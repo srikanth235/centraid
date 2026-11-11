@@ -226,10 +226,16 @@ fn a_void_line_a_vault_already_holds_offers_no_more_changes_and_no_void() {
 fn an_unknown_line_is_a_failure_never_an_empty_page() {
     let mut d = driver();
     let i = open(&mut d, "no-such-line");
-    assert!(matches!(
-        txn_state(d.view(i)).content,
-        Some(wire::money_transaction_state::Content::Failure(_))
-    ));
+    // A line that is not there is the page's final failure, in its own words, with no Retry.
+    let state = txn_state(d.view(i));
+    assert!(state.content.is_none());
+    let Some(wire::page_state::State::Failed(failure)) =
+        state.page.as_ref().and_then(|page| page.state.as_ref())
+    else {
+        panic!("an unknown line is a failed page");
+    };
+    assert_eq!(failure.sentence, "This transaction is no longer here.");
+    assert!(failure.permanent);
 }
 
 // --- target ------------------------------------------------------------------
@@ -392,10 +398,12 @@ fn recurring_charges_are_rows_with_a_cadence_and_a_state() {
         panic!("not recurring");
     };
     assert_eq!(state.chrome.as_ref().unwrap().title, "Recurring");
+    // No recurring charge is the page's own empty state; otherwise the rows are the data.
     let Some(wire::money_recurring_state::Content::Data(data)) = state.content else {
-        panic!("no recurring data");
+        assert!(empty_of(&state.page).is_some(), "no data is the empty page");
+        return;
     };
-    assert!(data.empty.is_some() == data.rows.is_empty());
+    assert!(empty_of(&state.page).is_none());
     for row in &data.rows {
         assert!(row.meta.contains('·'), "{}", row.meta);
         assert!(row.detail.contains("seen"), "{}", row.detail);
@@ -419,6 +427,14 @@ fn search_state(v: &wire::ViewState) -> &wire::MoneySearchState {
     }
 }
 
+/// The empty state of a page, when the page is empty.
+fn empty_of(page: &Option<wire::PageState>) -> Option<&wire::EmptyState> {
+    match page.as_ref().and_then(|page| page.state.as_ref()) {
+        Some(wire::page_state::State::Empty(empty)) => Some(empty),
+        _ => None,
+    }
+}
+
 fn search_event(kind: se::Kind) -> wire::screen_event::Kind {
     wire::screen_event::Kind::MoneySearch(wire::MoneySearchEvent { kind: Some(kind) })
 }
@@ -429,7 +445,9 @@ fn search_rests_until_there_is_a_term_and_reads_nothing_for_a_blank_one() {
     let i = push(&mut d, routes::search("Money"));
     let state = search_state(d.view(i));
     assert_eq!(
-        state.resting.as_ref().unwrap().headline,
+        empty_of(&state.page)
+            .expect("the resting page is empty")
+            .headline,
         "Search by name, bank words or category."
     );
     assert!(state.content.is_none());
@@ -467,7 +485,7 @@ fn a_term_that_matches_nothing_says_so_and_a_clear_goes_back_to_resting() {
             route: Some(centraid_screens::chat::routes::ask("Find zzqqxx", "money")),
         })
     );
-    let empty = data.empty.expect("an empty state");
+    let empty = empty_of(&search_state(d.view(i)).page).expect("an empty state");
     assert_eq!(empty.headline, "Nothing matches zzqqxx.");
     assert_eq!(
         empty.body,
@@ -475,7 +493,7 @@ fn a_term_that_matches_nothing_says_so_and_a_clear_goes_back_to_resting() {
     );
     event(&mut d, i, search_event(se::Kind::Cleared(se::Cleared {})));
     let state = search_state(d.view(i));
-    assert!(state.resting.is_some() && state.content.is_none() && state.term.is_empty());
+    assert!(empty_of(&state.page).is_some() && state.content.is_none() && state.term.is_empty());
 }
 
 #[test]

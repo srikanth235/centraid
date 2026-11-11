@@ -22,7 +22,6 @@ struct MoneyTransactionView: View {
     }
 
     var body: some View {
-        let content = state.readContent
         let sheetBinding = moneySheetBinding(state.sheet == .category || state.sheet == .name) {
             send(event { $0.sheetClosed = .init() })
         }
@@ -31,16 +30,14 @@ struct MoneyTransactionView: View {
         PushedPage(title: "", parentTitle: state.chrome.backLabel, onBack: onBack) {
             EmptyView()
         } content: {
-            // THE PAGE STAYS ON THE GONE CARD AFTER MOVE TO TRASH, and the status line under it
-            // carries "{title} moved to trash" with Undo (#1185).
+            // THE PAGE STAYS ON THE GONE FAILURE AFTER MOVE TO TRASH (a final failure with no Retry), and
+            // the status line under it carries "{title} moved to trash" with Undo (#1185).
             Group {
-                if case let .gone(gone)? = state.content {
-                    EmptyStateView(gone)
-                } else {
-                    ReadStateView(
-                        content: content,
-                        onRetry: { send(event { $0.refreshed = .init() }) }
-                    ) { transaction in
+                PageReadStateView(
+                    page: state.page,
+                    onRetry: { send(event { $0.refreshed = .init() }) }
+                ) {
+                    if case let .data(transaction)? = state.content {
                         ScrollView {
                             VStack(alignment: .leading, spacing: 0) { page(transaction) }
                                 .padding(.bottom, 16)
@@ -57,7 +54,7 @@ struct MoneyTransactionView: View {
                 }
             }
         }
-        .sheet(isPresented: sheetBinding) { sheetContent(state, transaction: content.loaded) }
+        .sheet(isPresented: sheetBinding) { sheetContent(state, transaction: state.loaded) }
         .linkPickerSheet(state.withPicker) { link in send(event { $0.withLink = link }) }
     }
 
@@ -230,17 +227,18 @@ struct MoneyTargetView: View {
     }
 
     var body: some View {
-        let content = state.readContent
         SheetPage(title: state.chrome.title, onCancel: onBack) {
-            ReadStateView(
-                content: content,
+            PageReadStateView(
+                page: state.page,
                 onRetry: { send(event { $0.refreshed = .init() }) }
-            ) { target in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) { page(target, state: state) }
-                        .padding(.bottom, 16)
+            ) {
+                if case let .data(target)? = state.content {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) { page(target, state: state) }
+                            .padding(.bottom, 16)
+                    }
+                    .scrollDismissesKeyboard(.interactively)
                 }
-                .scrollDismissesKeyboard(.interactively)
             }
         } foot: {
             VStack(spacing: 0) {
@@ -248,7 +246,7 @@ struct MoneyTargetView: View {
                     status: MoneyWords.line(state.hasStatus ? state.status : nil),
                     identifier: "money-target-status"
                 )
-                if let target = content.loaded {
+                if let target = state.loaded {
                     footKeys(target)
                 }
             }
@@ -384,13 +382,11 @@ struct MoneyRecurringView: View {
         PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
             EmptyView()
         } content: {
-            ReadStateView(
-                content: state.readContent,
+            PageReadStateView(
+                page: state.page,
                 onRetry: { send(Centraid_Core_V1_MoneyRecurringEvent.with { $0.refreshed = .init() }) }
-            ) { recurring in
-                if recurring.hasEmpty {
-                    EmptyStateView(recurring.empty)
-                } else {
+            ) {
+                if case let .data(recurring)? = state.content {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) {
                             MoneyPageCard {

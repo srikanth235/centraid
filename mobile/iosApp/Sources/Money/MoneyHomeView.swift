@@ -52,8 +52,13 @@ struct MoneyHomeView: View {
         )
     }
 
+    /// The vault refused Money: the page's gate. It has no band or search.
+    private var isDenied: Bool {
+        if case .refused? = state.page.state { return true }
+        return false
+    }
+
     var body: some View {
-        let content = state.readContent
         let chrome = state.chrome
         let sheetBinding = moneySheetBinding(sheetIsOpen(state)) { send(event { $0.sheetClosed = .init() }) }
         AppPlace(
@@ -65,7 +70,7 @@ struct MoneyHomeView: View {
                 : RoomAction(iconKey: "Plus", label: chrome.addLabel, identifier: "money-add", action: addStatement),
             // A DOOR, NOT A FIELD (R-CHROME-2): the band's key pushes the search page; the field is
             // never open here.
-            search: content.isDenied || chrome.searchPlaceholder.isEmpty ? nil : SearchSlot(
+            search: isDenied || chrome.searchPlaceholder.isEmpty ? nil : SearchSlot(
                 field: KitSearchField(),
                 placeholder: chrome.searchPlaceholder,
                 onOpen: { open(chrome.searchRoute) },
@@ -76,7 +81,7 @@ struct MoneyHomeView: View {
             // stays under the title and opens its sheet.
             filter: filter,
             subtitle: subtitle,
-            showsBand: !content.isDenied && !state.band.isEmpty
+            showsBand: !isDenied && !state.band.isEmpty
         ) {
             AppBand(
                 app: "money",
@@ -96,10 +101,11 @@ struct MoneyHomeView: View {
                 onHome: onHome
             )
         } content: {
-            ReadStateView(
-                content: content,
+            PageReadStateView(
+                page: state.page,
                 onRetry: { send(event { $0.refreshed = .init() }) }
-            ) { home in
+            ) {
+                if case let .data(home)? = state.content {
                 ScrollView {
                     // SPENDING AND CASH FLOW ARE BOUNDED AND EAGER; ACTIVITY IS THE
                     // LONG LIST AND STAYS LAZY. A `LazyVStack` here drew the
@@ -118,6 +124,7 @@ struct MoneyHomeView: View {
                 .refreshable { send(event { $0.refreshed = .init() }) }
                 .accessibilityIdentifier("money-home-list")
             }
+            }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 MoneyStatusFoot(
                     status: MoneyWords.line(state.hasStatus ? state.status : nil),
@@ -126,7 +133,7 @@ struct MoneyHomeView: View {
             }
         }
         .sheet(isPresented: sheetBinding) {
-            sheetContent(state, home: content.loaded)
+            sheetContent(state, home: state.loaded)
         }
     }
 

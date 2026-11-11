@@ -22,8 +22,7 @@ struct MoneyAccountsView: View {
     }
 
     var body: some View {
-        let content = state.readContent
-        let addLabel = content.loaded?.addLabel ?? ""
+        let addLabel = state.loaded?.addLabel ?? ""
         let isOpen = state.hasEditor && state.sheet == .editor
         let sheetBinding = moneySheetBinding(isOpen) {
             send(event { $0.sheetClosed = .init() })
@@ -40,13 +39,12 @@ struct MoneyAccountsView: View {
                 action: { send(event { $0.add = .init() }) }
             ), app: "money")
         } content: {
-            ReadStateView(
-                content: content,
-                onRetry: { send(event { $0.refreshed = .init() }) }
-            ) { accounts in
-                if accounts.hasEmpty {
-                    EmptyStateView(accounts.empty, onAction: { send(event { $0.add = .init() }) })
-                } else {
+            PageReadStateView(
+                page: state.page,
+                onRetry: { send(event { $0.refreshed = .init() }) },
+                onEmptyAction: { send(event { $0.add = .init() }) }
+            ) {
+                if case let .data(accounts)? = state.content {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 0) { page(accounts) }
                             .padding(.bottom, 16)
@@ -163,8 +161,7 @@ struct MoneyRulesView: View {
     }
 
     var body: some View {
-        let content = state.readContent
-        let addLabel = content.loaded?.addLabel ?? ""
+        let addLabel = state.loaded?.addLabel ?? ""
         let isOpen = sheetIsOpen(state)
         let sheetBinding = moneySheetBinding(isOpen) { send(event { $0.sheetClosed = .init() }) }
         // A confirm over an open sheet is presented BY that sheet; a SwiftUI view
@@ -175,7 +172,7 @@ struct MoneyRulesView: View {
             title: state.chrome.title,
             parentTitle: state.chrome.backLabel,
             onBack: onBack,
-            meta: content.loaded?.limitLine ?? ""
+            meta: state.loaded?.limitLine ?? ""
         ) {
             RoomTrailing(action: addLabel.isEmpty ? nil : RoomAction(
                 iconKey: "Plus",
@@ -184,13 +181,12 @@ struct MoneyRulesView: View {
                 action: { send(event { $0.add = .init() }) }
             ), app: "money")
         } content: {
-            ReadStateView(
-                content: content,
-                onRetry: { send(event { $0.refreshed = .init() }) }
-            ) { rules in
-                if rules.hasEmpty {
-                    EmptyStateView(rules.empty, onAction: { send(event { $0.add = .init() }) })
-                } else {
+            PageReadStateView(
+                page: state.page,
+                onRetry: { send(event { $0.refreshed = .init() }) },
+                onEmptyAction: { send(event { $0.add = .init() }) }
+            ) {
+                if case let .data(rules)? = state.content {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) { page(rules) }
                             .padding(.bottom, 16)
@@ -205,7 +201,7 @@ struct MoneyRulesView: View {
             }
         }
         .sheet(isPresented: sheetBinding) {
-            sheetContent(state, rules: content.loaded)
+            sheetContent(state, rules: state.loaded)
                 .sheet(isPresented: nestedConfirm) { confirm(state) }
         }
         .sheet(isPresented: pageConfirm) { confirm(state) }
@@ -336,8 +332,7 @@ struct MoneyCategoriesView: View {
     }
 
     var body: some View {
-        let content = state.readContent
-        let addLabel = content.loaded?.addLabel ?? ""
+        let addLabel = state.loaded?.addLabel ?? ""
         let isOpen = sheetIsOpen(state)
         let sheetBinding = moneySheetBinding(isOpen) { send(event { $0.sheetClosed = .init() }) }
         let nestedConfirm = moneySheetBinding(state.hasConfirm) { send(event { $0.confirmDismissed = .init() }) }
@@ -350,13 +345,12 @@ struct MoneyCategoriesView: View {
                 action: { send(event { $0.add = .init() }) }
             ), app: "money")
         } content: {
-            ReadStateView(
-                content: content,
-                onRetry: { send(event { $0.refreshed = .init() }) }
-            ) { categories in
-                if categories.hasEmpty {
-                    EmptyStateView(categories.empty)
-                } else {
+            PageReadStateView(
+                page: state.page,
+                onRetry: { send(event { $0.refreshed = .init() }) },
+                onEmptyAction: { send(event { $0.add = .init() }) }
+            ) {
+                if case let .data(categories)? = state.content {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 0) { page(categories) }
                             .padding(.bottom, 16)
@@ -371,7 +365,7 @@ struct MoneyCategoriesView: View {
             }
         }
         .sheet(isPresented: sheetBinding) {
-            sheetContent(state, categories: content.loaded)
+            sheetContent(state, categories: state.loaded)
                 .sheet(isPresented: nestedConfirm) { confirm(state) }
         }
         .sheet(isPresented: pageConfirm) { confirm(state) }

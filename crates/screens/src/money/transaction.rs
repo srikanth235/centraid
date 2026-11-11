@@ -16,13 +16,13 @@ use wire::money_transaction_state::Sheet;
 use wire::screen_event::Kind as E;
 use wire::status_chip::Tone;
 
-use super::fold::{self, Phase};
+use super::fold;
 use super::rows;
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::earlier;
 use crate::kit::links::{self, Kind, Links, Outcome};
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Page, Reading};
 use crate::kit::share::{self, Share};
 use crate::kit::stale;
 use crate::kit::trash;
@@ -55,7 +55,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     Some(Box::new(Transaction {
         txn_id: args.txn_id.clone(),
         parent: args.parent.clone(),
-        phase: Phase::Loading,
+        page: Page::loading(),
+        gone: false,
         sheet: Sheet::None,
         name_draft: String::new(),
         rev: None,
@@ -80,7 +81,10 @@ struct Loaded {
 struct Transaction {
     txn_id: String,
     parent: String,
-    phase: Phase<Loaded>,
+    page: Page<Loaded>,
+    /// The line has no row any more (moved to the trash here, or never on this phone): the page's
+    /// final failure in its own words.
+    gone: bool,
     sheet: Sheet,
     name_draft: String,
     /// The line's revision when the page was last read, and when the name sheet opened: what a
@@ -119,7 +123,8 @@ impl Transaction {
             _ => None,
         });
         let with = links::read_people(ctx, &self.txn_id);
-        self.phase = match (txn, categories, with) {
+        self.gone = matches!(&txn, Reading::Data(txn) if !txn.found);
+        let reading = match (txn, categories, with) {
             (Reading::Data(txn), Reading::Data(categories), Reading::Data(with)) if txn.found => {
                 let linked: Vec<String> = with.iter().map(|p| p.party_id.clone()).collect();
                 let voided = txn.flags.contains(&(Flag::Void as i32));
@@ -129,27 +134,33 @@ impl Transaction {
                     let people = self.links.people(ctx);
                     links::propose(&[&txn.display_name, &txn.raw], people, &linked).cloned()
                 };
-                Phase::Ready(Loaded {
+                Reading::Data(Loaded {
                     txn,
                     categories,
                     with,
                     with_proposal,
                 })
             }
-            (Reading::Denied(_), _, _) => Phase::Denied,
-            _ => Phase::Failed,
+            (Reading::Denied(denial), _, _) => Reading::Denied(denial),
+            _ => Reading::Failed,
         };
-        self.earlier = match &self.phase {
-            Phase::Ready(loaded) => {
+        if self.gone {
+            // Gone beats a held page: nothing of the line is shown.
+            self.page = Page::Failed;
+        } else {
+            fold::reread(&mut self.page, ctx.locale(), reading, |_| false);
+        }
+        self.earlier = match self.page.data() {
+            Some(loaded) => {
                 earlier::foot(ctx, super::EARLIER, &self.txn_id, &loaded.txn.display_name)
             }
-            _ => earlier::Foot::default(),
+            None => earlier::Foot::default(),
         };
     }
 
     /// The ids of the people the line is with now.
     fn with_ids(&self) -> Vec<String> {
-        self.phase
+        self.page
             .data()
             .map(|loaded| loaded.with.iter().map(|p| p.party_id.clone()).collect())
             .unwrap_or_default()
@@ -240,7 +251,7 @@ impl Transaction {
 
     /// MOVE TO TRASH: the title the status line names is the line's own, as its page shows it.
     fn trash_line(&mut self, ctx: &Ctx) {
-        let Some(loaded) = self.phase.data() else {
+        let Some(loaded) = self.page.data() else {
             return;
         };
         let title = if loaded.txn.display_name.is_empty() {
@@ -264,7 +275,7 @@ impl Transaction {
             ACTION_CATEGORY => self.sheet = Sheet::Category,
             ACTION_NAME => {
                 self.name_draft = self
-                    .phase
+                    .page
                     .data()
                     .map(|l| l.txn.display_name.clone())
                     .unwrap_or_default();
@@ -293,7 +304,7 @@ impl Transaction {
     }
 
     fn accept(&mut self, key: &str, ctx: &Ctx) {
-        let Some(loaded) = self.phase.data() else {
+        let Some(loaded) = self.page.data() else {
             return;
         };
         let locale = ctx.locale();
@@ -360,7 +371,7 @@ impl Transaction {
             Some(T::NameSaved(_)) => {
                 // A cleared name goes back to the bank's own words.
                 let raw = self
-                    .phase
+                    .page
                     .data()
                     .map(|l| l.txn.raw.clone())
                     .unwrap_or_default();
@@ -658,23 +669,32 @@ impl Screen for Transaction {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::money_transaction_state::Content;
         let locale = ctx.locale();
-        let content = match &self.phase {
-            // The member just moved the line to the trash from this page: it reads as gone, and the
-            // status line (with Undo) shows over it. A line that was never here stays a failure.
-            Phase::Failed if self.undo.can_undo() => Content::Gone(wire::EmptyState {
-                headline: words::transaction_gone(locale),
-                ..Default::default()
-            }),
-            Phase::Loading => Content::Loading(wire::Loading { first_load: true }),
-            Phase::Failed => Content::Failure(read::failure(locale)),
-            Phase::Denied => Content::Denied(fold::denied(locale)),
-            Phase::Ready(loaded) => Content::Data(Box::new(self.data(locale, loaded))),
+        let content = if self.gone {
+            None
+        } else {
+            self.page
+                .data()
+                .map(|loaded| Content::Data(Box::new(self.data(locale, loaded))))
+        };
+        // A line that has no row any more is the page's final failure, in its own words and with no
+        // Retry; the status line (Move to trash, with Undo) shows over it.
+        let page = if self.gone {
+            wire::PageState {
+                state: Some(wire::page_state::State::Failed(read::gone(
+                    words::transaction_gone(locale),
+                    String::new(),
+                ))),
+                note: None,
+            }
+        } else {
+            fold::wire_page(&self.page, locale, wire::EmptyState::default)
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::MoneyTransaction(
                 wire::MoneyTransactionState {
                     txn_id: self.txn_id.clone(),
-                    content: Some(content),
+                    content,
+                    page: Some(page),
                     sheet: self.sheet as i32,
                     with_picker: Some(self.links.picker(locale, &self.with_ids())),
                     name_draft: self.name_draft.clone(),

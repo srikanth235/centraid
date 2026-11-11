@@ -285,11 +285,18 @@ fn a_trashed_line_leaves_every_figure_and_a_restore_brings_each_back_exactly() {
     assert_eq!(line.sentence, "QQBISTRO CAFE moved to trash");
     assert_eq!(line.action_label, "Undo");
     assert!(!line.refused);
-    let Some(wire::money_transaction_state::Content::Gone(gone)) = &txn_state(&d, page).content
+    let state = txn_state(&d, page);
+    assert!(
+        state.content.is_none(),
+        "a line that is gone shows nothing of it"
+    );
+    let Some(wire::page_state::State::Failed(gone)) =
+        state.page.as_ref().and_then(|page| page.state.as_ref())
     else {
-        panic!("the page is not the gone state");
+        panic!("the page is not the gone failure");
     };
-    assert_eq!(gone.headline, "This transaction is no longer here.");
+    assert_eq!(gone.sentence, "This transaction is no longer here.");
+    assert!(gone.permanent, "trying again cannot bring it back");
 
     // The balance, the month's spending, the month's rows and the search lose it.
     let after = figures(&d);

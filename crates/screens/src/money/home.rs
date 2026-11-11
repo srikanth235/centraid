@@ -19,9 +19,10 @@ use wire::money_home_state::{Destination, Sheet};
 use wire::screen_event::Kind as E;
 use wire::status_chip::Tone;
 
-use super::fold::{self, Phase, figure};
+use super::fold::{self, figure};
 use super::{routes, rows};
 use crate::catalog::load;
+use crate::kit::read::Page;
 use crate::kit::undo::Undo;
 use crate::kit::{export, menu, read};
 use crate::screen::{Ctx, Screen};
@@ -65,7 +66,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         bars: Bars::Week,
         bar: None,
         categories_open: false,
-        phase: Phase::Loading,
+        page: Page::loading(),
+        asked: String::new(),
         undo: Undo::default(),
     }))
 }
@@ -136,25 +138,41 @@ struct Home {
     bar: Option<usize>,
     /// "N more categories" was tapped: every category is listed.
     categories_open: bool,
-    phase: Phase<Loaded>,
+    page: Page<Loaded>,
+    /// The question `page` answers (the tab, month, account and category): another question starts
+    /// from nothing, so a failure of it is the failure and never the old tab.
+    asked: String,
     /// The line a page closed above this one left (a target saved), and its Undo.
     undo: Undo,
 }
 
 impl Home {
     fn reload(&mut self, ctx: &Ctx) {
-        self.phase = self.read(ctx);
+        let reading = self.read(ctx);
+        if self.asked != self.question() {
+            self.page = Page::loading();
+        }
+        fold::reread(&mut self.page, ctx.locale(), reading, |_| false);
         // THE MONTH THE ANSWER WAS FOR is the month in view from now on, so a
         // step is arithmetic over a month and never over "this month".
-        if let Phase::Ready(loaded) = &self.phase
+        if let Some(loaded) = self.page.data()
             && self.month.is_empty()
             && !loaded.month().is_empty()
         {
             self.month = loaded.month().to_owned();
         }
+        self.asked = self.question();
     }
 
-    fn read(&self, ctx: &Ctx) -> Phase<Loaded> {
+    /// What the page on screen answers: the tab, the month, the account and the category.
+    fn question(&self) -> String {
+        format!(
+            "{}|{}|{}|{}",
+            self.destination as i32, self.month, self.account_id, self.category_filter
+        )
+    }
+
+    fn read(&self, ctx: &Ctx) -> read::Reading<Loaded> {
         use wire::app_query_response::Answer;
         match self.destination {
             Destination::Activity => {
@@ -208,17 +226,17 @@ impl Home {
                         read::Reading::Data(activity),
                         read::Reading::Data(accounts),
                         read::Reading::Data(categories),
-                    ) => Phase::Ready(Loaded::Activity {
+                    ) => read::Reading::Data(Loaded::Activity {
                         activity: Box::new(activity),
                         accounts: Box::new(accounts),
                         categories: Box::new(categories),
                         overview,
                     }),
-                    (read::Reading::Denied(_), ..) => Phase::Denied,
-                    _ => Phase::Failed,
+                    (read::Reading::Denied(denial), ..) => read::Reading::Denied(denial),
+                    _ => read::Reading::Failed,
                 }
             }
-            Destination::Cashflow => Phase::of(read::read(
+            Destination::Cashflow => match read::read(
                 ctx,
                 load::money::Cashflow {
                     through: self.month.clone(),
@@ -227,9 +245,14 @@ impl Home {
                     Answer::MoneyCashflow(x) => Some(x),
                     _ => None,
                 },
-            ))
-            .map(|answer| Loaded::Cashflow(Box::new(answer))),
-            _ => Phase::of(read::read(
+            ) {
+                read::Reading::Data(answer) => {
+                    read::Reading::Data(Loaded::Cashflow(Box::new(answer)))
+                }
+                read::Reading::Denied(denial) => read::Reading::Denied(denial),
+                read::Reading::Failed => read::Reading::Failed,
+            },
+            _ => match read::read(
                 ctx,
                 load::money::Spending {
                     month: self.month.clone(),
@@ -238,8 +261,13 @@ impl Home {
                     Answer::MoneySpending(x) => Some(x),
                     _ => None,
                 },
-            ))
-            .map(|answer| Loaded::Spending(Box::new(answer))),
+            ) {
+                read::Reading::Data(answer) => {
+                    read::Reading::Data(Loaded::Spending(Box::new(answer)))
+                }
+                read::Reading::Denied(denial) => read::Reading::Denied(denial),
+                read::Reading::Failed => read::Reading::Failed,
+            },
         }
     }
 
@@ -255,7 +283,7 @@ impl Home {
     fn set_month(&mut self, month: &str, ctx: &Ctx) {
         // THERE IS NO MONTH AFTER THIS ONE: nothing is dated beyond today's month's reach.
         let today_month = self
-            .phase
+            .page
             .data()
             .map(|loaded| fold::month_of(loaded.today()))
             .unwrap_or_default();
@@ -478,11 +506,11 @@ impl Home {
     /// single choice, no sort. Lit while either narrows Activity. Only on Activity
     /// once it has read, where the chip row stood.
     fn filter_menu(&self, locale: Locale) -> Option<wire::FilterMenu> {
-        let Phase::Ready(Loaded::Activity {
+        let Some(Loaded::Activity {
             accounts,
             categories,
             ..
-        }) = &self.phase
+        }) = self.page.data()
         else {
             return None;
         };
@@ -517,7 +545,7 @@ impl Home {
     /// one way to change month. Activity and Spending, once read; Cash flow
     /// reads twelve months at once, so it has no month to change.
     fn subtitle(&self, locale: Locale) -> Option<wire::HeaderSubtitle> {
-        let Phase::Ready(Loaded::Activity { .. } | Loaded::Spending(_)) = &self.phase else {
+        let Some(Loaded::Activity { .. } | Loaded::Spending(_)) = self.page.data() else {
             return None;
         };
         let label = if self.month.is_empty() {
@@ -1363,16 +1391,18 @@ impl Screen for Home {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::money_home_state::Content;
         let locale = ctx.locale();
-        let (content, drawing) = match &self.phase {
-            Phase::Loading => (Content::Loading(wire::Loading { first_load: true }), true),
-            Phase::Failed => (Content::Failure(read::failure(locale)), true),
-            Phase::Denied => (Content::Denied(fold::denied(locale)), false),
-            Phase::Ready(loaded) => (Content::Data(Box::new(self.data(locale, loaded))), true),
-        };
+        // The gate draws no band, filter or month.
+        let drawing = !matches!(self.page, Page::Refused(_));
+        let content = self
+            .page
+            .data()
+            .map(|loaded| Content::Data(Box::new(self.data(locale, loaded))));
+        let page = fold::wire_page(&self.page, locale, wire::EmptyState::default);
         wire::ViewState {
             kind: Some(wire::view_state::Kind::MoneyHome(wire::MoneyHomeState {
                 destination: self.destination as i32,
-                content: Some(content),
+                content,
+                page: Some(page),
                 sheet: self.sheet as i32,
                 band: if drawing {
                     self.band(locale)

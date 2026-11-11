@@ -31,14 +31,18 @@ struct MoneySearchView: View {
             EmptyView()
         } content: {
             VStack(alignment: .leading, spacing: 0) {
-                if state.content == nil, state.hasResting {
-                    let resting = state.resting
-                    EmptyStateView(resting)
-                } else {
-                    ReadStateView(
-                        content: state.readContent,
-                        onRetry: { send(event { $0.refreshed = .init() }) }
-                    ) { search in
+                PageReadStateView(
+                    page: state.page,
+                    onRetry: { send(event { $0.refreshed = .init() }) },
+                    emptyExtra: {
+                        // A term that found nothing still offers the Ask row under the empty sentence.
+                        if case let .data(search)? = state.content, search.hasAsk {
+                            return AnyView(SearchAskRow(ask: search.ask))
+                        }
+                        return AnyView(EmptyView())
+                    }
+                ) {
+                    if case let .data(search)? = state.content {
                         results(search, state: state)
                     }
                 }
@@ -62,30 +66,24 @@ struct MoneySearchView: View {
 
     @ViewBuilder
     private func results(_ search: Centraid_Core_V1_MoneySearchData, state: Centraid_Core_V1_MoneySearchState) -> some View {
-        if search.rows.isEmpty, search.hasEmpty {
-            EmptyStateView(search.empty)
-            if search.hasAsk { SearchAskRow(ask: search.ask) }
-            Spacer(minLength: 0)
-        } else {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(search.countLabel)
-                        .kitType(.meta)
-                        .foregroundStyle(Surface.meta)
-                        .padding(.horizontal, 4)
-                        .accessibilityIdentifier("money-search-count")
-                    MoneyCardStack {
-                        ForEach(Array(search.rows.enumerated()), id: \.offset) { index, row in
-                            if index > 0 { KitHairline(inset: 64) }
-                            MoneyTxnRow(row: row) { open(row.route) }
-                        }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(search.countLabel)
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
+                    .padding(.horizontal, 4)
+                    .accessibilityIdentifier("money-search-count")
+                MoneyCardStack {
+                    ForEach(Array(search.rows.enumerated()), id: \.offset) { index, row in
+                        if index > 0 { KitHairline(inset: 64) }
+                        MoneyTxnRow(row: row) { open(row.route) }
                     }
-                    if search.hasAsk { SearchAskRow(ask: search.ask) }
                 }
-                .padding(.horizontal, CentraidGeometry.pageMargin)
-                .padding(.top, 8)
-                .padding(.bottom, 16)
+                if search.hasAsk { SearchAskRow(ask: search.ask) }
             }
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.top, 8)
+            .padding(.bottom, 16)
         }
     }
 

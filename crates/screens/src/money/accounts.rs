@@ -15,11 +15,11 @@ use wire::money_accounts_state::Sheet;
 use wire::screen_event::Kind as E;
 use wire::status_chip::Tone;
 
-use super::fold::{self, Phase};
+use super::fold;
 use crate::catalog::{act, load};
 use crate::field::Field;
 use crate::kit::act as kit_act;
-use crate::kit::read;
+use crate::kit::read::{self, Page};
 use crate::kit::stale;
 use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
@@ -34,7 +34,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     };
     Some(Box::new(Accounts {
         parent: args.parent.clone(),
-        phase: Phase::Loading,
+        page: Page::loading(),
         editor: None,
         confirm_remove_number: false,
         stale: None,
@@ -69,7 +69,7 @@ struct Editor {
 
 struct Accounts {
     parent: String,
-    phase: Phase<wire::MoneyAccounts>,
+    page: Page<wire::MoneyAccounts>,
     editor: Option<Editor>,
     confirm_remove_number: bool,
     /// Why the vault refused the last write, when the account had changed (or gone to the trash)
@@ -90,10 +90,15 @@ fn lines(answer: &wire::MoneyAccounts) -> Vec<(&wire::money_accounts::AccountLin
 
 impl Accounts {
     fn reload(&mut self, ctx: &Ctx) {
-        self.phase = Phase::of(read::read(ctx, load::money::Accounts {}, |a| match a {
-            wire::app_query_response::Answer::MoneyAccounts(x) => Some(x),
-            _ => None,
-        }));
+        fold::reread(
+            &mut self.page,
+            ctx.locale(),
+            read::read(ctx, load::money::Accounts {}, |a| match a {
+                wire::app_query_response::Answer::MoneyAccounts(x) => Some(x),
+                _ => None,
+            }),
+            |answer| lines(answer).is_empty(),
+        );
     }
 
     fn issue(editor: &Editor, locale: Locale) -> String {
@@ -174,7 +179,7 @@ impl Accounts {
             )
         } else {
             let before_closed = self
-                .phase
+                .page
                 .data()
                 .and_then(|answer| {
                     lines(answer)
@@ -277,7 +282,7 @@ impl Accounts {
                 });
             }
             Some(A::Account(tapped)) => {
-                let Some(answer) = self.phase.data() else {
+                let Some(answer) = self.page.data() else {
                     return;
                 };
                 let Some((line, on_budget)) = lines(answer)
@@ -494,11 +499,6 @@ impl Accounts {
             } else {
                 String::new()
             },
-            empty: sections.is_empty().then(|| wire::EmptyState {
-                headline: words::accounts_empty(locale),
-                action_label: words::add_account(locale),
-                ..Default::default()
-            }),
             sections,
             add_label: words::add_account(locale),
             definitions: fold::definitions(locale, &answer.definitions),
@@ -528,16 +528,21 @@ impl Screen for Accounts {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::money_accounts_state::Content;
         let locale = ctx.locale();
-        let content = match &self.phase {
-            Phase::Loading => Content::Loading(wire::Loading { first_load: true }),
-            Phase::Failed => Content::Failure(read::failure(locale)),
-            Phase::Denied => Content::Denied(fold::denied(locale)),
-            Phase::Ready(answer) => Content::Data(Box::new(Self::data(locale, answer))),
-        };
+        let content = self
+            .page
+            .data()
+            .map(|answer| Content::Data(Box::new(Self::data(locale, answer))));
+        // An account list with no account is the page's own empty state, and its one action adds one.
+        let page = fold::wire_page(&self.page, locale, || wire::EmptyState {
+            headline: words::accounts_empty(locale),
+            action_label: words::add_account(locale),
+            ..Default::default()
+        });
         wire::ViewState {
             kind: Some(wire::view_state::Kind::MoneyAccounts(
                 wire::MoneyAccountsState {
-                    content: Some(content),
+                    content,
+                    page: Some(page),
                     sheet: if self.editor.is_some() {
                         Sheet::Editor
                     } else {

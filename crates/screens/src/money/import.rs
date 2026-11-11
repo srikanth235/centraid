@@ -20,11 +20,11 @@ use wire::money_import_state::{Phase as P, Sheet};
 use wire::screen_event::Kind as E;
 use wire::status_chip::Tone;
 
-use super::fold::{self, Phase, chip, choice};
+use super::fold::{self, chip, choice};
 use crate::catalog::act::money as acts;
 use crate::catalog::load::money as loads;
 use crate::kit::act as kit_act;
-use crate::kit::read;
+use crate::kit::read::{self, Page};
 use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, money as words};
@@ -42,7 +42,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     };
     Some(Box::new(Import {
         parent: args.parent.clone(),
-        accounts: Phase::Loading,
+        accounts: Page::loading(),
         file: None,
         account_id: String::new(),
         date_order: None,
@@ -65,7 +65,7 @@ struct Held {
 
 struct Import {
     parent: String,
-    accounts: Phase<wire::MoneyAccounts>,
+    accounts: Page<wire::MoneyAccounts>,
     file: Option<Held>,
     account_id: String,
     date_order: Option<loads::ImportPlanDateOrder>,
@@ -113,10 +113,15 @@ impl Import {
     }
 
     fn reload_accounts(&mut self, ctx: &Ctx) {
-        self.accounts = Phase::of(read::read(ctx, loads::Accounts {}, |a| match a {
-            wire::app_query_response::Answer::MoneyAccounts(x) => Some(x),
-            _ => None,
-        }));
+        fold::reread(
+            &mut self.accounts,
+            ctx.locale(),
+            read::read(ctx, loads::Accounts {}, |a| match a {
+                wire::app_query_response::Answer::MoneyAccounts(x) => Some(x),
+                _ => None,
+            }),
+            |_| false,
+        );
     }
 
     /// Drop the file and the plan, and every answer given about them.
@@ -548,11 +553,6 @@ impl Import {
             } else {
                 String::new()
             },
-            empty: accounts.is_empty().then(|| wire::EmptyState {
-                headline: words::import_no_account(locale),
-                action_label: words::add_account(locale),
-                ..Default::default()
-            }),
             accounts_route: Some(super::routes::accounts(&words::import_title(locale))),
         }
     }
@@ -875,17 +875,24 @@ impl Screen for Import {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::money_import_state::Content;
         let locale = ctx.locale();
-        let content = match &self.accounts {
-            Phase::Loading => Content::Loading(wire::Loading { first_load: true }),
-            Phase::Failed => Content::Failure(read::failure(locale)),
-            Phase::Denied => Content::Denied(fold::denied(locale)),
-            Phase::Ready(_) => Content::Data(Box::new(self.data(locale))),
-        };
+        let content = self
+            .accounts
+            .data()
+            .map(|_| Content::Data(Box::new(self.data(locale))));
+        // With no account to import into the page is its own empty state (its one action opens
+        // Accounts); the answer stays, because that route is on it.
+        let nothing = self.accounts.data().is_some() && self.open_accounts().is_empty();
+        let page = fold::wire_page_keeping(&self.accounts, locale, nothing, || wire::EmptyState {
+            headline: words::import_no_account(locale),
+            action_label: words::add_account(locale),
+            ..Default::default()
+        });
         wire::ViewState {
             kind: Some(wire::view_state::Kind::MoneyImport(
                 wire::MoneyImportState {
                     phase: self.phase as i32,
-                    content: Some(content),
+                    content,
+                    page: Some(page),
                     chrome: Some(fold::chrome(
                         locale,
                         words::import_title(locale),
@@ -910,7 +917,7 @@ mod tests {
     fn planned() -> Import {
         Import {
             parent: String::new(),
-            accounts: Phase::Loading,
+            accounts: Page::loading(),
             file: Some(Held {
                 name: "Statement.csv".to_owned(),
                 bytes: b"Date,Description,Amount\n".to_vec(),

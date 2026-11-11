@@ -7,9 +7,9 @@ use wire::MoneyRecurringStatus as Status;
 use wire::screen_event::Kind as E;
 use wire::status_chip::Tone;
 
-use super::fold::{self, Phase, chip};
+use super::fold::{self, chip};
 use crate::catalog::load;
-use crate::kit::read;
+use crate::kit::read::{self, Page};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, money as words};
 
@@ -20,21 +20,26 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     };
     Some(Box::new(Recurring {
         parent: args.parent.clone(),
-        phase: Phase::Loading,
+        page: Page::loading(),
     }))
 }
 
 struct Recurring {
     parent: String,
-    phase: Phase<wire::MoneyRecurring>,
+    page: Page<wire::MoneyRecurring>,
 }
 
 impl Recurring {
     fn reload(&mut self, ctx: &Ctx) {
-        self.phase = Phase::of(read::read(ctx, load::money::Recurring {}, |a| match a {
-            wire::app_query_response::Answer::MoneyRecurring(x) => Some(x),
-            _ => None,
-        }));
+        fold::reread(
+            &mut self.page,
+            ctx.locale(),
+            read::read(ctx, load::money::Recurring {}, |a| match a {
+                wire::app_query_response::Answer::MoneyRecurring(x) => Some(x),
+                _ => None,
+            }),
+            |answer| answer.series.is_empty(),
+        );
     }
 
     fn data(locale: Locale, answer: &wire::MoneyRecurring) -> wire::MoneyRecurringData {
@@ -85,10 +90,6 @@ impl Recurring {
             })
             .collect();
         wire::MoneyRecurringData {
-            empty: rows.is_empty().then(|| wire::EmptyState {
-                headline: words::recurring_empty(locale),
-                ..Default::default()
-            }),
             rows,
             definitions: fold::definitions(locale, &answer.definitions),
             window_note: if answer.truncated {
@@ -113,16 +114,19 @@ impl Screen for Recurring {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::money_recurring_state::Content;
         let locale = ctx.locale();
-        let content = match &self.phase {
-            Phase::Loading => Content::Loading(wire::Loading { first_load: true }),
-            Phase::Failed => Content::Failure(read::failure(locale)),
-            Phase::Denied => Content::Denied(fold::denied(locale)),
-            Phase::Ready(answer) => Content::Data(Self::data(locale, answer)),
-        };
+        let content = self
+            .page
+            .data()
+            .map(|answer| Content::Data(Self::data(locale, answer)));
+        let page = fold::wire_page(&self.page, locale, || wire::EmptyState {
+            headline: words::recurring_empty(locale),
+            ..Default::default()
+        });
         wire::ViewState {
             kind: Some(wire::view_state::Kind::MoneyRecurring(
                 wire::MoneyRecurringState {
-                    content: Some(content),
+                    content,
+                    page: Some(page),
                     chrome: Some(fold::chrome(
                         locale,
                         words::recurring_title(locale),
