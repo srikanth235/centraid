@@ -937,11 +937,11 @@ impl Screen for Detail {
             }
             Some(E::PhoneSaysTaken(taken)) => {
                 if let Some(settled) = follow::take(ctx, &self.task_id, &taken) {
-                    self.ops.status = (!settled.committed).then(|| wire::StatusLine {
-                        sentence: settled.refusal,
-                        action_label: String::new(),
-                        refused: true,
-                    });
+                    if settled.committed {
+                        self.ops.clear();
+                    } else {
+                        self.ops.line.refuse(settled.refusal);
+                    }
                     self.reload(ctx);
                 }
             }
