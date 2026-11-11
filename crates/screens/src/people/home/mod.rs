@@ -12,7 +12,7 @@
 //!   closing search reads nothing and clears the term.
 //! - **The room's grammar** (R-CHROME-1…4): Add person is the header's one
 //!   action beside the filter button, search the bar under it, and More holds
-//!   Import, Export and Trash.
+//!   Lists, Import, Export and Trash.
 //! - **The star** is a write from the row: it commits at once, the load after it
 //!   shows the vault's star, and a refusal's sentence is the status line.
 //! - **Contacts** import here ([`ContactsFollow`]): the day-one empty state offers the phone's
@@ -37,6 +37,9 @@ use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, people as words, shared};
 
 mod rows;
+
+/// The More row that stops reading the phone's contacts.
+const MORE_STOP: &str = "stop";
 
 /// At most what `people.search` asks of the index.
 const SEARCH_LIMIT: u32 = 50;
@@ -80,6 +83,8 @@ struct Home {
     /// What a write did, or a refusal's sentence; the page stays.
     status: Option<wire::StatusLine>,
     contacts: ContactsFollow,
+    /// The member tapped "Stop reading Phone contacts" and has not answered the confirm.
+    asking_stop: bool,
     /// The contacts flow has asked the shell whether this device follows.
     attached: bool,
 }
@@ -96,6 +101,7 @@ impl Home {
             sheet: wire::people_home_state::Sheet::Unspecified,
             status: None,
             contacts: ContactsFollow::new(),
+            asking_stop: false,
             attached: false,
         }
     }
@@ -264,6 +270,26 @@ impl Home {
         self.reload(ctx);
     }
 
+    /// STOP READING, once the member said so: the status line says what happened, and People goes
+    /// on showing the people it already holds.
+    fn stop(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
+        let locale = ctx.locale();
+        if !std::mem::take(&mut self.asking_stop) {
+            return Vec::new();
+        }
+        let (sentence, refused, effects) = match self.contacts.stop(ctx) {
+            Some(effects) => (words::contacts_stopped(locale), false, effects),
+            None => (shared::write_refused(locale), true, Vec::new()),
+        };
+        self.status = Some(wire::StatusLine {
+            sentence,
+            action_label: String::new(),
+            refused,
+        });
+        self.reload(ctx);
+        effects
+    }
+
     fn event(&mut self, event: wire::PeopleHomeEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         let Some(kind) = event.kind else {
             return Vec::new();
@@ -308,6 +334,15 @@ impl Home {
             H::SearchTerm(typed) => self.search_term(ctx, typed.term),
             H::SearchClosed(_) => self.search_closed(ctx),
             H::SheetClosed(_) => self.sheet = wire::people_home_state::Sheet::Unspecified,
+            // THE ONE MORE ROW WITH NO ROUTE: it asks before it stops.
+            H::MoreRow(picked) => {
+                if picked.key == MORE_STOP && self.contacts.can_stop(ctx) {
+                    self.asking_stop = true;
+                    self.sheet = wire::people_home_state::Sheet::Unspecified;
+                }
+            }
+            H::StopDismissed(_) => self.asking_stop = false,
+            H::StopConfirmed(_) => return self.stop(ctx),
             H::Star(toggled) => self.star(ctx, &toggled.party_id),
             H::ImportContacts(_) => {
                 self.status = None;
@@ -513,6 +548,13 @@ impl Screen for Home {
                 let export = export::entry(locale, super::EXPORT);
                 vec![
                     wire::PeopleMoreRow {
+                        key: "lists".to_owned(),
+                        label: crate::strings::people_lists::more_row(locale),
+                        icon_key: "List".to_owned(),
+                        route: Some(routes::lists(&back)),
+                        meta: String::new(),
+                    },
+                    wire::PeopleMoreRow {
                         key: "import".to_owned(),
                         label: words::more_import(locale),
                         icon_key: "Download".to_owned(),
@@ -534,10 +576,28 @@ impl Screen for Home {
                         meta: shared::trash_entry_meta(locale),
                     },
                 ]
+                .into_iter()
+                // THE STOP ROW, last (as Health's): the same words for every followed store.
+                .chain(self.contacts.can_stop(ctx).then(|| wire::PeopleMoreRow {
+                    key: MORE_STOP.to_owned(),
+                    label: crate::kit::follow::stop_row(locale, &words::contacts_title(locale)),
+                    icon_key: "Stop".to_owned(),
+                    route: None,
+                    meta: String::new(),
+                }))
+                .collect()
             },
             sheet: self.sheet as i32,
             status: self.status(ctx),
             contacts: (!denied_now).then(|| self.contacts.row(ctx)),
+            stop: (self.asking_stop && !denied_now).then(|| {
+                crate::kit::follow::stop_confirm(
+                    locale,
+                    &words::app_title(locale),
+                    &words::contacts_title(locale),
+                    &words::contacts_kept(locale),
+                )
+            }),
             add_person: Some(routes::new_person()),
             filter_menu: self.filter_menu(locale),
         };

@@ -153,7 +153,6 @@ people,complete-task,complete,task,card,yes: crates/screens/src/kit/schedule/ops
 people,reopen-task,reopen,task,card,yes: crates/screens/src/kit/schedule/ops.rs,yes
 people,add-important-date,create,important_date,card,yes: crates/screens/src/people/person/mod.rs,no
 people,set-reminder,edit,important_date,card,yes: crates/screens/src/people/person/mod.rs,no
-people,set-birthday-reminder,edit,person,card,yes: crates/screens/src/people/person/mod.rs,no
 people,add-relationship,link,person,card,no,no
 people,remove-relationship,unlink,person,card,no,no
 people,add-gift,create,gift,card,no,no

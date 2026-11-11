@@ -86,6 +86,9 @@ pub struct TrashRow {
     pub role: String,
     pub deleted_at: Option<String>,
     pub purge_at: Option<String>,
+    /// The row is a list, not a person: a list in the trash keeps its members and they are in it
+    /// again once it is restored.
+    pub list: bool,
 }
 
 /// What `trash` answers.
@@ -226,19 +229,31 @@ pub fn load_links(
 /// `trash` — the reversible shelf.
 pub fn load_trash(door: &dyn PageDoor) -> KitResult<(TrashData, Option<Denial>)> {
     let shelf = asked!(read_trashed(door), TrashData::default());
+    let mut rows: Vec<TrashRow> = shelf
+        .members
+        .into_iter()
+        .map(|person| TrashRow {
+            party_id: person.id,
+            name: person.name,
+            role: person.role,
+            deleted_at: person.deleted_at,
+            purge_at: person.purge_at,
+            list: false,
+        })
+        .chain(shelf.lists.into_iter().map(|list| TrashRow {
+            party_id: list.id,
+            name: list.name,
+            role: String::new(),
+            deleted_at: list.deleted_at,
+            purge_at: list.purge_at,
+            list: true,
+        }))
+        .collect();
+    // Most recently trashed first, whichever kind it is (the stamps are ISO instants).
+    rows.sort_by(|a, b| b.deleted_at.cmp(&a.deleted_at));
     Ok((
         TrashData {
-            people: shelf
-                .members
-                .into_iter()
-                .map(|person| TrashRow {
-                    party_id: person.id,
-                    name: person.name,
-                    role: person.role,
-                    deleted_at: person.deleted_at,
-                    purge_at: person.purge_at,
-                })
-                .collect(),
+            people: rows,
             truncated: shelf.filled,
         },
         None,

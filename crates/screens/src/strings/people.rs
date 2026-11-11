@@ -90,6 +90,8 @@ catalog! {
         "They were moved to the trash or merged into someone else."
     );
     plain gone_title = ("This person is not in People.", "This person is not in People.");
+    plain contacts_kept = ("people", "people");
+    plain contacts_stopped = ("People stopped reading your phone contacts.", "People stopped reading your phone contacts.");
     plain contacts_pause = ("Pause", "Pause");
     plain contacts_resume = ("Resume", "Resume");
     plain contacts_settings = ("Settings", "Settings");

@@ -297,18 +297,55 @@ pub fn read_circle(door: &dyn PageDoor, window: usize) -> KitResult<Circle> {
     })
 }
 
-/// The trash shelf's window: people, most recently trashed first.
-pub fn read_trashed(door: &dyn PageDoor) -> KitResult<Circle> {
+/// A list in the trash: its name and the two instants the vault stamped.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrashedList {
+    pub id: String,
+    pub name: String,
+    pub deleted_at: Option<String>,
+    pub purge_at: Option<String>,
+}
+
+/// The trash shelf's window: what People can bring back.
+pub struct Shelf {
+    /// People in the trash, most recently trashed first.
+    pub members: Vec<PersonRow>,
+    /// Lists in the trash, most recently trashed first.
+    pub lists: Vec<TrashedList>,
+    /// The window was full: more is in the trash than it read.
+    pub filled: bool,
+}
+
+/// The trash shelf's window: people and lists, most recently trashed first. One read answers both
+/// (a list has no `person` row, so the people join leaves it out).
+pub fn read_trashed(door: &dyn PageDoor) -> KitResult<Shelf> {
     let query = PageQuery::new(
         "people.trash",
-        ENTITY_COLUMNS,
+        "id, title, kind, created_at, updated_at, deleted_at, purge_at",
         "entity",
         PageOrder::desc("deleted_at", "id"),
     )
-    .filter("kind = ? AND deleted_at IS NOT NULL", vec![text("person")]);
+    .filter(
+        "kind IN (?, ?) AND deleted_at IS NOT NULL",
+        vec![text("person"), text("list")],
+    );
     let read = read_window(door, &query, TRASH_ROWS)?;
-    Ok(Circle {
+    let lists = read
+        .rows
+        .iter()
+        .filter(|row| text_of(row, "kind").as_deref() == Some("list"))
+        .filter_map(|row| {
+            Some(TrashedList {
+                id: text_of(row, "id")?,
+                name: text_of(row, "title").unwrap_or_default(),
+                deleted_at: text_of(row, "deleted_at"),
+                purge_at: text_of(row, "purge_at"),
+            })
+        })
+        .collect();
+    Ok(Shelf {
         members: members(door, &read.rows, false)?,
+        lists,
         filled: read.filled,
     })
 }

@@ -613,22 +613,34 @@ fn purge(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
 }
 
 fn pre_empty(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    Ok(match ctx.optional_str("kind") {
-        None => None,
-        Some(word) => match Kind::parse(word) {
-            None => Some(format!("`{word}` is not a kind of thing in this vault")),
-            Some(kind) if !kind.has_trash() => {
-                Some(format!("a {} has no trash to empty", kind.noun()))
+    for name in ["kind", "with_kind"] {
+        let Some(word) = ctx.optional_str(name) else {
+            continue;
+        };
+        match Kind::parse(word) {
+            None => {
+                return Ok(Some(format!(
+                    "`{word}` is not a kind of thing in this vault"
+                )));
             }
-            Some(_) => None,
-        },
-    })
+            Some(kind) if !kind.has_trash() => {
+                return Ok(Some(format!("a {} has no trash to empty", kind.noun())));
+            }
+            Some(_) => {}
+        }
+    }
+    if ctx.optional_str("with_kind").is_some() && ctx.optional_str("kind").is_none() {
+        return Ok(Some(
+            "`with_kind` names a second kind beside `kind`, which is absent".to_owned(),
+        ));
+    }
+    Ok(None)
 }
 
 /// How many trashed rows one read of the pass takes.
 const DOOMED_CHUNK: i64 = 64;
 
-/// Purge what is in the trash: one kind's, or every kind's; all of it, or only
+/// Purge what is in the trash: one kind's (with `with_kind`, a second beside it: a People trash holds people and lists), or every kind's; all of it, or only
 /// what has waited out its window; and, with a `limit`, at most that many
 /// roots (what went with them is not counted against it), saying `more` when
 /// something else is due. With `having: "workout"` only the activities that have a workout row
@@ -653,6 +665,7 @@ fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         .and_then(serde_json::Value::as_bool)
         .unwrap_or(false);
     let kind = ctx.optional_str("kind");
+    let with_kind = ctx.optional_str("with_kind");
     let having = ctx.optional_str("having");
     let mut purged = Vec::new();
     let mut roots = 0usize;
@@ -667,7 +680,7 @@ fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
             .prepare(
                 "SELECT id, deleted_at, n FROM entity
                   WHERE deleted_at IS NOT NULL
-                    AND (?1 IS NULL OR kind = ?1)
+                    AND (?1 IS NULL OR kind = ?1 OR kind = ?8)
                     AND (?2 = 0 OR purge_at <= ?3)
                     AND (?4 IS NULL OR (deleted_at, n) > (?4, ?5))
                     AND (?7 IS NULL OR (?7 = 'workout'
@@ -682,7 +695,8 @@ fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
                     after.as_ref().map(|(at, _)| at),
                     after.as_ref().map_or(0, |(_, n)| *n),
                     DOOMED_CHUNK,
-                    having
+                    having,
+                    with_kind
                 ],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )?
@@ -780,6 +794,7 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "additionalProperties": false,
               "properties": {
                 "kind": { "type": "string", "minLength": 1 },
+                "with_kind": { "type": "string", "minLength": 1 },
                 "having": { "type": "string", "enum": ["workout"] },
                 "due_only": { "type": "boolean" },
                 "limit": { "type": "integer", "minimum": 1 },

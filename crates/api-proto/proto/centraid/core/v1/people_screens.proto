@@ -88,7 +88,7 @@ message PeopleHomeState {
   // Search is the field under the title; while a term is answered its rows
   // replace the surface.
   PeopleSearchState search = 12;
-  // SHEET_MORE's rows: Import, Export and Trash, never search, sort or a filter (R-CHROME-4).
+  // SHEET_MORE's rows: Lists, Import, Export and Trash, never search, sort or a filter (R-CHROME-4).
   repeated PeopleMoreRow more_rows = 13;
   Sheet sheet = 14;
   // What a write did, a refusal's sentence, or how an import went; the screen
@@ -103,6 +103,10 @@ message PeopleHomeState {
   // THE "PHONE CONTACTS" ROW OF MORE (#1173, item 20): what People may read of the address
   // book, drawn above the rows. Unset while denied.
   optional PeopleContactsRow contacts = 19;
+  // THE STOP CONFIRM (#1185), set while the member is asked to stop reading the phone's contacts: the same
+  // sheet and the same words as every followed store (Health's `Stop reading`). Present only after the
+  // More row `stop` was tapped; `StopConfirmed` stops, `StopDismissed` (or a tap outside) keeps following.
+  optional Confirm stop = 20;
 
   enum Sheet {
     // No sheet is open.
@@ -169,7 +173,8 @@ message PeopleMoreRow {
   string key = 1;
   string label = 2;
   string icon_key = 3;
-  // Where a tap goes.
+  // Where a tap goes. ABSENT on a row that opens a confirm instead (`stop`, "Stop reading Phone
+  // contacts"): the tap is `MoreRowPicked`.
   Route route = 4;
   // The row's second line (#1185): Trash says "30 days, then erased". Empty for the others.
   string meta = 5;
@@ -370,6 +375,10 @@ message PeopleHomeEvent {
     FilterMenuCleared filter_menu_cleared = 14;
     // The Phone contacts row's one action: pause, resume, turn on, or open Settings.
     ContactsActionTapped contacts_action = 15;
+    // A More row with no route of its own (`stop`): Rust decides what it opens.
+    MoreRowPicked more_row = 16;
+    StopConfirmed stop_confirmed = 17;
+    StopDismissed stop_dismissed = 18;
   }
 
   // 3 was `chip`, 4 `order` and 8 `sheet_opened`: a pick in the filter menu is
@@ -393,6 +402,15 @@ message PeopleHomeEvent {
   message SearchClosed {}
 
   message SheetClosed {}
+
+  // A More row by `PeopleMoreRow.key` that carries no route.
+  message MoreRowPicked {
+    string key = 1;
+  }
+
+  message StopConfirmed {}
+
+  message StopDismissed {}
 
   message StarToggled {
     string party_id = 1;
@@ -891,4 +909,96 @@ message PeopleEditorEvent {
   message CadencePicked {
     int64 days = 1;
   }
+}
+
+// ---------------------------------------------------------------------------
+// People's lists (`people.lists`, #1185)
+// ---------------------------------------------------------------------------
+
+// THE MEMBER'S LISTS: a page of rows, a "New list" in the header, and one sheet that makes a list or
+// renames the one tapped. Deleting is "Move to trash" on that sheet: no confirm, the status line says
+// "{name} moved to trash" and carries Undo, and the list is a row of People's trash until then.
+message PeopleListsState {
+  // "Lists".
+  string title = 1;
+  // The page it was pushed from ("People").
+  string back_label = 2;
+  oneof content {
+    Loading loading = 3;
+    Failure failure = 4;
+    Denied denied = 5;
+    PeopleListsData data = 6;
+  }
+  // A write's sentence or a refusal's; with Undo after a move to the trash.
+  StatusLine status = 7;
+  // The name sheet, while it is open.
+  optional PeopleListSheet sheet = 8;
+}
+
+message PeopleListsData {
+  // By name. Empty while `empty` is set.
+  repeated PeopleListRow rows = 1;
+  // "New list": the header's one action (`NewTapped`).
+  string add_label = 2;
+  // Set exactly when there are no lists.
+  optional EmptyState empty = 3;
+}
+
+message PeopleListRow {
+  string list_id = 1;
+  string name = 2;
+  // "3 people" / "1 person"; EMPTY when the count was not read whole (more people than a window).
+  string meta = 3;
+  // "Family, 3 people".
+  string accessibility_label = 4;
+}
+
+// The sheet that makes a list ("New list") or renames one ("Rename list").
+message PeopleListSheet {
+  string title = 1;
+  // The draft's name, as typed.
+  string name = 2;
+  // "List name".
+  string name_placeholder = 3;
+  // "Create" or "Save"; armed by a name (`can_submit`).
+  string submit_label = 4;
+  bool can_submit = 5;
+  string cancel_label = 6;
+  // "Move to trash" (destructive, no confirm): present only when renaming an existing list.
+  optional string trash_label = 7;
+}
+
+message PeopleListsEvent {
+  oneof kind {
+    // The failure's "Try again".
+    Refreshed refreshed = 1;
+    // The header's "New list": the sheet opens empty.
+    NewTapped new_tapped = 2;
+    // A row: the sheet opens on that list.
+    RowTapped row_tapped = 3;
+    NameChanged name_changed = 4;
+    // "Create" or "Save".
+    Submitted submitted = 5;
+    SheetClosed sheet_closed = 6;
+    // The sheet's "Move to trash".
+    TrashTapped trash_tapped = 7;
+  }
+
+  message Refreshed {}
+
+  message NewTapped {}
+
+  message RowTapped {
+    string list_id = 1;
+  }
+
+  message NameChanged {
+    string text = 1;
+  }
+
+  message Submitted {}
+
+  message SheetClosed {}
+
+  message TrashTapped {}
 }

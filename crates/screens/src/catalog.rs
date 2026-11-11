@@ -1624,6 +1624,7 @@ pub mod act {
             Files,
             Health,
             Statement,
+            PhoneReminders,
         }
         impl StopFollowingSystem {
             fn wire(self) -> &'static str {
@@ -1633,6 +1634,7 @@ pub mod act {
                     Self::Files => "files",
                     Self::Health => "health",
                     Self::Statement => "statement",
+                    Self::PhoneReminders => "phone_reminders",
                 }
             }
         }
@@ -4530,11 +4532,25 @@ pub mod act {
             }
         }
 
-        /// Empty the person trash through entity.empty_trash with kind person. Irreversible and takes no id: every person in the trash is destroyed now, as purge destroys one.
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum EmptyTrashWithKind {
+            #[default]
+            List,
+        }
+        impl EmptyTrashWithKind {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::List => "list",
+                }
+            }
+        }
+
+        /// Empty the person trash through entity.empty_trash with kind person, and with_kind list to take the lists in the trash with them. Irreversible and takes no id: every person (and list) in the trash is destroyed now, as purge destroys one.
         #[derive(Clone, Debug, Default)]
         pub struct EmptyTrash {
             pub due_only: Option<bool>,
             pub kind: Option<EmptyTrashKind>,
+            pub with_kind: Option<EmptyTrashWithKind>,
         }
         impl EmptyTrash {
             pub const NAME: &str = "empty-trash";
@@ -4543,6 +4559,7 @@ pub mod act {
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 if let Some(it) = self.due_only { map.insert("due_only".to_owned(), flag(it)); }
                 if let Some(it) = self.kind { map.insert("kind".to_owned(), text(it.wire())); }
+                if let Some(it) = self.with_kind { map.insert("with_kind".to_owned(), text(it.wire())); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
         }
@@ -4768,28 +4785,6 @@ pub mod act {
         }
         impl From<SetReminder> for wire::ActRequest {
             fn from(value: SetReminder) -> Self {
-                value.request()
-            }
-        }
-
-        /// Ensure a person's birthday reminder is on through person.set_birthday_reminder. Birthday reminders always stay on; requests to turn one off are refused.
-        #[derive(Clone, Debug, Default)]
-        pub struct SetBirthdayReminder {
-            pub person_id: String,
-            pub on: bool,
-        }
-        impl SetBirthdayReminder {
-            pub const NAME: &str = "set-birthday-reminder";
-            pub fn request(self) -> wire::ActRequest {
-                #[allow(unused_mut)]
-                let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                map.insert("id".to_owned(), text(self.person_id));
-                map.insert("on".to_owned(), flag(self.on));
-                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
-            }
-        }
-        impl From<SetBirthdayReminder> for wire::ActRequest {
-            fn from(value: SetBirthdayReminder) -> Self {
                 value.request()
             }
         }

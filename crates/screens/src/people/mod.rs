@@ -44,6 +44,7 @@ pub mod editor;
 pub mod export;
 pub mod fold;
 pub mod home;
+pub mod lists;
 pub mod person;
 pub mod sections;
 pub mod transfer;
@@ -54,6 +55,7 @@ pub const PERSON: &str = "people.person";
 pub const EDITOR: &str = "people.editor";
 pub const TRASH: &str = "people.trash";
 pub const EARLIER: &str = "people.earlier";
+pub const LISTS: &str = "people.lists";
 pub const IMPORT: &str = "people.import";
 pub const EXPORT: &str = "people.export";
 
@@ -69,6 +71,7 @@ pub fn registry() -> Registry {
         .with(EDITOR, editor::build)
         .with(TRASH, trash::build)
         .with(EARLIER, earlier::build)
+        .with(LISTS, lists::build)
         .with(IMPORT, transfer::build_import)
         .with(EXPORT, export::build)
 }
@@ -135,7 +138,7 @@ pub(crate) fn denied(
 
 /// The routes People's own screens hand to a shell inside a view state.
 pub mod routes {
-    use super::{EDITOR, HOME, PERSON, TRASH, wire};
+    use super::{EDITOR, HOME, LISTS, PERSON, TRASH, wire};
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
         wire::Route {
@@ -195,8 +198,19 @@ pub mod routes {
         )
     }
 
-    /// The kit's transfer screen on People's vCards; `back` names the page it was pushed from.
-    /// The export's entry is the kit's (`kit::export::entry`).
+    /// The member's lists; `back` names the page it was pushed from.
+    #[must_use]
+    pub fn lists(back: &str) -> wire::Route {
+        route(
+            LISTS,
+            wire::route::Args::PeopleLists(wire::PeopleListsRoute {
+                back_label: back.to_owned(),
+            }),
+        )
+    }
+
+    /// The kit's transfer screen on People's vCards, either way; `back` names the page it was
+    /// pushed from.
     #[must_use]
     pub fn import(back: &str) -> wire::Route {
         route(

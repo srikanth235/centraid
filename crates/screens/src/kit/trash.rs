@@ -194,6 +194,11 @@ impl Trash {
     /// What a row is called in "Delete this {noun} forever?": its own word when it has one, else
     /// the app's.
     fn noun_of(&self, id: &str) -> Words {
+        self.own_noun(id).unwrap_or(self.spec.noun)
+    }
+
+    /// The noun a row carries itself, when it is not what the app's spec says.
+    fn own_noun(&self, id: &str) -> Option<Words> {
         match &self.phase {
             Phase::Ready(items) => items
                 .iter()
@@ -201,7 +206,6 @@ impl Trash {
                 .and_then(|item| item.noun),
             _ => None,
         }
-        .unwrap_or(self.spec.noun)
     }
 
     /// One write under a key of its own; a refusal is the status line, and
@@ -288,7 +292,12 @@ impl Trash {
             Asking::Nothing => None,
             Asking::Purge(ref id) => Some(wire::Confirm {
                 title: purge_title(locale, self.noun_of(id)),
-                body: purge_body(locale, self.spec.purge_lead),
+                // The app's lead is about the app's own records: a row with a noun of its own (a
+                // list among people) takes the kit's.
+                body: purge_body(
+                    locale,
+                    self.spec.purge_lead.filter(|_| self.own_noun(id).is_none()),
+                ),
                 confirm_label: shared::trash_purge(locale),
                 destructive: true,
             }),

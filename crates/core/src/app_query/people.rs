@@ -236,6 +236,7 @@ pub(crate) fn trash(
                     name: row.name,
                     role: row.role,
                     purge_at: row.purge_at,
+                    list: row.list,
                 })
                 .collect(),
             truncated: data.truncated,

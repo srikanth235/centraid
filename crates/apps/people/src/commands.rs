@@ -13,7 +13,7 @@
 //! `task.complete` and `task.reopen` (a follow-up or a gift idea is a task, and
 //! completing one is the operation Tasks and automations share, so a repeating
 //! task gets its next occurrence) and `event.edit` (a date's reminder is its
-//! event's). A birthday is the person's own column, so its reminder is `set-birthday-reminder`.
+//! event's). A birthday's reminder is always on and has no action.
 //!
 //! **An action says the state it wants.** The v0 actions `toggle-gift` and
 //! `toggle-reminder` flipped a state the caller had not read; a gift is a task,
@@ -112,7 +112,7 @@ pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
 /// THE TABLE. Thirty-two actions, in the manifest's own order.
-pub const ACTIONS: [ActionRow; 36] = [
+pub const ACTIONS: [ActionRow; 35] = [
     // THE GENERAL LINK (#1185): any item to any other, and the link taken off.
     act("link", "edge.add"),
     act("unlink", "edge.remove"),
@@ -133,7 +133,6 @@ pub const ACTIONS: [ActionRow; 36] = [
     act("reopen-task", "task.reopen"),
     act("add-important-date", "person.add_date"),
     act("set-reminder", "event.edit"),
-    act("set-birthday-reminder", "person.set_birthday_reminder"),
     act("add-relationship", "person.add_relationship"),
     confirmed("remove-relationship", "edge.remove"),
     act("add-gift", "person.add_gift"),
@@ -217,7 +216,7 @@ mod tests {
 
     #[test]
     fn every_action_invokes_one_command_and_the_person_verbs_are_the_persons_own() {
-        assert_eq!(ACTIONS.len(), 36);
+        assert_eq!(ACTIONS.len(), 35);
         assert_eq!(
             commands("person."),
             [
@@ -236,7 +235,6 @@ mod tests {
                 "person.move",
                 "person.remove_contact_point",
                 "person.save_contact_point",
-                "person.set_birthday_reminder",
             ],
             "what only a person has; everything else is a shared verb"
         );

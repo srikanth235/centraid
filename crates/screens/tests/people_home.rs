@@ -366,7 +366,7 @@ fn search_is_a_field_over_the_roster_names_only_and_closing_clears_it() {
 }
 
 #[test]
-fn more_holds_import_export_and_trash_and_is_an_ordinary_band_tab_last() {
+fn more_holds_lists_import_export_and_trash_and_is_an_ordinary_band_tab_last() {
     let mut d = clean();
     person(&d, "Dana");
     let i = begin(&mut d);
@@ -380,10 +380,11 @@ fn more_holds_import_export_and_trash_and_is_an_ordinary_band_tab_last() {
     let more = home_state(d.view(i));
     assert_eq!(more.sheet, wire::people_home_state::Sheet::More as i32);
     let labels: Vec<&str> = more.more_rows.iter().map(|r| r.label.as_str()).collect();
-    assert_eq!(labels, ["Import", "Export", "Trash"]);
-    assert_eq!(more.more_rows[2].route, Some(routes::trash()));
-    assert_eq!(more.more_rows[2].meta, "30 days, then erased");
-    assert!(more.more_rows[..2].iter().all(|row| row.meta.is_empty()));
+    assert_eq!(labels, ["Lists", "Import", "Export", "Trash"]);
+    assert_eq!(more.more_rows[0].route, Some(routes::lists("People")));
+    assert_eq!(more.more_rows[3].route, Some(routes::trash()));
+    assert_eq!(more.more_rows[3].meta, "30 days, then erased");
+    assert!(more.more_rows[..3].iter().all(|row| row.meta.is_empty()));
     send_home(&mut d, i, H::SheetClosed(ev::SheetClosed {}));
     assert_eq!(
         home_state(d.view(i)).sheet,

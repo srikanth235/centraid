@@ -334,6 +334,68 @@ fn the_trash_shelf_and_the_search_answer_in_the_roster_s_shape() {
 }
 
 #[test]
+fn a_list_in_the_trash_is_a_row_of_the_shelf_and_the_trash_empties_people_and_lists_together() {
+    let w = World::new();
+    let list = w.ok(
+        "container.create",
+        json!({ "kind": "list", "title": "Family" }),
+    )["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let ada = w.person("Ada", json!({ "list_id": list }));
+    let bob = w.person("Bob", json!({}));
+    w.ok("entity.trash", json!({ "id": list }));
+    w.clock.advance_days(1);
+    w.ok("entity.trash", json!({ "id": bob }));
+    let (shelf, denial) = w.read(|door| load_trash(door).expect("reads"));
+    assert!(denial.is_none() && !shelf.truncated);
+    // Most recently trashed first, whichever kind; only the list says it is one.
+    assert_eq!(
+        shelf
+            .people
+            .iter()
+            .map(|row| (row.name.as_str(), row.list))
+            .collect::<Vec<_>>(),
+        [("Bob", false), ("Family", true)]
+    );
+    // The people in a trashed list are not touched; the list is not on the live roster.
+    let (roster, _) = w.read(|door| load_people(door, PeopleInput::default()).expect("reads"));
+    assert_eq!(roster.lists.len(), 0);
+    assert_eq!(
+        roster
+            .people
+            .iter()
+            .map(|p| p.party_id.as_str())
+            .collect::<Vec<_>>(),
+        [ada.as_str()]
+    );
+    // A restore brings it back, with Ada in it again.
+    w.ok("entity.restore", json!({ "id": list }));
+    let (roster, _) = w.read(|door| load_people(door, PeopleInput::default()).expect("reads"));
+    assert_eq!(roster.lists.len(), 1);
+    assert_eq!(roster.people[0].list_id.as_deref(), Some(list.as_str()));
+    // `with_kind` empties the lists of the trash beside the people.
+    w.ok("entity.trash", json!({ "id": list }));
+    w.ok(
+        "entity.empty_trash",
+        json!({ "kind": "person", "with_kind": "list" }),
+    );
+    let (shelf, _) = w.read(|door| load_trash(door).expect("reads"));
+    assert!(shelf.people.is_empty(), "{:?}", shelf.people);
+    // A second kind with no first is refused.
+    let refused = w
+        .vault
+        .execute(
+            &w.registry,
+            &Principal::owner("phone"),
+            &Command::new("entity.empty_trash", json!({ "with_kind": "list" })),
+        )
+        .expect("answers");
+    assert_eq!(refused.status, CommandStatus::Failed);
+}
+
+#[test]
 fn an_empty_vault_answers_every_read_empty() {
     let w = World::new();
     let now = parse_instant("2026-06-01T00:00:00.000Z").unwrap();

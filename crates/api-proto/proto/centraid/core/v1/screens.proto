@@ -313,6 +313,7 @@ message ScreenEvent {
     PeopleHomeEvent people_home = 700;
     PeoplePersonEvent people_person = 701;
     PeopleEditorEvent people_editor = 702;
+    PeopleListsEvent people_lists = 703;
     // ---- pairing (1400-1449, lane H2) ----
     PairLaptopEvent pair_laptop = 1400;
     // ---- the kit (900-999) ----
@@ -449,6 +450,7 @@ message ViewState {
     PeopleHomeState people_home = 700;
     PeoplePersonState people_person = 701;
     PeopleEditorState people_editor = 702;
+    PeopleListsState people_lists = 703;
     // ---- pairing (1400-1449, lane H2) ----
     PairLaptopState pair_laptop = 1400;
     // ---- the kit (900-999) ----

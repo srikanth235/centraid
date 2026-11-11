@@ -89,6 +89,7 @@ message Route {
     PeopleHomeRoute people_home = 700;
     PeoplePersonRoute people_person = 701;
     PeopleEditorRoute people_editor = 702;
+    PeopleListsRoute people_lists = 703;
     // ---- the kit (900-999) ----
     TrashRoute trash = 900;
     TransferRoute transfer = 901;
@@ -474,6 +475,12 @@ message PeoplePersonRoute {
 message PeopleEditorRoute {
   string party_id = 1;
   bool is_new = 2;
+}
+
+// `people.lists` (#1185): the member's lists, to make, rename and move to the trash. `back_label` is the
+// title of the page it was pushed from.
+message PeopleListsRoute {
+  string back_label = 1;
 }
 
 // ---------------------------------------------------------------------------

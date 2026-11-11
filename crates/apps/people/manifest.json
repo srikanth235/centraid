@@ -166,11 +166,6 @@
       },
       {
         "schema": "person",
-        "table": "set_birthday_reminder",
-        "verbs": "act"
-      },
-      {
-        "schema": "person",
         "table": "add_gift",
         "verbs": "act"
       },
@@ -646,7 +641,7 @@
         "clear out the trashed people for good",
         "permanently delete everyone in the trash"
       ],
-      "description": "Empty the person trash through entity.empty_trash with kind person. Irreversible and takes no id: every person in the trash is destroyed now, as purge destroys one.",
+      "description": "Empty the person trash through entity.empty_trash with kind person, and with_kind list to take the lists in the trash with them. Irreversible and takes no id: every person (and list) in the trash is destroyed now, as purge destroys one.",
       "confirmation": "required",
       "input": {
         "type": "object",
@@ -654,6 +649,10 @@
           "kind": {
             "type": "string",
             "enum": ["person"]
+          },
+          "with_kind": {
+            "type": "string",
+            "enum": ["list"]
           },
           "due_only": {
             "type": "boolean"
@@ -1100,50 +1099,6 @@
           }
         },
         "required": ["id", "reminders"],
-        "additionalProperties": false
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "type": "string"
-          },
-          "output": {
-            "type": "object"
-          },
-          "reason": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    {
-      "name": "set-birthday-reminder",
-      "verb": "edit",
-      "kind": "person",
-      "inverse": null,
-      "writes_nothing": true,
-      "sealed": [],
-      "command": "person.set_birthday_reminder",
-      "phrasings": [
-        "stop reminding me of Maria's birthday",
-        "turn off the birthday reminder for Sam",
-        "remind me of Priya's birthday again"
-      ],
-      "description": "Ensure a person's birthday reminder is on through person.set_birthday_reminder. Birthday reminders always stay on; requests to turn one off are refused.",
-      "confirmation": "none",
-      "input": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "on": {
-            "type": "boolean"
-          }
-        },
-        "required": ["id", "on"],
         "additionalProperties": false
       },
       "output": {

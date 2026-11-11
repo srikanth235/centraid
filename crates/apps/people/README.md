@@ -24,7 +24,7 @@ People is five queries, twenty-five actions and thirty-three scopes. It stores n
 | last contacted | **computed at read** from the activities `with` the person |
 | a note, a journal entry | a `note` `about` the person; an entry is about the owner, titled by its mood |
 | a follow-up, a gift idea | a `task` `about` the person; a gift also carries the `gift` tag |
-| the birthday | the person's `birthday` column (`MM-DD`, or `YYYY-MM-DD`); its reminder is on unless the member turned it off (`person.birthday_reminder`, per person; `set-birthday-reminder`) |
+| the birthday | the person's `birthday` column (`MM-DD`, or `YYYY-MM-DD`); its reminder is always on |
 | any other important date | a yearly all-day `event` `about` the person (R-FP-2) |
 | a relationship | a `related` edge labelled by a `relation` concept; it shows on both people's sheets, each read from its own side (the label names what the edge's target is to its source) |
 | how to reach them | `contact_point` rows (one preferred per kind) |
@@ -42,14 +42,14 @@ SQL, in any form, is refused by `cargo xtask rules` (`sql-confinement`): a read 
 The rulings a reader of this crate meets first:
 
 - **A toggle is two actions.** `toggle-gift` is `complete-task` and `reopen-task`, `toggle-reminder` is `set-reminder`; three commands (`task.complete`, `task.reopen`, `event.edit`) are Reminders' and Calendar's and `ActionRow::pending_schema` names them until that lane lands.
-- **Five actions are confirm-gated** by the manifest, which is the surface's gate: `trash-person`, `purge-person`, `empty-trash` (every trashed person, forever), `delete-contact-channel` and `merge-people`. No command sets the command-level `confirm`.
+- **Five actions are confirm-gated** by the manifest, which is the surface's gate: `trash-person`, `purge-person`, `empty-trash` (every trashed person, and with `with_kind` list every trashed list, forever), `delete-contact-channel` and `merge-people`. No command sets the command-level `confirm`.
 - **A person holds what is written about them alone**: their notes, touches and yearly dates go to the trash and are purged with them; a task about them stays.
 - **`people.limit` is 20-10,000**, the widest window in the tree and the manifest's own; the walk reports `truncated` when it filled.
 - **There is no clock here.** A civil date is read in a zone somebody stated.
 
 ## The five queries
 
-`people` is the roster: a window of the circle, newest-added first, with the star, the list, the reminders that are on and when each person was last touched. `person` is one sheet: the roster's row, nickname, how you met, contact points (with who else holds the same value), dates, notes and the touch log and their relationships. A touch in the trash is no touch: it leaves the log, last contacted and the cadence. `dashboard` folds Reconnect (most overdue first, ties by id), Upcoming (nearest first across the year boundary) and the newest 30 touches over the whole window. `search` is the vault's one index over `person` (name, nickname, role, how you met, contact points and the notes about them and about their touches), ranked, with a snippet. `trash` is the reversible shelf, most recently trashed first.
+`people` is the roster: a window of the circle, newest-added first, with the star, the list, the reminders that are on and when each person was last touched. `person` is one sheet: the roster's row, nickname, how you met, contact points (with who else holds the same value), dates, notes and the touch log and their relationships. A touch in the trash is no touch: it leaves the log, last contacted and the cadence. `dashboard` folds Reconnect (most overdue first, ties by id), Upcoming (nearest first across the year boundary) and the newest 30 touches over the whole window. `search` is the vault's one index over `person` (name, nickname, role, how you met, contact points and the notes about them and about their touches), ranked, with a snippet. `trash` is the reversible shelf, most recently trashed first: people, and the lists (`list` on the row) the member moved to the trash, which keep their members and bring them back when restored.
 
 ## On the phone
 

@@ -1465,12 +1465,28 @@
       "x": 3330,
       "y": 24000
     },
+    "PeopleListSheet.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "9 · Rename a list",
+      "w": 390,
+      "x": 4290,
+      "y": 24000
+    },
+    "PeopleLists.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "8 · People lists, after a delete",
+      "w": 390,
+      "x": 3810,
+      "y": 24000
+    },
     "Reconnect.dc.html": {
       "h": 844,
       "page": "light",
       "title": "7 · Reconnect phone data",
       "w": 390,
-      "x": 4290,
+      "x": 5250,
       "y": 24000
     },
     "PeopleMoreContacts.dc.html": {
@@ -1479,6 +1495,14 @@
       "title": "7 · People more",
       "w": 390,
       "x": 2850,
+      "y": 24000
+    },
+    "PeopleStopContacts.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "10 · Stop reading contacts",
+      "w": 390,
+      "x": 4770,
       "y": 24000
     },
     "PermissionPhotos.dc.html": {

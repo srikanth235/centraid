@@ -4,8 +4,12 @@
 //! person forever, with everything written about them alone that went to the
 //! trash with them (a task about them stays the member's). The vault refuses it
 //! while the owner is the person, and that refusal is the core's sentence on the
-//! status line. `empty-trash` (`entity.empty_trash`, kind person) deletes every
-//! trashed person forever the same way (#1185).
+//! status line. `empty-trash` (`entity.empty_trash`, kind person and with it kind list) deletes every
+//! trashed person and list forever the same way (#1185).
+//!
+//! A list is a row of the same shelf, called a list: it was moved to the trash with `delete-list`,
+//! its members were not touched, and one restore brings it back with them in it. Its purge says
+//! nothing about a person's profile (the kit's own lead, as any row with its own noun).
 //!
 //! The list is the core's `people.trash` (the name lives on the party), not a
 //! page of `entity` rows.
@@ -50,6 +54,7 @@ pub static SPEC: TrashSpec = TrashSpec {
     empty: || {
         act::people::EmptyTrash {
             kind: Some(act::people::EmptyTrashKind::Person),
+            with_kind: Some(act::people::EmptyTrashWithKind::List),
             ..Default::default()
         }
         .into()
@@ -78,7 +83,8 @@ fn trashed(ctx: &Ctx) -> Reading<Vec<TrashItem>> {
                     title: row.name,
                     deleted_day: row.deleted_local_day,
                     purge_day: row.purge_local_day,
-                    noun: None,
+                    // A list on the shelf of people says what it is.
+                    noun: row.list.then_some(shared::trash_noun_list as _),
                 })
                 .collect(),
         ),
