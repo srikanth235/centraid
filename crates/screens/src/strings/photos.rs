@@ -87,8 +87,8 @@ catalog! {
     plain photos_editor_title = ("Crop and rotate", "Crop and rotate");
     plain photos_export_all = ("All photos and videos", "All photos and videos");
     plain photos_export_lede = (
-        "Your original photos and videos in one .zip archive, named by when they were taken.",
-        "Your original photos and videos in one .zip archive, named by when they were taken."
+        "Your original photos and videos in one .zip, named by date taken.",
+        "Your original photos and videos in one .zip, named by date taken."
     );
     plain photos_export_nothing = (
         "There are no photos or videos on this phone to export.",
@@ -158,7 +158,7 @@ catalog! {
     plain photos_import_wait_wifi = ("Waiting for Wi-Fi", "Waiting for Wi-Fi");
     plain photos_info = ("Info", "Info");
     plain photos_keep_it = ("Keep it", "Keep it");
-    plain photos_keep_originals_label = ("Keep originals on this phone", "Keep originals on this phone");
+    plain photos_keep_originals_label = ("Keep originals here", "Keep originals here");
     plain photos_keep_originals_title = ("Keep originals on this phone", "Keep originals on this phone");
     plain photos_keep_them = ("Keep them", "Keep them");
     plain photos_labels = ("Labels", "Labels");

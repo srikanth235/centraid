@@ -69,8 +69,8 @@ catalog! {
     plain empty_starred_body = ("Star a document to keep it here.", "Star a document to keep it here.");
     plain export_all = ("All documents", "All documents");
     plain export_lede = (
-        "Your original files in one .zip archive, in the folders you see here.",
-        "Your original files in one .zip archive, in the folders you see here."
+        "Your original files in one .zip archive, in your folders.",
+        "Your original files in one .zip archive, in your folders."
     );
     plain export_nothing = (
         "There are no documents on this phone to export.",

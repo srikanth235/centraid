@@ -261,7 +261,6 @@ const BUDGET = {
     // ENDPOINT_LABEL, RESTORE_HELD_OWN_LABEL: field and list prompts — the
     // `_LABEL` suffix also names these, and they are not buttons.
     "crates/screens/src/strings/custody.rs": 3,
-    "crates/screens/src/strings/photos.rs": 1,
   },
 };
 
