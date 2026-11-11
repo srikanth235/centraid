@@ -40,7 +40,9 @@ use crate::kit::schedule::ops::Ops;
 use crate::kit::schedule::phase::Phase;
 use crate::kit::schedule::style::{Draft, Subject};
 use crate::screen::{Ctx, Screen};
-use crate::strings::{agenda as words, agenda_reminders as reminders};
+use crate::strings::{
+    agenda as words, agenda_calendar as calendar_words, agenda_reminders as reminders, shared,
+};
 
 pub(super) struct Home {
     phase: Phase,
@@ -67,6 +69,8 @@ pub(super) struct Home {
     held: Held,
     /// The phone's calendar, imported here; the coordinator follows it (`crate::follow`).
     calendar: CalendarFollow,
+    /// The stop-reading confirm is up (#1185).
+    asking_stop: bool,
 }
 
 /// The registry factory for Calendar's home.
@@ -109,6 +113,7 @@ impl Home {
             ops: Ops::default(),
             held: Held::default(),
             calendar: CalendarFollow::new(),
+            asking_stop: false,
         }
     }
 
@@ -223,6 +228,9 @@ impl Home {
             }
             H::CalendarToggled(toggled) => self.toggle_calendar(&toggled.calendar_id),
             H::MoreRow(picked) => self.more_row(&picked.key, ctx),
+            H::StopDismissed(_) => self.asking_stop = false,
+            // Taken in `update`: it returns the shell's effects.
+            H::StopConfirmed(_) => {}
             H::SheetOpened(opened) => {
                 let sheet = Sheet::try_from(opened.sheet).unwrap_or(Sheet::Unspecified);
                 if sheet != Sheet::Unspecified {
@@ -331,9 +339,39 @@ impl Home {
         }
     }
 
+    /// STOP READING, once the member said so: the status line says what happened, and Calendar
+    /// goes on showing the events it already holds (they are ordinary ones now).
+    fn stop(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
+        let locale = ctx.locale();
+        if !std::mem::take(&mut self.asking_stop) {
+            return Vec::new();
+        }
+        let effects = match self.calendar.stop(ctx) {
+            Some(effects) => {
+                self.ops.say(calendar_words::calendars_stopped(locale));
+                effects
+            }
+            None => {
+                self.ops.line.refuse(shared::write_refused(locale));
+                Vec::new()
+            }
+        };
+        self.refresh(ctx);
+        effects
+    }
+
     /// A Calendars sheet row, by its key. A key the sheet does not hold now (a calendar
     /// gone since it was drawn) does nothing.
     fn more_row(&mut self, key: &str, ctx: &Ctx) {
+        // THE ONE MENU ROW WITH NO ROUTE: it asks before it stops.
+        if self.menu && key == chrome::MORE_STOP {
+            if self.calendar.can_stop(ctx) {
+                self.asking_stop = true;
+                self.sheet = Sheet::None;
+                self.menu = false;
+            }
+            return;
+        }
         // THE MENU'S ROW is a route the shell pushes: the sheet is done.
         if self.menu && key == chrome::MORE_TRASH {
             self.sheet = Sheet::None;
@@ -437,7 +475,7 @@ impl Home {
             return Vec::new();
         }
         if self.menu {
-            return chrome::menu_rows(ctx.locale());
+            return chrome::menu_rows(ctx.locale(), self.calendar.can_stop(ctx));
         }
         let calendars = self
             .data(ctx)
@@ -460,6 +498,7 @@ impl Screen for Home {
             Some(E::EnvironmentChanged(_) | E::DataChanged(_)) => self.refresh(ctx),
             Some(E::AgendaHome(home)) => match home.kind {
                 Some(H::ImportRequested(_)) => return self.calendar.import(ctx),
+                Some(H::StopConfirmed(_)) => return self.stop(ctx),
                 // A LONG PRESS ON AN EMPTY SLOT writes nothing: it opens the add
                 // sheet at the snapped time.
                 Some(H::SlotPressed(pressed)) => {
@@ -594,7 +633,7 @@ impl Screen for Home {
                     more_rows: if denied {
                         Vec::new()
                     } else if menu_up {
-                        chrome::menu_rows(locale)
+                        chrome::menu_rows(locale, self.calendar.can_stop(ctx))
                     } else {
                         chrome::more_rows(
                             locale,
@@ -622,6 +661,15 @@ impl Screen for Home {
                                 .report(Store::Calendar)
                                 .status(ctx, Store::Calendar)
                         }),
+                    // THE STOP CONFIRM (#1185): the kit's sheet, in the shared words.
+                    stop: (self.asking_stop && !denied).then(|| {
+                        crate::kit::follow::stop_confirm(
+                            locale,
+                            &words::app_title(locale),
+                            &chrome::stop_store(locale),
+                            &calendar_words::calendars_kept(locale),
+                        )
+                    }),
                     quick_add: Some(wire::TodoQuickAdd::default()),
                     file_choices: Vec::new(),
                     style: self

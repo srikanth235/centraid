@@ -1232,3 +1232,159 @@ fn a_followed_series_whose_rule_this_build_cannot_read_still_loads_everywhere() 
     world.send_editor(editor, K::CustomApplied(events::CustomApplied {}));
     assert!(world.editor_data(editor).dirty);
 }
+
+// ---------------------------------------------------------------------------
+// STOP READING (#1185): Calendar's menu sheet, in the shared words
+// ---------------------------------------------------------------------------
+
+fn stop_world() -> World {
+    World::with(Registry::default().with(
+        centraid_screens::calendar::HOME,
+        centraid_screens::calendar::home::build,
+    ))
+}
+
+fn agenda_home_route() -> wire::Route {
+    wire::Route {
+        sheet: false,
+        screen: centraid_screens::calendar::HOME.to_owned(),
+        args: Some(wire::route::Args::AgendaHome(wire::AgendaHomeRoute {
+            destination: wire::AgendaDestination::Month as i32,
+            quick_add_title: String::new(),
+            open_quick_add: false,
+        })),
+    }
+}
+
+fn home_state(world: &World, home: u64) -> &wire::AgendaHomeState {
+    match &world.driver.view(home).kind {
+        Some(wire::view_state::Kind::AgendaHome(state)) => state,
+        other => panic!("not Calendar's home: {other:?}"),
+    }
+}
+
+fn send_home(world: &mut World, home: u64, kind: wire::agenda_home_event::Kind) {
+    world.driver.send(
+        home,
+        E::AgendaHome(wire::AgendaHomeEvent { kind: Some(kind) }),
+    );
+}
+
+fn open_menu(world: &mut World, home: u64) {
+    send_home(
+        world,
+        home,
+        wire::agenda_home_event::Kind::Band(wire::agenda_home_event::BandPicked {
+            key: "menu".to_owned(),
+        }),
+    );
+}
+
+fn tap_stop(world: &mut World, home: u64) {
+    open_menu(world, home);
+    send_home(
+        world,
+        home,
+        wire::agenda_home_event::Kind::MoreRow(wire::agenda_home_event::MoreRowPicked {
+            key: "stop".to_owned(),
+        }),
+    );
+}
+
+fn menu_keys(world: &World, home: u64) -> Vec<String> {
+    home_state(world, home)
+        .more_rows
+        .iter()
+        .map(|row| row.key.clone())
+        .collect()
+}
+
+#[test]
+fn stop_reading_is_offered_only_while_following_asks_in_the_shared_words_and_the_events_stay() {
+    use wire::agenda_home_event::{Kind as H, StopConfirmed, StopDismissed};
+    let mut world = stop_world();
+    let home = world
+        .driver
+        .push(centraid_screens::agenda::TAB, agenda_home_route());
+    habit(&mut world, false);
+
+    // Nothing is followed yet: the menu holds Export and Trash only.
+    open_menu(&mut world, home);
+    assert_eq!(menu_keys(&world, home), ["export", "trash"]);
+    // A tap on a row that is not there asks nothing.
+    send_home(
+        &mut world,
+        home,
+        H::MoreRow(wire::agenda_home_event::MoreRowPicked {
+            key: "stop".to_owned(),
+        }),
+    );
+    assert!(home_state(&world, home).stop.is_none());
+
+    // The Import tap follows (the pass says which calendar).
+    send_home(&mut world, home, H::ImportRequested(Default::default()));
+    answer(
+        &mut world,
+        is_read,
+        wire::effect_result::Outcome::Calendar(snapshot(vec![future(
+            "Offsite",
+            "2099-03-10",
+            "uid:offsite@google",
+        )])),
+    );
+    world.driver.effects.clear();
+    open_menu(&mut world, home);
+    assert_eq!(menu_keys(&world, home), ["export", "trash", "stop"]);
+    // The same words as Health's and People's, on a row with no route of its own.
+    let stop = home_state(&world, home).more_rows[2].clone();
+    assert_eq!(
+        (stop.label.as_str(), stop.icon_key.as_str()),
+        ("Stop reading Phone calendars", "Stop")
+    );
+    assert!(stop.route.is_none());
+    assert!(home_state(&world, home).stop.is_none());
+
+    // Tapping it asks first, in the shared sheet's words; dismissing keeps following.
+    tap_stop(&mut world, home);
+    let confirm = home_state(&world, home).stop.clone().expect("asked first");
+    assert_eq!(confirm.title, "Stop reading Phone calendars?");
+    assert_eq!(
+        confirm.body,
+        "Calendar stops reading Phone calendars on this phone. The events already here stay."
+    );
+    assert_eq!(confirm.confirm_label, "Stop reading");
+    assert!(confirm.destructive);
+    send_home(&mut world, home, H::StopDismissed(StopDismissed {}));
+    assert!(home_state(&world, home).stop.is_none());
+    assert!(world.driver.effects.is_empty(), "dismissing stops nothing");
+    open_menu(&mut world, home);
+    assert_eq!(menu_keys(&world, home), ["export", "trash", "stop"]);
+
+    // Confirming retires the store: the habit is forgotten and the events stay.
+    tap_stop(&mut world, home);
+    send_home(&mut world, home, H::StopConfirmed(StopConfirmed {}));
+    let ops: Vec<i32> = world
+        .driver
+        .effects
+        .iter()
+        .filter_map(|request| match request.effect.as_ref()?.kind.as_ref()? {
+            wire::effect::Kind::Keychain(op) => Some(op.op),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(ops, [wire::keychain_op::Op::Delete as i32]);
+    let state = home_state(&world, home);
+    assert!(state.stop.is_none());
+    assert_eq!(
+        state.status.as_ref().map(|status| status.sentence.as_str()),
+        Some("Calendar stopped reading your phone calendars.")
+    );
+    open_menu(&mut world, home);
+    assert_eq!(menu_keys(&world, home), ["export", "trash"]);
+    assert_eq!(in_window(&world, "Offsite").len(), 1);
+
+    // A confirm that was never asked stops nothing.
+    world.driver.effects.clear();
+    send_home(&mut world, home, H::StopConfirmed(StopConfirmed {}));
+    assert!(world.driver.effects.is_empty());
+}

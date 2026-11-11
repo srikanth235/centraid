@@ -191,6 +191,20 @@ struct AgendaHomeView: View {
                 onCancel: { send(AgendaEvents.make { $0.sheetClosed = .init() }) }
             )
         }
+        // THE STOP CONFIRM (#1185): the kit's sheet in Rust's own sentences, the same as Health's and People's.
+        .sheet(isPresented: Binding(
+            get: { state.hasStop },
+            set: { shown in
+                guard !shown, state.hasStop else { return }
+                send(AgendaEvents.make { $0.stopDismissed = .init() })
+            }
+        )) {
+            ConfirmSheet(
+                state.stop,
+                onConfirm: { send(AgendaEvents.make { $0.stopConfirmed = .init() }) },
+                onDismiss: { send(AgendaEvents.make { $0.stopDismissed = .init() }) }
+            )
+        }
         // THE SHEETS WEAR AGENDA'S BLUE (the boards' Create, Save and Import reminders): the accent
         // is set on the screen that presents them, so a sheet's ink button no longer falls back to
         // the shell's teal.

@@ -124,6 +124,11 @@ message AgendaHomeState {
   // completed) and Sort. Present on the Reminders place only; absent on the Calendar,
   // the gate and while a search answers. A pick comes back as `FilterMenuPicked`.
   optional FilterMenu filter_menu = 36;
+  // THE STOP CONFIRM (#1185), set while the member is asked to stop reading the phone's calendars: the
+  // same sheet and the same words as every followed store (Health's and People's `Stop reading`).
+  // Present only after the menu's More row `stop` was tapped; `StopConfirmed` stops, `StopDismissed`
+  // (or a tap outside) keeps following. Calendar only: Reminders never sets it.
+  optional Confirm stop = 41;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -749,7 +754,8 @@ message AgendaMoreRow {
   // `calendar-<calendar_id>`, `new-calendar` (opens SHEET_NEW_CALENDAR), a Tasks
   // place (`anytime`, `logbook`, `reminders`, `trash`), `import-reminders`
   // (opens SHEET_IMPORT_REMINDERS; only where the platform has a reminders
-  // source) or `reads`.
+  // source), `reads`, or Calendar's menu `stop` (#1185; no `route`: it opens
+  // `AgendaHomeState.stop`).
   string key = 1;
   string label = 2;
   // "Shown" / "Hidden" on a calendar row; empty on an action row.
@@ -867,9 +873,17 @@ message AgendaHomeEvent {
     // THE REMINDERS FILTER AND SORT MENU: a pick, and the clear row.
     FilterMenuPicked filter_menu_picked = 60;
     FilterMenuCleared filter_menu_cleared = 61;
+    // THE STOP CONFIRM (#1185): the menu's `stop` More row asks first (`MoreRowPicked`), then one of
+    // these answers it.
+    StopConfirmed stop_confirmed = 62;
+    StopDismissed stop_dismissed = 63;
   }
 
   // The "‹ November" chip: back to the month the anchor is in.
+  message StopConfirmed {}
+
+  message StopDismissed {}
+
   message MonthChipTapped {}
 
   // A layout key choice (`AgendaCalendarHeader.layouts`), keeping the anchor.

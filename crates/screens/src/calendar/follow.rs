@@ -784,6 +784,38 @@ impl CalendarFollow {
         self.followed
     }
 
+    /// Whether "Stop reading" is offered: this device follows and a pass has said which calendars
+    /// (People's rule).
+    #[must_use]
+    pub fn can_stop(&self, ctx: &Ctx) -> bool {
+        self.followed && !ctx.follows().report(Store::Calendar).origins.is_empty()
+    }
+
+    /// STOP READING: every calendar the passes followed is retired (`stop-following`, the same door
+    /// chat and Undo use) and this device no longer follows. **Every event stays**, an ordinary one
+    /// from now on. `None` when the vault refused part of it (the rest is done, and stopping again
+    /// finishes it); the effects forget the habit.
+    pub fn stop(&mut self, ctx: &Ctx) -> Option<Vec<wire::Effect>> {
+        let mut clean = true;
+        for origin in ctx.follows().report(Store::Calendar).origins {
+            let request = act::calendar::StopFollowing {
+                r#ref: origin.clone(),
+            };
+            let key = kit_act::key(&["stop-following", &origin], kit_act::fresh());
+            // undo-exempt: Stop reading asks first and is itself the Undo of a follow; the empty
+            // state offers Import again, so no line of its own takes it back.
+            clean = kit_act::act(ctx, request, &key).committed && clean;
+        }
+        if !clean {
+            return None;
+        }
+        ctx.follows().stopped(Store::Calendar);
+        self.followed = false;
+        self.status = None;
+        self.outcome = None;
+        Some(vec![keychain(wire::keychain_op::Op::Delete, Vec::new())])
+    }
+
     /// Offer the host's event. `Some(effects)` when it was the answer to an effect this flow
     /// asked; `None` otherwise.
     pub fn on_event(&mut self, event: &E, ctx: &Ctx) -> Option<Vec<wire::Effect>> {
@@ -875,6 +907,7 @@ pub(crate) fn run(ctx: &Ctx, snapshot: &wire::CalendarSnapshot) -> (Outcome, boo
     };
     let mut told = false;
     let mut doubted = 0;
+    let mut followed = Vec::new();
     for origin in &batch.origins {
         let records: Vec<&EventRecord> = batch
             .records
@@ -894,6 +927,7 @@ pub(crate) fn run(ctx: &Ctx, snapshot: &wire::CalendarSnapshot) -> (Outcome, boo
             continue;
         }
         told = true;
+        followed.push(origin.id.clone());
         let output: Value = serde_json::from_slice(&settled.output).unwrap_or(Value::Null);
         outcome.added += count(&output, "added") + count(&output, "matched");
         outcome.refused += count(&output, "refused");
@@ -903,6 +937,8 @@ pub(crate) fn run(ctx: &Ctx, snapshot: &wire::CalendarSnapshot) -> (Outcome, boo
     }
     ctx.follows()
         .judged(Store::Calendar, doubted, !batch.complete);
+    // THE ORIGINS A STOP MUST RETIRE (#1185).
+    ctx.follows().followed_origins(Store::Calendar, &followed);
     (outcome, told)
 }
 

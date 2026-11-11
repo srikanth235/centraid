@@ -65,6 +65,7 @@ import dev.centraid.android.kit.DeniedGate
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.hueColor
 import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.screens.agenda.agendaListColor
 import dev.centraid.android.screens.agenda.gridHue
 import dev.centraid.android.kit.KitGeometry
@@ -321,6 +322,15 @@ public fun AgendaHomeScreen(
         AgendaHomeState.Sheet.SHEET_EDIT_CALENDAR,
         -> AgendaTaskSheet(state, words, onEvent)
         else -> Unit
+    }
+    // THE STOP CONFIRM (#1185): the kit's sheet in Rust's own sentences, the same as Health's and People's.
+    state.stop?.let { stop ->
+        ConfirmSheet(
+            confirm = stop,
+            onConfirm = { onEvent(AgendaHomeEvent(stop_confirmed = AgendaHomeEvent.StopConfirmed())) },
+            onDismiss = { onEvent(AgendaHomeEvent(stop_dismissed = AgendaHomeEvent.StopDismissed())) },
+            confirmTag = "agenda-stop-confirm",
+        )
     }
 }
 

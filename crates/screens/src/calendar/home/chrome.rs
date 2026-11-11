@@ -30,6 +30,8 @@ pub const MORE_CALENDAR: &str = "calendar-";
 pub const MORE_NEW_CALENDAR: &str = "new-calendar";
 /// The menu sheet's row to the trash (#1185).
 pub const MORE_TRASH: &str = "trash";
+/// The menu sheet's row that stops reading the phone's calendars (#1185); it opens a confirm.
+pub const MORE_STOP: &str = "stop";
 
 /// The band (places only, R-CHROME-5): Calendar, Calendars (the sheet of calendars to show or hide,
 /// Apple's middle key) and Invites (Apple's Inbox; the old Waiting). Calendar holds Day, Week, Month,
@@ -265,7 +267,7 @@ pub fn more_rows(
 /// CALENDAR'S MENU SHEET (`MoreCalendar.dc.html`): the places that are not a view of the calendar.
 /// Trash, with the rule that every trash states: 30 days, then erased.
 #[must_use]
-pub fn menu_rows(locale: Locale) -> Vec<wire::AgendaMoreRow> {
+pub fn menu_rows(locale: Locale, can_stop: bool) -> Vec<wire::AgendaMoreRow> {
     let label = shared::trash_entry(locale);
     let meta = shared::trash_entry_meta(locale);
     let export = export::entry(locale, super::super::EXPORT);
@@ -288,6 +290,26 @@ pub fn menu_rows(locale: Locale) -> Vec<wire::AgendaMoreRow> {
             ..wire::AgendaMoreRow::default()
         },
     ]
+    .into_iter()
+    // THE STOP ROW, last (as Health's and People's): the same words for every followed store, and
+    // no route of its own, so its tap asks first.
+    .chain(can_stop.then(|| {
+        let label = crate::kit::follow::stop_row(locale, &stop_store(locale));
+        wire::AgendaMoreRow {
+            key: MORE_STOP.to_owned(),
+            spoken: label.clone(),
+            label,
+            icon_key: "Stop".to_owned(),
+            ..wire::AgendaMoreRow::default()
+        }
+    }))
+    .collect()
+}
+
+/// What the stop row and its confirm call the store: "Phone calendars", as the Reconnect list does.
+#[must_use]
+pub fn stop_store(locale: Locale) -> String {
+    crate::strings::follow::reconnect_calendars(locale)
 }
 
 /// The screen's fixed words, so a view carries no copy of its own.

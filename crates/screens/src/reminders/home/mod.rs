@@ -609,6 +609,8 @@ impl Screen for Home {
                     add_label: task::add_task(locale),
                     add_opens_quick_add: true,
                     new_event: None,
+                    // Stopping the phone's calendars is Calendar's.
+                    stop: None,
                     content,
                 },
             ))),
