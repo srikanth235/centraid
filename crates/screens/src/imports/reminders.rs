@@ -9,7 +9,6 @@
 //! | title, notes | title, description |
 //! | due date, due time, zone | `due` (a day, or `YYYY-MM-DDTHH:MM` floating) and `zone` |
 //! | priority 0 / 1..4 / 5 / 6..9 | none / `!!!` (3) / `!!` (2) / `!` (1), see [`priority_of`] |
-//! | flagged | the Flag: the task's star (`starred`), stated only when the shell can read the flag |
 //! | recurrence rule | `rule` when the vault can expand it; else the task imports without one and the outcome counts it |
 //! | alarms | `remind_before_min` from the FIRST alarm only (a relative one is its offset, an absolute one is due minus its date) |
 //! | its list (calendar) | a list (project) of that name, made when missing, in the nearest of the eight list colours |
@@ -233,11 +232,6 @@ pub fn fields(reminder: &wire::PhoneReminder) -> (serde_json::Map<String, Value>
         },
     );
     map.insert("url".into(), text(&reminder.url));
-    // The flag is the task's star. A shell that cannot read it states nothing, so a star the
-    // member gave the task is never answered with "the phone says not flagged".
-    if let Some(flagged) = reminder.phone_flagged {
-        map.insert("starred".into(), json!(flagged));
-    }
     let done = reminder.completed && !reminder.completed_at.trim().is_empty();
     map.insert("status".into(), json!(if done { "done" } else { "open" }));
     map.insert(
@@ -472,20 +466,6 @@ mod tests {
                 reminder("Call mum", "", ""),
             ]
         );
-    }
-
-    #[test]
-    fn a_flag_is_stated_as_the_star_only_when_the_shell_could_read_it() {
-        let stated = |flagged| {
-            fields(&wire::PhoneReminder {
-                phone_flagged: flagged,
-                ..reminder("A", "", "")
-            })
-            .0
-        };
-        assert_eq!(stated(Some(true)).get("starred"), Some(&json!(true)));
-        assert_eq!(stated(Some(false)).get("starred"), Some(&json!(false)));
-        assert_eq!(stated(None).get("starred"), None);
     }
 
     #[test]

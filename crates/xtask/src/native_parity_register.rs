@@ -241,12 +241,6 @@ pub const REGISTER: &[Entry] = &[
     ("PhoneReminder.due_time", platform(Shell::Ios, REMINDERS)),
     ("PhoneReminder.list_color", platform(Shell::Ios, REMINDERS)),
     (
-        "PhoneReminder.phone_flagged",
-        runtime(
-            "a shell states the phone's flag only when its store can read it; EventKit has no public flag and Android has no Reminders store, so no shell sets it today and the import (imports/reminders.rs) reads it",
-        ),
-    ),
-    (
         "RemindersRead.include_completed",
         platform(Shell::Ios, REMINDERS),
     ),
