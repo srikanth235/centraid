@@ -12,6 +12,7 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
+import "centraid/core/v1/agenda_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/route.proto";
 
@@ -575,6 +576,10 @@ message MoneyTransactionData {
   // kit's shared section, above the earlier versions. Absent while what it is linked to was not
   // read. Its events go back as `MoneyTransactionEvent.link`.
   optional LinkSection links = 21;
+  // The attachments (#1185): the photos and files on this line, with Add photo and Add file. The
+  // kit's shared section (`AgendaAttachmentsSection`), after the offers and before "Linked to".
+  // Its events go back as `MoneyTransactionEvent.attachment`.
+  AgendaAttachmentsSection attachments = 22;
 }
 
 // An offer the app PROPOSES and never applies on its own.
@@ -607,6 +612,8 @@ message MoneyTransactionEvent {
     LinkEvent with_link = 31;
     // The "Linked to" section and its picker (#1185): the kit's `LinkEvent`.
     LinkEvent link = 32;
+    // The attachments section's events (#1185): the kit's `AgendaAttachmentEvent`.
+    AgendaAttachmentEvent attachment = 33;
   }
   reserved 10, 11;
   reserved "confirm_accepted", "confirm_dismissed";

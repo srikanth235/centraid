@@ -1780,10 +1780,10 @@ fn the_committed_register_exempts_only_locker_and_owes_what_is_not_adopted_yet()
     assert!(matches!(status("locker"), Status::Exempt(_)));
     assert!(matches!(status("calendar"), Status::Kept(_)));
     assert!(matches!(status("reminders"), Status::Kept(_)));
-    for app in ["people", "photos", "docs", "health"] {
+    for app in ["people", "photos", "docs", "health", "money"] {
         assert!(matches!(status(app), Status::Kept(_)), "{app}");
     }
-    for app in ["notes", "money"] {
+    for app in ["notes"] {
         assert!(matches!(status(app), Status::Owed(_)), "{app}");
     }
     assert_eq!(ATTACH_EXEMPT.len(), 1);

@@ -425,7 +425,18 @@ internal fun MoneyTransactionScreen(
                 tx.with_offer?.let { offer ->
                     item(key = "offer-with") { OfferCard(offer, "with", onEvent) }
                 }
-                // LINKED TO (#1185): the kit's section, after the offers; Rust makes every word and row.
+                // ATTACHMENTS (#1185): the kit's section, after the offers; Rust makes every word and row.
+                tx.attachments?.let { section ->
+                    item(key = "attachments") {
+                        dev.centraid.android.screens.agenda.AgendaAttachmentsView(
+                            section = section,
+                            prefix = "money-transaction",
+                            onEvent = { onEvent(MoneyTransactionEvent(attachment = it)) },
+                            onOpen = onOpen,
+                        )
+                    }
+                }
+                // LINKED TO (#1185): the kit's section, after the attachments; Rust makes every word and row.
                 tx.links?.let { section ->
                     item(key = "links") {
                         dev.centraid.android.kit.LinkSectionView(section, { link -> onEvent(MoneyTransactionEvent(link = link)) }, onOpen)

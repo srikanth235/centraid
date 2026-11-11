@@ -20,6 +20,7 @@ use super::fold;
 use super::rows;
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
+use crate::kit::attachments::Attachments;
 use crate::kit::earlier;
 use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::read::{self, Page, Reading};
@@ -69,6 +70,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         every: Links::new(&Kind::ALL).for_entity(&args.txn_id),
         linked: None,
         linked_unread: false,
+        attachments: Attachments::of("money", &args.txn_id),
         earlier: earlier::Foot::default(),
         share: Share::default(),
     }))
@@ -112,6 +114,8 @@ struct Transaction {
     linked: Option<Vec<wire::LinkedItem>>,
     /// The read of `linked` was refused or failed: the status line says so, no empty section.
     linked_unread: bool,
+    /// The photos and files on the line (#1185): the kit's section, read with the page.
+    attachments: Attachments,
     /// The entry to the line's earlier versions, read with the page (#1185).
     earlier: earlier::Foot,
     /// The line handed to the OS share sheet as a spreadsheet file (#1185).
@@ -166,6 +170,9 @@ impl Transaction {
             fold::reread(&mut self.page, ctx.locale(), reading, |_| false);
         }
         self.read_linked(ctx);
+        if self.page.data().is_some() {
+            self.attachments.reload(ctx);
+        }
         self.earlier = match self.page.data() {
             Some(loaded) => {
                 earlier::foot(ctx, super::EARLIER, &self.txn_id, &loaded.txn.display_name)
@@ -459,7 +466,7 @@ impl Transaction {
         }
     }
 
-    fn event(&mut self, event: wire::MoneyTransactionEvent, ctx: &Ctx) {
+    fn event(&mut self, event: wire::MoneyTransactionEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             Some(T::Action(picked)) => self.action(&picked.key, ctx),
             Some(T::Category(picked)) => {
@@ -491,6 +498,7 @@ impl Transaction {
             Some(T::OfferDismissed(dismissed)) => self.dismiss(&dismissed.key),
             Some(T::WithLink(link)) => self.link_event(&link, ctx),
             Some(T::Link(link)) => self.linked_event(&link, ctx),
+            Some(T::Attachment(attachment)) => return self.attachments.event(ctx, attachment),
             Some(T::StatusActed(_)) => {
                 if self.undo.acted(ctx) {
                     self.reload(ctx);
@@ -498,6 +506,7 @@ impl Transaction {
             }
             _ => {}
         }
+        Vec::new()
     }
 
     fn data(&self, locale: Locale, loaded: &Loaded) -> wire::MoneyTransactionData {
@@ -706,8 +715,10 @@ impl Transaction {
             // Money out is ink, not red: red is a state. Money in is green.
             amount_tone: if struck { Tone::Seam } else { Tone::Neutral } as i32,
             amount_positive: !struck && answer.amount.as_ref().is_some_and(|a| a.minor > 0),
-            // The "Linked to" section is the page's own read, laid on by `view`.
+            // The "Linked to" section and the attachments are the page's own reads, laid on by
+            // `view`.
             links: None,
+            attachments: None,
             direction_label: if minor < 0 {
                 words::money_out(locale)
             } else {
@@ -749,13 +760,20 @@ impl Screen for Transaction {
             Some(E::MoneyTransaction(wire::MoneyTransactionEvent {
                 kind: Some(T::Action(picked)),
             })) if picked.key == ACTION_SHARE => return self.share.tap(ctx.locale()),
-            Some(E::MoneyTransaction(t)) => self.event(t, ctx),
+            Some(E::MoneyTransaction(t)) => return self.event(t, ctx),
             // THE SHELL'S ANSWER to the owner check or the share sheet.
             Some(E::EffectResult(result)) => {
                 let id = self.txn_id.clone();
-                return self.share.result(ctx, &result, |ctx| {
+                let shared = self.share.result(ctx, &result, |ctx| {
                     super::export::file(ctx, None, Some(&id))
                 });
+                if !shared.is_empty() || self.share.status().is_some() {
+                    return shared;
+                }
+                // The shell's answer to a pick: the attachments' (an add under way).
+                if let Some(outcome) = &result.outcome {
+                    return self.attachments.result(ctx, outcome).unwrap_or_default();
+                }
             }
             Some(E::StatusActed(_)) => {
                 if self.undo.acted(ctx) {
@@ -779,6 +797,7 @@ impl Screen for Transaction {
         } else {
             self.page.data().map(|loaded| {
                 let mut data = self.data(locale, loaded);
+                data.attachments = Some(self.attachments.view(locale, ctx.units()));
                 data.links = self.linked.as_ref().map(|linked| {
                     self.every.section(
                         locale,

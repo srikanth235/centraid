@@ -114,7 +114,17 @@ struct MoneyTransactionView: View {
         if transaction.hasTransferOffer { offer(transaction.transferOffer, key: "transfer") }
         if transaction.hasRuleOffer { offer(transaction.ruleOffer, key: "rule") }
         if transaction.hasWithOffer { offer(transaction.withOffer, key: "with") }
-        // LINKED TO (#1185): the kit's section, after the offers; Rust makes every word and row.
+        // ATTACHMENTS (#1185): the kit's section, after the offers; Rust makes every word and row.
+        if transaction.hasAttachments {
+            AgendaAttachmentsView(
+                section: transaction.attachments,
+                idPrefix: "money-transaction-attachment",
+                headIdentifier: "money-transaction-attachments",
+                open: open,
+                send: { attachment in send(event { $0.attachment = attachment }) }
+            )
+        }
+        // LINKED TO (#1185): the kit's section, after the attachments; Rust makes every word and row.
         if transaction.hasLinks {
             LinkSectionView(section: transaction.links, send: { link in
                 send(event { $0.link = link })
