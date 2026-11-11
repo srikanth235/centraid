@@ -39,11 +39,12 @@ button{font:inherit;color:inherit}
   <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.4px; color: #A39E95; margin: 16px 32px 6px;">UNITS</div>
   <div style="margin: 0 16px; background: #1F1E1C; border-radius: 16px; padding: 8px;">
     <div role="radiogroup" aria-label="Units" style="display: flex; background: #2A2826; border-radius: 12px; padding: 3px; font-size: 15px;">
+      <span role="radio" aria-checked="true" style="flex: 1; height: 34px; border-radius: 9px; background: #1F1E1C; border: 1px solid #3A3733; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-weight: 600;">Phone's setting</span>
       <span role="radio" aria-checked="false" style="flex: 1; height: 34px; display: flex; align-items: center; justify-content: center; color: #C9C4BA;">Metric</span>
-      <span role="radio" aria-checked="true" style="flex: 1; height: 34px; border-radius: 9px; background: #1F1E1C; border: 1px solid #3A3733; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-weight: 600;">Imperial</span>
+      <span role="radio" aria-checked="false" style="flex: 1; height: 34px; display: flex; align-items: center; justify-content: center; color: #C9C4BA;">Imperial</span>
     </div>
   </div>
-  <p style="margin: 6px 32px 0; font-size: 13px; color: #A39E95; line-height: 1.4;">Distances, weights and temperatures in every app. Starts as your region's.</p>
+  <p style="margin: 6px 32px 0; font-size: 13px; color: #A39E95; line-height: 1.4;">Distances, weights and temperatures. Phone's setting follows your region.</p>
 
   <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.4px; color: #A39E95; margin: 16px 32px 6px;">VAULT</div>
   <div style="margin: 0 16px; background: #1F1E1C; border-radius: 16px;">
@@ -99,6 +100,10 @@ button{font:inherit;color:inherit}
       <span style="flex-grow: 1; font-size: 16px;">Version</span>
       <span style="font-size: 15px; color: #A39E95;">1.0 (412)</span>
     </div>
+  </div>
+
+  <div role="status" aria-live="polite" style="position: absolute; left: 16px; right: 16px; bottom: 24px; min-height: 44px; border-radius: 22px; background: #1F1E1C; border: 1px solid #3A3733; display: flex; align-items: center; padding: 0 16px; box-sizing: border-box;">
+    <span style="flex-grow: 1; font-size: 15px; color: #F27A6D;">Couldn’t save your units. Try again.</span>
   </div>
 </div>
 </x-dc>
