@@ -117,4 +117,3 @@ The vault keeps every record's earlier values at its commit door (#1185); `kit/e
 2. **The detail screen** of the primary record holds a `Share`: its menu row (`share::label(locale)`, icon `share::ICON`) sends a `ShareRequested` event (add it to the screen's event proto, and the label to its chrome) whose handler returns `self.share.tap(locale)`; the `EffectResult` arm returns `self.share.result(ctx, &result, |ctx| Ok(file))`; `Left` returns `self.share.left()`; `status` ORs in `self.share.status()`.
 3. **Shells**: add the row beside the menu's others in Compose and SwiftUI (`chrome.share_label` / `chrome.shareLabel`, the event). The effect's performers exist in both.
 4. **Register**: flip the app's `Promise::Share` row to `kept(.., "<the detail screen>")`. Docs (`ShareFile`) and Photos (`ExportOriginals`) are named in `OWN_SHARE`; Locker has no share by decision (`NO_SHARE`, D11).
-

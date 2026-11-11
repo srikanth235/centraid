@@ -1748,7 +1748,11 @@
         "type": "object",
         "properties": {
           "list_id": { "type": "string", "minLength": 1, "aliases": ["list"] },
-          "person_id": { "type": "string", "minLength": 1, "aliases": ["person"] }
+          "person_id": {
+            "type": "string",
+            "minLength": 1,
+            "aliases": ["person"]
+          }
         },
 
         "additionalProperties": false
