@@ -110,11 +110,10 @@ internal object PhotosEditRender {
             } else {
                 Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true)
             }
-            val crop = clamp(plan.crop ?: FULL_CROP)
-            val cropped = if (crop.w >= 1.0 && crop.h >= 1.0) {
+            val (x, y, w, h) = framePixels(plan.crop, turned.width, turned.height)
+            val cropped = if (x == 0 && y == 0 && w == turned.width && h == turned.height) {
                 turned
             } else {
-                val (x, y, w, h) = cropPixels(crop, turned.width, turned.height)
                 Bitmap.createBitmap(turned, x, y, w, h)
             }
             val file = File(cacheDir, "edit-" + UUID.randomUUID() + ".jpg")
@@ -126,6 +125,14 @@ internal object PhotosEditRender {
             null
         }
     }
+
+    /**
+     * WHERE THE CROP LANDS in a rotated frame of [width] x [height]: Rust's `clamp_crop` then
+     * `crop_pixels`, as `[x, y, w, h]`. Pure, so `PhotosEditGeometryTest` holds it to
+     * `contracts/photos/editor-geometry.json`.
+     */
+    internal fun framePixels(crop: PhotosEditCrop?, width: Int, height: Int): List<Int> =
+        cropPixels(clamp(crop ?: FULL_CROP), width, height)
 
     /** Rust's clamp: a side below a tenth grows to it, and the rectangle stays inside the frame. */
     private fun clamp(rect: PhotosEditCrop): PhotosEditCrop {
