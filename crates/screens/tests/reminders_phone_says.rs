@@ -86,3 +86,66 @@ fn a_flag_the_member_changed_says_what_the_phone_says_and_taking_it_flags_the_ta
     assert!(task_of(&d, &id).flagged);
     assert!(detail(d.view(page)).phone_says.is_empty());
 }
+
+/// The phone's word for the due day, as the task page words its own: "Tomorrow", "Wed 11 March"
+/// and "9:30 AM", in the member's zone and hour cycle, never the stored text.
+#[test]
+fn a_due_the_member_moved_says_what_the_phone_says_in_the_words_and_zone_of_the_page() {
+    let mut d = reminders_driver();
+    d.call(wire::screen_request::Kind::Environment(wire::Environment {
+        locale: "en-US".to_owned(),
+        zone: "Pacific/Auckland".to_owned(),
+        hour_cycle_12: true,
+        ..Default::default()
+    }));
+    let weekday = |day: &str| {
+        centraid_screens::kit::civil::relative_day(
+            centraid_screens::strings::Locale::En,
+            day,
+            "2000-01-01",
+        )
+    };
+    follow_reminders(
+        &d,
+        ("list:1", "Errands"),
+        json!([
+            // A wall clock the phone states with no zone: it is the member's own.
+            { "external_id": "wall", "fields": reminder_fields("Wall", json!({ "due": "2099-03-02T09:30" })) },
+            // An instant: 20:00 UTC is the next morning in Auckland.
+            { "external_id": "instant", "fields": reminder_fields("Instant", json!({ "due": "2099-03-02T20:00:00Z" })) },
+            { "external_id": "day", "fields": reminder_fields("Day", json!({ "due": "2099-03-02" })) },
+        ]),
+        true,
+    );
+    for title in ["Wall", "Instant", "Day"] {
+        let id = id_by_title(&d, title);
+        arrange(
+            &d,
+            act::reminders::EditTask {
+                task_id: id.clone(),
+                due: Field::Is("2099-06-01".to_owned()),
+                ..Default::default()
+            },
+        );
+    }
+    let said = |d: &mut centraid_screens::testing::Driver, title: &str| {
+        let id = id_by_title(d, title);
+        lines(d, &id)
+            .1
+            .into_iter()
+            .map(|line| line.lead)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        said(&mut d, "Wall"),
+        [format!("Phone says {} 9:30 AM", weekday("2099-03-02"))]
+    );
+    assert_eq!(
+        said(&mut d, "Instant"),
+        [format!("Phone says {} 9:00 AM", weekday("2099-03-03"))]
+    );
+    assert_eq!(
+        said(&mut d, "Day"),
+        [format!("Phone says {}", weekday("2099-03-02"))]
+    );
+}

@@ -20,6 +20,8 @@ use wire::todo_detail_event::Kind as D;
 use wire::todo_detail_state::Asking;
 
 use super::list::{self, Phase};
+use centraid_vault::time::{FireZone, parse_civil_ms};
+
 use crate::catalog::{act, load};
 use crate::field::Field;
 use crate::kit::act as kit_act;
@@ -1193,7 +1195,15 @@ impl Screen for Detail {
                 finished: self.finished,
                 earlier: self.earlier.entry.clone(),
                 origin: self.earlier.origin.clone(),
-                phone_says: phone_says(locale, &self.differences),
+                phone_says: phone_says(
+                    &Wording {
+                        locale,
+                        cycle: ctx.hour_cycle(),
+                        zone: ctx.zone(),
+                        today: &self.today(),
+                    },
+                    &self.differences,
+                ),
                 link_picker: (self.linked.is_some() && self.links.is_open())
                     .then(|| self.links.picker(locale, &self.linked_ids())),
             })),
@@ -1663,8 +1673,51 @@ fn place_choices(
     out
 }
 
+/// What the lines need to word a value the way the page words it.
+#[derive(Clone, Copy)]
+struct Wording<'a> {
+    locale: Locale,
+    cycle: HourCycle,
+    /// The member's own zone (the device's): a stated instant is read here, never in UTC.
+    zone: &'a str,
+    /// The core's today in that zone.
+    today: &'a str,
+}
+
+/// A stated `due` as the page words the task's own: the day as "When" says it ("Today", "Wed 11
+/// March"), then the time as "Time" says it when the due has one, read in the member's zone. A
+/// value that is no date is left as the phone stated it.
+fn due_words(wording: &Wording<'_>, stated: &str) -> String {
+    let Wording {
+        locale,
+        cycle,
+        zone,
+        today,
+    } = *wording;
+    let local = if stated.len() == 10 {
+        Some(stated.to_owned())
+    } else {
+        FireZone::named(zone).ok().and_then(|zone| {
+            let at = zone.zoned_parts(parse_civil_ms(stated, &zone)?);
+            Some(format!(
+                "{:04}-{:02}-{:02}T{:02}:{:02}",
+                at.year, at.month, at.day, at.hour, at.minute
+            ))
+        })
+    };
+    let Some(local) = local.filter(|local| civil::epoch_day_of(&local[..10]).is_some()) else {
+        return stated.to_owned();
+    };
+    let day = civil::relative_day(locale, &local[..10], today);
+    match civil::clock(&local) {
+        time if time.is_empty() => day,
+        _ => format!("{day} {}", civil::clock_for(locale, &local, cycle)),
+    }
+}
+
 /// The lines "Phone says …" under the task: one per field the member's value differs on.
-fn phone_says(locale: Locale, differences: &follow::Phone) -> Vec<wire::PhoneSays> {
+fn phone_says(wording: &Wording<'_>, differences: &follow::Phone) -> Vec<wire::PhoneSays> {
+    let locale = wording.locale;
     let line = |field: &str, noun: String, show: &dyn Fn(&str) -> String| {
         let difference = follow::of(differences, field)?;
         let stated = follow::text(&difference.stated)
@@ -1679,6 +1732,7 @@ fn phone_says(locale: Locale, differences: &follow::Phone) -> Vec<wire::PhoneSay
         ))
     };
     let same = |text: &str| text.to_owned();
+    let due = |text: &str| due_words(wording, text);
     let bangs = |level: &str| match level {
         "3" => "!!!".to_owned(),
         "2" => "!!".to_owned(),
@@ -1704,7 +1758,7 @@ fn phone_says(locale: Locale, differences: &follow::Phone) -> Vec<wire::PhoneSay
     [
         line("title", words::says_noun_title(locale), &same),
         line("description", words::says_noun_notes(locale), &same),
-        line("due", words::says_noun_due(locale), &same),
+        line("due", words::says_noun_due(locale), &due),
         line("priority", words::says_noun_priority(locale), &bangs),
         flag,
         line("url", words::says_noun_link(locale), &same),
