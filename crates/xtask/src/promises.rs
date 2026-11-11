@@ -1614,6 +1614,12 @@ fn units_missing(root: &Path, app: &str) -> Vec<String> {
                     "{path} {what} (`{needle}`), and {app} uses it; use kit::quantity"
                 ));
             }
+        }
+    }
+    gaps
+}
+
+// ---------------------------------------------------------------------------
 // OwnerCheck (Confirm it's me)
 // ---------------------------------------------------------------------------
 
