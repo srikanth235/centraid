@@ -528,6 +528,9 @@ message TransferView {
   // A read or a write is under way: the rows and buttons are drawn but do nothing.
   bool busy = 8;
   StatusLine status = 9;
+  // THE READ, for a page that reads the vault (Reconnect): loading, or failed with Retry. Unset
+  // is ready, for the pages that read nothing (an export's choices, a file's import).
+  PageState page = 10;
 }
 
 message TransferRow {
@@ -551,6 +554,8 @@ message TransferAction {
 // A tap on an action or a row: its key.
 message TransferEvent {
   string key = 1;
+  // The failed read's "Try again": the page reads again.
+  bool refreshed = 2;
 }
 
 // What a trash screen shows. The screen name (`<app>.trash`) says which app.

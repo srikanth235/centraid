@@ -203,6 +203,7 @@ fn notes_an_import_asks_first_so_it_offers_no_undo() {
         i,
         wire::screen_event::Kind::Transfer(wire::TransferEvent {
             key: "folder".to_owned(),
+            ..Default::default()
         }),
     );
     d.answer_effect(wire::effect_result::Outcome::BytesPicked(
@@ -219,6 +220,7 @@ fn notes_an_import_asks_first_so_it_offers_no_undo() {
         i,
         wire::screen_event::Kind::Transfer(wire::TransferEvent {
             key: "import".to_owned(),
+            ..Default::default()
         }),
     );
     let Some(wire::view_state::Kind::Transfer(view)) = &d.view(i).kind else {

@@ -76,6 +76,7 @@ fn tap(d: &mut Driver, i: u64) {
         i,
         E::Transfer(wire::TransferEvent {
             key: "all".to_owned(),
+            ..Default::default()
         }),
     );
 }

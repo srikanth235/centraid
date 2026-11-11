@@ -21,6 +21,7 @@ fn tap(d: &mut centraid_screens::testing::Driver, i: u64, key: &str) {
         i,
         wire::screen_event::Kind::Transfer(wire::TransferEvent {
             key: key.to_owned(),
+            ..Default::default()
         }),
     );
 }

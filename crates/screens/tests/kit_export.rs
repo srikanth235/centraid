@@ -116,6 +116,7 @@ fn tap(d: &mut Driver, i: u64, key: &str) {
         i,
         wire::screen_event::Kind::Transfer(wire::TransferEvent {
             key: key.to_owned(),
+            ..Default::default()
         }),
     );
 }
@@ -299,8 +300,14 @@ fn leaving_while_the_check_is_up_withdraws_it() {
 fn a_denied_read_draws_the_gate_and_offers_nothing() {
     let (d, i) = open(&DENIED);
     let page = view(&d, i);
-    assert_eq!(page.headline, "Not here");
-    assert_eq!(page.lede, "The vault said no.");
+    // The vault's refusal is the page's gate, drawn by the shared view in the app's own words.
+    let Some(wire::page_state::State::Refused(gate)) =
+        page.page.as_ref().and_then(|page| page.state.as_ref())
+    else {
+        panic!("a denied read is a refused page");
+    };
+    assert_eq!(gate.title, "Not here");
+    assert_eq!(gate.body, "The vault said no.");
     assert!(page.rows.is_empty());
 }
 

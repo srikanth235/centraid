@@ -78,6 +78,7 @@ fn send_row(d: &mut Driver, page: u64, key: &str) {
         page,
         wire::screen_event::Kind::Transfer(wire::TransferEvent {
             key: key.to_owned(),
+            ..Default::default()
         }),
     );
     pass_owner_check(d);

@@ -25,7 +25,7 @@ use centraid_api_proto::core_v1 as wire;
 use wire::screen_event::Kind as E;
 
 use super::owner::{Answer, Leaving, NoPasscode, OwnerGate};
-use super::read::{self, Reading};
+use super::read::{Page, Reading};
 use super::transfer::row;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, shared};
@@ -211,8 +211,7 @@ pub fn build(spec: &'static ExportSpec, route: &wire::Route) -> Option<Box<dyn S
     };
     Some(Box::new(Export {
         spec,
-        rows: Reading::Failed,
-        loaded: false,
+        page: Page::loading(),
         gate: OwnerGate::default(),
         stage: Stage::Choosing,
         chosen: String::new(),
@@ -236,8 +235,9 @@ enum Stage {
 
 struct Export {
     spec: &'static ExportSpec,
-    rows: Reading<Vec<Choice>>,
-    loaded: bool,
+    /// What can be exported: loading until the vault has said, a failure with Retry, the gate, or
+    /// the choices (#1185).
+    page: Page<Vec<Choice>>,
     gate: OwnerGate,
     stage: Stage,
     /// What the check was asked for.
@@ -262,13 +262,17 @@ impl Export {
     }
 
     fn reload(&mut self, ctx: &Ctx) {
-        self.rows = (self.spec.choices)(ctx);
-        self.loaded = true;
+        let kept = std::mem::replace(&mut self.page, Page::loading());
+        self.page = kept
+            .refreshing()
+            .after((self.spec.choices)(ctx), ctx.locale(), |_| false);
     }
 
     fn tapped(&mut self, ctx: &Ctx, key: &str) -> Vec<wire::Effect> {
-        let known =
-            matches!(&self.rows, Reading::Data(rows) if rows.iter().any(|row| row.key == key));
+        let known = self
+            .page
+            .data()
+            .is_some_and(|rows| rows.iter().any(|row| row.key == key));
         if self.stage != Stage::Choosing || !known {
             return Vec::new();
         }
@@ -434,27 +438,22 @@ impl Screen for Export {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
-        let (rows, headline, lede) = match (&self.rows, self.loaded) {
-            (_, false) => (Vec::new(), String::new(), (self.spec.lede)(locale)),
-            (Reading::Data(choices), _) => (
+        let (rows, headline) = match self.page.data() {
+            Some(choices) => (
                 choices
                     .iter()
                     .map(|choice| row(&choice.key, &choice.label, &choice.value, true, "Upload"))
                     .collect(),
                 shared::export_headline(locale),
-                (self.spec.lede)(locale),
             ),
-            // The gate the vault drew: its words in the headline and the lede, no rows.
-            (Reading::Denied(denial), _) => {
-                let denied = (self.spec.denied)(locale, denial);
-                (Vec::new(), denied.title, denied.body)
-            }
-            (Reading::Failed, _) => (
-                Vec::new(),
-                read::failure(locale).sentence,
-                (self.spec.lede)(locale),
-            ),
+            None => (Vec::new(), String::new()),
         };
+        let lede = (self.spec.lede)(locale);
+        let page = self.page.wire(
+            locale,
+            |denial| (self.spec.denied)(locale, denial),
+            wire::EmptyState::default,
+        );
         wire::ViewState {
             kind: Some(wire::view_state::Kind::Transfer(wire::TransferView {
                 app_id: self.spec.app.to_owned(),
@@ -466,6 +465,7 @@ impl Screen for Export {
                 actions: Vec::new(),
                 busy: self.stage != Stage::Choosing,
                 status: self.status.clone(),
+                page: Some(page),
             })),
             ..wire::ViewState::default()
         }

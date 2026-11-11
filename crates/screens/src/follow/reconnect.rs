@@ -27,7 +27,7 @@ use wire::screen_event::Kind as E;
 use crate::calendar::follow::{self as calendar, CalendarFollow};
 use crate::catalog::load;
 use crate::health;
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Page, Reading};
 use crate::kit::transfer;
 use crate::people::contacts::{self, ContactsFollow};
 use crate::screen::{Ctx, Screen};
@@ -91,19 +91,12 @@ enum Check {
     Folders,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Stage {
-    /// The vault has not been read.
-    Loading,
-    /// The vault was read and the phone is being asked.
-    Checking,
-    Ready,
-    /// The vault could not be read.
-    Failed,
-}
-
 struct Reconnect {
-    stage: Stage,
+    /// The read of the vault's followed stores: loading, failed, or ready (the rows are then drawn
+    /// once the phone has been asked).
+    page: Page<()>,
+    /// The phone is being asked about each system the vault holds.
+    checking: bool,
     stores: Vec<wire::FollowedStore>,
     queue: VecDeque<Check>,
     waiting: Option<Check>,
@@ -124,7 +117,8 @@ struct Reconnect {
 impl Reconnect {
     fn new() -> Self {
         Self {
-            stage: Stage::Loading,
+            page: Page::loading(),
+            checking: false,
             stores: Vec::new(),
             queue: VecDeque::new(),
             waiting: None,
@@ -138,19 +132,38 @@ impl Reconnect {
         }
     }
 
+    /// The vault was read and the phone has answered about every system it holds.
+    fn ready(&self) -> bool {
+        matches!(self.page, Page::Ready { .. }) && !self.checking
+    }
+
     fn has(&self, system: &str) -> bool {
         self.stores.iter().any(|store| store.system == system)
     }
 
     /// Read the vault, then ask this phone about each system it holds.
     fn reload(&mut self, ctx: &Ctx, out: &mut Vec<wire::Effect>) {
-        match stores(ctx) {
+        let reading = stores(ctx);
+        let kept = std::mem::replace(&mut self.page, Page::loading());
+        match reading {
             Reading::Data(stores) => {
                 self.stores = stores;
-                self.stage = Stage::Checking;
+                self.page = Page::Ready {
+                    data: (),
+                    note: None,
+                };
+                self.checking = true;
             }
-            _ => {
-                self.stage = Stage::Failed;
+            // A re-read that failed keeps the rows under one sentence; a first read is the failure.
+            other => {
+                self.page = kept.refreshing().after(
+                    match other {
+                        Reading::Denied(denial) => Reading::Denied(denial),
+                        _ => Reading::Failed,
+                    },
+                    ctx.locale(),
+                    |()| false,
+                );
                 return;
             }
         }
@@ -172,7 +185,7 @@ impl Reconnect {
 
     fn ask_next(&mut self, out: &mut Vec<wire::Effect>) {
         let Some(check) = self.queue.pop_front() else {
-            self.stage = Stage::Ready;
+            self.checking = false;
             return;
         };
         self.waiting = Some(check);
@@ -263,7 +276,7 @@ impl Reconnect {
     }
 
     fn tapped(&mut self, key: &str, ctx: &Ctx) -> Vec<wire::Effect> {
-        if self.stage != Stage::Ready || !self.open.contains(key) {
+        if !self.ready() || !self.open.contains(key) {
             return Vec::new();
         }
         match key {
@@ -366,6 +379,8 @@ impl Screen for Reconnect {
                     self.reload(ctx, &mut out);
                 }
             }
+            // RETRY of a failed read: the vault is read again, then the phone asked.
+            Some(E::Transfer(tapped)) if tapped.refreshed => self.reload(ctx, &mut out),
             Some(E::Transfer(tapped)) => out = self.tapped(&tapped.key, ctx),
             Some(E::EffectResult(result)) => self.result(&result, ctx, &mut out),
             _ => {}
@@ -389,29 +404,28 @@ impl Screen for Reconnect {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
-        let rows = if self.stage == Stage::Ready {
+        let rows = if self.ready() {
             self.rows(ctx)
         } else {
             Vec::new()
         };
-        let status = match self.stage {
-            Stage::Failed => Some(wire::StatusLine {
-                sentence: words::reconnect_failed(locale),
-                action_label: String::new(),
-                refused: false,
-            }),
-            _ => self
-                .contacts
-                .status()
-                .or_else(|| self.calendar.status())
-                .cloned(),
-        };
+        let status = self
+            .contacts
+            .status()
+            .or_else(|| self.calendar.status())
+            .cloned();
+        // THE READ (#1185): the vault's followed stores, loading or failed (with Retry) until read.
+        let page = self.page.wire(
+            locale,
+            |_| wire::Denied::default(),
+            wire::EmptyState::default,
+        );
         wire::ViewState {
             kind: Some(wire::view_state::Kind::Transfer(wire::TransferView {
                 app_id: String::new(),
                 title: words::reconnect_title(locale),
                 back_label: shared::back(locale),
-                headline: if self.stage == Stage::Ready && rows.is_empty() {
+                headline: if self.ready() && rows.is_empty() {
                     words::reconnect_none(locale)
                 } else {
                     String::new()
@@ -419,8 +433,9 @@ impl Screen for Reconnect {
                 lede: words::reconnect_lede(locale),
                 rows,
                 actions: Vec::new(),
-                busy: matches!(self.stage, Stage::Loading | Stage::Checking),
+                busy: matches!(self.page, Page::Loading) || self.checking,
                 status,
+                page: Some(page),
             })),
             ..wire::ViewState::default()
         }

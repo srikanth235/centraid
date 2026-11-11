@@ -48,6 +48,7 @@ fn an_export_saves_an_ics_of_to_dos_through_the_os_save_sheet_after_the_owner_ch
         i,
         wire::screen_event::Kind::Transfer(wire::TransferEvent {
             key: "all".to_owned(),
+            ..Default::default()
         }),
     );
     pass_owner_check(&mut d);

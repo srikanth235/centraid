@@ -152,7 +152,10 @@ pub fn all(root: &Path) -> Vec<RuleReport> {
     ]
     .into_iter()
     .chain(crate::native_rules::all(root))
-    .chain([crate::promises::promises(root)])
+    .chain([
+        crate::promises::promises(root),
+        crate::page_state::page_state(root),
+    ])
     .collect()
 }
 

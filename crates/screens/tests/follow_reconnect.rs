@@ -208,6 +208,7 @@ fn connecting_contacts_is_the_import_that_asks_the_phone_and_then_the_row_goes()
         instance,
         wire::screen_event::Kind::Transfer(wire::TransferEvent {
             key: "contacts".to_owned(),
+            ..Default::default()
         }),
     );
     // The existing import: the read that may ask the OS for its permission.
@@ -268,7 +269,10 @@ fn connecting_a_folder_opens_the_picker_and_retires_the_old_origin_of_that_folde
         .expect("a folder row");
     d.send(
         instance,
-        wire::screen_event::Kind::Transfer(wire::TransferEvent { key: folder_key }),
+        wire::screen_event::Kind::Transfer(wire::TransferEvent {
+            key: folder_key,
+            ..Default::default()
+        }),
     );
     let asked = d.effects.remove(0);
     assert!(matches!(

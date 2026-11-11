@@ -31,6 +31,7 @@ fn tap(d: &mut Driver, i: u64, key: &str) {
         i,
         wire::screen_event::Kind::Transfer(wire::TransferEvent {
             key: key.to_owned(),
+            ..Default::default()
         }),
     );
 }

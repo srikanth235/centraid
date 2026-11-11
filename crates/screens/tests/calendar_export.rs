@@ -59,6 +59,7 @@ fn an_export_saves_an_ics_through_the_os_save_sheet_after_the_owner_check() {
         i,
         wire::screen_event::Kind::Transfer(wire::TransferEvent {
             key: "all".to_owned(),
+            ..Default::default()
         }),
     );
     pass_owner_check(&mut world.driver);

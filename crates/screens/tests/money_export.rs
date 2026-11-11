@@ -82,6 +82,7 @@ fn an_export_saves_a_csv_through_the_os_save_sheet_after_the_owner_check() {
         i,
         wire::screen_event::Kind::Transfer(wire::TransferEvent {
             key: "all".to_owned(),
+            ..Default::default()
         }),
     );
     pass_owner_check(&mut d);
@@ -109,7 +110,10 @@ fn one_account_is_exported_as_its_own_file() {
     d.effects.clear();
     d.send(
         i,
-        wire::screen_event::Kind::Transfer(wire::TransferEvent { key: account }),
+        wire::screen_event::Kind::Transfer(wire::TransferEvent {
+            key: account,
+            ..Default::default()
+        }),
     );
     pass_owner_check(&mut d);
     let save = saved(&d);

@@ -295,6 +295,7 @@ impl Screen for Transfer {
                 actions,
                 busy: matches!(self.stage, Stage::Reading | Stage::Writing),
                 status: self.undo.status(),
+                page: None,
             })),
             ..wire::ViewState::default()
         }

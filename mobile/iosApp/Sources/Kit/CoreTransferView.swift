@@ -29,51 +29,62 @@ struct CoreTransferView: View {
             EmptyView()
         } content: {
             VStack(spacing: 0) {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text(state.lede)
-                            .kitType(.row)
-                            .foregroundStyle(Surface.meta)
-                        if !state.headline.isEmpty {
-                            Text(state.headline)
-                                .kitType(.row)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(Surface.ink)
-                                .accessibilityIdentifier("transfer-headline")
-                        }
-                        if !state.rows.isEmpty {
-                            LazyVStack(spacing: 0) {
-                                ForEach(state.rows, id: \.key) { row in
-                                    TransferRowView(row: row, busy: state.busy) { tapped(row.key) }
-                                }
-                            }
-                            .padding(.bottom, -1)
-                            .kitCard()
-                            .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
-                        }
-                        ForEach(state.actions, id: \.key) { action in
-                            Group {
-                                if action.primary {
-                                    KitPillButton(label: action.label) { tapped(action.key) }
-                                } else {
-                                    Button { tapped(action.key) } label: {
-                                        Text(action.label)
-                                            .kitType(.row)
-                                            .fontWeight(.semibold)
-                                            .foregroundStyle(accent.text)
-                                            .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                                            .contentShape(Rectangle())
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            .disabled(!action.enabled || state.busy)
-                            .opacity(action.enabled && !state.busy ? 1 : 0.4)
-                            .accessibilityIdentifier("transfer-\(action.key)")
-                        }
+                // THE READ (#1185): a page that reads the vault (Reconnect) is loading or failed with
+                // Retry; the others read nothing and carry no page, which is ready.
+                PageReadStateView(
+                    page: state.page,
+                    onRetry: {
+                        var event = Centraid_Core_V1_TransferEvent()
+                        event.refreshed = true
+                        send(event)
                     }
-                    .padding(.horizontal, CentraidGeometry.pageMargin)
-                    .padding(.top, 4)
+                ) {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 14) {
+                            Text(state.lede)
+                                .kitType(.row)
+                                .foregroundStyle(Surface.meta)
+                            if !state.headline.isEmpty {
+                                Text(state.headline)
+                                    .kitType(.row)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(Surface.ink)
+                                    .accessibilityIdentifier("transfer-headline")
+                            }
+                            if !state.rows.isEmpty {
+                                LazyVStack(spacing: 0) {
+                                    ForEach(state.rows, id: \.key) { row in
+                                        TransferRowView(row: row, busy: state.busy) { tapped(row.key) }
+                                    }
+                                }
+                                .padding(.bottom, -1)
+                                .kitCard()
+                                .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+                            }
+                            ForEach(state.actions, id: \.key) { action in
+                                Group {
+                                    if action.primary {
+                                        KitPillButton(label: action.label) { tapped(action.key) }
+                                    } else {
+                                        Button { tapped(action.key) } label: {
+                                            Text(action.label)
+                                                .kitType(.row)
+                                                .fontWeight(.semibold)
+                                                .foregroundStyle(accent.text)
+                                                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                                                .contentShape(Rectangle())
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                                .disabled(!action.enabled || state.busy)
+                                .opacity(action.enabled && !state.busy ? 1 : 0.4)
+                                .accessibilityIdentifier("transfer-\(action.key)")
+                            }
+                        }
+                        .padding(.horizontal, CentraidGeometry.pageMargin)
+                        .padding(.top, 4)
+                    }
                 }
                 StatusLineView(status: state.status, identifier: "transfer-status-action")
             }
