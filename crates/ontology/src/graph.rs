@@ -8,8 +8,13 @@
 //! module is the one catalogue of both, and the one reading of them.
 //!
 //! - [`EDGE_RELATIONS`] and [`COLUMN_LINKS`] are data. A reader over a
-//!   `PageDoor` (the app kit's `graph`) or over the assistant's `Door` plans its
-//!   own reads from them and so cannot drift from this list.
+//!   `PageDoor` (the app kit's `graph`) plans its reads from them and so cannot
+//!   drift from this list.
+//! - [`incoming`] and [`outgoing`] are that planning, once: which edge relations
+//!   and which columns answer "what ends here" and "what starts here", over any
+//!   [`GraphSource`]. A source only answers one question, "these rows, for these
+//!   ids", in its own way (a connection joins, a door reads a table at a time),
+//!   so the two cannot disagree on WHAT is read.
 //! - [`links_at`] reads both kinds of join for one entity from a connection, as
 //!   the same [`Link`] the door-based readers build.
 //! - [`Link::touches_locker`] is the wall: a link that starts or ends at a
@@ -262,4 +267,144 @@ pub fn links_outside_locker(
         .into_iter()
         .filter(|link| !link.touches_locker())
         .collect())
+}
+
+/// Which end of a join a read starts from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum End {
+    /// The ids are where the joins start: an edge's `from_id`, a kind's own row.
+    From,
+    /// The ids are where the joins end: an edge's `to_id`, the row a column points at.
+    To,
+}
+
+/// One edge row as a source answers it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EdgeRow {
+    pub from: String,
+    pub to: String,
+    /// The edge's `rel`.
+    pub rel: String,
+    /// The edge's anchor, as the text of its JSON (a link written in a note's words carries one).
+    pub anchor: Option<String>,
+}
+
+/// One join, read: the id at each end and how it is stored.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Join {
+    pub from: String,
+    pub to: String,
+    /// The edge's `rel`, or the column's relation word.
+    pub relation: String,
+    pub via: Via,
+}
+
+/// Where a reader of the graph gets its rows. A source answers two questions and plans nothing:
+/// which edge relations and which columns are read is [`incoming`] and [`outgoing`]'s, from the
+/// catalogue.
+pub trait GraphSource {
+    /// What a read can refuse with.
+    type Error;
+
+    /// The edges of the relations in `rels` whose `end` is one of `ids`, in the order of the
+    /// other end. `ids` and `rels` are not empty.
+    ///
+    /// # Errors
+    /// The source's own refusal.
+    fn edges(
+        &self,
+        end: End,
+        ids: &[String],
+        rels: &[&str],
+    ) -> std::result::Result<Vec<EdgeRow>, Self::Error>;
+
+    /// The rows of `link.table` the column links, as `(row id, the column's value)`: for
+    /// [`End::From`] the rows whose own id is one of `ids`, for [`End::To`] the rows whose column
+    /// holds one of `ids`. A row whose column is empty is not answered. `ids` is not empty.
+    ///
+    /// # Errors
+    /// The source's own refusal.
+    fn column_rows(
+        &self,
+        link: &ColumnLink,
+        end: End,
+        ids: &[String],
+    ) -> std::result::Result<Vec<(String, String)>, Self::Error>;
+}
+
+/// The joins that END at `id`, by `rels` (edge relations) and by every column of the catalogue
+/// that points at a kind named `to_kind`. Sorted, each once.
+///
+/// # Errors
+/// The source's own refusal.
+pub fn incoming<S: GraphSource>(
+    source: &S,
+    id: &str,
+    to_kind: &str,
+    rels: &[&str],
+) -> std::result::Result<Vec<Join>, S::Error> {
+    let ids = [id.to_owned()];
+    let mut out = Vec::new();
+    if !rels.is_empty() {
+        for edge in source.edges(End::To, &ids, rels)? {
+            out.push(Join {
+                from: edge.from,
+                to: edge.to,
+                relation: edge.rel,
+                via: Via::Edge,
+            });
+        }
+    }
+    for link in COLUMN_LINKS.iter().filter(|link| link.to_kind == to_kind) {
+        for (from, _) in source.column_rows(link, End::To, &ids)? {
+            out.push(Join {
+                from,
+                to: id.to_owned(),
+                relation: link.relation.to_owned(),
+                via: Via::Column,
+            });
+        }
+    }
+    out.sort();
+    out.dedup();
+    Ok(out)
+}
+
+/// The joins that START at any of `ids`, which are all of kind `from_kind`: by `rels` (edge
+/// relations) and by the columns of that kind's own row. Sorted, each once.
+///
+/// # Errors
+/// The source's own refusal.
+pub fn outgoing<S: GraphSource>(
+    source: &S,
+    ids: &[String],
+    from_kind: &str,
+    rels: &[&str],
+) -> std::result::Result<Vec<Join>, S::Error> {
+    let mut out = Vec::new();
+    if !rels.is_empty() && !ids.is_empty() {
+        for edge in source.edges(End::From, ids, rels)? {
+            out.push(Join {
+                from: edge.from,
+                to: edge.to,
+                relation: edge.rel,
+                via: Via::Edge,
+            });
+        }
+    }
+    if !ids.is_empty() {
+        for link in COLUMN_LINKS.iter().filter(|link| link.table == from_kind) {
+            for (from, to) in source.column_rows(link, End::From, ids)? {
+                out.push(Join {
+                    from,
+                    to,
+                    relation: link.relation.to_owned(),
+                    via: Via::Column,
+                });
+            }
+        }
+    }
+    out.sort();
+    out.dedup();
+    Ok(out)
 }
