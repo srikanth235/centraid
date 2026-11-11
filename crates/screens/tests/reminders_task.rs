@@ -881,14 +881,21 @@ fn a_refused_field_write_says_the_cores_sentence_on_the_status_line() {
 }
 
 #[test]
-fn a_field_write_clears_the_old_status_line() {
+fn a_field_write_replaces_the_old_status_line_with_its_own() {
     let mut d = driver();
     let id = rent(&d);
     let i = open(&mut d, &id);
     send_detail(&mut d, i, de::Kind::Check(de::CheckTapped {}));
     assert!(detail(d.view(i)).status.is_some());
     choose(&mut d, i, "priority", "2");
-    assert!(detail(d.view(i)).status.is_none());
+    let status = detail(d.view(i))
+        .status
+        .clone()
+        .expect("the new write is said");
+    assert_eq!(
+        (status.sentence.as_str(), status.action_label.as_str()),
+        ("Task updated", "Undo")
+    );
 }
 
 #[test]

@@ -277,19 +277,17 @@ impl Detail {
             .unwrap_or_default()
     }
 
-    /// One field write: the status line is cleared, then says the refusal when
-    /// there is one; the page is read again either way.
-    fn write(&mut self, ctx: &Ctx, request: impl Into<wire::ActRequest>, parts: &[&str]) -> bool {
-        self.ops.status = None;
+    /// One write through the kit's door: the status line says `said` with Undo when the core can
+    /// take it back, or the refusal; the page is read again either way.
+    fn write(
+        &mut self,
+        ctx: &Ctx,
+        request: impl Into<wire::ActRequest>,
+        parts: &[&str],
+        said: impl FnOnce(Locale) -> String,
+    ) -> bool {
         let key = kit_act::key(parts, kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        if !settled.committed {
-            self.ops.status = Some(wire::StatusLine {
-                sentence: settled.refusal.clone(),
-                action_label: String::new(),
-                refused: true,
-            });
-        }
+        let settled = self.ops.line.act(ctx, request, &key, said);
         self.reload(ctx);
         settled.committed
     }
@@ -306,6 +304,7 @@ impl Detail {
             ctx,
             edit,
             &[act::reminders::EditTask::NAME, &task.task_id, field, value],
+            words::task_updated,
         );
     }
 
@@ -443,6 +442,7 @@ impl Detail {
                             ANCHOR,
                             key,
                         ],
+                        words::task_updated,
                     );
                 }
             }
@@ -494,7 +494,7 @@ impl Detail {
                     _ => return,
                 };
                 if on != task.flagged {
-                    self.ops.status = None;
+                    self.ops.clear();
                     self.ops.flag(ctx, &task.task_id, on);
                     self.reload(ctx);
                 }
@@ -514,6 +514,7 @@ impl Detail {
                             &task.task_id,
                             &tag.concept_id,
                         ],
+                        words::tag_removed,
                     );
                 }
             }
@@ -566,6 +567,7 @@ impl Detail {
                 PROJECT,
                 key,
             ],
+            words::task_moved,
         );
     }
 
@@ -574,7 +576,6 @@ impl Detail {
         let Some(task) = self.task() else {
             return;
         };
-        let locale = ctx.locale();
         match asking {
             Asking::Delete => {
                 let request = act::reminders::DeleteTask {
@@ -584,25 +585,23 @@ impl Detail {
                     ctx,
                     request,
                     &[act::reminders::DeleteTask::NAME, &task.task_id],
+                    |locale| crate::kit::trash::moved_to_trash(locale, &task.title),
                 ) {
                     self.finished = true;
                     // The words are gone with the task: leaving saves nothing.
                     self.autosave = Autosave::new();
-                    self.ops.status =
-                        Some(say(crate::kit::trash::moved_to_trash(locale, &task.title)));
                 }
             }
             Asking::Release => {
                 let request = act::reminders::CancelTask {
                     task_id: task.task_id.clone(),
                 };
-                if self.write(
+                self.write(
                     ctx,
                     request,
                     &[act::reminders::CancelTask::NAME, &task.task_id],
-                ) {
-                    self.ops.status = Some(say(words::task_released(locale)));
-                }
+                    words::task_released,
+                );
             }
             _ => {}
         }
@@ -697,6 +696,7 @@ impl Detail {
                         ctx,
                         request,
                         &[act::reminders::AddTaskTag::NAME, &task.task_id, &label],
+                        words::tag_added,
                     );
                 }
             }
@@ -738,6 +738,7 @@ impl Detail {
                     ctx,
                     request,
                     &[act::reminders::AddTask::NAME, &task.task_id, "sub", &title],
+                    words::subtask_added,
                 );
             }
             Some(D::Delete(_)) => self.asking = Asking::Delete,
@@ -916,18 +917,14 @@ fn link_of(locale: Locale, task: &wire::AgendaTask) -> Option<wire::TodoLink> {
     })
 }
 
-fn say(sentence: String) -> wire::StatusLine {
-    wire::StatusLine {
-        sentence,
-        action_label: String::new(),
-        refused: false,
-    }
-}
-
 impl Screen for Detail {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
+            Some(E::StatusActed(_)) => {
+                self.ops.undo(ctx);
+                self.reload(ctx);
+            }
             Some(E::TimerFired(fired)) => {
                 if self.autosave.fired(ctx, &fired.timer) {
                     self.reload(ctx);
@@ -995,8 +992,7 @@ impl Screen for Detail {
                 chrome: Some(rows::chrome(locale)),
                 status: self
                     .ops
-                    .status
-                    .clone()
+                    .status()
                     .or_else(|| self.differences.status(locale, follow::Source::Phone))
                     .or_else(|| self.share.status())
                     .or_else(|| self.earlier.status(locale)),

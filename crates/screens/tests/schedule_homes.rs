@@ -2202,7 +2202,11 @@ fn check_off_says_task_done_with_undo_and_undo_brings_the_row_back() {
     );
     r.send(H::StatusActed(wire::agenda_home_event::StatusActed {}));
     assert!(inbox_titles(&mut r).contains(&"Zq Call Ana".to_owned()));
-    assert!(r.status().is_none());
+    assert_eq!(
+        r.status()
+            .map(|s| (s.sentence.clone(), s.action_label.clone())),
+        Some(("Undone".to_owned(), String::new()))
+    );
     r.check("zq-ana");
     assert!(
         !inbox_titles(&mut r).contains(&"Zq Call Ana".to_owned()),

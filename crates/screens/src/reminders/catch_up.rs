@@ -197,25 +197,16 @@ impl CatchUp {
         };
         let tasks: Vec<wire::AgendaTask> = self.pile(&pile).into_iter().cloned().collect();
         let mut done = 0_u64;
-        self.ops.status = None;
+        self.ops.clear();
         for task in &tasks {
             self.ops.check(ctx, task);
-            if self
-                .ops
-                .status
-                .as_ref()
-                .is_some_and(|status| status.refused)
-            {
+            if self.ops.status().is_some_and(|status| status.refused) {
                 break;
             }
             done += 1;
         }
         if done > 0 && done as usize == tasks.len() {
-            self.ops.status = Some(wire::StatusLine {
-                sentence: agenda_todo::tasks_done_n(ctx.locale(), done),
-                action_label: String::new(),
-                refused: false,
-            });
+            self.ops.say(agenda_todo::tasks_done_n(ctx.locale(), done));
         }
         self.reload(ctx);
     }
@@ -240,12 +231,7 @@ impl CatchUp {
             // Only a status line that offers Undo is undone: a bulk "2 tasks
             // done" offers none.
             Some(C::StatusActed(_)) => {
-                if self
-                    .ops
-                    .status
-                    .as_ref()
-                    .is_some_and(|status| !status.action_label.is_empty())
-                {
+                if self.ops.can_undo() {
                     self.ops.undo(ctx);
                     self.reload(ctx);
                 }
@@ -259,6 +245,10 @@ impl Screen for CatchUp {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
+            Some(E::StatusActed(_)) => {
+                self.ops.undo(ctx);
+                self.reload(ctx);
+            }
             Some(E::TodoCatchUp(catch_up)) => self.event(catch_up, ctx),
             _ => {}
         }
@@ -283,7 +273,7 @@ impl Screen for CatchUp {
                         title: words::catch_up(locale),
                         ..rows::chrome(locale)
                     }),
-                    status: self.ops.status.clone(),
+                    status: self.ops.status(),
                     confirm: self.confirm(locale),
                 },
             )),

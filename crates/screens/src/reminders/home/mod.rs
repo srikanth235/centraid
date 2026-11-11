@@ -453,6 +453,10 @@ impl Screen for Home {
                 return self.prefs.ask().into_iter().collect();
             }
             Some(E::EnvironmentChanged(_) | E::DataChanged(_)) => self.refresh(ctx),
+            Some(E::StatusActed(_)) => {
+                self.ops.undo(ctx);
+                self.refresh(ctx);
+            }
             Some(E::AgendaHome(home)) => match home.kind {
                 Some(H::FilterMenuPicked(picked)) if self.menu_offered() => {
                     let mut options = self.prefs.options;
@@ -560,7 +564,7 @@ impl Screen for Home {
                             "reminders",
                         )
                     }),
-                    status: self.ops.status.clone(),
+                    status: self.ops.status(),
                     quick_add: Some({
                         let mut bar = wire::TodoQuickAdd {
                             title: self.quick.title.clone(),

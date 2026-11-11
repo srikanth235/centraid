@@ -675,7 +675,13 @@ fn a_move_keeps_the_length_and_undo_puts_it_back() {
     assert_eq!(held.local_start, "2027-06-09T14:00");
     assert_eq!(held.local_end, "2027-06-09T15:30");
     assert_eq!(r.block(WED, "zq-mv").start_minute, 840);
-    assert!(r.state().status.is_none());
+    assert_eq!(
+        r.state()
+            .status
+            .clone()
+            .map(|s| (s.sentence, s.action_label)),
+        Some(("Undone".to_owned(), String::new()))
+    );
 }
 
 #[test]
@@ -714,7 +720,13 @@ fn a_resize_sets_the_end_and_is_never_under_fifteen_minutes() {
         instance_key: "zq-rs".to_owned(),
         end_minute: minutes("11:45"),
     }));
-    assert!(r.state().status.is_none());
+    assert_eq!(
+        r.state()
+            .status
+            .clone()
+            .map(|s| (s.sentence, s.action_label)),
+        Some(("Undone".to_owned(), String::new()))
+    );
 }
 
 #[test]

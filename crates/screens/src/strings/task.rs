@@ -151,6 +151,11 @@ catalog! {
     plain title_placeholder = ("Task name", "Task name");
     plain title_required = ("A task needs a name.", "A task needs a name.");
     plain trash_purge_lead = ("It and the subtasks trashed with it leave this vault for good.", "It and the subtasks trashed with it leave this vault for good.");
+    plain subtask_added = ("Subtask added", "Subtask added");
+    plain tag_added = ("Tag added", "Tag added");
+    plain tag_removed = ("Tag removed", "Tag removed");
+    plain task_moved = ("Task moved", "Task moved");
+    plain task_updated = ("Task updated", "Task updated");
     plain undo = ("Undo", "Undo");
     plain untitled = ("Untitled task", "Untitled task");
     plain view_all = ("All", "All");

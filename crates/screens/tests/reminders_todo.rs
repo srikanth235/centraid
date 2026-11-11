@@ -238,7 +238,11 @@ fn checking_a_row_completes_it_and_undo_reopens_it() {
 
     send_list(&mut d, i, le::Kind::StatusActed(le::StatusActed {}));
     assert_eq!(task_of(&d, &gone).status, "open");
-    assert!(list(d.view(i)).status.is_none());
+    let status = list(d.view(i)).status.clone().expect("Undone is said");
+    assert_eq!(
+        (status.sentence.as_str(), status.action_label.as_str()),
+        ("Undone", "")
+    );
     assert_eq!(rows(&list_data(d.view(i)).groups).len(), 2);
 }
 

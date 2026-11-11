@@ -13,14 +13,16 @@
 //!
 //! `act` answers at once (the phone is the vault), so there is no in-flight
 //! map, no hidden-until-answered set and no pending row: a screen submits, the
-//! verdict is the status line, and the next load draws what committed. Undo is
-//! the core's own `inverse` for the action, sent back as an action.
+//! verdict is the status line, and the next load draws what committed. The line and its Undo are
+//! the kit's [`Undo`] (`kit::undo`): the core's own `inverse` for the action, sent back as an
+//! action.
 
 use centraid_api_proto::core_v1 as wire;
 
 use crate::catalog::act;
-use crate::kit::act::{self as kit_act, Settled};
+use crate::kit::act as kit_act;
 use crate::kit::schedule::rows;
+use crate::kit::undo::Undo;
 use crate::screen::Ctx;
 use crate::strings::task as words;
 
@@ -32,16 +34,12 @@ pub(crate) struct NextOf {
     pub(crate) series_id: Option<String>,
 }
 
-/// What a to-do surface holds beside its answers: the one status line, what
-/// Undo reverses, and the count of completions this session.
+/// What a to-do surface holds beside its answers: the status line and Undo (the kit's [`Undo`]),
+/// and the count of completions this session.
 #[derive(Clone, Debug, Default)]
 pub struct Ops {
     pub(crate) seq: u64,
-    pub status: Option<wire::StatusLine>,
-    pub(crate) undo: Option<wire::ActInverse>,
-    /// The app the Undo is sent to: Reminders' for a task, Calendar's for an event rewritten on the
-    /// grid (`changed`).
-    pub(crate) undo_app: Option<String>,
+    pub(crate) line: Undo,
     pub(crate) next_of: Option<NextOf>,
     /// Completions this session, for Today's earned quiet.
     pub completed: u32,
@@ -53,24 +51,31 @@ impl Ops {
         self.seq
     }
 
-    pub(crate) fn refused(&mut self, settled: &Settled) {
-        self.status = Some(wire::StatusLine {
-            sentence: settled.refusal.clone(),
-            action_label: String::new(),
-            refused: true,
-        });
-        self.undo = None;
+    /// The status line to draw.
+    #[must_use]
+    pub fn status(&self) -> Option<wire::StatusLine> {
+        self.line.status()
+    }
+
+    /// Say a sentence with no verb.
+    pub fn say(&mut self, sentence: String) {
+        self.line.say(sentence);
+    }
+
+    /// Drop the line (a screen left, or a newer thing replaces it).
+    pub fn clear(&mut self) {
+        self.line.clear();
+        self.next_of = None;
     }
 
     /// Whether an Undo is on offer.
     #[must_use]
     pub fn can_undo(&self) -> bool {
-        self.undo.is_some()
+        self.line.can_undo()
     }
 
     /// The box. Open work completes; closed work (the Logbook) reopens.
     pub fn check(&mut self, ctx: &Ctx, task: &wire::AgendaTask) {
-        let locale = ctx.locale();
         let open = rows::is_open(task);
         let key = kit_act::key(
             &[
@@ -79,45 +84,31 @@ impl Ops {
             ],
             self.next_seq(),
         );
+        let task_id = task.task_id.clone();
         let settled = if open {
-            kit_act::act(
+            self.line.act(
                 ctx,
-                act::reminders::CompleteTask {
-                    task_id: task.task_id.clone(),
-                },
+                act::reminders::CompleteTask { task_id },
                 &key,
+                words::task_done,
             )
         } else {
-            kit_act::act(
+            self.line.act(
                 ctx,
-                act::reminders::ReopenTask {
-                    task_id: task.task_id.clone(),
-                },
+                act::reminders::ReopenTask { task_id },
                 &key,
+                words::task_reopened,
             )
         };
         if !settled.committed {
-            self.refused(&settled);
             return;
         }
         // A REPEATING TASK'S COMPLETION IS NOT UNDONE HERE: the engine has
         // already opened its next occurrence, and reopening this one would
         // leave two open copies of one series.
-        let undoable = !task.repeats;
-        self.status = Some(wire::StatusLine {
-            sentence: if open {
-                words::task_done(locale)
-            } else {
-                words::task_reopened(locale)
-            },
-            action_label: if undoable {
-                words::undo(locale)
-            } else {
-                String::new()
-            },
-            refused: false,
-        });
-        self.undo = settled.inverse.filter(|_| undoable);
+        if task.repeats {
+            self.line.withdraw();
+        }
         self.next_of = (open && task.repeats).then(|| NextOf {
             task_id: task.task_id.clone(),
             series_id: task.series_id.clone(),
@@ -131,29 +122,14 @@ impl Ops {
 
     /// The status line's Undo: the inverse action, sent as the core described it.
     pub fn undo(&mut self, ctx: &Ctx) {
-        let Some(inverse) = self.undo.take() else {
-            return;
-        };
-        let was_completion = inverse.action == "reopen-task";
-        let request = wire::ActRequest {
-            app: self
-                .undo_app
-                .take()
-                .unwrap_or_else(|| act::reminders::APP.to_owned()),
-            action: inverse.action,
-            input: inverse.input,
-            invoke_key: String::new(),
-        };
-        let key = kit_act::key(&["undo", &request.action], self.next_seq());
-        let settled = kit_act::act(ctx, request, &key);
+        let was_completion = self
+            .line
+            .offered()
+            .is_some_and(|inverse| inverse.action == "reopen-task");
+        let done = self.line.acted(ctx);
         self.next_of = None;
-        if settled.committed {
-            self.status = None;
-            if was_completion {
-                self.completed = self.completed.saturating_sub(1);
-            }
-        } else {
-            self.refused(&settled);
+        if done && was_completion {
+            self.completed = self.completed.saturating_sub(1);
         }
     }
 
@@ -169,24 +145,10 @@ impl Ops {
         sentence: String,
     ) -> bool {
         let request = request.into();
-        let revert = revert.into();
         let key = kit_act::key(&[&request.action, subject], self.next_seq());
-        let settled = kit_act::act(ctx, request, &key);
-        if !settled.committed {
-            self.refused(&settled);
-            return false;
-        }
-        self.status = Some(wire::StatusLine {
-            sentence,
-            action_label: words::undo(ctx.locale()),
-            refused: false,
-        });
-        self.undo_app = Some(revert.app.clone());
-        self.undo = Some(wire::ActInverse {
-            action: revert.action,
-            input: revert.input,
-        });
-        true
+        self.line
+            .act_reverting(ctx, request, revert, &key, |_| sentence)
+            .committed
     }
 
     /// A create with no row to draw (a project, a section): the status line says it.
@@ -198,17 +160,6 @@ impl Ops {
         done: String,
     ) -> bool {
         let key = kit_act::key(&["create", subject], self.next_seq());
-        let settled = kit_act::act(ctx, request, &key);
-        self.undo = None;
-        if settled.committed {
-            self.status = Some(wire::StatusLine {
-                sentence: done,
-                action_label: String::new(),
-                refused: false,
-            });
-        } else {
-            self.refused(&settled);
-        }
-        settled.committed
+        self.line.act(ctx, request, &key, |_| done).committed
     }
 }

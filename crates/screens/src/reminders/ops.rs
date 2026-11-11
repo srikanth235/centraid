@@ -116,28 +116,22 @@ impl Ops {
     /// A tag or a flag the vault refuses after the add leaves the task made and
     /// says the refusal, so a screen never files the same task twice.
     pub fn add_full(&mut self, ctx: &Ctx, task: &NewTask, lands_in: &str) -> Option<String> {
-        let locale = ctx.locale();
         let mut request = add_request(task);
         // A wall-clock due names the device's zone beside it.
         if task.timed && !task.due.is_empty() {
             request.zone = crate::field::Field::Is(ctx.zone().to_owned());
         }
         let key = kit_act::key(&["add-task", task.title], self.next_seq());
-        let settled = kit_act::act(ctx, request, &key);
-        self.undo = None;
+        let settled = self.line.act(ctx, request, &key, |locale| {
+            format!("{} {lands_in}", words::added_to(locale))
+        });
         if !settled.committed {
-            self.refused(&settled);
             return None;
         }
-        self.status = Some(wire::StatusLine {
-            sentence: format!("{} {lands_in}", words::added_to(locale)),
-            action_label: String::new(),
-            refused: false,
-        });
         let id = settled.output_text("id")?;
         for label in task.tags {
             let key = kit_act::key(&["add-task-tag", &id, label], self.next_seq());
-            let tagged = kit_act::act(
+            let tagged = self.line.act_also(
                 ctx,
                 act::reminders::AddTaskTag {
                     task_id: id.clone(),
@@ -146,22 +140,18 @@ impl Ops {
                 &key,
             );
             if !tagged.committed {
-                self.refused(&tagged);
                 return Some(id);
             }
         }
         if task.flagged {
             let key = kit_act::key(&["star-task", &id], self.next_seq());
-            let starred = kit_act::act(
+            self.line.act_also(
                 ctx,
                 act::reminders::StarTask {
                     task_id: id.clone(),
                 },
                 &key,
             );
-            if !starred.committed {
-                self.refused(&starred);
-            }
         }
         Some(id)
     }
@@ -176,7 +166,6 @@ impl Ops {
         section_id: Option<&str>,
         label: &str,
     ) {
-        let locale = ctx.locale();
         // A project without a section CLEARS the section, because a section of
         // another project would be refused; the Inbox clears both.
         let clear = || crate::field::Field::Clear;
@@ -199,116 +188,79 @@ impl Ops {
             ],
             self.next_seq(),
         );
-        let settled = kit_act::act(ctx, request, &key);
-        self.undo = None;
-        if settled.committed {
-            self.status = Some(wire::StatusLine {
-                sentence: format!("{} {label}", words::filed_in(locale)),
-                action_label: String::new(),
-                refused: false,
-            });
-        } else {
-            self.refused(&settled);
-        }
+        self.line.act(ctx, request, &key, |locale| {
+            format!("{} {label}", words::filed_in(locale))
+        });
     }
 
     /// THE FLAG (#1173): set or clear the starred flag on a task. The status
     /// line says it, and the inverse is the other verb, so Undo flips it back.
     pub fn flag(&mut self, ctx: &Ctx, task_id: &str, on: bool) -> bool {
-        let locale = ctx.locale();
         let key = kit_act::key(
             &[if on { "star-task" } else { "unstar-task" }, task_id],
             self.next_seq(),
         );
-        let settled = if on {
-            kit_act::act(
-                ctx,
-                act::reminders::StarTask {
-                    task_id: task_id.to_owned(),
-                },
-                &key,
-            )
+        let task_id = task_id.to_owned();
+        let request: wire::ActRequest = if on {
+            act::reminders::StarTask { task_id }.into()
         } else {
-            kit_act::act(
-                ctx,
-                act::reminders::UnstarTask {
-                    task_id: task_id.to_owned(),
-                },
-                &key,
-            )
+            act::reminders::UnstarTask { task_id }.into()
         };
-        if !settled.committed {
-            self.refused(&settled);
-            return false;
-        }
-        self.status = Some(wire::StatusLine {
-            sentence: if on {
-                reminders::row_flagged(locale)
-            } else {
-                reminders::row_unflagged(locale)
-            },
-            action_label: words::undo(locale),
-            refused: false,
-        });
-        self.undo = settled.inverse;
-        true
+        self.line
+            .act(
+                ctx,
+                request,
+                &key,
+                if on {
+                    reminders::row_flagged
+                } else {
+                    reminders::row_unflagged
+                },
+            )
+            .committed
     }
 
     /// THE SWIPE'S DELETE: the task goes to the trash with its subtasks and
     /// Undo restores it.
     pub fn delete(&mut self, ctx: &Ctx, task_id: &str, title: &str) -> bool {
-        let locale = ctx.locale();
         let key = kit_act::key(&["delete-task", task_id], self.next_seq());
-        let settled = kit_act::act(
-            ctx,
-            act::reminders::DeleteTask {
-                task_id: task_id.to_owned(),
-            },
-            &key,
-        );
-        if !settled.committed {
-            self.refused(&settled);
-            return false;
-        }
-        self.status = Some(wire::StatusLine {
-            sentence: crate::kit::trash::moved_to_trash(locale, title),
-            action_label: words::undo(locale),
-            refused: false,
-        });
-        self.undo = settled.inverse;
-        true
+        self.line
+            .act(
+                ctx,
+                act::reminders::DeleteTask {
+                    task_id: task_id.to_owned(),
+                },
+                &key,
+                |locale| crate::kit::trash::moved_to_trash(locale, title),
+            )
+            .committed
     }
 
     /// DRAG TO REORDER (#1173): put `task_id` at `position`. Only the position
     /// changes: the project and the section stay as stored.
     pub fn reposition(&mut self, ctx: &Ctx, task_id: &str, position: f64) -> bool {
         let key = kit_act::key(&["organize-task", task_id, "position"], self.next_seq());
-        let settled = kit_act::act(
-            ctx,
-            act::reminders::OrganizeTask {
-                task_id: task_id.to_owned(),
-                position: Some(position),
-                ..Default::default()
-            },
-            &key,
-        );
-        self.undo = None;
-        if settled.committed {
-            self.status = None;
-        } else {
-            self.refused(&settled);
-        }
-        settled.committed
+        self.line
+            .act_quietly(
+                ctx,
+                act::reminders::OrganizeTask {
+                    task_id: task_id.to_owned(),
+                    position: Some(position),
+                    ..Default::default()
+                },
+                &key,
+            )
+            .committed
     }
 
     /// "Clear": the completed tasks of a list go to the trash (30 days, the
     /// Trash page restores them). One status line says it; there is no
-    /// single Undo for many writes.
+    /// single Undo for many writes, so each delete is quiet and the line is
+    /// said once they all committed.
     pub fn clear_completed(&mut self, ctx: &Ctx, task_ids: &[String]) -> bool {
-        let locale = ctx.locale();
         for id in task_ids {
             let key = kit_act::key(&["delete-task", id, "cleared"], self.next_seq());
-            let settled = kit_act::act(
+            let settled = self.line.act_also(
                 ctx,
                 act::reminders::DeleteTask {
                     task_id: id.clone(),
@@ -316,16 +268,10 @@ impl Ops {
                 &key,
             );
             if !settled.committed {
-                self.refused(&settled);
                 return false;
             }
         }
-        self.undo = None;
-        self.status = Some(wire::StatusLine {
-            sentence: reminders::completed_cleared(locale),
-            action_label: String::new(),
-            refused: false,
-        });
+        self.line.say(reminders::completed_cleared(ctx.locale()));
         true
     }
 
@@ -347,20 +293,15 @@ impl Ops {
             return;
         };
         if self
-            .status
-            .as_ref()
+            .status()
             .is_some_and(|s| s.sentence == words::task_done(locale))
         {
-            self.status = Some(wire::StatusLine {
-                sentence: format!(
-                    "{} · {} {}",
-                    words::task_done(locale),
-                    words::next_one_is(locale),
-                    civil::relative_day(locale, &next.due_day, today)
-                ),
-                action_label: String::new(),
-                refused: false,
-            });
+            self.line.say(format!(
+                "{} · {} {}",
+                words::task_done(locale),
+                words::next_one_is(locale),
+                civil::relative_day(locale, &next.due_day, today)
+            ));
         }
         self.next_of = None;
     }

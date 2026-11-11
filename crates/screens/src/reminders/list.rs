@@ -353,6 +353,10 @@ impl Screen for List {
                 return self.prefs.reset_and_ask();
             }
             Some(E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
+            Some(E::StatusActed(_)) => {
+                self.ops.undo(ctx);
+                self.reload(ctx);
+            }
             Some(E::EffectResult(result)) => {
                 self.prefs.answers(&result);
             }
@@ -386,7 +390,7 @@ impl Screen for List {
                 title: self.title(locale),
                 content: Some(content),
                 chrome: Some(rows::chrome(locale)),
-                status: self.ops.status.clone(),
+                status: self.ops.status(),
                 color_key: self.color_key().to_owned(),
                 add_label: if ready {
                     words::add_task(locale)

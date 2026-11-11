@@ -616,7 +616,7 @@ impl Screen for Home {
                         .calendar
                         .status()
                         .cloned()
-                        .or_else(|| self.ops.status.clone())
+                        .or_else(|| self.ops.status())
                         .or_else(|| {
                             ctx.follows()
                                 .report(Store::Calendar)

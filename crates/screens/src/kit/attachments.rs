@@ -48,6 +48,7 @@ use wire::effect_result::Outcome as O;
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::read::{self, Reading};
+use crate::kit::undo::Undo;
 use crate::screen::Ctx;
 use crate::shell::row_routes::{self, RowRef};
 use crate::strings::{Locale, agenda as agenda_words, agenda_event as words, fill};
@@ -102,7 +103,7 @@ pub struct Attachments {
     waiting: Option<Waiting>,
     /// The attachment whose remove confirm is up.
     removing: Option<String>,
-    status: Option<wire::StatusLine>,
+    line: Undo,
 }
 
 impl Attachments {
@@ -193,7 +194,7 @@ impl Attachments {
             Some(K::RemoveConfirmed(_)) => self.detach(ctx),
             Some(K::RemoveDismissed(_)) => self.removing = None,
             Some(K::ShowMore(_)) => self.more(ctx),
-            Some(K::StatusDismissed(_)) => self.status = None,
+            Some(K::StatusDismissed(_)) => self.line.clear(),
             None => {}
         }
         Vec::new()
@@ -203,7 +204,7 @@ impl Attachments {
         if self.waiting.is_some() {
             return Vec::new();
         }
-        self.status = None;
+        self.line.clear();
         self.waiting = Some(Waiting { pick, name: None });
         let kind = match pick {
             Pick::Photo => wire::pick_file::Kind::Photo,
@@ -246,11 +247,7 @@ impl Attachments {
     }
 
     fn refuse(&mut self, sentence: String) {
-        self.status = Some(wire::StatusLine {
-            sentence,
-            action_label: String::new(),
-            refused: true,
-        });
+        self.line.refuse(sentence);
     }
 
     /// Make the staged bytes a photo or a document, and attach it.
@@ -266,7 +263,7 @@ impl Attachments {
             ),
         };
         let key = kit_act::key(&["attach-make", subject, &picked.blob], kit_act::fresh());
-        let made = kit_act::act(ctx, made, &key);
+        let made = self.line.act_quietly(ctx, made, &key);
         let Some(id) = made.output_text("id").filter(|_| made.committed) else {
             self.refuse(refusal_or(locale, &made.refusal));
             return;
@@ -279,7 +276,7 @@ impl Attachments {
         // Every app's `attach` has one shape, so one request serves them all.
         let mut request = act::calendar::Attach { from, to }.request();
         request.app = self.app.to_owned();
-        let attached = kit_act::act(ctx, request, &key);
+        let attached = self.line.act_quietly(ctx, request, &key);
         if !attached.committed {
             self.refuse(refusal_or(locale, &attached.refusal));
         }
@@ -289,7 +286,7 @@ impl Attachments {
         let Some(id) = self.removing.take() else {
             return;
         };
-        self.status = None;
+        self.line.clear();
         let key = kit_act::key(
             &[act::calendar::Detach::NAME, &self.item_id, &id],
             kit_act::fresh(),
@@ -297,7 +294,7 @@ impl Attachments {
         let (from, to) = (self.item_id.clone(), id);
         let mut request = act::calendar::Detach { from, to }.request();
         request.app = self.app.to_owned();
-        let detached = kit_act::act(ctx, request, &key);
+        let detached = self.line.act_quietly(ctx, request, &key);
         if !detached.committed {
             self.refuse(refusal_or(ctx.locale(), &detached.refusal));
         }
@@ -355,7 +352,7 @@ impl Attachments {
                     destructive: true,
                 })
             }),
-            status: self.status.clone(),
+            status: self.line.status(),
             add_photo_icon_key: ICON_PHOTO.to_owned(),
             add_file_icon_key: ICON_ADD_FILE.to_owned(),
         }

@@ -559,6 +559,10 @@ impl Screen for Project {
                 }
             }
             Some(E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
+            Some(E::StatusActed(_)) => {
+                self.ops.undo(ctx);
+                self.reload(ctx);
+            }
             Some(E::TodoProject(project)) => {
                 if let Some(P::GroupVerb(verb)) = &project.kind
                     && verb.key == rows::VERB_CATCH_UP
@@ -589,7 +593,7 @@ impl Screen for Project {
                     title: self.name.clone(),
                     content: Some(content),
                     chrome: Some(rows::chrome(locale)),
-                    status: self.ops.status.clone(),
+                    status: self.ops.status(),
                     quick_add: Some(self.quick_add(locale, ctx.hour_cycle())),
                     sheet: self.sheet as i32,
                     new_section_name: self.new_section_name.clone(),

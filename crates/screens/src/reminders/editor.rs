@@ -211,7 +211,7 @@ impl Editor {
             self.dismissed = true;
             return Vec::new();
         }
-        self.status = self.ops.status.clone();
+        self.status = self.ops.status();
         Vec::new()
     }
 
