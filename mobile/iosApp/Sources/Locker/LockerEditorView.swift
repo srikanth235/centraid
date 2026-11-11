@@ -35,15 +35,6 @@ struct LockerEditorView: View {
     @Environment(\.colorScheme) private var scheme
     @State private var concealing = false
 
-    private var content: ScreenContent<Centraid_Core_V1_LockerEditorData> {
-        switch state.content {
-        case .loading?, nil: return .loading(true)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        }
-    }
-
     private var canSave: Bool {
         if case let .data(data)? = state.content { return data.canSave }
         return false
@@ -54,65 +45,67 @@ struct LockerEditorView: View {
         LockerCovered(wall: state.hasWall ? state.wall : nil, backLabel: chrome.title, send: sendWall, onWords: onWords, onBack: onClose) {
             // THE FORM IS SHIELDED FROM CAPTURE while Rust says `secure`.
             LockerShield(secure: state.secure) {
-                ReadStateView(content: content, onRetry: { send(LockerEditorEvents.make { $0.refreshed = .init() }) }) { editor in
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 0) {
-                            if !chrome.lede.isEmpty {
-                                LockerNote(text: chrome.lede)
-                            }
-                            if !editor.types.isEmpty {
-                                SectionHeader(title: editor.typesLabel)
-                                LockerChoicePills(choices: editor.types, identifier: "locker-editor-type") { key in
-                                    send(LockerEditorEvents.make { $0.type = .with { $0.key = key } })
+                PageReadStateView(page: state.page, onRetry: { send(LockerEditorEvents.make { $0.refreshed = .init() }) }) {
+                        if case let .data(editor)? = state.content {
+                            ScrollView {
+                                VStack(alignment: .leading, spacing: 0) {
+                                    if !chrome.lede.isEmpty {
+                                        LockerNote(text: chrome.lede)
+                                    }
+                                    if !editor.types.isEmpty {
+                                        SectionHeader(title: editor.typesLabel)
+                                        LockerChoicePills(choices: editor.types, identifier: "locker-editor-type") { key in
+                                            send(LockerEditorEvents.make { $0.type = .with { $0.key = key } })
+                                        }
+                                    }
+                                    VStack(spacing: 0) {
+                                    ForEach(editor.inputs, id: \.key) { input in
+                                        LockerInputRowView(
+                                            input: input,
+                                            // ONE FIELD PER ITEM AND TYPE: a type switch
+                                            // re-seeds the field rather than keeping the
+                                            // last type's keystrokes.
+                                            identity: "\(state.itemID)-\(input.key)",
+                                            concealed: concealing,
+                                            onEdit: { value in send(LockerEditorEvents.make { $0.typed = .with { $0.key = input.key; $0.value = value } }) },
+                                            onGenerate: { send(LockerEditorEvents.make { $0.generate = .with { $0.key = input.key } }) }
+                                        )
+                                    }
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(editor.tagsLabel)
+                                            .kitType(.meta)
+                                            .foregroundStyle(Surface.meta)
+                                        MachineTextField(placeholder: editor.tagsHint, value: editor.tagsText) { text in
+                                            send(LockerEditorEvents.make { $0.tags = .with { $0.text = text } })
+                                        }
+                                        .centraidType("body")
+                                        .textInputAutocapitalization(.never)
+                                        .accessibilityLabel(editor.tagsLabel)
+                                        .accessibilityIdentifier("locker-editor-tags")
+                                    }
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 8)
+                                    .overlay(alignment: .bottom) { KitHairline().padding(.leading, 14) }
+                                    if !editor.compromisedLabel.isEmpty {
+                                        LockerCompromisedRow(
+                                            label: editor.compromisedLabel,
+                                            on: editor.compromised,
+                                            note: editor.compromisedNote
+                                        ) { on in
+                                            send(LockerEditorEvents.make { $0.compromised = .with { $0.on = on } })
+                                        }
+                                    }
+                                    }
+                                    .kitCard()
+                                    .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+                                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                                    .padding(.top, 8)
+                                    LockerNote(text: editor.blocked)
                                 }
+                                .padding(.bottom, 24)
                             }
-                            VStack(spacing: 0) {
-                            ForEach(editor.inputs, id: \.key) { input in
-                                LockerInputRowView(
-                                    input: input,
-                                    // ONE FIELD PER ITEM AND TYPE: a type switch
-                                    // re-seeds the field rather than keeping the
-                                    // last type's keystrokes.
-                                    identity: "\(state.itemID)-\(input.key)",
-                                    concealed: concealing,
-                                    onEdit: { value in send(LockerEditorEvents.make { $0.typed = .with { $0.key = input.key; $0.value = value } }) },
-                                    onGenerate: { send(LockerEditorEvents.make { $0.generate = .with { $0.key = input.key } }) }
-                                )
-                            }
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(editor.tagsLabel)
-                                    .kitType(.meta)
-                                    .foregroundStyle(Surface.meta)
-                                MachineTextField(placeholder: editor.tagsHint, value: editor.tagsText) { text in
-                                    send(LockerEditorEvents.make { $0.tags = .with { $0.text = text } })
-                                }
-                                .centraidType("body")
-                                .textInputAutocapitalization(.never)
-                                .accessibilityLabel(editor.tagsLabel)
-                                .accessibilityIdentifier("locker-editor-tags")
-                            }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .overlay(alignment: .bottom) { KitHairline().padding(.leading, 14) }
-                            if !editor.compromisedLabel.isEmpty {
-                                LockerCompromisedRow(
-                                    label: editor.compromisedLabel,
-                                    on: editor.compromised,
-                                    note: editor.compromisedNote
-                                ) { on in
-                                    send(LockerEditorEvents.make { $0.compromised = .with { $0.on = on } })
-                                }
-                            }
-                            }
-                            .kitCard()
-                            .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
-                            .padding(.horizontal, CentraidGeometry.pageMargin)
-                            .padding(.top, 8)
-                            LockerNote(text: editor.blocked)
                         }
-                        .padding(.bottom, 24)
                     }
-                }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if state.hasStatus, state.status.refused {

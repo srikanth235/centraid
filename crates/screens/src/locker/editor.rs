@@ -35,12 +35,12 @@ use wire::screen_event::Kind as E;
 use super::generator::{self, Entropy, system_entropy};
 use super::handoff;
 use super::item::PLACEHOLDER;
-use super::shared::{self, Phase};
+use super::shared;
 use super::types::{self, SEED};
 use super::wall::{Change, Wall};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Page, Reading};
 use crate::kit::stale;
 use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
@@ -98,7 +98,9 @@ struct Editor {
     item_id: String,
     adding: bool,
     /// The item as the vault holds it, on EDIT.
-    stored: Phase<wire::LockerItem>,
+    stored: Page<wire::LockerItem>,
+    /// The item has no row any more: the page's final failure, in its own words.
+    gone: bool,
     form: Option<Form>,
     /// The item's revision when the form was read: what an edit names as the one it replaces
     /// (#1185). `None` for a new item.
@@ -118,7 +120,8 @@ impl Editor {
             route,
             wall: Wall::default(),
             entropy,
-            stored: Phase::Loading,
+            stored: Page::loading(),
+            gone: false,
             form: None,
             rev: None,
             confirm_discard: false,
@@ -252,16 +255,21 @@ impl Editor {
                 _ => None,
             },
         );
+        self.gone = matches!(reading, Reading::Data(None));
         match reading {
             Reading::Data(Some(item)) => {
                 if self.form.is_none() {
                     self.form = Some(Self::form_of(&item));
                 }
-                self.stored = Phase::Ready(item);
+                shared::reread(&mut self.stored, ctx.locale(), Reading::Data(item));
             }
             // The item is gone: nothing to edit.
-            Reading::Data(None) | Reading::Failed => self.stored = Phase::Failed,
-            Reading::Denied(denial) => self.stored = Phase::Denied(denial),
+            Reading::Data(None) | Reading::Failed => {
+                shared::reread(&mut self.stored, ctx.locale(), Reading::Failed);
+            }
+            Reading::Denied(denial) => {
+                shared::reread(&mut self.stored, ctx.locale(), Reading::Denied(denial));
+            }
         }
     }
 
@@ -275,7 +283,7 @@ impl Editor {
             // shell pops it.
             Change::Closed => {
                 self.form = None;
-                self.stored = Phase::Loading;
+                self.stored = Page::loading();
                 self.finished = true;
             }
             Change::None => {}
@@ -722,20 +730,34 @@ impl Screen for Editor {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
         let open = self.wall.is_open();
-        let content = open.then(|| match (&self.form, &self.stored) {
-            (Some(form), _) => {
+        let content = (open && !self.gone)
+            .then_some(self.form.as_ref())
+            .flatten()
+            .map(|form| {
                 wire::locker_editor_state::Content::Data(Box::new(self.data(locale, form)))
+            });
+        // THE READ (#1185): the form already on screen is the member's, so a re-read that failed
+        // leaves it under the one sentence; an item with no row any more is the final failure.
+        let denied = |denial: &wire::AppQueryDenial| shared::denied(locale, denial);
+        let page = if !open {
+            Page::<()>::loading().wire(locale, denied, wire::EmptyState::default)
+        } else if self.gone {
+            wire::PageState {
+                state: Some(wire::page_state::State::Failed(read::gone(
+                    words::item_gone(locale),
+                    words::item_gone_body(locale),
+                ))),
+                note: None,
             }
-            (None, Phase::Failed) => {
-                wire::locker_editor_state::Content::Failure(read::failure(locale))
+        } else if self.form.is_some() {
+            Page::Ready {
+                data: (),
+                note: self.stored.note().cloned(),
             }
-            (None, Phase::Denied(denial)) => {
-                wire::locker_editor_state::Content::Denied(shared::denied(locale, denial))
-            }
-            (None, _) => {
-                wire::locker_editor_state::Content::Loading(wire::Loading { first_load: true })
-            }
-        });
+            .wire(locale, denied, wire::EmptyState::default)
+        } else {
+            self.stored.wire(locale, denied, wire::EmptyState::default)
+        };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::LockerEditor(
                 wire::LockerEditorState {
@@ -748,6 +770,7 @@ impl Screen for Editor {
                     },
                     item_id: self.item_id.clone(),
                     content,
+                    page: Some(page),
                     confirm: self.confirm_discard.then(|| wire::Confirm {
                         title: words::discard_title(locale),
                         body: words::discard_body(locale),

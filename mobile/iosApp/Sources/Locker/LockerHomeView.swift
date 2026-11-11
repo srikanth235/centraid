@@ -27,13 +27,10 @@ struct LockerHomeView: View {
 
     @Environment(\.colorScheme) private var scheme
 
-    private var content: ScreenContent<Centraid_Core_V1_LockerHomeData> {
-        switch state.content {
-        case .loading?, nil: return .loading(true)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        }
+    /// The vault refused Locker: the page's gate. It has no band, search or add.
+    private var isDenied: Bool {
+        if case .refused? = state.page.state { return true }
+        return false
     }
 
     private var searchField: KitSearchField {
@@ -46,16 +43,15 @@ struct LockerHomeView: View {
 
     var body: some View {
         let covered = state.hasWall
-        let content = content
         AppPlace(
             app: "locker",
             title: state.chrome.title,
-            trailing: covered || content.isDenied || state.chrome.addLabel.isEmpty
+            trailing: covered || isDenied || state.chrome.addLabel.isEmpty
                 ? nil
                 : RoomAction(iconKey: "Plus", label: state.chrome.addLabel, identifier: "locker-add") {
                     open(state.chrome.addRoute)
                 },
-            search: covered || content.isDenied ? nil : SearchSlot(
+            search: covered || isDenied ? nil : SearchSlot(
                 field: searchField,
                 placeholder: state.chrome.searchPlaceholder,
                 closeLabel: state.chrome.closeLabel,
@@ -64,13 +60,13 @@ struct LockerHomeView: View {
                 onClose: { send(LockerHomeEvents.make { $0.searchClosed = .init() }) }
             ),
             // THE LOCK KEY (#1173): cover every item now, Rust's own event.
-            lead: covered || content.isDenied || state.chrome.lockLabel.isEmpty
+            lead: covered || isDenied || state.chrome.lockLabel.isEmpty
                 ? nil
                 : RoomAction(iconKey: "Lock", label: state.chrome.lockLabel, identifier: "locker-lock") {
                     send(LockerHomeEvents.make { $0.lockRequested = .init() })
                 },
-            filter: covered ? nil : filterSlot(content),
-            showsBand: !content.isDenied
+            filter: covered ? nil : filterSlot(),
+            showsBand: !isDenied
         ) {
             AppBand(
                 app: "locker",
@@ -96,7 +92,7 @@ struct LockerHomeView: View {
                 LockerWallView(wall: wall, send: sendWall, onWords: onWords)
             } else {
                 // OPEN, AND SHIELDED FROM CAPTURE while Rust says `secure`.
-                LockerShield(secure: state.secure) { unlocked(content) }
+                LockerShield(secure: state.secure) { unlocked() }
             }
         }
         .sheet(isPresented: sheetBinding(.more)) {
@@ -124,23 +120,25 @@ struct LockerHomeView: View {
 
     /// What an open Locker draws under its header: the tab's list, or the generator.
     @ViewBuilder
-    private func unlocked(_ content: ScreenContent<Centraid_Core_V1_LockerHomeData>) -> some View {
-        ReadStateView(
-            content: content,
+    private func unlocked() -> some View {
+        PageReadStateView(
+            page: state.page,
             onRetry: { send(LockerHomeEvents.make { $0.refreshed = .init() }) }
-        ) { home in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    switch state.destination {
-                    case .review: review(home)
-                    case .search: search(home)
-                    case .generate: LockerGeneratorView(generator: home.generator, send: send, open: open)
-                    default: items(home)
+        ) {
+            if case let .data(home)? = state.content {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        switch state.destination {
+                        case .review: review(home)
+                        case .search: search(home)
+                        case .generate: LockerGeneratorView(generator: home.generator, send: send, open: open)
+                        default: items(home)
+                        }
                     }
+                    .padding(.bottom, 16)
                 }
-                .padding(.bottom, 16)
+                .refreshable { send(LockerHomeEvents.make { $0.refreshed = .init() }) }
             }
-            .refreshable { send(LockerHomeEvents.make { $0.refreshed = .init() }) }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if state.hasStatus {
@@ -258,8 +256,8 @@ struct LockerHomeView: View {
     /// THE ITEMS FILTER AS THE HEADER'S MENU (R-CHROME-3): only Items' data carries it, so the
     /// button is there on Items and nowhere else. A pick or the clear row is an event; which
     /// option is checked, and whether the funnel is lit, is Rust's.
-    private func filterSlot(_ content: ScreenContent<Centraid_Core_V1_LockerHomeData>) -> FilterSlot? {
-        guard case let .data(home) = content, home.hasFilterMenu else { return nil }
+    private func filterSlot() -> FilterSlot? {
+        guard case let .data(home)? = state.content, home.hasFilterMenu else { return nil }
         return FilterSlot(
             menu: home.filterMenu,
             onPick: { section, option in

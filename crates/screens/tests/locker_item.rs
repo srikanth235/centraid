@@ -217,7 +217,15 @@ fn purging_asks_first_and_then_the_item_is_gone() {
         id,
         I::Confirmed(wire::locker_item_event::Confirmed {}),
     );
-    assert!(item_data(&d, id).gone.is_some());
+    // The item is gone: the page's final failure in its own words, with no Retry.
+    let state = item(&d, id);
+    assert!(state.content.is_none());
+    let Some(wire::page_state::State::Failed(failure)) = state.page.and_then(|page| page.state)
+    else {
+        panic!("a purged item is a failed page");
+    };
+    assert_eq!(failure.sentence, "This item is gone");
+    assert!(failure.permanent);
 }
 
 #[test]

@@ -13,12 +13,12 @@ use wire::locker_home_event::Kind as H;
 use wire::screen_event::Kind as E;
 
 use super::generator::{Generator, system_entropy};
-use super::shared::{self, Phase};
+use super::shared;
 use super::wall::{CLIPBOARD_LIFE, Change, Wall};
 use super::{handoff, routes};
 use crate::catalog::load;
 use crate::kit::menu;
-use crate::kit::read;
+use crate::kit::read::{self, Page};
 use crate::kit::secret::Secrets;
 use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
@@ -114,9 +114,9 @@ struct Home {
     browsing: Option<String>,
     search_open: bool,
     term: String,
-    items: Phase<wire::LockerItems>,
-    review: Phase<wire::LockerReview>,
-    hits: Phase<wire::LockerSearch>,
+    items: Page<wire::LockerItems>,
+    review: Page<wire::LockerReview>,
+    hits: Page<wire::LockerSearch>,
     generator: Generator,
     status: Option<wire::StatusLine>,
     /// A saved item's line and its Undo, left by the editor that closed above this page (#1185).
@@ -136,9 +136,9 @@ impl Home {
             browsing: None,
             search_open: false,
             term: String::new(),
-            items: Phase::Loading,
-            review: Phase::Loading,
-            hits: Phase::Loading,
+            items: Page::loading(),
+            review: Page::loading(),
+            hits: Page::loading(),
             generator: Generator::new(entropy),
             status: None,
             undo: Undo::default(),
@@ -156,26 +156,30 @@ impl Home {
         use wire::LockerDestination as D;
         match self.destination {
             D::Review => {
-                self.review = Phase::of(read::read(
-                    ctx,
-                    load::locker::Review::default(),
-                    |a| match a {
+                shared::reread(
+                    &mut self.review,
+                    ctx.locale(),
+                    read::read(ctx, load::locker::Review::default(), |a| match a {
                         Answer::LockerReview(review) => Some(review),
                         _ => None,
-                    },
-                ));
+                    }),
+                );
             }
             D::Search if !self.term.trim().is_empty() => {
-                self.hits = Phase::of(read::read(
-                    ctx,
-                    load::locker::Search {
-                        term: self.term.clone(),
-                    },
-                    |a| match a {
-                        Answer::LockerSearch(search) => Some(search),
-                        _ => None,
-                    },
-                ));
+                shared::reread(
+                    &mut self.hits,
+                    ctx.locale(),
+                    read::read(
+                        ctx,
+                        load::locker::Search {
+                            term: self.term.clone(),
+                        },
+                        |a| match a {
+                            Answer::LockerSearch(search) => Some(search),
+                            _ => None,
+                        },
+                    ),
+                );
             }
             // Items — and Generate and an empty search, which read the shelf so
             // a change event on them re-reads something true.
@@ -183,39 +187,43 @@ impl Home {
                 self.read_items(ctx);
                 // The Review card counts what Review would list.
                 if self.destination == D::Items {
-                    self.review = Phase::of(read::read(
-                        ctx,
-                        load::locker::Review::default(),
-                        |a| match a {
+                    shared::reread(
+                        &mut self.review,
+                        ctx.locale(),
+                        read::read(ctx, load::locker::Review::default(), |a| match a {
                             Answer::LockerReview(review) => Some(review),
                             _ => None,
-                        },
-                    ));
+                        }),
+                    );
                 }
             }
         }
     }
 
     fn read_items(&mut self, ctx: &Ctx) {
-        self.items = Phase::of(read::read(
-            ctx,
-            load::locker::Items {
-                archived: Some(self.filter == ARCHIVED),
-                limit: 0,
-            },
-            |a| match a {
-                Answer::LockerItems(items) => Some(items),
-                _ => None,
-            },
-        ));
+        shared::reread(
+            &mut self.items,
+            ctx.locale(),
+            read::read(
+                ctx,
+                load::locker::Items {
+                    archived: Some(self.filter == ARCHIVED),
+                    limit: 0,
+                },
+                |a| match a {
+                    Answer::LockerItems(items) => Some(items),
+                    _ => None,
+                },
+            ),
+        );
     }
 
     /// A RELOCK KEEPS WHERE THE MEMBER WAS — the tab and the filter — and
     /// nothing of what they saw; search is closed, because a term is content.
     fn wipe(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        self.items = Phase::Loading;
-        self.review = Phase::Loading;
-        self.hits = Phase::Loading;
+        self.items = Page::loading();
+        self.review = Page::loading();
+        self.hits = Page::loading();
         self.search_open = false;
         self.term.clear();
         self.sheet = wire::locker_home_state::Sheet::None;
@@ -284,7 +292,7 @@ impl Home {
         // asked for, never filtered out of the live one); every other filter
         // re-folds the shelf already held.
         if shelf_changed {
-            self.items = Phase::Loading;
+            self.items = Page::loading();
             self.read_items(ctx);
         }
     }
@@ -361,15 +369,17 @@ impl Home {
                 self.search_open = true;
                 self.destination = D::Search;
                 self.term = typed.term;
+                // A new term is a new question: the hits of the last one are never shown for it.
+                self.hits = Page::loading();
                 if self.term.trim().is_empty() {
-                    self.hits = Phase::Loading;
+                    self.hits = Page::loading();
                 } else {
                     self.reload(ctx);
                 }
             }
             // CLOSING CLEARS (R-1046-6): the term and its hits.
             Some(H::SearchClosed(_)) => {
-                self.hits = Phase::Loading;
+                self.hits = Page::loading();
                 self.search_open = false;
                 self.term.clear();
                 self.goto(ctx, D::Items);
@@ -555,7 +565,7 @@ impl Home {
         let live = answer.items.iter().filter(|row| !row.archived);
         let codes = u32::try_from(live.filter(|row| row.has_code).count()).unwrap_or(u32::MAX);
         let review = match &self.review {
-            Phase::Ready(review) => review_count(review),
+            Page::Ready { data: review, .. } => review_count(review),
             _ => 0,
         };
         let card = |key: &str, label: String, count: u32, icon: &str, color: &str| {
@@ -726,39 +736,61 @@ impl Home {
         }
     }
 
+    /// The data the open place draws, once its read has answered.
     fn content(&self, locale: Locale) -> Option<wire::locker_home_state::Content> {
         use wire::LockerDestination as D;
         use wire::locker_home_state::Content as C;
         if !self.wall.is_open() {
             return None;
         }
-        Some(match self.destination {
-            D::Generate => C::Data(Box::new(wire::LockerHomeData {
+        match self.destination {
+            D::Generate => Some(C::Data(Box::new(wire::LockerHomeData {
                 status_line: words::items_status(locale),
                 generator: Some(self.generator.view(locale)),
                 ..wire::LockerHomeData::default()
-            })),
-            D::Review => match &self.review {
-                Phase::Loading => C::Loading(wire::Loading { first_load: true }),
-                Phase::Failed => C::Failure(read::failure(locale)),
-                Phase::Denied(denial) => C::Denied(shared::denied(locale, denial)),
-                Phase::Ready(answer) => C::Data(Box::new(Self::review_data(locale, answer))),
-            },
-            D::Search => C::Data(Box::new(self.search_data(locale))),
-            _ => match &self.items {
-                Phase::Loading => C::Loading(wire::Loading { first_load: true }),
-                Phase::Failed => C::Failure(read::failure(locale)),
-                Phase::Denied(denial) => C::Denied(shared::denied(locale, denial)),
-                Phase::Ready(answer) => C::Data(Box::new(self.items_data(locale, answer))),
-            },
-        })
+            }))),
+            D::Review => self
+                .review
+                .data()
+                .map(|answer| C::Data(Box::new(Self::review_data(locale, answer)))),
+            D::Search if self.term.trim().is_empty() || self.hits.data().is_some() => {
+                Some(C::Data(Box::new(self.search_data(locale))))
+            }
+            D::Search => None,
+            _ => self
+                .items
+                .data()
+                .map(|answer| C::Data(Box::new(self.items_data(locale, answer)))),
+        }
+    }
+
+    /// THE READ OF THE PLACE ON SCREEN, as the kit's page state: the tab's own read (Generate and an
+    /// empty search read nothing, so they are ready). Its empties are inside its data, beside
+    /// the filter, the search field and the sections that stay.
+    fn page(&self, locale: Locale) -> wire::PageState {
+        use wire::LockerDestination as D;
+        let denied = |denial: &wire::AppQueryDenial| shared::denied(locale, denial);
+        let empty = wire::EmptyState::default;
+        if !self.wall.is_open() {
+            return Page::<()>::loading().wire(locale, denied, empty);
+        }
+        match self.destination {
+            D::Review => self.review.wire(locale, denied, empty),
+            D::Search if !self.term.trim().is_empty() => self.hits.wire(locale, denied, empty),
+            D::Generate | D::Search => Page::Ready {
+                data: (),
+                note: None,
+            }
+            .wire(locale, denied, empty),
+            _ => self.items.wire(locale, denied, empty),
+        }
     }
 
     fn band(&self, locale: Locale) -> Vec<wire::LockerBandTab> {
         use wire::LockerDestination as D;
         let denied = matches!(
             (self.destination, &self.items, &self.review),
-            (D::Items, Phase::Denied(_), _) | (D::Review, _, Phase::Denied(_))
+            (D::Items, Page::Refused(_), _) | (D::Review, _, Page::Refused(_))
         );
         if denied {
             return Vec::new();
@@ -888,7 +920,7 @@ impl Screen for Home {
                 let step = self.wall.appeared(ctx, true);
                 let effects = self.walled(ctx, step);
                 // A home that finds the session already open still reads.
-                if self.wall.is_open() && matches!(self.items, Phase::Loading) {
+                if self.wall.is_open() && matches!(self.items, Page::Loading { .. }) {
                     self.reload(ctx);
                 }
                 effects
@@ -990,6 +1022,7 @@ impl Screen for Home {
                 secure: open,
                 destination: self.destination as i32,
                 content,
+                page: Some(self.page(locale)),
                 sheet: self.sheet as i32,
                 band: self.band(locale),
                 band_locked: !open,

@@ -1,4 +1,4 @@
-//! What every Locker screen shares beyond the wall: the three states of a read,
+//! What every Locker screen shares beyond the wall: a read answered again on the kit's page,
 //! the session's reveal as a screen asks it, an item as a list draws it, and
 //! the small status-line helpers.
 
@@ -7,35 +7,15 @@ use std::time::Duration;
 use centraid_api_proto::core_v1 as wire;
 
 use super::types;
-use crate::kit::read::Reading;
+use crate::kit::read::{Page, Reading};
 use crate::screen::Ctx;
 use crate::strings::{Locale, fill, locker as words};
 
-/// What a Locker page holds of one read: nothing yet, a refusal, a gate or the
-/// answer. A failed read is never an empty list.
-#[derive(Clone, Debug)]
-pub(super) enum Phase<T> {
-    Loading,
-    Failed,
-    Denied(wire::AppQueryDenial),
-    Ready(T),
-}
-
-impl<T> Phase<T> {
-    pub(super) fn of(reading: Reading<T>) -> Self {
-        match reading {
-            Reading::Data(data) => Self::Ready(data),
-            Reading::Denied(denial) => Self::Denied(denial),
-            Reading::Failed => Self::Failed,
-        }
-    }
-
-    pub(super) fn data(&self) -> Option<&T> {
-        match self {
-            Self::Ready(data) => Some(data),
-            _ => None,
-        }
-    }
+/// A page's read answered again. What is shown stays (a refresh that failed keeps it under the
+/// page's one sentence); a failure or gate becomes the skeleton until the answer lands.
+pub(super) fn reread<T>(page: &mut Page<T>, locale: Locale, reading: Reading<T>) {
+    let kept = std::mem::replace(page, Page::loading());
+    *page = kept.refreshing().after(reading, locale, |_| false);
 }
 
 /// The gate drawn when the vault will not let Locker read.

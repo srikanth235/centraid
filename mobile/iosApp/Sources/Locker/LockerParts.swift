@@ -297,19 +297,6 @@ struct LockerCountdownRing: View {
     }
 }
 
-/// The content of a Locker view state's `oneof content`, as the kit's read states take it.
-func lockerContent<Value>(
-    loading: Bool,
-    failure: Centraid_Core_V1_Failure?,
-    denied: Centraid_Core_V1_Denied?,
-    data: Value?
-) -> ScreenContent<Value> {
-    if let data { return .data(data) }
-    if let failure { return .failed(failure) }
-    if let denied { return .gated(denied) }
-    return .loading(true)
-}
-
 /// A WHITE CARD OF ROWS under an optional group head: Starred, Recently used, a category's list.
 struct LockerRowGroup: View {
     let title: String

@@ -127,7 +127,6 @@ import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.StatusChipView
 import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.kitSwitchColors
-import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
@@ -296,11 +295,11 @@ internal fun LockerHomeScreen(
                 RoomAction("Plus", label, "locker-add") { chrome.add_route?.let(onOpen) }
             },
             // THE LOCK KEY (#1173): cover every item now, Rust's own event.
-            lead = chrome?.lock_label?.takeIf { it.isNotEmpty() && state.denied == null }?.let { label ->
+            lead = chrome?.lock_label?.takeIf { it.isNotEmpty() && state.page?.refused == null }?.let { label ->
                 RoomAction("Lock", label, "locker-lock") { onEvent(LockerHomeEvent(lock_requested = LockerHomeEvent.LockRequested())) }
             },
             // SEARCH IS THE ROOM'S BAR (R-CHROME-2), never a tab.
-            search = if (state.denied == null) {
+            search = if (state.page?.refused == null) {
                 RoomSearch(
                     field = SearchField(open_ = field?.open_ == true, term = field?.term.orEmpty(), answered_term = field?.answered_term.orEmpty(), corrected = field?.corrected.orEmpty()),
                     placeholder = chrome?.search_placeholder.orEmpty(),
@@ -343,11 +342,12 @@ internal fun LockerHomeScreen(
             },
         ) {
             ReadStateView(
-                content = screenContentOf(state.loading, state.failure, data, state.denied),
+                page = state.page!!,
                 onRetry = { onEvent(LockerHomeEvent(refreshed = LockerHomeEvent.Refreshed())) },
                 retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
                 skeleton = { RowSkeleton() },
-            ) { home ->
+            ) {
+                val home = data ?: return@ReadStateView
                 BackHandler(enabled = home.list_title.isNotEmpty()) {
                     onEvent(LockerHomeEvent(category_closed = LockerHomeEvent.CategoryClosed()))
                 }
@@ -776,24 +776,20 @@ internal fun LockerItemScreen(
             parentTitle = chrome?.back_label.orEmpty(),
             onBack = onBack,
             // THE "…" MENU holds the item's verbs (add a field, star, archive, trash).
-            more = data?.takeIf { it.gone == null && it.actions.isNotEmpty() }?.let {
+            more = data?.takeIf { it.actions.isNotEmpty() }?.let {
                 RoomAction("MoreHoriz", chrome?.menu_label.orEmpty(), "locker-item-menu") { menuOpen = true }
             },
-            trailing = chrome?.edit_label?.takeIf { it.isNotEmpty() && data?.gone == null }?.let { label ->
+            trailing = chrome?.edit_label?.takeIf { it.isNotEmpty() && data != null }?.let { label ->
                 RoomAction("Pencil", label, "locker-item-edit") { chrome.edit_route?.let(onOpen) }
             },
             statusLine = { StatusLine(state.status) { onEvent(LockerItemEvent(status_acted = LockerItemEvent.StatusActed())) } },
         ) {
             ReadStateView(
-                content = screenContentOf(state.loading, state.failure, data, state.denied),
+                page = state.page!!,
                 onRetry = { onEvent(LockerItemEvent(refreshed = LockerItemEvent.Refreshed())) },
                 retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
-            ) { item ->
-                val gone = item.gone
-                if (gone != null) {
-                    EmptyStateView(gone, onAction = null)
-                    return@ReadStateView
-                }
+            ) {
+                val item = data ?: return@ReadStateView
                 LazyColumn(Modifier.fillMaxSize().testTag("locker-item")) {
                     item(key = "head") {
                         // THE CENTRED HERO (the Locker item board): the title's first letter on ink, the title with
@@ -1167,9 +1163,11 @@ internal fun LockerEditorScreen(
             status = state.status?.sentence.orEmpty().ifEmpty { data?.blocked.orEmpty() },
         ) {
             ReadStateView(
-                content = screenContentOf(state.loading, state.failure, data, state.denied),
-                onRetry = null,
-            ) { editor ->
+                page = state.page!!,
+                onRetry = { onEvent(LockerEditorEvent(refreshed = LockerEditorEvent.Refreshed())) },
+                retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
+            ) {
+                val editor = data ?: return@ReadStateView
                 LazyColumn(Modifier.fillMaxSize().testTag("locker-editor")) {
                     item(key = "lede") { LockerNote(chrome?.lede.orEmpty()) }
                     if (editor.types.isNotEmpty()) {

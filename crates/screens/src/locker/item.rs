@@ -30,7 +30,7 @@ use wire::locker_item_event::Kind as I;
 use wire::screen_event::Kind as E;
 
 use super::routes;
-use super::shared::{self, Opened, Phase, Refused};
+use super::shared::{self, Opened, Refused};
 use super::types::{self, SEED};
 use super::wall::{CLIPBOARD_LIFE, Change, Wall};
 use crate::catalog::{act, load};
@@ -38,7 +38,7 @@ use crate::kit::act::{self as kit_act, Settled};
 use crate::kit::civil;
 use crate::kit::earlier;
 use crate::kit::links::{self, Kind, Links, Outcome};
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Page, Reading};
 use crate::kit::secret::Secrets;
 use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
@@ -106,7 +106,7 @@ struct Item {
     route: wire::LockerItemRoute,
     wall: Wall,
     secrets: Secrets,
-    loaded: Phase<Loaded>,
+    loaded: Page<Loaded>,
     shown: Option<Shown>,
     /// The status line and what its Undo reverses (the kit's one door). A line never carries a
     /// secret: it names the field, never the value.
@@ -133,7 +133,7 @@ impl Item {
             route,
             wall: Wall::default(),
             secrets: Secrets::view_shielded(),
-            loaded: Phase::Loading,
+            loaded: Page::loading(),
             shown: None,
             undo: Undo::default(),
             confirming: None,
@@ -182,11 +182,12 @@ impl Item {
             }
             _ => earlier::Foot::default(),
         };
-        self.loaded = match item {
-            Reading::Data((item, today)) => Phase::Ready(Loaded { item, today }),
-            Reading::Denied(denial) => Phase::Denied(denial),
-            Reading::Failed => Phase::Failed,
+        let reading = match item {
+            Reading::Data((item, today)) => Reading::Data(Loaded { item, today }),
+            Reading::Denied(denial) => Reading::Denied(denial),
+            Reading::Failed => Reading::Failed,
         };
+        shared::reread(&mut self.loaded, ctx.locale(), reading);
         // THE ITEM MOVED UNDER A REVEAL (an edit, a trash): the revealed value
         // is for the item as it was, so it goes.
         let mut effects = Vec::new();
@@ -235,7 +236,7 @@ impl Item {
     /// A RELOCK IS A WIPE: every answer, every revealed value and every sheet
     /// goes, and the screen is its blank until the Locker opens again.
     fn wipe(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        self.loaded = Phase::Loading;
+        self.loaded = Page::loading();
         self.shown = None;
         self.undo.clear();
         self.confirming = None;
@@ -911,15 +912,9 @@ impl Item {
     // --- views ---------------------------------------------------------------
 
     fn data(&self, locale: Locale, loaded: &Loaded) -> wire::LockerItemData {
+        // An item that is gone is the page's failure, never data (see `view`).
         let Some(item) = &loaded.item else {
-            return wire::LockerItemData {
-                gone: Some(wire::EmptyState {
-                    headline: words::item_gone(locale),
-                    body: words::item_gone_body(locale),
-                    ..wire::EmptyState::default()
-                }),
-                ..wire::LockerItemData::default()
-            };
+            return wire::LockerItemData::default();
         };
         let kind = types::of(&item.r#type);
         let mut chips = Vec::new();
@@ -1061,7 +1056,6 @@ impl Item {
                 words::memo_edit(locale)
             },
             actions,
-            gone: None,
             change_password: change_password_url(item)
                 .map(|_| action("change_password", words::change_password(locale), false)),
             trashed_note: if item.trashed {
@@ -1748,7 +1742,7 @@ impl Screen for Item {
                 let step = self.wall.appeared(ctx, false);
                 let mut effects = self.walled(ctx, step);
                 // The session may be open already: read what it opens.
-                if self.wall.is_open() && matches!(self.loaded, Phase::Loading) {
+                if self.wall.is_open() && matches!(self.loaded, Page::Loading { .. }) {
                     effects.extend(self.reload(ctx));
                     effects.extend(self.followed(ctx));
                 }
@@ -1825,18 +1819,31 @@ impl Screen for Item {
         let locale = ctx.locale();
         let open = self.wall.is_open();
         let item = self.item();
-        let content = open.then(|| match &self.loaded {
-            Phase::Loading => {
-                wire::locker_item_state::Content::Loading(wire::Loading { first_load: true })
-            }
-            Phase::Failed => wire::locker_item_state::Content::Failure(read::failure(locale)),
-            Phase::Denied(denial) => {
-                wire::locker_item_state::Content::Denied(shared::denied(locale, denial))
-            }
-            Phase::Ready(loaded) => {
+        // An item that is no longer there is the page's final failure, in its own words; the data
+        // is drawn only for an item that is.
+        let gone = self
+            .loaded
+            .data()
+            .is_some_and(|loaded| loaded.item.is_none());
+        let content = if open && !gone {
+            self.loaded.data().map(|loaded| {
                 wire::locker_item_state::Content::Data(Box::new(self.data(locale, loaded)))
-            }
-        });
+            })
+        } else {
+            None
+        };
+        let denied = |denial: &wire::AppQueryDenial| shared::denied(locale, denial);
+        let mut page = if open {
+            self.loaded.wire(locale, denied, wire::EmptyState::default)
+        } else {
+            Page::<()>::loading().wire(locale, denied, wire::EmptyState::default)
+        };
+        if open && gone {
+            page.state = Some(wire::page_state::State::Failed(read::gone(
+                words::item_gone(locale),
+                words::item_gone_body(locale),
+            )));
+        }
         let status = self.undo.status().or_else(|| self.earlier.status(locale));
         wire::ViewState {
             kind: Some(wire::view_state::Kind::LockerItem(Box::new(
@@ -1845,6 +1852,7 @@ impl Screen for Item {
                     secure: open,
                     item_id: self.route.item_id.clone(),
                     content,
+                    page: Some(page),
                     confirm: self.confirm(locale),
                     status,
                     chrome: Some(wire::LockerItemChrome {
