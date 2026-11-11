@@ -294,3 +294,40 @@ fn a_guest_is_named_with_their_reply_and_an_own_zone_is_said_as_the_page_says_it
         "{lines:?}"
     );
 }
+
+#[test]
+fn a_followed_event_says_its_calendar_and_a_typed_one_does_not() {
+    let mut w = World::seeded_with(
+        Registry::default().with(calendar::EARLIER, calendar::earlier::build),
+        SEEDED_AT_MS,
+    );
+    w.act(act::calendar::FollowCalendar {
+        origin: json!({ "ref": "calendar:work", "label": "Work", "device_id": "phone-1" })
+            .to_string(),
+        records: json!([{ "external_id": "uid:1", "device_id": "phone-1", "fields": {
+            "title": "Design sync", "starts": "2099-06-19T09:00", "ends": "2099-06-19T10:00",
+            "timing": "floating", "busy": 1
+        } }])
+        .to_string(),
+        complete: Some(true),
+        since: None,
+    });
+    let followed = w
+        .window("2099-06-19T00:00:00Z", "2099-06-20T00:00:00Z")
+        .first()
+        .expect("the followed event")
+        .event_id
+        .clone();
+    let page = w.open_event(&followed, &followed, None, "2099-06-19");
+    let line = w.event_state(page).origin.clone().expect("a line");
+    assert_eq!(line.text, "From Work");
+    assert_eq!(line.accessibility_label, "Came from Work");
+    let typed = w.propose(
+        "Review",
+        "2099-06-15T14:00:00",
+        "2099-06-15T15:00:00",
+        |_| {},
+    );
+    let page = w.open_event(&typed, &typed, None, "2099-06-15");
+    assert_eq!(w.event_state(page).origin, None);
+}

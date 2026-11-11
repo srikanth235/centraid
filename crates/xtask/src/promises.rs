@@ -437,7 +437,11 @@ pub const REGISTER: &[Row] = &[
     ),
     // Origin (#1185, Phase 2B): the detail screen's "From ..." line; the checker's gaps are the
     // adopters' work list.
-    owed("calendar", Promise::Origin, ORIGIN_OWED),
+    kept(
+        "calendar",
+        Promise::Origin,
+        "crates/screens/src/calendar/earlier.rs",
+    ),
     owed("docs", Promise::Origin, ORIGIN_OWED),
     owed("health", Promise::Origin, ORIGIN_OWED),
     owed("locker", Promise::Origin, ORIGIN_OWED),

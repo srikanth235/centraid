@@ -517,7 +517,7 @@ impl Screen for EventPage {
                 .or_else(|| self.differences.status(locale, follow::Source::Phone))
                 .or_else(|| self.earlier.status(locale)),
             earlier: self.earlier.entry.clone(),
-            origin: None,
+            origin: self.earlier.origin.clone(),
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::AgendaEvent(state)),
