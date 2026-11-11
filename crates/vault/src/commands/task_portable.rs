@@ -4,8 +4,10 @@
 //!
 //! A task is a VTODO with its UID, DTSTAMP, title, notes, due (a date, or a wall clock in the
 //! task's zone, or a floating one), status (done carries COMPLETED), priority, link, alert
-//! (VALARM, minutes before it is due) and RRULE when it repeats. Not written: sub-task links,
-//! sections, tags and the effort estimate.
+//! (VALARM, minutes before it is due) and RRULE when it repeats. A sub-task names its parent
+//! (`RELATED-TO;RELTYPE=PARENT`), tags are CATEGORIES, the effort estimate is ESTIMATED-DURATION,
+//! and the list, the section and the star, which RFC 5545 has no property for, are
+//! `X-CENTRAID-LIST`, `X-CENTRAID-SECTION` and `X-CENTRAID-STARRED`.
 
 use rusqlite::Connection;
 use serde_json::Value as Json;
@@ -31,6 +33,12 @@ struct Task {
     remind_before_min: Option<i64>,
     url: Option<String>,
     description: Option<String>,
+    effort_min: Option<i64>,
+    parent_id: Option<String>,
+    list: Option<String>,
+    section: Option<String>,
+    tags: Vec<String>,
+    starred: bool,
 }
 
 /// The due date as the property that carries it: `(parameters, value)`.
@@ -78,7 +86,9 @@ const fn priority_of(mark: i64) -> Option<u8> {
 fn tasks(connection: &Connection, list: Option<&str>, one: Option<&str>) -> Result<Vec<Task>> {
     let mut statement = connection.prepare_cached(
         "SELECT e.id, e.title, e.updated_at, t.status, t.priority, t.due, t.done_at, t.rule,
-                t.zone, t.remind_before_min, t.url, t.description
+                t.zone, t.remind_before_min, t.url, t.description, t.effort_min, t.parent_id,
+                (SELECT title FROM entity WHERE id = t.project_id),
+                (SELECT title FROM entity WHERE id = t.section_id)
            FROM task t JOIN entity e ON e.id = t.id
           WHERE e.kind = 'task' AND e.deleted_at IS NULL
             AND (?1 IS NULL OR t.project_id = ?1)
@@ -100,9 +110,39 @@ fn tasks(connection: &Connection, list: Option<&str>, one: Option<&str>) -> Resu
                 remind_before_min: row.get(9)?,
                 url: row.get(10)?,
                 description: row.get(11)?,
+                effort_min: row.get(12)?,
+                parent_id: row.get(13)?,
+                list: row.get(14)?,
+                section: row.get(15)?,
+                tags: Vec::new(),
+                starred: false,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut labels = connection.prepare_cached(
+        "SELECT t.kind, t.id, t.title FROM edge a JOIN entity t ON t.id = a.to_id
+          WHERE a.from_id = ?1 AND a.rel = 'tagged' AND t.kind IN ('tag', 'flag')
+          ORDER BY t.title, t.id",
+    )?;
+    let mut rows = rows;
+    for task in &mut rows {
+        let found = labels
+            .query_map([&task.id], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        for (kind, id, title) in found {
+            if kind == "tag" {
+                task.tags.push(title);
+            } else if id == "flag:starred" {
+                task.starred = true;
+            }
+        }
+    }
     Ok(rows)
 }
 
@@ -147,6 +187,25 @@ fn file(tasks: &[Task]) -> String {
         }
         if let Some(url) = task.url.as_deref().filter(|u| !u.trim().is_empty()) {
             writer.line(&format!("URL:{url}"));
+        }
+        if let Some(parent) = &task.parent_id {
+            writer.line(&format!("RELATED-TO;RELTYPE=PARENT:{parent}@centraid"));
+        }
+        if !task.tags.is_empty() {
+            let tags: Vec<String> = task.tags.iter().map(|t| ical::escape_text(t)).collect();
+            writer.line(&format!("CATEGORIES:{}", tags.join(",")));
+        }
+        if let Some(minutes) = task.effort_min.filter(|m| *m > 0) {
+            writer.line(&format!("ESTIMATED-DURATION:PT{minutes}M"));
+        }
+        if let Some(list) = task.list.as_deref() {
+            writer.text("X-CENTRAID-LIST", list);
+        }
+        if let Some(section) = task.section.as_deref() {
+            writer.text("X-CENTRAID-SECTION", section);
+        }
+        if task.starred {
+            writer.line("X-CENTRAID-STARRED:TRUE");
         }
         if let (Some(minutes), Some(_)) = (task.remind_before_min, &due) {
             writer.line("BEGIN:VALARM");

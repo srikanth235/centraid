@@ -269,3 +269,111 @@ fn a_reminder_is_a_todo_with_its_due_status_priority_and_rule() {
     assert_eq!(text.matches("BEGIN:VTODO").count(), 1);
     assert_eq!(w.writes(), before, "an export writes nothing");
 }
+
+#[test]
+fn an_event_carries_its_guests_with_their_answers_and_its_travel_allowance() {
+    let w = World::new();
+    let ada = w.id("person.add", json!({ "title": "Ada, Countess" }));
+    w.ok(
+        "person.save_contact_point",
+        json!({ "id": ada, "kind": "email", "value": "ada@example.com" }),
+    );
+    let bob = w.id("person.add", json!({ "title": "Bob" }));
+    let id = w.id(
+        "event.propose",
+        json!({ "title": "Party", "starts": "2026-03-07T18:00", "ends": "2026-03-07T20:00",
+                "zone": "Europe/Paris", "attendees": [ada, bob], "travel_min": 25 }),
+    );
+    w.ok(
+        "event.respond",
+        json!({ "id": id, "person_id": ada, "state": "accepted" }),
+    );
+    let (_, text) = w.file("event.export_ics", json!({ "event_id": id }));
+    let l = lines(&text);
+    assert!(has(
+        &l,
+        "ATTENDEE;CN=\"Ada, Countess\";ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED:mailto:ada@example.com"
+    ));
+    assert!(
+        l.iter().any(|x| x.starts_with(
+            "ATTENDEE;CN=\"Bob\";ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION:urn:centraid:person:"
+        )),
+        "a guest with no address is still named: {l:?}"
+    );
+    assert!(has(&l, "X-APPLE-TRAVEL-DURATION;VALUE=DURATION:PT25M"));
+
+    let bare = w.id(
+        "event.propose",
+        json!({ "title": "Alone", "starts": "2026-03-08T18:00" }),
+    );
+    let (_, plain) = w.file("event.export_ics", json!({ "event_id": bare }));
+    assert!(!plain.contains("ATTENDEE") && !plain.contains("TRAVEL"));
+}
+
+#[test]
+fn a_changed_day_of_a_series_is_its_own_event_with_the_guests_repeated() {
+    let w = World::new();
+    let ada = w.id("person.add", json!({ "title": "Ada" }));
+    let id = w.id(
+        "event.propose",
+        json!({ "title": "Standup", "starts": "2026-03-02T09:00", "ends": "2026-03-02T09:30",
+                "zone": "Europe/Paris", "rule": "FREQ=WEEKLY", "attendees": [ada] }),
+    );
+    // Only its end changes: still a changed day.
+    w.ok(
+        "event.edit_occurrence",
+        json!({ "id": id, "original_start": "2026-03-09T09:00:00", "scope": "occurrence",
+                "action": "override", "ends": "2026-03-09T10:00" }),
+    );
+    let (_, text) = w.file("event.export_ics", json!({ "event_id": id }));
+    let l = lines(&text);
+    assert!(has(&l, "RECURRENCE-ID;TZID=Europe/Paris:20260309T090000"));
+    assert!(has(&l, "DTEND;TZID=Europe/Paris:20260309T100000"));
+    assert_eq!(text.matches("BEGIN:VEVENT").count(), 2);
+    assert_eq!(
+        text.matches("ATTENDEE;").count(),
+        2,
+        "each VEVENT names the guest"
+    );
+}
+
+#[test]
+fn a_reminder_carries_its_parent_tags_section_list_effort_and_star() {
+    let w = World::new();
+    let errands = w.id(
+        "container.create",
+        json!({ "kind": "project", "title": "Errands" }),
+    );
+    let section = w.id(
+        "container.create",
+        json!({ "kind": "section", "title": "This week, soon", "parent": errands }),
+    );
+    let parent = w.id(
+        "task.add",
+        json!({ "title": "Move house", "project_id": errands }),
+    );
+    let child = w.id(
+        "task.add",
+        json!({ "title": "Pack books", "parent_id": parent, "project_id": errands,
+                "section_id": section, "effort_min": 90 }),
+    );
+    w.ok("tag.add", json!({ "id": child, "label": "boxes, heavy" }));
+    w.ok("tag.add", json!({ "id": child, "label": "home" }));
+    w.ok("flag.set", json!({ "id": child, "flag": "starred" }));
+
+    let (_, text) = w.file("task.export_ics", json!({ "task_id": child }));
+    let l = lines(&text);
+    assert!(has(
+        &l,
+        &format!("RELATED-TO;RELTYPE=PARENT:{parent}@centraid")
+    ));
+    assert!(has(&l, "CATEGORIES:boxes\\, heavy,home") || has(&l, "CATEGORIES:home,boxes\\, heavy"));
+    assert!(has(&l, "ESTIMATED-DURATION:PT90M"));
+    assert!(has(&l, "X-CENTRAID-LIST:Errands"));
+    assert!(has(&l, "X-CENTRAID-SECTION:This week\\, soon"));
+    assert!(has(&l, "X-CENTRAID-STARRED:TRUE"));
+
+    let (_, text) = w.file("task.export_ics", json!({ "task_id": parent }));
+    assert!(!text.contains("RELATED-TO") && !text.contains("CATEGORIES"));
+    assert!(!text.contains("ESTIMATED-DURATION") && !text.contains("X-CENTRAID-STARRED"));
+}

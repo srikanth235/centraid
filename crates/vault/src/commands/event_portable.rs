@@ -3,10 +3,13 @@
 //!
 //! An event is a VEVENT with its UID, DTSTAMP, times (a date for an all-day event, a wall clock
 //! for a floating one, a wall clock in the event's own zone for a zoned one), title, place,
-//! notes, link, status, alerts (VALARM) and, for a series, its RRULE with a day the member
-//! cancelled as an EXDATE and a day moved or renamed as a VEVENT with the same UID and a
-//! RECURRENCE-ID. Not written: guests, the travel allowance, and a change that reaches "this day
-//! and every one after it" (a calendar file has no spelling for it short of rewriting the rule).
+//! notes, link, status, alerts (VALARM), guests (ATTENDEE with their answer as PARTSTAT, and the
+//! mail address as a `mailto:` when the person has one), the travel allowance
+//! (`X-APPLE-TRAVEL-DURATION`, the property calendar apps read it from) and, for a series, its
+//! RRULE with a day the member cancelled as an EXDATE and a day moved, renamed or changed in any
+//! way as a VEVENT with the same UID and a RECURRENCE-ID (it repeats the guests, which stay the
+//! series'). Not written: a change that reaches "this day and every one after it" (a calendar
+//! file has no spelling for it short of rewriting the rule).
 
 use rusqlite::Connection;
 use serde_json::Value as Json;
@@ -34,6 +37,15 @@ struct Event {
     url: Option<String>,
     reminders: Option<String>,
     description: Option<String>,
+    travel_min: Option<i64>,
+    guests: Vec<Guest>,
+}
+
+/// One guest of an event: who, how to reach them and what they answered.
+struct Guest {
+    name: String,
+    address: String,
+    answer: &'static str,
 }
 
 /// A stored start or end as the property that carries it: `(parameters, value)`.
@@ -82,6 +94,74 @@ fn series_key(timing: &str, zone: Option<&str>, key: &str) -> Option<(String, St
             })
         }
     }
+}
+
+/// A parameter value in quotes (it may hold a comma, colon or semicolon; a quote cannot be
+/// escaped inside one, so it is dropped).
+fn quoted_param(value: &str) -> String {
+    let clean: String = value
+        .chars()
+        .filter(|c| !matches!(c, '"' | '\r' | '\n'))
+        .collect();
+    format!("\"{clean}\"")
+}
+
+/// The event's guests in the order they were added, each with their preferred mail address
+/// (`mailto:`), or a `urn:centraid:person:` name when they have none.
+fn guests(connection: &Connection, id: &str) -> Result<Vec<Guest>> {
+    // Both reads are by index and unordered; the few rows an event has are put in order here.
+    let mut statement = connection.prepare_cached(
+        "SELECT p.id, p.title, a.state, a.created_at
+           FROM edge a JOIN entity p ON p.id = a.to_id
+          WHERE a.from_id = ?1 AND a.rel = 'attendee' AND p.deleted_at IS NULL",
+    )?;
+    let mut found = statement
+        .query_map([id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    found.sort_by(|a, b| (&a.3, &a.0).cmp(&(&b.3, &b.0)));
+    let mut emails = connection.prepare_cached(
+        "SELECT value, preferred, position, id FROM contact_point
+          WHERE person_id = ?1 AND kind = 'email'",
+    )?;
+    let mut out = Vec::with_capacity(found.len());
+    for (person, name, state, _) in found {
+        let mut held = emails
+            .query_map([&person], |row| {
+                Ok((
+                    row.get::<_, i64>(1)? == 0, // preferred sorts first
+                    row.get::<_, f64>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(0)?,
+                ))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        held.sort_by(|a, b| {
+            a.0.cmp(&b.0)
+                .then(a.1.total_cmp(&b.1))
+                .then_with(|| a.2.cmp(&b.2))
+        });
+        out.push(Guest {
+            name,
+            address: match held.first() {
+                Some(email) => format!("mailto:{}", email.3.trim()),
+                None => format!("urn:centraid:person:{person}"),
+            },
+            answer: match state.as_deref() {
+                Some("accepted") => "ACCEPTED",
+                Some("declined") => "DECLINED",
+                Some("tentative") => "TENTATIVE",
+                _ => "NEEDS-ACTION",
+            },
+        });
+    }
+    Ok(out)
 }
 
 fn place_text(connection: &Connection, id: &str) -> Option<String> {
@@ -166,6 +246,19 @@ fn write_day(writer: &mut Writer, exdates: &[(String, String)], day: &Day<'_>) {
     } else {
         "TRANSP:TRANSPARENT"
     });
+    for guest in &event.guests {
+        writer.line(&format!(
+            "ATTENDEE;CN={};ROLE=REQ-PARTICIPANT;PARTSTAT={}:{}",
+            quoted_param(&guest.name),
+            guest.answer,
+            guest.address
+        ));
+    }
+    if let Some(minutes) = event.travel_min.filter(|m| *m > 0) {
+        writer.line(&format!(
+            "X-APPLE-TRAVEL-DURATION;VALUE=DURATION:PT{minutes}M"
+        ));
+    }
     if let Some(Json::Array(alerts)) = event
         .reminders
         .as_deref()
@@ -193,7 +286,7 @@ fn events(
 ) -> Result<Vec<Event>> {
     let mut statement = connection.prepare_cached(
         "SELECT e.id, e.title, e.updated_at, v.starts, v.ends, v.timing, v.zone, v.rule, v.status,
-                v.busy, v.place_id, v.url, v.reminders, v.description
+                v.busy, v.place_id, v.url, v.reminders, v.description, v.travel_min
            FROM event v JOIN entity e ON e.id = v.id
           WHERE e.kind = 'event' AND e.deleted_at IS NULL
             AND (?1 IS NULL OR v.calendar_id = ?1)
@@ -218,20 +311,22 @@ fn events(
                     url: row.get(11)?,
                     reminders: row.get(12)?,
                     description: row.get(13)?,
+                    travel_min: row.get(14)?,
+                    guests: Vec::new(),
                 },
                 row.get::<_, Option<String>>(10)?,
             ))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(rows
-        .into_iter()
-        .map(|(mut event, place)| {
-            event.place = place.and_then(|id| place_text(connection, &id));
-            event.stamp =
-                ical::compact_utc(&event.stamp).unwrap_or_else(|| "19700101T000000Z".to_owned());
-            event
-        })
-        .collect())
+    let mut out = Vec::with_capacity(rows.len());
+    for (mut event, place) in rows {
+        event.place = place.and_then(|id| place_text(connection, &id));
+        event.guests = guests(connection, &event.id)?;
+        event.stamp =
+            ical::compact_utc(&event.stamp).unwrap_or_else(|| "19700101T000000Z".to_owned());
+        out.push(event);
+    }
+    Ok(out)
 }
 
 /// One override row of a series: a day moved, renamed or cancelled.
@@ -316,6 +411,8 @@ fn file(connection: &Connection, events: &[Event]) -> Result<String> {
         );
         for day in days.iter().filter(|day| !day.cancelled) {
             let changed = day.starts.is_some()
+                || day.ends.is_some()
+                || day.timing.is_some()
                 || day.title.is_some()
                 || day.description.is_some()
                 || day.url.is_some()
