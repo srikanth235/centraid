@@ -123,7 +123,8 @@ struct LockerHomeView: View {
     private func unlocked() -> some View {
         PageReadStateView(
             page: state.page,
-            onRetry: { send(LockerHomeEvents.make { $0.refreshed = .init() }) }
+            onRetry: { send(LockerHomeEvents.make { $0.refreshed = .init() }) },
+            onEmptyAction: { open(state.chrome.addRoute) }
         ) {
             if case let .data(home)? = state.content {
                 ScrollView {
@@ -165,12 +166,6 @@ struct LockerHomeView: View {
     @ViewBuilder
     private func landing(_ home: Centraid_Core_V1_LockerHomeData) -> some View {
         LockerNote(text: home.statusLine)
-        if home.hasItemsEmpty {
-            EmptyStateView(
-                home.itemsEmpty,
-                onAction: home.itemsEmpty.actionLabel.isEmpty ? nil : { open(state.chrome.addRoute) }
-            )
-        }
         if !home.categories.isEmpty {
             KitCardGrid(items: home.categories) { category in
                 LockerCategoryCard(category: category) {
@@ -210,9 +205,6 @@ struct LockerHomeView: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, CentraidGeometry.pageMargin - 6)
-        if home.hasItemsEmpty {
-            EmptyStateView(home.itemsEmpty)
-        }
         if !home.rows.isEmpty {
             LockerRowGroup(title: "", rows: home.rows, open: open)
         }
@@ -245,9 +237,6 @@ struct LockerHomeView: View {
     @ViewBuilder
     private func search(_ home: Centraid_Core_V1_LockerHomeData) -> some View {
         LockerNote(text: state.chrome.searchNote)
-        if home.hasSearchEmpty {
-            EmptyStateView(home.searchEmpty)
-        }
         ForEach(home.hits, id: \.itemID) { row in
             LockerRowView(row: row) { open(row.route) }
         }

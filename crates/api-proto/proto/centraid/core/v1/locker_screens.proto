@@ -270,7 +270,9 @@ message LockerHomeData {
   reserved "filters";
   repeated LockerRow rows = 3;
   string window = 4;
-  optional EmptyState items_empty = 5;
+  // 5 was `items_empty`: no item at all, or none under the filter or category in view, is the page's own empty state (#1185).
+  reserved 5;
+  reserved "items_empty";
 
   // REVIEW.
   repeated LockerReviewSection review = 6;
@@ -281,7 +283,9 @@ message LockerHomeData {
 
   // SEARCH.
   repeated LockerRow hits = 11;
-  optional EmptyState search_empty = 12;
+  // 12 was `search_empty`: a search that matched nothing is the page's own empty state (#1185).
+  reserved 12;
+  reserved "search_empty";
 
   // GENERATE: reads nothing, writes nothing.
   optional LockerGenerator generator = 13;

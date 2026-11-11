@@ -413,7 +413,12 @@ impl Home {
 
     // --- views ---------------------------------------------------------------
 
-    fn items_data(&self, locale: Locale, answer: &wire::LockerItems) -> wire::LockerHomeData {
+    /// The Items tab's data, and what it says when it has nothing to draw (see [`Self::nothing`]).
+    fn items_data(
+        &self,
+        locale: Locale,
+        answer: &wire::LockerItems,
+    ) -> (wire::LockerHomeData, Option<wire::EmptyState>) {
         let filter = self.filter.as_str();
         let shown: Vec<&wire::LockerItemRow> = match filter {
             ALL | ARCHIVED => answer.items.iter().collect(),
@@ -512,45 +517,50 @@ impl Home {
         let parent = words::app_name(locale);
         if self.browsing.is_none() {
             // THE LANDING: category cards, then Starred and Recently used.
-            return wire::LockerHomeData {
-                status_line: self.wall.unlocked_line(locale),
-                filter_menu,
-                categories: if day_one {
-                    Vec::new()
-                } else {
-                    self.categories(locale, answer)
+            let said = if day_one { empty } else { None };
+            return (
+                wire::LockerHomeData {
+                    status_line: self.wall.unlocked_line(locale),
+                    filter_menu,
+                    categories: if day_one {
+                        Vec::new()
+                    } else {
+                        self.categories(locale, answer)
+                    },
+                    starred_title: words::filter_starred(locale),
+                    starred: answer
+                        .items
+                        .iter()
+                        .filter(|row| row.starred)
+                        .take(LANDING_ROWS)
+                        .map(|row| shared::row(locale, row, &parent))
+                        .collect(),
+                    recent_title: words::recent_head(locale),
+                    recent: recent_of(answer)
+                        .into_iter()
+                        .map(|row| shared::row(locale, row, &parent))
+                        .collect(),
+                    ..wire::LockerHomeData::default()
                 },
-                starred_title: words::filter_starred(locale),
-                starred: answer
-                    .items
-                    .iter()
-                    .filter(|row| row.starred)
-                    .take(LANDING_ROWS)
-                    .map(|row| shared::row(locale, row, &parent))
-                    .collect(),
-                recent_title: words::recent_head(locale),
-                recent: recent_of(answer)
+                said,
+            );
+        }
+        let list_title = list_title(locale, filter);
+        (
+            wire::LockerHomeData {
+                status_line: words::items_status(locale),
+                filter_menu,
+                rows: shown
                     .into_iter()
                     .map(|row| shared::row(locale, row, &parent))
                     .collect(),
-                items_empty: if day_one { empty } else { None },
+                window,
+                list_title,
+                list_back_label: parent,
                 ..wire::LockerHomeData::default()
-            };
-        }
-        let list_title = list_title(locale, filter);
-        wire::LockerHomeData {
-            status_line: words::items_status(locale),
-            filter_menu,
-            rows: shown
-                .into_iter()
-                .map(|row| shared::row(locale, row, &parent))
-                .collect(),
-            window,
-            items_empty: empty,
-            list_title,
-            list_back_label: parent,
-            ..wire::LockerHomeData::default()
-        }
+            },
+            empty,
+        )
     }
 
     /// The six cards, in the board's order, each with its own count.
@@ -713,27 +723,30 @@ impl Home {
         }
     }
 
-    fn search_data(&self, locale: Locale) -> wire::LockerHomeData {
+    /// The search surface's data, and what it says when the term matched nothing.
+    fn search_data(&self, locale: Locale) -> (wire::LockerHomeData, Option<wire::EmptyState>) {
         let base = wire::LockerHomeData {
             status_line: words::items_status(locale),
             ..wire::LockerHomeData::default()
         };
         let Some(answer) = self.hits.data().filter(|_| !self.term.trim().is_empty()) else {
-            return base;
+            return (base, None);
         };
-        wire::LockerHomeData {
-            hits: answer
-                .items
-                .iter()
-                .map(|row| shared::row(locale, row, &words::app_name(locale)))
-                .collect(),
-            search_empty: answer.items.is_empty().then(|| wire::EmptyState {
+        (
+            wire::LockerHomeData {
+                hits: answer
+                    .items
+                    .iter()
+                    .map(|row| shared::row(locale, row, &words::app_name(locale)))
+                    .collect(),
+                ..base
+            },
+            answer.items.is_empty().then(|| wire::EmptyState {
                 headline: fill(&words::search_empty(locale), &[("term", &answer.term)]),
                 body: words::search_note(locale),
                 ..wire::EmptyState::default()
             }),
-            ..base
-        }
+        )
     }
 
     /// The data the open place draws, once its read has answered.
@@ -754,13 +767,38 @@ impl Home {
                 .data()
                 .map(|answer| C::Data(Box::new(Self::review_data(locale, answer)))),
             D::Search if self.term.trim().is_empty() || self.hits.data().is_some() => {
-                Some(C::Data(Box::new(self.search_data(locale))))
+                Some(C::Data(Box::new(self.search_data(locale).0)))
             }
             D::Search => None,
             _ => self
                 .items
                 .data()
-                .map(|answer| C::Data(Box::new(self.items_data(locale, answer)))),
+                .map(|answer| C::Data(Box::new(self.items_data(locale, answer).0))),
+        }
+    }
+
+    /// WHAT THE PLACE SAYS WHEN IT HAS NOTHING TO DRAW: no item at all (day one, whose landing has
+    /// no card to draw), none under the filter or category in view, or a search that matched
+    /// nothing. It is the page's own empty state; the answer stays, because the filter in the
+    /// header and the category's back chevron are built from it. Review draws real content at
+    /// zero (what it cannot check), so its all-clear stays inside its data.
+    fn nothing(&self, locale: Locale) -> Option<wire::EmptyState> {
+        use wire::LockerDestination as D;
+        if !self.wall.is_open() {
+            return None;
+        }
+        match self.destination {
+            D::Generate | D::Review => None,
+            D::Search => {
+                if self.term.trim().is_empty() {
+                    return None;
+                }
+                self.search_data(locale).1
+            }
+            _ => self
+                .items
+                .data()
+                .and_then(|answer| self.items_data(locale, answer).1),
         }
     }
 
@@ -774,15 +812,20 @@ impl Home {
         if !self.wall.is_open() {
             return Page::<()>::loading().wire(locale, denied, empty);
         }
+        let nothing = self.nothing(locale);
+        let holds_nothing = nothing.is_some();
+        let said = || nothing.clone().unwrap_or_default();
         match self.destination {
             D::Review => self.review.wire(locale, denied, empty),
-            D::Search if !self.term.trim().is_empty() => self.hits.wire(locale, denied, empty),
+            D::Search if !self.term.trim().is_empty() => {
+                self.hits.wire_keeping(locale, denied, holds_nothing, said)
+            }
             D::Generate | D::Search => Page::Ready {
                 data: (),
                 note: None,
             }
             .wire(locale, denied, empty),
-            _ => self.items.wire(locale, denied, empty),
+            _ => self.items.wire_keeping(locale, denied, holds_nothing, said),
         }
     }
 

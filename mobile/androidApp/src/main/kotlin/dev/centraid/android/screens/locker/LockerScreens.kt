@@ -344,6 +344,7 @@ internal fun LockerHomeScreen(
             ReadStateView(
                 page = state.page!!,
                 onRetry = { onEvent(LockerHomeEvent(refreshed = LockerHomeEvent.Refreshed())) },
+                onEmptyAction = chrome?.add_route?.let { route -> { onOpen(route) } },
                 retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
                 skeleton = { RowSkeleton() },
             ) {
@@ -359,7 +360,7 @@ internal fun LockerHomeScreen(
                         when (state.destination) {
                             LockerDestination.LOCKER_DESTINATION_REVIEW -> reviewTab(home, onOpen)
                             LockerDestination.LOCKER_DESTINATION_SEARCH -> searchTab(state, home, onOpen)
-                            else -> itemsTab(home, chrome?.add_route, onOpen, onEvent)
+                            else -> itemsTab(home, onOpen, onEvent)
                         }
                     }
                 }
@@ -387,24 +388,15 @@ internal fun LockerHomeScreen(
 
 private fun LazyListScope.itemsTab(
     home: LockerHomeData,
-    add: Route?,
     onOpen: (Route) -> Unit,
     onEvent: (LockerHomeEvent) -> Unit,
 ) {
     if (home.list_title.isNotEmpty()) {
-        listOfCategory(home, add, onOpen, onEvent)
+        listOfCategory(home, onOpen, onEvent)
         return
     }
     // THE LANDING: the six category cards, then Starred and Recently used.
-    val empty = home.items_empty
     if (home.status_line.isNotEmpty()) item(key = "landing-note") { LockerNote(home.status_line) }
-    if (empty != null) {
-        item(key = "empty") {
-            Box(Modifier.heightIn(min = 320.dp)) {
-                EmptyStateView(empty, onAction = add?.let { route -> { onOpen(route) } })
-            }
-        }
-    }
     if (home.categories.isNotEmpty()) {
         item(key = "categories") {
             KitCardGrid(
@@ -433,7 +425,6 @@ private fun LazyListScope.itemsTab(
 /** ONE CATEGORY'S LIST: the chevron back (also the system back) returns to the landing. */
 private fun LazyListScope.listOfCategory(
     home: LockerHomeData,
-    add: Route?,
     onOpen: (Route) -> Unit,
     onEvent: (LockerHomeEvent) -> Unit,
 ) {
@@ -452,14 +443,6 @@ private fun LazyListScope.listOfCategory(
                 contentAlignment = Alignment.Center,
             ) { CentraidIcon(iconKey = "ChevronLeft", tint = Surface.ink, size = 18.dp) }
             KitText(home.list_title, KitType.Section, Surface.ink)
-        }
-    }
-    val empty = home.items_empty
-    if (home.rows.isEmpty() && empty != null) {
-        item(key = "empty") {
-            Box(Modifier.heightIn(min = 320.dp)) {
-                EmptyStateView(empty, onAction = add?.let { route -> { onOpen(route) } })
-            }
         }
     }
     items(home.rows, key = { "i-" + it.item_id }) { row -> LockerRowView(row) { row.route?.let(onOpen) } }
@@ -530,10 +513,6 @@ private fun LazyListScope.searchTab(state: LockerHomeState, home: LockerHomeData
         // WHAT IS NEVER SEARCHED, said before a term.
         item(key = "note") { LockerNote(state.chrome?.search_note.orEmpty()) }
         return
-    }
-    val empty = home.search_empty
-    if (home.hits.isEmpty() && empty != null) {
-        item(key = "empty") { Box(Modifier.heightIn(min = 240.dp)) { EmptyStateView(empty, onAction = null) } }
     }
     items(home.hits, key = { "h-" + it.item_id }) { row -> LockerRowView(row) { row.route?.let(onOpen) } }
 }

@@ -264,6 +264,7 @@ fn refresh_failed(page: &Option<wire::PageState>) {
 #[test]
 fn a_home_that_cannot_be_read_is_failed_or_refused_and_never_an_empty_shelf() {
     let d = locker_support::driver();
+    locker_support::login(&d, "i1", "Bank");
     let mut shell = Shell::new(&d.handle, Mode::Fails);
     assert!(!failed(&shell.home().page).permanent);
     assert!(shell.home().content.is_none());
@@ -280,6 +281,7 @@ fn a_home_that_cannot_be_read_is_failed_or_refused_and_never_an_empty_shelf() {
 #[test]
 fn a_failed_refresh_keeps_the_shelf_shown_under_one_sentence() {
     let d = locker_support::driver();
+    locker_support::login(&d, "i1", "Bank");
     let mut shell = Shell::new(&d.handle, Mode::Answers);
     ready(&shell.home().page);
     shell.reads(Mode::Fails);
@@ -326,4 +328,22 @@ fn the_export_page_is_failed_refused_or_ready_and_never_blank() {
     shell.reads(Mode::Fails);
     shell.retry_export(export);
     refresh_failed(&shell.export(export).page);
+}
+
+#[test]
+fn a_shelf_with_nothing_on_it_is_the_pages_empty_state_with_its_filter_kept() {
+    let d = locker_support::driver();
+    let mut shell = Shell::new(&d.handle, Mode::Answers);
+    // Day one: no item at all is the page's own empty state, with its one action.
+    let State::Empty(empty) = state_of(&shell.home().page).expect("a state") else {
+        panic!("day one is not empty: {:?}", shell.home().page);
+    };
+    assert_eq!(empty.headline, "Nothing is kept here yet");
+    assert!(!empty.action_label.is_empty());
+    // The answer stays, because the header's filter is built from it.
+    assert!(shell.home().content.is_some());
+    // A refresh that fails over nothing is the failure, never an empty shelf.
+    shell.reads(Mode::Fails);
+    shell.retry_home();
+    assert!(!failed(&shell.home().page).permanent);
 }

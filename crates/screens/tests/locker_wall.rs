@@ -236,7 +236,7 @@ fn items_fold_into_a_menu_rows_and_a_day_one_state() {
     let id = open_home(&mut d);
     let data = home_data(&d, id);
     assert!(data.rows.is_empty());
-    let empty = data.items_empty.expect("day one");
+    let empty = home_empty(&d, id);
     assert_eq!(empty.headline, "Nothing is kept here yet");
     // A lone All is nothing to choose between: no button on day one.
     assert!(data.filter_menu.is_none());
@@ -473,7 +473,7 @@ fn search_finds_by_title_and_never_offers_ask() {
     );
     let data = home_data(&d, id);
     assert!(data.hits.is_empty());
-    assert!(data.search_empty.unwrap().headline.contains("zzzz"));
+    assert!(home_empty(&d, id).headline.contains("zzzz"));
 }
 
 #[test]
