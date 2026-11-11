@@ -145,6 +145,9 @@ internal fun AgendaEventScreen(
             onDismiss = { menuOpen = false },
         )
     }
+    state.link_picker?.takeIf { it.open_ }?.let { picker ->
+        dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(AgendaEventEvent(link = link)) }
+    }
     val confirm = state.confirm
     if (confirm != null) {
         ConfirmSheet(
@@ -290,6 +293,10 @@ private fun EventBody(
                 onEvent = { onEvent(AgendaEventEvent(attachment = it)) },
                 onOpen = onOpen,
             )
+        }
+        // LINKED TO (#1185): the kit's section, after the attachments; Rust makes every word and row.
+        data.links?.let { section ->
+            dev.centraid.android.kit.LinkSectionView(section, { link -> onEvent(AgendaEventEvent(link = link)) }, onOpen)
         }
         // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the actions.
         EarlierEntryCard(earlier, onOpen)

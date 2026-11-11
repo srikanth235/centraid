@@ -37,6 +37,13 @@ catalog! {
     counted guest_count = ("{n} guest", "{n} guests");
     plain guest_name_you = ("{name} · you", "{name} · you");
     plain guest_spoken = ("{name}, {reply}", "{name}, {reply}");
+    plain link_added = ("Linked", "Linked");
+    plain link_removed = ("Link removed", "Link removed");
+    plain links_empty = ("Nothing linked yet", "Nothing linked yet");
+    plain links_unread = (
+        "Couldn’t read what this event is linked to.",
+        "Couldn’t read what this event is linked to."
+    );
     plain link_label = ("Link", "Link");
     plain link_open_label = ("Open link", "Open link");
     plain link_spoken_label = ("Open link {url}", "Open link {url}");

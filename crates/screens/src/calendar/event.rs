@@ -51,6 +51,7 @@ use crate::kit::attachments::Attachments;
 use crate::kit::civil::{self, HourCycle};
 use crate::kit::earlier;
 use crate::kit::follow;
+use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::quantity::UnitsPref;
 use crate::kit::read::{self as kit_read, Reading};
 use crate::kit::schedule::rows::hue_role;
@@ -60,7 +61,7 @@ use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
     Locale, agenda as words, agenda_editor as editor_words, agenda_event as event_words, fill,
-    shared,
+    links as link_label, shared,
 };
 
 pub const ACTION_EDIT: &str = "edit";
@@ -92,6 +93,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         args.instance_key.clone_from(&args.event_id);
     }
     let attachments = Attachments::of("calendar", &args.event_id);
+    let links = Links::new(&Kind::ALL).for_entity(&args.event_id);
     Some(Box::new(EventPage {
         route: args,
         content: Content::Loading,
@@ -104,6 +106,10 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         differences: follow::Phone::default(),
         earlier: earlier::Foot::default(),
         share: Share::default(),
+        // An event may link to another event; the picker leaves this one out (`for_entity`).
+        links,
+        linked: None,
+        linked_unread: false,
     }))
 }
 
@@ -134,6 +140,14 @@ struct EventPage {
     earlier: earlier::Foot,
     /// The event handed to the OS share sheet as a calendar file (#1185).
     share: Share,
+    /// THE "Linked to" SECTION'S PICKER (#1185): what the event can link to, any item but a
+    /// Locker one.
+    links: Links,
+    /// What the event is linked to, either end (`links::read_linked`). `None` until read, and
+    /// while a read did not land.
+    linked: Option<Vec<wire::LinkedItem>>,
+    /// The read of `linked` was refused or failed: the status line says so, no empty section.
+    linked_unread: bool,
 }
 
 impl EventPage {
@@ -187,6 +201,59 @@ impl EventPage {
             }
         }
         self.attachments.reload(ctx);
+        self.read_linked(ctx);
+    }
+
+    /// What the event is linked to, in both directions. A refused or failed read is said on the
+    /// status line and never drawn as an empty section.
+    fn read_linked(&mut self, ctx: &Ctx) {
+        match links::read_linked(ctx, &self.route.event_id) {
+            Reading::Data(items) => {
+                self.linked = Some(items);
+                self.linked_unread = false;
+            }
+            Reading::Denied(_) | Reading::Failed => {
+                self.linked = None;
+                self.linked_unread = true;
+                self.links.close();
+            }
+        }
+        self.links.reload(ctx);
+    }
+
+    fn linked_ids(&self) -> Vec<String> {
+        self.linked.as_deref().map(links::ids).unwrap_or_default()
+    }
+
+    /// One tap in the "Linked to" section or its picker, written through the kit's door (Undo
+    /// when the core can take it back); the page is read again.
+    fn link_event(&mut self, ctx: &Ctx, event: &wire::LinkEvent) {
+        let linked = self.linked_ids();
+        let id = self.route.event_id.clone();
+        let (request, said): (wire::ActRequest, fn(Locale) -> String) =
+            match self.links.update(event, &linked, ctx) {
+                Outcome::Moved => return,
+                Outcome::Add { id: to, .. } => (
+                    act::calendar::Link {
+                        from: id.clone(),
+                        to,
+                    }
+                    .into(),
+                    event_words::link_added,
+                ),
+                Outcome::Remove { id: to } => (
+                    act::calendar::Unlink {
+                        from: id.clone(),
+                        to,
+                    }
+                    .into(),
+                    event_words::link_removed,
+                ),
+            };
+        let name = request.action.clone();
+        let key = kit_act::key(&[&name, &id], kit_act::fresh());
+        self.undo.act(ctx, request, &key, said);
+        self.reload(ctx);
     }
 
     /// The answered event, when it is the series this screen is on.
@@ -435,6 +502,7 @@ impl Screen for EventPage {
                 Some(K::Confirmed(_)) => self.confirmed(ctx),
                 Some(K::ConfirmDismissed(_)) => self.confirm = false,
                 Some(K::Attachment(attachment)) => return self.attachments.event(ctx, attachment),
+                Some(K::Link(link)) => self.link_event(ctx, &link),
             },
             _ => {}
         }
@@ -488,9 +556,18 @@ impl Screen for EventPage {
                 .status()
                 .or_else(|| self.share.status())
                 .or_else(|| self.differences.status(locale, follow::Source::Phone))
-                .or_else(|| self.earlier.status(locale)),
+                .or_else(|| self.earlier.status(locale))
+                .or_else(|| {
+                    self.linked_unread.then(|| wire::StatusLine {
+                        sentence: event_words::links_unread(locale),
+                        action_label: String::new(),
+                        refused: false,
+                    })
+                }),
             earlier: self.earlier.entry.clone(),
             origin: self.earlier.origin.clone(),
+            link_picker: (self.linked.is_some() && self.links.is_open())
+                .then(|| self.links.picker(locale, &self.linked_ids())),
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::AgendaEvent(state)),
@@ -701,6 +778,14 @@ impl EventPage {
             },
             followed_guests: followed,
             attachments: Some(self.attachments.view(locale, units)),
+            links: self.linked.as_ref().map(|linked| {
+                self.links.section(
+                    locale,
+                    link_label::section_linked(locale),
+                    links::rows(locale, linked),
+                    event_words::links_empty(locale),
+                )
+            }),
             title,
             date_label: date,
             when_label: when,
@@ -1125,5 +1210,267 @@ mod tests {
         );
         // No calendar at all is the neutral one.
         assert_eq!(calendar_hue(None, None), "cSlate");
+    }
+}
+
+#[cfg(test)]
+mod link_tests {
+    //! The "Linked to" section (#1185): the Driver supplies a real vault; only the `links` read and
+    //! the act log are replaced.
+
+    use std::time::Duration;
+
+    use super::*;
+    use crate::field::Field;
+    use crate::testing::Driver;
+    use wire::link_event::Kind as L;
+
+    struct Flaky<'a> {
+        core: &'a centraid_core::Handle,
+        fail_links: std::cell::Cell<bool>,
+        /// The `app.action` of each act made through this ctx, in order.
+        acted: std::cell::RefCell<Vec<String>>,
+        /// The `from`/`to`/`rel` of each link or unlink act, in order.
+        inputs: std::cell::RefCell<Vec<(String, String, String)>>,
+    }
+
+    impl centraid_core::screens::ScreenCtx for Flaky<'_> {
+        fn load(&self, request: &wire::LoadRequest) -> centraid_core::Result<wire::LoadResponse> {
+            if self.fail_links.get() && request.app == "shell" && request.query == "links" {
+                Err(centraid_core::CoreError::Unavailable {
+                    reason: "test read failure".into(),
+                })
+            } else {
+                self.core.load(request)
+            }
+        }
+
+        fn act(&self, request: &wire::ActRequest) -> centraid_core::Result<wire::ActResponse> {
+            self.acted
+                .borrow_mut()
+                .push(format!("{}.{}", request.app, request.action));
+            if request.action == "link" || request.action == "unlink" {
+                let text = |key: &str| match request.input.get(key).and_then(|v| v.kind.as_ref()) {
+                    Some(wire::value::Kind::Text(text)) => text.clone(),
+                    _ => String::new(),
+                };
+                self.inputs
+                    .borrow_mut()
+                    .push((text("from"), text("to"), text("rel")));
+            }
+            self.core.act(request)
+        }
+
+        fn push(&self, _update: wire::ScreenUpdate) {}
+        fn wake_after(&self, _after: Duration) {}
+    }
+
+    fn flaky(core: &centraid_core::Handle) -> Flaky<'_> {
+        Flaky {
+            core,
+            fail_links: false.into(),
+            acted: Vec::new().into(),
+            inputs: Vec::new().into(),
+        }
+    }
+
+    /// An event on its own day; the id it was given.
+    fn make(driver: &Driver, title: &str, hour: u32) -> String {
+        let mut request: wire::ActRequest = act::calendar::Propose {
+            title: title.into(),
+            starts: format!("2099-06-15T{hour:02}:00:00"),
+            ends: Field::Is(format!("2099-06-15T{hour:02}:30:00")),
+            zone: Field::Is("Europe/London".to_owned()),
+            ..act::calendar::Propose::default()
+        }
+        .into();
+        request.invoke_key = format!("test:{}", kit_act::fresh());
+        let created = driver.act(request);
+        let output: serde_json::Value = serde_json::from_slice(&created.output).expect("output");
+        output["id"].as_str().expect("id").to_owned()
+    }
+
+    fn opened<'a>(core: &'a Flaky, id: &str) -> (Box<dyn Screen>, Ctx<'a>) {
+        let env: &'static crate::screen::Environment =
+            Box::leak(Box::new(crate::screen::Environment::default()));
+        let ctx = Ctx::new(core, env);
+        let mut screen = build(&routes::event(id, id, None, "2099-06-15")).expect("event page");
+        screen.update(
+            wire::ScreenEvent {
+                kind: Some(E::Appeared(wire::Appeared {})),
+            },
+            &ctx,
+        );
+        (screen, ctx)
+    }
+
+    fn link(screen: &mut Box<dyn Screen>, ctx: &Ctx, kind: L) {
+        screen.update(
+            wire::ScreenEvent {
+                kind: Some(E::AgendaEvent(wire::AgendaEventEvent {
+                    kind: Some(K::Link(wire::LinkEvent { kind: Some(kind) })),
+                })),
+            },
+            ctx,
+        );
+    }
+
+    fn state(screen: &dyn Screen, ctx: &Ctx) -> wire::AgendaEventState {
+        let Some(wire::view_state::Kind::AgendaEvent(state)) = screen.view(ctx).kind else {
+            panic!("event state")
+        };
+        state
+    }
+
+    fn data(screen: &dyn Screen, ctx: &Ctx) -> wire::AgendaEventData {
+        let Some(wire::agenda_event_state::Content::Data(data)) = state(screen, ctx).content else {
+            panic!("event data")
+        };
+        *data
+    }
+
+    fn rows(screen: &dyn Screen, ctx: &Ctx) -> Vec<(String, String)> {
+        data(screen, ctx)
+            .links
+            .expect("the Linked to section")
+            .rows
+            .into_iter()
+            .map(|row| (row.title, row.meta))
+            .collect()
+    }
+
+    fn add(screen: &mut Box<dyn Screen>, ctx: &Ctx, kind: &str, id: &str) {
+        for step in [
+            L::Add(wire::link_event::AddTapped { key: "link".into() }),
+            L::Pick(wire::link_event::Picked { id: kind.into() }),
+            L::Pick(wire::link_event::Picked { id: id.into() }),
+        ] {
+            link(screen, ctx, step);
+        }
+    }
+
+    #[test]
+    fn the_page_lists_what_the_event_is_linked_to_and_a_pick_links_through_calendar_link() {
+        let driver = Driver::with_runtime(crate::agenda::runtime());
+        let other = make(&driver, "Lunch", 12);
+        let id = make(&driver, "Review", 9);
+        let core = flaky(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        assert!(rows(&*screen, &ctx).is_empty());
+        let section = data(&*screen, &ctx).links.expect("section");
+        assert_eq!(section.title, "Linked to");
+        assert_eq!(section.empty, "Nothing linked yet");
+        assert_eq!(section.adds.len(), 1, "one Add link row for many kinds");
+        link(
+            &mut screen,
+            &ctx,
+            L::Add(wire::link_event::AddTapped { key: "link".into() }),
+        );
+        let picker = state(&*screen, &ctx).link_picker.expect("kind chooser");
+        assert!(picker.open);
+        assert!(
+            picker.candidates.iter().any(|row| row.id == "event"),
+            "an event may link to another event"
+        );
+        link(
+            &mut screen,
+            &ctx,
+            L::Pick(wire::link_event::Picked { id: "event".into() }),
+        );
+        let picker = state(&*screen, &ctx).link_picker.expect("events");
+        assert!(picker.candidates.iter().any(|row| row.id == other));
+        assert!(
+            picker.candidates.iter().all(|row| row.id != id),
+            "an event is never offered itself"
+        );
+        link(
+            &mut screen,
+            &ctx,
+            L::Pick(wire::link_event::Picked { id: other.clone() }),
+        );
+        assert_eq!(core.acted.borrow().as_slice(), ["calendar.link"]);
+        assert_eq!(
+            core.inputs.borrow().as_slice(),
+            [(id.clone(), other.clone(), "links".to_owned())]
+        );
+        let view = state(&*screen, &ctx);
+        assert!(view.link_picker.is_none_or(|picker| !picker.open));
+        let status = view.status.expect("status");
+        assert_eq!(status.sentence, "Linked");
+        assert_eq!(status.action_label, "Undo");
+        assert_eq!(
+            rows(&*screen, &ctx),
+            [("Lunch".to_owned(), "Event".to_owned())]
+        );
+        // The link has no direction: the other event's page lists this one.
+        let there = flaky(&driver.handle);
+        let (other_screen, other_ctx) = opened(&there, &other);
+        assert_eq!(rows(&*other_screen, &other_ctx).len(), 1);
+    }
+
+    #[test]
+    fn a_tap_on_remove_unlinks_and_undo_links_again() {
+        let driver = Driver::with_runtime(crate::agenda::runtime());
+        let other = make(&driver, "Lunch", 12);
+        let id = make(&driver, "Review", 9);
+        let core = flaky(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        add(&mut screen, &ctx, "event", &other);
+        assert_eq!(rows(&*screen, &ctx).len(), 1);
+        link(
+            &mut screen,
+            &ctx,
+            L::Remove(wire::link_event::RemoveTapped { id: other.clone() }),
+        );
+        assert_eq!(
+            core.acted.borrow().as_slice(),
+            ["calendar.link", "calendar.unlink"]
+        );
+        assert_eq!(
+            core.inputs.borrow().last(),
+            Some(&(id.clone(), other.clone(), "links".to_owned()))
+        );
+        assert!(rows(&*screen, &ctx).is_empty());
+        let status = state(&*screen, &ctx).status.expect("status");
+        assert_eq!(status.sentence, "Link removed");
+        assert_eq!(status.action_label, "Undo");
+        screen.update(
+            wire::ScreenEvent {
+                kind: Some(E::StatusActed(wire::StatusActed {})),
+            },
+            &ctx,
+        );
+        assert_eq!(rows(&*screen, &ctx).len(), 1);
+    }
+
+    #[test]
+    fn links_that_could_not_be_read_are_said_not_drawn_as_none() {
+        let driver = Driver::with_runtime(crate::agenda::runtime());
+        let id = make(&driver, "Review", 9);
+        let core = flaky(&driver.handle);
+        core.fail_links.set(true);
+        let (mut screen, ctx) = opened(&core, &id);
+        let view = state(&*screen, &ctx);
+        let Some(wire::agenda_event_state::Content::Data(page)) = view.content else {
+            panic!("event data")
+        };
+        assert!(page.links.is_none(), "no section for what was not read");
+        assert_eq!(
+            view.status.expect("status").sentence,
+            "Couldn’t read what this event is linked to."
+        );
+        // Read again, the section comes back.
+        core.fail_links.set(false);
+        screen.update(
+            wire::ScreenEvent {
+                kind: Some(E::AgendaEvent(wire::AgendaEventEvent {
+                    kind: Some(K::Refreshed(wire::agenda_event_event::Refreshed {})),
+                })),
+            },
+            &ctx,
+        );
+        assert!(rows(&*screen, &ctx).is_empty());
+        assert!(state(&*screen, &ctx).status.is_none());
+        assert!(core.acted.borrow().is_empty());
     }
 }

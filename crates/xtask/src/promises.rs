@@ -537,7 +537,11 @@ pub const REGISTER: &[Row] = &[
         "crates/screens/src/reminders/earlier.rs",
     ),
     // Link (#1185): the manifest's verbs and the shared "Linked to" section on each detail page.
-    owed("calendar", Promise::Link, LINK_OWED),
+    kept(
+        "calendar",
+        Promise::Link,
+        "crates/screens/src/calendar/event.rs",
+    ),
     owed("docs", Promise::Link, LINK_OWED),
     owed("health", Promise::Link, LINK_OWED),
     owed("locker", Promise::Link, LINK_OWED),

@@ -1144,6 +1144,8 @@ message AgendaEventState {
   optional EarlierEntry earlier = 20;
   // Where it came from, under the Earlier versions entry (#1185). Absent for a typed item.
   optional OriginLine origin = 21;
+  // The picker over the "Linked to" section, while it is up (#1185). The kit's generic picker.
+  optional LinkPicker link_picker = 22;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -1215,6 +1217,10 @@ message AgendaEventData {
   // (Share). Same shape as `actions`; empty draws no key. `menu_label` names the key ("More").
   repeated AgendaAction menu = 25;
   string menu_label = 26;
+  // "Linked to" (#1185): every item the event is linked to, from either end, with the add row. The
+  // kit's shared section, after the attachments. Absent while what it is linked to was not read
+  // (the status line says so). Its events go back as `AgendaEventEvent.link`.
+  optional LinkSection links = 27;
 }
 
 // One guest the phone's calendar states: a name or an address, and the reply
@@ -1360,6 +1366,8 @@ message AgendaEventEvent {
     AgendaAttachmentEvent attachment = 20;
     // "Undo" on the status line after Move to trash or its Undo (#1185).
     StatusActed status_acted = 21;
+    // The "Linked to" section and its picker (#1185): the kit's `LinkEvent`.
+    LinkEvent link = 22;
   }
 
   message Refreshed {}

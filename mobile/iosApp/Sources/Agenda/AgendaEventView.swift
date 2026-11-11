@@ -107,6 +107,7 @@ struct AgendaEventView: View {
                 onDismiss: { send(event { $0.confirmDismissed = .init() }) }
             )
         }
+        .linkPickerSheet(state.linkPicker) { link in send(event { $0.link = link }) }
         // A CANCELLATION COMMITTED: the screen is done.
         .onChange(of: state.dismissed) { _, dismissed in
             if dismissed { onBack() }
@@ -198,6 +199,12 @@ struct AgendaEventView: View {
                         open: open,
                         send: { attachment in send(event { $0.attachment = attachment }) }
                     )
+                }
+                // LINKED TO (#1185): the kit's section, after the attachments; Rust makes every word and row.
+                if detail.hasLinks {
+                    LinkSectionView(section: detail.links, send: { link in
+                        send(event { $0.link = link })
+                    }, open: open)
                 }
                 let sentence = writeSentence(state)
                 if !sentence.isEmpty, state.sheet != .cancelScope {
