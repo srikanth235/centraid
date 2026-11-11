@@ -15,6 +15,7 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
+import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/photos_home_screens.proto";
 import "centraid/core/v1/route.proto";
 
@@ -86,6 +87,9 @@ message ImportsCameraRollState {
   // first), counted per round.
   uint32 fed_last_round = 4;
   uint32 fed_rounds = 5;
+  // THE READ of the vault's cursor, the one thing the walk reads: loading until the first walk asks,
+  // then ready, or failed (the walk then reads the roll from the start, as it does with no cursor).
+  PageState page = 6;
 }
 
 // ---------------------------------------------------------------------------

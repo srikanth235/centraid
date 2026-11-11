@@ -288,6 +288,34 @@ fn a_roll_root_opened_for_a_vault_walks_the_roll_without_being_asked() {
     assert_eq!(library.prompts, 0, "a walk on open never asks the member");
 }
 
+/// The one thing the screen reads, the vault's cursor, is on its page (#1185): loading until the
+/// first walk asks for it, ready once the vault has answered.
+#[test]
+fn the_cursor_read_is_the_screens_page_loading_until_a_walk_asks_and_ready_after() {
+    let mut library = Library::new();
+    library.permission = Permission::Granted;
+    let mut shell = started(&mut library);
+    let is_loading = |shell: &Shell| {
+        matches!(
+            state(shell).page.and_then(|page| page.state),
+            Some(wire::page_state::State::Loading(_))
+        )
+    };
+    // Started, and nothing walked: no read has asked yet.
+    let before = state(&shell).page.expect("the page is on the state");
+    assert!(
+        before.state.is_some(),
+        "a screen that has not read is loading"
+    );
+    walk(&mut shell, &mut library);
+    let after = state(&shell).page.expect("the page is on the state");
+    assert!(
+        after.state.is_none(),
+        "the vault answered: ready, no state drawn"
+    );
+    assert!(!is_loading(&shell));
+}
+
 /// A LAUNCH WALKS BEFORE ANY VAULT IS IN FRONT: the pass service sends the session's first walk
 /// while the shelf is still opening its vaults, so the walk names no vault.
 #[test]

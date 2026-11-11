@@ -66,7 +66,7 @@ use crate::catalog::{act, load};
 use crate::custody::secrets::VaultSecrets;
 use crate::field::{Field, Keyed};
 use crate::kit::act as kit_act;
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Page, Reading};
 use crate::passes::{Rules, TransferRule};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, imports as words, photos as photo_words};
@@ -298,6 +298,10 @@ struct Roll {
     imported_total: u32,
     fed_last_round: u32,
     fed_rounds: u32,
+    /// The read of the vault's cursor, the one thing this screen reads: loading until the first
+    /// walk asks, then what the vault answered. A cursor that could not be read is a complete
+    /// walk, not a stopped one, so the page says it and the walk goes on.
+    page: Page<()>,
 }
 
 impl Roll {
@@ -319,6 +323,7 @@ impl Roll {
             imported_total: 0,
             fed_last_round: 0,
             fed_rounds: 0,
+            page: Page::loading(),
         }
     }
 
@@ -460,12 +465,12 @@ impl Roll {
     /// WHERE THE LAST READ GOT TO, from the vault: empty (a complete read) when there is no cursor,
     /// when another install wrote it, when this install is not known yet and when the read did not
     /// land. A walk from the start costs a stage and a hash compare per photograph, never a copy.
-    fn held_cursor(&self, ctx: &Ctx) -> String {
+    fn held_cursor(&mut self, ctx: &Ctx) -> String {
         use wire::app_query_response::Answer;
         if self.device_id.is_empty() {
             return String::new();
         }
-        match read::read(
+        let reading = read::read(
             ctx,
             load::shell::OriginCursor {
                 system: load::shell::OriginCursorSystem::CameraRoll,
@@ -476,10 +481,15 @@ impl Roll {
                 Answer::OriginCursor(held) => Some(held.cursor),
                 _ => None,
             },
-        ) {
-            Reading::Data(cursor) => cursor,
-            _ => String::new(),
-        }
+        );
+        let (cursor, seen) = match reading {
+            Reading::Data(cursor) => (cursor, Reading::Data(())),
+            Reading::Denied(denial) => (String::new(), Reading::Denied(denial)),
+            Reading::Failed => (String::new(), Reading::Failed),
+        };
+        let kept = std::mem::replace(&mut self.page, Page::loading());
+        self.page = kept.after(seen, ctx.locale(), |()| false);
+        cursor
     }
 
     /// Move the vault's cursor with no photograph riding along: an asset with nothing to bring in,
@@ -1065,10 +1075,15 @@ impl Screen for Roll {
         effects
     }
 
-    fn view(&self, _ctx: &Ctx) -> wire::ViewState {
+    fn view(&self, ctx: &Ctx) -> wire::ViewState {
         wire::ViewState {
             kind: Some(wire::view_state::Kind::ImportsCameraRoll(
                 wire::ImportsCameraRollState {
+                    page: Some(self.page.wire(
+                        ctx.locale(),
+                        |_| wire::Denied::default(),
+                        wire::EmptyState::default,
+                    )),
                     permission: self.permission as i32,
                     backup: Some(self.backup.clone()),
                     imported_total: self.imported_total,
