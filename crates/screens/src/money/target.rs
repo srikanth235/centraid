@@ -12,6 +12,7 @@ use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::money as money_kit;
 use crate::kit::read;
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, money as words};
 
@@ -31,7 +32,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         amount_text: String::new(),
         carry: false,
         seeded: false,
-        status: None,
+        undo: Undo::default(),
         finished: false,
     }))
 }
@@ -45,7 +46,8 @@ struct Target {
     carry: bool,
     /// The form was seeded from the stored plan; later answers never overwrite typing.
     seeded: bool,
-    status: Option<wire::StatusLine>,
+    /// The status line (a refusal) and the kit's one door.
+    undo: Undo,
     finished: bool,
 }
 
@@ -103,7 +105,8 @@ impl Target {
             &["money", "target", &self.month, &self.category_id],
             kit_act::fresh(),
         );
-        let settled = kit_act::act(
+        // The sheet closes on success, so no line is drawn: the write says nothing.
+        let settled = self.undo.act_quietly(
             ctx,
             act::money::SetTarget {
                 amount_minor: amount,
@@ -116,9 +119,6 @@ impl Target {
         );
         if settled.committed {
             self.finished = true;
-            self.status = None;
-        } else {
-            self.status = Some(fold::refusal(ctx.locale(), &settled.refusal));
         }
     }
 
@@ -244,7 +244,7 @@ impl Screen for Target {
                     amount_text: self.amount_text.clone(),
                     carry: self.carry,
                     chrome: Some(fold::chrome(locale, words::target_sheet_title(locale), "")),
-                    status: self.status.clone(),
+                    status: self.undo.status(),
                     finished: self.finished,
                 },
             )),

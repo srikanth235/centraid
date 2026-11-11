@@ -25,6 +25,7 @@ use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::read::{self, Reading};
 use crate::kit::share::{self, Share};
 use crate::kit::trash;
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, links as link_words, money as words, shared};
 
@@ -56,8 +57,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         phase: Phase::Loading,
         sheet: Sheet::None,
         name_draft: String::new(),
-        status: None,
-        undo: None,
+        undo: Undo::default(),
         dismissed: Vec::new(),
         links: Links::new(&[Kind::Person]),
         earlier: earlier::Foot::default(),
@@ -74,22 +74,14 @@ struct Loaded {
     with_proposal: Option<links::Person>,
 }
 
-/// The line the status line's Undo reverses, and which way.
-struct Undo {
-    title: String,
-    /// The line is in the trash now, so Undo restores it.
-    restore: bool,
-}
-
 struct Transaction {
     txn_id: String,
     parent: String,
     phase: Phase<Loaded>,
     sheet: Sheet,
     name_draft: String,
-    status: Option<wire::StatusLine>,
-    /// What the status line's Undo does: put the line back in the trash, or back in the account.
-    undo: Option<Undo>,
+    /// The status line and what its Undo reverses (the kit's one door).
+    undo: Undo,
     /// Offers the member waved off this sitting: `transfer`, `rule`, `with`.
     dismissed: Vec<String>,
     /// The "With" row's picker and the people it lists.
@@ -202,12 +194,7 @@ impl Transaction {
     /// Submit one write and read again; the verdict is the status line.
     fn submit(&mut self, ctx: &Ctx, request: impl Into<wire::ActRequest>, done: String) {
         let key = kit_act::key(&["money", "txn", &self.txn_id], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        self.status = Some(if settled.committed {
-            fold::done(done)
-        } else {
-            fold::refusal(ctx.locale(), &settled.refusal)
-        });
+        self.undo.act(ctx, request, &key, |_| done);
         self.reload(ctx);
     }
 
@@ -221,58 +208,14 @@ impl Transaction {
         } else {
             loaded.txn.display_name.clone()
         };
-        self.trash_or_restore(ctx, title, false);
-    }
-
-    /// The status line's Undo: reverse the last move.
-    fn undone(&mut self, ctx: &Ctx) {
-        let has_undo = self
-            .status
-            .as_ref()
-            .is_some_and(|status| !status.action_label.is_empty());
-        let Some(undo) = self.undo.take().filter(|_| has_undo) else {
-            return;
-        };
-        self.trash_or_restore(ctx, undo.title, undo.restore);
-    }
-
-    fn trash_or_restore(&mut self, ctx: &Ctx, title: String, restore: bool) {
-        let locale = ctx.locale();
-        self.status = None;
-        self.undo = None;
         let id = self.txn_id.clone();
-        let settled = if restore {
-            let key = kit_act::key(&["restore-transaction", &id], kit_act::fresh());
-            kit_act::act(
-                ctx,
-                act::money::RestoreTransaction { transaction_id: id },
-                &key,
-            )
-        } else {
-            let key = kit_act::key(&["trash-transaction", &id], kit_act::fresh());
-            kit_act::act(
-                ctx,
-                act::money::TrashTransaction { transaction_id: id },
-                &key,
-            )
-        };
-        if settled.committed {
-            self.status = Some(wire::StatusLine {
-                sentence: if restore {
-                    trash::restored(locale, &title)
-                } else {
-                    trash::moved_to_trash(locale, &title)
-                },
-                action_label: shared::trash_undo(locale),
-                refused: false,
-            });
-            self.undo = Some(Undo {
-                title,
-                restore: !restore,
-            });
-        } else {
-            self.status = Some(fold::refusal(locale, &settled.refusal));
-        }
+        let key = kit_act::key(&["trash-transaction", &id], kit_act::fresh());
+        self.undo.act(
+            ctx,
+            act::money::TrashTransaction { transaction_id: id },
+            &key,
+            |locale| trash::moved_to_trash(locale, &title),
+        );
         self.reload(ctx);
     }
 
@@ -400,7 +343,11 @@ impl Transaction {
             Some(T::OfferAccepted(accepted)) => self.accept(&accepted.key, ctx),
             Some(T::OfferDismissed(dismissed)) => self.dismiss(&dismissed.key),
             Some(T::WithLink(link)) => self.link_event(&link, ctx),
-            Some(T::StatusActed(_)) => self.undone(ctx),
+            Some(T::StatusActed(_)) => {
+                if self.undo.acted(ctx) {
+                    self.reload(ctx);
+                }
+            }
             _ => {}
         }
     }
@@ -660,7 +607,15 @@ impl Screen for Transaction {
                     super::export::file(ctx, None, Some(&id))
                 });
             }
-            Some(E::Left(_)) => return self.share.left(),
+            Some(E::StatusActed(_)) => {
+                if self.undo.acted(ctx) {
+                    self.reload(ctx);
+                }
+            }
+            Some(E::Left(_)) => {
+                self.undo.clear();
+                return self.share.left();
+            }
             _ => {}
         }
         Vec::new()
@@ -672,12 +627,10 @@ impl Screen for Transaction {
         let content = match &self.phase {
             // The member just moved the line to the trash from this page: it reads as gone, and the
             // status line (with Undo) shows over it. A line that was never here stays a failure.
-            Phase::Failed if self.undo.as_ref().is_some_and(|undo| undo.restore) => {
-                Content::Gone(wire::EmptyState {
-                    headline: words::transaction_gone(locale),
-                    ..Default::default()
-                })
-            }
+            Phase::Failed if self.undo.can_undo() => Content::Gone(wire::EmptyState {
+                headline: words::transaction_gone(locale),
+                ..Default::default()
+            }),
             Phase::Loading => Content::Loading(wire::Loading { first_load: true }),
             Phase::Failed => Content::Failure(read::failure(locale)),
             Phase::Denied => Content::Denied(fold::denied(locale)),
@@ -697,8 +650,8 @@ impl Screen for Transaction {
                         &self.parent,
                     )),
                     status: self
-                        .status
-                        .clone()
+                        .undo
+                        .status()
                         .or_else(|| self.share.status())
                         .or_else(|| self.earlier.status(locale)),
                     earlier: self.earlier.entry.clone(),

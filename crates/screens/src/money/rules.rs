@@ -26,6 +26,7 @@ use crate::field::Field;
 use crate::kit::act as kit_act;
 use crate::kit::money as money_kit;
 use crate::kit::read::{self, Reading};
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, money as words};
 
@@ -42,7 +43,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         sheet: Sheet::None,
         editor: None,
         pending: None,
-        status: None,
+        undo: Undo::default(),
     }))
 }
 
@@ -83,7 +84,8 @@ struct Rules {
     sheet: Sheet,
     editor: Option<Editor>,
     pending: Option<Pending>,
-    status: Option<wire::StatusLine>,
+    /// The status line and what its Undo reverses (the kit's one door).
+    undo: Undo,
 }
 
 fn kinds(locale: Locale) -> Vec<(&'static str, String)> {
@@ -249,14 +251,11 @@ impl Rules {
 
     fn submit(&mut self, ctx: &Ctx, request: impl Into<wire::ActRequest>, done: String) -> bool {
         let key = kit_act::key(&["money", "rule"], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
+        let settled = self.undo.act(ctx, request, &key, |_| done);
         if settled.committed {
             // SAVED, DELETED OR APPLIED: the sheet goes and the list reads again.
             self.sheet = Sheet::None;
             self.editor = None;
-            self.status = Some(fold::done(done));
-        } else {
-            self.status = Some(fold::refusal(ctx.locale(), &settled.refusal));
         }
         self.reload(ctx);
         settled.committed
@@ -402,7 +401,7 @@ impl Rules {
             rename: rule.rename_to.clone().unwrap_or_default(),
         });
         self.sheet = Sheet::Editor;
-        self.status = None;
+        self.undo.clear();
     }
 
     fn pick_account(&mut self, account_id: &str) {
@@ -434,7 +433,7 @@ impl Rules {
         let locale = ctx.locale();
         match event.kind {
             Some(R::Add(_)) => {
-                self.status = None;
+                self.undo.clear();
                 self.sheet = Sheet::Editor;
                 self.editor = Some(Editor {
                     mode: Mode::Add,
@@ -736,6 +735,12 @@ impl Screen for Rules {
                 kind: Some(wire::money_rules_event::Kind::Refreshed(_)),
             })) => self.reload(ctx),
             Some(E::MoneyRules(r)) => self.event(r, ctx),
+            Some(E::StatusActed(_)) => {
+                if self.undo.acted(ctx) {
+                    self.reload(ctx);
+                }
+            }
+            Some(E::Left(_)) => self.undo.clear(),
             _ => {}
         }
         Vec::new()
@@ -778,7 +783,7 @@ impl Screen for Rules {
                     words::rules_title(locale),
                     &self.parent,
                 )),
-                status: self.status.clone(),
+                status: self.undo.status(),
             })),
             ..wire::ViewState::default()
         }

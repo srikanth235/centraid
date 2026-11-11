@@ -20,6 +20,7 @@ use crate::catalog::{act, load};
 use crate::field::Field;
 use crate::kit::act as kit_act;
 use crate::kit::read;
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, money as words};
 
@@ -35,7 +36,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         phase: Phase::Loading,
         editor: None,
         confirm_remove_number: false,
-        status: None,
+        undo: Undo::default(),
     }))
 }
 
@@ -66,7 +67,8 @@ struct Accounts {
     phase: Phase<wire::MoneyAccounts>,
     editor: Option<Editor>,
     confirm_remove_number: bool,
-    status: Option<wire::StatusLine>,
+    /// The status line and what its Undo reverses (the kit's one door).
+    undo: Undo,
 }
 
 fn lines(answer: &wire::MoneyAccounts) -> Vec<(&wire::money_accounts::AccountLine, bool)> {
@@ -100,13 +102,19 @@ impl Accounts {
         }
     }
 
-    fn submit(&mut self, ctx: &Ctx, request: impl Into<wire::ActRequest>) -> bool {
+    /// One write. `said` is the sentence when this write is the one the line is about; a write that
+    /// follows another (the close beside an edit) passes `None` and leaves that line as it is.
+    fn submit(
+        &mut self,
+        ctx: &Ctx,
+        request: impl Into<wire::ActRequest>,
+        said: Option<String>,
+    ) -> bool {
         let key = kit_act::key(&["money", "account"], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        if !settled.committed {
-            self.status = Some(fold::refusal(ctx.locale(), &settled.refusal));
+        match said {
+            Some(said) => self.undo.act(ctx, request, &key, |_| said).committed,
+            None => self.undo.act_also(ctx, request, &key).committed,
         }
-        settled.committed
     }
 
     fn save(&mut self, ctx: &Ctx) {
@@ -118,6 +126,7 @@ impl Accounts {
             return;
         }
         let number = Some(editor.external_ref.trim().to_owned()).filter(|n| !n.is_empty());
+        let mut edited_and_closed = false;
         let committed = if editor.mode == Mode::Add {
             self.submit(
                 ctx,
@@ -134,6 +143,7 @@ impl Accounts {
                     on_budget: Some(editor.on_budget),
                     ..Default::default()
                 },
+                Some(words::done_account(locale)),
             )
         } else {
             let before_closed = self
@@ -160,9 +170,11 @@ impl Accounts {
                         _ => act::money::EditAccountType::Checking,
                     }),
                 },
+                Some(words::done_account(locale)),
             );
             // A closed account is the archived flag on it: its own action, sent beside the edit.
             if edited && before_closed != editor.closed {
+                edited_and_closed = true;
                 if editor.closed {
                     self.submit(
                         ctx,
@@ -170,6 +182,7 @@ impl Accounts {
                             flag: act::money::CloseAccountFlag::Archived,
                             account_id: editor.account_id.clone(),
                         },
+                        None,
                     )
                 } else {
                     self.submit(
@@ -178,6 +191,7 @@ impl Accounts {
                             flag: act::money::ReopenAccountFlag::Archived,
                             account_id: editor.account_id.clone(),
                         },
+                        None,
                     )
                 }
             } else {
@@ -186,7 +200,11 @@ impl Accounts {
         };
         if committed {
             self.editor = None;
-            self.status = Some(fold::done(words::done_account(locale)));
+            // An edit with a close beside it is two writes: Undo would take back only one, so the
+            // line keeps its sentence and offers nothing.
+            if edited_and_closed {
+                self.undo.withdraw();
+            }
         }
         self.reload(ctx);
     }
@@ -204,9 +222,9 @@ impl Accounts {
                 external_ref: Field::Clear,
                 ..Default::default()
             },
+            Some(words::account_number_removed(ctx.locale())),
         ) {
             self.editor = None;
-            self.status = Some(fold::done(words::account_number_removed(ctx.locale())));
         }
         self.reload(ctx);
     }
@@ -214,7 +232,7 @@ impl Accounts {
     fn event(&mut self, event: wire::MoneyAccountsEvent, ctx: &Ctx) {
         match event.kind {
             Some(A::Add(_)) => {
-                self.status = None;
+                self.undo.clear();
                 self.editor = Some(Editor {
                     mode: Mode::Add,
                     account_id: String::new(),
@@ -248,7 +266,7 @@ impl Accounts {
                     has_external_ref: line.mask.is_some(),
                     closed: line.closed,
                 });
-                self.status = None;
+                self.undo.clear();
             }
             Some(A::ConfirmDismissed(_)) => self.confirm_remove_number = false,
             Some(A::ConfirmAccepted(_)) if self.confirm_remove_number => self.remove_number(ctx),
@@ -464,6 +482,12 @@ impl Screen for Accounts {
                 kind: Some(wire::money_accounts_event::Kind::Refreshed(_)),
             })) => self.reload(ctx),
             Some(E::MoneyAccounts(a)) => self.event(a, ctx),
+            Some(E::StatusActed(_)) => {
+                if self.undo.acted(ctx) {
+                    self.reload(ctx);
+                }
+            }
+            Some(E::Left(_)) => self.undo.clear(),
             _ => {}
         }
         Vec::new()
@@ -499,7 +523,7 @@ impl Screen for Accounts {
                         words::accounts_title(locale),
                         &self.parent,
                     )),
-                    status: self.status.clone(),
+                    status: self.undo.status(),
                 },
             )),
             ..wire::ViewState::default()

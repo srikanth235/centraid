@@ -25,6 +25,7 @@ use crate::catalog::act::money as acts;
 use crate::catalog::load::money as loads;
 use crate::kit::act as kit_act;
 use crate::kit::read;
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, money as words};
 
@@ -49,7 +50,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         keep_proposed: false,
         phase: P::Idle,
         plan: None,
-        status: None,
+        undo: Undo::default(),
         sheet: Sheet::None,
         finished: false,
     }))
@@ -72,7 +73,9 @@ struct Import {
     keep_proposed: bool,
     phase: P,
     plan: Option<wire::MoneyImportPlan>,
-    status: Option<wire::StatusLine>,
+    /// The status line, said through the kit's one door. A statement import is taken back by
+    /// nothing (it previews first and asks), so it only ever says plain sentences.
+    undo: Undo,
     sheet: Sheet,
     finished: bool,
 }
@@ -141,7 +144,7 @@ impl Import {
             self.account_id.clone()
         };
         self.drop_file();
-        self.status = None;
+        self.undo.clear();
         self.account_id = account;
         self.file = Some(Held {
             name: file.name,
@@ -161,7 +164,7 @@ impl Import {
         if source == loads::ImportPlanSource::Csv && self.account_id.is_empty() {
             self.plan = None;
             self.phase = P::Idle;
-            self.status = Some(fold::done(words::import_choose_account(locale)));
+            self.undo.say(words::import_choose_account(locale));
             return;
         }
         let reading = read::read(
@@ -182,12 +185,12 @@ impl Import {
             read::Reading::Data(plan) => {
                 self.plan = Some(plan);
                 self.phase = P::Planned;
-                self.status = None;
+                self.undo.clear();
             }
             read::Reading::Denied(_) | read::Reading::Failed => {
                 self.plan = None;
                 self.phase = P::Idle;
-                self.status = Some(fold::refusal(locale, &words::no_answer(locale)));
+                self.undo.refuse(words::no_answer(locale));
             }
         }
     }
@@ -250,7 +253,7 @@ impl Import {
                 return;
             };
             let key = kit_act::key(&["import-transactions", &index.to_string()], seq);
-            let settled = kit_act::act(ctx, request, &key);
+            let settled = self.undo.act_quietly(ctx, request, &key);
             if !settled.committed {
                 // A REFUSED PUBLISH KEEPS THE PLAN, so Import can be tried
                 // again: rows already in write nothing.
@@ -264,7 +267,7 @@ impl Import {
             file.bytes = Vec::new();
         }
         self.phase = P::Published;
-        self.status = Some(fold::done(fill(
+        self.undo.say(fill(
             &words::import_done(locale),
             &[(
                 "rows",
@@ -274,20 +277,16 @@ impl Import {
                     &words::row_many(locale),
                 ),
             )],
-        )));
+        ));
     }
 
     fn refused(&mut self, locale: Locale, sentence: &str) {
         self.phase = P::Planned;
-        self.status = Some(fold::refusal(
-            locale,
-            if sentence.trim().is_empty() {
-                words::import_failed(locale)
-            } else {
-                sentence.to_owned()
-            }
-            .as_str(),
-        ));
+        self.undo.refuse(if sentence.trim().is_empty() {
+            words::import_failed(locale)
+        } else {
+            sentence.to_owned()
+        });
     }
 
     /// Rows a publish wrote, as the plan counted them.
@@ -308,7 +307,7 @@ impl Import {
 
     /// The balance each statement stated, and the layout a CSV used: each its
     /// own action, after the rows. Neither can take the import back.
-    fn remember(&self, ctx: &Ctx, seq: u64) {
+    fn remember(&mut self, ctx: &Ctx, seq: u64) {
         let statements = self.plan.iter().flat_map(|plan| &plan.statements);
         for statement in statements {
             let Some(account) = &statement.account_id else {
@@ -318,7 +317,7 @@ impl Import {
                 && let Some(balance) = &stated.balance
             {
                 let key = kit_act::key(&["record-checkpoint", account, &stated.as_of], seq);
-                let _ = kit_act::act(
+                self.undo.act_quietly(
                     ctx,
                     acts::RecordCheckpoint {
                         account_id: account.clone(),
@@ -330,7 +329,7 @@ impl Import {
             }
             if let Some(profile) = &statement.profile_to_save {
                 let key = kit_act::key(&["save-import-profile", account], seq);
-                let _ = kit_act::act(
+                self.undo.act_quietly(
                     ctx,
                     acts::SaveImportProfile {
                         account_id: account.clone(),
@@ -388,7 +387,7 @@ impl Import {
             Some(I::Publish(_)) if self.phase == P::Planned => self.publish(ctx),
             Some(I::Discard(_)) if !busy => {
                 self.drop_file();
-                self.status = None;
+                self.undo.clear();
             }
             Some(I::Done(_)) if self.phase == P::Published => self.finished = true,
             _ => {}
@@ -857,10 +856,7 @@ impl Screen for Import {
                 match result.outcome {
                     Some(wire::effect_result::Outcome::BytesPicked(file)) => self.picked(ctx, file),
                     Some(wire::effect_result::Outcome::Failed(failure)) if !failure.cancelled => {
-                        self.status = Some(fold::refusal(
-                            ctx.locale(),
-                            &words::import_failed(ctx.locale()),
-                        ));
+                        self.undo.refuse(words::import_failed(ctx.locale()));
                     }
                     _ => {}
                 }
@@ -869,7 +865,7 @@ impl Screen for Import {
             // LEAVING DROPS THE FILE.
             Some(E::Left(_)) => {
                 self.drop_file();
-                self.status = None;
+                self.undo.clear();
                 Vec::new()
             }
             _ => Vec::new(),
@@ -895,7 +891,7 @@ impl Screen for Import {
                         words::import_title(locale),
                         &self.parent,
                     )),
-                    status: self.status.clone(),
+                    status: self.undo.status(),
                     account_id: self.account_id.clone(),
                     sheet: self.sheet as i32,
                     keep_proposed: self.keep_proposed,
@@ -932,7 +928,7 @@ mod tests {
                 }],
                 ..Default::default()
             }),
-            status: None,
+            undo: Undo::default(),
             sheet: Sheet::None,
             finished: false,
         }
@@ -949,7 +945,7 @@ mod tests {
         assert!(import.file.is_some() && import.plan.is_some());
         assert_eq!(import.inputs().len(), 1);
         assert_eq!(import.publishable(), 5);
-        let status = import.status.as_ref().expect("a status");
+        let status = import.undo.status().expect("a status");
         assert!(status.refused);
         assert_eq!(status.sentence, "That account is not open.");
     }
@@ -959,7 +955,7 @@ mod tests {
         let mut import = planned();
         import.refused(Locale::En, "  ");
         assert_eq!(
-            import.status.as_ref().expect("a status").sentence,
+            import.undo.status().expect("a status").sentence,
             "Couldn’t import this file. Try again."
         );
         assert_eq!(import.phase, P::Planned);

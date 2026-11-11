@@ -9,6 +9,7 @@ mod calendar_support;
 mod docs_support;
 mod health_support;
 mod locker_support;
+mod money_support;
 mod notes_support;
 mod reminders_support;
 
@@ -19,7 +20,7 @@ mod routes;
 use centraid_api_proto::core_v1 as wire;
 use centraid_screens::agenda;
 use centraid_screens::catalog::act;
-use centraid_screens::field::Field;
+use centraid_screens::field::{Field, Keyed};
 use centraid_screens::testing::Driver;
 use wire::notes_editor_event::{self as ee, Kind as N};
 use wire::notes_home_event::{self as nh, Kind as H};
@@ -746,4 +747,165 @@ fn locker_a_memo_says_so_and_a_later_edit_refuses_the_undo_plainly() {
         status.sentence,
         "This can no longer be undone: it has changed since."
     );
+}
+
+// --- Money: accounts, categories, one transaction ---------------------------------------
+
+fn money_accounts_page(d: &mut Driver) -> u64 {
+    money_support::push(d, centraid_screens::money::routes::accounts("Money"))
+}
+
+fn money_accounts_state(d: &Driver, page: u64) -> &wire::MoneyAccountsState {
+    match &d.view(page).kind {
+        Some(wire::view_state::Kind::MoneyAccounts(state)) => state,
+        other => panic!("not the accounts: {other:?}"),
+    }
+}
+
+fn money_account_event(d: &mut Driver, page: u64, kind: wire::money_accounts_event::Kind) {
+    money_support::event(
+        d,
+        page,
+        wire::screen_event::Kind::MoneyAccounts(wire::MoneyAccountsEvent { kind: Some(kind) }),
+    );
+}
+
+fn money_account_name(d: &Driver, id: &str) -> String {
+    money_support::accounts(d)
+        .into_iter()
+        .find(|(account, _)| account == id)
+        .map(|(_, name)| name)
+        .expect("the account")
+}
+
+/// Rename the first account through its sheet; returns its id.
+fn money_rename_first_account(d: &mut Driver, page: u64, name: &str) -> String {
+    use wire::money_accounts_event as ae;
+    let (id, _) = money_support::accounts(d).remove(0);
+    money_account_event(
+        d,
+        page,
+        ae::Kind::Account(ae::AccountTapped {
+            account_id: id.clone(),
+        }),
+    );
+    money_account_event(
+        d,
+        page,
+        ae::Kind::Name(ae::NameEdited {
+            text: name.to_owned(),
+        }),
+    );
+    money_account_event(d, page, ae::Kind::Save(ae::Save {}));
+    id
+}
+
+#[test]
+fn money_renaming_an_account_says_so_and_undo_puts_the_name_back() {
+    let mut d = money_support::driver();
+    let page = money_accounts_page(&mut d);
+    let (id, before) = money_support::accounts(&d).remove(0);
+    money_rename_first_account(&mut d, page, "Renamed");
+    assert_eq!(money_account_name(&d, &id), "Renamed");
+    assert_eq!(
+        said(money_accounts_state(&d, page).status.as_ref()),
+        line("Account saved", "Undo")
+    );
+
+    status_acted(&mut d, page);
+    assert_eq!(money_account_name(&d, &id), before);
+    assert_eq!(
+        said(money_accounts_state(&d, page).status.as_ref()),
+        line("Undone", "")
+    );
+}
+
+#[test]
+fn money_a_later_rename_refuses_the_undo_plainly_and_stays() {
+    let mut d = money_support::driver();
+    let page = money_accounts_page(&mut d);
+    let id = money_rename_first_account(&mut d, page, "Renamed");
+
+    // Another surface renames it again: the Undo no longer fits, and the later name stays.
+    let response = d.act(
+        wire::ActRequest::from(act::money::EditAccount {
+            account_id: id.clone(),
+            title: Some("Renamed elsewhere".to_owned()),
+            ..Default::default()
+        })
+        .keyed("arrange:money-rename".to_owned()),
+    );
+    assert_eq!(response.status, wire::ActStatus::Executed as i32);
+    status_acted(&mut d, page);
+    let status = money_accounts_state(&d, page)
+        .status
+        .clone()
+        .expect("a line");
+    assert!(status.refused);
+    assert_eq!(status.action_label, "");
+    assert!(!status.sentence.is_empty());
+    assert_eq!(money_account_name(&d, &id), "Renamed elsewhere");
+}
+
+#[test]
+fn money_adding_a_category_says_so_and_undo_archives_it() {
+    use wire::money_categories_event as ce;
+    let mut d = money_support::driver();
+    let page = money_support::push(&mut d, centraid_screens::money::routes::categories("Money"));
+    let pet = |d: &Driver| -> Option<bool> {
+        let Some(wire::view_state::Kind::MoneyCategories(state)) = &d.view(page).kind else {
+            panic!("not the categories");
+        };
+        let Some(wire::money_categories_state::Content::Data(data)) = &state.content else {
+            panic!("no categories data");
+        };
+        data.groups
+            .iter()
+            .flat_map(|group| &group.rows)
+            .find(|row| row.label == "Pet sitting")
+            .map(|row| row.archived)
+    };
+    let status = |d: &Driver| -> (String, String) {
+        let Some(wire::view_state::Kind::MoneyCategories(state)) = &d.view(page).kind else {
+            panic!("not the categories");
+        };
+        said(state.status.as_ref())
+    };
+    let send = |d: &mut Driver, kind: ce::Kind| {
+        money_support::event(
+            d,
+            page,
+            wire::screen_event::Kind::MoneyCategories(wire::MoneyCategoriesEvent {
+                kind: Some(kind),
+            }),
+        );
+    };
+    let group = {
+        let Some(wire::view_state::Kind::MoneyCategories(state)) = &d.view(page).kind else {
+            panic!("not the categories");
+        };
+        let Some(wire::money_categories_state::Content::Data(data)) = &state.content else {
+            panic!("no categories data");
+        };
+        data.groups[0].group_id.clone()
+    };
+    send(&mut d, ce::Kind::Add(ce::AddTapped {}));
+    send(
+        &mut d,
+        ce::Kind::Name(ce::NameEdited {
+            text: "Pet sitting".to_owned(),
+        }),
+    );
+    send(&mut d, ce::Kind::Group(ce::GroupPicked { group_id: group }));
+    send(&mut d, ce::Kind::Save(ce::Save {}));
+    assert_eq!(pet(&d), Some(false));
+    assert_eq!(status(&d), line("Category added", "Undo"));
+
+    status_acted(&mut d, page);
+    assert_eq!(
+        pet(&d),
+        Some(true),
+        "Undo archives it: a category has no trash"
+    );
+    assert_eq!(status(&d), line("Undone", ""));
 }

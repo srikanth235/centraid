@@ -305,8 +305,8 @@ fn a_trashed_line_leaves_every_figure_and_a_restore_brings_each_back_exactly() {
     // Undo restores it, and every figure is back as it was.
     txn_event(&mut d, page, te::Kind::StatusActed(te::StatusActed {}));
     let line = txn_state(&d, page).status.clone().expect("a status line");
-    assert_eq!(line.sentence, "QQBISTRO CAFE restored");
-    assert_eq!(line.action_label, "Undo");
+    assert_eq!(line.sentence, "Undone");
+    assert_eq!(line.action_label, "", "an Undo offers nothing more");
     let restored = figures(&d);
     assert_eq!(
         (
@@ -322,13 +322,9 @@ fn a_trashed_line_leaves_every_figure_and_a_restore_brings_each_back_exactly() {
             before.found
         )
     );
-    // Undo of the restore trashes it again: the line is the same in both directions.
+    // Nothing is on offer any more: a second tap changes nothing.
     txn_event(&mut d, page, te::Kind::StatusActed(te::StatusActed {}));
-    assert_eq!(
-        txn_state(&d, page).status.as_ref().unwrap().sentence,
-        "QQBISTRO CAFE moved to trash"
-    );
-    assert_eq!(figures(&d).balance, before.balance + 4_250);
+    assert_eq!(figures(&d).balance, before.balance);
 }
 
 #[test]

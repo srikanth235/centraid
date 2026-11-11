@@ -13,6 +13,7 @@ use super::fold::{self, Phase};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::read;
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, money as words};
 
@@ -34,7 +35,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         name_draft: String::new(),
         group_id: String::new(),
         merge_into: String::new(),
-        status: None,
+        undo: Undo::default(),
     }))
 }
 
@@ -48,7 +49,8 @@ struct Categories {
     group_id: String,
     /// The category a merge waits on a confirmation to move into.
     merge_into: String,
-    status: Option<wire::StatusLine>,
+    /// The status line and what its Undo reverses (the kit's one door).
+    undo: Undo,
 }
 
 fn entry<'a>(
@@ -72,12 +74,7 @@ impl Categories {
 
     fn submit(&mut self, ctx: &Ctx, request: impl Into<wire::ActRequest>, done: String) {
         let key = kit_act::key(&["money", "category"], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        self.status = Some(if settled.committed {
-            fold::done(done)
-        } else {
-            fold::refusal(ctx.locale(), &settled.refusal)
-        });
+        self.undo.act(ctx, request, &key, |_| done);
         self.reload(ctx);
     }
 
@@ -133,7 +130,7 @@ impl Categories {
                 self.sheet = Sheet::Add;
                 self.name_draft.clear();
                 self.group_id.clear();
-                self.status = None;
+                self.undo.clear();
             }
             Some(C::Name(typed)) => self.name_draft = typed.text,
             Some(C::Group(picked)) => self.group_id = picked.group_id,
@@ -141,7 +138,7 @@ impl Categories {
             Some(C::Category(tapped)) => {
                 self.sheet = Sheet::Row;
                 self.category_id = tapped.category_id;
-                self.status = None;
+                self.undo.clear();
             }
             Some(C::RowAction(action)) => self.row_action(&action.key, ctx),
             Some(C::MergeInto(into)) => {
@@ -316,6 +313,12 @@ impl Screen for Categories {
                 kind: Some(wire::money_categories_event::Kind::Refreshed(_)),
             })) => self.reload(ctx),
             Some(E::MoneyCategories(c)) => self.event(c, ctx),
+            Some(E::StatusActed(_)) => {
+                if self.undo.acted(ctx) {
+                    self.reload(ctx);
+                }
+            }
+            Some(E::Left(_)) => self.undo.clear(),
             _ => {}
         }
         Vec::new()
@@ -344,7 +347,7 @@ impl Screen for Categories {
                         words::categories_title(locale),
                         &self.parent,
                     )),
-                    status: self.status.clone(),
+                    status: self.undo.status(),
                 },
             )),
             ..wire::ViewState::default()
