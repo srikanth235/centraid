@@ -241,6 +241,22 @@
       "x": 1410,
       "y": 22040
     },
+    "AndroidMoreMoney.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "6 · Money More on Android",
+      "w": 412,
+      "x": 2350,
+      "y": 30680
+    },
+    "AndroidNoteMenu.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "5 · Note menu on Android",
+      "w": 412,
+      "x": 1880,
+      "y": 30680
+    },
     "AndroidNotes.dc.html": {
       "h": 915,
       "page": "light",
@@ -320,6 +336,38 @@
       "w": 412,
       "x": 470,
       "y": 20880
+    },
+    "AndroidTrash.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "1 · Notes trash on Android",
+      "w": 412,
+      "x": 0,
+      "y": 30680
+    },
+    "AndroidTrashConfirm.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "2 · Empty trash on Android",
+      "w": 412,
+      "x": 470,
+      "y": 30680
+    },
+    "AndroidUndo.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "3 · Undo after a delete on Android",
+      "w": 412,
+      "x": 940,
+      "y": 30680
+    },
+    "AndroidVersions.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "4 · Earlier versions on Android",
+      "w": 412,
+      "x": 1410,
+      "y": 30680
     },
     "Backup.dc.html": {
       "h": 844,
@@ -2236,6 +2284,7 @@
     "light21",
     "light22",
     "light23",
+    "light24",
     "dark0",
     "dark1",
     "dark2",
@@ -2630,6 +2679,15 @@
       "w": 240,
       "x": 0,
       "y": 29320
+    },
+    "light24": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "Change safely on Android: Trash, Undo, earlier versions and More",
+      "w": 240,
+      "x": 0,
+      "y": 30480
     },
     "light3": {
       "kind": "title1",
