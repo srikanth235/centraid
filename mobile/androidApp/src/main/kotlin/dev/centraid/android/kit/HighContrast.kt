@@ -7,6 +7,9 @@ import android.os.Looper
 import android.provider.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.ProvidableCompositionLocal
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,9 +32,21 @@ private const val HIGH_TEXT_CONTRAST: String = "high_text_contrast_enabled"
 public fun highTextContrast(context: Context): Boolean =
     Settings.Secure.getInt(context.contentResolver, HIGH_TEXT_CONTRAST, 0) == 1
 
+/**
+ * [highTextContrast] as the whole tree reads it: [CentraidTheme] provides it once, so a hairline
+ * or a line of secondary text asks a local and not the system, and the kit's controls strengthen
+ * without a screen threading the setting through (#1185). Off outside the theme.
+ */
+public val LocalHighTextContrast: ProvidableCompositionLocal<Boolean> = compositionLocalOf { false }
+
+/** [highTextContrast] in force: the setting as [CentraidTheme] last read it. */
+@Composable
+@ReadOnlyComposable
+public fun rememberHighTextContrast(): Boolean = LocalHighTextContrast.current
+
 /** [highTextContrast] for the composition's own context, kept current while the screen is up. */
 @Composable
-public fun rememberHighTextContrast(): Boolean {
+internal fun observeHighTextContrast(): Boolean {
     val context = LocalContext.current
     var on by remember(context) { mutableStateOf(highTextContrast(context)) }
     DisposableEffect(context) {

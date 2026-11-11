@@ -78,6 +78,7 @@ import centraid.core.v1.PhotosLightboxState
 import dev.centraid.android.screens.decodeUpright
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.StageKey
+import dev.centraid.android.kit.rememberReducedMotion
 import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
@@ -585,10 +586,14 @@ internal fun LightboxFilmstrip(state: PhotosLightboxState, onEvent: (PhotosLight
     if (window.size <= 1) return
     val list = rememberLazyListState()
     val current = window.indexOfFirst { it.current }
+    val reduceMotion = rememberReducedMotion()
     // PAGING MOVES THE STRIP TOO, or the two controls disagree about where
     // the member is.
     LaunchedEffect(current, window.first().photo_id) {
-        if (current >= 0) list.animateScrollToItem(maxOf(0, current - 3))
+        if (current >= 0) {
+            val first = maxOf(0, current - 3)
+            if (reduceMotion) list.scrollToItem(first) else list.animateScrollToItem(first)
+        }
     }
     LazyRow(
         state = list,

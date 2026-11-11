@@ -58,6 +58,7 @@ import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.LocalBandClearance
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.RowSkeleton
+import dev.centraid.android.kit.motion
 import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
@@ -196,7 +197,7 @@ private val FOLD_CONTROL = 30.dp
 private fun Section(title: String, toggleLabel: String, isFolded: Boolean, onFold: () -> Unit, content: @Composable () -> Unit) {
     val turn by animateFloatAsState(
         targetValue = if (isFolded) -90f else 0f,
-        animationSpec = tween(CentraidGeometry.DURATION_ONE),
+        animationSpec = motion(tween(CentraidGeometry.DURATION_ONE)),
         label = "fold",
     )
     Column(Modifier.fillMaxWidth().padding(top = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

@@ -21,7 +21,11 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import dev.centraid.android.kit.LocalHighTextContrast
+import dev.centraid.android.kit.LocalReducedMotion
 import dev.centraid.android.kit.Money
+import dev.centraid.android.kit.observeHighTextContrast
+import dev.centraid.android.kit.observeReducedMotion
 import dev.centraid.android.R
 import dev.centraid.design.CentraidTokens
 import dev.centraid.design.NATIVE_TYPE_FACES
@@ -58,7 +62,15 @@ public fun CentraidTheme(
     val density = remember(system.density, system.fontScale) {
         if (system.fontScale <= MAX_FONT_SCALE) system else Density(system.density, MAX_FONT_SCALE)
     }
-    CompositionLocalProvider(LocalCentraidTokens provides tokens, LocalDensity provides density) {
+    // THE TWO OTHER SYSTEM SETTINGS, READ ONCE FOR THE WHOLE TREE (#1185): high-contrast text
+    // strengthens the hairlines and the secondary ink ([centraidColor], `Surface`), and animations
+    // off turns every animation into a snap ([dev.centraid.android.kit.motion]).
+    CompositionLocalProvider(
+        LocalCentraidTokens provides tokens,
+        LocalDensity provides density,
+        LocalHighTextContrast provides observeHighTextContrast(),
+        LocalReducedMotion provides observeReducedMotion(),
+    ) {
         MaterialTheme(
             colorScheme = if (tokens.scheme == "dark") {
                 darkColorScheme(
@@ -127,7 +139,26 @@ public fun centraidDark(): Boolean = LocalCentraidTokens.current.scheme == "dark
 /** A colour role, in force. See [color] for why a missing role is loud. */
 @Composable
 @ReadOnlyComposable
-public fun centraidColor(role: String): Color = LocalCentraidTokens.current.color(role)
+public fun centraidColor(role: String): Color {
+    val tokens = LocalCentraidTokens.current
+    // INCREASED CONTRAST (#1185): a hairline or a faint ink takes the next stronger role that exists.
+    val shown = if (LocalHighTextContrast.current) STRONGER_ROLE[role] ?: role else role
+    return tokens.color(shown)
+}
+
+/**
+ * The role drawn in place of a role under high-contrast text. Rules and outlines take the faint
+ * ink, faint and ghost text the soft ink, soft text the full ink; `textDisabled` is absent on
+ * purpose, a disabled control is meant to read as quiet. The iOS twin is `Theme.color`'s
+ * `strongerRole`.
+ */
+private val STRONGER_ROLE: Map<String, String> = mapOf(
+    "line" to "textFaint",
+    "lineStrong" to "textFaint",
+    "textGhost" to "textSoft",
+    "textFaint" to "textSoft",
+    "textSoft" to "text",
+)
 
 /**
  * A TYPE ROLE, WITH ITS OWN LINE HEIGHT.

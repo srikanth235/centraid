@@ -1,6 +1,7 @@
 package dev.centraid.android.kit
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -87,6 +88,8 @@ public fun KitSwipeRow(
     val density = LocalDensity.current
     val reveal = with(density) { (ACTION_WIDTH * swipeActions.size).toPx() }
     val offset = remember { Animatable(0f) }
+    // THE SETTLE under a finger lifted or a row tapped shut: a spring, or a snap with animations off.
+    val settle = motion(spring<Float>())
     val scope = rememberCoroutineScope()
     var menu by remember { mutableStateOf(false) }
     val graphite = appAccent("locker").fill
@@ -105,7 +108,7 @@ public fun KitSwipeRow(
                         .fillMaxHeight()
                         .background(fill)
                         .clickable {
-                            scope.launch { offset.animateTo(0f) }
+                            scope.launch { offset.animateTo(0f, settle) }
                             action.onPress()
                         }
                         .testTag("row-action-${action.id}")
@@ -127,12 +130,12 @@ public fun KitSwipeRow(
                         scope.launch { offset.snapTo((offset.value + delta).coerceIn(-reveal, 0f)) }
                     },
                     onDragStopped = {
-                        scope.launch { offset.animateTo(if (offset.value < -reveal / 2) -reveal else 0f) }
+                        scope.launch { offset.animateTo(if (offset.value < -reveal / 2) -reveal else 0f, settle) }
                     },
                 )
                 .combinedClickable(
                     onClick = {
-                        if (offset.value != 0f) scope.launch { offset.animateTo(0f) } else onTap?.invoke()
+                        if (offset.value != 0f) scope.launch { offset.animateTo(0f, settle) } else onTap?.invoke()
                     },
                     onLongClick = if (menuOnLongPress) ({ menu = true }) else null,
                 ),
