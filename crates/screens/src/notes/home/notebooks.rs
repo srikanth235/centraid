@@ -9,8 +9,8 @@ use centraid_api_proto::core_v1 as wire;
 use wire::app_query_response::Answer;
 
 use crate::catalog::load;
-use crate::kit::read;
-use crate::notes::{Phase, fold};
+use crate::kit::read::{self, Page};
+use crate::notes::{denied, fold};
 use crate::screen::Ctx;
 use crate::strings::{Locale, notes as words};
 
@@ -18,30 +18,53 @@ use crate::strings::{Locale, notes as words};
 pub(super) const UNFILED: &str = "unfiled";
 
 pub(super) struct Notebooks {
-    pub phase: Phase<wire::NotesNotebooks>,
+    /// The read. "Unfiled" is always a row, so a read that came is never [`Page::Empty`]: a
+    /// notebook-less vault is the card with the create sentence under it (an empty section of a
+    /// page that shows something).
+    pub page: Page<wire::NotesNotebooks>,
 }
 
 impl Notebooks {
     pub fn new() -> Self {
         Self {
-            phase: Phase::Loading,
+            page: Page::loading(),
         }
     }
 
     pub fn reload(&mut self, ctx: &Ctx) {
-        self.phase = Phase::of(read::read(
+        let reading = read::read(
             ctx,
             load::notes::Notebooks::default(),
             |answer| match answer {
                 Answer::NotesNotebooks(notebooks) => Some(notebooks),
                 _ => None,
             },
-        ));
+        );
+        let held = std::mem::replace(&mut self.page, Page::loading());
+        self.page = held.refreshing().after(reading, ctx.locale(), |_| false);
     }
 
+    /// The wire page: a read that came is ready.
+    pub fn wire(&self, locale: Locale) -> wire::PageState {
+        self.page.wire(
+            locale,
+            |denial| denied(locale, denial),
+            || Self::none_yet(locale),
+        )
+    }
+
+    /// The create sentence under "Unfiled" when the vault holds no notebook.
+    fn none_yet(locale: Locale) -> wire::EmptyState {
+        wire::EmptyState {
+            headline: words::notebooks_empty_headline(locale),
+            body: words::notebooks_empty_body(locale),
+            action_label: words::new_notebook(locale),
+            ..wire::EmptyState::default()
+        }
+    }
     /// A notebook's name, for the heading a pick opens.
     pub fn name_of(&self, locale: Locale, id: &str) -> Option<String> {
-        self.phase
+        self.page
             .data()?
             .notebooks
             .iter()
@@ -80,12 +103,7 @@ impl Notebooks {
             count: unfiled,
             manageable: false,
         };
-        let empty = rows.is_empty().then(|| wire::EmptyState {
-            headline: words::notebooks_empty_headline(locale),
-            body: words::notebooks_empty_body(locale),
-            action_label: words::new_notebook(locale),
-            ..wire::EmptyState::default()
-        });
+        let empty = rows.is_empty().then(|| Self::none_yet(locale));
         wire::NotesNotebooksData {
             rows: std::iter::once(unfiled_row).chain(rows).collect(),
             empty,

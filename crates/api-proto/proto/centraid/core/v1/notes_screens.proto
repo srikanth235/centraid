@@ -28,14 +28,15 @@ message NotesHomeState {
   // The band: Notes · Notebooks · Journal, then More. EMPTY while denied.
   repeated NotesBandTab band = 3;
   NotesHomeChrome chrome = 4;
+  // The data of the place that is showing, when the page is ready (and not over search).
   oneof content {
-    Loading loading = 5;
-    Failure failure = 6;
-    Denied denied = 7;
     NotesLibraryData library = 8;
     NotesNotebooksData notebooks = 9;
     NotesJournalData journal = 10;
   }
+  // 5, 6 and 7 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 5, 6, 7;
+  reserved "loading", "failure", "denied";
   // 11 was `chips`, the Notes place's filters and sort as a chip row: the
   // filters and the sort are `filter_menu`, the notebook scope is `subtitle`.
   reserved 11;
@@ -67,6 +68,10 @@ message NotesHomeState {
   // with a close key that shows every note. Unset when the place is not scoped,
   // while denied, over search and off the Notes place.
   optional HeaderSubtitle subtitle = 24;
+  // THE READ (#1185): loading, failed, refused, empty (the place has nothing, or the search matched
+  // nothing) or ready, with a note when a refresh or a wider window failed over what is shown.
+  // Over an open search it is the search's read.
+  PageState page = 25;
 }
 
 enum NotesSheet {
@@ -210,7 +215,9 @@ message NotesLibraryData {
   reserved "tags";
   // "12 notes".
   string count_label = 3;
-  EmptyState empty = 4;
+  // 4 was `empty`: a library with nothing to show is the page's own Empty state (#1185).
+  reserved 4;
+  reserved "empty";
   // The recent window filled: older notes exist.
   bool truncated = 5;
   string window_end_label = 6;
@@ -224,16 +231,23 @@ message NotesSearchState {
   // "Including results for “x”".
   string corrected = 3;
   repeated SearchContainer containers = 4;
-  // The answer for `term`, once it has landed; absent while the field is empty
-  // or the answer is out.
+  // The answer for `term` while the home's page is ready; absent when the search
+  // matched nothing, failed or was refused (the page says which).
   optional NotesSearchResults results = 5;
+  // Set for an answer that came, with matches or none.
   optional SearchAsk ask = 6;
 }
 
+// What a ready search shows. Set only while the page is ready; nothing matched is the page's own
+// Empty state, and a failed or refused search is the page's failure or gate.
 message NotesSearchResults {
   repeated NotesNoteRow rows = 1;
-  optional EmptyState empty = 2;
-  bool loading = 3;
+  // 2 and 3 were `empty` and `loading` (#1185).
+  reserved 2, 3;
+  reserved "empty", "loading";
+  // What to do with the field while nothing is typed ("Search your notes"); empty once there is a
+  // term.
+  string hint = 4;
 }
 
 message NotesNotebooksData {
@@ -271,7 +285,9 @@ message NotesJournalData {
   repeated NotesJournalDaySection days = 1;
   string today = 2;
   string tz = 3;
-  EmptyState empty = 4;
+  // 4 was `empty`: a journal with no entry is the page's own Empty state (#1185).
+  reserved 4;
+  reserved "empty";
   bool truncated = 5;
   string window_end_verb = 6;
 }
@@ -445,11 +461,11 @@ message NotesEditorState {
   // 2 was `is_new`: nothing read it (#1152).
   reserved 2;
   reserved "is_new";
-  oneof content {
-    Loading loading = 3;
-    Failure failure = 4;
-    NotesEditorDraft draft = 5;
-  }
+  // 3 and 4 were `loading` and `failure`: the read is `page` (#1185).
+  reserved 3, 4;
+  reserved "loading", "failure";
+  // Set when the page is ready.
+  optional NotesEditorDraft draft = 5;
   NotesEditorChrome chrome = 6;
   Autosave autosave = 7;
   // The powerbox, while open.
@@ -486,6 +502,9 @@ message NotesEditorState {
   optional LinkSection links = 19;
   // The picker over that sheet, while it is up.
   optional LinkPicker link_picker = 20;
+  // THE NOTE'S READ (#1185): loading, failed (also a note that is gone or in the trash, with its
+  // own sentence), refused, or ready, with a note when a re-read failed over the words shown.
+  PageState page = 21;
 }
 
 // The menu row that opens the "Linked to" sheet.
@@ -640,17 +659,20 @@ message NotesLinkSheet {
   string retry = 5;
   string loading_label = 6;
   string foot = 7;
-  oneof content {
-    Loading loading = 8;
-    Failure failure = 9;
-    Denied denied = 10;
-    NotesLinkData data = 11;
-  }
+  // 8 to 11 were `loading`, `failure`, `denied` and `data`'s oneof (#1185).
+  reserved 8, 9, 10;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready.
+  optional NotesLinkData data = 11;
+  // The powerbox's read: nothing the term finds is the page's own Empty state.
+  PageState page = 12;
 }
 
 message NotesLinkData {
   repeated NotesLinkDomain domains = 1;
-  EmptyState empty = 2;
+  // 2 was `empty` (#1185).
+  reserved 2;
+  reserved "empty";
 }
 
 message NotesLinkDomain {

@@ -38,16 +38,7 @@ struct NotesEditorView: View {
     }
 
     private var draft: Centraid_Core_V1_NotesEditorDraft? {
-        if case let .draft(draft)? = state.content { return draft }
-        return nil
-    }
-
-    private var content: ScreenContent<Centraid_Core_V1_NotesEditorDraft> {
-        switch state.content {
-        case .loading?, nil: return .loading(true)
-        case let .failure(failure)?: return .failed(failure)
-        case let .draft(draft)?: return .data(draft)
-        }
+        state.hasDraft ? state.draft : nil
     }
 
     @FocusState private var tagFocused: Bool
@@ -122,11 +113,12 @@ struct NotesEditorView: View {
                 .accessibilityIdentifier("note-editor-menu")
             }
         } content: {
-            ReadStateView(
-                content: content,
-                skeleton: { RowSkeleton(rows: 4, meta: false, label: "") },
-                onRetry: { send(event { $0.refreshed = .init() }) }
-            ) { draft in
+            PageReadStateView(
+                page: state.page,
+                onRetry: { send(event { $0.refreshed = .init() }) },
+                skeleton: { RowSkeleton(rows: 4, meta: false, label: "") }
+            ) {
+                let draft = state.draft
                 VStack(alignment: .leading, spacing: 0) {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 8) {
@@ -473,15 +465,6 @@ private struct NotesLinkSheet: View {
         return event
     }
 
-    private var content: ScreenContent<Centraid_Core_V1_NotesLinkData> {
-        switch sheet.content {
-        case .loading?, nil: return .loading(true)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        }
-    }
-
     var body: some View {
         SheetRoom(title: sheet.title, status: sheet.foot) {
             CentraidSearchField(
@@ -492,29 +475,27 @@ private struct NotesLinkSheet: View {
                 onTerm: { term in send(event { $0.linkTerm = .with { $0.term = term } }) },
                 onClose: { send(event { $0.linkDismissed = .init() }) }
             )
-            ReadStateView(
-                content: content,
-                skeleton: { RowSkeleton(rows: 4, label: sheet.loadingLabel) },
-                onRetry: { send(event { $0.refreshed = .init() }) }
-            ) { picker in
-                if picker.domains.allSatisfy({ $0.rows.isEmpty }) {
-                    EmptyStateView(picker.empty)
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            ForEach(Array(picker.domains.enumerated()), id: \.offset) { _, domain in
-                                SectionHeader(title: domain.head.title, count: domain.head.count)
-                                    .padding(.horizontal, -CentraidGeometry.pageMargin)
-                                ForEach(domain.rows, id: \.id) { row in
-                                    CentraidRow(
-                                        title: row.title,
-                                        meta: row.subtitle,
-                                        accessibility: row.accessibilityLabel,
-                                        identifier: "notes-link-\(row.id)",
-                                        onTap: { send(event { $0.linkPicked = .with { $0.id = row.id } }) }
-                                    )
-                                    .padding(.horizontal, -CentraidGeometry.pageMargin)
-                                }
+            // The powerbox's read is the page: Retry reads the targets again.
+            PageReadStateView(
+                page: sheet.page,
+                onRetry: { send(event { $0.refreshed = .init() }) },
+                skeleton: { RowSkeleton(rows: 4, label: sheet.loadingLabel) }
+            ) {
+                let picker = sheet.data
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(picker.domains.enumerated()), id: \.offset) { _, domain in
+                            SectionHeader(title: domain.head.title, count: domain.head.count)
+                                .padding(.horizontal, -CentraidGeometry.pageMargin)
+                            ForEach(domain.rows, id: \.id) { row in
+                                CentraidRow(
+                                    title: row.title,
+                                    meta: row.subtitle,
+                                    accessibility: row.accessibilityLabel,
+                                    identifier: "notes-link-\(row.id)",
+                                    onTap: { send(event { $0.linkPicked = .with { $0.id = row.id } }) }
+                                )
+                                .padding(.horizontal, -CentraidGeometry.pageMargin)
                             }
                         }
                     }

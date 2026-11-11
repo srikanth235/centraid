@@ -26,6 +26,14 @@ fn journal(v: &wire::ViewState) -> &wire::NotesJournalData {
     }
 }
 
+/// The day the core reads as today: an empty journal is the page's empty state and carries none.
+fn core_today(d: &Driver) -> String {
+    let Answer::NotesJournal(core) = answer(d, load::notes::Journal::default()) else {
+        panic!("the journal answers");
+    };
+    core.today
+}
+
 fn clean() -> Driver {
     let d = driver();
     clear_notes(&d);
@@ -164,6 +172,7 @@ fn notebooks_unfiled_first_every_notebook_with_its_count_in_words() {
         "0 notes"
     );
     assert!(books(d.view(i)).empty.is_none());
+    assert!(home_state(d.view(i)).page.as_ref().unwrap().state.is_none());
 }
 
 #[test]
@@ -378,8 +387,8 @@ fn the_journal_groups_entries_by_the_local_day_newest_first_in_words() {
     let mut d = clean();
     let i = home(&mut d, wire::NotesPlace::Journal);
     // Seeded or not, today is the core's: stating it lets the entry be dated.
-    let today = journal(d.view(i)).today.clone();
-    assert!(!today.is_empty() || journal(d.view(i)).empty.is_some());
+    let today = core_today(&d);
+    assert!(!today.is_empty());
     let Answer::NotesJournal(core) = answer(&d, load::notes::Journal::default()) else {
         panic!("the journal answers");
     };
@@ -423,20 +432,20 @@ fn the_empty_journal_is_one_sentence() {
         }
     }
     let i = home(&mut d, wire::NotesPlace::Journal);
-    let empty = journal(d.view(i)).empty.clone().expect("empty");
+    let empty = empty_of(d.view(i)).clone();
     assert_eq!(empty.headline, "No journal entries yet");
     assert_eq!(
         empty.body,
         "Entries you write about people in People appear here."
     );
-    assert!(journal(d.view(i)).days.is_empty());
+    assert!(home_state(d.view(i)).content.is_none());
 }
 
 #[test]
 fn a_new_entry_opens_the_sheet_and_save_files_it_through_peoples_action_on_the_day_read() {
     let mut d = clean();
     let i = home(&mut d, wire::NotesPlace::Journal);
-    let today = journal(d.view(i)).today.clone();
+    let today = core_today(&d);
     assert!(!today.is_empty());
     send_home(&mut d, i, H::NewEntry(ev::NewEntryTapped {}));
     let compose = home_state(d.view(i)).compose.clone().expect("the sheet");

@@ -56,7 +56,7 @@ use wire::notes_editor_event::Kind as N;
 use wire::screen_event::Kind as E;
 
 use super::rich::{self, LinkTarget};
-use super::{Phase, denied, fold, routes};
+use super::{denied, fold, routes};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::autosave::{Autosave, Draft, Resolved};
@@ -64,7 +64,7 @@ use crate::kit::civil;
 use crate::kit::earlier;
 use crate::kit::export::ExportFile;
 use crate::kit::links::{self, Kind, Links, Outcome};
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Note, Page, Reading};
 use crate::kit::share::{self, Share};
 use crate::kit::undo::Undo as Door;
 use crate::screen::{Ctx, Screen};
@@ -253,7 +253,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         note_id: Some(args.note_id.clone()).filter(|id| !id.is_empty()),
         auto: Autosave::new(),
         blocked: None,
-        read_failure: None,
+        read_failure: false,
         denied: None,
         pinned: false,
         tags: Vec::new(),
@@ -287,7 +287,11 @@ struct LinkSheet {
     anchor: usize,
     replaces: bool,
     term: String,
-    phase: Phase<Vec<wire::NotesLinkTarget>>,
+    /// The read. Nothing the term finds is [`Page::Empty`].
+    page: Page<Vec<wire::NotesLinkTarget>>,
+    /// The trimmed term `page` answers: a read of a new term that fails is the failure, not the
+    /// last term's rows under a note.
+    asked: String,
 }
 
 struct Editor {
@@ -296,8 +300,8 @@ struct Editor {
     auto: Autosave<NoteDraft>,
     /// The read that replaced the editor: the note is gone, trashed or unreadable.
     blocked: Option<wire::Failure>,
-    /// A failed reread is said over the existing draft, never in its place.
-    read_failure: Option<String>,
+    /// A failed reread is said over the existing draft (the page's note), never in its place.
+    read_failure: bool,
     denied: Option<wire::AppQueryDenial>,
     pinned: bool,
     /// The tags the vault holds for the note: `(concept id, label)`.
@@ -391,7 +395,7 @@ impl Editor {
                 self.refuse(words::note_trashed(locale));
             }
             Reading::Data(note) => {
-                self.read_failure = None;
+                self.read_failure = false;
                 self.blocked = None;
                 self.denied = None;
                 self.pinned = note.pinned;
@@ -420,15 +424,35 @@ impl Editor {
             }
             Reading::Denied(denial) => {
                 self.auto = Autosave::new();
+                self.blocked = None;
                 self.denied = Some(denial);
             }
             Reading::Failed if self.auto.draft().is_some() => {
-                self.read_failure = Some(read::failure(locale).sentence);
+                self.read_failure = true;
             }
             Reading::Failed => {
                 self.auto = Autosave::new();
+                self.denied = None;
                 self.blocked = Some(read::failure(locale));
             }
+        }
+    }
+
+    /// THE NOTE'S READ: a gate (never retried by itself), a note that cannot be shown (gone, in
+    /// the trash or unreadable), the words with a note over them when a re-read failed, or the
+    /// first load.
+    fn page(&self, locale: Locale) -> Page<()> {
+        if let Some(denial) = &self.denied {
+            Page::Refused(denial.clone())
+        } else if self.blocked.is_some() {
+            Page::Failed
+        } else if self.auto.draft().is_some() {
+            Page::Ready {
+                data: (),
+                note: self.read_failure.then(|| Note::refresh_failed(locale)),
+            }
+        } else {
+            Page::loading()
         }
     }
 
@@ -866,6 +890,7 @@ impl Editor {
         self.links_open = false;
         self.links.close();
         self.auto = Autosave::new();
+        self.denied = None;
         self.blocked = Some(wire::Failure {
             sentence,
             remedy: String::new(),
@@ -876,7 +901,7 @@ impl Editor {
     /// before it existed lands.
     fn after_save(&mut self, ctx: &Ctx) {
         if self.auto.saved() {
-            self.read_failure = None;
+            self.read_failure = false;
         }
         if self.note_id.is_some() {
             return;
@@ -1011,7 +1036,8 @@ impl Editor {
             anchor,
             replaces,
             term: String::new(),
-            phase: Phase::Loading,
+            page: Page::loading(),
+            asked: String::new(),
         });
         self.read_links(ctx);
     }
@@ -1020,16 +1046,23 @@ impl Editor {
         let Some(sheet) = &mut self.link else {
             return;
         };
-        sheet.phase = Phase::of(read::read(
+        let term = sheet.term.trim().to_owned();
+        let reading = read::read(
             ctx,
-            load::notes::LinkTargets {
-                term: sheet.term.trim().to_owned(),
-            },
+            load::notes::LinkTargets { term: term.clone() },
             |answer| match answer {
                 Answer::NotesLinkTargets(found) => Some(found.targets),
                 _ => None,
             },
-        ));
+        );
+        let kept = std::mem::replace(&mut sheet.page, Page::loading());
+        let held = if sheet.asked == term {
+            kept.refreshing()
+        } else {
+            Page::loading()
+        };
+        sheet.asked = term;
+        sheet.page = held.after(reading, ctx.locale(), Vec::is_empty);
     }
 
     fn pick_link(&mut self, ctx: &Ctx, id: &str) {
@@ -1038,7 +1071,7 @@ impl Editor {
         };
         let locale = ctx.locale();
         let Some(target) = sheet
-            .phase
+            .page
             .data()
             .and_then(|targets| targets.iter().find(|target| target.id == id))
         else {
@@ -1119,9 +1152,11 @@ impl Editor {
                 self.links.close();
             }
             Some(N::Link(link)) => self.link_event(ctx, &link),
+            // Retry: the note is read again, and so is the powerbox when it is up.
             Some(N::Refreshed(_)) => {
                 self.own.clear();
                 self.reload_all(ctx);
+                self.read_links(ctx);
             }
             Some(N::ChecklistToggled(tapped)) => self.toggle(ctx, tapped.at),
             Some(N::StatusActed(_)) => return self.status_acted(ctx),
@@ -1312,28 +1347,19 @@ impl Editor {
     }
 
     fn sheet_view(&self, locale: Locale, sheet: &LinkSheet) -> wire::NotesLinkSheet {
-        let content = match &sheet.phase {
-            Phase::Loading => {
-                wire::notes_link_sheet::Content::Loading(wire::Loading { first_load: true })
-            }
-            Phase::Failed => wire::notes_link_sheet::Content::Failure(read::failure(locale)),
-            Phase::Denied(denial) => {
-                wire::notes_link_sheet::Content::Denied(denied(locale, denial))
-            }
-            Phase::Ready(targets) => {
-                let domains = fold::link_domains(locale, targets);
-                let empty = domains.is_empty().then(|| wire::EmptyState {
-                    headline: words::link_empty_headline(locale),
-                    body: if sheet.term.trim().is_empty() {
-                        words::link_empty_body(locale)
-                    } else {
-                        words::link_no_match_body(locale)
-                    },
-                    ..wire::EmptyState::default()
-                });
-                wire::notes_link_sheet::Content::Data(wire::NotesLinkData { domains, empty })
-            }
-        };
+        let page = sheet.page.wire(
+            locale,
+            |denial| denied(locale, denial),
+            || wire::EmptyState {
+                headline: words::link_empty_headline(locale),
+                body: if sheet.term.trim().is_empty() {
+                    words::link_empty_body(locale)
+                } else {
+                    words::link_no_match_body(locale)
+                },
+                ..wire::EmptyState::default()
+            },
+        );
         wire::NotesLinkSheet {
             term: sheet.term.clone(),
             title: words::link_title(locale),
@@ -1342,7 +1368,10 @@ impl Editor {
             retry: words::retry(locale),
             loading_label: words::loading_links(locale),
             foot: words::powerbox_foot(locale),
-            content: Some(content),
+            data: sheet.page.data().map(|targets| wire::NotesLinkData {
+                domains: fold::link_domains(locale, targets),
+            }),
+            page: Some(page),
         }
     }
 }
@@ -1478,23 +1507,20 @@ impl Screen for Editor {
                 draft.title.clone()
             }
         });
-        let content = match (draft, &self.blocked, &self.denied) {
-            (_, Some(failure), _) => wire::notes_editor_state::Content::Failure(failure.clone()),
-            (_, None, Some(denial)) => wire::notes_editor_state::Content::Failure(wire::Failure {
-                sentence: denied(locale, denial).body,
-                remedy: String::new(),
-            }),
-            (Some(draft), None, None) => {
-                wire::notes_editor_state::Content::Draft(wire::NotesEditorDraft {
-                    title: draft.title.clone(),
-                    body: draft.body.clone(),
-                    pinned: self.pinned,
-                })
-            }
-            (None, None, None) => {
-                wire::notes_editor_state::Content::Loading(wire::Loading { first_load: true })
-            }
-        };
+        let page = self.page(locale);
+        let ready = matches!(page, Page::Ready { .. });
+        let mut wired = page.wire(
+            locale,
+            |denial| denied(locale, denial),
+            wire::EmptyState::default,
+        );
+        // A note that is gone or in the trash says so in its own words (and where the member's
+        // text went), not the generic failure.
+        if let (Some(blocked), Some(wire::page_state::State::Failed(_))) =
+            (&self.blocked, &wired.state)
+        {
+            wired.state = Some(wire::page_state::State::Failed(blocked.clone()));
+        }
         let phase =
             wire::autosave::Phase::try_from(autosave.phase).unwrap_or(wire::autosave::Phase::Clean);
         let save_status = match phase {
@@ -1512,7 +1538,12 @@ impl Screen for Editor {
         let reminders_words = title.clone();
         let mut state = wire::NotesEditorState {
             note_id: self.note_id.clone().unwrap_or_default(),
-            content: Some(content),
+            page: Some(wired),
+            draft: draft.filter(|_| ready).map(|draft| wire::NotesEditorDraft {
+                title: draft.title.clone(),
+                body: draft.body.clone(),
+                pinned: self.pinned,
+            }),
             chrome: Some(wire::NotesEditorChrome {
                 // "Cancel" only before the first keystroke of this visit; after
                 // it, close = done, and an autosave does not undo that.
@@ -1533,9 +1564,8 @@ impl Screen for Editor {
                 status: if autosave.refused {
                     save_status
                 } else {
-                    self.read_failure
+                    self.status
                         .clone()
-                        .or_else(|| self.status.clone())
                         .or_else(|| self.share.status().map(|line| line.sentence))
                         .or_else(|| self.door.status().map(|line| line.sentence))
                         .or_else(|| self.earlier.status(locale).map(|unread| unread.sentence))
@@ -1548,7 +1578,6 @@ impl Screen for Editor {
                     shared::stale_reload_label(locale)
                 } else if (self.undo.is_some() || self.offer.is_some())
                     && !autosave.refused
-                    && self.read_failure.is_none()
                     && self.status.is_some()
                 {
                     match &self.offer {
@@ -1556,8 +1585,7 @@ impl Screen for Editor {
                         Some(Offer::Restore { .. }) => words::link_restore(locale),
                         None => words::undo(locale),
                     }
-                } else if self.status.is_none() && self.read_failure.is_none() && !autosave.refused
-                {
+                } else if self.status.is_none() && !autosave.refused {
                     self.door
                         .status()
                         .map(|line| line.action_label)
@@ -1619,7 +1647,7 @@ impl Screen for Editor {
             }),
             ..wire::NotesEditorState::default()
         };
-        if let (Some(draft), None, None) = (draft, &self.blocked, &self.denied) {
+        if let (Some(draft), true) = (draft, ready) {
             state.rich = Some(self.rich_view(locale, &rich::parse(&draft.body)));
         }
         // WHERE IT CAME FROM (#1185): the menu's quiet "From ..." line, read with the entry.
@@ -1778,12 +1806,17 @@ mod tests {
         let Some(wire::view_state::Kind::NotesEditor(state)) = state.kind else {
             panic!("editor state")
         };
-        assert!(
-            matches!(state.content, Some(wire::notes_editor_state::Content::Draft(ref draft)) if draft.body == "only copy")
-        );
-        assert_eq!(
+        assert!(matches!(state.draft, Some(ref draft) if draft.body == "only copy"));
+        // The failed re-read is the page's note over the words, never the status line.
+        let page = state.page.expect("page");
+        assert!(page.state.is_none(), "the words stay ready");
+        let note = page.note.expect("a note over the words");
+        assert_eq!(note.sentence, shared::read_refresh_failed(Locale::En));
+        assert_eq!(note.action_label, shared::kit_retry(Locale::En));
+        assert_ne!(
             state.chrome.expect("chrome").status,
-            "Couldn't read this. Try again."
+            note.sentence,
+            "a read is not a write result"
         );
         core.fail_writes.set(true);
         send(
@@ -1797,9 +1830,7 @@ mod tests {
             panic!("editor state")
         };
         assert!(state.autosave.expect("autosave").refused);
-        assert!(
-            matches!(state.content, Some(wire::notes_editor_state::Content::Draft(ref draft)) if draft.body == "only copy")
-        );
+        assert!(matches!(state.draft, Some(ref draft) if draft.body == "only copy"));
         core.fail_writes.set(false);
         send(&mut screen, E::Left(wire::Left {}));
         core.fail_reads.set(false);
@@ -2033,9 +2064,9 @@ mod tests {
     }
 
     fn body_of(state: &wire::NotesEditorState) -> String {
-        match &state.content {
-            Some(wire::notes_editor_state::Content::Draft(draft)) => draft.body.clone(),
-            other => panic!("no draft: {other:?}"),
+        match &state.draft {
+            Some(draft) => draft.body.clone(),
+            None => panic!("no draft: {:?}", state.page),
         }
     }
 

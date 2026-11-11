@@ -22,9 +22,9 @@ fn open(d: &mut Driver, id: &str) -> u64 {
 }
 
 fn draft(v: &wire::ViewState) -> &wire::NotesEditorDraft {
-    match &editor_state(v).content {
-        Some(wire::notes_editor_state::Content::Draft(draft)) => draft,
-        other => panic!("not a draft: {other:?}"),
+    match &editor_state(v).draft {
+        Some(draft) => draft,
+        None => panic!("not a draft: {:?}", editor_state(v).page),
     }
 }
 
@@ -52,13 +52,13 @@ fn link(v: &wire::ViewState) -> &wire::NotesLinkSheet {
 }
 
 fn link_ids(v: &wire::ViewState) -> Vec<String> {
-    match link(v).content.as_ref().unwrap() {
-        wire::notes_link_sheet::Content::Data(data) => data
+    match &link(v).data {
+        Some(data) => data
             .domains
             .iter()
             .flat_map(|domain| domain.rows.iter().map(|row| row.id.clone()))
             .collect(),
-        other => panic!("no link data: {other:?}"),
+        None => panic!("no link data: {:?}", link(v).page),
     }
 }
 
@@ -388,8 +388,8 @@ fn a_note_moved_to_the_trash_elsewhere_refuses_the_save_and_reload_keeps_the_wor
     assert_eq!(draft(d.view(i)).body, "my typing");
     send_editor(&mut d, i, N::StatusActed(ev::StatusActed {}));
     // The trashed state is shown, and says where the words went.
-    match &editor_state(d.view(i)).content {
-        Some(wire::notes_editor_state::Content::Failure(failure)) => {
+    match page_of(editor_state(d.view(i)).page.as_ref()) {
+        Some(wire::page_state::State::Failed(failure)) => {
             assert_eq!(failure.sentence, "This note is in the trash.");
             assert_eq!(
                 failure.remedy,
@@ -503,8 +503,8 @@ fn the_body_is_always_here_so_a_cleared_body_is_saved_as_empty() {
 fn a_note_that_is_not_here_or_is_in_the_trash_is_a_sentence_not_an_empty_editor() {
     let mut d = driver();
     let gone = open(&mut d, "no-such-note");
-    match &editor_state(d.view(gone)).content {
-        Some(wire::notes_editor_state::Content::Failure(failure)) => {
+    match page_of(editor_state(d.view(gone)).page.as_ref()) {
+        Some(wire::page_state::State::Failed(failure)) => {
             assert_eq!(failure.sentence, "This note isn't on this phone.");
         }
         other => panic!("not a failure: {other:?}"),
@@ -517,8 +517,8 @@ fn a_note_that_is_not_here_or_is_in_the_trash_is_a_sentence_not_an_empty_editor(
         },
     );
     let trashed = open(&mut d, &id);
-    match &editor_state(d.view(trashed)).content {
-        Some(wire::notes_editor_state::Content::Failure(failure)) => {
+    match page_of(editor_state(d.view(trashed)).page.as_ref()) {
+        Some(wire::page_state::State::Failed(failure)) => {
             assert_eq!(failure.sentence, "This note is in the trash.");
         }
         other => panic!("not a failure: {other:?}"),
@@ -579,8 +579,8 @@ fn the_powerbox_reads_link_targets_grouped_by_domain() {
         }),
     );
     assert!(link_ids(d.view(i)).contains(&target));
-    match link(d.view(i)).content.as_ref().unwrap() {
-        wire::notes_link_sheet::Content::Data(data) => {
+    match &link(d.view(i)).data {
+        Some(data) => {
             let notes_group = data
                 .domains
                 .iter()
@@ -597,7 +597,7 @@ fn the_powerbox_reads_link_targets_grouped_by_domain() {
             assert_eq!(row.subtitle, "Note");
             assert_eq!(row.app_id, "notes");
         }
-        other => panic!("{other:?}"),
+        None => panic!("{:?}", link(d.view(i)).page),
     }
     // Nothing matches: one sentence.
     send_editor(
@@ -607,12 +607,10 @@ fn the_powerbox_reads_link_targets_grouped_by_domain() {
             term: "zzqxvv".into(),
         }),
     );
-    match link(d.view(i)).content.as_ref().unwrap() {
-        wire::notes_link_sheet::Content::Data(data) => {
-            assert_eq!(
-                data.empty.as_ref().unwrap().body,
-                "Nothing matches that search."
-            );
+    match page_of(link(d.view(i)).page.as_ref()) {
+        Some(wire::page_state::State::Empty(empty)) => {
+            assert_eq!(empty.body, "Nothing matches that search.");
+            assert!(link(d.view(i)).data.is_none());
         }
         other => panic!("{other:?}"),
     }

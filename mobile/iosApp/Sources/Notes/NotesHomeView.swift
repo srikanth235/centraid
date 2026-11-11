@@ -18,8 +18,9 @@ struct NotesHomeView: View {
 
     @Environment(\.colorScheme) private var scheme
 
+    /// The gate hides the header's actions (Rust left the band and More empty); nothing else is read here.
     private var denied: Bool {
-        if case .denied? = state.content { return true }
+        if case .refused? = state.page.state { return true }
         return false
     }
 
@@ -49,16 +50,19 @@ struct NotesHomeView: View {
             )
         } content: {
             VStack(spacing: 0) {
-                if isNotesPlace, state.search.open, case .library? = state.content {
-                    searchResults
-                } else {
-                    ReadStateView(
-                        content: readContent,
-                        loadingLabel: chrome.loading,
-                        onRetry: { send(NotesEvents.home { $0.refreshed = .init() }) }
-                    ) { _ in
-                        placeContent
-                    }
+                PageReadStateView(
+                    page: state.page,
+                    loadingLabel: chrome.loading,
+                    onRetry: { send(NotesEvents.home { $0.refreshed = .init() }) },
+                    // The empty Notes place's one action is a new note; the other empties carry none.
+                    onEmptyAction: { open(state.newNote) }
+                ) {
+                    placeContent
+                }
+                // THE ASK ROW closes an answer that matched nothing too (#1097): with matches it
+                // rides at the foot of the results, so only an answer with none draws it here.
+                if isNotesPlace, state.search.open, !state.search.hasResults, state.search.hasAsk {
+                    SearchAskRow(ask: state.search.ask)
                 }
                 StatusLineView(status: state.status, identifier: "notes-status-action")
             }
@@ -185,54 +189,49 @@ struct NotesHomeView: View {
 
     // MARK: content
 
-    private var readContent: ScreenContent<Bool> {
-        switch state.content {
-        case .loading?, nil: return .loading(true)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        default: return .data(true)
-        }
-    }
-
     @ViewBuilder
     private var placeContent: some View {
-        switch state.content {
-        case let .library(library)?: NotesLibraryList(library: library, state: state, send: send, open: open)
-        case let .notebooks(notebooks)?: notebooksList(notebooks)
-        case let .journal(journal)?: journalList(journal)
-        default: EmptyView()
+        if isNotesPlace, state.search.open {
+            searchResults
+        } else {
+            switch state.content {
+            case let .library(library)?: NotesLibraryList(library: library, state: state, send: send, open: open)
+            case let .notebooks(notebooks)?: notebooksList(notebooks)
+            case let .journal(journal)?: journalList(journal)
+            case nil: EmptyView()
+            }
         }
     }
 
     private var searchResults: some View {
-        Group {
-            if let results = state.search.hasResults ? state.search.results : nil,
-               results.rows.isEmpty, state.search.containers.isEmpty {
-                EmptyStateView(results.empty)
-                if state.search.hasAsk { SearchAskRow(ask: state.search.ask) }
-                Spacer(minLength: 0)
-            } else {
-                ScrollView {
-                    VStack(spacing: 0) {
-                        // THE NOTEBOOKS WHOSE NAME MATCHED come first (#1097).
-                        ForEach(state.search.containers, id: \.id) { container in
-                            SearchContainerRow(container: container) { _ in open(container.route) }
+        ScrollView {
+            VStack(spacing: 0) {
+                // NOTHING TYPED YET says what the field does.
+                if !state.search.results.hint.isEmpty {
+                    Text(state.search.results.hint)
+                        .kitType(.meta)
+                        .foregroundStyle(Surface.meta)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, CentraidGeometry.pageMargin + 2)
+                        .padding(.vertical, 8)
+                }
+                // THE NOTEBOOKS WHOSE NAME MATCHED come first (#1097).
+                ForEach(state.search.containers, id: \.id) { container in
+                    SearchContainerRow(container: container) { _ in open(container.route) }
+                }
+                let found = state.search.results.rows
+                if !found.isEmpty {
+                    NotesCard {
+                        ForEach(Array(found.enumerated()), id: \.element.noteID) { at, row in
+                            NotesRowView(row: row, chrome: nil, onTap: { open(row.route) }, send: send)
+                            if at < found.count - 1 { NotesCardRule() }
                         }
-                        let found = state.search.results.rows
-                        if !found.isEmpty {
-                            NotesCard {
-                                ForEach(Array(found.enumerated()), id: \.element.noteID) { at, row in
-                                    NotesRowView(row: row, chrome: nil, onTap: { open(row.route) }, send: send)
-                                    if at < found.count - 1 { NotesCardRule() }
-                                }
-                            }
-                        }
-                        if state.search.hasAsk { SearchAskRow(ask: state.search.ask) }
                     }
                 }
-                .accessibilityIdentifier("notes-search-results")
+                if state.search.hasAsk { SearchAskRow(ask: state.search.ask) }
             }
         }
+        .accessibilityIdentifier("notes-search-results")
     }
 
     private func notebooksList(_ notebooks: Centraid_Core_V1_NotesNotebooksData) -> some View {
@@ -296,40 +295,34 @@ struct NotesHomeView: View {
     }
 
     private func journalList(_ journal: Centraid_Core_V1_NotesJournalData) -> some View {
-        Group {
-            if journal.days.isEmpty {
-                EmptyStateView(journal.empty)
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        if !state.chrome.journalOrigin.isEmpty {
-                            Text(state.chrome.journalOrigin)
-                                .kitType(.meta)
-                                .foregroundStyle(Surface.meta)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, CentraidGeometry.pageMargin + 2)
-                                .padding(.bottom, 4)
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                if !state.chrome.journalOrigin.isEmpty {
+                    Text(state.chrome.journalOrigin)
+                        .kitType(.meta)
+                        .foregroundStyle(Surface.meta)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, CentraidGeometry.pageMargin + 2)
+                        .padding(.bottom, 4)
+                }
+                ForEach(journal.days, id: \.day) { day in
+                    NotesSectionTitle(title: day.head.title, pinned: false)
+                    NotesCard {
+                        ForEach(Array(day.rows.enumerated()), id: \.element.noteID) { at, row in
+                            CentraidRow(journalListRow(row)) { open(row.route) }
+                            if at < day.rows.count - 1 { NotesCardRule() }
                         }
-                        ForEach(journal.days, id: \.day) { day in
-                            NotesSectionTitle(title: day.head.title, pinned: false)
-                            NotesCard {
-                                ForEach(Array(day.rows.enumerated()), id: \.element.noteID) { at, row in
-                                    CentraidRow(journalListRow(row)) { open(row.route) }
-                                    if at < day.rows.count - 1 { NotesCardRule() }
-                                }
-                            }
-                        }
-                        ShowMoreFooter(
-                            visible: journal.truncated,
-                            label: journal.windowEndVerb,
-                            onMore: { send(NotesEvents.home { $0.windowWidened = .init() }) }
-                        )
                     }
                 }
-                .refreshable { send(NotesEvents.home { $0.refreshed = .init() }) }
-                .accessibilityIdentifier("notes-journal")
+                ShowMoreFooter(
+                    visible: journal.truncated,
+                    label: journal.windowEndVerb,
+                    onMore: { send(NotesEvents.home { $0.windowWidened = .init() }) }
+                )
             }
         }
+        .refreshable { send(NotesEvents.home { $0.refreshed = .init() }) }
+        .accessibilityIdentifier("notes-journal")
     }
 }
 
@@ -354,55 +347,50 @@ private struct NotesLibraryList: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if library.sections.allSatisfy({ $0.rows.isEmpty }) {
-                EmptyStateView(library.empty, onAction: { open(state.newNote) })
-                Spacer(minLength: 0)
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        if !library.countLabel.isEmpty {
-                            Text(library.countLabel)
-                                .kitType(.meta)
-                                .foregroundStyle(Surface.meta)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, CentraidGeometry.pageMargin + 2)
-                                .padding(.bottom, 4)
-                                .accessibilityIdentifier("notes-count")
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    if !library.countLabel.isEmpty {
+                        Text(library.countLabel)
+                            .kitType(.meta)
+                            .foregroundStyle(Surface.meta)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, CentraidGeometry.pageMargin + 2)
+                            .padding(.bottom, 4)
+                            .accessibilityIdentifier("notes-count")
+                    }
+                    ForEach(Array(library.sections.enumerated()), id: \.offset) { _, section in
+                        if !section.head.title.isEmpty {
+                            NotesSectionTitle(title: section.head.title, pinned: section.rows.first?.pinned == true)
                         }
-                        ForEach(Array(library.sections.enumerated()), id: \.offset) { _, section in
-                            if !section.head.title.isEmpty {
-                                NotesSectionTitle(title: section.head.title, pinned: section.rows.first?.pinned == true)
+                        NotesCard {
+                            ForEach(Array(section.rows.enumerated()), id: \.element.noteID) { at, row in
+                                NotesRowView(
+                                    row: row,
+                                    chrome: state.chrome,
+                                    onTap: { open(row.route) },
+                                    send: send
+                                )
+                                if at < section.rows.count - 1 { NotesCardRule() }
                             }
-                            NotesCard {
-                                ForEach(Array(section.rows.enumerated()), id: \.element.noteID) { at, row in
-                                    NotesRowView(
-                                        row: row,
-                                        chrome: state.chrome,
-                                        onTap: { open(row.route) },
-                                        send: send
-                                    )
-                                    if at < section.rows.count - 1 { NotesCardRule() }
-                                }
-                            }
-                        }
-                        if library.truncated {
-                            if !library.windowEndLabel.isEmpty {
-                                Text(library.windowEndLabel)
-                                    .centraidType("small")
-                                    .foregroundStyle(Theme.color("textSoft", scheme))
-                                    .padding(.top, 12)
-                            }
-                            ShowMoreFooter(
-                                visible: library.canWiden,
-                                label: library.windowEndVerb,
-                                onMore: { send(NotesEvents.home { $0.windowWidened = .init() }) }
-                            )
                         }
                     }
+                    if library.truncated {
+                        if !library.windowEndLabel.isEmpty {
+                            Text(library.windowEndLabel)
+                                .centraidType("small")
+                                .foregroundStyle(Theme.color("textSoft", scheme))
+                                .padding(.top, 12)
+                        }
+                        ShowMoreFooter(
+                            visible: library.canWiden,
+                            label: library.windowEndVerb,
+                            onMore: { send(NotesEvents.home { $0.windowWidened = .init() }) }
+                        )
+                    }
                 }
-                .refreshable { send(NotesEvents.home { $0.refreshed = .init() }) }
-                .accessibilityIdentifier("notes-library")
             }
+            .refreshable { send(NotesEvents.home { $0.refreshed = .init() }) }
+            .accessibilityIdentifier("notes-library")
         }
     }
 }

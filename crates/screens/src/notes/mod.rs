@@ -19,7 +19,6 @@
 use centraid_api_proto::core_v1 as wire;
 
 use crate::Registry;
-use crate::kit::read::Reading;
 
 pub mod earlier;
 pub mod editor;
@@ -64,33 +63,6 @@ pub fn runtime() -> crate::Runtime {
             routes::home(wire::NotesPlace::Notes, "", "", false),
         )],
     )
-}
-
-/// What a read came to while a screen waits on it: nothing yet, a refusal, a
-/// gate or the answer. A failed read is never an empty list.
-#[derive(Clone, Debug)]
-pub(crate) enum Phase<T> {
-    Loading,
-    Failed,
-    Denied(wire::AppQueryDenial),
-    Ready(T),
-}
-
-impl<T> Phase<T> {
-    pub(crate) fn of(reading: Reading<T>) -> Self {
-        match reading {
-            Reading::Data(data) => Self::Ready(data),
-            Reading::Denied(denial) => Self::Denied(denial),
-            Reading::Failed => Self::Failed,
-        }
-    }
-
-    pub(crate) fn data(&self) -> Option<&T> {
-        match self {
-            Self::Ready(data) => Some(data),
-            _ => None,
-        }
-    }
 }
 
 /// The gate drawn when the vault will not let Notes read: the core's own code

@@ -18,12 +18,12 @@ use centraid_api_proto::core_v1 as wire;
 use wire::notes_home_event::Kind as H;
 use wire::screen_event::Kind as E;
 
-use super::{Phase, denied, routes};
+use super::routes;
 use crate::catalog::act;
 use crate::kit::act as kit_act;
 use crate::kit::export;
 use crate::kit::menu;
-use crate::kit::read;
+use crate::kit::read::Page;
 use crate::kit::undo::Undo as Door;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, notes as words, shared};
@@ -33,7 +33,7 @@ mod library;
 mod notebooks;
 
 use journal::{Compose, Journal};
-use library::{Content, Library};
+use library::Library;
 use notebooks::{Form, Notebooks, UNFILED};
 
 #[must_use]
@@ -92,9 +92,9 @@ impl Home {
 
     fn denied(&self) -> bool {
         match self.place {
-            wire::NotesPlace::Notebooks => matches!(self.notebooks.phase, Phase::Denied(_)),
-            wire::NotesPlace::Journal => matches!(self.journal.phase, Phase::Denied(_)),
-            _ => matches!(self.library.phase, Phase::Denied(_)),
+            wire::NotesPlace::Notebooks => matches!(self.notebooks.page, Page::Refused(_)),
+            wire::NotesPlace::Journal => matches!(self.journal.page, Page::Refused(_)),
+            _ => matches!(self.library.page, Page::Refused(_)),
         }
     }
 
@@ -341,18 +341,18 @@ impl Home {
         if self.compose.is_some() {
             return;
         }
-        let Some(journal) = self.journal.phase.data() else {
+        let Some((today, tz)) = self.journal.clock() else {
             return;
         };
         // No day to date it by: the answer has not landed, so nothing opens.
-        if journal.today.is_empty() {
+        if today.is_empty() {
             return;
         }
         self.compose = Some(Compose {
-            day: journal.today.clone(),
+            day: today.clone(),
             // The zone the day was read in rides with the sheet, so the entry
             // is filed on `day` IN it (east of UTC+11:59 noon UTC is the next day).
-            tz: journal.tz.clone(),
+            tz: tz.clone(),
             mood: String::new(),
             text: String::new(),
             status: String::new(),
@@ -565,7 +565,7 @@ impl Home {
                 };
                 let choices = if self.sheet == wire::NotesSheet::FileInto {
                     self.library
-                        .phase
+                        .page
                         .data()
                         .map(|library| {
                             super::fold::file_choices(
@@ -620,27 +620,30 @@ impl Screen for Home {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::notes_home_state::Content as C;
         let locale = ctx.locale();
-        let loading = || C::Loading(wire::Loading { first_load: true });
-        let from_phase = |content: Content| match content {
-            Content::Loading => loading(),
-            Content::Failed => C::Failure(read::failure(locale)),
-            Content::Denied(denial) => C::Denied(denied(locale, &denial)),
-            Content::Data(data) => C::Library(data),
-        };
-        let content = match self.place {
-            wire::NotesPlace::Notebooks => match &self.notebooks.phase {
-                Phase::Loading => loading(),
-                Phase::Failed => C::Failure(read::failure(locale)),
-                Phase::Denied(denial) => C::Denied(denied(locale, denial)),
-                Phase::Ready(answer) => C::Notebooks(Notebooks::data(locale, answer)),
-            },
-            wire::NotesPlace::Journal => match &self.journal.phase {
-                Phase::Loading => loading(),
-                Phase::Failed => C::Failure(read::failure(locale)),
-                Phase::Denied(denial) => C::Denied(denied(locale, denial)),
-                Phase::Ready(answer) => C::Journal(Journal::data(locale, ctx.hour_cycle(), answer)),
-            },
-            _ => from_phase(self.library.content(locale)),
+        // The read is the page; the data is the place that is showing, when the page is ready
+        // (and not over an open search, whose rows are `search`).
+        let (page, content) = match self.place {
+            wire::NotesPlace::Notebooks => (
+                self.notebooks.wire(locale),
+                self.notebooks
+                    .page
+                    .data()
+                    .map(|answer| C::Notebooks(Notebooks::data(locale, answer))),
+            ),
+            wire::NotesPlace::Journal => (
+                self.journal.wire(locale),
+                self.journal
+                    .page
+                    .data()
+                    .map(|answer| C::Journal(Journal::data(locale, ctx.hour_cycle(), answer))),
+            ),
+            _ => (
+                self.library.wire(locale),
+                self.library
+                    .shelf(locale)
+                    .filter(|_| !self.library.search.open)
+                    .map(C::Library),
+            ),
         };
         let notes_place = !matches!(
             self.place,
@@ -653,7 +656,8 @@ impl Screen for Home {
             title: self.title(locale),
             band: self.band(locale),
             chrome: Some(Self::chrome(locale, self.place)),
-            content: Some(content),
+            content,
+            page: Some(page),
             search: notes_place.then(|| self.library.search_state(locale)),
             more_rows: if denied_now {
                 Vec::new()

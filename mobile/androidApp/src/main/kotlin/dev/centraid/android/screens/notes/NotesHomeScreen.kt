@@ -23,6 +23,7 @@ import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.SearchAskRow
 import dev.centraid.design.CentraidScale
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -76,7 +77,6 @@ import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
-import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -100,7 +100,8 @@ public fun NotesHomeScreen(
     val chrome = state.chrome
     val notesPlace = state.place != NotesPlace.NOTES_PLACE_NOTEBOOKS && state.place != NotesPlace.NOTES_PLACE_JOURNAL
     val search = state.search
-    val denied = state.denied
+    // The gate hides the header's actions (Rust left the band and More empty); nothing else is read here.
+    val denied = state.page?.refused
     AppPlace(
         app = "notes",
         title = state.title,
@@ -149,41 +150,46 @@ public fun NotesHomeScreen(
         statusLine = { StatusLine(state.status) },
         band = if (state.band.isEmpty()) null else ({ NotesBand(state.band, { key -> onEvent(NotesHomeEvent(band = NotesHomeEvent.BandPicked(key))) }, onHome) }),
     ) {
-        val results = search?.results
-        if (notesPlace && search?.open_ == true && results != null && state.library != null) {
-            LazyColumn(Modifier.testTag("notes-search-results")) {
-                val empty = results.empty
-                if (results.rows.isEmpty() && search.containers.isEmpty() && empty != null) {
-                    item(key = "empty") {
-                        if (empty.headline.isEmpty()) Quiet(empty.body) else EmptyStateView(empty, onAction = null)
-                    }
-                }
-                // THE NOTEBOOKS WHOSE NAME MATCHED come first (#1097), through the route they carry.
-                items(search.containers, key = { "c-${it.entity}-${it.id}" }) { container ->
-                    SearchContainerRow(container, onOpen = onOpen)
-                }
-                itemsIndexed(results.rows, key = { _, row -> "s-" + row.note_id }) { at, row -> NoteTile(row, state, at, results.rows.size, onOpen, onEvent) }
-                // THE ASK ROW closes the answer, whether or not anything matched (#1097).
-                item(key = "ask") { SearchAskRow(search.ask, onOpen) }
-            }
-        } else {
+        val searching = notesPlace && search?.open_ == true
+        Column(Modifier.fillMaxSize()) {
             ReadStateView(
-                content = screenContentOf(
-                    state.loading,
-                    state.failure,
-                    state.library ?: state.notebooks ?: state.journal,
-                    state.denied,
-                ),
+                page = state.page!!,
                 onRetry = { onEvent(NotesHomeEvent(refreshed = NotesHomeEvent.Refreshed())) },
+                modifier = Modifier.weight(1f),
+                // The empty Notes place's one action is a new note; the other empties carry none.
+                onEmptyAction = { state.new_note?.let(onOpen) },
                 retryLabel = chrome?.retry.orEmpty(),
                 skeleton = { RowSkeleton(label = chrome?.loading.orEmpty()) },
-            ) { data ->
-                when (data) {
-                    is NotesLibraryData -> LibraryList(data, state, onOpen, onEvent)
-                    is NotesNotebooksData -> NotebooksList(data, state, onEvent)
-                    is NotesJournalData -> JournalList(data, state, onOpen, onEvent)
+            ) {
+                val results = search?.results
+                val library = state.library
+                val notebooks = state.notebooks
+                val journal = state.journal
+                if (searching && search != null && results != null) {
+                    LazyColumn(Modifier.testTag("notes-search-results")) {
+                        // NOTHING TYPED YET says what the field does.
+                        if (results.hint.isNotEmpty()) {
+                            item(key = "hint") { Quiet(results.hint) }
+                        }
+                        // THE NOTEBOOKS WHOSE NAME MATCHED come first (#1097), through the route they carry.
+                        items(search.containers, key = { "c-${it.entity}-${it.id}" }) { container ->
+                            SearchContainerRow(container, onOpen = onOpen)
+                        }
+                        itemsIndexed(results.rows, key = { _, row -> "s-" + row.note_id }) { at, row -> NoteTile(row, state, at, results.rows.size, onOpen, onEvent) }
+                        // THE ASK ROW closes the answer, whether or not anything matched (#1097).
+                        item(key = "ask") { SearchAskRow(search.ask, onOpen) }
+                    }
+                } else if (library != null) {
+                    LibraryList(library, state, onOpen, onEvent)
+                } else if (notebooks != null) {
+                    NotebooksList(notebooks, state, onEvent)
+                } else if (journal != null) {
+                    JournalList(journal, state, onOpen, onEvent)
                 }
             }
+            // THE ASK ROW closes an answer that matched nothing too (#1097): with matches it rides
+            // at the foot of the results above, so only an answer with none draws it here.
+            if (searching && search?.results == null) SearchAskRow(search?.ask, onOpen)
         }
     }
     HomeSheets(state, onEvent, onOpen)
@@ -207,12 +213,6 @@ private fun LibraryList(
     onEvent: (NotesHomeEvent) -> Unit,
 ) {
     LazyColumn(Modifier.testTag("notes-library")) {
-        val empty = data.empty
-        if (data.sections.all { it.rows.isEmpty() } && empty != null) {
-            item(key = "empty") {
-                EmptyStateView(empty, onAction = { state.new_note?.let(onOpen) })
-            }
-        }
         sections(data, state, onOpen, onEvent)
         if (data.truncated) {
             item(key = "window") {
@@ -426,11 +426,6 @@ private fun JournalList(
     onOpen: (Route) -> Unit,
     onEvent: (NotesHomeEvent) -> Unit,
 ) {
-    val empty = data.empty
-    if (data.days.isEmpty() && empty != null) {
-        EmptyStateView(empty, onAction = null)
-        return
-    }
     LazyColumn(Modifier.testTag("notes-journal")) {
         item(key = "origin") { Quiet(state.chrome?.journal_origin.orEmpty()) }
         data.days.forEach { day ->

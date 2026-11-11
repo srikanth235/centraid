@@ -20,9 +20,9 @@ use wire::app_query_response::Answer;
 
 use crate::catalog::load;
 use crate::kit::menu;
-use crate::kit::read;
+use crate::kit::read::{self, Note, Page, Reading};
 use crate::kit::search;
-use crate::notes::{Phase, fold, routes};
+use crate::notes::{denied, fold, routes};
 use crate::screen::Ctx;
 use crate::strings::{Locale, fill, notes as words};
 
@@ -49,8 +49,29 @@ const SORT_TITLE: &str = "title";
 pub(super) struct Search {
     pub open: bool,
     pub term: String,
-    /// The answer for the trimmed `term`, once there is one to ask.
-    pub held: Option<Phase<wire::NotesSearch>>,
+    /// The answer for the trimmed `term`, once there is one to ask. A search that matched
+    /// nothing is [`Page::Empty`], never ready data.
+    pub held: Option<Page<wire::NotesSearch>>,
+    /// The trimmed term `held` answers: a read of a new term that fails is the failure, not the
+    /// last term's rows under a note.
+    answered: String,
+}
+
+/// Did the search match nothing? A notebook whose name matched is an answer (#1097).
+fn matched_nothing(found: &wire::NotesSearch) -> bool {
+    found.hits.is_empty()
+        && !found
+            .containers
+            .iter()
+            .any(|hit| hit.entity == "notebook" && hit.app_id == "notes")
+}
+
+/// Does a row pass the About options? With neither on, every row does.
+fn passes(about_people: bool, about_events: bool, row: &wire::NotesRow) -> bool {
+    (!about_people && !about_events)
+        || row.about.iter().any(|card| {
+            (about_people && card.entity == "person") || (about_events && card.entity == "event")
+        })
 }
 
 impl Search {
@@ -71,7 +92,14 @@ pub(super) struct Library {
     pub notebook_id: String,
     pub notebook_name: String,
     pub unfiled_only: bool,
-    pub phase: Phase<wire::NotesLibrary>,
+    /// The read. Nothing the filters leave is [`Page::Empty`] (see [`Library::wire`]).
+    pub page: Page<wire::NotesLibrary>,
+    /// What the read was asked for, apart from its window: data read for another filter, sort
+    /// or notebook is not shown under a failed read of this one.
+    asked: String,
+    /// The tags the window saw, from the last answer that came (the filter menu's options stay
+    /// while a filter leaves nothing).
+    tags: Vec<wire::NotesTagFacet>,
     pub search: Search,
 }
 
@@ -87,14 +115,34 @@ impl Library {
             notebook_id: notebook_id.to_owned(),
             notebook_name: notebook_name.to_owned(),
             unfiled_only: unfiled_only && notebook_id.is_empty(),
-            phase: Phase::Loading,
+            page: Page::loading(),
+            asked: String::new(),
+            tags: Vec::new(),
             search: Search::default(),
         }
     }
 
     pub fn reload(&mut self, ctx: &Ctx) {
+        self.read(ctx, false);
+    }
+
+    /// The read the shelf was last asked for, without its window.
+    fn query_key(&self) -> String {
+        format!(
+            "{}/{}/{}/{}/{}",
+            sort_key(self.sort),
+            self.pinned_only,
+            self.tag_ids.join(","),
+            self.notebook_id,
+            self.unfiled_only && self.notebook_id.is_empty()
+        )
+    }
+
+    /// Read the shelf (or search's answer); `wider` says the window grew, so a read that did not
+    /// come keeps the rows already shown under the "more did not load" note.
+    fn read(&mut self, ctx: &Ctx, wider: bool) {
         if self.search.active() {
-            self.search.held = Some(self.read_search(ctx));
+            self.read_search(ctx);
             return;
         }
         let sort = sort_key(self.sort);
@@ -107,24 +155,57 @@ impl Library {
                 .then(|| serde_json::to_string(&self.tag_ids).unwrap_or_default()),
             unfiled_only: (self.unfiled_only && self.notebook_id.is_empty()).then_some(1),
         };
-        // The rows stay drawn while a refresh reads (a synchronous read leaves no gap).
-        self.phase = Phase::of(read::read(ctx, request, |answer| match answer {
+        let reading = read::read(ctx, request, |answer| match answer {
             Answer::NotesLibrary(library) => Some(library),
             _ => None,
-        }));
+        });
+        self.landed(ctx.locale(), reading, wider);
     }
 
-    fn read_search(&self, ctx: &Ctx) -> Phase<wire::NotesSearch> {
-        Phase::of(read::read(
-            ctx,
-            load::notes::Search {
-                term: self.search.term.trim().to_owned(),
+    /// The page after `reading` landed over the one before. A refresh never blanks the rows
+    /// shown (a failed one keeps them under a note); a read for another filter, sort or notebook
+    /// starts from nothing, so a failure of it is the failure and never the old rows.
+    fn landed(&mut self, locale: Locale, reading: Reading<wire::NotesLibrary>, wider: bool) {
+        if let Reading::Data(library) = &reading {
+            self.tags.clone_from(&library.tags);
+        }
+        let key = self.query_key();
+        let kept = std::mem::replace(&mut self.page, Page::loading());
+        let held = if self.asked == key {
+            kept.refreshing()
+        } else {
+            Page::loading()
+        };
+        self.asked = key;
+        let (people, events) = (self.about_people, self.about_events);
+        self.page = match (held, reading) {
+            (Page::Ready { data, .. }, Reading::Failed) if wider => Page::Ready {
+                data,
+                note: Some(Note::more_failed(locale)),
             },
-            |answer| match answer {
-                Answer::NotesSearch(found) => Some(found),
-                _ => None,
-            },
-        ))
+            (held, reading) => held.after(reading, locale, |library| {
+                !library.notes.iter().any(|row| passes(people, events, row))
+            }),
+        };
+    }
+
+    fn read_search(&mut self, ctx: &Ctx) {
+        let term = self.search.term.trim().to_owned();
+        let reading =
+            read::read(
+                ctx,
+                load::notes::Search { term: term.clone() },
+                |answer| match answer {
+                    Answer::NotesSearch(found) => Some(found),
+                    _ => None,
+                },
+            );
+        let held = match self.search.held.take() {
+            Some(held) if self.search.answered == term => held.refreshing(),
+            _ => Page::loading(),
+        };
+        self.search.answered = term;
+        self.search.held = Some(held.after(reading, ctx.locale(), matched_nothing));
     }
 
     pub fn search_opened(&mut self) {
@@ -134,11 +215,11 @@ impl Library {
     pub fn search_term(&mut self, ctx: &Ctx, term: String) {
         self.search.open = true;
         self.search.term = term;
-        self.search.held = if self.search.active() {
-            Some(self.read_search(ctx))
+        if self.search.active() {
+            self.read_search(ctx);
         } else {
-            None
-        };
+            self.search.held = None;
+        }
     }
 
     /// CLOSE CLEARS the term and its answer; the library comes back.
@@ -157,7 +238,7 @@ impl Library {
             return;
         }
         self.window = (current * 2).min(MAX_WINDOW);
-        self.reload(ctx);
+        self.read(ctx, true);
     }
 
     pub fn toggle_tag(&mut self, ctx: &Ctx, concept_id: &str) {
@@ -181,11 +262,7 @@ impl Library {
 
     /// Whether a row passes the About options: with neither on, every row does.
     fn shows(&self, row: &wire::NotesRow) -> bool {
-        (!self.about_people && !self.about_events)
-            || row.about.iter().any(|card| {
-                (self.about_people && card.entity == "person")
-                    || (self.about_events && card.entity == "event")
-            })
+        passes(self.about_people, self.about_events, row)
     }
 
     pub fn toggle_pinned(&mut self, ctx: &Ctx) {
@@ -241,7 +318,7 @@ impl Library {
     /// Does the library offer its menu and subtitle? Not while denied, and not
     /// over search, whose results no filter narrows and no notebook scopes.
     fn offers_chrome(&self) -> bool {
-        !matches!(self.phase, Phase::Denied(_)) && !self.search.open
+        !matches!(self.page, Page::Refused(_)) && !self.search.open
     }
 
     /// THE TITLE'S SECOND LINE: the notebook (or "Unfiled") the library was
@@ -268,7 +345,7 @@ impl Library {
         } else {
             None
         };
-        if let Some(Phase::Ready(found)) = searched
+        if let Some(found) = searched.and_then(Page::data)
             && let Some(hit) = found.hits.iter().find(|hit| hit.note_id == note_id)
         {
             return Some(Found {
@@ -277,7 +354,7 @@ impl Library {
                 notebook_id: hit.notebook_ids.first().cloned().unwrap_or_default(),
             });
         }
-        let library = self.phase.data()?;
+        let library = self.page.data()?;
         let row = library.notes.iter().find(|row| row.note_id == note_id)?;
         Some(Found {
             title: fold::title_of(locale, row.title.as_deref(), &row.preview),
@@ -309,15 +386,13 @@ impl Library {
             words::filter_pinned(locale),
             self.pinned_only,
         )];
-        if let Some(library) = self.phase.data() {
-            shown.extend(library.tags.iter().map(|tag| {
-                menu::option(
-                    format!("{FILTER_TAG}{}", tag.concept_id),
-                    tag.label.clone(),
-                    self.tag_ids.contains(&tag.concept_id),
-                )
-            }));
-        }
+        shown.extend(self.tags.iter().map(|tag| {
+            menu::option(
+                format!("{FILTER_TAG}{}", tag.concept_id),
+                tag.label.clone(),
+                self.tag_ids.contains(&tag.concept_id),
+            )
+        }));
         shown.push(menu::option(
             FILTER_ABOUT_PEOPLE,
             words::filter_about_people(locale),
@@ -366,21 +441,65 @@ impl Library {
         }
     }
 
-    /// What the place draws: the library, or search's failure or gate.
-    pub fn content(&self, locale: Locale) -> Content {
-        // A search that did not land replaces the shelf: it is not an empty one.
-        if self.search.active() {
-            match &self.search.held {
-                Some(Phase::Failed) => return Content::Failed,
-                Some(Phase::Denied(denial)) => return Content::Denied(denial.clone()),
-                _ => {}
-            }
+    /// Does the shelf, as the filters leave it, hold nothing? Ready means there is something to
+    /// show: this is [`Page::Empty`] on the wire.
+    fn nothing_shown(&self) -> bool {
+        matches!(&self.page, Page::Ready { data, .. } if !data.notes.iter().any(|row| self.shows(row)))
+    }
+
+    /// THE PAGE'S READ: over an open search it is the search's (nothing typed is ready, with the
+    /// hint under the field); otherwise the shelf's, where nothing the filters leave is the empty
+    /// state with the sentence for why.
+    pub fn wire(&self, locale: Locale) -> wire::PageState {
+        let gate = |denial: &wire::AppQueryDenial| denied(locale, denial);
+        if self.search.open {
+            return match (&self.search.held, self.search.active()) {
+                (Some(held), true) => held.wire(locale, gate, || no_match(locale)),
+                _ => Page::<()>::Ready {
+                    data: (),
+                    note: None,
+                }
+                .wire(locale, gate, wire::EmptyState::default),
+            };
         }
-        match &self.phase {
-            Phase::Loading => Content::Loading,
-            Phase::Failed => Content::Failed,
-            Phase::Denied(denial) => Content::Denied(denial.clone()),
-            Phase::Ready(library) => Content::Data(self.data(locale, library)),
+        if self.nothing_shown() {
+            return Page::<()>::Empty.wire(locale, gate, || self.empty_state(locale));
+        }
+        self.page.wire(locale, gate, || self.empty_state(locale))
+    }
+
+    /// What the shelf draws when it is ready and has something to show.
+    pub fn shelf(&self, locale: Locale) -> Option<wire::NotesLibraryData> {
+        if self.nothing_shown() {
+            return None;
+        }
+        self.page.data().map(|library| self.data(locale, library))
+    }
+
+    /// THE EMPTY SHELF'S SENTENCE: day one, a notebook with nothing in it, or filters that leave
+    /// nothing.
+    fn empty_state(&self, locale: Locale) -> wire::EmptyState {
+        if !self.notebook_id.is_empty() {
+            wire::EmptyState {
+                headline: words::empty_filtered_headline(locale),
+                body: words::empty_notebook_body(locale),
+                action_label: words::new_note(locale),
+                ..wire::EmptyState::default()
+            }
+        } else if self.filtered() {
+            wire::EmptyState {
+                headline: words::empty_filtered_headline(locale),
+                body: words::empty_filtered_body(locale),
+                ..wire::EmptyState::default()
+            }
+        } else {
+            // DAY ONE: nothing written yet, and one action that takes content.
+            wire::EmptyState {
+                headline: words::empty_day_one_headline(locale),
+                body: words::empty_day_one(locale),
+                action_label: words::new_note(locale),
+                ..wire::EmptyState::default()
+            }
         }
     }
 
@@ -392,30 +511,6 @@ impl Library {
             .map(|row| fold::row(locale, row))
             .collect();
         let count = rows.len();
-        let empty = if count > 0 {
-            None
-        } else if !self.notebook_id.is_empty() {
-            Some(wire::EmptyState {
-                headline: words::empty_filtered_headline(locale),
-                body: words::empty_notebook_body(locale),
-                action_label: words::new_note(locale),
-                ..wire::EmptyState::default()
-            })
-        } else if self.filtered() {
-            Some(wire::EmptyState {
-                headline: words::empty_filtered_headline(locale),
-                body: words::empty_filtered_body(locale),
-                ..wire::EmptyState::default()
-            })
-        } else {
-            // DAY ONE: nothing written yet, and one action that takes content.
-            Some(wire::EmptyState {
-                headline: words::empty_day_one_headline(locale),
-                body: words::empty_day_one(locale),
-                action_label: words::new_note(locale),
-                ..wire::EmptyState::default()
-            })
-        };
         let window = if self.window == 0 {
             DEFAULT_WINDOW
         } else {
@@ -424,7 +519,6 @@ impl Library {
         wire::NotesLibraryData {
             sections: fold::sections(locale, rows),
             count_label: fold::notes_count(locale, count, false),
-            empty,
             truncated: library.truncated,
             window_end_label: if library.truncated {
                 words::window_end_label(locale)
@@ -454,40 +548,47 @@ impl Library {
         if !self.search.active() {
             state.results = Some(wire::NotesSearchResults {
                 rows: Vec::new(),
-                empty: Some(wire::EmptyState {
-                    body: words::search_empty(locale),
-                    ..wire::EmptyState::default()
-                }),
-                loading: false,
+                hint: words::search_empty(locale),
             });
             return state;
         }
-        let Some(Phase::Ready(found)) = &self.search.held else {
-            return state;
-        };
+        match &self.search.held {
+            Some(Page::Ready { data, .. }) => self.fill(locale, &mut state, data),
+            // Nothing matched: the page's Empty state says so, and the ask still closes it.
+            Some(Page::Empty) => {
+                state.ask = Some(search::offer(locale, &self.search.term, "notes"));
+            }
+            _ => {}
+        }
+        state
+    }
+
+    /// An answer with something in it: its rows, the notebooks it named, its correction and the
+    /// ask.
+    fn fill(&self, locale: Locale, state: &mut wire::NotesSearchState, found: &wire::NotesSearch) {
         let rows: Vec<wire::NotesNoteRow> = found
             .hits
             .iter()
             .map(|hit| fold::hit(locale, hit))
             .collect();
-        let containers = containers(locale, &found.containers);
-        // A NOTEBOOK THAT MATCHED IS AN ANSWER: no "nothing found" over it.
-        let empty = (rows.is_empty() && containers.is_empty()).then(|| wire::EmptyState {
-            headline: words::search_no_match_headline(locale),
-            body: words::search_no_match_body(locale),
-            ..wire::EmptyState::default()
-        });
         state.results = Some(wire::NotesSearchResults {
             rows,
-            empty,
-            loading: false,
+            hint: String::new(),
         });
-        state.containers = containers;
+        state.containers = containers(locale, &found.containers);
         if !found.corrected.is_empty() {
             state.corrected = search::corrected(locale, &found.corrected);
         }
         state.ask = Some(search::offer(locale, &self.search.term, "notes"));
-        state
+    }
+}
+
+/// NOTHING MATCHED is the page's empty state: the headline and the sentence under it.
+fn no_match(locale: Locale) -> wire::EmptyState {
+    wire::EmptyState {
+        headline: words::search_no_match_headline(locale),
+        body: words::search_no_match_body(locale),
+        ..wire::EmptyState::default()
     }
 }
 
@@ -496,14 +597,6 @@ pub(super) struct Found {
     pub title: String,
     pub pinned: bool,
     pub notebook_id: String,
-}
-
-/// What the Notes place draws.
-pub(super) enum Content {
-    Loading,
-    Failed,
-    Denied(wire::AppQueryDenial),
-    Data(wire::NotesLibraryData),
 }
 
 /// The sort a menu key names, or None for a key the menu did not make.
@@ -568,7 +661,10 @@ mod tests {
 
     fn ready(notebook: &str, unfiled: bool) -> Library {
         let mut library = Library::new(notebook, "Work", unfiled);
-        library.phase = Phase::Ready(wire::NotesLibrary::default());
+        library.page = Page::Ready {
+            data: wire::NotesLibrary::default(),
+            note: None,
+        };
         library
     }
 
@@ -580,7 +676,7 @@ mod tests {
         assert!(library.subtitle(locale).is_some());
 
         let mut denied = ready("book-1", false);
-        denied.phase = Phase::Denied(wire::AppQueryDenial::default());
+        denied.page = Page::Refused(wire::AppQueryDenial::default());
         assert!(denied.filter_menu(locale).is_none());
         assert!(denied.subtitle(locale).is_none());
 
@@ -646,27 +742,26 @@ mod tests {
     fn a_note_about_something_wears_its_subject_and_the_about_options_narrow_the_shelf() {
         let locale = Locale::En;
         let mut library = ready("", false);
-        library.phase = Phase::Ready(wire::NotesLibrary {
-            notes: vec![
-                row_about("plain", &[]),
-                row_about("maya", &[("person", "p1", "Maya")]),
-                row_about("dinner", &[("event", "e1", "Dinner")]),
-            ],
-            ..wire::NotesLibrary::default()
-        });
+        library.page = Page::Ready {
+            data: wire::NotesLibrary {
+                notes: vec![
+                    row_about("plain", &[]),
+                    row_about("maya", &[("person", "p1", "Maya")]),
+                    row_about("dinner", &[("event", "e1", "Dinner")]),
+                ],
+                ..wire::NotesLibrary::default()
+            },
+            note: None,
+        };
         let titles = |library: &Library| -> Vec<String> {
-            let Content::Data(data) = library.content(locale) else {
-                panic!("data");
-            };
+            let data = library.shelf(locale).expect("data");
             data.sections
                 .iter()
                 .flat_map(|section| section.rows.iter())
                 .map(|row| row.title.clone())
                 .collect()
         };
-        let Content::Data(all) = library.content(locale) else {
-            panic!("data");
-        };
+        let all = library.shelf(locale).expect("data");
         let chips: Vec<(String, String)> = all
             .sections
             .iter()

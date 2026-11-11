@@ -17,9 +17,9 @@ fn open(d: &mut Driver, id: &str) -> u64 {
 }
 
 fn body_of(v: &wire::ViewState) -> String {
-    match &editor_state(v).content {
-        Some(wire::notes_editor_state::Content::Draft(draft)) => draft.body.clone(),
-        other => panic!("not a draft: {other:?}"),
+    match &editor_state(v).draft {
+        Some(draft) => draft.body.clone(),
+        None => panic!("not a draft: {:?}", editor_state(v).page),
     }
 }
 

@@ -62,18 +62,15 @@ import dev.centraid.android.kit.CentraidSearchField
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EditorRoom
 import dev.centraid.android.kit.IconKey
-import dev.centraid.android.kit.FailureView
 import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.RowSkeleton
-import dev.centraid.android.kit.ScreenContent
 import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.StatusLine
-import dev.centraid.android.kit.screenContentOf
 
 /**
  * `notes.editor` (#1135), in the kit's `EditorRoom`.
@@ -141,11 +138,12 @@ public fun NotesEditorScreen(
             StatusLine(chrome?.status.orEmpty())
         }
         ReadStateView(
-            content = screenContentOf(state.loading, state.failure, draft),
+            page = state.page!!,
             onRetry = { onEvent(NotesEditorEvent(refreshed = NotesEditorEvent.Refreshed())) },
             retryLabel = chrome?.retry.orEmpty(),
             skeleton = { RowSkeleton(rows = 4, meta = false) },
-        ) { note ->
+        ) {
+            val note = draft ?: return@ReadStateView
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                 // ABOUT, above the words (#1173): who or what the note is about; a tap opens it.
                 AboutChips(state.about, Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 2.dp), onOpen)
@@ -344,30 +342,27 @@ private fun LinkSheet(sheet: NotesLinkSheet, onEvent: (NotesEditorEvent) -> Unit
             onClose = dismiss,
             testTag = "notes-link-search",
         )
-        when (val content = screenContentOf(sheet.loading, sheet.failure, sheet.data_, sheet.denied)) {
-            is ScreenContent.Loading -> RowSkeleton(rows = 4, label = sheet.loading_label)
-            is ScreenContent.Failure -> FailureView(content.sentence, content.remedy, onRetry = null)
-            is ScreenContent.Gate -> Quiet(content.denied.title)
-            is ScreenContent.Data -> {
-                val data = content.value
-                val empty = data.empty
-                if (data.domains.isEmpty() && empty != null) {
-                    Quiet(listOf(empty.headline, empty.body).filter { it.isNotEmpty() }.joinToString(" "))
-                }
-                LazyColumn(Modifier.testTag("notes-link-targets")) {
-                    data.domains.forEachIndexed { index, domain ->
-                        domain.head?.let { head ->
-                            item(key = "h-$index") { SectionHeader(SectionHead(title = head.title, count = head.count)) }
-                        }
-                        items(domain.rows, key = { "$index-" + it.entity + it.id }) { target ->
-                            CentraidRow(
-                                title = target.title,
-                                meta = target.subtitle,
-                                a11y = target.accessibility_label,
-                                testTag = "notes-link-${target.id}",
-                                onTap = { onEvent(NotesEditorEvent(link_picked = NotesEditorEvent.LinkPicked(target.id))) },
-                            )
-                        }
+        // The powerbox's read is the page: Retry reads the targets again.
+        ReadStateView(
+            page = sheet.page!!,
+            onRetry = { onEvent(NotesEditorEvent(refreshed = NotesEditorEvent.Refreshed())) },
+            retryLabel = sheet.retry,
+            skeleton = { RowSkeleton(rows = 4, label = sheet.loading_label) },
+        ) {
+            val data = sheet.data_ ?: return@ReadStateView
+            LazyColumn(Modifier.testTag("notes-link-targets")) {
+                data.domains.forEachIndexed { index, domain ->
+                    domain.head?.let { head ->
+                        item(key = "h-$index") { SectionHeader(SectionHead(title = head.title, count = head.count)) }
+                    }
+                    items(domain.rows, key = { "$index-" + it.entity + it.id }) { target ->
+                        CentraidRow(
+                            title = target.title,
+                            meta = target.subtitle,
+                            a11y = target.accessibility_label,
+                            testTag = "notes-link-${target.id}",
+                            onTap = { onEvent(NotesEditorEvent(link_picked = NotesEditorEvent.LinkPicked(target.id))) },
+                        )
                     }
                 }
             }
