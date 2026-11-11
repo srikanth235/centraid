@@ -447,17 +447,18 @@ internal fun MoneyTransactionScreen(
                 }
                 // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the actions.
                 state.earlier?.let { entry -> item(key = "earlier") { EarlierEntryCard(entry, onOpen) } }
-                items(tx.actions, key = { "act-${it.key}" }) { action ->
-                    CentraidRow(
-                        title = action.label,
-                        dimmed = !action.enabled,
-                        testTag = "money-action-${action.key}",
-                        onTap = if (action.enabled) {
-                            { onEvent(MoneyTransactionEvent(action = MoneyTransactionEvent.ActionPicked(key = action.key))) }
-                        } else {
-                            null
-                        },
-                    )
+                // THE ACTIONS ARE ALTERNATIVES: one stack; a destructive one is outlined in `net`.
+                item(key = "actions") {
+                    ChoiceStack(Modifier.padding(horizontal = KitGeometry.GUTTER).padding(top = 24.dp)) {
+                        tx.actions.forEach { action ->
+                            OutlineButton(
+                                label = action.label,
+                                testTag = "money-action-${action.key}",
+                                ink = if (action.destructive) "net" else "text",
+                                enabled = action.enabled,
+                            ) { onEvent(MoneyTransactionEvent(action = MoneyTransactionEvent.ActionPicked(key = action.key))) }
+                        }
+                    }
                 }
             }
         }

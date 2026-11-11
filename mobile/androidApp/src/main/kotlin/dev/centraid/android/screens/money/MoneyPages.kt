@@ -730,7 +730,7 @@ internal fun MoneyCategoriesScreen(state: MoneyCategoriesState, onEvent: (MoneyC
         MoneyCategoriesState.Sheet.SHEET_ROW -> if (categories != null) {
             OptionSheet(
                 title = categories.row_title,
-                options = categories.row_actions.filter { it.enabled }.map { SheetOption(key = it.key, label = it.label, iconKey = it.icon_key) },
+                options = categories.row_actions.filter { it.enabled }.map { SheetOption(key = it.key, label = it.label, iconKey = it.icon_key, destructive = it.destructive) },
                 onPick = { key -> onEvent(MoneyCategoriesEvent(row_action = MoneyCategoriesEvent.RowAction(key = key))) },
                 onDismiss = close,
             )
