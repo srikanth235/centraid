@@ -10,8 +10,12 @@
 
 use centraid_api_proto::core_v1 as wire;
 
-use crate::catalog::act;
-use crate::kit::autosave::{Autosave, Draft};
+use wire::app_query_response::Answer;
+
+use crate::catalog::{act, load};
+use crate::kit::autosave::{Autosave, Draft, Resolved};
+use crate::kit::read::{self, Reading};
+use crate::kit::stale;
 use crate::screen::Ctx;
 use crate::strings::{Locale, docs as words};
 
@@ -19,6 +23,9 @@ use crate::strings::{Locale, docs as words};
 struct Title {
     document_id: String,
     title: String,
+    /// The document's revision when its title was read, advanced by each save's answer: what a
+    /// rename names as the one it replaces (#1185). `None` when it could not be read.
+    rev: Option<i64>,
 }
 
 impl Draft for Title {
@@ -46,9 +53,38 @@ impl Draft for Title {
             act::docs::Rename {
                 document_id: self.document_id.clone(),
                 title: title.to_owned(),
+                expected_rev: self.rev,
             }
             .into()
         })
+    }
+
+    fn committed(&mut self, output: &[u8]) {
+        if let Some(rev) = serde_json::from_slice::<serde_json::Value>(output)
+            .ok()
+            .and_then(|value| value.get("rev")?.as_i64())
+        {
+            self.rev = Some(rev);
+        }
+    }
+
+    fn subject_id(&self) -> Option<&str> {
+        Some(&self.document_id)
+    }
+
+    fn base_rev(&self) -> Option<i64> {
+        self.rev
+    }
+
+    fn rebased(&mut self, rev: i64) {
+        self.rev = Some(rev);
+    }
+
+    fn kept_fields(&self, baseline: &Self) -> Vec<(String, serde_json::Value)> {
+        if self.title.trim() == baseline.title.trim() {
+            return Vec::new();
+        }
+        vec![("entity.title".to_owned(), self.title.trim().into())]
     }
 }
 
@@ -57,21 +93,76 @@ impl Draft for Title {
 pub struct Rename {
     document_id: String,
     autosave: Autosave<Title>,
+    /// After Reload: where the member's words went.
+    kept: String,
+}
+
+/// The document's title and revision, as the vault holds them now: `None` when it cannot be read
+/// or is not there to rename.
+fn read_title(ctx: &Ctx, document_id: &str) -> Option<(String, i64)> {
+    match read::read(
+        ctx,
+        load::docs::History {
+            document_id: document_id.to_owned(),
+        },
+        |answer| match answer {
+            Answer::DocsDocument(document) => Some(document),
+            _ => None,
+        },
+    ) {
+        Reading::Data(document) => document
+            .document
+            .filter(|row| !row.trashed)
+            .map(|row| (row.title, document.rev)),
+        _ => None,
+    }
 }
 
 impl Rename {
-    /// Open on `document_id`, whose title the vault holds as `title`.
+    /// Open on `document_id`, whose title the vault holds as `title`, and whose revision is read
+    /// now: the rename names it when it saves (#1185).
     #[must_use]
-    pub fn open(document_id: &str, title: &str) -> Self {
+    pub fn open(ctx: &Ctx, document_id: &str, title: &str) -> Self {
         let mut autosave = Autosave::new();
         autosave.loaded(Title {
             document_id: document_id.to_owned(),
             title: title.to_owned(),
+            rev: read_title(ctx, document_id).map(|(_, rev)| rev),
         });
         Self {
             document_id: document_id.to_owned(),
             autosave,
+            kept: String::new(),
         }
+    }
+
+    /// Whether the vault refused the rename because the document changed, or went to the trash,
+    /// since the field opened.
+    #[must_use]
+    pub fn conflicted(&self) -> bool {
+        self.autosave.conflict().is_some()
+    }
+
+    /// RELOAD after a conflict: the title typed is kept as an earlier version, then the field
+    /// shows the vault's title. Returns whether the rename is still open (a document that went to
+    /// the trash has nothing to rename: the page shows it as it is).
+    #[must_use]
+    pub fn reload(&mut self, ctx: &Ctx) -> bool {
+        let Resolved::Reloaded { kept, .. } = self.autosave.resolve(ctx) else {
+            return true;
+        };
+        let Some((title, rev)) = read_title(ctx, &self.document_id) else {
+            return false;
+        };
+        self.autosave.loaded(Title {
+            document_id: self.document_id.clone(),
+            title,
+            rev: Some(rev),
+        });
+        if kept {
+            self.kept = stale::kept(ctx.locale());
+        }
+        true
     }
 
     #[must_use]
@@ -116,7 +207,11 @@ impl Rename {
         wire::DocsRename {
             document_id: self.document_id.clone(),
             title: self.title().to_owned(),
-            status_label: status(&autosave),
+            status_label: if self.kept.is_empty() {
+                status(&autosave)
+            } else {
+                self.kept.clone()
+            },
             autosave: Some(autosave),
         }
     }
@@ -126,7 +221,9 @@ impl Rename {
 fn status(autosave: &wire::Autosave) -> String {
     use wire::autosave::Phase;
     match autosave.phase() {
-        Phase::Dirty | Phase::Saving | Phase::Saved | Phase::Refused => autosave.label.clone(),
+        Phase::Dirty | Phase::Saving | Phase::Saved | Phase::Refused | Phase::Conflict => {
+            autosave.label.clone()
+        }
         _ => String::new(),
     }
 }

@@ -37,7 +37,7 @@
 use rusqlite::OptionalExtension;
 
 use crate::commands::blob::{claim, pre_claimable};
-use crate::commands::entity::lookup_live;
+use crate::commands::entity::{STALE_GUARD, lookup_live, with_rev};
 use crate::commands::note::BODY_BUDGET_BYTES;
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, arrival};
 use crate::error::{Result, VaultError};
@@ -119,7 +119,7 @@ fn pre_create_text(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 }
 
 /// The media type of the document's current bytes.
-fn media_type_of(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Option<String>> {
+pub(crate) fn media_type_of(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Option<String>> {
     Ok(ctx
         .connection()
         .query_row(
@@ -225,7 +225,7 @@ fn set_content(ctx: &CommandCtx<'_, '_>, id: &str, blob: &str, media_type: &str)
 
 /// Write words into the content store, claim them, and keep them as the text
 /// the search index reads. Returns the blob's hash.
-fn write_words(ctx: &CommandCtx<'_, '_>, words: &str) -> Result<String> {
+pub(crate) fn write_words(ctx: &CommandCtx<'_, '_>, words: &str) -> Result<String> {
     let store = ctx.blobs().ok_or_else(|| VaultError::Invariant {
         context: "a precondition said the vault had a content store".to_owned(),
     })?;
@@ -296,7 +296,7 @@ fn edit(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         )?;
     }
     ctx.touch(id)?;
-    Ok(serde_json::json!({ "id": id }))
+    with_rev(ctx, id, serde_json::json!({ "id": id }))
 }
 
 fn replace(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
@@ -348,10 +348,14 @@ pub fn definitions() -> Vec<CommandDefinition> {
         predicate: "document_has_a_name_words_within_budget_and_a_folder",
         check: pre_create_text,
     }];
-    const EDIT: &[CommandCondition] = &[CommandCondition {
-        predicate: "document_is_live_text_and_words_within_budget",
-        check: pre_edit,
-    }];
+    const EDIT: &[CommandCondition] = &[
+        STALE_GUARD[0],
+        STALE_GUARD[1],
+        CommandCondition {
+            predicate: "document_is_live_text_and_words_within_budget",
+            check: pre_edit,
+        },
+    ];
     const REPLACE: &[CommandCondition] = &[CommandCondition {
         predicate: "document_is_live_and_bytes_arrived",
         check: pre_replace,
@@ -420,7 +424,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "properties": {
                 "id": { "type": "string", "minLength": 1 },
                 "body_text": { "type": "string" },
-                "title": { "type": "string", "maxLength": 1000 }
+                "title": { "type": "string", "maxLength": 1000 },
+                "expected_rev": { "type": "integer", "minimum": 0 }
               }
             }"#,
             Idempotency::Idempotent,

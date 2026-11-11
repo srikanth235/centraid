@@ -331,6 +331,11 @@ impl<D: Draft> Autosave<D> {
             remote_changed: self.remote_changed,
             label: self.label(locale),
             refused: matches!(self.phase, Phase::Refused | Phase::Conflict),
+            reload_label: if self.phase == Phase::Conflict {
+                shared::stale_reload_label(locale)
+            } else {
+                String::new()
+            },
         }
     }
 }
@@ -369,14 +374,6 @@ impl<D: Draft> Autosave<D> {
         {
             draft.rebased(rev);
         }
-    }
-
-    /// The status line of a conflict, for a screen that draws a [`wire::StatusLine`]: the sentence
-    /// and Reload.
-    #[must_use]
-    pub fn conflict_line(&self, locale: Locale) -> Option<wire::StatusLine> {
-        let stale = self.conflict()?;
-        Some(stale::line(locale, &D::noun(locale), stale))
     }
 
     /// Why the save was refused, while the editor rests in conflict.

@@ -334,6 +334,7 @@ impl Transaction {
                         act::money::SetDisplayName {
                             transaction_id: self.txn_id.clone(),
                             title: text,
+                            expected_rev: None,
                         },
                         words::done_name(locale),
                     );

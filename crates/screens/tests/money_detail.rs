@@ -551,6 +551,7 @@ fn a_payee_that_names_a_person_is_proposed_and_written_only_when_confirmed() {
         act::money::SetDisplayName {
             transaction_id: id.clone(),
             title: "UPI Priya Rao 4412".into(),
+            expected_rev: None,
         },
     );
     let priya = arrange(

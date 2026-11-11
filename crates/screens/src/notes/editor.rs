@@ -1466,7 +1466,9 @@ impl Screen for Editor {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
-        let autosave = self.auto.view(locale);
+        let mut autosave = self.auto.view(locale);
+        // Notes draws Reload on its own status line, beside the sentence.
+        autosave.reload_label.clear();
         let draft = self.auto.draft();
         let exists = draft.is_some_and(|draft| draft.id.is_some());
         let title = draft.map_or(String::new(), |draft| {

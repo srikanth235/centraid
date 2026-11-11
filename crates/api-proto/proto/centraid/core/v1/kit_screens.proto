@@ -147,6 +147,10 @@ message Autosave {
   // the line inks `net` and an editor stops concealing on it. A shell reads
   // this, never `phase`.
   bool refused = 10;
+  // RELOAD, in the editor's language: set only while the phase is CONFLICT (#1185). The shell
+  // draws it as the one verb beside the status words and sends the kit's `StatusActed` when it
+  // is tapped; empty means there is no verb.
+  string reload_label = 11;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;

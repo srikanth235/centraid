@@ -322,6 +322,7 @@ pub(crate) fn document(
     };
     settle(door, loaded, |(data, history)| {
         Answer::DocsDocument(wire::DocsDocument {
+            rev: data.rev,
             document: data.row.map(|row| row_to_wire(row, &zone, clock.now_ms)),
             path: data
                 .path

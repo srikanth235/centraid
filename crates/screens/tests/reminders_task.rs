@@ -1174,9 +1174,11 @@ fn a_save_over_a_task_that_changed_elsewhere_is_refused_and_reload_keeps_the_wor
         detail_data(d.view(i)).draft.as_ref().unwrap().title,
         "Rent, June"
     );
-    let status = detail(d.view(i)).status.clone().expect("the sentence");
-    assert_eq!(status.sentence, "This reminder changed somewhere else.");
-    assert_eq!(status.action_label, "Reload");
+    assert_eq!(
+        autosave(d.view(i)).label,
+        "This reminder changed somewhere else."
+    );
+    assert_eq!(autosave(d.view(i)).reload_label, "Reload");
     send_detail(&mut d, i, de::Kind::StatusActed(de::StatusActed {}));
     assert_eq!(
         detail_data(d.view(i)).draft.as_ref().unwrap().title,

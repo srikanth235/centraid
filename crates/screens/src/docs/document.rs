@@ -334,7 +334,7 @@ impl Document {
                         return Vec::new();
                     }
                 }
-                self.rename = Some(Rename::open(&id, &row.title));
+                self.rename = Some(Rename::open(ctx, &id, &row.title));
             }
             KEY_MOVE => self.sheet = Sheet::Move,
             KEY_LABELS => self.sheet = Sheet::Labels(String::new()),
@@ -604,7 +604,17 @@ impl Screen for Document {
             }
             // CLOSE = DONE: whatever is typed is saved.
             Some(E::StatusActed(_)) => {
-                if self.undo.acted(ctx) {
+                // A rename the vault refused as stale: Reload keeps the title typed and reads it again.
+                if self.rename.as_ref().is_some_and(Rename::conflicted) {
+                    if self
+                        .rename
+                        .as_mut()
+                        .is_some_and(|rename| !rename.reload(ctx))
+                    {
+                        self.rename = None;
+                    }
+                    self.reload(ctx);
+                } else if self.undo.acted(ctx) {
                     self.reload(ctx);
                 }
             }

@@ -961,6 +961,10 @@
             "aliases": ["name"],
             "maxLength": 1000,
             "type": "string"
+          },
+          "expected_rev": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": ["id", "title"],

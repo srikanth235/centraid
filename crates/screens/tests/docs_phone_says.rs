@@ -76,6 +76,7 @@ fn rename(d: &Driver, id: &str, title: &str) {
         act::docs::Rename {
             document_id: id.to_owned(),
             title: title.to_owned(),
+            expected_rev: None,
         },
     );
 }

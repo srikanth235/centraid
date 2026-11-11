@@ -460,10 +460,7 @@ impl Screen for Editor {
             } else {
                 Vec::new()
             },
-            status: self
-                .autosave
-                .conflict_line(locale)
-                .or_else(|| self.undo.status()),
+            status: self.undo.status(),
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::PeopleEditor(Box::new(state))),

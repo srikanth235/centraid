@@ -829,7 +829,7 @@ message DocsEditorState {
   // "Saved" / "Saving" / "Edited" / the refusal's sentence; EMPTY while
   // clean.
   string status_label = 8;
-  // "Changed elsewhere; saving reloads it." EMPTY unless
+  // "Changed elsewhere; your next save will ask to reload." EMPTY unless
   // `autosave.remote_changed`.
   string remote_note = 9;
   DocsReader.Format format = 10;

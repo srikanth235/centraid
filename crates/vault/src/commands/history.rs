@@ -106,6 +106,10 @@ fn fields(ctx: &CommandCtx<'_, '_>) -> serde_json::Map<String, serde_json::Value
         .unwrap_or_default()
 }
 
+/// The overlay's field for a text document's words: not a column, the words themselves, which the
+/// handler writes into the content store and keeps by their hash.
+const DOCUMENT_TEXT: &str = "document.text";
+
 /// The record is there (in the trash or not: a record trashed elsewhere keeps the words that
 /// were being written to it) and each field is one its history keeps. A Locker item is not kept
 /// this way: its secrets are sealed by the core, not here.
@@ -119,12 +123,30 @@ fn pre_keep(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
             "A Locker item keeps its earlier values on its own.".to_owned(),
         ));
     }
-    history::overlay_refusal(ctx.connection(), id, &fields(ctx))
+    let mut overlay = fields(ctx);
+    if let Some(words) = overlay.remove(DOCUMENT_TEXT) {
+        let text_document = found.kind == crate::model::Kind::Document
+            && words.is_string()
+            && ctx.blobs().is_some()
+            && crate::commands::document::media_type_of(ctx, id)?
+                .is_some_and(|media_type| media_type.starts_with("text/"));
+        if !text_document {
+            return Ok(Some(format!(
+                "`{DOCUMENT_TEXT}` is the words of a text document"
+            )));
+        }
+    }
+    history::overlay_refusal(ctx.connection(), id, &overlay)
 }
 
 fn keep_version(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let id = ctx.required_str("id")?;
-    let kept = history::keep_overlay(ctx.connection(), id, &fields(ctx), &ctx.now, ctx.command)?;
+    let mut overlay = fields(ctx);
+    if let Some(words) = overlay.remove(DOCUMENT_TEXT) {
+        let hash = crate::commands::document::write_words(ctx, words.as_str().unwrap_or_default())?;
+        overlay.insert("document.blob".to_owned(), hash.into());
+    }
+    let kept = history::keep_overlay(ctx.connection(), id, &overlay, &ctx.now, ctx.command)?;
     Ok(match kept {
         history::Kept::Version(seq) => serde_json::json!({ "id": id, "kept": true, "seq": seq }),
         history::Kept::Same => serde_json::json!({ "id": id, "kept": false }),

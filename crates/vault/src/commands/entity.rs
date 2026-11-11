@@ -565,7 +565,7 @@ fn retitle(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     ctx.connection()
         .execute("UPDATE entity SET title = ?2 WHERE id = ?1", [id, title])?;
     ctx.touch(id)?;
-    Ok(serde_json::json!({ "id": id, "title": title }))
+    with_rev(ctx, id, serde_json::json!({ "id": id, "title": title }))
 }
 
 fn pre_trash(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -820,14 +820,19 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "additionalProperties": false,
               "properties": {
                 "id": { "type": "string", "minLength": 1 },
-                "title": { "type": "string", "maxLength": 1000 }
+                "title": { "type": "string", "maxLength": 1000 },
+                "expected_rev": { "type": "integer", "minimum": 0 }
               }
             }"#,
             Idempotency::Idempotent,
-            &[CommandCondition {
-                predicate: "title_is_changeable",
-                check: pre_retitle,
-            }],
+            &[
+                STALE_GUARD[0],
+                STALE_GUARD[1],
+                CommandCondition {
+                    predicate: "title_is_changeable",
+                    check: pre_retitle,
+                },
+            ],
             retitle,
         ),
         CommandDefinition::plain(

@@ -16,8 +16,9 @@ use wire::screen_event::Kind as E;
 
 use super::fold;
 use crate::catalog::{act, load};
-use crate::kit::autosave::{Autosave, Draft};
+use crate::kit::autosave::{Autosave, Draft, Resolved};
 use crate::kit::read::{self, Reading};
+use crate::kit::stale;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, docs as words};
 
@@ -27,6 +28,9 @@ struct Typed {
     id: String,
     title: String,
     body: String,
+    /// The document's revision when it was read, advanced by each save's answer: what a save
+    /// names as the one it replaces (#1185).
+    rev: i64,
 }
 
 impl Draft for Typed {
@@ -60,9 +64,44 @@ impl Draft for Typed {
                 document_id: self.id.clone(),
                 body_text: Some(self.body.clone()),
                 title: title.then(|| self.title.trim().to_owned()),
+                expected_rev: Some(self.rev),
             }
             .into(),
         )
+    }
+
+    fn committed(&mut self, output: &[u8]) {
+        if let Some(rev) = serde_json::from_slice::<serde_json::Value>(output)
+            .ok()
+            .and_then(|value| value.get("rev")?.as_i64())
+        {
+            self.rev = rev;
+        }
+    }
+
+    fn subject_id(&self) -> Option<&str> {
+        Some(&self.id)
+    }
+
+    fn base_rev(&self) -> Option<i64> {
+        Some(self.rev)
+    }
+
+    fn rebased(&mut self, rev: i64) {
+        self.rev = rev;
+    }
+
+    /// The words the document does not hold, by the vault's names for them: the text is the
+    /// document's own words (it keeps them as the bytes of a version).
+    fn kept_fields(&self, baseline: &Self) -> Vec<(String, serde_json::Value)> {
+        let mut kept = Vec::new();
+        if self.title.trim() != baseline.title.trim() {
+            kept.push(("entity.title".to_owned(), self.title.trim().into()));
+        }
+        if self.body != baseline.body {
+            kept.push(("document.text".to_owned(), self.body.clone().into()));
+        }
+        kept
     }
 }
 
@@ -89,6 +128,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         autosave: Autosave::new(),
         version_label: String::new(),
         format: wire::docs_reader::Format::Plain,
+        kept: String::new(),
+        remedy: String::new(),
     }))
 }
 
@@ -100,9 +141,29 @@ struct Editor {
     /// "Version 4" — the vault's, re-read after a save commits.
     version_label: String,
     format: wire::docs_reader::Format,
+    /// After Reload: where the member's words went, said where the version is.
+    kept: String,
+    /// After Reload over a document in the trash: how to find the words, said under the sentence.
+    remedy: String,
 }
 
 impl Editor {
+    /// RELOAD after a save the vault refused as stale (#1185): the words typed are kept as an
+    /// earlier version of the document, then the vault's document is read and shown.
+    fn reload_after_conflict(&mut self, ctx: &Ctx) {
+        let locale = ctx.locale();
+        let Resolved::Reloaded { kept, .. } = self.autosave.resolve(ctx) else {
+            return;
+        };
+        self.reload(ctx);
+        if kept {
+            match self.opened {
+                Opened::Refused(_) => self.remedy = stale::kept_in_trash(locale),
+                _ => self.kept = stale::kept(locale),
+            }
+        }
+    }
+
     fn reload(&mut self, ctx: &Ctx) {
         let reading = read::read(
             ctx,
@@ -116,7 +177,12 @@ impl Editor {
         );
         match reading {
             Reading::Data(document) => match fold::editor(ctx.locale(), &document) {
+                // Words not yet saved are the only copy: a document trashed elsewhere does not
+                // replace the editor under them. The save is refused as stale and Reload keeps them.
+                Err(_) if self.autosave.unsaved() => self.autosave.vault_moved(),
                 Ok(draft) => {
+                    self.kept.clear();
+                    self.remedy.clear();
                     self.version_label = draft.version_label;
                     self.format = draft.format;
                     self.opened = Opened::Ready;
@@ -125,6 +191,7 @@ impl Editor {
                         id: self.document_id.clone(),
                         title: draft.title,
                         body: draft.body,
+                        rev: document.rev,
                     });
                 }
                 Err(sentence) => self.opened = Opened::Refused(sentence),
@@ -145,6 +212,7 @@ impl Screen for Editor {
                     self.reload(ctx);
                 }
             }
+            Some(E::StatusActed(_)) => self.reload_after_conflict(ctx),
             // CLOSE = DONE: whatever is typed is saved.
             Some(E::Left(_)) => {
                 let _ = self.autosave.flush(ctx);
@@ -169,7 +237,7 @@ impl Screen for Editor {
             (Opened::Failed, _) => Content::Failure(read::failure(locale)),
             (Opened::Refused(sentence), _) => Content::Failure(wire::Failure {
                 sentence: sentence.clone(),
-                remedy: String::new(),
+                remedy: self.remedy.clone(),
             }),
             (Opened::Ready, Some(draft)) => Content::Draft(wire::DocsEditorDraft {
                 title: draft.title.clone(),
@@ -190,7 +258,9 @@ impl Screen for Editor {
                 content: Some(content),
                 version_label: self.version_label.clone(),
                 status_label,
-                remote_note: if autosave.remote_changed {
+                remote_note: if !self.kept.is_empty() {
+                    self.kept.clone()
+                } else if autosave.remote_changed {
                     words::remote_changed(locale)
                 } else {
                     String::new()

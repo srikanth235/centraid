@@ -359,6 +359,7 @@ fn a_vault_change_never_replaces_words_being_typed() {
             document_id: id.clone(),
             body_text: Some("elsewhere".to_owned()),
             title: None,
+            expected_rev: None,
         },
     );
     d.pump(Duration::from_millis(300));
@@ -367,7 +368,10 @@ fn a_vault_change_never_replaces_words_being_typed() {
         panic!();
     };
     assert_eq!(draft.body, "mine");
-    assert_eq!(state.remote_note, "Changed elsewhere; saving reloads it.");
+    assert_eq!(
+        state.remote_note,
+        "Changed elsewhere; your next save will ask to reload."
+    );
 }
 
 #[test]
@@ -631,4 +635,102 @@ fn a_document_is_about_people_picked_by_name_and_taken_off_again() {
         link(le::Kind::Remove(le::RemoveTapped { id: maya })),
     );
     assert!(about(&d, i).rows.is_empty());
+}
+
+#[test]
+fn a_save_over_a_document_that_changed_elsewhere_is_refused_and_reload_keeps_the_words() {
+    let mut d = driver();
+    let id = text(&d, "Letter", "first");
+    let i = editor(&mut d, &id);
+    editor_send(
+        &mut d,
+        i,
+        EE::Body(ee::BodyEdited {
+            body: "my words".to_owned(),
+        }),
+    );
+    arrange(
+        &d,
+        act::docs::Edit {
+            document_id: id.clone(),
+            body_text: Some("elsewhere".to_owned()),
+            title: None,
+            expected_rev: None,
+        },
+    );
+    d.pump(Duration::from_millis(1300));
+    assert_eq!(document(&d, &id).body.as_deref(), Some("elsewhere"));
+    let state = editor_state(d.view(i));
+    let autosave = state.autosave.clone().unwrap();
+    assert_eq!(autosave.phase, wire::autosave::Phase::Conflict as i32);
+    assert_eq!(state.status_label, "This document changed somewhere else.");
+    assert_eq!(autosave.reload_label, "Reload");
+    let Some(wire::docs_editor_state::Content::Draft(draft)) = &state.content else {
+        panic!("{:?}", state.content);
+    };
+    assert_eq!(draft.body, "my words");
+    // Reload: the words are kept as an earlier version and the vault's document is shown.
+    d.send(
+        i,
+        wire::screen_event::Kind::StatusActed(wire::StatusActed {}),
+    );
+    let state = editor_state(d.view(i));
+    let Some(wire::docs_editor_state::Content::Draft(draft)) = &state.content else {
+        panic!("{:?}", state.content);
+    };
+    assert_eq!(draft.body, "elsewhere");
+    assert_eq!(state.remote_note, "Your text is in Earlier versions.");
+    assert_eq!(state.version_label, "Version 3");
+    // The next save is fresh.
+    editor_send(
+        &mut d,
+        i,
+        EE::Body(ee::BodyEdited {
+            body: "from the new one".to_owned(),
+        }),
+    );
+    d.pump(Duration::from_millis(1300));
+    assert_eq!(document(&d, &id).body.as_deref(), Some("from the new one"));
+}
+
+#[test]
+fn a_document_trashed_elsewhere_refuses_the_save_as_trashed_and_reload_keeps_the_words() {
+    let mut d = driver();
+    let id = text(&d, "Letter", "first");
+    let i = editor(&mut d, &id);
+    editor_send(
+        &mut d,
+        i,
+        EE::Body(ee::BodyEdited {
+            body: "my words".to_owned(),
+        }),
+    );
+    arrange(
+        &d,
+        act::docs::Trash {
+            document_id: id.clone(),
+        },
+    );
+    d.pump(Duration::from_millis(1300));
+    let state = editor_state(d.view(i));
+    assert_eq!(state.status_label, "This document was moved to the trash.");
+    d.send(
+        i,
+        wire::screen_event::Kind::StatusActed(wire::StatusActed {}),
+    );
+    let state = editor_state(d.view(i));
+    let Some(wire::docs_editor_state::Content::Failure(failure)) = &state.content else {
+        panic!("{:?}", state.content);
+    };
+    assert_eq!(
+        failure.remedy,
+        "Restore it to find your text in Earlier versions."
+    );
+    arrange(
+        &d,
+        act::docs::Restore {
+            document_id: id.clone(),
+        },
+    );
+    assert_eq!(document(&d, &id).versions.len(), 2);
 }

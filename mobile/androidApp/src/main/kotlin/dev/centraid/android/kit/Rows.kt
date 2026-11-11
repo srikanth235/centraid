@@ -455,13 +455,32 @@ public fun AutosaveStatus(autosave: Autosave?, modifier: Modifier = Modifier) {
     val label = autosaveLabel(autosave)
     if (label.isEmpty()) return
     val refused = autosave?.refused == true
-    Text(
-        label,
-        style = centraidType("annotLabel"),
-        color = if (refused) centraidColor("net") else centraidColor("textSoft"),
-        maxLines = 2,
-        modifier = modifier.testTag("kit-autosave"),
-    )
+    val reload = autosave?.reload_label.orEmpty()
+    val acted = LocalStatusActed.current
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            label,
+            style = centraidType("annotLabel"),
+            color = if (refused) centraidColor("net") else centraidColor("textSoft"),
+            maxLines = 2,
+            modifier = Modifier.testTag("kit-autosave"),
+        )
+        // A SAVE THE VAULT REFUSED BECAUSE THE RECORD CHANGED ELSEWHERE (#1185): the words stay,
+        // and Reload is the one verb. It is the kit's `StatusActed`, which Rust answers.
+        if (reload.isNotEmpty()) {
+            Text(
+                reload,
+                style = centraidType("annotLabel").copy(fontWeight = FontWeight.SemiBold),
+                color = centraidColor("text"),
+                modifier = Modifier
+                    .heightIn(min = KitGeometry.ROW_MIN)
+                    .clickable(onClick = acted)
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .testTag("kit-autosave-reload")
+                    .semantics { role = Role.Button },
+            )
+        }
+    }
 }
 
 /**

@@ -937,6 +937,7 @@ fn recents_lists_the_newest_changed_first() {
             document_id: old,
             body_text: Some("changed".to_owned()),
             title: None,
+            expected_rev: None,
         },
     );
     drive_send(&mut d, i, D::Refreshed(de::Refreshed {}));
@@ -1091,4 +1092,41 @@ fn a_document_without_its_bytes_here_has_no_thumbnail_and_a_badge_from_its_name(
     );
     let tahoe = row(d.view(i), "Tahoe packing list");
     assert!(!tahoe.badge.is_empty() && tahoe.badge.len() <= 4);
+}
+
+#[test]
+fn a_rename_over_a_document_that_changed_elsewhere_is_refused_and_reload_shows_its_title() {
+    let mut d = driver();
+    let i = root(&d);
+    let id = text(&d, "Draft", "x");
+    drive_send(&mut d, i, D::Refreshed(de::Refreshed {}));
+    row_menu(&mut d, i, &id);
+    pick(&mut d, i, "rename");
+    arrange(
+        &d,
+        act::docs::Rename {
+            document_id: id.clone(),
+            title: "Elsewhere".to_owned(),
+            expected_rev: None,
+        },
+    );
+    drive_send(
+        &mut d,
+        i,
+        D::RenameEdited(de::RenameEdited {
+            title: "Mine".to_owned(),
+        }),
+    );
+    d.pump(std::time::Duration::from_millis(1300));
+    assert_eq!(document(&d, &id).document.unwrap().title, "Elsewhere");
+    let rename = state(&d, i).rename.clone().expect("the rename stays open");
+    assert_eq!(rename.status_label, "This document changed somewhere else.");
+    assert_eq!(rename.autosave.unwrap().reload_label, "Reload");
+    d.send(
+        i,
+        wire::screen_event::Kind::StatusActed(wire::StatusActed {}),
+    );
+    let rename = state(&d, i).rename.clone().expect("still open");
+    assert_eq!(rename.title, "Elsewhere");
+    assert_eq!(rename.status_label, "Your text is in Earlier versions.");
 }

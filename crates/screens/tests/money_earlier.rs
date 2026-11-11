@@ -84,6 +84,7 @@ fn rename(d: &Driver, id: &str, title: &str) {
     let done = d.act(act_key(act::money::SetDisplayName {
         transaction_id: id.to_owned(),
         title: title.to_owned(),
+        expected_rev: None,
     }));
     assert_eq!(done.status, wire::ActStatus::Executed as i32, "{done:?}");
 }

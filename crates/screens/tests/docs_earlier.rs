@@ -57,6 +57,7 @@ fn edit(d: &Driver, id: &str, body: &str) {
             document_id: id.to_owned(),
             body_text: Some(body.to_owned()),
             title: None,
+            expected_rev: None,
         },
     );
 }
@@ -134,6 +135,7 @@ fn replaced_bytes_read_as_the_earlier_files_type_and_size_a_rename_as_its_name_a
         act::docs::Rename {
             document_id: id.clone(),
             title: "Lease 2026".to_owned(),
+            expected_rev: None,
         },
     );
     arrange(

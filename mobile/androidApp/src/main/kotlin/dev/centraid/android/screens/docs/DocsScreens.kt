@@ -89,6 +89,7 @@ import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.PhoneSaysLine
+import centraid.core.v1.StatusLine as StatusLineMessage
 import dev.centraid.android.kit.ProgressStatusLine
 import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.ReadStateView
@@ -248,7 +249,17 @@ internal fun RenameLine(rename: DocsRename?, placeholder: String, doneLabel: Str
         }
         OutlineButton(label = doneLabel.ifEmpty { KitWords.DONE }, testTag = "docs-rename-done", onPress = onDone)
     }
-    StatusLine(rename.status_label)
+    // A RENAME THE VAULT REFUSED BECAUSE THE DOCUMENT CHANGED ELSEWHERE (#1185): Reload is the one verb,
+    // the kit's `StatusActed`.
+    val reload = rename.autosave?.reload_label.orEmpty()
+    if (reload.isNotEmpty()) {
+        StatusLine(
+            line = StatusLineMessage(sentence = rename.status_label, action_label = reload, refused = true),
+            actTag = "docs-rename-reload",
+        )
+    } else {
+        StatusLine(rename.status_label)
+    }
 }
 
 // ---------------------------------------------------------------------------

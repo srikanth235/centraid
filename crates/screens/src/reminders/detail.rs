@@ -1178,9 +1178,8 @@ impl Screen for Detail {
                 open_field: self.open_field.clone(),
                 chrome: Some(rows::chrome(locale)),
                 status: self
-                    .autosave
-                    .conflict_line(locale)
-                    .or_else(|| self.ops.status())
+                    .ops
+                    .status()
                     .or_else(|| self.differences.status(locale, follow::Source::Phone))
                     .or_else(|| self.share.status())
                     .or_else(|| self.earlier.status(locale))

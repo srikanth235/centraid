@@ -249,9 +249,8 @@ fn a_save_over_a_person_who_changed_elsewhere_is_refused_and_reload_keeps_the_wo
     let autosave = state.autosave.clone().unwrap();
     assert_eq!(autosave.phase, wire::autosave::Phase::Conflict as i32);
     assert_eq!(draft(d.view(i)).met, "At the studio");
-    let status = state.status.clone().expect("the sentence");
-    assert_eq!(status.sentence, "This person changed somewhere else.");
-    assert_eq!(status.action_label, "Reload");
+    assert_eq!(autosave.label, "This person changed somewhere else.");
+    assert_eq!(autosave.reload_label, "Reload");
     // Reload: the words are kept as an earlier version and the vault's person is shown.
     d.send(
         i,
@@ -299,7 +298,7 @@ fn a_person_trashed_elsewhere_refuses_the_save_as_trashed_and_keeps_the_words() 
         wire::autosave::Phase::Conflict as i32
     );
     assert_eq!(
-        state.status.clone().unwrap().sentence,
+        state.autosave.clone().unwrap().label,
         "This person was moved to the trash."
     );
     assert_eq!(draft(d.view(i)).role, "Illustrator");

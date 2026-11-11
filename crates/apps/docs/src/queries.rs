@@ -726,6 +726,9 @@ pub struct DocumentData {
     /// The words extracted from the head's bytes: `None` is "no text row", and
     /// `Some("")` is an empty text document.
     pub body: Option<String>,
+    /// The document's revision (its history's newest version, 0 when none), read before the
+    /// document: what an edit or a rename names as `expected_rev` (#1185).
+    pub rev: i64,
 }
 
 /// A folder as the tree sees it: its id and its parent's. [`folder_path`] is
@@ -780,6 +783,8 @@ pub fn load_document(
     }
     guarded(|| {
         let ids = [document_id.to_owned()];
+        // The revision first: a change between the two reads refuses the save, never lets it through.
+        let rev = centraid_apps_kit::revision::head(door, document_id)?;
         let entities = read_of(
             door,
             "docs.document.entity",
@@ -811,6 +816,7 @@ pub fn load_document(
             path: folder_path(&folders, row.folder_id.as_deref()),
             row: Some(row),
             body,
+            rev,
         })
     })
 }

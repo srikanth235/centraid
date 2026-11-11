@@ -134,7 +134,7 @@ catalog! {
     plain not_starred = ("Not starred", "Not starred");
     plain no_text = ("This document has no text to show.", "This document has no text to show.");
     plain recent_rule = ("Most recently added documents.", "Most recently added documents.");
-    plain remote_changed = ("Changed elsewhere; saving reloads it.", "Changed elsewhere; saving reloads it.");
+    plain remote_changed = ("Changed elsewhere; your next save will ask to reload.", "Changed elsewhere; your next save will ask to reload.");
     plain rename_placeholder = ("Document name", "Document name");
     plain retry = ("Try again", "Try again");
     plain saved = ("Saved", "Saved");

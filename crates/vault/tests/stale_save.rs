@@ -19,7 +19,7 @@ struct World {
 impl World {
     fn new() -> Self {
         Self {
-            scratch: common::Scratch::founded("stale_save").expect("a vault"),
+            scratch: common::Scratch::founded_with_blobs("stale_save").expect("a vault"),
             registry: Registry::with_system_commands().expect("a registry"),
         }
     }
@@ -136,4 +136,96 @@ fn a_task_edit_checks_the_revision_it_replaces() {
             w.ok("entity.trash", json!({ "id": id }));
         },
     );
+}
+
+#[test]
+fn a_document_edit_checks_the_revision_it_replaces() {
+    let w = World::new();
+    let id = w.ok(
+        "document.create_text",
+        json!({ "title": "Notes.txt", "body_text": "first", "media_type": "text/plain" }),
+    )["id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    w.the_four_facts(
+        "document.edit",
+        &id,
+        |rev, words| {
+            let mut input = json!({ "id": id, "body_text": words });
+            if let Some(rev) = rev {
+                input["expected_rev"] = rev.into();
+            }
+            input
+        },
+        || {
+            w.ok("entity.trash", json!({ "id": id }));
+        },
+    );
+}
+
+#[test]
+fn a_retitle_checks_the_revision_it_replaces() {
+    let w = World::new();
+    let id = w.ok(
+        "document.create_text",
+        json!({ "title": "Notes.txt", "body_text": "first", "media_type": "text/plain" }),
+    )["id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    w.the_four_facts(
+        "entity.retitle",
+        &id,
+        |rev, title| {
+            let mut input = json!({ "id": id, "title": title });
+            if let Some(rev) = rev {
+                input["expected_rev"] = rev.into();
+            }
+            input
+        },
+        || {
+            w.ok("entity.trash", json!({ "id": id }));
+        },
+    );
+}
+
+#[test]
+fn the_words_of_a_refused_document_save_are_kept_as_a_version_the_document_can_return_to() {
+    let w = World::new();
+    let id = w.ok(
+        "document.create_text",
+        json!({ "title": "Notes.txt", "body_text": "first", "media_type": "text/plain" }),
+    )["id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    w.ok(
+        "document.edit",
+        json!({ "id": id, "body_text": "elsewhere" }),
+    );
+    let kept = w.ok(
+        "history.keep_version",
+        json!({ "id": id, "fields": { "document.text": "my unsaved words" } }),
+    );
+    assert_eq!(kept["kept"], true);
+    assert_eq!(w.versions(&id), 2);
+    // The document is as the other surface left it; restoring the kept version brings the words back.
+    w.ok(
+        "history.restore_version",
+        json!({ "id": id, "seq": kept["seq"] }),
+    );
+    let (held, kept_blob): (String, String) = w
+        .scratch
+        .vault
+        .read(|c| {
+            Ok(c.query_row(
+                "SELECT d.blob, (SELECT r.blob FROM revision r WHERE r.entity_id = d.id AND r.seq = ?2)
+                   FROM document d WHERE d.id = ?1",
+                rusqlite::params![&id, kept["seq"].as_i64()],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )?)
+        })
+        .expect("a hash");
+    assert_eq!(held, kept_blob);
 }
