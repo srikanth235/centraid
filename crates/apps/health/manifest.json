@@ -490,7 +490,14 @@
         "properties": {
           "system": {
             "type": "string",
-            "enum": ["contacts", "calendar", "files", "health", "statement"]
+            "enum": [
+              "contacts",
+              "calendar",
+              "files",
+              "health",
+              "statement",
+              "phone_reminders"
+            ]
           },
           "ref": {
             "type": "string",
