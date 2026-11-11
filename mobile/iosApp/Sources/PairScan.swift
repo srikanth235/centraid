@@ -28,7 +28,7 @@ enum PairScan {
         done: @escaping (Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void
     ) {
         guard let top = frontmost() else {
-            done(.failed(ScreenStore.failure("no screen to present over")))
+            done(.failed(ScreenStore.failure(EffectReason.noWindow)))
             return
         }
         if PairScanner.available {
@@ -45,7 +45,7 @@ enum PairScan {
             }
             controller.onCancel = { [weak controller] in
                 controller?.dismiss(animated: true)
-                done(.failed(ScreenStore.failure("scan closed", cancelled: true)))
+                done(.failed(ScreenStore.failure(EffectReason.cancelled, cancelled: true)))
             }
             // The camera screen's photo choice is the controller's own; Rust is told
             // only what it reads.
@@ -55,7 +55,7 @@ enum PairScan {
             let chosen = PairPhotoPicker { code, cancelled in
                 picker = nil
                 if cancelled {
-                    done(.failed(ScreenStore.failure("scan closed", cancelled: true)))
+                    done(.failed(ScreenStore.failure(EffectReason.cancelled, cancelled: true)))
                 } else {
                     done(.codeScanned(Self.scanned(code ?? "")))
                 }

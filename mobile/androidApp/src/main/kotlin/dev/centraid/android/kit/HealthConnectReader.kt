@@ -107,18 +107,18 @@ internal class AndroidHealth(context: Context) {
                 launch(permissionsFor(read.chosen, read.ask_background))
             } catch (_: android.content.ActivityNotFoundException) {
                 waiting = null
-                return denied("the permission sheet could not be shown")
+                return denied(EffectReason.DENIED)
             }
             answer.await()
         }
         return withContext(Dispatchers.IO) {
             effectAttempt { HealthConnectReader(context).read(read) }.fold(
                 onSuccess = { snapshot ->
-                    snapshot?.let { EffectResult(health = it) } ?: denied("health connect has granted nothing")
+                    snapshot?.let { EffectResult(health = it) } ?: denied(EffectReason.DENIED)
                 },
                 onFailure = { failure ->
-                    if (failure is SecurityException) denied("health access is off")
-                    else EffectResult(failed = EffectFailed(reason = "health could not be read"))
+                    if (failure is SecurityException) denied(EffectReason.DENIED)
+                    else EffectResult(failed = EffectFailed(reason = EffectReason.UNREADABLE))
                 },
             )
         }

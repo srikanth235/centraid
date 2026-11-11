@@ -651,3 +651,62 @@ fn a_first_launch_view_that_draws_the_roster_is_clean_and_no_view_is_pending() {
         RuleState::Pending(_)
     ));
 }
+
+// ---- native-effect-reasons ----
+
+fn reasons_tree(name: &str, kotlin: &str, swift: &str) -> std::path::PathBuf {
+    let root = fixture_dir(name);
+    write(
+        &root,
+        EFFECT_REASONS,
+        "pub const DENIED: &str = \"denied\";\npub const FAILED: &str = \"failed\";\n",
+    );
+    write(
+        &root,
+        "mobile/androidApp/src/main/kotlin/EffectReason.kt",
+        "object EffectReason {\n    const val DENIED = \"denied\"\n    const val FAILED = \"failed\"\n}\n",
+    );
+    write(
+        &root,
+        "mobile/iosApp/Sources/EffectReason.swift",
+        "enum EffectReason {\n    static let denied = \"denied\"\n    static let failed = \"failed\"\n}\n",
+    );
+    write(&root, "mobile/androidApp/src/main/kotlin/Fx.kt", kotlin);
+    write(&root, "mobile/iosApp/Sources/Fx.swift", swift);
+    root
+}
+
+#[test]
+fn english_passed_as_a_reason_is_caught() {
+    let root = reasons_tree(
+        "native-reasons-red",
+        "fun a() = failed(\"the calendar could not be read\")\n",
+        "failed.reason = \"calendar access not given\"\n",
+    );
+    let report = native_effect_reasons(&root);
+    assert_eq!(report.findings.len(), 2, "{}", findings(&report));
+}
+
+#[test]
+fn a_helper_that_drifts_from_the_rust_codes_is_caught() {
+    let root = reasons_tree("native-reasons-drift", "", "");
+    write(
+        &root,
+        "mobile/iosApp/Sources/EffectReason.swift",
+        "enum EffectReason {\n    static let denied = \"refused\"\n    static let failed = \"failed\"\n}\n",
+    );
+    let report = native_effect_reasons(&root);
+    assert_eq!(report.findings.len(), 1, "{}", findings(&report));
+}
+
+#[test]
+fn codes_from_the_helper_are_clean() {
+    let root = reasons_tree(
+        "native-reasons-green",
+        "fun a() = failed(EffectReason.DENIED)\nval t = reason = EffectReason.FAILED\n",
+        "failed.reason = EffectReason.denied\nlet x = failure(EffectReason.failed)\n",
+    );
+    let report = native_effect_reasons(&root);
+    assert!(report.findings.is_empty(), "{}", findings(&report));
+    assert!(matches!(report.state, RuleState::Applied(2)));
+}

@@ -22,6 +22,7 @@ import java.util.UUID
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
+import dev.centraid.android.kit.EffectReason
 
 /**
  * THE PIXEL HALF OF THE EDITOR (#1135): decode, draw, encode. The platform's
@@ -55,7 +56,7 @@ internal object PhotosEditRender {
             // An original the photo library holds is copied out for the render.
             val copied = if (effect.source_path.isEmpty() && effect.os_ref.isNotEmpty()) copyLibraryOriginal(context, effect.os_ref) else null
             val source = if (copied != null) effect.copy(source_path = copied) else effect
-            val made = render(cacheDir, source) ?: return@withContext failed("the edit could not be drawn")
+            val made = render(cacheDir, source) ?: return@withContext failed(EffectReason.FAILED)
             try {
                 val size = made.file.length()
                 val staged = made.file.inputStream().use { source ->

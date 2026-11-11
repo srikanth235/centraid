@@ -176,13 +176,13 @@ enum FilePerformer {
         do {
             try save.content.write(to: url, options: [.completeFileProtection])
         } catch {
-            done(.failed(ScreenStore.failure("could not stage the file")))
+            done(.failed(ScreenStore.failure(EffectReason.failed)))
             return
         }
         let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)
         let holder = PickerHolder { urls in
             try? FileManager.default.removeItem(at: url)
-            done(urls.isEmpty ? .failed(ScreenStore.failure("dismissed", cancelled: true)) : .done(Centraid_Core_V1_EffectDone()))
+            done(urls.isEmpty ? .failed(ScreenStore.failure(EffectReason.cancelled, cancelled: true)) : .done(Centraid_Core_V1_EffectDone()))
         }
         present(picker, holder)
     }
@@ -206,13 +206,13 @@ enum FilePerformer {
         } catch {
             try? manager.removeItem(at: staged)
             try? manager.removeItem(at: url)
-            done(.failed(ScreenStore.failure("could not stage the file")))
+            done(.failed(ScreenStore.failure(EffectReason.failed)))
             return
         }
         let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)
         let holder = PickerHolder { urls in
             try? FileManager.default.removeItem(at: url)
-            done(urls.isEmpty ? .failed(ScreenStore.failure("dismissed", cancelled: true)) : .done(Centraid_Core_V1_EffectDone()))
+            done(urls.isEmpty ? .failed(ScreenStore.failure(EffectReason.cancelled, cancelled: true)) : .done(Centraid_Core_V1_EffectDone()))
         }
         present(picker, holder)
     }

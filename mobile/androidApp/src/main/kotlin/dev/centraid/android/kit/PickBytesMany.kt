@@ -76,6 +76,6 @@ internal suspend fun pickFolder(context: Context, tree: Uri?, accept: List<Strin
                 }
             }
             EffectResult(bytes_picked = BytesPicked(files = files))
-        }.getOrElse { EffectResult(failed = EffectFailed(reason = "the folder could not be read")) }
+        }.getOrElse { EffectResult(failed = EffectFailed(reason = EffectReason.UNREADABLE)) }
     }
 }

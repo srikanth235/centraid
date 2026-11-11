@@ -65,7 +65,7 @@ enum ShelfCopyExport {
             return saved < 0 ? exported(.failed) : exported(.done, handed: saved)
         default:
             var failed = Centraid_Core_V1_EffectFailed()
-            failed.reason = "no export mode"
+            failed.reason = EffectReason.unsupported
             return .failed(failed)
         }
     }

@@ -35,9 +35,9 @@ enum HealthKitReader {
     /// The effect's answer: a snapshot, or a refusal by value when HealthKit is not on this phone
     /// or the member's Connect sheet failed.
     static func snapshot(_ read: Centraid_Core_V1_HealthRead) async -> Centraid_Core_V1_EffectResult.OneOf_Outcome {
-        guard HKHealthStore.isHealthDataAvailable() else { return .failed(denied("health data is not available")) }
+        guard HKHealthStore.isHealthDataAvailable() else { return .failed(denied(EffectReason.unavailable)) }
         if read.askPermission {
-            guard await HealthAccess.request(read.chosen) else { return .failed(denied("health access not given")) }
+            guard await HealthAccess.request(read.chosen) else { return .failed(denied(EffectReason.denied)) }
         }
         let store = HealthAccess.store
         return await Task.detached(priority: .utility) {

@@ -52,7 +52,7 @@ final class DocsFiles: ObservableObject {
             if VNDocumentCameraViewController.isSupported {
                 scanning = true
             } else {
-                fail("unavailable")
+                fail(EffectReason.unavailable)
             }
         } else {
             importing = true
@@ -67,7 +67,7 @@ final class DocsFiles: ObservableObject {
             if (error as NSError).code == NSUserCancelledError {
                 done()
             } else {
-                fail("the picker failed")
+                fail(EffectReason.failed)
             }
         case let .success(urls):
             guard let url = urls.first else { return done() }
@@ -76,7 +76,7 @@ final class DocsFiles: ObservableObject {
             DispatchQueue.global(qos: .userInitiated).async {
                 let copied = DocsFileCopies.copy(url)
                 DispatchQueue.main.async {
-                    guard let copied else { return self.fail("the file cannot be read") }
+                    guard let copied else { return self.fail(EffectReason.unreadable) }
                     self.stage(copied.path, name: copied.name, mediaType: copied.mediaType)
                 }
             }
@@ -89,7 +89,7 @@ final class DocsFiles: ObservableObject {
     func photoChosen(_ copied: DocsFileCopies.Copied?, cancelled: Bool) {
         choosingPhoto = false
         if cancelled { return done() }
-        guard let copied else { return fail("the photo cannot be read") }
+        guard let copied else { return fail(EffectReason.unreadable) }
         stage(copied.path, name: copied.name, mediaType: copied.mediaType)
     }
 
@@ -115,13 +115,13 @@ final class DocsFiles: ObservableObject {
     func scanFailed() {
         scanning = false
         let status = AVCaptureDevice.authorizationStatus(for: .video)
-        fail("the scanner failed", denied: status == .denied || status == .restricted)
+        fail(EffectReason.failed, denied: status == .denied || status == .restricted)
     }
 
     // MARK: Staging
 
     private func stage(_ path: String, name: String, mediaType: String) {
-        guard let core else { return fail("no vault is open") }
+        guard let core else { return fail(EffectReason.unavailable) }
         let answer = answer
         self.answer = nil
         Task {
@@ -144,7 +144,7 @@ final class DocsFiles: ObservableObject {
             case .refused:
                 // The sentence is Rust's: a refusal is said by the screen that asked.
                 var failed = Centraid_Core_V1_EffectFailed()
-                failed.reason = "the core refused the file"
+                failed.reason = EffectReason.failed
                 answer?(.failed(failed))
             }
         }

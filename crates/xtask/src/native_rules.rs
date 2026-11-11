@@ -38,6 +38,7 @@ pub fn all(root: &Path) -> Vec<RuleReport> {
         health_connect_read_only(root),
         walker_platform_law(root),
         first_launch_asks_nothing(root),
+        native_effect_reasons(root),
         crate::native_parity::native_shell_parity(root),
     ]
 }
@@ -1226,6 +1227,89 @@ pub fn first_launch_asks_nothing(root: &Path) -> RuleReport {
         }
     }
     RuleReport::applied(NAME, views.len(), findings)
+}
+
+/// The Rust file that defines the reason codes a shell may send.
+const EFFECT_REASONS: &str = "crates/screens/src/effect_reason.rs";
+
+/// The string value of every `<marker> … = "value"` line, in order.
+fn constant_values(source: &str, marker: &str) -> Vec<String> {
+    code_lines(source)
+        .into_iter()
+        .filter(|(_, line)| line.trim_start().starts_with(marker))
+        .filter_map(|(_, line)| quoted(line).first().map(|value| (*value).to_owned()))
+        .collect()
+}
+
+/// `native-effect-reasons` — a shell answers a refused effect with a FACT CODE,
+/// never English (#1185). The codes are the `pub const`s of
+/// `crates/screens/src/effect_reason.rs`; each shell has one `EffectReason`
+/// holding exactly that set, and no other literal is passed as a reason
+/// (`failed("…")`, `failure("…")`, `fail("…")`, `denied("…")`, `reason = "…"`).
+pub fn native_effect_reasons(root: &Path) -> RuleReport {
+    const NAME: &str = "native-effect-reasons";
+    let rust = read(&root.join(EFFECT_REASONS));
+    if rust.is_empty() {
+        return RuleReport::pending(NAME, "no crates/screens/src/effect_reason.rs");
+    }
+    let mut codes = constant_values(&rust, "pub const ");
+    codes.sort();
+    let mut findings = Vec::new();
+    let mut scanned = 0usize;
+    let sets: Vec<(&str, Vec<PathBuf>, &str)> = vec![
+        ("const val ", compose_sources(root), "EffectReason.kt"),
+        ("static let ", swift_sources(root), "EffectReason.swift"),
+    ];
+    for (marker, sources, helper_name) in sets {
+        let helpers: Vec<&PathBuf> = sources
+            .iter()
+            .filter(|path| path.ends_with(helper_name))
+            .collect();
+        if sources.is_empty() {
+            continue;
+        }
+        let Some(helper) = helpers.first() else {
+            findings.push(format!(
+                "{helper_name} is missing: the shell has no reason codes"
+            ));
+            continue;
+        };
+        let mut values = constant_values(&read(helper), marker);
+        values.sort();
+        if values != codes {
+            findings.push(format!(
+                "{}: its codes {values:?} differ from {EFFECT_REASONS} {codes:?}",
+                relative(root, helper)
+            ));
+        }
+        for file in &sources {
+            if file.ends_with(helper_name) {
+                continue;
+            }
+            scanned += 1;
+            let rel = relative(root, file);
+            for (line, text) in code_lines(&read(file)) {
+                for opener in [
+                    "failed(\"",
+                    "failure(\"",
+                    "fail(\"",
+                    "denied(\"",
+                    "reason = \"",
+                    "reason: \"",
+                ] {
+                    if !text.contains(opener) {
+                        continue;
+                    }
+                    findings.push(format!(
+                        "{rel}:{line}: `{}` — a reason is a code from EffectReason, never words",
+                        text.trim()
+                    ));
+                    break;
+                }
+            }
+        }
+    }
+    RuleReport::applied(NAME, scanned, findings)
 }
 
 #[cfg(test)]

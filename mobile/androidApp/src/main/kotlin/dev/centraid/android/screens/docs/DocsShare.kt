@@ -11,6 +11,7 @@ import centraid.core.v1.ShareFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import dev.centraid.android.kit.EffectReason
 
 /**
  * SHARE ONE DOCUMENT'S FILE (`ShareFile`): the store names a file by its digest, so the receiver
@@ -27,7 +28,7 @@ internal suspend fun performShareFile(context: Context, share: ShareFile): Effec
         folder.mkdirs()
         val target = File(folder, share.name.replace('/', '-').ifEmpty { "Document" })
         runCatching { File(share.path).copyTo(target, overwrite = true) }.getOrNull()
-    } ?: return EffectResult(failed = EffectFailed(reason = "the file could not be read"))
+    } ?: return EffectResult(failed = EffectFailed(reason = EffectReason.UNREADABLE))
     return openShareSheet(context, copy, share.media_type, share.chooser_title)
 }
 
@@ -45,7 +46,7 @@ internal suspend fun performShareBytes(context: Context, share: ShareBytes): Eff
         folder.mkdirs()
         val target = File(folder, share.name.replace('/', '-').ifEmpty { "Shared" })
         runCatching { target.writeBytes(share.content.toByteArray()) }.map { target }.getOrNull()
-    } ?: return EffectResult(failed = EffectFailed(reason = "the file could not be written"))
+    } ?: return EffectResult(failed = EffectFailed(reason = EffectReason.UNWRITABLE))
     return openShareSheet(context, copy, share.media_type, share.chooser_title)
 }
 

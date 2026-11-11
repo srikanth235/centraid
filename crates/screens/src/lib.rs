@@ -10,6 +10,7 @@ pub mod catalog;
 pub mod chat;
 pub mod custody;
 pub mod docs;
+pub mod effect_reason;
 pub mod field;
 pub mod follow;
 pub mod health;

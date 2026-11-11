@@ -25,6 +25,7 @@ import dev.centraid.core.CoreOutcome
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import dev.centraid.android.kit.EffectReason
 
 /**
  * THE ORIGINALS OF A PICK, HANDED TO THE PLATFORM (#1135): the generic
@@ -91,7 +92,7 @@ internal suspend fun performExportOriginals(
             }
         }
 
-        else -> EffectResult(failed = EffectFailed(reason = "no export mode"))
+        else -> EffectResult(failed = EffectFailed(reason = EffectReason.UNSUPPORTED))
     }
 }
 

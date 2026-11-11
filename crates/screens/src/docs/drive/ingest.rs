@@ -352,7 +352,7 @@ fn refusal_of(locale: Locale, kind: Kind, failed: &wire::EffectFailed) -> String
 }
 
 /// The reason a shell gives when this phone has no picker or scanner to offer.
-pub const UNAVAILABLE: &str = "unavailable";
+pub use crate::effect_reason::UNAVAILABLE;
 
 /// A media type for a file the platform named none for, off its name — the core
 /// has no sniffer, and bytes promoted as `application/octet-stream` are ones no

@@ -58,7 +58,7 @@ const PAGE: usize = 30;
 /// The most rows one `<app>.attachments` page answers (the read's own maximum).
 const PAGE_MAX: usize = 100;
 /// The reason a shell gives when this phone has no picker to offer.
-pub const UNAVAILABLE: &str = "unavailable";
+pub use crate::effect_reason::UNAVAILABLE;
 const OCTET_STREAM: &str = "application/octet-stream";
 const PHOTO: &str = "photo";
 

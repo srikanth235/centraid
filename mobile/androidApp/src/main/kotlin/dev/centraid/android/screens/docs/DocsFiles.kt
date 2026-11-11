@@ -33,6 +33,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import dev.centraid.android.kit.EffectReason
 
 /**
  * WHAT DOCS' EFFECTS NEED FROM THE SESSION (#1135): the core a picked file streams into (the vault
@@ -80,7 +81,7 @@ internal class DocsPickers(
             // A declared-and-denied CAMERA makes `TakePicture` throw; the grant can be
             // revoked between the check and the launch.
             setScanTarget("")
-            fail("camera", denied = true)
+            fail(EffectReason.DENIED, denied = true)
         }
     }
 
@@ -89,7 +90,7 @@ internal class DocsPickers(
         val policy = context.getSystemService(android.app.admin.DevicePolicyManager::class.java)
         when {
             !context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY) -> fail(UNAVAILABLE)
-            policy?.getCameraDisabled(null) == true -> fail("camera", denied = true)
+            policy?.getCameraDisabled(null) == true -> fail(EffectReason.DENIED, denied = true)
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED -> launchScan()
             else -> cameraGrant?.launch(Manifest.permission.CAMERA) ?: fail(UNAVAILABLE)
         }
@@ -104,7 +105,7 @@ internal class DocsPickers(
 
     /** The camera grant was answered. */
     fun cameraAnswered(granted: Boolean) {
-        if (!granted) return fail("camera", denied = true)
+        if (!granted) return fail(EffectReason.DENIED, denied = true)
         try {
             launchScan()
         } catch (why: ActivityNotFoundException) {
@@ -112,7 +113,7 @@ internal class DocsPickers(
             fail(UNAVAILABLE)
         } catch (why: SecurityException) {
             setScanTarget("")
-            fail("camera", denied = true)
+            fail(EffectReason.DENIED, denied = true)
         }
     }
 
@@ -121,7 +122,7 @@ internal class DocsPickers(
         if (uri == null) return done()
         scope.launch {
             val copied = withContext(Dispatchers.IO) { DocsIngestFiles.copy(context, uri) }
-            if (copied == null) fail("the file cannot be read") else stage(copied.path, copied.name, mediaTypeOf(copied.name, copied.mediaType))
+            if (copied == null) fail(EffectReason.UNREADABLE) else stage(copied.path, copied.name, mediaTypeOf(copied.name, copied.mediaType))
         }
     }
 
@@ -135,7 +136,7 @@ internal class DocsPickers(
         }
         scope.launch {
             val pdf = withContext(Dispatchers.IO) { DocsIngestFiles.scanToPdf(context, photo) }
-            if (pdf == null) fail("the scan cannot be read") else stage(pdf.absolutePath, "", PDF)
+            if (pdf == null) fail(EffectReason.UNREADABLE) else stage(pdf.absolutePath, "", PDF)
         }
     }
 
@@ -182,7 +183,7 @@ internal class DocsPickers(
                     ),
                 )
                 is Stage.Outcome.Refused ->
-                    answer?.invoke(EffectResult(failed = EffectFailed(reason = outcome.sentence.ifEmpty { "the file was not staged" })))
+                    answer?.invoke(EffectResult(failed = EffectFailed(reason = outcome.sentence.ifEmpty { EffectReason.FAILED })))
             }
         }
     }
@@ -209,7 +210,7 @@ internal class DocsPickers(
         if (tree == null) return done()
         if (FolderAccess.following(context, tree) != null) return done()
         val origin = "folder:" + java.util.UUID.randomUUID().toString()
-        if (!FolderAccess.remember(context, origin, tree)) return fail("the folder could not be followed")
+        if (!FolderAccess.remember(context, origin, tree)) return fail(EffectReason.FAILED)
         val name = FolderAccess.name(context, tree).ifEmpty { tree.lastPathSegment.orEmpty() }
         answer?.invoke(EffectResult(folder_followed = FolderFollowed(origin = origin, name = name)))
         answer = null

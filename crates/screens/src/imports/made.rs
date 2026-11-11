@@ -36,7 +36,7 @@ fn followed(ctx: &Ctx, outcome: &reminders::Outcome) -> Vec<wire::Effect> {
 }
 
 /// The reason a shell gives when the phone has no Reminders store to read: the fact, never words.
-pub const UNAVAILABLE: &str = "unavailable";
+pub use crate::effect_reason::UNAVAILABLE;
 
 #[must_use]
 pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
