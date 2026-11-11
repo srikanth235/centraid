@@ -1208,3 +1208,105 @@ fn the_units_ratchet_fails_both_ways() {
     let paid = check(&root, &table(Status::Owed("#1185")));
     assert!(findings(&paid).contains("listed Owed"));
 }
+
+fn owner_tree(name: &str, screen: &str) -> PathBuf {
+    let root = fixture_dir(name);
+    write(&root, "crates/screens/src/notes/transfer.rs", screen);
+    root
+}
+
+fn owner_lacking(root: &Path) -> String {
+    owner_check_missing(root, "notes").join("\n")
+}
+
+#[test]
+fn a_screen_that_saves_a_file_through_the_owner_gate_keeps_the_owner_check() {
+    let root = owner_tree(
+        "owner-gated",
+        "use crate::kit::owner::OwnerGate; fn go() { wire::effect::Kind::SaveFile(file); }",
+    );
+    assert_eq!(owner_lacking(&root), "");
+    let kit = owner_tree(
+        "owner-kit-export",
+        "use crate::kit::export::ExportSpec; fn go() { wire::effect::Kind::SaveFile(file); }",
+    );
+    assert_eq!(owner_lacking(&kit), "");
+}
+
+#[test]
+fn a_screen_that_lets_data_leave_without_the_gate_is_named_with_its_file() {
+    for effect in ["SaveFile", "ShareFile", "ExportOriginals", "Share("] {
+        let root = owner_tree(
+            "owner-red",
+            &format!("fn go() {{ wire::effect::Kind::{effect}(file); }}"),
+        );
+        let gaps = owner_lacking(&root);
+        assert!(
+            gaps.contains("crates/screens/src/notes/transfer.rs") && gaps.contains(effect),
+            "{effect}: {gaps}"
+        );
+    }
+}
+
+#[test]
+fn a_comment_or_a_test_module_that_spells_a_leaving_effect_does_not_count() {
+    let root = owner_tree(
+        "owner-quiet",
+        "// Kind::SaveFile goes to the save sheet\n#[cfg(test)]\nmod tests { fn t() { Kind::Share(x); } }",
+    );
+    assert_eq!(owner_lacking(&root), "");
+}
+
+#[test]
+fn an_owner_check_raised_by_hand_is_named_unless_the_file_is_excepted() {
+    let hand = "fn ask() { wire::effect::Kind::OwnerCheck(check); }";
+    let root = owner_tree("owner-hand", hand);
+    assert!(owner_lacking(&root).contains("by hand"));
+    let excepted = [OwnerException {
+        file: "notes/transfer.rs",
+        reason: "its own wall",
+    }];
+    assert_eq!(
+        owner_check_missing_in(&root, "notes", &excepted),
+        Vec::<String>::new()
+    );
+    // An exception for a file that raises nothing is stale and says why.
+    let quiet = owner_tree("owner-stale", "fn nothing() {}");
+    let gaps = owner_check_missing_in(&quiet, "notes", &excepted).join("\n");
+    assert!(
+        gaps.contains("raises nothing") && gaps.contains("its own wall"),
+        "{gaps}"
+    );
+}
+
+#[test]
+fn only_lockers_wall_is_excepted_and_the_restore_screens_hold_the_gate() {
+    let excepted: Vec<&str> = OWNER_EXCEPTIONS.iter().map(|e| e.file).collect();
+    assert_eq!(excepted, ["locker/wall.rs"]);
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    assert_eq!(owner_custody_missing(&root), Vec::<String>::new());
+    // A fixture with a restore screen that stopped asking is named.
+    let bare = fixture_dir("owner-custody");
+    write(
+        &bare,
+        "crates/screens/src/custody/enter.rs",
+        "fn restore() {}",
+    );
+    let gaps = owner_custody_missing(&bare).join("\n");
+    assert!(
+        gaps.contains("custody/enter.rs") && gaps.contains("custody/make.rs"),
+        "{gaps}"
+    );
+}
+
+#[test]
+fn every_app_has_an_owner_check_row_and_the_committed_tree_keeps_it() {
+    for app in APPS {
+        assert!(
+            REGISTER
+                .iter()
+                .any(|row| row.app == app && row.promise == Promise::OwnerCheck),
+            "{app} has no OwnerCheck row"
+        );
+    }
+}

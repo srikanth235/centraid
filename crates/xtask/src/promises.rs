@@ -80,11 +80,15 @@ pub enum Promise {
     /// Every measured amount an app shows is a `kit::quantity::Quantity`, worded through the
     /// member's one units preference (metric or imperial), never by a formatter of the app's own.
     Units,
+    /// Anything that leaves the phone in the clear, and a restore, asks the owner check first
+    /// (#1185, "Confirm it's me"): one gate in the kit, `kit::owner`. Not on open; an import is
+    /// not checked.
+    OwnerCheck,
 }
 
 impl Promise {
     /// Every promise, in the order the table is read.
-    pub const ALL: [Promise; 7] = [
+    pub const ALL: [Promise; 8] = [
         Promise::Trash,
         Promise::Undo,
         Promise::History,
@@ -92,6 +96,7 @@ impl Promise {
         Promise::Export,
         Promise::Share,
         Promise::Units,
+        Promise::OwnerCheck,
     ];
 
     fn name(self) -> &'static str {
@@ -103,6 +108,7 @@ impl Promise {
             Promise::Arrive => "Arrive",
             Promise::Export => "Export",
             Promise::Share => "Share",
+            Promise::OwnerCheck => "OwnerCheck",
         }
     }
 }
@@ -340,6 +346,53 @@ pub const REGISTER: &[Row] = &[
         "crates/screens/src/photos/lightbox.rs",
     ),
     owed("reminders", Promise::Share, SHARE_OWED),
+    // OwnerCheck (#1185, "Confirm it's me"): one gate in the kit; a row is Owed while a screen
+    // hands member data to the OS without it.
+    kept(
+        "calendar",
+        Promise::OwnerCheck,
+        "crates/screens/src/calendar/mod.rs",
+    ),
+    kept(
+        "docs",
+        Promise::OwnerCheck,
+        "crates/screens/src/docs/document.rs",
+    ),
+    kept(
+        "health",
+        Promise::OwnerCheck,
+        "crates/screens/src/health/mod.rs",
+    ),
+    kept(
+        "locker",
+        Promise::OwnerCheck,
+        "crates/screens/src/locker/transfer.rs",
+    ),
+    kept(
+        "money",
+        Promise::OwnerCheck,
+        "crates/screens/src/money/mod.rs",
+    ),
+    kept(
+        "notes",
+        Promise::OwnerCheck,
+        "crates/screens/src/notes/mod.rs",
+    ),
+    kept(
+        "people",
+        Promise::OwnerCheck,
+        "crates/screens/src/people/mod.rs",
+    ),
+    kept(
+        "photos",
+        Promise::OwnerCheck,
+        "crates/screens/src/photos/lightbox.rs",
+    ),
+    kept(
+        "reminders",
+        Promise::OwnerCheck,
+        "crates/screens/src/reminders/mod.rs",
+    ),
 ];
 
 const EXPORT_OWED: &str = "no export screen on the kit's ExportSpec (#1185)";
@@ -351,7 +404,10 @@ const UNITS_OWED: &str = "words a measure by hand instead of `kit::quantity` (#1
 
 /// `promises`: the table is complete, and every row is true.
 pub fn promises(root: &Path) -> RuleReport {
-    check(root, REGISTER)
+    let mut report = check(root, REGISTER);
+    // The restore and recovery-words screens are not an app, so no row holds them.
+    report.findings.extend(owner_custody_missing(root));
+    report
 }
 
 pub(crate) fn check(root: &Path, register: &[Row]) -> RuleReport {
@@ -438,6 +494,7 @@ pub fn missing(root: &Path, app: &str, promise: Promise) -> Vec<String> {
         Promise::Arrive => arrive_missing(root, app),
         Promise::Export => export_missing(root, app),
         Promise::Share => share_missing(root, app),
+        Promise::OwnerCheck => owner_check_missing(root, app),
     }
 }
 
@@ -1557,9 +1614,109 @@ fn units_missing(root: &Path, app: &str) -> Vec<String> {
                     "{path} {what} (`{needle}`), and {app} uses it; use kit::quantity"
                 ));
             }
+// OwnerCheck (Confirm it's me)
+// ---------------------------------------------------------------------------
+
+/// What a screen spells to make something leave the phone in the clear.
+const LEAVING_EFFECTS: [&str; 4] = [
+    "Kind::SaveFile",
+    "Kind::ShareFile",
+    "Kind::ExportOriginals",
+    "Kind::Share(",
+];
+
+/// What counts as asking the owner: the gate itself, or the kit machines that hold one.
+const OWNER_GATES: [&str; 5] = [
+    "kit::owner",
+    "OwnerGate",
+    "kit::export",
+    "kit::share",
+    "kit::transfer::ExportSpec",
+];
+
+/// A FILE THAT LEAVES THE GATE OUT, by name, with the reason.
+pub struct OwnerException {
+    /// The file under `crates/screens/src/`.
+    pub file: &'static str,
+    pub reason: &'static str,
+}
+
+/// The files exempt from the gate. Locker's wall is its own owner check (it also counts failed
+/// unlocks and holds the session), so it stays its own machine; the recovery words' "Save a
+/// copy" sits behind the check that showed them.
+pub const OWNER_EXCEPTIONS: &[OwnerException] = &[OwnerException {
+    file: "locker/wall.rs",
+    reason: "Locker's own wall: its owner check opens the Locker and counts failed unlocks",
+}];
+
+/// The screens that start a restore or hand the recovery words out; not an app, so they are
+/// held to the gate by this fixed list rather than by a row.
+pub const OWNER_CUSTODY: [&str; 3] = [
+    "crates/screens/src/custody/enter.rs",
+    "crates/screens/src/custody/make.rs",
+    "crates/screens/src/custody/show.rs",
+];
+
+/// OwnerCheck is kept when no live (non-test, non-comment) code under
+/// `crates/screens/src/<app>/` makes something leave the phone ([`LEAVING_EFFECTS`]) in a file
+/// that does not ask the owner ([`OWNER_GATES`]) and is not in [`OWNER_EXCEPTIONS`].
+fn owner_check_missing(root: &Path, app: &str) -> Vec<String> {
+    owner_check_missing_in(root, app, OWNER_EXCEPTIONS)
+}
+
+fn owner_check_missing_in(root: &Path, app: &str, exceptions: &[OwnerException]) -> Vec<String> {
+    let dir = root.join("crates/screens/src").join(app);
+    let mut gaps = Vec::new();
+    for file in source_files(&dir, "rs") {
+        let rel = relative(root, &file);
+        let Some(text) = live_source(&file) else {
+            continue;
+        };
+        let raised = LEAVING_EFFECTS
+            .iter()
+            .find(|effect| text.contains(**effect))
+            .copied();
+        let hand_made = text.contains("Kind::OwnerCheck") && !text.contains("kit::owner");
+        if let Some(exception) = exceptions
+            .iter()
+            .find(|exception| rel.ends_with(&format!("src/{}", exception.file)))
+        {
+            // An exception that no longer raises anything is stale: say so, so the table
+            // cannot keep a name the code no longer needs.
+            if !hand_made && raised.is_none() {
+                gaps.push(format!(
+                    "{rel}: excepted from the owner gate ({}) but raises nothing; remove the exception",
+                    exception.reason
+                ));
+            }
+            continue;
+        }
+        if hand_made {
+            gaps.push(format!(
+                "{rel}: raises `Kind::OwnerCheck` by hand instead of the kit's gate (`kit::owner::OwnerGate`)"
+            ));
+        }
+        let Some(effect) = raised else {
+            continue;
+        };
+        if !OWNER_GATES.iter().any(|gate| text.contains(gate)) {
+            gaps.push(format!(
+                "{rel}: raises `{effect}` without asking the owner (`kit::owner::OwnerGate`)"
+            ));
         }
     }
     gaps
+}
+
+/// The restore and recovery-words screens that stopped asking the owner.
+pub fn owner_custody_missing(root: &Path) -> Vec<String> {
+    OWNER_CUSTODY
+        .iter()
+        .filter(|rel| !live_source(&root.join(rel)).is_some_and(|text| text.contains("kit::owner")))
+        .map(|rel| {
+            format!("{rel}: a restore or the recovery words without the owner gate (`kit::owner`)")
+        })
+        .collect()
 }
 
 /// `(action name, command)` for every action in the app's manifest.
