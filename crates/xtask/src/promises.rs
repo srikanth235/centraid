@@ -453,7 +453,11 @@ pub const REGISTER: &[Row] = &[
         "crates/screens/src/people/earlier.rs",
     ),
     owed("photos", Promise::Origin, ORIGIN_OWED),
-    owed("reminders", Promise::Origin, ORIGIN_OWED),
+    kept(
+        "reminders",
+        Promise::Origin,
+        "crates/screens/src/reminders/earlier.rs",
+    ),
 ];
 
 const EXPORT_OWED: &str = "no export screen on the kit's ExportSpec (#1185)";
