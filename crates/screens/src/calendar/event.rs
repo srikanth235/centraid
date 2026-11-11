@@ -735,14 +735,6 @@ impl EventPage {
                         )),
                     },
                     wire::AgendaAction {
-                        key: ACTION_SHARE.to_owned(),
-                        label: share::label(locale),
-                        enabled: true,
-                        destructive: false,
-                        accessibility_label: share::label(locale),
-                        route: None,
-                    },
-                    wire::AgendaAction {
                         key: ACTION_CANCEL.to_owned(),
                         // THE BOARD'S WORD, with its ellipsis: a confirmation follows.
                         label: words::cancel_action(locale),
@@ -761,6 +753,16 @@ impl EventPage {
                     },
                 ])
                 .collect(),
+            // SHARE SITS IN THE "…" MENU, not the bar of three (#1185).
+            menu: vec![wire::AgendaAction {
+                key: ACTION_SHARE.to_owned(),
+                label: share::label(locale),
+                enabled: true,
+                destructive: false,
+                accessibility_label: share::label(locale),
+                route: None,
+            }],
+            menu_label: words::menu_more(locale),
             is_past: ended(event, &detail.today, &detail.now_local),
             accessibility_label: spoken_parts.join(", "),
             call_label: if call_uri.is_empty() {

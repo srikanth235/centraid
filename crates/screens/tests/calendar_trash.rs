@@ -126,7 +126,6 @@ fn the_event_page_offers_move_to_trash_and_it_asks_nothing() {
         keys,
         [
             ("edit", "Edit", false),
-            ("share", "Share", false),
             ("cancel", "Cancel…", true),
             ("trash", "Move to trash", true)
         ]

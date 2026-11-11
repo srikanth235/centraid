@@ -29,6 +29,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
@@ -52,7 +56,10 @@ import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.PhoneSaysLine
+import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.PushedPage
+import dev.centraid.android.kit.RoomAction
+import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SectionHeader
@@ -81,11 +88,17 @@ internal fun AgendaEventScreen(
     onPhoneSays: (PhoneSaysTaken) -> Unit,
 ) {
     val chrome = state.chrome
+    var menuOpen by remember { mutableStateOf(false) }
+    val menu = state.data_?.menu.orEmpty()
     PushedPage(
         // THE EVENT'S OWN NAME IS THE TITLE, in the top row beside the chevron (round 9).
         title = state.data_?.title.orEmpty(),
         parentTitle = chrome?.back.orEmpty(),
         onBack = onBack,
+        // THE "…" KEY holds the verbs that do not fit the bar of three (Share).
+        trailing = menu.takeIf { state.gone == null && it.isNotEmpty() }?.let {
+            RoomAction("MoreHoriz", state.data_?.menu_label.orEmpty(), "agenda-event-menu") { menuOpen = true }
+        },
         statusLine = {
             // "{title} moved to trash" with Undo on the gone card (#1185), and a refusal's sentence.
             StatusLine(state.status, actTag = "agenda-status-action") {
@@ -119,6 +132,17 @@ internal fun AgendaEventScreen(
             onPick = { onEvent(AgendaEventEvent(scope = AgendaEventEvent.ScopePicked(scope = it.scope))) },
             onCommit = { onEvent(AgendaEventEvent(confirmed = AgendaEventEvent.Confirmed())) },
             onDismiss = { onEvent(AgendaEventEvent(sheet_closed = AgendaEventEvent.SheetClosed())) },
+        )
+    }
+    if (menuOpen && menu.isNotEmpty()) {
+        OptionSheet(
+            title = state.data_?.menu_label.orEmpty(),
+            options = menu.map { SheetOption(key = it.key, label = it.label, destructive = it.destructive) },
+            onPick = { key ->
+                menuOpen = false
+                onEvent(AgendaEventEvent(action = AgendaEventEvent.ActionPicked(key = key)))
+            },
+            onDismiss = { menuOpen = false },
         )
     }
     val confirm = state.confirm

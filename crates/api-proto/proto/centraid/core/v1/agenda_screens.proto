@@ -1193,6 +1193,10 @@ message AgendaEventData {
   // Under the guests: a guest whose reply the member changed ("Phone says ...") and one they
   // took off ("Phone still has ..."). A guest the member added has no line.
   repeated PhoneSays guests_phone_says = 24;
+  // THE "…" MENU in the top bar (#1185): the verbs that do not fit the bar of three, in order
+  // (Share). Same shape as `actions`; empty draws no key. `menu_label` names the key ("More").
+  repeated AgendaAction menu = 25;
+  string menu_label = 26;
 }
 
 // One guest the phone's calendar states: a name or an address, and the reply

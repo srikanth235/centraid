@@ -29,7 +29,22 @@ struct AgendaEventView: View {
         let chrome = state.chrome
         // THE EVENT'S OWN NAME IS THE TITLE, inline in the top row beside the chevron (round 9).
         PushedPage(title: { if case let .data(d)? = state.content { return d.title } else { return "" } }(), parentTitle: chrome.back, onBack: onBack) {
-            EmptyView()
+            // THE "…" KEY holds the verbs that do not fit the bar of three (Share).
+            if case let .data(d)? = state.content, !d.menu.isEmpty {
+                Menu {
+                    ForEach(d.menu, id: \.key) { action in
+                        Button(action.label) {
+                            send(event { $0.action = .with { $0.key = action.key } })
+                        }
+                        .disabled(!action.enabled)
+                        .accessibilityIdentifier("agenda-menu-\(action.key)")
+                    }
+                } label: {
+                    ToolbarIconFace(iconKey: "MoreHoriz")
+                }
+                .accessibilityLabel(d.menuLabel)
+                .accessibilityIdentifier("agenda-event-menu")
+            }
         } content: {
             if case let .gone(gone)? = state.content {
                 // THE PAGE STAYS ON THE GONE CARD AFTER MOVE TO TRASH, and the status line under it

@@ -57,6 +57,22 @@
       "x": 470,
       "y": 15080
     },
+    "AgendaEventMenu.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "3 · Event menu",
+      "w": 390,
+      "x": 1880,
+      "y": 15080
+    },
+    "AgendaEventMenuDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "3 · Event menu · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 15080
+    },
     "AgendaEventDark.dc.html": {
       "h": 844,
       "page": "dark",
@@ -2873,6 +2889,7 @@
     "MoneyTransaction.dc.html",
     "AgendaEvent.dc.html",
     "AgendaEventCancel.dc.html",
+    "AgendaEventMenu.dc.html",
     "AgendaProject.dc.html",
     "AgendaCatchUp.dc.html",
     "ChatList.dc.html",
@@ -2972,6 +2989,7 @@
     "MoneyTransactionDark.dc.html",
     "AgendaEventDark.dc.html",
     "AgendaEventCancelDark.dc.html",
+    "AgendaEventMenuDark.dc.html",
     "AgendaProjectDark.dc.html",
     "AgendaCatchUpDark.dc.html",
     "ChatListDark.dc.html",

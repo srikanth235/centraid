@@ -58,9 +58,17 @@ fn one_event_is_shared_as_one_ics_only_after_the_owner_check() {
     assert!(
         world
             .event_data(page)
-            .actions
+            .menu
             .iter()
             .any(|a| a.key == "share" && a.label == "Share")
+    );
+    assert!(
+        !world
+            .event_data(page)
+            .actions
+            .iter()
+            .any(|a| a.key == "share"),
+        "the bar keeps three buttons"
     );
     world.driver.effects.clear();
     share(&mut world, page);
