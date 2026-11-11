@@ -248,6 +248,39 @@ fn a_trashed_transaction_is_not_in_the_file_and_the_count_says_so() {
 }
 
 #[test]
+fn a_voided_line_is_kept_with_its_status_and_a_trashed_one_is_dropped() {
+    let w = World::new();
+    let account = w.account("Everyday", "USD");
+    w.line(&account, "k", "2026-06-01", -100, "KEEP");
+    let voided = w.line(&account, "v", "2026-06-02", -200, "VOIDED");
+    let gone = w.line(&account, "g", "2026-06-03", -300, "GONE");
+    w.ok("entity.trash", json!({ "id": gone }));
+    w.scratch
+        .vault
+        .commit(|tx| {
+            tx.set_producer("test.void");
+            tx.connection()
+                .execute("UPDATE txn SET status = 'void' WHERE id = ?1", [&voided])?;
+            Ok(())
+        })
+        .expect("a voided line");
+    let (out, text) = w.file(json!({}));
+    assert_eq!(out["count"], 2);
+    assert!(!text.contains("GONE"));
+    let rows = records(&text);
+    let void_row = rows
+        .iter()
+        .find(|r| r[2] == "VOIDED")
+        .expect("the voided line");
+    assert_eq!(void_row[7], "void");
+    let kept = rows
+        .iter()
+        .find(|r| r[2] == "KEEP")
+        .expect("the other line");
+    assert_ne!(kept[7], "void");
+}
+
+#[test]
 fn one_account_is_its_own_file_named_for_it() {
     let w = World::new();
     let one = w.account("Everyday", "USD");
