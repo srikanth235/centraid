@@ -94,7 +94,16 @@ pub enum Status {
     /// Kept; the string is the file that proves it (read by the checker, and it
     /// must exist).
     Kept(&'static str),
-    /// A known gap; the string says why, and names the issue that tracks it.
+    /// A known gap; the string says why, and names the issue that tracks it. No promise is owed
+    /// today (every row above is Kept), so only the checker's own tests build one; the mechanism
+    /// stays for the next gap.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "no promise is owed today; the next gap is listed here"
+        )
+    )]
     Owed(&'static str),
 }
 
@@ -111,14 +120,6 @@ const fn kept(app: &'static str, promise: Promise, proof: &'static str) -> Row {
         app,
         promise,
         status: Status::Kept(proof),
-    }
-}
-
-const fn owed(app: &'static str, promise: Promise, why: &'static str) -> Row {
-    Row {
-        app,
-        promise,
-        status: Status::Owed(why),
     }
 }
 
@@ -266,8 +267,6 @@ pub const REGISTER: &[Row] = &[
         "crates/screens/src/imports/reminders.rs",
     ),
 ];
-
-const ARRIVE_OWED: &str = "an arrival path brings items in without passing `arrived`, so the vault records no origin for them (#1185)";
 
 /// `promises`: the table is complete, and every row is true.
 pub fn promises(root: &Path) -> RuleReport {
