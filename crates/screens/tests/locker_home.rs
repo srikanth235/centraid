@@ -286,10 +286,11 @@ fn the_trash_deletes_forever_and_empties_in_the_shared_words() {
     assert_eq!(confirm.title, "Empty trash?");
     assert_eq!(confirm.confirm_label, "Empty trash");
     send(&mut d, i, T::Confirmed(te::Confirmed {}));
+    // A trash with nothing in it is the page's own empty state, with no rows and nothing to empty.
     let view = trash_state(&d, i);
-    let Some(wire::trash_view::Content::Data(data)) = &view.content else {
-        panic!("no data: {view:?}");
-    };
-    assert!(data.rows.is_empty(), "the trash is empty");
-    assert_eq!(data.empty_label, "");
+    assert!(view.content.is_none(), "the trash is empty: {view:?}");
+    assert!(matches!(
+        view.page.as_ref().and_then(|page| page.state.as_ref()),
+        Some(wire::page_state::State::Empty(_))
+    ));
 }
