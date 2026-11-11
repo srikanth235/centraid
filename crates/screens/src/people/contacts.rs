@@ -304,6 +304,7 @@ pub fn follow_request(
         records: Value::Array(records).to_string(),
         complete: Some(complete),
         since: None,
+        gone: None,
     }
 }
 

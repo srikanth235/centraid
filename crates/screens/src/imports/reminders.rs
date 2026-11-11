@@ -378,6 +378,7 @@ pub fn run(ctx: &Ctx, reminders: &[wire::PhoneReminder], include_completed: bool
             records: Value::Array(records).to_string(),
             complete: Some(include_completed),
             since: None,
+            gone: None,
         };
         let key = kit_act::key(&["follow-reminders", &reference], kit_act::fresh());
         // undo-exempt: a Reminders follow pass has no status line of its own (the import line says what it did); its Undo is Stop reading (`stop-following`), which asks first.

@@ -414,6 +414,7 @@ fn import_request(input: &[u8]) -> Option<acts::ImportTransactions> {
             .get("since")
             .and_then(serde_json::Value::as_str)
             .map(str::to_owned),
+        gone: None,
     })
 }
 

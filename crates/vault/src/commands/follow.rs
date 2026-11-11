@@ -748,8 +748,12 @@ fn upsert_origin(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<OriginRow>
             )?;
         } else {
             connection.execute(
-                "UPDATE origin SET label = ?2, device_id = ?3, fills = COALESCE(?4, fills),
-                        config = COALESCE(?5, config)
+                // A cursor is the word of the install that wrote it: an origin another install takes
+                // over (`device_id` changes) keeps none of the last one's (#1183).
+                "UPDATE origin SET label = ?2, fills = COALESCE(?4, fills),
+                        config = CASE WHEN device_id IS ?3 THEN COALESCE(?5, config)
+                                      ELSE json_remove(COALESCE(?5, config), '$.cursor') END,
+                        device_id = ?3
                   WHERE id = ?1",
                 rusqlite::params![id, label, device, fills, config],
             )?;
@@ -1649,6 +1653,21 @@ fn settle_absent(
     Ok(())
 }
 
+/// The records the store says were deleted (`gone`, a delta's word for what a complete read finds
+/// absent): each row is kept and its source forgotten, the same end a complete read gives a record
+/// of a system that keeps what the phone loses. Only this phone's: another phone's source is its own.
+fn forget_gone(ctx: &CommandCtx<'_, '_>, origin: &OriginRow, tally: &mut Tally) -> Result<()> {
+    let ids = ctx.input.get("gone").and_then(Json::as_array);
+    for id in ids.into_iter().flatten().filter_map(Json::as_str) {
+        tally.forgotten += ctx.connection().execute(
+            "DELETE FROM source WHERE origin_id = ?1 AND external_id = ?2
+                AND ifnull(device_id, '') = ?3 AND entity_id IS NOT NULL",
+            rusqlite::params![origin.id, id, origin.device.as_deref().unwrap_or_default()],
+        )?;
+    }
+    Ok(())
+}
+
 /// A followed calendar the member trashed stays trashed: a pass is not a restore, and an event the
 /// phone states into it now goes to the trash with it, under the calendar's own stamp, so one
 /// restore of the calendar brings back exactly what went with it.
@@ -1689,6 +1708,21 @@ fn keep_in_a_trashed_home(ctx: &CommandCtx<'_, '_>, origin: &OriginRow) -> Resul
 /// Apply one batch of records from a system.
 pub fn apply(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<serde_json::Value> {
     let origin = upsert_origin(ctx, map)?;
+    // THE STORE'S CURSOR RIDES WITH THE RECORDS IT COVERS (#1183): one commit.
+    if let Some(cursor) = ctx
+        .input
+        .get("origin")
+        .and_then(|origin| origin.get("cursor"))
+        .and_then(Json::as_str)
+    {
+        origin_cursor::advance(
+            ctx,
+            map.system,
+            ctx.input["origin"]["ref"].as_str().unwrap_or_default(),
+            origin.device.as_deref().unwrap_or_default(),
+            cursor,
+        )?;
+    }
     let (records, refused) = records_of(ctx, map)?;
     let mut tally = Tally {
         refused: refused.len(),
@@ -1703,6 +1737,7 @@ pub fn apply(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<serde_json::Va
         seen.push((record.external_id.clone(), record.device_id.clone()));
     }
     keep_in_a_trashed_home(ctx, &origin)?;
+    forget_gone(ctx, &origin, &mut tally)?;
     let complete = ctx
         .input
         .get("complete")
@@ -1784,6 +1819,24 @@ fn pre_records(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
             return Ok(Some(format!("the origin needs a `{key}`")));
         }
     }
+    let map = map_of(ctx)?;
+    if origin.get("cursor").is_some()
+        && (map.origin != OriginOf::Phone
+            || origin
+                .get("device_id")
+                .and_then(Json::as_str)
+                .is_none_or(|device| device.trim().is_empty()))
+    {
+        return Ok(Some(
+            "a cursor is a phone store's, with the install that read it".to_owned(),
+        ));
+    }
+    if ctx.input.get("gone").is_some() && map.gone != Gone::Forget {
+        return Ok(Some(format!(
+            "`{}` forgets no deleted record: its rows follow a complete read",
+            map.system
+        )));
+    }
     Ok(None)
 }
 
@@ -1807,7 +1860,9 @@ const SCHEMA: &str = r#"{
         "fills": { "type": ["string", "null"] },
         "color": { "type": ["string", "null"], "maxLength": 64,
           "description": "The colour the phone paints the store with, as the design wheel names it." },
-        "config": { "type": ["object", "null"] }
+        "config": { "type": ["object", "null"] },
+        "cursor": { "type": "string", "minLength": 1, "maxLength": 4096,
+          "description": "Where this read of the store got to: it moves in this commit, as the install named by device_id read it (a phone store's, never an account's)." }
       }
     },
     "records": {
@@ -1826,7 +1881,9 @@ const SCHEMA: &str = r#"{
       }
     },
     "complete": { "type": "boolean" },
-    "since": { "type": "string" }
+    "since": { "type": "string" },
+    "gone": { "type": "array", "items": { "type": "string" },
+      "description": "The source ids the store says were deleted since the cursor (a delta's, in place of a complete read): the row is kept and its source forgotten. Only for a system whose gone rows are kept." }
   }
 }"#;
 

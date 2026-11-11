@@ -283,11 +283,27 @@
         "record last night's sleep as seven hours",
         "note my weight as 70 kilos this morning"
       ],
-      "description": "Record a batch of the store's daily totals through measurement.record: a value the vault already holds is not written, a changed one is replaced, a new one added. A day is never deleted. It is the follow pass writing the store's totals, never a member's own act (a figure by hand is log-figure), so its Undo is stopping the follow.",
+      "description": "Record a batch of the store's daily totals through measurement.record: a value the vault already holds is not written, a changed one is replaced, a new one added. A day is never deleted. It is the follow pass writing the store's totals, never a member's own act (a figure by hand is log-figure), so its Undo is stopping the follow. The store's cursor rides with the days it covers, in the same commit.",
       "confirmation": "none",
       "input": {
         "additionalProperties": false,
         "properties": {
+          "cursor": {
+            "description": "The store's cursor once these days are in: it moves in this commit.",
+            "maxLength": 4096,
+            "minLength": 1,
+            "type": "string"
+          },
+          "cursor_device": {
+            "description": "The install that read the store; required with cursor.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "cursor_ref": {
+            "description": "The store's origin the cursor is for; required with cursor.",
+            "minLength": 1,
+            "type": "string"
+          },
           "days": {
             "items": {
               "additionalProperties": false,
@@ -353,13 +369,20 @@
         "sync workouts from the health store",
         "import this week's runs"
       ],
-      "description": "Follow the store's workouts through follow.health: each is an activity of a workout kind and what the store measured, written or corrected in place under the store's own id; one gone from a complete read keeps its row and forgets its source.",
+      "description": "Follow the store's workouts through follow.health: each is an activity of a workout kind and what the store measured, written or corrected in place under the store's own id; one gone from a complete read, or named deleted by a delta (gone), keeps its row and forgets its source. The store's cursor rides with the workouts it covers, in the same commit.",
       "confirmation": "none",
       "input": {
         "additionalProperties": false,
         "properties": {
           "complete": {
             "type": "boolean"
+          },
+          "gone": {
+            "description": "The source ids the store says were deleted since the cursor (a delta's, in place of a complete read): the row is kept and its source forgotten. Only for a system whose gone rows are kept.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "origin": {
             "additionalProperties": false,
@@ -371,6 +394,12 @@
               },
               "config": {
                 "type": ["object", "null"]
+              },
+              "cursor": {
+                "description": "Where this read of the store got to: it moves in this commit, as the install named by device_id read it (a phone store's, never an account's).",
+                "maxLength": 4096,
+                "minLength": 1,
+                "type": "string"
               },
               "device_id": {
                 "type": ["string", "null"]

@@ -533,6 +533,7 @@ pub mod act {
             pub origin: String,
             pub records: String,
             pub complete: Option<bool>,
+            pub gone: Option<String>,
             pub since: Option<String>,
         }
         impl FollowCalendar {
@@ -543,6 +544,7 @@ pub mod act {
                 map.insert("origin".to_owned(), text(self.origin));
                 map.insert("records".to_owned(), text(self.records));
                 if let Some(it) = self.complete { map.insert("complete".to_owned(), flag(it)); }
+                if let Some(it) = self.gone { map.insert("gone".to_owned(), text(it)); }
                 if let Some(it) = self.since { map.insert("since".to_owned(), text(it)); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
@@ -1576,10 +1578,13 @@ pub mod act {
             }
         }
 
-        /// Record a batch of the store's daily totals through measurement.record: a value the vault already holds is not written, a changed one is replaced, a new one added. A day is never deleted. It is the follow pass writing the store's totals, never a member's own act (a figure by hand is log-figure), so its Undo is stopping the follow.
+        /// Record a batch of the store's daily totals through measurement.record: a value the vault already holds is not written, a changed one is replaced, a new one added. A day is never deleted. It is the follow pass writing the store's totals, never a member's own act (a figure by hand is log-figure), so its Undo is stopping the follow. The store's cursor rides with the days it covers, in the same commit.
         #[derive(Clone, Debug, Default)]
         pub struct RecordDays {
             pub days: String,
+            pub cursor: Option<String>,
+            pub cursor_device: Option<String>,
+            pub cursor_ref: Option<String>,
             pub person_id: Option<String>,
         }
         impl RecordDays {
@@ -1588,6 +1593,9 @@ pub mod act {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("days".to_owned(), text(self.days));
+                if let Some(it) = self.cursor { map.insert("cursor".to_owned(), text(it)); }
+                if let Some(it) = self.cursor_device { map.insert("cursor_device".to_owned(), text(it)); }
+                if let Some(it) = self.cursor_ref { map.insert("cursor_ref".to_owned(), text(it)); }
                 if let Some(it) = self.person_id { map.insert("person_id".to_owned(), text(it)); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
@@ -1598,12 +1606,13 @@ pub mod act {
             }
         }
 
-        /// Follow the store's workouts through follow.health: each is an activity of a workout kind and what the store measured, written or corrected in place under the store's own id; one gone from a complete read keeps its row and forgets its source.
+        /// Follow the store's workouts through follow.health: each is an activity of a workout kind and what the store measured, written or corrected in place under the store's own id; one gone from a complete read, or named deleted by a delta (gone), keeps its row and forgets its source. The store's cursor rides with the workouts it covers, in the same commit.
         #[derive(Clone, Debug, Default)]
         pub struct FollowWorkouts {
             pub origin: String,
             pub records: String,
             pub complete: Option<bool>,
+            pub gone: Option<String>,
             pub since: Option<String>,
         }
         impl FollowWorkouts {
@@ -1614,6 +1623,7 @@ pub mod act {
                 map.insert("origin".to_owned(), text(self.origin));
                 map.insert("records".to_owned(), text(self.records));
                 if let Some(it) = self.complete { map.insert("complete".to_owned(), flag(it)); }
+                if let Some(it) = self.gone { map.insert("gone".to_owned(), text(it)); }
                 if let Some(it) = self.since { map.insert("since".to_owned(), text(it)); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
@@ -3052,6 +3062,7 @@ pub mod act {
             pub origin: String,
             pub records: String,
             pub complete: Option<bool>,
+            pub gone: Option<String>,
             pub since: Option<String>,
         }
         impl ImportTransactions {
@@ -3062,6 +3073,7 @@ pub mod act {
                 map.insert("origin".to_owned(), text(self.origin));
                 map.insert("records".to_owned(), text(self.records));
                 if let Some(it) = self.complete { map.insert("complete".to_owned(), flag(it)); }
+                if let Some(it) = self.gone { map.insert("gone".to_owned(), text(it)); }
                 if let Some(it) = self.since { map.insert("since".to_owned(), text(it)); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
@@ -5178,6 +5190,7 @@ pub mod act {
             pub origin: String,
             pub records: String,
             pub complete: Option<bool>,
+            pub gone: Option<String>,
             pub since: Option<String>,
         }
         impl FollowContacts {
@@ -5188,6 +5201,7 @@ pub mod act {
                 map.insert("origin".to_owned(), text(self.origin));
                 map.insert("records".to_owned(), text(self.records));
                 if let Some(it) = self.complete { map.insert("complete".to_owned(), flag(it)); }
+                if let Some(it) = self.gone { map.insert("gone".to_owned(), text(it)); }
                 if let Some(it) = self.since { map.insert("since".to_owned(), text(it)); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
@@ -6712,6 +6726,7 @@ pub mod act {
             pub origin: String,
             pub records: String,
             pub complete: Option<bool>,
+            pub gone: Option<String>,
             pub since: Option<String>,
         }
         impl FollowReminders {
@@ -6722,6 +6737,7 @@ pub mod act {
                 map.insert("origin".to_owned(), text(self.origin));
                 map.insert("records".to_owned(), text(self.records));
                 if let Some(it) = self.complete { map.insert("complete".to_owned(), flag(it)); }
+                if let Some(it) = self.gone { map.insert("gone".to_owned(), text(it)); }
                 if let Some(it) = self.since { map.insert("since".to_owned(), text(it)); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }

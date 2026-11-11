@@ -132,6 +132,7 @@ pub fn record(d: &Driver, today: &str, days: &[(i64, &str, f64)]) {
         act::health::RecordDays {
             days: serde_json::Value::Array(list).to_string(),
             person_id: None,
+            ..Default::default()
         },
     );
 }

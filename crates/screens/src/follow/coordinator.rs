@@ -304,7 +304,9 @@ impl Coordinator {
                 let Some(window) = window else {
                     return self.end_taken(ctx, store);
                 };
-                let effect = health::read_effect(&window, &device.chosen, false);
+                // WHERE THE LAST READ GOT TO is in the vault, for the install that wrote it (#1183).
+                let cursor = health::held_cursor(ctx, &device.install);
+                let effect = health::read_effect(&window, &device.chosen, false, &cursor);
                 (
                     Read::Health {
                         window,

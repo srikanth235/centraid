@@ -647,6 +647,10 @@ message HealthRead {
   // Health while Centraid is closed (D16). Asked only at the Connect tap, never
   // by a pass. HealthKit needs no such ask and ignores it.
   bool ask_background = 6;
+  // WHERE THE LAST READ GOT TO (#1183): an opaque string the vault keeps with the records it
+  // covers, which Rust hands back and never opens. On iOS a JSON map of sample type to HealthKit
+  // anchor; on Android the Health Connect changes token. Empty is a complete read.
+  string cursor = 7;
 }
 
 message KeychainOp {
@@ -1012,7 +1016,7 @@ message HealthSnapshot {
   // a refusal, so iOS leaves this empty.
   repeated string refused = 3;
   // Every day total the store has in the window, chosen metrics only; a day the
-  // store has nothing for is absent, never a zero.
+  // store has nothing for is absent, never a zero. With `delta`, only the days the changes touched.
   repeated HealthDayTotal days = 4;
   repeated HealthPhoneWorkout workouts = 5;
   // False when the workout read may have missed some (a query failed part-way).
@@ -1026,6 +1030,17 @@ message HealthSnapshot {
   // `HealthRead.ask_background`): following still works while the app is open.
   // Always false on iOS and when it was not asked.
   bool background_refused = 9;
+  // TRUE when this answers `HealthRead.cursor`: `days` are then only the days the changes since
+  // touched (a sum day left with no samples is 0, never absent), `workouts` only those added or
+  // changed, and `deleted_workout_ids` the store's ids of those removed. FALSE is a complete read of
+  // the window: what an empty, expired or unusable cursor is answered with, never an error.
+  bool delta = 10;
+  // Where this read got to: the cursor of the next one, taken before the read began so a change
+  // that landed during it is seen again. Empty when the store would not say (the next read is complete).
+  string next_cursor = 11;
+  // With `delta`: the store's ids of workouts deleted since the cursor. The vault keeps each row
+  // and forgets its source.
+  repeated string deleted_workout_ids = 12;
 
   enum Store {
     STORE_UNSPECIFIED = 0;

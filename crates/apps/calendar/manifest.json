@@ -936,6 +936,13 @@
           "complete": {
             "type": "boolean"
           },
+          "gone": {
+            "description": "The source ids the store says were deleted since the cursor (a delta's, in place of a complete read): the row is kept and its source forgotten. Only for a system whose gone rows are kept.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "origin": {
             "additionalProperties": false,
             "properties": {
@@ -946,6 +953,12 @@
               },
               "config": {
                 "type": ["object", "null"]
+              },
+              "cursor": {
+                "description": "Where this read of the store got to: it moves in this commit, as the install named by device_id read it (a phone store's, never an account's).",
+                "maxLength": 4096,
+                "minLength": 1,
+                "type": "string"
               },
               "device_id": {
                 "type": ["string", "null"]
