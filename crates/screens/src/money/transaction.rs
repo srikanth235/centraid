@@ -459,16 +459,6 @@ impl Transaction {
                 facts.push(fact(label, value.clone()));
             }
         }
-        if let Some(from) = &answer.imported_from {
-            facts.push(fact(
-                words::fact_imported(locale),
-                if from == "ofx" {
-                    words::source_ofx_from(locale)
-                } else {
-                    words::source_csv_from(locale)
-                },
-            ));
-        }
         let transfer_offer = answer
             .transfer_proposal
             .as_ref()
@@ -683,7 +673,7 @@ impl Screen for Transaction {
                     )),
                     status: self.status.clone().or_else(|| self.earlier.status(locale)),
                     earlier: self.earlier.entry.clone(),
-                    origin: None,
+                    origin: self.earlier.origin.clone(),
                 },
             )),
             ..wire::ViewState::default()

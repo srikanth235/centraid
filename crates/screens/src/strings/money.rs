@@ -130,7 +130,6 @@ catalog! {
     plain fact_bank_wrote = ("Bank wrote", "Bank wrote");
     plain fact_category = ("Category", "Category");
     plain fact_check = ("Check number", "Check number");
-    plain fact_imported = ("Imported", "Imported");
     plain fact_memo = ("Memo", "Memo");
     plain fact_name = ("Name", "Name");
     plain fact_posted = ("Posted", "Posted");
@@ -284,9 +283,7 @@ catalog! {
     plain sign_negative = ("Negative", "Negative");
     plain sign_positive = ("Positive", "Positive");
     plain source_csv = ("a CSV statement", "a CSV statement");
-    plain source_csv_from = ("From a CSV statement", "From a CSV statement");
     plain source_ofx = ("an OFX statement", "an OFX statement");
-    plain source_ofx_from = ("From an OFX statement", "From an OFX statement");
     plain spent = ("spent", "spent");
     plain statement = ("Statement", "Statement");
     plain statement_balance = ("Statement balance", "Statement balance");

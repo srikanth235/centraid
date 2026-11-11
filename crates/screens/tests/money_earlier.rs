@@ -271,3 +271,19 @@ fn a_read_that_fails_is_the_failed_state_never_an_empty_list() {
         Some(wire::earlier_view::Content::Failure(_))
     ));
 }
+
+#[test]
+fn a_statement_line_says_its_account_in_the_one_shared_line() {
+    let mut d = driver();
+    let id = arrange(&d);
+    let page = push(&mut d, routes::transaction(&id, "Money"));
+    let line = state(d.view(page)).origin.clone().expect("a line");
+    assert_eq!(line.text, "From Earlier test");
+    assert_eq!(line.accessibility_label, "Came from Earlier test");
+    // The old bespoke "Imported" fact is gone: one mechanism says where it came from.
+    let facts = match state(d.view(page)).content.as_ref() {
+        Some(wire::money_transaction_state::Content::Data(data)) => data.facts.clone(),
+        other => panic!("no data: {other:?}"),
+    };
+    assert!(facts.iter().all(|fact| fact.label != "Imported"));
+}
