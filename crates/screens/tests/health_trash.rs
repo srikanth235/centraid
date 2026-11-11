@@ -188,7 +188,7 @@ fn moving_a_workout_to_trash_says_so_with_undo_and_takes_it_out_of_the_lists() {
 }
 
 #[test]
-fn undo_restores_it_and_undo_of_the_restore_trashes_it_again() {
+fn undo_restores_it_and_says_undone_with_nothing_more_to_tap() {
     let mut d = seeded();
     two_followed(&d);
     let run = id_of(&d, "run");
@@ -198,8 +198,9 @@ fn undo_restores_it_and_undo_of_the_restore_trashes_it_again() {
 
     undo(&mut d, page);
     let line = status(&d, page).expect("a status line");
-    assert_eq!(line.sentence, "Morning run restored");
-    assert_eq!(line.action_label, "Undo");
+    // The kit's one Undo line (#1185): "Undone", with nothing more to tap.
+    assert_eq!(line.sentence, "Undone");
+    assert_eq!(line.action_label, "");
     assert_eq!(listed(&d).len(), 2, "back exactly where it was");
     assert!(trashed(&d).is_empty());
     let Some(wire::health_workout_state::Content::Data(data)) =
@@ -210,12 +211,9 @@ fn undo_restores_it_and_undo_of_the_restore_trashes_it_again() {
     assert!(data.gone.is_none());
     assert_eq!(data.figures[0].value, "5.2");
 
+    // Nothing is on offer any more: a second tap changes nothing.
     undo(&mut d, page);
-    assert_eq!(
-        status(&d, page).unwrap().sentence,
-        "Morning run moved to trash"
-    );
-    assert_eq!(listed(&d).len(), 1);
+    assert_eq!(listed(&d).len(), 2);
 }
 
 #[test]

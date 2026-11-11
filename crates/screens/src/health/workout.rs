@@ -19,6 +19,7 @@ use crate::kit::quantity::Quantity;
 use crate::kit::read;
 use crate::kit::share::{self, Share};
 use crate::kit::trash;
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, health as words, shared};
 
@@ -39,8 +40,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         phase: Phase::Loading,
         differences: follow::Phone::default(),
         earlier: earlier::Foot::default(),
-        status: None,
-        undo: None,
+        undo: Undo::default(),
         share: Share::default(),
     }))
 }
@@ -53,19 +53,10 @@ struct WorkoutPage {
     differences: follow::Phone,
     /// The entry to the workout's earlier versions, read with the page (#1185).
     earlier: earlier::Foot,
-    status: Option<wire::StatusLine>,
-    /// What the status line's Undo does: put the workout back in the trash, or back in the list.
-    undo: Option<Undo>,
+    /// The status line and what its Undo reverses (the kit's one door).
+    undo: Undo,
     /// The workout handed to the OS share sheet as a spreadsheet file (#1185).
     share: Share,
-}
-
-/// The workout the status line's Undo reverses, and which way.
-struct Undo {
-    activity_id: String,
-    title: String,
-    /// The workout is in the trash now, so Undo restores it.
-    restore: bool,
 }
 
 /// The measure columns a line can name, in the order the page draws their figures.
@@ -145,11 +136,11 @@ impl WorkoutPage {
         let Some(settled) = follow::take(ctx, &self.activity_id, taken) else {
             return;
         };
-        self.status = (!settled.committed).then(|| wire::StatusLine {
-            sentence: settled.refusal,
-            action_label: String::new(),
-            refused: true,
-        });
+        // Taking the store's figure has no inverse: it says nothing and offers nothing.
+        self.undo.clear();
+        if !settled.committed {
+            self.undo.refuse(settled.refusal);
+        }
         self.reload(ctx);
     }
 
@@ -165,68 +156,15 @@ impl WorkoutPage {
             &row.kind_key,
             &civil::clock_for(ctx.locale(), &row.local_start, ctx.hour_cycle()),
         );
-        self.trash_or_restore(ctx, self.activity_id.clone(), title, false);
-    }
-
-    /// The status line's Undo: reverse the last move.
-    fn undone(&mut self, ctx: &Ctx) {
-        let has_undo = self
-            .status
-            .as_ref()
-            .is_some_and(|status| !status.action_label.is_empty());
-        let Some(undo) = self.undo.take().filter(|_| has_undo) else {
-            return;
-        };
-        self.trash_or_restore(ctx, undo.activity_id, undo.title, undo.restore);
-    }
-
-    fn trash_or_restore(&mut self, ctx: &Ctx, activity_id: String, title: String, restore: bool) {
-        let locale = ctx.locale();
-        self.status = None;
-        self.undo = None;
-        let settled = if restore {
-            let key = kit_act::key(&["restore-workout", &activity_id], kit_act::fresh());
-            kit_act::act(
-                ctx,
-                act::health::RestoreWorkout {
-                    workout_id: activity_id.clone(),
-                },
-                &key,
-            )
-        } else {
-            let key = kit_act::key(&["delete-workout", &activity_id], kit_act::fresh());
-            kit_act::act(
-                ctx,
-                act::health::DeleteWorkout {
-                    workout_id: activity_id.clone(),
-                },
-                &key,
-            )
-        };
-        self.status = Some(if settled.committed {
-            wire::StatusLine {
-                sentence: if restore {
-                    trash::restored(locale, &title)
-                } else {
-                    trash::moved_to_trash(locale, &title)
-                },
-                action_label: shared::trash_undo(locale),
-                refused: false,
-            }
-        } else {
-            wire::StatusLine {
-                sentence: settled.refusal,
-                action_label: String::new(),
-                refused: true,
-            }
-        });
-        if settled.committed {
-            self.undo = Some(Undo {
-                activity_id,
-                title,
-                restore: !restore,
-            });
-        }
+        let key = kit_act::key(&["delete-workout", &self.activity_id], kit_act::fresh());
+        self.undo.act(
+            ctx,
+            act::health::DeleteWorkout {
+                workout_id: self.activity_id.clone(),
+            },
+            &key,
+            |locale| trash::moved_to_trash(locale, &title),
+        );
         self.reload(ctx);
     }
 
@@ -375,7 +313,11 @@ impl Screen for WorkoutPage {
             Some(E::HealthWorkout(event)) => match event.kind {
                 Some(W::Refreshed(_)) => self.reload(ctx),
                 Some(W::Trash(_)) => self.trash_workout(ctx),
-                Some(W::StatusActed(_)) => self.undone(ctx),
+                Some(W::StatusActed(_)) => {
+                    if self.undo.acted(ctx) {
+                        self.reload(ctx);
+                    }
+                }
                 Some(W::ShareRequested(_)) => {
                     if self
                         .phase
@@ -394,7 +336,15 @@ impl Screen for WorkoutPage {
                     super::export::workouts_file(ctx, Some(&id))
                 });
             }
-            Some(E::Left(_)) => return self.share.left(),
+            Some(E::StatusActed(_)) => {
+                if self.undo.acted(ctx) {
+                    self.reload(ctx);
+                }
+            }
+            Some(E::Left(_)) => {
+                self.undo.clear();
+                return self.share.left();
+            }
             _ => {}
         }
         Vec::new()
@@ -432,8 +382,8 @@ impl Screen for WorkoutPage {
                         retry: words::retry(locale),
                     }),
                     status: self
-                        .status
-                        .clone()
+                        .undo
+                        .status()
                         .or_else(|| {
                             self.differences
                                 .status(locale, Source::Store(&Store::of(ctx).name(locale)))

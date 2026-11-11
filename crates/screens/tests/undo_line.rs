@@ -7,6 +7,7 @@
 
 mod calendar_support;
 mod docs_support;
+mod health_support;
 mod notes_support;
 mod reminders_support;
 
@@ -565,4 +566,93 @@ fn docs_a_move_says_so_and_a_later_move_refuses_the_undo_plainly() {
         second,
         "the later move stays"
     );
+}
+
+// --- Health: a workout -------------------------------------------------------------
+
+fn health_workouts(d: &Driver) -> Vec<String> {
+    match health_support::answer(
+        d,
+        centraid_screens::catalog::load::health::Workouts {
+            limit: 50,
+            ..Default::default()
+        },
+    ) {
+        wire::app_query_response::Answer::HealthWorkouts(found) => found
+            .workouts
+            .into_iter()
+            .map(|workout| workout.activity_id)
+            .collect(),
+        other => panic!("workouts answered {other:?}"),
+    }
+}
+
+fn health_page(d: &mut Driver) -> (u64, String) {
+    health_support::connect_store(d);
+    health_support::workout(
+        d,
+        "run",
+        "run",
+        "2026-11-08T06:40:00.000Z",
+        "2026-11-08T07:11:00.000Z",
+    );
+    let id = health_workouts(d).pop().expect("a workout");
+    let page = health_support::push(d, centraid_screens::health::routes::workout(&id, "Health"));
+    (page, id)
+}
+
+fn health_line(d: &Driver, page: u64) -> (String, String) {
+    said(health_support::workout_state(d.view(page)).status.as_ref())
+}
+
+fn health_trash(d: &mut Driver, page: u64) {
+    d.send(
+        page,
+        wire::screen_event::Kind::HealthWorkout(wire::HealthWorkoutEvent {
+            kind: Some(wire::health_workout_event::Kind::Trash(
+                wire::health_workout_event::TrashTapped {},
+            )),
+        }),
+    );
+}
+
+#[test]
+fn health_trashing_a_workout_says_which_and_undo_brings_it_back() {
+    let mut d = health_support::driver();
+    let (page, _) = health_page(&mut d);
+    health_trash(&mut d, page);
+    assert!(health_workouts(&d).is_empty());
+    let (sentence, action) = health_line(&d, page);
+    assert!(sentence.ends_with(" moved to trash"), "{sentence}");
+    assert_eq!(action, "Undo");
+
+    status_acted(&mut d, page);
+    assert_eq!(health_workouts(&d).len(), 1);
+    assert_eq!(health_line(&d, page), line("Undone", ""));
+    // Nothing is on offer any more: a second tap changes nothing.
+    status_acted(&mut d, page);
+    assert_eq!(health_workouts(&d).len(), 1);
+}
+
+#[test]
+fn health_an_undo_after_the_workout_came_back_elsewhere_is_refused_plainly() {
+    let mut d = health_support::driver();
+    let (page, id) = health_page(&mut d);
+    health_trash(&mut d, page);
+    // Another surface restores it first: the Undo has nothing to put back.
+    health_support::arrange(
+        &d,
+        act::health::RestoreWorkout {
+            workout_id: id.clone(),
+        },
+    );
+    status_acted(&mut d, page);
+    let status = health_support::workout_state(d.view(page))
+        .status
+        .clone()
+        .expect("a line");
+    assert!(status.refused);
+    assert_eq!(status.action_label, "");
+    assert_eq!(status.sentence, "“Run” is not in the trash");
+    assert_eq!(health_workouts(&d).len(), 1, "the workout stays");
 }

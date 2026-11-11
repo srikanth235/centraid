@@ -223,7 +223,7 @@ pub const REGISTER: &[Row] = &[
     // Reminders are the reference adoptions; the rest are owed until they adopt the door.
     kept("calendar", Promise::Undo, "crates/core/src/act/inverse.rs"),
     kept("docs", Promise::Undo, "crates/core/src/act/inverse.rs"),
-    owed("health", Promise::Undo, UNDO_DOOR_OWED),
+    kept("health", Promise::Undo, "crates/core/src/act/inverse.rs"),
     owed("locker", Promise::Undo, UNDO_DOOR_OWED),
     owed("money", Promise::Undo, UNDO_DOOR_OWED),
     kept("notes", Promise::Undo, "crates/core/src/act/inverse.rs"),

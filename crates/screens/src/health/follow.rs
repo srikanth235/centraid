@@ -431,6 +431,8 @@ pub fn run(
                 days: Value::Array(days).to_string(),
                 person_id: None,
             };
+            // undo-exempt: a follow pass runs unseen and has no status line; its Undo is Stop
+            // reading in the More sheet (`stop-following`).
             if kit_act::act(ctx, request, &key("record-days", &window.today)).committed {
                 outcome.days += batch.len();
             } else {
@@ -450,6 +452,8 @@ pub fn run(
         complete: Some(complete),
         since: Some(instant_of(window.workouts_since_ms)),
     };
+    // undo-exempt: a follow pass runs unseen and has no status line; its Undo is Stop reading in
+    // the More sheet (`stop-following`).
     let settled = kit_act::act(ctx, request, &key("follow-workouts", &window.today));
     if !settled.committed {
         outcome.refused += 1;
@@ -488,6 +492,8 @@ pub fn connect(
         complete: None,
         since: None,
     };
+    // undo-exempt: Connect shows its own progress and result, not a status line; its Undo is Stop
+    // reading in the More sheet (`stop-following`).
     if !kit_act::act(ctx, request, &key("follow-workouts", "origin")).committed {
         return None;
     }
@@ -507,6 +513,8 @@ pub fn stop(ctx: &Ctx) -> bool {
             system: act::health::StopFollowingSystem::Health,
             r#ref: origin.to_owned(),
         };
+        // undo-exempt: this is the Undo of a follow, and the Stop reading confirm asks first; the
+        // status line only says whether the store was left.
         clean = kit_act::act(ctx, request, &key("stop-following", origin)).committed && clean;
     }
     clean
