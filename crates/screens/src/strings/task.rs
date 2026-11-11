@@ -33,6 +33,12 @@ catalog! {
     plain delete = ("Move to trash", "Move to trash");
     plain delete_body = ("It goes to trash with its subtasks, and Restore brings it back for 30 days.", "It goes to trash with its subtasks, and Restore brings it back for 30 days.");
     plain delete_title = ("Move this task to trash?", "Move this task to trash?");
+    plain export_all = ("All lists", "All lists");
+    plain export_lede = (
+        "Reminders as to-dos in one .ics file, for other task apps.",
+        "Reminders as to-dos in one .ics file, for other task apps."
+    );
+    plain export_title = ("Export reminders", "Export reminders");
     plain denied_body = ("Ask the owner of this vault for access.", "Ask the owner of this vault for access.");
     plain denied_title = ("Reminders cannot read your tasks", "Reminders cannot read your tasks");
     plain done = ("Done", "Done");

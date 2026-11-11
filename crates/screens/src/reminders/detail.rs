@@ -34,6 +34,7 @@ use crate::kit::schedule::ops::Ops;
 use crate::kit::schedule::repeat::{REPEAT_CUSTOM, normalize_url};
 use crate::kit::schedule::rows::{self, Context};
 use crate::kit::schedule::rule_words;
+use crate::kit::share::{self, Share};
 use crate::reminders::routes;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
@@ -176,6 +177,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         custom: None,
         earlier: earlier::Foot::default(),
         differences: follow::Phone::default(),
+        share: Share::default(),
     }))
 }
 
@@ -199,6 +201,8 @@ struct Detail {
     earlier: earlier::Foot,
     /// Where the phone's Reminders differ from the task, read with the page.
     differences: follow::Phone,
+    /// The task handed to the OS share sheet as a calendar file (#1185).
+    share: Share,
 }
 
 impl Detail {
@@ -608,6 +612,11 @@ impl Detail {
     fn event(&mut self, event: wire::TodoDetailEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             Some(D::OpenLink(_)) => return self.open_link(),
+            Some(D::ShareRequested(_)) => {
+                if self.task().is_some() {
+                    return self.share.tap(ctx.locale());
+                }
+            }
             Some(D::Attachment(attachment)) => return self.attachments.event(ctx, attachment),
             _ => self.changed(event, ctx),
         }
@@ -737,7 +746,7 @@ impl Detail {
             Some(D::Confirmed(_)) => self.confirmed(ctx),
             Some(D::Dismissed(_)) => self.asking = Asking::None,
             // The page's asks of the shell are `event`'s.
-            Some(D::OpenLink(_) | D::Attachment(_)) | None => {}
+            Some(D::OpenLink(_) | D::Attachment(_) | D::ShareRequested(_)) | None => {}
         }
     }
 
@@ -878,6 +887,7 @@ impl Detail {
             notes_placeholder: words::notes_placeholder(locale),
             add_subtask_placeholder: words::subtask_placeholder(locale),
             delete_label: words::delete(locale),
+            share_label: share::label(locale),
             release_label: words::release(locale),
             can_release: open,
             today: today.to_owned(),
@@ -926,6 +936,7 @@ impl Screen for Detail {
             // CLOSE = DONE: whatever is typed is saved.
             Some(E::Left(_)) => {
                 let _ = self.autosave.flush(ctx);
+                return self.share.left();
             }
             Some(E::PhoneSaysTaken(taken)) => {
                 if let Some(settled) = follow::take(ctx, &self.task_id, &taken) {
@@ -940,6 +951,13 @@ impl Screen for Detail {
             Some(E::TodoDetail(detail)) => return self.event(detail, ctx),
             // THE SHELL'S ANSWER TO A PICK: the attachments' (an add under way).
             Some(E::EffectResult(result)) => {
+                let id = self.task_id.clone();
+                let shared = self.share.result(ctx, &result, |ctx| {
+                    super::export::file(ctx, None, Some(&id))
+                });
+                if !shared.is_empty() || self.share.status().is_some() {
+                    return shared;
+                }
                 if let Some(outcome) = &result.outcome {
                     return self.attachments.result(ctx, outcome).unwrap_or_default();
                 }
@@ -980,6 +998,7 @@ impl Screen for Detail {
                     .status
                     .clone()
                     .or_else(|| self.differences.status(locale, follow::Source::Phone))
+                    .or_else(|| self.share.status())
                     .or_else(|| self.earlier.status(locale)),
                 finished: self.finished,
                 earlier: self.earlier.entry.clone(),

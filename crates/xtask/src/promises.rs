@@ -344,7 +344,11 @@ pub const REGISTER: &[Row] = &[
         "crates/screens/src/people/export.rs",
     ),
     owed("photos", Promise::Export, EXPORT_OWED),
-    owed("reminders", Promise::Export, EXPORT_OWED),
+    kept(
+        "reminders",
+        Promise::Export,
+        "crates/screens/src/reminders/export.rs",
+    ),
     kept(
         "calendar",
         Promise::Share,
@@ -377,7 +381,11 @@ pub const REGISTER: &[Row] = &[
         Promise::Share,
         "crates/screens/src/photos/lightbox.rs",
     ),
-    owed("reminders", Promise::Share, SHARE_OWED),
+    kept(
+        "reminders",
+        Promise::Share,
+        "crates/screens/src/reminders/detail.rs",
+    ),
     // OwnerCheck (#1185, "Confirm it's me"): one gate in the kit; a row is Owed while a screen
     // hands member data to the OS without it.
     kept(

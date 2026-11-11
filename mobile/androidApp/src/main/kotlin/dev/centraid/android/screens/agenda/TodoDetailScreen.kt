@@ -255,6 +255,11 @@ private fun TodoDetailBody(
                     onEvent(TodoDetailEvent(release = TodoDetailEvent.ReleaseRequested()))
                 }
             }
+            if (data.share_label.isNotEmpty()) {
+                OutlineButton(data.share_label, testTag = "tasks-share", modifier = Modifier.padding(end = 8.dp)) {
+                    onEvent(TodoDetailEvent(share_requested = TodoDetailEvent.ShareRequested()))
+                }
+            }
             if (data.delete_label.isNotEmpty()) {
                 OutlineButton(data.delete_label, testTag = "tasks-delete", ink = "net") {
                     onEvent(TodoDetailEvent(delete = TodoDetailEvent.DeleteRequested()))

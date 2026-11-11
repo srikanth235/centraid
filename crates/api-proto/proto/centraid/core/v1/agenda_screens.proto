@@ -2609,6 +2609,8 @@ message TodoDetailData {
   // The Custom repeat sheet, while it is open: the editor's own sheet, over
   // this task's stored rule. Its events go back as `TodoDetailEvent.custom_repeat`.
   optional AgendaCustomRepeatSheet custom_repeat = 22;
+  // "Share": the button that hands the task to the OS as a calendar file (#1185).
+  string share_label = 23;
 }
 
 // A task's address and the one control that opens it in the browser.
@@ -2689,9 +2691,13 @@ message TodoDetailEvent {
     AgendaAttachmentEvent attachment = 31;
     // The Custom repeat sheet's controls: the editor's `custom_*` events, same meaning.
     AgendaEditorEvent custom_repeat = 32;
+    // The Share button (#1185): Rust asks the owner check, then hands the calendar file to the OS.
+    ShareRequested share_requested = 33;
   }
 
   message Refreshed {}
+
+  message ShareRequested {}
 
   // Asks the shell to open the task's address (an `OpenUrl` effect).
   message OpenLinkTapped {}

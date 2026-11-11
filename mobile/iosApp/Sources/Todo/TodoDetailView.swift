@@ -194,6 +194,10 @@ struct TodoDetailView: View {
                 EarlierEntryRow(entry: state.hasEarlier ? state.earlier : nil, open: open)
                 OriginLineView(line: state.hasOrigin ? state.origin : nil)
                 HStack(spacing: 12) {
+                    if !detail.shareLabel.isEmpty {
+                        KitOutlineButton(label: detail.shareLabel) { send(event { $0.shareRequested = .init() }) }
+                            .accessibilityIdentifier("tasks-share")
+                    }
                     if !detail.deleteLabel.isEmpty {
                         KitOutlineButton(label: detail.deleteLabel, tone: "net") { send(event { $0.delete = .init() }) }
                             .accessibilityIdentifier("tasks-delete")

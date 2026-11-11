@@ -5,6 +5,7 @@ use centraid_api_proto::core_v1 as wire;
 use wire::AgendaDestination as Dest;
 
 use super::super::routes;
+use crate::kit::export;
 use crate::kit::schedule::rows;
 use crate::strings::{
     Locale, agenda as words, agenda_reminders as reminders, imports, shared, task,
@@ -107,6 +108,16 @@ pub fn more_rows(locale: Locale, can_import_reminders: bool) -> Vec<wire::Agenda
         ),
     ];
     out.extend(places);
+    // EXPORT (#1185): the kit's one entry, the same row in every app.
+    let export = export::entry(locale, super::super::EXPORT);
+    out.push(wire::AgendaMoreRow {
+        key: export.key.to_owned(),
+        spoken: export.label.clone(),
+        label: export.label,
+        icon_key: export.icon_key.to_owned(),
+        route: Some(export.route),
+        ..wire::AgendaMoreRow::default()
+    });
     // THE REMINDERS IMPORT, beside the Tasks places: an action row that opens its option sheet.
     // Only where the platform has a Reminders store (iOS).
     if can_import_reminders {

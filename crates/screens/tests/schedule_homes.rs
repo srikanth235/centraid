@@ -1129,7 +1129,14 @@ fn to_do_has_no_calendar_rows_in_more() {
             .iter()
             .map(|row| row.key.as_str())
             .collect::<Vec<_>>(),
-        ["anytime", "logbook", "reminders", "trash", "reads"]
+        [
+            "anytime",
+            "logbook",
+            "reminders",
+            "trash",
+            "export",
+            "reads"
+        ]
     );
     assert_eq!(r.state().more_rows[0].section, "");
     // WHERE A PLACE GOES is the row's own route, and a place closes the sheet.
@@ -1147,8 +1154,9 @@ fn to_do_has_no_calendar_rows_in_more() {
         Some(routes::todo_list(wire::TodoView::Reminders))
     );
     assert_eq!(rows[3].route, Some(routes::trash()));
+    assert_eq!(rows[4].route.as_ref().unwrap().screen, "reminders.export");
     assert_eq!(
-        rows[4].label, "What Reminders may read",
+        rows[5].label, "What Reminders may read",
         "the sheet says what Reminders may read"
     );
     r.more_row("logbook");
