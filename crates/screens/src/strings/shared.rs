@@ -115,4 +115,13 @@ catalog! {
     plain read_failed = ("Couldn't read this. Try again.", "Couldn't read this. Try again.");
     plain read_incomplete = ("Part of this didn't arrive. Try again.", "Part of this didn't arrive. Try again.");
     plain write_refused = ("That change wasn't saved.", "That change wasn't saved.");
+    plain owner_locked_out = ("Too many tries. Unlock the phone with its passcode, then try again.", "Too many tries. Unlock the phone with its passcode, then try again.");
+    plain owner_not_confirmed = ("Couldn't confirm it's you. Nothing was done.", "Couldn't confirm it's you. Nothing was done.");
+    plain owner_no_passcode = ("This phone has no passcode. Set one in Settings, then try again.", "This phone has no passcode. Set one in Settings, then try again.");
+    plain owner_reason_export = ("Confirm it's you to export this.", "Confirm it's you to export this.");
+    plain owner_reason_restore = ("Confirm it's you to restore from your recovery key.", "Confirm it's you to restore from your recovery key.");
+    plain owner_reason_reveal = ("Confirm it's you to show your recovery key.", "Confirm it's you to show your recovery key.");
+    plain owner_reason_share = ("Confirm it's you to share this.", "Confirm it's you to share this.");
+    plain owner_title = ("Confirm it's you", "Confirm it's you");
+    plain owner_unprotected = ("This phone has no passcode, so nothing confirmed it's you.", "This phone has no passcode, so nothing confirmed it's you.");
 }
