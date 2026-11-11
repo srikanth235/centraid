@@ -174,7 +174,8 @@ fn a_tap_asks_the_owner_check_then_offers_the_staged_archive_to_the_save_sheet()
             .status
             .as_ref()
             .map(|s| s.sentence.as_str()),
-        Some("Export saved")
+        Some(format!("Export saved: {} files", names.len() - 1).as_str()),
+        "it counts the files saved, not the README"
     );
 }
 
@@ -199,7 +200,7 @@ fn a_phone_with_no_passcode_saves_with_the_warning() {
     let status = transfer(d.view(i)).status.clone().expect("a line");
     assert!(!status.refused);
     assert!(
-        status.sentence.starts_with("Export saved. ") && status.sentence.len() > 14,
+        status.sentence.starts_with("Export saved: ") && status.sentence.contains(" files. "),
         "the warning rides with the saved line: {}",
         status.sentence
     );

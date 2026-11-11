@@ -119,6 +119,22 @@ pub fn count(output: &[u8], field: &str) -> u32 {
         .unwrap_or_default()
 }
 
+/// The `name` of each `{name, ...}` object in the answer's `field` array, in order.
+#[must_use]
+pub fn names(output: &[u8], field: &str) -> Vec<String> {
+    serde_json::from_slice::<serde_json::Value>(output)
+        .ok()
+        .and_then(|value| {
+            value.get(field)?.as_array().map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| Some(item.get("name")?.as_str()?.to_owned()))
+                    .collect()
+            })
+        })
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod arrival_tests {
     use super::*;

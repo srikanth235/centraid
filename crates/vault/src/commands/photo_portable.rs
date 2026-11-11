@@ -12,9 +12,10 @@
 //!
 //! The zip is written to the store's staging folder ([`BlobStore::staging_dir`]), emptied first;
 //! the shell deletes the file once the save sheet is done with it. The command answers `{path,
-//! name, media_type, count, missing}`: `missing` counts photographs whose bytes are not on this
-//! phone (freed up, or still to arrive), which the archive leaves out. It writes nothing to the
-//! vault.
+//! name, media_type, count, missing, left_out}`: `missing` counts the photographs the archive could
+//! not include (their bytes are not on this phone, freed up or still to arrive, or the file could
+//! not be read) and `left_out` names the first of them, by the name each would have had; the
+//! archive carries `Left out.txt` naming every one. It writes nothing to the vault.
 
 use std::collections::BTreeSet;
 use std::fs::{self, File};
@@ -25,7 +26,9 @@ use rusqlite::Connection;
 
 use crate::bytes::BlobStore;
 use crate::commands::document::no_store;
-use crate::commands::document_portable::{clear, unique};
+use crate::commands::document_portable::{
+    LeftOut, NOT_HERE, UNREADABLE, add_left_out, clear, left_out_json, unique,
+};
 use crate::commands::entity::lookup_live;
 use crate::commands::note_portable::file_stem;
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
@@ -152,12 +155,13 @@ fn export_zip(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     clear(&staging)?;
     let target = staging.join("export.zip");
     match write_archive(blobs, &target, items) {
-        Ok((count, missing)) => Ok(serde_json::json!({
+        Ok((count, left)) => Ok(serde_json::json!({
             "path": target.to_string_lossy(),
             "name": format!("{archive_name}.zip"),
             "media_type": "application/zip",
             "count": count,
-            "missing": missing,
+            "missing": left.len(),
+            "left_out": left_out_json(&left),
         })),
         Err(error) => {
             // A half-written archive is plaintext nobody asked to keep.
@@ -168,45 +172,33 @@ fn export_zip(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
 }
 
 /// The archive itself: each original streamed from the store's file. Returns how many went in
-/// and how many were not on this phone.
+/// and the originals it could not include.
 fn write_archive(
     blobs: &(dyn BlobStore + Send + Sync),
     target: &Path,
     items: Vec<Item>,
-) -> Result<(u64, u64)> {
+) -> Result<(u64, Vec<LeftOut>)> {
     let mut zip = ZipWriter::new(BufWriter::new(File::create(target)?));
-    let (added, missing) = add_photos(&mut zip, blobs, items, "")?;
+    let (added, left) = add_photos(&mut zip, blobs, items, "")?;
+    add_left_out(&mut zip, &left)?;
     zip.finish()?;
-    Ok((added, missing))
+    Ok((added, left))
 }
 
 /// Stream each photograph's original into `zip` under `prefix` (empty, or a folder name ending in
-/// `/`), named by when it was taken. Returns how many went in and how many were not on this
-/// phone. The whole-vault export writes the same entries under `Photos/`.
+/// `/`), named by when it was taken. Returns how many went in and the photographs it could not
+/// include (bytes not on this phone, or a file that cannot be read), each named as it would have
+/// been. The whole-vault export writes the same entries under `Photos/`.
 pub(crate) fn add_photos<W: Write + Seek>(
     zip: &mut ZipWriter<W>,
     blobs: &(dyn BlobStore + Send + Sync),
     items: Vec<Item>,
     prefix: &str,
-) -> Result<(u64, u64)> {
+) -> Result<(u64, Vec<LeftOut>)> {
     let mut used: BTreeSet<String> = BTreeSet::new();
     let mut added = 0_u64;
-    let mut missing = 0_u64;
+    let mut left: Vec<LeftOut> = Vec::new();
     for item in items {
-        let located = blobs
-            .path_of(&item.blob)
-            .map_err(|error| VaultError::Invariant {
-                context: format!("the content store would not say where a photograph is: {error}"),
-            })?;
-        let Some(path) = located else {
-            missing += 1;
-            continue;
-        };
-        let Ok(file) = File::open(&path) else {
-            missing += 1;
-            continue;
-        };
-        let size = file.metadata()?.len();
         let extension = extension_of(&item.media_type);
         let name = match item.stamp {
             Some(stamp) => format!("{}/{stamp}.{extension}", stamp.get(..4).unwrap_or("0000")),
@@ -215,11 +207,27 @@ pub(crate) fn add_photos<W: Write + Seek>(
                 item.blob.chars().take(12).collect::<String>()
             ),
         };
+        let (path, why) = match blobs.path_of(&item.blob) {
+            Ok(Some(path)) => (Some(path), UNREADABLE),
+            Ok(None) => (None, NOT_HERE),
+            Err(_) => (None, UNREADABLE),
+        };
+        let opened = path.and_then(|path| File::open(path).ok());
+        let Some((file, size)) = opened.and_then(|file| {
+            let size = file.metadata().ok()?.len();
+            Some((file, size))
+        }) else {
+            left.push(LeftOut {
+                name: format!("{prefix}{name}"),
+                why,
+            });
+            continue;
+        };
         let name = unique(&mut used, format!("{prefix}{name}"));
         zip.add(&name, size, file)?;
         added += 1;
     }
-    Ok((added, missing))
+    Ok((added, left))
 }
 
 const SCHEMA: &str = r#"{

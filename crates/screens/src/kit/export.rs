@@ -61,8 +61,12 @@ pub struct StagedFile {
     pub path: String,
     pub name: String,
     pub media_type: String,
-    /// Originals the file leaves out because their bytes are not on this phone; 0 for none.
+    /// Files that went in; 0 when the command did not say.
+    pub saved: u64,
+    /// Originals the file leaves out (not on this phone, or not readable); 0 for none.
     pub missing: u64,
+    /// The first of those, by name (the file itself, `Left out.txt`, names every one).
+    pub left_out: Vec<String>,
 }
 
 /// What a spec's `export` made: bytes in memory (a small file) or a file already on disk (a
@@ -169,7 +173,7 @@ pub fn file_of(
 }
 
 /// The file a command staged on disk, in the shape a streamed export command answers:
-/// `{path, name, count}`. A refusal is the core's sentence; an answer with no path is empty (the
+/// `{path, name, count, missing, left_out}`. A refusal is the core's sentence; an answer with no path is empty (the
 /// kit's "Could not export").
 ///
 /// # Errors
@@ -193,7 +197,9 @@ pub fn staged_of(
             .filter(|name| !name.is_empty())
             .unwrap_or_else(|| fallback_name.to_owned()),
         media_type: media_type.to_owned(),
+        saved: u64::from(super::transfer::count(&settled.output, "count")),
         missing: u64::from(super::transfer::count(&settled.output, "missing")),
+        left_out: super::transfer::names(&settled.output, "left_out"),
     })
 }
 
@@ -211,7 +217,9 @@ pub fn build(spec: &'static ExportSpec, route: &wire::Route) -> Option<Box<dyn S
         stage: Stage::Choosing,
         chosen: String::new(),
         warning: String::new(),
+        saved: 0,
         missing: 0,
+        left_out: Vec::new(),
         status: None,
     }))
 }
@@ -236,8 +244,11 @@ struct Export {
     chosen: String,
     /// What a phone with no passcode warned, said with the saved line.
     warning: String,
-    /// Originals the file just made leaves out (not on this phone), said with the saved line.
+    /// How many files the staged file holds, said with the saved line; 0 for none or unknown.
+    saved: u64,
+    /// Originals the file just made leaves out, and the first few by name, said with the saved line.
     missing: u64,
+    left_out: Vec<String>,
     status: Option<wire::StatusLine>,
 }
 
@@ -263,7 +274,9 @@ impl Export {
         }
         self.chosen = key.to_owned();
         self.warning.clear();
+        self.saved = 0;
         self.missing = 0;
+        self.left_out.clear();
         self.status = None;
         self.stage = Stage::Checking;
         self.gate.begin(ctx.locale(), Leaving::Export)
@@ -302,9 +315,9 @@ impl Export {
                     let warning = self.warning.clone();
                     self.say(warning, false);
                 }
-                self.missing = match &made {
-                    Made::Staged(file) => file.missing,
-                    Made::Bytes(_) => 0,
+                (self.saved, self.missing, self.left_out) = match &made {
+                    Made::Staged(file) => (file.saved, file.missing, file.left_out.clone()),
+                    Made::Bytes(_) => (0, 0, Vec::new()),
                 };
                 let kind = match made {
                     Made::Bytes(file) => wire::effect::Kind::SaveFile(wire::SaveFile {
@@ -341,12 +354,15 @@ impl Export {
         self.stage = Stage::Choosing;
         match &result.outcome {
             Some(wire::effect_result::Outcome::Done(_)) => {
-                let done = shared::export_done(locale);
-                let mut sentence = done;
+                let mut sentence = if self.saved > 0 {
+                    shared::export_saved_files(locale, self.saved)
+                } else {
+                    shared::export_done(locale)
+                };
                 if self.missing > 0 {
                     sentence = format!(
                         "{sentence}. {}",
-                        shared::export_missing(locale, self.missing)
+                        left_out_line(locale, self.missing, &self.left_out)
                     );
                 }
                 if !self.warning.is_empty() {
@@ -360,8 +376,33 @@ impl Export {
             _ => self.status = None,
         }
         self.warning.clear();
+        self.saved = 0;
         self.missing = 0;
+        self.left_out.clear();
     }
+}
+
+/// The most left-out names the status line spells out.
+const NAMED_ON_THE_LINE: usize = 3;
+
+/// "2 originals were left out: A.pdf, B.jpg", with "and 5 more" when there are more than the line
+/// names, and just the count when the command named none.
+fn left_out_line(locale: Locale, missing: u64, names: &[String]) -> String {
+    let count = shared::export_missing(locale, missing);
+    if names.is_empty() {
+        return count;
+    }
+    let mut list = names
+        .iter()
+        .take(NAMED_ON_THE_LINE)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(", ");
+    let more = missing.saturating_sub(NAMED_ON_THE_LINE.min(names.len()) as u64);
+    if more > 0 {
+        list = format!("{list} {}", shared::export_more(locale, more));
+    }
+    format!("{count}: {list}")
 }
 
 impl Screen for Export {

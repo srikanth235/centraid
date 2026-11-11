@@ -148,9 +148,24 @@ fn the_trash_the_missing_and_the_duplicates() {
     let (out, entries) = w.zip(json!({}));
     assert_eq!(out["count"], 3);
     assert_eq!(out["missing"], 1);
+    assert_eq!(
+        out["left_out"],
+        json!([{ "name": "Far.pdf", "why": "not on this phone" }])
+    );
     let mut listed = names(&entries);
     listed.sort_unstable();
-    assert_eq!(listed, ["Same 3.pdf", "Same.pdf", "same 2.PDF"]);
+    assert_eq!(
+        listed,
+        ["Left out.txt", "Same 3.pdf", "Same.pdf", "same 2.PDF"]
+    );
+    let note = entries
+        .iter()
+        .find(|(name, _)| name == "Left out.txt")
+        .expect("the note of what was left out");
+    assert_eq!(
+        String::from_utf8_lossy(&note.1),
+        "These originals could not be included in this archive.\n\nFar.pdf (not on this phone)\n"
+    );
     let first = entries
         .iter()
         .find(|(name, _)| name == "Same.pdf")
@@ -159,11 +174,13 @@ fn the_trash_the_missing_and_the_duplicates() {
 }
 
 #[test]
-fn unsafe_titles_are_made_safe_in_the_archive() {
+fn an_archive_with_nothing_left_out_has_no_note_and_unsafe_titles_are_made_safe() {
     let w = World::new();
     w.document("a/b: c.pdf", b"one", None);
     w.document("CON.txt", b"two", None);
-    let (_, entries) = w.zip(json!({}));
+    let (out, entries) = w.zip(json!({}));
+    assert_eq!(out["missing"], 0);
+    assert_eq!(out["left_out"], json!([]));
     let mut listed = names(&entries);
     listed.sort_unstable();
     assert_eq!(listed, ["CON_.txt", "a-b- c.pdf"]);

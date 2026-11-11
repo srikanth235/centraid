@@ -203,7 +203,7 @@ fn a_tap_asks_the_owner_check_then_offers_the_staged_file_of_originals() {
             .status
             .as_ref()
             .map(|s| s.sentence.as_str()),
-        Some("Export saved")
+        Some("Export saved: 1 file")
     );
 }
 

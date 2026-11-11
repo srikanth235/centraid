@@ -142,7 +142,9 @@ catalog! {
     plain owner_unprotected = ("This phone has no passcode, so nothing confirmed it's you.", "This phone has no passcode, so nothing confirmed it's you.");
     // TAKE OUT (#1185): the one export screen and the one Share entry, said the same in every app.
     plain export_done = ("Export saved", "Export saved");
-    counted export_missing = ("{n} original was not on this phone and is left out", "{n} originals were not on this phone and are left out");
+    counted export_saved_files = ("Export saved: {n} file", "Export saved: {n} files");
+    counted export_missing = ("{n} original was left out", "{n} originals were left out");
+    counted export_more = ("and {n} more", "and {n} more");
     plain export_entry = ("Export", "Export");
     plain export_failed = ("Could not export", "Could not export");
     plain export_headline = ("Choose what to export", "Choose what to export");

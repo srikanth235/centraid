@@ -148,6 +148,14 @@ fn the_trash_the_missing_the_undated_and_the_duplicates() {
     let (out, entries) = w.zip(json!({}));
     assert_eq!(out["count"], 4);
     assert_eq!(out["missing"], 1);
+    // The one that is not here is named, in the answer and in the archive.
+    assert_eq!(out["left_out"].as_array().map(Vec::len), Some(1));
+    assert_eq!(out["left_out"][0]["why"], "not on this phone");
+    let left_name = out["left_out"][0]["name"].as_str().expect("a name");
+    assert!(
+        left_name.ends_with(".jpg") && left_name.contains('/'),
+        "{left_name}"
+    );
     let year = w
         .scratch
         .vault
@@ -169,7 +177,18 @@ fn the_trash_the_missing_the_undated_and_the_duplicates() {
             "2025/2025-03-03 080000 3.jpg",
             "2025/2025-03-03 080000.jpg",
             imported.as_str(),
+            "Left out.txt",
         ]
+    );
+    let note = entries
+        .iter()
+        .find(|(name, _)| name == "Left out.txt")
+        .expect("the note of what was left out");
+    assert_eq!(
+        String::from_utf8_lossy(&note.1),
+        format!(
+            "These originals could not be included in this archive.\n\n{left_name} (not on this phone)\n"
+        )
     );
     let first = entries
         .iter()

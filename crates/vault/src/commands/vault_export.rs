@@ -23,16 +23,20 @@
 //!
 //! The zip is written to the store's staging folder, emptied first; the shell deletes the file
 //! once the save sheet is done with it. The command answers `{path, name, media_type, count,
-//! missing}`: `count` is the files in the archive other than the README and `missing` counts the
-//! documents and photographs whose bytes are not on this phone, which the archive leaves out. It
-//! writes nothing to the vault.
+//! missing, left_out}`: `count` is the files in the archive other than the README and
+//! `Left out.txt`, `missing` counts the documents and photographs the archive could not include
+//! (bytes not on this phone, or a file that cannot be read) and `left_out` names the first of
+//! them with the reason; `Left out.txt` in the archive names every one. It writes nothing to the
+//! vault.
 
 use std::fs::{self, File};
 use std::io::{BufWriter, Seek, Write};
 
 use crate::bytes::BlobStore;
 use crate::commands::document::no_store;
-use crate::commands::document_portable::{add_documents, clear, live_documents, live_folders};
+use crate::commands::document_portable::{
+    LeftOut, add_documents, add_left_out, clear, left_out_json, live_documents, live_folders,
+};
 use crate::commands::health_portable::{measurements, workouts};
 use crate::commands::photo_portable::{add_photos, live_photos};
 use crate::commands::{
@@ -54,6 +58,8 @@ Money: your transactions as one spreadsheet (transactions.csv).
 Health: your daily totals and your workouts as two spreadsheets.
 Docs: your documents, as the original files, in the folders you made.
 Photos: your photos and videos, as the original files, by the year and time they were taken.
+
+If a document or a photo could not be included, Left out.txt names it and says why.
 
 Locker is not here. Its passwords and secrets leave only through Locker's own export.
 
@@ -95,12 +101,13 @@ fn export_all(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let target = staging.join("export.zip");
     let day: String = ctx.now.chars().take(10).collect();
     match write_archive(ctx, &target) {
-        Ok((count, missing)) => Ok(serde_json::json!({
+        Ok((count, left)) => Ok(serde_json::json!({
             "path": target.to_string_lossy(),
             "name": format!("Centraid export {day}.zip"),
             "media_type": "application/zip",
             "count": count,
-            "missing": missing,
+            "missing": left.len(),
+            "left_out": left_out_json(&left),
         })),
         Err(error) => {
             // A half-written archive is plaintext nobody asked to keep.
@@ -110,9 +117,12 @@ fn export_all(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     }
 }
 
-/// The archive itself. Returns how many files went in (the README not counted) and how many
-/// documents and photographs were not on this phone.
-fn write_archive(ctx: &CommandCtx<'_, '_>, target: &std::path::Path) -> Result<(u64, u64)> {
+/// The archive itself. Returns how many files went in (the README and `Left out.txt` not counted)
+/// and the documents and photographs it could not include.
+fn write_archive(
+    ctx: &CommandCtx<'_, '_>,
+    target: &std::path::Path,
+) -> Result<(u64, Vec<LeftOut>)> {
     let (Some(blobs), connection) = (ctx.blobs(), ctx.connection()) else {
         return Err(VaultError::Invariant {
             context: "vault.export_all ran without a content store".to_owned(),
@@ -140,13 +150,15 @@ fn write_archive(ctx: &CommandCtx<'_, '_>, target: &std::path::Path) -> Result<(
 
     let folders = live_folders(connection)?;
     let documents = live_documents(connection)?;
-    let (_, lost_documents) = add_documents(&mut zip, blobs, &folders, None, documents, "Docs/")?;
+    let (_, mut left) = add_documents(&mut zip, blobs, &folders, None, documents, "Docs/")?;
     let photos = live_photos(connection, None)?;
     let (_, lost_photos) = add_photos(&mut zip, blobs, photos, "Photos/")?;
+    left.extend(lost_photos);
+    let notes = u64::from(add_left_out(&mut zip, &left)?);
 
-    let count = zip.entries().saturating_sub(1);
+    let count = zip.entries().saturating_sub(1 + notes);
     zip.finish()?;
-    Ok((count, lost_documents + lost_photos))
+    Ok((count, left))
 }
 
 const SCHEMA: &str = r#"{

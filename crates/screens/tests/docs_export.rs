@@ -157,7 +157,7 @@ fn a_tap_asks_the_owner_check_then_offers_the_staged_file_to_the_save_sheet() {
             .status
             .as_ref()
             .map(|s| s.sentence.as_str()),
-        Some("Export saved")
+        Some("Export saved: 2 files")
     );
 }
 
@@ -220,7 +220,7 @@ fn a_cancelled_check_makes_no_file() {
 }
 
 #[test]
-fn a_save_says_how_many_originals_were_not_on_this_phone() {
+fn a_save_counts_what_it_saved_and_names_the_originals_that_were_not_on_this_phone() {
     let mut d = driver();
     text(&d, "Here.txt", "here");
     pdf(&d, "Far.pdf", 'a');
@@ -230,11 +230,14 @@ fn a_save_says_how_many_originals_were_not_on_this_phone() {
     pass_owner_check(&mut d);
     let _ = staged(&d);
     d.answer_effect(wire::effect_result::Outcome::Done(wire::EffectDone {}));
-    assert_eq!(
-        transfer(d.view(i))
-            .status
-            .as_ref()
-            .map(|s| s.sentence.as_str()),
-        Some("Export saved. 2 originals were not on this phone and are left out")
+    let line = transfer(d.view(i))
+        .status
+        .as_ref()
+        .map(|s| s.sentence.clone())
+        .unwrap_or_default();
+    assert!(
+        line.starts_with("Export saved: ")
+            && line.ends_with(" files. 2 originals were left out: Far.pdf, Farther.pdf"),
+        "{line}"
     );
 }

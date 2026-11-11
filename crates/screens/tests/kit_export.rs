@@ -54,8 +54,16 @@ fn staged(_: &Ctx, key: &str) -> Result<Made, String> {
         path: format!("/staging/{key}.zip"),
         name: format!("{key}.zip"),
         media_type: "application/zip".to_owned(),
-        // "All" has originals that are not on this phone.
-        missing: if key == "all" { 3 } else { 0 },
+        saved: if key == "all" { 7 } else { 0 },
+        // "All" has originals it could not include, and names the first five.
+        missing: if key == "all" { 5 } else { 0 },
+        left_out: if key == "all" {
+            ["A.pdf", "B.pdf", "C.pdf", "D.pdf", "E.pdf"]
+                .map(str::to_owned)
+                .to_vec()
+        } else {
+            Vec::new()
+        },
     }))
 }
 
@@ -334,7 +342,7 @@ fn a_staged_file_goes_to_the_save_sheet_by_its_path_after_the_owner_check() {
 }
 
 #[test]
-fn a_saved_export_names_the_originals_that_were_not_on_this_phone() {
+fn a_saved_export_counts_what_it_saved_and_names_the_originals_it_left_out() {
     let (mut d, i) = open(&STREAMS);
     d.effects.clear();
     tap(&mut d, i, "all");
@@ -342,7 +350,7 @@ fn a_saved_export_names_the_originals_that_were_not_on_this_phone() {
     d.answer_effect(wire::effect_result::Outcome::Done(wire::EffectDone {}));
     assert_eq!(
         view(&d, i).status.clone().expect("a line").sentence,
-        "Export saved. 3 originals were not on this phone and are left out"
+        "Export saved: 7 files. 5 originals were left out: A.pdf, B.pdf, C.pdf and 2 more"
     );
     // The next export starts clean.
     d.effects.clear();

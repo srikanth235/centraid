@@ -195,6 +195,11 @@ fn every_app_has_its_folder_the_text_is_each_apps_own_export_and_the_originals_a
             .is_some_and(|name| name.starts_with("Centraid export ") && name.ends_with(".zip"))
     );
     assert_eq!(out["missing"], 1, "the photograph whose bytes are not here");
+    assert_eq!(
+        out["left_out"],
+        json!([{ "name": "Photos/2025/2025-07-02 100000.jpg", "why": "not on this phone" }]),
+        "and it is named"
+    );
 
     let mut names: Vec<&str> = entries.iter().map(|(name, _)| name.as_str()).collect();
     names.sort_unstable();
@@ -205,6 +210,7 @@ fn every_app_has_its_folder_the_text_is_each_apps_own_export_and_the_originals_a
             "Docs/Taxes/Receipt.pdf",
             "Health/Daily totals.csv",
             "Health/Workouts.csv",
+            "Left out.txt",
             "Money/transactions.csv",
             "Notes/Ideas/Boat.md",
             "Notes/Loose.md",
@@ -214,7 +220,10 @@ fn every_app_has_its_folder_the_text_is_each_apps_own_export_and_the_originals_a
             "Reminders/reminders.ics",
         ]
     );
-    assert_eq!(out["count"], 10, "every file but the README");
+    assert_eq!(
+        out["count"], 10,
+        "every file but the README and the left-out note"
+    );
 
     // The text files are what each app's own export saves, byte for byte.
     assert_eq!(
@@ -256,6 +265,11 @@ fn every_app_has_its_folder_the_text_is_each_apps_own_export_and_the_originals_a
 
     let readme = String::from_utf8_lossy(find(&entries, "README.txt")).into_owned();
     assert!(readme.contains("Locker is not here"));
+    assert!(readme.contains("Left out.txt"));
+    assert_eq!(
+        String::from_utf8_lossy(find(&entries, "Left out.txt")),
+        "These originals could not be included in this archive.\n\nPhotos/2025/2025-07-02 100000.jpg (not on this phone)\n"
+    );
 }
 
 #[test]
