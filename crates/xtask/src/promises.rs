@@ -238,7 +238,11 @@ pub const REGISTER: &[Row] = &[
         "crates/vault/src/commands/money.rs",
     ),
     owed("notes", Promise::Arrive, ARRIVE_OWED),
-    owed("people", Promise::Arrive, ARRIVE_OWED),
+    kept(
+        "people",
+        Promise::Arrive,
+        "crates/screens/src/people/transfer.rs",
+    ),
     owed("photos", Promise::Arrive, ARRIVE_OWED),
     owed("reminders", Promise::Arrive, ARRIVE_OWED),
 ];

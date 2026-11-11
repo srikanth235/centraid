@@ -87,6 +87,29 @@ struct Transfer {
     saving: u32,
 }
 
+/// The `import-vcf` request for the picked cards: the dry run and the write say the same
+/// arrival, the file's name, so the vault records one origin for them.
+fn import_request(
+    files: &[TextFile],
+    dry_run: Option<bool>,
+    merge: Option<bool>,
+) -> act::people::ImportVcf {
+    let label = transfer::arrival_name(files);
+    act::people::ImportVcf {
+        cards: files
+            .iter()
+            .map(|file| file.text.as_str())
+            .collect::<Vec<_>>()
+            .join("\n"),
+        dry_run,
+        merge,
+        arrived_system: label
+            .is_some()
+            .then_some(act::people::ImportVcfArrivedSystem::Vcard),
+        arrived_label: label,
+    }
+}
+
 fn plan_of(output: &[u8]) -> Plan {
     let value: serde_json::Value = serde_json::from_slice(output).unwrap_or_default();
     Plan {
@@ -135,14 +158,6 @@ impl Transfer {
         }]
     }
 
-    fn cards(&self) -> String {
-        self.files
-            .iter()
-            .map(|file| file.text.as_str())
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
-
     fn picked(&mut self, ctx: &Ctx, picked: &wire::BytesPicked) {
         if picked.cancelled {
             return;
@@ -151,15 +166,7 @@ impl Transfer {
         self.status = None;
         self.stage = Stage::Reading;
         let key = kit_act::key(&["person.import_vcf", "dry"], kit_act::fresh());
-        let settled = kit_act::act(
-            ctx,
-            act::people::ImportVcf {
-                cards: self.cards(),
-                dry_run: Some(true),
-                merge: None,
-            },
-            &key,
-        );
+        let settled = kit_act::act(ctx, import_request(&self.files, Some(true), None), &key);
         if !settled.committed {
             self.stage = Stage::Choosing;
             self.refuse(settled.refusal);
@@ -173,15 +180,7 @@ impl Transfer {
         let locale = ctx.locale();
         self.stage = Stage::Writing;
         let key = kit_act::key(&["person.import_vcf"], kit_act::fresh());
-        let settled = kit_act::act(
-            ctx,
-            act::people::ImportVcf {
-                cards: self.cards(),
-                dry_run: None,
-                merge: Some(merge),
-            },
-            &key,
-        );
+        let settled = kit_act::act(ctx, import_request(&self.files, None, Some(merge)), &key);
         if settled.committed {
             let done = plan_of(&settled.output);
             let people = done.added + done.merged;
@@ -438,5 +437,32 @@ impl Screen for Transfer {
             })),
             ..wire::ViewState::default()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_dry_run_and_the_write_carry_the_same_arrival() {
+        let files = vec![TextFile {
+            path: "Backups/contacts.vcf".to_owned(),
+            text: "BEGIN:VCARD".to_owned(),
+        }];
+        for request in [
+            import_request(&files, Some(true), None),
+            import_request(&files, None, Some(true)),
+        ] {
+            let request: wire::ActRequest = request.into();
+            let text = |key: &str| match &request.input[key].kind {
+                Some(wire::value::Kind::Text(text)) => text.clone(),
+                other => panic!("{key}: {other:?}"),
+            };
+            assert_eq!(text("arrived_system"), "vcard");
+            assert_eq!(text("arrived_label"), "contacts.vcf");
+        }
+        let none: wire::ActRequest = import_request(&[], None, None).into();
+        assert!(!none.input.contains_key("arrived_system"));
     }
 }

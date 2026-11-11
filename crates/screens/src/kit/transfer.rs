@@ -73,6 +73,30 @@ pub fn picked_files(picked: &wire::BytesPicked) -> Vec<TextFile> {
         .collect()
 }
 
+/// What an import records as where its items came from: the file's name for one file, the picked
+/// folder's name for a folder, else the first file's name. A name, never content. `None` for a pick
+/// that named nothing.
+#[must_use]
+pub fn arrival_name(files: &[TextFile]) -> Option<String> {
+    let first = files.first()?;
+    let folder = first
+        .path
+        .split_once('/')
+        .map(|(folder, _)| folder)
+        .filter(|_| files.len() > 1);
+    let name = match folder {
+        Some(folder)
+            if files
+                .iter()
+                .all(|file| file.path.starts_with(&format!("{folder}/"))) =>
+        {
+            folder
+        }
+        _ => first.path.rsplit('/').next().unwrap_or(&first.path),
+    };
+    Some(name.trim().to_owned()).filter(|name| !name.is_empty())
+}
+
 /// The files as the JSON text an import action carries.
 #[must_use]
 pub fn files_json(files: &[TextFile]) -> String {
@@ -93,4 +117,33 @@ pub fn count(output: &[u8], field: &str) -> u32 {
         .and_then(|value| value.get(field)?.as_u64())
         .and_then(|n| u32::try_from(n).ok())
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod arrival_tests {
+    use super::*;
+
+    fn file(path: &str) -> TextFile {
+        TextFile {
+            path: path.to_owned(),
+            text: "secret words".to_owned(),
+        }
+    }
+
+    #[test]
+    fn an_arrival_is_named_by_its_file_or_its_folder_never_its_content() {
+        assert_eq!(
+            arrival_name(&[file("contacts.vcf")]).as_deref(),
+            Some("contacts.vcf")
+        );
+        assert_eq!(
+            arrival_name(&[file("Vault/a.md"), file("Vault/sub/b.md")]).as_deref(),
+            Some("Vault")
+        );
+        assert_eq!(
+            arrival_name(&[file("a.md"), file("b.md")]).as_deref(),
+            Some("a.md")
+        );
+        assert_eq!(arrival_name(&[]), None);
+    }
 }
