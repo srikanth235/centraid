@@ -28,9 +28,11 @@ use wire::app_query_response::Answer;
 use wire::home_tile_body::Kind as Body;
 
 use crate::catalog::load;
+use crate::docs::fold;
 use crate::health::figures::grouped;
 use crate::kit::civil::{self, HourCycle};
 use crate::kit::money::{self, Amount};
+use crate::kit::quantity::UnitsPref;
 use crate::kit::read::{self, Reading};
 use crate::screen::Ctx;
 use crate::strings::{
@@ -231,10 +233,10 @@ fn docs(ctx: &Ctx) -> Made {
     ) else {
         return unknown();
     };
-    docs_tile(ctx.locale(), &drive)
+    docs_tile(ctx.locale(), ctx.units(), &drive)
 }
 
-fn docs_tile(locale: Locale, drive: &wire::DocsDrive) -> Made {
+fn docs_tile(locale: Locale, units: UnitsPref, drive: &wire::DocsDrive) -> Made {
     let (one, many) = (
         words::tile_docs_count_one(locale),
         words::tile_docs_count_many(locale),
@@ -250,7 +252,7 @@ fn docs_tile(locale: Locale, drive: &wire::DocsDrive) -> Made {
         .map(|document| wire::home_tile_body::docs::Row {
             document_id: document.document_id.clone(),
             name: document.title.clone(),
-            size: document.size.clone(),
+            size: fold::size(locale, units, document.byte_size),
         })
         .collect();
     content(
@@ -1492,6 +1494,7 @@ mod tests {
         let docs = |n: usize, window: u32| {
             docs_tile(
                 Locale::En,
+                UnitsPref::Metric,
                 &wire::DocsDrive {
                     documents: (0..n)
                         .map(|i| wire::DocsDocumentRow {
@@ -1556,21 +1559,22 @@ mod tests {
     }
 
     #[test]
-    fn the_docs_tile_names_the_newest_three_with_the_size_the_core_worded() {
-        let row = |id: &str, title: &str, size: &str| wire::DocsDocumentRow {
+    fn the_docs_tile_names_the_newest_three_with_their_sizes_worded_by_the_quantity() {
+        let row = |id: &str, title: &str, bytes: i64| wire::DocsDocumentRow {
             document_id: id.to_owned(),
             title: title.to_owned(),
-            size: size.to_owned(),
+            byte_size: Some(bytes),
             ..Default::default()
         };
         let made = docs_tile(
             Locale::En,
+            UnitsPref::Metric,
             &wire::DocsDrive {
                 documents: vec![
-                    row("1", "Lease", "2.4 MB"),
-                    row("2", "Tax", "12 KB"),
-                    row("3", "Notes", "1 KB"),
-                    row("4", "Old", "9 KB"),
+                    row("1", "Lease", 2_400_000),
+                    row("2", "Tax", 12_000),
+                    row("3", "Notes", 1_000),
+                    row("4", "Old", 9_000),
                 ],
                 all_count: 4,
                 window: 200,

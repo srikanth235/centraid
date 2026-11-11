@@ -12,7 +12,7 @@
 use serde_json::Value;
 use wire::app_query_response::Answer;
 
-use super::{denied, folders};
+use super::{denied, fold, folders};
 use crate::catalog::load;
 use crate::kit::earlier::{self, EarlierSpec, Field, Look, Names};
 use crate::kit::read::{self, Reading};
@@ -55,7 +55,10 @@ fn know(ctx: &Ctx, document_id: &str) -> Names {
         },
     ) {
         for version in &history.versions {
-            names.insert(version.content_id.clone(), version.size.clone());
+            names.insert(
+                version.content_id.clone(),
+                fold::size(ctx.locale(), ctx.units(), version.byte_size),
+            );
             names.insert(
                 kind_key(&version.content_id),
                 kind_name(&version.media_type),

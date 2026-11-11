@@ -613,6 +613,7 @@ impl Screen for Document {
             Phase::Ready(answered) => {
                 let mut data = fold::document(
                     locale,
+                    ctx.units(),
                     ctx.hour_cycle(),
                     &answered.document,
                     answered.drive.as_ref(),

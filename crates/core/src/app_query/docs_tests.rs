@@ -517,7 +517,7 @@ fn the_version_history_is_newest_first_and_numbered_from_the_oldest() {
     assert_eq!(row.surface, wire::DocsSurface::Reading as i32);
     assert_eq!(row.kind, wire::DocsKind::Document as i32);
     assert_eq!(row.kind_name, "Document");
-    assert_eq!(row.size, "5 bytes", "the head's bytes, in words");
+    assert_eq!(row.byte_size, Some(5), "the head's bytes");
     assert_eq!(opened.body.as_deref(), Some("third"));
     let numbers: Vec<u32> = opened
         .versions
@@ -528,7 +528,7 @@ fn the_version_history_is_newest_first_and_numbered_from_the_oldest() {
     assert!(opened.versions[0].current);
     assert!(opened.versions[1..].iter().all(|version| !version.current));
     assert_eq!(opened.versions[0].content_id, row.content_id);
-    assert_eq!(opened.versions[2].size, "5 bytes");
+    assert_eq!(opened.versions[2].byte_size, Some(5));
     assert!(opened.bytes_held, "the words are a file in the store too");
 }
 

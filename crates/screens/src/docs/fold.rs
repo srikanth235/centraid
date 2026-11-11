@@ -1,8 +1,8 @@
 //! THE CORE'S DOCS ANSWERS, AS THE SCREENS DRAW THEM: every word, icon key and
 //! accessibility label a row, a fact and a version carries. Pure: dates are the
 //! core's `*_local` readings against the answer's own `today`, and no size, kind
-//! or media type is classified here (the core answers `size`, `kind_name` and
-//! `surface`).
+//! or media type is classified here (the core answers `byte_size`, `kind_name` and
+//! `surface`; a size is worded through `kit::quantity`).
 //!
 //! What depends on the SCREEN's state (the band, the filter menu, which empty state)
 //! is the screen's; what depends only on the answer is here.
@@ -11,6 +11,7 @@ use centraid_api_proto::core_v1 as wire;
 
 use super::{folders, routes};
 use crate::kit::civil::{self, HourCycle};
+use crate::kit::quantity::{Quantity, UnitsPref};
 use crate::strings::{Locale, docs as words, shared};
 
 /// The `design/icons.toml` key of a trash glyph.
@@ -28,6 +29,14 @@ pub const KEY_RESTORE: &str = "restore";
 pub const KEY_PURGE: &str = "purge";
 pub const KEY_MORE: &str = "more";
 pub const KEY_SHARE: &str = "share";
+
+/// A document's size in words (`2.4 MB`), or empty when its bytes have no row.
+#[must_use]
+pub fn size(locale: Locale, units: UnitsPref, bytes: Option<i64>) -> String {
+    bytes.map_or_else(String::new, |count| {
+        Quantity::bytes(count).words(locale, units)
+    })
+}
 
 /// "1 document" / "24 documents".
 #[must_use]
@@ -69,6 +78,7 @@ pub fn stamp(locale: Locale, cycle: HourCycle, local: &str) -> Option<String> {
 #[must_use]
 pub fn row(
     locale: Locale,
+    units: UnitsPref,
     row: &wire::DocsDocumentRow,
     today: &str,
     parent: &str,
@@ -88,11 +98,15 @@ pub fn row(
         };
         dated(locale, &words::changed(locale), at, today)
     };
-    let meta = [row.kind_name.clone(), row.size.clone(), when]
-        .into_iter()
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join(" · ");
+    let meta = [
+        row.kind_name.clone(),
+        size(locale, units, row.byte_size),
+        when,
+    ]
+    .into_iter()
+    .filter(|part| !part.is_empty())
+    .collect::<Vec<_>>()
+    .join(" · ");
     let accessibility_label = [
         Some(title.clone()),
         Some(meta.replace(" · ", ", ")).filter(|meta| !meta.is_empty()),
@@ -383,6 +397,7 @@ pub fn labels_sheet(
 #[must_use]
 pub fn document(
     locale: Locale,
+    units: UnitsPref,
     cycle: HourCycle,
     answer: &wire::DocsDocument,
     drive: Option<&wire::DocsDrive>,
@@ -399,7 +414,7 @@ pub fn document(
     };
     // The document's own page is the parent of what it opens (its crumbs and
     // versions): they name it, so its title is the back word.
-    let view = row(locale, found, &answer.today, "");
+    let view = row(locale, units, found, &answer.today, "");
     let surface = match found.surface() {
         wire::DocsSurface::Reading => Surface::Reading(reader(locale, found, answer)),
         wire::DocsSurface::Stage => Surface::Stage(stage(locale, found, answer, &view.title)),
@@ -414,17 +429,20 @@ pub fn document(
         about: None,
         title_phone_says: None,
         surface: Some(surface),
-        facts: facts(locale, cycle, found, answer, &view),
+        facts: facts(locale, units, cycle, found, answer, &view),
         path: folders::path_crumbs(locale, &answer.path, &view.title),
         earlier: None,
         origin: None,
         actions: head_actions(locale, found),
         bar: bar_actions(locale, found),
-        kind_size: [view.kind_label.clone(), found.size.clone()]
-            .into_iter()
-            .filter(|part| !part.is_empty())
-            .collect::<Vec<_>>()
-            .join(" · "),
+        kind_size: [
+            view.kind_label.clone(),
+            size(locale, units, found.byte_size),
+        ]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" · "),
         changed: dated(
             locale,
             &words::changed(locale),
@@ -530,6 +548,7 @@ fn stage(
 
 fn facts(
     locale: Locale,
+    units: UnitsPref,
     cycle: HourCycle,
     row: &wire::DocsDocumentRow,
     answer: &wire::DocsDocument,
@@ -537,8 +556,11 @@ fn facts(
 ) -> Vec<wire::DocsFact> {
     let fact = |label: String, detail: String| wire::DocsFact { label, detail };
     let mut facts = vec![fact(words::fact_kind(locale), view.kind_label.clone())];
-    if !row.size.is_empty() {
-        facts.push(fact(words::fact_size(locale), row.size.clone()));
+    if row.byte_size.is_some() {
+        facts.push(fact(
+            words::fact_size(locale),
+            size(locale, units, row.byte_size),
+        ));
     }
     if !row.media_type.is_empty() {
         facts.push(fact(words::fact_media_type(locale), row.media_type.clone()));

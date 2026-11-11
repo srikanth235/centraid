@@ -9,6 +9,7 @@ use super::query::{
 };
 use super::{BAND_ALL, BAND_FOLDERS, BAND_MORE, BAND_STARRED, Drive, Held, sheets};
 use crate::docs::{Phase, denied, fold, folders};
+use crate::kit::quantity::UnitsPref;
 use crate::kit::{menu, read, search as kit_search};
 use crate::screen::Ctx;
 use crate::strings::{Locale, docs as words, shared};
@@ -40,7 +41,7 @@ pub(super) fn state(drive: &Drive, ctx: &Ctx) -> wire::ViewState {
         Phase::Loading => Content::Loading(wire::Loading { first_load: true }),
         Phase::Failed => Content::Failure(read::failure(locale)),
         Phase::Denied(denial) => Content::Denied(denied(locale, denial)),
-        Phase::Ready(held) => Content::Data(Box::new(data(drive, locale, held))),
+        Phase::Ready(held) => Content::Data(Box::new(data(drive, locale, ctx.units(), held))),
     };
     wire::ViewState {
         kind: Some(wire::view_state::Kind::DocsDrive(Box::new(
@@ -265,7 +266,7 @@ fn chrome(drive: &Drive, locale: Locale) -> wire::DocsDriveChrome {
 
 /// The data as drawn: the folder level, the crumbs, the empty choice, a rename's
 /// title over its row.
-fn data(drive: &Drive, locale: Locale, held: &Held) -> wire::DocsDriveData {
+fn data(drive: &Drive, locale: Locale, units: UnitsPref, held: &Held) -> wire::DocsDriveData {
     use wire::DocsDestination as Dest;
     let page = title(drive, locale);
     let in_folders = drive.destination == Dest::Folders && !held.search;
@@ -286,7 +287,7 @@ fn data(drive: &Drive, locale: Locale, held: &Held) -> wire::DocsDriveData {
         .rows
         .iter()
         .map(|row| {
-            let mut view = fold::row(locale, row, &held.today, &page);
+            let mut view = fold::row(locale, units, row, &held.today, &page);
             if let Some(rename) = drive
                 .rename
                 .as_ref()

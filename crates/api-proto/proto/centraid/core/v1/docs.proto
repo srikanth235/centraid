@@ -27,9 +27,9 @@
 // that dates anything carries `today`, so "edited today" and "purges in 3
 // days" are string comparisons in a view.
 //
-// SIZES ARE PHRASES. `size` is `format_byte_size`'s words ("2.4 MB") — the one
-// formatter Home's Docs tile already reads through `with_document_size` — and
-// EMPTY when the document's bytes have no row, never "0 bytes".
+// SIZES ARE COUNTS. `byte_size` is the bytes' length and ABSENT when the
+// document's bytes have no row, never 0; the screens word it through
+// `kit::quantity`, the one measure formatter.
 //
 // WHAT "TRASH" MEANS ON THIS PHONE. Trashing stamps `purge_at` thirty days out.
 // `entity.purge` destroys one trashed document at once — the path Photos'
@@ -228,8 +228,8 @@ message DocsDocumentRow {
   // The kind's word, as the Kind column prints it.
   string kind_name = 6;
   DocsSurface surface = 7;
-  // The bytes, in words. EMPTY when there is no byte row.
-  string size = 8;
+  // The bytes' length. ABSENT when there is no byte row.
+  optional int64 byte_size = 8;
   // EMPTY at the top level.
   string folder_id = 9;
   bool starred = 10;
@@ -270,7 +270,7 @@ message DocsDocumentRow {
 message DocsVersion {
   string content_id = 1;
   string media_type = 2;
-  string size = 3;
+  optional int64 byte_size = 3;
   // Exactly one version is current: the first.
   bool current = 4;
   // "Version N", counted from the oldest, which is 1.
