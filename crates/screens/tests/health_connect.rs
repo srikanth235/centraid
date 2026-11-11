@@ -399,3 +399,73 @@ fn a_granted_background_read_adds_no_sentence() {
             .all(|fact| fact.label != "When Centraid is closed")
     );
 }
+
+/// Every sentence the Health connect page and the Health home say on the HealthKit store.
+fn ios_copy(d: &Driver, connect: u64) -> String {
+    let page = connect_state(d.view(connect));
+    let mut all = vec![
+        page.headline.clone(),
+        page.lede.clone(),
+        page.note.clone(),
+        page.status.clone(),
+        page.connect_label.clone(),
+    ];
+    all.extend(
+        page.choices
+            .iter()
+            .map(|c| format!("{} {}", c.label, c.detail)),
+    );
+    all.extend(
+        home_state(d.view(root(d)))
+            .reads_facts
+            .iter()
+            .map(|fact| format!("{} {}", fact.label, fact.detail)),
+    );
+    all.join("\n")
+}
+
+#[test]
+fn no_apple_health_copy_says_anything_about_reading_while_centraid_is_closed() {
+    // HealthKit's background reading is not wired: nothing on iOS asks for it, promises it, or
+    // reports it refused, even if a shell said so. Android keeps its sentences (tests above).
+    let (mut d, follower) = driver_following_on("ios", "en-US");
+    let today = today(&d);
+    d.answer_effect(no_memory());
+    let i = opened(&mut d);
+    d.answer_effect(no_memory());
+    let before = ios_copy(&d, i);
+    tap(&mut d, i);
+    assert!(!health_read(&d).ask_background);
+    let mut refused = snapshot(&today);
+    refused.background_refused = true;
+    d.answer_effect(Outcome::Health(refused));
+    d.pump(std::time::Duration::from_millis(2_600));
+    answer_for(&mut d, follower, keychain("1|steps"));
+    answer_for(
+        &mut d,
+        follower,
+        Outcome::Health(wire::HealthSnapshot {
+            store: wire::health_snapshot::Store::AppleHealth as i32,
+            store_present: true,
+            ..Default::default()
+        }),
+    );
+    let after = ios_copy(&d, i);
+    for copy in [before, after] {
+        let copy = copy.to_lowercase();
+        for banned in [
+            "closed",
+            "background",
+            "while centraid is open",
+            "health connect",
+        ] {
+            assert!(!copy.contains(banned), "iOS copy says `{banned}`: {copy}");
+        }
+    }
+    assert!(
+        home_state(d.view(root(&d)))
+            .reads_facts
+            .iter()
+            .all(|fact| fact.label != "When Centraid is closed")
+    );
+}
