@@ -28,6 +28,7 @@ pub(crate) fn trash(
                     event_id: row.event_id,
                     title: row.title,
                     purge_at: row.purge_at,
+                    calendar: row.calendar,
                 })
                 .collect(),
             truncated: data.truncated,

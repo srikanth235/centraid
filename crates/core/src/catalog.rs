@@ -131,8 +131,8 @@ mod tests {
             }
         }
         assert_eq!(
-            actions, 197,
-            "the nine manifests declare 197 actions: the 178 of the eight, the four the split of Agenda shares (attach and detach for a task and for an event, a calendar's rename and style), and the thirteen that give every trash a way to be emptied and Notes, Calendar, Health and Money a way to delete forever (Money's four take the place of its void), and the one that takes back a People relationship, and the one that stops following the phone's contacts (#1185)"
+            actions, 198,
+            "the nine manifests declare 198 actions: the 178 of the eight, the four the split of Agenda shares (attach and detach for a task and for an event, a calendar's rename and style), and the thirteen that give every trash a way to be emptied and Notes, Calendar, Health and Money a way to delete forever (Money's four take the place of its void), and the one that takes back a People relationship, and the one that stops following the phone's contacts, and the one that stops following the phone's calendars (#1185)"
         );
     }
 

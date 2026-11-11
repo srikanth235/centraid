@@ -503,6 +503,27 @@ pub mod act {
             }
         }
 
+        /// Stop following one of the phone's calendars through follow.stop: its origin is retired and its events forget their source. Every event stays, an ordinary one from now on. It is the Undo of follow-calendar, and it asks first because following again needs the phone's own read.
+        #[derive(Clone, Debug, Default)]
+        pub struct StopFollowing {
+            pub r#ref: String,
+        }
+        impl StopFollowing {
+            pub const NAME: &str = "stop-following";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("ref".to_owned(), text(self.r#ref));
+                map.insert("system".to_owned(), text("calendar"));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<StopFollowing> for wire::ActRequest {
+            fn from(value: StopFollowing) -> Self {
+                value.request()
+            }
+        }
+
         #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
         pub enum CreateCalendarColor {
             #[default]
@@ -530,7 +551,7 @@ pub mod act {
             }
         }
 
-        /// Create a calendar of the vault's own through container.create, with one of the eight list colours and an icon. A calendar is renamed through entity.retitle.
+        /// Create a calendar of the vault's own through container.create, with one of the eight list colours and an icon. A calendar is renamed through entity.retitle. Taking the creation back moves the calendar to the trash, where it comes back from.
         #[derive(Clone, Debug, Default)]
         pub struct CreateCalendar {
             pub title: String,

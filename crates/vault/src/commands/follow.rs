@@ -1581,6 +1581,43 @@ fn settle_absent(
     Ok(())
 }
 
+/// A followed calendar the member trashed stays trashed: a pass is not a restore, and an event the
+/// phone states into it now goes to the trash with it, under the calendar's own stamp, so one
+/// restore of the calendar brings back exactly what went with it.
+fn keep_in_a_trashed_home(ctx: &CommandCtx<'_, '_>, origin: &OriginRow) -> Result<()> {
+    let Some(home) = origin.fills.as_deref() else {
+        return Ok(());
+    };
+    let connection = ctx.connection();
+    let stamp: Option<(String, Option<String>)> = connection
+        .query_row(
+            "SELECT deleted_at, purge_at FROM entity WHERE id = ?1 AND kind = 'calendar'
+                AND deleted_at IS NOT NULL",
+            [home],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+    let Some((deleted_at, purge_at)) = stamp else {
+        return Ok(());
+    };
+    let arrivals: Vec<String> = connection
+        .prepare(
+            "SELECT ev.id FROM event ev JOIN entity en ON en.id = ev.id
+              JOIN source s ON s.entity_id = ev.id
+              WHERE ev.calendar_id = ?1 AND s.origin_id = ?2 AND en.deleted_at IS NULL",
+        )?
+        .query_map([home, origin.id.as_str()], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    for id in arrivals {
+        connection.execute(
+            "UPDATE entity SET deleted_at = ?2, purge_at = ?3 WHERE id = ?1",
+            rusqlite::params![id, deleted_at, purge_at],
+        )?;
+        ctx.touch(&id)?;
+    }
+    Ok(())
+}
+
 /// Apply one batch of records from a system.
 pub fn apply(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<serde_json::Value> {
     let origin = upsert_origin(ctx, map)?;
@@ -1597,6 +1634,7 @@ pub fn apply(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<serde_json::Va
         merge_record(ctx, map, &origin, record, &mut tally)?;
         seen.push((record.external_id.clone(), record.device_id.clone()));
     }
+    keep_in_a_trashed_home(ctx, &origin)?;
     let complete = ctx
         .input
         .get("complete")

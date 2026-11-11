@@ -265,3 +265,69 @@ fn search_answers_the_live_event_with_its_snippet_and_not_the_trashed_one() {
         "a member who typed `---` was refused nothing"
     );
 }
+
+/// A CALENDAR IN THE TRASH is a row of the shelf, called a calendar, with the events that went
+/// with it; it is no longer offered as a calendar and its events are off the agenda. One restore
+/// of the calendar brings it and exactly those back.
+#[test]
+fn a_trashed_calendar_is_on_the_shelf_as_a_calendar_and_leaves_the_picker_and_the_agenda() {
+    use centraid_apps_calendar::load_trash;
+
+    let scratch = Scratch::founded("calendar");
+    let side = scratch.run(
+        "container.create",
+        json!({ "kind": "calendar", "title": "Side" }),
+    )["id"]
+        .as_str()
+        .expect("a calendar id")
+        .to_owned();
+    let event = scratch.run(
+        "event.propose",
+        json!({ "title": "Side standup", "starts": "2099-06-03T09:00:00",
+                "ends": "2099-06-03T09:30:00", "timing": "floating", "calendar_id": side }),
+    )["id"]
+        .as_str()
+        .expect("an event id")
+        .to_owned();
+    let calendars = |scratch: &Scratch| -> Vec<String> {
+        scratch
+            .vault
+            .read(|connection| {
+                let door = TestDoor::new(connection);
+                let (data, _) = load_upcoming(&door, Some(FROM), Some(TO), NOW, &utc())
+                    .expect("upcoming reads");
+                Ok(data
+                    .calendars
+                    .into_iter()
+                    .map(|row| row.calendar_id)
+                    .collect())
+            })
+            .expect("the read runs")
+    };
+    assert!(calendars(&scratch).contains(&side));
+
+    scratch.run("entity.trash", json!({ "id": side }));
+    assert!(
+        !calendars(&scratch).contains(&side),
+        "a trashed calendar is not offered"
+    );
+    assert!(
+        scratch.upcoming().is_empty(),
+        "nor are its events on the agenda"
+    );
+    let shelf = scratch
+        .vault
+        .read(|connection| {
+            let (data, denial) = load_trash(&TestDoor::new(connection)).expect("the shelf reads");
+            assert!(denial.is_none());
+            Ok(data)
+        })
+        .expect("the read runs");
+    let row = |id: &str| shelf.events.iter().find(|row| row.event_id == id);
+    assert_eq!(row(&side).map(|row| row.calendar), Some(true));
+    assert_eq!(row(&event).map(|row| row.calendar), Some(false));
+
+    scratch.run("entity.restore", json!({ "id": side }));
+    assert!(calendars(&scratch).contains(&side));
+    assert_eq!(scratch.upcoming(), vec!["Side standup"]);
+}

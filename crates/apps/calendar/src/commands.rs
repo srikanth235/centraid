@@ -114,7 +114,7 @@ pub struct CommandsUnavailable {
 pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
-/// The sixteen, in the manifest's own order.
+/// The seventeen, in the manifest's own order.
 pub const ACTIONS: &[ActionRow] = &[
     act("propose", "event.propose"),
     act("rsvp", "event.respond"),
@@ -132,6 +132,9 @@ pub const ACTIONS: &[ActionRow] = &[
     act("detach", "edge.remove"),
     // THE PHONE'S CALENDARS, FOLLOWED (#1127): one record per event, the vault merges.
     act("follow-calendar", "follow.calendar"),
+    // Its Undo (owner ruling: connecting is undone by disconnecting); it asks first, as following
+    // again needs the phone's own read.
+    confirmed("stop-following", "follow.stop"),
     // A CALENDAR OF THE VAULT'S OWN is a container: the shared verb, and the shared colour and
     // icon verb. A calendar is renamed with `entity.retitle`.
     act("create-calendar", "container.create"),
@@ -170,7 +173,7 @@ mod tests {
 
     #[test]
     fn the_events_own_are_the_verbs_the_rest_are_shared_and_no_task_is_written() {
-        assert_eq!(ACTIONS.len(), 16);
+        assert_eq!(ACTIONS.len(), 17);
         assert!(
             ACTIONS.iter().all(|row| !row.command.starts_with("task.")),
             "Calendar reads a reminder and never writes one"
@@ -199,7 +202,7 @@ mod tests {
             .map(|row| row.action)
             .collect();
         assert_eq!(creates, ["create-calendar"]);
-        assert_eq!(act_scope_tables().len(), 16);
+        assert_eq!(act_scope_tables().len(), 17);
     }
 
     /// EVERY command this app names is in the vault's own catalogue. **A button

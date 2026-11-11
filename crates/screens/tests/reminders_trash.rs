@@ -258,12 +258,14 @@ mod kit {
                 title: "Buy milk".into(),
                 deleted_day: "2026-03-12".into(),
                 purge_day: "2026-04-11".into(),
+                noun: None,
             },
             TrashItem {
                 id: "t2".into(),
                 title: "  ".into(),
                 deleted_day: String::new(),
                 purge_day: String::new(),
+                noun: None,
             },
         ])
     }

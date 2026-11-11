@@ -47,7 +47,7 @@ mod tests {
     fn it_declares_seven_queries_and_fourteen_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 8);
-        assert_eq!(manifest.actions.len(), 16);
+        assert_eq!(manifest.actions.len(), 17);
         for name in [
             "upcoming",
             "search",
@@ -137,7 +137,8 @@ mod tests {
     /// owner-facing prompt on the member's own gesture.
     ///
     /// The exceptions are `purge-event` and `empty-trash` (#1185), the irreversible acts: they
-    /// confirm, as every other app's destroys do.
+    /// confirm, as every other app's destroys do; so does `stop-following`, which cannot be taken
+    /// back by one action.
     #[test]
     fn calendar_confirms_nothing_and_the_command_gate_is_the_other_one() {
         for row in ACTIONS {
@@ -145,7 +146,8 @@ mod tests {
                 .action(row.action)
                 .expect("checked above")
                 .confirmation;
-            let expected = if matches!(row.action, "purge-event" | "empty-trash") {
+            let expected = if matches!(row.action, "purge-event" | "empty-trash" | "stop-following")
+            {
                 (Confirmation::Required, Confirm::Required)
             } else {
                 (Confirmation::None, Confirm::None)

@@ -95,6 +95,7 @@ pub(crate) const UNDO_CHANGE: &str = "undo-change";
 type Row = (&'static str, &'static str, Input);
 
 /// `(action, its inverse, where the inverse's input comes from)`.
+#[rustfmt::skip]
 const CALENDAR: &[Row] = &[
     ("propose", "cancel-event", Input::Created),
     ("trash-event", "restore-event", Input::Id),
@@ -108,6 +109,9 @@ const CALENDAR: &[Row] = &[
     ("rename-calendar", "rename-calendar", Input::Earlier),
     ("style-calendar", "style-calendar", Input::Earlier),
     ("add-place", "undo-create", Input::Created),
+    // A calendar is a holder: taking its creation back moves it, and its events, to the trash.
+    ("create-calendar", "undo-create", Input::Created),
+    ("follow-calendar", "stop-following", Input::Stops("calendar")),
 ];
 
 const REMINDERS: &[Row] = &[
@@ -526,7 +530,7 @@ mod tests {
     /// The apps whose Undo row of the promise register (`cargo xtask rules`) is still Owed: the
     /// two checks below hold for every other app, and an app leaves this list in the change that
     /// takes its row to Kept.
-    const OWED: &[&str] = &["calendar", "locker", "money"];
+    const OWED: &[&str] = &["locker", "money"];
 
     /// Single actions still owed in an app whose other actions are held to the check below.
     const OWED_ACTIONS: &[(&str, &str)] = &[];

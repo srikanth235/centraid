@@ -1,4 +1,4 @@
-//! `trash` — the events in the trash, most recently trashed first (#1185).
+//! `trash` — the events and calendars in the trash, most recently trashed first (#1185).
 //!
 //! An event is an entity of kind `event`; trashing one (`entity.trash`) stamps
 //! `deleted_at` and `purge_at` on the entity row and nothing else, so the shelf
@@ -22,13 +22,15 @@ fn text(word: &str) -> PageBindValue {
 /// The shelf's window.
 pub const TRASH_ROWS: usize = 500;
 
-/// One trashed event: its title and the two instants the vault stamped.
+/// One trashed event or calendar: its title and the two instants the vault stamped.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrashRow {
     pub event_id: String,
     pub title: String,
     pub deleted_at: Option<String>,
     pub purge_at: Option<String>,
+    /// The row is a calendar, not an event: the shelf names it so.
+    pub calendar: bool,
 }
 
 /// The shelf, and whether it is longer than its window.
@@ -46,11 +48,14 @@ pub struct TrashData {
 pub fn load_trash(door: &dyn PageDoor) -> KitResult<(TrashData, Option<Denial>)> {
     let query = PageQuery::new(
         "calendar.trash",
-        "id, title, deleted_at, purge_at",
+        "id, title, kind, deleted_at, purge_at",
         "entity",
         PageOrder::desc("deleted_at", "id"),
     )
-    .filter("kind = ? AND deleted_at IS NOT NULL", vec![text("event")]);
+    .filter(
+        "kind IN (?, ?) AND deleted_at IS NOT NULL",
+        vec![text("event"), text("calendar")],
+    );
     let window = match read_window(door, &query, TRASH_ROWS) {
         Ok(window) => window,
         Err(KitError::Door(message)) => {
@@ -67,6 +72,7 @@ pub fn load_trash(door: &dyn PageDoor) -> KitResult<(TrashData, Option<Denial>)>
                 title: text_of(row, "title").unwrap_or_default(),
                 deleted_at: text_of(row, "deleted_at"),
                 purge_at: text_of(row, "purge_at"),
+                calendar: text_of(row, "kind").as_deref() == Some("calendar"),
             })
         })
         .collect();

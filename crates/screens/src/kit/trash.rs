@@ -26,12 +26,15 @@ use crate::strings::{Locale, shared};
 /// One trashed row as the app's query answered it: the days are the civil days
 /// the core read in the member's zone, empty when it stated none (never a
 /// slice of a UTC instant).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct TrashItem {
     pub id: String,
     pub title: String,
     pub deleted_day: String,
     pub purge_day: String,
+    /// What this row is called when it is not what the app's spec says (a calendar on a shelf of
+    /// events); `None` is the spec's own noun.
+    pub noun: Option<Words>,
 }
 
 /// A sentence in a locale.
@@ -188,6 +191,19 @@ impl Trash {
         }
     }
 
+    /// What a row is called in "Delete this {noun} forever?": its own word when it has one, else
+    /// the app's.
+    fn noun_of(&self, id: &str) -> Words {
+        match &self.phase {
+            Phase::Ready(items) => items
+                .iter()
+                .find(|item| item.id == id)
+                .and_then(|item| item.noun),
+            _ => None,
+        }
+        .unwrap_or(self.spec.noun)
+    }
+
     /// One write under a key of its own; a refusal is the status line, and
     /// either way the list is read again. Answers whether it committed.
     fn write(&mut self, ctx: &Ctx, request: wire::ActRequest, subject: &str) -> bool {
@@ -270,8 +286,8 @@ impl Trash {
     fn confirm(&self, locale: Locale) -> Option<wire::Confirm> {
         match self.asking {
             Asking::Nothing => None,
-            Asking::Purge(_) => Some(wire::Confirm {
-                title: purge_title(locale, self.spec.noun),
+            Asking::Purge(ref id) => Some(wire::Confirm {
+                title: purge_title(locale, self.noun_of(id)),
                 body: purge_body(locale, self.spec.purge_lead),
                 confirm_label: shared::trash_purge(locale),
                 destructive: true,

@@ -153,8 +153,9 @@ impl Kind {
     }
 
     /// Whether a member's delete of this kind goes through the trash. The rest
-    /// are deleted outright: a tag, a category or a calendar is not something
-    /// a member wants back after thirty days, and a chat is deleted when the member says so
+    /// are deleted outright: a tag or a category is not something
+    /// a member wants back after thirty days (a calendar is a holder: it takes its events to the
+    /// trash with it and they come back with it), and a chat is deleted when the member says so
     /// (R-CHAT-8).
     #[must_use]
     pub const fn has_trash(self) -> bool {
@@ -166,7 +167,6 @@ impl Kind {
                 | Self::WorkoutKind
                 | Self::ActivityKind
                 | Self::Relation
-                | Self::Calendar
                 | Self::Thread
         )
     }

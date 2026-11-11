@@ -5,7 +5,8 @@
 //! back, `purge-event` (`entity.purge`) deletes one forever and `empty-trash` (`entity.empty_trash`,
 //! kind event) every trashed event, each behind the kit's destructive confirm. A repeating event is
 //! ONE event: it is in the trash whole, every occurrence with it, and one restore brings the whole
-//! series back. The list is the core's `calendar.trash`, not a page of `entity` rows.
+//! series back. A calendar is a row of the same shelf, called a calendar, and one restore of it brings
+//! back the events that went with it. The list is the core's `calendar.trash`, not a page of `entity` rows.
 
 use centraid_api_proto::core_v1 as wire;
 use wire::app_query_response::Answer;
@@ -85,6 +86,8 @@ fn trashed(ctx: &Ctx) -> Reading<Vec<TrashItem>> {
                     title: row.title,
                     deleted_day: row.deleted_local_day,
                     purge_day: row.purge_local_day,
+                    // A calendar on the shelf of events says what it is.
+                    noun: row.calendar.then_some(shared::trash_noun_calendar as _),
                 })
                 .collect(),
         ),

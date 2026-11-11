@@ -270,10 +270,8 @@ fn purging_a_calendar_or_a_folder_an_origin_fills_clears_the_origin() {
                 Ok(())
             })
             .expect("an origin");
-        // A calendar is deleted, not moved to the trash; a folder is trashed first.
-        if system == "files" {
-            w.ok("entity.trash", json!({ "id": holder }));
-        }
+        // A calendar and a folder are each trashed first.
+        w.ok("entity.trash", json!({ "id": holder }));
         w.ok("entity.purge", json!({ "id": holder }));
         assert_eq!(
             w.one::<i64>("SELECT COUNT(*) FROM origin WHERE fills IS NOT NULL", &[]),

@@ -21,6 +21,8 @@
 //!   the top level (`DETACH`): a note the member restored on its own is not lost
 //!   with its notebook's purge. What cannot live without the holder (a section
 //!   without its project, a transaction without its account) is purged.
+//! - **A calendar is a holder too**: its events go to the trash with it and come back with it,
+//!   and the vault's own calendar (the one every vault is founded with) is never trashed.
 //! - **A person is a holder of what is written about them alone**: a note, a
 //!   touch or a yearly date about that person and no one else goes to the trash
 //!   with them and comes back with them. A task about them stays.
@@ -33,7 +35,7 @@ use rusqlite::{Connection, OptionalExtension};
 
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk};
 use crate::error::{Result, VaultError};
-use crate::model::Kind;
+use crate::model::{DEFAULT_CALENDAR_ID, Kind};
 
 /// How long a trashed entity waits before a sweep may purge it.
 pub const TRASH_DAYS: i64 = 30;
@@ -137,6 +139,9 @@ fn members(connection: &Connection, holder: &Found) -> Result<Vec<String>> {
              UNION ALL SELECT id FROM task WHERE project_id = ?1"
         }
         Kind::Account => "SELECT id FROM txn WHERE account_id = ?1",
+        // A calendar holds its events (a repeating one is one row): they go to the trash with it
+        // and, stamped with its own `deleted_at`, only those come back with it.
+        Kind::Calendar => "SELECT id FROM event WHERE calendar_id = ?1",
         // What was written or logged about one person and no one else: their
         // notes and journal words, the touches that were with them alone, and
         // their yearly dates. A task about them is the member's own and stays,
@@ -245,9 +250,19 @@ fn purge_refusal(connection: &Connection, found: &Found) -> Result<Option<String
     let refusal = match found.kind {
         Kind::Flag => Some("a flag is built in and cannot be removed".to_owned()),
         Kind::Calendar => {
+            if found.id == DEFAULT_CALENDAR_ID {
+                return Ok(Some(
+                    "this is the calendar every vault is founded with; it cannot be removed"
+                        .to_owned(),
+                ));
+            }
+            // Events that went to the trash WITH the calendar are purged with it; any other is
+            // still the member's.
             let events = count(
                 connection,
-                "SELECT COUNT(*) FROM event WHERE calendar_id = ?1",
+                "SELECT COUNT(*) FROM event ev JOIN entity en ON en.id = ev.id
+                  WHERE ev.calendar_id = ?1
+                    AND en.deleted_at IS NOT (SELECT deleted_at FROM entity WHERE id = ?1)",
                 &found.id,
             )?;
             (events > 0).then(|| {
@@ -486,6 +501,11 @@ fn pre_trash(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
             "this is you; a vault cannot do without its owner".to_owned(),
         ));
     }
+    if found.id == DEFAULT_CALENDAR_ID {
+        return Ok(Some(
+            "this is the calendar every vault is founded with; it cannot be removed".to_owned(),
+        ));
+    }
     Ok((!found.kind.has_trash())
         .then(|| format!("a {} is deleted, not moved to the trash", found.kind.noun())))
 }
@@ -504,6 +524,25 @@ fn pre_restore(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     };
     if found.deleted_at.is_none() {
         return Ok(Some(format!("“{}” is not in the trash", found.title)));
+    }
+    // An event is not brought back into a calendar that is in the trash: the calendar comes back
+    // first, and takes with it the events that went with it.
+    if found.kind == Kind::Event {
+        let calendar: Option<String> = ctx
+            .connection()
+            .query_row(
+                "SELECT c.title FROM event ev JOIN entity c ON c.id = ev.calendar_id
+                  WHERE ev.id = ?1 AND c.deleted_at IS NOT NULL",
+                [&found.id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if let Some(title) = calendar {
+            return Ok(Some(format!(
+                "“{}” is on “{title}”, which is in the trash; restore the calendar first",
+                found.title
+            )));
+        }
     }
     // THE GRACE WINDOW REFUSES NOTHING. An overdue row is emptied by the pass
     // at launch (`Vault::empty_overdue_trash`); until that pass runs it is a

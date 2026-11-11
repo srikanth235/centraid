@@ -68,18 +68,6 @@ impl World {
             .expect("a row")
     }
 
-    fn sql(&self, sql: &str, params: &[&str]) {
-        self.scratch
-            .vault
-            .commit(|tx| {
-                tx.set_producer("test.sql");
-                tx.connection()
-                    .execute(sql, rusqlite::params_from_iter(params))?;
-                Ok(())
-            })
-            .expect("a write");
-    }
-
     /// `(timing, zone, starts, ends)` of the one day of `series` keyed `key`.
     fn day(
         &self,
@@ -465,14 +453,20 @@ fn a_purged_phone_calendar_ends_its_follow_and_the_next_pass_makes_it_again() {
     let w = World::new();
     follow(&w, "home", Some("var(--c-teal)"), vec![dated(1, "home")]);
     let home: String = w.one("SELECT fills FROM origin WHERE ref = 'calendar:home'", &[]);
-    // A calendar with events cannot be purged: they are moved or deleted first.
+    // A calendar is trashed before it is purged, and a purge takes the events that went to the
+    // trash with it; one with an event of its own still on it refuses.
     let sentence = w.refused("entity.purge", json!({ "id": home }));
-    assert!(sentence.contains("event"), "{sentence}");
-    w.sql(
-        "UPDATE event SET calendar_id = 'calendar:default' WHERE calendar_id = ?1",
-        &[&home],
-    );
+    assert!(sentence.contains("trash"), "{sentence}");
+    w.ok("entity.trash", json!({ "id": home }));
     w.ok("entity.purge", json!({ "id": home }));
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM event WHERE calendar_id = ?1",
+            &[&home]
+        ),
+        0,
+        "the events that went with it are purged with it"
+    );
     assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM origin", &[]), 0);
     follow(&w, "home", Some("var(--c-teal)"), vec![dated(1, "home")]);
     let again: String = w.one("SELECT fills FROM origin WHERE ref = 'calendar:home'", &[]);

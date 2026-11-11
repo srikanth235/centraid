@@ -399,8 +399,8 @@ message CalendarDatedReminders {
   repeated CalendarDatedReminder reminders = 2;
 }
 
-// `calendar.trash` (#1185): the events in the trash, most recently trashed first. A repeating event is ONE
-// row, whole.
+// `calendar.trash` (#1185): the events and calendars in the trash, most recently trashed first. A repeating
+// event is ONE row, whole.
 message CalendarTrashRequest {
   // The zone the rows' days are read in: as `PeopleTrashRequest.tz`.
   string tz = 1;
@@ -412,7 +412,7 @@ message CalendarTrash {
   bool truncated = 2;
 }
 
-// One trashed event: its title, when it was trashed and the two civil days (`YYYY-MM-DD`) in the
+// One trashed event or calendar: its title, when it was trashed and the two civil days (`YYYY-MM-DD`) in the
 // request's zone. EMPTY when the instant is absent or no zone resolved.
 message CalendarTrashRow {
   string event_id = 1;
@@ -421,6 +421,9 @@ message CalendarTrashRow {
   string deleted_at = 4;
   string deleted_local_day = 5;
   string purge_local_day = 6;
+  // The row is a calendar, not an event (`event_id` names it all the same): a calendar in the trash
+  // took its events with it, and one restore brings back exactly those.
+  bool calendar = 7;
 }
 
 // A reminder on its day: its title, due day, due time, state and nothing else.

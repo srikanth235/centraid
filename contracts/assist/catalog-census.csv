@@ -11,6 +11,7 @@ calendar,empty-trash,purge,event,card,yes: crates/screens/src/calendar/trash.rs,
 calendar,attach,attach,event,card,no,no
 calendar,detach,detach,event,card,no,no
 calendar,follow-calendar,import,event,card,yes: crates/screens/src/calendar/follow.rs,no
+calendar,stop-following,detach,event,card,no,no
 calendar,create-calendar,create:kind,list,card,no,no
 calendar,rename-calendar,edit,calendar,direct,yes: crates/screens/src/kit/schedule/style.rs,no
 calendar,style-calendar,edit:color,calendar,direct,yes: crates/screens/src/kit/schedule/style.rs,no

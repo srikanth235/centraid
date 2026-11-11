@@ -555,7 +555,7 @@ pub(crate) fn read_calendars(door: &dyn PageDoor) -> KitResult<Vec<CalendarRow>>
             "entity",
             PageOrder::asc("title", "id"),
         )
-        .filter("kind = ?", vec![text("calendar")]),
+        .filter("kind = ? AND deleted_at IS NULL", vec![text("calendar")]),
         EVENT_JOIN_BOUND,
     )?;
     let ids = ids_of(&named, "id");

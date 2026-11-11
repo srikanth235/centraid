@@ -1132,3 +1132,63 @@ fn following_the_health_store_is_taken_back_by_stopping_and_its_days_stay() {
         "the days stay"
     );
 }
+
+/// Creating a calendar is taken back by the shell's trash: the calendar and the events that were
+/// put on it go to the trash, and the calendar's own restore brings back exactly those.
+#[test]
+fn a_created_calendar_is_taken_back_by_the_trash_and_restored_whole() {
+    let w = World::new();
+    let made = w.ok(
+        "calendar",
+        "create-calendar",
+        &json!({ "kind": "calendar", "title": "Side" }),
+    );
+    let (undo, back) = made.inverse().expect("a calendar is taken back");
+    assert_eq!(undo, "undo-create");
+    let side = back["id"].as_str().expect("an id").to_owned();
+    let event = w.make(
+        "calendar",
+        "propose",
+        &json!({ "title": "Side standup", "starts": "2030-04-01T09:00:00", "ends": "2030-04-01T09:30:00", "timing": "floating", "calendar_id": side }),
+    );
+    assert!(w.live(&side) && w.live(&event));
+    w.ok("calendar", &undo, &back);
+    assert!(!w.live(&side), "the calendar is in the trash");
+    assert!(!w.live(&event), "and its event went with it");
+    w.ok("calendar", "restore-event", &json!({ "id": side }));
+    assert!(w.live(&side) && w.live(&event), "restored whole");
+}
+
+/// Connecting the phone's calendars is taken back by stopping, and the events stay.
+#[test]
+fn following_the_phones_calendar_is_taken_back_by_stopping_and_its_events_stay() {
+    let w = World::new();
+    let done = w.ok(
+        "calendar",
+        "follow-calendar",
+        &json!({ "origin": { "ref": "calendar:work", "label": "Work" }, "complete": true, "records": [
+            { "external_id": "uid:1", "fields": { "title": "Sync with the phone",
+              "starts": "2030-05-02T09:00", "ends": "2030-05-02T10:00", "timing": "floating",
+              "rule": null, "busy": 1 } }
+        ] }),
+    );
+    assert!(w.followed("calendar", "calendar:work"));
+    let (undo, back) = done.inverse().expect("a connection is taken back");
+    assert_eq!(undo, "stop-following");
+    assert_eq!(
+        back,
+        json!({ "system": "calendar", "ref": "calendar:work" })
+    );
+    w.ok("calendar", &undo, &back);
+    assert!(!w.followed("calendar", "calendar:work"));
+    let kept = w.sample.handle.with_vault(|vault| {
+        Ok(vault.read(|connection| {
+            Ok(connection.query_row(
+                "SELECT COUNT(*) FROM entity WHERE title = 'Sync with the phone' AND deleted_at IS NULL",
+                [],
+                |row| row.get::<_, i64>(0),
+            )?)
+        })?)
+    });
+    assert_eq!(kept.expect("a count"), 1, "the followed event remains");
+}

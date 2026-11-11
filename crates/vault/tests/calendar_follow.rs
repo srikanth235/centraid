@@ -240,3 +240,118 @@ fn a_phones_guests_match_a_person_by_exact_email_and_the_rest_stay_in_the_statem
         "declined"
     );
 }
+
+fn deleted(w: &World, id: &str) -> bool {
+    w.one::<Option<String>>("SELECT deleted_at FROM entity WHERE id = ?1", &[id])
+        .is_some()
+}
+
+/// A calendar is a holder: it takes its live events to the trash with it, an event that was
+/// already in the trash keeps its own stamp, and one restore brings back exactly the events that
+/// went with it. The vault's own calendar cannot be trashed.
+#[test]
+fn a_calendar_takes_its_events_to_the_trash_and_restores_exactly_those() {
+    let w = World::new();
+    let side = w.id(
+        "container.create",
+        json!({ "kind": "calendar", "title": "Side" }),
+    );
+    let on = |title: &str, day: &str| {
+        w.id(
+            "event.propose",
+            json!({ "title": title, "starts": format!("{day}T09:00:00"),
+                    "ends": format!("{day}T09:30:00"), "timing": "floating", "calendar_id": side }),
+        )
+    };
+    let (kept, early) = (on("Kept", "2030-01-10"), on("Early", "2030-01-11"));
+    w.ok("entity.trash", json!({ "id": early }));
+    w.scratch.clock.advance_ms(1_000);
+    let trashed = w.ok("entity.trash", json!({ "id": side }));
+    assert_eq!(
+        trashed["trashed"].as_array().map(Vec::len),
+        Some(2),
+        "the calendar and Kept"
+    );
+    assert!(deleted(&w, &side) && deleted(&w, &kept) && deleted(&w, &early));
+    // An event is not brought back into a calendar in the trash; a new one is not made on it.
+    let refused = w.run("entity.restore", json!({ "id": kept }));
+    assert_eq!(refused.status, CommandStatus::Failed);
+    let made = w.run(
+        "event.propose",
+        json!({ "title": "Late", "starts": "2030-01-11T09:00:00", "ends": "2030-01-11T09:30:00",
+                "timing": "floating", "calendar_id": side }),
+    );
+    assert_eq!(made.status, CommandStatus::Failed);
+    // The vault's own calendar stays.
+    let own = w.run("entity.trash", json!({ "id": "calendar:default" }));
+    assert_eq!(own.status, CommandStatus::Failed);
+    w.ok("entity.restore", json!({ "id": side }));
+    assert!(!deleted(&w, &side) && !deleted(&w, &kept));
+    assert!(
+        deleted(&w, &early),
+        "the event that was already in the trash stays there"
+    );
+}
+
+/// A calendar in the trash purges with the events that went with it, and refuses while an event
+/// the member trashed on its own, or kept live, is still on it.
+#[test]
+fn a_purged_calendar_takes_what_went_with_it() {
+    let w = World::new();
+    let side = w.id(
+        "container.create",
+        json!({ "kind": "calendar", "title": "Side" }),
+    );
+    let event = w.id(
+        "event.propose",
+        json!({ "title": "Only", "starts": "2030-01-10T09:00:00", "ends": "2030-01-10T09:30:00",
+                "timing": "floating", "calendar_id": side }),
+    );
+    let early = w.id(
+        "event.propose",
+        json!({ "title": "Early", "starts": "2030-01-12T09:00:00", "ends": "2030-01-12T09:30:00",
+                "timing": "floating", "calendar_id": side }),
+    );
+    w.ok("entity.trash", json!({ "id": early }));
+    w.scratch.clock.advance_ms(1_000);
+    w.ok("entity.trash", json!({ "id": side }));
+    let refused = w.run("entity.purge", json!({ "id": side }));
+    assert_eq!(
+        refused.status,
+        CommandStatus::Failed,
+        "an event of its own is still on it"
+    );
+    w.ok("entity.purge", json!({ "id": early }));
+    w.ok("entity.purge", json!({ "id": side }));
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM entity WHERE id IN (?1, ?2, ?3)",
+            &[&side, &event, &early]
+        ),
+        0
+    );
+}
+
+/// A followed calendar the member trashed is not resurrected by the next pass, and what the phone
+/// newly states into it goes to the trash with it, so a restore brings it back.
+#[test]
+fn a_followed_calendar_the_member_trashed_stays_trashed() {
+    let w = World::new();
+    w.read(vec![meeting("uid:1", "Sync")]);
+    let event = w.event_of("uid:1");
+    let calendar: String = w.one("SELECT calendar_id FROM event WHERE id = ?1", &[&event]);
+    w.ok("entity.trash", json!({ "id": calendar }));
+    assert!(deleted(&w, &event));
+    w.read(vec![meeting("uid:1", "Sync"), meeting("uid:2", "New")]);
+    let arrival = w.event_of("uid:2");
+    assert!(
+        deleted(&w, &calendar),
+        "a pass does not restore the calendar"
+    );
+    assert!(
+        deleted(&w, &event) && deleted(&w, &arrival),
+        "nor its events"
+    );
+    w.ok("entity.restore", json!({ "id": calendar }));
+    assert!(!deleted(&w, &calendar) && !deleted(&w, &event) && !deleted(&w, &arrival));
+}

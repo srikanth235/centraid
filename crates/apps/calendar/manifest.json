@@ -145,6 +145,11 @@
         "verbs": "act"
       },
       {
+        "schema": "follow",
+        "table": "stop",
+        "verbs": "act"
+      },
+      {
         "schema": "place",
         "table": "add",
         "verbs": "act"
@@ -805,7 +810,7 @@
       "name": "follow-calendar",
       "verb": "import",
       "kind": "event",
-      "inverse": null,
+      "inverse": "stop-following",
       "sealed": [],
       "bulk": true,
       "command": "follow.calendar",
@@ -896,6 +901,50 @@
       }
     },
     {
+      "name": "stop-following",
+      "verb": "detach",
+      "kind": "event",
+      "inverse": null,
+      "sealed": [],
+      "command": "follow.stop",
+      "phrasings": [
+        "stop reading the phone's calendars",
+        "disconnect the calendar on this phone",
+        "stop following the phone calendar"
+      ],
+      "description": "Stop following one of the phone's calendars through follow.stop: its origin is retired and its events forget their source. Every event stays, an ordinary one from now on. It is the Undo of follow-calendar, and it asks first because following again needs the phone's own read.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "required": ["system", "ref"],
+        "additionalProperties": false,
+        "properties": {
+          "system": {
+            "type": "string",
+            "enum": ["calendar"]
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
       "name": "create-calendar",
       "verb": "create:kind",
       "kind": "list",
@@ -906,7 +955,7 @@
         "create a calendar named Work",
         "start a new calendar for the kids' school"
       ],
-      "description": "Create a calendar of the vault's own through container.create, with one of the eight list colours and an icon. A calendar is renamed through entity.retitle.",
+      "description": "Create a calendar of the vault's own through container.create, with one of the eight list colours and an icon. A calendar is renamed through entity.retitle. Taking the creation back moves the calendar to the trash, where it comes back from.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -964,7 +1013,7 @@
           }
         }
       },
-      "inverse": null
+      "inverse": "undo-create"
     },
     {
       "name": "rename-calendar",

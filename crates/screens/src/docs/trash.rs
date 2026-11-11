@@ -85,6 +85,7 @@ fn trashed(ctx: &Ctx) -> Reading<Vec<TrashItem>> {
                     title: row.title,
                     deleted_day: row.trashed_local,
                     purge_day: row.purge_local_day,
+                    noun: None,
                 })
                 .collect(),
         ),
