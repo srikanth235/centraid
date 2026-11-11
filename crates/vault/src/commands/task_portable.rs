@@ -164,6 +164,18 @@ fn file(tasks: &[Task]) -> String {
     writer.finish()
 }
 
+/// The calendar file of every reminder (or one list's, or one reminder) and how many it holds.
+/// `task.export_ics` answers it; the whole-vault export writes the same text as
+/// `Reminders/reminders.ics`.
+pub(crate) fn reminders_text(
+    connection: &Connection,
+    list: Option<&str>,
+    one: Option<&str>,
+) -> Result<(String, usize)> {
+    let rows = tasks(connection, list, one)?;
+    Ok((file(&rows), rows.len()))
+}
+
 /// `task.export_ics`: every list's reminders, one list's (`list_id`), or one reminder
 /// (`task_id`, what a reminder page shares) as a calendar file. Writes nothing. Trashed
 /// reminders are not in it.
@@ -180,12 +192,11 @@ fn export_ics(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             .ok();
         file_name = title.map_or_else(|| "Reminders".to_owned(), |t| note::portable_stem(&t));
     }
-    let rows = tasks(ctx.connection(), list, one)?;
-    let text = file(&rows);
+    let (text, count) = reminders_text(ctx.connection(), list, one)?;
     Ok(serde_json::json!({
         "name": format!("{file_name}.ics"),
         "media_type": "text/calendar",
-        "count": rows.len(),
+        "count": count,
         "content": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, text),
     }))
 }

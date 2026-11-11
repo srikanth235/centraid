@@ -18,8 +18,10 @@
 
 use std::collections::BTreeSet;
 use std::fs::{self, File};
-use std::io::BufWriter;
+use std::io::{BufWriter, Seek, Write};
 use std::path::Path;
+
+use rusqlite::Connection;
 
 use crate::bytes::BlobStore;
 use crate::commands::document::no_store;
@@ -81,10 +83,38 @@ fn extension_of(media_type: &str) -> &'static str {
 }
 
 /// One photograph to write: its bytes' hash, its media type and its stamp (`YYYY-MM-DD HHMMSS`).
-struct Item {
+pub(crate) struct Item {
     blob: String,
     media_type: String,
     stamp: Option<String>,
+}
+
+/// Every live photograph (or one album's) in the order it was taken.
+pub(crate) fn live_photos(connection: &Connection, album: Option<&str>) -> Result<Vec<Item>> {
+    // The capture time on the clock where it was taken (SQLite does the date arithmetic), else
+    // the day the photograph was imported.
+    let mut statement = connection.prepare_cached(
+        "SELECT p.blob, p.media_type,
+                strftime('%Y-%m-%d %H%M%S', COALESCE(p.taken_at, e.created_at),
+                         printf('%+d minutes', CASE WHEN p.taken_at IS NULL
+                                                    THEN 0 ELSE COALESCE(p.offset_min, 0) END))
+           FROM photo p JOIN entity e ON e.id = p.id
+          WHERE e.deleted_at IS NULL
+            AND (?1 IS NULL OR EXISTS (SELECT 1 FROM edge m
+                                        WHERE m.from_id = ?1 AND m.rel = 'contains'
+                                          AND m.to_id = p.id))
+          ORDER BY COALESCE(p.taken_at, e.created_at), e.n",
+    )?;
+    let items = statement
+        .query_map([album], |row| {
+            Ok(Item {
+                blob: row.get(0)?,
+                media_type: row.get(1)?,
+                stamp: row.get(2)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(items)
 }
 
 /// `photo.export_zip`: see the module header.
@@ -113,29 +143,7 @@ fn export_zip(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         name => name,
     };
 
-    // The capture time on the clock where it was taken (SQLite does the date arithmetic), else
-    // the day the photograph was imported.
-    let mut statement = connection.prepare_cached(
-        "SELECT p.blob, p.media_type,
-                strftime('%Y-%m-%d %H%M%S', COALESCE(p.taken_at, e.created_at),
-                         printf('%+d minutes', CASE WHEN p.taken_at IS NULL
-                                                    THEN 0 ELSE COALESCE(p.offset_min, 0) END))
-           FROM photo p JOIN entity e ON e.id = p.id
-          WHERE e.deleted_at IS NULL
-            AND (?1 IS NULL OR EXISTS (SELECT 1 FROM edge m
-                                        WHERE m.from_id = ?1 AND m.rel = 'contains'
-                                          AND m.to_id = p.id))
-          ORDER BY COALESCE(p.taken_at, e.created_at), e.n",
-    )?;
-    let items = statement
-        .query_map([album], |row| {
-            Ok(Item {
-                blob: row.get(0)?,
-                media_type: row.get(1)?,
-                stamp: row.get(2)?,
-            })
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let items = live_photos(connection, album)?;
 
     clear(&staging)?;
     let target = staging.join("export.zip");
@@ -163,7 +171,22 @@ fn write_archive(
     items: Vec<Item>,
 ) -> Result<(u64, u64)> {
     let mut zip = ZipWriter::new(BufWriter::new(File::create(target)?));
+    let (added, missing) = add_photos(&mut zip, blobs, items, "")?;
+    zip.finish()?;
+    Ok((added, missing))
+}
+
+/// Stream each photograph's original into `zip` under `prefix` (empty, or a folder name ending in
+/// `/`), named by when it was taken. Returns how many went in and how many were not on this
+/// phone. The whole-vault export writes the same entries under `Photos/`.
+pub(crate) fn add_photos<W: Write + Seek>(
+    zip: &mut ZipWriter<W>,
+    blobs: &(dyn BlobStore + Send + Sync),
+    items: Vec<Item>,
+    prefix: &str,
+) -> Result<(u64, u64)> {
     let mut used: BTreeSet<String> = BTreeSet::new();
+    let mut added = 0_u64;
     let mut missing = 0_u64;
     for item in items {
         let located = blobs
@@ -188,12 +211,11 @@ fn write_archive(
                 item.blob.chars().take(12).collect::<String>()
             ),
         };
-        let name = unique(&mut used, name);
+        let name = unique(&mut used, format!("{prefix}{name}"));
         zip.add(&name, size, file)?;
+        added += 1;
     }
-    let count = zip.entries();
-    zip.finish()?;
-    Ok((count, missing))
+    Ok((added, missing))
 }
 
 const SCHEMA: &str = r#"{

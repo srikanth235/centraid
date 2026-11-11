@@ -16,8 +16,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
-use std::io::BufWriter;
+use std::io::{BufWriter, Seek, Write};
 use std::path::Path;
+
+use rusqlite::Connection;
 
 use crate::bytes::BlobStore;
 use crate::commands::document::{folder_refusal, no_store};
@@ -43,7 +45,7 @@ fn pre_export(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 }
 
 /// A live folder: its name and the folder it is in.
-struct Folder {
+pub(crate) struct Folder {
     name: String,
     parent: Option<String>,
 }
@@ -116,20 +118,8 @@ pub(crate) fn clear(dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// `document.export_zip`: see the module header.
-fn export_zip(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let (Some(blobs), connection) = (ctx.blobs(), ctx.connection()) else {
-        return Err(VaultError::Invariant {
-            context: "document.export_zip ran without a content store".to_owned(),
-        });
-    };
-    let Some(staging) = blobs.staging_dir() else {
-        return Err(VaultError::Invariant {
-            context: "document.export_zip ran without a staging folder".to_owned(),
-        });
-    };
-    let scope = ctx.optional_str("folder_id");
-
+/// Every live folder by id.
+pub(crate) fn live_folders(connection: &Connection) -> Result<BTreeMap<String, Folder>> {
     let mut folders: BTreeMap<String, Folder> = BTreeMap::new();
     {
         let mut statement = connection.prepare_cached(
@@ -151,27 +141,52 @@ fn export_zip(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
             folders.insert(id, folder);
         }
     }
+    Ok(folders)
+}
+
+/// Every live document: its title, its blob and its folder, in the order it was made.
+pub(crate) fn live_documents(connection: &Connection) -> Result<Vec<DocumentRow>> {
+    let mut statement = connection.prepare_cached(
+        "SELECT e.title, d.blob, d.folder_id
+           FROM document d JOIN entity e ON e.id = d.id
+          WHERE e.deleted_at IS NULL
+          ORDER BY e.n",
+    )?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
+}
+
+/// A document to write: its title, its blob's hash and the folder it is in.
+pub(crate) type DocumentRow = (String, String, Option<String>);
+
+/// `document.export_zip`: see the module header.
+fn export_zip(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let (Some(blobs), connection) = (ctx.blobs(), ctx.connection()) else {
+        return Err(VaultError::Invariant {
+            context: "document.export_zip ran without a content store".to_owned(),
+        });
+    };
+    let Some(staging) = blobs.staging_dir() else {
+        return Err(VaultError::Invariant {
+            context: "document.export_zip ran without a staging folder".to_owned(),
+        });
+    };
+    let scope = ctx.optional_str("folder_id");
+
+    let folders = live_folders(connection)?;
     let archive_name = scope
         .and_then(|id| folders.get(id))
         .map_or_else(|| "Documents".to_owned(), |folder| file_stem(&folder.name));
 
-    let documents = {
-        let mut statement = connection.prepare_cached(
-            "SELECT e.title, d.blob, d.folder_id
-               FROM document d JOIN entity e ON e.id = d.id
-              WHERE e.deleted_at IS NULL
-              ORDER BY e.n",
-        )?;
-        statement
-            .query_map([], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, Option<String>>(2)?,
-                ))
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()?
-    };
+    let documents = live_documents(connection)?;
 
     clear(&staging)?;
     let target = staging.join("export.zip");
@@ -199,10 +214,27 @@ fn write_archive(
     target: &Path,
     folders: &BTreeMap<String, Folder>,
     scope: Option<&str>,
-    documents: Vec<(String, String, Option<String>)>,
+    documents: Vec<DocumentRow>,
 ) -> Result<(u64, u64)> {
     let mut zip = ZipWriter::new(BufWriter::new(File::create(target)?));
+    let (added, missing) = add_documents(&mut zip, blobs, folders, scope, documents, "")?;
+    zip.finish()?;
+    Ok((added, missing))
+}
+
+/// Stream each document's original into `zip` under `prefix` (empty, or a folder name ending in
+/// `/`), in the folders the member sees. Returns how many went in and how many were not on this
+/// phone. The whole-vault export writes the same entries under `Docs/`.
+pub(crate) fn add_documents<W: Write + Seek>(
+    zip: &mut ZipWriter<W>,
+    blobs: &(dyn BlobStore + Send + Sync),
+    folders: &BTreeMap<String, Folder>,
+    scope: Option<&str>,
+    documents: Vec<DocumentRow>,
+    prefix: &str,
+) -> Result<(u64, u64)> {
     let mut used: BTreeSet<String> = BTreeSet::new();
+    let mut added = 0_u64;
     let mut missing = 0_u64;
     for (title, blob, folder) in documents {
         let Some(mut names) = path_of(folders, folder.as_deref(), scope) else {
@@ -223,12 +255,11 @@ fn write_archive(
         };
         let size = file.metadata()?.len();
         names.push(file_stem(&title));
-        let name = unique(&mut used, names.join("/"));
+        let name = unique(&mut used, format!("{prefix}{}", names.join("/")));
         zip.add(&name, size, file)?;
+        added += 1;
     }
-    let count = zip.entries();
-    zip.finish()?;
-    Ok((count, missing))
+    Ok((added, missing))
 }
 
 const SCHEMA: &str = r#"{

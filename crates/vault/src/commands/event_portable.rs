@@ -359,6 +359,18 @@ fn file(connection: &Connection, events: &[Event]) -> Result<String> {
     Ok(writer.finish())
 }
 
+/// The calendar file of every event (or one calendar's, or one event) and how many events it
+/// holds. `event.export_ics` answers it; the whole-vault export writes the same text as
+/// `Calendar/calendar.ics`.
+pub(crate) fn calendar_text(
+    connection: &Connection,
+    calendar: Option<&str>,
+    one: Option<&str>,
+) -> Result<(String, usize)> {
+    let rows = events(connection, calendar, one)?;
+    Ok((file(connection, &rows)?, rows.len()))
+}
+
 /// `event.export_ics`: every calendar's events, one calendar's (`calendar_id`), or one event
 /// (`event_id`, what an event page shares) as a calendar file. Writes nothing. Trashed events
 /// are not in it.
@@ -375,12 +387,11 @@ fn export_ics(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             .ok();
         file_name = title.map_or_else(|| "Calendar".to_owned(), |t| note::portable_stem(&t));
     }
-    let rows = events(ctx.connection(), calendar, one)?;
-    let text = file(ctx.connection(), &rows)?;
+    let (text, count) = calendar_text(ctx.connection(), calendar, one)?;
     Ok(serde_json::json!({
         "name": format!("{file_name}.ics"),
         "media_type": "text/calendar",
-        "count": rows.len(),
+        "count": count,
         "content": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, text),
     }))
 }

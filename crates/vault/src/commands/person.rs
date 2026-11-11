@@ -1125,7 +1125,24 @@ fn export_vcf(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             .ok();
         file_name = title.map_or_else(|| "People".to_owned(), |t| note::portable_stem(&t));
     }
-    let mut people = ctx.connection().prepare_cached(
+    let (text, count) = vcard_file(ctx.connection(), list, person)?;
+    Ok(serde_json::json!({
+        "name": format!("{file_name}.vcf"),
+        "media_type": "text/vcard",
+        "count": count,
+        "content": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, text),
+    }))
+}
+
+/// The vCards of everyone (or one list's people, or one person) as one file's text and how many
+/// cards it holds. `person.export_vcf` answers it; the whole-vault export writes the same text
+/// as `People/people.vcf`.
+pub(crate) fn vcard_file(
+    connection: &rusqlite::Connection,
+    list: Option<&str>,
+    person: Option<&str>,
+) -> Result<(String, usize)> {
+    let mut people = connection.prepare_cached(
         "SELECT e.id, e.title, p.nickname, p.role, p.birthday
            FROM entity e JOIN person p ON p.id = e.id
           WHERE e.kind = 'person' AND e.deleted_at IS NULL AND e.id IS NOT (SELECT self_id FROM vault)
@@ -1144,7 +1161,7 @@ fn export_vcf(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             ))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    let mut points = ctx.connection().prepare_cached(
+    let mut points = connection.prepare_cached(
         "SELECT kind, value, label FROM contact_point WHERE person_id = ?1 ORDER BY position",
     )?;
     let mut text = String::new();
@@ -1181,12 +1198,7 @@ fn export_vcf(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
                 .collect(),
         }));
     }
-    Ok(serde_json::json!({
-        "name": format!("{file_name}.vcf"),
-        "media_type": "text/vcard",
-        "count": rows.len(),
-        "content": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, text),
-    }))
+    Ok((text, rows.len()))
 }
 
 fn permanent(mut definition: CommandDefinition) -> CommandDefinition {

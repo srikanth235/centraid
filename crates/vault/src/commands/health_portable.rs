@@ -54,7 +54,7 @@ fn optional<T>(value: Option<T>, spell: impl Fn(T) -> String) -> String {
     value.map(spell).unwrap_or_default()
 }
 
-fn measurements(connection: &Connection, only: Option<&str>) -> Result<(String, i64)> {
+pub(crate) fn measurements(connection: &Connection, only: Option<&str>) -> Result<(String, i64)> {
     // One person at a time, by the table's primary key (person, day, metric): a read of every
     // measurement in one statement is a scan of the biggest table a vault holds.
     let people = connection
@@ -93,7 +93,7 @@ fn measurements(connection: &Connection, only: Option<&str>) -> Result<(String, 
 /// single workout's file name).
 type Workouts = (String, i64, Option<(String, String)>);
 
-fn workouts(connection: &Connection, one: Option<&str>) -> Result<Workouts> {
+pub(crate) fn workouts(connection: &Connection, one: Option<&str>) -> Result<Workouts> {
     let mut statement = connection.prepare_cached(
         "SELECT a.starts, a.ends, t.title, e.title, w.moving_s, w.distance_m, w.energy_kcal,
                 w.heart_bpm, w.climb_m, w.recorded_by
