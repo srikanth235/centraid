@@ -77,6 +77,7 @@ pub fn file(
     account_id: Option<&str>,
     transaction_id: Option<&str>,
 ) -> Result<export::ExportFile, String> {
+    // undo-exempt: an export writes nothing (`writes_nothing` in the manifest), so there is nothing to take back.
     let settled = kit_act::act(
         ctx,
         act::money::ExportCsv {
