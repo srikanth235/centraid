@@ -1231,7 +1231,7 @@ pub mod act {
         use super::*;
         pub const APP: &str = "health";
 
-        /// Record a batch of the store's daily totals through measurement.record: a value the vault already holds is not written, a changed one is replaced, a new one added. A day is never deleted.
+        /// Record a batch of the store's daily totals through measurement.record: a value the vault already holds is not written, a changed one is replaced, a new one added. A day is never deleted. It is the follow pass writing the store's totals, never a member's own act (a figure by hand is log-figure), so its Undo is stopping the follow.
         #[derive(Clone, Debug, Default)]
         pub struct RecordDays {
             pub days: String,
@@ -1320,7 +1320,7 @@ pub mod act {
             }
         }
 
-        /// Stop following the phone's health store through follow.stop: the store's origin is retired and its workouts forget their source. Every day and every workout stays, an ordinary row from now on.
+        /// Stop following the phone's health store through follow.stop: the store's origin is retired and its workouts forget their source. Every day and every workout stays, an ordinary row from now on. It is the Undo of follow-workouts, and it asks first (the app's Stop reading sheet confirms) because following again needs the phone's own read.
         #[derive(Clone, Debug, Default)]
         pub struct StopFollowing {
             pub r#ref: String,

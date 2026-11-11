@@ -149,6 +149,7 @@ people,save-contact-channel,edit,contact_point,card,yes: crates/screens/src/peop
 people,delete-contact-channel,delete,contact_point,card,yes: crates/screens/src/people/person/mod.rs,no
 people,merge-people,merge,person,card,yes: crates/screens/src/people/person/mod.rs,no
 people,follow-contacts,import,person,card,yes: crates/screens/src/people/contacts.rs,no
+people,stop-following,detach,person,card,no,no
 people,import-vcf,log,person,card,no,no
 people,export-vcf,log,person,card,no,no
 photos,upload,import,photo,card,yes: crates/screens/src/photos/editor.rs,no

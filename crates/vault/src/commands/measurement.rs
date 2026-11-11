@@ -175,13 +175,25 @@ fn log(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         .and_then(Json::as_f64)
         .unwrap_or_default();
     let connection = ctx.connection();
+    let replaced: Option<f64> = connection
+        .query_row(
+            "SELECT value FROM measurement WHERE person_id = ?1 AND day = ?2 AND metric = ?3",
+            rusqlite::params![person, day, metric],
+            |row| row.get(0),
+        )
+        .optional()?;
     connection.execute(
         "INSERT INTO measurement (person_id, day, metric, value) VALUES (?1, ?2, ?3, ?4)
          ON CONFLICT (person_id, day, metric) DO UPDATE SET value = excluded.value",
         rusqlite::params![person, day, metric, value],
     )?;
     ctx.touch(&person)?;
-    Ok(json!({ "id": format!("{day}:{metric}"), "day": day, "metric": metric, "value": value }))
+    // `replaced` is the figure this one took the place of, `null` when the day held none: a
+    // measurement is outside the history, so the answer is how an Undo puts it back.
+    Ok(json!({
+        "id": format!("{day}:{metric}"), "day": day, "metric": metric, "value": value,
+        "replaced": replaced
+    }))
 }
 
 fn pre_clear(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -206,12 +218,23 @@ fn pre_clear(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 fn clear(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let (day, metric) = named(ctx).unwrap_or_default();
     let person = subject(ctx)?;
+    let replaced: Option<f64> = ctx
+        .connection()
+        .query_row(
+            "SELECT value FROM measurement WHERE person_id = ?1 AND day = ?2 AND metric = ?3",
+            rusqlite::params![person, day, metric],
+            |row| row.get(0),
+        )
+        .optional()?;
     ctx.connection().execute(
         "DELETE FROM measurement WHERE person_id = ?1 AND day = ?2 AND metric = ?3",
         rusqlite::params![person, day, metric],
     )?;
     ctx.touch(&person)?;
-    Ok(json!({ "id": format!("{day}:{metric}"), "day": day, "metric": metric }))
+    // The figure that went, so taking the clearing back logs it again.
+    Ok(json!({
+        "id": format!("{day}:{metric}"), "day": day, "metric": metric, "replaced": replaced
+    }))
 }
 
 #[must_use]

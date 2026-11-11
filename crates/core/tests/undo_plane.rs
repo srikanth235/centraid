@@ -630,6 +630,20 @@ fn calendar(w: &World) {
     assert!(!w.live(&id), "the place is in the trash");
 }
 
+fn health(w: &World) {
+    let workout = w.make(
+        "health",
+        "log-workout",
+        &json!({ "type": "run", "title": "Morning run", "starts": "2030-03-01T07:00:00", "distance_m": 5000 }),
+    );
+    w.round_trip(
+        "health",
+        "edit-workout",
+        &workout,
+        &json!({ "id": workout, "title": "Long run", "distance_m": 8000 }),
+    );
+}
+
 fn people(w: &World) {
     let person = w.make("people", "add-person", &json!({ "title": "Una Undo" }));
     let list = w.make(
@@ -890,6 +904,7 @@ fn every_earlier_row_round_trips_and_nothing_else_is_claimed() {
     reminders(&w);
     calendar(&w);
     docs(&w);
+    health(&w);
     notes(&w);
     people(&w);
     photos(&w);
@@ -1014,4 +1029,106 @@ fn following_the_contacts_is_taken_back_by_stopping_and_the_people_stay() {
     // Stopping what is not followed is nothing, and the action answers so.
     let again = w.ok("people", "stop-following", &back);
     assert_eq!(again.output()["stopped"], json!(false));
+}
+
+impl World {
+    /// The figure a person's day holds for a metric (the vault owner's, as the actions here name).
+    pub fn figure(&self, day: &str, metric: &str) -> Option<f64> {
+        self.sample
+            .handle
+            .with_vault(|vault| {
+                Ok(vault.read(|connection| {
+                    Ok(connection
+                        .query_row(
+                            "SELECT value FROM measurement WHERE day = ?1 AND metric = ?2",
+                            [day, metric],
+                            |row| row.get::<_, f64>(0),
+                        )
+                        .ok())
+                })?)
+            })
+            .expect("a figure")
+    }
+}
+
+/// A figure is outside the history, so each act answers the value it replaced and the Undo puts
+/// exactly that back: a new figure is cleared, a replaced one is the one that was there, and a
+/// cleared one is logged again.
+#[test]
+fn a_figure_comes_back_as_it_was_and_a_cleared_one_is_logged_again() {
+    let w = World::new();
+    let (day, metric) = ("2030-03-02", "weight_kg");
+    // New: its Undo clears it.
+    let first = w.ok(
+        "health",
+        "log-figure",
+        &json!({ "day": day, "metric": metric, "value": 70.5 }),
+    );
+    let (undo, back) = first.inverse().expect("a new figure is taken back");
+    assert_eq!(undo, "clear-figure");
+    assert_eq!(w.figure(day, metric), Some(70.5));
+    w.ok("health", &undo, &back);
+    assert_eq!(w.figure(day, metric), None, "undone: no figure");
+    // Replaced, by either action: the Undo is the figure that was there.
+    w.ok(
+        "health",
+        "log-figure",
+        &json!({ "day": day, "metric": metric, "value": 70.5 }),
+    );
+    for action in ["log-figure", "edit-figure"] {
+        let replaced = w.ok(
+            "health",
+            action,
+            &json!({ "day": day, "metric": metric, "value": 72.25 }),
+        );
+        let (undo, back) = replaced.inverse().expect("a replaced figure is taken back");
+        assert_eq!((undo.as_str(), &back["value"]), (action, &json!(70.5)));
+        assert_eq!(w.figure(day, metric), Some(72.25));
+        w.ok("health", &undo, &back);
+        assert_eq!(
+            w.figure(day, metric),
+            Some(70.5),
+            "{action}: the exact prior figure"
+        );
+    }
+    // Cleared: the Undo logs the value that went.
+    let cleared = w.ok(
+        "health",
+        "clear-figure",
+        &json!({ "day": day, "metric": metric }),
+    );
+    let (undo, back) = cleared.inverse().expect("a clearing is taken back");
+    assert_eq!(undo, "log-figure");
+    assert_eq!(w.figure(day, metric), None);
+    w.ok("health", &undo, &back);
+    assert_eq!(w.figure(day, metric), Some(70.5));
+}
+
+/// Connecting the health store is taken back by stopping it, and the days and workouts stay. The
+/// day totals a pass writes are the pass, not a member's act: they name no store, so offer none.
+#[test]
+fn following_the_health_store_is_taken_back_by_stopping_and_its_days_stay() {
+    let w = World::new();
+    let done = w.ok(
+        "health",
+        "follow-workouts",
+        &json!({ "origin": { "ref": "healthkit", "label": "Apple Health" }, "records": [] }),
+    );
+    assert!(w.followed("health", "healthkit"));
+    let (undo, back) = done.inverse().expect("a connection is taken back");
+    assert_eq!(undo, "stop-following");
+    assert_eq!(back, json!({ "system": "health", "ref": "healthkit" }));
+    let days = w.ok(
+        "health",
+        "record-days",
+        &json!({ "days": [{ "day": "2030-03-03", "metric": "steps", "value": 8000 }] }),
+    );
+    assert!(days.inverse().is_none(), "a day total names no store");
+    w.ok("health", &undo, &back);
+    assert!(!w.followed("health", "healthkit"));
+    assert_eq!(
+        w.figure("2030-03-03", "steps"),
+        Some(8000.0),
+        "the days stay"
+    );
 }

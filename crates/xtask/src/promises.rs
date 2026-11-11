@@ -151,7 +151,7 @@ pub const REGISTER: &[Row] = &[
     // Undo (#1185, Phase 1): the checker's gaps are the adopters' work list.
     owed("calendar", Promise::Undo, CALENDAR_UNDO_OWED),
     kept("docs", Promise::Undo, "crates/core/src/act/inverse.rs"),
-    owed("health", Promise::Undo, UNDO_OWED),
+    kept("health", Promise::Undo, "crates/core/src/act/inverse.rs"),
     owed("locker", Promise::Undo, UNDO_OWED),
     owed("money", Promise::Undo, UNDO_OWED),
     kept("notes", Promise::Undo, "crates/core/src/act/inverse.rs"),

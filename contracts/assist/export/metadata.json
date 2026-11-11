@@ -1871,7 +1871,7 @@
         "bulk": true,
         "chat": "card",
         "command": "measurement.record",
-        "inverse": null,
+        "inverse": "stop-following",
         "kind": "daily_figure",
         "phrasings": [
           "log 8000 steps for today",
@@ -1889,7 +1889,7 @@
         "bulk": true,
         "chat": "card",
         "command": "follow.health",
-        "inverse": null,
+        "inverse": "stop-following",
         "kind": "workout",
         "phrasings": [
           "pull in my latest workouts",

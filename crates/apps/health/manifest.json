@@ -107,7 +107,7 @@
       "name": "record-days",
       "verb": "log",
       "kind": "daily_figure",
-      "inverse": null,
+      "inverse": "stop-following",
       "sealed": [],
       "bulk": true,
       "command": "measurement.record",
@@ -116,7 +116,7 @@
         "record last night's sleep as seven hours",
         "note my weight as 70 kilos this morning"
       ],
-      "description": "Record a batch of the store's daily totals through measurement.record: a value the vault already holds is not written, a changed one is replaced, a new one added. A day is never deleted.",
+      "description": "Record a batch of the store's daily totals through measurement.record: a value the vault already holds is not written, a changed one is replaced, a new one added. A day is never deleted. It is the follow pass writing the store's totals, never a member's own act (a figure by hand is log-figure), so its Undo is stopping the follow.",
       "confirmation": "none",
       "input": {
         "additionalProperties": false,
@@ -177,7 +177,7 @@
       "name": "follow-workouts",
       "verb": "import",
       "kind": "workout",
-      "inverse": null,
+      "inverse": "stop-following",
       "sealed": [],
       "bulk": true,
       "command": "follow.health",
@@ -319,8 +319,8 @@
         "disconnect Apple Health",
         "stop following Health Connect"
       ],
-      "description": "Stop following the phone's health store through follow.stop: the store's origin is retired and its workouts forget their source. Every day and every workout stays, an ordinary row from now on.",
-      "confirmation": "none",
+      "description": "Stop following the phone's health store through follow.stop: the store's origin is retired and its workouts forget their source. Every day and every workout stays, an ordinary row from now on. It is the Undo of follow-workouts, and it asks first (the app's Stop reading sheet confirms) because following again needs the phone's own read.",
+      "confirmation": "required",
       "input": {
         "type": "object",
         "required": ["system", "ref"],

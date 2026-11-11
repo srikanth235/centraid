@@ -80,6 +80,13 @@ pub(crate) enum Input {
     /// inverse is the app's `stop-following` for the named system with the pass's own
     /// `origin.ref`; a call that names no origin (the health follower's day totals) offers none.
     Stops(&'static str),
+    /// A figure set by hand (`measurement.log`), whose command answers the value it replaced under
+    /// `replaced`, `null` when the day held none. Taken back by the figure that was there, or by
+    /// `clear-figure` when there was none.
+    Figure,
+    /// A figure cleared (`measurement.clear`), which answers the value it removed under
+    /// `replaced`: taken back by logging that value for the same day and metric.
+    Cleared,
 }
 
 /// The shell action that puts a record back to a named earlier version. Any app's act can run it.
@@ -159,6 +166,14 @@ const LOCKER: &[Row] = &[
     ("remove-link", "add-link", Input::Same),
 ];
 const HEALTH: &[Row] = &[
+    // The follow pass writes the store's day totals and its workouts, and is taken back by
+    // disconnecting the store. A day total names no origin, so it offers none of its own.
+    ("record-days", "stop-following", Input::Stops("health")),
+    ("follow-workouts", "stop-following", Input::Stops("health")),
+    ("edit-workout", "edit-workout", Input::Earlier),
+    ("edit-figure", "edit-figure", Input::Figure),
+    ("log-figure", "clear-figure", Input::Figure),
+    ("clear-figure", "log-figure", Input::Cleared),
     ("log-workout", "delete-workout", Input::Created),
     ("delete-workout", "restore-workout", Input::Id),
     ("restore-workout", "delete-workout", Input::Id),
@@ -272,7 +287,8 @@ pub(crate) fn of(
     input: &Map<String, Value>,
     output: &Value,
 ) -> Option<(&'static str, Map<String, Value>)> {
-    let (_, inverse, from) = rows(app).iter().find(|row| row.0 == action)?;
+    let (name, inverse, from) = rows(app).iter().find(|row| row.0 == action)?;
+    let mut inverse = *inverse;
     let built = match from {
         Input::Same => input.clone(),
         Input::Earlier => return None,
@@ -300,6 +316,33 @@ pub(crate) fn of(
             stop.insert("system".to_owned(), Value::String((*system).to_owned()));
             stop.insert("ref".to_owned(), input.get("origin")?.get("ref")?.clone());
             stop
+        }
+        Input::Figure => {
+            let replaced = output.get("replaced")?;
+            let mut again = Map::new();
+            if let Some(person) = input.get("person_id") {
+                again.insert("person_id".to_owned(), person.clone());
+            }
+            again.insert("day".to_owned(), output.get("day")?.clone());
+            again.insert("metric".to_owned(), output.get("metric")?.clone());
+            if replaced.is_null() {
+                inverse = "clear-figure";
+            } else {
+                // The figure that was there comes back under the action that replaced it.
+                inverse = name;
+                again.insert("value".to_owned(), replaced.clone());
+            }
+            again
+        }
+        Input::Cleared => {
+            let mut again = Map::new();
+            if let Some(person) = input.get("person_id") {
+                again.insert("person_id".to_owned(), person.clone());
+            }
+            again.insert("day".to_owned(), output.get("day")?.clone());
+            again.insert("metric".to_owned(), output.get("metric")?.clone());
+            again.insert("value".to_owned(), output.get("replaced")?.clone());
+            again
         }
         Input::Replaced => {
             let replaced = output.get("replaced")?.as_object()?;
@@ -412,6 +455,12 @@ mod tests {
                             );
                         }
                     }
+                    Input::Figure => assert!(
+                        action == inverse || *inverse == "clear-figure",
+                        "{}.{action}: a figure is put back by itself or cleared",
+                        app.id
+                    ),
+                    Input::Cleared => assert_eq!(*inverse, "log-figure"),
                     Input::CreatedAs(_) | Input::CreatedElseEarlier(_) => {
                         unreachable!("{}.{action}: these are the shell's undo-create", app.id)
                     }
@@ -477,7 +526,7 @@ mod tests {
     /// The apps whose Undo row of the promise register (`cargo xtask rules`) is still Owed: the
     /// two checks below hold for every other app, and an app leaves this list in the change that
     /// takes its row to Kept.
-    const OWED: &[&str] = &["calendar", "health", "locker", "money"];
+    const OWED: &[&str] = &["calendar", "locker", "money"];
 
     /// Single actions still owed in an app whose other actions are held to the check below.
     const OWED_ACTIONS: &[(&str, &str)] = &[];

@@ -21,7 +21,7 @@ pub const ACTIONS: [ActionRow; 12] = [
     act("record-days", "measurement.record"),
     act("follow-workouts", "follow.health"),
     act("delete-workout", "entity.trash"),
-    act("stop-following", "follow.stop"),
+    confirmed("stop-following", "follow.stop"),
     act("log-workout", "workout.log"),
     act("edit-workout", "workout.edit"),
     act("restore-workout", "entity.restore"),
@@ -83,7 +83,7 @@ mod tests {
             let (action, _) = (row.action, row.command);
             let declared = manifest.action(action).expect("declared");
             // The irreversible acts confirm (#1185), as every other app's destroys do.
-            let expected = if matches!(action, "purge-workout" | "empty-trash") {
+            let expected = if matches!(action, "purge-workout" | "empty-trash" | "stop-following") {
                 Confirmation::Required
             } else {
                 Confirmation::None
