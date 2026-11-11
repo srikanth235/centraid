@@ -71,12 +71,8 @@ catalog! {
     plain export_leaves_out = ("Not included: trash, old passwords, passkey keys.", "Not included: trash, old passwords, passkey keys.");
     plain export_lede = ("This saves every item, including passwords, to an unencrypted file. Anything that opens it can read your secrets.", "This saves every item, including passwords, to an unencrypted file. Anything that opens it can read your secrets.");
     plain export_nothing = ("No items to export.", "No items to export.");
-    plain export_not_confirmed = ("Not confirmed. No file written.", "Not confirmed. No file written.");
     plain export_not_saved = ("Not saved. No file written.", "Not saved. No file written.");
     plain export_no_saver = ("This phone cannot save the file.", "This phone cannot save the file.");
-    plain export_prompt_reason = ("Confirm it's you to export every secret.", "Confirm it's you to export every secret.");
-    plain export_prompt_subtitle = ("Anything that reads the file reads your secrets.", "Anything that reads the file reads your secrets.");
-    plain export_prompt_title = ("Export Locker", "Export Locker");
     plain export_save_refused = ("Couldn't save the file.", "Couldn't save the file.");
     plain export_saving = ("Choose where the file goes.", "Choose where the file goes.");
     plain export_title = ("Export everything", "Export everything");

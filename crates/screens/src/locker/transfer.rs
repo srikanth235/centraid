@@ -23,6 +23,7 @@ use super::shared::{self, Phase};
 use super::types;
 use super::wall::{Change, Wall};
 use crate::catalog::load;
+use crate::kit::owner::{Answer as Owner, Leaving, NoPasscode, OwnerGate};
 use crate::kit::read;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, locker as words};
@@ -62,6 +63,7 @@ pub fn build_export(route: &wire::Route) -> Option<Box<dyn Screen>> {
         count: Phase::Loading,
         json: false,
         confirm: false,
+        gate: OwnerGate::default(),
         phase: wire::locker_export_state::Phase::Idle,
         status: None,
         unopened: 0,
@@ -74,6 +76,8 @@ struct Export {
     count: Phase<wire::LockerItems>,
     json: bool,
     confirm: bool,
+    /// The export's owner check; no passcode refuses it (D15).
+    gate: OwnerGate,
     phase: wire::locker_export_state::Phase,
     status: Option<wire::StatusLine>,
     /// Sealed values that did not open and are not in the file.
@@ -107,31 +111,31 @@ impl Export {
 
     /// Take down the export's own owner check when one is up.
     fn withdraw_check(&mut self, popped: bool) -> Vec<wire::Effect> {
-        let checking = self.phase == wire::locker_export_state::Phase::Checking;
+        let effects = self.gate.cancel();
         if popped {
             self.confirm = false;
             self.phase = wire::locker_export_state::Phase::Idle;
-        } else if checking {
+        } else if !effects.is_empty() {
             self.phase = wire::locker_export_state::Phase::Idle;
         }
-        if !checking {
-            return Vec::new();
-        }
-        vec![wire::Effect {
-            kind: Some(wire::effect::Kind::OwnerCheck(wire::OwnerCheck {
-                cancel: true,
-                ..Default::default()
-            })),
-        }]
+        effects
     }
 
     /// The owner check's answer, for an export that is checking.
     fn checked(&mut self, ctx: &Ctx, checked: &wire::OwnerChecked) -> Vec<wire::Effect> {
         let locale = ctx.locale();
-        if checked.outcome != wire::owner_checked::Outcome::Succeeded as i32 {
-            self.phase = wire::locker_export_state::Phase::Idle;
-            self.status = shared::status(words::export_not_confirmed(locale));
-            return Vec::new();
+        match self.gate.answer(locale, NoPasscode::Refuse, checked) {
+            Some(Owner::Passed) => {}
+            Some(Owner::Refused(sentence)) => {
+                self.phase = wire::locker_export_state::Phase::Idle;
+                self.status = shared::status(sentence);
+                return Vec::new();
+            }
+            // Dismissed, or not ours: nothing is written and nothing is said.
+            _ => {
+                self.phase = wire::locker_export_state::Phase::Idle;
+                return Vec::new();
+            }
         }
         self.phase = wire::locker_export_state::Phase::Writing;
         let format = if self.json {
@@ -234,15 +238,7 @@ impl Export {
             Some(X::Confirmed(_)) if self.confirm => {
                 self.confirm = false;
                 self.phase = wire::locker_export_state::Phase::Checking;
-                vec![wire::Effect {
-                    kind: Some(wire::effect::Kind::OwnerCheck(wire::OwnerCheck {
-                        ask: true,
-                        reason: words::export_prompt_reason(locale),
-                        title: words::export_prompt_title(locale),
-                        subtitle: words::export_prompt_subtitle(locale),
-                        cancel: false,
-                    })),
-                }]
+                self.gate.begin(locale, Leaving::Export)
             }
             Some(X::Refreshed(_)) => {
                 self.reload(ctx);
