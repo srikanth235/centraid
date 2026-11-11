@@ -81,25 +81,6 @@ pub fn runtime() -> crate::Runtime {
 /// The tab Docs' drive is the root of.
 pub const TAB: &str = "docs";
 
-/// What a page holds of its reads: nothing yet, a refusal, a gate or the
-/// answer. A failed read is never an empty list.
-#[derive(Clone, Debug)]
-pub(crate) enum Phase<T> {
-    Loading,
-    Failed,
-    Denied(wire::AppQueryDenial),
-    Ready(T),
-}
-
-impl<T> Phase<T> {
-    pub(crate) fn data(&self) -> Option<&T> {
-        match self {
-            Self::Ready(data) => Some(data),
-            _ => None,
-        }
-    }
-}
-
 /// The gate drawn when the vault will not let Docs read.
 pub(crate) fn denied(locale: Locale, denial: &wire::AppQueryDenial) -> wire::Denied {
     wire::Denied {

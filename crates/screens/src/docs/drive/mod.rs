@@ -38,14 +38,13 @@ use wire::app_query_response::Answer;
 use wire::docs_drive_event::Kind as D;
 use wire::screen_event::Kind as E;
 
-use super::Phase;
 use super::fold::{KEY_LABELS, KEY_MOVE, KEY_RENAME, KEY_STAR, KEY_TRASH, KEY_UNSTAR};
 use super::folders::TOP_LEVEL;
 use super::rename::Rename;
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::menu;
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Page, Reading};
 use crate::kit::trash;
 use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
@@ -147,7 +146,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         // THE GRID IS THE DEFAULT: real thumbnails are the board's whole point.
         grid: true,
         search: Search::default(),
-        phase: Phase::Loading,
+        page: Page::loading(),
+        asked: String::new(),
         rail: None,
         sheet: Sheet::None,
         undo: Undo::default(),
@@ -172,7 +172,12 @@ struct Drive {
     query: Query,
     grid: bool,
     search: Search,
-    phase: Phase<Held>,
+    /// The read. A shelf, folder or search with nothing to show is [`Page::Empty`] (see
+    /// [`Drive::reload`]), never ready data with no rows.
+    page: Page<Held>,
+    /// What `page` was asked for, apart from the window: data read for another shelf, filter,
+    /// order or term is not shown under a failed read of this one.
+    asked: String,
     rail: Option<Rail>,
     sheet: Sheet,
     /// A refused write's sentence, over the rows.
@@ -214,26 +219,41 @@ impl Drive {
                 Answer::DocsSearch(search) => Some(search),
                 _ => None,
             });
-            self.phase = match reading {
-                Reading::Data(search) => Phase::Ready(Held {
-                    search: true,
-                    rows: search.documents,
-                    today: search.today,
-                    truncated: false,
-                    corrected: search.corrected,
-                    containers: search.containers,
-                }),
-                Reading::Denied(denial) => Phase::Denied(denial),
-                Reading::Failed => Phase::Failed,
+            let nothing = |search: &wire::DocsSearch| {
+                search.documents.is_empty()
+                    && !search.containers.iter().any(|hit| hit.entity == "folder")
             };
+            let reading = match reading {
+                Reading::Data(search) => Reading::Data((
+                    nothing(&search),
+                    Held {
+                        search: true,
+                        rows: search.documents,
+                        today: search.today,
+                        truncated: false,
+                        corrected: search.corrected,
+                        containers: search.containers,
+                    },
+                )),
+                Reading::Denied(denial) => Reading::Denied(denial),
+                Reading::Failed => Reading::Failed,
+            };
+            self.landed(ctx.locale(), reading);
             return;
         }
         let reading = read::read(ctx, self.drive_request(), |answer| match answer {
             Answer::DocsDrive(drive) => Some(drive),
             _ => None,
         });
-        self.phase = match reading {
+        let reading = match reading {
             Reading::Data(drive) => {
+                // The open folder's child folders count as something to show.
+                let children = self.destination == wire::DocsDestination::Folders
+                    && drive
+                        .folders
+                        .iter()
+                        .any(|folder| folder.parent_id == self.folder_id);
+                let nothing = drive.documents.is_empty() && !children;
                 self.rail = Some(Rail {
                     folders: drive.folders,
                     labels: drive.labels,
@@ -243,18 +263,52 @@ impl Drive {
                     starred_count: drive.starred_count,
                     trash_count: drive.trash_count,
                 });
-                Phase::Ready(Held {
-                    search: false,
-                    rows: drive.documents,
-                    today: drive.today,
-                    truncated: drive.truncated,
-                    corrected: String::new(),
-                    containers: Vec::new(),
-                })
+                Reading::Data((
+                    nothing,
+                    Held {
+                        search: false,
+                        rows: drive.documents,
+                        today: drive.today,
+                        truncated: drive.truncated,
+                        corrected: String::new(),
+                        containers: Vec::new(),
+                    },
+                ))
             }
-            Reading::Denied(denial) => Phase::Denied(denial),
-            Reading::Failed => Phase::Failed,
+            Reading::Denied(denial) => Reading::Denied(denial),
+            Reading::Failed => Reading::Failed,
         };
+        self.landed(ctx.locale(), reading);
+    }
+
+    /// What the read now showing was asked for, without its window.
+    fn asking(&self) -> String {
+        match self.active_term() {
+            Some(term) => format!("search/{term}"),
+            None => format!("{:?}/{}/{:?}", self.destination, self.folder_id, self.query),
+        }
+    }
+
+    /// The page after `reading` landed over the one before. A refresh never blanks the rows
+    /// shown (a failed one keeps them under a note); a read for another shelf, filter, order or
+    /// term starts from nothing, so a failure of it is the failure and never the old rows.
+    fn landed(&mut self, locale: Locale, reading: Reading<(bool, Held)>) {
+        let asked = self.asking();
+        let kept = std::mem::replace(&mut self.page, Page::loading());
+        let held = if self.asked == asked {
+            kept.refreshing()
+        } else {
+            Page::loading()
+        };
+        self.asked = asked;
+        let nothing = matches!(reading, Reading::Data((true, _)));
+        let reading = match reading {
+            Reading::Data((_, held)) => Reading::Data(held),
+            Reading::Denied(denial) => Reading::Denied(denial),
+            Reading::Failed => Reading::Failed,
+        };
+        // A shelf with nothing to show is the page's empty state, which holds no rows.
+        self.page = held.after(reading, locale, |_| nothing);
     }
 
     /// The shelf as the core's request.
@@ -285,7 +339,7 @@ impl Drive {
     }
 
     fn rows(&self) -> &[wire::DocsDocumentRow] {
-        self.phase.data().map_or(&[], |held| held.rows.as_slice())
+        self.page.data().map_or(&[], |held| held.rows.as_slice())
     }
 
     fn row(&self, document_id: &str) -> Option<&wire::DocsDocumentRow> {

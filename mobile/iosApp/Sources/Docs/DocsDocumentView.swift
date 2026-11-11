@@ -24,21 +24,12 @@ struct DocsDocumentView: View {
         return event
     }
 
-    private func content(_ state: Centraid_Core_V1_DocsDocumentState) -> ScreenContent<Centraid_Core_V1_DocsDocumentData> {
-        switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
-        }
-    }
-
     var body: some View {
         let state = state
-        let content = content(state)
+        // The head's title and More come from the data when the page is ready; the page itself is
+        // drawn by `PageReadStateView`.
         let document: Centraid_Core_V1_DocsDocumentData? = {
-            if case let .data(document) = content { return document }
+            if case let .data(data)? = state.content { return data }
             return nil
         }()
         let title = (document?.hasRow ?? false) && !(document?.row.title.isEmpty ?? true)
@@ -66,61 +57,58 @@ struct DocsDocumentView: View {
                         onClose: { send(Self.event { $0.renameClosed = .init() }) }
                     )
                 }
-                ReadStateView(
-                    content: content,
+                PageReadStateView(
+                    page: state.page,
                     loadingLabel: state.chrome.loading,
                     onRetry: { send(Self.event { $0.refreshed = .init() }) }
-                ) { document in
-                    if case let .gone(empty)? = document.surface {
-                        EmptyStateView(empty)
-                    } else {
-                        ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 0) {
-                                if !document.trashedNote.isEmpty {
-                                    Text(document.trashedNote)
-                                        .centraidType("small")
-                                        .foregroundStyle(Theme.color("net", scheme))
-                                        .padding(.horizontal, CentraidGeometry.pageMargin)
-                                        .padding(.vertical, 8)
-                                }
-                                if !document.subtitle.isEmpty {
-                                    Text(document.subtitle)
-                                        .centraidType("annotLabel")
-                                        .foregroundStyle(Theme.color("textFaint", scheme))
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.top, 2)
-                                        .accessibilityIdentifier("docs-document-subtitle")
-                                }
-                                // WHAT THE FOLDER SAYS, under the name (#1183).
-                                if document.hasTitlePhoneSays {
-                                    PhoneSaysLines(lines: [document.titlePhoneSays], onTake: onPhoneSays)
-                                }
-                                surface(document)
-                                infoCard(document)
-                                if document.hasAbout {
-                                    LinkSectionView(section: document.about, send: { link in
-                                        send(Self.event { $0.about = link })
-                                    }, open: open)
-                                }
-                                if !document.facts.isEmpty {
-                                    SectionHeader(title: state.chrome.factsHeading)
-                                    // Ids prefixed per list, so a second list added here never collides
-                                    // with these in the `LazyVStack`.
-                                    ForEach(Array(document.facts.enumerated()).map { ("fact-\($0.offset)", $0.element) }, id: \.0) { _, fact in
-                                        FieldRow(key: fact.label, value: fact.detail)
-                                    }
-                                }
-                                // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the actions.
-                                EarlierEntryRow(entry: document.hasEarlier ? document.earlier : nil, open: open)
-                                OriginLineView(line: document.hasOrigin ? document.origin : nil)
+                ) {
+                    let document = state.data
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            if !document.trashedNote.isEmpty {
+                                Text(document.trashedNote)
+                                    .centraidType("small")
+                                    .foregroundStyle(Theme.color("net", scheme))
+                                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                                    .padding(.vertical, 8)
                             }
-                            .padding(.bottom, 16)
+                            if !document.subtitle.isEmpty {
+                                Text(document.subtitle)
+                                    .centraidType("annotLabel")
+                                    .foregroundStyle(Theme.color("textFaint", scheme))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.top, 2)
+                                    .accessibilityIdentifier("docs-document-subtitle")
+                            }
+                            // WHAT THE FOLDER SAYS, under the name (#1183).
+                            if document.hasTitlePhoneSays {
+                                PhoneSaysLines(lines: [document.titlePhoneSays], onTake: onPhoneSays)
+                            }
+                            surface(document)
+                            infoCard(document)
+                            if document.hasAbout {
+                                LinkSectionView(section: document.about, send: { link in
+                                    send(Self.event { $0.about = link })
+                                }, open: open)
+                            }
+                            if !document.facts.isEmpty {
+                                SectionHeader(title: state.chrome.factsHeading)
+                                // Ids prefixed per list, so a second list added here never collides
+                                // with these in the `LazyVStack`.
+                                ForEach(Array(document.facts.enumerated()).map { ("fact-\($0.offset)", $0.element) }, id: \.0) { _, fact in
+                                    FieldRow(key: fact.label, value: fact.detail)
+                                }
+                            }
+                            // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the actions.
+                            EarlierEntryRow(entry: document.hasEarlier ? document.earlier : nil, open: open)
+                            OriginLineView(line: document.hasOrigin ? document.origin : nil)
                         }
-                        .refreshable { send(Self.event { $0.refreshed = .init() }) }
-                        // THE QUICK LOOK BAR floats over the page: glass on iOS 26, paper before.
-                        .safeAreaInset(edge: .bottom, spacing: 0) {
-                            if !document.bar.isEmpty { quickLookBar(document.bar) }
-                        }
+                        .padding(.bottom, 16)
+                    }
+                    .refreshable { send(Self.event { $0.refreshed = .init() }) }
+                    // THE QUICK LOOK BAR floats over the page: glass on iOS 26, paper before.
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        if !document.bar.isEmpty { quickLookBar(document.bar) }
                     }
                 }
             }
@@ -198,7 +186,7 @@ struct DocsDocumentView: View {
                 .foregroundStyle(Theme.color("textSoft", scheme))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(CentraidGeometry.pageMargin)
-        case .gone, nil:
+        case nil:
             EmptyView()
         }
     }
@@ -447,15 +435,6 @@ struct DocsEditorView: View {
         return event
     }
 
-    private func content(_ state: Centraid_Core_V1_DocsEditorState) -> ScreenContent<Centraid_Core_V1_DocsEditorDraft> {
-        switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .draft(draft)?: return .data(draft)
-        case nil: return .loading(true)
-        }
-    }
-
     var body: some View {
         let state = state
         let chrome = state.chrome
@@ -468,11 +447,12 @@ struct DocsEditorView: View {
         ) {
             EmptyView()
         } content: {
-            ReadStateView(
-                content: content(state),
-                skeleton: { RowSkeleton(rows: 4, meta: false, label: chrome.loading) },
-                onRetry: { send(Self.event { $0.refreshed = .init() }) }
-            ) { draft in
+            PageReadStateView(
+                page: state.page,
+                onRetry: { send(Self.event { $0.refreshed = .init() }) },
+                skeleton: { RowSkeleton(rows: 4, meta: false, label: chrome.loading) }
+            ) {
+                let draft = state.draft
                 VStack(alignment: .leading, spacing: 8) {
                     let notes = [state.versionLabel, state.statusLabel, state.remoteNote].filter { !$0.isEmpty }
                     ForEach(Array(notes.enumerated()), id: \.offset) { _, note in

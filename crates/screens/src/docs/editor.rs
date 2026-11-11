@@ -14,10 +14,10 @@ use wire::autosave::Phase as Save;
 use wire::docs_editor_event::Kind as D;
 use wire::screen_event::Kind as E;
 
-use super::fold;
+use super::{denied, fold};
 use crate::catalog::{act, load};
 use crate::kit::autosave::{Autosave, Draft, Resolved};
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Note, Page, Reading};
 use crate::kit::stale;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, docs as words};
@@ -107,6 +107,7 @@ impl Draft for Typed {
 
 enum Opened {
     Loading,
+    /// The last read did not land.
     Failed,
     /// The document cannot be edited here, and why.
     Refused(String),
@@ -125,6 +126,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         document_id: args.document_id.clone(),
         title_hint: args.title.clone(),
         opened: Opened::Loading,
+        denied: None,
         autosave: Autosave::new(),
         version_label: String::new(),
         format: wire::docs_reader::Format::Plain,
@@ -137,6 +139,8 @@ struct Editor {
     document_id: String,
     title_hint: String,
     opened: Opened,
+    /// The vault would not let Docs read: the page is the gate (it never retries by itself).
+    denied: Option<wire::AppQueryDenial>,
     autosave: Autosave<Typed>,
     /// "Version 4" — the vault's, re-read after a save commits.
     version_label: String,
@@ -175,6 +179,9 @@ impl Editor {
                 _ => None,
             },
         );
+        if !matches!(reading, Reading::Denied(_)) {
+            self.denied = None;
+        }
         match reading {
             Reading::Data(document) => match fold::editor(ctx.locale(), &document) {
                 // Words not yet saved are the only copy: a document trashed elsewhere does not
@@ -196,7 +203,30 @@ impl Editor {
                 }
                 Err(sentence) => self.opened = Opened::Refused(sentence),
             },
-            Reading::Denied(_) | Reading::Failed => self.opened = Opened::Failed,
+            Reading::Denied(denial) => self.denied = Some(denial),
+            Reading::Failed => self.opened = Opened::Failed,
+        }
+    }
+
+    /// THE DOCUMENT'S READ (#1185): a gate (never retried by itself), a document that cannot be
+    /// edited here or could not be read (nothing is shown), the words with a note over them when a
+    /// re-read failed, or the first load.
+    fn page(&self, locale: Locale) -> Page<()> {
+        if let Some(denial) = &self.denied {
+            return Page::Refused(denial.clone());
+        }
+        match (&self.opened, self.autosave.draft()) {
+            (Opened::Refused(_), _) => Page::Failed,
+            (Opened::Failed, Some(_)) => Page::Ready {
+                data: (),
+                note: Some(Note::refresh_failed(locale)),
+            },
+            (Opened::Failed, None) => Page::Failed,
+            (Opened::Ready, Some(_)) => Page::Ready {
+                data: (),
+                note: None,
+            },
+            (Opened::Loading | Opened::Ready, _) => Page::loading(),
         }
     }
 }
@@ -232,19 +262,28 @@ impl Screen for Editor {
         use wire::docs_editor_state::Content;
         let locale = ctx.locale();
         let autosave = self.autosave.view(locale);
-        let content = match (&self.opened, self.autosave.draft()) {
-            (Opened::Loading, _) => Content::Loading(wire::Loading { first_load: true }),
-            (Opened::Failed, _) => Content::Failure(read::failure(locale)),
-            (Opened::Refused(sentence), _) => Content::Failure(wire::Failure {
+        let page = self.page(locale);
+        let ready = matches!(page, Page::Ready { .. });
+        let mut wired = page.wire(
+            locale,
+            |denial| denied(locale, denial),
+            wire::EmptyState::default,
+        );
+        // A document that cannot be edited here says why in its own words.
+        if let (Opened::Refused(sentence), Some(wire::page_state::State::Failed(_))) =
+            (&self.opened, &wired.state)
+        {
+            wired.state = Some(wire::page_state::State::Failed(wire::Failure {
                 sentence: sentence.clone(),
                 remedy: self.remedy.clone(),
-            }),
-            (Opened::Ready, Some(draft)) => Content::Draft(wire::DocsEditorDraft {
+            }));
+        }
+        let content = self.autosave.draft().filter(|_| ready).map(|draft| {
+            Content::Draft(wire::DocsEditorDraft {
                 title: draft.title.clone(),
                 body: draft.body.clone(),
-            }),
-            (Opened::Ready, None) => Content::Loading(wire::Loading { first_load: true }),
-        };
+            })
+        });
         let status_label = match autosave.phase() {
             Save::Dirty | Save::Saving | Save::Saved | Save::Refused | Save::Conflict => {
                 autosave.label.clone()
@@ -255,7 +294,8 @@ impl Screen for Editor {
             kind: Some(wire::view_state::Kind::DocsEditor(wire::DocsEditorState {
                 document_id: self.document_id.clone(),
                 title_hint: self.title_hint.clone(),
-                content: Some(content),
+                content,
+                page: Some(wired),
                 version_label: self.version_label.clone(),
                 status_label,
                 remote_note: if !self.kept.is_empty() {

@@ -170,8 +170,14 @@ fn document(view: &wire::ViewState) -> Page {
     let Some(wire::docs_document_state::Content::Data(data)) = &state.content else {
         panic!("no data: {:?}", state.content)
     };
+    // The document says it as the page's note over the data, not on the status line (#1185).
+    assert!(state.status.is_none(), "{:?}", state.status);
     Page {
-        status: state.status.as_ref().map(|line| line.sentence.clone()),
+        status: state
+            .page
+            .as_ref()
+            .and_then(|page| page.note.as_ref())
+            .map(|note| note.sentence.clone()),
         lines: usize::from(data.title_phone_says.is_some()),
     }
 }

@@ -8,9 +8,10 @@ use super::query::{
     self, ANY, MODIFIED, SECTION_LABEL, SECTION_MODIFIED, SECTION_TYPE, SORTS, TYPES,
 };
 use super::{BAND_ALL, BAND_FOLDERS, BAND_MORE, BAND_STARRED, Drive, Held, sheets};
-use crate::docs::{Phase, denied, fold, folders};
+use crate::docs::{denied, fold, folders};
 use crate::kit::quantity::UnitsPref;
-use crate::kit::{menu, read, search as kit_search};
+use crate::kit::read::{Note, Page};
+use crate::kit::{menu, search as kit_search};
 use crate::screen::Ctx;
 use crate::strings::{Locale, docs as words, shared};
 
@@ -36,13 +37,25 @@ pub(super) fn title(drive: &Drive, locale: Locale) -> String {
 pub(super) fn state(drive: &Drive, ctx: &Ctx) -> wire::ViewState {
     use wire::docs_drive_state::Content;
     let locale = ctx.locale();
-    let is_denied = matches!(drive.phase, Phase::Denied(_));
-    let content = match &drive.phase {
-        Phase::Loading => Content::Loading(wire::Loading { first_load: true }),
-        Phase::Failed => Content::Failure(read::failure(locale)),
-        Phase::Denied(denial) => Content::Denied(denied(locale, denial)),
-        Phase::Ready(held) => Content::Data(Box::new(data(drive, locale, ctx.units(), held))),
+    let is_denied = matches!(drive.page, Page::Refused(_));
+    // A followed folder the phone read only part of is a note over the rows (its own words, and
+    // no Retry: reconnecting or the follow itself is the remedy).
+    let report = ctx.follows().report(crate::follow::Store::Files);
+    let page =
+        drive
+            .page
+            .clone()
+            .noted(Note::partial(&report, locale, crate::follow::Store::Files));
+    let content = page
+        .data()
+        .map(|held| Content::Data(Box::new(data(drive, locale, ctx.units(), held))));
+    // Nothing to draw is the page's empty state, with the action it sends.
+    let (empty, empty_action) = if matches!(page, Page::Empty) {
+        empty_of(drive, locale, drive.active_term().is_some())
+    } else {
+        (wire::EmptyState::default(), EmptyAction::None)
     };
+    let page = page.wire(locale, |denial| denied(locale, denial), || empty);
     wire::ViewState {
         kind: Some(wire::view_state::Kind::DocsDrive(Box::new(
             wire::DocsDriveState {
@@ -55,17 +68,16 @@ pub(super) fn state(drive: &Drive, ctx: &Ctx) -> wire::ViewState {
                     wire::docs_drive_state::Layout::List
                 } as i32,
                 search: Some(search_field(drive, locale)),
-                content: Some(content),
+                content,
+                page: Some(page),
+                empty_action: empty_action as i32,
+                crumbs: crumbs(drive, locale),
                 sheet: Some(if is_denied {
                     sheets::none()
                 } else {
                     sheets::view(drive, locale)
                 }),
-                status: drive.undo.status().or_else(|| {
-                    ctx.follows()
-                        .report(crate::follow::Store::Files)
-                        .status(ctx, crate::follow::Store::Files)
-                }),
+                status: drive.undo.status(),
                 confirm: drive.asking.as_ref().map(|_| wire::Confirm {
                     title: words::trash_confirm_title(locale),
                     body: words::trash_confirm_body(locale),
@@ -102,10 +114,15 @@ pub(super) fn state(drive: &Drive, ctx: &Ctx) -> wire::ViewState {
 }
 
 fn search_field(drive: &Drive, locale: Locale) -> wire::DocsSearchField {
-    let held = match &drive.phase {
-        Phase::Ready(held) if held.search && drive.active_term().is_some() => Some(held),
+    let held = match &drive.page {
+        Page::Ready { data: held, .. } if held.search && drive.active_term().is_some() => {
+            Some(held)
+        }
         _ => None,
     };
+    // THE ASK ROW closes an answer that matched nothing too.
+    let answered =
+        held.is_some() || (matches!(drive.page, Page::Empty) && drive.active_term().is_some());
     let corrected = held.map(|held| held.corrected.clone()).unwrap_or_default();
     wire::DocsSearchField {
         open: drive.search.open,
@@ -116,7 +133,7 @@ fn search_field(drive: &Drive, locale: Locale) -> wire::DocsSearchField {
             kit_search::corrected(locale, &corrected)
         },
         corrected,
-        ask_row: held.map(|_| kit_search::offer(locale, &drive.search.term, "docs")),
+        ask_row: answered.then(|| kit_search::offer(locale, &drive.search.term, "docs")),
     }
 }
 
@@ -160,7 +177,7 @@ fn band(drive: &Drive, locale: Locale) -> Vec<wire::DocsBandTab> {
 /// the layout is the one thing the member can still choose there. None while the
 /// vault denies Docs.
 fn filter_menu(drive: &Drive, locale: Locale) -> Option<wire::FilterMenu> {
-    if matches!(drive.phase, Phase::Denied(_)) {
+    if matches!(drive.page, Page::Refused(_)) {
         return None;
     }
     let narrows = drive.active_term().is_none() && drive.filtering();
@@ -316,14 +333,6 @@ fn data(drive: &Drive, locale: Locale, units: UnitsPref, held: &Held) -> wire::D
     } else {
         Vec::new()
     };
-    // A FOLDER THAT MATCHED THE NAME IS AN ANSWER: no "nothing found" over it.
-    let nothing = rows.is_empty() && children.is_empty() && (!held.search || containers.is_empty());
-    let (empty, action) = if nothing {
-        let (empty, action) = empty_of(drive, locale, held.search);
-        (Some(empty), action)
-    } else {
-        (None, EmptyAction::None)
-    };
     let label_chips = if held.search {
         Vec::new()
     } else {
@@ -338,13 +347,6 @@ fn data(drive: &Drive, locale: Locale, units: UnitsPref, held: &Held) -> wire::D
         } as i32,
         rows,
         folders: folders::nodes(locale, &children, &page),
-        crumbs: if in_folders {
-            folders::rail_crumbs(locale, all, &drive.folder_id, &page)
-        } else {
-            Vec::new()
-        },
-        empty,
-        empty_action: action as i32,
         // Search is not windowed; only a shelf can be cut short.
         truncated_note: if !held.search && held.truncated {
             words::truncated(locale)
@@ -358,6 +360,22 @@ fn data(drive: &Drive, locale: Locale, units: UnitsPref, held: &Held) -> wire::D
         },
         containers,
     }
+}
+
+/// THE PATH TO THE FOLDER OPEN, top level first: on the Browse shelf's folder pages, ready or
+/// empty (an empty folder still shows the way back up), and not over a search or a failure.
+fn crumbs(drive: &Drive, locale: Locale) -> Vec<wire::DocsCrumb> {
+    use wire::DocsDestination as Dest;
+    let shown = matches!(drive.page, Page::Ready { .. } | Page::Empty);
+    if !shown || drive.destination != Dest::Folders || drive.active_term().is_some() {
+        return Vec::new();
+    }
+    let all = drive
+        .rail
+        .as_ref()
+        .map(|rail| rail.folders.as_slice())
+        .unwrap_or_default();
+    folders::rail_crumbs(locale, all, &drive.folder_id, &title(drive, locale))
 }
 
 /// THE FOLDERS A TERM NAMED, as the kit's containers. Folders only: a hit of
@@ -476,19 +494,22 @@ fn label_chips(drive: &Drive) -> Vec<wire::DocsLabelChip> {
 
 fn head_meta(drive: &Drive, locale: Locale) -> String {
     use wire::DocsDestination as Dest;
-    let Phase::Ready(held) = &drive.phase else {
-        return String::new();
+    // An empty shelf still says how many it holds (none) and what it is.
+    let (search, rows) = match &drive.page {
+        Page::Ready { data: held, .. } => (held.search, held.rows.len()),
+        Page::Empty => (drive.active_term().is_some(), 0),
+        _ => return String::new(),
     };
-    let rows = u32::try_from(held.rows.len()).unwrap_or(u32::MAX);
+    let rows = u32::try_from(rows).unwrap_or(u32::MAX);
     let count = match (&drive.rail, drive.destination) {
-        _ if held.search => rows,
+        _ if search => rows,
         (Some(rail), Dest::All) => rail.all_count,
         (Some(rail), Dest::Starred) => rail.starred_count,
         (Some(rail), Dest::Folders) if drive.folder_id.is_empty() => rail.unfiled_count,
         _ => rows,
     };
     // RECENTS says what it is: documents changed lately, and how many there are.
-    if drive.destination == Dest::All && drive.folder_id.is_empty() && !held.search {
+    if drive.destination == Dest::All && drive.folder_id.is_empty() && !search {
         return words::recents_subtitle(locale, u64::from(count));
     }
     fold::count_label(locale, count)

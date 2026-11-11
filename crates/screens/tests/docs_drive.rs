@@ -191,14 +191,11 @@ fn filters_are_the_requests_and_the_menu_follows_them() {
     assert_eq!(menu::checked(section(&d, i, "sort")), ["name_asc"]);
     // A filter nothing matches is its own empty state with the one action.
     menu_pick(&mut d, i, "type", "video");
-    let data = drive_data(d.view(i));
+    let empty = drive_empty(d.view(i));
+    assert_eq!(empty.headline, "Nothing matches these filters.");
+    assert_eq!(empty.action_label, "Clear filters");
     assert_eq!(
-        data.empty.as_ref().unwrap().headline,
-        "Nothing matches these filters."
-    );
-    assert_eq!(data.empty.as_ref().unwrap().action_label, "Clear filters");
-    assert_eq!(
-        data.empty_action,
+        state(&d, i).empty_action,
         wire::docs_drive_data::EmptyAction::ClearFilters as i32
     );
     // That action is the menu's Clear.
@@ -348,13 +345,9 @@ fn a_search_that_finds_nothing_says_so_and_still_offers_ask() {
     let mut d = driver();
     let i = root(&d);
     search(&mut d, i, "zzzqqq");
-    let data = drive_data(d.view(i));
-    assert!(data.rows.is_empty());
-    assert_eq!(
-        data.empty.as_ref().unwrap().headline,
-        "Nothing matches that."
-    );
-    assert_eq!(data.empty.as_ref().unwrap().body, "Try fewer words.");
+    let empty = drive_empty(d.view(i));
+    assert_eq!(empty.headline, "Nothing matches that.");
+    assert_eq!(empty.body, "Try fewer words.");
     assert!(state(&d, i).search.as_ref().unwrap().ask_row.is_some());
 }
 
@@ -385,12 +378,11 @@ fn every_shelf_has_its_own_empty_sentence_and_at_most_one_action() {
     let tahoe = row(d.view(i), "Tahoe packing list").document_id.clone();
     arrange(&d, act::docs::Unstar { document_id: tahoe });
     band(&mut d, i, "starred");
-    let data = drive_data(d.view(i));
-    let empty = data.empty.as_ref().expect("an empty state");
+    let empty = drive_empty(d.view(i));
     assert_eq!(empty.headline, "Nothing starred yet.");
     assert_eq!(empty.body, "Star a document to keep it here.");
     assert_eq!(
-        data.empty_action,
+        state(&d, i).empty_action,
         wire::docs_drive_data::EmptyAction::None as i32
     );
 }
@@ -657,14 +649,15 @@ fn a_folder_page_shows_its_children_its_crumbs_and_makes_a_folder_inside_it() {
     assert_eq!(data.folders[0].name, "2026");
     assert_eq!(data.folders[0].count_label, "Empty");
     assert_eq!(
-        data.crumbs
+        state(&d, page)
+            .crumbs
             .iter()
             .map(|c| c.name.as_str())
             .collect::<Vec<_>>(),
         ["Taxes"]
     );
-    assert_eq!(
-        data.empty, None,
+    assert!(
+        state(&d, page).page.as_ref().unwrap().state.is_none(),
         "a folder with a child folder is not empty"
     );
     // A new folder lands inside the folder open.
@@ -700,15 +693,15 @@ fn a_folder_page_shows_its_children_its_crumbs_and_makes_a_folder_inside_it() {
         ),
     );
     assert_eq!(state(&d, deeper).chrome.as_ref().unwrap().back, "Taxes");
-    let crumbs: Vec<&str> = drive_data(d.view(deeper))
+    // An empty folder still shows the way back up.
+    let crumbs: Vec<&str> = state(&d, deeper)
         .crumbs
         .iter()
         .map(|c| c.name.as_str())
         .collect();
     assert_eq!(crumbs, ["Taxes", "2026"]);
-    assert!(drive_data(d.view(deeper)).empty.is_some());
     assert_eq!(
-        drive_data(d.view(deeper)).empty.as_ref().unwrap().headline,
+        drive_empty(d.view(deeper)).headline,
         "This folder is empty."
     );
 }

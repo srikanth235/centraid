@@ -48,13 +48,14 @@ message DocsDriveState {
   reserved "query";
   Layout layout = 5;
   DocsSearchField search = 6;
+  // The shelf, when the page is ready (something to show).
   oneof content {
-    Loading loading = 7;
-    Failure failure = 8;
-    // The vault would not let Docs read: no band, the gate's words.
-    Denied denied = 9;
     DocsDriveData data = 10;
   }
+  // 7, 8 and 9 were `loading`, `failure` and `denied`: the read is `page` (#1185). The vault
+  // refusing Docs is `page.refused`: no band, the gate's words.
+  reserved 7, 8, 9;
+  reserved "loading", "failure", "denied";
   // 11 was `refreshing`: a read is answered at once, so no re-read runs over
   // rows the screen keeps drawing.
   reserved 11;
@@ -94,6 +95,16 @@ message DocsDriveState {
   // row of the Followed folders sheet was tapped; `StopConfirmed` stops it, `StopDismissed` (or a tap
   // outside) keeps following. The trash confirm above is its own.
   optional Confirm stop = 24;
+  // WHAT THE READ SHOWS (#1185): the first load, the gate, the failure, a shelf with nothing to
+  // show (its own sentence), or ready with `data` under an optional note (a failed refresh, or a
+  // followed folder the phone read part of).
+  PageState page = 25;
+  // What the empty page's action sends (the action's label is `page.empty.action_label`); NONE
+  // unless `page.empty` is set and carries one.
+  DocsDriveData.EmptyAction empty_action = 26;
+  // FOLDERS only: the path to the folder open, top level first. Set while the page is ready or
+  // empty, so an empty folder still shows the way back up.
+  repeated DocsCrumb crumbs = 27;
   enum Layout {
     LAYOUT_UNSPECIFIED = 0;
     LAYOUT_LIST = 1;
@@ -196,13 +207,15 @@ message DocsDriveData {
   Mode mode = 1;
   // The shelf's rows (or the hits), in the core's order.
   repeated DocsRowView rows = 2;
-  // FOLDERS only: the open folder's child folders, and the path to it.
+  // FOLDERS only: the open folder's child folders.
   repeated DocsFolderNode folders = 3;
-  repeated DocsCrumb crumbs = 4;
-  // Set exactly when there is nothing to draw: no rows and no folders.
-  optional EmptyState empty = 5;
-  // What the empty state's action sends; NONE when it has none.
-  EmptyAction empty_action = 6;
+  // 4 was `crumbs`: the path is the page's (`DocsDriveState.crumbs`), so an empty folder keeps it.
+  reserved 4;
+  reserved "crumbs";
+  // 5 and 6 were `empty` and `empty_action`: a shelf with nothing to draw is the page's empty
+  // state (#1185), and its action is `DocsDriveState.empty_action`.
+  reserved 5, 6;
+  reserved "empty", "empty_action";
   // "Showing the newest 200. Search reaches the rest." EMPTY when whole.
   string truncated_note = 7;
   // Recently changed's one-line rule. EMPTY elsewhere.
@@ -584,11 +597,12 @@ message DocsDocumentState {
   // Rides along, so the head has words before the read.
   string title_hint = 2;
   oneof content {
-    Loading loading = 3;
-    Failure failure = 4;
-    Denied denied = 5;
     DocsDocumentData data = 6;
   }
+  // 3, 4 and 5 were `loading`, `failure` and `denied`: the read is `page` (#1185). A document
+  // that is gone is the page's empty state.
+  reserved 3, 4, 5;
+  reserved "loading", "failure", "denied";
   // 7 was `refreshing` (see `DocsDriveState`).
   reserved 7;
   reserved "refreshing";
@@ -604,6 +618,8 @@ message DocsDocumentState {
   bool dismissed = 14;
   // THE "ABOUT" PICKER (#1173): who the document is about, picked by name.
   LinkPicker about_picker = 15;
+  // WHAT THE READ SHOWS (#1185): see `DocsDriveState.page`.
+  PageState page = 16;
 
   enum Asking {
     ASKING_UNSPECIFIED = 0;
@@ -632,7 +648,7 @@ message DocsDocumentChrome {
 }
 
 message DocsDocumentData {
-  // The document, as its head draws it. Unset when it is gone.
+  // The document, as its head draws it.
   optional DocsRowView row = 1;
   // WHICH SURFACE, and what it draws (law 3).
   oneof surface {
@@ -640,9 +656,10 @@ message DocsDocumentData {
     DocsStage stage = 3;
     // Docs cannot render this kind: the facts below are the answer.
     DocsFactsOnly facts_only = 4;
-    // No such document: deleted elsewhere, or a stale link.
-    EmptyState gone = 5;
   }
+  // 5 was `gone`: a document deleted elsewhere, or a stale link, is the page's empty state.
+  reserved 5;
+  reserved "gone";
   repeated DocsFact facts = 6;
   // The folder path, top level first, for the breadcrumb.
   repeated DocsCrumb path = 7;
@@ -819,10 +836,12 @@ message DocsEditorState {
   string document_id = 1;
   string title_hint = 2;
   oneof content {
-    Loading loading = 3;
-    Failure failure = 4;
     DocsEditorDraft draft = 5;
   }
+  // 3 and 4 were `loading` and `failure`: the read is `page` (#1185). A document that cannot be
+  // edited here (gone, in the trash, no text) is the page's failure in its own words.
+  reserved 3, 4;
+  reserved "loading", "failure";
   Autosave autosave = 6;
   // "Version 4" — the vault's, re-read after a save commits.
   string version_label = 7;
@@ -834,6 +853,9 @@ message DocsEditorState {
   string remote_note = 9;
   DocsReader.Format format = 10;
   DocsEditorChrome chrome = 11;
+  // WHAT THE READ SHOWS (#1185): see `DocsDriveState.page`. A failed re-read over the words is
+  // a note under them, never in their place.
+  PageState page = 12;
 }
 
 message DocsEditorDraft {

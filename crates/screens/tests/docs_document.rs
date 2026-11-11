@@ -127,12 +127,17 @@ fn a_document_over_bytes_this_device_does_not_hold_says_why() {
 fn a_document_that_is_gone_is_a_state_not_a_failure() {
     let mut d = driver();
     let i = open(&mut d, "nope", "", "");
-    let data = document_data(d.view(i));
-    assert!(data.row.is_none());
-    assert!(matches!(
-        data.surface,
-        Some(wire::docs_document_data::Surface::Gone(_))
-    ));
+    let state = document_state(d.view(i));
+    assert!(
+        state.content.is_none(),
+        "nothing is drawn for a gone document"
+    );
+    let Some(wire::page_state::State::Empty(empty)) =
+        state.page.as_ref().and_then(|page| page.state.as_ref())
+    else {
+        panic!("gone is the page's empty state: {:?}", state.page);
+    };
+    assert_eq!(empty.headline, "This document is no longer here.");
 }
 
 #[test]
@@ -377,8 +382,12 @@ fn a_vault_change_never_replaces_words_being_typed() {
 #[test]
 fn only_a_live_text_document_with_text_opens_in_the_editor() {
     let mut d = driver();
-    let sentence = |d: &Driver, i: u64| match &editor_state(d.view(i)).content {
-        Some(wire::docs_editor_state::Content::Failure(f)) => f.sentence.clone(),
+    let sentence = |d: &Driver, i: u64| match editor_state(d.view(i))
+        .page
+        .as_ref()
+        .and_then(|page| page.state.as_ref())
+    {
+        Some(wire::page_state::State::Failed(f)) => f.sentence.clone(),
         other => panic!("{other:?}"),
     };
     let binary = pdf(&d, "Lease.pdf", 'f');
@@ -719,8 +728,10 @@ fn a_document_trashed_elsewhere_refuses_the_save_as_trashed_and_reload_keeps_the
         wire::screen_event::Kind::StatusActed(wire::StatusActed {}),
     );
     let state = editor_state(d.view(i));
-    let Some(wire::docs_editor_state::Content::Failure(failure)) = &state.content else {
-        panic!("{:?}", state.content);
+    let Some(wire::page_state::State::Failed(failure)) =
+        state.page.as_ref().and_then(|page| page.state.as_ref())
+    else {
+        panic!("{:?}", state.page);
     };
     assert_eq!(
         failure.remedy,

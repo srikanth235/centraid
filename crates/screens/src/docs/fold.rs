@@ -415,14 +415,9 @@ pub fn document(
     drive: Option<&wire::DocsDrive>,
 ) -> wire::DocsDocumentData {
     use wire::docs_document_data::Surface;
+    // A document that is gone never reaches here: the page is empty (its sentence is the screen's).
     let Some(found) = answer.document.as_ref() else {
-        return wire::DocsDocumentData {
-            surface: Some(Surface::Gone(wire::EmptyState {
-                headline: words::gone(locale),
-                ..wire::EmptyState::default()
-            })),
-            ..wire::DocsDocumentData::default()
-        };
+        return wire::DocsDocumentData::default();
     };
     // The document's own page is the parent of what it opens (its crumbs and
     // versions): they name it, so its title is the back word.

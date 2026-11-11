@@ -20,18 +20,18 @@ use wire::docs_document_event::Kind as D;
 use wire::docs_document_state::Asking;
 use wire::screen_event::Kind as E;
 
+use super::denied;
 use super::fold::{self, KEY_LABELS, KEY_MORE, KEY_MOVE, KEY_PURGE, KEY_RENAME, KEY_RESTORE};
 use super::fold::{KEY_SHARE, KEY_STAR, KEY_TRASH, KEY_UNSTAR};
 use super::folders::{self, TOP_LEVEL};
 use super::rename::Rename;
-use super::{Phase, denied};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::earlier;
 use crate::kit::follow::{self, Source};
 use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::owner::{Answer as Owner, Leaving, NoPasscode, OwnerGate};
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Note, Page, Reading};
 use crate::kit::trash;
 use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
@@ -70,7 +70,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         document_id: args.document_id.clone(),
         title_hint: args.title.clone(),
         parent: args.parent.clone(),
-        phase: Phase::Loading,
+        page: Page::loading(),
         undo: Undo::default(),
         gate: OwnerGate::default(),
         asking: Asking::None,
@@ -89,7 +89,8 @@ struct Document {
     title_hint: String,
     /// The page it was pushed from, by its title: what the back control says.
     parent: String,
-    phase: Phase<Answered>,
+    /// The read. A document that is gone is [`Page::Empty`], not ready data.
+    page: Page<Answered>,
     /// The status line and what its Undo reverses (the kit's one door).
     undo: Undo,
     /// The owner check a share asks first; a phone with no passcode warns and goes ahead.
@@ -145,8 +146,8 @@ impl Document {
             }
             _ => earlier::Foot::default(),
         };
-        self.phase = match document {
-            Reading::Data(document) => Phase::Ready(Answered {
+        let reading = match document {
+            Reading::Data(document) => Reading::Data(Answered {
                 document,
                 drive: match drive {
                     Reading::Data(drive) => Some(drive),
@@ -157,14 +158,19 @@ impl Document {
                     _ => None,
                 },
             }),
-            Reading::Denied(denial) => Phase::Denied(denial),
-            Reading::Failed => Phase::Failed,
+            Reading::Denied(denial) => Reading::Denied(denial),
+            Reading::Failed => Reading::Failed,
         };
+        // A refresh never blanks the page shown: a failed one keeps it under a note.
+        let held = std::mem::replace(&mut self.page, Page::loading());
+        self.page = held.after(reading, ctx.locale(), |answered| {
+            answered.document.document.is_none()
+        });
     }
 
     /// The ids of the people the document is about now.
     fn about_ids(&self) -> Vec<String> {
-        self.phase
+        self.page
             .data()
             .and_then(|answered| answered.about.as_ref())
             .map(|people| people.iter().map(|p| p.party_id.clone()).collect())
@@ -203,7 +209,7 @@ impl Document {
     }
 
     fn row(&self) -> Option<&wire::DocsDocumentRow> {
-        self.phase.data()?.document.document.as_ref()
+        self.page.data()?.document.document.as_ref()
     }
 
     /// A write the status line says, with Undo when the core can take it back.
@@ -251,7 +257,7 @@ impl Document {
     }
 
     fn shared_path(&self) -> String {
-        self.phase
+        self.page
             .data()
             .map(|answered| answered.document.bytes_path.clone())
             .unwrap_or_default()
@@ -651,11 +657,15 @@ impl Screen for Document {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::docs_document_state::Content;
         let locale = ctx.locale();
-        let (content, sheet) = match &self.phase {
-            Phase::Loading => (Content::Loading(wire::Loading { first_load: true }), None),
-            Phase::Failed => (Content::Failure(read::failure(locale)), None),
-            Phase::Denied(denial) => (Content::Denied(denied(locale, denial)), None),
-            Phase::Ready(answered) => {
+        // What the phone says beside the data (the folder's name for the document) that was not
+        // checked is a note over it; a failed refresh already is one, and the stronger wins.
+        let page =
+            self.page
+                .clone()
+                .noted(Note::unchecked(&self.differences, locale, Source::Folder));
+        let (content, sheet) = match page.data() {
+            None => (None, None),
+            Some(answered) => {
                 let mut data = fold::document(
                     locale,
                     ctx.units(),
@@ -708,7 +718,7 @@ impl Screen for Document {
                     row.title = rename.title().to_owned();
                 }
                 (
-                    Content::Data(Box::new(data)),
+                    Some(Content::Data(Box::new(data))),
                     Some(self.sheet_view(locale, answered)),
                 )
             }
@@ -718,12 +728,16 @@ impl Screen for Document {
                 wire::DocsDocumentState {
                     document_id: self.document_id.clone(),
                     title_hint: self.title_hint.clone(),
-                    content: Some(content),
-                    status: self
-                        .undo
-                        .status()
-                        .or_else(|| self.differences.status(locale, Source::Folder))
-                        .or_else(|| self.earlier.status(locale)),
+                    content,
+                    page: Some(page.wire(
+                        locale,
+                        |denial| denied(locale, denial),
+                        || wire::EmptyState {
+                            headline: words::gone(locale),
+                            ..wire::EmptyState::default()
+                        },
+                    )),
+                    status: self.undo.status().or_else(|| self.earlier.status(locale)),
                     confirm: self.confirm(locale),
                     rename: self.rename.as_ref().map(|rename| rename.view(locale)),
                     sheet,
@@ -747,18 +761,21 @@ mod tests {
             document_id: "d1".to_owned(),
             title_hint: String::new(),
             parent: String::new(),
-            phase: Phase::Ready(Answered {
-                document: wire::DocsDocument {
-                    document: Some(wire::DocsDocumentRow {
-                        title: "Lease.pdf".to_owned(),
+            page: Page::Ready {
+                data: Answered {
+                    document: wire::DocsDocument {
+                        document: Some(wire::DocsDocumentRow {
+                            title: "Lease.pdf".to_owned(),
+                            ..Default::default()
+                        }),
+                        bytes_path: "/store/lease".to_owned(),
                         ..Default::default()
-                    }),
-                    bytes_path: "/store/lease".to_owned(),
-                    ..Default::default()
+                    },
+                    drive: None,
+                    about: None,
                 },
-                drive: None,
-                about: None,
-            }),
+                note: None,
+            },
             undo: Undo::default(),
             gate: OwnerGate::default(),
             asking: Asking::None,

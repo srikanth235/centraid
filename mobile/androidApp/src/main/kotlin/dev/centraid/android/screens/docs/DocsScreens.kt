@@ -81,7 +81,6 @@ import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EditorRoom
-import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.KitGeometry
@@ -105,7 +104,6 @@ import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.StatusLine
-import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.screens.photos.LightboxTransport
 import dev.centraid.android.screens.photos.PlayerSurface
 import dev.centraid.android.screens.decodeUpright
@@ -325,7 +323,7 @@ internal fun DocsDriveScreen(
             Column(Modifier.fillMaxSize()) {
                 Box(Modifier.weight(1f)) { DriveBody(state, onEvent, onOpen) }
                 SearchAskRow(state.search?.ask_row, onOpen)
-                if (state.denied == null || search.field.open_) SearchFoot(search, testTag = "docs-search")
+                if (state.page?.refused == null || search.field.open_) SearchFoot(search, testTag = "docs-search")
             }
         }
         PushedPage(
@@ -419,29 +417,14 @@ private fun DriveBody(state: DocsDriveState, onEvent: (DocsDriveEvent) -> Unit, 
             onEdit = { onEvent(DocsDriveEvent(rename_edited = DocsDriveEvent.RenameEdited(title = it))) },
             onDone = { onEvent(DocsDriveEvent(rename_closed = DocsDriveEvent.RenameClosed())) },
         )
+        // THE WAY BACK UP (a folder page's path) stays over an empty folder too.
+        Crumbs(state.crumbs, onOpen)
         ReadStateView(
-            content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
+            page = state.page!!,
             onRetry = { onEvent(DocsDriveEvent(refreshed = DocsDriveEvent.Refreshed())) },
-            retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
-            skeleton = { RowSkeleton(label = chrome?.loading.orEmpty().ifEmpty { KitWords.OPENING }) },
-        ) { data -> DriveData(state, data, onEvent, onOpen) }
-    }
-}
-
-@Composable
-private fun DriveData(
-    state: DocsDriveState,
-    data: DocsDriveData,
-    onEvent: (DocsDriveEvent) -> Unit,
-    onOpen: (Route) -> Unit,
-) {
-    val empty = data.empty
-    // THE FOLDERS WHOSE NAME MATCHED (#1097) come before the documents; a tap pushes each one's route.
-    val containers = data.containers
-    if (data.rows.isEmpty() && data.folders.isEmpty() && containers.isEmpty() && empty != null) {
-        EmptyStateView(
-            empty,
-            onAction = when (data.empty_action) {
+            modifier = Modifier.weight(1f),
+            // The empty page's one action is Rust's: add a document, clear the filters or make a folder.
+            onEmptyAction = when (state.empty_action) {
                 DocsDriveData.EmptyAction.EMPTY_ACTION_ADD -> {
                     { onEvent(DocsDriveEvent(sheet_opened = DocsDriveEvent.SheetOpened(kind = DocsSheet.Kind.KIND_ADD))) }
                 }
@@ -453,16 +436,31 @@ private fun DriveData(
                 }
                 else -> null
             },
-        )
-        return
+            retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
+            skeleton = { RowSkeleton(label = chrome?.loading.orEmpty().ifEmpty { KitWords.OPENING }) },
+        ) {
+            val data = state.data_ ?: return@ReadStateView
+            DriveData(state, data, onEvent, onOpen)
+        }
     }
+}
+
+@Composable
+private fun DriveData(
+    state: DocsDriveState,
+    data: DocsDriveData,
+    onEvent: (DocsDriveEvent) -> Unit,
+    onOpen: (Route) -> Unit,
+) {
+    // THE FOLDERS WHOSE NAME MATCHED (#1097) come before the documents; a tap pushes each one's route.
+    val containers = data.containers
     val openMenu = { row: DocsRowView ->
         onEvent(DocsDriveEvent(row_menu = DocsDriveEvent.RowMenuOpened(document_id = row.document_id)))
     }
     val chrome = state.chrome
     if (state.layout == DocsDriveState.Layout.LAYOUT_GRID) {
         LazyVerticalGrid(columns = GridCells.Fixed(3), modifier = Modifier.fillMaxSize()) {
-            item(span = { GridItemSpan(maxLineSpan) }, key = "head") { DriveHead(data, onOpen) }
+            item(span = { GridItemSpan(maxLineSpan) }, key = "head") { DriveHead(data) }
             if (data.label_chips.isNotEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }, key = "chips") {
                     DocsLabelChips(data.label_chips) { label ->
@@ -483,7 +481,7 @@ private fun DriveData(
         }
     } else {
         LazyColumn(Modifier.fillMaxSize()) {
-            item(key = "head") { DriveHead(data, onOpen) }
+            item(key = "head") { DriveHead(data) }
             if (data.label_chips.isNotEmpty()) {
                 item(key = "chips") {
                     DocsLabelChips(data.label_chips) { label ->
@@ -504,8 +502,7 @@ private fun DriveData(
 }
 
 @Composable
-private fun DriveHead(data: DocsDriveData, onOpen: (Route) -> Unit) {
-    Crumbs(data.crumbs, onOpen)
+private fun DriveHead(data: DocsDriveData) {
     StatusLine(data.shelf_note)
 }
 
@@ -639,16 +636,12 @@ internal fun DocsDocumentScreen(
         status = state.status?.sentence.orEmpty(),
     ) {
         ReadStateView(
-            content = screenContentOf(state.loading, state.failure, data, state.denied),
+            page = state.page!!,
             onRetry = { onEvent(DocsDocumentEvent(refreshed = DocsDocumentEvent.Refreshed())) },
             retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
             skeleton = { RowSkeleton(label = chrome?.loading.orEmpty().ifEmpty { KitWords.OPENING }) },
-        ) { document ->
-            val gone = document.gone
-            if (gone != null) {
-                EmptyStateView(gone, onAction = null)
-                return@ReadStateView
-            }
+        ) {
+            val document = data ?: return@ReadStateView
             Column(Modifier.fillMaxSize()) {
             LazyColumn(Modifier.weight(1f)) {
                 item(key = "path") {
@@ -936,11 +929,12 @@ internal fun DocsEditorScreen(state: DocsEditorState, onEvent: (DocsEditorEvent)
     ) {
         StatusLine(listOf(state.version_label, state.remote_note).filter { it.isNotEmpty() }.joinToString(" · "))
         ReadStateView(
-            content = screenContentOf(state.loading, state.failure, draft),
+            page = state.page!!,
             onRetry = { onEvent(DocsEditorEvent(refreshed = DocsEditorEvent.Refreshed())) },
             retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
             skeleton = { RowSkeleton(label = chrome?.loading.orEmpty().ifEmpty { KitWords.OPENING }) },
-        ) { words ->
+        ) {
+            val words = draft ?: return@ReadStateView
             Column(Modifier.fillMaxSize()) {
                 EditableFieldRow(
                     key = "",
