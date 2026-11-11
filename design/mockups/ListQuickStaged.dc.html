@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reminders list, quick add with a link and a photo staged</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #FBFAF8; font-family: Geist, system-ui, sans-serif; color: #1C1B19;">
+  <div style="display: flex; align-items: flex-start; justify-content: space-between; padding: 56px 20px 8px;">
+    <h1 style="margin: 4px 0 0; flex: 1; min-width: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px;">Errands</h1>
+    <a href="Main.dc.html" aria-label="Back to Reminders" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid #E4E0D8; background: rgba(255,255,255,0.85); display: flex; align-items: center; justify-content: center;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
+    </a>
+    <button aria-label="Done" style="width: 44px; height: 44px; border-radius: 22px; border: none; background: #B08505; display: flex; align-items: center; justify-content: center;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>
+    </button>
+  </div>
+  
+
+
+  <div style="padding: 0 20px;">
+    <div style="font-size: 15px; font-weight: 600; color: #6F6B64; padding: 6px 0 4px;">Groceries</div>
+    <div style="display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid #EEEBE5;">
+      <span style="width: 22px; height: 22px; border-radius: 11px; border: 1.6px solid #8E897F; flex-shrink: 0;"></span>
+      <div style="font-size: 16px;">Oat milk</div>
+    </div>
+    <div style="display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid #EEEBE5;">
+      <span style="width: 22px; height: 22px; border-radius: 11px; border: 1.6px solid #8E897F; flex-shrink: 0;"></span>
+      <div style="flex-grow: 1;">
+        <div style="font-size: 16px;">Coffee beans</div>
+        <div style="font-size: 13px; color: #6F6B64; margin-top: 3px;">2 subtasks</div>
+      </div>
+    </div>
+    <div style="display: flex; gap: 12px; padding: 10px 0 10px 34px; border-bottom: 1px solid #EEEBE5;">
+      <span style="width: 20px; height: 20px; border-radius: 10px; border: 1.6px solid #8E897F; flex-shrink: 0;"></span>
+      <div style="font-size: 15px;">Decaf for Ana</div>
+    </div>
+
+    <div style="font-size: 15px; font-weight: 600; color: #6F6B64; padding: 18px 0 4px;">Around town</div>
+    <div style="display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid #EEEBE5;">
+      <span style="width: 22px; height: 22px; border-radius: 11px; border: 1.6px solid #8E897F; flex-shrink: 0;"></span>
+      <div style="flex-grow: 1;">
+        <div style="font-size: 16px;">Return library books</div>
+        <div style="font-size: 13px; color: #6F6B64; margin-top: 3px;">Fri 6 Nov</div>
+      </div>
+    </div>
+    <div style="display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid #EEEBE5; align-items: flex-start;">
+      <span style="width: 22px; height: 22px; border-radius: 11px; border: 1.6px solid #B08505; flex-shrink: 0;"></span>
+      <div style="flex-grow: 1;">
+        <div style="font-size: 16px;">Get passport photos<span style="display: inline-block; width: 2px; height: 18px; background: #B08505; vertical-align: -3px; margin-left: 1px;"></span></div>
+        <div style="font-size: 13px; color: #266FC4; margin-top: 3px;">Tomorrow, 10:00 · understood from “tomorrow 10am”</div>
+        <div style="font-size: 13px; color: #85807A; margin-top: 2px;">Notes</div>
+      </div>
+      <button aria-label="Details" style="width: 32px; height: 32px; border: none; background: none; display: flex; align-items: center; justify-content: center;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#B08505" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v6M12 7.5v.01"></path></svg>
+      </button>
+    </div>
+  </div>
+
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 300px; background: #D7D4CE; display: flex; align-items: center; justify-content: center; color: #6F6B64; font-size: 13px;">Keyboard</div>
+  <div role="group" aria-label="Staged for the next reminder" style="position: absolute; left: 16px; right: 16px; bottom: 372px; background: #FFFFFF; border-radius: 16px; box-shadow: 0 6px 20px rgba(0,0,0,0.08); overflow: hidden;"><div style="display: flex; align-items: center; gap: 12px; padding: 0 14px; min-height: 44px; box-sizing: border-box; border-bottom: 1px solid #EEEBE5;"><span style="width: 28px; height: 28px; border-radius: 8px; background: #ECE9E4; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10 14a4 4 0 006 0l3-3a4 4 0 00-6-6l-1 1M14 10a4 4 0 00-6 0l-3 3a4 4 0 006 6l1-1"></path></svg></span><div style="flex-grow: 1; min-width: 0;"><div style="font-size: 12px; color: #6F6B64;">Link · Note</div><div style="font-size: 16px; overflow-wrap: anywhere;">Lisbon trip</div></div><button aria-label="Remove Lisbon trip" style="width: 44px; height: 44px; border: none; background: none; display: flex; align-items: center; justify-content: center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8E897F" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button></div><div style="display: flex; align-items: center; gap: 12px; padding: 0 14px; min-height: 44px; box-sizing: border-box; border-bottom: 1px solid #EEEBE5;"><span style="width: 28px; height: 28px; border-radius: 8px; background: #ECE9E4; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10 14a4 4 0 006 0l3-3a4 4 0 00-6-6l-1 1M14 10a4 4 0 00-6 0l-3 3a4 4 0 006 6l1-1"></path></svg></span><div style="flex-grow: 1; min-width: 0;"><div style="font-size: 12px; color: #6F6B64;">Link · Person</div><div style="font-size: 16px; overflow-wrap: anywhere;">Ana Díaz</div></div><button aria-label="Remove Ana Díaz" style="width: 44px; height: 44px; border: none; background: none; display: flex; align-items: center; justify-content: center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8E897F" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button></div><div style="display: flex; align-items: center; gap: 12px; padding: 0 14px; min-height: 44px; box-sizing: border-box;"><span style="width: 28px; height: 28px; border-radius: 8px; background: #ECE9E4; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"></path><circle cx="12" cy="13" r="3.5"></circle></svg></span><div style="flex-grow: 1; min-width: 0;"><div style="font-size: 12px; color: #6F6B64;">Photo</div><div style="font-size: 16px; overflow-wrap: anywhere;">1 photo</div></div><button aria-label="Remove 1 photo" style="width: 44px; height: 44px; border: none; background: none; display: flex; align-items: center; justify-content: center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8E897F" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button></div></div>
+  <div style="position: absolute; left: 16px; right: 16px; bottom: 312px; height: 52px; border-radius: 26px; border: 1px solid rgba(255,255,255,0.7); background: rgba(255,255,255,0.8); box-shadow: 0 6px 20px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: space-around;">
+    <button aria-label="Date and time" style="width: 44px; height: 44px; border-radius: 22px; border: none; background: #B08505; display: flex; align-items: center; justify-content: center;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"></rect><path d="M3 10h18"></path></svg>
+    </button>
+    <button aria-label="Tag" style="width: 44px; height: 44px; border: none; background: none; display: flex; align-items: center; justify-content: center;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 9h14M5 15h14M10 4L8 20M16 4l-2 16"></path></svg>
+    </button>
+    <button aria-label="Flag" style="width: 44px; height: 44px; border: none; background: none; display: flex; align-items: center; justify-content: center;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4h11l-2 4 2 4H5"></path></svg>
+    </button>
+    <button aria-label="Link a person, note or event" style="width: 44px; height: 44px; border: none; background: none; display: flex; align-items: center; justify-content: center;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10 14a4 4 0 006 0l3-3a4 4 0 00-6-6l-1 1M14 10a4 4 0 00-6 0l-3 3a4 4 0 006 6l1-1"></path></svg>
+    </button>
+    <button aria-label="Photo" style="width: 44px; height: 44px; border: none; background: none; display: flex; align-items: center; justify-content: center;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>
+    </button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

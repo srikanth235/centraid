@@ -969,6 +969,14 @@
       "x": 1410,
       "y": 3480
     },
+    "ListQuickStaged.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · A list, quick add with a link and a photo staged",
+      "w": 390,
+      "x": 1410,
+      "y": 4380
+    },
     "ListDark.dc.html": {
       "h": 844,
       "page": "dark",
@@ -2933,6 +2941,7 @@
     "RemindersFilterMenu.dc.html",
     "Today.dc.html",
     "List.dc.html",
+    "ListQuickStaged.dc.html",
     "RemindersToday.dc.html",
     "CalendarReminders.dc.html",
     "Details.dc.html",
