@@ -1784,3 +1784,123 @@ fn an_owed_link_row_prints_each_gap_with_its_file() {
         report.details
     );
 }
+
+// ---------------------------------------------------------------------------
+// Stale save
+// ---------------------------------------------------------------------------
+
+/// A `notes` app whose editor sends the revision and answers the refusal through the kit.
+fn stale_tree(name: &str) -> PathBuf {
+    let root = fixture_dir(name);
+    write(
+        &root,
+        "crates/screens/src/notes/editor.rs",
+        "use crate::kit::autosave::Autosave;\nfn request() { EditNote { expected_rev: Some(rev) } }",
+    );
+    root
+}
+
+fn stale_lacking(root: &Path) -> String {
+    stale_save_missing(root, "notes").join("\n")
+}
+
+#[test]
+fn an_editor_that_sends_the_revision_and_answers_the_refusal_keeps_stale_save() {
+    assert_eq!(stale_lacking(&stale_tree("stale-clean")), "");
+}
+
+#[test]
+fn an_editor_that_sends_no_revision_is_named() {
+    let root = stale_tree("stale-no-rev");
+    write(
+        &root,
+        "crates/screens/src/notes/editor.rs",
+        "use crate::kit::autosave::Autosave;\nfn request() { EditNote {} }",
+    );
+    assert!(stale_lacking(&root).contains(
+        "crates/screens/src/notes/editor.rs: the editor does not send the revision it read"
+    ));
+}
+
+#[test]
+fn an_editor_that_does_not_answer_the_refusal_through_the_kit_is_named() {
+    let root = stale_tree("stale-no-kit");
+    write(
+        &root,
+        "crates/screens/src/notes/editor.rs",
+        "fn request() { EditNote { expected_rev: Some(rev) } }",
+    );
+    assert!(stale_lacking(&root).contains("does not answer a stale refusal through the kit"));
+}
+
+#[test]
+fn a_comment_does_not_count_as_sending_the_revision() {
+    let root = stale_tree("stale-comment");
+    write(
+        &root,
+        "crates/screens/src/notes/editor.rs",
+        "use crate::kit::autosave::Autosave;\n// expected_rev is sent here\nfn request() {}",
+    );
+    assert!(stale_lacking(&root).contains("does not send the revision it read"));
+}
+
+#[test]
+fn a_save_that_leaves_the_revision_empty_does_not_send_it() {
+    let root = stale_tree("stale-none");
+    write(
+        &root,
+        "crates/screens/src/notes/editor.rs",
+        "use crate::kit::autosave::Autosave;\nfn request() { EditNote { expected_rev: None } }",
+    );
+    assert!(stale_lacking(&root).contains("does not send the revision it read"));
+}
+
+#[test]
+fn an_editor_file_that_is_gone_is_named() {
+    let root = fixture_dir("stale-gone");
+    assert!(stale_lacking(&root).contains("crates/screens/src/notes/editor.rs is missing"));
+}
+
+#[test]
+fn an_exempt_app_that_grows_an_editor_is_named_and_one_without_is_clean() {
+    let root = fixture_dir("stale-exempt");
+    write(
+        &root,
+        "crates/screens/src/health/workout.rs",
+        "fn view() {}",
+    );
+    assert!(stale_save_missing(&root, "health").is_empty());
+    write(
+        &root,
+        "crates/screens/src/health/log.rs",
+        "use crate::kit::autosave::Autosave;",
+    );
+    let gaps = stale_save_missing(&root, "health").join("\n");
+    assert!(
+        gaps.contains("crates/screens/src/health/log.rs has grown an editor"),
+        "{gaps}"
+    );
+}
+
+#[test]
+fn an_owed_stale_save_row_prints_each_gap_with_its_file() {
+    let root = stale_tree("stale-owed");
+    write(&root, "crates/screens/src/notes/editor.rs", "fn view() {}");
+    let table: Vec<Row> = APPS
+        .iter()
+        .map(|app| Row {
+            app,
+            promise: Promise::StaleSave,
+            status: Status::Owed("#1185"),
+        })
+        .collect();
+    let report = check(&root, &table);
+    assert!(
+        report
+            .details
+            .iter()
+            .any(|line| line.starts_with("owed notes / Stale save:") && line.contains("editor.rs")),
+        "{:?}",
+        report.details
+    );
+}

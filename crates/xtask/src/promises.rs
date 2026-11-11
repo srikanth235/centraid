@@ -98,11 +98,17 @@ pub enum Promise {
     /// what the item is linked to through `kit::links::read_linked`. A Locker item may start a
     /// link, so Locker is held to the same promise.
     Link,
+    /// A save checks what it is replacing (#1185): every editor screen of an app sends the
+    /// revision it was read at (`expected_rev`) and handles the vault's refusal (`stale_revision`,
+    /// `stale_trashed`) through `kit::autosave` or the kit's `kit::stale`, so the words stay on
+    /// screen under a sentence and Reload keeps them as an earlier version. Health has no editor,
+    /// a named exception.
+    StaleSave,
 }
 
 impl Promise {
     /// Every promise, in the order the table is read.
-    pub const ALL: [Promise; 11] = [
+    pub const ALL: [Promise; 12] = [
         Promise::Trash,
         Promise::Undo,
         Promise::History,
@@ -114,6 +120,7 @@ impl Promise {
         Promise::Attach,
         Promise::Origin,
         Promise::Link,
+        Promise::StaleSave,
     ];
 
     fn name(self) -> &'static str {
@@ -129,6 +136,7 @@ impl Promise {
             Promise::Attach => "Attach",
             Promise::Origin => "Origin",
             Promise::Link => "Link",
+            Promise::StaleSave => "Stale save",
         }
     }
 }
@@ -537,6 +545,32 @@ pub const REGISTER: &[Row] = &[
     kept("notes", Promise::Link, "crates/screens/src/notes/editor.rs"),
     owed("people", Promise::Link, LINK_OWED),
     owed("photos", Promise::Link, LINK_OWED),
+    // Stale save (#1185): a save names the revision it replaces and handles the refusal.
+    kept(
+        "docs",
+        Promise::StaleSave,
+        "crates/screens/src/docs/editor.rs",
+    ),
+    owed("calendar", Promise::StaleSave, STALE_SAVE_OWED),
+    exempt("health", Promise::StaleSave, STALE_SAVE_EXEMPT[0].1),
+    owed("locker", Promise::StaleSave, STALE_SAVE_OWED),
+    owed("money", Promise::StaleSave, STALE_SAVE_OWED),
+    kept(
+        "notes",
+        Promise::StaleSave,
+        "crates/screens/src/notes/editor.rs",
+    ),
+    kept(
+        "people",
+        Promise::StaleSave,
+        "crates/screens/src/people/editor.rs",
+    ),
+    owed("photos", Promise::StaleSave, STALE_SAVE_OWED),
+    kept(
+        "reminders",
+        Promise::StaleSave,
+        "crates/screens/src/reminders/detail.rs",
+    ),
     kept(
         "reminders",
         Promise::Link,
@@ -545,6 +579,15 @@ pub const REGISTER: &[Row] = &[
 ];
 
 const LINK_OWED: &str = "the detail screen does not embed the kit's general \"Linked to\" section (`kit::links::read_linked`) yet (#1185)";
+
+const STALE_SAVE_OWED: &str = "an editor screen does not send `expected_rev` and handle the vault's stale refusal yet (#1185)";
+
+/// The apps with no editor, with the ruling that says so (the Stale save promise's only
+/// exceptions). Health logs figures and imports workouts; it edits no record a member typed.
+pub const STALE_SAVE_EXEMPT: &[(&str, &str)] = &[(
+    "health",
+    "Health has no editor: it logs figures and follows workouts and edits no record's words",
+)];
 
 const UNITS_PROOF: &str = "crates/screens/src/kit/quantity.rs";
 
@@ -624,12 +667,18 @@ pub(crate) fn check(root: &Path, register: &[Row]) -> RuleReport {
                 }
             }
             Status::Exempt(ruling) => {
-                let named = ATTACH_EXEMPT
-                    .iter()
-                    .any(|(app, said)| *app == row.app && *said == ruling);
-                if row.promise != Promise::Attach || !named {
+                let named = match row.promise {
+                    Promise::Attach => ATTACH_EXEMPT
+                        .iter()
+                        .any(|(app, said)| *app == row.app && *said == ruling),
+                    Promise::StaleSave => STALE_SAVE_EXEMPT
+                        .iter()
+                        .any(|(app, said)| *app == row.app && *said == ruling),
+                    _ => false,
+                };
+                if !named {
                     findings.push(format!(
-                        "{} / {}: Exempt, but `{ruling}` is not a ruling listed in ATTACH_EXEMPT",
+                        "{} / {}: Exempt, but `{ruling}` is not a ruling listed in ATTACH_EXEMPT or STALE_SAVE_EXEMPT",
                         row.app,
                         row.promise.name()
                     ));
@@ -679,6 +728,7 @@ pub fn missing(root: &Path, app: &str, promise: Promise) -> Vec<String> {
         Promise::Attach => attach_missing(root, app),
         Promise::Origin => origin_missing(root, app),
         Promise::Link => link_missing(root, app),
+        Promise::StaleSave => stale_save_missing(root, app),
     }
 }
 
@@ -1372,6 +1422,73 @@ fn history_missing_in(root: &Path, app: &str, menus: &[MenuEntry]) -> Vec<String
                 "crates/screens/src/{app}/{screen}: the {kind} page declares its entry as a menu row but does not hand it to the view (`{}`) beside the menu (`{}`)",
                 menu.entry.trim(),
                 menu.menu
+            ));
+        }
+    }
+    gaps
+}
+
+// ---------------------------------------------------------------------------
+// Stale save
+// ---------------------------------------------------------------------------
+
+/// THE EDITOR SCREENS OF EACH APP (files under `crates/screens/src/<app>/`): the screens where a
+/// member types or picks what a record holds and saves it. Each is held to the Stale save promise.
+pub const STALE_SAVE_EDITORS: &[(&str, &[&str])] = &[
+    ("calendar", &["editor.rs"]),
+    ("docs", &["editor.rs", "rename.rs"]),
+    ("locker", &["editor.rs"]),
+    ("money", &["accounts.rs", "transaction.rs"]),
+    ("notes", &["editor.rs"]),
+    ("people", &["editor.rs"]),
+    ("photos", &["lightbox.rs"]),
+    ("reminders", &["detail.rs"]),
+];
+
+/// Stale save is kept when every editor screen of the app ([`STALE_SAVE_EDITORS`]) sends the
+/// revision it read (`expected_rev`) and answers the vault's refusal through the kit
+/// (`kit::autosave` for a draft that saves as it is typed, `kit::stale` for a save on a button).
+/// An app in [`STALE_SAVE_EXEMPT`] is held the other way: it fails when a screen of its own takes
+/// the kit's autosave or sends `expected_rev`, which means it has grown an editor.
+fn stale_save_missing(root: &Path, app: &str) -> Vec<String> {
+    let dir = root.join("crates/screens/src").join(app);
+    if STALE_SAVE_EXEMPT.iter().any(|(exempt, _)| *exempt == app) {
+        return source_files(&dir, "rs")
+            .iter()
+            .filter_map(|file| live_source(file).map(|text| (file, text)))
+            .filter(|(_, text)| text.contains("kit::autosave") || text.contains("expected_rev"))
+            .map(|(file, _)| {
+                format!(
+                    "{} has grown an editor, but {app} is exempt from the Stale save promise as an app with none",
+                    file.strip_prefix(root).unwrap_or(file).display()
+                )
+            })
+            .collect();
+    }
+    let files = STALE_SAVE_EDITORS
+        .iter()
+        .find(|(name, _)| *name == app)
+        .map_or(&[][..], |(_, files)| *files);
+    let mut gaps = Vec::new();
+    for file in files {
+        let path = dir.join(file);
+        let shown = format!("crates/screens/src/{app}/{file}");
+        let Some(text) = live_source(&path) else {
+            gaps.push(format!("{shown} is missing"));
+            continue;
+        };
+        // `expected_rev: None` is the field left empty: no revision is sent.
+        if !text
+            .replace("expected_rev: None", "")
+            .contains("expected_rev")
+        {
+            gaps.push(format!(
+                "{shown}: the editor does not send the revision it read (`expected_rev`)"
+            ));
+        }
+        if !text.contains("kit::autosave") && !text.contains("kit::stale") {
+            gaps.push(format!(
+                "{shown}: the editor does not answer a stale refusal through the kit (`kit::autosave` or `kit::stale`)"
             ));
         }
     }
