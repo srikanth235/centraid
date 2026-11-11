@@ -17,6 +17,7 @@ use centraid_core::{Handle, Result};
 use prost::Message;
 
 use crate::follow::Follows;
+use crate::kit::act::Settled;
 use crate::strings::Locale;
 
 /// One screen. `Send` because the runtime lives behind a mutex shared by the
@@ -155,6 +156,38 @@ impl<'a> Ctx<'a> {
     /// `Ok` response with `status: refused`, to be shown as the screen decides.
     pub fn act(&self, request: &wire::ActRequest) -> Result<wire::ActResponse> {
         self.core.act(request)
+    }
+
+    /// One of the shell's own commands, which no app's manifest declares
+    /// (`vault.export_all`), answered as `act` is: the verdict, the sentence of a refusal and
+    /// the output.
+    pub fn command(&self, name: &str, input: &serde_json::Value, invoke_key: &str) -> Settled {
+        match self.core.command(name, input, invoke_key) {
+            Ok(outcome) if outcome.status == centraid_vault::CommandStatus::Executed => Settled {
+                committed: true,
+                refusal: String::new(),
+                output: serde_json::to_vec(&outcome.output).unwrap_or_default(),
+                inverse: None,
+                tables: outcome.tables,
+            },
+            Ok(outcome) => Settled {
+                committed: false,
+                refusal: outcome
+                    .reason
+                    .filter(|reason| !reason.trim().is_empty())
+                    .unwrap_or_else(|| crate::strings::shared::write_refused(self.locale())),
+                output: Vec::new(),
+                inverse: None,
+                tables: Vec::new(),
+            },
+            Err(_) => Settled {
+                committed: false,
+                refusal: crate::strings::shared::write_refused(self.locale()),
+                output: Vec::new(),
+                inverse: None,
+                tables: Vec::new(),
+            },
+        }
     }
 
     /// The keep list and the census of originals (`originals.proto`).

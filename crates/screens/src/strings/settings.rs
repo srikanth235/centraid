@@ -19,6 +19,14 @@ catalog! {
     plain settings_make_vault = ("Make a vault", "Make a vault");
     plain settings_download_settings = ("Download settings", "Download settings");
     plain settings_reconnect = ("Reconnect phone data", "Reconnect phone data");
+    plain settings_export = ("Export everything", "Export everything");
+    plain settings_export_title = ("Export everything", "Export everything");
+    plain settings_export_lede = (
+        "One archive, a folder per app. Locker exports on its own.",
+        "One archive, a folder per app. Locker exports on its own."
+    );
+    plain settings_export_all = ("Everything on this phone", "Everything on this phone");
+    plain settings_export_all_value = ("8 apps; Locker exports on its own", "8 apps; Locker exports on its own");
     plain settings_backup = ("Backup", "Backup");
     plain settings_recovery_key = ("Recovery key", "Recovery key");
     plain settings_show_recovery_key = ("Show recovery key", "Show recovery key");

@@ -141,6 +141,13 @@ fn file(rows: &[Line]) -> String {
     text
 }
 
+/// The spreadsheet of every transaction as text, and how many it holds. `txn.export_csv` answers
+/// the same for any scope; the whole-vault export writes this as `Money/transactions.csv`.
+pub(crate) fn transactions_csv(connection: &Connection) -> Result<(String, usize)> {
+    let rows = lines(connection, None, None)?;
+    Ok((file(&rows), rows.len()))
+}
+
 /// `txn.export_csv`: every account's transactions, one account's (`account_id`), or one
 /// transaction (`transaction_id`, what a transaction page shares) as a spreadsheet file. Writes
 /// nothing.

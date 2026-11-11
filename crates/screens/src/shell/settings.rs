@@ -6,7 +6,7 @@
 //! | Appearance | System, Light or Dark: one choice, kept in the Keychain under the key Home reads |
 //! | Units | Metric or Imperial: one switch for every app, kept on the phone ([`quantity::set_op`]); the region's until chosen |
 //! | Vault | how many vaults this phone holds; a tap opens Home's vault switcher |
-//! | Backup | the one honest line ([`crate::backup::line`]) and the Backup page behind it |
+//! | Backup | the one honest line ([`crate::backup::line`]) and the Backup page behind it; "Export everything", every app but Locker as one archive ([`super::export`]) |
 //! | Recovery key | where the key is ([`crate::backup::key`]) and the page that shows it |
 //! | About | the version |
 //!
@@ -353,6 +353,17 @@ impl Settings {
                             String::new(),
                             "Backup",
                             Some(crate::follow::reconnect::route()),
+                            "neutral",
+                            String::new(),
+                        ),
+                        // EVERYTHING BUT LOCKER as one archive: the kit's export page, behind the owner
+                        // check (#1185).
+                        row(
+                            "export",
+                            words::settings_export(locale),
+                            String::new(),
+                            "Upload",
+                            Some(crate::kit::export::entry(locale, super::EXPORT).route),
                             "neutral",
                             String::new(),
                         ),

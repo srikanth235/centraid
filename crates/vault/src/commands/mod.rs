@@ -77,6 +77,7 @@ pub mod task_portable;
 pub mod thread;
 pub mod txn_portable;
 pub mod vault;
+pub mod vault_export;
 pub mod workout;
 
 use std::collections::BTreeMap;
@@ -308,7 +309,7 @@ impl Registry {
     /// The registry the phone serves: every command this build carries.
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
-        let modules: [fn() -> Vec<CommandDefinition>; 29] = [
+        let modules: [fn() -> Vec<CommandDefinition>; 30] = [
             blob::definitions,
             contact_point::definitions,
             container::definitions,
@@ -337,6 +338,7 @@ impl Registry {
             document_portable::definitions,
             photo_portable::definitions,
             vault::definitions,
+            vault_export::definitions,
             workout::definitions,
         ];
         for definitions in modules {

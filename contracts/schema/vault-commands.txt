@@ -116,6 +116,7 @@ txn.export_csv
 txn.link_transfer
 txn.unlink_transfer
 txn.void
+vault.export_all
 vault.rename
 workout.edit
 workout.log
