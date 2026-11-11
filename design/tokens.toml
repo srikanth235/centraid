@@ -662,6 +662,7 @@ colors = [
   { light = "#266FC4", text = "#569EF7", fill = "#3077CD", line = "#569EF7" },
   { light = "#27388B", text = "#7C97F4", fill = "#536EDC", line = "#7C97F4" },
   { light = "#2B7B51", text = "#62D092", fill = "#2F8556", line = "#62D092" },
+  { light = "#2D4BA8", text = "#9DB0F0" },
   { light = "#2F6FB5", text = "#5C96D5" },
   { light = "#3D638F", text = "#5E89BA" },
   { light = "#3E6B55", text = "#5A9B7B" },

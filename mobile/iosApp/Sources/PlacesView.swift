@@ -179,14 +179,29 @@ private struct PlaceCard: View {
     }
 
     var body: some View {
-        Button(action: onOpen) {
-            card
+        // THE NAME IS A VISIBLE LINK UNDER THE CARD, as on Android: a place with no name is not
+        // asked for it in a menu nobody finds. The long press and the accessibility action stay.
+        VStack(alignment: .leading, spacing: 0) {
+            Button(action: onOpen) {
+                top
+            }
+            .buttonStyle(KitRowPress())
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(row.spoken)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction(named: row.nameLabel, onName)
+            KitLink(
+                label: row.nameLabel,
+                dense: true,
+                identifier: "places-name-\(row.placeID)",
+                action: onName
+            )
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .buttonStyle(KitRowPress())
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(row.spoken)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityAction(named: row.nameLabel, onName)
+        .kitCard()
+        .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+        .frame(maxWidth: .infinity, alignment: .leading)
         .contextMenu {
             Button {
                 onName()
@@ -200,7 +215,8 @@ private struct PlaceCard: View {
         }
     }
 
-    private var card: some View {
+    /// The cover, the name and the count: the part of the card that opens the place's shelf.
+    private var top: some View {
         VStack(alignment: .leading, spacing: 0) {
             Color.clear
                 .aspectRatio(4 / 3, contentMode: .fit)
@@ -226,11 +242,10 @@ private struct PlaceCard: View {
                 }
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.top, 10)
+            .padding(.bottom, 2)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .kitCard()
-        .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
     }
