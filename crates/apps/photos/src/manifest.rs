@@ -50,8 +50,8 @@ mod tests {
         // `storage` and `enrichment-status`, whose producers left with the custody
         // sweep and the enricher (R-1135-5); then the screens' reads: one shelf, one
         // photograph, the collections and the places.
-        assert_eq!(manifest.queries.len(), 5);
-        assert_eq!(manifest.actions.len(), 24);
+        assert_eq!(manifest.queries.len(), 6);
+        assert_eq!(manifest.actions.len(), 26);
         for name in ["search", "shelf", "photo", "albums", "places"] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
@@ -175,7 +175,7 @@ mod tests {
             .vault
             .as_ref()
             .expect("Photos declares its vault reach");
-        assert_eq!(vault.scopes.len(), 23);
+        assert_eq!(vault.scopes.len(), 24);
         let mut reads: Vec<&str> = vault
             .scopes
             .iter()
@@ -192,6 +192,7 @@ mod tests {
                 "blob",
                 "container",
                 "derivative",
+                "document",
                 "edge",
                 "entity",
                 "photo",

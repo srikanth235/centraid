@@ -92,7 +92,7 @@ use centraid_apps_kit::actions::{act, confirmed};
 /// and a name for a line are the shared verbs (`flag.set`, `flag.clear`,
 /// `entity.retitle`): Money wraps none of them, so two actions may name one command.
 /// Confirmation is asked for what cannot be taken back or touches many rows.
-pub const ACTIONS: [ActionRow; 28] = [
+pub const ACTIONS: [ActionRow; 30] = [
     act("add-account", "account.add"),
     act("edit-account", "account.edit"),
     act("close-account", "flag.set"),
@@ -125,6 +125,10 @@ pub const ACTIONS: [ActionRow; 28] = [
     // A link set by hand (#1173): one edge, shaped by the vault.
     act("add-with", "edge.add"),
     act("remove-with", "edge.remove"),
+    // AN ATTACHMENT is an `attached` edge from the item to a document or a photo: the shared
+    // verbs, one pair in every app (the Attach promise, #1185).
+    act("attach", "edge.add"),
+    act("detach", "edge.remove"),
 ];
 
 /// The `act` scopes Money declares, derived from the action table: one per

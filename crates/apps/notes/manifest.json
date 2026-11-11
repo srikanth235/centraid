@@ -1423,6 +1423,55 @@
           }
         }
       }
+    },
+    {
+      "name": "attachments",
+      "kind": "note",
+      "figures": ["attachments"],
+      "description": "What is attached to one note, a page at a time: each attachment's id, kind (document or photo), title, media type, byte size and where its bytes are served, in the order of the attached file's id. Pass the page's `next` cursor as `after` for the next page. An id that is no live note answers an empty page, and an attached file in the trash is left out until it is restored.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "after": {
+            "type": "object",
+            "properties": {
+              "sortKey": {
+                "type": "string"
+              },
+              "pk": {
+                "type": "string"
+              }
+            },
+            "required": ["sortKey", "pk"],
+            "additionalProperties": false
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "attachments": {
+            "type": "array"
+          },
+          "next": {
+            "type": ["object", "null"]
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
     }
   ],
   "kinds": [

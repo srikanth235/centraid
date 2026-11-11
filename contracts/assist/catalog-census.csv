@@ -37,6 +37,8 @@ docs,rename-folder,edit,folder,direct,no,yes
 docs,delete-folder,delete,folder,direct,no,yes
 docs,add-about,link,document,card,yes: crates/screens/src/docs/document.rs,no
 docs,remove-about,unlink,document,card,yes: crates/screens/src/docs/document.rs,no
+docs,attach,attach,document,card,no,no
+docs,detach,detach,document,card,no,no
 health,record-days,log,daily_figure,card,yes: crates/screens/src/health/follow.rs,no
 health,follow-workouts,import,workout,card,yes: crates/screens/src/health/follow.rs,no
 health,delete-workout,delete,workout,direct,yes: crates/screens/src/health/trash.rs; crates/screens/src/health/workout.rs,yes
@@ -49,6 +51,8 @@ health,empty-trash,purge,workout,card,yes: crates/screens/src/health/trash.rs,no
 health,edit-figure,edit,daily_figure,direct,no,yes
 health,log-figure,create,daily_figure,direct,no,yes
 health,clear-figure,delete,daily_figure,direct,no,yes
+health,attach,attach,workout,card,no,no
+health,detach,detach,workout,card,no,no
 locker,add-item,create,locker_item,direct,yes: crates/screens/src/locker/editor.rs,yes
 locker,edit-item,edit,locker_item,direct,yes: crates/screens/src/locker/editor.rs,yes
 locker,trash-item,delete,locker_item,direct,yes: crates/screens/src/locker/item.rs,yes
@@ -100,6 +104,8 @@ money,archive-category,archive,category,direct,yes: crates/screens/src/money/acc
 money,unarchive-category,unarchive,category,direct,yes: crates/screens/src/money/categories.rs,no
 money,add-with,link,transaction,card,yes: crates/screens/src/money/transaction.rs,no
 money,remove-with,unlink,transaction,card,yes: crates/screens/src/money/transaction.rs,no
+money,attach,attach,transaction,card,no,no
+money,detach,detach,transaction,card,no,no
 notes,create-note,create,note,direct,yes: crates/screens/src/notes/editor.rs,yes
 notes,edit-note,edit,note,direct,yes: crates/screens/src/notes/editor.rs,yes
 notes,move-note,add_to,note,direct,yes: crates/screens/src/notes/home/mod.rs,yes
@@ -153,6 +159,8 @@ people,follow-contacts,import,person,card,yes: crates/screens/src/people/contact
 people,stop-following,detach,person,card,no,no
 people,import-vcf,log,person,card,no,no
 people,export-vcf,log,person,card,no,no
+people,attach,attach,person,card,no,no
+people,detach,detach,person,card,no,no
 photos,upload,import,photo,card,yes: crates/screens/src/photos/editor.rs,no
 photos,edit-photo,edit,photo,card,no,no
 photos,retitle-photo,edit,photo,direct,yes: crates/screens/src/photos/lightbox.rs,yes
@@ -177,6 +185,8 @@ photos,tag-photo,tag,photo,direct,yes: crates/screens/src/photos/lightbox.rs,no
 photos,untag-photo,untag,photo,direct,yes: crates/screens/src/photos/lightbox.rs,no
 photos,add-person,link,photo,card,yes: crates/screens/src/photos/lightbox.rs,no
 photos,remove-person,unlink,photo,card,yes: crates/screens/src/photos/lightbox.rs,no
+photos,attach,attach,photo,card,no,no
+photos,detach,detach,photo,card,no,no
 reminders,add-task,create,task,direct,yes: crates/screens/src/reminders/ops.rs,yes
 reminders,edit-task,edit,task,direct,yes: crates/screens/src/reminders/detail.rs,yes
 reminders,complete-task,complete,task,direct,yes: crates/screens/src/kit/schedule/ops.rs,yes

@@ -369,16 +369,13 @@ fn read(
         ("calendar", "trash") => {
             app_query::calendar_trash::trash(vault, door, &wire::CalendarTrashRequest { tz })?
         }
-        ("calendar", "attachments") => app_query::attachments::attachments(
+        (
+            app @ ("calendar" | "reminders" | "notes" | "people" | "photos" | "docs" | "health"
+            | "money"),
+            "attachments",
+        ) => app_query::attachments::attachments(
             door,
-            app_query::attachments::Of::Event,
-            &p.text("item_id")?,
-            p.after()?,
-            p.limit(ATTACHMENTS_ROWS),
-        )?,
-        ("reminders", "attachments") => app_query::attachments::attachments(
-            door,
-            app_query::attachments::Of::Task,
+            app,
             &p.text("item_id")?,
             p.after()?,
             p.limit(ATTACHMENTS_ROWS),

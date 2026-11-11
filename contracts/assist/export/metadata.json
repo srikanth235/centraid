@@ -1883,6 +1883,42 @@
         "verb": "unlink"
       },
       {
+        "action": "attach",
+        "also": [],
+        "app": "docs",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.add",
+        "inverse": "detach",
+        "kind": "document",
+        "phrasings": [
+          "attach the scan to the lease",
+          "add the photo to the warranty document",
+          "attach the receipt to my tax return"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "attach"
+      },
+      {
+        "action": "detach",
+        "also": [],
+        "app": "docs",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "attach",
+        "kind": "document",
+        "phrasings": [
+          "take the scan off the lease",
+          "remove the photo from the warranty document",
+          "detach the receipt from my tax return"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "detach"
+      },
+      {
         "action": "record-days",
         "also": [],
         "app": "health",
@@ -2097,6 +2133,42 @@
         "qualifier": null,
         "sealed": [],
         "verb": "delete"
+      },
+      {
+        "action": "attach",
+        "also": [],
+        "app": "health",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.add",
+        "inverse": "detach",
+        "kind": "workout",
+        "phrasings": [
+          "attach the route map to this workout",
+          "add the photo to my Sunday run",
+          "attach the coach's plan to the workout"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "attach"
+      },
+      {
+        "action": "detach",
+        "also": [],
+        "app": "health",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "attach",
+        "kind": "workout",
+        "phrasings": [
+          "take the route map off this workout",
+          "remove the photo from my Sunday run",
+          "detach the coach's plan from the workout"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "detach"
       },
       {
         "action": "add-item",
@@ -3031,6 +3103,42 @@
         "qualifier": null,
         "sealed": [],
         "verb": "unlink"
+      },
+      {
+        "action": "attach",
+        "also": [],
+        "app": "money",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.add",
+        "inverse": "detach",
+        "kind": "transaction",
+        "phrasings": [
+          "attach the receipt to this transaction",
+          "add the invoice to the rent payment",
+          "attach the warranty to the laptop purchase"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "attach"
+      },
+      {
+        "action": "detach",
+        "also": [],
+        "app": "money",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "attach",
+        "kind": "transaction",
+        "phrasings": [
+          "take the receipt off this transaction",
+          "remove the invoice from the rent payment",
+          "detach the warranty from the laptop purchase"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "detach"
       },
       {
         "action": "create-note",
@@ -3991,6 +4099,42 @@
         "verb": "log"
       },
       {
+        "action": "attach",
+        "also": [],
+        "app": "people",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.add",
+        "inverse": "detach",
+        "kind": "person",
+        "phrasings": [
+          "attach the contract to Dana's card",
+          "add the photo to Sam's card",
+          "attach the vet record to Maya"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "attach"
+      },
+      {
+        "action": "detach",
+        "also": [],
+        "app": "people",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "attach",
+        "kind": "person",
+        "phrasings": [
+          "take the contract off Dana's card",
+          "remove the photo from Sam's card",
+          "detach the vet record from Maya"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "detach"
+      },
+      {
         "action": "upload",
         "also": [],
         "app": "photos",
@@ -4421,6 +4565,42 @@
         "qualifier": null,
         "sealed": [],
         "verb": "unlink"
+      },
+      {
+        "action": "attach",
+        "also": [],
+        "app": "photos",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.add",
+        "inverse": "detach",
+        "kind": "photo",
+        "phrasings": [
+          "attach the receipt to this photo",
+          "add the PDF to the wedding photo",
+          "attach the scan to my passport photo"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "attach"
+      },
+      {
+        "action": "detach",
+        "also": [],
+        "app": "photos",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "attach",
+        "kind": "photo",
+        "phrasings": [
+          "take the receipt off this photo",
+          "remove the PDF from the wedding photo",
+          "detach the scan from my passport photo"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "detach"
       },
       {
         "action": "add-task",
@@ -4886,6 +5066,14 @@
         "query": "history"
       },
       {
+        "app": "docs",
+        "figures": [
+          "attachments"
+        ],
+        "kind": "document",
+        "query": "attachments"
+      },
+      {
         "app": "health",
         "figures": [
           "figure",
@@ -4958,6 +5146,14 @@
         ],
         "kind": "daily_figure",
         "query": "follow-view"
+      },
+      {
+        "app": "health",
+        "figures": [
+          "attachments"
+        ],
+        "kind": "workout",
+        "query": "attachments"
       },
       {
         "app": "locker",
@@ -5144,6 +5340,14 @@
         "query": "trash"
       },
       {
+        "app": "money",
+        "figures": [
+          "attachments"
+        ],
+        "kind": "transaction",
+        "query": "attachments"
+      },
+      {
         "app": "notes",
         "figures": [
           "targets"
@@ -5222,6 +5426,14 @@
         "query": "about"
       },
       {
+        "app": "notes",
+        "figures": [
+          "attachments"
+        ],
+        "kind": "note",
+        "query": "attachments"
+      },
+      {
         "app": "people",
         "figures": [
           "people",
@@ -5278,6 +5490,14 @@
         "query": "links"
       },
       {
+        "app": "people",
+        "figures": [
+          "attachments"
+        ],
+        "kind": "person",
+        "query": "attachments"
+      },
+      {
         "app": "photos",
         "figures": [
           "matches",
@@ -5327,6 +5547,14 @@
         ],
         "kind": "place",
         "query": "places"
+      },
+      {
+        "app": "photos",
+        "figures": [
+          "attachments"
+        ],
+        "kind": "photo",
+        "query": "attachments"
       },
       {
         "app": "reminders",

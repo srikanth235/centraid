@@ -3,6 +3,7 @@
 //! and never restate a law (#1135).
 
 pub mod act;
+pub mod attachments;
 pub mod autosave;
 pub mod civil;
 pub mod earlier;

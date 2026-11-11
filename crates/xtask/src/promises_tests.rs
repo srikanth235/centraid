@@ -1159,17 +1159,17 @@ fn an_app_inherits_the_hand_worded_measures_of_a_file_it_shares() {
     let root = units_tree("units-shared");
     write(
         &root,
-        "crates/screens/src/kit/schedule/attachments.rs",
+        "crates/screens/src/kit/attachments.rs",
         "fn line() { format_byte_size(1); }",
     );
     assert_eq!(units_gaps(&root, "notes"), "");
     write(
         &root,
         "crates/screens/src/notes/detail.rs",
-        "use crate::kit::schedule::attachments::Attachments;",
+        "use crate::kit::attachments::Attachments;",
     );
     let gaps = units_gaps(&root, "notes");
-    assert!(gaps.contains("crates/screens/src/kit/schedule/attachments.rs"));
+    assert!(gaps.contains("crates/screens/src/kit/attachments.rs"));
     assert!(gaps.contains("and notes uses it"));
 }
 
@@ -1309,4 +1309,147 @@ fn every_app_has_an_owner_check_row_and_the_committed_tree_keeps_it() {
             "{app} has no OwnerCheck row"
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// Attach
+// ---------------------------------------------------------------------------
+
+const ATTACH_MANIFEST: &str = r#"{"actions":[
+ {"name":"attach","command":"edge.add","inverse":"detach"},
+ {"name":"detach","command":"edge.remove","inverse":"attach"}],
+ "queries":[{"name":"attachments"}]}"#;
+
+const ATTACH_INVERSES: &str = r#"const NOTES: &[Row] = &[
+    ("attach", "detach", Input::Same),
+    ("detach", "attach", Input::Same),
+];
+"#;
+
+/// A `notes` app that keeps Attach in full.
+fn attach_tree(name: &str) -> PathBuf {
+    let root = fixture_dir(name);
+    write(&root, "crates/apps/notes/manifest.json", ATTACH_MANIFEST);
+    write(&root, INVERSE_TABLE, ATTACH_INVERSES);
+    write(
+        &root,
+        "crates/screens/src/notes/editor.rs",
+        "use crate::kit::attachments::Attachments;",
+    );
+    root
+}
+
+fn attach_lacking(root: &Path) -> String {
+    attach_missing(root, "notes").join("\n")
+}
+
+#[test]
+fn an_app_with_the_trio_and_the_section_keeps_attach() {
+    assert_eq!(attach_lacking(&attach_tree("attach-clean")), "");
+}
+
+#[test]
+fn a_manifest_without_the_trio_is_named() {
+    let root = attach_tree("attach-no-trio");
+    write(
+        &root,
+        "crates/apps/notes/manifest.json",
+        r#"{"actions":[{"name":"attach","command":"edge.add","inverse":"detach"}],"queries":[]}"#,
+    );
+    let gaps = attach_lacking(&root);
+    assert!(gaps.contains("declares no `detach` action"), "{gaps}");
+    assert!(gaps.contains("declares no `attachments` query"), "{gaps}");
+}
+
+#[test]
+fn a_pair_that_is_not_each_others_inverse_is_named() {
+    let root = attach_tree("attach-no-inverse");
+    write(
+        &root,
+        "crates/apps/notes/manifest.json",
+        &ATTACH_MANIFEST.replace(r#""inverse":"attach""#, r#""inverse":"link""#),
+    );
+    assert!(attach_lacking(&root).contains("`detach` does not declare `attach` as its inverse"));
+}
+
+#[test]
+fn a_pair_missing_from_the_inverse_table_is_named() {
+    let root = attach_tree("attach-no-table");
+    write(
+        &root,
+        INVERSE_TABLE,
+        "const NOTES: &[Row] = &[\n    (\"attach\", \"detach\", Input::Same),\n];\n",
+    );
+    assert!(attach_lacking(&root).contains("has no `detach` row reversed by `attach`"));
+}
+
+#[test]
+fn a_detail_page_that_does_not_embed_the_section_is_named_by_file_and_kind() {
+    let root = attach_tree("attach-no-section");
+    write(
+        &root,
+        "crates/screens/src/notes/editor.rs",
+        "// kit::attachments::Attachments is in a comment only\nfn view() {}",
+    );
+    assert!(attach_lacking(&root).contains(
+        "crates/screens/src/notes/editor.rs: the note page does not embed the shared attachments section"
+    ));
+}
+
+#[test]
+fn the_exempt_app_fails_when_its_manifest_grows_the_trio() {
+    let root = fixture_dir("attach-exempt");
+    write(
+        &root,
+        "crates/apps/locker/manifest.json",
+        r#"{"actions":[{"name":"star-item","command":"flag.add"}],"queries":[]}"#,
+    );
+    assert!(attach_missing(&root, "locker").is_empty());
+    write(&root, "crates/apps/locker/manifest.json", ATTACH_MANIFEST);
+    let gaps = attach_missing(&root, "locker").join("\n");
+    assert!(
+        gaps.contains("declares `attach`, which the ruling forbids (D11"),
+        "{gaps}"
+    );
+    assert!(
+        gaps.contains("an `attachments` read, which the ruling forbids"),
+        "{gaps}"
+    );
+}
+
+#[test]
+fn an_exempt_row_is_held_to_the_listed_ruling() {
+    let root = attach_tree("attach-exempt-row");
+    let mut table: Vec<Row> = APPS
+        .iter()
+        .map(|app| Row {
+            app,
+            promise: Promise::Attach,
+            status: Status::Owed("#1185"),
+        })
+        .collect();
+    table[5].status = Status::Exempt("a ruling nobody listed");
+    let found = check(&root, &table).findings.join("\n");
+    assert!(
+        found.contains("is not a ruling listed in ATTACH_EXEMPT"),
+        "{found}"
+    );
+}
+
+#[test]
+fn the_committed_register_exempts_only_locker_and_owes_the_six() {
+    let status = |app: &str| {
+        REGISTER
+            .iter()
+            .find(|row| row.app == app && row.promise == Promise::Attach)
+            .map(|row| row.status)
+            .expect("a row")
+    };
+    assert!(matches!(status("locker"), Status::Exempt(_)));
+    assert!(matches!(status("calendar"), Status::Kept(_)));
+    assert!(matches!(status("reminders"), Status::Kept(_)));
+    for app in ["notes", "people", "photos", "docs", "health", "money"] {
+        assert!(matches!(status(app), Status::Owed(_)), "{app}");
+    }
+    assert_eq!(ATTACH_EXEMPT.len(), 1);
 }

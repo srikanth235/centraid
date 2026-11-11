@@ -43,6 +43,7 @@
 //! rather than restated in Rust: two copies of "which commands does People
 //! invoke" is how the two answers drift.
 
+pub mod attachments;
 pub mod commands;
 pub mod dashboard;
 pub mod dates;
@@ -52,6 +53,7 @@ pub mod phone;
 pub mod queries;
 pub mod roster;
 
+pub use attachments::load_attachments;
 pub use commands::{ACTIONS, Commands, Invocation, Outcome};
 pub use dates::{DAYS_UNSET, days_until_month_day};
 pub use manifest::{APP_ID, manifest};

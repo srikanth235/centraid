@@ -1265,6 +1265,52 @@ pub mod act {
                 value.request()
             }
         }
+
+        /// Attach a document or photo to a document through edge.add (rel attached); the bytes are the document's or photo's own, found by hash.
+        #[derive(Clone, Debug, Default)]
+        pub struct Attach {
+            pub from: String,
+            pub to: String,
+        }
+        impl Attach {
+            pub const NAME: &str = "attach";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("from".to_owned(), text(self.from));
+                map.insert("rel".to_owned(), text("attached"));
+                map.insert("to".to_owned(), text(self.to));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<Attach> for wire::ActRequest {
+            fn from(value: Attach) -> Self {
+                value.request()
+            }
+        }
+
+        /// Detach a document or photo from a document through edge.remove; the document or photo is kept.
+        #[derive(Clone, Debug, Default)]
+        pub struct Detach {
+            pub from: String,
+            pub to: String,
+        }
+        impl Detach {
+            pub const NAME: &str = "detach";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("from".to_owned(), text(self.from));
+                map.insert("rel".to_owned(), text("attached"));
+                map.insert("to".to_owned(), text(self.to));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<Detach> for wire::ActRequest {
+            fn from(value: Detach) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod health {
@@ -1695,6 +1741,52 @@ pub mod act {
         }
         impl From<ClearFigure> for wire::ActRequest {
             fn from(value: ClearFigure) -> Self {
+                value.request()
+            }
+        }
+
+        /// Attach a document or photo to a workout through edge.add (rel attached); the bytes are the document's or photo's own, found by hash.
+        #[derive(Clone, Debug, Default)]
+        pub struct Attach {
+            pub from: String,
+            pub to: String,
+        }
+        impl Attach {
+            pub const NAME: &str = "attach";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("from".to_owned(), text(self.from));
+                map.insert("rel".to_owned(), text("attached"));
+                map.insert("to".to_owned(), text(self.to));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<Attach> for wire::ActRequest {
+            fn from(value: Attach) -> Self {
+                value.request()
+            }
+        }
+
+        /// Detach a document or photo from a workout through edge.remove; the document or photo is kept.
+        #[derive(Clone, Debug, Default)]
+        pub struct Detach {
+            pub from: String,
+            pub to: String,
+        }
+        impl Detach {
+            pub const NAME: &str = "detach";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("from".to_owned(), text(self.from));
+                map.insert("rel".to_owned(), text("attached"));
+                map.insert("to".to_owned(), text(self.to));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<Detach> for wire::ActRequest {
+            fn from(value: Detach) -> Self {
                 value.request()
             }
         }
@@ -3328,6 +3420,52 @@ pub mod act {
                 value.request()
             }
         }
+
+        /// Attach a document or photo to a transaction through edge.add (rel attached); the bytes are the document's or photo's own, found by hash.
+        #[derive(Clone, Debug, Default)]
+        pub struct Attach {
+            pub from: String,
+            pub to: String,
+        }
+        impl Attach {
+            pub const NAME: &str = "attach";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("from".to_owned(), text(self.from));
+                map.insert("rel".to_owned(), text("attached"));
+                map.insert("to".to_owned(), text(self.to));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<Attach> for wire::ActRequest {
+            fn from(value: Attach) -> Self {
+                value.request()
+            }
+        }
+
+        /// Detach a document or photo from a transaction through edge.remove; the document or photo is kept.
+        #[derive(Clone, Debug, Default)]
+        pub struct Detach {
+            pub from: String,
+            pub to: String,
+        }
+        impl Detach {
+            pub const NAME: &str = "detach";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("from".to_owned(), text(self.from));
+                map.insert("rel".to_owned(), text("attached"));
+                map.insert("to".to_owned(), text(self.to));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<Detach> for wire::ActRequest {
+            fn from(value: Detach) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod notes {
@@ -4698,6 +4836,52 @@ pub mod act {
                 value.request()
             }
         }
+
+        /// Attach a document or photo to a person through edge.add (rel attached); the bytes are the document's or photo's own, found by hash.
+        #[derive(Clone, Debug, Default)]
+        pub struct Attach {
+            pub from: String,
+            pub to: String,
+        }
+        impl Attach {
+            pub const NAME: &str = "attach";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("from".to_owned(), text(self.from));
+                map.insert("rel".to_owned(), text("attached"));
+                map.insert("to".to_owned(), text(self.to));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<Attach> for wire::ActRequest {
+            fn from(value: Attach) -> Self {
+                value.request()
+            }
+        }
+
+        /// Detach a document or photo from a person through edge.remove; the document or photo is kept.
+        #[derive(Clone, Debug, Default)]
+        pub struct Detach {
+            pub from: String,
+            pub to: String,
+        }
+        impl Detach {
+            pub const NAME: &str = "detach";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("from".to_owned(), text(self.from));
+                map.insert("rel".to_owned(), text("attached"));
+                map.insert("to".to_owned(), text(self.to));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<Detach> for wire::ActRequest {
+            fn from(value: Detach) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod photos {
@@ -5308,6 +5492,52 @@ pub mod act {
         }
         impl From<RemovePerson> for wire::ActRequest {
             fn from(value: RemovePerson) -> Self {
+                value.request()
+            }
+        }
+
+        /// Attach a document or photo to a photo through edge.add (rel attached); the bytes are the document's or photo's own, found by hash.
+        #[derive(Clone, Debug, Default)]
+        pub struct Attach {
+            pub from: String,
+            pub to: String,
+        }
+        impl Attach {
+            pub const NAME: &str = "attach";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("from".to_owned(), text(self.from));
+                map.insert("rel".to_owned(), text("attached"));
+                map.insert("to".to_owned(), text(self.to));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<Attach> for wire::ActRequest {
+            fn from(value: Attach) -> Self {
+                value.request()
+            }
+        }
+
+        /// Detach a document or photo from a photo through edge.remove; the document or photo is kept.
+        #[derive(Clone, Debug, Default)]
+        pub struct Detach {
+            pub from: String,
+            pub to: String,
+        }
+        impl Detach {
+            pub const NAME: &str = "detach";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("from".to_owned(), text(self.from));
+                map.insert("rel".to_owned(), text("attached"));
+                map.insert("to".to_owned(), text(self.to));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<Detach> for wire::ActRequest {
+            fn from(value: Detach) -> Self {
                 value.request()
             }
         }
@@ -6368,6 +6598,28 @@ pub mod load {
                 value.request()
             }
         }
+
+        /// What is attached to one document, a page at a time: each attachment's id, kind (document or photo), title, media type, byte size and where its bytes are served, in the order of the attached file's id. Pass the page's `next` cursor as `after` for the next page. An id that is no live document answers an empty page, and an attached file in the trash is left out until it is restored.
+        #[derive(Clone, Debug, Default)]
+        pub struct Attachments {
+            pub item_id: String,
+            pub after: Option<String>,
+            pub limit: u32,
+        }
+        impl Attachments {
+            pub const NAME: &str = "attachments";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("item_id".to_owned(), text(self.item_id));
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, after: self.after.unwrap_or_default(), params: map, ..Default::default() }
+            }
+        }
+        impl From<Attachments> for wire::LoadRequest {
+            fn from(value: Attachments) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod health {
@@ -6567,6 +6819,28 @@ pub mod load {
         }
         impl From<FollowView> for wire::LoadRequest {
             fn from(value: FollowView) -> Self {
+                value.request()
+            }
+        }
+
+        /// What is attached to one workout, a page at a time: each attachment's id, kind (document or photo), title, media type, byte size and where its bytes are served, in the order of the attached file's id. Pass the page's `next` cursor as `after` for the next page. An id that is no live workout answers an empty page, and an attached file in the trash is left out until it is restored.
+        #[derive(Clone, Debug, Default)]
+        pub struct Attachments {
+            pub item_id: String,
+            pub after: Option<String>,
+            pub limit: u32,
+        }
+        impl Attachments {
+            pub const NAME: &str = "attachments";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("item_id".to_owned(), text(self.item_id));
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, after: self.after.unwrap_or_default(), params: map, ..Default::default() }
+            }
+        }
+        impl From<Attachments> for wire::LoadRequest {
+            fn from(value: Attachments) -> Self {
                 value.request()
             }
         }
@@ -7001,6 +7275,28 @@ pub mod load {
                 value.request()
             }
         }
+
+        /// What is attached to one transaction, a page at a time: each attachment's id, kind (document or photo), title, media type, byte size and where its bytes are served, in the order of the attached file's id. Pass the page's `next` cursor as `after` for the next page. An id that is no live transaction answers an empty page, and an attached file in the trash is left out until it is restored.
+        #[derive(Clone, Debug, Default)]
+        pub struct Attachments {
+            pub item_id: String,
+            pub after: Option<String>,
+            pub limit: u32,
+        }
+        impl Attachments {
+            pub const NAME: &str = "attachments";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("item_id".to_owned(), text(self.item_id));
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, after: self.after.unwrap_or_default(), params: map, ..Default::default() }
+            }
+        }
+        impl From<Attachments> for wire::LoadRequest {
+            fn from(value: Attachments) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod notes {
@@ -7191,6 +7487,28 @@ pub mod load {
                 value.request()
             }
         }
+
+        /// What is attached to one note, a page at a time: each attachment's id, kind (document or photo), title, media type, byte size and where its bytes are served, in the order of the attached file's id. Pass the page's `next` cursor as `after` for the next page. An id that is no live note answers an empty page, and an attached file in the trash is left out until it is restored.
+        #[derive(Clone, Debug, Default)]
+        pub struct Attachments {
+            pub item_id: String,
+            pub after: Option<String>,
+            pub limit: u32,
+        }
+        impl Attachments {
+            pub const NAME: &str = "attachments";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("item_id".to_owned(), text(self.item_id));
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, after: self.after.unwrap_or_default(), params: map, ..Default::default() }
+            }
+        }
+        impl From<Attachments> for wire::LoadRequest {
+            fn from(value: Attachments) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod people {
@@ -7312,6 +7630,28 @@ pub mod load {
         }
         impl From<Links> for wire::LoadRequest {
             fn from(value: Links) -> Self {
+                value.request()
+            }
+        }
+
+        /// What is attached to one person, a page at a time: each attachment's id, kind (document or photo), title, media type, byte size and where its bytes are served, in the order of the attached file's id. Pass the page's `next` cursor as `after` for the next page. An id that is no live person answers an empty page, and an attached file in the trash is left out until it is restored.
+        #[derive(Clone, Debug, Default)]
+        pub struct Attachments {
+            pub item_id: String,
+            pub after: Option<String>,
+            pub limit: u32,
+        }
+        impl Attachments {
+            pub const NAME: &str = "attachments";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("item_id".to_owned(), text(self.item_id));
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, after: self.after.unwrap_or_default(), params: map, ..Default::default() }
+            }
+        }
+        impl From<Attachments> for wire::LoadRequest {
+            fn from(value: Attachments) -> Self {
                 value.request()
             }
         }
@@ -7447,6 +7787,28 @@ pub mod load {
         }
         impl From<Places> for wire::LoadRequest {
             fn from(value: Places) -> Self {
+                value.request()
+            }
+        }
+
+        /// What is attached to one photo, a page at a time: each attachment's id, kind (document or photo), title, media type, byte size and where its bytes are served, in the order of the attached file's id. Pass the page's `next` cursor as `after` for the next page. An id that is no live photo answers an empty page, and an attached file in the trash is left out until it is restored.
+        #[derive(Clone, Debug, Default)]
+        pub struct Attachments {
+            pub item_id: String,
+            pub after: Option<String>,
+            pub limit: u32,
+        }
+        impl Attachments {
+            pub const NAME: &str = "attachments";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("item_id".to_owned(), text(self.item_id));
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, after: self.after.unwrap_or_default(), params: map, ..Default::default() }
+            }
+        }
+        impl From<Attachments> for wire::LoadRequest {
+            fn from(value: Attachments) -> Self {
                 value.request()
             }
         }

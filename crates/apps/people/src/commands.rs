@@ -112,7 +112,7 @@ pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
 /// THE TABLE. Thirty-two actions, in the manifest's own order.
-pub const ACTIONS: [ActionRow; 32] = [
+pub const ACTIONS: [ActionRow; 34] = [
     act("add-person", "person.add"),
     act("edit-person", "person.edit"),
     act("set-cadence", "person.edit"),
@@ -151,6 +151,10 @@ pub const ACTIONS: [ActionRow; 32] = [
     // writes nothing (`writes_nothing`).
     confirmed("import-vcf", "person.import_vcf"),
     act("export-vcf", "person.export_vcf"),
+    // AN ATTACHMENT is an `attached` edge from the item to a document or a photo: the shared
+    // verbs, one pair in every app (the Attach promise, #1185).
+    act("attach", "edge.add"),
+    act("detach", "edge.remove"),
 ];
 
 /// One action's row, by the name the manifest gives it.
@@ -210,7 +214,7 @@ mod tests {
 
     #[test]
     fn every_action_invokes_one_command_and_the_person_verbs_are_the_persons_own() {
-        assert_eq!(ACTIONS.len(), 32);
+        assert_eq!(ACTIONS.len(), 34);
         assert_eq!(
             commands("person."),
             [

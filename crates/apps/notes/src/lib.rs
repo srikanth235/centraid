@@ -46,6 +46,7 @@
 //! the trash shelf and notebook spine, the editor's note,
 //! and the Journal by the member's local day.
 
+pub mod attachments;
 pub mod cards;
 pub mod commands;
 pub mod derive;
@@ -56,6 +57,7 @@ pub mod manifest;
 pub mod queries;
 pub mod shelves;
 
+pub use attachments::load_attachments;
 pub use cards::{CardStatus, RefCard};
 pub use commands::{ACTIONS, Commands, Invocation, Outcome};
 pub use derive::{CheckTally, PREVIEW_CHARS, PREVIEW_LINES, check_of, preview_of};

@@ -50,8 +50,8 @@ mod tests {
     #[test]
     fn it_declares_thirteen_queries_and_twenty_eight_actions() {
         let manifest = manifest();
-        assert_eq!(manifest.queries.len(), 13);
-        assert_eq!(manifest.actions.len(), 28);
+        assert_eq!(manifest.queries.len(), 14);
+        assert_eq!(manifest.actions.len(), 30);
         for name in [
             "spending",
             "activity",
@@ -182,6 +182,11 @@ mod tests {
             // `empty-trash` is the app's narrowing of the bulk verb: it names the one kind it
             // empties and leaves out `limit` and `defer_collect`, which are the launch pass's.
             if row.action == "empty-trash" {
+                continue;
+            }
+            // `attach` and `detach` narrow the shared edge verbs to the one relation, as in every
+            // app (the Attach promise): `from`, `rel` (`attached`) and `to`.
+            if matches!(row.action, "attach" | "detach") {
                 continue;
             }
             assert_eq!(

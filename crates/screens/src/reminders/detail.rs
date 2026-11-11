@@ -23,11 +23,11 @@ use super::list::{self, Phase};
 use crate::catalog::{act, load};
 use crate::field::Field;
 use crate::kit::act as kit_act;
+use crate::kit::attachments::Attachments;
 use crate::kit::autosave::{Autosave, Draft};
 use crate::kit::civil::{self, HourCycle};
 use crate::kit::earlier;
 use crate::kit::read::{self, Reading};
-use crate::kit::schedule::attachments::{Attachments, Of};
 use crate::kit::schedule::custom::{Custom, Done};
 use crate::kit::schedule::ops::Ops;
 use crate::kit::schedule::repeat::{REPEAT_CUSTOM, normalize_url};
@@ -171,7 +171,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         open_field: String::new(),
         ops: Ops::default(),
         finished: false,
-        attachments: Attachments::of(Of::Task, &args.task_id),
+        attachments: Attachments::of("reminders", &args.task_id),
         custom: None,
         earlier: earlier::Foot::default(),
     }))

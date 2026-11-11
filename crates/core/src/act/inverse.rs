@@ -146,6 +146,8 @@ const REMINDERS: &[Row] = &[
     ("style-container", "style-container", Input::Earlier),
 ];
 const DOCS: &[Row] = &[
+    ("attach", "detach", Input::Same),
+    ("detach", "attach", Input::Same),
     ("upload", "trash", Input::Created),
     ("create-text", "trash", Input::Created),
     ("create-folder", "delete-folder", Input::Created),
@@ -194,6 +196,8 @@ const LOCKER: &[Row] = &[
     ("clear-passkey", "undo-change", Input::Earlier),
 ];
 const HEALTH: &[Row] = &[
+    ("attach", "detach", Input::Same),
+    ("detach", "attach", Input::Same),
     // The follow pass writes the store's day totals and its workouts, and is taken back by
     // disconnecting the store. A day total names no origin, so it offers none of its own.
     ("record-days", "stop-following", Input::Stops("health")),
@@ -216,6 +220,8 @@ const HEALTH: &[Row] = &[
 /// its inverse would turn into a card.
 #[rustfmt::skip]
 const MONEY: &[Row] = &[
+    ("attach", "detach", Input::Same),
+    ("detach", "attach", Input::Same),
     ("add-account", "close-account", Input::CreatedWith("flag", "archived")),
     ("edit-account", "edit-account", Input::Earlier),
     ("set-display-name", "set-display-name", Input::Earlier),
@@ -264,6 +270,8 @@ const NOTES: &[Row] = &[
 /// edge. A contact channel is a child row of the person, which the history keeps on the person.
 #[rustfmt::skip]
 const PEOPLE: &[Row] = &[
+    ("attach", "detach", Input::Same),
+    ("detach", "attach", Input::Same),
     ("add-person", "trash-person", Input::Created),
     ("trash-person", "restore-person", Input::Id),
     ("restore-person", "trash-person", Input::Id),
@@ -288,6 +296,8 @@ const PEOPLE: &[Row] = &[
     ("follow-contacts", "stop-following", Input::Stops("contacts")),
 ];
 const PHOTOS: &[Row] = &[
+    ("attach", "detach", Input::Same),
+    ("detach", "attach", Input::Same),
     ("upload", "delete-photo", Input::Created),
     ("create-album", "delete-album", Input::Created),
     ("delete-photo", "restore-photo", Input::Id),

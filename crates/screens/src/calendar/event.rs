@@ -31,7 +31,7 @@
 //! (only when free: busy is what every event is), time zone (only when the event's own zone is
 //! not the phone's), travel time (only when set) and calendar. The guests the phone's own
 //! calendar states for a followed event are a read-only list with the reply in words. The
-//! attachments section is [`crate::kit::schedule::attachments`]'s: photos and files, added, opened and removed
+//! attachments section is [`crate::kit::attachments`]'s: photos and files, added, opened and removed
 //! from here.
 
 use centraid_api_proto::core_v1 as wire;
@@ -47,11 +47,11 @@ use crate::calendar::hues::Hues;
 use crate::calendar::routes;
 use crate::catalog::{act, load};
 use crate::kit::act::{self as kit_act, Settled};
+use crate::kit::attachments::Attachments;
 use crate::kit::civil::{self, HourCycle};
 use crate::kit::earlier;
 use crate::kit::follow;
 use crate::kit::read::{self as kit_read, Reading};
-use crate::kit::schedule::attachments::{Attachments, Of};
 use crate::kit::schedule::rows::hue_role;
 use crate::kit::trash;
 use crate::screen::{Ctx, Screen};
@@ -85,7 +85,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     if args.instance_key.is_empty() {
         args.instance_key.clone_from(&args.event_id);
     }
-    let attachments = Attachments::of(Of::Event, &args.event_id);
+    let attachments = Attachments::of("calendar", &args.event_id);
     Some(Box::new(EventPage {
         route: args,
         content: Content::Loading,

@@ -1,6 +1,23 @@
-//! THE ATTACHMENTS SECTION of an event or a task page (#1173): the photos and files
+//! THE ATTACHMENTS SECTION of an item's page (#1173, #1185): the photos and files
 //! on one item, a page at a time, and the controls that attach, open and detach them.
-//! The two pages hold one of these each, so the two shells draw one section.
+//! Every app's item page may host one, so the shells draw one section.
+//!
+//! # ADOPTING IT (what a host screen needs)
+//!
+//! 1. The app's manifest declares `attach`, `detach` (edge.add and edge.remove, `rel` `attached`)
+//!    and an `attachments` read, as every app's does; the host passes its APP ID (`"notes"`), and
+//!    this piece reads `<app>.attachments` and acts `<app>.attach` and `<app>.detach`.
+//! 2. State: a field `attachments: Attachments`, built `Attachments::of("notes", &item_id)`.
+//! 3. Load: call `attachments.reload(ctx)` where the page loads and after it reloads.
+//! 4. Events: forward the section's `wire::AgendaAttachmentEvent` to
+//!    `attachments.event(ctx, event)`, which answers the effects to return (a `PickFile`).
+//! 5. Effects: offer every `EffectResult` outcome to `attachments.result(ctx, &outcome)` first;
+//!    `Some(effects)` means a pick was waiting and the answer was this section's.
+//! 6. View: `attachments.view(locale)` is the `AgendaAttachmentsSection` the page draws.
+//! 7. A tap on a row is a route the section already carries; the page names no screen for it.
+//!
+//! Held by the promise register's Attach row (`cargo xtask promises`): the manifest's trio and
+//! a primary detail screen that names this module.
 //!
 //! ```text
 //!   Add photo / Add file ─PickFile─> (FileProgress)* ─FilePicked─> photo.add | document.add
@@ -19,7 +36,7 @@
 //! **A tap opens the photo or file where it lives.** A row carries the route of Photos' viewer
 //! or of the Docs page; the shell pushes it, and this section names no screen of its own.
 //!
-//! Reads are `calendar.attachments` or `reminders.attachments`, a keyset page. The first page is read again after every
+//! Reads are `<app>.attachments`, a keyset page. The first page is read again after every
 //! change (as many rows as are shown, up to the page maximum); Show more reads the next.
 
 use centraid_api_proto::core_v1 as wire;
@@ -37,7 +54,7 @@ use crate::strings::{Locale, agenda as agenda_words, agenda_event as words, fill
 
 /// Rows a first read asks for, and a Show more.
 const PAGE: usize = 30;
-/// The most rows one `calendar.attachments` or `reminders.attachments` page answers (the read's own maximum).
+/// The most rows one `<app>.attachments` page answers (the read's own maximum).
 const PAGE_MAX: usize = 100;
 /// The reason a shell gives when this phone has no picker to offer.
 pub const UNAVAILABLE: &str = "unavailable";
@@ -72,20 +89,12 @@ enum Loaded {
     Failed,
 }
 
-/// Whose attachments a page holds: an event's (Calendar) or a task's (Reminders).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Of {
-    #[default]
-    Event,
-    Task,
-}
-
 /// One item's attachments, as its page holds them.
 #[derive(Debug, Default)]
 pub struct Attachments {
     item_id: String,
-    /// Whose attachments these are: an event's are Calendar's, a task's are Reminders'.
-    of: Of,
+    /// The host app's id: whose attachments these are (`calendar`, `notes`, ...).
+    app: &'static str,
     items: Vec<wire::AgendaAttachmentRow>,
     /// The cursor of the next page, as the answer spelled it.
     next: Option<String>,
@@ -98,9 +107,9 @@ pub struct Attachments {
 
 impl Attachments {
     #[must_use]
-    pub fn of(of: Of, item_id: &str) -> Self {
+    pub fn of(app: &'static str, item_id: &str) -> Self {
         Self {
-            of,
+            app,
             item_id: item_id.to_owned(),
             ..Self::default()
         }
@@ -120,26 +129,15 @@ impl Attachments {
             Answer::AgendaAttachments(page) => Some(page),
             _ => None,
         };
-        match self.of {
-            Of::Event => read::read(
-                ctx,
-                load::calendar::Attachments {
-                    item_id,
-                    after,
-                    limit,
-                },
-                pick,
-            ),
-            Of::Task => read::read(
-                ctx,
-                load::reminders::Attachments {
-                    item_id,
-                    after,
-                    limit,
-                },
-                pick,
-            ),
+        // Every app's `attachments` read has one shape, so one request serves them all.
+        let mut request = load::calendar::Attachments {
+            item_id,
+            after,
+            limit,
         }
+        .request();
+        request.app = self.app.to_owned();
+        read::read(ctx, request, pick)
     }
 
     /// Read the first page again. A read that failed keeps what is shown: only a first
@@ -278,10 +276,10 @@ impl Attachments {
             kit_act::fresh(),
         );
         let (from, to) = (self.item_id.clone(), id);
-        let attached = match self.of {
-            Of::Event => kit_act::act(ctx, act::calendar::Attach { from, to }, &key),
-            Of::Task => kit_act::act(ctx, act::reminders::Attach { from, to }, &key),
-        };
+        // Every app's `attach` has one shape, so one request serves them all.
+        let mut request = act::calendar::Attach { from, to }.request();
+        request.app = self.app.to_owned();
+        let attached = kit_act::act(ctx, request, &key);
         if !attached.committed {
             self.refuse(refusal_or(locale, &attached.refusal));
         }
@@ -297,10 +295,9 @@ impl Attachments {
             kit_act::fresh(),
         );
         let (from, to) = (self.item_id.clone(), id);
-        let detached = match self.of {
-            Of::Event => kit_act::act(ctx, act::calendar::Detach { from, to }, &key),
-            Of::Task => kit_act::act(ctx, act::reminders::Detach { from, to }, &key),
-        };
+        let mut request = act::calendar::Detach { from, to }.request();
+        request.app = self.app.to_owned();
+        let detached = kit_act::act(ctx, request, &key);
         if !detached.committed {
             self.refuse(refusal_or(ctx.locale(), &detached.refusal));
         }

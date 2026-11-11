@@ -123,6 +123,11 @@
         "schema": "tag",
         "table": "remove",
         "verbs": "act"
+      },
+      {
+        "schema": "vault",
+        "table": "document",
+        "verbs": "read"
       }
     ]
   },
@@ -1281,6 +1286,102 @@
           }
         }
       }
+    },
+    {
+      "name": "attach",
+      "verb": "attach",
+      "kind": "photo",
+      "inverse": "detach",
+      "sealed": [],
+      "command": "edge.add",
+      "phrasings": [
+        "attach the receipt to this photo",
+        "add the PDF to the wedding photo",
+        "attach the scan to my passport photo"
+      ],
+      "description": "Attach a document or photo to a photo through edge.add (rel attached); the bytes are the document's or photo's own, found by hash.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["attached"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "detach",
+      "verb": "detach",
+      "kind": "photo",
+      "inverse": "attach",
+      "sealed": [],
+      "command": "edge.remove",
+      "phrasings": [
+        "take the receipt off this photo",
+        "remove the PDF from the wedding photo",
+        "detach the scan from my passport photo"
+      ],
+      "description": "Detach a document or photo from a photo through edge.remove; the document or photo is kept.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["attached"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
     }
   ],
   "queries": [
@@ -1511,6 +1612,55 @@
           },
           "unplaced": {
             "type": "integer"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "attachments",
+      "kind": "photo",
+      "figures": ["attachments"],
+      "description": "What is attached to one photo, a page at a time: each attachment's id, kind (document or photo), title, media type, byte size and where its bytes are served, in the order of the attached file's id. Pass the page's `next` cursor as `after` for the next page. An id that is no live photo answers an empty page, and an attached file in the trash is left out until it is restored.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "after": {
+            "type": "object",
+            "properties": {
+              "sortKey": {
+                "type": "string"
+              },
+              "pk": {
+                "type": "string"
+              }
+            },
+            "required": ["sortKey", "pk"],
+            "additionalProperties": false
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "attachments": {
+            "type": "array"
+          },
+          "next": {
+            "type": ["object", "null"]
           },
           "vaultDenied": {
             "type": "object"

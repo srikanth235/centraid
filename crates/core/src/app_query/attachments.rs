@@ -22,27 +22,35 @@ use crate::error::Result;
 /// The key and the primary key of a cursor, joined as a request's `after` spells it.
 const CURSOR_SEPARATOR: char = '\u{1f}';
 
-/// `agenda.attachments`: one page of what `item_id` has attached. `after` is the cursor of the
-/// page before, as its answer's `next` spelled it.
-/// Whose attachments: an event's (Calendar's) or a task's (Reminders').
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Of {
-    Event,
-    Task,
-}
-
+/// `<app>.attachments`: one page of what `item_id` has attached. `after` is the cursor of the
+/// page before, as its answer's `next` spelled it. `app` is the host's (`calendar`, `notes`, ...):
+/// every app's read is the kit's one page over its own item kind (the Attach promise).
 pub(crate) fn attachments(
     door: &VaultDoor<'_>,
-    of: Of,
+    app: &str,
     item_id: &str,
     after: Option<(String, String)>,
     limit: u32,
 ) -> Result<Answer> {
     let limit = usize::try_from(limit).unwrap_or(usize::MAX).max(1);
     let after = after.map(|(sort_key, pk)| PageCursor { sort_key, pk });
-    let loaded = match of {
-        Of::Event => centraid_apps_calendar::load_attachments(door, item_id, after, limit),
-        Of::Task => centraid_apps_reminders::load_attachments(door, item_id, after, limit),
+    let loaded = match app {
+        "calendar" => centraid_apps_calendar::load_attachments(door, item_id, after, limit),
+        "reminders" => centraid_apps_reminders::load_attachments(door, item_id, after, limit),
+        "notes" => centraid_apps_notes::load_attachments(door, item_id, after, limit),
+        "people" => centraid_apps_people::load_attachments(door, item_id, after, limit),
+        "photos" => centraid_apps_photos::load_attachments(door, item_id, after, limit),
+        "docs" => centraid_apps_docs::load_attachments(door, item_id, after, limit),
+        "health" => centraid_apps_health::load_attachments(door, item_id, after, limit),
+        "money" => centraid_apps_money::load_attachments(door, item_id, after, limit),
+        // Locker's items hold no attachments (D11), and no other app has the read.
+        other => {
+            return Ok(Answer::Denied(wire::AppQueryDenial {
+                code: Some("no-attachments".to_owned()),
+                message: Some(format!("{other} items hold no attachments")),
+                revoked_at: None,
+            }));
+        }
     }
     .and_then(|(data, denial)| {
         let thumbnails = if denial.is_some() {

@@ -18,6 +18,7 @@
 //! into the normalised row and plans it against the account's existing rows;
 //! [`rules`] is the rule semantics the vault agrees with.
 
+pub mod attachments;
 pub mod civil;
 pub mod commands;
 pub mod engine;
@@ -29,3 +30,5 @@ pub mod recurring;
 pub mod rules;
 pub mod trash;
 pub mod year3;
+
+pub use attachments::load_attachments;

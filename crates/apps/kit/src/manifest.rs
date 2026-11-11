@@ -1639,13 +1639,13 @@ mod tests {
     fn the_nine_bundled_manifests_are_fully_classified() {
         let apps = [
             ("calendar", 17),
-            ("docs", 21),
-            ("health", 12),
+            ("docs", 23),
+            ("health", 14),
             ("locker", 23),
-            ("money", 28),
+            ("money", 30),
             ("notes", 21),
-            ("people", 32),
-            ("photos", 24),
+            ("people", 34),
+            ("photos", 26),
             ("reminders", 20),
         ];
         let mut total = 0;
@@ -1683,7 +1683,7 @@ mod tests {
                 assert!(!query.figures.is_empty(), "{app}/{}", query.name);
             }
         }
-        assert_eq!(total, 198);
+        assert_eq!(total, 208);
         // the orders are 0..N with no hole, so the generated enum is dense
         let expected: BTreeSet<u32> = (0..u32::try_from(orders.len()).unwrap()).collect();
         assert_eq!(orders, expected);

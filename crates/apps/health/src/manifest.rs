@@ -17,7 +17,7 @@ pub const MANIFEST_JSON: &str = include_str!("../manifest.json");
 pub const APP_ID: &str = "health";
 
 /// The action each vault command is declared as.
-pub const ACTIONS: [ActionRow; 12] = [
+pub const ACTIONS: [ActionRow; 14] = [
     act("record-days", "measurement.record"),
     act("follow-workouts", "follow.health"),
     act("delete-workout", "entity.trash"),
@@ -31,6 +31,10 @@ pub const ACTIONS: [ActionRow; 12] = [
     act("edit-figure", "measurement.log"),
     act("log-figure", "measurement.log"),
     act("clear-figure", "measurement.clear"),
+    // AN ATTACHMENT is an `attached` edge from the item to a document or a photo: the shared
+    // verbs, one pair in every app (the Attach promise, #1185).
+    act("attach", "edge.add"),
+    act("detach", "edge.remove"),
 ];
 
 /// The parsed manifest.
@@ -66,7 +70,7 @@ mod tests {
     #[test]
     fn it_declares_seven_queries_and_its_actions() {
         let manifest = manifest();
-        assert_eq!(manifest.queries.len(), 7);
+        assert_eq!(manifest.queries.len(), 8);
         for name in [
             "today",
             "series",
@@ -121,6 +125,11 @@ mod tests {
             // `empty-trash` is the app's narrowing of the bulk verb: it names the one kind it
             // empties and leaves out `limit` and `defer_collect`, which are the launch pass's.
             if action == "empty-trash" {
+                continue;
+            }
+            // `attach` and `detach` narrow the shared edge verbs to the one relation, as in every
+            // app (the Attach promise): `from`, `rel` (`attached`) and `to`.
+            if matches!(action, "attach" | "detach") {
                 continue;
             }
             assert_eq!(

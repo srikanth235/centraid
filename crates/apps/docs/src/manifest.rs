@@ -47,8 +47,8 @@ mod tests {
     #[test]
     fn it_declares_three_queries_and_nineteen_actions() {
         let manifest = manifest();
-        assert_eq!(manifest.queries.len(), 3);
-        assert_eq!(manifest.actions.len(), 21);
+        assert_eq!(manifest.queries.len(), 4);
+        assert_eq!(manifest.actions.len(), 23);
         for name in ["drive", "search", "history"] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
@@ -134,7 +134,7 @@ mod tests {
     fn it_declares_twenty_seven_scopes_with_one_act_scope_per_command() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("Docs declares its reach");
-        assert_eq!(vault.scopes.len(), 27);
+        assert_eq!(vault.scopes.len(), 28);
 
         let mut declared: Vec<(&str, &str)> = vault
             .scopes
@@ -174,6 +174,7 @@ mod tests {
                 "document",
                 "edge",
                 "entity",
+                "photo",
                 "revision"
             ]
         );

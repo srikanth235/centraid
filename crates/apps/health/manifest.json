@@ -98,6 +98,36 @@
         "schema": "measurement",
         "table": "clear",
         "verbs": "act"
+      },
+      {
+        "schema": "vault",
+        "table": "edge",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "document",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "photo",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "blob",
+        "verbs": "read"
+      },
+      {
+        "schema": "edge",
+        "table": "add",
+        "verbs": "act"
+      },
+      {
+        "schema": "edge",
+        "table": "remove",
+        "verbs": "act"
       }
     ]
   },
@@ -838,6 +868,102 @@
           }
         }
       }
+    },
+    {
+      "name": "attach",
+      "verb": "attach",
+      "kind": "workout",
+      "inverse": "detach",
+      "sealed": [],
+      "command": "edge.add",
+      "phrasings": [
+        "attach the route map to this workout",
+        "add the photo to my Sunday run",
+        "attach the coach's plan to the workout"
+      ],
+      "description": "Attach a document or photo to a workout through edge.add (rel attached); the bytes are the document's or photo's own, found by hash.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["attached"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "detach",
+      "verb": "detach",
+      "kind": "workout",
+      "inverse": "attach",
+      "sealed": [],
+      "command": "edge.remove",
+      "phrasings": [
+        "take the route map off this workout",
+        "remove the photo from my Sunday run",
+        "detach the coach's plan from the workout"
+      ],
+      "description": "Detach a document or photo from a workout through edge.remove; the document or photo is kept.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["attached"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
     }
   ],
   "queries": [
@@ -1004,6 +1130,55 @@
       "output": {
         "type": "object",
         "properties": {}
+      }
+    },
+    {
+      "name": "attachments",
+      "kind": "workout",
+      "figures": ["attachments"],
+      "description": "What is attached to one workout, a page at a time: each attachment's id, kind (document or photo), title, media type, byte size and where its bytes are served, in the order of the attached file's id. Pass the page's `next` cursor as `after` for the next page. An id that is no live workout answers an empty page, and an attached file in the trash is left out until it is restored.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "after": {
+            "type": "object",
+            "properties": {
+              "sortKey": {
+                "type": "string"
+              },
+              "pk": {
+                "type": "string"
+              }
+            },
+            "required": ["sortKey", "pk"],
+            "additionalProperties": false
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "attachments": {
+            "type": "array"
+          },
+          "next": {
+            "type": ["object", "null"]
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
       }
     }
   ],

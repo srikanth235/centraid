@@ -44,6 +44,7 @@
 //! does Docs send" is how the two answers drift, so the action table
 //! ([`commands::ACTIONS`]) is compared with it by a test.
 
+pub mod attachments;
 pub mod bytes;
 pub mod commands;
 pub mod kind;
@@ -51,6 +52,7 @@ pub mod manifest;
 pub mod phone;
 pub mod queries;
 
+pub use attachments::load_attachments;
 pub use bytes::{ByteDoor, ByteRequest, NEVER_INLINE, StagedBlob, may_serve_inline};
 pub use commands::{ACTIONS, Commands, Invocation, Outcome};
 pub use manifest::{APP_ID, manifest};

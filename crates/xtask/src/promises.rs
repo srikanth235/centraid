@@ -84,11 +84,15 @@ pub enum Promise {
     /// (#1185, "Confirm it's me"): one gate in the kit, `kit::owner`. Not on open; an import is
     /// not checked.
     OwnerCheck,
+    /// Every item a member opens may hold photos and files: the manifest declares `attach`,
+    /// `detach` and an `attachments` read, and the item's detail screen embeds the kit's one
+    /// section. A Locker item holds none (owner decision D11), a named exception.
+    Attach,
 }
 
 impl Promise {
     /// Every promise, in the order the table is read.
-    pub const ALL: [Promise; 8] = [
+    pub const ALL: [Promise; 9] = [
         Promise::Trash,
         Promise::Undo,
         Promise::History,
@@ -97,6 +101,7 @@ impl Promise {
         Promise::Share,
         Promise::Units,
         Promise::OwnerCheck,
+        Promise::Attach,
     ];
 
     fn name(self) -> &'static str {
@@ -109,6 +114,7 @@ impl Promise {
             Promise::Export => "Export",
             Promise::Share => "Share",
             Promise::OwnerCheck => "OwnerCheck",
+            Promise::Attach => "Attach",
         }
     }
 }
@@ -121,6 +127,10 @@ pub enum Status {
     Kept(&'static str),
     /// A known gap; the string says why, and names the issue that tracks it.
     Owed(&'static str),
+    /// A NAMED EXCEPTION, not a gap: the promise does not apply to this app, and the string is
+    /// the ruling. It is held to [`ATTACH_EXEMPT`] (the one list of exceptions) and the checker
+    /// fails when the app grows what the ruling says it cannot have.
+    Exempt(&'static str),
 }
 
 /// One cell of the table.
@@ -401,6 +411,24 @@ pub const REGISTER: &[Row] = &[
         Promise::OwnerCheck,
         "crates/screens/src/reminders/mod.rs",
     ),
+    // Attach (#1185): the manifest's trio and the shared section on each primary detail page.
+    kept(
+        "calendar",
+        Promise::Attach,
+        "crates/screens/src/calendar/event.rs",
+    ),
+    owed("docs", Promise::Attach, ATTACH_OWED),
+    owed("health", Promise::Attach, ATTACH_OWED),
+    exempt("locker", Promise::Attach, ATTACH_EXEMPT[0].1),
+    owed("money", Promise::Attach, ATTACH_OWED),
+    owed("notes", Promise::Attach, ATTACH_OWED),
+    owed("people", Promise::Attach, ATTACH_OWED),
+    owed("photos", Promise::Attach, ATTACH_OWED),
+    kept(
+        "reminders",
+        Promise::Attach,
+        "crates/screens/src/reminders/detail.rs",
+    ),
 ];
 
 const EXPORT_OWED: &str = "no export screen on the kit's ExportSpec (#1185)";
@@ -409,6 +437,21 @@ const SHARE_OWED: &str = "no share of one record on the kit's share helper (#118
 const UNITS_PROOF: &str = "crates/screens/src/kit/quantity.rs";
 
 const UNITS_OWED: &str = "words a measure by hand instead of `kit::quantity` (#1185)";
+const ATTACH_OWED: &str =
+    "the detail screen does not embed the kit's attachments section yet (#1185)";
+
+const fn exempt(app: &'static str, promise: Promise, ruling: &'static str) -> Row {
+    Row {
+        app,
+        promise,
+        status: Status::Exempt(ruling),
+    }
+}
+
+/// The apps whose items hold no attachments, with the ruling that says so (the Attach promise's
+/// only exceptions). A Locker item is sealed: a photo or file beside it would sit outside the seal.
+pub const ATTACH_EXEMPT: &[(&str, &str)] =
+    &[("locker", "D11: a Locker item cannot hold attachments")];
 
 /// `promises`: the table is complete, and every row is true.
 pub fn promises(root: &Path) -> RuleReport {
@@ -469,6 +512,25 @@ pub(crate) fn check(root: &Path, register: &[Row]) -> RuleReport {
                     ));
                 }
             }
+            Status::Exempt(ruling) => {
+                let named = ATTACH_EXEMPT
+                    .iter()
+                    .any(|(app, said)| *app == row.app && *said == ruling);
+                if row.promise != Promise::Attach || !named {
+                    findings.push(format!(
+                        "{} / {}: Exempt, but `{ruling}` is not a ruling listed in ATTACH_EXEMPT",
+                        row.app,
+                        row.promise.name()
+                    ));
+                }
+                for gap in lacking {
+                    findings.push(format!(
+                        "{} / {}: claimed Exempt ({ruling}), but {gap}",
+                        row.app,
+                        row.promise.name()
+                    ));
+                }
+            }
             Status::Owed(why) => {
                 owed_count += 1;
                 if lacking.is_empty() {
@@ -503,6 +565,7 @@ pub fn missing(root: &Path, app: &str, promise: Promise) -> Vec<String> {
         Promise::Export => export_missing(root, app),
         Promise::Share => share_missing(root, app),
         Promise::OwnerCheck => owner_check_missing(root, app),
+        Promise::Attach => attach_missing(root, app),
     }
 }
 
@@ -1153,7 +1216,7 @@ pub const ARRIVAL_SITES: &[ArrivalSite] = &[
     },
     ArrivalSite {
         app: "docs",
-        file: "crates/screens/src/kit/schedule/attachments.rs",
+        file: "crates/screens/src/kit/attachments.rs",
         call: "act::docs::Upload",
         path: "a file picked to attach",
     },
@@ -1183,7 +1246,7 @@ pub const ARRIVAL_SITES: &[ArrivalSite] = &[
     },
     ArrivalSite {
         app: "photos",
-        file: "crates/screens/src/kit/schedule/attachments.rs",
+        file: "crates/screens/src/kit/attachments.rs",
         call: "act::photos::Upload",
         path: "a photo picked to attach",
     },
@@ -1582,8 +1645,8 @@ const HAND_MEASURES: [(&str, &str); 11] = [
 /// A file several apps share, and what an app spells to use it: its hand-worded measures are
 /// theirs too.
 const SHARED_MEASURERS: [(&str, &str); 1] = [(
-    "schedule::attachments::",
-    "crates/screens/src/kit/schedule/attachments.rs",
+    "kit::attachments::",
+    "crates/screens/src/kit/attachments.rs",
 )];
 
 /// The units promise is kept when, for `app`, no file under `crates/screens/src/<app>/` (and no
@@ -1810,6 +1873,125 @@ fn pascal(action: &str) -> String {
                 .unwrap_or_default()
         })
         .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Attach
+// ---------------------------------------------------------------------------
+
+/// The shared kit piece a detail screen embeds, by the path its `use` spells.
+const ATTACH_PIECE: &str = "kit::attachments::";
+
+/// Attach is kept when, for `app`:
+///
+/// 1. the manifest has `attach` (`edge.add`) and `detach` (`edge.remove`) actions, each the
+///    other's declared inverse, and an `attachments` query;
+/// 2. the core's inverse table carries the pair (`attach` and `detach`), so Undo stays Kept;
+/// 3. the detail screen of each primary kind ([`HISTORY_KINDS`]) embeds the kit's one section
+///    ([`ATTACH_PIECE`]).
+///
+/// An app in [`ATTACH_EXEMPT`] is held the other way: it fails when its manifest declares any of
+/// the three, because the ruling says its items cannot hold attachments.
+fn attach_missing(root: &Path, app: &str) -> Vec<String> {
+    let manifest = format!("crates/apps/{app}/manifest.json");
+    let actions = undo_actions(root, app);
+    if actions.is_empty() {
+        return vec![format!("{manifest} could not be read")];
+    }
+    let has_query = fs::read_to_string(root.join(&manifest))
+        .ok()
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+        .and_then(|value| {
+            value
+                .get("queries")
+                .and_then(serde_json::Value::as_array)
+                .map(|queries| {
+                    queries
+                        .iter()
+                        .any(|q| q.get("name").and_then(|n| n.as_str()) == Some("attachments"))
+                })
+        })
+        .unwrap_or(false);
+    let commands = manifest_actions(root, app);
+    let action = |name: &str| actions.iter().find(|a| a.name == name);
+    let command = |name: &str| {
+        commands
+            .iter()
+            .find(|(action, _)| action == name)
+            .map(|(_, command)| command.as_str())
+    };
+    if let Some((_, ruling)) = ATTACH_EXEMPT.iter().find(|(exempt, _)| *exempt == app) {
+        let mut gaps = Vec::new();
+        for name in ["attach", "detach"] {
+            if action(name).is_some() {
+                gaps.push(format!(
+                    "{manifest} declares `{name}`, which the ruling forbids ({ruling})"
+                ));
+            }
+        }
+        if has_query {
+            gaps.push(format!(
+                "{manifest} declares an `attachments` read, which the ruling forbids ({ruling})"
+            ));
+        }
+        return gaps;
+    }
+
+    let mut gaps = Vec::new();
+    for (name, shared, other) in [
+        ("attach", "edge.add", "detach"),
+        ("detach", "edge.remove", "attach"),
+    ] {
+        match action(name) {
+            None => gaps.push(format!("{manifest} declares no `{name}` action")),
+            Some(found) => {
+                if command(name) != Some(shared) {
+                    gaps.push(format!("{manifest}: `{name}` does not run `{shared}`"));
+                }
+                if found.inverse.as_deref() != Some(other) {
+                    gaps.push(format!(
+                        "{manifest}: `{name}` does not declare `{other}` as its inverse"
+                    ));
+                }
+            }
+        }
+    }
+    if !has_query {
+        gaps.push(format!("{manifest} declares no `attachments` query"));
+    }
+    let table = core_inverses(root, app).unwrap_or_default();
+    for (name, inverse) in [("attach", "detach"), ("detach", "attach")] {
+        if table.get(name).map(String::as_str) != Some(inverse) {
+            gaps.push(format!(
+                "{INVERSE_TABLE}: `{}` has no `{name}` row reversed by `{inverse}`",
+                app.to_uppercase()
+            ));
+        }
+    }
+    let dir = root.join("crates/screens/src").join(app);
+    let kinds = HISTORY_KINDS
+        .iter()
+        .find(|(name, _)| *name == app)
+        .map_or(&[][..], |(_, kinds)| *kinds);
+    for (kind, screen) in kinds {
+        let path = dir.join(screen);
+        let files = if path.is_dir() {
+            source_files(&path, "rs")
+        } else {
+            vec![path]
+        };
+        let text: String = files
+            .iter()
+            .filter_map(|file| live_source(file))
+            .collect::<Vec<_>>()
+            .join("\n");
+        if !text.contains(ATTACH_PIECE) {
+            gaps.push(format!(
+                "crates/screens/src/{app}/{screen}: the {kind} page does not embed the shared attachments section (`{ATTACH_PIECE}Attachments`)"
+            ));
+        }
+    }
+    gaps
 }
 
 #[cfg(test)]
