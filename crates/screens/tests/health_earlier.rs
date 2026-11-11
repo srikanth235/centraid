@@ -262,3 +262,30 @@ fn a_read_that_fails_is_the_failed_state_never_an_empty_list() {
         Some(wire::earlier_view::Content::Failure(_))
     ));
 }
+
+#[test]
+fn a_followed_workout_says_its_store_and_a_logged_one_does_not() {
+    let mut d = driver_in("DE");
+    arrange(
+        &d,
+        act::health::FollowWorkouts {
+            origin: json!({ "ref": "store:apple-health", "label": "Apple Health", "device_id": "phone-a" })
+                .to_string(),
+            records: json!([{ "external_id": "w:1", "device_id": "phone-a", "fields": {
+                "kind": "run", "starts": STARTS, "ends": "2026-03-04T07:30:00Z",
+                "workout": { "moving_s": 1_800, "distance_m": 5_000 } } }])
+            .to_string(),
+            ..Default::default()
+        },
+    );
+    let id = the_workout(&d);
+    let page = d.push(health::TAB, routes::workout(&id, "Today"));
+    let line = workout_state(d.view(page)).origin.clone().expect("a line");
+    assert_eq!(line.text, "From Apple Health");
+    assert_eq!(line.accessibility_label, "Came from Apple Health");
+
+    let mut typed = driver_in("DE");
+    let id = run(&typed);
+    let page = typed.push(health::TAB, routes::workout(&id, "Today"));
+    assert_eq!(workout_state(typed.view(page)).origin, None);
+}
