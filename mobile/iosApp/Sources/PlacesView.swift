@@ -54,7 +54,7 @@ struct PlacesView: View {
                 }
 
                 PageReadStateView(page: state.page, onRetry: { event { $0.refreshed = .init() } }) {
-                    if state.hasData {
+                    if state.content != nil {
                         let data = state.data
                         // NO PLACES AT ALL is the page's Empty state; the map's "none pinned" is a
                         // section of a page that still has places, so it stays here.

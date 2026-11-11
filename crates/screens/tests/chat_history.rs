@@ -518,8 +518,8 @@ fn photos_picker_with_the_attach_purpose_hands_its_pick_to_the_chat() {
     let picker = chat.driver.push(centraid_screens::chat::TAB, route);
     // the picker's grid is the library: pick the first photograph and confirm
     let cells = match &chat.driver.view(picker).kind {
-        Some(wire::view_state::Kind::PhotosPicker(state)) => match &state.data {
-            Some(data) => data.cells.clone(),
+        Some(wire::view_state::Kind::PhotosPicker(state)) => match &state.content {
+            Some(wire::photos_picker_state::Content::Data(data)) => data.cells.clone(),
             None => panic!("{:?}", state.page),
         },
         other => panic!("{other:?}"),

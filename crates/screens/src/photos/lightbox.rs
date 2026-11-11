@@ -1480,7 +1480,8 @@ impl Screen for Lightbox {
                 |denial| super::denied(locale, denial),
                 wire::EmptyState::default,
             )),
-            photo,
+            content: photo
+                .map(|photo| wire::photos_lightbox_state::Content::Photo(Box::new(photo))),
             chrome_visible: self.chrome_visible || self.slideshow,
             sheet: self.sheet as i32,
             slideshow: self.slideshow,

@@ -847,7 +847,9 @@ impl Screen for Shelf {
                 |denial| super::denied(locale, denial),
                 || self.empty(locale),
             )),
-            data: page.data().map(|()| self.data(locale)),
+            content: page
+                .data()
+                .map(|()| wire::photos_shelf_state::Content::Data(Box::new(self.data(locale)))),
             selection: Some(self.selection.view(locale)),
             status: self.selection.status(locale),
             notice: self.notice.clone(),

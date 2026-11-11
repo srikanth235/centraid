@@ -388,7 +388,9 @@ impl Screen for Picker {
                         |denial| super::denied(locale, denial),
                         || self.empty(locale),
                     )),
-                    data: page.data().map(|()| self.data(locale)),
+                    content: page.data().map(|()| {
+                        wire::photos_picker_state::Content::Data(Box::new(self.data(locale)))
+                    }),
                     status: self.undo.status(),
                     finished: self.finished,
                 },

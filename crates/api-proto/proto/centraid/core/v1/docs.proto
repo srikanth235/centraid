@@ -228,8 +228,9 @@ message DocsDocumentRow {
   // The kind's word, as the Kind column prints it.
   string kind_name = 6;
   DocsSurface surface = 7;
-  // The bytes' length. ABSENT when there is no byte row.
-  optional int64 byte_size = 8;
+  // 8 was `size`, the bytes in words: the length is `byte_size` now (#1185).
+  reserved 8;
+  reserved "size";
   // EMPTY at the top level.
   string folder_id = 9;
   bool starred = 10;
@@ -266,6 +267,8 @@ message DocsDocumentRow {
   // The words matched only in an EARLIER VERSION of the item, not in what it says now (#1185):
   // the row is the live item, once, and it opens that item's Earlier versions. Search rows only.
   bool in_earlier_version = 24;
+  // The bytes' length. ABSENT when there is no byte row.
+  optional int64 byte_size = 25;
 }
 
 // One version, newest first. A→B→A is THREE versions: each is an occurrence,
@@ -273,13 +276,17 @@ message DocsDocumentRow {
 message DocsVersion {
   string content_id = 1;
   string media_type = 2;
-  optional int64 byte_size = 3;
+  // 3 was `size`, the bytes in words: the length is `byte_size` now (#1185).
+  reserved 3;
+  reserved "size";
   // Exactly one version is current: the first.
   bool current = 4;
   // "Version N", counted from the oldest, which is 1.
   uint32 number = 5;
   string asserted_at = 6;
   string asserted_local = 7;
+  // The bytes' length. ABSENT when there is no byte row.
+  optional int64 byte_size = 8;
 }
 
 // ---------------------------------------------------------------------------

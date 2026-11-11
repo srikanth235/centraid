@@ -453,10 +453,9 @@ message PhoneReminder {
   string tz = 5;
   // EventKit's raw priority, 0..9.
   int32 priority = 6;
-  // Whether the reminder is flagged on the phone. ABSENT when the shell cannot read the flag
-  // (EventKit has no public one), so a store that says nothing is not read as "not flagged"; a
-  // shell that can read it says true or false. It becomes the task's star (`flag:starred`).
-  optional bool flagged = 7;
+  // 7 was the plain `flagged`: the flag is now `phone_flagged`, which can say nothing (#1185).
+  reserved 7;
+  reserved "flagged";
   // RFC 5545 rule text (`FREQ=WEEKLY;BYDAY=MO`, with or without `RRULE:`), or empty.
   string rrule = 8;
   // Minutes before the due time of the first alarm, or absent.
@@ -474,6 +473,10 @@ message PhoneReminder {
   // (EventKit's external identifier, else its item identifier), and its list's identifier.
   string phone_id = 17;
   string list_id = 18;
+  // Whether the reminder is flagged on the phone. ABSENT when the shell cannot read the flag
+  // (EventKit has no public one), so a store that says nothing is not read as "not flagged"; a
+  // shell that can read it says true or false. It becomes the task's star (`flag:starred`).
+  optional bool phone_flagged = 19;
   bool completed = 15;
   // When it was completed, `YYYY-MM-DDTHH:MM:SSZ` (UTC), or empty.
   string completed_at = 16;

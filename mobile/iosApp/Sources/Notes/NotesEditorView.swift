@@ -38,7 +38,7 @@ struct NotesEditorView: View {
     }
 
     private var draft: Centraid_Core_V1_NotesEditorDraft? {
-        state.hasDraft ? state.draft : nil
+        state.content != nil ? state.draft : nil
     }
 
     @FocusState private var tagFocused: Bool

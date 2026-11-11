@@ -465,7 +465,9 @@ message NotesEditorState {
   reserved 3, 4;
   reserved "loading", "failure";
   // Set when the page is ready.
-  optional NotesEditorDraft draft = 5;
+  oneof content {
+    NotesEditorDraft draft = 5;
+  }
   NotesEditorChrome chrome = 6;
   Autosave autosave = 7;
   // The powerbox, while open.
@@ -663,7 +665,9 @@ message NotesLinkSheet {
   reserved 8, 9, 10;
   reserved "loading", "failure", "denied";
   // Set when the page is ready.
-  optional NotesLinkData data = 11;
+  oneof content {
+    NotesLinkData data = 11;
+  }
   // The powerbox's read: nothing the term finds is the page's own Empty state.
   PageState page = 12;
 }

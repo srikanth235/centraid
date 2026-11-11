@@ -33,7 +33,7 @@ struct PhotosCollectionsBody: View {
                     page: collections.page,
                     onRetry: { send(PhotosHomeEvents.make { $0.refreshed = .init() }) }
                 ) {
-                    if collections.hasData {
+                    if collections.content != nil {
                         let data = collections.data
                         // SHOW ALL / COLLAPSE ALL, ONE LINK — v0's Collections menu without
                         // the menu: a bulk fold is a command over this list, not a header verb.

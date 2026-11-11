@@ -25,7 +25,7 @@ struct PhotoShelfView: View {
     private var selecting: Bool { selection.selecting }
 
     private var cells: [Centraid_Core_V1_PhotosShelfCell] {
-        state.hasData ? state.data.cells : []
+        state.content != nil ? state.data.cells : []
     }
 
     private func shelf(_ build: (inout Centraid_Core_V1_PhotosShelfEvent) -> Void) {
@@ -128,7 +128,7 @@ struct PhotoShelfView: View {
                     onRetry: { shelf { $0.refreshed = .init() } },
                     skeleton: { RowSkeleton().padding(.horizontal, CentraidGeometry.pageMargin) },
                     data: {
-                        if state.hasData {
+                        if state.content != nil {
                             let data = state.data
                             PhotoCellsGrid(
                                 cells: data.cells.map(\.tile),
@@ -294,7 +294,7 @@ struct PhotoShelfView: View {
                 Text(selection.title)
                     .centraidType("small")
                     .foregroundStyle(Theme.color("textSoft", scheme))
-            } else if state.hasData, state.data.hasEmptyTrashLabel {
+            } else if state.content != nil, state.data.hasEmptyTrashLabel {
                 // EMPTY TRASH, only on the trash. An outline in `net` and never
                 // a filled one: the safety is the confirm behind it.
                 KitOutlineButton(label: state.data.emptyTrashLabel, tone: "net") { prompt(.emptyTrash) }
@@ -304,7 +304,7 @@ struct PhotoShelfView: View {
     }
 
     private var countLabel: String {
-        state.hasData ? state.data.countLabel : ""
+        state.content != nil ? state.data.countLabel : ""
     }
 
     /// THE BAR: the verbs Rust offered for this shelf, in its order, disabled

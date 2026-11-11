@@ -83,7 +83,7 @@ struct PhotosLibraryBody: View {
     }
 
     private var data: Centraid_Core_V1_PhotosLibraryData? {
-        library.hasData ? library.data : nil
+        library.content != nil ? library.data : nil
     }
 
     var body: some View {

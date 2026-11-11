@@ -757,7 +757,7 @@ impl Screen for Editor {
                 |denial| super::denied(locale, denial),
                 wire::EmptyState::default,
             )),
-            data,
+            content: data.map(|data| wire::photos_editor_state::Content::Data(Box::new(data))),
             phase: self.phase as i32,
             status_line: if self.phase == Phase::Saving {
                 words::photos_edit_saving(locale)

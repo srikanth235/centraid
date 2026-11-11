@@ -519,12 +519,12 @@ fn an_editor_that_cannot_read_its_note_is_failed_and_not_an_empty_page() {
     shell.reads(Mode::Fails);
     let i = shell.push(routes::editor(&id));
     assert!(failed(&shell.editor(i).page));
-    assert!(shell.editor(i).draft.is_none() && shell.editor(i).rich.is_none());
+    assert!(shell.editor(i).content.is_none() && shell.editor(i).rich.is_none());
     // Retry reads it again.
     shell.reads(Mode::Answers);
     shell.editor_event(i, editor::Kind::Refreshed(editor::Refreshed {}));
     ready(&shell.editor(i).page);
-    assert_eq!(shell.editor(i).draft.as_ref().unwrap().body, "words");
+    assert_eq!(draft_body(shell.editor(i)), "words");
 }
 
 #[test]
@@ -535,7 +535,7 @@ fn a_refused_editor_is_the_gate_in_notes_own_words() {
     shell.reads(Mode::Refuses);
     let i = shell.push(routes::editor(&id));
     gate_words(&shell.editor(i).page);
-    assert!(shell.editor(i).draft.is_none());
+    assert!(shell.editor(i).content.is_none());
 }
 
 #[test]
@@ -548,7 +548,7 @@ fn a_failed_reread_leaves_the_words_under_one_sentence_and_not_on_the_status_lin
     shell.reads(Mode::Fails);
     shell.editor_event(i, editor::Kind::Refreshed(editor::Refreshed {}));
     refresh_failed(&shell.editor(i).page);
-    assert_eq!(shell.editor(i).draft.as_ref().unwrap().body, "words");
+    assert_eq!(draft_body(shell.editor(i)), "words");
     let status = &shell.editor(i).chrome.as_ref().unwrap().status;
     assert_ne!(*status, shared::read_refresh_failed(Locale::En));
     // The note clears once a read comes.
@@ -571,7 +571,7 @@ fn the_powerbox_is_loading_failed_refused_or_empty_never_a_blank_list() {
     shell.editor_event(i, editor::Kind::LinkRequested(editor::LinkRequested {}));
     let sheet = shell.editor(i).link.as_ref().expect("the powerbox is open");
     assert!(failed(&sheet.page));
-    assert!(sheet.data.is_none());
+    assert!(sheet.content.is_none());
 
     shell.reads(Mode::Refuses);
     shell.editor_event(i, editor::Kind::Refreshed(editor::Refreshed {}));
@@ -593,7 +593,7 @@ fn the_powerbox_is_loading_failed_refused_or_empty_never_a_blank_list() {
     );
     let sheet = shell.editor(i).link.as_ref().unwrap();
     ready(&sheet.page);
-    assert!(sheet.data.is_some());
+    assert!(sheet.content.is_some());
 
     // Nothing the term finds is the empty state, with the sentence for a term.
     shell.editor_event(
@@ -607,10 +607,18 @@ fn the_powerbox_is_loading_failed_refused_or_empty_never_a_blank_list() {
         panic!("not empty: {:?}", sheet.page);
     };
     assert_eq!(empty.body, "Nothing matches that search.");
-    assert!(sheet.data.is_none());
+    assert!(sheet.content.is_none());
 
     // A failed refresh of the term shown over nothing is failed.
     shell.reads(Mode::Fails);
     shell.editor_event(i, editor::Kind::Refreshed(editor::Refreshed {}));
     assert!(failed(&shell.editor(i).link.as_ref().unwrap().page));
+}
+
+/// The words the editor holds: its `draft`, or a panic when the page is not ready.
+fn draft_body(state: &wire::NotesEditorState) -> &str {
+    match &state.content {
+        Some(wire::notes_editor_state::Content::Draft(draft)) => &draft.body,
+        None => panic!("not a draft: {:?}", state.page),
+    }
 }

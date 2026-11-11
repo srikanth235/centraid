@@ -26,8 +26,8 @@ fn state(d: &Driver, instance: u64) -> &wire::PhotosShelfState {
 
 fn data(d: &Driver, instance: u64) -> &wire::PhotosShelfData {
     let state = state(d, instance);
-    match &state.data {
-        Some(data) => data,
+    match &state.content {
+        Some(wire::photos_shelf_state::Content::Data(data)) => data,
         None => panic!("the shelf has no data: {:?}", state.page),
     }
 }
@@ -35,7 +35,7 @@ fn data(d: &Driver, instance: u64) -> &wire::PhotosShelfData {
 fn shown(d: &Driver, instance: u64) -> Vec<String> {
     // A shelf that holds nothing is the page's Empty state, which carries no cells.
     let state = state(d, instance);
-    if state.data.is_none()
+    if state.content.is_none()
         && matches!(
             state.page.as_ref().and_then(|page| page.state.as_ref()),
             Some(wire::page_state::State::Empty(_))
@@ -244,7 +244,7 @@ fn a_trashed_album_can_be_restored_from_its_shelf() {
 /// The shelf's page must be Empty (never ready data), and this is its sentence.
 fn empty(d: &Driver, instance: u64) -> &wire::EmptyState {
     let state = state(d, instance);
-    assert!(state.data.is_none(), "an empty shelf carries no data");
+    assert!(state.content.is_none(), "an empty shelf carries no data");
     match state.page.as_ref().and_then(|page| page.state.as_ref()) {
         Some(wire::page_state::State::Empty(empty)) => empty,
         other => panic!("expected the empty state, found {other:?}"),
@@ -506,7 +506,7 @@ fn a_refused_write_keeps_the_rows_and_the_pick_and_says_why() {
     let view = state(&d, shelf);
     let status = view.status.as_ref().expect("the vault's sentence");
     assert!(status.refused && !status.sentence.is_empty());
-    assert!(view.data.is_some());
+    assert!(view.content.is_some());
     assert_eq!(view.selection.as_ref().unwrap().selected_ids, vec![a]);
 }
 

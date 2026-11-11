@@ -128,7 +128,7 @@ struct PhotosLightboxView: View {
                     onRetry: { send(.refreshed(.init())) },
                     skeleton: { band(model, photo: nil, infoOpen: false) },
                     data: {
-                        if state.hasPhoto {
+                        if state.content != nil {
                             let photo = state.photo
                             band(model, photo: photo, infoOpen: infoOpen)
                             if infoOpen {
@@ -154,7 +154,7 @@ struct PhotosLightboxView: View {
     /// The top row: close, the stamp (WHEN outranks WHAT), the menu.
     private func lightHeader() -> some View {
         let stamp = { () -> (String, String) in
-            if state.hasPhoto { return (state.photo.stampDate, state.photo.stampLine) }
+            if state.content != nil { return (state.photo.stampDate, state.photo.stampLine) }
             return ("", "")
         }()
         return HStack(alignment: .center) {
@@ -399,7 +399,7 @@ struct PhotosLightboxView: View {
     private func toolbar(light: Bool = false) -> some View {
         let reasons = Array(Set(state.toolbar.filter { !$0.enabled && !$0.why.isEmpty }.map(\.why))).sorted()
         var trashed = false
-        if state.hasPhoto { trashed = state.photo.trashed }
+        if state.content != nil { trashed = state.photo.trashed }
         // THE POINTER EQUIVALENT FOR SWIPE: nothing here is reachable by gesture alone.
         // The arrows are the ends of the one row, so they line up with the verbs between
         // them; the ids are Rust's `previous_id` and `next_id`, empty at either end.
@@ -851,7 +851,7 @@ struct PhotosLightboxModel {
     let state: Centraid_Core_V1_PhotosLightboxState
 
     var photo: Centraid_Core_V1_PhotosLightboxPhoto? {
-        state.hasPhoto ? state.photo : nil
+        state.content != nil ? state.photo : nil
     }
 
     var photoID: String { state.photoID }

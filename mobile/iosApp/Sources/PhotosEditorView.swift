@@ -60,11 +60,11 @@ struct PhotosEditorView: View {
                         .foregroundStyle(Surface.meta)
                 },
                 data: {
-                    if state.hasData { editor(state.data) }
+                    if state.content != nil { editor(state.data) }
                 }
             )
             // THE WAY OUT when there is nothing to edit: a failed or refused read has no top bar.
-            if !state.hasData, !reading {
+            if state.content == nil, !reading {
                 VStack {
                     Spacer()
                     Button {
@@ -381,7 +381,7 @@ struct PhotosEditorView: View {
                 .kitType(.meta)
                 .foregroundStyle(Surface.meta)
             // WHERE IT CAME FROM, the board's last line.
-            if state.hasData, !state.data.meta.isEmpty {
+            if state.content != nil, !state.data.meta.isEmpty {
                 Text(state.data.meta)
                     .kitType(.meta)
                     .foregroundStyle(Surface.meta)

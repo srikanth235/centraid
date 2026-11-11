@@ -30,7 +30,7 @@ fn state(d: &Driver, instance: u64) -> &wire::PhotosPickerState {
 /// The picker's page must be Empty (never ready data), and this is its sentence.
 fn empty(d: &Driver, instance: u64) -> &wire::EmptyState {
     let state = state(d, instance);
-    assert!(state.data.is_none(), "nothing left carries no data");
+    assert!(state.content.is_none(), "nothing left carries no data");
     match state.page.as_ref().and_then(|page| page.state.as_ref()) {
         Some(wire::page_state::State::Empty(empty)) => empty,
         other => panic!("expected the empty state, found {other:?}"),
@@ -39,8 +39,8 @@ fn empty(d: &Driver, instance: u64) -> &wire::EmptyState {
 
 fn data(d: &Driver, instance: u64) -> &wire::PhotosPickerData {
     let state = state(d, instance);
-    match &state.data {
-        Some(data) => data,
+    match &state.content {
+        Some(wire::photos_picker_state::Content::Data(data)) => data,
         None => panic!("no data: {:?}", state.page),
     }
 }
@@ -164,7 +164,7 @@ fn confirm_adds_each_pick_to_the_album_and_finishes_when_all_landed() {
     let Some(wire::view_state::Kind::PhotosShelf(shelf)) = &d.view(shelf).kind else {
         panic!("a shelf");
     };
-    let Some(members) = &shelf.data else {
+    let Some(wire::photos_shelf_state::Content::Data(members)) = &shelf.content else {
         panic!("data");
     };
     assert_eq!(members.cells.len(), 2);
@@ -185,7 +185,7 @@ fn a_refused_add_keeps_the_pick_and_the_grid_and_says_why() {
     assert!(!view.finished);
     let status = view.status.as_ref().expect("the vault's sentence");
     assert!(status.refused && !status.sentence.is_empty());
-    assert!(view.data.is_some());
+    assert!(view.content.is_some());
     // The one that landed is taken; the one the vault refused is still picked.
     assert!(cell(&d, picker, &good).taken);
     assert_eq!(view.add_label, "Add 1");
@@ -244,9 +244,10 @@ fn adding_several_leaves_one_line_with_one_undo_on_the_album_beneath() {
         ("3 photos added to Portugal.".to_owned(), "Undo".to_owned())
     );
     let held = |d: &Driver| match &d.view(shelf).kind {
-        Some(wire::view_state::Kind::PhotosShelf(state)) => {
-            state.data.as_ref().map_or(0, |data| data.cells.len())
-        }
+        Some(wire::view_state::Kind::PhotosShelf(state)) => match &state.content {
+            Some(wire::photos_shelf_state::Content::Data(data)) => data.cells.len(),
+            None => 0,
+        },
         other => panic!("not a shelf: {other:?}"),
     };
     assert_eq!(held(&d), 3);

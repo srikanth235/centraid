@@ -141,11 +141,13 @@ message PhotosHomeChrome {
 message PhotosLibrary {
   // The read: loading, failed, refused, or ready (with a note when a refresh or a next page
   // failed over the photographs shown).
-  PageState page = 1;
-  // The grid is the loading state: the skeleton's rows, packed at the rung. Only while loading.
-  repeated PhotosPackedRow skeleton = 2;
+  // 1 and 2 were `loading` and `failure`: the read is `page` (#1185).
+  reserved 1, 2;
+  reserved "loading", "failure";
   // Set when the page is ready.
-  optional PhotosLibraryData data = 3;
+  oneof content {
+    PhotosLibraryData data = 3;
+  }
   PhotosGrain grain = 4;
   PhotosFilter filter = 5;
   // 0-3, XS to L.
@@ -153,6 +155,9 @@ message PhotosLibrary {
   // WHERE THE MEMBER IS, capture-local `YYYY-MM-DD`, so a grain switch lands on
   // the same stretch of time; empty is the top.
   string place_day = 7;
+  PageState page = 8;
+  // The grid is the loading state: the skeleton's rows, packed at the rung. Only while loading.
+  repeated PhotosPackedRow skeleton = 9;
 }
 
 message PhotosLibraryData {
@@ -247,9 +252,13 @@ message PhotosPeriod {
 // ---------------------------------------------------------------------------
 
 message PhotosCollections {
-  PageState page = 1;
+  // 1 and 2 were `loading` and `failure`: the read is `page` (#1185).
+  reserved 1, 2;
+  reserved "loading", "failure";
   // Set when the page is ready.
-  optional PhotosCollectionsData data = 2;
+  oneof content {
+    PhotosCollectionsData data = 3;
+  }
   // The sections the member folded.
   repeated string folded = 4;
   // "New album": the field's value and whether Create can run.
@@ -265,6 +274,7 @@ message PhotosCollections {
   string create_label = 10;
   // The delete confirm's way out: "Keep it".
   string keep_label = 11;
+  PageState page = 12;
 }
 
 message PhotosCollectionsData {
@@ -321,7 +331,9 @@ message PhotosCollectionCard {
 
 message PhotosSearchView {
   string query = 1;
-  PageState page = 3;
+  // 3 and 4 were `loading` and `failure`: the read is `page` (#1185).
+  reserved 3, 4;
+  reserved "loading", "failure";
   // What a ready page holds: the resting vocabulary, or the hits for the query.
   oneof content {
     PhotosSearchResting resting = 2;
@@ -330,6 +342,7 @@ message PhotosSearchView {
   // "Including results for “x”": set only for a current corrected answer.
   string corrected = 6;
   optional SearchAsk ask = 7;
+  PageState page = 8;
 }
 
 message PhotosSearchResting {

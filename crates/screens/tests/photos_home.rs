@@ -86,8 +86,8 @@ impl Rig {
 
     fn library(&self) -> &wire::PhotosLibraryData {
         let library = self.state().library.as_ref().expect("the library");
-        match &library.data {
-            Some(data) => data,
+        match &library.content {
+            Some(wire::photos_library::Content::Data(data)) => data,
             None => panic!("expected the library's data, found {:?}", library.page),
         }
     }
@@ -95,7 +95,10 @@ impl Rig {
     /// The library's page must be Empty (never ready data), and this is its sentence.
     fn library_empty(&self) -> &wire::EmptyState {
         let library = self.state().library.as_ref().expect("the library");
-        assert!(library.data.is_none(), "an empty library carries no data");
+        assert!(
+            library.content.is_none(),
+            "an empty library carries no data"
+        );
         match library.page.as_ref().and_then(|page| page.state.as_ref()) {
             Some(wire::page_state::State::Empty(empty)) => empty,
             other => panic!("expected the empty state, found {other:?}"),
@@ -117,8 +120,8 @@ impl Rig {
 
     fn collections(&self) -> &wire::PhotosCollectionsData {
         let collections = self.state().collections.as_ref().expect("collections");
-        match &collections.data {
-            Some(data) => data,
+        match &collections.content {
+            Some(wire::photos_collections::Content::Data(data)) => data,
             None => panic!("expected collections' data, found {:?}", collections.page),
         }
     }
@@ -137,7 +140,7 @@ impl Rig {
     fn tile_ids(&self) -> Vec<String> {
         // An empty library is the page's Empty state, which carries no tiles.
         let library = self.state().library.as_ref().expect("the library");
-        if library.data.is_none()
+        if library.content.is_none()
             && matches!(
                 library.page.as_ref().and_then(|page| page.state.as_ref()),
                 Some(wire::page_state::State::Empty(_))

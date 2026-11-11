@@ -235,7 +235,7 @@ pub fn fields(reminder: &wire::PhoneReminder) -> (serde_json::Map<String, Value>
     map.insert("url".into(), text(&reminder.url));
     // The flag is the task's star. A shell that cannot read it states nothing, so a star the
     // member gave the task is never answered with "the phone says not flagged".
-    if let Some(flagged) = reminder.flagged {
+    if let Some(flagged) = reminder.phone_flagged {
         map.insert("starred".into(), json!(flagged));
     }
     let done = reminder.completed && !reminder.completed_at.trim().is_empty();
@@ -478,7 +478,7 @@ mod tests {
     fn a_flag_is_stated_as_the_star_only_when_the_shell_could_read_it() {
         let stated = |flagged| {
             fields(&wire::PhoneReminder {
-                flagged,
+                phone_flagged: flagged,
                 ..reminder("A", "", "")
             })
             .0

@@ -171,8 +171,10 @@ impl Collections {
                 |denial| super::super::denied(locale, denial),
                 wire::EmptyState::default,
             )),
-            data: self.page.data().map(|albums| wire::PhotosCollectionsData {
-                sections: self.sections(locale, link, albums),
+            content: self.page.data().map(|albums| {
+                wire::photos_collections::Content::Data(wire::PhotosCollectionsData {
+                    sections: self.sections(locale, link, albums),
+                })
             }),
             folded: self.folded.clone(),
             new_album_name: self.new_album_name.clone(),

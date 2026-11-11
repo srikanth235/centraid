@@ -31,7 +31,7 @@ fn a_shelf_that_cannot_be_read_is_failed_and_never_empty() {
         panic!("a shelf");
     };
     assert!(failed(&state.page));
-    assert!(state.data.is_none());
+    assert!(state.content.is_none());
 }
 
 #[test]
@@ -41,7 +41,7 @@ fn places_that_cannot_be_read_are_failed_and_never_empty() {
         panic!("places");
     };
     assert!(failed(&state.page));
-    assert!(state.data.is_none());
+    assert!(state.content.is_none());
 }
 
 #[test]
@@ -51,7 +51,7 @@ fn a_picker_that_cannot_be_read_is_failed_and_never_empty() {
         panic!("a picker");
     };
     assert!(failed(&state.page));
-    assert!(state.data.is_none());
+    assert!(state.content.is_none());
 }
 
 #[test]
@@ -62,7 +62,7 @@ fn a_library_that_cannot_be_read_is_failed_and_never_an_empty_grid() {
     };
     let library = state.library.as_ref().expect("the library");
     assert!(failed(&library.page));
-    assert!(library.data.is_none());
+    assert!(library.content.is_none());
 }
 
 #[test]
@@ -76,7 +76,7 @@ fn collections_that_cannot_be_read_are_failed_and_never_empty() {
     };
     let collections = state.collections.as_ref().expect("collections");
     assert!(failed(&collections.page));
-    assert!(collections.data.is_none());
+    assert!(collections.content.is_none());
 }
 
 #[test]
@@ -86,5 +86,5 @@ fn a_photograph_that_cannot_be_read_is_failed_and_never_blank() {
         panic!("the lightbox");
     };
     assert!(failed(&state.page));
-    assert!(state.photo.is_none());
+    assert!(state.content.is_none());
 }

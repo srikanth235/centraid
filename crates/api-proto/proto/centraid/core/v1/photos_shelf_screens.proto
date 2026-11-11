@@ -24,9 +24,13 @@ message PhotosShelfState {
   // (an album's name, a place's phrase).
   string title = 1;
   PhotosShelfKind kind = 2;
-  PageState page = 3;
+  // 3 and 4 were `loading` and `failure`: the read is `page` (#1185).
+  reserved 3, 4;
+  reserved "loading", "failure";
   // Set when the page is ready.
-  optional PhotosShelfData data = 4;
+  oneof content {
+    PhotosShelfData data = 5;
+  }
   // Select mode, the picked set, the bar and the confirm over its destructive
   // verbs.
   PhotosSelection selection = 6;
@@ -58,6 +62,7 @@ message PhotosShelfState {
   PhotosShelfBar bar = 19;
   // The sheet's way out: "Keep them" over the trash, "Keep it" over an album.
   string prompt_cancel_label = 20;
+  PageState page = 21;
 
   enum Prompt {
     // No prompt is open.
@@ -234,12 +239,17 @@ message PhotosPickerState {
   bool add_enabled = 4;
   // "An album points to a photo where it lives."
   string refers_note = 5;
-  PageState page = 6;
+  // 6 and 7 were `loading` and `failure`: the read is `page` (#1185).
+  reserved 6, 7;
+  reserved "loading", "failure";
   // Set when the page is ready.
-  optional PhotosPickerData data = 7;
+  oneof content {
+    PhotosPickerData data = 8;
+  }
   optional StatusLine status = 9;
   // Every pick landed: the shell pops.
   bool finished = 10;
+  PageState page = 11;
 }
 
 message PhotosPickerEvent {
@@ -318,13 +328,18 @@ message PhotosPlacesState {
   Presentation presentation = 2;
   string cards_label = 3;
   string map_label = 4;
-  PageState page = 5;
+  // 5 and 6 were `loading` and `failure`: the read is `page` (#1185).
+  reserved 5, 6;
+  reserved "loading", "failure";
   // Set when the page is ready.
-  optional PhotosPlacesData data = 6;
+  oneof content {
+    PhotosPlacesData data = 7;
+  }
   // A refused rename, in its own slot.
   optional StatusLine status = 8;
   // The sheet that names a place.
   optional PhotosPlaceNameSheet name_sheet = 9;
+  PageState page = 10;
 
   enum Presentation {
     PRESENTATION_UNSPECIFIED = 0;

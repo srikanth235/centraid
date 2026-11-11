@@ -421,7 +421,9 @@ impl Screen for Places {
                         |denial| super::denied(locale, denial),
                         || Self::empty(locale),
                     )),
-                    data: page.data().map(|()| self.data(locale)),
+                    content: page.data().map(|()| {
+                        wire::photos_places_state::Content::Data(Box::new(self.data(locale)))
+                    }),
                     status: self.undo.status(),
                     name_sheet: self.sheet(locale),
                 },

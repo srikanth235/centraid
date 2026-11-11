@@ -22,8 +22,8 @@ fn open(d: &mut Driver, id: &str) -> u64 {
 }
 
 fn draft(v: &wire::ViewState) -> &wire::NotesEditorDraft {
-    match &editor_state(v).draft {
-        Some(draft) => draft,
+    match &editor_state(v).content {
+        Some(wire::notes_editor_state::Content::Draft(draft)) => draft,
         None => panic!("not a draft: {:?}", editor_state(v).page),
     }
 }
@@ -52,8 +52,8 @@ fn link(v: &wire::ViewState) -> &wire::NotesLinkSheet {
 }
 
 fn link_ids(v: &wire::ViewState) -> Vec<String> {
-    match &link(v).data {
-        Some(data) => data
+    match &link(v).content {
+        Some(wire::notes_link_sheet::Content::Data(data)) => data
             .domains
             .iter()
             .flat_map(|domain| domain.rows.iter().map(|row| row.id.clone()))
@@ -579,8 +579,8 @@ fn the_powerbox_reads_link_targets_grouped_by_domain() {
         }),
     );
     assert!(link_ids(d.view(i)).contains(&target));
-    match &link(d.view(i)).data {
-        Some(data) => {
+    match &link(d.view(i)).content {
+        Some(wire::notes_link_sheet::Content::Data(data)) => {
             let notes_group = data
                 .domains
                 .iter()
@@ -610,7 +610,7 @@ fn the_powerbox_reads_link_targets_grouped_by_domain() {
     match page_of(link(d.view(i)).page.as_ref()) {
         Some(wire::page_state::State::Empty(empty)) => {
             assert_eq!(empty.body, "Nothing matches that search.");
-            assert!(link(d.view(i)).data.is_none());
+            assert!(link(d.view(i)).content.is_none());
         }
         other => panic!("{other:?}"),
     }

@@ -650,7 +650,9 @@ impl Home {
             } else {
                 Vec::new()
             },
-            data: page.data().map(|()| self.library_data(locale, target)),
+            content: page.data().map(|()| {
+                wire::photos_library::Content::Data(Box::new(self.library_data(locale, target)))
+            }),
             grain: self.grain as i32,
             filter: self.filter as i32,
             rung,

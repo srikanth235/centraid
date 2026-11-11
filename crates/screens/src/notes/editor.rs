@@ -1368,8 +1368,10 @@ impl Editor {
             retry: words::retry(locale),
             loading_label: words::loading_links(locale),
             foot: words::powerbox_foot(locale),
-            data: sheet.page.data().map(|targets| wire::NotesLinkData {
-                domains: fold::link_domains(locale, targets),
+            content: sheet.page.data().map(|targets| {
+                wire::notes_link_sheet::Content::Data(wire::NotesLinkData {
+                    domains: fold::link_domains(locale, targets),
+                })
             }),
             page: Some(page),
         }
@@ -1539,10 +1541,12 @@ impl Screen for Editor {
         let mut state = wire::NotesEditorState {
             note_id: self.note_id.clone().unwrap_or_default(),
             page: Some(wired),
-            draft: draft.filter(|_| ready).map(|draft| wire::NotesEditorDraft {
-                title: draft.title.clone(),
-                body: draft.body.clone(),
-                pinned: self.pinned,
+            content: draft.filter(|_| ready).map(|draft| {
+                wire::notes_editor_state::Content::Draft(wire::NotesEditorDraft {
+                    title: draft.title.clone(),
+                    body: draft.body.clone(),
+                    pinned: self.pinned,
+                })
             }),
             chrome: Some(wire::NotesEditorChrome {
                 // "Cancel" only before the first keystroke of this visit; after
@@ -1806,7 +1810,9 @@ mod tests {
         let Some(wire::view_state::Kind::NotesEditor(state)) = state.kind else {
             panic!("editor state")
         };
-        assert!(matches!(state.draft, Some(ref draft) if draft.body == "only copy"));
+        assert!(
+            matches!(state.content, Some(wire::notes_editor_state::Content::Draft(ref draft)) if draft.body == "only copy")
+        );
         // The failed re-read is the page's note over the words, never the status line.
         let page = state.page.expect("page");
         assert!(page.state.is_none(), "the words stay ready");
@@ -1830,7 +1836,9 @@ mod tests {
             panic!("editor state")
         };
         assert!(state.autosave.expect("autosave").refused);
-        assert!(matches!(state.draft, Some(ref draft) if draft.body == "only copy"));
+        assert!(
+            matches!(state.content, Some(wire::notes_editor_state::Content::Draft(ref draft)) if draft.body == "only copy")
+        );
         core.fail_writes.set(false);
         send(&mut screen, E::Left(wire::Left {}));
         core.fail_reads.set(false);
@@ -2064,8 +2072,8 @@ mod tests {
     }
 
     fn body_of(state: &wire::NotesEditorState) -> String {
-        match &state.draft {
-            Some(draft) => draft.body.clone(),
+        match &state.content {
+            Some(wire::notes_editor_state::Content::Draft(draft)) => draft.body.clone(),
             None => panic!("no draft: {:?}", state.page),
         }
     }

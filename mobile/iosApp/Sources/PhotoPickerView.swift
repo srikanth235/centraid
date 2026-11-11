@@ -49,7 +49,7 @@ struct PhotoPickerView: View {
 
                 // A FAILED READ IS NOT AN EMPTY LIBRARY: the page says which of the five it is.
                 PageReadStateView(page: state.page, onRetry: { event { $0.refreshed = .init() } }) {
-                    if state.hasData {
+                    if state.content != nil {
                         let data = state.data
                         // TAKEN, NOT HIDDEN: a member hunting for the photograph
                         // they added last week finds it, and finds out why it

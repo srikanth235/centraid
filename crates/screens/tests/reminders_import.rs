@@ -330,7 +330,7 @@ fn every_field_lands_on_the_task_and_the_priority_and_rule_are_the_vaults() {
             due_time: "09:00".into(),
             tz: "Europe/Paris".into(),
             priority: 1,
-            flagged: Some(true),
+            phone_flagged: Some(true),
             rrule: "FREQ=MONTHLY;BYMONTHDAY=2".into(),
             alarm_minutes_before: Some(60),
             ..wire::PhoneReminder::default()
