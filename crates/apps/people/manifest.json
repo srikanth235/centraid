@@ -208,6 +208,11 @@
         "schema": "follow",
         "table": "contacts",
         "verbs": "act"
+      },
+      {
+        "schema": "follow",
+        "table": "stop",
+        "verbs": "act"
       }
     ]
   },
@@ -1522,7 +1527,7 @@
       "name": "follow-contacts",
       "verb": "import",
       "kind": "person",
-      "inverse": null,
+      "inverse": "stop-following",
       "sealed": [],
       "bulk": true,
       "command": "follow.contacts",
@@ -1596,6 +1601,50 @@
         },
         "required": ["origin", "records"],
         "type": "object"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "stop-following",
+      "verb": "detach",
+      "kind": "person",
+      "inverse": null,
+      "sealed": [],
+      "command": "follow.stop",
+      "phrasings": [
+        "stop reading my phone's contacts",
+        "disconnect the address book",
+        "stop following contacts"
+      ],
+      "description": "Stop following the phone's address book through follow.stop: the account's origin is retired and its people forget their source. Every person stays, an ordinary one from now on. It is the Undo of follow-contacts, and it asks first because following again needs the phone's own read.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "required": ["system", "ref"],
+        "additionalProperties": false,
+        "properties": {
+          "system": {
+            "type": "string",
+            "enum": ["contacts"]
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
       },
       "output": {
         "type": "object",

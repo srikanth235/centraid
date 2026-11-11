@@ -956,3 +956,62 @@ fn a_label_colour_is_taken_back_by_the_colour_it_replaced() {
     let (_, forward) = second.inverse().expect("and taken back again");
     assert_eq!(forward["color"], json!("petrol"));
 }
+
+impl World {
+    /// Whether the vault follows a phone store: the origin of a system and ref, if it holds one.
+    pub fn followed(&self, system: &str, reference: &str) -> bool {
+        self.sample
+            .handle
+            .with_vault(|vault| {
+                Ok(vault.read(|connection| {
+                    Ok(connection.query_row(
+                        "SELECT EXISTS (SELECT 1 FROM origin WHERE system = ?1 AND ref = ?2)",
+                        [system, reference],
+                        |row| row.get::<_, bool>(0),
+                    )?)
+                })?)
+            })
+            .expect("an origin count")
+    }
+}
+
+/// Connecting the phone's contacts is taken back by disconnecting the store (owner ruling): the
+/// store is no longer followed and the people the pass brought stay.
+#[test]
+fn following_the_contacts_is_taken_back_by_stopping_and_the_people_stay() {
+    let w = World::new();
+    let origin = json!({ "ref": "phone-contacts", "label": "Phone" });
+    let done = w.ok(
+        "people",
+        "follow-contacts",
+        &json!({ "origin": origin, "complete": true, "records": [
+            { "external_id": "c1", "fields": { "title": "Ada Lovelace" } }
+        ] }),
+    );
+    assert!(w.followed("contacts", "phone-contacts"));
+    let (undo, back) = done.inverse().expect("a connection is taken back");
+    assert_eq!(undo, "stop-following");
+    assert_eq!(
+        back,
+        json!({ "system": "contacts", "ref": "phone-contacts" })
+    );
+    let stopped = w.ok("people", &undo, &back);
+    assert_eq!(stopped.output()["stopped"], json!(true));
+    assert!(
+        !w.followed("contacts", "phone-contacts"),
+        "no longer followed"
+    );
+    let ada = w.sample.handle.with_vault(|vault| {
+        Ok(vault.read(|connection| {
+            Ok(connection.query_row(
+                "SELECT COUNT(*) FROM entity WHERE title = 'Ada Lovelace' AND deleted_at IS NULL",
+                [],
+                |row| row.get::<_, i64>(0),
+            )?)
+        })?)
+    });
+    assert_eq!(ada.expect("a count"), 1, "the followed person remains");
+    // Stopping what is not followed is nothing, and the action answers so.
+    let again = w.ok("people", "stop-following", &back);
+    assert_eq!(again.output()["stopped"], json!(false));
+}

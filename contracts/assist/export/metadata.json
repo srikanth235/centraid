@@ -3907,7 +3907,7 @@
         "bulk": true,
         "chat": "card",
         "command": "follow.contacts",
-        "inverse": null,
+        "inverse": "stop-following",
         "kind": "person",
         "phrasings": [
           "import my phone's contacts",
@@ -3917,6 +3917,24 @@
         "qualifier": null,
         "sealed": [],
         "verb": "import"
+      },
+      {
+        "action": "stop-following",
+        "also": [],
+        "app": "people",
+        "bulk": false,
+        "chat": "card",
+        "command": "follow.stop",
+        "inverse": null,
+        "kind": "person",
+        "phrasings": [
+          "stop reading my phone's contacts",
+          "disconnect the address book",
+          "stop following contacts"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "detach"
       },
       {
         "action": "import-vcf",

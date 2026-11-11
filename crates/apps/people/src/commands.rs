@@ -1,4 +1,4 @@
-//! THE THIRTY-ONE ACTIONS, as command invocations.
+//! THE THIRTY-TWO ACTIONS, as command invocations.
 //!
 //! Every People action is a thin invocation of ONE typed vault command: the
 //! projection lives in the command, not the app, so this module is a table, not
@@ -111,8 +111,8 @@ pub struct CommandsUnavailable {
 pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
-/// THE TABLE. Thirty-one actions, in the manifest's own order.
-pub const ACTIONS: [ActionRow; 31] = [
+/// THE TABLE. Thirty-two actions, in the manifest's own order.
+pub const ACTIONS: [ActionRow; 32] = [
     act("add-person", "person.add"),
     act("edit-person", "person.edit"),
     act("set-cadence", "person.edit"),
@@ -142,6 +142,9 @@ pub const ACTIONS: [ActionRow; 31] = [
     confirmed("delete-contact-channel", "person.remove_contact_point"),
     confirmed("merge-people", "person.merge"),
     act("follow-contacts", "follow.contacts"),
+    // The Undo of the pass above (owner ruling: connecting is undone by disconnecting). No People
+    // screen offers it; chat does, and asks first because following again needs the phone's read.
+    confirmed("stop-following", "follow.stop"),
     // Item 20 (#1173): the More page's Import and Export of vCards. An import is not taken back by
     // an action (it adds people the member can trash and fills blanks), so it asks first: the
     // Import screen is choose, preview, then the member's tap, and only the tap writes. An export
@@ -207,7 +210,7 @@ mod tests {
 
     #[test]
     fn every_action_invokes_one_command_and_the_person_verbs_are_the_persons_own() {
-        assert_eq!(ACTIONS.len(), 31);
+        assert_eq!(ACTIONS.len(), 32);
         assert_eq!(
             commands("person."),
             [
@@ -263,6 +266,7 @@ mod tests {
                 "delete-list",
                 "delete-contact-channel",
                 "merge-people",
+                "stop-following",
                 "import-vcf"
             ]
         );

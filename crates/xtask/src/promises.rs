@@ -155,7 +155,7 @@ pub const REGISTER: &[Row] = &[
     owed("locker", Promise::Undo, UNDO_OWED),
     owed("money", Promise::Undo, UNDO_OWED),
     kept("notes", Promise::Undo, "crates/core/src/act/inverse.rs"),
-    owed("people", Promise::Undo, PEOPLE_UNDO_OWED),
+    kept("people", Promise::Undo, "crates/core/src/act/inverse.rs"),
     kept("photos", Promise::Undo, "crates/core/src/act/inverse.rs"),
     kept("reminders", Promise::Undo, "crates/core/src/act/inverse.rs"),
     // History (#1185, Phase 1): People is the reference adoption; the checker's gaps are the
@@ -209,8 +209,6 @@ pub const REGISTER: &[Row] = &[
 ];
 
 const CALENDAR_UNDO_OWED: &str = "two actions left (#1185): follow-calendar is a pass of the phone's store, not a member's act, so neither an inverse nor a question fits it; create-calendar has no inverse because a calendar is deleted, never trashed";
-
-const PEOPLE_UNDO_OWED: &str = "one action left (#1185): follow-contacts is undone by disconnecting the store (owner ruling), and People declares no action that stops following contacts; Health's `stop-following` runs follow.stop for any system, so adding People's is an owner's call about a new action";
 
 const UNDO_OWED: &str = "actions neither in the core's inverse table nor confirmed, or the manifest and the table disagree (#1185)";
 

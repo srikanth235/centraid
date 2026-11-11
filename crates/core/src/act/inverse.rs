@@ -75,6 +75,11 @@ pub(crate) enum Input {
     /// A relationship made between two people, taken back by `remove-relationship` naming the
     /// same two people and the same label.
     Related,
+    /// A pass over a phone's store, taken back by disconnecting it: the shell's owner ruling that
+    /// connecting a store is undone by disconnecting it, and the rows the pass brought stay. The
+    /// inverse is the app's `stop-following` for the named system with the pass's own
+    /// `origin.ref`; a call that names no origin (the health follower's day totals) offers none.
+    Stops(&'static str),
 }
 
 /// The shell action that puts a record back to a named earlier version. Any app's act can run it.
@@ -216,6 +221,7 @@ const PEOPLE: &[Row] = &[
     ("rename-list", "rename-list", Input::Earlier),
     ("add-journal-entry", "undo-create", Input::CreatedAs("entry_id")),
     ("save-contact-channel", "save-contact-channel", Input::Earlier),
+    ("follow-contacts", "stop-following", Input::Stops("contacts")),
 ];
 const PHOTOS: &[Row] = &[
     ("upload", "delete-photo", Input::Created),
@@ -288,6 +294,12 @@ pub(crate) fn of(
             back.insert("to".to_owned(), output.get("related_id")?.clone());
             back.insert("label".to_owned(), input.get("kind")?.clone());
             back
+        }
+        Input::Stops(system) => {
+            let mut stop = Map::new();
+            stop.insert("system".to_owned(), Value::String((*system).to_owned()));
+            stop.insert("ref".to_owned(), input.get("origin")?.get("ref")?.clone());
+            stop
         }
         Input::Replaced => {
             let replaced = output.get("replaced")?.as_object()?;
@@ -389,6 +401,17 @@ mod tests {
                             );
                         }
                     }
+                    Input::Stops(_) => {
+                        for name in ["system", "ref"] {
+                            assert!(
+                                back.input["properties"]
+                                    .as_object()
+                                    .is_some_and(|offered| offered.contains_key(name)),
+                                "{}.{inverse} does not take `{name}`",
+                                app.id
+                            );
+                        }
+                    }
                     Input::CreatedAs(_) | Input::CreatedElseEarlier(_) => {
                         unreachable!("{}.{action}: these are the shell's undo-create", app.id)
                     }
@@ -456,10 +479,8 @@ mod tests {
     /// takes its row to Kept.
     const OWED: &[&str] = &["calendar", "health", "locker", "money"];
 
-    /// Single actions still owed in an app whose other actions are held to the check below:
-    /// People's `follow-contacts` is undone by disconnecting the store (owner ruling), and People
-    /// has no action that stops following contacts yet (#1185).
-    const OWED_ACTIONS: &[(&str, &str)] = &[("people", "follow-contacts")];
+    /// Single actions still owed in an app whose other actions are held to the check below.
+    const OWED_ACTIONS: &[(&str, &str)] = &[];
 
     /// EVERY ACTION IS TAKEN BACK, ASKS FIRST, OR WRITES NOTHING, AND THE TWO LISTS ARE ONE.
     ///

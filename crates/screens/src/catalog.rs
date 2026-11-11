@@ -4541,6 +4541,27 @@ pub mod act {
             }
         }
 
+        /// Stop following the phone's address book through follow.stop: the account's origin is retired and its people forget their source. Every person stays, an ordinary one from now on. It is the Undo of follow-contacts, and it asks first because following again needs the phone's own read.
+        #[derive(Clone, Debug, Default)]
+        pub struct StopFollowing {
+            pub r#ref: String,
+        }
+        impl StopFollowing {
+            pub const NAME: &str = "stop-following";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("ref".to_owned(), text(self.r#ref));
+                map.insert("system".to_owned(), text("contacts"));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<StopFollowing> for wire::ActRequest {
+            fn from(value: StopFollowing) -> Self {
+                value.request()
+            }
+        }
+
         /// Read vCards as people through person.import_vcf: a card naming someone already in the vault is a proposal to merge (it fills blanks and adds missing points, replacing nothing); with dry_run it only says what would happen.
         #[derive(Clone, Debug, Default)]
         pub struct ImportVcf {
