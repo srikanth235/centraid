@@ -17,9 +17,13 @@ struct AgendaAttachmentsView: View {
     let headIdentifier: String
     let open: (Centraid_Core_V1_Route) -> Void
     let send: (Centraid_Core_V1_AgendaAttachmentEvent) -> Void
+    /// The page margin around the section; one placed inside a column that pads itself turns it off.
+    var padded = true
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.appAccent) private var accent
+
+    private var margin: CGFloat { padded ? CentraidGeometry.pageMargin : 0 }
 
     private func event(_ build: (inout Centraid_Core_V1_AgendaAttachmentEvent) -> Void) {
         var event = Centraid_Core_V1_AgendaAttachmentEvent()
@@ -35,7 +39,7 @@ struct AgendaAttachmentsView: View {
                 Text(section.emptyLabel)
                     .centraidType("body")
                     .foregroundStyle(Theme.color("textSoft", scheme))
-                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                    .padding(.horizontal, margin)
                     .padding(.vertical, 8)
             }
             // THE BOARD'S CARD: the attachments in one rounded plate, a hairline between.
@@ -46,13 +50,13 @@ struct AgendaAttachmentsView: View {
                     }
                 }
                 .background(Surface.card, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
-                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.horizontal, margin)
             }
             if section.hasMore_p, !section.moreLabel.isEmpty {
                 KitLink(label: section.moreLabel, identifier: "\(idPrefix)-more") {
                     event { $0.showMore = .init() }
                 }
-                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.horizontal, margin)
             }
             HStack(spacing: 8) {
                 addButton(
@@ -71,13 +75,13 @@ struct AgendaAttachmentsView: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.horizontal, margin)
             .padding(.top, 12)
             if section.busy, !section.busyLabel.isEmpty {
                 Text(section.busyLabel)
                     .centraidType("annotLabel")
                     .foregroundStyle(Theme.color("textFaint", scheme))
-                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                    .padding(.horizontal, margin)
             }
             if section.hasStatus, !section.status.sentence.isEmpty {
                 HStack(spacing: 8) {
@@ -92,7 +96,7 @@ struct AgendaAttachmentsView: View {
                         }
                     }
                 }
-                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.horizontal, margin)
                 .padding(.top, 8)
             }
         }

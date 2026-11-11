@@ -813,7 +813,18 @@ private fun InfoCards(
             )
         }
 
-        // LINKED TO (#1185): the kit's section, after who is in it; Rust makes every word and row.
+        // ATTACHMENTS (#1185): the kit's section, after who is in it; Rust makes every word and row.
+        photo.attachments?.let { section ->
+            dev.centraid.android.screens.agenda.AgendaAttachmentsView(
+                section = section,
+                prefix = "photos-lightbox",
+                onEvent = { onEvent(PhotosLightboxEvent(attachment = it)) },
+                onOpen = onOpen,
+                padded = false,
+            )
+        }
+
+        // LINKED TO (#1185): the kit's section, after the attachments; Rust makes every word and row.
         photo.links?.let { section ->
             dev.centraid.android.kit.LinkSectionView(
                 section,

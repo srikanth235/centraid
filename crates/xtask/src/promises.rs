@@ -491,7 +491,11 @@ pub const REGISTER: &[Row] = &[
         Promise::Attach,
         "crates/screens/src/people/person/mod.rs",
     ),
-    owed("photos", Promise::Attach, ATTACH_OWED),
+    kept(
+        "photos",
+        Promise::Attach,
+        "crates/screens/src/photos/lightbox.rs",
+    ),
     kept(
         "reminders",
         Promise::Attach,

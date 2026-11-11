@@ -52,6 +52,7 @@ use super::{editor, fetch, media, routes};
 use crate::catalog::{act, load};
 use crate::field::Field;
 use crate::kit::act as kit_act;
+use crate::kit::attachments::Attachments;
 use crate::kit::civil::HourCycle;
 use crate::kit::earlier;
 use crate::kit::links::{self, Kind, Links, Outcome};
@@ -103,6 +104,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         every: Links::new(&Kind::ALL).for_entity(&args.photo_id),
         linked: None,
         linked_unread: false,
+        attachments: Attachments::of("photos", &args.photo_id),
         earlier: earlier::Foot::default(),
         rev: None,
         stale: None,
@@ -199,6 +201,8 @@ struct Lightbox {
     linked: Option<Vec<wire::LinkedItem>>,
     /// The read of `linked` was refused or failed: the status line says so, no empty section.
     linked_unread: bool,
+    /// The photos and files on the photograph (#1185): the kit's section, read with it.
+    attachments: Attachments,
     /// The entry to the photograph's earlier versions, read with it (#1185).
     earlier: earlier::Foot,
     /// The photograph's revision when the page was last read: what a caption names as the one it
@@ -274,6 +278,9 @@ impl Lightbox {
         }
         self.earlier = self.read_foot(ctx);
         self.read_linked(ctx);
+        if self.detail().is_some_and(|detail| !detail.trashed) {
+            self.attachments.reload(ctx);
+        }
         self.locate(ctx);
         self.fill_film(ctx);
         self.camera_effects()
@@ -1043,6 +1050,7 @@ impl Lightbox {
                 }
                 section
             }),
+            attachments: (!detail.trashed).then(|| self.attachments.view(locale, units)),
             links: self.linked.as_ref().map(|linked| {
                 self.every.section(
                     locale,
@@ -1328,6 +1336,12 @@ impl Screen for Lightbox {
                         return self.checked(&checked, locale);
                     }
                 }
+                // The shell's answer to a pick: the attachments' (an add under way).
+                if let Some(outcome) = &result.outcome
+                    && let Some(effects) = self.attachments.result(ctx, outcome)
+                {
+                    return effects;
+                }
                 return self.effect_result(&result, ctx);
             }
             Some(E::StatusActed(_)) => {
@@ -1390,6 +1404,7 @@ impl Screen for Lightbox {
                     K::AlbumChoice(album) => self.album_event(&album, ctx),
                     K::People(link) => self.people_event(&link, ctx),
                     K::Link(link) => self.link_event(&link, ctx),
+                    K::Attachment(attachment) => return self.attachments.event(ctx, attachment),
                     K::Share(chosen) => {
                         self.sheet = Sheet::None;
                         let precision =

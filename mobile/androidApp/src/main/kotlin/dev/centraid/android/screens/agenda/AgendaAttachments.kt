@@ -55,23 +55,26 @@ internal fun AgendaAttachmentsView(
     prefix: String,
     onEvent: (AgendaAttachmentEvent) -> Unit,
     onOpen: (Route) -> Unit,
+    padded: Boolean = true,
 ) {
+    // The page margin around the section; one placed inside a column that pads itself turns it off.
+    val gutter = if (padded) KitGeometry.GUTTER else 0.dp
     Column(Modifier.fillMaxWidth().testTag("$prefix-attachments")) {
         Text(
             section.heading,
             style = centraidType("eyebrow"),
             color = centraidColor("textSoft"),
-            modifier = Modifier.padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, top = 16.dp, bottom = 6.dp).semantics { heading() },
+            modifier = Modifier.padding(start = gutter, end = gutter, top = 16.dp, bottom = 6.dp).semantics { heading() },
         )
         if (section.items.isEmpty() && section.empty_label.isNotEmpty()) {
-            Text(section.empty_label, style = centraidType("body"), color = centraidColor("textFaint"), modifier = Modifier.padding(horizontal = KitGeometry.GUTTER))
+            Text(section.empty_label, style = centraidType("body"), color = centraidColor("textFaint"), modifier = Modifier.padding(horizontal = gutter))
         }
         // THE BOARD'S CARD: the attachments in one rounded plate.
         if (section.items.isNotEmpty()) {
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = KitGeometry.GUTTER)
+                    .padding(horizontal = gutter)
                     .clip(RoundedCornerShape(CentraidScale.cardRadius.dp))
                     .background(Surface.card),
             ) {
@@ -82,13 +85,13 @@ internal fun AgendaAttachmentsView(
             KitLink(
                 label = section.more_label,
                 onClick = { onEvent(AgendaAttachmentEvent(show_more = AgendaAttachmentEvent.ShowMore())) },
-                modifier = Modifier.testTag("$prefix-attachment-more").padding(horizontal = KitGeometry.GUTTER / 2),
+                modifier = Modifier.testTag("$prefix-attachment-more").padding(horizontal = gutter / 2),
             )
         }
         if (section.busy && section.busy_label.isNotEmpty()) {
-            Text(section.busy_label, style = centraidType("annotLabel"), color = centraidColor("textSoft"), modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp))
+            Text(section.busy_label, style = centraidType("annotLabel"), color = centraidColor("textSoft"), modifier = Modifier.padding(horizontal = gutter, vertical = 4.dp))
         }
-        Row(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = gutter, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AddVerb(section.add_photo_label, section.add_photo_icon_key, "$prefix-attachment-add-photo", !section.busy) {
                 onEvent(AgendaAttachmentEvent(add_photo = AgendaAttachmentEvent.AddPhoto()))
             }

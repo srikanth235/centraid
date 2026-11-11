@@ -1625,6 +1625,120 @@ fn a_photo_in_the_trash_has_no_linked_section() {
     );
 }
 
+// -----------------------------------------------------------------------------
+// Attachments (#1185): the photos and files on one photograph, the kit's section
+// -----------------------------------------------------------------------------
+
+fn attachments_of(d: &Driver, at: u64) -> wire::AgendaAttachmentsSection {
+    photo_of(&view(d, at))
+        .attachments
+        .clone()
+        .expect("an attachments section")
+}
+
+fn on_attachments(d: &mut Driver, at: u64, kind: wire::agenda_attachment_event::Kind) {
+    send(
+        d,
+        at,
+        ev::Kind::Attachment(wire::AgendaAttachmentEvent { kind: Some(kind) }),
+    );
+}
+
+/// Answer the oldest effect the lightbox asked, whatever other screens have pending.
+fn answer_lightbox(d: &mut Driver, instance: u64, outcome: wire::effect_result::Outcome) {
+    let at = d
+        .effects
+        .iter()
+        .position(|request| request.instance == instance)
+        .expect("the lightbox asked for an effect");
+    let request = d.effects.remove(at);
+    d.send(
+        instance,
+        E::EffectResult(wire::EffectResult {
+            effect_id: request.effect_id,
+            outcome: Some(outcome),
+        }),
+    );
+}
+
+#[test]
+fn a_photo_with_nothing_attached_says_so_and_offers_both_adds() {
+    let mut d = driver();
+    let id = photo(&d, Shot::new("lb-attach-empty"));
+    let at = open(&mut d, &id, std::slice::from_ref(&id), "");
+    let section = attachments_of(&d, at);
+    assert_eq!(section.heading, "Attachments");
+    assert!(section.items.is_empty());
+    assert_eq!(section.empty_label, "Nothing attached yet.");
+    assert_eq!(section.add_photo_label, "Add photo");
+    assert_eq!(section.add_file_label, "Add file");
+}
+
+#[test]
+fn add_file_files_it_in_docs_and_attaches_it_to_the_photo_and_remove_detaches_only_the_edge() {
+    use wire::agenda_attachment_event as ae;
+    use wire::effect_result::Outcome as O;
+    let mut d = driver();
+    let id = photo(&d, Shot::new("lb-attach-file"));
+    let at = open(&mut d, &id, std::slice::from_ref(&id), "");
+    on_attachments(&mut d, at, ae::Kind::AddFile(Default::default()));
+    assert!(attachments_of(&d, at).busy, "the pick is under way");
+    answer_lightbox(
+        &mut d,
+        at,
+        O::FilePicked(wire::FilePicked {
+            blob: "b".repeat(64),
+            byte_size: 2_400_000,
+            name: "Receipt.pdf".to_owned(),
+            media_type: String::new(),
+        }),
+    );
+    let section = attachments_of(&d, at);
+    assert_eq!(section.items.len(), 1, "{:?}", section.status);
+    let tile = &section.items[0];
+    assert_eq!(tile.kind, "document");
+    assert_eq!(tile.title, "Receipt.pdf");
+    let attached = tile.attachment_id.clone();
+
+    on_attachments(
+        &mut d,
+        at,
+        ae::Kind::RemoveAsked(ae::RemoveAsked {
+            attachment_id: attached,
+        }),
+    );
+    let confirm = attachments_of(&d, at).remove_confirm.expect("a confirm");
+    assert_eq!(confirm.body, "It comes off here. The file stays in Docs.");
+    on_attachments(&mut d, at, ae::Kind::RemoveConfirmed(Default::default()));
+    assert!(attachments_of(&d, at).items.is_empty());
+}
+
+#[test]
+fn a_photo_in_the_trash_has_no_attachments_section() {
+    let mut d = driver();
+    let id = photo(&d, Shot::new("lb-attach-trash"));
+    let at = open(&mut d, &id, std::slice::from_ref(&id), "");
+    assert!(photo_of(&view(&d, at)).attachments.is_some());
+    let response = d.act(
+        act::photos::DeletePhoto {
+            photo_id: id.clone(),
+        }
+        .request()
+        .keyed(format!("lb:{}", kit_act::fresh())),
+    );
+    assert_eq!(
+        response.status,
+        wire::ActStatus::Executed as i32,
+        "{}",
+        response.reason
+    );
+    d.send(at, E::DataChanged(wire::DataChanged::default()));
+    assert!(
+        photo_of(&view(&d, at)).attachments.is_none(),
+        "no section on a photograph in the trash"
+    );
+}
+
 fn answer_check(d: &mut Driver, at: u64, outcome: wire::owner_checked::Outcome) {
     d.send(
         at,

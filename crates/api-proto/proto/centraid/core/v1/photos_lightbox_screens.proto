@@ -9,6 +9,7 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
+import "centraid/core/v1/agenda_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/photos_screens.proto";
 import "centraid/core/v1/route.proto";
@@ -152,6 +153,11 @@ message PhotosLightboxPhoto {
   // was not read, and on a photograph in the trash. Its events go back as
   // `PhotosLightboxEvent.link`.
   optional LinkSection links = 29;
+  // The attachments (#1185): the photos and files on this photograph, with Add photo and Add file.
+  // The kit's shared section (`AgendaAttachmentsSection`), after "People in this photo" and before
+  // "Linked to", on a photograph that is not in the trash. Its events go back as
+  // `PhotosLightboxEvent.attachment`.
+  AgendaAttachmentsSection attachments = 30;
 }
 
 message PhotosLightboxFact {
@@ -298,6 +304,8 @@ message PhotosLightboxEvent {
     LinkEvent people = 17;
     // The "Linked to" section and its picker (#1185): the kit's `LinkEvent`.
     LinkEvent link = 19;
+    // The attachments section's events (#1185): the kit's `AgendaAttachmentEvent`.
+    AgendaAttachmentEvent attachment = 20;
     // The status line's Undo after Move to trash: restores the photograph.
     StatusActed status_acted = 18;
   }

@@ -734,7 +734,19 @@ private struct PhotosLightboxInfo: View {
                     LinkSectionView(section: photo.people, send: { link in send(.people(link)) }, open: open, padded: false)
                 }
 
-                // LINKED TO (#1185): the kit's section, after who is in it; Rust makes every word and row.
+                // ATTACHMENTS (#1185): the kit's section, after who is in it; Rust makes every word and row.
+                if photo.hasAttachments {
+                    AgendaAttachmentsView(
+                        section: photo.attachments,
+                        idPrefix: "photos-lightbox-attachment",
+                        headIdentifier: "photos-lightbox-attachments",
+                        open: open,
+                        send: { attachment in send(.attachment(attachment)) },
+                        padded: false
+                    )
+                }
+
+                // LINKED TO (#1185): the kit's section, after the attachments; Rust makes every word and row.
                 if photo.hasLinks {
                     LinkSectionView(section: photo.links, send: { link in send(.link(link)) }, open: open, padded: false)
                 }
