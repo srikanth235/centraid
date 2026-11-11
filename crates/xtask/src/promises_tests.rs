@@ -584,7 +584,15 @@ fn reminders_answer_for_the_agenda_and_the_schedule_kit() {
         "fn go() { kit_act::act(ctx, request, &key); }\n",
     );
     let folders = undo_folders("reminders");
-    assert_eq!(folders, ["reminders", "agenda", "kit/schedule"]);
+    assert_eq!(
+        folders,
+        [
+            "reminders",
+            "agenda",
+            "kit/schedule",
+            "imports/reminders.rs"
+        ]
+    );
     let gaps = direct_writes(&root, "reminders").join("\n");
     assert!(
         gaps.contains("crates/screens/src/kit/schedule/ops.rs: (C)"),
@@ -2107,4 +2115,47 @@ fn an_owed_stale_save_row_prints_each_gap_with_its_file() {
         "{:?}",
         report.details
     );
+}
+
+#[test]
+fn an_import_service_that_writes_is_read_by_rule_c_and_a_new_one_cannot_slip_past() {
+    let root = undo_tree("undo-imports", &UNDO_APPS);
+    // An unmarked write in a listed import service is its app's gap.
+    write(
+        &root,
+        "crates/screens/src/imports/reminders.rs",
+        "fn run() { kit_act::act(ctx, request, &key); }\n",
+    );
+    let gaps = direct_writes(&root, "reminders").join("\n");
+    assert!(
+        gaps.contains("crates/screens/src/imports/reminders.rs: (C)"),
+        "{gaps}"
+    );
+    // The same call marked with its reason is exempt.
+    write(
+        &root,
+        "crates/screens/src/imports/reminders.rs",
+        "// undo-exempt: a follow pass runs unseen; its Undo is Stop reading.\nfn run() { kit_act::act(ctx, request, &key); }\n",
+    );
+    assert!(direct_writes(&root, "reminders").is_empty());
+    // A file of `imports/` that writes and no app answers for fails the guard, so a new import
+    // service is not missed.
+    assert!(unowned_import_writes(&root).is_empty());
+    write(
+        &root,
+        "crates/screens/src/imports/contacts_extra.rs",
+        "fn run() { kit_act::act(ctx, request, &key); }\n",
+    );
+    let unowned = unowned_import_writes(&root).join("\n");
+    assert!(
+        unowned.contains("imports/contacts_extra.rs: (C) writes straight to the door"),
+        "{unowned}"
+    );
+    // A file that does not write is nobody's business.
+    write(
+        &root,
+        "crates/screens/src/imports/contacts_extra.rs",
+        "fn run() { let _ = 1; }\n",
+    );
+    assert!(unowned_import_writes(&root).is_empty());
 }

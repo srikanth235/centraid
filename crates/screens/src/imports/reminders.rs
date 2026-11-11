@@ -328,6 +328,7 @@ fn list_for(
     // Nearest of the eight list colours by hue: a red list is raspberry, a green one petrol.
     let color = list_color(title, &reminder.list_color).map_or(Field::Keep, Field::Is);
     let key = kit_act::key(&["import-reminder-list", title], kit_act::fresh());
+    // undo-exempt: the list a follow pass makes for its reminders; Stop reading is the follow's Undo, and the list goes to the trash like any.
     let made = kit_act::act(
         ctx,
         act::reminders::CreateProject {
@@ -379,6 +380,7 @@ pub fn run(ctx: &Ctx, reminders: &[wire::PhoneReminder], include_completed: bool
             since: None,
         };
         let key = kit_act::key(&["follow-reminders", &reference], kit_act::fresh());
+        // undo-exempt: a Reminders follow pass has no status line of its own (the import line says what it did); its Undo is Stop reading (`stop-following`), which asks first.
         let settled = kit_act::act(ctx, request, &key);
         if !settled.committed {
             outcome.refused += u32::try_from(group.len()).unwrap_or(u32::MAX);

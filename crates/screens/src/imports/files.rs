@@ -388,6 +388,7 @@ impl Files {
             complete: Some(plan.whole),
         };
         let key = kit_act::key(&["follow-files", &plan.origin], kit_act::fresh());
+        // undo-exempt: a folder follow pass runs unseen and has no status line; its Undo is Stop reading (`stop-following`) from the Followed folders sheet.
         let told = kit_act::act(ctx, request, &key);
         if told.committed {
             let output: Value = serde_json::from_slice(&told.output).unwrap_or(Value::Null);
@@ -433,6 +434,7 @@ impl Files {
             });
         let known = self.held.iter().any(|held| held.phone_origin == origin);
         let tell = |fills: Option<&str>| {
+            // undo-exempt: telling the vault which folder this phone follows is part of the follow; its Undo is Stop reading, which asks first.
             kit_act::act(
                 ctx,
                 act::shell::FollowFiles {
@@ -454,6 +456,7 @@ impl Files {
                 let fills = if known {
                     None
                 } else {
+                    // undo-exempt: the Docs folder a follow fills is made with the follow; Stop reading is the follow's Undo, and the folder goes to the trash like any.
                     let made = kit_act::act(
                         ctx,
                         act::docs::CreateFolder {
@@ -487,6 +490,7 @@ impl Files {
     /// The member stopped following: the sources are forgotten and the origin retired. Every
     /// document stays.
     fn stop(&mut self, ctx: &Ctx, origin: &str) {
+        // undo-exempt: Stop reading asks first and is itself the Undo of a follow.
         let stopped = kit_act::act(
             ctx,
             act::shell::StopFollowingFiles {

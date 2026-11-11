@@ -707,6 +707,9 @@ pub(crate) fn check(root: &Path, register: &[Row]) -> RuleReport {
         }
     }
 
+    // Rule C's guard: an import service that writes is an app's, so it is read.
+    findings.extend(unowned_import_writes(root));
+
     let mut kept_count = 0;
     let mut owed_count = 0;
     for row in register {
@@ -1165,7 +1168,7 @@ fn core_inverses(root: &Path, app: &str) -> Option<BTreeMap<String, String>> {
 /// Reminders and Calendar share the agenda's notification service and the schedule kit, so each
 /// answers for them; the kit's own doors (`kit/undo.rs`, `kit/act.rs`) are not an app's.
 fn undo_folders(app: &str) -> Vec<&'static str> {
-    match app {
+    let mut folders = match app {
         "calendar" => vec!["calendar", "agenda", "kit/schedule"],
         "reminders" => vec!["reminders", "agenda", "kit/schedule"],
         "docs" => vec!["docs"],
@@ -1176,7 +1179,59 @@ fn undo_folders(app: &str) -> Vec<&'static str> {
         "people" => vec!["people"],
         "photos" => vec!["photos"],
         _ => Vec::new(),
+    };
+    // THE IMPORT SERVICES write for an app too (`imports/`): each answers for its app.
+    folders.extend(
+        IMPORT_WRITERS
+            .iter()
+            .filter(|(_, owner)| *owner == app)
+            .map(|(file, _)| *file),
+    );
+    folders
+}
+
+/// The files of `crates/screens/src/imports/` that write to the vault, and the app each answers
+/// for (rule C reads them as part of that app's screens). A file there that writes and is not
+/// listed fails [`unowned_import_writes`], so a new import service cannot slip past the rule.
+pub const IMPORT_WRITERS: &[(&str, &str)] = &[
+    ("imports/camera_roll.rs", "photos"),
+    ("imports/files.rs", "docs"),
+    ("imports/reminders.rs", "reminders"),
+];
+
+/// The files of `imports/` that call the write door and no app answers for (rule C's guard that a
+/// place is not missed): each as `<file>: (C) ...`.
+fn unowned_import_writes(root: &Path) -> Vec<String> {
+    let dir = root.join("crates/screens/src/imports");
+    let mut gaps = Vec::new();
+    for file in source_files(&dir, "rs") {
+        let listed_as = format!(
+            "imports/{}",
+            file.file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default()
+        );
+        if IMPORT_WRITERS
+            .iter()
+            .any(|(listed, _)| *listed == listed_as)
+        {
+            continue;
+        }
+        let Ok(text) = fs::read_to_string(&file) else {
+            continue;
+        };
+        let live = text.split("#[cfg(test)]").next().unwrap_or_default();
+        if live.lines().any(|line| {
+            !line.trim_start().starts_with("//")
+                && DIRECT_WRITES.iter().any(|call| line.contains(call))
+        }) {
+            gaps.push(format!(
+                "{}: (C) writes straight to the door and no app answers for it; list it in IMPORT_WRITERS (promises.rs) so rule C reads it",
+                relative(root, &file)
+            ));
+        }
     }
+    gaps
 }
 
 /// What a direct write looks like: `kit_act::act(`, `kit::act::act(`, `act::act(` and the
@@ -1193,7 +1248,13 @@ fn direct_writes(root: &Path, app: &str) -> Vec<String> {
     let mut gaps = Vec::new();
     for folder in undo_folders(app) {
         let dir = root.join(format!("crates/screens/src/{folder}"));
-        for file in source_files(&dir, "rs") {
+        // An entry is a folder, or one file (an import service).
+        let files = if folder.ends_with(".rs") {
+            vec![dir]
+        } else {
+            source_files(&dir, "rs")
+        };
+        for file in files {
             if file.file_name().is_some_and(|name| name == "tests.rs")
                 || file.components().any(|part| part.as_os_str() == "tests")
             {

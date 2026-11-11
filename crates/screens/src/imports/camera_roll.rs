@@ -693,6 +693,7 @@ impl Roll {
             source.as_deref(),
         );
         let key = kit_act::key(&["add-photo", &staged.content_hash], kit_act::fresh());
+        // undo-exempt: a camera-roll pass runs unseen and has no status line; the photographs it brings in are the library's own, taken out one at a time with Move to trash.
         let response = ctx.act(&wire::ActRequest::from(request).keyed(key));
         let added = match response {
             Ok(response) if response.status == wire::ActStatus::Executed as i32 => {
