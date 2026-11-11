@@ -65,6 +65,10 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         undo: Undo::default(),
         dismissed: Vec::new(),
         links: Links::new(&[Kind::Person]),
+        // A transaction may link to another transaction; the picker leaves this one out.
+        every: Links::new(&Kind::ALL).for_entity(&args.txn_id),
+        linked: None,
+        linked_unread: false,
         earlier: earlier::Foot::default(),
         share: Share::default(),
     }))
@@ -100,6 +104,14 @@ struct Transaction {
     dismissed: Vec<String>,
     /// The "With" row's picker and the people it lists.
     links: Links,
+    /// THE "Linked to" SECTION'S PICKER (#1185): what the line can link to, any item but a Locker
+    /// one ("With", above, is people only and says who the line was with).
+    every: Links,
+    /// What the line is linked to, either end (`links::read_linked`). `None` until read, and
+    /// while a read did not land.
+    linked: Option<Vec<wire::LinkedItem>>,
+    /// The read of `linked` was refused or failed: the status line says so, no empty section.
+    linked_unread: bool,
     /// The entry to the line's earlier versions, read with the page (#1185).
     earlier: earlier::Foot,
     /// The line handed to the OS share sheet as a spreadsheet file (#1185).
@@ -153,12 +165,70 @@ impl Transaction {
         } else {
             fold::reread(&mut self.page, ctx.locale(), reading, |_| false);
         }
+        self.read_linked(ctx);
         self.earlier = match self.page.data() {
             Some(loaded) => {
                 earlier::foot(ctx, super::EARLIER, &self.txn_id, &loaded.txn.display_name)
             }
             None => earlier::Foot::default(),
         };
+    }
+
+    /// What the line is linked to, in both directions. A refused or failed read is said on the
+    /// status line and never drawn as an empty section; a line that was not read has none.
+    fn read_linked(&mut self, ctx: &Ctx) {
+        if self.page.data().is_none() {
+            self.linked = None;
+            self.linked_unread = false;
+            self.every.close();
+            return;
+        }
+        match links::read_linked(ctx, &self.txn_id) {
+            Reading::Data(items) => {
+                self.linked = Some(items);
+                self.linked_unread = false;
+            }
+            Reading::Denied(_) | Reading::Failed => {
+                self.linked = None;
+                self.linked_unread = true;
+                self.every.close();
+            }
+        }
+        self.every.reload(ctx);
+    }
+
+    fn linked_ids(&self) -> Vec<String> {
+        self.linked.as_deref().map(links::ids).unwrap_or_default()
+    }
+
+    /// One tap in the "Linked to" section or its picker. `add-with` and `remove-with` carry rel
+    /// `links` for every kind, a person included, as a link and not as who the line was with.
+    fn linked_event(&mut self, event: &wire::LinkEvent, ctx: &Ctx) {
+        let linked = self.linked_ids();
+        let from = self.txn_id.clone();
+        match self.every.update(event, &linked, ctx) {
+            Outcome::Add { id: to, .. } => self.submit(
+                ctx,
+                act::money::AddWith {
+                    from,
+                    rel: act::money::AddWithRel::Links,
+                    to,
+                    ..Default::default()
+                },
+                words::link_added(ctx.locale()),
+            ),
+            Outcome::Remove { id: to } => self.submit(
+                ctx,
+                act::money::RemoveWith {
+                    from,
+                    rel: act::money::RemoveWithRel::Links,
+                    to,
+                    ..Default::default()
+                },
+                words::link_removed(ctx.locale()),
+            ),
+            Outcome::Moved => {}
+        }
     }
 
     /// The ids of the people the line is with now.
@@ -420,6 +490,7 @@ impl Transaction {
             Some(T::OfferAccepted(accepted)) => self.accept(&accepted.key, ctx),
             Some(T::OfferDismissed(dismissed)) => self.dismiss(&dismissed.key),
             Some(T::WithLink(link)) => self.link_event(&link, ctx),
+            Some(T::Link(link)) => self.linked_event(&link, ctx),
             Some(T::StatusActed(_)) => {
                 if self.undo.acted(ctx) {
                     self.reload(ctx);
@@ -635,6 +706,8 @@ impl Transaction {
             // Money out is ink, not red: red is a state. Money in is green.
             amount_tone: if struck { Tone::Seam } else { Tone::Neutral } as i32,
             amount_positive: !struck && answer.amount.as_ref().is_some_and(|a| a.minor > 0),
+            // The "Linked to" section is the page's own read, laid on by `view`.
+            links: None,
             direction_label: if minor < 0 {
                 words::money_out(locale)
             } else {
@@ -704,9 +777,18 @@ impl Screen for Transaction {
         let content = if self.gone {
             None
         } else {
-            self.page
-                .data()
-                .map(|loaded| Content::Data(Box::new(self.data(locale, loaded))))
+            self.page.data().map(|loaded| {
+                let mut data = self.data(locale, loaded);
+                data.links = self.linked.as_ref().map(|linked| {
+                    self.every.section(
+                        locale,
+                        link_words::section_linked(locale),
+                        links::rows(locale, linked),
+                        words::links_empty(locale),
+                    )
+                });
+                Content::Data(Box::new(data))
+            })
         };
         // A line that has no row any more is the page's final failure, in its own words and with no
         // Retry; the status line (Move to trash, with Undo) shows over it.
@@ -729,6 +811,8 @@ impl Screen for Transaction {
                     page: Some(page),
                     sheet: self.sheet as i32,
                     with_picker: Some(self.links.picker(locale, &self.with_ids())),
+                    link_picker: (self.linked.is_some() && self.every.is_open())
+                        .then(|| self.every.picker(locale, &self.linked_ids())),
                     name_draft: self.name_draft.clone(),
                     chrome: Some(fold::chrome(
                         locale,
@@ -739,7 +823,14 @@ impl Screen for Transaction {
                         .undo
                         .status()
                         .or_else(|| self.share.status())
-                        .or_else(|| self.earlier.status(locale)),
+                        .or_else(|| self.earlier.status(locale))
+                        .or_else(|| {
+                            self.linked_unread.then(|| wire::StatusLine {
+                                sentence: words::links_unread(locale),
+                                action_label: String::new(),
+                                refused: false,
+                            })
+                        }),
                     earlier: self.earlier.entry.clone(),
                     origin: self.earlier.origin.clone(),
                 },
@@ -748,3 +839,7 @@ impl Screen for Transaction {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "transaction_link_tests.rs"]
+mod link_tests;

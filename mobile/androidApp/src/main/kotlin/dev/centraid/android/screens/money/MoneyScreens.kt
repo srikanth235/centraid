@@ -425,6 +425,12 @@ internal fun MoneyTransactionScreen(
                 tx.with_offer?.let { offer ->
                     item(key = "offer-with") { OfferCard(offer, "with", onEvent) }
                 }
+                // LINKED TO (#1185): the kit's section, after the offers; Rust makes every word and row.
+                tx.links?.let { section ->
+                    item(key = "links") {
+                        dev.centraid.android.kit.LinkSectionView(section, { link -> onEvent(MoneyTransactionEvent(link = link)) }, onOpen)
+                    }
+                }
                 // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the actions.
                 state.earlier?.let { entry -> item(key = "earlier") { EarlierEntryCard(entry, onOpen) } }
                 item(key = "origin") { dev.centraid.android.kit.OriginLineView(state.origin) }
@@ -447,6 +453,9 @@ internal fun MoneyTransactionScreen(
     val data2 = state.data_
     state.with_picker?.takeIf { it.open_ }?.let { picker ->
         dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(MoneyTransactionEvent(with_link = link)) }
+    }
+    state.link_picker?.takeIf { it.open_ }?.let { picker ->
+        dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(MoneyTransactionEvent(link = link)) }
     }
     when (state.sheet) {
         MoneyTransactionState.Sheet.SHEET_CATEGORY -> MoneyChoiceSheet(

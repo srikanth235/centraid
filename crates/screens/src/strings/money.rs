@@ -124,6 +124,13 @@ catalog! {
     plain done_name = ("Name saved", "Name saved");
     plain done_rule = ("Rule saved", "Rule saved");
     plain done_rule_deleted = ("Rule deleted", "Rule deleted");
+    plain link_added = ("Linked", "Linked");
+    plain link_removed = ("Link removed", "Link removed");
+    plain links_empty = ("Nothing linked yet", "Nothing linked yet");
+    plain links_unread = (
+        "Couldn’t read what this transaction is linked to.",
+        "Couldn’t read what this transaction is linked to."
+    );
     plain done_unlinked = ("Transfer link removed", "Transfer link removed");
     plain export_all = ("All accounts", "All accounts");
     plain export_lede = (

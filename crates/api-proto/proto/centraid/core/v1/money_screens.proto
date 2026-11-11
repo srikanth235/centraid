@@ -525,6 +525,9 @@ message MoneyTransactionState {
   optional EarlierEntry earlier = 15;
   // Where it came from, under the Earlier versions entry (#1185). Absent for a typed item.
   optional OriginLine origin = 16;
+  // The picker over the "Linked to" section, while it is up (#1185). The kit's generic picker,
+  // over every kind (`with_picker` above is people only).
+  optional LinkPicker link_picker = 18;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -568,6 +571,10 @@ message MoneyTransactionData {
   reserved "is_transfer";
   // Money in: the amount is drawn green. Money out is ink.
   bool amount_positive = 19;
+  // "Linked to" (#1185): every item the line is linked to, from either end, with the add row. The
+  // kit's shared section, above the earlier versions. Absent while what it is linked to was not
+  // read. Its events go back as `MoneyTransactionEvent.link`.
+  optional LinkSection links = 21;
 }
 
 // An offer the app PROPOSES and never applies on its own.
@@ -598,6 +605,8 @@ message MoneyTransactionEvent {
     StatusActed status_acted = 12;
     // The "With" picker's own events (#1173).
     LinkEvent with_link = 31;
+    // The "Linked to" section and its picker (#1185): the kit's `LinkEvent`.
+    LinkEvent link = 32;
   }
   reserved 10, 11;
   reserved "confirm_accepted", "confirm_dismissed";
