@@ -227,7 +227,7 @@ pub const REGISTER: &[Row] = &[
     kept("locker", Promise::Undo, "crates/core/src/act/inverse.rs"),
     kept("money", Promise::Undo, "crates/core/src/act/inverse.rs"),
     kept("notes", Promise::Undo, "crates/core/src/act/inverse.rs"),
-    owed("people", Promise::Undo, UNDO_DOOR_OWED),
+    kept("people", Promise::Undo, "crates/core/src/act/inverse.rs"),
     owed("photos", Promise::Undo, UNDO_DOOR_OWED),
     kept("reminders", Promise::Undo, "crates/core/src/act/inverse.rs"),
     // History (#1185, Phase 1): People is the reference adoption; the checker's gaps are the

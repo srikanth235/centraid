@@ -11,6 +11,7 @@ mod health_support;
 mod locker_support;
 mod money_support;
 mod notes_support;
+mod people_support;
 mod reminders_support;
 
 #[allow(clippy::duplicate_mod)]
@@ -908,4 +909,112 @@ fn money_adding_a_category_says_so_and_undo_archives_it() {
         "Undo archives it: a category has no trash"
     );
     assert_eq!(status(&d), line("Undone", ""));
+}
+
+// --- People: the home's star, the editor's cadence --------------------------------------
+
+#[test]
+fn people_a_star_says_so_and_undo_removes_it() {
+    use wire::people_home_event as ev;
+    let mut d = people_support::clean();
+    let dana = people_support::person(&d, "Dana");
+    let home = people_support::begin(&mut d);
+    people_support::send_home(
+        &mut d,
+        home,
+        ev::Kind::Star(ev::StarToggled {
+            party_id: dana.clone(),
+        }),
+    );
+    let starred = |d: &Driver| {
+        people_support::sheet_of(d, &dana)
+            .sheet
+            .and_then(|sheet| sheet.person)
+            .is_some_and(|person| person.starred)
+    };
+    assert!(starred(&d));
+    assert_eq!(
+        said(people_support::home_state(d.view(home)).status.as_ref()),
+        line("Dana starred", "Undo")
+    );
+
+    status_acted(&mut d, home);
+    assert!(!starred(&d));
+    assert_eq!(
+        said(people_support::home_state(d.view(home)).status.as_ref()),
+        line("Undone", "")
+    );
+}
+
+fn people_cadence(d: &Driver, id: &str) -> i64 {
+    people_support::sheet_of(d, id)
+        .sheet
+        .and_then(|sheet| sheet.person)
+        .expect("a live person")
+        .cadence_days
+}
+
+#[test]
+fn people_a_cadence_says_so_and_undo_puts_the_old_one_back() {
+    use wire::people_editor_event as ev;
+    let mut d = people_support::clean();
+    let id = people_support::person(&d, "Dana");
+    let before = people_cadence(&d, &id);
+    d.start();
+    let page = d.push(
+        centraid_screens::people::TAB,
+        centraid_screens::people::routes::editor(&id),
+    );
+    people_support::send_editor(
+        &mut d,
+        page,
+        ev::Kind::Cadence(ev::CadencePicked { days: 30 }),
+    );
+    assert_eq!(people_cadence(&d, &id), 30);
+    assert_eq!(
+        said(people_support::editor_state(d.view(page)).status.as_ref()),
+        line("Cadence changed", "Undo")
+    );
+
+    status_acted(&mut d, page);
+    assert_eq!(people_cadence(&d, &id), before);
+    assert_eq!(
+        said(people_support::editor_state(d.view(page)).status.as_ref()),
+        line("Undone", "")
+    );
+}
+
+#[test]
+fn people_a_later_cadence_refuses_the_undo_plainly_and_stays() {
+    use wire::people_editor_event as ev;
+    let mut d = people_support::clean();
+    let id = people_support::person(&d, "Dana");
+    d.start();
+    let page = d.push(
+        centraid_screens::people::TAB,
+        centraid_screens::people::routes::editor(&id),
+    );
+    people_support::send_editor(
+        &mut d,
+        page,
+        ev::Kind::Cadence(ev::CadencePicked { days: 30 }),
+    );
+
+    // Another surface changes it again: the Undo no longer fits, and the later cadence stays.
+    people_support::arrange(
+        &d,
+        act::people::SetCadence {
+            person_id: id.clone(),
+            cadence_days: 7,
+        },
+    );
+    status_acted(&mut d, page);
+    let status = people_support::editor_state(d.view(page))
+        .status
+        .clone()
+        .expect("a line");
+    assert!(status.refused);
+    assert_eq!(status.action_label, "");
+    assert!(!status.sentence.is_empty());
+    assert_eq!(people_cadence(&d, &id), 7);
 }

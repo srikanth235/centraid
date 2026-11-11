@@ -489,6 +489,8 @@ impl ContactsFollow {
                 r#ref: origin.clone(),
             };
             let key = kit_act::key(&["stop-following", &origin], kit_act::fresh());
+            // undo-exempt: Stop reading asks first and is itself the Undo of a follow; the row
+            // offers "Turn on" again, so no line of its own takes it back.
             clean = kit_act::act(ctx, request, &key).committed && clean;
         }
         if !clean {
@@ -677,6 +679,8 @@ pub(crate) fn run(ctx: &Ctx, snapshot: &wire::ContactsSnapshot) -> (Outcome, boo
             .collect();
         let request = follow_request(origin, &records, batch.complete, &snapshot.device_id);
         let key = kit_act::key(&["follow-contacts", &origin.id], kit_act::fresh());
+        // undo-exempt: a follow pass runs unseen and has no status line; its Undo is Stop reading
+        // in the More sheet (`stop-following`).
         let settled = kit_act::act(ctx, request, &key);
         if !settled.committed {
             outcome.refused += u32::try_from(records.len()).unwrap_or(u32::MAX);

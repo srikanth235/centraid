@@ -38,6 +38,7 @@ use crate::kit::export::{self, ExportFile};
 use crate::kit::follow;
 use crate::kit::read;
 use crate::kit::share::{self, Share};
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, people as words};
 
@@ -66,7 +67,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         opening_log: args.log_touch,
         sheet: None,
         asking: Asking::Nothing,
-        status: None,
+        undo: Undo::default(),
         done: false,
         differences: follow::Phone::default(),
         earlier: earlier::Foot::default(),
@@ -76,6 +77,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
 
 /// One person as a vCard file, through the same command the export screen calls.
 fn vcard(ctx: &Ctx, person_id: &str) -> Result<ExportFile, String> {
+    // undo-exempt: an export writes nothing (`writes_nothing` in the manifest), so there is nothing to take back.
     let settled = kit_act::act(
         ctx,
         act::people::ExportVcf {
@@ -107,7 +109,8 @@ struct Person {
     opening_log: bool,
     sheet: Option<Sheet>,
     asking: Asking,
-    status: Option<wire::StatusLine>,
+    /// The status line and what its Undo reverses (the kit's one door).
+    undo: Undo,
     done: bool,
     /// Where the phone's words differ from the person's, read with the page (#1183).
     differences: follow::Phone,
@@ -195,7 +198,7 @@ impl Person {
             return;
         }
         let locale = ctx.locale();
-        self.status = None;
+        self.undo.clear();
         self.sheet = Some(match which {
             W::LogTouch => Sheet::log_touch(locale),
             W::Note => Sheet::note(),
@@ -304,13 +307,14 @@ impl Person {
             Form::Merge(_) => return,
         };
         let key = kit_act::key(&[&request.action.clone(), &self.party_id], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
+        let settled = self.undo.act(ctx, request, &key, |_| outcome);
         if settled.committed {
             // A WRITE SHEET CLOSES ON ITS COMMIT; the load shows what was written.
             self.sheet = None;
-            self.status = Some(plain(outcome));
         } else if let Some(sheet) = &mut self.sheet {
+            // The sheet says why; the page keeps no line of its own.
             sheet.failure = Some(settled.refusal);
+            self.undo.clear();
         }
         self.reload(ctx);
     }
@@ -327,12 +331,7 @@ impl Person {
         outcome: String,
     ) -> bool {
         let key = kit_act::key(&[&request.action.clone(), subject], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        self.status = Some(if settled.committed {
-            plain(outcome)
-        } else {
-            refused(settled.refusal)
-        });
+        let settled = self.undo.act(ctx, request, &key, |_| outcome);
         if settled.committed {
             self.reload(ctx);
         }
@@ -562,7 +561,12 @@ impl Person {
         let Some(settled) = follow::take(ctx, &self.party_id, taken) else {
             return;
         };
-        self.status = (!settled.committed).then(|| refused(settled.refusal));
+        // Taking the phone's value has no inverse: it says nothing and offers nothing.
+        if settled.committed {
+            self.undo.clear();
+        } else {
+            self.undo.refuse(settled.refusal);
+        }
         self.reload(ctx);
     }
 
@@ -705,22 +709,6 @@ fn percent_encode(value: &str) -> String {
     out
 }
 
-fn plain(sentence: String) -> wire::StatusLine {
-    wire::StatusLine {
-        sentence,
-        action_label: String::new(),
-        refused: false,
-    }
-}
-
-fn refused(sentence: String) -> wire::StatusLine {
-    wire::StatusLine {
-        sentence,
-        action_label: String::new(),
-        refused: true,
-    }
-}
-
 impl Screen for Person {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
@@ -738,7 +726,15 @@ impl Screen for Person {
                 let id = self.party_id.clone();
                 return self.share.result(ctx, &result, |ctx| vcard(ctx, &id));
             }
-            Some(E::Left(_)) => return self.share.left(),
+            Some(E::StatusActed(_)) => {
+                if self.undo.acted(ctx) {
+                    self.reload(ctx);
+                }
+            }
+            Some(E::Left(_)) => {
+                self.undo.clear();
+                return self.share.left();
+            }
             _ => {}
         }
         Vec::new()
@@ -771,8 +767,8 @@ impl Screen for Person {
             sheet: self.sheet.as_ref().map(|sheet| sheet.view(locale)),
             confirm: self.confirm(locale),
             status: self
-                .status
-                .clone()
+                .undo
+                .status()
                 .or_else(|| self.share.status())
                 .or_else(|| self.differences.status(locale, follow::Source::Phone))
                 .or_else(|| self.earlier.status(locale)),

@@ -33,6 +33,7 @@ use crate::kit::export;
 use crate::kit::menu;
 use crate::kit::read;
 use crate::kit::search;
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, people as words, shared};
 
@@ -80,8 +81,9 @@ struct Home {
     touch: Phase<wire::PeopleTouch>,
     search: Search,
     sheet: wire::people_home_state::Sheet,
-    /// What a write did, or a refusal's sentence; the page stays.
-    status: Option<wire::StatusLine>,
+    /// What a write did (with Undo when the core can take it back), or a refusal's sentence; the
+    /// page stays. The kit's one door.
+    undo: Undo,
     contacts: ContactsFollow,
     /// The member tapped "Stop reading Phone contacts" and has not answered the confirm.
     asking_stop: bool,
@@ -99,7 +101,7 @@ impl Home {
             touch: Phase::Loading,
             search: Search::default(),
             sheet: wire::people_home_state::Sheet::Unspecified,
-            status: None,
+            undo: Undo::default(),
             contacts: ContactsFollow::new(),
             asking_stop: false,
             attached: false,
@@ -171,7 +173,7 @@ impl Home {
         self.destination = destination;
         self.sheet = wire::people_home_state::Sheet::Unspecified;
         self.search = Search::default();
-        self.status = None;
+        self.undo.clear();
         self.reload(ctx);
     }
 
@@ -188,7 +190,7 @@ impl Home {
         self.chip = chip;
         self.destination = wire::PeopleDestination::People;
         self.search = Search::default();
-        self.status = None;
+        self.undo.clear();
         self.reload(ctx);
     }
 
@@ -253,19 +255,15 @@ impl Home {
             .into()
         };
         let key = kit_act::key(&[&request.action.clone(), party_id], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        let locale = ctx.locale();
-        self.status = Some(if settled.committed {
-            plain(fill(
+        self.undo.act(ctx, request, &key, |locale| {
+            fill(
                 &if starred {
                     words::outcome_unstarred(locale)
                 } else {
                     words::outcome_starred(locale)
                 },
                 &[("name", &name)],
-            ))
-        } else {
-            refused(settled.refusal)
+            )
         });
         self.reload(ctx);
     }
@@ -277,15 +275,16 @@ impl Home {
         if !std::mem::take(&mut self.asking_stop) {
             return Vec::new();
         }
-        let (sentence, refused, effects) = match self.contacts.stop(ctx) {
-            Some(effects) => (words::contacts_stopped(locale), false, effects),
-            None => (shared::write_refused(locale), true, Vec::new()),
+        let effects = match self.contacts.stop(ctx) {
+            Some(effects) => {
+                self.undo.say(words::contacts_stopped(locale));
+                effects
+            }
+            None => {
+                self.undo.refuse(shared::write_refused(locale));
+                Vec::new()
+            }
         };
-        self.status = Some(wire::StatusLine {
-            sentence,
-            action_label: String::new(),
-            refused,
-        });
         self.reload(ctx);
         effects
     }
@@ -345,11 +344,11 @@ impl Home {
             H::StopConfirmed(_) => return self.stop(ctx),
             H::Star(toggled) => self.star(ctx, &toggled.party_id),
             H::ImportContacts(_) => {
-                self.status = None;
+                self.undo.clear();
                 return self.contacts.import(ctx);
             }
             H::ContactsAction(_) => {
-                self.status = None;
+                self.undo.clear();
                 if self.contacts.needs_settings(ctx) {
                     // THE PHONE SAID NO: only its own Settings can say yes.
                     return vec![wire::Effect {
@@ -451,30 +450,14 @@ impl Home {
     }
 
     fn status(&self, ctx: &Ctx) -> Option<wire::StatusLine> {
-        self.status
-            .clone()
+        self.undo
+            .status()
             .or_else(|| self.contacts.status().cloned())
             .or_else(|| {
                 ctx.follows()
                     .report(Store::Contacts)
                     .status(ctx, Store::Contacts)
             })
-    }
-}
-
-fn plain(sentence: String) -> wire::StatusLine {
-    wire::StatusLine {
-        sentence,
-        action_label: String::new(),
-        refused: false,
-    }
-}
-
-fn refused(sentence: String) -> wire::StatusLine {
-    wire::StatusLine {
-        sentence,
-        action_label: String::new(),
-        refused: true,
     }
 }
 
@@ -498,6 +481,12 @@ impl Screen for Home {
             }
             E::DataChanged(_) | E::EnvironmentChanged(_) => self.reload(ctx),
             E::PeopleHome(home) => return self.event(home, ctx),
+            E::StatusActed(_) => {
+                if self.undo.acted(ctx) {
+                    self.reload(ctx);
+                }
+            }
+            E::Left(_) => self.undo.clear(),
             _ => {}
         }
         Vec::new()

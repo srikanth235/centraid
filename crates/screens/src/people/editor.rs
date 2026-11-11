@@ -25,6 +25,7 @@ use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::autosave::{Autosave, Draft};
 use crate::kit::read::{self, Reading};
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, people as words};
 
@@ -130,7 +131,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         autosave,
         cadence: 0,
         touched: false,
-        status: None,
+        undo: Undo::default(),
     }))
 }
 
@@ -145,8 +146,8 @@ struct Editor {
     cadence: i64,
     /// False before the first keystroke of a new person: close then discards.
     touched: bool,
-    /// A refused cadence.
-    status: Option<wire::StatusLine>,
+    /// The cadence's status line and what its Undo reverses (the kit's one door).
+    undo: Undo,
 }
 
 impl Editor {
@@ -228,17 +229,12 @@ impl Editor {
         }
         .into();
         let key = kit_act::key(&["set-cadence", &self.party_id], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
+        let settled = self
+            .undo
+            .act(ctx, request, &key, words::outcome_cadence_changed);
         self.touched = true;
         if settled.committed {
             self.cadence = days;
-            self.status = None;
-        } else {
-            self.status = Some(wire::StatusLine {
-                sentence: settled.refusal,
-                action_label: String::new(),
-                refused: true,
-            });
         }
         self.reload(ctx);
     }
@@ -341,7 +337,13 @@ impl Screen for Editor {
                 self.saved(ctx, again);
             }
             // CLOSE = DONE: the words typed are saved on the way out.
+            Some(E::StatusActed(_)) => {
+                if self.undo.acted(ctx) {
+                    self.reload(ctx);
+                }
+            }
             Some(E::Left(_)) => {
+                self.undo.clear();
                 let again = self.autosave.flush(ctx);
                 self.saved(ctx, again);
             }
@@ -376,7 +378,7 @@ impl Screen for Editor {
             } else {
                 Vec::new()
             },
-            status: self.status.clone(),
+            status: self.undo.status(),
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::PeopleEditor(Box::new(state))),

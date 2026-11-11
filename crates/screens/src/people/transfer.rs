@@ -14,6 +14,7 @@ use wire::screen_event::Kind as E;
 use crate::catalog::act;
 use crate::kit::act as kit_act;
 use crate::kit::transfer::{self, TextFile, action, row};
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, people as words};
 
@@ -34,7 +35,7 @@ pub fn build_import(route: &wire::Route) -> Option<Box<dyn Screen>> {
         files: Vec::new(),
         plan: None,
         stage: Stage::Choosing,
-        status: None,
+        undo: Undo::default(),
     }))
 }
 
@@ -62,7 +63,9 @@ struct Transfer {
     files: Vec<TextFile>,
     plan: Option<Plan>,
     stage: Stage,
-    status: Option<wire::StatusLine>,
+    /// The status line, said through the kit's one door. An import asks first (the plan is the
+    /// preview) and the core has no inverse for it, so it only says plain sentences.
+    undo: Undo,
 }
 
 /// The `import-vcf` request for the picked cards: the dry run and the write say the same
@@ -110,22 +113,6 @@ fn plan_of(output: &[u8]) -> Plan {
 }
 
 impl Transfer {
-    fn refuse(&mut self, sentence: String) {
-        self.status = Some(wire::StatusLine {
-            sentence,
-            action_label: String::new(),
-            refused: true,
-        });
-    }
-
-    fn say(&mut self, sentence: String) {
-        self.status = Some(wire::StatusLine {
-            sentence,
-            action_label: String::new(),
-            refused: false,
-        });
-    }
-
     fn pick() -> Vec<wire::Effect> {
         vec![wire::Effect {
             kind: Some(wire::effect::Kind::PickBytes(wire::PickBytes {
@@ -141,13 +128,14 @@ impl Transfer {
             return;
         }
         self.files = transfer::picked_files(picked);
-        self.status = None;
+        self.undo.clear();
         self.stage = Stage::Reading;
         let key = kit_act::key(&["person.import_vcf", "dry"], kit_act::fresh());
+        // undo-exempt: a dry run writes nothing; it only previews what the import would do.
         let settled = kit_act::act(ctx, import_request(&self.files, Some(true), None), &key);
         if !settled.committed {
             self.stage = Stage::Choosing;
-            self.refuse(settled.refusal);
+            self.undo.refuse(settled.refusal);
             return;
         }
         self.plan = Some(plan_of(&settled.output));
@@ -158,11 +146,13 @@ impl Transfer {
         let locale = ctx.locale();
         self.stage = Stage::Writing;
         let key = kit_act::key(&["person.import_vcf"], kit_act::fresh());
-        let settled = kit_act::act(ctx, import_request(&self.files, None, Some(merge)), &key);
+        let settled =
+            self.undo
+                .act_quietly(ctx, import_request(&self.files, None, Some(merge)), &key);
         if settled.committed {
             let done = plan_of(&settled.output);
             let people = done.added + done.merged;
-            self.say(fill(
+            self.undo.say(fill(
                 &words::transfer_import_done(locale),
                 &[("n", &people.to_string())],
             ));
@@ -174,7 +164,7 @@ impl Transfer {
             });
         } else {
             self.stage = Stage::Planned;
-            self.refuse(settled.refusal);
+            self.undo.refuse(settled.refusal);
         }
     }
 
@@ -283,6 +273,10 @@ impl Screen for Transfer {
                 }
                 Vec::new()
             }
+            Some(E::Left(_)) => {
+                self.undo.clear();
+                Vec::new()
+            }
             _ => Vec::new(),
         }
     }
@@ -300,7 +294,7 @@ impl Screen for Transfer {
                 rows,
                 actions,
                 busy: matches!(self.stage, Stage::Reading | Stage::Writing),
-                status: self.status.clone(),
+                status: self.undo.status(),
             })),
             ..wire::ViewState::default()
         }

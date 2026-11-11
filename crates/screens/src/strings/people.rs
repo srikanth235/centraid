@@ -170,6 +170,7 @@ catalog! {
     plain note_label = ("Note", "Note");
     plain note_placeholder = ("Optional", "Optional");
     plain note_sheet_placeholder = ("What to remember", "What to remember");
+    plain outcome_cadence_changed = ("Cadence changed", "Cadence changed");
     plain outcome_channel_removed = ("{kind} removed", "{kind} removed");
     plain outcome_channel_saved = ("{kind} saved", "{kind} saved");
     plain outcome_dated = ("Date added · {name}", "Date added · {name}");
