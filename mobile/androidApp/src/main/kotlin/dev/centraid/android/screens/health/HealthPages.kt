@@ -44,7 +44,6 @@ import dev.centraid.android.kit.EarlierEntryCard
 import centraid.core.v1.PhoneSaysTaken
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ChoiceStack
-import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.InkButton
 import dev.centraid.android.kit.KitCardGrid
 import dev.centraid.android.kit.KitGeometry
@@ -65,7 +64,6 @@ import dev.centraid.android.kit.kitBorderedCard
 import dev.centraid.android.kit.kitCard
 import dev.centraid.android.kit.kitTextStyle
 import dev.centraid.android.theme.LocalCentraidTokens
-import dev.centraid.android.kit.screenContentOf
 
 // ---------------------------------------------------------------------------
 // health.metric: one metric over a week, a month or a year (#1129, #1135)
@@ -86,14 +84,12 @@ internal fun HealthMetricScreen(state: HealthMetricState, onEvent: (HealthMetric
                     )
                 }
                 ReadStateView(
-                    content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
+                    page = state.page!!,
                     onRetry = { onEvent(HealthMetricEvent(refreshed = HealthMetricEvent.Refreshed())) },
                     retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
-                ) { data ->
-                    val empty = data.empty
-                    if (empty != null) {
-                        EmptyStateView(empty, onAction = null)
-                    } else {
+                    modifier = Modifier.weight(1f),
+                ) {
+                    state.data_?.let { data ->
                         LazyColumn(Modifier.testTag("health-metric-page")) {
                             item(key = "head") {
                                 Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)) {
@@ -161,21 +157,18 @@ internal fun HealthWorkoutScreen(
             parentTitle = chrome?.back_label.orEmpty(),
             onBack = onBack,
             statusLine = {
-                // "{title} moved to trash" with Undo; the gone card shows under it (#1185).
+                // "{title} moved to trash" with Undo; the gone page shows under it (#1185).
                 StatusLine(state.status, actTag = "health-status-action") {
                     onEvent(HealthWorkoutEvent(status_acted = HealthWorkoutEvent.StatusActed()))
                 }
             },
         ) {
             ReadStateView(
-                content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
+                page = state.page!!,
                 onRetry = { onEvent(HealthWorkoutEvent(refreshed = HealthWorkoutEvent.Refreshed())) },
                 retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
-            ) { data ->
-                val gone = data.gone
-                if (gone != null) {
-                    EmptyStateView(gone, onAction = null)
-                } else {
+            ) {
+                state.data_?.let { data ->
                     LazyColumn(Modifier.testTag("health-workout-page")) {
                         item(key = "head") {
                             Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER + 4.dp, vertical = 4.dp)) {

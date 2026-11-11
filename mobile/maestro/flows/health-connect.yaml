@@ -28,7 +28,7 @@ name: health-connect
 - assertVisible:
     id: "health-band"
 - tapOn:
-    id: "health-connect-open"
+    id: "kit-empty-action"
 # Connect: a switch a type, every one on the first time, and the one Ink button.
 - assertVisible:
     id: "health-connect-page"
@@ -62,7 +62,7 @@ name: health-connect
       id: "health-hero"
     timeout: 60000
 - assertNotVisible:
-    id: "health-connect-open"
+    id: "kit-empty-action"
 # Where the numbers come from, at the page's foot.
 - scrollUntilVisible:
     element:

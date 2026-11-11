@@ -29,33 +29,31 @@ struct HealthWorkoutView: View {
         PushedPage(title: "", parentTitle: state.chrome.backLabel, onBack: onBack) {
             EmptyView()
         } content: {
-            ReadStateView(
-                content: state.readContent,
+            VStack(spacing: 0) {
+            // THE PAGE'S STATUS LINE (a refused write says so here), as Trash's does: above the
+            // page, so "{title} moved to trash" with Undo (#1185) shows over the gone page too.
+            if state.hasStatus {
+                StatusLineView(status: state.status, identifier: "health-status-action") {
+                    send(event { $0.statusActed = .init() })
+                }
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.top, 4)
+            }
+            PageReadStateView(
+                page: state.page,
                 onRetry: { send(event { $0.refreshed = .init() }) }
-            ) { workout in
+            ) {
+                let workout = state.data
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         VStack(alignment: .leading, spacing: 16) {
-                            // THE PAGE'S STATUS LINE (a refused write says so here), as Trash's does.
-                            if state.hasStatus {
-                                // "{title} moved to trash" with Undo (#1185); the gone card shows under it.
-                                StatusLineView(status: state.status, identifier: "health-status-action") {
-                                    send(event { $0.statusActed = .init() })
-                                }
-                            }
-                            if workout.hasGone {
-                                EmptyStateView(workout.gone)
-                            } else {
-                                page(workout)
-                            }
+                            page(workout)
                         }
                         .padding(.horizontal, CentraidGeometry.pageMargin)
                         .padding(.top, 4)
                         // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row; Move to trash is pinned below.
-                        if !workout.hasGone {
-                            EarlierEntryRow(entry: state.hasEarlier ? state.earlier : nil, open: open)
-                            OriginLineView(line: state.hasOrigin ? state.origin : nil)
-                        }
+                        EarlierEntryRow(entry: state.hasEarlier ? state.earlier : nil, open: open)
+                        OriginLineView(line: state.hasOrigin ? state.origin : nil)
                     }
                     .padding(.bottom, 24)
                 }
@@ -82,6 +80,7 @@ struct HealthWorkoutView: View {
                         .background(Theme.color("bg", scheme))
                     }
                 }
+            }
             }
         }
         .appAccent("health")

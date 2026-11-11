@@ -13,44 +13,6 @@ func healthFraction<Number: BinaryInteger>(_ basisPoints: Number) -> CGFloat {
     min(max(CGFloat(Int(basisPoints)) / 10_000, 0), 1)
 }
 
-// MARK: - The read law, per state
-
-extension Centraid_Core_V1_HealthHomeState {
-    var readContent: ScreenContent<Centraid_Core_V1_HealthHomeData> {
-        switch content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
-        }
-    }
-}
-
-extension Centraid_Core_V1_HealthMetricState {
-    var readContent: ScreenContent<Centraid_Core_V1_HealthMetricData> {
-        switch content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
-        }
-    }
-}
-
-extension Centraid_Core_V1_HealthWorkoutState {
-    var readContent: ScreenContent<Centraid_Core_V1_HealthWorkoutData> {
-        switch content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
-        }
-    }
-}
-
 // MARK: - A card
 
 /// THE GROUND A GROUP OF FIGURES SITS ON: a white card on a card page (`kitCard`), or the same

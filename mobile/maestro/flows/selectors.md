@@ -192,7 +192,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `words-make-secondary`, `words-enter-secondary`, `words-show-secondary` | words.make / words.enter / words.show | the round X at the top: the screen's own leave control (Cancel), spoken as its label |
 | `words-held-found` | words.enter | the "Recovery key found" card of a held-key restore, with where it came from |
 | `health-band-<tab>` | Health | one band tab (`today` (the Summary), `trends`, `workouts`, `more`); `health-band` is the plate (#1129) |
-| `health-connect-open` | Health | the not-connected empty state's one action, which pushes Connect |
+| `kit-empty-action` | Health | the not-connected empty state's one action, which pushes Connect (the shared empty state's action) |
 | `health-hero`, `health-metric-<key>`, `health-trend-<key>` | Health | The Summary's steps card, another pinned card and a Trends row, each the tap to its metric page (`<key>` is `steps`, `sleep_min`, …) |
 | `health-highlight-<key>` | Health | one Highlights card on the Summary (`<key>` the metric), the tap to its page |
 | `health-workout-<activityId>` | Health | one workout row (Today and Workouts) |

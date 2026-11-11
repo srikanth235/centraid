@@ -23,27 +23,29 @@ struct HealthMetricView: View {
         PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
             EmptyView()
         } content: {
-            ReadStateView(
-                content: state.readContent,
+            VStack(spacing: 0) {
+            // THE PERIOD CHIPS stay above the page whether it is ready or empty, so an empty
+            // period can be left.
+            if !state.segments.isEmpty {
+                KitSegmented(
+                    options: state.segments.map { (key: $0.key, label: $0.label) },
+                    selected: state.segments.first(where: \.active)?.key ?? "",
+                    identifier: "health-metric-range",
+                    fills: true,
+                    onSelect: { key in send(event { $0.range = .with { $0.key = key } }) }
+                )
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.top, 8)
+                .padding(.bottom, 8)
+            }
+            PageReadStateView(
+                page: state.page,
                 onRetry: { send(event { $0.refreshed = .init() }) }
-            ) { metric in
+            ) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
-                        if !state.segments.isEmpty {
-                            KitSegmented(
-                                options: state.segments.map { (key: $0.key, label: $0.label) },
-                                selected: state.segments.first(where: \.active)?.key ?? "",
-                                identifier: "health-metric-range",
-                                fills: true,
-                                onSelect: { key in send(event { $0.range = .with { $0.key = key } }) }
-                            )
-                            .frame(maxWidth: .infinity)
-                        }
-                        if metric.hasEmpty {
-                            EmptyStateView(metric.empty)
-                        } else {
-                            page(metric)
-                        }
+                        page(state.data)
                     }
                     .padding(.horizontal, CentraidGeometry.pageMargin)
                     .padding(.top, 8)
@@ -51,6 +53,7 @@ struct HealthMetricView: View {
                 }
                 .refreshable { send(event { $0.refreshed = .init() }) }
                 .accessibilityIdentifier("health-metric-page")
+            }
             }
         }
         .background(Surface.plainPage.ignoresSafeArea())

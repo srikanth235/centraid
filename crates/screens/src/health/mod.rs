@@ -33,7 +33,6 @@
 use centraid_api_proto::core_v1 as wire;
 
 use crate::Registry;
-use crate::kit::read::Reading;
 use crate::screen::Ctx;
 use crate::strings::{Locale, health as words};
 
@@ -89,33 +88,6 @@ pub fn runtime() -> crate::Runtime {
         registry(),
         vec![(TAB.to_owned(), routes::home(wire::HealthDestination::Today))],
     )
-}
-
-/// What a page holds of its reads: nothing yet, a refusal, a gate or the answer.
-/// A failed read is never an empty list.
-#[derive(Clone, Debug)]
-pub(crate) enum Phase<T> {
-    Loading,
-    Failed,
-    Denied(wire::AppQueryDenial),
-    Ready(T),
-}
-
-impl<T> Phase<T> {
-    pub(crate) fn of(reading: Reading<T>) -> Self {
-        match reading {
-            Reading::Data(data) => Self::Ready(data),
-            Reading::Denied(denial) => Self::Denied(denial),
-            Reading::Failed => Self::Failed,
-        }
-    }
-
-    pub(crate) fn data(&self) -> Option<&T> {
-        match self {
-            Self::Ready(data) => Some(data),
-            _ => None,
-        }
-    }
 }
 
 /// The gate drawn when the vault will not let Health read.

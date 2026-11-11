@@ -36,14 +36,13 @@ fn nothing_connected_every_tab_is_one_sentence_and_connect_naming_the_phones_sto
     let d = driver();
     let i = root(&d);
     let state = home_state(d.view(i));
-    let data = home_data(d.view(i));
-    let empty = data.empty.as_ref().expect("an empty state");
+    let empty = empty_of(state);
     assert_eq!(
         empty.headline,
         "Bring in your steps, sleep and workouts from Apple Health."
     );
     assert_eq!(empty.action_label, "Connect Apple Health");
-    assert!(data.today_data.is_none());
+    assert!(state.content.is_none());
     let band: Vec<&str> = state.band.iter().map(|tab| tab.label.as_str()).collect();
     assert_eq!(band, ["Summary", "Trends", "Workouts", "More"]);
     let more: Vec<&str> = state.more_rows.iter().map(|row| row.key.as_str()).collect();
@@ -55,7 +54,7 @@ fn nothing_connected_every_tab_is_one_sentence_and_connect_naming_the_phones_sto
         Some("health.connect")
     );
     assert_eq!(
-        data.connect.as_ref().map(|r| r.screen.as_str()),
+        state.connect.as_ref().map(|r| r.screen.as_str()),
         Some("health.connect")
     );
 }
@@ -63,9 +62,8 @@ fn nothing_connected_every_tab_is_one_sentence_and_connect_naming_the_phones_sto
 #[test]
 fn the_phones_store_is_its_os_health_connect_on_android() {
     let d = driver_on("android", "en-GB");
-    let data = home_data(d.view(root(&d)));
     assert_eq!(
-        data.empty.as_ref().unwrap().action_label,
+        empty_of(home_state(d.view(root(&d)))).action_label,
         "Connect Health Connect"
     );
 }
@@ -328,7 +326,7 @@ fn more_says_what_health_reads_and_a_chosen_type_that_read_nothing_and_stops_beh
     home_event(&mut d, i, he::Kind::Stop(he::StopConfirmed {}));
     let after = home_state(d.view(i));
     assert_eq!(after.sheet, Sheet::None as i32);
-    assert!(home_data(d.view(i)).empty.is_some());
+    assert!(empty_state_of(home_state(d.view(i))).is_some());
     match pending(&d) {
         wire::effect::Kind::Keychain(op) => {
             assert_eq!(op.op, wire::keychain_op::Op::Set as i32);
@@ -639,14 +637,8 @@ fn a_workout_re_reads_home_and_an_unrelated_write_does_not() {
     let i = root(&d);
     band(&mut d, i, "workouts");
     d.pump(Duration::from_millis(300));
-    assert!(
-        home_data(d.view(i))
-            .workouts
-            .as_ref()
-            .unwrap()
-            .sections
-            .is_empty()
-    );
+    // No workout yet is the page's own empty state, never ready data.
+    assert_eq!(empty_of(home_state(d.view(i))).headline, "No workouts yet.");
 
     // Nothing Health reads changed: no screen update arrives.
     arrange(
@@ -672,4 +664,17 @@ fn a_workout_re_reads_home_and_an_unrelated_write_does_not() {
         home_data(d.view(i)).workouts.as_ref().unwrap().sections[0].rows[0].title,
         "Morning run"
     );
+}
+
+/// The page's own empty state, when it is empty.
+fn empty_state_of(state: &wire::HealthHomeState) -> Option<&wire::EmptyState> {
+    match state.page.as_ref().and_then(|page| page.state.as_ref()) {
+        Some(wire::page_state::State::Empty(empty)) => Some(empty),
+        _ => None,
+    }
+}
+
+/// The page's empty state, or a panic naming the page.
+fn empty_of(state: &wire::HealthHomeState) -> &wire::EmptyState {
+    empty_state_of(state).unwrap_or_else(|| panic!("not empty: {:?}", state.page))
 }

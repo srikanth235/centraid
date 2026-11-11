@@ -156,13 +156,15 @@ fn moving_a_workout_to_trash_says_so_with_undo_and_takes_it_out_of_the_lists() {
     assert_eq!(line.action_label, "Undo");
     assert!(!line.refused);
     // The page reads the workout as gone and keeps the line over it.
-    let Some(wire::health_workout_state::Content::Data(data)) =
-        &workout_state(d.view(page)).content
+    let state = workout_state(d.view(page));
+    let Some(wire::page_state::State::Failed(failure)) =
+        state.page.as_ref().and_then(|page| page.state.as_ref())
     else {
-        panic!("no data");
+        panic!("a workout that is gone is a failed page");
     };
-    assert!(data.gone.is_some());
-    assert!(data.trash_label.is_empty());
+    assert_eq!(failure.sentence, "This workout is no longer here.");
+    assert!(failure.permanent, "trying again cannot bring it back");
+    assert!(state.content.is_none());
     // Off the list, and still there for the other.
     assert_eq!(listed(&d), [(ride, "cycle".to_owned())]);
 
@@ -208,7 +210,6 @@ fn undo_restores_it_and_says_undone_with_nothing_more_to_tap() {
     else {
         panic!("no data");
     };
-    assert!(data.gone.is_none());
     assert_eq!(data.figures[0].value, "5.2");
 
     // Nothing is on offer any more: a second tap changes nothing.

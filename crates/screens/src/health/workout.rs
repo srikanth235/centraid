@@ -9,14 +9,14 @@ use wire::health_workout_event::Kind as W;
 use wire::screen_event::Kind as E;
 
 use super::figures;
-use super::{Metric, Phase, Store, Units, denied, kinds};
+use super::{Metric, Store, Units, denied, kinds};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::civil;
 use crate::kit::earlier;
 use crate::kit::follow::{self, Source};
 use crate::kit::quantity::Quantity;
-use crate::kit::read;
+use crate::kit::read::{self, Page};
 use crate::kit::share::{self, Share};
 use crate::kit::trash;
 use crate::kit::undo::Undo;
@@ -37,7 +37,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     Some(Box::new(WorkoutPage {
         activity_id: args.activity_id.clone(),
         parent: args.parent.clone(),
-        phase: Phase::Loading,
+        page: Page::loading(),
+        gone: false,
         differences: follow::Phone::default(),
         earlier: earlier::Foot::default(),
         undo: Undo::default(),
@@ -48,7 +49,10 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
 struct WorkoutPage {
     activity_id: String,
     parent: String,
-    phase: Phase<wire::HealthWorkout>,
+    /// The read. A workout no longer in the vault is [`Page::Failed`] with `gone` set: a final
+    /// failure in its own words, never ready data and never an empty page.
+    page: Page<wire::HealthWorkout>,
+    gone: bool,
     /// Where the store's figures differ from the member's (#1183), read with the page.
     differences: follow::Phone,
     /// The entry to the workout's earlier versions, read with the page (#1185).
@@ -126,7 +130,7 @@ impl WorkoutPage {
     /// refusal is the status line, over the workout as it still is.
     fn take_store(&mut self, ctx: &Ctx, taken: &wire::PhoneSaysTaken) {
         if self
-            .phase
+            .page
             .data()
             .and_then(|answer| answer.workout.as_ref())
             .is_none()
@@ -148,7 +152,7 @@ impl WorkoutPage {
     /// workout a health store states goes like any other and stays in the trash when the store reads
     /// it again. The page stays, reads the workout as gone, and keeps the status line.
     fn trash_workout(&mut self, ctx: &Ctx) {
-        let Some(row) = self.phase.data().and_then(|answer| answer.workout.as_ref()) else {
+        let Some(row) = self.page.data().and_then(|answer| answer.workout.as_ref()) else {
             return;
         };
         let title = figures::title(
@@ -169,7 +173,7 @@ impl WorkoutPage {
     }
 
     fn reload(&mut self, ctx: &Ctx) {
-        self.phase = Phase::of(read::read(
+        let reading = read::read(
             ctx,
             load::health::Workout {
                 activity_id: self.activity_id.clone(),
@@ -178,15 +182,22 @@ impl WorkoutPage {
                 Answer::HealthWorkout(workout) => Some(workout),
                 _ => None,
             },
-        ));
-        self.differences = match &self.phase {
-            Phase::Ready(answer) if answer.workout.is_some() => {
-                follow::read(ctx, &self.activity_id)
-            }
+        );
+        // A refresh never blanks the page shown: a failed one keeps it under a note.
+        let held = std::mem::replace(&mut self.page, Page::loading());
+        self.page = held.after(reading, ctx.locale(), |answer| answer.workout.is_none());
+        // A read that succeeded and found no workout: it is gone, which is a failure, not an
+        // empty place.
+        self.gone = matches!(self.page, Page::Empty);
+        if self.gone {
+            self.page = Page::Failed;
+        }
+        self.differences = match self.page.data() {
+            Some(answer) if answer.workout.is_some() => follow::read(ctx, &self.activity_id),
             _ => follow::Phone::default(),
         };
-        self.earlier = match &self.phase {
-            Phase::Ready(answer) if answer.workout.is_some() => {
+        self.earlier = match self.page.data() {
+            Some(answer) if answer.workout.is_some() => {
                 let title = answer.workout.as_ref().map_or_else(String::new, |row| {
                     figures::title(
                         ctx.locale(),
@@ -202,14 +213,9 @@ impl WorkoutPage {
 
     fn data(&self, ctx: &Ctx, answer: &wire::HealthWorkout) -> wire::HealthWorkoutData {
         let (locale, units, cycle) = (ctx.locale(), ctx.units(), ctx.hour_cycle());
+        // A workout that is gone is a failed page, so a ready one always holds its row.
         let Some(row) = &answer.workout else {
-            return wire::HealthWorkoutData {
-                gone: Some(wire::EmptyState {
-                    headline: words::workout_gone(locale),
-                    ..Default::default()
-                }),
-                ..Default::default()
-            };
+            return wire::HealthWorkoutData::default();
         };
         let start = &row.local_start;
         let figure =
@@ -290,7 +296,6 @@ impl WorkoutPage {
             },
             figures: figures_,
             foot,
-            gone: None,
             trash_label: shared::trash_move(locale),
             share_label: share::label(locale),
             figures_phone_says: phone_says(
@@ -320,7 +325,7 @@ impl Screen for WorkoutPage {
                 }
                 Some(W::ShareRequested(_)) => {
                     if self
-                        .phase
+                        .page
                         .data()
                         .is_some_and(|answer| answer.workout.is_some())
                     {
@@ -353,14 +358,24 @@ impl Screen for WorkoutPage {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::health_workout_state::Content;
         let locale = ctx.locale();
-        let content = match &self.phase {
-            Phase::Loading => Content::Loading(wire::Loading { first_load: true }),
-            Phase::Failed => Content::Failure(read::failure(locale)),
-            Phase::Denied(denial) => Content::Denied(denied(locale, denial)),
-            Phase::Ready(answer) => Content::Data(Box::new(self.data(ctx, answer))),
-        };
+        let content = self
+            .page
+            .data()
+            .map(|answer| Content::Data(Box::new(self.data(ctx, answer))));
+        let mut page = self.page.wire(
+            locale,
+            |denial| denied(locale, denial),
+            wire::EmptyState::default,
+        );
+        // A workout that is gone says so in its own words and offers no Retry.
+        if self.gone && matches!(page.state, Some(wire::page_state::State::Failed(_))) {
+            page.state = Some(wire::page_state::State::Failed(read::gone(
+                words::workout_gone(locale),
+                String::new(),
+            )));
+        }
         let title = self
-            .phase
+            .page
             .data()
             .and_then(|answer| answer.workout.as_ref())
             .map_or_else(
@@ -371,7 +386,8 @@ impl Screen for WorkoutPage {
             kind: Some(wire::view_state::Kind::HealthWorkout(
                 wire::HealthWorkoutState {
                     activity_id: self.activity_id.clone(),
-                    content: Some(content),
+                    content,
+                    page: Some(page),
                     chrome: Some(wire::HealthPageChrome {
                         title,
                         back_label: if self.parent.is_empty() {
