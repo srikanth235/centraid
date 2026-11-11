@@ -21,6 +21,7 @@ use wire::words_show_state::Phase;
 use super::enrollment::{Env, Job, Out, Progress, Runner};
 use super::keeper::{Absent, Keeper, KeeperSlot};
 use super::secrets::{VaultSecrets, WORDS};
+use crate::kit::owner::{Answer, Leaving, NoPasscode, OwnerGate};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, custody as words, fill};
 
@@ -41,8 +42,8 @@ pub struct Show {
     phase: Phase,
     started: bool,
     finished: bool,
-    /// The owner check is up and its answer is awaited.
-    asking: bool,
+    /// The owner check; no passcode refuses (the words are the vault's key).
+    gate: OwnerGate,
     /// The claim of a saved copy is being recorded; the screen closes once it is.
     saving: bool,
     words: Vec<String>,
@@ -74,7 +75,7 @@ impl Show {
             phase: Phase::Ask,
             started: false,
             finished: false,
-            asking: false,
+            gate: OwnerGate::default(),
             saving: false,
             words: Vec::new(),
             seed_held: false,
@@ -91,15 +92,8 @@ impl Show {
 
     /// The owner check, raised at once: "Show recovery key" was already the ask.
     fn ask(&mut self, locale: Locale) -> Vec<wire::Effect> {
-        self.asking = true;
         self.failed = false;
-        vec![effect(wire::effect::Kind::OwnerCheck(wire::OwnerCheck {
-            ask: true,
-            reason: words::show_again_reason(locale),
-            title: words::show_again_reason(locale),
-            subtitle: String::new(),
-            cancel: false,
-        }))]
+        self.gate.begin(locale, Leaving::Reveal)
     }
 
     fn begin(&mut self, job: Job, ctx: &Ctx) -> Vec<wire::Effect> {
@@ -167,35 +161,32 @@ impl Show {
 
     fn checked(&mut self, result: &wire::EffectResult, ctx: &Ctx) -> Vec<wire::Effect> {
         use wire::effect_result::Outcome;
-        use wire::owner_checked::Outcome as Checked;
-        if !self.asking {
-            return Vec::new();
-        }
-        let outcome = match &result.outcome {
-            Some(Outcome::OwnerChecked(checked)) => {
-                Checked::try_from(checked.outcome).unwrap_or(Checked::Failed)
-            }
-            Some(Outcome::Failed(_)) => Checked::Failed,
+        let checked = match &result.outcome {
+            Some(Outcome::OwnerChecked(checked)) => checked.clone(),
+            Some(Outcome::Failed(_)) => wire::OwnerChecked {
+                outcome: wire::owner_checked::Outcome::Failed as i32,
+                ..Default::default()
+            },
             _ => return Vec::new(),
         };
-        self.asking = false;
-        match outcome {
+        match self.gate.answer(ctx.locale(), NoPasscode::Refuse, &checked) {
             // THE WORDS ARE READ ONLY AFTER THE PHONE SAID IT IS ITS OWNER.
-            Checked::Succeeded => {
+            Some(Answer::Passed | Answer::PassedUnprotected(_)) => {
                 self.phase = Phase::Loading;
                 self.begin(Job::reload(), ctx)
             }
             // A CANCELLED CHECK IS A NO: there was no screen before it, so there
             // is none to go back to.
-            Checked::Cancelled => {
+            Some(Answer::Cancelled) => {
                 self.close();
                 Vec::new()
             }
             // Any other failure draws ASK with why, and a primary to try again.
-            _ => {
+            Some(Answer::Refused(_)) => {
                 self.failed = true;
                 Vec::new()
             }
+            None => Vec::new(),
         }
     }
 
@@ -217,7 +208,9 @@ impl Show {
                 self.begin(Job::write(vec![VaultSecrets::mark_words_saved()]), ctx)
             }
             // ASK's primary, after a failed check: ask again.
-            Some(K::Primary(_)) if self.phase == Phase::Ask && self.failed && !self.asking => {
+            Some(K::Primary(_))
+                if self.phase == Phase::Ask && self.failed && !self.gate.asking() =>
+            {
                 self.ask(ctx.locale())
             }
             Some(K::Primary(_)) if self.phase != Phase::Ask && self.phase != Phase::Loading => {
@@ -334,7 +327,7 @@ impl Screen for Show {
                 self.ask(ctx.locale())
             }
             Some(E::EffectResult(result)) => {
-                if self.asking {
+                if self.gate.asking() {
                     return self.checked(&result, ctx);
                 }
                 let keeper = self.keeper.get();
@@ -353,11 +346,11 @@ impl Screen for Show {
             // THE WORDS ARE DROPPED the moment the app leaves the foreground.
             Some(E::Lifecycle(lifecycle)) if !lifecycle.foreground => {
                 self.close();
-                Vec::new()
+                self.gate.cancel()
             }
             Some(E::Left(_)) => {
                 self.words.clear();
-                Vec::new()
+                self.gate.cancel()
             }
             Some(E::WordsShow(event)) => self.event(event, ctx),
             _ => Vec::new(),

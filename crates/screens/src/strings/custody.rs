@@ -71,7 +71,6 @@ catalog! {
     plain show_again_own_body = ("This key opens {name} only. Your main vault's Locker keeps a copy after you unlock it.", "This key opens {name} only. Your main vault's Locker keeps a copy after you unlock it.");
     plain show_again_own_none = ("This phone got the key for {name} without its words. Look in your main vault's Locker, or wherever you saved them.", "This phone got the key for {name} without its words. Look in your main vault's Locker, or wherever you saved them.");
     plain show_again_primary = ("Show recovery key", "Show recovery key");
-    plain show_again_reason = ("Show your recovery key", "Show your recovery key");
     plain show_again_saved = ("I've saved it", "I've saved it");
     plain show_again_title = ("Your recovery key", "Your recovery key");
     plain show_again_verify_failed = ("Couldn't confirm it's you, so your recovery key stays hidden.", "Couldn't confirm it's you, so your recovery key stays hidden.");
