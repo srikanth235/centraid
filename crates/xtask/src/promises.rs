@@ -247,7 +247,11 @@ pub const REGISTER: &[Row] = &[
         Promise::Arrive,
         "crates/screens/src/people/transfer.rs",
     ),
-    owed("photos", Promise::Arrive, ARRIVE_OWED),
+    kept(
+        "photos",
+        Promise::Arrive,
+        "crates/screens/src/imports/camera_roll.rs",
+    ),
     owed("reminders", Promise::Arrive, ARRIVE_OWED),
 ];
 

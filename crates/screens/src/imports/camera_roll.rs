@@ -135,6 +135,10 @@ pub fn may_fetch(link: &wire::LinkReading, rule: TransferRule, video: bool) -> b
     }
 }
 
+/// The name the vault keeps for where these photographs came from. The platform gives the core
+/// no device name, so the origin is the store itself: one origin for the phone's camera roll.
+pub const ORIGIN_LABEL: &str = "Camera roll";
+
 /// `add-photo`'s request for one staged resource.
 ///
 /// `edited_from` is the CORE'S asset id for edit lineage (#711), never the phone's local
@@ -169,6 +173,8 @@ pub fn add_request(
         // there is kept (A20).
         Some(from) => request.edited_from = Field::Is(from.to_owned()),
         None => {
+            request.arrived_system = Some(act::photos::UploadArrivedSystem::CameraRoll);
+            request.arrived_label = Some(ORIGIN_LABEL.to_owned());
             if !asset.captured_at.is_empty() {
                 request.taken_at = Field::Is(asset.captured_at.clone());
             }

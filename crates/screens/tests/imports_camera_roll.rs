@@ -405,6 +405,40 @@ fn an_edit_names_its_source_and_says_nothing_of_when_it_was_taken() {
     assert!(!input.contains_key("taken_at") && !input.contains_key("offset_min"));
 }
 
+fn text_of(input: &std::collections::HashMap<String, wire::Value>, key: &str) -> Option<String> {
+    match &input.get(key)?.kind {
+        Some(wire::value::Kind::Text(text)) => Some(text.clone()),
+        _ => None,
+    }
+}
+
+#[test]
+fn a_camera_roll_photograph_records_where_it_came_from_and_an_edit_does_not() {
+    let asset = photo("R");
+    let input =
+        input_of(add_request(&asset, &"ee".repeat(32), 1, "image/jpeg", false, None).into());
+    assert_eq!(
+        text_of(&input, "arrived_system").as_deref(),
+        Some("camera_roll")
+    );
+    assert_eq!(
+        text_of(&input, "arrived_label").as_deref(),
+        Some("Camera roll")
+    );
+    let edit = input_of(
+        add_request(
+            &asset,
+            &"ff".repeat(32),
+            1,
+            "image/jpeg",
+            false,
+            Some("asset-1"),
+        )
+        .into(),
+    );
+    assert!(!edit.contains_key("arrived_system") && !edit.contains_key("arrived_label"));
+}
+
 // ---- the walk ----
 
 #[test]

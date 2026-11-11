@@ -261,16 +261,7 @@ impl Attachments {
         let media_type = media_type_of(&picked.name, &picked.media_type);
         let size = i64::try_from(picked.byte_size).ok();
         let (made, subject): (wire::ActRequest, &str) = match pick {
-            Pick::Photo => (
-                act::photos::Upload {
-                    blob: picked.blob.clone(),
-                    media_type,
-                    size,
-                    ..Default::default()
-                }
-                .into(),
-                "photo",
-            ),
+            Pick::Photo => (photo_upload(picked, media_type, size).into(), "photo"),
             Pick::File => (
                 act::docs::Upload {
                     blob: picked.blob.clone(),
@@ -477,6 +468,30 @@ fn refusal_or(locale: Locale, sentence: &str) -> String {
     }
 }
 
+/// The file's name as the origin keeps it, or nothing for a file the platform named none for.
+fn arrival_label(name: &str) -> Option<String> {
+    Some(name.trim().to_owned()).filter(|name| !name.is_empty())
+}
+
+/// The photograph a picked image becomes: it arrived through the picker.
+fn photo_upload(
+    picked: &wire::FilePicked,
+    media_type: String,
+    size: Option<i64>,
+) -> act::photos::Upload {
+    let label = arrival_label(&picked.name);
+    act::photos::Upload {
+        blob: picked.blob.clone(),
+        media_type,
+        size,
+        arrived_system: label
+            .is_some()
+            .then_some(act::photos::UploadArrivedSystem::Picker),
+        arrived_label: label,
+        ..Default::default()
+    }
+}
+
 /// A media type for a file the platform named none for, off its name: the core has no sniffer,
 /// and bytes promoted as `application/octet-stream` are ones no stage will draw.
 #[must_use]
@@ -501,4 +516,38 @@ pub fn media_type_of(name: &str, stated: &str) -> String {
         _ => OCTET_STREAM,
     }
     .to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn picked(name: &str) -> wire::FilePicked {
+        wire::FilePicked {
+            blob: "a".repeat(64),
+            byte_size: 9,
+            name: name.to_owned(),
+            media_type: String::new(),
+        }
+    }
+
+    #[test]
+    fn a_picked_photo_arrives_through_the_picker_under_its_file_name() {
+        let request: wire::ActRequest =
+            photo_upload(&picked(" IMG_0042.jpg "), "image/jpeg".to_owned(), Some(9)).into();
+        let text = |key: &str| match &request.input[key].kind {
+            Some(wire::value::Kind::Text(text)) => text.clone(),
+            other => panic!("{key}: {other:?}"),
+        };
+        assert_eq!(text("arrived_system"), "picker");
+        assert_eq!(text("arrived_label"), "IMG_0042.jpg");
+    }
+
+    #[test]
+    fn a_picked_photo_with_no_name_says_nothing_rather_than_half_an_arrival() {
+        let request: wire::ActRequest =
+            photo_upload(&picked("  "), "image/jpeg".to_owned(), None).into();
+        assert!(!request.input.contains_key("arrived_system"));
+        assert!(!request.input.contains_key("arrived_label"));
+    }
 }
