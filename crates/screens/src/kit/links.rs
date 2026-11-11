@@ -1,6 +1,32 @@
-//! LINKS SET BY HAND, ONCE, FOR EVERY SCREEN THAT OFFERS THEM (#1173, O3): Money's "With" row on a
-//! transaction, Photos' "People in this photo", Docs' "About" and Locker's "Linked to". Each is an
-//! edge the member writes (`edge.add`, `edge.remove`); this holds what they share and nothing else.
+//! LINKS SET BY HAND, ONCE, FOR EVERY SCREEN THAT OFFERS THEM (#1173, O3; #1185): Money's "With" row
+//! on a transaction, Photos' "People in this photo", Docs' "About" and Locker's "Linked to", and the
+//! general "Linked to" section any item's page can add. Each is an edge the member writes (a link
+//! the vault stores under rel `links`); this holds what they share and nothing else. A link joins
+//! any linkable kind to any other; a Locker item can start one but is never offered as a target.
+//!
+//! ## Adopting "Linked to" on a detail screen (any app, any item)
+//!
+//! 1. State: `links: Links::new(&Kind::all_but(Kind::Task)).for_entity(&id)`, the kinds the page
+//!    offers (everything but its own kind) and the id the picker leaves out.
+//! 2. Read, in `reload`: `links::read_linked(ctx, &id)` (`shell.links`, both directions) gives a
+//!    `Reading<Vec<wire::LinkedItem>>`; keep the `Data` and fold a `Denied` or `Failed` into the
+//!    page's status line, never an empty section.
+//! 3. Section: `Links::section(locale, ..)` with `links::rows(locale, &linked)` (each row routes to
+//!    the linked item's own page); the add row is `Links::adds(locale)` and the sheet is
+//!    `Links::picker(locale, &links::ids(&linked))`.
+//! 4. Update: send each `wire::LinkEvent` to `Links::update(&event, &links::ids(&linked), ctx)`.
+//!    On [`Outcome::Add`] call the app's link action with `{ from: id, to: picked, rel: "links" }`
+//!    and on [`Outcome::Remove`] its unlink action with the same input (the manifest's `link` and
+//!    `unlink` in Calendar, Health, Notes, People and Reminders; the typed actions that take `rel`
+//!    in Docs `add-about`/`remove-about`, Locker `add-link`/`remove-link`, Money
+//!    `add-with`/`remove-with`, Photos `add-person`/`remove-person`). Write through the Undo door
+//!    (`kit::undo`), then `reload`.
+//! 5. `Left`: `Links::close`.
+//!
+//! ## What the four first hosts do
+//!
+//! Money, Locker, Docs and Photos keep their person-specific API ([`read_people`], [`person_rows`],
+//! [`propose`], [`offer`], [`names`], [`person_route`]) and are unchanged.
 //!
 //! ## How a host screen uses it
 //!
@@ -13,6 +39,8 @@
 //!    its own manifest action and reads again; this module never writes.
 //! 3. The picker is a sheet over the host: [`Links::picker`] is its finished state. A row that is
 //!    linked already is `selected`, and a tap on it takes the link off, so one list adds and removes.
+//!    A host that offers four kinds or more draws one "Add link" row, and the sheet lists the kinds
+//!    first.
 //!
 //! ## What is proposed, and what is not
 //!
@@ -20,9 +48,9 @@
 //! whole name the payee says. It is a proposal only. Nothing is written until the member confirms,
 //! and "Not them" asks again no sooner than the next time the page opens.
 //!
-//! A person is picked from `people.roster`, an account from `money.accounts` and a place from
-//! `photos.places` (named ones only). A read that is refused or fails lists nothing, and the sheet
-//! says so in its own words.
+//! The picker lists `shell.link-candidates` of the chosen kind: the first rows by name that hold
+//! the typed term, the owner as "You", never the host's own item and never a Locker item. A read
+//! that is refused or fails lists nothing, and the sheet says so in its own words.
 
 use centraid_api_proto::core_v1 as wire;
 use wire::app_query_response::Answer;
@@ -31,33 +59,99 @@ use wire::link_event::Kind as E;
 use crate::catalog::load;
 use crate::kit::read::{self, Reading};
 use crate::screen::Ctx;
+use crate::shell::row_routes::{self, RowRef};
 use crate::strings::{Locale, fill, links as words};
 
-/// What a link can point at, as the picker lists it.
+/// What a link can point at, as the picker lists it: every item a link may end at (a Locker item
+/// never is one, so it has no kind here).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
     Person,
     Account,
     Place,
+    Task,
+    Event,
+    Note,
+    Document,
+    Photo,
+    Transaction,
+    Workout,
 }
 
 impl Kind {
-    /// The `LinkAdd.key` the wire carries.
+    /// Every kind, in the order a host that offers all of them draws them.
+    pub const ALL: [Self; 10] = [
+        Self::Person,
+        Self::Task,
+        Self::Event,
+        Self::Note,
+        Self::Document,
+        Self::Photo,
+        Self::Transaction,
+        Self::Workout,
+        Self::Account,
+        Self::Place,
+    ];
+
+    /// Every kind but `own`: what an item's page offers, since nothing links to itself.
+    #[must_use]
+    pub fn all_but(own: Self) -> Vec<Self> {
+        Self::ALL.into_iter().filter(|kind| *kind != own).collect()
+    }
+
+    /// The `LinkAdd.key` the wire carries, and the word the vault's `shell.links` and
+    /// `shell.link-candidates` reads use.
     #[must_use]
     pub const fn key(self) -> &'static str {
         match self {
             Self::Person => "person",
             Self::Account => "account",
             Self::Place => "place",
+            Self::Task => "task",
+            Self::Event => "event",
+            Self::Note => "note",
+            Self::Document => "document",
+            Self::Photo => "photo",
+            Self::Transaction => "transaction",
+            Self::Workout => "workout",
         }
     }
 
-    fn parse(key: &str) -> Option<Self> {
-        match key {
-            "person" => Some(Self::Person),
-            "account" => Some(Self::Account),
-            "place" => Some(Self::Place),
-            _ => None,
+    #[must_use]
+    pub fn parse(key: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|kind| kind.key() == key)
+    }
+
+    fn wire(self) -> load::shell::LinkCandidatesKind {
+        use load::shell::LinkCandidatesKind as K;
+        match self {
+            Self::Person => K::Person,
+            Self::Account => K::Account,
+            Self::Place => K::Place,
+            Self::Task => K::Task,
+            Self::Event => K::Event,
+            Self::Note => K::Note,
+            Self::Document => K::Document,
+            Self::Photo => K::Photo,
+            Self::Transaction => K::Transaction,
+            Self::Workout => K::Workout,
+        }
+    }
+
+    /// The kind's word, over a linked row and on the kind chooser ("Task").
+    #[must_use]
+    pub fn name(self, locale: Locale) -> String {
+        match self {
+            Self::Person => words::kind_person(locale),
+            Self::Account => words::kind_account(locale),
+            Self::Place => words::kind_place(locale),
+            Self::Task => words::kind_task(locale),
+            Self::Event => words::kind_event(locale),
+            Self::Note => words::kind_note(locale),
+            Self::Document => words::kind_document(locale),
+            Self::Photo => words::kind_photo(locale),
+            Self::Transaction => words::kind_transaction(locale),
+            Self::Workout => words::kind_workout(locale),
         }
     }
 
@@ -66,6 +160,13 @@ impl Kind {
             Self::Person => words::add_person(locale),
             Self::Account => words::add_account(locale),
             Self::Place => words::add_place(locale),
+            Self::Task => words::add_task(locale),
+            Self::Event => words::add_event(locale),
+            Self::Note => words::add_note(locale),
+            Self::Document => words::add_document(locale),
+            Self::Photo => words::add_photo(locale),
+            Self::Transaction => words::add_transaction(locale),
+            Self::Workout => words::add_workout(locale),
         }
     }
 
@@ -74,6 +175,13 @@ impl Kind {
             Self::Person => words::search_people(locale),
             Self::Account => words::search_accounts(locale),
             Self::Place => words::search_places(locale),
+            Self::Task => words::search_tasks(locale),
+            Self::Event => words::search_events(locale),
+            Self::Note => words::search_notes(locale),
+            Self::Document => words::search_documents(locale),
+            Self::Photo => words::search_photos(locale),
+            Self::Transaction => words::search_transactions(locale),
+            Self::Workout => words::search_workouts(locale),
         }
     }
 
@@ -82,8 +190,32 @@ impl Kind {
             Self::Person => words::no_people(locale),
             Self::Account => words::no_accounts(locale),
             Self::Place => words::no_places(locale),
+            Self::Task => words::no_tasks(locale),
+            Self::Event => words::no_events(locale),
+            Self::Note => words::no_notes(locale),
+            Self::Document => words::no_documents(locale),
+            Self::Photo => words::no_photos(locale),
+            Self::Transaction => words::no_transactions(locale),
+            Self::Workout => words::no_workouts(locale),
         }
     }
+}
+
+/// The app and entity a linked row of this `shell.links` kind opens (`shell::row_routes`); `None`
+/// for a kind with no page of its own (an account, a place).
+fn opens(key: &str) -> Option<(&'static str, &'static str)> {
+    Some(match key {
+        "person" => ("people", "person"),
+        "task" => ("reminders", "task"),
+        "event" => ("calendar", "event"),
+        "note" => ("notes", "note"),
+        "document" => ("docs", "document"),
+        "photo" => ("photos", "photo"),
+        "transaction" => ("money", "transaction"),
+        "workout" => ("health", "workout"),
+        "locker_item" => ("locker", "locker_item"),
+        _ => return None,
+    })
 }
 
 /// A person the member keeps, as the picker and the proposal read them.
@@ -112,19 +244,36 @@ struct Candidate {
     meta: String,
 }
 
+/// Where the sheet is: choosing a kind (a host that offers many), or listing one kind's items.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Stage {
+    Chooser,
+    Items(Kind),
+}
+
 #[derive(Clone, Debug)]
 struct Open {
-    kind: Kind,
+    stage: Stage,
     query: String,
     loaded: bool,
     candidates: Vec<Candidate>,
 }
+
+/// A host that offers this many kinds or more draws ONE "Add link" row, and the sheet it opens
+/// lists the kinds first (in the picker's own rows: no new element). Fewer are drawn as one
+/// "Add ..." row each, as the first four hosts always did.
+const CHOOSER_FROM: usize = 4;
+
+/// The `LinkAdd.key` of that one row.
+const CHOOSER_KEY: &str = "link";
 
 /// The state a host holds for its links: which kinds it can add, the picker while it is up, and
 /// the people it has read.
 #[derive(Clone, Debug)]
 pub struct Links {
     adds: Vec<Kind>,
+    /// The host's own item, which the picker never offers (nothing links to itself).
+    own: Option<String>,
     open: Option<Open>,
     people: Option<Vec<Person>>,
 }
@@ -135,9 +284,17 @@ impl Links {
     pub fn new(adds: &[Kind]) -> Self {
         Self {
             adds: adds.to_vec(),
+            own: None,
             open: None,
             people: None,
         }
+    }
+
+    /// The same, for the page of the item `id`: the picker leaves `id` out.
+    #[must_use]
+    pub fn for_entity(mut self, id: &str) -> Self {
+        self.own = Some(id.to_owned());
+        self
     }
 
     #[must_use]
@@ -150,8 +307,13 @@ impl Links {
         self.open = None;
     }
 
+    fn chooses_a_kind(&self) -> bool {
+        self.adds.len() >= CHOOSER_FROM
+    }
+
     /// The people the member keeps, read once: the owner first (as "You"), then the circle in name
-    /// order. A read that fails or is refused lists nobody.
+    /// order. A read that fails or is refused lists nobody. (The proposal reads these; the picker
+    /// reads [`read_candidates`].)
     pub fn people(&mut self, ctx: &Ctx) -> &[Person] {
         if self.people.is_none() {
             self.people = Some(read_roster(ctx));
@@ -162,34 +324,31 @@ impl Links {
     /// Read what the picker lists again (the data it lists moved).
     pub fn reload(&mut self, ctx: &Ctx) {
         self.people = None;
-        if let Some(kind) = self.open.as_ref().map(|open| open.kind) {
-            let candidates = self.candidates(kind, ctx);
-            if let Some(open) = self.open.as_mut() {
-                open.candidates = candidates;
-                open.loaded = true;
-            }
+        let Some((kind, query)) = self.open.as_ref().and_then(|open| match open.stage {
+            Stage::Items(kind) => Some((kind, open.query.clone())),
+            Stage::Chooser => None,
+        }) else {
+            return;
+        };
+        let candidates = self.candidates(kind, &query, ctx);
+        if let Some(open) = self.open.as_mut() {
+            open.candidates = candidates;
+            open.loaded = true;
         }
     }
 
-    fn candidates(&mut self, kind: Kind, ctx: &Ctx) -> Vec<Candidate> {
-        let locale = ctx.locale();
-        match kind {
-            Kind::Person => self
-                .people(ctx)
-                .iter()
-                .map(|person| Candidate {
-                    id: person.id.clone(),
-                    title: person.name.clone(),
-                    meta: if person.is_owner {
-                        words::you(locale)
-                    } else {
-                        String::new()
-                    },
-                })
-                .collect(),
-            Kind::Account => read_accounts(ctx),
-            Kind::Place => read_places(ctx),
-        }
+    fn candidates(&self, kind: Kind, term: &str, ctx: &Ctx) -> Vec<Candidate> {
+        read_candidates(ctx, kind, term, self.own.as_deref())
+    }
+
+    fn open_items(&mut self, kind: Kind, ctx: &Ctx) {
+        let candidates = self.candidates(kind, "", ctx);
+        self.open = Some(Open {
+            stage: Stage::Items(kind),
+            query: String::new(),
+            loaded: true,
+            candidates,
+        });
     }
 
     /// Take one event. `linked` is the ids the host is linked to now: a tap on one of them in the
@@ -197,15 +356,17 @@ impl Links {
     pub fn update(&mut self, event: &wire::LinkEvent, linked: &[String], ctx: &Ctx) -> Outcome {
         match &event.kind {
             Some(E::Add(tapped)) => {
-                if let Some(kind) = Kind::parse(&tapped.key).filter(|kind| self.adds.contains(kind))
-                {
-                    let candidates = self.candidates(kind, ctx);
+                if tapped.key == CHOOSER_KEY && self.chooses_a_kind() {
                     self.open = Some(Open {
-                        kind,
+                        stage: Stage::Chooser,
                         query: String::new(),
                         loaded: true,
-                        candidates,
+                        candidates: Vec::new(),
                     });
+                } else if let Some(kind) =
+                    Kind::parse(&tapped.key).filter(|kind| self.adds.contains(kind))
+                {
+                    self.open_items(kind, ctx);
                 }
                 Outcome::Moved
             }
@@ -214,6 +375,17 @@ impl Links {
             },
             Some(E::Pick(picked)) => {
                 let Some(open) = self.open.take() else {
+                    return Outcome::Moved;
+                };
+                if open.stage == Stage::Chooser {
+                    // A tap on a kind: its items take the sheet's place.
+                    match Kind::parse(&picked.id).filter(|kind| self.adds.contains(kind)) {
+                        Some(kind) => self.open_items(kind, ctx),
+                        None => self.open = Some(open),
+                    }
+                    return Outcome::Moved;
+                }
+                let Stage::Items(kind) = open.stage else {
                     return Outcome::Moved;
                 };
                 if !open.candidates.iter().any(|c| c.id == picked.id) {
@@ -226,14 +398,25 @@ impl Links {
                     }
                 } else {
                     Outcome::Add {
-                        kind: open.kind,
+                        kind,
                         id: picked.id.clone(),
                     }
                 }
             }
             Some(E::Query(typed)) => {
-                if let Some(open) = self.open.as_mut() {
-                    open.query.clone_from(&typed.text);
+                let Some(open) = self.open.as_mut() else {
+                    return Outcome::Moved;
+                };
+                open.query.clone_from(&typed.text);
+                // Typing asks the vault again: it answers the first rows whose title holds the
+                // term, so a long list is never walked here.
+                if let Stage::Items(kind) = open.stage {
+                    let term = typed.text.clone();
+                    let candidates = self.candidates(kind, &term, ctx);
+                    if let Some(open) = self.open.as_mut() {
+                        open.candidates = candidates;
+                        open.loaded = true;
+                    }
                 }
                 Outcome::Moved
             }
@@ -245,9 +428,16 @@ impl Links {
         }
     }
 
-    /// The add rows, in the host's order.
+    /// The add rows, in the host's order: one per kind, or the one "Add link" row of a host that
+    /// offers many.
     #[must_use]
     pub fn adds(&self, locale: Locale) -> Vec<wire::LinkAdd> {
+        if self.chooses_a_kind() {
+            return vec![wire::LinkAdd {
+                key: CHOOSER_KEY.to_owned(),
+                label: words::add_link(locale),
+            }];
+        }
         self.adds
             .iter()
             .map(|kind| wire::LinkAdd {
@@ -274,17 +464,20 @@ impl Links {
         }
     }
 
-    /// The picker sheet. Matching is by name, ignoring case; a linked row is `selected`.
+    /// The picker sheet. The vault has matched the typed term already; a linked row is `selected`.
+    /// On the chooser, the typed words narrow the kinds.
     #[must_use]
     pub fn picker(&self, locale: Locale, linked: &[String]) -> wire::LinkPicker {
         let Some(open) = &self.open else {
             return wire::LinkPicker::default();
         };
-        let needle = open.query.trim().to_lowercase();
+        let kind = match open.stage {
+            Stage::Items(kind) => kind,
+            Stage::Chooser => return self.chooser_picker(locale, open),
+        };
         let rows: Vec<wire::LinkRow> = open
             .candidates
             .iter()
-            .filter(|c| needle.is_empty() || c.title.to_lowercase().contains(&needle))
             .map(|c| wire::LinkRow {
                 id: c.id.clone(),
                 title: c.title.clone(),
@@ -296,21 +489,138 @@ impl Links {
             .collect();
         let empty = if !rows.is_empty() {
             String::new()
-        } else if open.candidates.is_empty() {
-            open.kind.none(locale)
+        } else if open.query.trim().is_empty() {
+            kind.none(locale)
         } else {
             words::no_match(locale)
         };
         wire::LinkPicker {
             open: true,
-            title: open.kind.add_label(locale),
+            title: kind.add_label(locale),
             query: open.query.clone(),
-            placeholder: open.kind.placeholder(locale),
+            placeholder: kind.placeholder(locale),
             candidates: rows,
             empty,
             loaded: open.loaded,
         }
     }
+
+    fn chooser_picker(&self, locale: Locale, open: &Open) -> wire::LinkPicker {
+        let needle = open.query.trim().to_lowercase();
+        let rows: Vec<wire::LinkRow> = self
+            .adds
+            .iter()
+            .filter(|kind| needle.is_empty() || kind.name(locale).to_lowercase().contains(&needle))
+            .map(|kind| wire::LinkRow {
+                id: kind.key().to_owned(),
+                title: kind.name(locale),
+                meta: String::new(),
+                route: None,
+                remove_label: String::new(),
+                selected: false,
+            })
+            .collect();
+        wire::LinkPicker {
+            open: true,
+            title: words::add_link(locale),
+            query: open.query.clone(),
+            placeholder: words::search_kinds(locale),
+            empty: if rows.is_empty() {
+                words::no_match(locale)
+            } else {
+                String::new()
+            },
+            candidates: rows,
+            loaded: true,
+        }
+    }
+}
+
+/// The items of `kind` the picker offers for a typed `term` (`shell.link-candidates`): the first
+/// rows by name whose title holds it, the owner as "You", never `own` (the host's own item). A read
+/// that is refused or fails lists nothing, and the sheet says so in its own words.
+fn read_candidates(ctx: &Ctx, kind: Kind, term: &str, own: Option<&str>) -> Vec<Candidate> {
+    let locale = ctx.locale();
+    let Reading::Data(found) = read::read(
+        ctx,
+        load::shell::LinkCandidates {
+            kind: kind.wire(),
+            limit: 0,
+            term: (!term.trim().is_empty()).then(|| term.trim().to_owned()),
+        },
+        |answer| match answer {
+            Answer::LinkCandidates(found) => Some(found),
+            _ => None,
+        },
+    ) else {
+        return Vec::new();
+    };
+    found
+        .candidates
+        .into_iter()
+        .filter(|row| own != Some(row.id.as_str()))
+        .map(|row| Candidate {
+            id: row.id,
+            title: row.title,
+            meta: if row.is_owner {
+                words::you(locale)
+            } else {
+                String::new()
+            },
+        })
+        .collect()
+}
+
+/// WHAT THE ITEM `entity_id` IS LINKED TO, whichever page set the link (`shell.links`): a note's
+/// link shows on the event it points at. Build the section's rows from it with [`rows`] and the
+/// ids the picker marks from it with [`ids`].
+pub fn read_linked(ctx: &Ctx, entity_id: &str) -> Reading<Vec<wire::LinkedItem>> {
+    read::read(
+        ctx,
+        load::shell::Links {
+            entity_id: entity_id.to_owned(),
+        },
+        |answer| match answer {
+            Answer::LinkedItems(linked) => Some(linked.items),
+            _ => None,
+        },
+    )
+}
+
+/// The ids of what a page is linked to: what [`Links::update`] and [`Links::picker`] take as
+/// `linked`.
+#[must_use]
+pub fn ids(linked: &[wire::LinkedItem]) -> Vec<String> {
+    linked.iter().map(|item| item.id.clone()).collect()
+}
+
+/// The rows of a page's links: the title, the kind over it ("Task", "You" on the owner), a key to
+/// take the link off, and the page that opens the linked item (the same routing a search hit
+/// takes; an account or a place has no page).
+#[must_use]
+pub fn rows(locale: Locale, linked: &[wire::LinkedItem]) -> Vec<wire::LinkRow> {
+    linked
+        .iter()
+        .map(|item| {
+            let route = opens(&item.kind).and_then(|(app, entity)| {
+                row_routes::route(&RowRef::new(app, entity, &item.id, &item.title), "", &[])
+            });
+            wire::LinkRow {
+                id: item.id.clone(),
+                title: item.title.clone(),
+                meta: if item.is_owner {
+                    words::you(locale)
+                } else {
+                    Kind::parse(&item.kind)
+                        .map(|kind| kind.name(locale))
+                        .unwrap_or_default()
+                },
+                route,
+                remove_label: fill(&words::remove(locale), &[("name", item.title.as_str())]),
+                selected: false,
+            }
+        })
+        .collect()
 }
 
 /// The people one transaction, document or photograph is joined to (`people.links`).
@@ -469,53 +779,6 @@ fn read_roster(ctx: &Ctx) -> Vec<Person> {
     people
 }
 
-fn read_accounts(ctx: &Ctx) -> Vec<Candidate> {
-    let Reading::Data(accounts) =
-        read::read(ctx, load::money::Accounts {}, |answer| match answer {
-            Answer::MoneyAccounts(accounts) => Some(accounts),
-            _ => None,
-        })
-    else {
-        return Vec::new();
-    };
-    let mut named: Vec<Candidate> = accounts
-        .on_budget
-        .into_iter()
-        .chain(accounts.off_budget)
-        .filter(|line| !line.closed)
-        .map(|line| Candidate {
-            id: line.account_id,
-            title: line.name,
-            meta: String::new(),
-        })
-        .collect();
-    named.sort_by_cached_key(|candidate| candidate.title.to_lowercase());
-    named
-}
-
-fn read_places(ctx: &Ctx) -> Vec<Candidate> {
-    let Reading::Data(places) = read::read(ctx, load::photos::Places {}, |answer| match answer {
-        Answer::PhotosPlaces(places) => Some(places),
-        _ => None,
-    }) else {
-        return Vec::new();
-    };
-    let mut named: Vec<Candidate> = places
-        .places
-        .into_iter()
-        .filter_map(|card| {
-            let name = card.name.filter(|name| !name.trim().is_empty())?;
-            Some(Candidate {
-                id: card.place?.place_id,
-                title: name,
-                meta: String::new(),
-            })
-        })
-        .collect();
-    named.sort_by_cached_key(|candidate| candidate.title.to_lowercase());
-    named
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -581,5 +844,146 @@ mod tests {
         ];
         assert_eq!(names(Locale::En, &linked), "Maya, Ravi");
         assert_eq!(names(Locale::En, &[]), "No one");
+    }
+
+    fn linked(id: &str, kind: &str, title: &str, is_owner: bool) -> wire::LinkedItem {
+        wire::LinkedItem {
+            id: id.to_owned(),
+            kind: kind.to_owned(),
+            title: title.to_owned(),
+            is_owner,
+        }
+    }
+
+    #[test]
+    fn every_kind_parses_its_own_key_and_nothing_else_does() {
+        for kind in Kind::ALL {
+            assert_eq!(Kind::parse(kind.key()), Some(kind), "{}", kind.key());
+        }
+        let keys: std::collections::BTreeSet<&str> =
+            Kind::ALL.iter().map(|kind| kind.key()).collect();
+        assert_eq!(keys.len(), Kind::ALL.len(), "two kinds share a key");
+        assert_eq!(Kind::parse("locker_item"), None);
+        assert_eq!(Kind::parse("link"), None);
+        assert_eq!(Kind::parse(""), None);
+    }
+
+    #[test]
+    fn all_but_leaves_out_the_one_kind_and_never_offers_a_locker_item() {
+        for own in Kind::ALL {
+            let offered = Kind::all_but(own);
+            assert!(!offered.contains(&own), "{} offered to itself", own.key());
+            assert_eq!(offered.len(), Kind::ALL.len() - 1);
+            assert!(offered.iter().all(|kind| kind.key() != "locker_item"));
+        }
+        assert!(Kind::ALL.iter().all(|kind| kind.key() != "locker_item"));
+    }
+
+    #[test]
+    fn every_kind_has_words_in_the_kit() {
+        for kind in Kind::ALL {
+            assert!(!kind.name(Locale::En).is_empty());
+            assert!(!kind.add_label(Locale::En).is_empty());
+            assert!(!kind.placeholder(Locale::En).is_empty());
+            assert!(!kind.none(Locale::En).is_empty());
+        }
+    }
+
+    #[test]
+    fn a_linked_row_opens_the_page_of_the_kind_it_is() {
+        let id = "x1";
+        let cases = [
+            ("person", Some("people.person")),
+            ("task", Some("reminders.task")),
+            ("event", Some("calendar.event")),
+            ("note", Some("notes.editor")),
+            ("document", Some("docs.document")),
+            ("photo", Some("photos.lightbox")),
+            ("transaction", Some("money.transaction")),
+            ("workout", Some("health.workout")),
+            ("locker_item", Some("locker.item")),
+            ("account", None),
+            ("place", None),
+        ];
+        for (kind, screen) in cases {
+            let made = rows(Locale::En, &[linked(id, kind, "T", false)]);
+            assert_eq!(made.len(), 1);
+            let opened = made[0].route.as_ref();
+            assert_eq!(opened.map(|route| route.screen.as_str()), screen, "{kind}");
+        }
+    }
+
+    #[test]
+    fn a_linked_row_says_its_kind_or_you_and_names_what_removing_it_does() {
+        let made = rows(
+            Locale::En,
+            &[
+                linked("a", "task", "Pay rent", false),
+                linked("b", "person", "Srikanth", true),
+            ],
+        );
+        assert_eq!(made[0].meta, "Task");
+        assert_eq!(made[1].meta, "You");
+        assert!(made[0].remove_label.contains("Pay rent"));
+        assert!(!made[0].selected);
+        assert_eq!(
+            ids(&[
+                linked("a", "task", "t", false),
+                linked("b", "note", "n", false)
+            ]),
+            ["a", "b"]
+        );
+    }
+
+    #[test]
+    fn the_picker_over_candidates_marks_the_linked_ones_selected() {
+        let mut links = Links::new(&Kind::all_but(Kind::Note)).for_entity("me");
+        links.open = Some(Open {
+            stage: Stage::Items(Kind::Task),
+            query: String::new(),
+            loaded: true,
+            candidates: vec![
+                Candidate {
+                    id: "t1".into(),
+                    title: "Pay rent".into(),
+                    meta: String::new(),
+                },
+                Candidate {
+                    id: "t2".into(),
+                    title: "Call Maya".into(),
+                    meta: String::new(),
+                },
+            ],
+        });
+        let picker = links.picker(Locale::En, &["t2".to_owned()]);
+        assert!(picker.open && picker.loaded);
+        assert_eq!(picker.title, "Add task");
+        let selected: Vec<(&str, bool)> = picker
+            .candidates
+            .iter()
+            .map(|row| (row.id.as_str(), row.selected))
+            .collect();
+        assert_eq!(selected, [("t1", false), ("t2", true)]);
+        assert!(picker.empty.is_empty());
+    }
+
+    #[test]
+    fn a_host_of_many_kinds_draws_one_add_row_and_a_sheet_of_kinds() {
+        let mut links = Links::new(&Kind::all_but(Kind::Task));
+        let adds = links.adds(Locale::En);
+        assert_eq!(adds.len(), 1);
+        assert_eq!(adds[0].key, "link");
+        links.open = Some(Open {
+            stage: Stage::Chooser,
+            query: String::new(),
+            loaded: true,
+            candidates: Vec::new(),
+        });
+        let picker = links.picker(Locale::En, &[]);
+        let listed: Vec<&str> = picker.candidates.iter().map(|r| r.id.as_str()).collect();
+        assert_eq!(listed.len(), 9);
+        assert!(!listed.contains(&"task") && !listed.contains(&"locker_item"));
+        let few = Links::new(&[Kind::Person, Kind::Account]);
+        assert_eq!(few.adds(Locale::En).len(), 2);
     }
 }
