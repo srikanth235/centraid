@@ -51,6 +51,7 @@ use crate::kit::attachments::Attachments;
 use crate::kit::civil::{self, HourCycle};
 use crate::kit::earlier;
 use crate::kit::follow;
+use crate::kit::quantity::UnitsPref;
 use crate::kit::read::{self as kit_read, Reading};
 use crate::kit::schedule::rows::hue_role;
 use crate::kit::share::{self, Share};
@@ -491,26 +492,28 @@ impl Screen for EventPage {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
-        let content =
-            match &self.content {
-                Content::Loading => {
-                    wire::agenda_event_state::Content::Loading(wire::Loading { first_load: true })
-                }
-                Content::Failed => {
-                    wire::agenda_event_state::Content::Failure(kit_read::failure(locale))
-                }
-                Content::Denied(denial) => {
-                    wire::agenda_event_state::Content::Denied(denied(locale, denial))
-                }
-                Content::Data(detail) => {
-                    match self.event() {
-                        None => wire::agenda_event_state::Content::Gone(gone(locale)),
-                        Some(event) => wire::agenda_event_state::Content::Data(Box::new(
-                            self.data(locale, ctx.hour_cycle(), ctx.zone(), event, detail),
-                        )),
-                    }
-                }
-            };
+        let content = match &self.content {
+            Content::Loading => {
+                wire::agenda_event_state::Content::Loading(wire::Loading { first_load: true })
+            }
+            Content::Failed => {
+                wire::agenda_event_state::Content::Failure(kit_read::failure(locale))
+            }
+            Content::Denied(denial) => {
+                wire::agenda_event_state::Content::Denied(denied(locale, denial))
+            }
+            Content::Data(detail) => match self.event() {
+                None => wire::agenda_event_state::Content::Gone(gone(locale)),
+                Some(event) => wire::agenda_event_state::Content::Data(Box::new(self.data(
+                    locale,
+                    ctx.units(),
+                    ctx.hour_cycle(),
+                    ctx.zone(),
+                    event,
+                    detail,
+                ))),
+            },
+        };
         let series_sheet = self.sheet == Sheet::CancelScope;
         let state = wire::AgendaEventState {
             content: Some(content),
@@ -549,6 +552,7 @@ impl EventPage {
     fn data(
         &self,
         locale: Locale,
+        units: UnitsPref,
         cycle: HourCycle,
         device_zone: &str,
         event: &wire::AgendaEvent,
@@ -745,7 +749,7 @@ impl EventPage {
                 event_words::followed_heading(locale, followed.len() as u64)
             },
             followed_guests: followed,
-            attachments: Some(self.attachments.view(locale)),
+            attachments: Some(self.attachments.view(locale, units)),
             title,
             date_label: date,
             when_label: when,

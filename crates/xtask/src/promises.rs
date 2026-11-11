@@ -171,11 +171,11 @@ pub const REGISTER: &[Row] = &[
     kept("money", Promise::Units, UNITS_PROOF),
     kept("notes", Promise::Units, UNITS_PROOF),
     kept("people", Promise::Units, UNITS_PROOF),
-    owed("calendar", Promise::Units, UNITS_OWED),
+    kept("calendar", Promise::Units, UNITS_PROOF),
     owed("docs", Promise::Units, UNITS_OWED),
     kept("health", Promise::Units, UNITS_PROOF),
     owed("photos", Promise::Units, UNITS_OWED),
-    owed("reminders", Promise::Units, UNITS_OWED),
+    kept("reminders", Promise::Units, UNITS_PROOF),
     kept(
         "calendar",
         Promise::Trash,

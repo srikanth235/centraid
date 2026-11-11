@@ -28,6 +28,7 @@ use crate::kit::autosave::{Autosave, Draft};
 use crate::kit::civil::{self, HourCycle};
 use crate::kit::earlier;
 use crate::kit::follow;
+use crate::kit::quantity::UnitsPref;
 use crate::kit::read::{self, Reading};
 use crate::kit::schedule::custom::{Custom, Done};
 use crate::kit::schedule::ops::Ops;
@@ -811,6 +812,7 @@ impl Detail {
     fn data(
         &self,
         locale: Locale,
+        units: UnitsPref,
         cycle: HourCycle,
         answer: &Answered,
         task: &wire::AgendaTask,
@@ -893,7 +895,7 @@ impl Detail {
             can_release: open,
             today: today.to_owned(),
             link: link_of(locale, task),
-            attachments: Some(self.attachments.view(locale)),
+            attachments: Some(self.attachments.view(locale, units)),
             custom_repeat: self.custom_sheet(locale, task),
         }
     }
@@ -973,9 +975,13 @@ impl Screen for Detail {
             Phase::Denied(denial) => Content::Denied(list::denied(locale, denial)),
             // GONE is drawn, not failed: never made, deleted, or in the trash.
             Phase::Ready(answer) => match answer.task() {
-                Some(task) => {
-                    Content::Data(Box::new(self.data(locale, ctx.hour_cycle(), answer, task)))
-                }
+                Some(task) => Content::Data(Box::new(self.data(
+                    locale,
+                    ctx.units(),
+                    ctx.hour_cycle(),
+                    answer,
+                    task,
+                ))),
                 None => Content::Gone(wire::EmptyState {
                     headline: words::task_gone(locale),
                     ..wire::EmptyState::default()

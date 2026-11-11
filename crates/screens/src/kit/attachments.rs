@@ -13,7 +13,7 @@
 //!    `attachments.event(ctx, event)`, which answers the effects to return (a `PickFile`).
 //! 5. Effects: offer every `EffectResult` outcome to `attachments.result(ctx, &outcome)` first;
 //!    `Some(effects)` means a pick was waiting and the answer was this section's.
-//! 6. View: `attachments.view(locale)` is the `AgendaAttachmentsSection` the page draws.
+//! 6. View: `attachments.view(locale, units)` is the `AgendaAttachmentsSection` the page draws.
 //! 7. A tap on a row is a route the section already carries; the page names no screen for it.
 //!
 //! Held by the promise register's Attach row (`cargo xtask promises`): the manifest's trio and
@@ -39,8 +39,8 @@
 //! Reads are `<app>.attachments`, a keyset page. The first page is read again after every
 //! change (as many rows as are shown, up to the page maximum); Show more reads the next.
 
+use crate::kit::quantity::{Quantity, UnitsPref};
 use centraid_api_proto::core_v1 as wire;
-use centraid_vault::page::format_byte_size;
 use wire::agenda_attachment_event::Kind as K;
 use wire::app_query_response::Answer;
 use wire::effect_result::Outcome as O;
@@ -303,7 +303,7 @@ impl Attachments {
 
     /// The section, as a page draws it.
     #[must_use]
-    pub fn view(&self, locale: Locale) -> wire::AgendaAttachmentsSection {
+    pub fn view(&self, locale: Locale, units: UnitsPref) -> wire::AgendaAttachmentsSection {
         let photos: Vec<String> = self
             .items
             .iter()
@@ -323,7 +323,7 @@ impl Attachments {
             items: self
                 .items
                 .iter()
-                .map(|row| tile(locale, row, &photos))
+                .map(|row| tile(locale, units, row, &photos))
                 .collect(),
             empty_label: if self.read == Loaded::Read && self.items.is_empty() {
                 words::attachments_empty(locale)
@@ -377,6 +377,7 @@ fn kind_label(locale: Locale, row: &wire::AgendaAttachmentRow) -> String {
 
 fn tile(
     locale: Locale,
+    units: UnitsPref,
     row: &wire::AgendaAttachmentRow,
     photos: &[String],
 ) -> wire::AgendaAttachmentTile {
@@ -399,7 +400,10 @@ fn tile(
         );
     let meta = fill(
         &words::attachment_meta(locale),
-        &[("kind", &kind), ("size", &format_byte_size(row.byte_size))],
+        &[
+            ("kind", &kind),
+            ("size", &Quantity::bytes(row.byte_size).words(locale, units)),
+        ],
     );
     // WHERE A TAP GOES is the shell's one table of rows to pages (`row_routes`): this section
     // names no other app's screen. The photographs beside a photo are what its viewer pages through.
