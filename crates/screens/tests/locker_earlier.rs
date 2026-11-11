@@ -454,3 +454,31 @@ fn locked_there_is_no_entry_and_the_route_refuses_to_read_or_restore() {
         "nothing was restored"
     );
 }
+
+#[test]
+fn an_imported_item_says_the_files_name_only_and_a_typed_one_does_not() {
+    let mut d = driver();
+    login(&d, "typed", "Bank");
+    arrange(
+        &d,
+        act::locker::AddItem {
+            title: "Shop".to_owned(),
+            r#type: act::locker::AddItemType::Login,
+            item_id: Some("imported".to_owned()),
+            username: Some("maya@example.com".to_owned()),
+            password: Some("shop-secret-pw".to_owned()),
+            arrived_system: Some(act::locker::AddItemArrivedSystem::Csv),
+            arrived_label: Some("/Downloads/Chrome Passwords.csv".to_owned()),
+            ..act::locker::AddItem::default()
+        },
+    );
+    d.start();
+    d.answer_effect(passed(wire::Biometry::Face));
+    let page = push_item(&mut d, "imported");
+    let line = item_data(&d, page).origin.expect("a line");
+    assert_eq!(line.text, "From Chrome Passwords.csv");
+    assert_eq!(line.accessibility_label, "Came from Chrome Passwords.csv");
+    assert!(!line.text.contains("shop-secret-pw") && !line.text.contains("Downloads"));
+    let page = push_item(&mut d, "typed");
+    assert_eq!(item_data(&d, page).origin, None);
+}
