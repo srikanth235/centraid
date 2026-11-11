@@ -329,6 +329,7 @@ impl Screen for Trash {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
+            Some(E::StatusActed(_)) => self.undone(ctx),
             Some(E::Trash(trash)) => self.event(trash, ctx),
             _ => {}
         }

@@ -285,7 +285,7 @@ message HeaderSubtitle {
 // THE ONE STATUS LINE (product-intuition/references/design-behaviour.md § Status line). One clause, at most one verb.
 // A screen carries it where it says what a write did — "Task done" with
 // Undo — and `action_label` empty is a line with no verb. What the verb does
-// is the screen's own event (`StatusActed`).
+// is the kit's `StatusActed` (any screen), or the screen's own.
 message StatusLine {
   string sentence = 1;
   // "Undo", or empty.
@@ -293,6 +293,10 @@ message StatusLine {
   // The vault refused a write: the sentence is the core's.
   bool refused = 3;
 }
+
+// The status line's verb is tapped. One event for every screen: the screen runs the inverse it
+// offered (`kit::undo`).
+message StatusActed {}
 
 // ---------------------------------------------------------------------------
 // The kit's trash screen (`<app>.trash`, arm 900 of Route/ScreenEvent/ViewState)

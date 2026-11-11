@@ -322,6 +322,8 @@ message ScreenEvent {
     PhoneSaysTaken phone_says_taken = 902;
     // The earlier-versions screen (#1185).
     EarlierEvent earlier = 903;
+    // The verb of any status line ("Undo"), from any screen; no per-screen arm is needed (#1185).
+    StatusActed status_acted = 904;
     // ---- backup (1450-1499, lane H2) ----
     BackupHomeEvent backup_home = 1450;
     // ---- passes (1500-1599): passes_screens.proto ----
