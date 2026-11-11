@@ -318,7 +318,7 @@ fn parsed(version: wire::EarlierVersion) -> Version {
 }
 
 impl Earlier {
-    fn page(&self, ctx: &Ctx, after: Option<i64>) -> Reading<(Vec<Version>, Option<i64>)> {
+    fn page(&mut self, ctx: &Ctx, after: Option<i64>) -> Reading<(Vec<Version>, Option<i64>)> {
         let mut request: wire::LoadRequest = load::shell::EarlierVersions {
             entity_id: self.entity_id.clone(),
         }
@@ -329,6 +329,10 @@ impl Earlier {
             _ => None,
         }) {
             Reading::Data(page) => {
+                // The titles of the lists, albums and items the changes name by id.
+                for named in page.names {
+                    self.names.entry(named.id).or_insert(named.title);
+                }
                 Reading::Data((page.versions.into_iter().map(parsed).collect(), page.next))
             }
             Reading::Denied(denial) => Reading::Denied(denial),
@@ -523,7 +527,15 @@ impl Earlier {
         secrets: Vec<wire::EarlierSecret>,
     ) -> wire::EarlierRow {
         let locale = look.locale;
-        let line = (self.spec.line)(look, fields);
+        // The app words its own fields; what decorates every record is worded once, for all.
+        let line = [
+            (self.spec.line)(look, fields),
+            super::earlier_decor::line(look, fields),
+        ]
+        .into_iter()
+        .filter(|part| !part.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join(" · ");
         let value = if line.trim().is_empty() {
             words::other_details(locale)
         } else {

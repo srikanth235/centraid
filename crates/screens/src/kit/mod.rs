@@ -7,6 +7,7 @@ pub mod attachments;
 pub mod autosave;
 pub mod civil;
 pub mod earlier;
+pub mod earlier_decor;
 pub mod export;
 pub mod follow;
 pub mod glance;

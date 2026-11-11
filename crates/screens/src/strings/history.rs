@@ -29,4 +29,21 @@ catalog! {
     plain restored = ("Earlier version restored", "Earlier version restored");
     plain restored_already = ("Already how it is now", "Already how it is now");
     plain title = ("Earlier versions", "Earlier versions");
+    plain tagged = ("Tagged {tags}", "Tagged {tags}");
+    plain not_tagged = ("Not tagged {tags}", "Not tagged {tags}");
+    plain flag_starred = ("Starred", "Starred");
+    plain flag_pinned = ("Pinned", "Pinned");
+    plain flag_archived = ("Archived", "Archived");
+    plain flag_not_starred = ("Not starred", "Not starred");
+    plain flag_not_pinned = ("Not pinned", "Not pinned");
+    plain flag_not_archived = ("Not archived", "Not archived");
+    plain in_list = ("In {names}", "In {names}");
+    plain not_in_list = ("Not in {names}", "Not in {names}");
+    plain linked_to = ("Linked to {names}", "Linked to {names}");
+    plain not_linked_to = ("Not linked to {names}", "Not linked to {names}");
+    plain about_names = ("About {names}", "About {names}");
+    plain not_about_names = ("Not about {names}", "Not about {names}");
+    plain shows_names = ("Shows {names}", "Shows {names}");
+    plain not_shows_names = ("Does not show {names}", "Does not show {names}");
+    plain item_gone = ("an item that is gone", "an item that is gone");
 }
