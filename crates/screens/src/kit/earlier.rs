@@ -104,8 +104,11 @@ pub struct Wall {
     /// Open one of a version's secrets (`entity_id`, `seq`, the secret's `key`): its plaintext
     /// and how long it may stay on screen, `Err(None)` when the wall shut under the ask, or
     /// `Err(Some(sentence))` for any other refusal, in the member's words.
-    pub open: fn(&Ctx, &str, i64, &str) -> Result<(String, Duration), Option<String>>,
+    pub open: fn(&Ctx, &str, i64, &str) -> Opened,
 }
+
+/// What [`Wall::open`] answers: the plaintext and its life on screen, or the refusal.
+pub type Opened = Result<(String, Duration), Option<String>>;
 
 /// One sealed value a version held, as the app names it.
 #[derive(Clone, Debug, PartialEq)]

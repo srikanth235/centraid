@@ -23,8 +23,6 @@ use centraid_api_proto::core_v1 as wire;
 use serde_json::Value;
 use wire::app_query_response::Answer;
 
-use std::time::Duration;
-
 use super::shared::{self, Opened, Refused};
 use super::types;
 use crate::catalog::load;
@@ -194,12 +192,7 @@ fn secrets(look: &Look, fields: &[Field]) -> Vec<Secret> {
 
 /// Open a version's secret: the core opens its sealed cell behind the unlocked session, as it
 /// does the live one.
-fn open(
-    ctx: &Ctx,
-    item_id: &str,
-    seq: i64,
-    key: &str,
-) -> Result<(String, Duration), Option<String>> {
+fn open(ctx: &Ctx, item_id: &str, seq: i64, key: &str) -> earlier::Opened {
     let (column, field_id) = match key.strip_prefix(FIELD) {
         Some(id) => ("value_sealed", id),
         None => (key, ""),
