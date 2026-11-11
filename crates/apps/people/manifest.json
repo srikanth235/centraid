@@ -160,6 +160,11 @@
         "verbs": "act"
       },
       {
+        "schema": "edge",
+        "table": "remove",
+        "verbs": "act"
+      },
+      {
         "schema": "person",
         "table": "set_birthday_reminder",
         "verbs": "act"
@@ -555,7 +560,7 @@
       "name": "log-interaction",
       "verb": "log",
       "kind": "person",
-      "inverse": null,
+      "inverse": "undo-create",
       "sealed": [],
       "command": "person.log_interaction",
       "phrasings": [
@@ -685,7 +690,7 @@
       "verb": "add_to",
       "kind": "person",
       "also": ["remove_from"],
-      "inverse": null,
+      "inverse": "move-person",
       "sealed": [],
       "command": "person.move",
       "phrasings": [
@@ -693,7 +698,7 @@
         "move Maria to Work",
         "take Priya out of her list"
       ],
-      "description": "Move a person into a list through person.move; omit list_id to un-list them. A person is in one list at a time.",
+      "description": "Move a person into a list through person.move; a list_id of null un-lists them. A person is in one list at a time.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -703,11 +708,11 @@
             "minLength": 1
           },
           "list_id": {
-            "type": "string",
+            "type": ["string", "null"],
             "minLength": 1
           }
         },
-        "required": ["id"],
+        "required": ["id", "list_id"],
         "additionalProperties": false
       },
       "output": {
@@ -729,7 +734,7 @@
       "name": "add-note",
       "verb": "create",
       "kind": "note",
-      "inverse": null,
+      "inverse": "undo-create",
       "sealed": [],
       "command": "person.add_note",
       "phrasings": [
@@ -773,7 +778,7 @@
       "name": "add-task",
       "verb": "create",
       "kind": "task",
-      "inverse": null,
+      "inverse": "undo-create",
       "sealed": [],
       "command": "person.add_task",
       "phrasings": [
@@ -817,7 +822,7 @@
       "name": "complete-task",
       "verb": "complete",
       "kind": "task",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "task.complete",
       "phrasings": [
@@ -857,7 +862,7 @@
       "name": "reopen-task",
       "verb": "reopen",
       "kind": "task",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "task.reopen",
       "phrasings": [
@@ -897,7 +902,7 @@
       "name": "add-important-date",
       "verb": "create",
       "kind": "important_date",
-      "inverse": null,
+      "inverse": "undo-create",
       "sealed": [],
       "command": "person.add_date",
       "phrasings": [
@@ -948,7 +953,7 @@
       "name": "set-reminder",
       "verb": "edit",
       "kind": "important_date",
-      "inverse": null,
+      "inverse": "set-reminder",
       "sealed": [],
       "command": "event.edit",
       "phrasings": [
@@ -996,6 +1001,7 @@
       "verb": "edit",
       "kind": "person",
       "inverse": null,
+      "writes_nothing": true,
       "sealed": [],
       "command": "person.set_birthday_reminder",
       "phrasings": [
@@ -1038,7 +1044,7 @@
       "name": "add-relationship",
       "verb": "link",
       "kind": "person",
-      "inverse": null,
+      "inverse": "remove-relationship",
       "sealed": [],
       "command": "person.add_relationship",
       "phrasings": [
@@ -1090,10 +1096,62 @@
       }
     },
     {
+      "name": "remove-relationship",
+      "verb": "unlink",
+      "kind": "person",
+      "inverse": null,
+      "sealed": [],
+      "command": "edge.remove",
+      "phrasings": [
+        "Sam is no longer Maria's brother",
+        "remove the cousin link between Priya and me",
+        "unlink Sam as Maria's manager"
+      ],
+      "description": "Remove a related edge between two people through edge.remove, by the label it was recorded with; the people stay. It is the Undo of add-relationship, and it asks first because it cannot be taken back by one action.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["related"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
       "name": "add-gift",
       "verb": "create",
       "kind": "gift",
-      "inverse": null,
+      "inverse": "undo-create",
       "sealed": [],
       "command": "person.add_gift",
       "phrasings": [
@@ -1137,7 +1195,7 @@
       "name": "create-list",
       "verb": "create",
       "kind": "people_list",
-      "inverse": null,
+      "inverse": "delete-list",
       "sealed": [],
       "command": "container.create",
       "phrasings": [
@@ -1186,7 +1244,7 @@
       "name": "rename-list",
       "verb": "edit",
       "kind": "people_list",
-      "inverse": null,
+      "inverse": "rename-list",
       "sealed": [],
       "command": "entity.retitle",
       "phrasings": [
@@ -1239,7 +1297,7 @@
         "trash the college friends list"
       ],
       "description": "Move a list to the trash through entity.trash; the people in it are not touched and are in it again if it is restored.",
-      "confirmation": "none",
+      "confirmation": "required",
       "input": {
         "type": "object",
         "properties": {
@@ -1270,7 +1328,7 @@
       "name": "add-journal-entry",
       "verb": "create",
       "kind": "journal_entry",
-      "inverse": null,
+      "inverse": "undo-create",
       "sealed": [],
       "command": "person.add_journal_entry",
       "phrasings": [
@@ -1321,7 +1379,7 @@
       "name": "save-contact-channel",
       "verb": "edit",
       "kind": "contact_point",
-      "inverse": null,
+      "inverse": "save-contact-channel",
       "sealed": [],
       "command": "person.save_contact_point",
       "phrasings": [
@@ -1568,7 +1626,7 @@
         "import vCards"
       ],
       "description": "Read vCards as people through person.import_vcf: a card naming someone already in the vault is a proposal to merge (it fills blanks and adds missing points, replacing nothing); with dry_run it only says what would happen.",
-      "confirmation": "none",
+      "confirmation": "required",
       "input": {
         "type": "object",
         "properties": {
@@ -1597,6 +1655,7 @@
       "bulk": true,
       "kind": "person",
       "inverse": null,
+      "writes_nothing": true,
       "sealed": [],
       "command": "person.export_vcf",
       "phrasings": [

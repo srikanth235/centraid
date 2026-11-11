@@ -165,7 +165,16 @@ impl World {
             .is_some()
     }
 
+    /// The list a person is filed in, if any.
+    pub fn list_of(&self, person: &str) -> Option<String> {
+        self.page_from("edge", "from_id", "rel = 'contains' AND to_id = ?", person)
+    }
+
     fn page_first(&self, predicate: &str, bind: &str) -> Option<String> {
+        self.page_from("entity", "id", predicate, bind)
+    }
+
+    fn page_from(&self, from: &str, column: &str, predicate: &str, bind: &str) -> Option<String> {
         let answer = self
             .sample
             .handle
@@ -173,15 +182,15 @@ impl World {
                 kind: Some(wire::request::Kind::Page(wire::PageRequest {
                     query: Some(wire::PageQuery {
                         name: "undo_plane.first".to_owned(),
-                        select: vec!["id".to_owned()],
-                        from: "entity".to_owned(),
+                        select: vec![column.to_owned()],
+                        from: from.to_owned(),
                         r#where: Some(predicate.to_owned()),
                         bind: vec![wire::Value {
                             kind: Some(wire::value::Kind::Text(bind.to_owned())),
                         }],
                         order: Some(wire::PageOrder {
-                            sort_column: "id".to_owned(),
-                            pk_column: "id".to_owned(),
+                            sort_column: column.to_owned(),
+                            pk_column: column.to_owned(),
                             descending: false,
                         }),
                         ..wire::PageQuery::default()
@@ -381,13 +390,31 @@ fn reminders(w: &World) {
 const WRITES_NOTHING: &[(&str, &str, &str)] = &[
     ("notes", "export-notes", "{}"),
     ("people", "export-vcf", "{}"),
+    // Birthday reminders always stay on: the command refuses an off request, and an on request
+    // restates what the person already has. The recipe asks for a person's birthday first.
+    (
+        "people",
+        "set-birthday-reminder",
+        "{\"id\":\"$BIRTHDAY_PERSON\",\"on\":true}",
+    ),
 ];
 
 #[test]
 fn a_claim_of_writing_nothing_is_proven_by_running_the_action() {
     let w = World::new();
     for (app, action, input) in WRITES_NOTHING {
-        let input: Value = serde_json::from_str(input).expect("json");
+        // A recipe that needs a person with a birthday names one, and one is made for it.
+        let input = if input.contains("$BIRTHDAY_PERSON") {
+            let person = w.make(
+                "people",
+                "add-person",
+                &json!({ "title": "Birthday Bo", "birthday": "05-05" }),
+            );
+            input.replace("$BIRTHDAY_PERSON", &person)
+        } else {
+            (*input).to_owned()
+        };
+        let input: Value = serde_json::from_str(&input).expect("json");
         let done = w.ok(app, action, &input);
         assert!(
             done.response.tables.is_empty(),
@@ -603,6 +630,196 @@ fn calendar(w: &World) {
     assert!(!w.live(&id), "the place is in the trash");
 }
 
+fn people(w: &World) {
+    let person = w.make("people", "add-person", &json!({ "title": "Una Undo" }));
+    let list = w.make(
+        "people",
+        "create-list",
+        &json!({ "kind": "list", "title": "Family" }),
+    );
+    w.round_trip(
+        "people",
+        "edit-person",
+        &person,
+        &json!({ "id": person, "role": "Chef" }),
+    );
+    w.round_trip(
+        "people",
+        "set-cadence",
+        &person,
+        &json!({ "id": person, "cadence_days": 14 }),
+    );
+    w.round_trip(
+        "people",
+        "rename-list",
+        &list,
+        &json!({ "id": list, "title": "Relatives" }),
+    );
+    // A contact channel is a child row of the person, which the history keeps on the person.
+    w.round_trip(
+        "people",
+        "save-contact-channel",
+        &person,
+        &json!({ "id": person, "kind": "phone", "value": "+44 7700 900123" }),
+    );
+    // A follow-up is a task: completing it and reopening it are each one record's edit.
+    let task = w
+        .ok(
+            "people",
+            "add-task",
+            &json!({ "id": person, "text": "send the photos" }),
+        )
+        .output()["task_id"]
+        .as_str()
+        .expect("a task")
+        .to_owned();
+    w.round_trip("people", "complete-task", &task, &json!({ "id": task }));
+    w.ok("people", "complete-task", &json!({ "id": task }));
+    w.round_trip("people", "reopen-task", &task, &json!({ "id": task }));
+    // An important date is an event, so changing its reminder is one record's edit.
+    let date = w
+        .ok(
+            "people",
+            "add-important-date",
+            &json!({ "id": person, "label": "Anniversary", "month_day": "06-01" }),
+        )
+        .output()["date_id"]
+        .as_str()
+        .expect("a date")
+        .to_owned();
+    w.round_trip(
+        "people",
+        "set-reminder",
+        &date,
+        &json!({ "id": date, "reminders": [0] }),
+    );
+}
+
+/// What a member records about a person is its own entity, and taking the act back puts it in the
+/// trash; a move between lists is the same move with the list it replaced; a relationship is taken back by removing that edge; a birthday date is the person's
+/// own column, so it is taken back by the person's earlier version.
+#[test]
+fn what_is_recorded_about_a_person_is_taken_back_and_a_list_comes_back_whole() {
+    let w = World::new();
+    let person = w.make("people", "add-person", &json!({ "title": "Una Undo" }));
+    let other = w.make("people", "add-person", &json!({ "title": "Otis Other" }));
+
+    let trashed_by_undo = |action: &str, input: &Value, key: &str| {
+        let done = w.ok("people", action, input);
+        let id = done.output()[key].as_str().expect("an id").to_owned();
+        let (undo, back) = done
+            .inverse()
+            .unwrap_or_else(|| panic!("{action} is taken back"));
+        assert_eq!(
+            (undo.as_str(), &back["id"]),
+            ("undo-create", &json!(id)),
+            "{action}"
+        );
+        assert!(w.live(&id), "{action} made {id}");
+        w.ok("people", &undo, &back);
+        assert!(!w.live(&id), "{action}: what it made is in the trash");
+        assert!(w.live(&person), "{action}: the person stays");
+    };
+    trashed_by_undo(
+        "log-interaction",
+        &json!({ "id": person, "kind": "coffee", "text": "caught up" }),
+        "interaction_id",
+    );
+    trashed_by_undo(
+        "add-note",
+        &json!({ "id": person, "text": "likes tea" }),
+        "note_id",
+    );
+    trashed_by_undo(
+        "add-task",
+        &json!({ "id": person, "text": "send the photos" }),
+        "task_id",
+    );
+    trashed_by_undo(
+        "add-gift",
+        &json!({ "id": person, "text": "a kettle" }),
+        "task_id",
+    );
+    trashed_by_undo(
+        "add-journal-entry",
+        &json!({ "mood": "calm", "text": "a good day" }),
+        "entry_id",
+    );
+    trashed_by_undo(
+        "add-important-date",
+        &json!({ "id": person, "label": "Moved in", "month_day": "09-09" }),
+        "date_id",
+    );
+
+    // A birthday is the person's own column: the date act edits the person, and the Undo is
+    // their earlier version.
+    let before = w.state(&person);
+    let birthday = w.ok(
+        "people",
+        "add-important-date",
+        &json!({ "id": person, "label": "Birthday", "month_day": "03-03" }),
+    );
+    let (undo, back) = birthday.inverse().expect("a birthday is taken back");
+    assert_eq!(undo, "undo-change");
+    assert_ne!(w.state(&person), before);
+    w.ok("people", &undo, &back);
+    assert_eq!(w.state(&person), before);
+
+    // A move between lists is taken back by moving them where they were, or out.
+    let family = w.make(
+        "people",
+        "create-list",
+        &json!({ "kind": "list", "title": "Family" }),
+    );
+    let work = w.make(
+        "people",
+        "create-list",
+        &json!({ "kind": "list", "title": "Work" }),
+    );
+    let into_family = w.ok(
+        "people",
+        "move-person",
+        &json!({ "id": person, "list_id": family }),
+    );
+    let (undo, back) = into_family.inverse().expect("a move is taken back");
+    assert_eq!(undo, "move-person");
+    assert_eq!(
+        back["list_id"],
+        Value::Null,
+        "they were in no list: out again"
+    );
+    assert_eq!(w.list_of(&person).as_deref(), Some(family.as_str()));
+    w.ok("people", &undo, &back);
+    assert_eq!(w.list_of(&person), None, "undone: in no list again");
+    w.ok(
+        "people",
+        "move-person",
+        &json!({ "id": person, "list_id": family }),
+    );
+    let into_work = w.ok(
+        "people",
+        "move-person",
+        &json!({ "id": person, "list_id": work }),
+    );
+    let (undo, back) = into_work.inverse().expect("a move is taken back");
+    assert_eq!(back["list_id"], json!(family));
+    assert_eq!(w.list_of(&person).as_deref(), Some(work.as_str()));
+    w.ok("people", &undo, &back);
+    assert_eq!(w.list_of(&person).as_deref(), Some(family.as_str()));
+
+    // A relationship is an edge, which the history does not keep: taking it back removes it.
+    let linked = w.ok(
+        "people",
+        "add-relationship",
+        &json!({ "id": person, "name": "Otis Other", "kind": "friend", "related_id": other }),
+    );
+    let (undo, back) = linked.inverse().expect("a relationship is taken back");
+    assert_eq!(undo, "remove-relationship");
+    assert_eq!(back["to"], json!(other));
+    let removed = w.ok("people", &undo, &back);
+    assert_eq!(removed.output()["removed"], json!(true));
+}
+
 fn photos(w: &World) {
     let photo = w.first("photo");
     let album = w.make(
@@ -674,6 +891,7 @@ fn every_earlier_row_round_trips_and_nothing_else_is_claimed() {
     calendar(&w);
     docs(&w);
     notes(&w);
+    people(&w);
     photos(&w);
     let proven = w.proven.borrow().clone();
 

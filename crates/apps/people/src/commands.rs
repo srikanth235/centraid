@@ -1,4 +1,4 @@
-//! THE TWENTY-NINE ACTIONS, as command invocations.
+//! THE THIRTY-ONE ACTIONS, as command invocations.
 //!
 //! Every People action is a thin invocation of ONE typed vault command: the
 //! projection lives in the command, not the app, so this module is a table, not
@@ -111,8 +111,8 @@ pub struct CommandsUnavailable {
 pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
-/// THE TABLE. Twenty-nine actions, in the manifest's own order.
-pub const ACTIONS: [ActionRow; 30] = [
+/// THE TABLE. Thirty-one actions, in the manifest's own order.
+pub const ACTIONS: [ActionRow; 31] = [
     act("add-person", "person.add"),
     act("edit-person", "person.edit"),
     act("set-cadence", "person.edit"),
@@ -132,17 +132,21 @@ pub const ACTIONS: [ActionRow; 30] = [
     act("set-reminder", "event.edit"),
     act("set-birthday-reminder", "person.set_birthday_reminder"),
     act("add-relationship", "person.add_relationship"),
+    confirmed("remove-relationship", "edge.remove"),
     act("add-gift", "person.add_gift"),
     act("create-list", "container.create"),
     act("rename-list", "entity.retitle"),
-    act("delete-list", "entity.trash"),
+    confirmed("delete-list", "entity.trash"),
     act("add-journal-entry", "person.add_journal_entry"),
     act("save-contact-channel", "person.save_contact_point"),
     confirmed("delete-contact-channel", "person.remove_contact_point"),
     confirmed("merge-people", "person.merge"),
     act("follow-contacts", "follow.contacts"),
-    // Item 20 (#1173): the More page's Import and Export of vCards.
-    act("import-vcf", "person.import_vcf"),
+    // Item 20 (#1173): the More page's Import and Export of vCards. An import is not taken back by
+    // an action (it adds people the member can trash and fills blanks), so it asks first: the
+    // Import screen is choose, preview, then the member's tap, and only the tap writes. An export
+    // writes nothing (`writes_nothing`).
+    confirmed("import-vcf", "person.import_vcf"),
     act("export-vcf", "person.export_vcf"),
 ];
 
@@ -203,7 +207,7 @@ mod tests {
 
     #[test]
     fn every_action_invokes_one_command_and_the_person_verbs_are_the_persons_own() {
-        assert_eq!(ACTIONS.len(), 30);
+        assert_eq!(ACTIONS.len(), 31);
         assert_eq!(
             commands("person."),
             [
@@ -243,7 +247,7 @@ mod tests {
     }
 
     #[test]
-    fn the_four_confirmed_actions_are_the_destructive_ones() {
+    fn the_confirmed_actions_are_the_destructive_ones_and_the_ones_that_cannot_be_taken_back() {
         let required: Vec<&str> = ACTIONS
             .iter()
             .filter(|row| row.confirm == Confirm::Required)
@@ -255,8 +259,11 @@ mod tests {
                 "trash-person",
                 "purge-person",
                 "empty-trash",
+                "remove-relationship",
+                "delete-list",
                 "delete-contact-channel",
-                "merge-people"
+                "merge-people",
+                "import-vcf"
             ]
         );
     }

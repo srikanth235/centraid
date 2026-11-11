@@ -59,6 +59,22 @@ pub(crate) enum Input {
     /// the same name. For a change the history does not keep (a label's colour is not a record).
     /// Offered only when the command named every value it replaced.
     Replaced,
+    /// The id of what the action created, which the command answers under the named output key
+    /// (`interaction_id`, `note_id`): the input's own `id` is the person it was about, so it is
+    /// never read. Taken back by the shell's `undo-create`.
+    CreatedAs(&'static str),
+    /// An act that creates something on one path (the output names it under the key) and edits
+    /// one record on the other, as a date does (a birthday is the person's own column; any other
+    /// is an event made about them): the created one by the trash, the edited one by the version
+    /// it made.
+    CreatedElseEarlier(&'static str),
+    /// The same action again with each value the command says it replaced under `replaced`,
+    /// `null` included: a person who was in no list is moved back out of the one they were filed
+    /// in by a move to `null`.
+    Prior,
+    /// A relationship made between two people, taken back by `remove-relationship` naming the
+    /// same two people and the same label.
+    Related,
 }
 
 /// The shell action that puts a record back to a named earlier version. Any app's act can run it.
@@ -171,15 +187,35 @@ const NOTES: &[Row] = &[
     ("restore-note-version", "undo-change", Input::Earlier),
     ("send-to-tasks", "undo-create", Input::Created),
 ];
+/// People. A person's edit is taken back by the version it made. What is made about a person (a
+/// touch, a note, a task, a gift, a journal line, a date) is its own entity and goes to the trash
+/// by the shell's `undo-create` under the key its command answers it by. A list's move is the
+/// same move with the list it replaced; a list's delete is its restore. A relationship is an edge,
+/// which is no record's state (the history leaves `related` outside), so its Undo is removing that
+/// edge. A contact channel is a child row of the person, which the history keeps on the person.
+#[rustfmt::skip]
 const PEOPLE: &[Row] = &[
     ("add-person", "trash-person", Input::Created),
     ("trash-person", "restore-person", Input::Id),
     ("restore-person", "trash-person", Input::Id),
     ("star-person", "unstar-person", Input::Same),
     ("unstar-person", "star-person", Input::Same),
-    ("complete-task", "reopen-task", Input::Id),
-    ("reopen-task", "complete-task", Input::Id),
+    ("complete-task", "undo-change", Input::Earlier),
+    ("reopen-task", "undo-change", Input::Earlier),
     ("create-list", "delete-list", Input::Created),
+    ("edit-person", "edit-person", Input::Earlier),
+    ("set-cadence", "set-cadence", Input::Earlier),
+    ("log-interaction", "undo-create", Input::CreatedAs("interaction_id")),
+    ("move-person", "move-person", Input::Prior),
+    ("add-note", "undo-create", Input::CreatedAs("note_id")),
+    ("add-task", "undo-create", Input::CreatedAs("task_id")),
+    ("add-gift", "undo-create", Input::CreatedAs("task_id")),
+    ("add-important-date", "undo-create", Input::CreatedElseEarlier("date_id")),
+    ("set-reminder", "set-reminder", Input::Earlier),
+    ("add-relationship", "remove-relationship", Input::Related),
+    ("rename-list", "rename-list", Input::Earlier),
+    ("add-journal-entry", "undo-create", Input::CreatedAs("entry_id")),
+    ("save-contact-channel", "save-contact-channel", Input::Earlier),
 ];
 const PHOTOS: &[Row] = &[
     ("upload", "delete-photo", Input::Created),
@@ -234,6 +270,25 @@ pub(crate) fn of(
     let built = match from {
         Input::Same => input.clone(),
         Input::Earlier => return None,
+        Input::CreatedElseEarlier(key) | Input::CreatedAs(key) => {
+            id_only(output.get(*key).filter(|id| id.is_string())?)?
+        }
+        Input::Prior => {
+            let replaced = output.get("replaced")?.as_object()?;
+            let mut again = input.clone();
+            for (name, value) in replaced {
+                again.insert(name.clone(), value.clone());
+            }
+            again
+        }
+        Input::Related => {
+            let mut back = Map::new();
+            back.insert("from".to_owned(), input.get("id")?.clone());
+            back.insert("rel".to_owned(), Value::String("related".to_owned()));
+            back.insert("to".to_owned(), output.get("related_id")?.clone());
+            back.insert("label".to_owned(), input.get("kind")?.clone());
+            back
+        }
         Input::Replaced => {
             let replaced = output.get("replaced")?.as_object()?;
             let mut again = input.clone();
@@ -260,9 +315,9 @@ pub(crate) fn of(
 
 /// Whether the action is taken back by the record's earlier version (an `Earlier` row).
 pub(crate) fn is_earlier(app: &str, action: &str) -> bool {
-    rows(app)
-        .iter()
-        .any(|row| row.0 == action && row.2 == Input::Earlier)
+    rows(app).iter().any(|row| {
+        row.0 == action && matches!(row.2, Input::Earlier | Input::CreatedElseEarlier(_))
+    })
 }
 
 /// The Undo of an act that made version `seq` of record `id`.
@@ -317,6 +372,26 @@ mod tests {
                         "{}.{action}: a replaced-values undo is the action run again",
                         app.id
                     ),
+                    Input::Prior => assert_eq!(
+                        action, inverse,
+                        "{}.{action}: a prior-values undo is the action run again",
+                        app.id
+                    ),
+                    Input::Related => {
+                        assert_eq!(*inverse, "remove-relationship");
+                        for name in ["from", "rel", "to", "label"] {
+                            assert!(
+                                back.input["properties"]
+                                    .as_object()
+                                    .is_some_and(|offered| offered.contains_key(name)),
+                                "{}.{inverse} does not take `{name}`",
+                                app.id
+                            );
+                        }
+                    }
+                    Input::CreatedAs(_) | Input::CreatedElseEarlier(_) => {
+                        unreachable!("{}.{action}: these are the shell's undo-create", app.id)
+                    }
                     Input::Id | Input::Created => assert_eq!(
                         required,
                         ["id"],
@@ -379,7 +454,12 @@ mod tests {
     /// The apps whose Undo row of the promise register (`cargo xtask rules`) is still Owed: the
     /// two checks below hold for every other app, and an app leaves this list in the change that
     /// takes its row to Kept.
-    const OWED: &[&str] = &["calendar", "health", "locker", "money", "people"];
+    const OWED: &[&str] = &["calendar", "health", "locker", "money"];
+
+    /// Single actions still owed in an app whose other actions are held to the check below:
+    /// People's `follow-contacts` is undone by disconnecting the store (owner ruling), and People
+    /// has no action that stops following contacts yet (#1185).
+    const OWED_ACTIONS: &[(&str, &str)] = &[("people", "follow-contacts")];
 
     /// EVERY ACTION IS TAKEN BACK, ASKS FIRST, OR WRITES NOTHING, AND THE TWO LISTS ARE ONE.
     ///
@@ -391,6 +471,9 @@ mod tests {
         use centraid_apps_kit::manifest::Confirmation;
         for app in APPS.iter().filter(|app| !OWED.contains(&app.id)) {
             for entry in &app.manifest().actions {
+                if OWED_ACTIONS.contains(&(app.id, entry.name.as_str())) {
+                    continue;
+                }
                 let row = rows(app.id).iter().find(|row| row.0 == entry.name);
                 assert!(
                     row.is_some()

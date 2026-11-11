@@ -4080,7 +4080,7 @@ pub mod act {
             }
         }
 
-        /// Move a person into a list through person.move; omit list_id to un-list them. A person is in one list at a time.
+        /// Move a person into a list through person.move; a list_id of null un-lists them. A person is in one list at a time.
         #[derive(Clone, Debug, Default)]
         pub struct MovePerson {
             pub person_id: String,
@@ -4092,7 +4092,7 @@ pub mod act {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("id".to_owned(), text(self.person_id));
-                if let Some(it) = self.list_id { map.insert("list_id".to_owned(), text(it)); }
+                map.insert("list_id".to_owned(), match self.list_id { Some(it) => text(it), None => null() });
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
         }
@@ -4280,6 +4280,31 @@ pub mod act {
         }
         impl From<AddRelationship> for wire::ActRequest {
             fn from(value: AddRelationship) -> Self {
+                value.request()
+            }
+        }
+
+        /// Remove a related edge between two people through edge.remove, by the label it was recorded with; the people stay. It is the Undo of add-relationship, and it asks first because it cannot be taken back by one action.
+        #[derive(Clone, Debug, Default)]
+        pub struct RemoveRelationship {
+            pub from: String,
+            pub to: String,
+            pub label: Option<String>,
+        }
+        impl RemoveRelationship {
+            pub const NAME: &str = "remove-relationship";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("from".to_owned(), text(self.from));
+                map.insert("rel".to_owned(), text("related"));
+                map.insert("to".to_owned(), text(self.to));
+                if let Some(it) = self.label { map.insert("label".to_owned(), text(it)); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<RemoveRelationship> for wire::ActRequest {
+            fn from(value: RemoveRelationship) -> Self {
                 value.request()
             }
         }

@@ -139,6 +139,7 @@ people,add-important-date,create,important_date,card,yes: crates/screens/src/peo
 people,set-reminder,edit,important_date,card,yes: crates/screens/src/people/person/mod.rs,no
 people,set-birthday-reminder,edit,person,card,yes: crates/screens/src/people/person/mod.rs,no
 people,add-relationship,link,person,card,no,no
+people,remove-relationship,unlink,person,card,no,no
 people,add-gift,create,gift,card,no,no
 people,create-list,create,people_list,card,no,no
 people,rename-list,edit,people_list,card,no,no

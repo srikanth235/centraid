@@ -382,6 +382,16 @@ fn pre_move(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 /// them out of the list they were in.
 fn move_person(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let id = ctx.required_str("id")?;
+    // The list they were in, so the move is taken back by moving them there again (`null`: none).
+    let was: Option<String> = ctx
+        .connection()
+        .query_row(
+            "SELECT from_id FROM edge WHERE rel = 'contains' AND to_id = ?1
+                AND from_id IN (SELECT id FROM container WHERE kind = 'list')",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?;
     ctx.connection().execute(
         "DELETE FROM edge WHERE rel = 'contains' AND to_id = ?1
             AND from_id IN (SELECT id FROM container WHERE kind = 'list')",
@@ -392,7 +402,11 @@ fn move_person(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     if let Some(list) = ctx.optional_str("list_id") {
         edge::put(ctx, list, Rel::Contains, id, None, &Extras::default())?;
     }
-    Ok(json!({ "id": id, "list_id": ctx.optional_str("list_id") }))
+    Ok(json!({
+        "id": id,
+        "list_id": ctx.optional_str("list_id"),
+        "replaced": { "list_id": was }
+    }))
 }
 
 // ---------------------------------------------------------------------------

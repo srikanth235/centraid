@@ -3527,7 +3527,7 @@
         "bulk": false,
         "chat": "direct",
         "command": "person.log_interaction",
-        "inverse": null,
+        "inverse": "undo-create",
         "kind": "person",
         "phrasings": [
           "I called Sam today",
@@ -3583,7 +3583,7 @@
         "bulk": false,
         "chat": "card",
         "command": "person.move",
-        "inverse": null,
+        "inverse": "move-person",
         "kind": "person",
         "phrasings": [
           "put Sam in my Family list",
@@ -3601,7 +3601,7 @@
         "bulk": false,
         "chat": "card",
         "command": "person.add_note",
-        "inverse": null,
+        "inverse": "undo-create",
         "kind": "note",
         "phrasings": [
           "add a note about Sam: loves hiking",
@@ -3619,7 +3619,7 @@
         "bulk": false,
         "chat": "card",
         "command": "person.add_task",
-        "inverse": null,
+        "inverse": "undo-create",
         "kind": "task",
         "phrasings": [
           "remind me to send Sam the photos",
@@ -3637,7 +3637,7 @@
         "bulk": false,
         "chat": "card",
         "command": "task.complete",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "task",
         "phrasings": [
           "mark the follow-up with Sam done",
@@ -3655,7 +3655,7 @@
         "bulk": false,
         "chat": "card",
         "command": "task.reopen",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "task",
         "phrasings": [
           "reopen the follow-up with Sam",
@@ -3673,7 +3673,7 @@
         "bulk": false,
         "chat": "card",
         "command": "person.add_date",
-        "inverse": null,
+        "inverse": "undo-create",
         "kind": "important_date",
         "phrasings": [
           "add Sam's anniversary on June 5",
@@ -3691,7 +3691,7 @@
         "bulk": false,
         "chat": "card",
         "command": "event.edit",
-        "inverse": null,
+        "inverse": "set-reminder",
         "kind": "important_date",
         "phrasings": [
           "remind me a week before Sam's anniversary",
@@ -3727,7 +3727,7 @@
         "bulk": false,
         "chat": "card",
         "command": "person.add_relationship",
-        "inverse": null,
+        "inverse": "remove-relationship",
         "kind": "person",
         "phrasings": [
           "Sam is Maria's brother",
@@ -3739,13 +3739,31 @@
         "verb": "link"
       },
       {
+        "action": "remove-relationship",
+        "also": [],
+        "app": "people",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": null,
+        "kind": "person",
+        "phrasings": [
+          "Sam is no longer Maria's brother",
+          "remove the cousin link between Priya and me",
+          "unlink Sam as Maria's manager"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "unlink"
+      },
+      {
         "action": "add-gift",
         "also": [],
         "app": "people",
         "bulk": false,
         "chat": "card",
         "command": "person.add_gift",
-        "inverse": null,
+        "inverse": "undo-create",
         "kind": "gift",
         "phrasings": [
           "gift idea for Sam: a hiking book",
@@ -3763,7 +3781,7 @@
         "bulk": false,
         "chat": "card",
         "command": "container.create",
-        "inverse": null,
+        "inverse": "delete-list",
         "kind": "people_list",
         "phrasings": [
           "make a list called Family",
@@ -3781,7 +3799,7 @@
         "bulk": false,
         "chat": "card",
         "command": "entity.retitle",
-        "inverse": null,
+        "inverse": "rename-list",
         "kind": "people_list",
         "phrasings": [
           "rename Family to Relatives",
@@ -3817,7 +3835,7 @@
         "bulk": false,
         "chat": "card",
         "command": "person.add_journal_entry",
-        "inverse": null,
+        "inverse": "undo-create",
         "kind": "journal_entry",
         "phrasings": [
           "journal: today was a good day",
@@ -3835,7 +3853,7 @@
         "bulk": false,
         "chat": "card",
         "command": "person.save_contact_point",
-        "inverse": null,
+        "inverse": "save-contact-channel",
         "kind": "contact_point",
         "phrasings": [
           "add Sam's phone number",

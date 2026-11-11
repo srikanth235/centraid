@@ -196,7 +196,11 @@ pub(crate) fn act(ctx: &Ctx<'_>, request: &wire::ActRequest) -> Result<wire::Act
     let answer = match outcome.status {
         CommandStatus::Executed => {
             let taken_back = match earlier {
-                Some((id, before)) => earlier_inverse(ctx, &id, before)?,
+                // An act that edits one record or creates another (a date) falls back to what it
+                // created when the vault made no version.
+                Some((id, before)) => earlier_inverse(ctx, &id, before)?.or_else(|| {
+                    inverse::of(&request.app, &request.action, input_object, &outcome.output)
+                }),
                 None => inverse::of(&request.app, &request.action, input_object, &outcome.output),
             };
             let inverse = taken_back.map(|(action, input)| wire::ActInverse {
