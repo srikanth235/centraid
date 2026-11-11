@@ -26,12 +26,14 @@ fn lists_data(v: &wire::ViewState) -> &wire::PeopleListsData {
     }
 }
 
+/// The names drawn; none while the page is empty (no list yet has no data).
 fn names(d: &Driver, i: u64) -> Vec<String> {
-    lists_data(d.view(i))
-        .rows
-        .iter()
-        .map(|row| row.name.clone())
-        .collect()
+    match &lists_state(d.view(i)).content {
+        Some(wire::people_lists_state::Content::Data(data)) => {
+            data.rows.iter().map(|row| row.name.clone()).collect()
+        }
+        None => Vec::new(),
+    }
 }
 
 fn send_lists(d: &mut Driver, i: u64, event: L) {
@@ -115,9 +117,15 @@ fn more_reaches_the_lists_page() {
 fn a_list_is_made_renamed_and_moved_to_the_trash_from_its_page() {
     let mut d = clean();
     let i = open(&mut d);
-    let data = lists_data(d.view(i));
-    assert_eq!(data.add_label, "New list");
-    let empty = data.empty.as_ref().expect("no lists yet");
+    let state = lists_state(d.view(i));
+    assert_eq!(state.add_label, "New list");
+    // No list yet is the page's own empty state, never ready data.
+    assert!(state.content.is_none());
+    let Some(wire::page_state::State::Empty(empty)) =
+        state.page.as_ref().and_then(|page| page.state.as_ref())
+    else {
+        panic!("no lists yet is the empty state: {:?}", state.page);
+    };
     assert_eq!(empty.headline, "No lists yet");
 
     // MAKE: a name arms it.
@@ -198,7 +206,7 @@ fn a_list_is_made_renamed_and_moved_to_the_trash_from_its_page() {
     );
     send_lists(&mut d, i, L::TrashTapped(ev::TrashTapped {}));
     assert!(lists_state(d.view(i)).sheet.is_none());
-    assert!(lists_data(d.view(i)).rows.is_empty());
+    assert!(names(&d, i).is_empty());
     let line = status(&d, i).expect("said");
     assert_eq!(
         (

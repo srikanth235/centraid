@@ -306,10 +306,11 @@ fn a_person_trashed_elsewhere_refuses_the_save_as_trashed_and_keeps_the_words() 
         i,
         wire::screen_event::Kind::StatusActed(wire::StatusActed {}),
     );
-    assert!(matches!(
-        editor_state(d.view(i)).content,
-        Some(wire::people_editor_state::Content::Gone(_))
-    ));
+    assert!(editor_state(d.view(i)).content.is_none());
+    assert_eq!(
+        people_support::gone_of(&editor_state(d.view(i)).page).sentence,
+        "This person is not in People."
+    );
     assert_eq!(
         editor_state(d.view(i)).status.clone().unwrap().sentence,
         "Restore it to find your text in Earlier versions."

@@ -92,6 +92,9 @@ struct PageReadStateView<Skeleton: View, Content: View>: View {
     var flat: Bool = false
     /// True where the page is a full-bleed dark stage; see the type's note.
     var stage: Bool = false
+    /// What a screen draws UNDER its empty state (People's phone-contacts import, search's Ask row);
+    /// nothing elsewhere. The Compose twin is `ReadStateView(emptyExtra =)`.
+    var emptyExtra: (() -> AnyView)? = nil
     let skeleton: () -> Skeleton
     let data: () -> Content
 
@@ -103,6 +106,7 @@ struct PageReadStateView<Skeleton: View, Content: View>: View {
         retryLabel: String = KitWords.RETRY,
         flat: Bool = false,
         stage: Bool = false,
+        emptyExtra: (() -> AnyView)? = nil,
         @ViewBuilder skeleton: @escaping () -> Skeleton,
         @ViewBuilder data: @escaping () -> Content
     ) {
@@ -113,6 +117,7 @@ struct PageReadStateView<Skeleton: View, Content: View>: View {
         self.retryLabel = retryLabel
         self.flat = flat
         self.stage = stage
+        self.emptyExtra = emptyExtra
         self.skeleton = skeleton
         self.data = data
     }
@@ -127,7 +132,10 @@ struct PageReadStateView<Skeleton: View, Content: View>: View {
             // A gone item offers no Retry: reading it again cannot bring it back.
             staged(FailureView(sentence: failure.sentence, remedy: failure.remedy, retryLabel: retryLabel, onRetry: failure.permanent ? nil : onRetry))
         case let .empty(empty):
-            staged(EmptyStateView(empty, onAction: onEmptyAction))
+            staged(VStack(spacing: 0) {
+                EmptyStateView(empty, onAction: onEmptyAction)
+                if let emptyExtra { emptyExtra() }
+            })
         case nil:
             if stage {
                 ZStack {
@@ -180,6 +188,7 @@ extension PageReadStateView where Skeleton == RowSkeleton {
         onEmptyAction: (() -> Void)? = nil,
         onNoteAction: (() -> Void)? = nil,
         retryLabel: String = KitWords.RETRY,
+        emptyExtra: (() -> AnyView)? = nil,
         @ViewBuilder data: @escaping () -> Content
     ) {
         self.init(
@@ -188,6 +197,7 @@ extension PageReadStateView where Skeleton == RowSkeleton {
             onEmptyAction: onEmptyAction,
             onNoteAction: onNoteAction,
             retryLabel: retryLabel,
+            emptyExtra: emptyExtra,
             skeleton: { RowSkeleton(label: loadingLabel) },
             data: data
         )

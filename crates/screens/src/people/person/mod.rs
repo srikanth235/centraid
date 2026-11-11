@@ -30,14 +30,14 @@ use wire::app_query_response::Answer;
 use wire::people_person_event::Kind as P;
 use wire::screen_event::Kind as E;
 
-use super::{Phase, denied, fold, routes};
+use super::{denied, fold, routes};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::earlier;
 use crate::kit::export::{self, ExportFile};
 use crate::kit::follow;
 use crate::kit::links::{self, Kind, Links, Outcome};
-use crate::kit::read;
+use crate::kit::read::{self, Page};
 use crate::kit::share::{self, Share};
 use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
@@ -64,7 +64,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     Some(Box::new(Person {
         party_id: args.party_id.clone(),
         name_hint: args.name.clone(),
-        phase: Phase::Loading,
+        page: Page::loading(),
+        gone: false,
         opening_log: args.log_touch,
         sheet: None,
         asking: Asking::Nothing,
@@ -108,8 +109,10 @@ enum Asking {
 struct Person {
     party_id: String,
     name_hint: String,
-    /// `None` inside `Ready`: no live person has this id.
-    phase: Phase<Option<(wire::PeopleSheet, String)>>,
+    /// The read. `None` inside `Ready` never reaches the page: no live person with this id is
+    /// `gone`, a failed page with its own words and no Retry, never an empty one.
+    page: Page<Option<(wire::PeopleSheet, String)>>,
+    gone: bool,
     /// The route asked for the Log a touch sheet at once; it opens with the data.
     opening_log: bool,
     sheet: Option<Sheet>,
@@ -145,43 +148,46 @@ impl Person {
                 _ => None,
             },
         );
-        self.phase = Phase::of(match reading {
+        let reading = match reading {
             read::Reading::Data(person) => {
                 read::Reading::Data(person.sheet.map(|sheet| (sheet, person.today)))
             }
             read::Reading::Denied(denial) => read::Reading::Denied(denial),
             read::Reading::Failed => read::Reading::Failed,
-        });
-        self.differences = match &self.phase {
-            Phase::Ready(Some(_)) => follow::read(ctx, &self.party_id),
-            _ => follow::Phone::default(),
         };
-        self.earlier = match &self.phase {
-            Phase::Ready(Some(_)) => {
-                earlier::foot(ctx, super::EARLIER, &self.party_id, &self.name())
-            }
-            _ => earlier::Foot::default(),
+        // A refresh never blanks the page shown: a failed one keeps it under a note.
+        let held = std::mem::replace(&mut self.page, Page::loading());
+        self.page = held.after(reading, ctx.locale(), Option::is_none);
+        // A read that succeeded and found no person: gone, which is a failure, not an empty page.
+        self.gone = matches!(self.page, Page::Empty);
+        if self.gone {
+            self.page = Page::Failed;
+        }
+        self.differences = match self.loaded() {
+            Some(_) => follow::read(ctx, &self.party_id),
+            None => follow::Phone::default(),
+        };
+        self.earlier = match self.loaded() {
+            Some(_) => earlier::foot(ctx, super::EARLIER, &self.party_id, &self.name()),
+            None => earlier::Foot::default(),
         };
         self.read_linked(ctx);
-        match &self.phase {
+        if self.gone {
             // GONE: nothing to write to, and no sheet over nothing.
-            Phase::Ready(None) => {
-                self.sheet = None;
-                self.asking = Asking::Nothing;
-            }
-            Phase::Denied(_) => self.sheet = None,
-            Phase::Ready(Some(_)) if self.opening_log => {
-                self.opening_log = false;
-                self.sheet = Some(Sheet::log_touch(ctx.locale()));
-            }
-            _ => {}
+            self.sheet = None;
+            self.asking = Asking::Nothing;
+        } else if matches!(self.page, Page::Refused(_)) {
+            self.sheet = None;
+        } else if self.loaded().is_some() && self.opening_log {
+            self.opening_log = false;
+            self.sheet = Some(Sheet::log_touch(ctx.locale()));
         }
     }
 
     /// What the person is linked to, in both directions. A refused or failed read is said on the
     /// status line and never drawn as an empty section; a person who is gone has none.
     fn read_linked(&mut self, ctx: &Ctx) {
-        if !matches!(self.phase, Phase::Ready(Some(_))) {
+        if self.loaded().is_none() {
             self.linked = None;
             self.linked_unread = false;
             self.links.close();
@@ -237,7 +243,7 @@ impl Person {
 
     /// The sheet's data, once it has arrived.
     fn loaded(&self) -> Option<&(wire::PeopleSheet, String)> {
-        self.phase.data().and_then(Option::as_ref)
+        self.page.data().and_then(Option::as_ref)
     }
 
     fn name(&self) -> String {
@@ -817,42 +823,56 @@ impl Screen for Person {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::people_person_state::Content as C;
         let locale = ctx.locale();
-        let content = match &self.phase {
-            Phase::Loading => C::Loading(wire::Loading { first_load: true }),
-            Phase::Failed => C::Failure(read::failure(locale)),
-            Phase::Denied(denial) => C::Denied(denied(locale, denial)),
-            Phase::Ready(None) => C::Gone(data::gone(locale)),
-            Phase::Ready(Some((sheet, today))) => {
-                let mut page = data::person(locale, ctx.hour_cycle(), sheet, today);
-                let lines = phone::lines(locale, &self.differences);
-                page.name_phone_says = lines.name;
-                page.role_phone_says = lines.role;
-                page.nickname_phone_says = lines.nickname;
-                page.birthday_phone_says = lines.birthday;
-                page.channels_phone_says = lines.channels;
-                page.links = self.linked.as_ref().map(|linked| {
-                    self.links.section(
-                        locale,
-                        link_label::section_linked(locale),
-                        links::rows(locale, linked),
-                        link_label::person_links_empty(locale),
-                    )
-                });
-                C::Data(Box::new(page))
-            }
-        };
+        // What the phone says that was not checked is a note over the data; a failed refresh
+        // already is one, and the stronger wins.
+        let drawn = self.page.clone().noted(read::Note::unchecked(
+            &self.differences,
+            locale,
+            follow::Source::Phone,
+        ));
+        let mut wired = drawn.wire(
+            locale,
+            |denial| denied(locale, denial),
+            wire::EmptyState::default,
+        );
+        // A person who is no longer there says so in its own words and offers no Retry.
+        if self.gone && matches!(wired.state, Some(wire::page_state::State::Failed(_))) {
+            let gone = data::gone(locale);
+            wired.state = Some(wire::page_state::State::Failed(read::gone(
+                gone.headline,
+                gone.body,
+            )));
+        }
+        let content = self.loaded().map(|(sheet, today)| {
+            let mut page = data::person(locale, ctx.hour_cycle(), sheet, today);
+            let lines = phone::lines(locale, &self.differences);
+            page.name_phone_says = lines.name;
+            page.role_phone_says = lines.role;
+            page.nickname_phone_says = lines.nickname;
+            page.birthday_phone_says = lines.birthday;
+            page.channels_phone_says = lines.channels;
+            page.links = self.linked.as_ref().map(|linked| {
+                self.links.section(
+                    locale,
+                    link_label::section_linked(locale),
+                    links::rows(locale, linked),
+                    link_label::person_links_empty(locale),
+                )
+            });
+            C::Data(Box::new(page))
+        });
         let state = wire::PeoplePersonState {
             party_id: self.party_id.clone(),
             name_hint: self.name_hint.clone(),
             chrome: Some(Self::chrome(locale)),
-            content: Some(content),
+            content,
+            page: Some(wired),
             sheet: self.sheet.as_ref().map(|sheet| sheet.view(locale)),
             confirm: self.confirm(locale),
             status: self
                 .undo
                 .status()
                 .or_else(|| self.share.status())
-                .or_else(|| self.differences.status(locale, follow::Source::Phone))
                 .or_else(|| self.earlier.status(locale))
                 .or_else(|| {
                     self.linked_unread.then(|| wire::StatusLine {

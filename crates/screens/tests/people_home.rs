@@ -204,10 +204,7 @@ fn the_star_is_a_write_from_the_row_and_the_starred_chip_filters() {
         "Star removed · Dana"
     );
     // Nobody is starred now, and that is the filter's own sentence, not day one's.
-    let empty = roster_data(d.view(i))
-        .empty
-        .clone()
-        .expect("an empty state");
+    let empty = empty_of(&home_state(d.view(i)).page).clone();
     assert_eq!(empty.headline, "Nobody is starred.");
     assert_eq!(empty.action_label, "");
     assert_eq!(empty.import_source, wire::ImportSource::Unspecified as i32);
@@ -241,7 +238,7 @@ fn a_filter_with_nobody_says_so_and_day_one_offers_the_phones_contacts() {
     let mut d = clean();
     let i = begin(&mut d);
     // Day one: nobody at all.
-    let empty = roster_data(d.view(i)).empty.clone().expect("day one");
+    let empty = empty_of(&home_state(d.view(i)).page).clone();
     assert_eq!(empty.headline, "Add people you keep up with");
     assert_eq!(empty.action_label, "Add person");
     assert_eq!(empty.import_source, wire::ImportSource::Contacts as i32);
@@ -249,10 +246,7 @@ fn a_filter_with_nobody_says_so_and_day_one_offers_the_phones_contacts() {
     person(&d, "Dana");
     refresh(&mut d, i);
     send_home(&mut d, i, pick("show", "due"));
-    let empty = roster_data(d.view(i))
-        .empty
-        .clone()
-        .expect("a filter's own");
+    let empty = empty_of(&home_state(d.view(i)).page).clone();
     assert_eq!(empty.headline, "Nobody is overdue.");
 }
 
@@ -335,8 +329,8 @@ fn search_is_a_field_over_the_roster_names_only_and_closing_clears_it() {
     let ask = state.search.as_ref().unwrap().ask.as_ref().expect("Ask");
     assert_eq!(ask.scope, "people");
     assert_eq!(ask.question, "Find dan");
-    // The roster stands under it.
-    assert_eq!(flat(roster_data(d.view(i))).len(), 2);
+    // The search is the page while a term is answered: the rows are `search.results`.
+    assert!(home_state(d.view(i)).content.is_none());
 
     send_home(
         &mut d,
@@ -345,14 +339,11 @@ fn search_is_a_field_over_the_roster_names_only_and_closing_clears_it() {
             term: "zzqx".into(),
         }),
     );
-    let none = home_state(d.view(i))
-        .search
-        .as_ref()
-        .unwrap()
-        .results
-        .clone()
-        .unwrap();
-    assert_eq!(none.empty.unwrap().headline, "Nothing matches.");
+    // A term that matched no one is the page's own empty state, with the Ask row still offered.
+    let state = home_state(d.view(i));
+    assert_eq!(empty_of(&state.page).headline, "Nothing matches.");
+    assert!(state.search.as_ref().unwrap().results.is_none());
+    assert!(state.search.as_ref().unwrap().ask.is_some());
 
     send_home(&mut d, i, H::SearchClosed(ev::SearchClosed {}));
     let state = home_state(d.view(i));
@@ -505,8 +496,15 @@ fn touch_is_tiles_rails_and_the_band_swaps_it_without_a_stack_entry() {
 fn touch_on_an_empty_vault_is_day_one() {
     let mut d = clean();
     let i = open_home(&mut d, wire::PeopleDestination::Touch);
-    let touch = touch_data(d.view(i));
-    assert_eq!(touch.empty.as_ref().unwrap().action_label, "Add person");
+    let state = home_state(d.view(i));
+    assert!(state.content.is_none());
+    let empty = empty_of(&state.page);
+    assert_eq!(empty.action_label, "Add person");
+    assert_eq!(
+        empty.import_source,
+        wire::ImportSource::Contacts as i32,
+        "day one offers the phone's contacts"
+    );
 }
 
 /// A LEAP-DAY BIRTHDAY FALLS ON THE 28TH IN A COMMON YEAR, on Touch's rail: the day shown is
@@ -629,8 +627,10 @@ fn my_card_is_the_owner_above_the_all_list_and_a_filter_takes_it_away() {
         flat(data).iter().all(|row| row.party_id != owner.party_id),
         "the owner is My card, not one of the people"
     );
+    // Nobody is starred: the page is empty, so My card is not drawn either.
     send_home(&mut d, i, pick("show", "starred"));
-    assert!(roster_data(d.view(i)).my_card.is_none());
+    assert!(home_state(d.view(i)).content.is_none());
+    empty_of(&home_state(d.view(i)).page);
     send_home(&mut d, i, pick("show", "all"));
     assert!(roster_data(d.view(i)).my_card.is_some());
 }

@@ -74,10 +74,12 @@ message PeopleHomeState {
   // The band: People · Touch, then More. EMPTY while denied.
   repeated PeopleBandTab band = 3;
   PeopleHomeChrome chrome = 4;
+  // 5 to 7 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 5, 6, 7;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready: the destination's rows. Over a ready search the rows are
+  // `search.results`.
   oneof content {
-    Loading loading = 5;
-    Failure failure = 6;
-    Denied denied = 7;
     PeopleRosterData roster = 8;
     PeopleTouchData touch = 9;
   }
@@ -107,6 +109,10 @@ message PeopleHomeState {
   // sheet and the same words as every followed store (Health's `Stop reading`). Present only after the
   // More row `stop` was tapped; `StopConfirmed` stops, `StopDismissed` (or a tap outside) keeps following.
   optional Confirm stop = 20;
+  // The read of the surface in view (the answer to the term while one is asked, else the
+  // destination's): loading, failed, refused, EMPTY (day one, a chip with no one, a term that
+  // matched no one) or ready.
+  PageState page = 21;
 
   enum Sheet {
     // No sheet is open.
@@ -207,9 +213,9 @@ message PeopleRosterData {
   // The flat list, in the requested order. EMPTY while `sections` holds the rows: under the
   // Name order the roster is A to Z (#1173).
   repeated PeopleRow rows = 1;
-  // Set exactly when `rows` is empty: day one (with "Add person" and the
-  // phone's contacts), or the chip's own sentence.
-  optional EmptyState empty = 2;
+  // 2 was `empty`: day one or a chip with no one is the page's own Empty state (#1185).
+  reserved 2;
+  reserved "empty";
   // "12 people · 3 to reconnect · 2 starred" ("shown" when truncated).
   string status_line = 3;
   bool truncated = 4;
@@ -336,8 +342,9 @@ message PeopleTouchData {
   string recent_empty = 10;
   // "12 people · 3 overdue".
   string status_line = 11;
-  // DAY ONE: nobody in People at all. Drawn instead of the rails.
-  optional EmptyState empty = 12;
+  // 12 was `empty`: day one is the page's own Empty state (#1185).
+  reserved 12;
+  reserved "empty";
 }
 
 // The search field and its answer.
@@ -353,7 +360,9 @@ message PeopleSearchState {
 
 message PeopleSearchResults {
   repeated PeopleRow rows = 1;
-  optional EmptyState empty = 2;
+  // 2 was `empty`: a term that matched no one is the page's own Empty state (#1185).
+  reserved 2;
+  reserved "empty";
 }
 
 message PeopleHomeEvent {
@@ -444,13 +453,13 @@ message PeoplePersonState {
   // The name the route carried, for the app bar before the read lands.
   string name_hint = 2;
   PeoplePersonChrome chrome = 3;
+  // 4 to 6 and 8 were `loading`, `failure`, `denied` and `gone`: the read is `page`, and a person
+  // who is no longer there is a final failure on it (#1185).
+  reserved 4, 5, 6, 8;
+  reserved "loading", "failure", "denied", "gone";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 4;
-    Failure failure = 5;
-    Denied denied = 6;
     PeoplePersonData data = 7;
-    // No live person has this id: trashed, merged away, or never here.
-    EmptyState gone = 8;
   }
   // The write sheet or choices sheet on screen; absent is none.
   optional PeoplePersonSheet sheet = 9;
@@ -467,6 +476,9 @@ message PeoplePersonState {
   optional OriginLine origin = 15;
   // The picker over the "Linked to" section, while it is up (#1185). The kit's generic picker.
   optional LinkPicker link_picker = 16;
+  // The read: loading, failed, refused or ready (with a note when a refresh failed or the phone could
+  // not be checked). A person no longer there is a final failure, never an empty page.
+  PageState page = 17;
 }
 
 message PeoplePersonChrome {
@@ -714,16 +726,22 @@ message PeopleMergeSheet {
   // "Merging cannot be undone."
   string body = 2;
   string cancel_label = 3;
+  // 4 and 5 were `loading` and `failure`: the read is `page` (#1185).
+  reserved 4, 5;
+  reserved "loading", "failure";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 4;
-    Failure failure = 5;
     PeopleMergeChoices choices = 6;
   }
+  // The read of who can be folded in: failed, EMPTY (no one else) or ready.
+  PageState page = 7;
 }
 
 message PeopleMergeChoices {
   repeated PeopleMergeChoice choices = 1;
-  optional EmptyState empty = 2;
+  // 2 was `empty`: no one to fold in is the page's own Empty state (#1185).
+  reserved 2;
+  reserved "empty";
 }
 
 message PeoplePersonSheet {
@@ -872,18 +890,20 @@ message PeopleEditorChrome {
 
 message PeopleEditorState {
   PeopleEditorChrome chrome = 1;
+  // 2 to 4 and 6 were `loading`, `failure`, `denied` and `gone`: the read is `page`, and a person
+  // who is no longer there is a final failure on it (#1185).
+  reserved 2, 3, 4, 6;
+  reserved "loading", "failure", "denied", "gone";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 2;
-    Failure failure = 3;
-    Denied denied = 4;
     PeopleProfileDraft draft = 5;
-    // The person is not there to edit.
-    EmptyState gone = 6;
   }
   Autosave autosave = 7;
   repeated PeopleCadenceChoice cadences = 8;
   // A refused cadence, or another sentence the editor owes; empty when none.
   StatusLine status = 9;
+  // The read: loading, failed, refused, or ready (with a note when a re-read failed over the words).
+  PageState page = 10;
 }
 
 message PeopleEditorEvent {
@@ -931,25 +951,29 @@ message PeopleListsState {
   string title = 1;
   // The page it was pushed from ("People").
   string back_label = 2;
+  // 3 to 5 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 3, 4, 5;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 3;
-    Failure failure = 4;
-    Denied denied = 5;
     PeopleListsData data = 6;
   }
   // A write's sentence or a refusal's; with Undo after a move to the trash.
   StatusLine status = 7;
   // The name sheet, while it is open.
   optional PeopleListSheet sheet = 8;
+  // The read: loading, failed, refused, EMPTY (no list yet) or ready.
+  PageState page = 9;
+  // "New list": the header's one action (`NewTapped`), drawn while the page is ready or empty.
+  string add_label = 10;
 }
 
 message PeopleListsData {
-  // By name. Empty while `empty` is set.
+  // By name.
   repeated PeopleListRow rows = 1;
-  // "New list": the header's one action (`NewTapped`).
-  string add_label = 2;
-  // Set exactly when there are no lists.
-  optional EmptyState empty = 3;
+  // 2 and 3 were `add_label` (now on the state) and `empty` (the page's own Empty state) (#1185).
+  reserved 2, 3;
+  reserved "add_label", "empty";
 }
 
 message PeopleListRow {

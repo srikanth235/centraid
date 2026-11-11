@@ -20,11 +20,11 @@ use wire::app_query_response::Answer;
 use wire::people_editor_event::Kind as N;
 use wire::screen_event::Kind as E;
 
-use super::{Phase, denied, fold};
+use super::{denied, fold};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::autosave::{Autosave, Draft, Resolved};
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Note, Page, Reading};
 use crate::kit::stale;
 use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
@@ -147,7 +147,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         return None;
     }
     let mut autosave = Autosave::new();
-    let phase = if args.is_new && args.party_id.is_empty() {
+    if args.is_new && args.party_id.is_empty() {
         // A NEW PERSON has nothing to read: an empty draft, and no baseline — the first save
         // sends everything it has.
         autosave.loaded(Profile {
@@ -159,14 +159,14 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
             cadence_days: 0,
             rev: 0,
         });
-        Phase::Ready(true)
-    } else {
-        Phase::Loading
-    };
+    }
     Some(Box::new(Editor {
         is_new: args.is_new,
         party_id: args.party_id.clone(),
-        phase,
+        gone: false,
+        failed: false,
+        denied: None,
+        read_failure: false,
         autosave,
         cadence: 0,
         touched: false,
@@ -178,8 +178,14 @@ struct Editor {
     is_new: bool,
     /// The person, once there is one to read.
     party_id: String,
-    /// `Ready(false)`: the person is not there to edit.
-    phase: Phase<bool>,
+    /// The person is not there to edit: a final failure, never an empty page.
+    gone: bool,
+    /// The first read came to nothing (nothing to show yet).
+    failed: bool,
+    /// The gate, when the first read was refused.
+    denied: Option<wire::AppQueryDenial>,
+    /// A re-read failed or was refused over words on screen: a note over them.
+    read_failure: bool,
     autosave: Autosave<Profile>,
     /// A person that exists: the vault's cadence, set on the tap.
     cadence: i64,
@@ -216,7 +222,12 @@ impl Editor {
                 // Words not yet saved are the only copy: a person trashed elsewhere does not
                 // replace the editor under them. The save is refused as stale and Reload keeps them.
                 None if self.autosave.unsaved() => self.autosave.vault_moved(),
-                None => self.phase = Phase::Ready(false),
+                None => {
+                    self.gone = true;
+                    self.failed = false;
+                    self.denied = None;
+                    self.read_failure = false;
+                }
                 Some(sheet) => {
                     let row = sheet.person.unwrap_or_default();
                     self.party_id = id.clone();
@@ -232,13 +243,35 @@ impl Editor {
                     };
                     // Over words being typed a change from the vault replaces NOTHING.
                     self.autosave.loaded(fresh);
-                    self.phase = Phase::Ready(true);
+                    self.gone = false;
+                    self.failed = false;
+                    self.denied = None;
+                    self.read_failure = false;
                 }
             },
-            // A refused read over words being typed keeps the words.
-            Reading::Denied(_) | Reading::Failed if self.autosave.draft().is_some() => {}
-            Reading::Denied(denial) => self.phase = Phase::Denied(denial),
-            Reading::Failed => self.phase = Phase::Failed,
+            // A refused read over words being typed keeps the words under a note.
+            Reading::Denied(_) | Reading::Failed if self.autosave.draft().is_some() => {
+                self.read_failure = true;
+            }
+            Reading::Denied(denial) => self.denied = Some(denial),
+            Reading::Failed => self.failed = true,
+        }
+    }
+
+    /// The page: the gate or a first read that came to nothing, a person who is gone, the words
+    /// (with a note over them when a re-read failed), or the first load.
+    fn page(&self, locale: Locale) -> Page<()> {
+        if let Some(denial) = &self.denied {
+            Page::Refused(denial.clone())
+        } else if self.gone || self.failed {
+            Page::Failed
+        } else if self.autosave.draft().is_some() {
+            Page::Ready {
+                data: (),
+                note: self.read_failure.then(|| Note::refresh_failed(locale)),
+            }
+        } else {
+            Page::loading()
         }
     }
 
@@ -311,7 +344,7 @@ impl Editor {
         self.undo.clear();
         self.reload(ctx);
         if kept {
-            self.undo.say(if matches!(self.phase, Phase::Ready(false)) {
+            self.undo.say(if self.gone {
                 stale::kept_in_trash(locale)
             } else {
                 stale::kept(locale)
@@ -438,22 +471,34 @@ impl Screen for Editor {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::people_editor_state::Content as C;
         let locale = ctx.locale();
-        let content = match (&self.phase, self.autosave.draft()) {
-            (Phase::Failed, None) => C::Failure(read::failure(locale)),
-            (Phase::Denied(denial), None) => C::Denied(denied(locale, denial)),
-            (Phase::Ready(false), _) => C::Gone(super::person::gone(locale)),
-            (_, Some(draft)) => C::Draft(wire::PeopleProfileDraft {
+        let page = self.page(locale);
+        let ready = matches!(page, Page::Ready { .. });
+        let mut wired = page.wire(
+            locale,
+            |denial| denied(locale, denial),
+            wire::EmptyState::default,
+        );
+        // A person who is no longer there says so in its own words and offers no Retry.
+        if self.gone && matches!(wired.state, Some(wire::page_state::State::Failed(_))) {
+            let gone = super::person::gone(locale);
+            wired.state = Some(wire::page_state::State::Failed(read::gone(
+                gone.headline,
+                gone.body,
+            )));
+        }
+        let content = self.autosave.draft().filter(|_| ready).map(|draft| {
+            C::Draft(wire::PeopleProfileDraft {
                 display_name: draft.name.clone(),
                 role: draft.role.clone(),
                 nickname: draft.nickname.clone(),
                 met: draft.met.clone(),
-            }),
-            _ => C::Loading(wire::Loading { first_load: true }),
-        };
-        let draft_shown = self.autosave.draft().is_some();
+            })
+        });
+        let draft_shown = ready;
         let state = wire::PeopleEditorState {
             chrome: Some(self.chrome(locale)),
-            content: Some(content),
+            content,
+            page: Some(wired),
             autosave: Some(self.autosave.view(locale)),
             cadences: if draft_shown {
                 self.cadences(locale)

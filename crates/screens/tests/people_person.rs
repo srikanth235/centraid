@@ -150,12 +150,13 @@ fn a_person_with_no_channels_says_so_and_one_who_is_not_there_is_gone() {
     assert_eq!(data.cadence_line, "No cadence · no touch logged yet");
 
     let gone = open_person(&mut d, "p-nobody", "Nobody");
-    match &person_state(d.view(gone)).content {
-        Some(wire::people_person_state::Content::Gone(empty)) => {
-            assert_eq!(empty.action_label, "Back");
-        }
-        other => panic!("expected gone, found {other:?}"),
-    }
+    // A person no longer there is a final failure in its own words, never an empty page.
+    let state = person_state(d.view(gone));
+    assert!(state.content.is_none());
+    assert_eq!(
+        people_support::gone_of(&state.page).sentence,
+        "This person is not in People."
+    );
     // Gone is not an error, and there is no editor to open on nothing.
     assert!(person_state(d.view(gone)).edit.is_none());
 }
@@ -499,11 +500,9 @@ fn nobody_else_to_merge_in_is_said_in_one_sentence() {
     let Some(wire::people_person_sheet::Kind::Merge(merge)) = &sheet_of_view(d.view(i)).kind else {
         panic!("the merge sheet");
     };
-    let Some(wire::people_merge_sheet::Content::Choices(choices)) = &merge.content else {
-        panic!("choices");
-    };
+    assert!(merge.content.is_none());
     assert_eq!(
-        choices.empty.as_ref().unwrap().headline,
+        people_support::empty_of(&merge.page).headline,
         "Nobody to merge in."
     );
 }

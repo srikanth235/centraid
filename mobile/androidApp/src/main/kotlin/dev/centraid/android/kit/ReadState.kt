@@ -138,6 +138,7 @@ public fun ReadStateView(
     onNoteAction: (() -> Unit)? = onRetry,
     retryLabel: String = KitWords.RETRY,
     stage: Boolean = false,
+    emptyExtra: (@Composable () -> Unit)? = null,
     skeleton: @Composable () -> Unit = { RowSkeleton() },
     data: @Composable () -> Unit,
 ) {
@@ -154,7 +155,14 @@ public fun ReadStateView(
                 // A gone item offers no Retry: reading it again cannot bring it back.
                 FailureView(failed.sentence, failed.remedy, onRetry.takeUnless { failed.permanent }, retryLabel = retryLabel)
             }
-            empty != null -> StageScheme(stage) { EmptyStateView(empty, onEmptyAction) }
+            empty != null -> StageScheme(stage) {
+                Column {
+                    EmptyStateView(empty, onEmptyAction)
+                    // What a screen draws UNDER its empty state (People's phone-contacts import,
+                    // search's Ask row). The SwiftUI twin is `PageReadStateView(emptyExtra:)`.
+                    emptyExtra?.invoke()
+                }
+            }
             stage -> {
                 data()
                 if (note != null) {

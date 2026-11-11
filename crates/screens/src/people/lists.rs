@@ -18,10 +18,10 @@ use wire::app_query_response::Answer;
 use wire::people_lists_event::Kind as L;
 use wire::screen_event::Kind as E;
 
-use super::{Phase, denied};
+use super::denied;
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
-use crate::kit::read;
+use crate::kit::read::{self, Page};
 use crate::kit::trash::moved_to_trash;
 use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
@@ -34,7 +34,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     };
     Some(Box::new(Lists {
         back: args.back_label.clone(),
-        phase: Phase::Loading,
+        page: Page::loading(),
         sheet: None,
         undo: Undo::default(),
     }))
@@ -62,7 +62,7 @@ impl Sheet {
 
 struct Lists {
     back: String,
-    phase: Phase<Held>,
+    page: Page<Held>,
     sheet: Option<Sheet>,
     /// What a write did (or a refusal's sentence), and what its Undo takes back. The list moved
     /// to the trash is taken back by its restore (`entity.restore` serves a list as it serves a
@@ -72,7 +72,7 @@ struct Lists {
 
 impl Lists {
     fn reload(&mut self, ctx: &Ctx) {
-        self.phase = match read::read(
+        let reading = match read::read(
             ctx,
             load::people::People {
                 filter: Some("all".to_owned()),
@@ -92,7 +92,7 @@ impl Lists {
                     }
                     counts
                 });
-                Phase::Ready(Held {
+                read::Reading::Data(Held {
                     lists: roster
                         .lists
                         .into_iter()
@@ -101,13 +101,16 @@ impl Lists {
                     counts,
                 })
             }
-            read::Reading::Denied(denial) => Phase::Denied(denial),
-            read::Reading::Failed => Phase::Failed,
+            read::Reading::Denied(denial) => read::Reading::Denied(denial),
+            read::Reading::Failed => read::Reading::Failed,
         };
+        // A refresh never blanks the page shown: a failed one keeps it under a note.
+        let held = std::mem::replace(&mut self.page, Page::loading());
+        self.page = held.after(reading, ctx.locale(), |held| held.lists.is_empty());
     }
 
     fn name_of(&self, list_id: &str) -> Option<String> {
-        self.phase
+        self.page
             .data()?
             .lists
             .iter()
@@ -232,16 +235,7 @@ impl Lists {
                 }
             })
             .collect();
-        wire::PeopleListsData {
-            empty: rows.is_empty().then(|| wire::EmptyState {
-                headline: words::empty_headline(locale),
-                body: words::empty_body(locale),
-                icon_key: "List".to_owned(),
-                ..wire::EmptyState::default()
-            }),
-            rows,
-            add_label: words::new_list(locale),
-        }
+        wire::PeopleListsData { rows }
     }
 
     fn sheet_state(&self, locale: Locale) -> Option<wire::PeopleListSheet> {
@@ -290,18 +284,32 @@ impl Screen for Lists {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::people_lists_state::Content;
         let locale = ctx.locale();
-        let content = match &self.phase {
-            Phase::Loading => Content::Loading(wire::Loading { first_load: true }),
-            Phase::Failed => Content::Failure(read::failure(locale)),
-            Phase::Denied(denial) => Content::Denied(denied(locale, denial)),
-            Phase::Ready(held) => Content::Data(self.data(locale, held)),
-        };
+        let content = self
+            .page
+            .data()
+            .map(|held| Content::Data(self.data(locale, held)));
+        let drawn = matches!(self.page, Page::Ready { .. } | Page::Empty);
         wire::ViewState {
             kind: Some(wire::view_state::Kind::PeopleLists(
                 wire::PeopleListsState {
                     title: words::title(locale),
                     back_label: self.back.clone(),
-                    content: Some(content),
+                    content,
+                    page: Some(self.page.wire(
+                        locale,
+                        |denial| denied(locale, denial),
+                        || wire::EmptyState {
+                            headline: words::empty_headline(locale),
+                            body: words::empty_body(locale),
+                            icon_key: "List".to_owned(),
+                            ..wire::EmptyState::default()
+                        },
+                    )),
+                    add_label: if drawn {
+                        words::new_list(locale)
+                    } else {
+                        String::new()
+                    },
                     status: self.undo.status(),
                     sheet: self.sheet_state(locale),
                 },

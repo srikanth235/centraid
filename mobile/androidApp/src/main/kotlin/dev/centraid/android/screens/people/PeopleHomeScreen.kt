@@ -73,7 +73,6 @@ import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace
 import dev.centraid.android.kit.CentraidRow
-import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.OutlineButton
@@ -87,7 +86,6 @@ import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.hueColor
-import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -109,7 +107,7 @@ public fun PeopleHomeScreen(
 ) {
     val chrome = state.chrome
     val search = state.search
-    val denied = state.denied != null
+    val denied = state.page?.refused != null
     val status = state.status?.sentence.orEmpty().ifEmpty {
         state.roster?.status_line ?: state.touch?.status_line ?: ""
     }
@@ -163,30 +161,42 @@ public fun PeopleHomeScreen(
         },
     ) {
         val results = search?.results
-        if (search?.open_ == true && results != null && !denied) {
-            // SEARCH IS A MODE OVER THE SURFACE: its rows while a term reads.
-            LazyColumn(Modifier.testTag("people-search-results")) {
-                val empty = results.empty
-                if (results.rows.isEmpty() && empty != null) {
-                    item(key = "empty") { EmptyStateView(empty, onAction = null) }
-                }
-                items(results.rows, key = { "s-" + it.party_id }) { row -> PersonRow(row, onOpen, onEvent) }
-                // THE ASK ROW closes the answer, whether or not anything matched (#1097).
-                item(key = "ask") { SearchAskRow(search.ask, onOpen) }
-            }
-        } else {
-            ReadStateView(
-                content = screenContentOf(state.loading, state.failure, state.roster ?: state.touch, state.denied),
-                onRetry = { onEvent(PeopleHomeEvent(refreshed = PeopleHomeEvent.Refreshed())) },
-                retryLabel = chrome?.retry.orEmpty(),
-                skeleton = { RowSkeleton(label = chrome?.loading.orEmpty()) },
-            ) { data ->
-                when (data) {
-                    is PeopleRosterData -> RosterList(data, chrome?.import_contacts.orEmpty(), onOpen, onEvent)
-                    is PeopleTouchData -> LazyColumn(Modifier.testTag("people-list")) {
-                        touch(data, chrome?.import_contacts.orEmpty(), onOpen, onEvent)
+        val rosterData = state.roster
+        val touchData = state.touch
+        // A TERM THAT MATCHED NO ONE (the page's empty state) still offers Ask (#1097); day one offers
+        // the phone's contacts as its import (the header's Add person stays).
+        val asksUnderEmpty = search?.open_ == true && search.ask != null && results == null
+        // Day one is the empty state that names the phone's contacts (reading it picks the extra).
+        val offersImport = state.page?.empty?.import_source == centraid.core.v1.ImportSource.IMPORT_SOURCE_CONTACTS
+        ReadStateView(
+            page = state.page!!,
+            onRetry = { onEvent(PeopleHomeEvent(refreshed = PeopleHomeEvent.Refreshed())) },
+            retryLabel = chrome?.retry.orEmpty(),
+            emptyExtra = if (asksUnderEmpty || offersImport) {
+                {
+                    if (asksUnderEmpty) SearchAskRow(search?.ask, onOpen)
+                    if (offersImport && !chrome?.import_contacts.isNullOrEmpty()) {
+                        OutlineButton(
+                            chrome?.import_contacts.orEmpty(),
+                            modifier = Modifier.padding(horizontal = KitGeometry.GUTTER),
+                            testTag = "kit-empty-import",
+                        ) { onEvent(PeopleHomeEvent(import_contacts = PeopleHomeEvent.ImportContactsTapped())) }
                     }
                 }
+            } else {
+                null
+            },
+            skeleton = { RowSkeleton(label = chrome?.loading.orEmpty()) },
+        ) {
+            when {
+                // SEARCH IS A MODE OVER THE SURFACE: its rows while a term reads.
+                search?.open_ == true && results != null -> LazyColumn(Modifier.testTag("people-search-results")) {
+                    items(results.rows, key = { "s-" + it.party_id }) { row -> PersonRow(row, onOpen, onEvent) }
+                    // THE ASK ROW closes the answer (#1097).
+                    item(key = "ask") { SearchAskRow(search.ask, onOpen) }
+                }
+                rosterData != null -> RosterList(rosterData, onOpen, onEvent)
+                touchData != null -> LazyColumn(Modifier.testTag("people-list")) { touch(touchData, onOpen, onEvent) }
             }
         }
     }
@@ -230,24 +240,6 @@ public fun PeopleHomeScreen(
     }
 }
 
-/** The day-one empty state: the phone's contacts are its action (the header's Add person stays). */
-@Composable
-private fun DayOne(empty: centraid.core.v1.EmptyState, importLabel: String, onEvent: (PeopleHomeEvent) -> Unit) {
-    val offersImport = empty.import_source == centraid.core.v1.ImportSource.IMPORT_SOURCE_CONTACTS && importLabel.isNotEmpty()
-    val shown = empty.copy(
-        import_source = centraid.core.v1.ImportSource.IMPORT_SOURCE_UNSPECIFIED,
-        action_label = if (offersImport) importLabel else "",
-    )
-    EmptyStateView(
-        shown,
-        onAction = if (offersImport) {
-            { onEvent(PeopleHomeEvent(import_contacts = PeopleHomeEvent.ImportContactsTapped())) }
-        } else {
-            null
-        },
-    )
-}
-
 /**
  * THE ROSTER (#1173): My card, the reconnect line, then the people. Under the Name order they are
  * A to Z in sections (the letter stays at the top while its people scroll) with the index beside
@@ -258,13 +250,11 @@ private fun DayOne(empty: centraid.core.v1.EmptyState, importLabel: String, onEv
 @Composable
 private fun RosterList(
     roster: PeopleRosterData,
-    importLabel: String,
     onOpen: (Route) -> Unit,
     onEvent: (PeopleHomeEvent) -> Unit,
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    val empty = roster.empty
     // The list's items before the first section: My card, the reconnect line.
     val lead = (if (roster.my_card != null) 1 else 0) + (if (roster.reconnect != null) 1 else 0)
     val starts = remember(roster) {
@@ -288,9 +278,6 @@ private fun RosterList(
                 item(key = "reconnect") {
                     ReconnectLine(line) { onEvent(PeopleHomeEvent(band = PeopleHomeEvent.BandPicked("touch"))) }
                 }
-            }
-            if (roster.rows.isEmpty() && roster.sections.isEmpty() && empty != null) {
-                item(key = "empty") { DayOne(empty, importLabel, onEvent) }
             }
             items(roster.rows, key = { it.party_id }) { row -> PersonRow(row, onOpen, onEvent) }
             roster.sections.forEach { section ->
@@ -416,15 +403,9 @@ private fun ReconnectLine(line: PeopleReconnectLine, onTap: () -> Unit) {
 
 private fun LazyListScope.touch(
     touch: PeopleTouchData,
-    importLabel: String,
     onOpen: (Route) -> Unit,
     onEvent: (PeopleHomeEvent) -> Unit,
 ) {
-    val empty = touch.empty
-    if (empty != null) {
-        item(key = "touch-empty") { DayOne(empty, importLabel, onEvent) }
-        return
-    }
     if (touch.tiles.isNotEmpty()) {
         item(key = "tiles") {
             Row(

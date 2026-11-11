@@ -18,16 +18,6 @@ struct PeoplePersonView: View {
 
     @Environment(\.colorScheme) private var scheme
 
-    private var content: ScreenContent<Centraid_Core_V1_PeoplePersonData> {
-        switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        case .gone?, nil: return .loading(true)
-        }
-    }
-
     var body: some View {
         let chrome = state.chrome
         let person: Centraid_Core_V1_PeoplePersonData? = {
@@ -53,16 +43,12 @@ struct PeoplePersonView: View {
                 }
             }
         } content: {
-            if case let .gone(gone)? = state.content {
-                EmptyStateView(gone)
-            } else {
-                ReadStateView(
-                    content: content,
-                    loadingLabel: chrome.loading,
-                    onRetry: { send(PeopleEvents.person { $0.refreshed = .init() }) }
-                ) { person in
-                    PeoplePersonBody(person: person, state: state, send: send, open: open, onPhoneSays: onPhoneSays)
-                }
+            PageReadStateView(
+                page: state.page,
+                loadingLabel: chrome.loading,
+                onRetry: { send(PeopleEvents.person { $0.refreshed = .init() }) }
+            ) {
+                PeoplePersonBody(person: state.data, state: state, send: send, open: open, onPhoneSays: onPhoneSays)
             }
         }
         .sheet(isPresented: Binding(
@@ -586,30 +572,22 @@ private struct PeoplePersonSheetView: View {
                         .centraidType("body")
                         .foregroundStyle(Theme.color("textSoft", scheme))
                 }
-                switch merge.content {
-                case .loading?, nil:
-                    RowSkeleton(rows: 3, label: merge.title)
-                        .frame(height: 170)
-                case let .failure(failure)?:
-                    FailureView(sentence: failure.sentence, remedy: failure.remedy, onRetry: nil)
-                case let .choices(choices)?:
-                    if choices.hasEmpty {
-                        EmptyStateView(choices.empty)
-                    } else {
-                        ScrollView {
-                            VStack(spacing: 0) {
-                                ForEach(choices.choices, id: \.partyID) { choice in
-                                    HStack(spacing: 0) {
-                                        PeopleAvatarView(avatar: choice.avatar)
-                                        CentraidRow(
-                                            title: choice.name,
-                                            meta: choice.role,
-                                            identifier: "people-merge-\(choice.partyID)",
-                                            onTap: {
-                                                send(PeopleEvents.person { $0.mergePicked = .with { $0.partyID = choice.partyID } })
-                                            }
-                                        )
-                                    }
+                // WHO CAN BE FOLDED IN: failed, empty (no one else) or the choices, drawn by the
+                // shared page view.
+                PageReadStateView(page: merge.page, onRetry: nil) {
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            ForEach(merge.choices.choices, id: \.partyID) { choice in
+                                HStack(spacing: 0) {
+                                    PeopleAvatarView(avatar: choice.avatar)
+                                    CentraidRow(
+                                        title: choice.name,
+                                        meta: choice.role,
+                                        identifier: "people-merge-\(choice.partyID)",
+                                        onTap: {
+                                            send(PeopleEvents.person { $0.mergePicked = .with { $0.partyID = choice.partyID } })
+                                        }
+                                    )
                                 }
                             }
                         }

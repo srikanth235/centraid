@@ -7,7 +7,6 @@ import centraid.core.v1.PeopleListsEvent
 import centraid.core.v1.PeopleListsState
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.EditableFieldRow
-import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
@@ -15,7 +14,6 @@ import dev.centraid.android.kit.SheetOutline
 import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.StatusLine
-import dev.centraid.android.kit.screenContentOf
 
 /**
  * `people.lists` (#1185): the member's lists by name with how many people each holds, "New list"
@@ -36,29 +34,24 @@ internal fun PeopleListsScreen(
         parentTitle = state.back_label,
         onBack = onBack,
         app = "people",
-        trailing = data?.add_label?.takeIf { it.isNotEmpty() }?.let { label ->
+        trailing = state.add_label.takeIf { it.isNotEmpty() }?.let { label ->
             RoomAction("Plus", label, "people-list-add") { onEvent(PeopleListsEvent(new_tapped = PeopleListsEvent.NewTapped())) }
         },
         statusLine = { StatusLine(state.status) },
     ) {
         ReadStateView(
-            content = screenContentOf(state.loading, state.failure, data, state.denied),
+            page = state.page!!,
             onRetry = { onEvent(PeopleListsEvent(refreshed = PeopleListsEvent.Refreshed())) },
-        ) { lists ->
-            val empty = lists.empty
-            if (empty != null) {
-                EmptyStateView(empty, onAction = null)
-            } else {
-                LazyColumn {
-                    items(lists.rows, key = { it.list_id }) { row ->
-                        CentraidRow(
-                            title = row.name,
-                            meta = row.meta,
-                            a11y = row.accessibility_label,
-                            testTag = "people-list-row-${row.list_id}",
-                            onTap = { onEvent(PeopleListsEvent(row_tapped = PeopleListsEvent.RowTapped(list_id = row.list_id))) },
-                        )
-                    }
+        ) {
+            LazyColumn {
+                items(data?.rows.orEmpty(), key = { it.list_id }) { row ->
+                    CentraidRow(
+                        title = row.name,
+                        meta = row.meta,
+                        a11y = row.accessibility_label,
+                        testTag = "people-list-row-${row.list_id}",
+                        onTap = { onEvent(PeopleListsEvent(row_tapped = PeopleListsEvent.RowTapped(list_id = row.list_id))) },
+                    )
                 }
             }
         }

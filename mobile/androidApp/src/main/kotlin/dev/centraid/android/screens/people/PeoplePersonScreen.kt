@@ -27,6 +27,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -50,8 +51,6 @@ import centraid.core.v1.StatusChip
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
-import dev.centraid.android.kit.EmptyStateView
-import dev.centraid.android.kit.FailureView
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.OutlineButton
@@ -61,13 +60,11 @@ import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.RowSkeleton
-import dev.centraid.android.kit.ScreenContent
 import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.StatusChipView
-import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -100,16 +97,13 @@ public fun PeoplePersonScreen(
         },
         status = state.status?.sentence.orEmpty(),
     ) {
-        val gone = state.gone
-        if (gone != null) {
-            EmptyStateView(gone, onAction = null)
-        } else {
-            ReadStateView(
-                content = screenContentOf(state.loading, state.failure, data, state.denied),
-                onRetry = { onEvent(PeoplePersonEvent(refreshed = PeoplePersonEvent.Refreshed())) },
-                retryLabel = chrome?.retry.orEmpty(),
-                skeleton = { RowSkeleton(label = chrome?.loading.orEmpty()) },
-            ) { person -> PersonBody(person, state, onEvent, onOpen, onPhoneSays, ::open) }
+        ReadStateView(
+            page = state.page!!,
+            onRetry = { onEvent(PeoplePersonEvent(refreshed = PeoplePersonEvent.Refreshed())) },
+            retryLabel = chrome?.retry.orEmpty(),
+            skeleton = { RowSkeleton(label = chrome?.loading.orEmpty()) },
+        ) {
+            data?.let { person -> PersonBody(person, state, onEvent, onOpen, onPhoneSays, ::open) }
         }
     }
 
@@ -503,16 +497,11 @@ private fun PersonSheet(sheet: PeoplePersonSheet, onEvent: (PeoplePersonEvent) -
     sheet.merge?.let { s ->
         SheetRoom(title = s.title, onDismiss = close) {
             if (s.body.isNotEmpty()) RailEmpty(s.body)
-            when (val content = screenContentOf(s.loading, s.failure, s.choices)) {
-                is ScreenContent.Loading -> RowSkeleton(rows = 3)
-                is ScreenContent.Failure -> FailureView(content.sentence, content.remedy, onRetry = null)
-                is ScreenContent.Gate -> Unit
-                is ScreenContent.Data -> {
-                    val empty = content.value.empty
-                    if (content.value.choices.isEmpty() && empty != null) {
-                        RailEmpty(empty.headline)
-                    }
-                    content.value.choices.forEach { choice ->
+            // WHO CAN BE FOLDED IN: failed, empty (no one else) or the choices, drawn by the shared
+            // page view.
+            ReadStateView(page = s.page!!, onRetry = null, modifier = Modifier.height(240.dp)) {
+                LazyColumn {
+                    items(s.choices?.choices.orEmpty(), key = { it.party_id }) { choice ->
                         CentraidRow(
                             title = choice.name,
                             meta = choice.role,

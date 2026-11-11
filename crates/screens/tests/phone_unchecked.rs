@@ -136,8 +136,13 @@ fn person(view: &wire::ViewState) -> Page {
     let Some(wire::people_person_state::Content::Data(data)) = &state.content else {
         panic!("no data: {:?}", state.content)
     };
+    // The person says it as the page's note over the data, not on the status line (#1185).
     Page {
-        status: state.status.as_ref().map(|line| line.sentence.clone()),
+        status: state
+            .page
+            .as_ref()
+            .and_then(|page| page.note.as_ref())
+            .map(|note| note.sentence.clone()),
         lines: usize::from(data.name_phone_says.is_some())
             + usize::from(data.role_phone_says.is_some())
             + usize::from(data.nickname_phone_says.is_some())
