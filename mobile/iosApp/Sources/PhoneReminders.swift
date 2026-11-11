@@ -39,6 +39,11 @@ enum PhoneReminders {
     /// stays empty.
     private static func phone(_ reminder: EKReminder) -> Centraid_Core_V1_PhoneReminder {
         var phone = Centraid_Core_V1_PhoneReminder()
+        // THE DURABLE IDS THAT LET THE VAULT FOLLOW THE STORE (#1185): the external identifier
+        // survives a sync, the item identifier is the fallback; the list is its calendar's id.
+        let external = reminder.calendarItemExternalIdentifier ?? ""
+        phone.phoneID = external.isEmpty ? reminder.calendarItemIdentifier : external
+        phone.listID = reminder.calendar?.calendarIdentifier ?? ""
         phone.title = reminder.title ?? ""
         phone.notes = reminder.notes ?? ""
         let due = reminder.dueDateComponents

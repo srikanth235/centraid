@@ -38,6 +38,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.Autosave
+import centraid.core.v1.PhoneSaysTaken
 import centraid.core.v1.Route
 import dev.centraid.android.kit.EarlierEntryCard
 import centraid.core.v1.TodoDetailData
@@ -56,6 +57,7 @@ import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OutlineButton
+import dev.centraid.android.kit.PhoneSaysLine
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SectionHeader
@@ -80,6 +82,7 @@ internal fun TodoDetailScreen(
     onEvent: (TodoDetailEvent) -> Unit,
     onOpen: (Route) -> Unit,
     onClose: () -> Unit,
+    onPhoneSays: (PhoneSaysTaken) -> Unit,
 ) {
     val gone = state.gone
     EditorRoom(
@@ -98,7 +101,7 @@ internal fun TodoDetailScreen(
                 onRetry = { onEvent(TodoDetailEvent(refreshed = TodoDetailEvent.Refreshed())) },
                 skeleton = { RowSkeleton(rows = 6, label = state.chrome?.loading?.ifEmpty { null } ?: KitWords.OPENING) },
                 modifier = Modifier.weight(1f),
-            ) { data -> TodoDetailBody(state, data, onEvent, onOpen) }
+            ) { data -> TodoDetailBody(state, data, onEvent, onOpen, onPhoneSays) }
             StatusLine(state.status) { onEvent(TodoDetailEvent(status_acted = TodoDetailEvent.StatusActed())) }
         }
     }
@@ -132,6 +135,7 @@ private fun TodoDetailBody(
     data: TodoDetailData,
     onEvent: (TodoDetailEvent) -> Unit,
     onOpen: (Route) -> Unit,
+    onPhoneSays: (PhoneSaysTaken) -> Unit,
 ) {
     // THE VAULT'S WORDS LAND ONLY WHILE CLEAN: typing never fights a reload.
     val clean = state.autosave?.phase == Autosave.Phase.PHASE_CLEAN
@@ -169,6 +173,8 @@ private fun TodoDetailBody(
             onEdit = { onEvent(TodoDetailEvent(notes = TodoDetailEvent.NotesChanged(notes = it))) },
             testTag = "tasks-detail-notes",
         )
+        // WHAT THE PHONE'S REMINDERS SAY DIFFERENTLY (#1185), each with its "Use phone's".
+        state.phone_says.forEach { PhoneSaysLine(it, onPhoneSays) }
         // THE TASK'S ADDRESS (#1173 wave 2): as stored, with the verb that hands it to the phone.
         data.link?.let { link ->
             Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp).testTag("agenda-detail-link")) {

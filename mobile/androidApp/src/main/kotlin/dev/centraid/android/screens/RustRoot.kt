@@ -564,6 +564,7 @@ internal class RustRoot(
                     onOpen = open,
                     // CLOSE = DONE: the pop; Rust flushes the autosave when it sees the page leave.
                     onClose = back,
+                    onPhoneSays = { send(ScreenEvent(phone_says_taken = it)) },
                 )
             }
             catchUp != null -> CompositionLocalProvider(LocalAppAccentId provides "reminders") {

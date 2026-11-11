@@ -14,6 +14,7 @@ struct TodoDetailView: View {
     let send: (Centraid_Core_V1_TodoDetailEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
     let onClose: () -> Void
+    let onPhoneSays: (Centraid_Core_V1_PhoneSaysTaken) -> Void
 
     /// THE ONLY PLACE A KEYSTROKE EXISTS BEFORE THE MACHINE HEARS IT —
     /// seeded once from the draft, never re-seeded (`NotesEditorView`'s rule).
@@ -156,6 +157,8 @@ struct TodoDetailView: View {
                         guard seeded, typed != detail.draft.notes else { return }
                         send(event { $0.notes = .with { $0.notes = typed } })
                     }
+                // WHAT THE PHONE'S REMINDERS SAY DIFFERENTLY (#1185), each with its "Use phone's".
+                PhoneSaysLines(lines: state.phoneSays, onTake: onPhoneSays)
                 KitHairline()
                 // THE GROUPED CARDS (#1173): a field with a `group` opens a new card under that heading.
                 ForEach(Self.cards(detail.fields), id: \.id) { card in

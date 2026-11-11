@@ -214,7 +214,8 @@ struct RustScreenView: View {
                 state: state,
                 send: { store.send(instance, .todoDetail($0)) },
                 open: open,
-                onClose: pop
+                onClose: pop,
+                onPhoneSays: { store.send(instance, .phoneSaysTaken($0)) }
             )
             .environment(\.appAccent, AppAccent("reminders"))
         case .todoCatchUp(let state)?:
