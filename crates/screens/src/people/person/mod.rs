@@ -33,6 +33,7 @@ use wire::screen_event::Kind as E;
 use super::{denied, fold, routes};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
+use crate::kit::attachments::Attachments;
 use crate::kit::earlier;
 use crate::kit::export::{self, ExportFile};
 use crate::kit::follow;
@@ -78,6 +79,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         links: Links::new(&Kind::ALL).for_entity(&args.party_id),
         linked: None,
         linked_unread: false,
+        attachments: Attachments::of("people", &args.party_id),
     }))
 }
 
@@ -134,6 +136,8 @@ struct Person {
     linked: Option<Vec<wire::LinkedItem>>,
     /// The read of `linked` was refused or failed: the status line says so, no empty section.
     linked_unread: bool,
+    /// The photos and files on the person (#1185): the kit's section, read with the page.
+    attachments: Attachments,
 }
 
 impl Person {
@@ -172,6 +176,9 @@ impl Person {
             None => earlier::Foot::default(),
         };
         self.read_linked(ctx);
+        if self.loaded().is_some() {
+            self.attachments.reload(ctx);
+        }
         if self.gone {
             // GONE: nothing to write to, and no sheet over nothing.
             self.sheet = None;
@@ -705,6 +712,7 @@ impl Person {
             P::Channel(tapped) => return self.channel_tapped(&tapped.channel_id),
             P::Hero(tapped) => return self.hero_tapped(ctx, &tapped.key),
             P::Link(link) => self.link_person(ctx, &link),
+            P::Attachment(attachment) => return self.attachments.event(ctx, attachment),
         }
         Vec::new()
     }
@@ -804,7 +812,14 @@ impl Screen for Person {
             // check passed.
             Some(E::EffectResult(result)) => {
                 let id = self.party_id.clone();
-                return self.share.result(ctx, &result, |ctx| vcard(ctx, &id));
+                let shared = self.share.result(ctx, &result, |ctx| vcard(ctx, &id));
+                if !shared.is_empty() || self.share.status().is_some() {
+                    return shared;
+                }
+                // The shell's answer to a pick: the attachments' (an add under way).
+                if let Some(outcome) = &result.outcome {
+                    return self.attachments.result(ctx, outcome).unwrap_or_default();
+                }
             }
             Some(E::StatusActed(_)) => {
                 if self.undo.acted(ctx) {
@@ -851,6 +866,7 @@ impl Screen for Person {
             page.nickname_phone_says = lines.nickname;
             page.birthday_phone_says = lines.birthday;
             page.channels_phone_says = lines.channels;
+            page.attachments = Some(self.attachments.view(locale, ctx.units()));
             page.links = self.linked.as_ref().map(|linked| {
                 self.links.section(
                     locale,

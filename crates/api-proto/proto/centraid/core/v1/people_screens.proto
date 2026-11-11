@@ -22,6 +22,7 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
+import "centraid/core/v1/agenda_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/route.proto";
 
@@ -618,6 +619,10 @@ message PeoplePersonData {
   // The kit's shared section, after "In your vault". Absent while what it is linked to was not
   // read (the status line says so). Its events go back as `PeoplePersonEvent.link`.
   optional LinkSection links = 35;
+  // The attachments (#1185): the photos and files on this person, with Add photo and Add file. The
+  // kit's shared section (`AgendaAttachmentsSection`), before "Linked to". Its events go back as
+  // `PeoplePersonEvent.attachment`.
+  AgendaAttachmentsSection attachments = 36;
 }
 
 message PeopleHeroAction {
@@ -780,6 +785,8 @@ message PeoplePersonEvent {
     ShareRequested share_requested = 18;
     // The "Linked to" section and its picker (#1185): the kit's `LinkEvent`.
     LinkEvent link = 19;
+    // The attachments section's events (#1185): the kit's `AgendaAttachmentEvent`.
+    AgendaAttachmentEvent attachment = 20;
   }
 
   message ShareRequested {}

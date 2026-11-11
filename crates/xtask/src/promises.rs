@@ -482,7 +482,11 @@ pub const REGISTER: &[Row] = &[
     exempt("locker", Promise::Attach, ATTACH_EXEMPT[0].1),
     owed("money", Promise::Attach, ATTACH_OWED),
     owed("notes", Promise::Attach, ATTACH_OWED),
-    owed("people", Promise::Attach, ATTACH_OWED),
+    kept(
+        "people",
+        Promise::Attach,
+        "crates/screens/src/people/person/mod.rs",
+    ),
     owed("photos", Promise::Attach, ATTACH_OWED),
     kept(
         "reminders",

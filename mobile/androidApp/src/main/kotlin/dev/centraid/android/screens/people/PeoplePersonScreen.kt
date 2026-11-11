@@ -65,6 +65,7 @@ import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.StatusChipView
+import dev.centraid.android.screens.agenda.AgendaAttachmentsView
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -230,7 +231,19 @@ private fun PersonBody(
             item(key = "vault") { VaultCard(person, onOpen) }
         }
 
-        // LINKED TO (#1185): the kit's section, after "In your vault"; Rust makes every word and row.
+        // ATTACHMENTS (#1185): the kit's section, after "In your vault"; Rust makes every word and row.
+        person.attachments?.let { section ->
+            item(key = "attachments") {
+                AgendaAttachmentsView(
+                    section = section,
+                    prefix = "people-person",
+                    onEvent = { onEvent(PeoplePersonEvent(attachment = it)) },
+                    onOpen = onOpen,
+                )
+            }
+        }
+
+        // LINKED TO (#1185): the kit's section, after the attachments; Rust makes every word and row.
         person.links?.let { section ->
             item(key = "links") {
                 dev.centraid.android.kit.LinkSectionView(section, { link -> onEvent(PeoplePersonEvent(link = link)) }, onOpen)

@@ -205,7 +205,18 @@ private struct PeoplePersonBody: View {
                     vault
                 }
 
-                // LINKED TO (#1185): the kit's section, after "In your vault"; Rust makes every word and row.
+                // ATTACHMENTS (#1185): the kit's section, after "In your vault"; Rust makes every word and row.
+                if person.hasAttachments {
+                    AgendaAttachmentsView(
+                        section: person.attachments,
+                        idPrefix: "people-person-attachment",
+                        headIdentifier: "people-person-attachments",
+                        open: open,
+                        send: { attachment in send(PeopleEvents.person { $0.attachment = attachment }) }
+                    )
+                }
+
+                // LINKED TO (#1185): the kit's section, after the attachments; Rust makes every word and row.
                 if person.hasLinks {
                     LinkSectionView(section: person.links, send: { link in
                         send(PeopleEvents.person { $0.link = link })

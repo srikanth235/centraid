@@ -503,6 +503,8 @@ pub fn person(
         channels_phone_says: Vec::new(),
         // The "Linked to" section is the screen's own read, laid on by `Person::view`.
         links: None,
+        // The attachments are the screen's own read, laid on by `Person::view`.
+        attachments: None,
     }
 }
 
