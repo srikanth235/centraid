@@ -158,8 +158,8 @@ fn workouts_carry_the_figures_as_stored_and_leave_the_trash_out() {
     assert_eq!(
         rows[1],
         [
-            "2026-03-04T07:10:00.000Z",
-            "2026-03-04T07:41:00.000Z",
+            "2026-03-04T07:10:00+00:00",
+            "2026-03-04T07:41:00+00:00",
             "Run",
             "Morning, \"easy\" run",
             "1800",
@@ -174,6 +174,30 @@ fn workouts_carry_the_figures_as_stored_and_leave_the_trash_out() {
     assert_eq!(one["count"], 1);
     let (none, _) = w.file(json!({ "what": "workouts", "id": gone }));
     assert_eq!(none["count"], 0);
+}
+
+#[test]
+fn a_workouts_times_are_the_members_own_with_their_offset() {
+    let w = World::new();
+    w.scratch
+        .vault
+        .commit(|tx| {
+            tx.set_producer("test.set_zone");
+            tx.connection()
+                .execute("UPDATE vault SET zone = 'Asia/Kolkata'", [])?;
+            Ok(())
+        })
+        .expect("a zone");
+    w.workout(json!({
+        "type": "run", "title": "Dawn", "starts": "2026-11-11T02:00:00Z",
+        "ends": "2026-11-11T02:45:00Z"
+    }));
+    let (_, text) = w.file(json!({ "what": "workouts" }));
+    let rows = records(&text);
+    assert_eq!(
+        rows[1][..2],
+        ["2026-11-11T07:30:00+05:30", "2026-11-11T08:15:00+05:30"]
+    );
 }
 
 #[test]

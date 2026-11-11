@@ -3,16 +3,19 @@
 //! (RFC 4180, see [`csv`](super::csv)). Writes nothing.
 //!
 //! Every value is the vault's own, as the store stated it: a daily total in the unit its metric
-//! is kept in (named in the next column), a workout's start and end as the UTC instants it is
-//! kept as, its distance in metres, its energy in kilocalories, its time in seconds. Nothing is
+//! is kept in (named in the next column), a workout's start and end as the moment it is kept as
+//! but written in the member's own time (the vault's zone) with its offset, like
+//! `2026-11-11T07:30:00+05:30`, its distance in metres, its energy in kilocalories, its time in seconds. Nothing is
 //! converted to the member's units or derived. Workouts in the trash are not in it.
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use serde_json::Value as Json;
 
 use crate::commands::csv::{self, row, text_row, words};
 use crate::commands::{CommandCtx, CommandDefinition, Idempotency, note};
 use crate::error::Result;
+use crate::time::recurrence::parse_instant_ms;
+use crate::time::zone::{FireZone, wall_iso};
 
 const WORKOUTS: &str = "workouts";
 
@@ -43,6 +46,39 @@ fn metric(key: &str) -> (&'static str, &'static str) {
         "resting_hr_bpm" => ("Resting heart rate", "bpm"),
         _ => ("Weight", "kg"),
     }
+}
+
+/// The zone the member's times are written in: the vault's own, else UTC (as a task's repeat
+/// does), so an unset zone is a stated offset and never a guess.
+fn member_zone(connection: &Connection) -> Option<FireZone> {
+    let vault: Option<String> = connection
+        .query_row("SELECT zone FROM vault", [], |row| row.get(0))
+        .optional()
+        .ok()
+        .flatten()
+        .flatten();
+    FireZone::resolve(None, vault.as_deref())
+        .or_else(|_| FireZone::named("Etc/UTC"))
+        .ok()
+}
+
+/// A stored instant as local ISO 8601 with its offset (an empty end stays empty).
+fn local_time(zone: Option<&FireZone>, stored: &str) -> String {
+    let (Some(zone), true) = (zone, stored.len() > 10) else {
+        return stored.to_owned();
+    };
+    let Some(millis) = parse_instant_ms(stored) else {
+        return stored.to_owned();
+    };
+    let minutes = zone.offset_minutes(millis);
+    let sign = if minutes < 0 { '-' } else { '+' };
+    let minutes = minutes.abs();
+    format!(
+        "{}{sign}{:02}:{:02}",
+        wall_iso(zone.zoned_parts(millis), true),
+        minutes / 60,
+        minutes % 60
+    )
 }
 
 /// A stored number as the file spells it: the shortest text that reads back as the same value.
@@ -125,11 +161,15 @@ pub(crate) fn workouts(connection: &Connection, one: Option<&str>) -> Result<Wor
             ))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
+    let zone = member_zone(connection);
     let mut text = text_row(&WORKOUT_HEADER);
     for (starts, ends, kind, title, moving, distance, energy, heart, climb, by) in &rows {
         text.push_str(&row(&[
-            words(starts),
-            words(ends.as_deref().unwrap_or_default()),
+            words(&local_time(zone.as_ref(), starts)),
+            words(&local_time(
+                zone.as_ref(),
+                ends.as_deref().unwrap_or_default(),
+            )),
             words(kind),
             words(title),
             csv::number(&optional(*moving, |n| n.to_string())),
