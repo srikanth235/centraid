@@ -325,7 +325,11 @@ fn a_trashed_calendar_is_on_the_shelf_as_a_calendar_and_leaves_the_picker_and_th
         .expect("the read runs");
     let row = |id: &str| shelf.events.iter().find(|row| row.event_id == id);
     assert_eq!(row(&side).map(|row| row.calendar), Some(true));
-    assert_eq!(row(&event).map(|row| row.calendar), Some(false));
+    assert!(
+        row(&event).is_none(),
+        "an event that went with its calendar is a member, not a row"
+    );
+    assert_eq!(row(&side).map(|row| row.members), Some(1));
 
     scratch.run("entity.restore", json!({ "id": side }));
     assert!(calendars(&scratch).contains(&side));
