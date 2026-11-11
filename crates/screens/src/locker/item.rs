@@ -1072,6 +1072,7 @@ impl Item {
         wire::LockerItemData {
             links: Some(self.link_section(locale, item)),
             earlier: self.earlier.entry.clone(),
+            origin: None,
             title: item.title.clone(),
             type_chip: kind.chip(locale),
             hero_initial: types::initial(&item.title),

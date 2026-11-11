@@ -476,6 +476,8 @@ message NotesEditorState {
   // The menu's "Earlier versions   2 ›" row (#1185): the kit's entry, absent until the note holds
   // an earlier version. Its route is the kit's one screen, `notes.earlier`.
   optional EarlierEntry earlier = 16;
+  // Where it came from, under the Earlier versions entry (#1185). Absent for a typed item.
+  optional OriginLine origin = 17;
 }
 
 message NotesEditorTag {

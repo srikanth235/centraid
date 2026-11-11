@@ -967,6 +967,7 @@ impl Screen for Detail {
                     .or_else(|| self.earlier.status(locale)),
                 finished: self.finished,
                 earlier: self.earlier.entry.clone(),
+                origin: None,
             })),
             ..wire::ViewState::default()
         }

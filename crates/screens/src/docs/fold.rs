@@ -417,6 +417,7 @@ pub fn document(
         facts: facts(locale, cycle, found, answer, &view),
         path: folders::path_crumbs(locale, &answer.path, &view.title),
         earlier: None,
+        origin: None,
         actions: head_actions(locale, found),
         bar: bar_actions(locale, found),
         kind_size: [view.kind_label.clone(), found.size.clone()]

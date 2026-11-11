@@ -93,6 +93,8 @@ catalog! {
     plain trash_noun_note = ("note", "note");
     plain trash_noun_person = ("person", "person");
     plain trash_noun_photo = ("photo", "photo");
+    plain origin_line = ("From {label}", "From {label}");
+    plain origin_spoken = ("Came from {label}", "Came from {label}");
     plain trash_noun_task = ("task", "task");
     plain trash_noun_transaction = ("transaction", "transaction");
     plain trash_noun_workout = ("workout", "workout");

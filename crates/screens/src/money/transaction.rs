@@ -683,6 +683,7 @@ impl Screen for Transaction {
                     )),
                     status: self.status.clone().or_else(|| self.earlier.status(locale)),
                     earlier: self.earlier.entry.clone(),
+                    origin: None,
                 },
             )),
             ..wire::ViewState::default()

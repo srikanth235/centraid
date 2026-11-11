@@ -511,6 +511,8 @@ message MoneyTransactionState {
   optional StatusLine status = 12;
   // "Earlier versions   2 ›" at the foot of the page (#1185); absent when there are none.
   optional EarlierEntry earlier = 15;
+  // Where it came from, under the Earlier versions entry (#1185). Absent for a typed item.
+  optional OriginLine origin = 16;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;

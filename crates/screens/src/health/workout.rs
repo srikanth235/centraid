@@ -422,6 +422,7 @@ impl Screen for WorkoutPage {
                         })
                         .or_else(|| self.earlier.status(locale)),
                     earlier: self.earlier.entry.clone(),
+                    origin: None,
                 },
             )),
             ..wire::ViewState::default()

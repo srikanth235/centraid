@@ -88,11 +88,15 @@ pub enum Promise {
     /// `detach` and an `attachments` read, and the item's detail screen embeds the kit's one
     /// section. A Locker item holds none (owner decision D11), a named exception.
     Attach,
+    /// The detail screen of each primary kind says where its item came from, in one quiet line
+    /// under the Earlier versions entry (`kit::origin`): the same read and the same sentence for a
+    /// followed store and a one-shot arrival, and no line for an item the member typed.
+    Origin,
 }
 
 impl Promise {
     /// Every promise, in the order the table is read.
-    pub const ALL: [Promise; 9] = [
+    pub const ALL: [Promise; 10] = [
         Promise::Trash,
         Promise::Undo,
         Promise::History,
@@ -102,6 +106,7 @@ impl Promise {
         Promise::Units,
         Promise::OwnerCheck,
         Promise::Attach,
+        Promise::Origin,
     ];
 
     fn name(self) -> &'static str {
@@ -115,6 +120,7 @@ impl Promise {
             Promise::Share => "Share",
             Promise::OwnerCheck => "OwnerCheck",
             Promise::Attach => "Attach",
+            Promise::Origin => "Origin",
         }
     }
 }
@@ -429,6 +435,17 @@ pub const REGISTER: &[Row] = &[
         Promise::Attach,
         "crates/screens/src/reminders/detail.rs",
     ),
+    // Origin (#1185, Phase 2B): the detail screen's "From ..." line; the checker's gaps are the
+    // adopters' work list.
+    owed("calendar", Promise::Origin, ORIGIN_OWED),
+    owed("docs", Promise::Origin, ORIGIN_OWED),
+    owed("health", Promise::Origin, ORIGIN_OWED),
+    owed("locker", Promise::Origin, ORIGIN_OWED),
+    owed("money", Promise::Origin, ORIGIN_OWED),
+    owed("notes", Promise::Origin, ORIGIN_OWED),
+    owed("people", Promise::Origin, ORIGIN_OWED),
+    owed("photos", Promise::Origin, ORIGIN_OWED),
+    owed("reminders", Promise::Origin, ORIGIN_OWED),
 ];
 
 const EXPORT_OWED: &str = "no export screen on the kit's ExportSpec (#1185)";
@@ -452,6 +469,8 @@ const fn exempt(app: &'static str, promise: Promise, ruling: &'static str) -> Ro
 /// only exceptions). A Locker item is sealed: a photo or file beside it would sit outside the seal.
 pub const ATTACH_EXEMPT: &[(&str, &str)] =
     &[("locker", "D11: a Locker item cannot hold attachments")];
+const ORIGIN_OWED: &str =
+    "the detail screen does not say where its item came from (kit::origin, #1185)";
 
 /// `promises`: the table is complete, and every row is true.
 pub fn promises(root: &Path) -> RuleReport {
@@ -566,6 +585,7 @@ pub fn missing(root: &Path, app: &str, promise: Promise) -> Vec<String> {
         Promise::Share => share_missing(root, app),
         Promise::OwnerCheck => owner_check_missing(root, app),
         Promise::Attach => attach_missing(root, app),
+        Promise::Origin => origin_missing(root, app),
     }
 }
 
@@ -1182,6 +1202,51 @@ fn history_missing_in(root: &Path, app: &str, menus: &[MenuEntry]) -> Vec<String
                 "crates/screens/src/{app}/{screen}: the {kind} page declares its entry as a menu row but does not hand it to the view (`{}`) beside the menu (`{}`)",
                 menu.entry.trim(),
                 menu.menu
+            ));
+        }
+    }
+    gaps
+}
+
+// ---------------------------------------------------------------------------
+// Origin
+// ---------------------------------------------------------------------------
+
+/// Origin is kept when `kit/earlier.rs` reads the shared origin with the count (`origin::read(`
+/// from `kit::origin`, so one read and one sentence for every page) and, for `app`, the detail
+/// screen of each primary kind ([`HISTORY_KINDS`], the same files that carry the Earlier versions
+/// entry) hands the foot's line to its view (`earlier.origin`), so no page words its own "where
+/// from".
+fn origin_missing(root: &Path, app: &str) -> Vec<String> {
+    let mut gaps = Vec::new();
+    let reads = live_source(&root.join("crates/screens/src/kit/earlier.rs"))
+        .is_some_and(|text| text.contains("origin::read("));
+    if !reads {
+        gaps.push(
+            "crates/screens/src/kit/earlier.rs does not read where the record came from (`origin::read(` from kit::origin)"
+                .to_owned(),
+        );
+    }
+    let dir = root.join("crates/screens/src").join(app);
+    let kinds = HISTORY_KINDS
+        .iter()
+        .find(|(name, _)| *name == app)
+        .map_or(&[][..], |(_, kinds)| *kinds);
+    for (kind, screen) in kinds {
+        let path = dir.join(screen);
+        let files = if path.is_dir() {
+            source_files(&path, "rs")
+        } else {
+            vec![path]
+        };
+        let text: String = files
+            .iter()
+            .filter_map(|file| live_source(file))
+            .collect::<Vec<_>>()
+            .join("\n");
+        if !text.contains("earlier.origin") {
+            gaps.push(format!(
+                "crates/screens/src/{app}/{screen}: the {kind} page does not hand the foot's origin line to its view (`earlier.origin`)"
             ));
         }
     }

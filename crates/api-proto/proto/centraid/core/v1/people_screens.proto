@@ -445,6 +445,8 @@ message PeoplePersonState {
   Route edit = 13;
   // "Earlier versions   2 ›" at the foot of the page (#1185); absent when there are none.
   optional EarlierEntry earlier = 14;
+  // Where it came from, under the Earlier versions entry (#1185). Absent for a typed item.
+  optional OriginLine origin = 15;
 }
 
 message PeoplePersonChrome {

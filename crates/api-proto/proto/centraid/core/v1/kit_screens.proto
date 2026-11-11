@@ -346,6 +346,14 @@ message OriginOf {
   string label = 2;
 }
 
+// The line a detail page draws under its Earlier versions entry: "From contacts.vcf". Absent for a
+// typed item, and when the read did not land (the page's status line says so then).
+message OriginLine {
+  string text = 1;
+  // "Came from contacts.vcf".
+  string accessibility_label = 2;
+}
+
 // `shell.earlier-count`: how many earlier versions one record holds.
 message EarlierCount {
   uint32 count = 1;

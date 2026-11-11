@@ -1453,3 +1453,86 @@ fn the_committed_register_exempts_only_locker_and_owes_the_six() {
     }
     assert_eq!(ATTACH_EXEMPT.len(), 1);
 }
+
+// ---------------------------------------------------------------------------
+// Origin
+// ---------------------------------------------------------------------------
+
+const FOOT_THAT_READS: &str = "fn foot() { let origin = origin::read(ctx, id); }";
+
+#[test]
+fn a_detail_page_that_hands_the_foots_origin_to_its_view_keeps_origin() {
+    let root = fixture_dir("origin-clean");
+    write(&root, "crates/screens/src/kit/earlier.rs", FOOT_THAT_READS);
+    write(
+        &root,
+        "crates/screens/src/people/person/mod.rs",
+        "fn view() { State { origin: self.earlier.origin.clone() } }",
+    );
+    assert_eq!(origin_missing(&root, "people").join("\n"), "");
+}
+
+#[test]
+fn a_detail_page_with_no_origin_is_named_by_file_and_kind() {
+    let root = fixture_dir("origin-red");
+    write(&root, "crates/screens/src/kit/earlier.rs", FOOT_THAT_READS);
+    write(
+        &root,
+        "crates/screens/src/people/person/mod.rs",
+        "fn view() { State {} }",
+    );
+    let gaps = origin_missing(&root, "people").join("\n");
+    assert!(
+        gaps.contains("crates/screens/src/people/person: the person page does not hand the foot's origin line to its view"),
+        "{gaps}"
+    );
+    // A line only a test module hands over is not on the page.
+    write(
+        &root,
+        "crates/screens/src/people/person/mod.rs",
+        "fn view() {}\n#[cfg(test)]\nmod t { fn x() { let _ = earlier.origin; } }",
+    );
+    assert!(
+        origin_missing(&root, "people")
+            .join("\n")
+            .contains("does not hand the foot's origin line")
+    );
+}
+
+#[test]
+fn a_foot_that_never_reads_the_origin_is_named_for_every_app() {
+    let root = fixture_dir("origin-foot");
+    write(&root, "crates/screens/src/kit/earlier.rs", "fn foot() {}");
+    write(
+        &root,
+        "crates/screens/src/people/person/mod.rs",
+        "fn view() { earlier.origin }",
+    );
+    assert!(
+        origin_missing(&root, "people")
+            .join("\n")
+            .contains("kit/earlier.rs does not read where the record came from")
+    );
+}
+
+#[test]
+fn an_owed_origin_row_prints_each_gap_with_its_file() {
+    let root = fixture_dir("origin-owed");
+    let table: Vec<Row> = APPS
+        .iter()
+        .map(|app| Row {
+            app,
+            promise: Promise::Origin,
+            status: Status::Owed("#1185"),
+        })
+        .collect();
+    let report = check(&root, &table);
+    assert!(
+        report
+            .details
+            .iter()
+            .any(|line| line.starts_with("owed notes / Origin:") && line.contains("editor.rs")),
+        "{:?}",
+        report.details
+    );
+}

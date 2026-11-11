@@ -166,6 +166,9 @@ pub fn route(screen: &str, entity_id: &str, back: &str) -> wire::Route {
 pub struct Foot {
     /// Absent when the record holds no earlier version, or the count was not read.
     pub entry: Option<wire::EarlierEntry>,
+    /// Where the record came from, "From contacts.vcf", read with the count and drawn under the
+    /// entry (#1185). Absent for an item the member typed, and when the read did not land.
+    pub origin: Option<wire::OriginLine>,
     unread: bool,
 }
 
@@ -186,6 +189,7 @@ pub fn foot(ctx: &Ctx, screen: &str, entity_id: &str, back: &str) -> Foot {
     if entity_id.is_empty() {
         return Foot::default();
     }
+    let origin = crate::kit::origin::read(ctx, entity_id);
     let reading = read::read(
         ctx,
         load::shell::EarlierCount {
@@ -199,6 +203,7 @@ pub fn foot(ctx: &Ctx, screen: &str, entity_id: &str, back: &str) -> Foot {
     let Reading::Data(count) = reading else {
         return Foot {
             entry: None,
+            origin,
             unread: true,
         };
     };
@@ -210,6 +215,7 @@ pub fn foot(ctx: &Ctx, screen: &str, entity_id: &str, back: &str) -> Foot {
             route: Some(route(screen, entity_id, back)),
             accessibility_label: fill(&words::entry_spoken(locale), &[("n", &count.to_string())]),
         }),
+        origin,
         unread: false,
     }
 }

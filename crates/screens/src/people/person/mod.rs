@@ -790,6 +790,7 @@ impl Screen for Person {
             done: self.done,
             edit: self.loaded().map(|_| routes::editor(&self.party_id)),
             earlier: self.earlier.entry.clone(),
+            origin: None,
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::PeoplePerson(Box::new(state))),

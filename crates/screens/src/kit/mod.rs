@@ -12,6 +12,7 @@ pub mod follow;
 pub mod links;
 pub mod menu;
 pub mod money;
+pub mod origin;
 pub mod owner;
 pub mod quantity;
 pub mod read;

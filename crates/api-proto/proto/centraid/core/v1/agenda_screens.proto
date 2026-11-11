@@ -1124,6 +1124,8 @@ message AgendaEventState {
   optional StatusLine status = 19;
   // "Earlier versions   2 ›" at the foot of the page (#1185); absent when there are none.
   optional EarlierEntry earlier = 20;
+  // Where it came from, under the Earlier versions entry (#1185). Absent for a typed item.
+  optional OriginLine origin = 21;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -2555,6 +2557,8 @@ message TodoDetailState {
   bool finished = 16;
   // "Earlier versions   2 ›" at the foot of the page (#1185); absent when there are none.
   optional EarlierEntry earlier = 18;
+  // Where it came from, under the Earlier versions entry (#1185). Absent for a typed item.
+  optional OriginLine origin = 19;
 
   enum Asking {
     ASKING_UNSPECIFIED = 0;
