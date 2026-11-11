@@ -12,7 +12,7 @@
 use rusqlite::Connection;
 use serde_json::Value as Json;
 
-use crate::commands::csv::row;
+use crate::commands::csv::{self, row, text_row, words};
 use crate::commands::{CommandCtx, CommandDefinition, Idempotency, note};
 use crate::error::Result;
 
@@ -123,19 +123,19 @@ fn lines(connection: &Connection, account: Option<&str>, one: Option<&str>) -> R
 }
 
 fn file(rows: &[Line]) -> String {
-    let mut text = row(&HEADER);
+    let mut text = text_row(&HEADER);
     for line in rows {
         text.push_str(&row(&[
-            &line.day,
-            &line.account,
-            &line.payee,
-            &line.bank,
-            &line.category,
-            &decimal(line.amount_minor, &line.currency),
-            &line.currency,
-            &line.status,
-            &line.memo,
-            &line.check_number,
+            words(&line.day),
+            words(&line.account),
+            words(&line.payee),
+            words(&line.bank),
+            words(&line.category),
+            csv::number(&decimal(line.amount_minor, &line.currency)),
+            words(&line.currency),
+            words(&line.status),
+            words(&line.memo),
+            words(&line.check_number),
         ]));
     }
     text

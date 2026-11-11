@@ -10,7 +10,7 @@
 use rusqlite::Connection;
 use serde_json::Value as Json;
 
-use crate::commands::csv::row;
+use crate::commands::csv::{self, row, text_row, words};
 use crate::commands::{CommandCtx, CommandDefinition, Idempotency, note};
 use crate::error::Result;
 
@@ -82,9 +82,14 @@ pub(crate) fn measurements(connection: &Connection, only: Option<&str>) -> Resul
     // The file reads by day, then metric, then person.
     rows.sort_by(|a, b| (&a.1.0, &a.1.1, a.0).cmp(&(&b.1.0, &b.1.1, b.0)));
     let rows: Vec<(String, String, f64)> = rows.into_iter().map(|(_, found)| found).collect();
-    let mut text = row(&MEASUREMENT_HEADER);
+    let mut text = text_row(&MEASUREMENT_HEADER);
     for (day, key, value) in &rows {
-        text.push_str(&row(&[day, key, &number(*value), metric(key).1]));
+        text.push_str(&row(&[
+            words(day),
+            words(key),
+            csv::number(&number(*value)),
+            words(metric(key).1),
+        ]));
     }
     Ok((text, i64::try_from(rows.len()).unwrap_or(i64::MAX)))
 }
@@ -120,19 +125,19 @@ pub(crate) fn workouts(connection: &Connection, one: Option<&str>) -> Result<Wor
             ))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    let mut text = row(&WORKOUT_HEADER);
+    let mut text = text_row(&WORKOUT_HEADER);
     for (starts, ends, kind, title, moving, distance, energy, heart, climb, by) in &rows {
         text.push_str(&row(&[
-            starts,
-            ends.as_deref().unwrap_or_default(),
-            kind,
-            title,
-            &optional(*moving, |n| n.to_string()),
-            &optional(*distance, number),
-            &optional(*energy, number),
-            &optional(*heart, |n| n.to_string()),
-            &optional(*climb, number),
-            by.as_deref().unwrap_or_default(),
+            words(starts),
+            words(ends.as_deref().unwrap_or_default()),
+            words(kind),
+            words(title),
+            csv::number(&optional(*moving, |n| n.to_string())),
+            csv::number(&optional(*distance, number)),
+            csv::number(&optional(*energy, number)),
+            csv::number(&optional(*heart, |n| n.to_string())),
+            csv::number(&optional(*climb, number)),
+            words(by.as_deref().unwrap_or_default()),
         ]));
     }
     let first = rows
