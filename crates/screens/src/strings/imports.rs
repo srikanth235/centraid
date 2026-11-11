@@ -21,10 +21,6 @@ catalog! {
     counted reminders_lists_created = ("{n} list created", "{n} lists created");
     counted reminders_refused = ("{n} reminder could not be imported", "{n} reminders could not be imported");
     counted reminders_rules_dropped = ("{n} repeat was not imported", "{n} repeats were not imported");
-    plain reminders_denied = (
-        "Reminders access is off. Turn it on in Settings.",
-        "Reminders access is off. Turn it on in Settings."
-    );
     plain reminders_unavailable = (
         "This phone has no Reminders to import.",
         "This phone has no Reminders to import."

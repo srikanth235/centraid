@@ -60,6 +60,7 @@ use crate::catalog::{act, load};
 use crate::follow::Store as Followed;
 use crate::kit::act as kit_act;
 use crate::kit::civil;
+use crate::kit::permission::{self, Resource};
 use crate::kit::read::{self, Reading};
 use crate::screen::Ctx;
 use crate::strings::{fill, health as words};
@@ -879,9 +880,14 @@ impl HealthFollow {
             (Waiting::Connect(chosen), Some(O::Health(snapshot))) => {
                 Some(self.read_ended(ctx, &chosen, snapshot))
             }
-            (Waiting::Connect(_), Some(O::Failed(_))) => {
+            (Waiting::Connect(_), Some(O::Failed(failed))) => {
                 self.waiting = Waiting::Nothing;
-                self.failure = Some(self.connect_failed(ctx));
+                // A GRANT THAT IS NOT THERE says so in the one permission voice; any other failure is
+                // the store that did not answer.
+                self.failure = Some(
+                    permission::refusal(ctx.locale(), Resource::Health, failed)
+                        .unwrap_or_else(|| self.connect_failed(ctx)),
+                );
                 Some(Vec::new())
             }
             _ => None,

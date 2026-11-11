@@ -500,6 +500,7 @@ fn a_render_the_shell_could_not_do_is_a_sentence_beside_the_editor_and_the_plan_
         reason: "no decoder".to_owned(),
         denied: false,
         cancelled: false,
+        ..Default::default()
     }));
     let state = state_of(&d, at);
     assert_eq!(state.phase, Phase::Editing as i32);

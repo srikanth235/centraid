@@ -5,6 +5,5 @@
 catalog! {
     plain calendars_kept = ("events", "events");
     plain calendars_stopped = ("Calendar stopped reading your phone calendars.", "Calendar stopped reading your phone calendars.");
-    plain import_calendar_denied = ("Calendar access is off. Turn it on in Settings.", "Calendar access is off. Turn it on in Settings.");
     plain import_calendar_running = ("Importing calendar", "Importing calendar");
 }

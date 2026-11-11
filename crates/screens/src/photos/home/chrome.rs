@@ -34,6 +34,7 @@ use wire::photos_home_import_banner::Remedy;
 
 use super::layout;
 use crate::kit::menu;
+use crate::kit::permission::{self, Resource};
 use crate::strings::{Locale, fill, photos as words};
 
 pub const BAND_LIBRARY: &str = "library";
@@ -180,13 +181,9 @@ pub fn can_enumerate(permission: Permission) -> bool {
 /// FOUR REASONS, FOUR SENTENCES. "Not asked" has a button, "denied" has a trip to
 /// Settings, and "restricted" has neither.
 fn paused_reason(locale: Locale, permission: Permission) -> String {
-    match permission {
-        Permission::Limited => words::photos_permission_limited(locale),
-        Permission::NotAsked => words::photos_permission_not_asked(locale),
-        Permission::Denied => words::photos_permission_denied(locale),
-        Permission::Restricted => words::photos_permission_restricted(locale),
-        Permission::Granted | Permission::Unspecified => String::new(),
-    }
+    permission::State::of_photos(permission)
+        .map(|state| permission::says(locale, Resource::Photos, state))
+        .unwrap_or_default()
 }
 
 /// What the roll last told this screen.

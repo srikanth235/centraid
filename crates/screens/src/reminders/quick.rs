@@ -14,6 +14,7 @@ use wire::effect_result::Outcome as O;
 
 use crate::kit::attachments::refusal_of;
 use crate::kit::links::{Kind, Links, Outcome};
+use crate::kit::permission::Resource;
 use crate::reminders::detail::{self, NEXT_WEEK, NONE, TODAY, TOMORROW, WEEKEND};
 use crate::screen::Ctx;
 use crate::strings::{Locale, agenda_tasks as words, fill, links as link_words, task};
@@ -183,7 +184,7 @@ impl Quick {
             O::Failed(failed) => {
                 self.picking = false;
                 if !failed.cancelled {
-                    return Picked::Refused(refusal_of(locale, failed));
+                    return Picked::Refused(refusal_of(locale, Resource::Photos, failed));
                 }
             }
             _ => return Picked::NotMine,

@@ -58,6 +58,7 @@ use crate::catalog::act;
 use crate::follow::Store;
 use crate::kit::act as kit_act;
 use crate::kit::civil;
+use crate::kit::permission::{self, Resource};
 use crate::screen::Ctx;
 use crate::strings::{Locale, agenda as words, agenda_calendar as calendar_words, fill};
 
@@ -831,10 +832,7 @@ impl CalendarFollow {
                 Some(self.finish(ctx))
             }
             (Waiting::Read, Some(O::Calendar(snapshot))) => Some(self.read_ended(ctx, snapshot)),
-            (Waiting::Read, Some(O::Failed(failed))) => {
-                let denied = failed.denied;
-                Some(self.read_failed(ctx, denied))
-            }
+            (Waiting::Read, Some(O::Failed(failed))) => Some(self.read_failed(ctx, failed)),
             _ => None,
         }
     }
@@ -846,13 +844,13 @@ impl CalendarFollow {
         vec![read_effect(true)]
     }
 
-    fn read_failed(&mut self, ctx: &Ctx, denied: bool) -> Vec<wire::Effect> {
+    fn read_failed(&mut self, ctx: &Ctx, failed: &wire::EffectFailed) -> Vec<wire::Effect> {
         let locale = ctx.locale();
-        self.status = Some(plain(if denied {
-            calendar_words::import_calendar_denied(locale)
-        } else {
-            words::import_calendar_failed(locale)
-        }));
+        // A GRANT THAT IS NOT THERE (off, blocked, or write-only) says so in the one permission voice.
+        self.status = Some(plain(
+            permission::refusal(locale, Resource::Calendar, failed)
+                .unwrap_or_else(|| words::import_calendar_failed(locale)),
+        ));
         self.waiting = Waiting::Nothing;
         self.finish(ctx)
     }

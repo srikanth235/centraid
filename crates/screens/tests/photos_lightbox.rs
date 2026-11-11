@@ -1164,6 +1164,7 @@ fn download_saves_the_original_into_the_phones_library_and_says_so() {
                 reason: "x".into(),
                 denied: false,
                 cancelled: false,
+                ..Default::default()
             })),
         }),
     );

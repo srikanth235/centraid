@@ -155,6 +155,7 @@ pub mod pairing;
 pub mod passes;
 pub mod people;
 pub mod people_lists;
+pub mod permission;
 pub mod photos;
 pub mod photos_home;
 pub mod photos_lightbox;

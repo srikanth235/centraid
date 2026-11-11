@@ -141,6 +141,7 @@ fn denied() -> O {
         reason: "denied".to_owned(),
         denied: true,
         cancelled: false,
+        ..Default::default()
     })
 }
 

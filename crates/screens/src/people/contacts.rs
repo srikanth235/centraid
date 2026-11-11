@@ -40,6 +40,7 @@ use wire::screen_event::Kind as E;
 use crate::catalog::act;
 use crate::follow::Store;
 use crate::kit::act as kit_act;
+use crate::kit::permission::{self, Resource};
 use crate::screen::Ctx;
 use crate::strings::{Locale, people as words};
 
@@ -591,10 +592,7 @@ impl ContactsFollow {
                 Some(self.finish(ctx))
             }
             (Waiting::Read, Some(O::Contacts(snapshot))) => Some(self.read_ended(ctx, snapshot)),
-            (Waiting::Read, Some(O::Failed(failed))) => {
-                let denied = failed.denied;
-                Some(self.read_failed(ctx, denied))
-            }
+            (Waiting::Read, Some(O::Failed(failed))) => Some(self.read_failed(ctx, failed)),
             _ => None,
         }
     }
@@ -606,14 +604,13 @@ impl ContactsFollow {
         vec![read_effect(true)]
     }
 
-    fn read_failed(&mut self, ctx: &Ctx, denied: bool) -> Vec<wire::Effect> {
-        ctx.follows().denied(Store::Contacts, denied);
+    fn read_failed(&mut self, ctx: &Ctx, failed: &wire::EffectFailed) -> Vec<wire::Effect> {
+        let refusal = permission::refusal(ctx.locale(), Resource::Contacts, failed);
+        ctx.follows().denied(Store::Contacts, refusal.is_some());
         let locale = ctx.locale();
-        self.status = Some(plain(if denied {
-            words::import_contacts_denied(locale)
-        } else {
-            words::import_contacts_failed(locale)
-        }));
+        self.status = Some(plain(
+            refusal.unwrap_or_else(|| words::import_contacts_failed(locale)),
+        ));
         self.waiting = Waiting::Nothing;
         self.finish(ctx)
     }

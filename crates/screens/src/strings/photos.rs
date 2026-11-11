@@ -194,10 +194,6 @@ catalog! {
     plain photos_original_held_back = ("Original not downloaded — your download setting is holding it back.", "Original not downloaded — your download setting is holding it back.");
     plain photos_original_on_phone = ("The original is on this phone.", "The original is on this phone.");
     plain photos_original_your_choice = ("Original not downloaded — your download setting leaves that to you.", "Original not downloaded — your download setting leaves that to you.");
-    plain photos_permission_denied = ("Photo access is off. Turn it on in Settings to import your camera roll.", "Photo access is off. Turn it on in Settings to import your camera roll.");
-    plain photos_permission_limited = ("Centraid imports the photos you selected.", "Centraid imports the photos you selected.");
-    plain photos_permission_not_asked = ("Centraid needs access to your photos to import them.", "Centraid needs access to your photos to import them.");
-    plain photos_permission_restricted = ("This phone does not allow photo access.", "This phone does not allow photo access.");
     plain photos_picker_nothing_chosen = ("Nothing chosen yet", "Nothing chosen yet");
     plain photos_picker_nothing_left = ("Everything in your library is already in this album.", "Everything in your library is already in this album.");
     plain photos_picker_title = ("Add to “{name}”", "Add to “{name}”");

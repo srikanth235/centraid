@@ -763,6 +763,44 @@ fn a_followed_event_the_member_trashed_is_not_resurrected_by_the_next_pass() {
 }
 
 #[test]
+fn a_write_only_or_blocked_calendar_says_what_it_is_in_the_permission_voice() {
+    // iOS 17's write-only access is NOT ENOUGH to read (`limited`); a policy that blocks Calendar is
+    // `restricted` and points nowhere. A shell reports the state and words nothing.
+    for (failed, want) in [
+        (
+            wire::EffectFailed {
+                limited: true,
+                ..Default::default()
+            },
+            "Centraid needs full calendar access, not only adding events. Turn it on in Settings.",
+        ),
+        (
+            wire::EffectFailed {
+                restricted: true,
+                ..Default::default()
+            },
+            "This phone does not allow calendar access.",
+        ),
+    ] {
+        let mut world = world();
+        let host = world.driver.push("calendar", host_route());
+        answer(
+            &mut world,
+            is_keychain,
+            wire::effect_result::Outcome::Keychain(wire::KeychainValue::default()),
+        );
+        tap_import(&mut world, host);
+        answer(
+            &mut world,
+            is_read,
+            wire::effect_result::Outcome::Failed(failed),
+        );
+        assert_eq!(status(&world, host), want);
+        assert!(watches(&world).is_empty());
+    }
+}
+
+#[test]
 fn a_denied_read_says_where_to_turn_it_on_and_a_calendarless_phone_says_to_add_an_account() {
     let mut world = world();
     let host = world.driver.push("calendar", host_route());

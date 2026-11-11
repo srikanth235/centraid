@@ -747,7 +747,7 @@ fn the_add_sheet_rows_follow_the_os_grants_as_state() {
     };
     let upload = list.actions.iter().find(|a| a.key == "upload").unwrap();
     assert!(!upload.enabled);
-    assert_eq!(upload.detail, "File access is blocked on this phone.");
+    assert_eq!(upload.detail, "This phone does not allow file access.");
 }
 
 /// The drive with two folders the vault follows (as `imports.files` records them), open on the

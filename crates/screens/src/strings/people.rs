@@ -135,10 +135,6 @@ catalog! {
         "No contacts found. Add your Google or other account in your phone's Settings, then come back.",
         "No contacts found. Add your Google or other account in your phone's Settings, then come back."
     );
-    plain import_contacts_denied = (
-        "Contacts access is off. Turn it on in Settings.",
-        "Contacts access is off. Turn it on in Settings."
-    );
     counted import_contacts_done = ("{n} person imported", "{n} people imported");
     plain import_contacts_failed = ("Contacts did not import.", "Contacts did not import.");
     plain import_contacts_none = ("No contacts to import", "No contacts to import");

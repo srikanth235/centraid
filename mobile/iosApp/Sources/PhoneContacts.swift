@@ -39,10 +39,17 @@ enum PhoneContacts {
         return await Task.detached(priority: .utility) { .contacts(snapshot(CNContactStore())) }.value
     }
 
+    /// A REFUSAL BY VALUE: the grant's state, never its words (Rust says them). A policy that blocks
+    /// Contacts is `restricted`; a no is `denied`. (iOS 18's limited access still reads: it is a
+    /// snapshot that is not complete, not a refusal.)
     private static func denied() -> Centraid_Core_V1_EffectFailed {
         var failed = Centraid_Core_V1_EffectFailed()
         failed.reason = EffectReason.denied
-        failed.denied = true
+        if CNContactStore.authorizationStatus(for: .contacts) == .restricted {
+            failed.restricted = true
+        } else {
+            failed.denied = true
+        }
         return failed
     }
 

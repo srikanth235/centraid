@@ -150,7 +150,9 @@ pub fn gone(
         O::LibraryDeleted(deleted) => deleted,
         // A dismissed confirmation and a refusal both removed nothing. THE PLATFORM'S OWN WORDS STAY
         // IN THE SHELL'S LOG: what it said is for a developer, the sentence is Rust's.
-        O::Failed(failed) if failed.cancelled || failed.denied => {
+        O::Failed(failed)
+            if failed.cancelled || crate::kit::permission::State::of(failed).is_some() =>
+        {
             return (Vec::new(), Last::of(Outcome::NothingRemoved));
         }
         O::Failed(_) => return (Vec::new(), Last::of(Outcome::PlatformError)),
@@ -345,6 +347,7 @@ mod tests {
                 reason: String::new(),
                 denied: false,
                 cancelled: true,
+                ..Default::default()
             }),
         );
         assert_eq!(last.outcome, Outcome::NothingRemoved);

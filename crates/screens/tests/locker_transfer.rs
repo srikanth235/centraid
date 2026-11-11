@@ -132,6 +132,7 @@ fn a_cancelled_owner_check_writes_nothing_and_a_dismissed_save_sheet_says_so() {
         reason: "dismissed".to_owned(),
         denied: false,
         cancelled: true,
+        ..Default::default()
     }));
     let state = export_state(&d, id);
     assert!(

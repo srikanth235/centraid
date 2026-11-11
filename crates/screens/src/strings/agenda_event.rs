@@ -10,7 +10,6 @@ catalog! {
     plain event_cancelled = ("Event cancelled", "Event cancelled");
     plain date_range = ("{from} – {to}", "{from} – {to}");
     plain day_long = ("{weekday} {day} {month}", "{weekday} {day} {month}");
-    plain add_denied_error = ("Allow access in Settings to add it.", "Allow access in Settings to add it.");
     plain add_failed_error = ("That could not be added.", "That could not be added.");
     plain add_file_label = ("Add file", "Add file");
     plain add_photo_label = ("Add photo", "Add photo");

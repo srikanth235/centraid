@@ -120,6 +120,22 @@ fn the_day_one_tap_reads_the_address_book_and_a_snapshot_becomes_people() {
 }
 
 #[test]
+fn a_phone_that_blocks_contacts_says_so_and_points_nowhere() {
+    let mut d = clean();
+    let i = begin(&mut d);
+    not_following(&mut d);
+    send_home(&mut d, i, H::ImportContacts(ev::ImportContactsTapped {}));
+    d.answer_effect(O::Failed(wire::EffectFailed {
+        reason: "contacts access not given".into(),
+        restricted: true,
+        ..Default::default()
+    }));
+    let said = status(&d, i);
+    assert_eq!(said, "This phone does not allow contacts access.");
+    assert!(!said.contains("Settings"));
+}
+
+#[test]
 fn an_import_the_os_refuses_says_where_to_turn_it_on_and_an_empty_phone_says_add_an_account() {
     let mut d = clean();
     let i = begin(&mut d);
@@ -130,6 +146,7 @@ fn an_import_the_os_refuses_says_where_to_turn_it_on_and_an_empty_phone_says_add
         reason: "contacts access not given".into(),
         denied: true,
         cancelled: false,
+        ..Default::default()
     }));
     assert_eq!(
         status(&d, i),
@@ -228,6 +245,7 @@ fn a_phone_that_refused_the_address_book_says_so_and_the_action_opens_settings()
         reason: "contacts access not given".into(),
         denied: true,
         cancelled: false,
+        ..Default::default()
     }));
     let denied = row(&d, i);
     assert_eq!(

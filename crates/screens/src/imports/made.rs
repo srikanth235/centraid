@@ -20,6 +20,7 @@ use wire::screen_event::Kind as E;
 
 use super::{effect, reminders};
 use crate::calendar::follow::{self as calendar, CalendarFollow};
+use crate::kit::permission::{self, Resource};
 use crate::people::contacts::{self, ContactsFollow};
 use crate::screen::{Ctx, Screen};
 use crate::shell::row_routes as rows;
@@ -301,8 +302,12 @@ impl Screen for Made {
                         effects = followed(ctx, &outcome);
                         reminders::status_line(ctx.locale(), outcome)
                     }
-                    Some(O::Failed(failed)) if failed.denied => {
-                        words::reminders_denied(ctx.locale())
+                    Some(O::Failed(failed)) if permission::State::of(failed).is_some() => {
+                        permission::says(
+                            ctx.locale(),
+                            Resource::Reminders,
+                            permission::State::of(failed).unwrap_or(permission::State::Refused),
+                        )
                     }
                     Some(O::Failed(failed)) if failed.reason == UNAVAILABLE => {
                         words::reminders_unavailable(ctx.locale())

@@ -108,11 +108,11 @@ fn a_grant_is_worded_in_four_sentences_and_none_blames_the_member() {
     );
     assert_eq!(
         permission_sentence(l, Permission::NotAsked),
-        "Centraid needs access to your photos to import them."
+        "Centraid needs access to your photos."
     );
     assert_eq!(
         permission_sentence(l, Permission::Denied),
-        "Photo access is off. Turn it on in Settings to import your camera roll."
+        "Photo access is off. Turn it on in Settings."
     );
     assert_eq!(
         permission_sentence(l, Permission::Restricted),

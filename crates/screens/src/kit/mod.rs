@@ -15,6 +15,7 @@ pub mod menu;
 pub mod money;
 pub mod origin;
 pub mod owner;
+pub mod permission;
 pub mod quantity;
 pub mod read;
 pub mod schedule;

@@ -55,10 +55,12 @@ enum HealthKitReader {
         }.value
     }
 
+    /// A failure by value: the member's no is `denied` (Rust says it in the one permission voice); a
+    /// phone with no HealthKit is `unavailable`, which is no refusal and so no grant's state.
     private static func denied(_ reason: String) -> Centraid_Core_V1_EffectFailed {
         var failed = Centraid_Core_V1_EffectFailed()
         failed.reason = reason
-        failed.denied = true
+        failed.denied = reason == EffectReason.denied
         return failed
     }
 

@@ -271,10 +271,14 @@ fn a_closed_picker_says_nothing_and_a_refusal_says_where_to_turn_it_on() {
         reason: "denied".to_owned(),
         denied: true,
         cancelled: false,
+        ..Default::default()
     }));
     let status = section(&world, page).status.clone().expect("a refusal");
     assert!(status.refused);
-    assert_eq!(status.sentence, "Allow access in Settings to add it.");
+    assert_eq!(
+        status.sentence,
+        "Photo access is off. Turn it on in Settings."
+    );
     on_event(&mut world, page, A::StatusDismissed(Default::default()));
     assert!(section(&world, page).status.is_none());
 

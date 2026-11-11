@@ -452,6 +452,26 @@ fn completed_reminders_come_in_as_done_tasks_only_with_the_toggle_on() {
 }
 
 #[test]
+fn a_phone_that_blocks_reminders_says_so_and_points_nowhere() {
+    let mut shell = fresh_shell();
+    tap(&mut shell, false);
+    answer(
+        &mut shell,
+        O::Failed(wire::EffectFailed {
+            reason: "denied".into(),
+            restricted: true,
+            ..Default::default()
+        }),
+    );
+    let said = line(&shell);
+    assert!(
+        said.starts_with("This phone does not allow reminders access"),
+        "{said}"
+    );
+    assert!(!said.contains("Settings"));
+}
+
+#[test]
 fn a_refused_or_denied_read_says_so_and_a_duplicate_is_folded() {
     let mut shell = fresh_shell();
     tap(&mut shell, false);
@@ -461,6 +481,7 @@ fn a_refused_or_denied_read_says_so_and_a_duplicate_is_folded() {
             reason: "denied".into(),
             denied: true,
             cancelled: false,
+            ..Default::default()
         }),
     );
     assert_eq!(

@@ -48,8 +48,6 @@ catalog! {
     plain band_home = ("Home", "Home");
     plain band_more = ("More", "More");
     plain band_starred = ("Starred", "Starred");
-    plain camera_denied = ("Camera access is off. Turn it on in Settings.", "Camera access is off. Turn it on in Settings.");
-    plain camera_restricted = ("Camera access is blocked on this phone.", "Camera access is blocked on this phone.");
     plain changed = ("Changed", "Changed");
     plain clear_filters = ("Clear filters", "Clear filters");
     plain close = ("Close", "Close");
@@ -93,8 +91,6 @@ catalog! {
     plain fact_media_type = ("Media type", "Media type");
     plain fact_size = ("Size", "Size");
     plain fact_versions = ("Versions", "Versions");
-    plain files_denied = ("File access is off. Turn it on in Settings.", "File access is off. Turn it on in Settings.");
-    plain files_restricted = ("File access is blocked on this phone.", "File access is blocked on this phone.");
     plain filter_label = ("Label", "Label");
     plain filter_modified = ("Modified", "Modified");
     plain filter_type = ("Type", "Type");

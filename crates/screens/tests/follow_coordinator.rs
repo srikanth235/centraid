@@ -463,6 +463,7 @@ fn a_read_the_phone_refuses_is_said_on_the_row_and_changes_nothing() {
                 reason: "contacts access not given".to_owned(),
                 denied: true,
                 cancelled: false,
+                ..Default::default()
             })),
         }),
     );

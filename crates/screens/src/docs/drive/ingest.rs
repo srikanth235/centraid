@@ -26,6 +26,7 @@ use wire::docs_ingest_view::Phase;
 use crate::catalog::act;
 use crate::docs::routes;
 use crate::kit::act as kit_act;
+use crate::kit::permission::{self, Resource};
 use crate::kit::undo::Undo;
 use crate::screen::Ctx;
 use crate::strings::{Locale, docs as words, fill};
@@ -341,11 +342,17 @@ fn title_of(locale: Locale, kind: Kind, name: &str) -> String {
 /// on; a phone with no picker says so; anything else is the file that would not
 /// read.
 fn refusal_of(locale: Locale, kind: Kind, failed: &wire::EffectFailed) -> String {
-    match (failed.denied, kind) {
-        (true, Kind::Scan) => words::camera_denied(locale),
-        (true, _) => words::files_denied(locale),
-        _ if failed.reason == UNAVAILABLE => words::ingest_no_picker(locale),
-        _ => words::ingest_no_file(locale),
+    let resource = if kind == Kind::Scan {
+        Resource::Camera
+    } else {
+        Resource::Files
+    };
+    if let Some(sentence) = permission::refusal(locale, resource, failed) {
+        sentence
+    } else if failed.reason == UNAVAILABLE {
+        words::ingest_no_picker(locale)
+    } else {
+        words::ingest_no_file(locale)
     }
 }
 

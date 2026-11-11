@@ -348,7 +348,9 @@ impl Coordinator {
                 follows.denied(Store::Health, false);
             }
             // A refusal or a shell that cannot read: nothing was read, so nothing changes.
-            (_, O::Failed(failed)) => follows.denied(store, failed.denied),
+            (_, O::Failed(failed)) => {
+                follows.denied(store, crate::kit::permission::State::of(&failed).is_some())
+            }
             _ => {}
         }
         // The screen that draws what the pass found draws again (a wake: its data did not move).

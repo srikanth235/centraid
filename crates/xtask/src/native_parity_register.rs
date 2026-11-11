@@ -193,6 +193,13 @@ pub const REGISTER: &[Entry] = &[
         platform(Shell::Ios, REMINDERS),
     ),
     ("Announce.topic", platform(Shell::Ios, CERT_PIN)),
+    (
+        "EffectFailed.limited",
+        platform(
+            Shell::Ios,
+            "iOS 17's write-only access to Calendar and Reminders is a grant that cannot read; Android's runtime permissions are all or nothing for those stores, so Android never reports a limited grant there (kit::permission words it)",
+        ),
+    ),
     ("Announced.topic", platform(Shell::Ios, CERT_PIN)),
     (
         "EffectResult.reminders_snapshot",

@@ -290,6 +290,7 @@ fn a_refusal_and_an_empty_phone_say_so_on_the_line_in_the_import_words() {
         reason: "denied".to_owned(),
         denied: true,
         cancelled: false,
+        ..Default::default()
     }));
     assert_eq!(
         r.line().summary,

@@ -115,7 +115,7 @@ final class DocsFiles: ObservableObject {
     func scanFailed() {
         scanning = false
         let status = AVCaptureDevice.authorizationStatus(for: .video)
-        fail(EffectReason.failed, denied: status == .denied || status == .restricted)
+        fail(EffectReason.failed, denied: status == .denied, restricted: status == .restricted)
     }
 
     // MARK: Staging
@@ -155,10 +155,11 @@ final class DocsFiles: ObservableObject {
         answer = nil
     }
 
-    private func fail(_ reason: String, denied: Bool = false) {
+    private func fail(_ reason: String, denied: Bool = false, restricted: Bool = false) {
         var failed = Centraid_Core_V1_EffectFailed()
         failed.reason = reason
         failed.denied = denied
+        failed.restricted = restricted
         answer?(.failed(failed))
         answer = nil
     }

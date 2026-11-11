@@ -248,7 +248,7 @@ fn after_connect_a_following_pass_reads_without_asking_and_changes_nothing() {
 }
 
 #[test]
-fn a_refusal_from_the_os_is_the_stores_own_didnt_answer_and_nothing_is_written() {
+fn a_refusal_from_the_os_says_so_in_the_permission_voice_and_nothing_is_written() {
     let mut d = driver();
     let i = opened(&mut d);
     d.answer_effect(no_memory());
@@ -257,12 +257,50 @@ fn a_refusal_from_the_os_is_the_stores_own_didnt_answer_and_nothing_is_written()
         reason: "denied".to_owned(),
         denied: true,
         cancelled: false,
+        ..Default::default()
     }));
     let state = connect_state(d.view(i));
     assert!(!state.working && !state.finished);
-    assert_eq!(state.status, "Apple Health didn’t answer. Try again.");
+    assert_eq!(
+        state.status,
+        "Health access is off. Turn it on in Settings."
+    );
     assert!(state.can_connect);
     assert!(!is_connected(&d));
+}
+
+#[test]
+fn a_failure_that_is_no_grants_is_the_stores_own_didnt_answer() {
+    // A phone with no HealthKit (`unavailable`) or a read that broke is not a refusal: no state is
+    // reported, so nothing says Settings.
+    let mut d = driver();
+    let i = opened(&mut d);
+    d.answer_effect(no_memory());
+    tap(&mut d, i);
+    d.answer_effect(Outcome::Failed(wire::EffectFailed {
+        reason: "unavailable".to_owned(),
+        ..Default::default()
+    }));
+    assert_eq!(
+        connect_state(d.view(i)).status,
+        "Apple Health didn’t answer. Try again."
+    );
+}
+
+#[test]
+fn a_phone_that_blocks_health_says_so_and_points_nowhere() {
+    let mut d = driver();
+    let i = opened(&mut d);
+    d.answer_effect(no_memory());
+    tap(&mut d, i);
+    d.answer_effect(Outcome::Failed(wire::EffectFailed {
+        reason: "denied".to_owned(),
+        restricted: true,
+        ..Default::default()
+    }));
+    let status = connect_state(d.view(i)).status.clone();
+    assert_eq!(status, "This phone does not allow Health access.");
+    assert!(!status.contains("Settings"));
 }
 
 #[test]

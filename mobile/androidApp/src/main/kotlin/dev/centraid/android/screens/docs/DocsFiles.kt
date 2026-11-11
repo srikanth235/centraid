@@ -86,11 +86,11 @@ internal class DocsPickers(
     }
 
     private fun scan() {
-        // THE CAMERA OFF BY POLICY (MDM, a work profile): refused as denied.
+        // THE CAMERA OFF BY POLICY (MDM, a work profile): `restricted`, which no button here can change.
         val policy = context.getSystemService(android.app.admin.DevicePolicyManager::class.java)
         when {
             !context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY) -> fail(UNAVAILABLE)
-            policy?.getCameraDisabled(null) == true -> fail(EffectReason.DENIED, denied = true)
+            policy?.getCameraDisabled(null) == true -> fail(EffectReason.DENIED, restricted = true)
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED -> launchScan()
             else -> cameraGrant?.launch(Manifest.permission.CAMERA) ?: fail(UNAVAILABLE)
         }
@@ -227,8 +227,8 @@ internal class DocsPickers(
         answer = null
     }
 
-    private fun fail(reason: String, denied: Boolean = false) {
-        answer?.invoke(EffectResult(failed = EffectFailed(reason = reason, denied = denied)))
+    private fun fail(reason: String, denied: Boolean = false, restricted: Boolean = false) {
+        answer?.invoke(EffectResult(failed = EffectFailed(reason = reason, denied = denied, restricted = restricted)))
         answer = null
     }
 

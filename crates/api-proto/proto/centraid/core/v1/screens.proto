@@ -1009,6 +1009,12 @@ message EffectFailed {
   bool denied = 2;
   // The member dismissed it (a save sheet): not a failure.
   bool cancelled = 3;
+  // A GRANT'S STATE, reported and never worded (#1185): the shell says which, Rust says the sentence
+  // (`kit::permission`). `denied` is the member's no; `restricted` is a policy that blocks it (parental
+  // controls, a managed phone) which no button here can change; `limited` is a grant that is not
+  // enough (a chosen selection of photos or contacts, write-only calendar or reminders).
+  bool restricted = 4;
+  bool limited = 5;
 }
 
 // WHAT THE SHELL READ OF THE HEALTH STORE. Nothing here is a decision: Rust diffs

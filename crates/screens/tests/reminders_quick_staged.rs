@@ -373,7 +373,10 @@ fn a_denied_or_missing_picker_says_so_in_the_shared_words_and_a_closed_one_says_
         }),
     );
     let line = status(&d, page).expect("a refusal is said");
-    assert_eq!(line.sentence, "Allow access in Settings to add it.");
+    assert_eq!(
+        line.sentence,
+        "Photo access is off. Turn it on in Settings."
+    );
     assert!(line.refused);
     assert!(bar(&d, page).staged_rows.is_empty());
 

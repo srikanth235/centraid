@@ -90,10 +90,16 @@ enum PhoneReminders {
         return String(format: "%04d-%02d-%02d", year, month, day)
     }
 
+    /// A REFUSAL BY VALUE: the grant's state, never its words (Rust says them). A policy that blocks
+    /// Reminders is `restricted`; write-only access is `limited` (it cannot read); a no is `denied`.
     private static func denied() -> Centraid_Core_V1_EffectFailed {
         var failed = Centraid_Core_V1_EffectFailed()
         failed.reason = EffectReason.denied
-        failed.denied = true
+        switch EKEventStore.authorizationStatus(for: .reminder) {
+        case .restricted: failed.restricted = true
+        case .writeOnly: failed.limited = true
+        default: failed.denied = true
+        }
         return failed
     }
 }

@@ -11,6 +11,7 @@ use super::{
 use crate::docs::fold::{self, TRASH_ICON};
 use crate::docs::{folders, routes};
 use crate::kit::export;
+use crate::kit::permission::{self, Resource, State};
 use crate::strings::{Locale, docs as words, shared};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -213,24 +214,17 @@ pub(super) fn view(drive: &Drive, locale: Locale) -> wire::DocsSheet {
 /// The Add sheet: what the OS lets the shell offer (law 4), and a folder.
 fn add_rows(drive: &Drive, locale: Locale) -> Vec<wire::DocsAction> {
     use wire::DocsPermission as P;
-    let gated = |key: &str,
-                 label: String,
-                 icon: &str,
-                 permission: P,
-                 denied: String,
-                 restricted: String| {
+    let gated = |key: &str, label: String, icon: &str, permission: P, resource: Resource| {
+        // THE ONE PERMISSION VOICE: the row says why it is off in `kit::permission`'s words.
+        let off = |state| wire::DocsAction {
+            enabled: false,
+            detail: permission::says(locale, resource, state),
+            ..fold::action(key, label.clone(), icon)
+        };
         match permission {
             P::Unavailable => None,
-            P::Denied => Some(wire::DocsAction {
-                enabled: false,
-                detail: denied,
-                ..fold::action(key, label, icon)
-            }),
-            P::Restricted => Some(wire::DocsAction {
-                enabled: false,
-                detail: restricted,
-                ..fold::action(key, label, icon)
-            }),
+            P::Denied => Some(off(State::Refused)),
+            P::Restricted => Some(off(State::Restricted)),
             _ => Some(fold::action(key, label, icon)),
         }
     };
@@ -240,8 +234,7 @@ fn add_rows(drive: &Drive, locale: Locale) -> Vec<wire::DocsAction> {
             words::add_upload(locale),
             "Upload",
             drive.files,
-            words::files_denied(locale),
-            words::files_restricted(locale),
+            Resource::Files,
         ),
         Some(fold::action(
             KEY_FOLLOW_FOLDER,
@@ -253,8 +246,7 @@ fn add_rows(drive: &Drive, locale: Locale) -> Vec<wire::DocsAction> {
             words::add_scan(locale),
             "Camera",
             drive.camera,
-            words::camera_denied(locale),
-            words::camera_restricted(locale),
+            Resource::Camera,
         ),
         Some(fold::action(KEY_TEXT, words::add_text(locale), "FileText")),
         Some(fold::action(

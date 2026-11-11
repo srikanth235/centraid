@@ -29,10 +29,16 @@ enum PhoneCalendar {
         return await Task.detached(priority: .utility) { .calendar(snapshot(EKEventStore(), read)) }.value
     }
 
+    /// A REFUSAL BY VALUE: the grant's state, never its words (Rust says them). A policy that blocks
+    /// Calendar is `restricted`; iOS 17's write-only access is `limited` (it cannot read); a no is `denied`.
     private static func denied() -> Centraid_Core_V1_EffectFailed {
         var failed = Centraid_Core_V1_EffectFailed()
         failed.reason = EffectReason.denied
-        failed.denied = true
+        switch EKEventStore.authorizationStatus(for: .event) {
+        case .restricted: failed.restricted = true
+        case .writeOnly: failed.limited = true
+        default: failed.denied = true
+        }
         return failed
     }
 

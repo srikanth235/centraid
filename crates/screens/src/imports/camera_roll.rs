@@ -66,10 +66,11 @@ use crate::catalog::{act, load};
 use crate::custody::secrets::VaultSecrets;
 use crate::field::{Field, Keyed};
 use crate::kit::act as kit_act;
+use crate::kit::permission;
 use crate::kit::read::{self, Page, Reading};
 use crate::passes::{Rules, TransferRule};
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, imports as words, photos as photo_words};
+use crate::strings::{Locale, imports as words};
 
 use wire::PhotosMediaPermission as Permission;
 
@@ -103,13 +104,9 @@ pub fn can_enumerate(permission: Permission) -> bool {
 /// WHAT THE GRANT MEANS, IN WORDS, AND NEVER A MEMBER'S FAULT: the sentences Photos' home words.
 #[must_use]
 pub fn permission_sentence(locale: Locale, permission: Permission) -> String {
-    match permission {
-        Permission::Limited => photo_words::photos_permission_limited(locale),
-        Permission::NotAsked => photo_words::photos_permission_not_asked(locale),
-        Permission::Denied => photo_words::photos_permission_denied(locale),
-        Permission::Restricted => photo_words::photos_permission_restricted(locale),
-        Permission::Granted | Permission::Unspecified => String::new(),
-    }
+    permission::State::of_photos(permission)
+        .map(|state| permission::says(locale, permission::Resource::Photos, state))
+        .unwrap_or_default()
 }
 
 /// MAY THIS PASS DOWNLOAD AN ORIGINAL THAT LIVES ONLY IN iCLOUD? (#1080)

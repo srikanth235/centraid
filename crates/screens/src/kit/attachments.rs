@@ -47,6 +47,7 @@ use wire::effect_result::Outcome as O;
 
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
+use crate::kit::permission::{self, Resource};
 use crate::kit::read::{self, Reading};
 use crate::kit::undo::Undo;
 use crate::screen::Ctx;
@@ -254,7 +255,11 @@ impl Attachments {
             O::Failed(failed) => {
                 self.waiting = None;
                 if !failed.cancelled {
-                    self.refuse(refusal_of(ctx.locale(), failed));
+                    let resource = match waiting.pick {
+                        Pick::Photo => Resource::Photos,
+                        Pick::File => Resource::Files,
+                    };
+                    self.refuse(refusal_of(ctx.locale(), resource, failed));
                 }
             }
             _ => return None,
@@ -454,9 +459,13 @@ fn tile(
 
 /// The member's words for a refused add: where to turn a grant on, a phone with no picker, or
 /// the file that would not go.
-pub(crate) fn refusal_of(locale: Locale, failed: &wire::EffectFailed) -> String {
-    if failed.denied {
-        words::add_denied_error(locale)
+pub(crate) fn refusal_of(
+    locale: Locale,
+    resource: Resource,
+    failed: &wire::EffectFailed,
+) -> String {
+    if let Some(sentence) = permission::refusal(locale, resource, failed) {
+        sentence
     } else if failed.reason == UNAVAILABLE {
         words::add_unavailable_error(locale)
     } else {
