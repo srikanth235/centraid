@@ -78,6 +78,6 @@ pub(crate) fn versions(
 
 /// `shell.earlier-count` for one entity.
 pub(crate) fn count(vault: &Vault, entity_id: &str) -> Result<Answer> {
-    let count = vault.read(|connection| history::count(connection, entity_id))?;
+    let count = vault.read(|connection| history::offered(connection, entity_id))?;
     Ok(Answer::EarlierCount(wire::EarlierCount { count }))
 }

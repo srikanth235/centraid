@@ -44,6 +44,9 @@
 //! value large enough to deserve a cell of their own. [`version_state`] puts them back, so
 //! there is one state and one place each fact is kept.
 //!
+//! A trashed record offers no "Earlier versions" entry ([`offered`]); its versions are kept and the
+//! entry returns with the record.
+//!
 //! ## Secrets, and bytes
 //!
 //! **A Locker item's sealed cells are kept SEALED** (owner ruling, #1185): a changed password,
@@ -69,7 +72,8 @@ mod restore;
 mod shape;
 
 pub use read::{
-    Change, Earlier, MASK, Version, Who, count, current_state, earlier_versions, version_state,
+    Change, Earlier, MASK, Version, Who, count, current_state, earlier_versions, offered,
+    version_state,
 };
 pub use restore::{Restored, Scope, restore_version};
 pub use shape::{

@@ -259,3 +259,33 @@ fn an_imported_note_says_its_folder_and_a_typed_one_does_not() {
     let i = d.push(notes::TAB, routes::editor(&typed));
     assert_eq!(editor_state(d.view(i)).origin, None);
 }
+
+#[test]
+fn a_trashed_note_offers_no_entry_and_the_entry_returns_with_the_note() {
+    let mut d = driver();
+    let id = note(&d, "Plans", "first words");
+    edit(&d, &id, |e| e.body = Some("second words".to_owned()));
+    let i = d.push(notes::TAB, routes::editor(&id));
+    assert!(editor_state(d.view(i)).earlier.is_some());
+
+    arrange(
+        &d,
+        act::notes::DeleteNote {
+            note_id: id.clone(),
+        },
+    );
+    refresh(&mut d, i);
+    assert!(
+        editor_state(d.view(i)).earlier.is_none(),
+        "an item in the trash offers no earlier versions"
+    );
+
+    arrange(
+        &d,
+        act::notes::RestoreNote {
+            note_id: id.clone(),
+        },
+    );
+    refresh(&mut d, i);
+    assert!(editor_state(d.view(i)).earlier.is_some());
+}

@@ -206,6 +206,24 @@ pub fn count(connection: &Connection, id: &str) -> Result<u32> {
     Ok(u32::try_from(held).unwrap_or(u32::MAX))
 }
 
+/// What a detail screen's "Earlier versions" entry counts: [`count`], except that an item in the
+/// trash offers none (its versions come back with it). The one place that rule is decided.
+///
+/// # Errors
+/// A database error.
+pub fn offered(connection: &Connection, id: &str) -> Result<u32> {
+    let trashed: bool = connection.query_row(
+        "SELECT EXISTS (SELECT 1 FROM entity WHERE id = ?1 AND deleted_at IS NOT NULL)",
+        [id],
+        |row| row.get(0),
+    )?;
+    if trashed {
+        Ok(0)
+    } else {
+        count(connection, id)
+    }
+}
+
 /// The earlier versions of one entity, newest first, a page at a time (`before` is the `next` of
 /// the page before; `limit` is at most [`MAX_PAGE`]). Each carries what changed when it was
 /// replaced.

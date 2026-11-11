@@ -1128,3 +1128,34 @@ fn what_an_edit_costs_in_storage() {
     eprintln!("storage per edited person with two contact points: {bytes} bytes");
     assert!(bytes < 1_500, "{bytes}");
 }
+
+#[test]
+fn a_trashed_item_offers_no_earlier_versions_and_gets_the_entry_back_with_the_item() {
+    let w = World::new();
+    // The entry's count is one rule for every kind: it is read from the entity, so a note, a
+    // person and a task stand for the nine apps' records.
+    let items = [
+        w.id("note.create", json!({ "title": "Plan", "body": "words" })),
+        w.id("person.add", json!({ "title": "Ada" })),
+        w.id("task.add", json!({ "title": "Ring the bank" })),
+    ];
+    for id in items {
+        let offered = |w: &World| {
+            w.scratch
+                .vault
+                .read(|c| history::offered(c, &id))
+                .expect("offered")
+        };
+        w.ok("entity.retitle", json!({ "id": id, "title": "Renamed" }));
+        assert_eq!(offered(&w), 1, "a live item offers its version");
+        w.ok("entity.trash", json!({ "id": id }));
+        assert_eq!(offered(&w), 0, "a trashed item offers none");
+        assert_eq!(
+            w.versions(&id).len(),
+            1,
+            "its versions are still kept for when it returns"
+        );
+        w.ok("entity.restore", json!({ "id": id }));
+        assert_eq!(offered(&w), 1, "restored, it offers them again");
+    }
+}
