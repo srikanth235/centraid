@@ -189,7 +189,7 @@ fn moving_an_event_to_trash_says_so_with_undo_and_takes_it_off_the_calendar_and_
 }
 
 #[test]
-fn undo_puts_the_event_back_and_says_it_is_restored() {
+fn undo_puts_the_event_back_and_says_undone() {
     let mut world = world();
     let id = review(&mut world);
     let page = world.open_event(&id, &id, None, "2026-11-12");
@@ -201,19 +201,16 @@ fn undo_puts_the_event_back_and_says_it_is_restored() {
         .status
         .clone()
         .expect("a status line");
-    assert_eq!(status.sentence, "Review restored");
-    assert_eq!(status.action_label, "Undo");
+    // The kit's one Undo line (#1185): "Undone", with nothing more to tap.
+    assert_eq!(status.sentence, "Undone");
+    assert_eq!(status.action_label, "");
     assert_eq!(world.event_data(page).title, "Review");
     assert_eq!(in_window(&world, "Review").len(), 1);
     assert_eq!(alerts(&world, "Review"), 1, "alerted again once restored");
 
-    // Undo of the restore trashes it again: the line is the same in both directions.
+    // Nothing is on offer any more: a second tap changes nothing.
     world.send_event(page, undo());
-    assert_eq!(
-        world.event_state(page).status.as_ref().unwrap().sentence,
-        "Review moved to trash"
-    );
-    assert!(in_window(&world, "Review").is_empty());
+    assert_eq!(in_window(&world, "Review").len(), 1);
 }
 
 #[test]

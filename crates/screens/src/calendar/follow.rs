@@ -886,6 +886,8 @@ pub(crate) fn run(ctx: &Ctx, snapshot: &wire::CalendarSnapshot) -> (Outcome, boo
             &["follow-calendar", &origin.id, &snapshot.now_ms.to_string()],
             kit_act::fresh(),
         );
+        // undo-exempt: a follow pass has no screen of its own (the coordinator runs it unseen); its
+        // Undo is the member disconnecting the phone's calendar (`stop-following`).
         let settled = kit_act::act(ctx, request, &key);
         if !settled.committed {
             outcome.refused += u32::try_from(records.len()).unwrap_or(u32::MAX);

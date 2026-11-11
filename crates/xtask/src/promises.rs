@@ -221,7 +221,7 @@ pub const REGISTER: &[Row] = &[
     // Undo (#1185, Phase 1): the checker's gaps are the adopters' work list.
     // Rule C (every write goes through `kit::undo`) is the adopters' work list: Notes and
     // Reminders are the reference adoptions; the rest are owed until they adopt the door.
-    owed("calendar", Promise::Undo, UNDO_DOOR_OWED),
+    kept("calendar", Promise::Undo, "crates/core/src/act/inverse.rs"),
     owed("docs", Promise::Undo, UNDO_DOOR_OWED),
     owed("health", Promise::Undo, UNDO_DOOR_OWED),
     owed("locker", Promise::Undo, UNDO_DOOR_OWED),

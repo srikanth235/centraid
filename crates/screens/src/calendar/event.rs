@@ -46,7 +46,7 @@ use crate::calendar::event_phone;
 use crate::calendar::hues::Hues;
 use crate::calendar::routes;
 use crate::catalog::{act, load};
-use crate::kit::act::{self as kit_act, Settled};
+use crate::kit::act as kit_act;
 use crate::kit::attachments::Attachments;
 use crate::kit::civil::{self, HourCycle};
 use crate::kit::earlier;
@@ -56,6 +56,7 @@ use crate::kit::read::{self as kit_read, Reading};
 use crate::kit::schedule::rows::hue_role;
 use crate::kit::share::{self, Share};
 use crate::kit::trash;
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
     Locale, agenda as words, agenda_editor as editor_words, agenda_event as event_words, fill,
@@ -97,8 +98,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         sheet: Sheet::None,
         confirm: false,
         scope: None,
-        status: None,
-        undo: None,
+        undo: Undo::default(),
         dismissed: false,
         attachments,
         differences: follow::Phone::default(),
@@ -114,14 +114,6 @@ enum Content {
     Data(Box<wire::AgendaEventDetail>),
 }
 
-/// The event the status line's Undo reverses, and which way.
-struct Undo {
-    event_id: String,
-    title: String,
-    /// The event is in the trash now, so Undo restores it.
-    restore: bool,
-}
-
 struct EventPage {
     route: wire::AgendaEventRoute,
     content: Content,
@@ -131,9 +123,8 @@ struct EventPage {
     confirm: bool,
     /// The scope the sheet has picked.
     scope: Option<wire::AgendaScope>,
-    status: Option<wire::StatusLine>,
-    /// What the status line's Undo does: put the event back in the trash, or back on the calendar.
-    undo: Option<Undo>,
+    /// The status line and what its Undo reverses (the kit's one door).
+    undo: Undo,
     dismissed: bool,
     /// The photos and files on the event (#1173).
     attachments: Attachments,
@@ -209,14 +200,6 @@ impl EventPage {
         }
     }
 
-    fn refused(&mut self, settled: &Settled) {
-        self.status = Some(wire::StatusLine {
-            sentence: settled.refusal.clone(),
-            action_label: String::new(),
-            refused: true,
-        });
-    }
-
     fn rsvp(&mut self, ctx: &Ctx, partstat: &str) {
         let Some(event) = self.event() else { return };
         let Some(you) = event.attendees.iter().find(|guest| guest.is_you) else {
@@ -237,11 +220,7 @@ impl EventPage {
             person_id,
             state,
         };
-        self.status = None;
-        let settled = kit_act::act(ctx, request, &key);
-        if !settled.committed {
-            self.refused(&settled);
-        }
+        self.undo.act(ctx, request, &key, event_words::rsvp_changed);
         self.reload(ctx);
     }
 
@@ -254,9 +233,10 @@ impl EventPage {
         let Some(settled) = follow::take(ctx, &self.route.event_id, taken) else {
             return;
         };
-        self.status = None;
+        // Taking the phone's value has no inverse: it says nothing and offers nothing.
+        self.undo.clear();
         if !settled.committed {
-            self.refused(&settled);
+            self.undo.refuse(settled.refusal);
         }
         self.reload(ctx);
     }
@@ -339,62 +319,17 @@ impl EventPage {
             event.event_id.clone(),
             event.summary.clone().unwrap_or_default(),
         );
-        self.trash_or_restore(ctx, event_id, title, false);
+        self.trash_event_named(ctx, event_id, title);
     }
 
-    /// The status line's Undo: reverse the last move.
-    fn undone(&mut self, ctx: &Ctx) {
-        let has_undo = self
-            .status
-            .as_ref()
-            .is_some_and(|status| !status.action_label.is_empty());
-        let Some(undo) = self.undo.take().filter(|_| has_undo) else {
-            return;
-        };
-        self.trash_or_restore(ctx, undo.event_id, undo.title, undo.restore);
-    }
-
-    fn trash_or_restore(&mut self, ctx: &Ctx, event_id: String, title: String, restore: bool) {
-        let locale = ctx.locale();
-        self.status = None;
-        self.undo = None;
-        let settled = if restore {
-            let key = kit_act::key(&["restore-event", &event_id], kit_act::fresh());
-            kit_act::act(
-                ctx,
-                act::calendar::RestoreEvent {
-                    event_id: event_id.clone(),
-                },
-                &key,
-            )
-        } else {
-            let key = kit_act::key(&["trash-event", &event_id], kit_act::fresh());
-            kit_act::act(
-                ctx,
-                act::calendar::TrashEvent {
-                    event_id: event_id.clone(),
-                },
-                &key,
-            )
-        };
-        if settled.committed {
-            self.status = Some(wire::StatusLine {
-                sentence: if restore {
-                    trash::restored(locale, &title)
-                } else {
-                    trash::moved_to_trash(locale, &title)
-                },
-                action_label: shared::trash_undo(locale),
-                refused: false,
-            });
-            self.undo = Some(Undo {
-                event_id,
-                title,
-                restore: !restore,
-            });
-        } else {
-            self.refused(&settled);
-        }
+    fn trash_event_named(&mut self, ctx: &Ctx, event_id: String, title: String) {
+        let key = kit_act::key(&["trash-event", &event_id], kit_act::fresh());
+        self.undo.act(
+            ctx,
+            act::calendar::TrashEvent { event_id },
+            &key,
+            |locale| trash::moved_to_trash(locale, &title),
+        );
         self.reload(ctx);
     }
 
@@ -409,12 +344,10 @@ impl EventPage {
     /// A cancellation: the event is off the calendar and the screen is done, or
     /// the vault's sentence stands over the event as it still is.
     fn committed_cancel(&mut self, ctx: &Ctx, request: impl Into<wire::ActRequest>, key: &str) {
-        self.status = None;
-        let settled = kit_act::act(ctx, request, key);
+        let settled = self.undo.act_quietly(ctx, request, key);
         if settled.committed {
             self.dismissed = true;
         } else {
-            self.refused(&settled);
             self.reload(ctx);
         }
     }
@@ -454,7 +387,15 @@ impl Screen for EventPage {
                     return self.attachments.result(ctx, outcome).unwrap_or_default();
                 }
             }
-            Some(E::Left(_)) => return self.share.left(),
+            Some(E::StatusActed(_)) => {
+                if self.undo.acted(ctx) {
+                    self.reload(ctx);
+                }
+            }
+            Some(E::Left(_)) => {
+                self.undo.clear();
+                return self.share.left();
+            }
             Some(E::PhoneSaysTaken(taken)) => self.take_phone(ctx, &taken),
             Some(E::AgendaEvent(event)) => match event.kind {
                 Some(K::Refreshed(_)) => self.reload(ctx),
@@ -464,7 +405,11 @@ impl Screen for EventPage {
                 Some(K::Action(picked)) if picked.key == ACTION_SHARE => {
                     return self.share.tap(ctx.locale());
                 }
-                Some(K::StatusActed(_)) => self.undone(ctx),
+                Some(K::StatusActed(_)) => {
+                    if self.undo.acted(ctx) {
+                        self.reload(ctx);
+                    }
+                }
                 Some(K::Action(picked)) if picked.key == ACTION_OPEN_MAP => {
                     return self.open_map();
                 }
@@ -533,8 +478,8 @@ impl Screen for EventPage {
             dismissed: self.dismissed,
             cancel_armed: series_sheet && self.scope.is_some(),
             status: self
-                .status
-                .clone()
+                .undo
+                .status()
                 .or_else(|| self.share.status())
                 .or_else(|| self.differences.status(locale, follow::Source::Phone))
                 .or_else(|| self.earlier.status(locale)),

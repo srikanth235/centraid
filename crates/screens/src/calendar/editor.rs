@@ -58,7 +58,7 @@ use super::event::{
     calendar_hue, is_series_occurrence, person_hue, reminder_label, scope_word, scopes,
 };
 use crate::catalog::{act, load};
-use crate::kit::act::{self as kit_act, Settled};
+use crate::kit::act as kit_act;
 use crate::kit::civil::{self, HourCycle};
 use crate::kit::read::{self as kit_read, Reading};
 use crate::kit::schedule::draft::{
@@ -66,6 +66,7 @@ use crate::kit::schedule::draft::{
     REPEAT_NONE, REPEAT_WEEKLY, REPEAT_YEARLY, RULES,
 };
 use crate::kit::schedule::rule_words::{self, long_day};
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
     Locale, agenda as words, agenda_editor as editor_words, agenda_notify as notify_words,
@@ -102,7 +103,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         asking: Asking::None,
         scope: None,
         save_tried: false,
-        status: None,
+        undo: Undo::default(),
         dismissed: false,
     }))
 }
@@ -149,7 +150,8 @@ struct Editor {
     /// anything was typed.
     save_tried: bool,
     /// The vault's refusal of the last Save, over the draft that stays.
-    status: Option<wire::StatusLine>,
+    /// The status line: a refusal, over the draft as it still is (a save ends the sitting).
+    undo: Undo,
     dismissed: bool,
 }
 
@@ -289,7 +291,7 @@ impl Editor {
         let Some(current) = &self.draft else { return };
         if let Some(next) = change(current) {
             self.draft = Some(next);
-            self.status = None;
+            self.undo.clear();
         }
     }
 
@@ -424,21 +426,10 @@ impl Editor {
         request: impl Into<wire::ActRequest>,
         key: &str,
     ) -> Vec<wire::Effect> {
-        self.status = None;
-        let settled = kit_act::act(ctx, request, key);
-        self.settle(&settled)
-    }
-
-    fn settle(&mut self, settled: &Settled) -> Vec<wire::Effect> {
+        let settled = self.undo.act_quietly(ctx, request, key);
         if settled.committed {
             self.dismissed = true;
-            return Vec::new();
         }
-        self.status = Some(wire::StatusLine {
-            sentence: settled.refusal.clone(),
-            action_label: String::new(),
-            refused: true,
-        });
         Vec::new()
     }
 
@@ -788,7 +779,7 @@ impl Screen for Editor {
             chrome: Some(chrome(locale)),
             dismissed: self.dismissed,
             kind: wire::AgendaEditorKind::Event as i32,
-            status: self.status.clone(),
+            status: self.undo.status(),
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::AgendaEditor(state)),

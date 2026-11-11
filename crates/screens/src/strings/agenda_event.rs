@@ -42,6 +42,7 @@ catalog! {
     plain remove_photo_body = ("It comes off here. The photo stays in Photos.", "It comes off here. The photo stays in Photos.");
     plain remove_spoken_label = ("Remove {name}", "Remove {name}");
     plain remove_title = ("Remove this attachment?", "Remove this attachment?");
+    plain rsvp_changed = ("Reply changed", "Reply changed");
     counted reminder_minutes_before = ("{n} minute before", "{n} minutes before");
     plain spoken_range = ("{from} to {to}", "{from} to {to}");
     // The "phone says" line (#1183): a time as the page words it, and what each thing is called

@@ -298,7 +298,12 @@ fn rsvp_writes_as_the_owner_and_the_chip_follows_the_vault() {
             .reply_label,
         "Going"
     );
-    assert!(world.event_state(page).status.is_none());
+    // The reply says what happened, with Undo (#1185).
+    let status = world.event_state(page).status.as_ref().expect("a line");
+    assert_eq!(
+        (status.sentence.as_str(), status.action_label.as_str()),
+        ("Reply changed", "Undo")
+    );
     // The vault holds it.
     let row = world.event_row(&id).expect("the event");
     assert_eq!(

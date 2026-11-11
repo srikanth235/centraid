@@ -5,6 +5,7 @@
 //! refused in a plain sentence, with the later change kept. Every test goes through `Driver`, and
 //! every assertion is on a value or a count, never a duration.
 
+mod calendar_support;
 mod notes_support;
 mod reminders_support;
 
@@ -374,4 +375,93 @@ fn reminders_a_tag_added_on_the_task_page_says_so_and_undo_removes_it() {
         said(reminders_support::detail(d.view(i)).status.as_ref()),
         line("Undone", "")
     );
+}
+
+// --- Calendar: the event page -----------------------------------------------------
+
+fn calendar_event_line(world: &calendar_support::World, page: u64) -> (String, String) {
+    said(world.event_state(page).status.as_ref())
+}
+
+fn calendar_review(world: &mut calendar_support::World) -> String {
+    let priya = world.person("Maya Alvarez");
+    let me = world.me.clone();
+    world.propose(
+        "Review",
+        "2099-06-15T14:00:00",
+        "2099-06-15T15:00:00",
+        |p| p.attendees = Some(serde_json::to_string(&[&priya, &me]).expect("json")),
+    )
+}
+
+#[test]
+fn calendar_trashing_an_event_says_which_and_undo_brings_it_back() {
+    let mut world = calendar_support::World::new();
+    let id = calendar_review(&mut world);
+    let page = world.open_event(&id, &id, None, "2099-06-15");
+    world.send_event(
+        page,
+        wire::agenda_event_event::Kind::Action(wire::agenda_event_event::ActionPicked {
+            key: "trash".to_owned(),
+        }),
+    );
+    assert!(world.event_row(&id).is_none());
+    assert_eq!(
+        calendar_event_line(&world, page),
+        line("Review moved to trash", "Undo")
+    );
+
+    status_acted(&mut world.driver, page);
+    assert!(world.event_row(&id).is_some());
+    assert_eq!(calendar_event_line(&world, page), line("Undone", ""));
+}
+
+#[test]
+fn calendar_a_reply_says_so_and_undo_takes_it_back_and_a_later_change_refuses_it() {
+    let mut world = calendar_support::World::new();
+    let id = calendar_review(&mut world);
+    let me = world.me.clone();
+    let page = world.open_event(&id, &id, None, "2099-06-15");
+    let reply = |world: &mut calendar_support::World, partstat: &str| {
+        world.send_event(
+            page,
+            wire::agenda_event_event::Kind::Rsvp(wire::agenda_event_event::RsvpPicked {
+                partstat: partstat.to_owned(),
+            }),
+        );
+    };
+    let partstat = |world: &calendar_support::World| {
+        world
+            .event_row(&id)
+            .expect("the event")
+            .attendees
+            .iter()
+            .find(|guest| guest.is_you)
+            .expect("you")
+            .partstat
+            .clone()
+    };
+    let before = partstat(&world);
+    reply(&mut world, "accepted");
+    assert_eq!(
+        calendar_event_line(&world, page),
+        line("Reply changed", "Undo")
+    );
+
+    status_acted(&mut world.driver, page);
+    assert_eq!(partstat(&world), before);
+    assert_eq!(calendar_event_line(&world, page), line("Undone", ""));
+
+    // Answered again, then changed from another surface: the Undo no longer fits.
+    reply(&mut world, "tentative");
+    world.act(act::calendar::Rsvp {
+        event_id: id.clone(),
+        person_id: me,
+        state: act::calendar::RsvpState::Declined,
+    });
+    status_acted(&mut world.driver, page);
+    let status = world.event_state(page).status.clone().expect("a line");
+    assert!(status.refused);
+    assert_eq!(status.action_label, "");
+    assert_eq!(partstat(&world), "declined", "the later change stays");
 }
