@@ -12,6 +12,7 @@ use super::figures;
 use super::{Metric, Store, Units, denied, kinds};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
+use crate::kit::attachments::Attachments;
 use crate::kit::civil;
 use crate::kit::earlier;
 use crate::kit::follow::{self, Source};
@@ -48,6 +49,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         links: Links::new(&Kind::ALL).for_entity(&args.activity_id),
         linked: None,
         linked_unread: false,
+        attachments: Attachments::of("health", &args.activity_id),
     }))
 }
 
@@ -74,6 +76,8 @@ struct WorkoutPage {
     linked: Option<Vec<wire::LinkedItem>>,
     /// The read of `linked` was refused or failed: the status line says so, no empty section.
     linked_unread: bool,
+    /// The photos and files on the workout (#1185): the kit's section, read with the page.
+    attachments: Attachments,
 }
 
 /// The measure columns a line can name, in the order the page draws their figures.
@@ -223,6 +227,13 @@ impl WorkoutPage {
             _ => earlier::Foot::default(),
         };
         self.read_linked(ctx);
+        if self
+            .page
+            .data()
+            .is_some_and(|answer| answer.workout.is_some())
+        {
+            self.attachments.reload(ctx);
+        }
     }
 
     /// What the workout is linked to, in both directions. A refused or failed read is said on the
@@ -377,6 +388,7 @@ impl WorkoutPage {
             foot,
             trash_label: shared::trash_move(locale),
             share_label: share::label(locale),
+            attachments: Some(self.attachments.view(locale, units)),
             links: self.linked.as_ref().map(|linked| {
                 self.links.section(
                     locale,
@@ -411,6 +423,7 @@ impl Screen for WorkoutPage {
                     }
                 }
                 Some(W::Link(link)) => self.link_workout(ctx, &link),
+                Some(W::Attachment(attachment)) => return self.attachments.event(ctx, attachment),
                 Some(W::ShareRequested(_)) => {
                     if self
                         .page
@@ -425,9 +438,16 @@ impl Screen for WorkoutPage {
             // THE SHELL'S ANSWER to the owner check or the share sheet.
             Some(E::EffectResult(result)) => {
                 let id = self.activity_id.clone();
-                return self.share.result(ctx, &result, |ctx| {
+                let shared = self.share.result(ctx, &result, |ctx| {
                     super::export::workouts_file(ctx, Some(&id))
                 });
+                if !shared.is_empty() || self.share.status().is_some() {
+                    return shared;
+                }
+                // The shell's answer to a pick: the attachments' (an add under way).
+                if let Some(outcome) = &result.outcome {
+                    return self.attachments.result(ctx, outcome).unwrap_or_default();
+                }
             }
             Some(E::StatusActed(_)) => {
                 if self.undo.acted(ctx) {

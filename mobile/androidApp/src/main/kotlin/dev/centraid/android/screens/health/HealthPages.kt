@@ -211,7 +211,18 @@ internal fun HealthWorkoutScreen(
                             }
                         }
                         item(key = "foot") { HealthNote(data.foot) }
-                        // LINKED TO (#1185): the kit's section, after the foot; Rust makes every word and row.
+                        // ATTACHMENTS (#1185): the kit's section, after the foot; Rust makes every word and row.
+                        data.attachments?.let { section ->
+                            item(key = "attachments") {
+                                dev.centraid.android.screens.agenda.AgendaAttachmentsView(
+                                    section = section,
+                                    prefix = "health-workout",
+                                    onEvent = { onEvent(HealthWorkoutEvent(attachment = it)) },
+                                    onOpen = onOpen,
+                                )
+                            }
+                        }
+                        // LINKED TO (#1185): the kit's section, after the attachments; Rust makes every word and row.
                         data.links?.let { section ->
                             item(key = "links") {
                                 dev.centraid.android.kit.LinkSectionView(section, { link -> onEvent(HealthWorkoutEvent(link = link)) }, onOpen)

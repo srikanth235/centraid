@@ -51,7 +51,17 @@ struct HealthWorkoutView: View {
                         }
                         .padding(.horizontal, CentraidGeometry.pageMargin)
                         .padding(.top, 4)
-                        // LINKED TO (#1185): the kit's section, after the foot; Rust makes every word and row.
+                        // ATTACHMENTS (#1185): the kit's section, after the foot; Rust makes every word and row.
+                        if workout.hasAttachments {
+                            AgendaAttachmentsView(
+                                section: workout.attachments,
+                                idPrefix: "health-workout-attachment",
+                                headIdentifier: "health-workout-attachments",
+                                open: open,
+                                send: { attachment in send(event { $0.attachment = attachment }) }
+                            )
+                        }
+                        // LINKED TO (#1185): the kit's section, after the attachments; Rust makes every word and row.
                         if workout.hasLinks {
                             LinkSectionView(section: workout.links, send: { link in
                                 send(event { $0.link = link })

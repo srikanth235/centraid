@@ -482,7 +482,11 @@ pub const REGISTER: &[Row] = &[
         Promise::Attach,
         "crates/screens/src/docs/document.rs",
     ),
-    owed("health", Promise::Attach, ATTACH_OWED),
+    kept(
+        "health",
+        Promise::Attach,
+        "crates/screens/src/health/workout.rs",
+    ),
     exempt("locker", Promise::Attach, ATTACH_EXEMPT[0].1),
     owed("money", Promise::Attach, ATTACH_OWED),
     owed("notes", Promise::Attach, ATTACH_OWED),
