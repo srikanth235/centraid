@@ -2,7 +2,8 @@
 //! background and the member opens nothing. The phone's calendar changes, the
 //! follow pass Calendar's home hosts reads it and writes an event that has an
 //! alert, and the notification service, which hears every commit, speaks a new
-//! set to the shell. Counted on what the set holds, never on time.
+//! set to the shell. Counted on what the set holds, never on time. The runtime runs the
+//! follow coordinator, as the app does: it hears the OS, reads the habit, then the phone.
 
 mod reminders_support;
 
@@ -66,17 +67,23 @@ fn is_read(kind: &wire::effect::Kind) -> bool {
 #[test]
 fn a_background_follow_pass_that_brings_in_an_alerted_event_re_arms_the_notifications() {
     let runtime = centraid_screens::Runtime::new(
-        agenda::registry(),
+        agenda::registry().merge(centraid_screens::follow::registry()),
         vec![(
             agenda::TAB.to_owned(),
             routes::home(wire::AgendaDestination::Day, ""),
         )],
     )
-    .with_services(agenda::notify::services());
+    .with_services(
+        [
+            agenda::notify::services(),
+            centraid_screens::follow::services(),
+        ]
+        .concat(),
+    );
     let mut d = Driver::with_runtime(runtime);
     d.start();
     // This device imported before, so Calendar's home follows the phone's store.
-    let host = answer(
+    answer(
         &mut d,
         is_keychain,
         wire::effect_result::Outcome::Keychain(wire::KeychainValue {
@@ -91,9 +98,23 @@ fn a_background_follow_pass_that_brings_in_an_alerted_event_re_arms_the_notifica
     d.call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
         foreground: false,
     }));
+    // The coordinator, which the lifecycle woke, asked the OS to watch the calendar.
+    let host = d
+        .effects
+        .iter()
+        .find_map(|request| match request.effect.as_ref()?.kind.as_ref()? {
+            wire::effect::Kind::PhoneWatch(watch)
+                if watch.source == wire::ImportSource::Calendar as i32 =>
+            {
+                Some(request.instance)
+            }
+            _ => None,
+        })
+        .expect("the coordinator watches the phone's calendar");
     d.effects.clear();
 
-    // The OS tells the home the calendar changed; the pass reads once the settle time is up.
+    // The OS tells the coordinator the calendar changed; the pass first asks whether this
+    // device follows (it does), then reads once the settle time is up.
     d.send(
         host,
         E::EffectResult(wire::EffectResult {
@@ -106,6 +127,14 @@ fn a_background_follow_pass_that_brings_in_an_alerted_event_re_arms_the_notifica
         }),
     );
     d.pump(Duration::from_millis(2_500));
+    answer(
+        &mut d,
+        is_keychain,
+        wire::effect_result::Outcome::Keychain(wire::KeychainValue {
+            found: true,
+            value: b"1".to_vec(),
+        }),
+    );
     assert!(position(&d, is_read).is_some(), "the pass read the phone");
     d.effects.retain(|request| {
         !matches!(
