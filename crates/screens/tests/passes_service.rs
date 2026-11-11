@@ -901,13 +901,27 @@ fn passes_probe_route() -> wire::Route {
     }
 }
 
+/// THE DEBOUNCE IS DECIDED BY A CLOCK THE TEST MOVES, never by how fast the machine runs: the window
+/// is an hour long on a clock that stands still, so "inside the window" holds however slowly the
+/// writes run, and "the window ended" is the test moving the clock and firing the timer the service
+/// asked for. The real timer (an hour away) never fires on its own.
 #[test]
 fn a_commit_is_a_pass_and_a_burst_of_them_is_one_more_at_the_end_of_the_debounce() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    const WINDOW_MS: u64 = 3_600_000;
     let mut rig = Rig::new();
+    rig.first_pass(empty());
+    // Past every instant the conductor has read on its real clock so far.
+    let now = Arc::new(AtomicU64::new(1_000_000_000));
+    let clock = Arc::clone(&now);
     rig.secrets
         .conductor()
-        .set_debounce(Duration::from_millis(250));
-    rig.first_pass(empty());
+        .set_clock(move || clock.load(Ordering::SeqCst));
+    rig.secrets
+        .conductor()
+        .set_debounce(Duration::from_millis(WINDOW_MS));
     let write = |rig: &mut Rig, n: u32| {
         let response = rig.driver.act(
             act::reminders::AddTask {
@@ -932,7 +946,14 @@ fn a_commit_is_a_pass_and_a_burst_of_them_is_one_more_at_the_end_of_the_debounce
     rig.driver.pump(Duration::from_millis(50));
     assert!(!rig.has_call());
     // ...AND ONE PASS RUNS WHEN THE WINDOW ENDS.
-    rig.driver.pump(Duration::from_millis(500));
+    now.fetch_add(WINDOW_MS, Ordering::SeqCst);
+    rig.driver.send(
+        SERVICE,
+        E::TimerFired(wire::TimerFired {
+            timer: "commit".to_owned(),
+        }),
+    );
+    rig.driver.pump(Duration::from_millis(100));
     assert!(rig.has_call());
     rig.answer_drain(empty());
     assert!(!rig.has_call());
