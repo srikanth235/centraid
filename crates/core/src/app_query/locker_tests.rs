@@ -1085,9 +1085,19 @@ impl Scratch {
     }
 
     fn import(&self, content: &str, publish: bool) -> wire::LockerSessionResponse {
+        self.import_named(content, publish, "")
+    }
+
+    fn import_named(
+        &self,
+        content: &str,
+        publish: bool,
+        name: &str,
+    ) -> wire::LockerSessionResponse {
         self.session(Step::ImportFile(wire::LockerImportAsk {
             content: content.as_bytes().to_vec(),
             publish,
+            file_name: name.to_owned(),
         }))
     }
 

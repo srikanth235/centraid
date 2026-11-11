@@ -404,6 +404,9 @@ message LockerImportAsk {
   bytes content = 1;
   // Write it. Without this the answer is the plan and nothing is written.
   bool publish = 2;
+  // The picked file's name, kept as where the items came from (their origin's label). A name
+  // only, never content: the core keeps its base name. Empty when the platform named none.
+  string file_name = 3;
 }
 
 // What an import would do, row by row — or, published, what it did. No row

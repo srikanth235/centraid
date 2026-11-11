@@ -499,6 +499,7 @@ impl Import {
                 wire::LockerImportAsk {
                     content: file.bytes.clone(),
                     publish,
+                    file_name: file.name.clone(),
                 },
             )),
         });
