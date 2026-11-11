@@ -94,27 +94,31 @@ pub(crate) fn live_photos(connection: &Connection, album: Option<&str>) -> Resul
     // The capture time on the clock where it was taken (SQLite does the date arithmetic), else
     // the day the photograph was imported.
     let mut statement = connection.prepare_cached(
-        "SELECT p.blob, p.media_type,
+        "SELECT COALESCE(p.taken_at, e.created_at), e.n, p.blob, p.media_type,
                 strftime('%Y-%m-%d %H%M%S', COALESCE(p.taken_at, e.created_at),
                          printf('%+d minutes', CASE WHEN p.taken_at IS NULL
                                                     THEN 0 ELSE COALESCE(p.offset_min, 0) END))
-           FROM photo p JOIN entity e ON e.id = p.id
-          WHERE e.deleted_at IS NULL
+           FROM entity e JOIN photo p ON p.id = e.id
+          WHERE e.kind = 'photo' AND e.deleted_at IS NULL
             AND (?1 IS NULL OR EXISTS (SELECT 1 FROM edge m
                                         WHERE m.from_id = ?1 AND m.rel = 'contains'
-                                          AND m.to_id = p.id))
-          ORDER BY COALESCE(p.taken_at, e.created_at), e.n",
+                                          AND m.to_id = p.id))",
     )?;
-    let items = statement
+    // Read through the entity index by kind, ordered here: the file keeps the order taken.
+    let mut found = statement
         .query_map([album], |row| {
-            Ok(Item {
-                blob: row.get(0)?,
-                media_type: row.get(1)?,
-                stamp: row.get(2)?,
-            })
+            Ok((
+                (row.get::<_, String>(0)?, row.get::<_, i64>(1)?),
+                Item {
+                    blob: row.get(2)?,
+                    media_type: row.get(3)?,
+                    stamp: row.get(4)?,
+                },
+            ))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(items)
+    found.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(found.into_iter().map(|(_, item)| item).collect())
 }
 
 /// `photo.export_zip`: see the module header.

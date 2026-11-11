@@ -147,21 +147,25 @@ pub(crate) fn live_folders(connection: &Connection) -> Result<BTreeMap<String, F
 /// Every live document: its title, its blob and its folder, in the order it was made.
 pub(crate) fn live_documents(connection: &Connection) -> Result<Vec<DocumentRow>> {
     let mut statement = connection.prepare_cached(
-        "SELECT e.title, d.blob, d.folder_id
-           FROM document d JOIN entity e ON e.id = d.id
-          WHERE e.deleted_at IS NULL
-          ORDER BY e.n",
+        "SELECT e.n, e.title, d.blob, d.folder_id
+           FROM entity e JOIN document d ON d.id = e.id
+          WHERE e.kind = 'document' AND e.deleted_at IS NULL",
     )?;
-    let rows = statement
+    // Read through the entity index by kind, ordered here: the file keeps the order they were made.
+    let mut rows = statement
         .query_map([], |row| {
             Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, Option<String>>(2)?,
+                row.get::<_, i64>(0)?,
+                (
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                ),
             ))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(rows)
+    rows.sort_by_key(|found| found.0);
+    Ok(rows.into_iter().map(|(_, row)| row).collect())
 }
 
 /// A document to write: its title, its blob's hash and the folder it is in.
