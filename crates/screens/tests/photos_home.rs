@@ -12,6 +12,7 @@ use centraid_screens::catalog::act;
 use centraid_screens::field::{Field, Keyed};
 use centraid_screens::kit::act as kit_act;
 use centraid_screens::kit::menu;
+use centraid_screens::kit::quantity::UnitsPref;
 use centraid_screens::photos;
 use centraid_screens::photos::home::chrome::Roll;
 use centraid_screens::photos::home::layout::{self, Boxed};
@@ -1504,29 +1505,29 @@ fn a_phone_whose_platform_cannot_delete_is_offered_no_row_and_counts_nothing() {
 #[test]
 fn nothing_is_offered_until_a_gateway_holds_an_original_whole() {
     use centraid_screens::photos::keep_originals::FreeUpRow;
-    let none = FreeUpRow::from_facts(Locale::En, &facts(0));
+    let none = FreeUpRow::from_facts(Locale::En, UnitsPref::Metric, &facts(0));
     assert!(!none.enabled && none.action_label.is_empty());
     assert!(none.reason.starts_with("None can be freed yet."));
     let mut unchecked = facts(0);
     unchecked.checked = false;
-    let row = FreeUpRow::from_facts(Locale::En, &unchecked);
+    let row = FreeUpRow::from_facts(Locale::En, UnitsPref::Metric, &unchecked);
     assert!(!row.enabled);
     assert!(row.reason.starts_with("Centraid could not check"));
     // NOT COUNTED IS NEVER ZERO.
     let mut uncounted = facts(2);
     uncounted.counted = false;
-    let row = FreeUpRow::from_facts(Locale::En, &uncounted);
+    let row = FreeUpRow::from_facts(Locale::En, UnitsPref::Metric, &uncounted);
     assert_eq!(row.meta, "Not counted yet.");
     assert!(!row.enabled);
     // A phone that cannot delete draws no row at all.
     let mut cannot = facts(2);
     cannot.offered = false;
-    assert!(!FreeUpRow::from_facts(Locale::En, &cannot).offered);
+    assert!(!FreeUpRow::from_facts(Locale::En, UnitsPref::Metric, &cannot).offered);
     // Albums the member keeps are said beside the reason.
     let mut kept = facts(1);
     kept.kept_count = 3;
     assert_eq!(
-        FreeUpRow::from_facts(Locale::En, &kept).reason,
+        FreeUpRow::from_facts(Locale::En, UnitsPref::Metric, &kept).reason,
         "1 photo is backed up. 3 of them are in albums you keep on this phone."
     );
 }
@@ -1537,11 +1538,11 @@ fn what_the_last_free_up_came_to_is_one_sentence_on_the_row() {
     let mut after = facts(0);
     after.outcome = wire::free_up_facts::Outcome::Freed as i32;
     after.freed_bytes = 2_000_000_000;
-    let row = FreeUpRow::from_facts(Locale::En, &after);
+    let row = FreeUpRow::from_facts(Locale::En, UnitsPref::Metric, &after);
     assert!(!row.freeing);
     assert_eq!(
         row.notice,
-        "Freed 2 GB. Photos download again from your backup device when you open them."
+        "Freed 2.0 GB. Photos download again from your backup device when you open them."
     );
     for (outcome, text) in [
         (
@@ -1555,17 +1556,20 @@ fn what_the_last_free_up_came_to_is_one_sentence_on_the_row() {
     ] {
         let mut f = facts(1);
         f.outcome = outcome as i32;
-        assert_eq!(FreeUpRow::from_facts(Locale::En, &f).notice, text);
+        assert_eq!(
+            FreeUpRow::from_facts(Locale::En, UnitsPref::Metric, &f).notice,
+            text
+        );
     }
     let mut platform = facts(1);
     platform.outcome = wire::free_up_facts::Outcome::PlatformError as i32;
     platform.platform_error = "Photos access is limited.".to_owned();
     assert_eq!(
-        FreeUpRow::from_facts(Locale::En, &platform).notice,
+        FreeUpRow::from_facts(Locale::En, UnitsPref::Metric, &platform).notice,
         "Photos access is limited."
     );
     // A row with something to free holds still while the system asks.
-    let row = FreeUpRow::from_facts(Locale::En, &facts(2));
+    let row = FreeUpRow::from_facts(Locale::En, UnitsPref::Metric, &facts(2));
     let held = row.tapped().expect("a tap holds");
     assert!(held.freeing && held.tapped().is_none());
 }

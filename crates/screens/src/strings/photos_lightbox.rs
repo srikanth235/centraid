@@ -7,9 +7,6 @@ catalog! {
         "Ask the owner of this vault for access."
     );
     plain pixel_box = ("{width} × {height}", "{width} × {height}");
-    plain size_kb = ("{n} KB", "{n} KB");
-    plain size_mb = ("{n} MB", "{n} MB");
-    plain size_gb = ("{n} GB", "{n} GB");
 
     plain edit_straighten = ("Straighten {degrees}", "Straighten {degrees}");
     plain edit_flip = ("Flip", "Flip");

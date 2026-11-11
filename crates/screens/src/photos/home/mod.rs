@@ -49,6 +49,7 @@ use super::keep_originals::FreeUpRow;
 use super::selection::{Drain, Offer, Outcome, Selection, Verb, Wording};
 use super::{fetch, free_up, routes};
 use crate::kit::owner::{Answer as Owner, Leaving, NoPasscode, OwnerGate};
+use crate::kit::quantity::UnitsPref;
 use crate::kit::{civil, menu};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, photos as words, photos_home as sentences};
@@ -460,7 +461,7 @@ impl Home {
         // the last import, and a census lists the whole content store.
         if sheet == Sheet::More {
             let facts = free_up::count(ctx, free_up::Last::default());
-            self.counted(facts, ctx.locale());
+            self.counted(facts, ctx.locale(), ctx.units());
         }
         Vec::new()
     }
@@ -518,7 +519,7 @@ impl Home {
         }
         match free_up::answered(done) {
             Some(free_up::Answered::Counted(facts)) => {
-                self.free_up = FreeUpRow::from_facts(locale, &facts);
+                self.free_up = FreeUpRow::from_facts(locale, ctx.units(), &facts);
             }
             Some(free_up::Answered::Listed(listed)) => match free_up::deletable(listed) {
                 Ok(items) => {
@@ -526,7 +527,7 @@ impl Home {
                     self.deleting = items;
                     return vec![effect];
                 }
-                Err(last) => self.counted(free_up::count(ctx, last), locale),
+                Err(last) => self.counted(free_up::count(ctx, last), locale, ctx.units()),
             },
             None => {}
         }
@@ -535,9 +536,9 @@ impl Home {
 
     /// A count that answered at once (a platform that cannot delete); one that
     /// runs off the lock lands in [`Self::on_job`].
-    fn counted(&mut self, facts: Option<wire::FreeUpFacts>, locale: Locale) {
+    fn counted(&mut self, facts: Option<wire::FreeUpFacts>, locale: Locale, units: UnitsPref) {
         if let Some(facts) = facts {
-            self.free_up = FreeUpRow::from_facts(locale, &facts);
+            self.free_up = FreeUpRow::from_facts(locale, units, &facts);
         }
     }
 
@@ -550,7 +551,7 @@ impl Home {
             Some(outcome @ (O::LibraryDeleted(_) | O::Failed(_))) if !self.deleting.is_empty() => {
                 let items = std::mem::take(&mut self.deleting);
                 let (freed, last) = free_up::gone(&items, outcome);
-                self.counted(free_up::released(ctx, freed, last), locale);
+                self.counted(free_up::released(ctx, freed, last), locale, ctx.units());
             }
             Some(O::OriginalsExported(exported)) => self.exported(locale, exported),
             Some(O::Keychain(value)) if value.found => {

@@ -57,6 +57,7 @@ use crate::kit::civil::HourCycle;
 use crate::kit::earlier;
 use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::owner::{Answer as Owner, Leaving, NoPasscode, OwnerGate};
+use crate::kit::quantity::{Quantity, UnitsPref};
 use crate::kit::read::{self, Reading};
 use crate::kit::trash;
 use crate::screen::{Ctx, Screen};
@@ -852,6 +853,7 @@ impl Lightbox {
         &self,
         detail: &Detail,
         locale: Locale,
+        units: UnitsPref,
         cycle: HourCycle,
     ) -> wire::PhotosLightboxPhoto {
         let cell = &detail.cell;
@@ -936,7 +938,7 @@ impl Lightbox {
             facts.push(wire::PhotosLightboxFact {
                 label: words::photos_fact_file(locale),
                 icon_key: "FileText".to_owned(),
-                text: media::bytes_phrase(locale, size),
+                text: Quantity::bytes(size).words(locale, units),
             });
         }
         if let Some((_, camera)) = self.camera.as_ref().filter(|(id, _)| *id == cell.photo_id) {
@@ -1484,9 +1486,12 @@ impl Screen for Lightbox {
                 body: own::denied_body(locale),
                 receipt: denial.code.clone().unwrap_or_default(),
             }),
-            Content::Data(detail) => {
-                C::Photo(Box::new(self.photo(detail, locale, ctx.hour_cycle())))
-            }
+            Content::Data(detail) => C::Photo(Box::new(self.photo(
+                detail,
+                locale,
+                ctx.units(),
+                ctx.hour_cycle(),
+            ))),
         };
         let refusal = self.refusal(locale);
         let edit = self

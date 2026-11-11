@@ -17,6 +17,7 @@
 use centraid_api_proto::core_v1 as wire;
 use wire::free_up_facts::Outcome;
 
+use crate::kit::quantity::{Quantity, UnitsPref};
 use crate::strings::{Locale, fill, photos as photos_words, photos_home as words};
 
 /// The switch's title and its spoken label.
@@ -156,18 +157,6 @@ pub struct FreeUpRow {
     pub notice: String,
 }
 
-/// Decimal bytes the way a backup's own screens say them: `999 bytes`, `12 KB`,
-/// `340 MB`, `2 GB` (whole units, truncated).
-#[must_use]
-pub fn drain_bytes(count: u64) -> String {
-    match count {
-        0..=999 => format!("{count} bytes"),
-        1_000..=999_999 => format!("{} KB", count / 1_000),
-        1_000_000..=999_999_999 => format!("{} MB", count / 1_000_000),
-        _ => format!("{} GB", count / 1_000_000_000),
-    }
-}
-
 impl FreeUpRow {
     /// The row while the census runs.
     #[must_use]
@@ -184,12 +173,12 @@ impl FreeUpRow {
     /// nothing. The action frees exactly what the core listed, so its size is
     /// theirs.
     #[must_use]
-    pub fn from_facts(locale: Locale, facts: &wire::FreeUpFacts) -> Self {
+    pub fn from_facts(locale: Locale, units: UnitsPref, facts: &wire::FreeUpFacts) -> Self {
         // NO ROW AT ALL where nothing can delete (A20).
         if !facts.offered {
             return Self::default();
         }
-        let notice = notice(locale, facts);
+        let notice = notice(locale, units, facts);
         if !facts.counted {
             return Self {
                 offered: true,
@@ -228,7 +217,7 @@ impl FreeUpRow {
                 &[
                     ("count", &facts.on_phone_count.to_string()),
                     ("noun", &noun),
-                    ("size", &drain_bytes(facts.on_phone_bytes)),
+                    ("size", &bytes(locale, units, facts.on_phone_bytes)),
                 ],
             ),
             notice,
@@ -250,7 +239,7 @@ impl FreeUpRow {
             row.reason = format!("{backed_up}{kept}");
             row.action_label = fill(
                 &words::free_up_action(locale),
-                &[("size", &drain_bytes(facts.releasable_bytes))],
+                &[("size", &bytes(locale, units, facts.releasable_bytes))],
             );
             row.enabled = true;
             row.releasable_count = facts.releasable_count;
@@ -272,16 +261,21 @@ impl FreeUpRow {
 }
 
 /// What the last free-up came to, in one clause; empty before the first.
-fn notice(locale: Locale, facts: &wire::FreeUpFacts) -> String {
+fn notice(locale: Locale, units: UnitsPref, facts: &wire::FreeUpFacts) -> String {
     match Outcome::try_from(facts.outcome).unwrap_or(Outcome::Unspecified) {
         Outcome::Unspecified => String::new(),
         Outcome::Freed => fill(
             &words::free_up_freed(locale),
-            &[("size", &drain_bytes(facts.freed_bytes))],
+            &[("size", &bytes(locale, units, facts.freed_bytes))],
         ),
         Outcome::NothingRemoved => words::free_up_nothing_removed(locale),
         Outcome::NotRecorded => words::free_up_not_recorded(locale),
         Outcome::NotChecked => words::free_up_not_checked(locale),
         Outcome::PlatformError => facts.platform_error.clone(),
     }
+}
+
+/// A count of bytes in the member's words, saturating where the count outgrows the wire's signed one.
+fn bytes(locale: Locale, units: UnitsPref, count: u64) -> String {
+    Quantity::bytes(i64::try_from(count).unwrap_or(i64::MAX)).words(locale, units)
 }

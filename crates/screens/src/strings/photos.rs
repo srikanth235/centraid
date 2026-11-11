@@ -32,8 +32,6 @@ catalog! {
     plain photos_band_collections = ("Collections", "Collections");
     plain photos_band_library = ("Library", "Library");
     plain photos_band_more = ("More", "More");
-    plain photos_bytes_many = ("{count} bytes", "{count} bytes");
-    plain photos_byte_one = ("1 byte", "1 byte");
     plain photos_cancel = ("Cancel", "Cancel");
     plain photos_receipt_restored = ("Restored.", "Restored.");
     plain photos_receipt_favorited = ("Added to Favorites.", "Added to Favorites.");
