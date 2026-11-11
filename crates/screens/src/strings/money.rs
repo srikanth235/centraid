@@ -303,6 +303,8 @@ catalog! {
     plain target_preview = ("{month} target", "{month} target");
     plain target_preview_carries = ("Unused money carries over.", "Unused money carries over.");
     plain target_preview_nothing = ("Nothing carries over.", "Nothing carries over.");
+    plain target_removed = ("Target removed", "Target removed");
+    plain target_saved = ("Target saved", "Target saved");
     plain target_remove = ("Remove target", "Remove target");
     plain target_save = ("Save target", "Save target");
     plain target_sheet_title = ("Target", "Target");

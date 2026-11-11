@@ -352,7 +352,11 @@ impl Screen for List {
                 self.reload(ctx);
                 return self.prefs.reset_and_ask();
             }
-            Some(E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
+            Some(E::DataChanged(_) | E::EnvironmentChanged(_)) => {
+                self.reload(ctx);
+                // THE EDITOR ABOVE CLOSED: its line and Undo are drawn here.
+                self.ops.line.take_handed(ctx);
+            }
             Some(E::StatusActed(_)) => {
                 self.ops.undo(ctx);
                 self.reload(ctx);

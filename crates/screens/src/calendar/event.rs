@@ -344,7 +344,9 @@ impl EventPage {
     /// A cancellation: the event is off the calendar and the screen is done, or
     /// the vault's sentence stands over the event as it still is.
     fn committed_cancel(&mut self, ctx: &Ctx, request: impl Into<wire::ActRequest>, key: &str) {
-        let settled = self.undo.act_quietly(ctx, request, key);
+        let settled = self
+            .undo
+            .act_handing_down(ctx, request, key, event_words::event_cancelled);
         if settled.committed {
             self.dismissed = true;
         } else {
@@ -373,7 +375,11 @@ impl Screen for EventPage {
             return Vec::new();
         }
         match event.kind {
-            Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
+            Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => {
+                self.reload(ctx);
+                // THE EDITOR ABOVE CLOSED: its "Event saved" and Undo are drawn here.
+                self.undo.take_handed(ctx);
+            }
             // THE SHELL'S ANSWER TO A PICK: the attachments' (an add under way).
             Some(E::EffectResult(result)) => {
                 let id = self.route.event_id.clone();

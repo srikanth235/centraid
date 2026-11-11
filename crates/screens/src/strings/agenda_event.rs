@@ -7,6 +7,7 @@
 //! of what is attached (#1173).
 
 catalog! {
+    plain event_cancelled = ("Event cancelled", "Event cancelled");
     plain date_range = ("{from} – {to}", "{from} – {to}");
     plain day_long = ("{weekday} {day} {month}", "{weekday} {day} {month}");
     plain add_denied_error = ("Allow access in Settings to add it.", "Allow access in Settings to add it.");

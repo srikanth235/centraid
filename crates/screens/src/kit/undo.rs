@@ -21,6 +21,16 @@
 //! 4. Draw it: `status: self.undo.status()`.
 //! 5. On `Left` (and where a newer, non-undoable line replaces this one) `self.undo.clear()`.
 //!
+//! A SAVE THAT CLOSES ITS PAGE (an editor, a sheet) writes through [`Undo::act_handing_down`] (or
+//! calls [`Undo::hand_down`] after a write that said its line): the line and its Undo leave with
+//! the page and are drawn by the page beneath. That page calls [`Undo::take_handed`] where it
+//! handles `Appeared` / `DataChanged` / `EnvironmentChanged` (the runtime sends it a
+//! `DataChanged` with no tables when the page above it is popped), draws `status:
+//! self.undo.status()` and takes the kit's `StatusActed` as any adopter does. The runtime holds
+//! the line for the pop of the page that handed it and for nothing else: any navigation that is
+//! not a pop drops it, and a screen that does not take it when the pop is told loses it, so it
+//! never reaches an unrelated screen later.
+//!
 //! A write whose Undo is offered elsewhere (a [`crate::kit::trash`] restore closure, an editor's own
 //! text undo) carries a `// undo-exempt: <reason>` comment on the call, which the rule reads.
 
@@ -42,6 +52,13 @@ struct Offer {
 pub struct Undo {
     offer: Option<Offer>,
     line: Option<wire::StatusLine>,
+}
+
+/// A status line and its Undo, left by a page that closed for the page beneath it.
+#[derive(Clone, Debug)]
+pub struct Handed {
+    offer: Option<Offer>,
+    line: wire::StatusLine,
 }
 
 fn plain(sentence: String) -> wire::StatusLine {
@@ -69,6 +86,30 @@ impl Undo {
     #[must_use]
     pub fn offered(&self) -> Option<&wire::ActInverse> {
         self.offer.as_ref().map(|offer| &offer.inverse)
+    }
+
+    /// THE PAGE IS ABOUT TO CLOSE: leave the line it said, with its Undo, for the page beneath
+    /// (drawn there after [`Self::take_handed`]). A refused line is not handed down: the page does
+    /// not close on a refusal. This page keeps nothing.
+    pub fn hand_down(&mut self, ctx: &Ctx) {
+        if let Some(line) = self.line.take().filter(|line| !line.refused) {
+            ctx.hand_down(Handed {
+                offer: self.offer.take(),
+                line,
+            });
+        }
+        self.clear();
+    }
+
+    /// THE PAGE ABOVE CLOSED: take the line it handed down, if the runtime kept one for this
+    /// screen. Given once. Returns whether there was one.
+    pub fn take_handed(&mut self, ctx: &Ctx) -> bool {
+        let Some(handed) = ctx.take_handed() else {
+            return false;
+        };
+        self.offer = handed.offer;
+        self.line = Some(handed.line);
+        true
     }
 
     /// Drop the line and the offer (a screen left, or a newer line replaces this one).
@@ -115,6 +156,22 @@ impl Undo {
         let app = request.app.clone();
         let settled = kit_act::act(ctx, request, invoke_key);
         self.settle(ctx, &settled, app, settled.inverse.clone(), Some(said));
+        settled
+    }
+
+    /// [`Self::act`] for a save that closes its page: on commit the line (and its Undo) is handed
+    /// to the page beneath ([`Self::hand_down`]).
+    pub fn act_handing_down(
+        &mut self,
+        ctx: &Ctx,
+        request: impl Into<wire::ActRequest>,
+        invoke_key: &str,
+        said: impl FnOnce(Locale) -> String,
+    ) -> Settled {
+        let settled = self.act(ctx, request, invoke_key, said);
+        if settled.committed {
+            self.hand_down(ctx);
+        }
         settled
     }
 

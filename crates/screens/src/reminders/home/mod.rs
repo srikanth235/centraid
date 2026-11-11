@@ -452,7 +452,11 @@ impl Screen for Home {
                 self.refresh(ctx);
                 return self.prefs.ask().into_iter().collect();
             }
-            Some(E::EnvironmentChanged(_) | E::DataChanged(_)) => self.refresh(ctx),
+            Some(E::EnvironmentChanged(_) | E::DataChanged(_)) => {
+                self.refresh(ctx);
+                // THE EDITOR ABOVE CLOSED: its line and Undo are drawn here.
+                self.ops.line.take_handed(ctx);
+            }
             Some(E::StatusActed(_)) => {
                 self.ops.undo(ctx);
                 self.refresh(ctx);

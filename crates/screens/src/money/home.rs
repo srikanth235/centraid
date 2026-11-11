@@ -22,6 +22,7 @@ use wire::status_chip::Tone;
 use super::fold::{self, Phase, figure};
 use super::{routes, rows};
 use crate::catalog::load;
+use crate::kit::undo::Undo;
 use crate::kit::{export, menu, read};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, money as words, shared};
@@ -65,6 +66,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         bar: None,
         categories_open: false,
         phase: Phase::Loading,
+        undo: Undo::default(),
     }))
 }
 
@@ -135,6 +137,8 @@ struct Home {
     /// "N more categories" was tapped: every category is listed.
     categories_open: bool,
     phase: Phase<Loaded>,
+    /// The line a page closed above this one left (a target saved), and its Undo.
+    undo: Undo,
 }
 
 impl Home {
@@ -1336,7 +1340,17 @@ fn cashflow(locale: Locale, answer: &wire::MoneyCashflow) -> wire::MoneyCashflow
 impl Screen for Home {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
-            Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
+            Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => {
+                self.reload(ctx);
+                // THE SHEET ABOVE CLOSED: its "Target saved" and Undo are drawn here.
+                self.undo.take_handed(ctx);
+            }
+            Some(E::StatusActed(_)) => {
+                if self.undo.acted(ctx) {
+                    self.reload(ctx);
+                }
+            }
+            Some(E::Left(_)) => self.undo.clear(),
             Some(E::MoneyHome(wire::MoneyHomeEvent {
                 kind: Some(wire::money_home_event::Kind::Refreshed(_)),
             })) => self.reload(ctx),
@@ -1373,6 +1387,7 @@ impl Screen for Home {
                     None
                 },
                 subtitle: if drawing { self.subtitle(locale) } else { None },
+                status: self.undo.status(),
             })),
             ..wire::ViewState::default()
         }

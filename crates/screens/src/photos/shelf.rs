@@ -451,6 +451,8 @@ impl Shelf {
             shelf_words::album_deleted,
         );
         if settled.committed {
+            // THE PAGE CLOSES: "Album deleted" and its Undo go to the page beneath (#1185).
+            self.selection.door().hand_down(ctx);
             self.dismissed = true;
         }
     }

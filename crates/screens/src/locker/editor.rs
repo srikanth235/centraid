@@ -417,7 +417,7 @@ impl Editor {
             request.phone = some("phone").filter(|v| !v.is_empty());
             request.url = some("url").filter(|v| !v.is_empty());
             request.username = some("username").filter(|v| !v.is_empty());
-            self.undo.act_quietly(ctx, request, &key)
+            self.undo.act(ctx, request, &key, words::item_added)
         } else {
             let request = act::locker::EditItem {
                 item_id: self.item_id.clone(),
@@ -441,7 +441,7 @@ impl Editor {
                 username: some("username"),
                 ..act::locker::EditItem::default()
             };
-            self.undo.act_quietly(ctx, request, &key)
+            self.undo.act(ctx, request, &key, words::item_saved)
         };
         if !settled.committed {
             return;
@@ -451,6 +451,8 @@ impl Editor {
         if !self.save_tags(ctx, &form) {
             return;
         }
+        // THE EDITOR CLOSES: the line and its Undo are drawn by the page beneath (#1185).
+        self.undo.hand_down(ctx);
         self.close();
     }
 

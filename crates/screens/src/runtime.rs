@@ -27,6 +27,7 @@ use centraid_core::screens::{ScreenCtx, ScreenHost};
 use centraid_core::{CoreError, Result};
 use prost::Message;
 
+use crate::kit::undo::Handed;
 use crate::registry::Registry;
 use crate::screen::{Ctx, Environment, Screen, TimerOp};
 use crate::strings::Locale;
@@ -56,6 +57,11 @@ struct Tab {
 pub type BandFn = fn(Locale, &[String], &str) -> wire::ShellBand;
 
 struct State {
+    /// The Undo line a page left as it closed, and which page left it (`Undo::hand_down`). It
+    /// lives until the pop that closes that page, or the next navigation of any other kind.
+    handed: Option<(u64, Handed)>,
+    /// The line being handed to one screen during the event the runtime sends it after a pop.
+    handing: Option<(u64, Handed)>,
     /// What the screens and the follow coordinator tell one another (`crate::follow`).
     follows: crate::follow::Follows,
     band: Option<BandFn>,
@@ -117,6 +123,8 @@ impl Runtime {
             roots,
             services: Vec::new(),
             state: Mutex::new(State {
+                handed: None,
+                handing: None,
                 follows: crate::follow::Follows::default(),
                 band: None,
                 next_instance: 1,
@@ -308,6 +316,8 @@ impl Runtime {
             .map(|candidate| candidate.stack.clone())
             .unwrap_or_default();
         state.selected = tab.to_owned();
+        // A TAB CHANGE IS NOT A POP: a line a closed page left for the one beneath is dropped.
+        state.handed = None;
         for id in hidden {
             Self::dispatch(
                 state,
@@ -335,9 +345,19 @@ impl Runtime {
         let Some(instance) = state.instances.get_mut(&id) else {
             return;
         };
-        let ctx = Ctx::new(core, &env).with_follows(follows.clone());
+        let handed = state
+            .handing
+            .as_ref()
+            .filter(|(to, _)| *to == id)
+            .map(|(_, handed)| handed.clone());
+        let ctx = Ctx::new(core, &env)
+            .with_follows(follows.clone())
+            .with_handed(handed);
         let effects = instance.screen.update(event, &ctx);
         let done = ctx.finish();
+        if let Some(handed) = done.handed {
+            state.handed = Some((id, handed));
+        }
         instance.tables.extend(done.tables);
         if let Some(vault_id) = done.switch {
             state.switch = Some(vault_id);
@@ -517,11 +537,16 @@ impl Runtime {
                 .position(|candidate| candidate.id == tab)
                 .ok_or_else(|| Self::bad(format!("there is no tab `{tab}`")))
         };
-        match nav
+        let kind = nav
             .kind
             .as_ref()
-            .ok_or_else(|| Self::bad("an empty navigation event"))?
-        {
+            .ok_or_else(|| Self::bad("an empty navigation event"))?;
+        // THE LINE A CLOSING PAGE LEFT lives for the pop that closes it and for nothing else: any
+        // other navigation drops it, so it never reaches an unrelated screen.
+        if !matches!(kind, N::Popped(_) | N::PopToRoot(_)) {
+            state.handed = None;
+        }
+        match kind {
             N::Push(push) => {
                 let index = tab_index(state, &push.tab)?;
                 let route = push
@@ -544,10 +569,8 @@ impl Runtime {
                     return Ok(());
                 };
                 let gone = stack.split_off(at);
-                for id in gone {
-                    Self::leave(state, core, id, out);
-                    Self::close(state, id, out);
-                }
+                Self::close_all(state, core, &gone, out);
+                Self::hand_to_top(state, core, index, &gone, out);
             }
             N::SelectTab(select) => {
                 tab_index(state, &select.tab)?;
@@ -556,15 +579,61 @@ impl Runtime {
             N::PopToRoot(pop) => {
                 let index = tab_index(state, &pop.tab)?;
                 let gone = state.tabs[index].stack.split_off(1);
-                for id in gone {
-                    Self::leave(state, core, id, out);
-                    Self::close(state, id, out);
-                }
+                Self::close_all(state, core, &gone, out);
+                Self::hand_to_top(state, core, index, &gone, out);
             }
         }
         state.nav_revision += 1;
         out.navigation = Some(Self::navigation(state));
         Ok(())
+    }
+
+    /// Tell each popped screen it is leaving, then drop it.
+    fn close_all(
+        state: &mut State,
+        core: &dyn ScreenCtx,
+        gone: &[u64],
+        out: &mut wire::ScreenUpdate,
+    ) {
+        for id in gone {
+            Self::leave(state, core, *id, out);
+            Self::close(state, *id, out);
+        }
+    }
+
+    /// A POP IS OVER: the line a popped page left (`Undo::hand_down`, in its save or its goodbye)
+    /// goes to the screen now on top of the tab, once, with a `DataChanged` that names no table
+    /// (the page reloads, and takes the line). A line left by any other page, or one the new top
+    /// does not take, is gone after this call.
+    fn hand_to_top(
+        state: &mut State,
+        core: &dyn ScreenCtx,
+        tab: usize,
+        gone: &[u64],
+        out: &mut wire::ScreenUpdate,
+    ) {
+        let Some((from, handed)) = state.handed.take() else {
+            return;
+        };
+        let Some(top) = state.tabs[tab].stack.last().copied() else {
+            return;
+        };
+        if !gone.contains(&from) {
+            return;
+        }
+        state.handing = Some((top, handed));
+        Self::dispatch(
+            state,
+            core,
+            top,
+            wire::ScreenEvent {
+                kind: Some(wire::screen_event::Kind::DataChanged(wire::DataChanged {
+                    tables: Vec::new(),
+                })),
+            },
+            out,
+        );
+        state.handing = None;
     }
 
     /// Send `event` to every screen `wants` picks.
@@ -634,6 +703,7 @@ impl Runtime {
             return;
         }
         state.foreground = now;
+        state.handed = None;
         let mut reopened = Vec::new();
         for tab in 0..state.tabs.len() {
             for id in std::mem::take(&mut state.tabs[tab].stack) {

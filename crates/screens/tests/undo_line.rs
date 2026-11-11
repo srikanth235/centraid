@@ -1249,3 +1249,289 @@ fn attachments_attaching_says_so_and_undo_detaches_and_removing_says_so_and_undo
     assert_eq!(attachment_count(&world, page), 1);
     assert_eq!(attachment_status(&world, page), Some(line("Undone", "")));
 }
+
+// --- A save that closes its page leaves its Undo on the page beneath ------------------------
+
+/// The editor says it is done, and the shell pops it.
+fn pop_editor(world: &mut calendar_support::World, editor: u64) {
+    world.driver.pop(agenda::TAB, editor);
+}
+
+#[test]
+fn calendar_an_event_saved_from_its_editor_leaves_event_saved_with_undo_on_the_event_page() {
+    let mut world = calendar_support::World::new();
+    let id = calendar_review(&mut world);
+    let page = world.open_event(&id, &id, None, "2099-06-15");
+    let before = world.event_row(&id).expect("event").summary.clone();
+    let editor = world.open_edit(&id, &id, None, "2099-06-15");
+    world.title(editor, "Review, moved");
+    world.save(editor);
+    assert!(world.editor_state(editor).dismissed, "the editor finishes");
+    assert_ne!(world.event_row(&id).expect("event").summary, before);
+
+    pop_editor(&mut world, editor);
+    assert_eq!(
+        calendar_event_line(&world, page),
+        line("Event saved", "Undo")
+    );
+    status_acted(&mut world.driver, page);
+    assert_eq!(world.event_row(&id).expect("event").summary, before);
+    assert_eq!(calendar_event_line(&world, page), line("Undone", ""));
+}
+
+#[test]
+fn calendar_a_new_event_leaves_event_saved_with_undo_on_the_home_and_undo_removes_it() {
+    let mut world = calendar_support::World::with(centraid_screens::Registry::default().with(
+        centraid_screens::calendar::HOME,
+        centraid_screens::calendar::home::build,
+    ));
+    let home = world.driver.push(
+        agenda::TAB,
+        routes::home(wire::AgendaDestination::Month, ""),
+    );
+    let editor = world.open_new("2099-06-15", wire::AgendaEditorKind::Event);
+    world.title(editor, "Picnic");
+    world.save(editor);
+    assert!(world.editor_state(editor).dismissed);
+    assert!(
+        !world
+            .window("2099-06-01T00:00:00Z", "2099-07-01T00:00:00Z")
+            .is_empty(),
+        "the event is saved"
+    );
+    pop_editor(&mut world, editor);
+    let home_line = |world: &calendar_support::World| match &world.driver.view(home).kind {
+        Some(wire::view_state::Kind::AgendaHome(state)) => said(state.status.as_ref()),
+        other => panic!("not the home: {other:?}"),
+    };
+    assert_eq!(home_line(&world), line("Event saved", "Undo"));
+    status_acted(&mut world.driver, home);
+    // Undo of a proposal cancels it: the event is still answered, as cancelled.
+    assert!(
+        world
+            .window("2099-06-01T00:00:00Z", "2099-07-01T00:00:00Z")
+            .iter()
+            .all(|event| event.status.as_deref() == Some("cancelled"))
+    );
+    assert_eq!(home_line(&world), line("Undone", ""));
+}
+
+#[test]
+fn calendar_a_cancelled_event_leaves_event_cancelled_on_the_home_and_undo_reinstates_it() {
+    let mut world = calendar_support::World::with(centraid_screens::Registry::default().with(
+        centraid_screens::calendar::HOME,
+        centraid_screens::calendar::home::build,
+    ));
+    let id = calendar_review(&mut world);
+    let home = world.driver.push(
+        agenda::TAB,
+        routes::home(wire::AgendaDestination::Month, ""),
+    );
+    let page = world.open_event(&id, &id, None, "2099-06-15");
+    let pick = |key: &str| {
+        wire::agenda_event_event::Kind::Action(wire::agenda_event_event::ActionPicked {
+            key: key.to_owned(),
+        })
+    };
+    world.send_event(page, pick("cancel"));
+    world.send_event(
+        page,
+        wire::agenda_event_event::Kind::Confirmed(wire::agenda_event_event::Confirmed {}),
+    );
+    assert!(world.event_state(page).dismissed);
+    world.driver.pop(agenda::TAB, page);
+    let home_line = |world: &calendar_support::World| match &world.driver.view(home).kind {
+        Some(wire::view_state::Kind::AgendaHome(state)) => said(state.status.as_ref()),
+        other => panic!("not the home: {other:?}"),
+    };
+    assert_eq!(home_line(&world), line("Event cancelled", "Undo"));
+    assert_eq!(
+        world.event_row(&id).expect("event").status.as_deref(),
+        Some("cancelled")
+    );
+    status_acted(&mut world.driver, home);
+    assert_eq!(
+        world.event_row(&id).expect("event").status.as_deref(),
+        Some("confirmed")
+    );
+    assert_eq!(home_line(&world), line("Undone", ""));
+}
+
+// --- Money: a target sheet ----------------------------------------------------------------
+
+#[test]
+fn money_a_saved_target_leaves_target_saved_with_undo_on_the_home_and_undo_puts_the_old_one_back() {
+    use wire::money_target_event as tg;
+    let mut d = money_support::driver();
+    let home = money_support::home(&d);
+    let wire::app_query_response::Answer::MoneySpending(spending) = money_support::load_answer(
+        &d,
+        centraid_screens::catalog::load::money::Spending {
+            month: String::new(),
+        },
+    ) else {
+        panic!("not Spending");
+    };
+    let category = spending.categories.first().expect("a category");
+    let route = || {
+        centraid_screens::money::routes::target(
+            &spending.month,
+            &category.category_id,
+            &category.currency,
+        )
+    };
+    let target =
+        |kind| wire::screen_event::Kind::MoneyTarget(wire::MoneyTargetEvent { kind: Some(kind) });
+    let amount = |d: &Driver, page: u64| match &d.view(page).kind {
+        Some(wire::view_state::Kind::MoneyTarget(state)) => state.amount_text.clone(),
+        other => panic!("not a target: {other:?}"),
+    };
+    for text in ["100", "250"] {
+        let page = money_support::push(&mut d, route());
+        money_support::event(
+            &mut d,
+            page,
+            target(tg::Kind::Amount(tg::AmountEdited { text: text.into() })),
+        );
+        money_support::event(&mut d, page, target(tg::Kind::Save(tg::Save {})));
+        d.pop(centraid_screens::money::TAB, page);
+        assert_eq!(
+            said(money_support::home_state(d.view(home)).status.as_ref()),
+            line("Target saved", "Undo")
+        );
+    }
+    status_acted(&mut d, home);
+    assert_eq!(
+        said(money_support::home_state(d.view(home)).status.as_ref()),
+        line("Undone", "")
+    );
+    let page = money_support::push(&mut d, route());
+    assert_eq!(amount(&d, page), "100.00", "the first target is back");
+}
+
+// --- Locker: the editor ---------------------------------------------------------------------
+
+#[test]
+fn locker_a_saved_item_leaves_item_saved_with_undo_on_its_page_and_undo_restores_the_title() {
+    use wire::locker_editor_event as le;
+    let (mut d, page) = locker_item();
+    let editor = d.push(
+        centraid_screens::locker::TAB,
+        centraid_screens::locker::routes::edit("i1"),
+    );
+    let send = |d: &mut Driver, kind| {
+        d.send(
+            editor,
+            wire::screen_event::Kind::LockerEditor(wire::LockerEditorEvent { kind: Some(kind) }),
+        );
+    };
+    send(
+        &mut d,
+        le::Kind::Typed(le::Typed {
+            key: "title".to_owned(),
+            value: "Bank, renamed".to_owned(),
+        }),
+    );
+    send(&mut d, le::Kind::Save(le::SaveTapped {}));
+    match &d.view(editor).kind {
+        Some(wire::view_state::Kind::LockerEditor(state)) => assert!(state.finished),
+        other => panic!("not the editor: {other:?}"),
+    }
+    d.pop(centraid_screens::locker::TAB, editor);
+    assert_eq!(locker_line(&d, page), line("Item saved", "Undo"));
+    assert_eq!(locker_support::item_data(&d, page).title, "Bank, renamed");
+
+    status_acted(&mut d, page);
+    assert_eq!(locker_support::item_data(&d, page).title, "Bank");
+    assert_eq!(locker_line(&d, page), line("Undone", ""));
+}
+
+// --- Reminders: the add sheet ---------------------------------------------------------------
+
+#[test]
+fn reminders_a_task_added_from_the_sheet_leaves_its_line_with_undo_on_the_list_and_undo_removes_it()
+{
+    use wire::agenda_editor_event as ee;
+    let mut d = reminders_support::driver();
+    reminders_support::clear_tasks(&d);
+    let list = d.push(agenda::TAB, routes::todo_list(wire::TodoView::Today));
+    let today = reminders_support::today(&d);
+    let sheet = d.push(
+        agenda::TAB,
+        centraid_screens::reminders::routes::editor(&today),
+    );
+    let send = |d: &mut Driver, kind| {
+        d.send(
+            sheet,
+            wire::screen_event::Kind::AgendaEditor(wire::AgendaEditorEvent { kind: Some(kind) }),
+        );
+    };
+    send(
+        &mut d,
+        ee::Kind::Title(ee::TitleChanged {
+            text: "Book flights".to_owned(),
+        }),
+    );
+    send(&mut d, ee::Kind::Save(ee::SaveTapped {}));
+    match &d.view(sheet).kind {
+        Some(wire::view_state::Kind::AgendaEditor(state)) => assert!(state.dismissed),
+        other => panic!("not the sheet: {other:?}"),
+    }
+    d.pop(agenda::TAB, sheet);
+    let status = list_status(&d, list).expect("a line");
+    assert!(status.sentence.starts_with("Added to"), "{status:?}");
+    assert_eq!(status.action_label, "Undo");
+    let titles = |d: &Driver| -> Vec<String> {
+        let data = reminders_support::list_data(d.view(list));
+        reminders_support::rows(&data.groups)
+            .iter()
+            .map(|row| row.title.clone())
+            .collect()
+    };
+    assert!(titles(&d).contains(&"Book flights".to_owned()));
+
+    status_acted(&mut d, list);
+    assert_eq!(said(list_status(&d, list).as_ref()), line("Undone", ""));
+    assert!(!titles(&d).contains(&"Book flights".to_owned()));
+}
+
+#[test]
+fn a_handed_line_is_taken_once_and_a_navigation_that_is_not_a_pop_drops_it() {
+    let mut world = calendar_support::World::new();
+    let id = calendar_review(&mut world);
+    let other = world.propose(
+        "Other",
+        "2099-06-16T14:00:00",
+        "2099-06-16T15:00:00",
+        |_| {},
+    );
+    let page = world.open_event(&id, &id, None, "2099-06-15");
+
+    // Taken once: after Undo, hearing the data change again does not bring the line back.
+    let editor = world.open_edit(&id, &id, None, "2099-06-15");
+    world.title(editor, "First");
+    world.save(editor);
+    pop_editor(&mut world, editor);
+    assert_eq!(
+        calendar_event_line(&world, page),
+        line("Event saved", "Undo")
+    );
+    status_acted(&mut world.driver, page);
+    world.driver.send(
+        page,
+        wire::screen_event::Kind::DataChanged(wire::DataChanged::default()),
+    );
+    assert_eq!(calendar_event_line(&world, page), line("Undone", ""));
+
+    // Dropped: a push that is not a pop comes between the save and the pop.
+    let editor = world.open_edit(&id, &id, None, "2099-06-15");
+    world.title(editor, "Second");
+    world.save(editor);
+    world.open_event(&other, &other, None, "2099-06-16");
+    pop_editor(&mut world, editor);
+    assert_eq!(
+        calendar_event_line(&world, page),
+        line("Undone", ""),
+        "the line did not reach a screen it was not left for"
+    );
+}

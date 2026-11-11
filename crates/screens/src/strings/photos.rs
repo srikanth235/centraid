@@ -112,6 +112,7 @@ catalog! {
     plain photos_edit_ratio_three_two = ("3 : 2", "3 : 2");
     plain photos_edit_reset = ("Reset", "Reset");
     plain photos_edit_rotate = ("Rotate 90°", "Rotate 90°");
+    plain photos_edit_saved = ("Saved as a new photo", "Saved as a new photo");
     plain photos_edit_saving = ("Saving new photo", "Saving new photo");
     plain photos_edit_still_loading = ("The original is still loading.", "The original is still loading.");
     plain photos_empty_favorites = ("No favorites yet — tap the heart on any photo.", "No favorites yet — tap the heart on any photo.");

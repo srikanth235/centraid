@@ -184,6 +184,8 @@ catalog! {
     plain item_gone_body = ("It was erased, or never on this phone.", "It was erased, or never on this phone.");
     plain item_last_used = ("{type} · last used {when}", "{type} · last used {when}");
     plain item_never_used = ("{type} · never used", "{type} · never used");
+    plain item_added = ("Item added", "Item added");
+    plain item_saved = ("Item saved", "Item saved");
     plain item_starred = ("Starred", "Starred");
     plain item_status = ("Revealed secrets hide again after 30 seconds.", "Revealed secrets hide again after 30 seconds.");
     plain keeps_backup = ("Backup", "Backup");

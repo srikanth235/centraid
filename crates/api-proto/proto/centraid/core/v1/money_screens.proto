@@ -144,6 +144,9 @@ message MoneyHomeState {
   // (`MonthTapped`), the one way to change month. Activity and Spending; unset
   // on Cash flow, which reads twelve months at once.
   optional HeaderSubtitle subtitle = 16;
+  // THE STATUS LINE (#1185): what a page that closed above this one said ("Target saved") with
+  // Undo, handed down by the runtime. The verb is the kit's `StatusActed`.
+  optional StatusLine status = 17;
 
   enum Destination {
     DESTINATION_UNSPECIFIED = 0;

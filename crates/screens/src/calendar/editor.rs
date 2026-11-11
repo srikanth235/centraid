@@ -376,7 +376,7 @@ impl Editor {
         if !self.is_series_edit() {
             let request = write::edit_event(&event_id, &draft, &base, &owner_ids);
             let key = kit_act::key(&["edit-event", &event_id], kit_act::fresh());
-            return self.committed(ctx, request, &key);
+            return self.committed(ctx, request, &key, editor_words::event_saved);
         }
         if self.sheet != Sheet::Scope {
             // WHICH OCCURRENCES: asked, never assumed.
@@ -392,7 +392,7 @@ impl Editor {
             wire::AgendaScope::Series => {
                 let request = write::edit_event(&event_id, &draft, &base, &owner_ids);
                 let key = kit_act::key(&["edit-event", &event_id], kit_act::fresh());
-                self.committed(ctx, request, &key)
+                self.committed(ctx, request, &key, editor_words::event_saved)
             }
             wire::AgendaScope::Occurrence | wire::AgendaScope::Future => {
                 let word = scope_word(scope);
@@ -407,7 +407,7 @@ impl Editor {
                     &["edit-occurrence", &event_id, &occurrence, word, "override"],
                     kit_act::fresh(),
                 );
-                self.committed(ctx, request, &key)
+                self.committed(ctx, request, &key, editor_words::event_saved)
             }
             wire::AgendaScope::Unspecified => Vec::new(),
         }
@@ -416,7 +416,7 @@ impl Editor {
     fn save_event(&mut self, ctx: &Ctx, draft: &Draft) -> Vec<wire::Effect> {
         let request = write::propose(draft);
         let key = kit_act::key(&["propose", "new"], kit_act::fresh());
-        self.committed(ctx, request, &key)
+        self.committed(ctx, request, &key, editor_words::event_saved)
     }
 
     /// Submit a write that ends the sitting when it commits.
@@ -425,8 +425,10 @@ impl Editor {
         ctx: &Ctx,
         request: impl Into<wire::ActRequest>,
         key: &str,
+        said: impl FnOnce(Locale) -> String,
     ) -> Vec<wire::Effect> {
-        let settled = self.undo.act_quietly(ctx, request, key);
+        // THE PAGE CLOSES, so the line (and its Undo) goes to the page beneath (#1185).
+        let settled = self.undo.act_handing_down(ctx, request, key, said);
         if settled.committed {
             self.dismissed = true;
         }
@@ -457,7 +459,7 @@ impl Editor {
             ],
             kit_act::fresh(),
         );
-        self.committed(ctx, request, &key);
+        self.committed(ctx, request, &key, editor_words::occurrence_skipped);
     }
 
     // -- events -----------------------------------------------------------

@@ -20,6 +20,7 @@ use crate::catalog::load;
 use crate::kit::menu;
 use crate::kit::read;
 use crate::kit::secret::Secrets;
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, locker as words, shared as kit_words};
 
@@ -118,6 +119,8 @@ struct Home {
     hits: Phase<wire::LockerSearch>,
     generator: Generator,
     status: Option<wire::StatusLine>,
+    /// A saved item's line and its Undo, left by the editor that closed above this page (#1185).
+    undo: Undo,
     /// THE PLACE A LOCKED BAND WAS TAPPED ON: the unlock it started lands there.
     pending: Option<String>,
 }
@@ -138,6 +141,7 @@ impl Home {
             hits: Phase::Loading,
             generator: Generator::new(entropy),
             status: None,
+            undo: Undo::default(),
             pending: None,
         }
     }
@@ -216,6 +220,7 @@ impl Home {
         self.term.clear();
         self.sheet = wire::locker_home_state::Sheet::None;
         self.status = None;
+        self.undo.clear();
         self.generator.forget();
         handoff::clear();
         let mut effects = self.secrets.hide_all(ctx);
@@ -386,6 +391,7 @@ impl Home {
                 let output = self.generator.output().to_owned();
                 if !output.is_empty() {
                     effects.extend(self.secrets.copy(ctx, &output, CLIPBOARD_LIFE));
+                    self.undo.clear();
                     self.status = shared::status(words::generated_copied(ctx.locale()));
                 }
             }
@@ -888,6 +894,8 @@ impl Screen for Home {
                 effects
             }
             Some(E::DataChanged(_) | E::EnvironmentChanged(_)) => {
+                // THE EDITOR ABOVE CLOSED: its "Item saved" and Undo are drawn here.
+                self.undo.take_handed(ctx);
                 if self.wall.is_open() {
                     self.reload(ctx);
                     Vec::new()
@@ -940,7 +948,14 @@ impl Screen for Home {
                 self.walled(ctx, step)
             }
             Some(E::TimerFired(fired)) => self.secrets.fired(&fired.timer),
+            Some(E::StatusActed(_)) => {
+                if self.undo.acted(ctx) && self.wall.is_open() {
+                    self.reload(ctx);
+                }
+                Vec::new()
+            }
             Some(E::Left(_)) => {
+                self.undo.clear();
                 self.secrets.conceal();
                 self.generator.forget();
                 // THE FACE ID SHEET MUST NOT OUTLIVE LOCKER: a pending unlock is dropped.
@@ -997,7 +1012,7 @@ impl Screen for Home {
                         .map(|answer| answer.corrected.clone())
                         .unwrap_or_default(),
                 }),
-                status: self.status.clone(),
+                status: self.undo.status().or_else(|| self.status.clone()),
             })),
             ..wire::ViewState::default()
         }

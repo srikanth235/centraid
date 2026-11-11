@@ -431,6 +431,8 @@ impl Person {
                 let outcome = fill(&words::outcome_trashed(locale), &[("name", &name)]);
                 let party = self.party_id.clone();
                 if self.write(ctx, request.into(), &party, outcome) {
+                    // THE PAGE CLOSES: "moved to trash" and its Undo go to the page beneath.
+                    self.undo.hand_down(ctx);
                     self.done = true;
                 }
             }

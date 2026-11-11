@@ -656,6 +656,8 @@ impl Detail {
                     &[act::reminders::DeleteTask::NAME, &task.task_id],
                     |locale| crate::kit::trash::moved_to_trash(locale, &task.title),
                 ) {
+                    // THE PAGE CLOSES: "moved to trash" and its Undo go to the page beneath.
+                    self.ops.line.hand_down(ctx);
                     self.finished = true;
                     // The words are gone with the task: leaving saves nothing.
                     self.autosave = Autosave::new();

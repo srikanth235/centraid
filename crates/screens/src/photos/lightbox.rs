@@ -1209,7 +1209,10 @@ impl Screen for Lightbox {
             }
             Some(E::DataChanged(_)) => {
                 self.albums.reload(ctx);
-                return self.reload(ctx);
+                // THE EDITOR ABOVE CLOSED: its line and Undo are drawn here.
+                let effects = self.reload(ctx);
+                self.undo.take_handed(ctx);
+                return effects;
             }
             Some(E::EffectResult(result)) => {
                 if self.gate.asking() {

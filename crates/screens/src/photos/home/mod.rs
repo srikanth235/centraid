@@ -932,7 +932,11 @@ impl Screen for Home {
                     })),
                 }];
             }
-            Some(E::EnvironmentChanged(_) | E::DataChanged(_)) => self.read(ctx),
+            Some(E::EnvironmentChanged(_) | E::DataChanged(_)) => {
+                self.read(ctx);
+                // A PAGE ABOVE CLOSED (an album deleted): its line and Undo are drawn here.
+                self.selection.door().take_handed(ctx);
+            }
             Some(E::EffectResult(result)) => {
                 use wire::effect_result::Outcome as O;
                 if self.gate.asking() {

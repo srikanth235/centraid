@@ -105,8 +105,8 @@ impl Target {
             &["money", "target", &self.month, &self.category_id],
             kit_act::fresh(),
         );
-        // The sheet closes on success, so no line is drawn: the write says nothing.
-        let settled = self.undo.act_quietly(
+        // The sheet closes on success, so the line and its Undo go to the page beneath (#1185).
+        let settled = self.undo.act_handing_down(
             ctx,
             act::money::SetTarget {
                 amount_minor: amount,
@@ -116,6 +116,11 @@ impl Target {
                 currency: Some(self.currency.clone()),
             },
             &key,
+            if remove {
+                words::target_removed
+            } else {
+                words::target_saved
+            },
         );
         if settled.committed {
             self.finished = true;

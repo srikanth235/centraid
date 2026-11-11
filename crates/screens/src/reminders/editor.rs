@@ -208,6 +208,8 @@ impl Editor {
             ..NewTask::default()
         };
         if self.ops.add_full(ctx, &task, &lands).is_some() {
+            // THE EDITOR CLOSES: "Added to ..." and its Undo go to the page beneath (#1185).
+            self.ops.line.hand_down(ctx);
             self.dismissed = true;
             return Vec::new();
         }

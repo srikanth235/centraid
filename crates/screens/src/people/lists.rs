@@ -272,6 +272,8 @@ impl Screen for Lists {
         match event.kind {
             Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => {
                 self.reload(ctx);
+                // THE PERSON PAGE ABOVE CLOSED (moved to trash): its line and Undo are drawn here.
+                self.undo.take_handed(ctx);
             }
             Some(E::PeopleLists(event)) => self.event(event, ctx),
             Some(E::StatusActed(_)) => {

@@ -1755,6 +1755,8 @@ impl Screen for Item {
                 effects
             }
             Some(E::DataChanged(_) | E::EnvironmentChanged(_)) => {
+                // THE EDITOR ABOVE CLOSED: its "Item saved" and Undo are drawn here.
+                self.undo.take_handed(ctx);
                 if self.wall.is_open() {
                     self.reload(ctx)
                 } else {

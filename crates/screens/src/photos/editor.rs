@@ -594,9 +594,9 @@ impl Editor {
             &["edit", &self.photo_id, &rendered.content_hash],
             kit_act::fresh(),
         );
-        // The editor leaves for the new photograph on success, so the write says nothing here (the
-        // new photograph is in the library, and the lightbox moves it to trash with Undo).
-        let settled = self.undo.act_quietly(
+        // The editor leaves for the new photograph on success, so the line (and its Undo, which
+        // moves the new photograph to trash) goes to the page beneath (#1185).
+        let settled = self.undo.act_handing_down(
             ctx,
             act::photos::Upload {
                 blob: rendered.content_hash,
@@ -609,6 +609,7 @@ impl Editor {
                 ..Default::default()
             },
             &key,
+            words::photos_edit_saved,
         );
         if settled.committed {
             self.phase = Phase::Saved;

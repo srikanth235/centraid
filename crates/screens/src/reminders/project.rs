@@ -558,7 +558,11 @@ impl Screen for Project {
                     self.show_completed = self.prefs.options.show_completed;
                 }
             }
-            Some(E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
+            Some(E::DataChanged(_) | E::EnvironmentChanged(_)) => {
+                self.reload(ctx);
+                // THE EDITOR ABOVE CLOSED: its line and Undo are drawn here.
+                self.ops.line.take_handed(ctx);
+            }
             Some(E::StatusActed(_)) => {
                 self.ops.undo(ctx);
                 self.reload(ctx);

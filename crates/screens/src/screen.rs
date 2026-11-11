@@ -18,6 +18,7 @@ use prost::Message;
 
 use crate::follow::Follows;
 use crate::kit::act::Settled;
+use crate::kit::undo::Handed;
 use crate::strings::Locale;
 
 /// One screen. `Send` because the runtime lives behind a mutex shared by the
@@ -98,6 +99,9 @@ pub(crate) struct Done {
     pub posts: Vec<(String, wire::ScreenEvent)>,
     /// Every other open screen must draw again, see [`Ctx::redraw_all`].
     pub redraw_all: bool,
+    /// The status line this update's page leaves for the page beneath it, see
+    /// [`crate::kit::undo::Undo::hand_down`].
+    pub handed: Option<Handed>,
 }
 
 /// A screen's door to the core, the catalog and the clock.
@@ -106,6 +110,8 @@ pub struct Ctx<'a> {
     env: &'a Environment,
     done: RefCell<Done>,
     follows: Follows,
+    /// The line a page that just closed handed down to this screen, until it takes it.
+    handed_in: RefCell<Option<Handed>>,
 }
 
 impl<'a> Ctx<'a> {
@@ -115,7 +121,26 @@ impl<'a> Ctx<'a> {
             env,
             done: RefCell::new(Done::default()),
             follows: Follows::default(),
+            handed_in: RefCell::new(None),
         }
+    }
+
+    /// This context for the screen a closing page handed its Undo line to (the runtime sets it
+    /// for the one event it sends that screen after the pop).
+    #[must_use]
+    pub(crate) fn with_handed(self, handed: Option<Handed>) -> Self {
+        *self.handed_in.borrow_mut() = handed;
+        self
+    }
+
+    /// A page that closes leaves its Undo line for the page beneath (`Undo::hand_down`).
+    pub(crate) fn hand_down(&self, handed: Handed) {
+        self.done.borrow_mut().handed = Some(handed);
+    }
+
+    /// The line handed down to this screen: given once, then gone (`Undo::take_handed`).
+    pub(crate) fn take_handed(&self) -> Option<Handed> {
+        self.handed_in.borrow_mut().take()
     }
 
     /// This context over the runtime's one follow board, so a screen's ask reaches the

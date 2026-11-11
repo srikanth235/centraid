@@ -143,6 +143,7 @@ internal fun MoneyHomeScreen(
                 onTap = { onEvent(MoneyHomeEvent(month_tapped = MoneyHomeEvent.MonthTapped())) },
             )
         },
+        statusLine = { StatusLine(state.status) },
         band = {
             AppBand(
                 app = "money",

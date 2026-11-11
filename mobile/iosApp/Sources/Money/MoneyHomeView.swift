@@ -118,6 +118,12 @@ struct MoneyHomeView: View {
                 .refreshable { send(event { $0.refreshed = .init() }) }
                 .accessibilityIdentifier("money-home-list")
             }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                MoneyStatusFoot(
+                    status: MoneyWords.line(state.hasStatus ? state.status : nil),
+                    identifier: "money-home-status"
+                )
+            }
         }
         .sheet(isPresented: sheetBinding) {
             sheetContent(state, home: content.loaded)

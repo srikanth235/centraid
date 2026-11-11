@@ -495,7 +495,16 @@ impl Screen for Home {
                 // choice is read after it has landed, never beside it.
                 return self.calendar.attach();
             }
-            Some(E::EnvironmentChanged(_) | E::DataChanged(_)) => self.refresh(ctx),
+            Some(E::EnvironmentChanged(_) | E::DataChanged(_)) => {
+                self.refresh(ctx);
+                // A PAGE ABOVE CLOSED (the event editor, a cancelled event): its line is drawn here.
+                self.ops.line.take_handed(ctx);
+            }
+            // THE KIT'S ONE STATUS VERB, beside the home's own (`H::StatusActed`).
+            Some(E::StatusActed(_)) => {
+                self.ops.undo(ctx);
+                self.refresh(ctx);
+            }
             Some(E::AgendaHome(home)) => match home.kind {
                 Some(H::ImportRequested(_)) => return self.calendar.import(ctx),
                 Some(H::StopConfirmed(_)) => return self.stop(ctx),
