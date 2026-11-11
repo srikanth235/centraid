@@ -63,17 +63,27 @@ pub enum Promise {
     /// Every record keeps its earlier values (the vault's one history, at the commit door), and
     /// the detail screen of each primary kind lists them on the kit's one screen, with Restore.
     History,
+    /// Every item that enters the vault by a path other than typing records where it came from:
+    /// the path passes `arrived_system` and `arrived_label` (a system and a file or device name) to the command that adds
+    /// it, and the vault keeps one origin per name and one source per item.
+    Arrive,
 }
 
 impl Promise {
     /// Every promise, in the order the table is read.
-    pub const ALL: [Promise; 3] = [Promise::Trash, Promise::Undo, Promise::History];
+    pub const ALL: [Promise; 4] = [
+        Promise::Trash,
+        Promise::Undo,
+        Promise::History,
+        Promise::Arrive,
+    ];
 
     fn name(self) -> &'static str {
         match self {
             Promise::Trash => "Trash",
             Promise::Undo => "Undo",
             Promise::History => "History",
+            Promise::Arrive => "Arrive",
         }
     }
 }
@@ -206,7 +216,34 @@ pub const REGISTER: &[Row] = &[
         Promise::History,
         "crates/screens/src/reminders/earlier.rs",
     ),
+    // Arrive (#1185, Phase 2): the vault side is one helper (`commands/arrival.rs`); an app keeps
+    // the promise when every path of its own that brings items in passes `arrived`. Calendar,
+    // Health and Money bring items in only through a follow pass or a statement, and the vault
+    // records those origins itself.
+    kept(
+        "calendar",
+        Promise::Arrive,
+        "crates/vault/src/commands/follow.rs",
+    ),
+    owed("docs", Promise::Arrive, ARRIVE_OWED),
+    kept(
+        "health",
+        Promise::Arrive,
+        "crates/vault/src/commands/follow.rs",
+    ),
+    owed("locker", Promise::Arrive, ARRIVE_OWED),
+    kept(
+        "money",
+        Promise::Arrive,
+        "crates/vault/src/commands/money.rs",
+    ),
+    owed("notes", Promise::Arrive, ARRIVE_OWED),
+    owed("people", Promise::Arrive, ARRIVE_OWED),
+    owed("photos", Promise::Arrive, ARRIVE_OWED),
+    owed("reminders", Promise::Arrive, ARRIVE_OWED),
 ];
+
+const ARRIVE_OWED: &str = "an arrival path brings items in without passing `arrived`, so the vault records no origin for them (#1185)";
 
 /// `promises`: the table is complete, and every row is true.
 pub fn promises(root: &Path) -> RuleReport {
@@ -293,6 +330,7 @@ pub fn missing(root: &Path, app: &str, promise: Promise) -> Vec<String> {
         Promise::Trash => trash_missing(root, app),
         Promise::Undo => undo_missing(root, app),
         Promise::History => history_missing(root, app),
+        Promise::Arrive => arrive_missing(root, app),
     }
 }
 
@@ -910,6 +948,171 @@ fn history_missing_in(root: &Path, app: &str, menus: &[MenuEntry]) -> Vec<String
                 menu.entry.trim(),
                 menu.menu
             ));
+        }
+    }
+    gaps
+}
+
+// ---------------------------------------------------------------------------
+// Arrive
+// ---------------------------------------------------------------------------
+
+/// One path that brings items into the vault by something other than typing.
+pub struct ArrivalSite {
+    pub app: &'static str,
+    /// The file that makes the call, from the repository root.
+    pub file: &'static str,
+    /// What the file spells where it adds the item: the catalog's action struct
+    /// (`act::photos::Upload`) or, in the core, the command's name.
+    pub call: &'static str,
+    /// The way in, for the sentence.
+    pub path: &'static str,
+}
+
+/// THE ARRIVAL PATHS, by name. Each must still make its call and pass `arrived` to it. A path
+/// that is not listed is found by [`arrival_named`] when it lives in an arrival-shaped file; one
+/// that hides elsewhere is a row to add here.
+pub const ARRIVAL_SITES: &[ArrivalSite] = &[
+    ArrivalSite {
+        app: "docs",
+        file: "crates/screens/src/docs/drive/ingest.rs",
+        call: "act::docs::Upload",
+        path: "a scan or an upload into Docs",
+    },
+    ArrivalSite {
+        app: "docs",
+        file: "crates/screens/src/kit/schedule/attachments.rs",
+        call: "act::docs::Upload",
+        path: "a file picked to attach",
+    },
+    ArrivalSite {
+        app: "locker",
+        file: "crates/core/src/locker/transfer.rs",
+        call: "\"locker.add_item\"",
+        path: "the Locker CSV import",
+    },
+    ArrivalSite {
+        app: "notes",
+        file: "crates/screens/src/notes/transfer.rs",
+        call: "act::notes::ImportNotes",
+        path: "the Markdown import",
+    },
+    ArrivalSite {
+        app: "people",
+        file: "crates/screens/src/people/transfer.rs",
+        call: "act::people::ImportVcf",
+        path: "the vCard import",
+    },
+    ArrivalSite {
+        app: "photos",
+        file: "crates/screens/src/imports/camera_roll.rs",
+        call: "act::photos::Upload",
+        path: "the camera roll",
+    },
+    ArrivalSite {
+        app: "photos",
+        file: "crates/screens/src/kit/schedule/attachments.rs",
+        call: "act::photos::Upload",
+        path: "a photo picked to attach",
+    },
+    ArrivalSite {
+        app: "reminders",
+        file: "crates/screens/src/imports/reminders.rs",
+        call: "act::reminders::AddTask",
+        path: "the phone's Reminders import",
+    },
+];
+
+/// The catalog structs of the app's actions whose input takes `arrived` (the manifest says which
+/// commands can record an arrival: `<app>/manifest.json` declares the property on each).
+fn arrival_structs(root: &Path, app: &str) -> Vec<String> {
+    let path = root.join(format!("crates/apps/{app}/manifest.json"));
+    let Some(value) = fs::read_to_string(path)
+        .ok()
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+    else {
+        return Vec::new();
+    };
+    value
+        .get("actions")
+        .and_then(|actions| actions.as_array())
+        .map(|actions| {
+            actions
+                .iter()
+                .filter(|action| {
+                    action
+                        .pointer("/input/properties/arrived_system")
+                        .is_some_and(|property| property.is_object())
+                })
+                .filter_map(|action| action.get("name")?.as_str().map(pascal))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Whether a screens file is shaped like an arrival: it lives in `imports/`, or it is a
+/// `transfer`, `ingest` or `import` screen.
+fn arrival_named(relative_path: &str) -> bool {
+    let stem = relative_path
+        .rsplit('/')
+        .next()
+        .and_then(|name| name.strip_suffix(".rs"))
+        .unwrap_or_default();
+    relative_path.contains("/imports/") || matches!(stem, "transfer" | "ingest" | "import")
+}
+
+/// Arrive is kept when, for `app`:
+///
+/// 1. every declared arrival path ([`ARRIVAL_SITES`]) still makes its call and spells `arrived`
+///    (the typed fields of the manifest's action, or the command's input in the core);
+/// 2. no arrival-shaped screens file ([`arrival_named`]) that builds one of the app's actions that
+///    takes `arrived` is missing from that list, so a new import cannot arrive unrecorded.
+///
+/// An app with no action that takes `arrived` (Calendar, Health and Money: a follow pass or a
+/// statement writes its own origin in the vault) and no listed path has nothing to pass.
+fn arrive_missing(root: &Path, app: &str) -> Vec<String> {
+    arrive_missing_in(root, app, ARRIVAL_SITES)
+}
+
+fn arrive_missing_in(root: &Path, app: &str, sites: &[ArrivalSite]) -> Vec<String> {
+    let mut gaps = Vec::new();
+    for site in sites.iter().filter(|site| site.app == app) {
+        match live_source(&root.join(site.file)) {
+            None => gaps.push(format!(
+                "{}: {} is listed as an arrival path of {app} but the file is missing",
+                site.file, site.path
+            )),
+            Some(text) if !text.contains(site.call) => gaps.push(format!(
+                "{}: {} is listed as an arrival path of {app} but no longer calls `{}`",
+                site.file, site.path, site.call
+            )),
+            Some(text) if !text.contains("arrived") => gaps.push(format!(
+                "{}: {} calls `{}` without passing `arrived`",
+                site.file, site.path, site.call
+            )),
+            Some(_) => {}
+        }
+    }
+    let takes = arrival_structs(root, app);
+    let screens = root.join("crates/screens/src");
+    for file in source_files(&screens, "rs") {
+        let rel = relative(root, &file);
+        let shown = rel.trim_start_matches("crates/screens/src");
+        if !arrival_named(shown)
+            || rel.ends_with("catalog.rs")
+            || sites.iter().any(|site| site.app == app && site.file == rel)
+        {
+            continue;
+        }
+        let Some(text) = live_source(&file) else {
+            continue;
+        };
+        for ident in act_idents(&text, app) {
+            if takes.contains(&ident) {
+                gaps.push(format!(
+                    "{rel}: builds `act::{app}::{ident}` in an arrival-shaped file that ARRIVAL_SITES does not list; list it and pass `arrived`"
+                ));
+            }
         }
     }
     gaps

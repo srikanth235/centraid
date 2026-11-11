@@ -745,3 +745,149 @@ fn the_committed_history_register_names_every_apps_kinds_and_people_keeps_it() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Arrive
+// ---------------------------------------------------------------------------
+
+const ARRIVE_MANIFEST: &str = r#"{"actions":[
+ {"name":"import-vcf","command":"person.import_vcf",
+  "input":{"type":"object","properties":{"cards":{"type":"string"},
+   "arrived_system":{"type":["string","null"]}}}},
+ {"name":"add-task","command":"task.add",
+  "input":{"type":"object","properties":{"title":{"type":"string"}}}}]}"#;
+
+const IMPORT_SITE: &[ArrivalSite] = &[ArrivalSite {
+    app: "people",
+    file: "crates/screens/src/people/transfer.rs",
+    call: "act::people::ImportVcf",
+    path: "the vCard import",
+}];
+
+/// A `people` app whose vCard import passes `arrived`.
+fn arrive_tree(name: &str) -> PathBuf {
+    let root = fixture_dir(name);
+    write(
+        &root,
+        "crates/screens/src/people/transfer.rs",
+        "fn go() { act::people::ImportVcf { cards, arrived_system: Some(from), ..Default::default() }; }",
+    );
+    write(&root, "crates/apps/people/manifest.json", ARRIVE_MANIFEST);
+    root
+}
+
+fn arrive_lacking(root: &Path) -> String {
+    arrive_missing_in(root, "people", IMPORT_SITE).join("\n")
+}
+
+#[test]
+fn an_arrival_that_passes_the_arrival_is_clean() {
+    let root = arrive_tree("arrive-clean");
+    assert_eq!(arrive_lacking(&root), "");
+}
+
+#[test]
+fn an_import_that_does_not_pass_the_arrival_is_named_by_file() {
+    let root = arrive_tree("arrive-red");
+    write(
+        &root,
+        "crates/screens/src/people/transfer.rs",
+        "fn go() { act::people::ImportVcf { cards, ..Default::default() }; }",
+    );
+    let gaps = arrive_lacking(&root);
+    assert!(
+        gaps.contains("crates/screens/src/people/transfer.rs: the vCard import calls `act::people::ImportVcf` without passing `arrived`"),
+        "{gaps}"
+    );
+}
+
+#[test]
+fn an_arrival_only_a_comment_or_a_test_spells_does_not_count() {
+    let root = arrive_tree("arrive-comment");
+    write(
+        &root,
+        "crates/screens/src/people/transfer.rs",
+        "// arrived: from the file\nfn go() { act::people::ImportVcf {}; }\n#[cfg(test)]\nmod tests { fn t() { let arrived = 1; } }",
+    );
+    assert!(arrive_lacking(&root).contains("without passing `arrived`"));
+}
+
+#[test]
+fn a_listed_path_that_is_gone_or_no_longer_calls_is_named() {
+    let root = arrive_tree("arrive-stale");
+    write(&root, "crates/screens/src/people/transfer.rs", "fn go() {}");
+    assert!(arrive_lacking(&root).contains("no longer calls `act::people::ImportVcf`"));
+    fs::remove_file(root.join("crates/screens/src/people/transfer.rs")).expect("remove");
+    assert!(arrive_lacking(&root).contains("the file is missing"));
+}
+
+#[test]
+fn an_unlisted_import_file_that_builds_an_arrival_action_is_named() {
+    let root = arrive_tree("arrive-unlisted");
+    write(
+        &root,
+        "crates/screens/src/imports/cards.rs",
+        "fn go() { act::people::ImportVcf { cards, ..Default::default() }; }",
+    );
+    // A typed add (a file that is not arrival-shaped) is never asked for an arrival.
+    write(
+        &root,
+        "crates/screens/src/people/ops.rs",
+        "fn typed() { act::people::ImportVcf {}; }",
+    );
+    let gaps = arrive_missing_in(&root, "people", &[]).join("\n");
+    assert!(
+        gaps.contains("crates/screens/src/imports/cards.rs: builds `act::people::ImportVcf`")
+            && gaps.contains("crates/screens/src/people/transfer.rs: builds"),
+        "{gaps}"
+    );
+    assert!(!gaps.contains("ops.rs"), "{gaps}");
+}
+
+#[test]
+fn an_owed_arrive_row_prints_each_gap_with_its_file() {
+    let root = arrive_tree("arrive-owed");
+    write(
+        &root,
+        "crates/screens/src/imports/cards.rs",
+        "fn go() { act::people::ImportVcf {}; }",
+    );
+    let table: Vec<Row> = APPS
+        .iter()
+        .map(|app| Row {
+            app,
+            promise: Promise::Arrive,
+            status: Status::Owed("#1185"),
+        })
+        .collect();
+    let report = check(&root, &table);
+    assert!(
+        report
+            .details
+            .iter()
+            .any(|line| line.starts_with("owed people / Arrive:")
+                && line.contains("imports/cards.rs")),
+        "{:?}",
+        report.details
+    );
+}
+
+#[test]
+fn the_committed_arrival_paths_exist_and_agree_with_their_rows() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    for site in ARRIVAL_SITES {
+        assert!(APPS.contains(&site.app), "{} is not an app", site.app);
+        assert!(
+            root.join(site.file).is_file(),
+            "{} is not a file ({})",
+            site.file,
+            site.path
+        );
+    }
+    for app in ["calendar", "health", "money"] {
+        assert!(
+            ARRIVAL_SITES.iter().all(|site| site.app != app),
+            "{app} records its arrivals in the vault and lists no path"
+        );
+    }
+}
