@@ -44,7 +44,7 @@ use crate::error::{Result, VaultError};
 use crate::model::Kind;
 
 /// A folder a document may be filed in: there, live and a folder.
-fn folder_refusal(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+pub(crate) fn folder_refusal(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let Some(id) = ctx.optional_str("folder_id") else {
         return Ok(None);
     };
@@ -92,7 +92,7 @@ fn words_refusal(ctx: &CommandCtx<'_, '_>) -> Option<String> {
     })
 }
 
-fn no_store(ctx: &CommandCtx<'_, '_>) -> Option<String> {
+pub(crate) fn no_store(ctx: &CommandCtx<'_, '_>) -> Option<String> {
     ctx.blobs()
         .is_none()
         .then(|| "this vault has nowhere to keep a file's bytes".to_owned())

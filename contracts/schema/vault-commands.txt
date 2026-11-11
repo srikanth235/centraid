@@ -18,6 +18,7 @@ derivative.write
 document.add
 document.create_text
 document.edit
+document.export_zip
 document.move
 document.replace
 document.restore_version

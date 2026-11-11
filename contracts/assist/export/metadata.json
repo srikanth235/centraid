@@ -1973,6 +1973,24 @@
         "verb": "detach"
       },
       {
+        "action": "export-zip",
+        "also": [],
+        "app": "docs",
+        "bulk": true,
+        "chat": "card",
+        "command": "document.export_zip",
+        "inverse": null,
+        "kind": "document",
+        "phrasings": [
+          "export all my documents as one archive",
+          "save my documents as a zip file",
+          "back up one folder of documents as a zip"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "log"
+      },
+      {
         "action": "link",
         "also": [],
         "app": "health",

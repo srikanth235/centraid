@@ -42,6 +42,7 @@ docs,add-about,link,document,card,yes: crates/screens/src/docs/document.rs,no
 docs,remove-about,unlink,document,card,yes: crates/screens/src/docs/document.rs,no
 docs,attach,attach,document,card,no,no
 docs,detach,detach,document,card,no,no
+docs,export-zip,log,document,card,no,no
 health,link,link,workout,card,no,no
 health,unlink,unlink,workout,card,no,no
 health,record-days,log,daily_figure,card,yes: crates/screens/src/health/follow.rs,no

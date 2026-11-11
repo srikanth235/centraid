@@ -130,6 +130,11 @@
         "verbs": "act"
       },
       {
+        "schema": "document",
+        "table": "export_zip",
+        "verbs": "act"
+      },
+      {
         "schema": "container",
         "table": "create",
         "verbs": "act"
@@ -1265,6 +1270,38 @@
           "reason": {
             "type": "string"
           }
+        }
+      }
+    },
+    {
+      "name": "export-zip",
+      "verb": "log",
+      "bulk": true,
+      "kind": "document",
+      "inverse": null,
+      "writes_nothing": true,
+      "sealed": [],
+      "command": "document.export_zip",
+      "phrasings": [
+        "export all my documents as one archive",
+        "save my documents as a zip file",
+        "back up one folder of documents as a zip"
+      ],
+      "description": "Write every document that is not in the trash (all of them, or one folder's and the folders below it) as one zip archive of the original files, in the folders the member sees, through document.export_zip. Answers the staged file's path, name and counts. Writes nothing to the vault.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "folder_id": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
         }
       }
     }

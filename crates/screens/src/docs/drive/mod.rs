@@ -65,6 +65,8 @@ use sheets::Sheet;
 /// The Add sheet's, More's and the followed list's row keys.
 pub const KEY_RECENT: &str = "recent";
 pub const KEY_TRASH_SHELF: &str = "trash_shelf";
+/// The More sheet's Export row (a route, so the shell pushes it).
+pub const KEY_EXPORT: &str = "export";
 pub const KEY_UPLOAD: &str = "upload";
 pub const KEY_SCAN: &str = "scan";
 pub const KEY_TEXT: &str = "text";

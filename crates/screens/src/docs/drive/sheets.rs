@@ -5,11 +5,12 @@ use centraid_api_proto::core_v1 as wire;
 use wire::docs_sheet::{Body, Kind};
 
 use super::{
-    Drive, KEY_FOLLOW_FOLDER, KEY_FOLLOWED, KEY_NEW_FOLDER, KEY_RECENT, KEY_SCAN, KEY_STOP_PREFIX,
-    KEY_TEXT, KEY_TRASH_SHELF, KEY_UPLOAD,
+    Drive, KEY_EXPORT, KEY_FOLLOW_FOLDER, KEY_FOLLOWED, KEY_NEW_FOLDER, KEY_RECENT, KEY_SCAN,
+    KEY_STOP_PREFIX, KEY_TEXT, KEY_TRASH_SHELF, KEY_UPLOAD,
 };
 use crate::docs::fold::{self, TRASH_ICON};
 use crate::docs::{folders, routes};
+use crate::kit::export;
 use crate::strings::{Locale, docs as words, fill, shared};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -77,6 +78,13 @@ pub(super) fn view(drive: &Drive, locale: Locale) -> wire::DocsSheet {
                     "Folder",
                 ));
             }
+            // EXPORT (#1185): the kit's row, the same in every app, a route the shell pushes.
+            let export = export::entry(locale, crate::docs::EXPORT);
+            rows.push(wire::DocsAction {
+                route: Some(export.route),
+                meta: words::more_export_meta(locale),
+                ..fold::action(KEY_EXPORT, export.label, export.icon_key)
+            });
             rows.push(wire::DocsAction {
                 detail: if rail.trash_count > 0 {
                     fold::count_label(locale, rail.trash_count)

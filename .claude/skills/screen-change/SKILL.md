@@ -109,6 +109,8 @@ The vault keeps every record's earlier values at its commit door (#1185); `kit/e
 4. **The entry**: a row of the More sheet built from `export::entry(locale, EXPORT)` (key, label, icon, route), the same row in every app.
 5. **Register the promise**: flip the app's `Promise::Export` row in `promises.rs` to `kept(.., "crates/screens/src/<app>/export.rs")`. Locker keeps its own machine (`OWN_EXPORT`).
 
+**A large export is a streamed file (D17).** `ExportSpec::export` returns `Made`: `Made::Bytes(ExportFile)` (what `file_of` makes, small files, `SaveFile`) or `Made::Staged(StagedFile)` (what `export::staged_of` makes from `{path, name}`, `SaveFilePath`: the shells offer the save sheet for a file already on disk, copy it by streaming and delete it). The command writes the archive itself: it asks `ctx.blobs().staging_dir()` (`<vault>.exports`, beside the store, emptied by the next export) and writes entry by entry through `centraid_vault::portable::zip::ZipWriter` (`add(name, size, reader)`, a fixed 64 KiB buffer, ZIP64 past 4 GiB), copying each original from `BlobStore::path_of`. Never build the archive in a `Vec`. `document.export_zip` is the model.
+
 ## 10. Adopting share in an app
 
 `kit/share.rs` is the one hand-off of a single item to the OS share sheet (`ShareBytes`: a small file made in memory); the owner check is inside it.

@@ -67,6 +67,16 @@ catalog! {
     plain empty_search_body = ("Try fewer words.", "Try fewer words.");
     plain empty_starred = ("Nothing starred yet.", "Nothing starred yet.");
     plain empty_starred_body = ("Star a document to keep it here.", "Star a document to keep it here.");
+    plain export_all = ("All documents", "All documents");
+    plain export_lede = (
+        "Your original files in one .zip archive, in the folders you see here.",
+        "Your original files in one .zip archive, in the folders you see here."
+    );
+    plain export_nothing = (
+        "There are no documents on this phone to export.",
+        "There are no documents on this phone to export."
+    );
+    plain export_title = ("Export documents", "Export documents");
     plain facts_only = ("Docs can't show this file, so here are its details.", "Docs can't show this file, so here are its details.");
     plain fact_added = ("Added", "Added");
     plain fact_changed = ("Changed", "Changed");
@@ -111,6 +121,7 @@ catalog! {
     plain modified_this_year = ("This year", "This year");
     plain modified_today = ("Today", "Today");
     plain more = ("More actions", "More actions");
+    plain more_export_meta = ("Your originals as one archive", "Your originals as one archive");
     plain more_followed = ("Followed folders", "Followed folders");
     plain more_recent = ("Recently added", "Recently added");
     plain more_title = ("More in Docs", "More in Docs");

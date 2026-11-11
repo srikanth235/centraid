@@ -334,7 +334,7 @@ pub const REGISTER: &[Row] = &[
         Promise::Export,
         "crates/screens/src/calendar/export.rs",
     ),
-    owed("docs", Promise::Export, EXPORT_OWED),
+    kept("docs", Promise::Export, "crates/screens/src/docs/export.rs"),
     kept(
         "health",
         Promise::Export,

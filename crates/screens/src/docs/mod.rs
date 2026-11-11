@@ -9,6 +9,7 @@
 //! | A document's earlier versions | [`EARLIER`] | [`earlier`] |
 //! | A text document's editor | [`EDITOR`] | [`editor`] |
 //! | The trash | [`TRASH`] | [`trash`] |
+//! | The originals as one archive | [`EXPORT`] | [`export`] |
 //!
 //! A row that opens a page carries the [`wire::Route`] to push (built by
 //! [`routes`]), so a shell never names a screen.
@@ -37,6 +38,7 @@ pub mod document;
 pub mod drive;
 pub mod earlier;
 pub mod editor;
+pub mod export;
 pub mod fold;
 pub mod folders;
 pub mod rename;
@@ -47,6 +49,8 @@ pub const DOCUMENT: &str = "docs.document";
 pub const EARLIER: &str = "docs.earlier";
 pub const EDITOR: &str = "docs.editor";
 pub const TRASH: &str = "docs.trash";
+/// Docs' export of its originals as one streamed archive (#1185).
+pub const EXPORT: &str = "docs.export";
 
 /// Every Docs screen, registered under its route name.
 #[must_use]
@@ -57,6 +61,7 @@ pub fn registry() -> Registry {
         .with(EARLIER, earlier::build)
         .with(EDITOR, editor::build)
         .with(TRASH, trash::build)
+        .with(EXPORT, export::build)
 }
 
 /// A runtime with Docs' screens and one tab, `docs`, rooted at the drive. The
