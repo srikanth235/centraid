@@ -188,7 +188,11 @@ fn naming_a_place_is_the_vaults_rename_and_a_blank_name_is_not_sent() {
         .clone();
     assert_eq!(row.title, "The cabin");
     assert_eq!(row.current_name, "The cabin");
-    assert!(state(&d, places).status.is_none());
+    let status = state(&d, places).status.clone().expect("a line");
+    assert_eq!(
+        (status.sentence.as_str(), status.action_label.as_str()),
+        ("Place named", "Undo")
+    );
 }
 
 #[test]

@@ -228,7 +228,7 @@ pub const REGISTER: &[Row] = &[
     kept("money", Promise::Undo, "crates/core/src/act/inverse.rs"),
     kept("notes", Promise::Undo, "crates/core/src/act/inverse.rs"),
     kept("people", Promise::Undo, "crates/core/src/act/inverse.rs"),
-    owed("photos", Promise::Undo, UNDO_DOOR_OWED),
+    kept("photos", Promise::Undo, "crates/core/src/act/inverse.rs"),
     kept("reminders", Promise::Undo, "crates/core/src/act/inverse.rs"),
     // History (#1185, Phase 1): People is the reference adoption; the checker's gaps are the
     // others' work list.
@@ -559,8 +559,6 @@ const fn exempt(app: &'static str, promise: Promise, ruling: &'static str) -> Ro
 /// only exceptions). A Locker item is sealed: a photo or file beside it would sit outside the seal.
 pub const ATTACH_EXEMPT: &[(&str, &str)] =
     &[("locker", "D11: a Locker item cannot hold attachments")];
-
-const UNDO_DOOR_OWED: &str = "screens still write straight to `kit::act::act`; rule C wants every write through `kit::undo` so each undoable action offers Undo (#1185)";
 
 /// `promises`: the table is complete, and every row is true.
 pub fn promises(root: &Path) -> RuleReport {

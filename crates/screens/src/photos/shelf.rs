@@ -322,7 +322,8 @@ impl Shelf {
                     )),
                 };
                 let picked = self.selection.picked().to_vec();
-                self.choice.update(&opened, &picked, ctx);
+                self.choice
+                    .update(&opened, &picked, self.selection.door(), ctx);
             }
             Outcome::Wrote(_) => self.reload(ctx),
         }
@@ -331,7 +332,10 @@ impl Shelf {
     fn album_choice_event(&mut self, event: &wire::PhotosAlbumChoiceEvent, ctx: &Ctx) {
         self.notice.clear();
         let picked = self.selection.picked().to_vec();
-        match self.choice.update(event, &picked, ctx) {
+        match self
+            .choice
+            .update(event, &picked, self.selection.door(), ctx)
+        {
             album_choice::Outcome::Moved => {}
             album_choice::Outcome::Added { album_id, written } => {
                 self.selection.settle(&written, Verb::AddToAlbum);
@@ -391,7 +395,9 @@ impl Shelf {
             && self.cells.iter().all(|cell| seen.contains(&cell.photo_id));
         if unchanged {
             let key = kit_act::key(&["empty-trash", "photo"], kit_act::fresh());
-            let settled = kit_act::act(
+            self.selection.refuse(None);
+            // Emptying the trash cannot be taken back, and asked first: it says nothing.
+            self.selection.door().act_quietly(
                 ctx,
                 act::photos::EmptyTrash {
                     kind: Some(act::photos::EmptyTrashKind::Photo),
@@ -399,15 +405,20 @@ impl Shelf {
                 },
                 &key,
             );
-            self.selection
-                .refuse((!settled.committed).then_some(settled.refusal));
         } else {
-            let written = each(ctx, &seen, "purge-photo", |id| {
-                act::photos::PurgePhoto {
-                    photo_id: id.to_owned(),
-                }
-                .into()
-            });
+            let written = each(
+                ctx,
+                self.selection.door(),
+                &seen,
+                "purge-photo",
+                None,
+                |id| {
+                    act::photos::PurgePhoto {
+                        photo_id: id.to_owned(),
+                    }
+                    .into()
+                },
+            );
             self.selection.refuse(written.refusal);
         }
         self.reload(ctx);
@@ -415,17 +426,17 @@ impl Shelf {
 
     fn delete_album(&mut self, ctx: &Ctx) {
         let key = kit_act::key(&["delete-album", &self.id], kit_act::fresh());
-        let settled = kit_act::act(
+        self.selection.refuse(None);
+        let settled = self.selection.door().act(
             ctx,
             act::photos::DeleteAlbum {
                 album_id: self.id.clone(),
             },
             &key,
+            shelf_words::album_deleted,
         );
         if settled.committed {
             self.dismissed = true;
-        } else {
-            self.selection.refuse(Some(settled.refusal));
         }
     }
 
@@ -439,16 +450,16 @@ impl Shelf {
             return;
         }
         let key = kit_act::key(&["rename-album", &self.id, name], kit_act::fresh());
-        let settled = kit_act::act(
+        self.selection.refuse(None);
+        self.selection.door().act(
             ctx,
             act::photos::RenameAlbum {
                 album_id: self.id.clone(),
                 title: name.to_owned(),
             },
             &key,
+            shelf_words::album_renamed,
         );
-        self.selection
-            .refuse((!settled.committed).then_some(settled.refusal));
         self.reload(ctx);
     }
 
@@ -463,16 +474,16 @@ impl Shelf {
         }
         let photo = photo.clone();
         let key = kit_act::key(&["set-album-cover", &self.id, &photo], kit_act::fresh());
-        let settled = kit_act::act(
+        self.selection.refuse(None);
+        self.selection.door().act(
             ctx,
             act::photos::SetAlbumCover {
                 album_id: self.id.clone(),
                 photo_id: Field::Is(photo),
             },
             &key,
+            shelf_words::cover_changed,
         );
-        self.selection
-            .refuse((!settled.committed).then_some(settled.refusal));
         self.reload(ctx);
     }
 
@@ -482,15 +493,15 @@ impl Shelf {
             return;
         }
         let key = kit_act::key(&["restore-album", &self.id], kit_act::fresh());
-        let settled = kit_act::act(
+        self.selection.refuse(None);
+        self.selection.door().act(
             ctx,
             act::photos::RestoreAlbum {
                 album_id: self.id.clone(),
             },
             &key,
+            shelf_words::album_restored,
         );
-        self.selection
-            .refuse((!settled.committed).then_some(settled.refusal));
         self.reload(ctx);
     }
 
@@ -779,7 +790,15 @@ impl Screen for Shelf {
                 }
                 self.copied(&result, ctx.locale());
             }
-            Some(S::Left(_)) => return self.gate.cancel(),
+            Some(S::StatusActed(_)) => {
+                if self.selection.acted(ctx) {
+                    self.reload(ctx);
+                }
+            }
+            Some(S::Left(_)) => {
+                self.selection.door().clear();
+                return self.gate.cancel();
+            }
             _ => {}
         }
         Vec::new()

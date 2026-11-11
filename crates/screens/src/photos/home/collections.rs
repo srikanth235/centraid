@@ -20,8 +20,11 @@ use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::export;
 use crate::kit::read::{self, Reading};
+use crate::kit::undo::Undo;
 use crate::screen::Ctx;
-use crate::strings::{Locale, fill, photos as words, photos_home as sentences};
+use crate::strings::{
+    Locale, fill, photos as words, photos_home as sentences, photos_shelf as shelf_words,
+};
 
 pub const PINNED: &str = "pinned";
 pub const ALBUMS: &str = "albums";
@@ -81,19 +84,20 @@ impl Collections {
     ///
     /// # Errors
     /// The vault's sentence for a refused create.
-    pub fn create(&mut self, ctx: &Ctx) -> Result<bool, String> {
+    pub fn create(&mut self, ctx: &Ctx, door: &mut Undo) -> Result<bool, String> {
         let name = self.new_album_name.trim().to_owned();
         if name.is_empty() {
             return Ok(false);
         }
         let key = kit_act::key(&["create-album", &name], kit_act::fresh());
-        let settled = kit_act::act(
+        let settled = door.act(
             ctx,
             act::photos::CreateAlbum {
                 title: name,
                 id: None,
             },
             &key,
+            shelf_words::album_created,
         );
         if settled.committed {
             self.new_album_name.clear();
@@ -108,14 +112,15 @@ impl Collections {
     ///
     /// # Errors
     /// The vault's sentence for a refused delete.
-    pub fn delete(ctx: &Ctx, album_id: &str) -> Result<(), String> {
+    pub fn delete(ctx: &Ctx, door: &mut Undo, album_id: &str) -> Result<(), String> {
         let key = kit_act::key(&["delete-album", album_id], kit_act::fresh());
-        let settled = kit_act::act(
+        let settled = door.act(
             ctx,
             act::photos::DeleteAlbum {
                 album_id: album_id.to_owned(),
             },
             &key,
+            shelf_words::album_deleted,
         );
         if settled.committed {
             Ok(())
@@ -128,14 +133,15 @@ impl Collections {
     ///
     /// # Errors
     /// The vault's sentence for a refused restore.
-    pub fn restore(ctx: &Ctx, album_id: &str) -> Result<(), String> {
+    pub fn restore(ctx: &Ctx, door: &mut Undo, album_id: &str) -> Result<(), String> {
         let key = kit_act::key(&["restore-album", album_id], kit_act::fresh());
-        let settled = kit_act::act(
+        let settled = door.act(
             ctx,
             act::photos::RestoreAlbum {
                 album_id: album_id.to_owned(),
             },
             &key,
+            shelf_words::album_restored,
         );
         if settled.committed {
             Ok(())

@@ -26,12 +26,13 @@ use wire::app_query_response::Answer;
 use wire::photos_album_choice_event::Kind as E;
 
 use super::cells::{self, Link};
-use super::selection::{Written, each};
+use super::selection::{self, Written, each};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::read::{self, Reading};
+use crate::kit::undo::Undo;
 use crate::screen::Ctx;
-use crate::strings::{Locale, photos as words};
+use crate::strings::{Locale, fill, photos as words, photos_shelf as shelf_words};
 
 /// What a sheet event came to, for the screen to act on.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -55,12 +56,24 @@ pub struct AlbumChoice {
     /// An album the list leaves out: a shelf does not offer its own album, because
     /// adding an album's photographs to itself is a batch of refusals.
     exclude: Option<String>,
+    /// A page of ONE photograph (the lightbox) says "Added to <album>."; a pick of one on a shelf
+    /// or the grid says the batch's "1 photo added to <album>.".
+    one_photo_page: bool,
 }
 
 impl AlbumChoice {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// The sheet of a page that holds exactly one photograph.
+    #[must_use]
+    pub fn for_one_photo() -> Self {
+        Self {
+            one_photo_page: true,
+            ..Self::default()
+        }
     }
 
     /// This sheet never lists `album_id`.
@@ -126,6 +139,7 @@ impl AlbumChoice {
         &mut self,
         event: &wire::PhotosAlbumChoiceEvent,
         picked: &[String],
+        door: &mut Undo,
         ctx: &Ctx,
     ) -> Outcome {
         match &event.kind {
@@ -142,13 +156,27 @@ impl AlbumChoice {
             }
             Some(E::Chosen(chosen)) => {
                 self.open = false;
+                // One photograph says "Added to <album>." through the door, with its Undo.
+                let title = self.title_of(&chosen.album_id);
+                let said = (picked.len() == 1)
+                    .then(|| {
+                        if self.one_photo_page {
+                            Some(fill(
+                                &words::photos_receipt_album(ctx.locale()),
+                                &[("album", title.unwrap_or_default())],
+                            ))
+                        } else {
+                            selection::receipt(ctx.locale(), selection::Verb::AddToAlbum, 1, title)
+                        }
+                    })
+                    .flatten();
                 Outcome::Added {
                     album_id: chosen.album_id.clone(),
-                    written: add(ctx, picked, &chosen.album_id),
+                    written: add(ctx, door, picked, &chosen.album_id, said),
                 }
             }
             Some(E::Created(created)) => {
-                let refusal = create(ctx, &created.title);
+                let refusal = create(ctx, door, &created.title);
                 self.load(ctx);
                 Outcome::Created { refusal }
             }
@@ -193,7 +221,13 @@ impl AlbumChoice {
 
 /// Put every photograph into the album: one `edge.add` each, which places it
 /// after the photographs the album has. An empty album id is not a write.
-pub fn add(ctx: &Ctx, photo_ids: &[String], album_id: &str) -> Written {
+pub fn add(
+    ctx: &Ctx,
+    door: &mut Undo,
+    photo_ids: &[String],
+    album_id: &str,
+    said: Option<String>,
+) -> Written {
     if album_id.is_empty() {
         return Written::default();
     }
@@ -203,7 +237,7 @@ pub fn add(ctx: &Ctx, photo_ids: &[String], album_id: &str) -> Written {
             ids.push(id.clone());
         }
     }
-    each(ctx, &ids, "add-to-album", |id| {
+    each(ctx, door, &ids, "add-to-album", said, |id| {
         act::photos::AddToAlbum {
             from: album_id.to_owned(),
             to: id.to_owned(),
@@ -215,8 +249,8 @@ pub fn add(ctx: &Ctx, photo_ids: &[String], album_id: &str) -> Written {
 
 /// Make an album called `title` (trimmed). An empty name is not a write: the
 /// vault's `title` is `minLength: 1`. Returns the vault's refusal, if any.
-pub fn create(ctx: &Ctx, title: &str) -> Option<String> {
-    match create_album(ctx, title) {
+pub fn create(ctx: &Ctx, door: &mut Undo, title: &str) -> Option<String> {
+    match create_album(ctx, door, title) {
         Err(sentence) if !sentence.is_empty() => Some(sentence),
         _ => None,
     }
@@ -227,19 +261,20 @@ pub fn create(ctx: &Ctx, title: &str) -> Option<String> {
 /// # Errors
 /// The vault's sentence when the create was refused; an empty name is an empty
 /// sentence, which is no write.
-pub fn create_album(ctx: &Ctx, title: &str) -> Result<String, String> {
+pub fn create_album(ctx: &Ctx, door: &mut Undo, title: &str) -> Result<String, String> {
     let name = title.trim();
     if name.is_empty() {
         return Err(String::new());
     }
     let key = kit_act::key(&["create-album", name], kit_act::fresh());
-    let settled = kit_act::act(
+    let settled = door.act(
         ctx,
         act::photos::CreateAlbum {
             title: name.to_owned(),
             id: None,
         },
         &key,
+        shelf_words::album_created,
     );
     if settled.committed {
         Ok(settled.output_text("id").unwrap_or_default())

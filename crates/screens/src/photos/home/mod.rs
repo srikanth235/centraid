@@ -276,7 +276,10 @@ impl Home {
             }
             H::AlbumChoice(event) => {
                 let picked = self.selection.picked().to_vec();
-                match self.choice.update(&event, &picked, ctx) {
+                match self
+                    .choice
+                    .update(&event, &picked, self.selection.door(), ctx)
+                {
                     ChoiceOutcome::Moved => {}
                     ChoiceOutcome::Added { album_id, written } => {
                         self.selection.settle(&written, Verb::AddToAlbum);
@@ -365,7 +368,7 @@ impl Home {
             H::SectionToggled(section) => self.collections.toggle(&section),
             H::FoldAll(_) => self.collections.fold_all(),
             H::NewAlbumName(name) => self.collections.new_album_name = name,
-            H::NewAlbumSubmitted(_) => match self.collections.create(ctx) {
+            H::NewAlbumSubmitted(_) => match self.collections.create(ctx, self.selection.door()) {
                 // THE SHEET STAYS OPEN UNTIL THE WRITE COMMITS: closing it would be
                 // the screen claiming an album exists because a button was pressed,
                 // and a refusal would then have nowhere to be read.
@@ -375,18 +378,21 @@ impl Home {
                     self.collections.read(ctx);
                 }
                 Ok(false) => {}
-                Err(sentence) => self.status = Some(refused(sentence)),
+                // The refusal is the door's line, drawn beside the selection's.
+                Err(_) => self.status = None,
             },
             H::AlbumDeleteAsked(id) => self.collections.deleting = Some(id),
             H::AlbumDeleteDismissed(_) => self.collections.deleting = None,
             H::AlbumDeleteConfirmed(_) => {
                 if let Some(id) = self.collections.deleting.take() {
-                    self.status = Collections::delete(ctx, &id).err().map(refused);
+                    self.status = None;
+                    let _ = Collections::delete(ctx, self.selection.door(), &id);
                     self.collections.read(ctx);
                 }
             }
             H::AlbumRestored(id) => {
-                self.status = Collections::restore(ctx, &id).err().map(refused);
+                self.status = None;
+                let _ = Collections::restore(ctx, self.selection.door(), &id);
                 self.collections.read(ctx);
             }
             H::Permission(changed) => {
@@ -476,7 +482,8 @@ impl Home {
                         wire::photos_album_choice_event::Opened {},
                     )),
                 };
-                self.choice.update(&opened, &picked, ctx);
+                self.choice
+                    .update(&opened, &picked, self.selection.door(), ctx);
             }
             Outcome::Wrote(_) => self.read_library(ctx),
         }
@@ -948,7 +955,15 @@ impl Screen for Home {
                 }
                 self.on_effect(&result, ctx);
             }
-            Some(E::Left(_)) => return self.gate.cancel(),
+            Some(E::StatusActed(_)) => {
+                if self.selection.acted(ctx) {
+                    self.read(ctx);
+                }
+            }
+            Some(E::Left(_)) => {
+                self.selection.door().clear();
+                return self.gate.cancel();
+            }
             Some(E::OffThreadDone(done)) => return self.on_job(&done, ctx),
             Some(E::PhotosHome(home)) => {
                 if let Some(kind) = home.kind {

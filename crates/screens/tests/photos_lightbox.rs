@@ -912,7 +912,12 @@ fn favorite_archive_and_trash_each_say_what_they_did() {
     // Undo restores it.
     send(&mut d, at, ev::Kind::StatusActed(ev::StatusActed {}));
     let state = view(&d, at);
-    assert_eq!(state.status.expect("receipt").sentence, "Restored.");
+    // The kit's door says "Undone" and offers nothing more.
+    let undone = state.status.clone().expect("receipt");
+    assert_eq!(
+        (undone.sentence.as_str(), undone.action_label.as_str()),
+        ("Undone", "")
+    );
     assert!(state.toolbar.iter().any(|v| v.kind == V::Trash as i32));
 }
 
@@ -1177,7 +1182,11 @@ fn make_key_photo_is_offered_only_inside_the_album_it_was_opened_from() {
     let at = open(&mut d, &id, &[], &keepers);
     assert!(verb(&view(&d, at), V::MakeKey).enabled);
     tap(&mut d, at, V::MakeKey);
-    assert!(view(&d, at).status.is_none(), "{:?}", view(&d, at).status);
+    let status = view(&d, at).status.expect("a line");
+    assert_eq!(
+        (status.sentence.as_str(), status.action_label.as_str()),
+        ("Cover changed", "Undo")
+    );
 }
 
 #[test]

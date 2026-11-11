@@ -31,8 +31,9 @@ use super::routes;
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::read::{self, Reading};
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, fill, photos as words};
+use crate::strings::{Locale, fill, photos as words, photos_shelf as shelf_words};
 
 /// A pin's side in points: the floor for the least photographed place and the
 /// ceiling for the most, growing with the square root of the count.
@@ -50,7 +51,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         places: Vec::new(),
         unplaced: 0,
         naming: None,
-        status: None,
+        undo: Undo::default(),
     }))
 }
 
@@ -67,7 +68,8 @@ struct Places {
     unplaced: u32,
     /// The place the name sheet is open over.
     naming: Option<String>,
-    status: Option<wire::StatusLine>,
+    /// The status line and what its Undo reverses (the kit's one door).
+    undo: Undo,
 }
 
 /// Where each pinned place stands on the plate: `x` and `y` in the unit square
@@ -189,19 +191,15 @@ impl Places {
             return;
         }
         let key = kit_act::key(&["name-place", place_id, name], kit_act::fresh());
-        let settled = kit_act::act(
+        self.undo.act(
             ctx,
             act::photos::NamePlace {
                 place_id: place_id.to_owned(),
                 title: name.to_owned(),
             },
             &key,
+            shelf_words::place_named,
         );
-        self.status = (!settled.committed).then(|| wire::StatusLine {
-            sentence: settled.refusal,
-            action_label: String::new(),
-            refused: true,
-        });
         self.reload(ctx);
     }
 
@@ -356,13 +354,19 @@ impl Screen for Places {
                     };
                 }
                 Some(E::NameRequested(asked)) => {
-                    self.status = None;
+                    self.undo.clear();
                     self.naming = Some(asked.place_id);
                 }
                 Some(E::NameDismissed(_)) => self.naming = None,
                 Some(E::Renamed(renamed)) => self.rename(&renamed.place_id, &renamed.name, ctx),
                 None => {}
             },
+            Some(S::StatusActed(_)) => {
+                if self.undo.acted(ctx) {
+                    self.reload(ctx);
+                }
+            }
+            Some(S::Left(_)) => self.undo.clear(),
             _ => {}
         }
         Vec::new()
@@ -385,7 +389,7 @@ impl Screen for Places {
                     cards_label: words::photos_places_cards(locale),
                     map_label: words::photos_places_map(locale),
                     content: Some(content),
-                    status: self.status.clone(),
+                    status: self.undo.status(),
                     name_sheet: self.sheet(locale),
                 },
             ))),

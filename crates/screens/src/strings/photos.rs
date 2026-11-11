@@ -34,6 +34,7 @@ catalog! {
     plain photos_band_more = ("More", "More");
     plain photos_cancel = ("Cancel", "Cancel");
     plain photos_receipt_restored = ("Restored.", "Restored.");
+    plain photos_receipt_removed_from_album = ("Removed from the album.", "Removed from the album.");
     plain photos_receipt_favorited = ("Added to Favorites.", "Added to Favorites.");
     plain photos_receipt_unfavorited = ("Removed from Favorites.", "Removed from Favorites.");
     plain photos_receipt_archived = ("Moved to the archive.", "Moved to the archive.");

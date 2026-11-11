@@ -23,6 +23,12 @@ catalog! {
     );
     plain edit_fallback_name = ("photo", "photo");
     plain not_in_vault = ("This photo is not in a vault yet.", "This photo is not in a vault yet.");
+    plain person_added = ("Person added", "Person added");
+    plain person_removed = ("Person removed", "Person removed");
+    plain caption_changed = ("Caption changed", "Caption changed");
+    plain label_added = ("Label added", "Label added");
+    plain label_removed = ("Label removed", "Label removed");
+    plain place_changed = ("Place changed", "Place changed");
     plain utc = ("UTC", "UTC");
     plain earlier_caption = ("Caption: {caption}", "Caption: {caption}");
     plain earlier_no_caption = ("No caption", "No caption");

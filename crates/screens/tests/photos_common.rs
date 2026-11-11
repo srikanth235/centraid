@@ -9,6 +9,7 @@ use centraid_screens::field::Keyed;
 use centraid_screens::kit::act as kit_act;
 use centraid_screens::kit::civil::HourCycle;
 use centraid_screens::kit::read::{self, Reading};
+use centraid_screens::kit::undo::Undo;
 use centraid_screens::photos;
 use centraid_screens::photos::album_choice::{self, AlbumChoice};
 use centraid_screens::photos::cells::{self, Link};
@@ -600,7 +601,10 @@ fn move_to_trash_asks_nothing_says_so_with_undo_and_a_library_trash_ends_the_mod
         &[],
     );
     assert!(matches!(outcome, Outcome::Wrote(ref w) if w.ok()));
-    assert!(selection.status(Locale::En).is_none());
+    // The kit's door says "Undone" and offers nothing more.
+    let status = selection.status(Locale::En).expect("a status line");
+    assert_eq!(status.sentence, "Undone");
+    assert_eq!(status.action_label, "");
     let live = ids_of(&shelf(&d, load::photos::ShelfView::Live, None));
     assert!(live.contains(&gone) && live.contains(&keep));
 }
@@ -747,7 +751,7 @@ fn pick(
     event: &wire::PhotosAlbumChoiceEvent,
     picked: &[String],
 ) -> album_choice::Outcome {
-    d.with_ctx(|ctx| sheet.update(event, picked, ctx))
+    d.with_ctx(|ctx| sheet.update(event, picked, &mut Undo::default(), ctx))
 }
 
 fn titles(view: &wire::PhotosAlbumChoice) -> Vec<String> {
@@ -831,7 +835,8 @@ fn a_new_album_keeps_the_sheet_open_and_joins_the_list_for_the_next_tap() {
     assert!(members.contains(&one) && members.contains(&two));
 
     // Adding twice changes nothing and is not a refusal (an edge is idempotent).
-    let again = d.with_ctx(|ctx| album_choice::add(ctx, &picked, &album_id));
+    let again =
+        d.with_ctx(|ctx| album_choice::add(ctx, &mut Undo::default(), &picked, &album_id, None));
     assert!(again.ok(), "{again:?}");
     assert_eq!(
         ids_of(&shelf(&d, load::photos::ShelfView::Album, Some(&album_id))).len(),

@@ -12,6 +12,7 @@ mod locker_support;
 mod money_support;
 mod notes_support;
 mod people_support;
+mod photos_w2_support;
 mod reminders_support;
 
 #[allow(clippy::duplicate_mod)]
@@ -1017,4 +1018,139 @@ fn people_a_later_cadence_refuses_the_undo_plainly_and_stays() {
     assert_eq!(status.action_label, "");
     assert!(!status.sentence.is_empty());
     assert_eq!(people_cadence(&d, &id), 7);
+}
+
+// --- Photos: the lightbox's favourite, a shelf's album rename ---------------------------
+
+fn photos_lightbox(d: &Driver, page: u64) -> &wire::PhotosLightboxState {
+    match &d.view(page).kind {
+        Some(wire::view_state::Kind::PhotosLightbox(state)) => state,
+        other => panic!("not the lightbox: {other:?}"),
+    }
+}
+
+fn photos_favorite_on(d: &Driver, page: u64) -> bool {
+    use wire::photos_lightbox_verb::Kind as V;
+    let state = photos_lightbox(d, page);
+    state
+        .toolbar
+        .iter()
+        .chain(state.menu.iter())
+        .find(|verb| verb.kind == V::Favorite as i32)
+        .expect("a favourite verb")
+        .on
+}
+
+fn photos_tap_favorite(d: &mut Driver, page: u64) {
+    use wire::photos_lightbox_event as ev;
+    use wire::photos_lightbox_verb::Kind as V;
+    d.send(
+        page,
+        wire::screen_event::Kind::PhotosLightbox(wire::PhotosLightboxEvent {
+            kind: Some(ev::Kind::Verb(ev::VerbTapped {
+                kind: V::Favorite as i32,
+            })),
+        }),
+    );
+}
+
+#[test]
+fn photos_a_favourite_says_so_and_undo_takes_it_back() {
+    let mut d = photos_w2_support::driver();
+    let id = photos_w2_support::photo(&d, "undo-favourite");
+    let page = d.push(
+        "photos",
+        centraid_screens::photos::routes::lightbox(&id, &[], ""),
+    );
+    photos_tap_favorite(&mut d, page);
+    assert!(photos_favorite_on(&d, page));
+    assert_eq!(
+        said(photos_lightbox(&d, page).status.as_ref()),
+        line("Added to Favorites.", "Undo")
+    );
+
+    status_acted(&mut d, page);
+    assert!(!photos_favorite_on(&d, page));
+    assert_eq!(
+        said(photos_lightbox(&d, page).status.as_ref()),
+        line("Undone", "")
+    );
+}
+
+fn photos_shelf(d: &Driver, page: u64) -> &wire::PhotosShelfState {
+    match &d.view(page).kind {
+        Some(wire::view_state::Kind::PhotosShelf(state)) => state,
+        other => panic!("not a shelf: {other:?}"),
+    }
+}
+
+fn photos_rename_album(d: &mut Driver, page: u64, title: &str) {
+    use wire::photos_shelf_event as ev;
+    for kind in [
+        ev::Kind::PromptOpened(ev::PromptOpened {
+            prompt: wire::photos_shelf_state::Prompt::RenameAlbum as i32,
+        }),
+        ev::Kind::AlbumRenamed(ev::AlbumRenamed {
+            title: title.to_owned(),
+        }),
+    ] {
+        d.send(
+            page,
+            wire::screen_event::Kind::PhotosShelf(wire::PhotosShelfEvent { kind: Some(kind) }),
+        );
+    }
+}
+
+fn photos_album_page(d: &mut Driver) -> (String, u64) {
+    let album = photos_w2_support::album(d, "Trip");
+    let photo = photos_w2_support::photo(d, "undo-album");
+    photos_w2_support::put_in(d, &album, &photo);
+    let page = d.push(
+        "photos",
+        centraid_screens::photos::routes::shelf(wire::PhotosShelfKind::Album, &album, ""),
+    );
+    (album, page)
+}
+
+#[test]
+fn photos_an_album_rename_says_so_and_undo_puts_the_name_back() {
+    let mut d = photos_w2_support::driver();
+    let (_, page) = photos_album_page(&mut d);
+    photos_rename_album(&mut d, page, "Portugal");
+    assert_eq!(photos_shelf(&d, page).title, "Portugal");
+    assert_eq!(
+        said(photos_shelf(&d, page).status.as_ref()),
+        line("Album renamed", "Undo")
+    );
+
+    status_acted(&mut d, page);
+    assert_eq!(photos_shelf(&d, page).title, "Trip");
+    assert_eq!(
+        said(photos_shelf(&d, page).status.as_ref()),
+        line("Undone", "")
+    );
+}
+
+#[test]
+fn photos_a_later_rename_refuses_the_undo_plainly_and_stays() {
+    let mut d = photos_w2_support::driver();
+    let (album, page) = photos_album_page(&mut d);
+    photos_rename_album(&mut d, page, "Portugal");
+
+    // Another surface renames it again: the Undo no longer fits, and the later name stays.
+    photos_w2_support::arrange(
+        &d,
+        act::photos::RenameAlbum {
+            album_id: album,
+            title: "Elsewhere".to_owned(),
+        },
+    );
+    status_acted(&mut d, page);
+    let status = photos_shelf(&d, page).status.clone().expect("a line");
+    assert!(status.refused);
+    assert_eq!(status.action_label, "");
+    assert!(!status.sentence.is_empty());
+    // The page reads again, and the later name is what the vault holds.
+    d.send(page, wire::screen_event::Kind::Appeared(wire::Appeared {}));
+    assert_eq!(photos_shelf(&d, page).title, "Elsewhere");
 }

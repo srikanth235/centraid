@@ -556,7 +556,11 @@ fn an_album_renames_covers_removes_and_deletes() {
     pick(&mut d, shelf, &b);
     assert!(state(&d, shelf).bar.as_ref().unwrap().make_key_enabled);
     send(&mut d, shelf, ev::Kind::CoverChosen(ev::CoverChosen {}));
-    assert!(state(&d, shelf).status.is_none());
+    let status = state(&d, shelf).status.clone().expect("a line");
+    assert_eq!(
+        (status.sentence.as_str(), status.action_label.as_str()),
+        ("Cover changed", "Undo")
+    );
 
     // Remove takes the reference and never the photograph.
     tap(&mut d, shelf, Verb::RemoveFromAlbum);

@@ -33,6 +33,7 @@ use super::album_choice;
 use super::cells::{self, Link};
 use crate::catalog::load;
 use crate::kit::read::{self, Reading};
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, photos as words};
 
@@ -58,7 +59,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         next: None,
         taken: BTreeSet::new(),
         picked: Vec::new(),
-        status: None,
+        undo: Undo::default(),
         finished: false,
     }))
 }
@@ -80,7 +81,9 @@ struct Picker {
     next: Option<wire::PhotosCursor>,
     taken: BTreeSet<String>,
     picked: Vec<String>,
-    status: Option<wire::StatusLine>,
+    /// The refusal line, said through the kit's one door. The pick closes on success, so the
+    /// write says nothing and offers no Undo of its own.
+    undo: Undo,
     finished: bool,
 }
 
@@ -227,20 +230,16 @@ impl Picker {
             self.attach_pick(ctx);
             return;
         }
-        self.status = None;
-        let written = album_choice::add(ctx, &self.picked, &self.album_id);
+        self.undo.clear();
+        let written = album_choice::add(ctx, &mut self.undo, &self.picked, &self.album_id, None);
         for id in &written.committed {
             self.taken.insert(id.clone());
         }
         self.picked.retain(|id| !written.committed.contains(id));
+        // The first refusal is the line (a later photograph that landed cleared the door's own);
+        // success ends the pick.
         match written.refusal {
-            Some(sentence) => {
-                self.status = Some(wire::StatusLine {
-                    sentence,
-                    action_label: String::new(),
-                    refused: true,
-                });
-            }
+            Some(sentence) => self.undo.refuse(sentence),
             None => self.finished = true,
         }
     }
@@ -337,7 +336,7 @@ impl Screen for Picker {
                         words::photos_album_refers(locale)
                     },
                     content: Some(content),
-                    status: self.status.clone(),
+                    status: self.undo.status(),
                     finished: self.finished,
                 },
             ))),
@@ -377,7 +376,7 @@ mod tests {
             next: None,
             picked: vec![picked.to_owned()],
             taken: BTreeSet::new(),
-            status: None,
+            undo: Undo::default(),
             finished: false,
         }
     }

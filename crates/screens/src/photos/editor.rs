@@ -35,6 +35,7 @@ use crate::catalog::{act, load};
 use crate::field::Field;
 use crate::kit::act as kit_act;
 use crate::kit::read::{self, Reading};
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, photos as words, photos_lightbox as own, shared};
 
@@ -380,6 +381,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         saved_route: None,
         rendering: None,
         crop_touched: false,
+        undo: Undo::default(),
     }))
 }
 
@@ -412,6 +414,8 @@ struct Editor {
     /// The member moved, resized or ratio-picked the crop: a straighten leaves it alone.
     /// Until then the crop is the frame a straighten leaves full of photograph.
     crop_touched: bool,
+    /// The kit's one door; the save leaves the page, so it only ever holds a refusal.
+    undo: Undo,
 }
 
 /// The plan a render was asked for, so a settle for a plan the member has since
@@ -594,7 +598,9 @@ impl Editor {
             &["edit", &self.photo_id, &rendered.content_hash],
             kit_act::fresh(),
         );
-        let settled = kit_act::act(
+        // The editor leaves for the new photograph on success, so the write says nothing here (the
+        // new photograph is in the library, and the lightbox moves it to trash with Undo).
+        let settled = self.undo.act_quietly(
             ctx,
             act::photos::Upload {
                 blob: rendered.content_hash,
