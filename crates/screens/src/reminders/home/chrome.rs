@@ -67,7 +67,11 @@ pub fn header(locale: Locale, shown: bool) -> wire::AgendaCalendarHeader {
 
 /// REMINDERS' SHEET: the places that are not on the home (Anytime, Logbook, Reminders and the trash),
 /// the phone's Reminders import where the platform has one, and what Reminders may read.
-pub fn more_rows(locale: Locale, has_source: bool, following: bool) -> Vec<wire::AgendaMoreRow> {
+pub fn more_rows(
+    locale: Locale,
+    has_source: bool,
+    following: Option<bool>,
+) -> Vec<wire::AgendaMoreRow> {
     let mut out: Vec<wire::AgendaMoreRow> = Vec::new();
     let place = |key: &str, label: String, meta: String, icon: &str, route: wire::Route| {
         wire::AgendaMoreRow {
@@ -124,7 +128,9 @@ pub fn more_rows(locale: Locale, has_source: bool, following: bool) -> Vec<wire:
     // THE STOP SLOT (as Calendar's, Health's and People's): "Stop reading Phone reminders" while
     // Reminders reads the phone, "Turn on Phone reminders" otherwise, so the slot is never empty.
     // Only where the platform has a Reminders store (iOS); Android shows neither.
-    if has_source {
+    // `following` is what the vault stores; while that read has not landed the slot says nothing
+    // rather than a wrong thing.
+    if let (true, Some(following)) = (has_source, following) {
         let store = reminders::phone_reminders(locale);
         let (key, label, icon) = if following {
             (

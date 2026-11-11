@@ -8,7 +8,9 @@
 #[path = "schedule_routes/mod.rs"]
 mod routes;
 use centraid_api_proto::core_v1 as wire;
+use centraid_screens::catalog::act;
 use centraid_screens::custody::secrets::VaultSecrets;
+use centraid_screens::field::Keyed;
 use centraid_screens::testing::Driver;
 use centraid_screens::{Runtime, agenda, imports};
 use wire::agenda_home_event::Kind as H;
@@ -329,11 +331,6 @@ fn after_the_import_the_slot_stops_asks_first_and_after_a_stop_turns_on_again() 
         wire::agenda_home_event::ImportRemindersSubmitted {},
     ));
     r.answer(reminders(&[("Renew passport", false)]));
-    let home = r.home;
-    r.d.send(
-        home,
-        E::DataChanged(wire::DataChanged { tables: Vec::new() }),
-    );
 
     // THE SLOT SWAPS: Stop is in the place of Turn on, never both and never neither.
     let keys = r.more_keys();
@@ -399,4 +396,57 @@ fn after_the_import_the_slot_stops_asks_first_and_after_a_stop_turns_on_again() 
     r.d.effects.clear();
     r.send(H::StopConfirmed(wire::agenda_home_event::StopConfirmed {}));
     assert!(r.d.effects.is_empty());
+}
+
+#[test]
+fn a_cold_start_reads_the_stored_follow_and_stop_works_from_it() {
+    let mut r = rig("ios");
+    // Nothing is followed: the slot offers Turn on.
+    assert!(r.more_keys().contains(&"turn-on".to_owned()));
+    // The vault follows a list of the phone's Reminders (a pass in an earlier launch stored it);
+    // THIS runtime has run no pass and holds nothing in memory about one.
+    let followed = r.d.act(
+        wire::ActRequest::from(act::reminders::FollowReminders {
+            origin: serde_json::json!({ "ref": "list-1", "label": "Home" }).to_string(),
+            records: serde_json::json!([{
+                "external_id": "r1",
+                "fields": { "title": "Renew passport", "status": "open", "done_at": null },
+            }])
+            .to_string(),
+            complete: Some(false),
+            since: None,
+        })
+        .keyed("arrange:cold-start".to_owned()),
+    );
+    assert_eq!(
+        followed.status,
+        wire::ActStatus::Executed as i32,
+        "{}",
+        followed.reason
+    );
+    r.d.send(r.home, E::Appeared(wire::Appeared {}));
+
+    // THE ROW SAYS WHAT IS STORED: Stop, never Turn on while the phone is followed.
+    let keys = r.more_keys();
+    assert!(
+        keys.contains(&"stop".to_owned()) && !keys.contains(&"turn-on".to_owned()),
+        "{keys:?}"
+    );
+
+    // And Stop works from that state: it retires the stored list and the row swaps.
+    r.send(H::MoreRow(wire::agenda_home_event::MoreRowPicked {
+        key: "stop".to_owned(),
+    }));
+    assert!(r.state().stop.is_some());
+    r.d.effects.clear();
+    r.send(H::StopConfirmed(wire::agenda_home_event::StopConfirmed {}));
+    let keys = r.more_keys();
+    assert!(
+        keys.contains(&"turn-on".to_owned()) && !keys.contains(&"stop".to_owned()),
+        "{keys:?}"
+    );
+    assert_eq!(
+        r.state().status.as_ref().map(|s| s.sentence.as_str()),
+        Some("Reminders stopped reading your phone reminders.")
+    );
 }

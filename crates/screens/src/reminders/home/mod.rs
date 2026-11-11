@@ -66,6 +66,9 @@ pub(super) struct Home {
     sheet: Sheet,
     /// The stop confirm is up.
     asking_stop: bool,
+    /// The lists the vault follows from the phone's Reminders (their origin refs), as it stores
+    /// them; `None` until that read has landed (and where the platform has no such store).
+    followed: Option<Vec<String>>,
     /// The Import reminders sheet's option "Include completed reminders"; off each time it opens.
     import_completed: bool,
     filing_task_id: String,
@@ -103,6 +106,7 @@ impl Home {
             search_term: String::new(),
             sheet: Sheet::None,
             asking_stop: false,
+            followed: None,
             import_completed: false,
             filing_task_id: String::new(),
             style: None,
@@ -135,6 +139,10 @@ impl Home {
     fn refresh(&mut self, ctx: &Ctx) {
         self.invalidate();
         self.read(ctx);
+        // THE STOP SLOT reads what the vault stores, so a cold start says the right thing.
+        if ctx.reminders_source() {
+            self.followed = crate::imports::reminders::followed_lists(ctx);
+        }
     }
 
     fn close_search(&mut self) {
@@ -449,15 +457,12 @@ impl Home {
         if self.denied() {
             return Vec::new();
         }
-        chrome::more_rows(ctx.locale(), ctx.reminders_source(), self.following(ctx))
+        chrome::more_rows(ctx.locale(), ctx.reminders_source(), self.following())
     }
 
-    /// Whether Reminders reads the phone's: a pass has said which lists it follows.
-    fn following(&self, ctx: &Ctx) -> bool {
-        !ctx.follows()
-            .report(crate::follow::Store::Reminders)
-            .origins
-            .is_empty()
+    /// Whether the vault follows the phone's Reminders, as it stores it; `None` while unknown.
+    fn following(&self) -> Option<bool> {
+        self.followed.as_ref().map(|lists| !lists.is_empty())
     }
 
     /// STOP READING, once the member said so: every list the passes followed is retired
@@ -469,11 +474,7 @@ impl Home {
             return Vec::new();
         }
         let mut clean = true;
-        for origin in ctx
-            .follows()
-            .report(crate::follow::Store::Reminders)
-            .origins
-        {
+        for origin in self.followed.clone().unwrap_or_default() {
             let request = act::reminders::StopFollowing {
                 r#ref: origin.clone(),
             };
@@ -486,7 +487,6 @@ impl Home {
             self.ops.line.refuse(shared::write_refused(locale));
             return Vec::new();
         }
-        ctx.follows().stopped(crate::follow::Store::Reminders);
         self.ops.say(reminders::reminders_stopped(locale));
         self.refresh(ctx);
         vec![crate::imports::reminders::habit_clear()]
@@ -619,7 +619,7 @@ impl Screen for Home {
                     more_rows: if denied {
                         Vec::new()
                     } else {
-                        chrome::more_rows(locale, ctx.reminders_source(), self.following(ctx))
+                        chrome::more_rows(locale, ctx.reminders_source(), self.following())
                     },
                     search_corrected: corrected,
                     // THE ASK ROW: for the answer to the term on screen, matched or not.

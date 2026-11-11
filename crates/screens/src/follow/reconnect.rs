@@ -63,7 +63,14 @@ fn stores(ctx: &Ctx) -> Reading<Vec<wire::FollowedStore>> {
         ctx,
         load::shell::FollowedStores::default(),
         |answer| match answer {
-            Answer::FollowedStores(held) => Some(held.stores),
+            // The Reconnect page asks the phone about its own stores; Reminders' lists are
+            // Reminders' (its More sheet reads them).
+            Answer::FollowedStores(held) => Some(
+                held.stores
+                    .into_iter()
+                    .filter(|store| store.system != crate::imports::reminders::SYSTEM)
+                    .collect(),
+            ),
             _ => None,
         },
     )

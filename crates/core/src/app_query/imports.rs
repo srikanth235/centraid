@@ -66,8 +66,8 @@ pub(crate) fn followed_stores(door: &VaultDoor<'_>) -> Result<Answer> {
             PageOrder::asc("id", "id"),
         )
         .filter(
-            "system IN (?, ?, ?, ?)",
-            ["contacts", "calendar", "files", "health"]
+            "system IN (?, ?, ?, ?, ?)",
+            ["contacts", "calendar", "files", "health", "phone_reminders"]
                 .map(|system| PageBindValue::Text(system.to_owned()))
                 .to_vec(),
         );

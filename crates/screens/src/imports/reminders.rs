@@ -58,6 +58,33 @@ fn habit(op: wire::keychain_op::Op, value: Vec<u8>) -> wire::Effect {
     }
 }
 
+/// The vault's name for the phone's Reminders as a followed system (`origin.system`).
+pub(crate) const SYSTEM: &str = "phone_reminders";
+
+/// THE LISTS THE VAULT FOLLOWS from the phone's Reminders, by their origin refs, read from what is
+/// stored (a stopped follow deletes its origin), never from what a pass has done since launch.
+/// `None` when the read did not land: the caller says nothing about it, rather than a wrong thing.
+#[must_use]
+pub(crate) fn followed_lists(ctx: &Ctx) -> Option<Vec<String>> {
+    match read::read(
+        ctx,
+        load::shell::FollowedStores::default(),
+        |answer| match answer {
+            Answer::FollowedStores(held) => Some(held.stores),
+            _ => None,
+        },
+    ) {
+        Reading::Data(stores) => Some(
+            stores
+                .into_iter()
+                .filter(|store| store.system == SYSTEM)
+                .map(|store| store.origin_ref)
+                .collect(),
+        ),
+        _ => None,
+    }
+}
+
 /// This device no longer follows its Reminders.
 #[must_use]
 pub(crate) fn habit_clear() -> wire::Effect {
@@ -350,7 +377,6 @@ pub fn run(ctx: &Ctx, reminders: &[wire::PhoneReminder], include_completed: bool
         }
     }
     outcome.read = u32::try_from(made.len()).unwrap_or(u32::MAX);
-    let mut followed = Vec::new();
     for (reference, group) in by_list {
         let first = group[0];
         let project = list_for(ctx, first, &mut held, &mut outcome);
@@ -376,7 +402,6 @@ pub fn run(ctx: &Ctx, reminders: &[wire::PhoneReminder], include_completed: bool
             continue;
         }
         outcome.told = true;
-        followed.push(reference.clone());
         let output: Value = serde_json::from_slice(&settled.output).unwrap_or(Value::Null);
         let count = |name: &str| {
             output
@@ -388,11 +413,6 @@ pub fn run(ctx: &Ctx, reminders: &[wire::PhoneReminder], include_completed: bool
         outcome.added += count("added") + count("matched");
         outcome.refused += count("refused");
         outcome.doubted += count("doubted");
-    }
-    // WHICH LISTS ARE FOLLOWED, so the More sheet can stop them (`stop-following` names each).
-    if !followed.is_empty() {
-        ctx.follows()
-            .followed_origins(crate::follow::Store::Reminders, &followed);
     }
     ctx.follows().judged(
         crate::follow::Store::Reminders,

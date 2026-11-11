@@ -32,6 +32,15 @@ fn followed(ctx: &Ctx, outcome: &reminders::Outcome) -> Vec<wire::Effect> {
         return Vec::new();
     }
     ctx.follows().changed(ctx, crate::follow::Store::Reminders);
+    // Reminders' More sheet says "Stop reading" now: its home reads what the vault stores again.
+    ctx.post(
+        crate::reminders::HOME,
+        wire::ScreenEvent {
+            kind: Some(wire::screen_event::Kind::DataChanged(wire::DataChanged {
+                tables: Vec::new(),
+            })),
+        },
+    );
     vec![reminders::habit_set()]
 }
 
