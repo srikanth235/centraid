@@ -89,8 +89,8 @@ class DocsQueryRoundTripSpec : StringSpec({
             row.folder_id shouldBe folder
             row.surface shouldBe DocsSurface.DOCS_SURFACE_READING
             row.kind_name shouldBe "Document"
-            // A PHRASE, formatted by the core — never a byte count in a view.
-            row.size shouldBe "11 bytes"
+            // The byte count; the screens word it through kit::quantity.
+            row.byte_size shouldBe 11L
             row.updated_local shouldStartWith all.today
 
             val inFolder = core.drive(
