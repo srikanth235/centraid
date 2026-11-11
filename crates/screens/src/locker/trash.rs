@@ -22,6 +22,7 @@ use crate::strings::{locker as words, shared as kit_words};
 
 /// Locker's trash, as the kit's screen takes it.
 pub static SPEC: TrashSpec = TrashSpec {
+    of_row: None,
     app: act::locker::APP,
     icon_key: "Key",
     noun: kit_words::trash_noun_item,

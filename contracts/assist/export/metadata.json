@@ -4135,6 +4135,24 @@
         "verb": "delete"
       },
       {
+        "action": "restore-list",
+        "also": [],
+        "app": "people",
+        "bulk": false,
+        "chat": "card",
+        "command": "entity.restore",
+        "inverse": null,
+        "kind": "people_list",
+        "phrasings": [
+          "bring the Family list back",
+          "restore the Work list",
+          "undelete the college friends list"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "restore"
+      },
+      {
         "action": "add-journal-entry",
         "also": [],
         "app": "people",

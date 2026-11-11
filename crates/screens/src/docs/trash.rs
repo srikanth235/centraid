@@ -18,6 +18,7 @@ use crate::strings::{Locale, docs as words, shared};
 
 /// Docs' trash, as the kit's screen takes it.
 pub static SPEC: TrashSpec = TrashSpec {
+    of_row: None,
     app: act::docs::APP,
     icon_key: "FileText",
     noun: shared::trash_noun_document,

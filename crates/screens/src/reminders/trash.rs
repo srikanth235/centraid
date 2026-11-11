@@ -18,6 +18,7 @@ use crate::strings::{Locale, agenda_reminders::reminders_title, shared, task as 
 
 /// Reminders' trash, as the kit's screen takes it.
 pub static SPEC: TrashSpec = TrashSpec {
+    of_row: None,
     app: act::reminders::APP,
     icon_key: "Todo",
     noun: shared::trash_noun_task,

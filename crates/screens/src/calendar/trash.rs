@@ -19,6 +19,7 @@ use crate::strings::{Locale, agenda as words, shared};
 
 /// Calendar's trash, as the kit's screen takes it.
 pub static SPEC: TrashSpec = TrashSpec {
+    of_row: None,
     app: act::calendar::APP,
     icon_key: "Calendar",
     noun: shared::trash_noun_event,

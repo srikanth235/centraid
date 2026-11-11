@@ -5029,6 +5029,26 @@ pub mod act {
             }
         }
 
+        /// Restore a trashed list through entity.restore; the people in it are in it again. The screen's Undo of a list's delete sends it.
+        #[derive(Clone, Debug, Default)]
+        pub struct RestoreList {
+            pub people_list_id: String,
+        }
+        impl RestoreList {
+            pub const NAME: &str = "restore-list";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("id".to_owned(), text(self.people_list_id));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<RestoreList> for wire::ActRequest {
+            fn from(value: RestoreList) -> Self {
+                value.request()
+            }
+        }
+
         /// Add an owner-level journal entry with a mood and a line about your day through person.add_journal_entry: a note about you, titled by the mood, filed on its own day.
         #[derive(Clone, Debug, Default)]
         pub struct AddJournalEntry {

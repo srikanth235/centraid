@@ -20,6 +20,7 @@ use crate::strings::{Locale, health as words, shared};
 
 /// Health's trash, as the kit's screen takes it.
 pub static SPEC: TrashSpec = TrashSpec {
+    of_row: None,
     app: act::health::APP,
     icon_key: "Activity",
     noun: shared::trash_noun_workout,

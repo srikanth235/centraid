@@ -100,6 +100,9 @@ fn day_meta(locale: Locale, verb: String, local_day: &str) -> String {
     }
 }
 
+/// The restore and the move back to the trash of one row.
+pub type RowWrites = (wire::ActRequest, wire::ActRequest);
+
 /// ONE APP'S TRASH, as the parameter the one trash screen takes. Every field is
 /// required: every app can move a record to trash, restore it, delete it forever
 /// and empty the trash, and says so in the same words (#1185).
@@ -123,6 +126,10 @@ pub struct TrashSpec {
     pub trash: fn(&str) -> wire::ActRequest,
     /// Bring a row back.
     pub restore: fn(&str) -> wire::ActRequest,
+    /// The restore (`.0`) and the move back to the trash (`.1`) of ONE row, where the row is a
+    /// different kind than the app's records (a People list among the people): `None` for a row
+    /// that takes the app's own.
+    pub of_row: Option<fn(&TrashItem) -> Option<RowWrites>>,
     /// Destroy a row now.
     pub purge: fn(&str) -> wire::ActRequest,
     /// Destroy every row now.
@@ -160,8 +167,8 @@ struct Trash {
     /// A refusal's sentence, or "{title} restored" with Undo, until the next
     /// attempt.
     status: Option<wire::StatusLine>,
-    /// The row a restore just brought back, which Undo puts back in the trash.
-    undo: Option<(String, String)>,
+    /// The row a restore just brought back, and the write that puts it back in the trash (Undo).
+    undo: Option<(String, String, wire::ActRequest)>,
     asking: Asking,
 }
 
@@ -176,6 +183,19 @@ impl Trash {
 
     fn shown(&self, id: &str) -> bool {
         matches!(&self.phase, Phase::Ready(items) if items.iter().any(|item| item.id == id))
+    }
+
+    /// The writes for `id`'s row: the restore, and the move back to the trash. A row of another
+    /// kind than the app's records takes its own (`TrashSpec::of_row`).
+    fn writes_for(&self, id: &str) -> (wire::ActRequest, wire::ActRequest) {
+        let own = match &self.phase {
+            Phase::Ready(items) => items
+                .iter()
+                .find(|item| item.id == id)
+                .and_then(|item| self.spec.of_row.and_then(|of_row| of_row(item))),
+            _ => None,
+        };
+        own.unwrap_or_else(|| ((self.spec.restore)(id), (self.spec.trash)(id)))
     }
 
     /// What a row is called on screen: its title, or the kit's "Untitled".
@@ -241,23 +261,24 @@ impl Trash {
     fn restore(&mut self, ctx: &Ctx, id: &str) {
         let locale = ctx.locale();
         let name = self.name_of(locale, id);
-        if self.write(ctx, (self.spec.restore)(id), id) {
+        let (restore, trash) = self.writes_for(id);
+        if self.write(ctx, restore, id) {
             self.status = Some(wire::StatusLine {
                 sentence: restored(locale, &name),
                 action_label: shared::trash_undo(locale),
                 refused: false,
             });
-            self.undo = Some((id.to_owned(), name));
+            self.undo = Some((id.to_owned(), name, trash));
         }
     }
 
     /// Undo of a restore: the row goes back in the trash.
     fn undone(&mut self, ctx: &Ctx) {
-        let Some((id, name)) = self.undo.take() else {
+        let Some((id, name, trash)) = self.undo.take() else {
             return;
         };
         let locale = ctx.locale();
-        if self.write(ctx, (self.spec.trash)(&id), &id) {
+        if self.write(ctx, trash, &id) {
             self.status = Some(wire::StatusLine {
                 sentence: moved_to_trash(locale, &name),
                 action_label: String::new(),

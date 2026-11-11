@@ -19,6 +19,7 @@ use crate::strings::{money as words, shared};
 
 /// Money's trash, as the kit's screen takes it.
 pub static SPEC: TrashSpec = TrashSpec {
+    of_row: None,
     app: act::money::APP,
     icon_key: "Coin",
     noun: shared::trash_noun_transaction,

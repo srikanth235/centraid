@@ -161,6 +161,7 @@ people,add-gift,create,gift,card,no,no
 people,create-list,create,people_list,card,no,no
 people,rename-list,edit,people_list,card,no,no
 people,delete-list,delete,people_list,card,no,no
+people,restore-list,restore,people_list,card,yes: crates/screens/src/people/lists.rs,no
 people,add-journal-entry,create,journal_entry,card,no,no
 people,save-contact-channel,edit,contact_point,card,yes: crates/screens/src/people/person/mod.rs,no
 people,delete-contact-channel,delete,contact_point,card,yes: crates/screens/src/people/person/mod.rs,no

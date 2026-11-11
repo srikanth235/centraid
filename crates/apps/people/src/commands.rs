@@ -112,7 +112,7 @@ pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
 /// THE TABLE. Thirty-two actions, in the manifest's own order.
-pub const ACTIONS: [ActionRow; 35] = [
+pub const ACTIONS: [ActionRow; 36] = [
     // THE GENERAL LINK (#1185): any item to any other, and the link taken off.
     act("link", "edge.add"),
     act("unlink", "edge.remove"),
@@ -139,6 +139,9 @@ pub const ACTIONS: [ActionRow; 35] = [
     act("create-list", "container.create"),
     act("rename-list", "entity.retitle"),
     confirmed("delete-list", "entity.trash"),
+    // THE SCREEN'S UNDO of a list's delete (a chat card, like the delete: the kit derives a
+    // direct action from an inverse, which needs the kind declared).
+    confirmed("restore-list", "entity.restore"),
     act("add-journal-entry", "person.add_journal_entry"),
     act("save-contact-channel", "person.save_contact_point"),
     confirmed("delete-contact-channel", "person.remove_contact_point"),
@@ -216,7 +219,7 @@ mod tests {
 
     #[test]
     fn every_action_invokes_one_command_and_the_person_verbs_are_the_persons_own() {
-        assert_eq!(ACTIONS.len(), 35);
+        assert_eq!(ACTIONS.len(), 36);
         assert_eq!(
             commands("person."),
             [
@@ -269,6 +272,7 @@ mod tests {
                 "empty-trash",
                 "remove-relationship",
                 "delete-list",
+                "restore-list",
                 "delete-contact-channel",
                 "merge-people",
                 "stop-following",

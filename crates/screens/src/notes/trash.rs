@@ -21,6 +21,7 @@ use crate::strings::{notes as words, shared};
 
 /// Notes' trash, as the kit's screen takes it.
 pub static SPEC: TrashSpec = TrashSpec {
+    of_row: None,
     app: act::notes::APP,
     icon_key: "FileText",
     noun: shared::trash_noun_note,

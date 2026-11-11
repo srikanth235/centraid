@@ -26,6 +26,12 @@ use crate::strings::{people as words, shared};
 
 /// People's trash, as the kit's screen takes it.
 pub static SPEC: TrashSpec = TrashSpec {
+    // A LIST IS A ROW OF THE SAME SHELF: its restore and its move back are the list's own actions.
+    of_row: Some(|item| {
+        item.noun?;
+        let (delete, restore) = super::lists::trash_pair(&item.id);
+        Some((restore, delete))
+    }),
     app: act::people::APP,
     icon_key: "User",
     noun: shared::trash_noun_person,

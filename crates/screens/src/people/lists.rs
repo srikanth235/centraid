@@ -167,15 +167,12 @@ impl Lists {
             return;
         };
         let key = kit_act::key(&["delete-list", &id], kit_act::fresh());
-        let settled = self.undo.act_reverting(
-            ctx,
-            act::people::DeleteList {
-                people_list_id: id.clone(),
-            },
-            act::people::RestorePerson { person_id: id },
-            &key,
-            |locale| moved_to_trash(locale, &name),
-        );
+        let (delete, restore) = trash_pair(&id);
+        let settled = self
+            .undo
+            .act_reverting(ctx, delete, restore, &key, |locale| {
+                moved_to_trash(locale, &name)
+            });
         if settled.committed {
             self.sheet = None;
             self.reload(ctx);
@@ -316,5 +313,36 @@ impl Screen for Lists {
             )),
             ..wire::ViewState::default()
         }
+    }
+}
+
+/// A list's move to the trash and its restore, as the list's own actions: Undo of the delete sends
+/// `restore-list` (never the person's `restore-person`), and People's trash restores a list the
+/// same way.
+#[must_use]
+pub(crate) fn trash_pair(list_id: &str) -> (wire::ActRequest, wire::ActRequest) {
+    (
+        act::people::DeleteList {
+            people_list_id: list_id.to_owned(),
+        }
+        .into(),
+        act::people::RestoreList {
+            people_list_id: list_id.to_owned(),
+        }
+        .into(),
+    )
+}
+
+#[cfg(test)]
+mod pair_tests {
+    use super::trash_pair;
+
+    #[test]
+    fn a_lists_delete_and_restore_are_the_lists_own_actions() {
+        let (delete, restore) = trash_pair("list-1");
+        assert_eq!(delete.action, "delete-list");
+        assert_eq!(restore.action, "restore-list");
+        assert_ne!(restore.action, "restore-person");
+        assert!(!restore.input.is_empty() && !delete.input.is_empty());
     }
 }

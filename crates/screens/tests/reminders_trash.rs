@@ -333,6 +333,7 @@ mod kit {
         load: two_rows,
         trash: trash_marker,
         restore,
+        of_row: None,
         purge,
         empty,
     };
@@ -362,6 +363,7 @@ mod kit {
             load: two_rows,
             trash: trash_marker,
             restore,
+            of_row: None,
             purge,
             empty,
         }
