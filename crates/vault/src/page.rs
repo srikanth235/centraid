@@ -514,8 +514,6 @@ fn tenths(count: i64, unit: i64) -> (i64, i64) {
 /// - `locker.*`: Locker's own reads, behind its gate on the shell;
 /// - `home.locker`: Home's count of Locker's items, which selects ids and
 ///   nothing a member wrote;
-/// - `notes.cards.entity`, `notes.library.links` and `notes.library.backlinks`:
-///   a note's link to an item and the card that renders its title (L8);
 /// - `assist.native.*`: the assistant's reads. It has the owner's access to a
 ///   Locker item's plain rows (the owner's ruling of 2026-10-22), and no
 ///   access to a sealed value, which [`withholds_sealed_value`] holds for it.
@@ -525,15 +523,7 @@ fn tenths(count: i64, unit: i64) -> (i64, i64) {
 /// either.
 #[must_use]
 pub fn reaches_locker(name: &str) -> bool {
-    name.starts_with("locker.")
-        || name.starts_with(ASSISTANT_READ)
-        || matches!(
-            name,
-            "home.locker"
-                | "notes.cards.entity"
-                | "notes.library.links"
-                | "notes.library.backlinks"
-        )
+    name.starts_with("locker.") || name.starts_with(ASSISTANT_READ) || name == "home.locker"
 }
 
 /// The prefix of the assistant's reads of the vault's tables.
