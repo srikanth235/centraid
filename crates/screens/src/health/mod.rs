@@ -10,6 +10,7 @@
 //! | One workout | [`WORKOUT`] | [`workout`] |
 //! | What Health may read, and Connect | [`CONNECT`] | [`connect`] |
 //! | Earlier versions of a workout | [`EARLIER`] | [`earlier`] |
+//! | Export daily totals or workouts | [`EXPORT`] | [`export`] |
 //!
 //! ## Reads and writes
 //!
@@ -38,6 +39,7 @@ use crate::strings::{Locale, health as words};
 
 pub mod connect;
 pub mod earlier;
+pub mod export;
 pub mod figures;
 pub mod follow;
 pub mod highlights;
@@ -56,6 +58,8 @@ pub const SEARCH: &str = "health.search";
 pub const TRASH: &str = "health.trash";
 /// The earlier versions of a workout (#1185).
 pub const EARLIER: &str = "health.earlier";
+/// Health's export of daily totals and workouts as a spreadsheet file (#1185).
+pub const EXPORT: &str = "health.export";
 
 /// The tab Health's pages are pushed under.
 pub const TAB: &str = "health";
@@ -70,6 +74,7 @@ pub fn registry() -> Registry {
         .with(CONNECT, connect::build)
         .with(TRASH, trash::build)
         .with(EARLIER, earlier::build)
+        .with(EXPORT, export::build)
         .with(SEARCH, crate::shell::search::build_health)
 }
 

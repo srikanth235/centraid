@@ -2023,6 +2023,68 @@ pub mod act {
                 value.request()
             }
         }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum ExportCsvWhat {
+            #[default]
+            Measurements,
+            Workouts,
+        }
+        impl ExportCsvWhat {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Measurements => "measurements",
+                    Self::Workouts => "workouts",
+                }
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum ExportCsvMetric {
+            #[default]
+            Steps,
+            ActiveEnergyKcal,
+            ExerciseMin,
+            SleepMin,
+            RestingHrBpm,
+            WeightKg,
+        }
+        impl ExportCsvMetric {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Steps => "steps",
+                    Self::ActiveEnergyKcal => "active_energy_kcal",
+                    Self::ExerciseMin => "exercise_min",
+                    Self::SleepMin => "sleep_min",
+                    Self::RestingHrBpm => "resting_hr_bpm",
+                    Self::WeightKg => "weight_kg",
+                }
+            }
+        }
+
+        /// Answer the daily totals (every metric's or one metric's) or the workouts (every one, or one) as a spreadsheet file (.csv) through health.export_csv. Writes nothing.
+        #[derive(Clone, Debug, Default)]
+        pub struct ExportCsv {
+            pub what: ExportCsvWhat,
+            pub workout_id: Field<String>,
+            pub metric: Option<ExportCsvMetric>,
+        }
+        impl ExportCsv {
+            pub const NAME: &str = "export-csv";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("what".to_owned(), text(self.what.wire()));
+                put_field(&mut map, "id", self.workout_id, |it| text(it));
+                if let Some(it) = self.metric { map.insert("metric".to_owned(), text(it.wire())); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<ExportCsv> for wire::ActRequest {
+            fn from(value: ExportCsv) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod locker {

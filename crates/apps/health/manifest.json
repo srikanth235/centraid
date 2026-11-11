@@ -75,6 +75,11 @@
         "verbs": "act"
       },
       {
+        "schema": "health",
+        "table": "export_csv",
+        "verbs": "act"
+      },
+      {
         "schema": "measurement",
         "table": "log",
         "verbs": "act"
@@ -1101,6 +1106,51 @@
           "reason": {
             "type": "string"
           }
+        }
+      }
+    },
+    {
+      "name": "export-csv",
+      "verb": "log",
+      "bulk": true,
+      "kind": "workout",
+      "inverse": null,
+      "writes_nothing": true,
+      "sealed": [],
+      "command": "health.export_csv",
+      "phrasings": [
+        "export my health data as a spreadsheet",
+        "save my workouts as a csv file",
+        "send someone this workout as a csv file"
+      ],
+      "description": "Answer the daily totals (every metric's or one metric's) or the workouts (every one, or one) as a spreadsheet file (.csv) through health.export_csv. Writes nothing.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "what": { "enum": ["measurements", "workouts"] },
+          "metric": {
+            "enum": [
+              "steps",
+              "active_energy_kcal",
+              "exercise_min",
+              "sleep_min",
+              "resting_hr_bpm",
+              "weight_kg",
+              null
+            ]
+          },
+          "id": { "type": ["string", "null"] }
+        },
+        "required": ["what"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
         }
       }
     }

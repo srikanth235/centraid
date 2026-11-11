@@ -73,6 +73,13 @@ catalog! {
     plain fact_lowest_month = ("Lowest month", "Lowest month");
     plain fact_lowest_week = ("Lowest week", "Lowest week");
     plain fact_total = ("Total", "Total");
+    plain export_lede = (
+        "Daily totals or workouts in one .csv file, for any spreadsheet.",
+        "Daily totals or workouts in one .csv file, for any spreadsheet."
+    );
+    plain export_totals = ("All daily totals", "All daily totals");
+    plain export_title = ("Export Health", "Export Health");
+    plain export_workouts = ("All workouts", "All workouts");
     plain figure_distance = ("Distance", "Distance");
     plain figure_elevation = ("Elevation gain", "Elevation gain");
     plain figure_energy = ("Active energy", "Active energy");
@@ -114,6 +121,7 @@ catalog! {
     plain metric_steps = ("Steps", "Steps");
     plain metric_weight = ("Weight", "Weight");
     plain more_choose = ("Choose what to read", "Choose what to read");
+    plain more_export_meta = ("Daily totals and workouts as a spreadsheet", "Daily totals and workouts as a spreadsheet");
     plain more_reads = ("What Health may read", "What Health may read");
     plain more_title = ("More", "More");
     plain part_afternoon = ("Afternoon {kind}", "Afternoon {kind}");

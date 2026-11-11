@@ -47,6 +47,7 @@ pub mod arrival;
 pub mod blob;
 pub mod contact_point;
 pub mod container;
+mod csv;
 pub mod document;
 pub mod edge;
 pub mod entity;
@@ -54,6 +55,7 @@ pub mod event;
 pub mod event_portable;
 pub mod flag;
 pub mod follow;
+pub mod health_portable;
 pub mod history;
 pub mod ical;
 pub mod locker;
@@ -304,7 +306,7 @@ impl Registry {
     /// The registry the phone serves: every command this build carries.
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
-        let modules: [fn() -> Vec<CommandDefinition>; 26] = [
+        let modules: [fn() -> Vec<CommandDefinition>; 27] = [
             blob::definitions,
             contact_point::definitions,
             container::definitions,
@@ -329,6 +331,7 @@ impl Registry {
             task_portable::definitions,
             thread::definitions,
             txn_portable::definitions,
+            health_portable::definitions,
             vault::definitions,
             workout::definitions,
         ];

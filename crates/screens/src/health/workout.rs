@@ -17,6 +17,7 @@ use crate::kit::earlier;
 use crate::kit::follow::{self, Source};
 use crate::kit::quantity::Quantity;
 use crate::kit::read;
+use crate::kit::share::{self, Share};
 use crate::kit::trash;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, health as words, shared};
@@ -40,6 +41,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         earlier: earlier::Foot::default(),
         status: None,
         undo: None,
+        share: Share::default(),
     }))
 }
 
@@ -54,6 +56,8 @@ struct WorkoutPage {
     status: Option<wire::StatusLine>,
     /// What the status line's Undo does: put the workout back in the trash, or back in the list.
     undo: Option<Undo>,
+    /// The workout handed to the OS share sheet as a spreadsheet file (#1185).
+    share: Share,
 }
 
 /// The workout the status line's Undo reverses, and which way.
@@ -350,6 +354,7 @@ impl WorkoutPage {
             foot,
             gone: None,
             trash_label: shared::trash_move(locale),
+            share_label: share::label(locale),
             figures_phone_says: phone_says(
                 locale,
                 units,
@@ -371,8 +376,25 @@ impl Screen for WorkoutPage {
                 Some(W::Refreshed(_)) => self.reload(ctx),
                 Some(W::Trash(_)) => self.trash_workout(ctx),
                 Some(W::StatusActed(_)) => self.undone(ctx),
+                Some(W::ShareRequested(_)) => {
+                    if self
+                        .phase
+                        .data()
+                        .is_some_and(|answer| answer.workout.is_some())
+                    {
+                        return self.share.tap(ctx.locale());
+                    }
+                }
                 None => {}
             },
+            // THE SHELL'S ANSWER to the owner check or the share sheet.
+            Some(E::EffectResult(result)) => {
+                let id = self.activity_id.clone();
+                return self.share.result(ctx, &result, |ctx| {
+                    super::export::workouts_file(ctx, Some(&id))
+                });
+            }
+            Some(E::Left(_)) => return self.share.left(),
             _ => {}
         }
         Vec::new()
@@ -416,6 +438,7 @@ impl Screen for WorkoutPage {
                             self.differences
                                 .status(locale, Source::Store(&Store::of(ctx).name(locale)))
                         })
+                        .or_else(|| self.share.status())
                         .or_else(|| self.earlier.status(locale)),
                     earlier: self.earlier.entry.clone(),
                     origin: self.earlier.origin.clone(),

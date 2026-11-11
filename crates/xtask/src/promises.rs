@@ -327,7 +327,11 @@ pub const REGISTER: &[Row] = &[
         "crates/screens/src/calendar/export.rs",
     ),
     owed("docs", Promise::Export, EXPORT_OWED),
-    owed("health", Promise::Export, EXPORT_OWED),
+    kept(
+        "health",
+        Promise::Export,
+        "crates/screens/src/health/export.rs",
+    ),
     // Locker's export keeps its own machine ([`OWN_EXPORT`]).
     kept(
         "locker",
@@ -365,7 +369,11 @@ pub const REGISTER: &[Row] = &[
         Promise::Share,
         "crates/screens/src/docs/document.rs",
     ),
-    owed("health", Promise::Share, SHARE_OWED),
+    kept(
+        "health",
+        Promise::Share,
+        "crates/screens/src/health/workout.rs",
+    ),
     kept(
         "locker",
         Promise::Share,
@@ -511,7 +519,6 @@ pub const REGISTER: &[Row] = &[
 ];
 
 const EXPORT_OWED: &str = "no export screen on the kit's ExportSpec (#1185)";
-const SHARE_OWED: &str = "no share of one record on the kit's share helper (#1185)";
 
 const UNITS_PROOF: &str = "crates/screens/src/kit/quantity.rs";
 

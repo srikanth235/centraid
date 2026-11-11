@@ -463,6 +463,9 @@ message HealthWorkoutData {
   // "Move to trash" (#1185), the destructive control under the figures; empty while the workout is
   // gone. It asks nothing: the status line says what happened with Undo.
   string trash_label = 9;
+  // "Share" (#1185): hands the workout to the OS as a spreadsheet file; empty while the workout
+  // is gone.
+  string share_label = 10;
 }
 
 message HealthWorkoutEvent {
@@ -472,6 +475,8 @@ message HealthWorkoutEvent {
     TrashTapped trash = 2;
     // "Undo" on the status line after Move to trash or its Undo (#1185).
     StatusActed status_acted = 3;
+    // "Share" was tapped (#1185): Rust asks the owner check, then hands the file to the OS.
+    ShareRequested share_requested = 4;
   }
 
   message Refreshed {}
@@ -479,6 +484,8 @@ message HealthWorkoutEvent {
   message TrashTapped {}
 
   message StatusActed {}
+
+  message ShareRequested {}
 }
 
 // ---------------------------------------------------------------------------

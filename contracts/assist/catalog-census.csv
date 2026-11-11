@@ -58,6 +58,7 @@ health,log-figure,create,daily_figure,direct,no,yes
 health,clear-figure,delete,daily_figure,direct,no,yes
 health,attach,attach,workout,card,no,no
 health,detach,detach,workout,card,no,no
+health,export-csv,log,workout,card,no,no
 locker,add-item,create,locker_item,direct,yes: crates/screens/src/locker/editor.rs,yes
 locker,edit-item,edit,locker_item,direct,yes: crates/screens/src/locker/editor.rs,yes
 locker,trash-item,delete,locker_item,direct,yes: crates/screens/src/locker/item.rs,yes

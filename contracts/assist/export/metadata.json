@@ -2261,6 +2261,24 @@
         "verb": "detach"
       },
       {
+        "action": "export-csv",
+        "also": [],
+        "app": "health",
+        "bulk": true,
+        "chat": "card",
+        "command": "health.export_csv",
+        "inverse": null,
+        "kind": "workout",
+        "phrasings": [
+          "export my health data as a spreadsheet",
+          "save my workouts as a csv file",
+          "send someone this workout as a csv file"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "log"
+      },
+      {
         "action": "add-item",
         "also": [],
         "app": "locker",

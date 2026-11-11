@@ -332,15 +332,15 @@ fn the_trash_deletes_forever_and_empties_in_the_shared_words() {
 }
 
 #[test]
-fn more_holds_the_trash_between_the_reads_and_the_stop() {
+fn more_holds_the_trash_between_the_export_and_the_stop() {
     let mut d = seeded();
     two_followed(&d);
     let home = root(&d);
     home_event(&mut d, home, he::Kind::ShowMore(he::ShowMore {}));
     let state = home_state(d.view(home));
     let keys: Vec<&str> = state.more_rows.iter().map(|row| row.key.as_str()).collect();
-    assert_eq!(keys, ["reads", "choose", "trash", "stop"]);
-    let row = &state.more_rows[2];
+    assert_eq!(keys, ["reads", "choose", "export", "trash", "stop"]);
+    let row = &state.more_rows[3];
     assert_eq!(
         (row.label.as_str(), row.meta.as_str(), row.icon_key.as_str()),
         ("Trash", "30 days, then erased", "Trash")

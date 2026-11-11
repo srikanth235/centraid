@@ -17,7 +17,7 @@ pub const MANIFEST_JSON: &str = include_str!("../manifest.json");
 pub const APP_ID: &str = "health";
 
 /// The action each vault command is declared as.
-pub const ACTIONS: [ActionRow; 16] = [
+pub const ACTIONS: [ActionRow; 17] = [
     // THE GENERAL LINK (#1185): any item to any other, and the link taken off.
     act("link", "edge.add"),
     act("unlink", "edge.remove"),
@@ -38,6 +38,9 @@ pub const ACTIONS: [ActionRow; 16] = [
     // verbs, one pair in every app (the Attach promise, #1185).
     act("attach", "edge.add"),
     act("detach", "edge.remove"),
+    // THE HEALTH DATA AS A FILE (#1185): the More sheet's Export and a workout's Share. It writes
+    // nothing (`writes_nothing`).
+    act("export-csv", "health.export_csv"),
 ];
 
 /// The parsed manifest.

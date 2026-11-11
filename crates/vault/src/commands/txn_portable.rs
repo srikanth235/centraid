@@ -12,6 +12,7 @@
 use rusqlite::Connection;
 use serde_json::Value as Json;
 
+use crate::commands::csv::row;
 use crate::commands::{CommandCtx, CommandDefinition, Idempotency, note};
 use crate::error::Result;
 
@@ -70,21 +71,6 @@ fn decimal(minor: i64, currency: &str) -> String {
         magnitude % scale,
         width = places as usize
     )
-}
-
-/// One field spelled for CSV: quoted when it holds a comma, a quote or a line break.
-fn field(value: &str) -> String {
-    if value.contains([',', '"', '\n', '\r']) {
-        format!("\"{}\"", value.replace('"', "\"\""))
-    } else {
-        value.to_owned()
-    }
-}
-
-fn row(cells: &[&str]) -> String {
-    let mut out = cells.iter().map(|c| field(c)).collect::<Vec<_>>().join(",");
-    out.push_str("\r\n");
-    out
 }
 
 fn lines(connection: &Connection, account: Option<&str>, one: Option<&str>) -> Result<Vec<Line>> {
@@ -207,7 +193,7 @@ pub fn definitions() -> Vec<CommandDefinition> {
 
 #[cfg(test)]
 mod tests {
-    use super::{decimal, field};
+    use super::decimal;
 
     #[test]
     fn amounts_are_plain_decimals_in_the_currencys_own_places() {
@@ -217,13 +203,5 @@ mod tests {
         assert_eq!(decimal(1200, "JPY"), "1200");
         assert_eq!(decimal(-1234, "KWD"), "-1.234");
         assert_eq!(decimal(i64::MIN, "USD"), "-92233720368547758.08");
-    }
-
-    #[test]
-    fn a_field_is_quoted_only_when_it_must_be() {
-        assert_eq!(field("plain"), "plain");
-        assert_eq!(field("a,b"), "\"a,b\"");
-        assert_eq!(field("say \"hi\""), "\"say \"\"hi\"\"\"");
-        assert_eq!(field("one\ntwo"), "\"one\ntwo\"");
     }
 }

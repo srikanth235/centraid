@@ -226,6 +226,12 @@ internal fun HealthWorkoutScreen(
                         if (data.trash_label.isNotEmpty()) {
                             item(key = "trash") {
                                 ChoiceStack(Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 16.dp)) {
+                                    if (data.share_label.isNotEmpty()) {
+                                        OutlineButton(
+                                            data.share_label,
+                                            testTag = "health-action-share",
+                                        ) { onEvent(HealthWorkoutEvent(share_requested = HealthWorkoutEvent.ShareRequested())) }
+                                    }
                                     OutlineButton(
                                         data.trash_label,
                                         testTag = "health-action-trash",

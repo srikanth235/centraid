@@ -34,6 +34,7 @@ use super::{Metric, PINNED, Phase, Store, Units, WIDE_CARDS, denied, highlights,
 use crate::catalog::load;
 use crate::follow::Store as Followed;
 use crate::kit::civil;
+use crate::kit::export;
 use crate::kit::menu;
 use crate::kit::read;
 use crate::screen::{Ctx, Screen};
@@ -53,6 +54,7 @@ const MORE_READS: &str = "reads";
 const MORE_CHOOSE: &str = "choose";
 const MORE_STOP: &str = "stop";
 /// The row to the trash (#1185): a route the shell pushes.
+const MORE_EXPORT: &str = "export";
 const MORE_TRASH: &str = "trash";
 
 /// The kind section's key and its All option's key (`health-filter-kind-all` on a
@@ -551,6 +553,7 @@ impl Home {
     fn more_rows(&self, ctx: &Ctx, connected: bool) -> Vec<wire::HealthMoreRow> {
         let locale = ctx.locale();
         let neutral = wire::status_chip::Tone::Neutral as i32;
+        let export = export::entry(locale, super::EXPORT);
         let mut rows = vec![
             wire::HealthMoreRow {
                 key: MORE_READS.to_owned(),
@@ -567,6 +570,15 @@ impl Home {
                 tone: neutral,
                 route: Some(routes::connect(&words::app_title(locale))),
                 meta: String::new(),
+            },
+            // EXPORT (#1185): the kit's row, the same in every app.
+            wire::HealthMoreRow {
+                key: MORE_EXPORT.to_owned(),
+                label: export.label,
+                icon_key: export.icon_key.to_owned(),
+                tone: neutral,
+                route: Some(export.route),
+                meta: words::more_export_meta(locale),
             },
             // THE TRASH (`MoreHealth.dc.html`), with the rule every trash states.
             wire::HealthMoreRow {

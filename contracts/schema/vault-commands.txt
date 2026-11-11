@@ -45,6 +45,7 @@ follow.reminders
 follow.statement
 follow.stop
 follow.take_stated
+health.export_csv
 history.restore_version
 history.undo
 locker.add_item

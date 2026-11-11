@@ -66,6 +66,12 @@ struct HealthWorkoutView: View {
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     if !workout.trashLabel.isEmpty {
                         KitChoiceStack {
+                            if !workout.shareLabel.isEmpty {
+                                KitOutlineButton(label: workout.shareLabel) {
+                                    send(event { $0.shareRequested = .init() })
+                                }
+                                .accessibilityIdentifier("health-action-share")
+                            }
                             KitOutlineButton(label: workout.trashLabel, tone: "net") {
                                 send(event { $0.trash = .init() })
                             }
