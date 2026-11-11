@@ -157,20 +157,32 @@ impl Report {
     /// failure). The same words in every store.
     #[must_use]
     pub fn status(&self, ctx: &Ctx, store: Store) -> Option<wire::StatusLine> {
-        let locale = ctx.locale();
+        self.sentence(ctx.locale(), store)
+            .map(|sentence| wire::StatusLine {
+                sentence,
+                action_label: String::new(),
+                refused: false,
+            })
+    }
+
+    /// The sentence for a doubted or incomplete pass (doubted wins), produced once: the status
+    /// line above and the page note ([`crate::kit::read::Note::partial`]) both say it.
+    #[must_use]
+    pub fn sentence(&self, locale: Locale, store: Store) -> Option<String> {
         let source = store.source(locale);
-        let sentence = if self.doubted > 0 {
-            crate::strings::fill(&words::doubted_status(locale), &[("source", &source)])
+        if self.doubted > 0 {
+            Some(crate::strings::fill(
+                &words::doubted_status(locale),
+                &[("source", &source)],
+            ))
         } else if self.incomplete {
-            crate::strings::fill(&words::incomplete_status(locale), &[("source", &source)])
+            Some(crate::strings::fill(
+                &words::incomplete_status(locale),
+                &[("source", &source)],
+            ))
         } else {
-            return None;
-        };
-        Some(wire::StatusLine {
-            sentence,
-            action_label: String::new(),
-            refused: false,
-        })
+            None
+        }
     }
 }
 

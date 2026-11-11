@@ -74,20 +74,26 @@ impl std::ops::Deref for Phone {
 impl Phone {
     /// The one sentence for a check that was not made, in the store's name; `None` when it was.
     #[must_use]
-    pub fn status(&self, locale: Locale, source: Source<'_>) -> Option<wire::StatusLine> {
+    pub fn sentence(&self, locale: Locale, source: Source<'_>) -> Option<String> {
         if !self.unchecked {
             return None;
         }
-        let sentence = match source {
+        Some(match source {
             Source::Phone => words::unchecked_phone_status(locale),
             Source::Folder => words::unchecked_folder_status(locale),
             Source::Store(name) => fill(&words::unchecked_store_status(locale), &[("store", name)]),
-        };
-        Some(wire::StatusLine {
-            sentence,
-            action_label: String::new(),
-            refused: false,
         })
+    }
+
+    /// The same sentence as a status line, for the screens not yet on the page note.
+    #[must_use]
+    pub fn status(&self, locale: Locale, source: Source<'_>) -> Option<wire::StatusLine> {
+        self.sentence(locale, source)
+            .map(|sentence| wire::StatusLine {
+                sentence,
+                action_label: String::new(),
+                refused: false,
+            })
     }
 }
 

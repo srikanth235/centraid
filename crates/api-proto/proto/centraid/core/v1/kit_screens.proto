@@ -741,3 +741,35 @@ message LinkCandidate {
   // The member's own person: listed first, said as "You".
   bool is_owner = 3;
 }
+
+// THE STATE OF A PAGE'S READ, said once for every screen that reads (#1185). The oneof is what
+// the page shows INSTEAD of data; none set is ready, with the page's own content drawn. A
+// refresh never blanks data already on screen: it keeps ready, and a refresh that failed is
+// ready with a `PageNote`. `refused` is a gate that never retries itself, `failed` is a read that
+// came to nothing (never an empty list), `empty` only a read that succeeded with nothing.
+message PageState {
+  oneof state {
+    Loading loading = 1;
+    Failure failed = 2;
+    Denied refused = 3;
+    EmptyState empty = 4;
+  }
+  // One sentence over the data when the read was short or unchecked. Only ever with ready.
+  optional PageNote note = 5;
+}
+
+// THE NOTE OVER DATA: one finished sentence and at most one action. A partial read says what
+// was shown (and may offer Retry); an unchecked one says what could not be checked and has no
+// action.
+message PageNote {
+  enum Kind {
+    // What is shown is some of it: a refresh that failed, or a follow that read part.
+    PARTIAL = 0;
+    // Something beside the data was not checked (what the phone says).
+    NOT_CHECKED = 1;
+  }
+  Kind kind = 1;
+  string sentence = 2;
+  // "Try again", or empty when nothing can be done here.
+  string action_label = 3;
+}
