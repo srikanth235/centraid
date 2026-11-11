@@ -586,12 +586,11 @@ fn a_cancel_the_vault_refuses_says_why_and_keeps_the_event_open() {
     world.send_event(page, action("cancel"));
     world.send_event(page, confirmed());
     let state = world.event_state(page);
-    if let Some(status) = &state.status {
-        assert!(status.refused);
-        assert!(!state.dismissed);
-    } else {
-        // The vault treats a repeat as done: the screen is done as well.
-        assert!(state.dismissed);
+    match &state.status {
+        Some(status) if status.refused => assert!(!state.dismissed),
+        // The vault treats a repeat as done: the screen is done as well, and its "Event
+        // cancelled" line goes to the page beneath.
+        _ => assert!(state.dismissed),
     }
 }
 

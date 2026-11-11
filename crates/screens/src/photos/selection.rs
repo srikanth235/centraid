@@ -143,25 +143,44 @@ impl Written {
     }
 }
 
+/// What `each` says when it lands `n` photographs: the sentence of the line, or `None` for a write
+/// that is confirmed first and says nothing (delete forever).
+pub type Said<'a> = &'a dyn Fn(usize) -> Option<String>;
+
 /// One `act` per id, each under a fresh key naming the verb and the photograph, through the
-/// kit's one door (`door`). A run of ONE photograph says `said` with the core's Undo; a longer run
-/// says nothing per photograph (one door line holds one inverse, so the caller says the batch's
-/// sentence and, for a Move to trash, keeps the list its own Undo restores).
+/// kit's one door (`door`). With a sentence the run is ONE line with ONE Undo
+/// ([`Undo::act_all`]): a single photograph says its sentence, several say the counted one, and a
+/// tap on Undo takes every one of them back. Every photograph is tried; the first refusal is the
+/// line, and the ones that did land keep their Undo. With no sentence (`said` is `None`) the writes
+/// are quiet, which only a write confirmed first may be.
 pub fn each(
     ctx: &Ctx,
     door: &mut Undo,
     ids: &[String],
     verb: &str,
-    said: Option<String>,
+    said: Option<Said<'_>>,
     request: impl Fn(&str) -> wire::ActRequest,
 ) -> Written {
     let mut written = Written::default();
-    for id in ids {
-        let key = kit_act::key(&[verb, id], kit_act::fresh());
-        let settled = match (&said, ids.len()) {
-            (Some(said), 1) => door.act(ctx, request(id), &key, |_| said.clone()),
-            _ => door.act_quietly(ctx, request(id), &key),
-        };
+    let sentence = said.and_then(|said| said(ids.len()));
+    let Some(sentence) = sentence else {
+        for id in ids {
+            let key = kit_act::key(&[verb, id], kit_act::fresh());
+            let settled = door.act_quietly(ctx, request(id), &key);
+            if settled.committed {
+                written.committed.push(id.clone());
+            } else if written.refusal.is_none() {
+                written.refusal = Some(settled.refusal);
+            }
+        }
+        return written;
+    };
+    let requests = ids
+        .iter()
+        .map(|id| (request(id), kit_act::key(&[verb, id], kit_act::fresh())))
+        .collect::<Vec<_>>();
+    let answers = door.act_all(ctx, requests, |_| sentence);
+    for (id, settled) in ids.iter().zip(answers) {
         if settled.committed {
             written.committed.push(id.clone());
         } else if written.refusal.is_none() {
@@ -195,9 +214,6 @@ pub struct Selection {
     /// The status line and what its Undo reverses (the kit's one door): what the last write said,
     /// until the next attempt.
     door: Undo,
-    /// The photographs the last Move to trash of SEVERAL took, which the status line's Undo
-    /// restores together (the door holds one inverse, a batch of one photograph uses it).
-    undo: Vec<String>,
 }
 
 impl Selection {
@@ -211,7 +227,6 @@ impl Selection {
             picked: Vec::new(),
             confirming: None,
             refusal: None,
-            undo: Vec::new(),
             door: Undo::default(),
         }
     }
@@ -314,7 +329,6 @@ impl Selection {
 
     fn clear_receipt(&mut self) {
         self.door.clear();
-        self.undo.clear();
     }
 
     /// The kit's door, for the writes a screen makes beside the batches (an album's rename, a
@@ -324,60 +338,28 @@ impl Selection {
     }
 
     /// THE STATUS LINE'S UNDO (the kit's `StatusActed`, or the selection's own): the door's
-    /// inverse when it holds one, else exactly the photographs the last Move to trash of several
-    /// took. Returns whether something was put back, so the screen reads again.
+    /// inverse, or for a batch every photograph's inverse together. Returns whether something was
+    /// put back, so the screen reads again.
     pub fn acted(&mut self, ctx: &Ctx) -> bool {
-        if self.door.can_undo() {
-            return self.door.acted(ctx);
-        }
-        let ids = std::mem::take(&mut self.undo);
-        if ids.is_empty() {
-            return false;
-        }
-        let written = each(ctx, &mut self.door, &ids, "restore-photo", None, |id| {
-            act::photos::RestorePhoto {
-                photo_id: id.to_owned(),
-            }
-            .into()
-        });
-        self.door.clear();
-        self.refusal = written.refusal;
-        true
+        self.refusal = None;
+        self.door.acted(ctx)
     }
 
-    /// The refusal as the kit's status line, or else what the last batch did.
+    /// The refusal as the kit's status line (with the Undo of the photographs that did land), or
+    /// else what the last batch did.
     #[must_use]
     pub fn status(&self, locale: Locale) -> Option<wire::StatusLine> {
-        self.refusal
-            .as_ref()
-            .map(|sentence| wire::StatusLine {
+        match &self.refusal {
+            Some(sentence) => Some(wire::StatusLine {
                 sentence: sentence.clone(),
-                action_label: String::new(),
+                action_label: if self.door.can_undo() {
+                    shared::undo_label(locale)
+                } else {
+                    String::new()
+                },
                 refused: true,
-            })
-            .or_else(|| {
-                self.door.status().map(|mut line| {
-                    if !line.refused && !self.undo.is_empty() {
-                        line.action_label = shared::trash_undo(locale);
-                    }
-                    line
-                })
-            })
-    }
-
-    /// Say what a batch did. Only a batch that landed something has a receipt. A batch of one
-    /// photograph was said by the door as it wrote, with the core's Undo, and stands as it is.
-    pub fn acknowledge(
-        &mut self,
-        locale: Locale,
-        verb: Verb,
-        written: &Written,
-        album: Option<&str>,
-    ) {
-        if written.committed.len() > 1
-            && let Some(sentence) = receipt(locale, verb, written.committed.len(), album)
-        {
-            self.door.say(sentence);
+            }),
+            None => self.door.status(),
         }
     }
 
@@ -489,58 +471,42 @@ impl Selection {
         let ids = self.picked.clone();
         let album = self.offer.album().unwrap_or_default().to_owned();
         let archive = self.offer.is_archive();
-        // A run of one photograph says its sentence through the door, with the core's Undo.
-        let said = if ids.len() == 1 {
-            // Out of the archive is `unarchive`, however the screen spelt it.
-            let spoken = if verb == Verb::Restore && archive {
-                Verb::Unarchive
-            } else {
-                verb
-            };
-            single_receipt(ctx.locale(), spoken, &album)
+        // Out of the archive is `unarchive`, however the screen spelt it.
+        let spoken = if verb == Verb::Restore && archive {
+            Verb::Unarchive
         } else {
-            None
+            verb
         };
+        let locale = ctx.locale();
+        // One photograph says its sentence, several the counted one; either way ONE Undo (the
+        // kit's door) takes the whole batch back. Delete forever was asked first and says nothing.
+        let sentence = |n: usize| {
+            if n == 1 {
+                single_receipt(locale, spoken, &album)
+            } else {
+                receipt(locale, spoken, n, Some(&album))
+            }
+        };
+        let said: Option<Said<'_>> = (verb != Verb::DeleteForever).then_some(&sentence);
         let written = match verb {
-            Verb::Favorite => each(
-                ctx,
-                &mut self.door,
-                &ids,
-                "flag-photo",
-                said.clone(),
-                |id| {
-                    act::photos::FlagPhoto {
-                        photo_id: id.to_owned(),
-                    }
-                    .into()
-                },
-            ),
-            Verb::Unfavorite => each(
-                ctx,
-                &mut self.door,
-                &ids,
-                "unflag-photo",
-                said.clone(),
-                |id| {
-                    act::photos::UnflagPhoto {
-                        photo_id: id.to_owned(),
-                    }
-                    .into()
-                },
-            ),
-            Verb::Archive => each(
-                ctx,
-                &mut self.door,
-                &ids,
-                "archive-photo",
-                said.clone(),
-                |id| {
-                    act::photos::ArchivePhoto {
-                        photo_id: id.to_owned(),
-                    }
-                    .into()
-                },
-            ),
+            Verb::Favorite => each(ctx, &mut self.door, &ids, "flag-photo", said, |id| {
+                act::photos::FlagPhoto {
+                    photo_id: id.to_owned(),
+                }
+                .into()
+            }),
+            Verb::Unfavorite => each(ctx, &mut self.door, &ids, "unflag-photo", said, |id| {
+                act::photos::UnflagPhoto {
+                    photo_id: id.to_owned(),
+                }
+                .into()
+            }),
+            Verb::Archive => each(ctx, &mut self.door, &ids, "archive-photo", said, |id| {
+                act::photos::ArchivePhoto {
+                    photo_id: id.to_owned(),
+                }
+                .into()
+            }),
             // An archived photograph was never deleted: out of the archive is
             // `unarchive`, and `restore` would be refused for it.
             Verb::Unarchive => each(
@@ -548,7 +514,7 @@ impl Selection {
                 &mut self.door,
                 &ids,
                 "unarchive-photo",
-                said.clone(),
+                said,
                 unarchive,
             ),
             Verb::Restore if archive => each(
@@ -556,71 +522,39 @@ impl Selection {
                 &mut self.door,
                 &ids,
                 "unarchive-photo",
-                said.clone(),
+                said,
                 unarchive,
             ),
-            Verb::Restore => each(
-                ctx,
-                &mut self.door,
-                &ids,
-                "restore-photo",
-                said.clone(),
-                |id| {
-                    act::photos::RestorePhoto {
-                        photo_id: id.to_owned(),
-                    }
-                    .into()
-                },
-            ),
-            Verb::Trash => each(
-                ctx,
-                &mut self.door,
-                &ids,
-                "delete-photo",
-                said.clone(),
-                |id| {
-                    act::photos::DeletePhoto {
-                        photo_id: id.to_owned(),
-                    }
-                    .into()
-                },
-            ),
-            Verb::DeleteForever => each(
-                ctx,
-                &mut self.door,
-                &ids,
-                "purge-photo",
-                said.clone(),
-                |id| {
-                    act::photos::PurgePhoto {
-                        photo_id: id.to_owned(),
-                    }
-                    .into()
-                },
-            ),
-            Verb::RemoveFromAlbum if !album.is_empty() => each(
-                ctx,
-                &mut self.door,
-                &ids,
-                "remove-from-album",
-                said.clone(),
-                |id| {
+            Verb::Restore => each(ctx, &mut self.door, &ids, "restore-photo", said, |id| {
+                act::photos::RestorePhoto {
+                    photo_id: id.to_owned(),
+                }
+                .into()
+            }),
+            Verb::Trash => each(ctx, &mut self.door, &ids, "delete-photo", said, |id| {
+                act::photos::DeletePhoto {
+                    photo_id: id.to_owned(),
+                }
+                .into()
+            }),
+            Verb::DeleteForever => each(ctx, &mut self.door, &ids, "purge-photo", said, |id| {
+                act::photos::PurgePhoto {
+                    photo_id: id.to_owned(),
+                }
+                .into()
+            }),
+            Verb::RemoveFromAlbum if !album.is_empty() => {
+                each(ctx, &mut self.door, &ids, "remove-from-album", said, |id| {
                     act::photos::RemoveFromAlbum {
                         from: album.clone(),
                         to: id.to_owned(),
                     }
                     .into()
-                },
-            ),
+                })
+            }
             Verb::RemoveFromAlbum | Verb::AddToAlbum | Verb::Unspecified => return Outcome::Moved,
         };
         self.settle(&written, verb);
-        self.acknowledge(ctx.locale(), verb, &written, None);
-        // Several photographs trashed at once: the door holds one inverse, so the selection keeps
-        // the list its Undo restores together.
-        if verb == Verb::Trash && written.committed.len() > 1 {
-            self.undo.clone_from(&written.committed);
-        }
         Outcome::Wrote(written)
     }
 
@@ -685,6 +619,8 @@ pub fn receipt(locale: Locale, verb: Verb, count: usize, album: Option<&str>) ->
         Verb::Trash => words::receipt_trashed_n(locale, n),
         Verb::Archive => words::receipt_archived_n(locale, n),
         Verb::Unarchive => words::receipt_unarchived_n(locale, n),
+        Verb::Restore => words::receipt_restored_n(locale, n),
+        Verb::RemoveFromAlbum => words::receipt_removed_from_album_n(locale, n),
         Verb::AddToAlbum => fill(
             &words::receipt_album_n(locale, n),
             &[("album", album.unwrap_or_default())],

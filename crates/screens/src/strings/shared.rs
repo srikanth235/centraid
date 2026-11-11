@@ -148,6 +148,7 @@ catalog! {
     plain share_failed = ("Could not share", "Could not share");
     plain share_title = ("Share a copy", "Share a copy");
     plain undo_label = ("Undo", "Undo");
+    counted undo_partial = ("{n} change was not undone", "{n} changes were not undone");
     plain undo_stale = ("This changed again, so it was not undone", "This changed again, so it was not undone");
     plain undone = ("Undone", "Undone");
 }

@@ -472,7 +472,7 @@ impl Editor {
         let id = self.item_id.clone();
         for tag in had.iter().filter(|tag| !kept.contains(&tag.to_lowercase())) {
             let key = kit_act::key(&["remove-tag", &id, tag], kit_act::fresh());
-            let settled = self.undo.act_also(
+            let settled = self.undo.act_joining(
                 ctx,
                 act::locker::RemoveTag {
                     locker_item_id: id.clone(),
@@ -489,7 +489,7 @@ impl Editor {
             .filter(|tag| !before.contains(&tag.to_lowercase()))
         {
             let key = kit_act::key(&["add-tag", &id, tag], kit_act::fresh());
-            let settled = self.undo.act_also(
+            let settled = self.undo.act_joining(
                 ctx,
                 act::locker::AddTag {
                     locker_item_id: id.clone(),

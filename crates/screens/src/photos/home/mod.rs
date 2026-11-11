@@ -282,14 +282,8 @@ impl Home {
                     .update(&event, &picked, self.selection.door(), ctx)
                 {
                     ChoiceOutcome::Moved => {}
-                    ChoiceOutcome::Added { album_id, written } => {
+                    ChoiceOutcome::Added { written, .. } => {
                         self.selection.settle(&written, Verb::AddToAlbum);
-                        self.selection.acknowledge(
-                            ctx.locale(),
-                            Verb::AddToAlbum,
-                            &written,
-                            self.choice.title_of(&album_id),
-                        );
                         self.read_library(ctx);
                     }
                     ChoiceOutcome::Created { refusal } => self.selection.refuse(refusal),

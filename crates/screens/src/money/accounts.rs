@@ -103,7 +103,8 @@ impl Accounts {
     }
 
     /// One write. `said` is the sentence when this write is the one the line is about; a write that
-    /// follows another (the close beside an edit) passes `None` and leaves that line as it is.
+    /// follows another (the close beside an edit) passes `None`: the line stays as it is and its
+    /// Undo takes this write back too, in the same tap.
     fn submit(
         &mut self,
         ctx: &Ctx,
@@ -113,7 +114,7 @@ impl Accounts {
         let key = kit_act::key(&["money", "account"], kit_act::fresh());
         match said {
             Some(said) => self.undo.act(ctx, request, &key, |_| said).committed,
-            None => self.undo.act_also(ctx, request, &key).committed,
+            None => self.undo.act_joining(ctx, request, &key).committed,
         }
     }
 
@@ -126,7 +127,6 @@ impl Accounts {
             return;
         }
         let number = Some(editor.external_ref.trim().to_owned()).filter(|n| !n.is_empty());
-        let mut edited_and_closed = false;
         let committed = if editor.mode == Mode::Add {
             self.submit(
                 ctx,
@@ -174,7 +174,6 @@ impl Accounts {
             );
             // A closed account is the archived flag on it: its own action, sent beside the edit.
             if edited && before_closed != editor.closed {
-                edited_and_closed = true;
                 if editor.closed {
                     self.submit(
                         ctx,
@@ -200,11 +199,6 @@ impl Accounts {
         };
         if committed {
             self.editor = None;
-            // An edit with a close beside it is two writes: Undo would take back only one, so the
-            // line keeps its sentence and offers nothing.
-            if edited_and_closed {
-                self.undo.withdraw();
-            }
         }
         self.reload(ctx);
     }

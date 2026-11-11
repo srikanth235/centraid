@@ -156,23 +156,26 @@ impl AlbumChoice {
             }
             Some(E::Chosen(chosen)) => {
                 self.open = false;
-                // One photograph says "Added to <album>." through the door, with its Undo.
+                // One photograph says "Added to <album>.", several the counted sentence; either
+                // way ONE Undo takes the whole add back.
                 let title = self.title_of(&chosen.album_id);
-                let said = (picked.len() == 1)
-                    .then(|| {
-                        if self.one_photo_page {
-                            Some(fill(
-                                &words::photos_receipt_album(ctx.locale()),
-                                &[("album", title.unwrap_or_default())],
-                            ))
-                        } else {
-                            selection::receipt(ctx.locale(), selection::Verb::AddToAlbum, 1, title)
-                        }
-                    })
-                    .flatten();
+                let locale = ctx.locale();
+                let one_page = self.one_photo_page;
+                let said = |n: usize| {
+                    if n != 1 {
+                        selection::receipt(locale, selection::Verb::AddToAlbum, n, title)
+                    } else if one_page {
+                        Some(fill(
+                            &words::photos_receipt_album(locale),
+                            &[("album", title.unwrap_or_default())],
+                        ))
+                    } else {
+                        selection::receipt(locale, selection::Verb::AddToAlbum, 1, title)
+                    }
+                };
                 Outcome::Added {
                     album_id: chosen.album_id.clone(),
-                    written: add(ctx, door, picked, &chosen.album_id, said),
+                    written: add(ctx, door, picked, &chosen.album_id, Some(&said)),
                 }
             }
             Some(E::Created(created)) => {
@@ -226,7 +229,7 @@ pub fn add(
     door: &mut Undo,
     photo_ids: &[String],
     album_id: &str,
-    said: Option<String>,
+    said: Option<selection::Said<'_>>,
 ) -> Written {
     if album_id.is_empty() {
         return Written::default();

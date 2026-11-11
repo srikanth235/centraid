@@ -21,6 +21,10 @@
 //! 4. Draw it: `status: self.undo.status()`.
 //! 5. On `Left` (and where a newer, non-undoable line replaces this one) `self.undo.clear()`.
 //!
+//! A WRITE OF SEVERAL THINGS is one line with one Undo: [`Undo::act_all`] runs a set of requests,
+//! [`Undo::act_joining`] adds a write to the line already said. Undo runs every inverse, last to
+//! first (see [`Undo::act_all`] for what happens when one fails).
+//!
 //! A SAVE THAT CLOSES ITS PAGE (an editor, a sheet) writes through [`Undo::act_handing_down`] (or
 //! calls [`Undo::hand_down`] after a write that said its line): the line and its Undo leave with
 //! the page and are drawn by the page beneath. That page calls [`Undo::take_handed`] where it
@@ -40,11 +44,27 @@ use super::act::{self as kit_act, Settled};
 use crate::screen::Ctx;
 use crate::strings::{Locale, shared};
 
-/// What Undo sends, and to which app.
+/// One write's inverse, and the app it goes to.
 #[derive(Clone, Debug)]
-struct Offer {
+struct Step {
     app: String,
     inverse: wire::ActInverse,
+}
+
+/// What Undo sends: the inverse of every write the line says, in the order the writes were made.
+/// A line of one write has one step. [`Undo::acted`] runs them last to first, so ONE tap takes
+/// back the whole set.
+#[derive(Clone, Debug)]
+struct Offer {
+    steps: Vec<Step>,
+}
+
+impl Offer {
+    fn of(app: String, inverse: wire::ActInverse) -> Self {
+        Self {
+            steps: vec![Step { app, inverse }],
+        }
+    }
 }
 
 /// The status line a screen holds beside its answers, and what its Undo reverses.
@@ -85,20 +105,23 @@ impl Undo {
     /// What the next Undo would send, for a screen that counts on it.
     #[must_use]
     pub fn offered(&self) -> Option<&wire::ActInverse> {
-        self.offer.as_ref().map(|offer| &offer.inverse)
+        self.offer
+            .as_ref()
+            .and_then(|offer| offer.steps.last())
+            .map(|step| &step.inverse)
     }
 
     /// THE PAGE IS ABOUT TO CLOSE: leave the line it said, with its Undo, for the page beneath
-    /// (drawn there after [`Self::take_handed`]). A refused line is not handed down: the page does
-    /// not close on a refusal. This page keeps nothing.
+    /// (drawn there after [`Self::take_handed`]). A refused line is not handed down: the page
+    /// does not close on a refusal. This page keeps its own copy for the frames before the shell
+    /// pops it, and nothing it does afterwards reaches the page beneath.
     pub fn hand_down(&mut self, ctx: &Ctx) {
-        if let Some(line) = self.line.take().filter(|line| !line.refused) {
+        if let Some(line) = self.line.clone().filter(|line| !line.refused) {
             ctx.hand_down(Handed {
-                offer: self.offer.take(),
+                offer: self.offer.clone(),
                 line,
             });
         }
-        self.clear();
     }
 
     /// THE PAGE ABOVE CLOSED: take the line it handed down, if the runtime kept one for this
@@ -225,6 +248,100 @@ impl Undo {
         settled
     }
 
+    /// A write that is PART OF the line already said (a locker item's tags beside the item):
+    /// success keeps the line and adds this write's inverse to its Undo, so one tap takes back
+    /// the whole set. A write the core knows no inverse for takes the Undo away entirely (a
+    /// half-undo would leave the set torn); a refusal is the refused line, and what the set
+    /// already did stays on offer. With no line yet it is [`Self::act`] with no sentence: the
+    /// caller says one first.
+    pub fn act_joining(
+        &mut self,
+        ctx: &Ctx,
+        request: impl Into<wire::ActRequest>,
+        invoke_key: &str,
+    ) -> Settled {
+        let request = request.into();
+        let app = request.app.clone();
+        let settled = kit_act::act(ctx, request, invoke_key);
+        if !settled.committed {
+            self.refuse_keeping_offer(ctx, settled.refusal.clone());
+            return settled;
+        }
+        match (settled.inverse.clone(), &mut self.offer) {
+            (Some(inverse), Some(offer)) => offer.steps.push(Step { app, inverse }),
+            _ => self.withdraw(),
+        }
+        settled
+    }
+
+    /// THE DOOR FOR A WRITE OF SEVERAL THINGS (a batch of photos): every request runs in order
+    /// under its own key, and the line says `said` once with ONE Undo that takes all of them back.
+    ///
+    /// * The core has no batch or atomic act, so the writes are separate commits. Undo runs each
+    ///   inverse, last to first, under a fresh key ([`Self::acted`]); if one of them fails
+    ///   partway, the line is a plain refusal naming how many were not undone, and the ones that
+    ///   did succeed stay undone.
+    /// * Every request is tried (a photograph the vault refuses does not hold back the others).
+    ///   The first refusal is the line, and the writes that did commit keep their Undo (the verb
+    ///   stays on the refused line).
+    /// * A write the core has no inverse for leaves the whole set with no Undo. That action must
+    ///   be confirmed first instead; the door does not invent the confirm.
+    ///
+    /// Returns one answer per request that ran.
+    pub fn act_all(
+        &mut self,
+        ctx: &Ctx,
+        requests: impl IntoIterator<Item = (wire::ActRequest, String)>,
+        said: impl FnOnce(Locale) -> String,
+    ) -> Vec<Settled> {
+        let mut steps = Vec::new();
+        let mut inverse_missing = false;
+        let mut answers = Vec::new();
+        let mut refusal = None;
+        for (request, key) in requests {
+            let app = request.app.clone();
+            let settled = kit_act::act(ctx, request, &key);
+            if settled.committed {
+                match settled.inverse.clone() {
+                    Some(inverse) => steps.push(Step { app, inverse }),
+                    None => inverse_missing = true,
+                }
+            } else if refusal.is_none() {
+                refusal = Some(settled.refusal.clone());
+            }
+            answers.push(settled);
+        }
+        let offer = (!steps.is_empty() && !inverse_missing).then_some(Offer { steps });
+        if let Some(sentence) = refusal {
+            self.offer = offer;
+            self.refuse_keeping_offer(ctx, sentence);
+        } else if answers.is_empty() {
+            self.clear();
+        } else {
+            self.offer = offer;
+            self.line = Some(wire::StatusLine {
+                sentence: said(ctx.locale()),
+                action_label: if self.offer.is_some() {
+                    shared::undo_label(ctx.locale())
+                } else {
+                    String::new()
+                },
+                refused: false,
+            });
+        }
+        answers
+    }
+
+    /// A refused line that still offers what is on offer (the writes before the refusal).
+    fn refuse_keeping_offer(&mut self, ctx: &Ctx, sentence: String) {
+        let kept = self.offer.take();
+        self.refuse(sentence);
+        if let (Some(kept), Some(line)) = (kept, &mut self.line) {
+            line.action_label = shared::undo_label(ctx.locale());
+            self.offer = Some(kept);
+        }
+    }
+
     fn settle<F: FnOnce(Locale) -> String>(
         &mut self,
         ctx: &Ctx,
@@ -242,7 +359,7 @@ impl Undo {
             return;
         };
         let locale = ctx.locale();
-        self.offer = inverse.map(|inverse| Offer { app, inverse });
+        self.offer = inverse.map(|inverse| Offer::of(app, inverse));
         self.line = Some(wire::StatusLine {
             sentence: said(locale),
             action_label: if self.offer.is_some() {
@@ -254,32 +371,51 @@ impl Undo {
         });
     }
 
-    /// THE STATUS LINE'S VERB WAS TAPPED: run the stored inverse under a fresh key. Returns whether
-    /// it committed (the screen then loads again). Either way nothing is on offer afterwards.
+    /// THE STATUS LINE'S VERB WAS TAPPED: run the stored inverse under a fresh key, or, for a line
+    /// of several writes, every inverse from the last write to the first (each under its own fresh
+    /// key). Returns whether anything committed (the screen then loads again). Either way nothing
+    /// is on offer afterwards.
+    ///
+    /// When some inverses fail the line is a plain refusal naming how many were not undone
+    /// ([`shared::undo_partial`]); the ones that succeeded stay undone. For a line of one write the
+    /// refusal is the core's plain sentence when it gave one, else ours.
     pub fn acted(&mut self, ctx: &Ctx) -> bool {
         let Some(offer) = self.offer.take() else {
             return false;
         };
-        let request = wire::ActRequest {
-            app: offer.app,
-            action: offer.inverse.action,
-            input: offer.inverse.input,
-            invoke_key: String::new(),
-        };
-        let key = kit_act::key(&["undo", &request.action], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
         let locale = ctx.locale();
-        if settled.committed {
+        let total = offer.steps.len();
+        let (mut undone, mut failed) = (0_usize, 0_usize);
+        let mut last_refusal = String::new();
+        for step in offer.steps.into_iter().rev() {
+            let request = wire::ActRequest {
+                app: step.app,
+                action: step.inverse.action,
+                input: step.inverse.input,
+                invoke_key: String::new(),
+            };
+            let key = kit_act::key(&["undo", &request.action], kit_act::fresh());
+            let settled = kit_act::act(ctx, request, &key);
+            if settled.committed {
+                undone += 1;
+            } else {
+                failed += 1;
+                last_refusal = settled.refusal;
+            }
+        }
+        if failed == 0 {
             self.line = Some(plain(shared::undone(locale)));
-        } else {
+        } else if total == 1 {
             // The core's plain sentence when it gave one, else ours.
-            let gave = settled.refusal != shared::write_refused(locale);
+            let gave = last_refusal != shared::write_refused(locale);
             self.refuse(if gave {
-                settled.refusal
+                last_refusal
             } else {
                 shared::undo_stale(locale)
             });
+        } else {
+            self.refuse(shared::undo_partial(locale, failed as u64));
         }
-        settled.committed
+        undone > 0
     }
 }

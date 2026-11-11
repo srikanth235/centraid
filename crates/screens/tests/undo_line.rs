@@ -1536,3 +1536,41 @@ fn a_handed_line_is_taken_once_and_a_navigation_that_is_not_a_pop_drops_it() {
         "the line did not reach a screen it was not left for"
     );
 }
+
+#[test]
+fn locker_an_item_saved_with_new_tags_is_taken_back_with_its_tags_by_one_undo() {
+    use wire::locker_editor_event as le;
+    let (mut d, page) = locker_item();
+    let editor = d.push(
+        centraid_screens::locker::TAB,
+        centraid_screens::locker::routes::edit("i1"),
+    );
+    let send = |d: &mut Driver, kind| {
+        d.send(
+            editor,
+            wire::screen_event::Kind::LockerEditor(wire::LockerEditorEvent { kind: Some(kind) }),
+        );
+    };
+    send(
+        &mut d,
+        le::Kind::Typed(le::Typed {
+            key: "title".to_owned(),
+            value: "Bank, renamed".to_owned(),
+        }),
+    );
+    send(
+        &mut d,
+        le::Kind::Tags(le::TagsTyped {
+            text: "money".to_owned(),
+        }),
+    );
+    send(&mut d, le::Kind::Save(le::SaveTapped {}));
+    d.pop(centraid_screens::locker::TAB, editor);
+    assert_eq!(locker_line(&d, page), line("Item saved", "Undo"));
+    assert_eq!(locker_support::item_data(&d, page).tags, ["money"]);
+
+    status_acted(&mut d, page);
+    let data = locker_support::item_data(&d, page);
+    assert_eq!((data.title.as_str(), data.tags.len()), ("Bank", 0));
+    assert_eq!(locker_line(&d, page), line("Undone", ""));
+}

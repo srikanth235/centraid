@@ -146,7 +146,14 @@ fn confirm_adds_each_pick_to_the_album_and_finishes_when_all_landed() {
     pick(&mut d, picker, &b);
     send(&mut d, picker, ev::Kind::Confirm(ev::ConfirmRequested {}));
     assert!(state(&d, picker).finished);
-    assert!(state(&d, picker).status.is_none());
+    // The line goes to the album beneath (its own test below); the closing picker still holds it.
+    assert_eq!(
+        state(&d, picker)
+            .status
+            .as_ref()
+            .map(|s| s.sentence.as_str()),
+        Some("2 photos added to Trip.")
+    );
     assert!(cell(&d, picker, &a).taken && cell(&d, picker, &b).taken);
     assert!(!cell(&d, picker, &a).picked);
 
@@ -206,4 +213,47 @@ fn an_album_that_holds_the_whole_library_says_there_is_nothing_left() {
         empty.headline,
         "Everything in your library is already in this album."
     );
+}
+
+#[test]
+fn adding_several_leaves_one_line_with_one_undo_on_the_album_beneath() {
+    let mut d = driver();
+    let photos: Vec<String> = ["a", "b", "c"].iter().map(|s| photo(&d, s)).collect();
+    let album_id = album(&d, "Portugal");
+    let shelf = d.push(
+        photos::TAB,
+        photos::routes::shelf(wire::PhotosShelfKind::Album, &album_id, ""),
+    );
+    let picker = open(&mut d, &album_id, "Portugal");
+    for id in &photos {
+        pick(&mut d, picker, id);
+    }
+    send(&mut d, picker, ev::Kind::Confirm(ev::ConfirmRequested {}));
+    assert!(state(&d, picker).finished, "the picker closes");
+    d.pop(photos::TAB, picker);
+
+    let line = |d: &Driver| match &d.view(shelf).kind {
+        Some(wire::view_state::Kind::PhotosShelf(state)) => {
+            let status = state.status.clone().expect("a line");
+            (status.sentence, status.action_label)
+        }
+        other => panic!("not a shelf: {other:?}"),
+    };
+    assert_eq!(
+        line(&d),
+        ("3 photos added to Portugal.".to_owned(), "Undo".to_owned())
+    );
+    let held = |d: &Driver| match &d.view(shelf).kind {
+        Some(wire::view_state::Kind::PhotosShelf(state)) => {
+            state.data.as_ref().map_or(0, |data| data.cells.len())
+        }
+        other => panic!("not a shelf: {other:?}"),
+    };
+    assert_eq!(held(&d), 3);
+    d.send(
+        shelf,
+        wire::screen_event::Kind::StatusActed(wire::StatusActed {}),
+    );
+    assert_eq!(held(&d), 0, "one Undo took all three out of the album");
+    assert_eq!(line(&d), ("Undone".to_owned(), String::new()));
 }

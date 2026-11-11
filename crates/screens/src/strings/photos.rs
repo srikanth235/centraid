@@ -322,6 +322,8 @@ catalog! {
     counted receipt_trashed_n = ("1 photo moved to trash", "{n} photos moved to trash");
     counted receipt_archived_n = ("1 photo moved to the archive.", "{n} photos moved to the archive.");
     counted receipt_unarchived_n = ("1 photo moved out of the archive.", "{n} photos moved out of the archive.");
+    counted receipt_restored_n = ("1 photo restored", "{n} photos restored");
+    counted receipt_removed_from_album_n = ("1 photo removed from the album", "{n} photos removed from the album");
     counted receipt_album_n = ("1 photo added to {album}.", "{n} photos added to {album}.");
     counted selected_title = ("1 photo selected", "{n} photos selected");
     counted chosen_title = ("{n} chosen", "{n} chosen");

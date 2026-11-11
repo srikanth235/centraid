@@ -254,25 +254,26 @@ impl Ops {
     }
 
     /// "Clear": the completed tasks of a list go to the trash (30 days, the
-    /// Trash page restores them). One status line says it; there is no
-    /// single Undo for many writes, so each delete is quiet and the line is
-    /// said once they all committed.
+    /// Trash page restores them). One status line says it, and ONE Undo
+    /// restores every task it cleared.
     pub fn clear_completed(&mut self, ctx: &Ctx, task_ids: &[String]) -> bool {
-        for id in task_ids {
-            let key = kit_act::key(&["delete-task", id, "cleared"], self.next_seq());
-            let settled = self.line.act_also(
-                ctx,
-                act::reminders::DeleteTask {
-                    task_id: id.clone(),
-                },
-                &key,
-            );
-            if !settled.committed {
-                return false;
-            }
-        }
-        self.line.say(reminders::completed_cleared(ctx.locale()));
-        true
+        let requests = task_ids
+            .iter()
+            .map(|id| {
+                let key = kit_act::key(&["delete-task", id, "cleared"], self.next_seq());
+                (
+                    act::reminders::DeleteTask {
+                        task_id: id.clone(),
+                    }
+                    .into(),
+                    key,
+                )
+            })
+            .collect::<Vec<(wire::ActRequest, String)>>();
+        let answers = self
+            .line
+            .act_all(ctx, requests, reminders::completed_cleared);
+        answers.len() == task_ids.len() && answers.iter().all(|settled| settled.committed)
     }
 
     /// A NEW ANSWER: a repeating task completed here names where its next

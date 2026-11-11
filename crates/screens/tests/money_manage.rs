@@ -676,3 +676,54 @@ fn a_rule_limited_to_an_account_checks_its_limits_in_that_accounts_units() {
         "Type an amount, like 220.00."
     );
 }
+
+#[test]
+fn an_account_edited_and_closed_in_one_save_is_taken_back_by_one_undo() {
+    let mut d = driver();
+    let i = push(&mut d, routes::accounts("Money"));
+    let (id, before) = accounts(&d).remove(0);
+    event(
+        &mut d,
+        i,
+        aev(ae::Kind::Account(ae::AccountTapped {
+            account_id: id.clone(),
+        })),
+    );
+    event(
+        &mut d,
+        i,
+        aev(ae::Kind::Name(ae::NameEdited {
+            text: "Renamed".into(),
+        })),
+    );
+    event(&mut d, i, aev(ae::Kind::Closed(ae::ClosedToggled {})));
+    event(&mut d, i, aev(ae::Kind::Save(ae::Save {})));
+    let line = acc(d.view(i)).status.clone().expect("a line");
+    assert_eq!(
+        (line.sentence.as_str(), line.action_label.as_str()),
+        ("Account saved", "Undo"),
+        "the edit and the close are one line with one Undo"
+    );
+    let row = |d: &centraid_screens::testing::Driver| {
+        let view = d.view(i);
+        acc_data(view)
+            .sections
+            .iter()
+            .flat_map(|s| &s.rows)
+            .find(|r| r.account_id == id)
+            .map(|r| (r.name.clone(), r.meta.ends_with("closed")))
+            .expect("the account")
+    };
+    assert_eq!(row(&d), ("Renamed".to_owned(), true));
+
+    d.send(
+        i,
+        wire::screen_event::Kind::StatusActed(wire::StatusActed {}),
+    );
+    assert_eq!(row(&d), (before, false), "one tap took back both writes");
+    let line = acc(d.view(i)).status.clone().expect("a line");
+    assert_eq!(
+        (line.sentence.as_str(), line.action_label.as_str()),
+        ("Undone", "")
+    );
+}

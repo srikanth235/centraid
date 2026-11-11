@@ -866,3 +866,221 @@ fn a_send_that_is_not_confirmed_sends_nothing_and_no_passcode_warns() {
     ));
     assert!(state(&d, shelf).notice.contains("no passcode"));
 }
+
+// -- A batch of several is one line with one Undo (#1185) -------------------------------
+
+fn line_of(d: &Driver, shelf: u64) -> (String, String) {
+    let status = state(d, shelf).status.clone().expect("a status line");
+    assert!(!status.refused, "{status:?}");
+    (status.sentence, status.action_label)
+}
+
+fn undo(d: &mut Driver, shelf: u64) {
+    d.send(
+        shelf,
+        wire::screen_event::Kind::StatusActed(wire::StatusActed {}),
+    );
+}
+
+fn favorites_of(d: &Driver, shelf: u64) -> Vec<bool> {
+    data(d, shelf)
+        .cells
+        .iter()
+        .map(|cell| cell.tile.as_ref().expect("a tile").favorite)
+        .collect()
+}
+
+/// Pick all of `ids` on `shelf` and tap `verb`.
+fn batch(d: &mut Driver, shelf: u64, ids: &[String], verb: Verb) {
+    for id in ids {
+        pick(d, shelf, id);
+    }
+    tap(d, shelf, verb);
+}
+
+#[test]
+fn a_batch_of_three_says_so_once_with_one_undo_that_takes_back_all_three() {
+    let mut d = driver();
+    let photos: Vec<String> = ["a", "b", "c"].iter().map(|s| photo(&d, s)).collect();
+    let (here, there) = (album(&d, "Here"), album(&d, "There"));
+    for id in &photos {
+        put_in(&d, &here, id);
+    }
+    let shelf = open(&mut d, wire::PhotosShelfKind::Album, &here);
+    let all = sorted(photos.clone());
+    let undone = ("Undone".to_owned(), String::new());
+
+    // FAVOURITE, then UNFAVOURITE.
+    batch(&mut d, shelf, &photos, Verb::Favorite);
+    assert_eq!(
+        line_of(&d, shelf),
+        ("3 photos added to Favorites.".to_owned(), "Undo".to_owned())
+    );
+    assert!(favorites_of(&d, shelf).iter().all(|on| *on));
+    undo(&mut d, shelf);
+    assert!(favorites_of(&d, shelf).iter().all(|on| !*on));
+    assert_eq!(line_of(&d, shelf), undone);
+
+    for id in &photos {
+        star(&d, id);
+    }
+    send(&mut d, shelf, ev::Kind::Refreshed(ev::Refreshed {}));
+    batch(&mut d, shelf, &photos, Verb::Unfavorite);
+    assert_eq!(
+        line_of(&d, shelf),
+        (
+            "3 photos removed from Favorites.".to_owned(),
+            "Undo".to_owned()
+        )
+    );
+    undo(&mut d, shelf);
+    assert!(favorites_of(&d, shelf).iter().all(|on| *on));
+
+    // ARCHIVE.
+    batch(&mut d, shelf, &photos, Verb::Archive);
+    assert_eq!(
+        line_of(&d, shelf),
+        (
+            "3 photos moved to the archive.".to_owned(),
+            "Undo".to_owned()
+        )
+    );
+    let archive_shelf = open(&mut d, wire::PhotosShelfKind::Archive, "");
+    assert_eq!(shown(&d, archive_shelf), all);
+    undo(&mut d, shelf);
+    send(&mut d, archive_shelf, ev::Kind::Refreshed(ev::Refreshed {}));
+    assert!(
+        shown(&d, archive_shelf).is_empty(),
+        "one Undo unarchived all three"
+    );
+
+    // ADD TO ANOTHER ALBUM.
+    for id in &photos {
+        pick(&mut d, shelf, id);
+    }
+    tap(&mut d, shelf, Verb::AddToAlbum);
+    send(
+        &mut d,
+        shelf,
+        ev::Kind::AlbumChoice(wire::PhotosAlbumChoiceEvent {
+            kind: Some(wire::photos_album_choice_event::Kind::Chosen(
+                wire::photos_album_choice_event::Chosen {
+                    album_id: there.clone(),
+                },
+            )),
+        }),
+    );
+    assert_eq!(
+        line_of(&d, shelf),
+        ("3 photos added to There.".to_owned(), "Undo".to_owned())
+    );
+    let there_shelf = open(&mut d, wire::PhotosShelfKind::Album, &there);
+    assert_eq!(shown(&d, there_shelf), all);
+    undo(&mut d, shelf);
+    assert_eq!(line_of(&d, shelf), undone);
+    send(&mut d, there_shelf, ev::Kind::Refreshed(ev::Refreshed {}));
+    assert!(
+        shown(&d, there_shelf).is_empty(),
+        "one Undo took all three out"
+    );
+
+    // REMOVE FROM THIS ALBUM.
+    batch(&mut d, shelf, &photos, Verb::RemoveFromAlbum);
+    assert_eq!(
+        line_of(&d, shelf),
+        (
+            "3 photos removed from the album".to_owned(),
+            "Undo".to_owned()
+        )
+    );
+    assert!(shown(&d, shelf).is_empty());
+    undo(&mut d, shelf);
+    assert_eq!(shown(&d, shelf), all);
+
+    // TRASH, then RESTORE from the trash.
+    batch(&mut d, shelf, &photos, Verb::Trash);
+    assert_eq!(
+        line_of(&d, shelf),
+        ("3 photos moved to trash".to_owned(), "Undo".to_owned())
+    );
+    assert!(shown(&d, shelf).is_empty());
+    let trash_shelf = open(&mut d, wire::PhotosShelfKind::Trash, "");
+    batch(&mut d, trash_shelf, &photos, Verb::Restore);
+    assert_eq!(
+        line_of(&d, trash_shelf),
+        ("3 photos restored".to_owned(), "Undo".to_owned())
+    );
+    assert!(shown(&d, trash_shelf).is_empty());
+    undo(&mut d, trash_shelf);
+    assert_eq!(
+        shown(&d, trash_shelf),
+        all,
+        "one Undo trashed all three again"
+    );
+}
+
+#[test]
+fn a_batch_that_one_photograph_refuses_says_so_and_keeps_the_undo_of_the_others() {
+    let mut d = driver();
+    let photos: Vec<String> = ["a", "b", "c"].iter().map(|s| photo(&d, s)).collect();
+    let here = album(&d, "Here");
+    for id in &photos {
+        put_in(&d, &here, id);
+    }
+    let shelf = open(&mut d, wire::PhotosShelfKind::Album, &here);
+    for id in &photos {
+        pick(&mut d, shelf, id);
+    }
+    // Another surface trashed one while the member was choosing.
+    trash(&d, &photos[1]);
+    tap(&mut d, shelf, Verb::Archive);
+    let status = state(&d, shelf).status.clone().expect("a line");
+    assert!(status.refused && !status.sentence.is_empty());
+    assert_eq!(
+        status.action_label, "Undo",
+        "the two that landed can be undone"
+    );
+    undo(&mut d, shelf);
+    assert_eq!(
+        shown(&d, shelf),
+        sorted(vec![photos[0].clone(), photos[2].clone()])
+    );
+}
+
+#[test]
+fn an_undo_that_fails_partway_names_how_many_were_not_undone_and_keeps_the_rest_undone() {
+    let mut d = driver();
+    let photos: Vec<String> = ["a", "b", "c"].iter().map(|s| photo(&d, s)).collect();
+    let here = album(&d, "Here");
+    for id in &photos {
+        put_in(&d, &here, id);
+    }
+    let shelf = open(&mut d, wire::PhotosShelfKind::Album, &here);
+    batch(&mut d, shelf, &photos, Verb::Trash);
+    assert_eq!(
+        line_of(&d, shelf),
+        ("3 photos moved to trash".to_owned(), "Undo".to_owned())
+    );
+    // Another surface brought one back already: putting it back again is refused.
+    arrange(
+        &d,
+        centraid_screens::catalog::act::photos::RestorePhoto {
+            photo_id: photos[1].clone(),
+        },
+    );
+    undo(&mut d, shelf);
+    let status = state(&d, shelf).status.clone().expect("a line");
+    assert_eq!(
+        (
+            status.sentence.as_str(),
+            status.action_label.as_str(),
+            status.refused
+        ),
+        ("1 change was not undone", "", true)
+    );
+    assert_eq!(
+        shown(&d, shelf),
+        sorted(photos),
+        "the other two stay undone"
+    );
+}

@@ -29,8 +29,8 @@ use wire::app_query_response::Answer;
 use wire::photos_picker_event::Kind as E;
 use wire::screen_event::Kind as S;
 
-use super::album_choice;
 use super::cells::{self, Link};
+use super::{album_choice, selection};
 use crate::catalog::load;
 use crate::kit::read::{self, Note, Page, Reading};
 use crate::kit::undo::Undo;
@@ -249,7 +249,19 @@ impl Picker {
             return;
         }
         self.undo.clear();
-        let written = album_choice::add(ctx, &mut self.undo, &self.picked, &self.album_id, None);
+        // One line, ONE Undo (the add's inverse for every pick, together): the picker closes, so
+        // the line goes to the album page beneath (#1185).
+        let locale = ctx.locale();
+        let name = self.album_name.clone();
+        let said =
+            |n: usize| selection::receipt(locale, selection::Verb::AddToAlbum, n, Some(&name));
+        let written = album_choice::add(
+            ctx,
+            &mut self.undo,
+            &self.picked,
+            &self.album_id,
+            Some(&said),
+        );
         for id in &written.committed {
             self.taken.insert(id.clone());
         }
@@ -258,7 +270,10 @@ impl Picker {
         // success ends the pick.
         match written.refusal {
             Some(sentence) => self.undo.refuse(sentence),
-            None => self.finished = true,
+            None => {
+                self.undo.hand_down(ctx);
+                self.finished = true;
+            }
         }
     }
 

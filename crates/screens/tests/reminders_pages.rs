@@ -423,6 +423,27 @@ fn completed_work_is_counted_shown_and_cleared() {
     assert_eq!(done.count, 0);
     assert_eq!(titles(&project_data(d.view(i)).groups), ["Still open"]);
     assert_eq!(task_of(&d, &open).status, "open");
+
+    // ONE UNDO puts back everything the Clear took (#1185).
+    assert_eq!(
+        project_state(d.view(i))
+            .status
+            .as_ref()
+            .unwrap()
+            .action_label,
+        "Undo"
+    );
+    d.send(
+        i,
+        wire::screen_event::Kind::StatusActed(wire::StatusActed {}),
+    );
+    assert_eq!(
+        project_state(d.view(i)).status.as_ref().unwrap().sentence,
+        "Undone"
+    );
+    assert_eq!(project_data(d.view(i)).completed.clone().unwrap().count, 2);
+    assert_eq!(task_of(&d, &a).status, "done");
+    assert_eq!(task_of(&d, &b).status, "done");
 }
 
 #[test]

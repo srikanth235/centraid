@@ -355,14 +355,8 @@ impl Shelf {
             .update(event, &picked, self.selection.door(), ctx)
         {
             album_choice::Outcome::Moved => {}
-            album_choice::Outcome::Added { album_id, written } => {
+            album_choice::Outcome::Added { written, .. } => {
                 self.selection.settle(&written, Verb::AddToAlbum);
-                self.selection.acknowledge(
-                    ctx.locale(),
-                    Verb::AddToAlbum,
-                    &written,
-                    self.choice.title_of(&album_id),
-                );
                 self.reload(ctx);
             }
             album_choice::Outcome::Created { refusal } => self.selection.refuse(refusal),
@@ -805,6 +799,8 @@ impl Screen for Shelf {
             Some(S::DataChanged(_)) => {
                 self.reload(ctx);
                 self.choice.reload(ctx);
+                // THE PICKER ABOVE CLOSED: its line and Undo are drawn here.
+                self.selection.door().take_handed(ctx);
             }
             Some(S::PhotosShelf(shelf)) => return self.event(shelf, ctx),
             Some(S::EffectResult(result)) => {
