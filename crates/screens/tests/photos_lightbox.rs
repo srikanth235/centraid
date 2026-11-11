@@ -840,6 +840,30 @@ fn export_of(effects: Vec<wire::effect::Kind>) -> wire::ExportOriginals {
         .expect("an export")
 }
 
+/// A send raises the owner check and nothing else; the member passes it and
+/// what the check was guarding goes out.
+fn after_check(d: &mut Driver, at: u64) -> Vec<wire::effect::Kind> {
+    let asked = effects_of(d);
+    assert!(
+        matches!(asked.as_slice(), [wire::effect::Kind::OwnerCheck(c)] if c.ask),
+        "only the owner check is asked: {asked:?}"
+    );
+    d.send(
+        at,
+        E::EffectResult(wire::EffectResult {
+            effect_id: 0,
+            outcome: Some(wire::effect_result::Outcome::OwnerChecked(
+                wire::OwnerChecked {
+                    available: true,
+                    biometry: wire::Biometry::Face as i32,
+                    outcome: wire::owner_checked::Outcome::Succeeded as i32,
+                },
+            )),
+        }),
+    );
+    effects_of(d)
+}
+
 fn exported(status: wire::originals_exported::Status) -> wire::effect_result::Outcome {
     wire::effect_result::Outcome::OriginalsExported(wire::OriginalsExported {
         status: status as i32,
@@ -856,7 +880,7 @@ fn a_photo_with_no_place_is_sent_without_asking_which_location() {
     d.effects.clear();
     tap(&mut d, at, V::Share);
     assert_eq!(view(&d, at).sheet, Sheet::None as i32);
-    let export = export_of(effects_of(&mut d));
+    let export = export_of(after_check(&mut d, at));
     assert_eq!(export.mode, wire::export_originals::Mode::Send as i32);
     assert!(!export.keep_location);
 }
@@ -931,7 +955,7 @@ fn a_send_is_a_decision_about_bytes_and_every_receipt_says_what_went_none_includ
             precision: Precision::None as i32,
         }),
     );
-    let export = export_of(effects_of(&mut d));
+    let export = export_of(after_check(&mut d, at));
     assert_eq!(export.photo_ids, std::slice::from_ref(&id));
     assert_eq!(export.mode, wire::export_originals::Mode::Send as i32);
     assert!(
@@ -958,7 +982,7 @@ fn a_send_is_a_decision_about_bytes_and_every_receipt_says_what_went_none_includ
             precision: Precision::Exact as i32,
         }),
     );
-    assert!(export_of(effects_of(&mut d)).keep_location);
+    assert!(export_of(after_check(&mut d, at)).keep_location);
     d.send(
         at,
         E::EffectResult(wire::EffectResult {
@@ -980,7 +1004,7 @@ fn a_send_is_a_decision_about_bytes_and_every_receipt_says_what_went_none_includ
             precision: Precision::None as i32,
         }),
     );
-    effects_of(&mut d);
+    after_check(&mut d, at);
     d.send(
         at,
         E::EffectResult(wire::EffectResult {
@@ -1002,7 +1026,7 @@ fn a_send_is_a_decision_about_bytes_and_every_receipt_says_what_went_none_includ
             precision: Precision::None as i32,
         }),
     );
-    effects_of(&mut d);
+    after_check(&mut d, at);
     d.send(
         at,
         E::EffectResult(wire::EffectResult {
@@ -1358,4 +1382,55 @@ fn people_in_a_photo_are_picked_by_name_added_and_removed_by_hand() {
         link(le::Kind::Remove(le::RemoveTapped { id: maya })),
     );
     assert!(people(&d).rows.is_empty());
+}
+
+fn answer_check(d: &mut Driver, at: u64, outcome: wire::owner_checked::Outcome) {
+    d.send(
+        at,
+        E::EffectResult(wire::EffectResult {
+            effect_id: 0,
+            outcome: Some(wire::effect_result::Outcome::OwnerChecked(
+                wire::OwnerChecked {
+                    available: outcome != wire::owner_checked::Outcome::Unavailable,
+                    biometry: wire::Biometry::Face as i32,
+                    outcome: outcome as i32,
+                },
+            )),
+        }),
+    );
+}
+
+#[test]
+fn a_send_that_is_not_confirmed_sends_nothing_and_a_phone_with_no_passcode_warns() {
+    use wire::owner_checked::Outcome as C;
+    let mut d = driver();
+    let id = photo(&d, Shot::new("lb-owner"));
+    let at = open(&mut d, &id, &[], "");
+    d.effects.clear();
+    // Dismissed: nothing goes, nothing is said.
+    tap(&mut d, at, V::Share);
+    effects_of(&mut d);
+    answer_check(&mut d, at, C::Cancelled);
+    assert!(effects_of(&mut d).is_empty());
+    assert!(view(&d, at).status.is_none());
+    // Not recognised: a sentence, nothing goes.
+    tap(&mut d, at, V::Share);
+    effects_of(&mut d);
+    answer_check(&mut d, at, C::Failed);
+    assert!(effects_of(&mut d).is_empty());
+    assert!(view(&d, at).status.expect("a sentence").refused);
+    // No passcode: it goes, with the warning shown.
+    tap(&mut d, at, V::Share);
+    effects_of(&mut d);
+    answer_check(&mut d, at, C::Unavailable);
+    let sent = effects_of(&mut d);
+    assert_eq!(
+        export_of(sent).mode,
+        wire::export_originals::Mode::Send as i32
+    );
+    let warning = view(&d, at).status.expect("the warning");
+    assert!(!warning.refused && warning.sentence.contains("no passcode"));
+    // Saving to the phone's own library asks nothing.
+    tap(&mut d, at, V::Download);
+    assert!(export_of(effects_of(&mut d)).mode == wire::export_originals::Mode::Save as i32);
 }

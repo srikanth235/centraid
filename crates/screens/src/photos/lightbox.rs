@@ -56,6 +56,7 @@ use crate::kit::act as kit_act;
 use crate::kit::civil::HourCycle;
 use crate::kit::earlier;
 use crate::kit::links::{self, Kind, Links, Outcome};
+use crate::kit::owner::{Answer as Owner, Leaving, NoPasscode, OwnerGate};
 use crate::kit::read::{self, Reading};
 use crate::kit::trash;
 use crate::screen::{Ctx, Screen};
@@ -73,6 +74,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         return None;
     };
     Some(Box::new(Lightbox {
+        gate: OwnerGate::default(),
+        sending: Precision::None,
         photo_id: args.photo_id.clone(),
         neighbours: args.neighbour_ids.clone(),
         album_id: args.album_id.clone(),
@@ -156,6 +159,11 @@ enum Pending {
 }
 
 struct Lightbox {
+    /// The owner check a send asks first (a copy saved to this phone's own
+    /// library does not leave it); no passcode warns and goes ahead.
+    gate: OwnerGate,
+    /// The precision the send waits on while the check is up.
+    sending: Precision,
     photo_id: String,
     neighbours: Vec<String>,
     album_id: String,
@@ -730,7 +738,18 @@ impl Lightbox {
         }
     }
 
+    /// A copy for the platform. SENDING ASKS THE OWNER CHECK FIRST (the bytes
+    /// leave the phone); saving to this phone's own library does not.
     fn export(&mut self, save: bool, precision: Precision, ctx: &Ctx) -> Vec<wire::Effect> {
+        if save || self.detail().is_none() {
+            return self.hand_over(save, precision, ctx.locale());
+        }
+        self.status = None;
+        self.sending = precision;
+        self.gate.begin(ctx.locale(), Leaving::Share)
+    }
+
+    fn hand_over(&mut self, save: bool, precision: Precision, locale: Locale) -> Vec<wire::Effect> {
         let Some(detail) = self.detail() else {
             return Vec::new();
         };
@@ -739,7 +758,7 @@ impl Lightbox {
         self.pending.push_back(Pending::Export { save, precision });
         vec![effect(wire::effect::Kind::ExportOriginals(
             super::export_originals(
-                ctx.locale(),
+                locale,
                 vec![id],
                 if save {
                     wire::export_originals::Mode::Save
@@ -749,6 +768,23 @@ impl Lightbox {
                 precision == Precision::Exact,
             ),
         ))]
+    }
+
+    /// The owner check's answer for a send.
+    fn checked(&mut self, checked: &wire::OwnerChecked, locale: Locale) -> Vec<wire::Effect> {
+        match self.gate.answer(locale, NoPasscode::Warn, checked) {
+            Some(Owner::Passed) => self.hand_over(false, self.sending, locale),
+            Some(Owner::PassedUnprotected(warning)) => {
+                let effects = self.hand_over(false, self.sending, locale);
+                self.receipt(warning);
+                effects
+            }
+            Some(Owner::Refused(sentence)) => {
+                self.refuse(sentence);
+                Vec::new()
+            }
+            Some(Owner::Cancelled) | None => Vec::new(),
+        }
     }
 
     fn effect_result(&mut self, result: &wire::EffectResult, ctx: &Ctx) -> Vec<wire::Effect> {
@@ -1215,7 +1251,25 @@ impl Screen for Lightbox {
                 self.albums.reload(ctx);
                 return self.reload(ctx);
             }
-            Some(E::EffectResult(result)) => return self.effect_result(&result, ctx),
+            Some(E::EffectResult(result)) => {
+                if self.gate.asking() {
+                    use wire::effect_result::Outcome as O;
+                    let checked = match &result.outcome {
+                        Some(O::OwnerChecked(checked)) => Some(*checked),
+                        // The prompt itself errored: the same as not recognised.
+                        Some(O::Failed(_)) => Some(wire::OwnerChecked {
+                            outcome: wire::owner_checked::Outcome::Failed as i32,
+                            ..Default::default()
+                        }),
+                        _ => None,
+                    };
+                    if let Some(checked) = checked {
+                        return self.checked(&checked, locale);
+                    }
+                }
+                return self.effect_result(&result, ctx);
+            }
+            Some(E::Left(_)) => return self.gate.cancel(),
             Some(E::OffThreadDone(done)) => return self.fetched(&done, ctx),
             Some(E::TimerFired(fired)) if fired.timer == SLIDESHOW_TIMER => {
                 // IT WRAPS AT THE END OF THE SHELF: a slideshow is a loop until Leave.

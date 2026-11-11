@@ -50,6 +50,7 @@ use super::selection::{Drain, Offer, Outcome, Selection, Verb, Wording, each};
 use crate::catalog::{act, load};
 use crate::field::Field;
 use crate::kit::act as kit_act;
+use crate::kit::owner::{Answer as Owner, Leaving, NoPasscode, OwnerGate};
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
@@ -104,6 +105,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         keep: album.map(|_| Keep::default()),
         dismissed: false,
         copying: None,
+        gate: OwnerGate::default(),
+        sending: None,
     }))
 }
 
@@ -127,6 +130,10 @@ struct Shelf {
     id: String,
     route_title: String,
     phase: Phase,
+    /// The owner check a send asks first; no passcode warns and goes ahead.
+    gate: OwnerGate,
+    /// The send waiting on the check: whether the exact place travels.
+    sending: Option<bool>,
     cells: Vec<wire::PhotosCell>,
     next: Option<wire::PhotosCursor>,
     head: Option<wire::PhotosAlbumHead>,
@@ -488,20 +495,51 @@ impl Shelf {
     }
 
     /// Hand the pick's originals to the platform: its share sheet or this
-    /// device's photos. The shell finds the files and takes the place out.
+    /// device's photos. SENDING ASKS THE OWNER CHECK FIRST (the bytes leave the
+    /// phone); saving to this device's photos does not. The shell finds the
+    /// files and takes the place out.
     fn copy(&mut self, mode: Mode, keep_location: bool, ctx: &Ctx) -> Vec<wire::Effect> {
         self.prompt = Prompt::Unspecified;
         self.notice.clear();
+        if self.selection.picked().is_empty() || self.copying.is_some() || self.gate.asking() {
+            return Vec::new();
+        }
+        if mode == Mode::Send {
+            self.sending = Some(keep_location);
+            return self.gate.begin(ctx.locale(), Leaving::Share);
+        }
+        self.hand_over(mode, keep_location, ctx.locale())
+    }
+
+    fn hand_over(&mut self, mode: Mode, keep_location: bool, locale: Locale) -> Vec<wire::Effect> {
         let ids = self.selection.picked().to_vec();
-        if ids.is_empty() || self.copying.is_some() {
+        if ids.is_empty() {
             return Vec::new();
         }
         self.copying = Some(mode);
         vec![wire::Effect {
             kind: Some(wire::effect::Kind::ExportOriginals(
-                super::export_originals(ctx.locale(), ids, mode, keep_location),
+                super::export_originals(locale, ids, mode, keep_location),
             )),
         }]
+    }
+
+    /// The owner check's answer for a send.
+    fn checked(&mut self, checked: &wire::OwnerChecked, locale: Locale) -> Vec<wire::Effect> {
+        let keep_location = self.sending.take().unwrap_or(false);
+        match self.gate.answer(locale, NoPasscode::Warn, checked) {
+            Some(Owner::Passed) => self.hand_over(Mode::Send, keep_location, locale),
+            Some(Owner::PassedUnprotected(warning)) => {
+                let effects = self.hand_over(Mode::Send, keep_location, locale);
+                self.notice = warning;
+                effects
+            }
+            Some(Owner::Refused(sentence)) => {
+                self.notice = sentence;
+                Vec::new()
+            }
+            Some(Owner::Cancelled) | None => Vec::new(),
+        }
     }
 
     fn copied(&mut self, result: &wire::EffectResult, locale: Locale) {
@@ -723,7 +761,25 @@ impl Screen for Shelf {
                 self.choice.reload(ctx);
             }
             Some(S::PhotosShelf(shelf)) => return self.event(shelf, ctx),
-            Some(S::EffectResult(result)) => self.copied(&result, ctx.locale()),
+            Some(S::EffectResult(result)) => {
+                use wire::effect_result::Outcome as O;
+                if self.gate.asking() {
+                    let checked = match &result.outcome {
+                        Some(O::OwnerChecked(checked)) => Some(*checked),
+                        // The prompt itself errored: the same as not recognised.
+                        Some(O::Failed(_)) => Some(wire::OwnerChecked {
+                            outcome: wire::owner_checked::Outcome::Failed as i32,
+                            ..Default::default()
+                        }),
+                        _ => None,
+                    };
+                    if let Some(checked) = checked {
+                        return self.checked(&checked, ctx.locale());
+                    }
+                }
+                self.copied(&result, ctx.locale());
+            }
+            Some(S::Left(_)) => return self.gate.cancel(),
             _ => {}
         }
         Vec::new()

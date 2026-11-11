@@ -678,6 +678,13 @@ fn send_a_copy_asks_how_much_place_travels_then_hands_the_pick_to_the_platform()
         shelf,
         ev::Kind::LocationChosen(ev::LocationChosen { exact: false }),
     );
+    // The tap raises the owner check and nothing leaves yet.
+    assert_eq!(d.effects.len(), 1);
+    assert!(matches!(
+        d.effects[0].effect.clone().and_then(|e| e.kind),
+        Some(wire::effect::Kind::OwnerCheck(c)) if c.ask
+    ));
+    d.answer_effect(owner_checked(wire::owner_checked::Outcome::Succeeded));
     assert_eq!(d.effects.len(), 1);
     let Some(wire::effect::Kind::ExportOriginals(export)) =
         d.effects[0].effect.clone().and_then(|e| e.kind)
@@ -800,4 +807,45 @@ fn the_trash_says_the_kits_words_and_empties_through_the_shared_verb() {
     confirm_prompt(&mut d, shelf);
     assert!(shown(&d, shelf).is_empty(), "the trash is empty");
     assert!(state(&d, shelf).status.is_none());
+}
+
+fn owner_checked(outcome: wire::owner_checked::Outcome) -> wire::effect_result::Outcome {
+    wire::effect_result::Outcome::OwnerChecked(wire::OwnerChecked {
+        available: outcome != wire::owner_checked::Outcome::Unavailable,
+        biometry: wire::Biometry::Face as i32,
+        outcome: outcome as i32,
+    })
+}
+
+#[test]
+fn a_send_that_is_not_confirmed_sends_nothing_and_no_passcode_warns() {
+    use wire::owner_checked::Outcome as C;
+    let mut d = driver();
+    let a = photo(&d, "owner");
+    star(&d, &a);
+    let shelf = open(&mut d, wire::PhotosShelfKind::Favorites, "");
+    pick(&mut d, shelf, &a);
+    let ask = |d: &mut Driver| {
+        d.effects.clear();
+        send(
+            d,
+            shelf,
+            ev::Kind::LocationChosen(ev::LocationChosen { exact: false }),
+        );
+    };
+    ask(&mut d);
+    d.answer_effect(owner_checked(C::Cancelled));
+    assert!(d.effects.is_empty());
+    assert!(state(&d, shelf).notice.is_empty());
+    ask(&mut d);
+    d.answer_effect(owner_checked(C::Failed));
+    assert!(d.effects.is_empty());
+    assert!(!state(&d, shelf).notice.is_empty());
+    ask(&mut d);
+    d.answer_effect(owner_checked(C::Unavailable));
+    assert!(matches!(
+        d.effects[0].effect.clone().and_then(|e| e.kind),
+        Some(wire::effect::Kind::ExportOriginals(_))
+    ));
+    assert!(state(&d, shelf).notice.contains("no passcode"));
 }

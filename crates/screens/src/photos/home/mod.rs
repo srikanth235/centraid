@@ -48,6 +48,7 @@ use super::cells::{self, Link};
 use super::keep_originals::FreeUpRow;
 use super::selection::{Drain, Offer, Outcome, Selection, Verb, Wording};
 use super::{fetch, free_up, routes};
+use crate::kit::owner::{Answer as Owner, Leaving, NoPasscode, OwnerGate};
 use crate::kit::{civil, menu};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, photos as words, photos_home as sentences};
@@ -63,6 +64,10 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
 }
 
 struct Home {
+    /// The owner check a send asks first; no passcode warns and goes ahead.
+    gate: OwnerGate,
+    /// The send waiting on the check: whether the exact place travels.
+    sending: bool,
     destination: Dest,
     search_origin: Dest,
     sheet: Sheet,
@@ -123,6 +128,8 @@ impl Home {
             free_up: FreeUpRow::default(),
             deleting: Vec::new(),
             status: None,
+            gate: OwnerGate::default(),
+            sending: false,
         }
     }
 
@@ -429,16 +436,9 @@ impl Home {
                 if self.sheet == Sheet::CopyPlace && !self.selection.picked().is_empty() {
                     self.sheet = Sheet::None;
                     self.status = None;
-                    return vec![wire::Effect {
-                        kind: Some(wire::effect::Kind::ExportOriginals(
-                            super::export_originals(
-                                locale,
-                                self.selection.picked().to_vec(),
-                                wire::export_originals::Mode::Send,
-                                chosen.keep_location,
-                            ),
-                        )),
-                    }];
+                    // SENDING ASKS THE OWNER CHECK FIRST: the bytes leave the phone.
+                    self.sending = chosen.keep_location;
+                    return self.gate.begin(locale, Leaving::Share);
                 }
             }
         }
@@ -559,6 +559,40 @@ impl Home {
                 }
             }
             _ => {}
+        }
+    }
+
+    /// The owner check's answer for a send.
+    fn checked(&mut self, checked: &wire::OwnerChecked, locale: Locale) -> Vec<wire::Effect> {
+        let ids = self.selection.picked().to_vec();
+        let send = |keep_location: bool| {
+            vec![wire::Effect {
+                kind: Some(wire::effect::Kind::ExportOriginals(
+                    super::export_originals(
+                        locale,
+                        ids.clone(),
+                        wire::export_originals::Mode::Send,
+                        keep_location,
+                    ),
+                )),
+            }]
+        };
+        let line = |sentence: String, refused: bool| wire::StatusLine {
+            sentence,
+            action_label: String::new(),
+            refused,
+        };
+        match self.gate.answer(locale, NoPasscode::Warn, checked) {
+            Some(Owner::Passed) if !ids.is_empty() => send(self.sending),
+            Some(Owner::PassedUnprotected(warning)) if !ids.is_empty() => {
+                self.status = Some(line(warning, false));
+                send(self.sending)
+            }
+            Some(Owner::Refused(sentence)) => {
+                self.status = Some(line(sentence, true));
+                Vec::new()
+            }
+            _ => Vec::new(),
         }
     }
 
@@ -895,7 +929,25 @@ impl Screen for Home {
                 }];
             }
             Some(E::EnvironmentChanged(_) | E::DataChanged(_)) => self.read(ctx),
-            Some(E::EffectResult(result)) => self.on_effect(&result, ctx),
+            Some(E::EffectResult(result)) => {
+                use wire::effect_result::Outcome as O;
+                if self.gate.asking() {
+                    let checked = match &result.outcome {
+                        Some(O::OwnerChecked(checked)) => Some(*checked),
+                        // The prompt itself errored: the same as not recognised.
+                        Some(O::Failed(_)) => Some(wire::OwnerChecked {
+                            outcome: wire::owner_checked::Outcome::Failed as i32,
+                            ..Default::default()
+                        }),
+                        _ => None,
+                    };
+                    if let Some(checked) = checked {
+                        return self.checked(&checked, ctx.locale());
+                    }
+                }
+                self.on_effect(&result, ctx);
+            }
+            Some(E::Left(_)) => return self.gate.cancel(),
             Some(E::OffThreadDone(done)) => return self.on_job(&done, ctx),
             Some(E::PhotosHome(home)) => {
                 if let Some(kind) = home.kind {

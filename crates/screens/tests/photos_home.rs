@@ -1328,6 +1328,20 @@ fn send_a_copy_asks_which_location_travels_then_hands_the_pick_to_the_shell() {
     let update = r.send(H::CopyPlaceChosen(wire::PhotosCopyPlaceChosen {
         keep_location: false,
     }));
+    // The tap raises the owner check and nothing leaves yet.
+    assert_eq!(update.effects.len(), 1);
+    assert!(matches!(
+        &update.effects[0].effect.as_ref().unwrap().kind,
+        Some(wire::effect::Kind::OwnerCheck(c)) if c.ask
+    ));
+    let update =
+        r.d.answer_effect(wire::effect_result::Outcome::OwnerChecked(
+            wire::OwnerChecked {
+                available: true,
+                biometry: wire::Biometry::Face as i32,
+                outcome: wire::owner_checked::Outcome::Succeeded as i32,
+            },
+        ));
     let Some(wire::effect::Kind::ExportOriginals(export)) =
         &update.effects[0].effect.as_ref().unwrap().kind
     else {
@@ -1995,4 +2009,44 @@ fn closing_search_returns_to_collections_when_it_started_there() {
     r.send(H::SearchOpened(wire::PhotosSearchOpened {}));
     r.send(H::SearchClosed(wire::PhotosSearchClosed {}));
     assert_eq!(r.state().destination, Dest::Collections as i32);
+}
+
+#[test]
+fn a_send_waits_on_the_owner_check_and_says_why_when_it_does_not_go() {
+    use wire::owner_checked::Outcome as C;
+    let check = |outcome: C| {
+        wire::effect_result::Outcome::OwnerChecked(wire::OwnerChecked {
+            available: outcome != C::Unavailable,
+            biometry: wire::Biometry::Face as i32,
+            outcome: outcome as i32,
+        })
+    };
+    let mut r = rig();
+    let a = r.photo("owner a", Some("2026-06-21T10:00:00Z"), None);
+    r.send(H::Refreshed(wire::PhotosRefreshed {}));
+    r.send(toggle(&a));
+    let ask = |r: &mut Rig| {
+        r.send(H::CopyAsked(wire::PhotosCopyAsked {}));
+        r.send(H::CopyPlaceChosen(wire::PhotosCopyPlaceChosen {
+            keep_location: false,
+        }))
+    };
+    ask(&mut r);
+    assert!(r.d.answer_effect(check(C::Cancelled)).effects.is_empty());
+    assert!(r.state().status.is_none());
+    ask(&mut r);
+    assert!(r.d.answer_effect(check(C::Failed)).effects.is_empty());
+    assert!(r.state().status.as_ref().is_some_and(|s| s.refused));
+    ask(&mut r);
+    let update = r.d.answer_effect(check(C::Unavailable));
+    assert!(matches!(
+        &update.effects[0].effect.as_ref().unwrap().kind,
+        Some(wire::effect::Kind::ExportOriginals(_))
+    ));
+    assert!(
+        r.state()
+            .status
+            .as_ref()
+            .is_some_and(|s| !s.refused && s.sentence.contains("no passcode"))
+    );
 }
