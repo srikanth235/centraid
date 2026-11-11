@@ -1771,28 +1771,11 @@ fn phone_says(wording: &Wording<'_>, differences: &follow::Phone) -> Vec<wire::P
         "1" => "!".to_owned(),
         _ => words::says_priority_none(locale),
     };
-    // The phone's flag is the task's star: it says "flagged" or "not flagged", as the page says Flag.
-    let flag = follow::of(differences, "starred").and_then(|difference| {
-        let stated = difference.stated.as_bool()?;
-        Some(follow::says(
-            locale,
-            follow::Source::Phone,
-            &if stated {
-                words::says_flagged(locale)
-            } else {
-                words::says_not_flagged(locale)
-            },
-            &words::says_noun_flag(locale),
-            "starred",
-            None,
-        ))
-    });
     [
         line("title", words::says_noun_title(locale), &same),
         line("description", words::says_noun_notes(locale), &same),
         line("due", words::says_noun_due(locale), &due),
         line("priority", words::says_noun_priority(locale), &bangs),
-        flag,
         line("url", words::says_noun_link(locale), &same),
     ]
     .into_iter()

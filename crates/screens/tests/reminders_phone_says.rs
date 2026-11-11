@@ -54,42 +54,6 @@ fn an_edited_followed_field_says_what_the_phone_says_and_taking_it_back_clears_t
 }
 
 #[test]
-fn a_flag_the_member_changed_says_what_the_phone_says_and_taking_it_flags_the_task_again() {
-    let mut d = reminders_driver();
-    follow_reminders(
-        &d,
-        ("list:1", "Errands"),
-        json!([{ "external_id": "r1", "fields": reminder_fields("Call mum", json!({ "starred": true })) }]),
-        true,
-    );
-    let id = id_by_title(&d, "Call mum");
-    assert!(
-        task_of(&d, &id).flagged,
-        "flagged on the phone, starred here"
-    );
-    assert!(lines(&mut d, &id).1.is_empty(), "nobody changed the star");
-    arrange(
-        &d,
-        act::reminders::UnstarTask {
-            task_id: id.clone(),
-        },
-    );
-    let (page, says) = lines(&mut d, &id);
-    let leads: Vec<&str> = says.iter().map(|line| line.lead.as_str()).collect();
-    assert_eq!(leads, ["Phone says flagged"]);
-    d.send(
-        page,
-        wire::screen_event::Kind::PhoneSaysTaken(wire::PhoneSaysTaken {
-            take: says[0].take.clone(),
-        }),
-    );
-    assert!(task_of(&d, &id).flagged);
-    assert!(detail(d.view(page)).phone_says.is_empty());
-}
-
-/// The phone's word for the due day, as the task page words its own: "Tomorrow", "Wed 11 March"
-/// and "9:30 AM", in the member's zone and hour cycle, never the stored text.
-#[test]
 fn a_due_the_member_moved_says_what_the_phone_says_in_the_words_and_zone_of_the_page() {
     let mut d = reminders_driver();
     d.call(wire::screen_request::Kind::Environment(wire::Environment {

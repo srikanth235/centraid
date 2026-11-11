@@ -62,10 +62,13 @@ fn nothing_connected_every_tab_is_one_sentence_and_connect_naming_the_phones_sto
 #[test]
 fn the_phones_store_is_its_os_health_connect_on_android() {
     let d = driver_on("android", "en-GB");
+    // On Android the store is Health Connect, in the sentence and on the action: never Apple Health.
+    let empty = empty_of(home_state(d.view(root(&d))));
     assert_eq!(
-        empty_of(home_state(d.view(root(&d)))).action_label,
-        "Connect Health Connect"
+        empty.headline,
+        "Bring in your steps, sleep and workouts from Health Connect."
     );
+    assert_eq!(empty.action_label, "Connect Health Connect");
 }
 
 #[test]

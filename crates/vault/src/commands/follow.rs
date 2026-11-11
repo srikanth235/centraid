@@ -64,7 +64,7 @@ use serde_json::{Map, Value as Json};
 use crate::blob;
 use crate::commands::entity::{self, trash_stamp};
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, arrival};
-use crate::commands::{contact_point, container, event, flag, workout};
+use crate::commands::{contact_point, container, event, workout};
 use crate::error::{Result, VaultError};
 use crate::model::{DEFAULT_CALENDAR_ID, Kind};
 
@@ -509,7 +509,7 @@ pub const SYSTEMS: &[SystemMap] = &[
     // A reminder of the phone's Reminders app (iOS): a task in the list it sat in. The
     // member's own edit of a field stands; a reminder the phone completes completes the task
     // (the status and its date are two fields written as one, so the table's own CHECK holds),
-    // its flag is the task's star, and one deleted on the phone goes to the trash if the member never touched the task.
+    // and one deleted on the phone goes to the trash if the member never touched the task.
     SystemMap {
         system: "phone_reminders",
         command: "follow.reminders",
@@ -529,16 +529,7 @@ pub const SYSTEMS: &[SystemMap] = &[
             "done_at",
         ],
         fixed: &[],
-        // The phone's flag is the task's star (`flag:starred`), judged like any field.
-        children: &[Child {
-            name: "starred",
-            read: flag::starred_read,
-            canon: flag::starred_canon,
-            merge: flag::starred_merge,
-            items: None,
-            take: flag::starred_take,
-            stamp: None,
-        }],
+        children: &[],
         match_on: &[Match::Title],
         gone: Gone::Trash,
         window: None,
