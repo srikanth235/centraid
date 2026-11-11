@@ -31,6 +31,20 @@ const AGAIN: &str = "again";
 const IMPORT: &str = "import";
 const ALL: &str = "all";
 
+/// The `import-notes` request for the picked files: the dry run and the write say the same
+/// arrival, the picked folder's (or file's) name, so the vault records one origin for them.
+fn import_request(files: &[TextFile], dry_run: Option<bool>) -> act::notes::ImportNotes {
+    let label = transfer::arrival_name(files);
+    act::notes::ImportNotes {
+        files: transfer::files_json(files),
+        dry_run,
+        arrived_system: label
+            .is_some()
+            .then_some(act::notes::ImportNotesArrivedSystem::Markdown),
+        arrived_label: label,
+    }
+}
+
 #[must_use]
 pub fn build_import(route: &wire::Route) -> Option<Box<dyn Screen>> {
     build(route, false)
@@ -130,14 +144,7 @@ impl Transfer {
         self.status = None;
         self.stage = Stage::Reading;
         let key = kit_act::key(&["note.import", "dry"], kit_act::fresh());
-        let settled = kit_act::act(
-            ctx,
-            act::notes::ImportNotes {
-                files: transfer::files_json(&self.files),
-                dry_run: Some(true),
-            },
-            &key,
-        );
+        let settled = kit_act::act(ctx, import_request(&self.files, Some(true)), &key);
         if !settled.committed {
             self.stage = Stage::Choosing;
             self.refuse(settled.refusal);
@@ -163,14 +170,7 @@ impl Transfer {
         };
         self.stage = Stage::Writing;
         let key = kit_act::key(&["note.import"], kit_act::fresh());
-        let settled = kit_act::act(
-            ctx,
-            act::notes::ImportNotes {
-                files: transfer::files_json(&self.files),
-                dry_run: None,
-            },
-            &key,
-        );
+        let settled = kit_act::act(ctx, import_request(&self.files, None), &key);
         if settled.committed {
             let made = transfer::count(&settled.output, "notes");
             self.say(fill(
@@ -444,5 +444,33 @@ impl Screen for Transfer {
             })),
             ..wire::ViewState::default()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_dry_run_and_the_write_carry_the_same_arrival() {
+        let file = |path: &str| TextFile {
+            path: path.to_owned(),
+            text: "words".to_owned(),
+        };
+        let files = vec![file("Vault/one.md"), file("Vault/sub/two.md")];
+        for request in [
+            import_request(&files, Some(true)),
+            import_request(&files, None),
+        ] {
+            let request: wire::ActRequest = request.into();
+            let text = |key: &str| match &request.input[key].kind {
+                Some(wire::value::Kind::Text(text)) => text.clone(),
+                other => panic!("{key}: {other:?}"),
+            };
+            assert_eq!(text("arrived_system"), "markdown");
+            assert_eq!(text("arrived_label"), "Vault");
+        }
+        let none: wire::ActRequest = import_request(&[], None).into();
+        assert!(!none.input.contains_key("arrived_system"));
     }
 }
