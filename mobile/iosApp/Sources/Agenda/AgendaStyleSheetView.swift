@@ -19,8 +19,17 @@ struct AgendaStyleSheetView: View {
     let onIcon: (String) -> Void
     let onSubmit: () -> Void
     let onCancel: () -> Void
+    /// "Move to trash" on the sheet that edits a calendar the vault may remove (the state carries
+    /// the word, or none): nil where the host has no such verb.
+    var onTrash: (() -> Void)? = nil
 
     @Environment(\.colorScheme) private var scheme
+
+    /// THE MOVE TO TRASH, when Rust sent its word and the host can send it.
+    private var trashOutline: [SheetOutline] {
+        guard let onTrash, !style.deleteLabel.isEmpty else { return [] }
+        return [SheetOutline(label: style.deleteLabel, tone: "net", identifier: "agenda-style-trash", action: onTrash)]
+    }
 
     /// THE BOARD'S GRID: eight to a row, the colours and the icons alike.
     private static let eight = Array(repeating: GridItem(.flexible(), spacing: 0), count: 8)
@@ -34,7 +43,7 @@ struct AgendaStyleSheetView: View {
                 identifier: "agenda-style-submit",
                 action: onSubmit
             ),
-            outlines: [SheetOutline(label: style.cancelLabel, link: true, identifier: "agenda-style-cancel", action: onCancel)]
+            outlines: trashOutline + [SheetOutline(label: style.cancelLabel, link: true, identifier: "agenda-style-cancel", action: onCancel)]
         ) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {

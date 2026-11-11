@@ -449,3 +449,143 @@ fn gone_of(page: &Option<wire::PageState>) -> &wire::Failure {
         _ => panic!("not a final failure: {page:?}"),
     }
 }
+
+/// Make a calendar of the vault's own and an event on it; both ids.
+fn calendar_with_an_event(world: &mut World, name: &str, event: &str) -> (String, String) {
+    let made = world.act(act::calendar::CreateCalendar {
+        title: name.to_owned(),
+        ..Default::default()
+    });
+    let output: serde_json::Value = serde_json::from_slice(&made.output).expect("json output");
+    let calendar = output["id"].as_str().expect("the calendar id").to_owned();
+    let id = world.propose(event, "2026-11-12T14:00:00", "2026-11-12T15:00:00", |p| {
+        p.calendar_id = Some(calendar.clone())
+    });
+    (calendar, id)
+}
+
+fn edit_calendar(world: &mut World, home: u64, calendar: &str) {
+    world.driver.send(
+        home,
+        E::AgendaHome(wire::AgendaHomeEvent {
+            kind: Some(wire::agenda_home_event::Kind::CalendarEdit(
+                wire::agenda_home_event::CalendarEditRequested {
+                    calendar_id: calendar.to_owned(),
+                },
+            )),
+        }),
+    );
+}
+
+#[test]
+fn a_calendar_moves_to_trash_from_its_edit_sheet_with_its_events_and_undo_brings_them_back() {
+    use wire::agenda_home_event::Kind as H;
+    let mut world = world();
+    let (calendar, _) = calendar_with_an_event(&mut world, "Work", "Standup");
+    let home = world.driver.push(agenda::TAB, agenda_home());
+
+    // THE CONTROL: the edit sheet of a calendar the vault may remove carries "Move to trash".
+    edit_calendar(&mut world, home, &calendar);
+    let sheet = home_state(&world, home).style.clone().expect("the sheet");
+    assert_eq!(sheet.title, "Edit Calendar");
+    assert_eq!(sheet.delete_label, "Move to trash");
+    // It asks nothing: the calendar and its events go, and the line says so with Undo.
+    world.driver.send(
+        home,
+        E::AgendaHome(wire::AgendaHomeEvent {
+            kind: Some(H::StyleTrashed(wire::agenda_home_event::StyleTrashed {})),
+        }),
+    );
+    let line = home_state(&world, home)
+        .status
+        .clone()
+        .expect("a status line");
+    assert_eq!(
+        (line.sentence.as_str(), line.action_label.as_str()),
+        ("Work moved to trash", "Undo")
+    );
+    assert_eq!(
+        home_state(&world, home).sheet,
+        wire::agenda_home_state::Sheet::None as i32
+    );
+    assert!(!world.calendar_names().iter().any(|(id, _)| *id == calendar));
+    assert!(
+        in_window(&world, "Standup").is_empty(),
+        "its events went with it"
+    );
+
+    // UNDO brings the calendar back with exactly those events.
+    world
+        .driver
+        .send(home, E::StatusActed(wire::StatusActed {}));
+    assert!(world.calendar_names().iter().any(|(id, _)| *id == calendar));
+    assert_eq!(in_window(&world, "Standup").len(), 1);
+    assert_eq!(
+        home_state(&world, home)
+            .status
+            .as_ref()
+            .map(|s| s.sentence.as_str()),
+        Some("Undone")
+    );
+}
+
+#[test]
+fn the_calendar_every_vault_is_founded_with_has_no_move_to_trash() {
+    let mut world = world();
+    let home = world.driver.push(agenda::TAB, agenda_home());
+    edit_calendar(&mut world, home, "calendar:default");
+    let sheet = home_state(&world, home).style.clone().expect("the sheet");
+    assert_eq!(
+        sheet.delete_label, "",
+        "the founding calendar cannot be removed"
+    );
+    // A new calendar's sheet has nothing to remove either.
+    pick_band(&mut world, home, "more");
+}
+
+#[test]
+fn a_calendar_in_the_trash_is_a_row_that_restores_with_its_events_and_empty_trash_takes_both() {
+    let mut world = world();
+    let (calendar, _) = calendar_with_an_event(&mut world, "Work", "Standup");
+    world.act(act::calendar::DeleteCalendar {
+        calendar_id: calendar.clone(),
+    });
+    let page = trash_page(&mut world);
+    let held = rows(&world, page);
+    let row = held
+        .iter()
+        .find(|row| row.id == calendar)
+        .expect("the calendar is a row of the shelf");
+    assert_eq!(row.title, "Work");
+
+    // One restore brings the calendar back with the events that went with it.
+    send_trash(
+        &mut world,
+        page,
+        T::Restore(te::RestoreTapped {
+            id: calendar.clone(),
+        }),
+    );
+    assert!(world.calendar_names().iter().any(|(id, _)| *id == calendar));
+    assert_eq!(in_window(&world, "Standup").len(), 1);
+
+    // Emptying the trash takes the calendars in it (and their events) for good.
+    send_trash(&mut world, page, T::Refreshed(te::Refreshed {}));
+    let before = rows(&world, page).len();
+    world.act(act::calendar::DeleteCalendar {
+        calendar_id: calendar.clone(),
+    });
+    send_trash(&mut world, page, T::Refreshed(te::Refreshed {}));
+    assert_eq!(
+        rows(&world, page).len(),
+        before + 2,
+        "the calendar and the event that went with it"
+    );
+    send_trash(&mut world, page, T::Empty(te::EmptyTapped {}));
+    send_trash(&mut world, page, T::Confirmed(te::Confirmed {}));
+    assert!(
+        rows(&world, page).is_empty(),
+        "everything in the trash went"
+    );
+    assert!(!world.calendar_names().iter().any(|(id, _)| *id == calendar));
+}

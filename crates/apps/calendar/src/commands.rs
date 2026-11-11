@@ -130,6 +130,10 @@ pub const ACTIONS: &[ActionRow] = &[
     // THE TWO DESTROYS (#1185), as in every app: one trashed event, and the whole trash.
     confirmed("purge-event", "entity.purge"),
     confirmed("empty-trash", "entity.empty_trash"),
+    // A CALENDAR GOES TO THE TRASH WITH ITS EVENTS AND COMES BACK WITH THEM (the vault's holder
+    // rule). Chat cards, asked first; the screen moves it with no confirm and its Undo is its restore.
+    confirmed("delete-calendar", "entity.trash"),
+    confirmed("restore-calendar", "entity.restore"),
     // An attachment is an `attached` edge from the event: the shared verbs.
     act("attach", "edge.add"),
     act("detach", "edge.remove"),
@@ -179,7 +183,7 @@ mod tests {
 
     #[test]
     fn the_events_own_are_the_verbs_the_rest_are_shared_and_no_task_is_written() {
-        assert_eq!(ACTIONS.len(), 20);
+        assert_eq!(ACTIONS.len(), 22);
         assert!(
             ACTIONS.iter().all(|row| !row.command.starts_with("task.")),
             "Calendar reads a reminder and never writes one"

@@ -197,7 +197,8 @@ struct AgendaHomeView: View {
                 onColor: { key in send(AgendaEvents.make { $0.styleColor = .with { $0.key = key } }) },
                 onIcon: { key in send(AgendaEvents.make { $0.styleIcon = .with { $0.key = key } }) },
                 onSubmit: { send(AgendaEvents.make { $0.styleSubmitted = .init() }) },
-                onCancel: { send(AgendaEvents.make { $0.sheetClosed = .init() }) }
+                onCancel: { send(AgendaEvents.make { $0.sheetClosed = .init() }) },
+                onTrash: { send(AgendaEvents.make { $0.styleTrashed = .init() }) }
             )
         }
         // THE STOP CONFIRM (#1185): the kit's sheet in Rust's own sentences, the same as Health's and People's.

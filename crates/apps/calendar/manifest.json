@@ -788,7 +788,7 @@
         "clear out the trashed events for good",
         "permanently delete everything in the Calendar trash"
       ],
-      "description": "Empty the event trash through entity.empty_trash with kind event. Irreversible and takes no id: every event in the trash is destroyed now, as purge destroys one.",
+      "description": "Empty the event trash through entity.empty_trash with kind event (and, with with_kind calendar, the calendars in it). Irreversible and takes no id: every event and calendar in the trash is destroyed now, as purge destroys one.",
       "confirmation": "required",
       "input": {
         "type": "object",
@@ -797,11 +797,95 @@
             "type": "string",
             "enum": ["event"]
           },
+          "with_kind": {
+            "type": "string",
+            "enum": ["calendar"]
+          },
           "due_only": {
             "type": "boolean"
           }
         },
         "required": [],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "delete-calendar",
+      "verb": "delete",
+      "kind": "calendar",
+      "inverse": null,
+      "sealed": [],
+      "command": "entity.trash",
+      "phrasings": [
+        "delete the Work calendar",
+        "remove the Birthdays calendar",
+        "trash the Family calendar"
+      ],
+      "description": "Move a calendar and its events to the trash through entity.trash; the vault refuses the calendar every vault is founded with. A restore brings the calendar back with exactly the events that went with it.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "restore-calendar",
+      "verb": "restore",
+      "kind": "calendar",
+      "inverse": null,
+      "sealed": [],
+      "command": "entity.restore",
+      "phrasings": [
+        "bring the Work calendar back",
+        "restore the Family calendar",
+        "undelete the Birthdays calendar"
+      ],
+      "description": "Restore a trashed calendar through entity.restore, with the events that went to the trash with it. The screen's Undo of a calendar's delete sends it.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {

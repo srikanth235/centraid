@@ -19,7 +19,21 @@ use crate::strings::{Locale, agenda as words, shared};
 
 /// Calendar's trash, as the kit's screen takes it.
 pub static SPEC: TrashSpec = TrashSpec {
-    of_row: None,
+    // A CALENDAR IS A ROW OF THE SAME SHELF: its restore and its move back are the calendar's own
+    // actions, and one restore brings back the events that went with it.
+    of_row: Some(|item| {
+        item.noun?;
+        Some((
+            act::calendar::RestoreCalendar {
+                calendar_id: item.id.clone(),
+            }
+            .into(),
+            act::calendar::DeleteCalendar {
+                calendar_id: item.id.clone(),
+            }
+            .into(),
+        ))
+    }),
     app: act::calendar::APP,
     icon_key: "Calendar",
     noun: shared::trash_noun_event,
@@ -48,6 +62,8 @@ pub static SPEC: TrashSpec = TrashSpec {
     empty: || {
         act::calendar::EmptyTrash {
             kind: Some(act::calendar::EmptyTrashKind::Event),
+            // The calendars in the trash go too (with the events that went with them).
+            with_kind: Some(act::calendar::EmptyTrashWithKind::Calendar),
             ..Default::default()
         }
         .into()

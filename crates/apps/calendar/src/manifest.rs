@@ -47,7 +47,7 @@ mod tests {
     fn it_declares_seven_queries_and_fourteen_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 8);
-        assert_eq!(manifest.actions.len(), 20);
+        assert_eq!(manifest.actions.len(), 22);
         for name in [
             "upcoming",
             "search",
@@ -146,8 +146,14 @@ mod tests {
                 .action(row.action)
                 .expect("checked above")
                 .confirmation;
-            let expected = if matches!(row.action, "purge-event" | "empty-trash" | "stop-following")
-            {
+            let expected = if matches!(
+                row.action,
+                "purge-event"
+                    | "empty-trash"
+                    | "stop-following"
+                    | "delete-calendar"
+                    | "restore-calendar"
+            ) {
                 (Confirmation::Required, Confirm::Required)
             } else {
                 (Confirmation::None, Confirm::None)

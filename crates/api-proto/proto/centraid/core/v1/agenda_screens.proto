@@ -876,6 +876,8 @@ message AgendaHomeEvent {
     // on a staged row.
     LinkEvent quick_link = 64;
     QuickStagedRemoved quick_staged_removed = 65;
+    // THE EDIT CALENDAR SHEET'S MOVE TO TRASH (#1185): the calendar and its events go to the trash.
+    StyleTrashed style_trashed = 66;
   }
 
   message QuickStagedRemoved {
@@ -887,6 +889,8 @@ message AgendaHomeEvent {
   message StopConfirmed {}
 
   message StopDismissed {}
+
+  message StyleTrashed {}
 
   message MonthChipTapped {}
 
@@ -2264,6 +2268,10 @@ message AgendaStyleSheet {
   string icon_key = 13;
   // The sheet's close verb, "Cancel".
   string cancel_label = 14;
+  // "Move to trash", on the sheet that EDITS a calendar the vault may remove (not the one every
+  // vault is founded with): its tap is `StyleTrashed`, which asks nothing and says "<name> moved to
+  // trash" with Undo. Empty: the sheet has no such control.
+  string delete_label = 15;
 }
 
 message AgendaStyleSwatch {

@@ -1395,6 +1395,42 @@
         "verb": "purge"
       },
       {
+        "action": "delete-calendar",
+        "also": [],
+        "app": "calendar",
+        "bulk": false,
+        "chat": "card",
+        "command": "entity.trash",
+        "inverse": null,
+        "kind": "calendar",
+        "phrasings": [
+          "delete the Work calendar",
+          "remove the Birthdays calendar",
+          "trash the Family calendar"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "delete"
+      },
+      {
+        "action": "restore-calendar",
+        "also": [],
+        "app": "calendar",
+        "bulk": false,
+        "chat": "card",
+        "command": "entity.restore",
+        "inverse": null,
+        "kind": "calendar",
+        "phrasings": [
+          "bring the Work calendar back",
+          "restore the Family calendar",
+          "undelete the Birthdays calendar"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "restore"
+      },
+      {
         "action": "attach",
         "also": [],
         "app": "calendar",

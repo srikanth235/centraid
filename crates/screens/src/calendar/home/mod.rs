@@ -34,7 +34,9 @@ use wire::screen_event::Kind as E;
 use self::held::Held;
 use super::follow::CalendarFollow;
 use super::routes;
+use crate::catalog::act;
 use crate::follow::Store;
+use crate::kit::act as kit_act;
 use crate::kit::civil;
 use crate::kit::read::Page;
 use crate::kit::schedule::ops::Ops;
@@ -304,6 +306,7 @@ impl Home {
                 }
             }
             H::StyleSubmitted(_) => self.submit_style(ctx),
+            H::StyleTrashed(_) => self.trash_calendar(ctx),
             H::CalendarEdit(asked) => self.edit_calendar(&asked.calendar_id, ctx),
             // A STRIP DAY, A MONTH CELL OR A YEAR'S MONTH: the anchor moves to the
             // day and the view to the cell's `opens`. A day that is not one is
@@ -484,6 +487,43 @@ impl Home {
             return;
         }
         if draft.submit(ctx, &mut self.ops) {
+            self.sheet = Sheet::None;
+        } else {
+            self.style = Some(draft);
+        }
+        self.refresh(ctx);
+    }
+
+    /// MOVE TO TRASH on the Edit Calendar sheet: the calendar and its events go to the trash
+    /// (the vault's holder rule), nothing is asked, and "<name> moved to trash" carries an Undo that
+    /// brings it back with exactly those events.
+    fn trash_calendar(&mut self, ctx: &Ctx) {
+        if self.sheet != Sheet::EditCalendar {
+            return;
+        }
+        let Some(draft) = self.style.take() else {
+            return;
+        };
+        let Some(id) = draft
+            .editing_id()
+            .filter(|id| *id != centraid_vault::model::DEFAULT_CALENDAR_ID)
+            .map(str::to_owned)
+        else {
+            self.style = Some(draft);
+            return;
+        };
+        let name = draft.name().to_owned();
+        let key = kit_act::key(&["delete-calendar", &id], kit_act::fresh());
+        let settled = self.ops.line.act_reverting(
+            ctx,
+            act::calendar::DeleteCalendar {
+                calendar_id: id.clone(),
+            },
+            act::calendar::RestoreCalendar { calendar_id: id },
+            &key,
+            |locale| crate::kit::trash::moved_to_trash(locale, &name),
+        );
+        if settled.committed {
             self.sheet = Sheet::None;
         } else {
             self.style = Some(draft);
@@ -748,7 +788,19 @@ impl Screen for Home {
                         .style
                         .as_ref()
                         .filter(|_| matches!(self.sheet, Sheet::NewCalendar | Sheet::EditCalendar))
-                        .map(|draft| Box::new(draft.sheet(locale))),
+                        .map(|draft| {
+                            let mut sheet = draft.sheet(locale);
+                            // MOVE TO TRASH on a calendar the vault may remove: its own edit
+                            // sheet, never the one every vault is founded with.
+                            if self.sheet == Sheet::EditCalendar
+                                && draft.editing_id().is_some_and(|id| {
+                                    id != centraid_vault::model::DEFAULT_CALENDAR_ID
+                                })
+                            {
+                                sheet.delete_label = shared::trash_move(locale);
+                            }
+                            Box::new(sheet)
+                        }),
                     import_reminders: None,
                     // Calendar's Plus adds an event only.
                     add_label: words::new_event(locale),

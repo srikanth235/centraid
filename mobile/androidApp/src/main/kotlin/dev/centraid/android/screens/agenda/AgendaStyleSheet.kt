@@ -50,13 +50,21 @@ internal fun AgendaStyleSheetView(
     onIcon: (String) -> Unit,
     onSubmit: () -> Unit,
     onCancel: () -> Unit,
+    // "Move to trash" on the sheet that edits a calendar the vault may remove (the state carries the
+    // word, or none): null where the host has no such verb.
+    onTrash: (() -> Unit)? = null,
 ) {
     SheetRoom(
         title = style.title,
         onDismiss = onCancel,
         expanded = true,
         primary = SheetPrimary(style.submit_label, testTag = "agenda-style-submit", enabled = style.can_submit, onPress = onSubmit),
-        outlines = listOf(SheetOutline(style.cancel_label, testTag = "agenda-style-cancel", link = true, onPress = onCancel)),
+        outlines = listOfNotNull(
+            onTrash?.takeIf { style.delete_label.isNotEmpty() }?.let { trash ->
+                SheetOutline(style.delete_label, testTag = "agenda-style-trash", ink = "net", onPress = trash)
+            },
+            SheetOutline(style.cancel_label, testTag = "agenda-style-cancel", link = true, onPress = onCancel),
+        ),
     ) {
         Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
             EditableFieldRow(

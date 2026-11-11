@@ -459,11 +459,25 @@ pub mod act {
             }
         }
 
-        /// Empty the event trash through entity.empty_trash with kind event. Irreversible and takes no id: every event in the trash is destroyed now, as purge destroys one.
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum EmptyTrashWithKind {
+            #[default]
+            Calendar,
+        }
+        impl EmptyTrashWithKind {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Calendar => "calendar",
+                }
+            }
+        }
+
+        /// Empty the event trash through entity.empty_trash with kind event (and, with with_kind calendar, the calendars in it). Irreversible and takes no id: every event and calendar in the trash is destroyed now, as purge destroys one.
         #[derive(Clone, Debug, Default)]
         pub struct EmptyTrash {
             pub due_only: Option<bool>,
             pub kind: Option<EmptyTrashKind>,
+            pub with_kind: Option<EmptyTrashWithKind>,
         }
         impl EmptyTrash {
             pub const NAME: &str = "empty-trash";
@@ -472,11 +486,52 @@ pub mod act {
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 if let Some(it) = self.due_only { map.insert("due_only".to_owned(), flag(it)); }
                 if let Some(it) = self.kind { map.insert("kind".to_owned(), text(it.wire())); }
+                if let Some(it) = self.with_kind { map.insert("with_kind".to_owned(), text(it.wire())); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
         }
         impl From<EmptyTrash> for wire::ActRequest {
             fn from(value: EmptyTrash) -> Self {
+                value.request()
+            }
+        }
+
+        /// Move a calendar and its events to the trash through entity.trash; the vault refuses the calendar every vault is founded with. A restore brings the calendar back with exactly the events that went with it.
+        #[derive(Clone, Debug, Default)]
+        pub struct DeleteCalendar {
+            pub calendar_id: String,
+        }
+        impl DeleteCalendar {
+            pub const NAME: &str = "delete-calendar";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("id".to_owned(), text(self.calendar_id));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<DeleteCalendar> for wire::ActRequest {
+            fn from(value: DeleteCalendar) -> Self {
+                value.request()
+            }
+        }
+
+        /// Restore a trashed calendar through entity.restore, with the events that went to the trash with it. The screen's Undo of a calendar's delete sends it.
+        #[derive(Clone, Debug, Default)]
+        pub struct RestoreCalendar {
+            pub calendar_id: String,
+        }
+        impl RestoreCalendar {
+            pub const NAME: &str = "restore-calendar";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("id".to_owned(), text(self.calendar_id));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<RestoreCalendar> for wire::ActRequest {
+            fn from(value: RestoreCalendar) -> Self {
                 value.request()
             }
         }

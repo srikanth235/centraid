@@ -10,6 +10,8 @@ calendar,trash-event,delete,event,direct,yes: crates/screens/src/calendar/event.
 calendar,restore-event,restore,event,direct,yes: crates/screens/src/calendar/event.rs; crates/screens/src/calendar/trash.rs,no
 calendar,purge-event,purge,event,card,yes: crates/screens/src/calendar/trash.rs,no
 calendar,empty-trash,purge,event,card,yes: crates/screens/src/calendar/trash.rs,no
+calendar,delete-calendar,delete,calendar,card,no,no
+calendar,restore-calendar,restore,calendar,card,yes: crates/screens/src/calendar/trash.rs,no
 calendar,attach,attach,event,card,no,no
 calendar,detach,detach,event,card,no,no
 calendar,follow-calendar,import,event,card,yes: crates/screens/src/calendar/follow.rs,no
