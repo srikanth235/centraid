@@ -37,7 +37,7 @@ use rusqlite::OptionalExtension;
 
 use crate::commands::tag::{ensure_concept, next_color, set_tagged};
 
-use crate::commands::entity::lookup_live;
+use crate::commands::entity::{STALE_GUARD, lookup_live, rev_after};
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, arrival};
 use crate::error::Result;
 use crate::model::Kind;
@@ -221,7 +221,11 @@ fn edit(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         )?;
     }
     ctx.touch(id)?;
-    Ok(serde_json::json!({ "id": id }))
+    let mut answer = serde_json::json!({ "id": id });
+    if let Some(rev) = rev_after(ctx, id)? {
+        answer["rev"] = rev.into();
+    }
+    Ok(answer)
 }
 
 fn move_note(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
@@ -658,10 +662,14 @@ pub fn definitions() -> Vec<CommandDefinition> {
         predicate: "note_has_a_title_a_body_within_budget_and_a_notebook",
         check: pre_create,
     }];
-    const EDIT: &[CommandCondition] = &[CommandCondition {
-        predicate: "note_is_live_and_body_within_budget",
-        check: pre_edit,
-    }];
+    const EDIT: &[CommandCondition] = &[
+        STALE_GUARD[0],
+        STALE_GUARD[1],
+        CommandCondition {
+            predicate: "note_is_live_and_body_within_budget",
+            check: pre_edit,
+        },
+    ];
     const MOVE: &[CommandCondition] = &[CommandCondition {
         predicate: "note_is_live_and_notebook_exists",
         check: pre_move,
@@ -736,7 +744,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
                 "id": { "type": "string", "minLength": 1 },
                 "title": { "type": "string", "maxLength": 1000 },
                 "body": { "type": "string" },
-                "format": { "type": "string", "enum": ["markdown", "plain"] }
+                "format": { "type": "string", "enum": ["markdown", "plain"] },
+                "expected_rev": { "type": "integer", "minimum": 0 }
               }
             }"#,
             Idempotency::Idempotent,

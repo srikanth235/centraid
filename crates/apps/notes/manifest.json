@@ -267,6 +267,10 @@
           "format": {
             "type": "string",
             "enum": ["markdown", "plain"]
+          },
+          "expected_rev": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": ["id"],

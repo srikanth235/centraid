@@ -3876,6 +3876,7 @@ pub mod act {
         pub struct EditNote {
             pub note_id: String,
             pub body: Option<String>,
+            pub expected_rev: Option<i64>,
             pub format: Option<EditNoteFormat>,
             pub title: Option<String>,
         }
@@ -3886,6 +3887,7 @@ pub mod act {
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("id".to_owned(), text(self.note_id));
                 if let Some(it) = self.body { map.insert("body".to_owned(), text(it)); }
+                if let Some(it) = self.expected_rev { map.insert("expected_rev".to_owned(), whole(it)); }
                 if let Some(it) = self.format { map.insert("format".to_owned(), text(it.wire())); }
                 if let Some(it) = self.title { map.insert("title".to_owned(), text(it)); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }

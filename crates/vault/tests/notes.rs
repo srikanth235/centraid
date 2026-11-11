@@ -357,3 +357,89 @@ fn a_title_only_edit_keeps_no_copy_of_the_body_and_its_version_restores_the_titl
         "a version that kept no words reads with the ones the note held then"
     );
 }
+
+fn revisions(w: &World, id: &str) -> i64 {
+    w.query::<i64>("SELECT COUNT(*) FROM revision WHERE entity_id = ?1", &[id])
+}
+
+#[test]
+fn a_save_that_names_a_stale_revision_is_refused_and_writes_nothing() {
+    let w = World::new();
+    let id = w.note("Plan", "first");
+    // Read at revision 0; something else edits it.
+    w.ok("note.edit", json!({ "id": id, "body": "elsewhere" }));
+    let before = revisions(&w, &id);
+    let outcome = w.run(
+        "note.edit",
+        json!({ "id": id, "body": "mine", "expected_rev": 0 }),
+    );
+    assert_eq!(outcome.status, CommandStatus::Failed);
+    assert_eq!(outcome.predicate.as_deref(), Some("stale_revision"));
+    assert_eq!(
+        w.query::<String>("SELECT body FROM note WHERE id = ?1", &[&id]),
+        "elsewhere"
+    );
+    assert_eq!(revisions(&w, &id), before);
+    assert!(outcome.tables.is_empty());
+}
+
+#[test]
+fn a_fresh_save_is_accepted_and_answers_the_revision_the_next_one_names() {
+    let w = World::new();
+    let id = w.note("Plan", "first");
+    let one = w.ok(
+        "note.edit",
+        json!({ "id": id, "body": "second", "expected_rev": 0 }),
+    );
+    assert_eq!(one["rev"], 1);
+    let two = w.ok(
+        "note.edit",
+        json!({ "id": id, "body": "third", "expected_rev": 1 }),
+    );
+    assert_eq!(two["rev"], 2);
+    assert_eq!(revisions(&w, &id), 2);
+}
+
+#[test]
+fn a_save_that_names_no_revision_is_accepted_as_before_and_answers_none() {
+    let w = World::new();
+    let id = w.note("Plan", "first");
+    w.ok("note.edit", json!({ "id": id, "body": "elsewhere" }));
+    let answer = w.ok("note.edit", json!({ "id": id, "body": "mine" }));
+    assert!(answer.get("rev").is_none());
+    assert_eq!(revisions(&w, &id), 2);
+}
+
+#[test]
+fn a_save_that_changes_nothing_does_not_move_the_revision() {
+    let w = World::new();
+    let id = w.note("Plan", "first");
+    let answer = w.ok(
+        "note.edit",
+        json!({ "id": id, "body": "first", "expected_rev": 0 }),
+    );
+    assert_eq!(answer["rev"], 0);
+    assert_eq!(revisions(&w, &id), 0);
+}
+
+#[test]
+fn a_save_into_the_trash_is_refused_as_trashed_whether_or_not_the_revision_matches() {
+    let w = World::new();
+    let id = w.note("Plan", "first");
+    w.ok("entity.trash", json!({ "id": id }));
+    for rev in [0, 7] {
+        let outcome = w.run(
+            "note.edit",
+            json!({ "id": id, "body": "mine", "expected_rev": rev }),
+        );
+        assert_eq!(outcome.status, CommandStatus::Failed);
+        assert_eq!(outcome.predicate.as_deref(), Some("stale_trashed"));
+    }
+    // With no revision named it is the ordinary refusal.
+    let plain = w.run("note.edit", json!({ "id": id, "body": "mine" }));
+    assert_ne!(plain.predicate.as_deref(), Some("stale_trashed"));
+    assert_eq!(
+        w.query::<String>("SELECT body FROM note WHERE id = ?1", &[&id]),
+        "first"
+    );
+}

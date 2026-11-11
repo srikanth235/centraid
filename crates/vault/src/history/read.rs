@@ -10,8 +10,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Map, Value as Json};
 
-use super::STATE_VIEW;
 use super::shape::{CONTENT, Part, Shape, shape};
+use super::{SEEN, STATE_VIEW};
 use crate::canonical::canonical_json;
 use crate::commands::follow;
 use crate::error::{Result, VaultError};
@@ -224,6 +224,41 @@ fn fill_body(connection: &Connection, id: &str, seq: i64, state: &mut Json) -> R
         note.insert("body".to_owned(), words);
     }
     Ok(())
+}
+
+/// The entity's revision: the newest version the history holds, 0 when it keeps none (a record
+/// no edit has changed). The number a save names to say which state it was made from. It reads
+/// the primary key's last entry for the entity, never the table.
+///
+/// # Errors
+/// A database error.
+pub fn head(connection: &Connection, id: &str) -> Result<i64> {
+    Ok(connection.query_row(
+        "SELECT COALESCE(MAX(seq), 0) FROM revision WHERE entity_id = ?1",
+        [id],
+        |row| row.get(0),
+    )?)
+}
+
+/// What [`head`] will be once the commit in progress settles: the head, plus one when the
+/// commit has changed what a member can see of the entity (the same test [`super::settle`] makes
+/// at the door). A handler answers it as the new revision.
+///
+/// # Errors
+/// A database error.
+pub fn head_after(connection: &Connection, id: &str) -> Result<i64> {
+    let now = head(connection, id)?;
+    let changed: bool = connection.query_row(
+        &format!(
+            "SELECT EXISTS (SELECT 1 FROM temp.{SEEN} s
+                             WHERE s.entity_id = ?1 AND s.state IS NOT NULL
+                               AND s.state IS NOT (SELECT v.state FROM temp.{STATE_VIEW} v
+                                                    WHERE v.entity_id = s.entity_id))"
+        ),
+        [id],
+        |row| row.get(0),
+    )?;
+    Ok(now + i64::from(changed))
 }
 
 /// How many earlier versions an entity holds: what a detail screen's "Earlier versions" entry

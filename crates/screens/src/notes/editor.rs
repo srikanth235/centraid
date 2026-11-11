@@ -171,6 +171,7 @@ impl Draft for NoteDraft {
                 title: title_changed.then_some(title),
                 body: body_changed.then(|| self.body.clone()),
                 format: None,
+                expected_rev: None,
             }
             .into(),
         )

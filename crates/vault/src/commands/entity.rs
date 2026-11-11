@@ -93,6 +93,71 @@ pub(crate) fn lookup_live(
     }))
 }
 
+// ---------------------------------------------------------------------------
+// A save that says which revision it replaces (#1185)
+// ---------------------------------------------------------------------------
+
+/// The predicate a guarded save is refused with when the record changed since the screen read
+/// it. A screen branches on it; the member never sees it.
+pub const STALE_REVISION: &str = "stale_revision";
+
+/// The predicate a guarded save is refused with when the record is in the trash.
+pub const STALE_TRASHED: &str = "stale_trashed";
+
+/// The revision a save says it replaces, when it says one. Absent is today's behaviour (the
+/// assistant, a follow pass and the shared verbs name none).
+fn expected_rev(ctx: &CommandCtx<'_, '_>) -> Option<i64> {
+    ctx.input
+        .get("expected_rev")
+        .and_then(serde_json::Value::as_i64)
+}
+
+fn stale_trashed(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    if expected_rev(ctx).is_none() {
+        return Ok(None);
+    }
+    Ok(find(ctx.connection(), ctx.required_str("id")?)?
+        .filter(|found| found.deleted_at.is_some())
+        .map(|found| format!("“{}” was moved to the trash", found.title)))
+}
+
+fn stale_revision(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let Some(expected) = expected_rev(ctx) else {
+        return Ok(None);
+    };
+    let id = ctx.required_str("id")?;
+    if find(ctx.connection(), id)?.is_none() {
+        return Ok(None);
+    }
+    Ok((crate::history::head(ctx.connection(), id)? != expected)
+        .then(|| "It changed somewhere else since you opened it".to_owned()))
+}
+
+/// THE GUARD of a save that names `expected_rev`: refused as [`STALE_TRASHED`] when the record
+/// is in the trash and as [`STALE_REVISION`] when its revision is not the one named. Put it
+/// first among a command's preconditions; with no `expected_rev` it holds. The command's schema
+/// carries the optional `expected_rev` (an integer, 0 or more), and its handler answers
+/// [`rev_after`].
+pub(crate) const STALE_GUARD: [CommandCondition; 2] = [
+    CommandCondition {
+        predicate: STALE_TRASHED,
+        check: stale_trashed,
+    },
+    CommandCondition {
+        predicate: STALE_REVISION,
+        check: stale_revision,
+    },
+];
+
+/// The revision a guarded save leaves: put in its output as `rev` when the save named one, so
+/// the next save names it.
+pub(crate) fn rev_after(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Option<i64>> {
+    if expected_rev(ctx).is_none() {
+        return Ok(None);
+    }
+    Ok(Some(crate::history::head_after(ctx.connection(), id)?))
+}
+
 /// A handler's view of the same: the entity must be there, because the
 /// precondition said so.
 pub(crate) fn require(connection: &Connection, id: &str) -> Result<Found> {
