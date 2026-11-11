@@ -28,15 +28,15 @@ struct BackupHomeView: View {
     }
 
     var body: some View {
-        switch state.body {
-        case .data(let data)?:
-            page(data)
-        case .failure(let failure)?:
-            FailureView(sentence: failure.sentence, remedy: failure.remedy) {
-                send(event { $0.retry = .init() })
+        // THE READ IS THE KIT'S PAGE STATE (#1185): loading, failure with Retry, and the page under the
+        // one sentence a refresh that failed leaves.
+        PageReadStateView(
+            page: state.page,
+            onRetry: { send(event { $0.retry = .init() }) }
+        ) {
+            if case let .data(data)? = state.body {
+                page(data)
             }
-        default:
-            RowSkeleton()
         }
     }
 

@@ -168,11 +168,15 @@ enum BackupInk {
 }
 
 message BackupHomeState {
+  // 1 and 2 were `loading` and `failure`: the read is `page` (#1185).
+  reserved 1, 2;
+  reserved "loading", "failure";
+  // Set when the page is ready.
   oneof body {
-    Loading loading = 1;
-    Failure failure = 2;
     BackupHomeData data = 3;
   }
+  // THE READ: loading, failed, or ready, with a note when a re-read failed.
+  PageState page = 4;
 }
 
 message BackupHomeData {

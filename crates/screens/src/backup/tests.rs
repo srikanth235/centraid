@@ -763,9 +763,10 @@ fn a_read_draws_the_line_the_gateways_and_the_controls_every_word_finished() {
     // UNTIL THE PHONE'S OWN SETTINGS HAVE BEEN READ the screen is loading, never
     // the default rule flipping to the member's.
     assert!(matches!(
-        page.state().body,
-        Some(wire::backup_home_state::Body::Loading(_))
+        page.state().page.and_then(|page| page.state),
+        Some(wire::page_state::State::Loading(_))
     ));
+    assert!(page.state().body.is_none());
     page.serve();
     page.shell.device.insert(
         super::rule::RULE_KEY.to_owned(),
@@ -1157,7 +1158,10 @@ fn a_read_that_fails_is_a_failure_and_a_refresh_that_fails_keeps_what_was_read()
     let mut page = page;
     page.send(E::Appeared(wire::Appeared {}));
     page.serve();
-    let Some(wire::backup_home_state::Body::Failure(failure)) = page.state().body else {
+    let state = page.state();
+    assert!(state.body.is_none());
+    let Some(wire::page_state::State::Failed(failure)) = state.page.and_then(|page| page.state)
+    else {
         panic!("a failed read is a failure");
     };
     assert!(!failure.sentence.is_empty() && !failure.remedy.is_empty());
@@ -1168,10 +1172,21 @@ fn a_read_that_fails_is_a_failure_and_a_refresh_that_fails_keeps_what_was_read()
     ));
     page.serve();
     assert_eq!(page.data().destinations.len(), 2);
-    // A refresh that fails keeps the last reading.
+    // A refresh that fails keeps the last reading, under the one sentence.
     *page.fake.status.borrow_mut() = None;
     page.send(E::DataChanged(wire::DataChanged { tables: vec![] }));
     assert_eq!(page.data().destinations.len(), 2);
+    let shown = page.state().page.expect("a page");
+    assert!(shown.state.is_none(), "what was read stays");
+    let note = shown.note.expect("a note over what is shown");
+    assert_eq!(
+        note.sentence,
+        crate::strings::shared::read_refresh_failed(crate::strings::Locale::En)
+    );
+    // Reading again clears it.
+    page.set_status(both());
+    page.send(E::DataChanged(wire::DataChanged { tables: vec![] }));
+    assert!(page.state().page.expect("a page").note.is_none());
 }
 
 #[test]

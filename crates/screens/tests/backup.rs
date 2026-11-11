@@ -27,6 +27,7 @@ fn data(driver: &Driver, instance: u64) -> wire::BackupHomeData {
     match &driver.view(instance).kind {
         Some(wire::view_state::Kind::BackupHome(wire::BackupHomeState {
             body: Some(wire::backup_home_state::Body::Data(data)),
+            ..
         })) => (**data).clone(),
         other => panic!("not a ready Backup screen: {other:?}"),
     }
@@ -38,7 +39,11 @@ fn the_backup_screen_is_registered_and_loads_until_the_phones_settings_are_read(
     assert!(matches!(
         &driver.view(instance).kind,
         Some(wire::view_state::Kind::BackupHome(wire::BackupHomeState {
-            body: Some(wire::backup_home_state::Body::Loading(_))
+            body: None,
+            page: Some(wire::PageState {
+                state: Some(wire::page_state::State::Loading(_)),
+                ..
+            }),
         }))
     ));
     // The shell's two stores and the platform's keychain probe are answered the way
