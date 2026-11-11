@@ -71,7 +71,8 @@ internal class AndroidHealth(context: Context) {
     fun status(): HealthConnectAccess.Status = HealthConnectAccess.status(context)
 
     /** The permissions Connect asks for [keys]: each type's read, a workout's figures, and the history read where offered. */
-    fun permissionsFor(keys: List<String>): Set<String> = HealthConnectAccess.permissionsFor(context, keys)
+    fun permissionsFor(keys: List<String>, background: Boolean = false): Set<String> =
+        HealthConnectAccess.permissionsFor(context, keys, background)
 
     /** The permission sheet, as an activity result; below API 26 a contract that grants nothing. */
     fun contract(): ActivityResultContract<Set<String>, Set<String>> = HealthConnectAccess.contract()
@@ -103,7 +104,7 @@ internal class AndroidHealth(context: Context) {
             val answer = CompletableDeferred<Set<String>>()
             waiting = answer
             try {
-                launch(permissionsFor(read.chosen))
+                launch(permissionsFor(read.chosen, read.ask_background))
             } catch (_: android.content.ActivityNotFoundException) {
                 waiting = null
                 return denied("the permission sheet could not be shown")
@@ -160,6 +161,7 @@ internal object HealthConnectAccess {
     const val READ_HEART_RATE: String = PREFIX + "READ_HEART_RATE"
     const val READ_ELEVATION_GAINED: String = PREFIX + "READ_ELEVATION_GAINED"
     const val READ_HEALTH_DATA_HISTORY: String = PREFIX + "READ_HEALTH_DATA_HISTORY"
+    const val READ_HEALTH_DATA_IN_BACKGROUND: String = PREFIX + "READ_HEALTH_DATA_IN_BACKGROUND"
 
     /**
      * THE ONE PERMISSION A TYPE STANDS ON: a type whose permission is not granted is refused
@@ -195,14 +197,25 @@ internal object HealthConnectAccess {
      * read when this Health Connect offers it — so the first read reaches the year Health keeps
      * rather than the 30 days before the grant. Read permissions only (R-1129-7).
      */
-    fun permissionsFor(context: Context, keys: List<String>): Set<String> {
+    fun permissionsFor(context: Context, keys: List<String>, background: Boolean = false): Set<String> {
         val types = keys.mapNotNull { TYPE[it] }
         if (types.isEmpty()) return emptySet()
         return buildSet {
             addAll(types)
             if (Key.WORKOUTS in keys) addAll(FIGURES)
             if (historyOffered(context)) add(READ_HEALTH_DATA_HISTORY)
+            // D16: reading while Centraid is closed, asked in the same sheet and only at Connect.
+            if (background && backgroundOffered(context)) add(READ_HEALTH_DATA_IN_BACKGROUND)
         }
+    }
+
+    /** Whether reading in the background is a permission this Health Connect offers. */
+    fun backgroundOffered(context: Context): Boolean {
+        if (!apiSupported || status(context) != Status.AVAILABLE) return false
+        return effectAttempt {
+            HealthConnectClient.getOrCreate(context).features
+                .getFeatureStatus(HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_IN_BACKGROUND) == HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
+        }.getOrDefault(false)
     }
 
     /** The chosen [keys] whose type permission [granted] lacks, in the order chosen. */
@@ -295,6 +308,9 @@ internal class HealthConnectReader(private val context: Context) {
             workouts = sessions.first,
             workouts_complete = sessions.second,
             device_id = InstallId.of(context),
+            // Asked at Connect (`ask_background`) and not granted (or not offered): Rust says so on
+            // Health's home and following carries on while the app is open. A pass never sets it.
+            background_refused = request.ask_background && HealthConnectAccess.READ_HEALTH_DATA_IN_BACKGROUND !in granted,
         )
     }
 

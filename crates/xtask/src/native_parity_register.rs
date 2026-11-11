@@ -112,6 +112,20 @@ pub const REGISTER: &[Entry] = &[
         platform(Shell::Android, DOCS_TRANSPORT),
     ),
     (
+        "HealthRead.ask_background",
+        platform(
+            Shell::Android,
+            "Health Connect has a separate background-read permission (D16); HealthKit needs no extra ask",
+        ),
+    ),
+    (
+        "HealthSnapshot.background_refused",
+        platform(
+            Shell::Android,
+            "only Health Connect's background-read permission can be refused; HealthKit has none",
+        ),
+    ),
+    (
         "HealthSnapshot.installable",
         platform(
             Shell::Android,

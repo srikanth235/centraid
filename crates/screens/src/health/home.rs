@@ -634,6 +634,12 @@ impl Home {
             .iter()
             .filter_map(|key| Metric::of_key(key))
             .collect();
+        if ctx.follows().report(Followed::Health).background_refused {
+            facts.push(wire::HealthFact {
+                label: words::reads_background(locale),
+                detail: words::reads_background_value(locale),
+            });
+        }
         for metric in &refused {
             facts.push(wire::HealthFact {
                 label: words::reads_refused(locale),

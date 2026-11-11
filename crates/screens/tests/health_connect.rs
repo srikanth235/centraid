@@ -308,3 +308,94 @@ fn a_toggle_after_a_failure_clears_its_sentence() {
     toggle(&mut d, i, "weight_kg");
     assert_eq!(connect_state(d.view(i)).status, "");
 }
+
+fn health_read(d: &Driver) -> wire::HealthRead {
+    match pending(d) {
+        wire::effect::Kind::HealthRead(read) => read.clone(),
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn android_asks_for_the_background_read_in_the_connect_tap_and_says_why() {
+    let mut d = driver_on("android", "en-GB");
+    let i = opened(&mut d);
+    d.answer_effect(no_memory());
+    assert!(
+        connect_state(d.view(i))
+            .note
+            .contains("Health is read while Centraid is closed so new figures arrive."),
+        "the reason is on the page before the tap"
+    );
+    tap(&mut d, i);
+    let read = health_read(&d);
+    assert!(read.ask_permission && read.ask_background);
+}
+
+#[test]
+fn ios_asks_nothing_extra_and_says_nothing_about_the_background() {
+    let mut d = driver();
+    let i = opened(&mut d);
+    d.answer_effect(no_memory());
+    assert!(
+        !connect_state(d.view(i))
+            .note
+            .contains("while Centraid is closed")
+    );
+    tap(&mut d, i);
+    assert!(!health_read(&d).ask_background);
+}
+
+#[test]
+fn a_refused_background_read_leaves_following_on_and_the_home_says_so() {
+    let (mut d, follower) = driver_following_on("android", "en-GB");
+    let today = today(&d);
+    d.answer_effect(no_memory());
+    let i = opened(&mut d);
+    d.answer_effect(no_memory());
+    tap(&mut d, i);
+    assert!(health_read(&d).ask_background);
+    let mut refused = snapshot(&today);
+    refused.store = wire::health_snapshot::Store::HealthConnect as i32;
+    refused.background_refused = true;
+    d.answer_effect(Outcome::Health(refused));
+    assert!(is_connected(&d), "following is on, in the foreground");
+    // The home draws again when the next pass ends; that pass never asks and never clears the refusal.
+    d.pump(std::time::Duration::from_millis(2_600));
+    answer_for(&mut d, follower, keychain("1|steps"));
+    answer_for(
+        &mut d,
+        follower,
+        Outcome::Health(wire::HealthSnapshot {
+            store: wire::health_snapshot::Store::HealthConnect as i32,
+            store_present: true,
+            ..Default::default()
+        }),
+    );
+    let facts = &home_state(d.view(root(&d))).reads_facts;
+    assert!(facts.iter().any(|fact| {
+        fact.label == "When Centraid is closed"
+            && fact
+                .detail
+                .starts_with("Not allowed: Health is read only while Centraid is open")
+    }));
+}
+
+#[test]
+fn a_granted_background_read_adds_no_sentence() {
+    let (mut d, _follower) = driver_following_on("android", "en-GB");
+    let today = today(&d);
+    d.answer_effect(no_memory());
+    let i = opened(&mut d);
+    d.answer_effect(no_memory());
+    tap(&mut d, i);
+    let mut granted = snapshot(&today);
+    granted.store = wire::health_snapshot::Store::HealthConnect as i32;
+    d.answer_effect(Outcome::Health(granted));
+    let facts = &home_state(d.view(root(&d))).reads_facts;
+    assert!(
+        facts
+            .iter()
+            .all(|fact| fact.label != "When Centraid is closed")
+    );
+}

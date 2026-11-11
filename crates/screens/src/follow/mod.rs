@@ -137,6 +137,9 @@ pub struct Report {
     pub denied: bool,
     /// The types the OS refused, as the last health read said.
     pub refused: Vec<String>,
+    /// Health Connect would not let the app read in the background (D16): following works
+    /// while the app is open.
+    pub background_refused: bool,
     /// How many followed rows the last pass doubted: a complete read that lost most of what the
     /// vault follows changes nothing and says how many it doubts.
     pub doubted: u32,
@@ -273,6 +276,15 @@ impl Follows {
     /// The types the OS refused in the last read of `store`.
     pub fn refused(&self, store: Store, refused: &[String]) {
         refused.clone_into(&mut self.lock().reports.entry(store).or_default().refused);
+    }
+
+    /// Whether the OS refused the background read of `store` at its Connect.
+    pub fn background_refused(&self, store: Store, refused: bool) {
+        self.lock()
+            .reports
+            .entry(store)
+            .or_default()
+            .background_refused = refused;
     }
 
     // ---- the coordinator's side ------------------------------------------------------------

@@ -670,6 +670,7 @@ impl HealthFollow {
         }
         self.device.connected = false;
         ctx.follows().refused(Followed::Health, &[]);
+        ctx.follows().background_refused(Followed::Health, false);
         Some(vec![keychain(
             wire::keychain_op::Op::Set,
             Device::encode(false, &self.device.chosen),
@@ -680,7 +681,13 @@ impl HealthFollow {
         let Some(window) = window(ctx) else {
             return Vec::new();
         };
-        let effect = read_effect(&window, keys, true);
+        let mut effect = read_effect(&window, keys, true);
+        // D16: Health Connect's one sheet also asks to read in the background, here and only here.
+        if Store::of(ctx) == Store::HealthConnect
+            && let Some(wire::effect::Kind::HealthRead(read)) = effect.kind.as_mut()
+        {
+            read.ask_background = true;
+        }
         self.window = Some(window);
         self.waiting = Waiting::Connect(chosen);
         vec![effect]
@@ -747,6 +754,8 @@ impl HealthFollow {
         match connect(ctx, snapshot, &window, chosen, &snapshot.device_id) {
             Some(outcome) => {
                 ctx.follows().refused(Followed::Health, &snapshot.refused);
+                ctx.follows()
+                    .background_refused(Followed::Health, snapshot.background_refused);
                 self.outcome = Some(outcome);
                 self.device = Device {
                     loaded: true,
@@ -791,6 +800,7 @@ pub(crate) fn read_effect(window: &Window, chosen: &[String], ask: bool) -> wire
             totals_from: window.totals_from.clone(),
             today: window.today.clone(),
             workouts_since_ms: window.workouts_since_ms,
+            ask_background: false,
         })),
     }
 }

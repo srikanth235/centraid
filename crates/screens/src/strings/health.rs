@@ -49,6 +49,7 @@ catalog! {
     );
     plain connect_depth_note = ("Health starts with a year of days and 90 days of workouts.", "Health starts with a year of days and 90 days of workouts.");
     plain connect_empty = ("Bring in your steps, sleep and workouts from {store}.", "Bring in your steps, sleep and workouts from {store}.");
+    plain connect_background_why = ("Health is read while Centraid is closed so new figures arrive.", "Health is read while Centraid is closed so new figures arrive.");
     plain connect_failed = ("{store} didn’t answer. Try again.", "{store} didn’t answer. Try again.");
     plain connect_headline = ("Your daily totals, kept with you", "Your daily totals, kept with you");
     plain connect_install = ("Get Health Connect from Google Play, then connect again.", "Get Health Connect from Google Play, then connect again.");
@@ -144,6 +145,8 @@ catalog! {
     plain reads_fact_writes_value = ("nothing to {store}", "nothing to {store}");
     plain reads_nothing = ("Nothing read", "Nothing read");
     plain reads_nothing_value = ("{type}: see Settings › Health › Data Access", "{type}: see Settings › Health › Data Access");
+    plain reads_background = ("When Centraid is closed", "When Centraid is closed");
+    plain reads_background_value = ("Not allowed: Health is read only while Centraid is open. Change it in Health Connect.", "Not allowed: Health is read only while Centraid is open. Change it in Health Connect.");
     plain reads_refused = ("Not allowed", "Not allowed");
     plain reads_refused_value = ("{type}: change it in Health Connect", "{type}: change it in Health Connect");
     plain reads_title = ("What Health may read", "What Health may read");

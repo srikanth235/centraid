@@ -637,6 +637,10 @@ message HealthRead {
   string totals_from = 3;
   string today = 4;
   int64 workouts_since_ms = 5;
+  // With `ask_permission` on Health Connect: the same sheet also asks to read
+  // Health while Centraid is closed (D16). Asked only at the Connect tap, never
+  // by a pass. HealthKit needs no such ask and ignores it.
+  bool ask_background = 6;
 }
 
 message KeychainOp {
@@ -1012,6 +1016,10 @@ message HealthSnapshot {
   // With `store_present` false: Health Connect is not installed and Google Play
   // can bring it, so Connect says where to get it.
   bool installable = 8;
+  // Health Connect would not let Centraid read in the background (asked with
+  // `HealthRead.ask_background`): following still works while the app is open.
+  // Always false on iOS and when it was not asked.
+  bool background_refused = 9;
 
   enum Store {
     STORE_UNSPECIFIED = 0;

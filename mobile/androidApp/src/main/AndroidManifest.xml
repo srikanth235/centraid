@@ -70,7 +70,9 @@
          declared: nothing is written back (`HealthConnectReadOnlySpec`). The
          last three are a workout's figures; READ_HEALTH_DATA_HISTORY lets the
          first read reach the year it keeps, not only the 30 days before the
-         grant. -->
+         grant. READ_HEALTH_DATA_IN_BACKGROUND (D16) lets the background
+         window read Health while Centraid is closed; it is asked in the same
+         sheet, at the Connect tap and nowhere else. -->
     <uses-permission android:name="android.permission.health.READ_STEPS" />
     <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
     <uses-permission android:name="android.permission.health.READ_EXERCISE" />
@@ -81,6 +83,7 @@
     <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
     <uses-permission android:name="android.permission.health.READ_ELEVATION_GAINED" />
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- FINDING A GATEWAY THAT MOVED (#1080 Q-1080-D3, #1152; `session/NsdBrowse.kt`).

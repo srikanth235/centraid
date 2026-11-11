@@ -32,6 +32,7 @@ import centraid.core.v1.PhoneChanged
 import dev.centraid.android.backup.BackupNow
 import dev.centraid.android.backup.LinkFacts
 import dev.centraid.android.backup.PassWork
+import dev.centraid.android.kit.AndroidHealth
 import dev.centraid.android.kit.effectAttempt
 import dev.centraid.android.kit.ClipboardDeadline
 import dev.centraid.android.glance.GlanceSnapshot
@@ -303,6 +304,11 @@ internal class ShellEffects(
             effect.select_tab != null -> done
             effect.vault_command?.open_ != null -> settingsDoor(effect.vault_command!!.open_!!)
             effect.vault_command != null -> failed("the shelf performs this command")
+            // A BACKGROUND WINDOW HAS NO SCREEN (D16): a pass reads Health Connect itself, with the
+            // background permission the member allowed at Connect; without it the store answers
+            // `denied` and Health follows at the next foreground. A pass never shows the sheet.
+            effect.health_read != null && ui == null && !effect.health_read!!.ask_permission ->
+                AndroidHealth(context).snapshot(effect.health_read!!) { error("a pass never asks") }
             else -> ui?.perform(request, answer) ?: EffectResult(failed = EffectFailed(reason = "no screen is up", cancelled = true))
         }
     }
