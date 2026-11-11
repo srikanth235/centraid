@@ -1664,3 +1664,123 @@ fn an_owed_origin_row_prints_each_gap_with_its_file() {
         report.details
     );
 }
+
+// ---------------------------------------------------------------------------
+// Link
+// ---------------------------------------------------------------------------
+
+const LINK_MANIFEST: &str = r#"{"actions":[
+ {"name":"link","verb":"link:rel","command":"edge.add","inverse":"unlink","input":{"properties":{"rel":{"enum":["links"]}}}},
+ {"name":"unlink","verb":"unlink","command":"edge.remove","inverse":"link","input":{"properties":{"rel":{"enum":["links"]}}}}]}"#;
+
+const LINK_INVERSES: &str = r#"const NOTES: &[Row] = &[
+    ("link", "unlink", Input::Same),
+    ("unlink", "link", Input::Same),
+];
+"#;
+
+/// A `notes` app that keeps Link in full.
+fn link_tree(name: &str) -> PathBuf {
+    let root = fixture_dir(name);
+    write(&root, "crates/apps/notes/manifest.json", LINK_MANIFEST);
+    write(&root, INVERSE_TABLE, LINK_INVERSES);
+    write(
+        &root,
+        "crates/screens/src/notes/editor.rs",
+        "fn reload() { let linked = links::read_linked(ctx, &id); }",
+    );
+    root
+}
+
+fn link_lacking(root: &Path) -> String {
+    link_missing(root, "notes").join("\n")
+}
+
+#[test]
+fn an_app_with_the_verbs_and_the_section_keeps_link() {
+    assert_eq!(link_lacking(&link_tree("link-clean")), "");
+}
+
+#[test]
+fn an_app_with_no_link_verbs_is_named() {
+    let root = link_tree("link-no-verbs");
+    write(
+        &root,
+        "crates/apps/notes/manifest.json",
+        r#"{"actions":[{"name":"star","verb":"star","command":"flag.add","inverse":"star"}]}"#,
+    );
+    let gaps = link_lacking(&root);
+    assert!(
+        gaps.contains("declares no `link` and `unlink` pair"),
+        "{gaps}"
+    );
+}
+
+#[test]
+fn a_link_verb_that_is_not_the_others_inverse_is_named() {
+    let root = link_tree("link-bad-inverse");
+    write(
+        &root,
+        "crates/apps/notes/manifest.json",
+        &LINK_MANIFEST.replace(r#""inverse":"link""#, r#""inverse":"star""#),
+    );
+    assert!(link_lacking(&root).contains("declares no `link` and `unlink` pair"));
+}
+
+#[test]
+fn a_pair_that_takes_no_links_rel_is_not_the_general_link() {
+    let root = link_tree("link-typed-only");
+    write(
+        &root,
+        "crates/apps/notes/manifest.json",
+        &LINK_MANIFEST.replace(r#""enum":["links"]"#, r#""enum":["about"]"#),
+    );
+    assert!(link_lacking(&root).contains("declares no `link` and `unlink` pair"));
+}
+
+#[test]
+fn a_link_verb_the_undo_table_does_not_classify_is_named() {
+    let root = link_tree("link-unclassified");
+    write(
+        &root,
+        INVERSE_TABLE,
+        "const NOTES: &[Row] = &[\n    (\"link\", \"unlink\", Input::Same),\n];\n",
+    );
+    assert!(link_lacking(&root).contains("`unlink` is not classified for Undo"));
+}
+
+#[test]
+fn a_detail_page_that_does_not_read_its_links_is_named() {
+    let root = link_tree("link-no-section");
+    write(
+        &root,
+        "crates/screens/src/notes/editor.rs",
+        "// links::read_linked( is in a comment only\nfn view() {}",
+    );
+    assert!(link_lacking(&root).contains(
+        "crates/screens/src/notes/editor.rs: the note page does not embed the kit's general"
+    ));
+}
+
+#[test]
+fn an_owed_link_row_prints_each_gap_with_its_file() {
+    let root = link_tree("link-owed");
+    write(&root, "crates/screens/src/notes/editor.rs", "fn view() {}");
+    let table: Vec<Row> = APPS
+        .iter()
+        .map(|app| Row {
+            app,
+            promise: Promise::Link,
+            status: Status::Owed("#1185"),
+        })
+        .collect();
+    let report = check(&root, &table);
+    assert!(
+        report
+            .details
+            .iter()
+            .any(|line| line.starts_with("owed notes / Link:") && line.contains("editor.rs")),
+        "{:?}",
+        report.details
+    );
+}

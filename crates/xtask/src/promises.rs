@@ -92,11 +92,17 @@ pub enum Promise {
     /// under the Earlier versions entry (`kit::origin`): the same read and the same sentence for a
     /// followed store and a one-shot arrival, and no line for an item the member typed.
     Origin,
+    /// Any item may be linked to any other but a Locker item (#1185): the manifest declares the
+    /// `link` and `unlink` verbs, each the other's inverse and classified for Undo, and the
+    /// detail screen of each primary kind embeds the kit's one "Linked to" section, which reads
+    /// what the item is linked to through `kit::links::read_linked`. A Locker item may start a
+    /// link, so Locker is held to the same promise.
+    Link,
 }
 
 impl Promise {
     /// Every promise, in the order the table is read.
-    pub const ALL: [Promise; 10] = [
+    pub const ALL: [Promise; 11] = [
         Promise::Trash,
         Promise::Undo,
         Promise::History,
@@ -107,6 +113,7 @@ impl Promise {
         Promise::OwnerCheck,
         Promise::Attach,
         Promise::Origin,
+        Promise::Link,
     ];
 
     fn name(self) -> &'static str {
@@ -121,6 +128,7 @@ impl Promise {
             Promise::OwnerCheck => "OwnerCheck",
             Promise::Attach => "Attach",
             Promise::Origin => "Origin",
+            Promise::Link => "Link",
         }
     }
 }
@@ -516,9 +524,21 @@ pub const REGISTER: &[Row] = &[
         Promise::Origin,
         "crates/screens/src/reminders/earlier.rs",
     ),
+    // Link (#1185): the manifest's verbs and the shared "Linked to" section on each detail page.
+    owed("calendar", Promise::Link, LINK_OWED),
+    owed("docs", Promise::Link, LINK_OWED),
+    owed("health", Promise::Link, LINK_OWED),
+    owed("locker", Promise::Link, LINK_OWED),
+    owed("money", Promise::Link, LINK_OWED),
+    owed("notes", Promise::Link, LINK_OWED),
+    owed("people", Promise::Link, LINK_OWED),
+    owed("photos", Promise::Link, LINK_OWED),
+    owed("reminders", Promise::Link, LINK_OWED),
 ];
 
 const EXPORT_OWED: &str = "no export screen on the kit's ExportSpec (#1185)";
+
+const LINK_OWED: &str = "the detail screen does not embed the kit's general \"Linked to\" section (`kit::links::read_linked`) yet (#1185)";
 
 const UNITS_PROOF: &str = "crates/screens/src/kit/quantity.rs";
 
@@ -654,6 +674,7 @@ pub fn missing(root: &Path, app: &str, promise: Promise) -> Vec<String> {
         Promise::OwnerCheck => owner_check_missing(root, app),
         Promise::Attach => attach_missing(root, app),
         Promise::Origin => origin_missing(root, app),
+        Promise::Link => link_missing(root, app),
     }
 }
 
@@ -2192,6 +2213,128 @@ fn attach_missing(root: &Path, app: &str) -> Vec<String> {
         if !text.contains(ATTACH_PIECE) {
             gaps.push(format!(
                 "crates/screens/src/{app}/{screen}: the {kind} page does not embed the shared attachments section (`{ATTACH_PIECE}Attachments`)"
+            ));
+        }
+    }
+    gaps
+}
+
+// ---------------------------------------------------------------------------
+// Link
+// ---------------------------------------------------------------------------
+
+/// The one entry point of the kit's general link section a detail screen calls to read what its
+/// item is linked to (`kit::links::read_linked`). A screen that spells it embeds the section.
+const LINK_PIECE: &str = "links::read_linked(";
+
+/// The `(name, verb)` of every action of the app's manifest whose input takes `rel: "links"`
+/// (a `rel` field whose enum holds `links`): the actions that can write a general link.
+fn link_capable(root: &Path, app: &str) -> Vec<(String, String)> {
+    let path = root.join(format!("crates/apps/{app}/manifest.json"));
+    let Ok(text) = fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return Vec::new();
+    };
+    value
+        .get("actions")
+        .and_then(|actions| actions.as_array())
+        .map(|actions| {
+            actions
+                .iter()
+                .filter(|action| {
+                    action
+                        .pointer("/input/properties/rel/enum")
+                        .and_then(serde_json::Value::as_array)
+                        .is_some_and(|values| values.iter().any(|v| v == "links"))
+                })
+                .filter_map(|action| {
+                    Some((
+                        action.get("name")?.as_str()?.to_owned(),
+                        action.get("verb")?.as_str()?.to_owned(),
+                    ))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Link is kept when, for `app`:
+///
+/// 1. the manifest has a `link` verb action and an `unlink` verb action that take `rel: "links"`
+///    (the typed ones of Docs, Locker, Money and Photos, or the plain `link` and `unlink`), each
+///    declaring the other as its inverse;
+/// 2. both are classified for Undo, by the Undo rule's own notion: a row in the core's inverse
+///    table that agrees with the manifest's declared inverse, or `confirmation` required, or
+///    `writes_nothing`;
+/// 3. the detail screen of each primary kind ([`HISTORY_KINDS`]) embeds the kit's general section,
+///    which it shows by calling [`LINK_PIECE`].
+///
+/// A Locker item may start a link (it is only never a target), so Locker is held like any app.
+fn link_missing(root: &Path, app: &str) -> Vec<String> {
+    let manifest = format!("crates/apps/{app}/manifest.json");
+    let actions = undo_actions(root, app);
+    if actions.is_empty() {
+        return vec![format!("{manifest} could not be read")];
+    }
+    let capable = link_capable(root, app);
+    let is = |verb: &str, word: &str| verb == word || verb.starts_with(&format!("{word}:"));
+    let table = core_inverses(root, app).unwrap_or_default();
+    let classified = |action: &UndoAction| match table.get(&action.name) {
+        Some(row) => action.inverse.as_deref() == Some(row.as_str()),
+        None => action.confirmed || action.writes_nothing,
+    };
+    let pair = capable
+        .iter()
+        .filter(|(_, verb)| is(verb, "link"))
+        .find_map(|(link, _)| {
+            let link = actions.iter().find(|a| &a.name == link)?;
+            let unlink = actions.iter().find(|a| {
+                Some(a.name.as_str()) == link.inverse.as_deref()
+                    && a.inverse.as_deref() == Some(link.name.as_str())
+                    && capable
+                        .iter()
+                        .any(|(name, verb)| name == &a.name && is(verb, "unlink"))
+            })?;
+            Some((link, unlink))
+        });
+    let mut gaps = Vec::new();
+    match pair {
+        None => gaps.push(format!(
+            "{manifest} declares no `link` and `unlink` pair of actions that take `rel: links`, each the other's inverse"
+        )),
+        Some((link, unlink)) => {
+            for action in [link, unlink] {
+                if !classified(action) {
+                    gaps.push(format!(
+                        "{INVERSE_TABLE}: `{}` is not classified for Undo (no agreeing inverse row, not confirmed, not `writes_nothing`)",
+                        action.name
+                    ));
+                }
+            }
+        }
+    }
+    let dir = root.join("crates/screens/src").join(app);
+    let kinds = HISTORY_KINDS
+        .iter()
+        .find(|(name, _)| *name == app)
+        .map_or(&[][..], |(_, kinds)| *kinds);
+    for (kind, screen) in kinds {
+        let path = dir.join(screen);
+        let files = if path.is_dir() {
+            source_files(&path, "rs")
+        } else {
+            vec![path]
+        };
+        let text: String = files
+            .iter()
+            .filter_map(|file| live_source(file))
+            .collect::<Vec<_>>()
+            .join("\n");
+        if !text.contains(LINK_PIECE) {
+            gaps.push(format!(
+                "crates/screens/src/{app}/{screen}: the {kind} page does not embed the kit's general \"Linked to\" section (`kit::{LINK_PIECE}`)"
             ));
         }
     }
