@@ -225,6 +225,8 @@ impl Ingest {
             }
         };
         let key = kit_act::key(&[&request.action, &subject], kit_act::fresh());
+        // undo-exempt: the ingest sheet draws no status line; it opens the new document, whose
+        // Move to trash takes the filing back.
         let settled = kit_act::act(ctx, request, &key);
         if !settled.committed {
             let sentence = if settled.refusal.trim().is_empty() {

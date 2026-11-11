@@ -24,7 +24,7 @@ use super::fold::{self, KEY_LABELS, KEY_MORE, KEY_MOVE, KEY_PURGE, KEY_RENAME, K
 use super::fold::{KEY_SHARE, KEY_STAR, KEY_TRASH, KEY_UNSTAR};
 use super::folders::{self, TOP_LEVEL};
 use super::rename::Rename;
-use super::{Phase, denied, refusal};
+use super::{Phase, denied};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::earlier;
@@ -32,6 +32,8 @@ use crate::kit::follow::{self, Source};
 use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::owner::{Answer as Owner, Leaving, NoPasscode, OwnerGate};
 use crate::kit::read::{self, Reading};
+use crate::kit::trash;
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, docs as words, links as link_words, shared};
 
@@ -69,7 +71,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         title_hint: args.title.clone(),
         parent: args.parent.clone(),
         phase: Phase::Loading,
-        status: None,
+        undo: Undo::default(),
         gate: OwnerGate::default(),
         asking: Asking::None,
         sheet: Sheet::None,
@@ -88,7 +90,8 @@ struct Document {
     /// The page it was pushed from, by its title: what the back control says.
     parent: String,
     phase: Phase<Answered>,
-    status: Option<wire::StatusLine>,
+    /// The status line and what its Undo reverses (the kit's one door).
+    undo: Undo,
     /// The owner check a share asks first; a phone with no passcode warns and goes ahead.
     gate: OwnerGate,
     asking: Asking,
@@ -181,6 +184,7 @@ impl Document {
                         rel: act::docs::AddAboutRel::About,
                         to: person,
                     },
+                    words::about_added,
                 );
             }
             Outcome::Remove { id: person } => {
@@ -191,6 +195,7 @@ impl Document {
                         rel: act::docs::RemoveAboutRel::About,
                         to: person,
                     },
+                    words::about_removed,
                 );
             }
             Outcome::Moved => {}
@@ -201,14 +206,16 @@ impl Document {
         self.phase.data()?.document.document.as_ref()
     }
 
-    fn write(&mut self, ctx: &Ctx, request: impl Into<wire::ActRequest>) -> bool {
+    /// A write the status line says, with Undo when the core can take it back.
+    fn write(
+        &mut self,
+        ctx: &Ctx,
+        request: impl Into<wire::ActRequest>,
+        said: impl FnOnce(Locale) -> String,
+    ) -> bool {
         let request: wire::ActRequest = request.into();
-        self.status = None;
         let key = kit_act::key(&[&request.action, &self.document_id], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        if !settled.committed {
-            self.status = Some(refusal(settled.refusal));
-        }
+        let settled = self.undo.act(ctx, request, &key, said);
         self.reload(ctx);
         settled.committed
     }
@@ -222,7 +229,11 @@ impl Document {
         let Some(settled) = follow::take(ctx, &self.document_id, taken) else {
             return;
         };
-        self.status = (!settled.committed).then(|| refusal(settled.refusal));
+        // Taking the folder's value has no inverse: it says nothing and offers nothing.
+        self.undo.clear();
+        if !settled.committed {
+            self.undo.refuse(settled.refusal);
+        }
         self.reload(ctx);
     }
 
@@ -232,10 +243,10 @@ impl Document {
     fn share(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         let locale = ctx.locale();
         if self.shared_path().is_empty() {
-            self.status = Some(refusal(words::share_missing(locale)));
+            self.undo.refuse(words::share_missing(locale));
             return Vec::new();
         }
-        self.status = None;
+        self.undo.clear();
         self.gate.begin(locale, Leaving::Share)
     }
 
@@ -254,16 +265,12 @@ impl Document {
             Some(Owner::PassedUnprotected(warning)) => {
                 let effects = self.send(locale);
                 if !effects.is_empty() {
-                    self.status = Some(wire::StatusLine {
-                        sentence: warning,
-                        action_label: String::new(),
-                        refused: false,
-                    });
+                    self.undo.say(warning);
                 }
                 effects
             }
             Some(Owner::Refused(sentence)) => {
-                self.status = Some(refusal(sentence));
+                self.undo.refuse(sentence);
                 Vec::new()
             }
             Some(Owner::Cancelled) | None => Vec::new(),
@@ -302,13 +309,23 @@ impl Document {
         match key {
             KEY_SHARE => return self.share(ctx),
             KEY_STAR => {
-                self.write(ctx, act::docs::Star { document_id: id });
+                self.write(
+                    ctx,
+                    act::docs::Star { document_id: id },
+                    words::starred_said,
+                );
             }
             KEY_UNSTAR => {
-                self.write(ctx, act::docs::Unstar { document_id: id });
+                self.write(
+                    ctx,
+                    act::docs::Unstar { document_id: id },
+                    words::unstarred_said,
+                );
             }
             KEY_RESTORE => {
-                self.write(ctx, act::docs::Restore { document_id: id });
+                self.write(ctx, act::docs::Restore { document_id: id }, |locale| {
+                    trash::restored(locale, &row.title)
+                });
             }
             KEY_RENAME => {
                 if self.rename.is_some() {
@@ -347,6 +364,7 @@ impl Document {
                 document_id: row.document_id,
                 folder_id: Some(folder_id.to_owned()).filter(|id| !id.is_empty()),
             },
+            words::moved_said,
         );
     }
 
@@ -368,6 +386,7 @@ impl Document {
                 label,
                 color: None,
             },
+            words::label_added_said,
         );
     }
 
@@ -390,6 +409,7 @@ impl Document {
                 document_id: row.document_id,
                 label,
             },
+            words::label_removed_said,
         );
     }
 
@@ -398,11 +418,20 @@ impl Document {
         let id = self.document_id.clone();
         match asking {
             Asking::Trash => {
-                self.write(ctx, act::docs::Trash { document_id: id });
+                let title = self.row().map(|row| row.title.clone()).unwrap_or_default();
+                self.write(ctx, act::docs::Trash { document_id: id }, |locale| {
+                    trash::moved_to_trash(locale, &title)
+                });
             }
             Asking::Purge => {
                 // DELETED FOREVER: nothing is left to show, so the page leaves.
-                if self.write(ctx, act::docs::Purge { document_id: id }) {
+                let key = kit_act::key(&["purge", &id], kit_act::fresh());
+                let purged = self
+                    .undo
+                    .act_quietly(ctx, act::docs::Purge { document_id: id }, &key)
+                    .committed;
+                self.reload(ctx);
+                if purged {
                     self.dismissed = true;
                     self.rename = None;
                 }
@@ -574,7 +603,13 @@ impl Screen for Document {
                 }
             }
             // CLOSE = DONE: whatever is typed is saved.
+            Some(E::StatusActed(_)) => {
+                if self.undo.acted(ctx) {
+                    self.reload(ctx);
+                }
+            }
             Some(E::Left(_)) => {
+                self.undo.clear();
                 if let Some(rename) = self.rename.as_mut() {
                     let _ = rename.close(ctx);
                 }
@@ -675,8 +710,8 @@ impl Screen for Document {
                     title_hint: self.title_hint.clone(),
                     content: Some(content),
                     status: self
-                        .status
-                        .clone()
+                        .undo
+                        .status()
                         .or_else(|| self.differences.status(locale, Source::Folder))
                         .or_else(|| self.earlier.status(locale)),
                     confirm: self.confirm(locale),
@@ -714,7 +749,7 @@ mod tests {
                 drive: None,
                 about: None,
             }),
-            status: None,
+            undo: Undo::default(),
             gate: OwnerGate::default(),
             asking: Asking::None,
             sheet: Sheet::None,
@@ -755,11 +790,12 @@ mod tests {
     #[test]
     fn a_passed_check_shares_and_a_phone_with_no_passcode_shares_with_a_warning() {
         let (effects, doc) = asked(O::Succeeded);
-        assert!(is_share(&effects) && doc.status.is_none());
+        assert!(is_share(&effects) && doc.undo.status().is_none());
         let (effects, doc) = asked(O::Unavailable);
         assert!(is_share(&effects));
         assert!(
-            doc.status
+            doc.undo
+                .status()
                 .is_some_and(|s| !s.refused && !s.sentence.is_empty())
         );
     }
@@ -767,8 +803,8 @@ mod tests {
     #[test]
     fn a_dismissed_or_failed_check_shares_nothing() {
         let (effects, doc) = asked(O::Cancelled);
-        assert!(effects.is_empty() && doc.status.is_none());
+        assert!(effects.is_empty() && doc.undo.status().is_none());
         let (effects, doc) = asked(O::Failed);
-        assert!(effects.is_empty() && doc.status.is_some_and(|s| s.refused));
+        assert!(effects.is_empty() && doc.undo.status().is_some_and(|s| s.refused));
     }
 }

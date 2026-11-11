@@ -38,15 +38,18 @@ use wire::app_query_response::Answer;
 use wire::docs_drive_event::Kind as D;
 use wire::screen_event::Kind as E;
 
+use super::Phase;
 use super::fold::{KEY_LABELS, KEY_MOVE, KEY_RENAME, KEY_STAR, KEY_TRASH, KEY_UNSTAR};
 use super::folders::TOP_LEVEL;
 use super::rename::Rename;
-use super::{Phase, refusal};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::menu;
 use crate::kit::read::{self, Reading};
+use crate::kit::trash;
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
+use crate::strings::Locale;
 use crate::strings::docs as words;
 
 mod ingest;
@@ -145,7 +148,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         phase: Phase::Loading,
         rail: None,
         sheet: Sheet::None,
-        status: None,
+        undo: Undo::default(),
         asking: None,
         rename: None,
         camera: wire::DocsPermission::NotAsked,
@@ -170,7 +173,8 @@ struct Drive {
     rail: Option<Rail>,
     sheet: Sheet,
     /// A refused write's sentence, over the rows.
-    status: Option<wire::StatusLine>,
+    /// The status line and what its Undo reverses (the kit's one door).
+    undo: Undo,
     /// The document a trash confirm asks about.
     asking: Option<String>,
     rename: Option<Rename>,
@@ -294,16 +298,18 @@ impl Drive {
     // Writes
     // -----------------------------------------------------------------------
 
-    /// One write under a key of its own: a refusal is the status line, and the
-    /// page is read again either way.
-    fn write(&mut self, ctx: &Ctx, request: impl Into<wire::ActRequest>, subject: &str) -> bool {
+    /// One write under a key of its own: the status line says what happened (with Undo when the
+    /// core can take it back) or the refusal, and the page is read again either way.
+    fn write(
+        &mut self,
+        ctx: &Ctx,
+        request: impl Into<wire::ActRequest>,
+        subject: &str,
+        said: impl FnOnce(Locale) -> String,
+    ) -> bool {
         let request: wire::ActRequest = request.into();
-        self.status = None;
         let key = kit_act::key(&[&request.action, subject], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        if !settled.committed {
-            self.status = Some(refusal(settled.refusal));
-        }
+        let settled = self.undo.act(ctx, request, &key, said);
         self.reload(ctx);
         settled.committed
     }
@@ -376,12 +382,17 @@ impl Drive {
             Some(D::FolderCreated(_)) => self.folder_created(ctx),
             Some(D::Confirmed(_)) => {
                 if let Some(id) = self.asking.take() {
+                    let title = self
+                        .row(&id)
+                        .map(|row| row.title.clone())
+                        .unwrap_or_default();
                     self.write(
                         ctx,
                         act::docs::Trash {
                             document_id: id.clone(),
                         },
                         &id,
+                        |locale| trash::moved_to_trash(locale, &title),
                     );
                 }
             }
@@ -494,6 +505,7 @@ impl Drive {
                             folder_id: Some(folder_id.to_owned()).filter(|id| !id.is_empty()),
                         },
                         &format!("{document_id}:{key}"),
+                        words::moved_said,
                     );
                 }
             }
@@ -592,6 +604,7 @@ impl Drive {
                         document_id: document_id.to_owned(),
                     },
                     document_id,
+                    words::starred_said,
                 );
             }
             KEY_UNSTAR => {
@@ -602,6 +615,7 @@ impl Drive {
                         document_id: document_id.to_owned(),
                     },
                     document_id,
+                    words::unstarred_said,
                 );
             }
             KEY_RENAME => {
@@ -655,6 +669,7 @@ impl Drive {
                 color: None,
             },
             &format!("{document_id}:{label}"),
+            words::label_added_said,
         );
     }
 
@@ -677,6 +692,7 @@ impl Drive {
                 label: label.clone(),
             },
             &format!("{document_id}:{label}"),
+            words::label_removed_said,
         );
     }
 
@@ -698,6 +714,7 @@ impl Drive {
                 ..Default::default()
             },
             &name,
+            words::folder_created_said,
         );
     }
 
@@ -723,7 +740,13 @@ impl Screen for Drive {
                 }
             }
             // CLOSE = DONE: whatever is typed is saved.
+            Some(E::StatusActed(_)) => {
+                if self.undo.acted(ctx) {
+                    self.reload(ctx);
+                }
+            }
             Some(E::Left(_)) => {
+                self.undo.clear();
                 if let Some(rename) = self.rename.as_mut() {
                     let _ = rename.close(ctx);
                 }
@@ -811,7 +834,7 @@ impl Drive {
                 }
             }
             O::Failed(_) => {
-                self.status = Some(refusal(words::follow_failed(ctx.locale())));
+                self.undo.refuse(words::follow_failed(ctx.locale()));
             }
             _ => {}
         }

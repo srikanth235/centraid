@@ -104,15 +104,6 @@ pub(crate) fn denied(locale: Locale, denial: &wire::AppQueryDenial) -> wire::Den
     }
 }
 
-/// A refused write's sentence, as the status line over the rows.
-pub(crate) fn refusal(sentence: String) -> wire::StatusLine {
-    wire::StatusLine {
-        sentence,
-        action_label: String::new(),
-        refused: true,
-    }
-}
-
 /// The routes Docs' own screens hand to a shell inside a view state.
 pub mod routes {
     use super::{DOCUMENT, DRIVE, EDITOR, TRASH, wire};

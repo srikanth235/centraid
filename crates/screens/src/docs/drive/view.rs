@@ -61,7 +61,7 @@ pub(super) fn state(drive: &Drive, ctx: &Ctx) -> wire::ViewState {
                 } else {
                     sheets::view(drive, locale)
                 }),
-                status: drive.status.clone().or_else(|| {
+                status: drive.undo.status().or_else(|| {
                     ctx.follows()
                         .report(crate::follow::Store::Files)
                         .status(ctx, crate::follow::Store::Files)

@@ -433,7 +433,12 @@ fn the_row_menu_stars_once_per_intent_and_a_refusal_keeps_the_rows() {
         state(&d, i).sheet.as_ref().unwrap().kind(),
         Sheet::None
     ));
-    assert!(state(&d, i).status.is_none());
+    // Nothing was written under it: the line is still the unstar's, with Undo (#1185).
+    let line = state(&d, i).status.as_ref().expect("the unstar's line");
+    assert_eq!(
+        (line.sentence.as_str(), line.action_label.as_str()),
+        ("Star removed", "Undo")
+    );
 }
 
 #[test]
@@ -516,7 +521,12 @@ fn labels_add_tags_a_label_it_has_is_nothing_and_remove_untags() {
             label: "tahoe".to_owned(),
         }),
     );
-    assert!(state(&d, i).status.is_none());
+    // No new write: the line is still the add's, with Undo (#1185).
+    let line = state(&d, i).status.as_ref().expect("the add's line");
+    assert_eq!(
+        (line.sentence.as_str(), line.action_label.as_str()),
+        ("Label added", "Undo")
+    );
     let tag = row(d.view(i), "Tahoe packing list")
         .labels
         .iter()

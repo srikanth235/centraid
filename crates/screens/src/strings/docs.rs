@@ -10,6 +10,14 @@ catalog! {
     plain action_edit = ("Edit", "Edit");
     plain action_labels = ("Labels", "Labels");
     plain action_move = ("Move", "Move");
+    plain about_added = ("Person added", "Person added");
+    plain about_removed = ("Person removed", "Person removed");
+    plain folder_created_said = ("Folder created", "Folder created");
+    plain label_added_said = ("Label added", "Label added");
+    plain label_removed_said = ("Label removed", "Label removed");
+    plain moved_said = ("Document moved", "Document moved");
+    plain starred_said = ("Document starred", "Document starred");
+    plain unstarred_said = ("Star removed", "Star removed");
     plain action_rename = ("Rename", "Rename");
     plain action_restore = ("Restore", "Restore");
     plain action_share = ("Share", "Share");

@@ -6,6 +6,7 @@
 //! every assertion is on a value or a count, never a duration.
 
 mod calendar_support;
+mod docs_support;
 mod notes_support;
 mod reminders_support;
 
@@ -464,4 +465,104 @@ fn calendar_a_reply_says_so_and_undo_takes_it_back_and_a_later_change_refuses_it
     assert!(status.refused);
     assert_eq!(status.action_label, "");
     assert_eq!(partstat(&world), "declined", "the later change stays");
+}
+
+// --- Docs: the drive -----------------------------------------------------------------
+
+fn docs_line(d: &Driver, i: u64) -> (String, String) {
+    said(docs_support::drive_state(d.view(i)).status.as_ref())
+}
+
+fn docs_has(d: &Driver, i: u64, title: &str) -> bool {
+    docs_support::titles(d.view(i)).contains(&title.to_owned())
+}
+
+#[test]
+fn docs_trashing_a_document_says_which_and_undo_brings_it_back() {
+    let mut d = docs_support::driver();
+    let i = docs_support::root(&d);
+    let id = docs_support::text(&d, "Scratch", "words");
+    docs_support::drive_send(
+        &mut d,
+        i,
+        wire::docs_drive_event::Kind::Refreshed(wire::docs_drive_event::Refreshed {}),
+    );
+    docs_support::row_menu(&mut d, i, &id);
+    docs_support::pick(&mut d, i, "trash");
+    docs_support::confirm(&mut d, i);
+    assert!(!docs_has(&d, i, "Scratch"));
+    assert_eq!(docs_line(&d, i), line("Scratch moved to trash", "Undo"));
+
+    status_acted(&mut d, i);
+    assert!(docs_has(&d, i, "Scratch"));
+    assert_eq!(docs_line(&d, i), line("Undone", ""));
+}
+
+#[test]
+fn docs_a_star_says_so_and_undo_unstars() {
+    let mut d = docs_support::driver();
+    let i = docs_support::root(&d);
+    let id = docs_support::text(&d, "Notes", "words");
+    docs_support::drive_send(
+        &mut d,
+        i,
+        wire::docs_drive_event::Kind::Refreshed(wire::docs_drive_event::Refreshed {}),
+    );
+    docs_support::row_menu(&mut d, i, &id);
+    docs_support::pick(&mut d, i, "star");
+    assert!(docs_support::row(d.view(i), "Notes").starred);
+    assert_eq!(docs_line(&d, i), line("Document starred", "Undo"));
+
+    status_acted(&mut d, i);
+    assert!(!docs_support::row(d.view(i), "Notes").starred);
+    assert_eq!(docs_line(&d, i), line("Undone", ""));
+}
+
+#[test]
+fn docs_a_move_says_so_and_a_later_move_refuses_the_undo_plainly() {
+    let mut d = docs_support::driver();
+    let i = docs_support::root(&d);
+    let first = docs_support::folder(&d, "Taxes", None);
+    let second = docs_support::folder(&d, "Trips", None);
+    let id = docs_support::text(&d, "Return", "numbers");
+    docs_support::drive_send(
+        &mut d,
+        i,
+        wire::docs_drive_event::Kind::Refreshed(wire::docs_drive_event::Refreshed {}),
+    );
+    docs_support::row_menu(&mut d, i, &id);
+    docs_support::pick(&mut d, i, "move");
+    docs_support::choose(&mut d, i, &first);
+    assert_eq!(docs_support::row(d.view(i), "Return").folder_id, first);
+    assert_eq!(docs_line(&d, i), line("Document moved", "Undo"));
+
+    // Another surface files it elsewhere: the Undo no longer fits.
+    docs_support::arrange(
+        &d,
+        act::docs::Move {
+            document_id: id.clone(),
+            folder_id: Some(second.clone()),
+        },
+    );
+    status_acted(&mut d, i);
+    let status = docs_support::drive_state(d.view(i))
+        .status
+        .clone()
+        .expect("a line");
+    assert!(status.refused);
+    assert_eq!(status.action_label, "");
+    assert_eq!(
+        status.sentence,
+        "This can no longer be undone: it has changed since."
+    );
+    docs_support::drive_send(
+        &mut d,
+        i,
+        wire::docs_drive_event::Kind::Refreshed(wire::docs_drive_event::Refreshed {}),
+    );
+    assert_eq!(
+        docs_support::row(d.view(i), "Return").folder_id,
+        second,
+        "the later move stays"
+    );
 }

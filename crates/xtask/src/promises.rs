@@ -222,7 +222,7 @@ pub const REGISTER: &[Row] = &[
     // Rule C (every write goes through `kit::undo`) is the adopters' work list: Notes and
     // Reminders are the reference adoptions; the rest are owed until they adopt the door.
     kept("calendar", Promise::Undo, "crates/core/src/act/inverse.rs"),
-    owed("docs", Promise::Undo, UNDO_DOOR_OWED),
+    kept("docs", Promise::Undo, "crates/core/src/act/inverse.rs"),
     owed("health", Promise::Undo, UNDO_DOOR_OWED),
     owed("locker", Promise::Undo, UNDO_DOOR_OWED),
     owed("money", Promise::Undo, UNDO_DOOR_OWED),
