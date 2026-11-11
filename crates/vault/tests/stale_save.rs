@@ -480,3 +480,102 @@ fn the_times_alerts_and_guests_of_a_refused_event_save_are_kept_and_restore_puts
     );
     assert_eq!(bad.status, CommandStatus::Failed);
 }
+
+#[test]
+fn a_refused_change_to_one_day_is_kept_as_the_days_override_and_restore_puts_it_back() {
+    let w = World::new();
+    let id = w.ok(
+        "event.propose",
+        json!({ "title": "Stand-up", "starts": "2026-03-02T10:00", "ends": "2026-03-02T10:30",
+                "zone": "Europe/Paris", "rule": "FREQ=DAILY" }),
+    )["id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    let day = |sql: &str| -> Vec<(Option<String>, Option<String>, Option<String>)> {
+        w.scratch
+            .vault
+            .read(|c| {
+                let mut statement = c.prepare(sql)?;
+                let rows = statement
+                    .query_map([&id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+                    .collect::<rusqlite::Result<_>>()?;
+                Ok(rows)
+            })
+            .expect("rows")
+    };
+    let rows = "SELECT starts, ends, title FROM occurrence WHERE series_id = ?1";
+    let kept = w.ok(
+        "history.keep_version",
+        json!({ "id": id, "fields": { "occurrence": {
+            "original_start": "2026-03-04T10:00:00", "scope": "occurrence",
+            "starts": "2026-03-04T15:00:00", "ends": "2026-03-04T16:00:00",
+            "zone": "Europe/Paris", "title": "Late sync" } } }),
+    );
+    assert_eq!(kept["kept"], true);
+    assert_eq!(w.versions(&id), 1);
+    // The day has no override yet: the event and its days are as they were.
+    assert!(day(rows).is_empty());
+    let title: String = w
+        .scratch
+        .vault
+        .read(|c| {
+            Ok(
+                c.query_row("SELECT title FROM entity WHERE id = ?1", [&id], |r| {
+                    r.get(0)
+                })?,
+            )
+        })
+        .expect("a title");
+    assert_eq!(title, "Stand-up");
+    // Restoring brings the day's override back, resolved as `edit-occurrence` would have.
+    w.ok("history.restore_version", json!({ "id": id, "seq": 1 }));
+    assert_eq!(
+        day(rows),
+        [(
+            Some("2026-03-04T14:00:00.000Z".to_owned()),
+            Some("2026-03-04T15:00:00.000Z".to_owned()),
+            Some("Late sync".to_owned())
+        )]
+    );
+    // The same day stated again replaces the row it has, and restore goes back to the first.
+    w.ok(
+        "history.keep_version",
+        json!({ "id": id, "fields": { "occurrence": {
+            "original_start": "2026-03-04T10:00:00", "scope": "occurrence", "title": "Cancelled-ish" } } }),
+    );
+    let newest = w.versions(&id);
+    w.ok(
+        "history.restore_version",
+        json!({ "id": id, "seq": newest }),
+    );
+    assert_eq!(day(rows), [(None, None, Some("Cancelled-ish".to_owned()))]);
+    // A day that is no day, a scope that is none, and an event that does not repeat are refused.
+    for bad in [
+        json!({ "original_start": "2026-03-04T10:00:00", "scope": "series", "title": "x" }),
+        json!({ "scope": "occurrence", "title": "x" }),
+        json!({ "original_start": "2026-03-04T10:00:00", "scope": "occurrence",
+                "starts": "2026-03-04T15:00:00", "ends": "2026-03-04T14:00:00", "zone": "Europe/Paris" }),
+    ] {
+        let refused = w.run(
+            "history.keep_version",
+            json!({ "id": id, "fields": { "occurrence": bad } }),
+        );
+        assert_eq!(refused.status, CommandStatus::Failed, "{bad}");
+    }
+    let once = w.ok(
+        "event.propose",
+        json!({ "title": "Once", "starts": "2026-03-02T12:00", "ends": "2026-03-02T13:00",
+                "zone": "Europe/Paris" }),
+    )["id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    let refused = w.run(
+        "history.keep_version",
+        json!({ "id": once, "fields": { "occurrence": {
+            "original_start": "2026-03-02T12:00:00", "scope": "occurrence", "title": "x" } } }),
+    );
+    assert_eq!(refused.status, CommandStatus::Failed);
+    assert_eq!(w.versions(&once), 0);
+}

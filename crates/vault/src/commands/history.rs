@@ -10,7 +10,8 @@
 //! - `history.keep_version`: the words a refused stale save held, kept as the newest earlier version beside
 //!   the record as it is (the record is not changed). Each kept field is `table.column`; an event's
 //!   times and alerts are stated as a member types them (a wall clock and its zone, minutes before)
-//!   and kept as the vault holds them, and `attendee` is the list of the guests by person id.
+//!   and kept as the vault holds them, `attendee` is the list of the guests by person id, and `occurrence` is what one day of a series
+//!   changes, stated as `event.edit_occurrence` states it.
 //! - `history.undo`: the record goes back to its newest earlier version, "undo the last change".
 //!   It is the generic inverse of every edit; it is not idempotent (twice undoes then redoes).
 //!   Given `seq` it undoes THAT change and nothing else: the version must still be the newest, so
@@ -122,7 +123,8 @@ fn pre_keep(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         return Ok(Some(format!("there is nothing with the id `{id}`")));
     };
     let mut overlay = fields(ctx);
-    if let Err(sentence) = crate::commands::event::shape_overlay(&mut overlay) {
+    if let Err(sentence) = crate::commands::event::shape_overlay(ctx.connection(), id, &mut overlay)
+    {
         return Ok(Some(sentence));
     }
     if let Some(words) = overlay.remove(DOCUMENT_TEXT) {
@@ -143,7 +145,7 @@ fn pre_keep(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 fn keep_version(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let id = ctx.required_str("id")?;
     let mut overlay = fields(ctx);
-    crate::commands::event::shape_overlay(&mut overlay)
+    crate::commands::event::shape_overlay(ctx.connection(), id, &mut overlay)
         .map_err(|sentence| crate::error::VaultError::Invariant { context: sentence })?;
     if let Some(words) = overlay.remove(DOCUMENT_TEXT) {
         let hash = crate::commands::document::write_words(ctx, words.as_str().unwrap_or_default())?;

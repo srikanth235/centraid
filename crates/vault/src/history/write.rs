@@ -27,6 +27,11 @@ pub enum Kept {
 /// answer, one added is invited and has not answered.
 pub const GUESTS: &str = "attendee";
 
+/// The overlay's field for what one day of a series changes: the `occurrence` row the day would
+/// hold (`original_start`, `scope` and its own columns), put over the day's row if it has one. A
+/// day's times, place and words are no field of the event, so the row stands for them all.
+pub const DAY: &str = "occurrence";
+
 /// Why a field cannot be kept, or `None` when it can: it must be a `table.column` the entity's
 /// state holds (its title, its kind row), not a sealed cell and not the bytes of a document.
 fn refusal(state: &Json, name: &str, value: &Json) -> Option<String> {
@@ -36,6 +41,15 @@ fn refusal(state: &Json, name: &str, value: &Json) -> Option<String> {
             .as_array()
             .is_some_and(|people| people.iter().all(Json::is_string));
         return (!(held && people)).then(|| format!("`{name}` is a list of the people it holds"));
+    }
+    if name == DAY {
+        let held = state.get(DAY).is_some_and(Json::is_array);
+        let day = value.as_object().is_some_and(|row| {
+            ["original_start", "scope"]
+                .iter()
+                .all(|key| row.get(*key).is_some_and(Json::is_string))
+        });
+        return (!(held && day)).then(|| format!("`{name}` is one day of a series it holds"));
     }
     let Some((table, column)) = name.split_once('.') else {
         return Some(format!("`{name}` is not a field of a record"));
@@ -91,6 +105,8 @@ pub fn keep_overlay(
     for (name, value) in overlay {
         if name == GUESTS {
             put_guests(&mut held, value, now);
+        } else if name == DAY {
+            put_day(&mut held, value);
         } else if let Some((table, column)) = name.split_once('.')
             && let Some(row) = held.get_mut(table).and_then(Json::as_object_mut)
         {
@@ -144,4 +160,19 @@ fn put_guests(held: &mut Json, people: &Json, now: &str) {
             .and_then(Json::as_str)
             .cmp(&b.get("to_id").and_then(Json::as_str))
     });
+}
+
+/// Put `day` (an `occurrence` row) over the day's row in `held`, or among them when the day has
+/// none, in the order the state keeps them (by day, then scope).
+fn put_day(held: &mut Json, day: &Json) {
+    let key = |row: &Json| {
+        ["original_start", "scope"]
+            .map(|name| row.get(name).and_then(Json::as_str).map(str::to_owned))
+    };
+    let Some(rows) = held.get_mut(DAY).and_then(Json::as_array_mut) else {
+        return;
+    };
+    rows.retain(|row| key(row) != key(day));
+    rows.push(day.clone());
+    rows.sort_by_key(key);
 }

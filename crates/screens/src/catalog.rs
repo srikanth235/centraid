@@ -6926,7 +6926,7 @@ pub mod act {
             }
         }
 
-        /// (history, #1185) Keep the words a refused stale save held as the record's newest earlier version, beside the record as it is, through history.keep_version; `fields` names each kept field as `table.column` (an event's times and alerts as typed, its guests as `attendee`, a list of person ids). The record itself is not changed. An editor's Reload, never the assistant's.
+        /// (history, #1185) Keep the words a refused stale save held as the record's newest earlier version, beside the record as it is, through history.keep_version; `fields` names each kept field as `table.column` (an event's times and alerts as typed, its guests as `attendee`, a list of person ids, one day of a series as `occurrence`, the override `event.edit_occurrence` would write). The record itself is not changed. An editor's Reload, never the assistant's.
         #[derive(Clone, Debug, Default)]
         pub struct KeepVersion {
             pub fields: String,

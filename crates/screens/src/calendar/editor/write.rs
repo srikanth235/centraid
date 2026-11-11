@@ -180,9 +180,48 @@ pub fn kept_event(
     kept
 }
 
-/// What a refused change to one day (or the days from it) keeps: the words it was given.
+/// What a refused change to one day (or the days from it) keeps: the override the save would have
+/// written (`occurrence`, stated as `edit-occurrence` states it), its times and its words, and
+/// nothing when the day was left as it was.
 #[must_use]
-pub fn kept_words(draft: &Draft, base: &Draft) -> Vec<(String, serde_json::Value)> {
+pub fn kept_day(
+    original_start: &str,
+    scope: act_cal::EditOccurrenceScope,
+    draft: &Draft,
+    base: &Draft,
+) -> Vec<(String, serde_json::Value)> {
+    let mut day = serde_json::Map::new();
+    if times_changed(draft, base) {
+        let times = Times::of(draft);
+        match &times.placing {
+            Placing::AllDay => day.insert("timing".to_owned(), "all-day".into()),
+            Placing::Floating => day.insert("timing".to_owned(), "floating".into()),
+            Placing::Zoned(zone) => day.insert("zone".to_owned(), zone.clone().into()),
+        };
+        day.insert("starts".to_owned(), times.starts.into());
+        day.insert("ends".to_owned(), times.ends.into());
+    }
+    if draft.title.trim() != base.title.trim() {
+        day.insert("title".to_owned(), draft.title.trim().into());
+    }
+    if draft.notes.trim() != base.notes.trim() {
+        day.insert("description".to_owned(), draft.notes.trim().into());
+    }
+    if day.is_empty() {
+        return Vec::new();
+    }
+    let scope = match scope {
+        act_cal::EditOccurrenceScope::Future => "future",
+        _ => "occurrence",
+    };
+    day.insert("original_start".to_owned(), original_start.into());
+    day.insert("scope".to_owned(), scope.into());
+    vec![("occurrence".to_owned(), day.into())]
+}
+
+/// The words a draft changed.
+#[must_use]
+fn kept_words(draft: &Draft, base: &Draft) -> Vec<(String, serde_json::Value)> {
     let mut kept = Vec::new();
     if draft.title.trim() != base.title.trim() {
         kept.push(("entity.title".to_owned(), draft.title.trim().into()));

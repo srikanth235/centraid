@@ -375,8 +375,13 @@ pub(crate) fn shape(fields: &mut serde_json::Map<String, Json>) -> std::result::
 /// What a refused save of an event keeps, in the form the vault holds it (`history.keep_version`):
 /// the overlay's times (`event.starts`, `event.ends`, `event.timing`, `event.zone`) and alerts
 /// (`event.reminders`) are stated as a source states them, so a wall clock and its zone become the
-/// instant the row would hold and the alerts the one text of the column. `Err` is a sentence.
+/// instant the row would hold and the alerts the one text of the column. A refused change to one day
+/// is `occurrence`, an object stated as `event.edit_occurrence` states it (`original_start`, `scope`
+/// and what the day changes), which becomes the row that command would have written. `Err` is a
+/// sentence.
 pub(crate) fn shape_overlay(
+    connection: &rusqlite::Connection,
+    id: &str,
     overlay: &mut serde_json::Map<String, Json>,
 ) -> std::result::Result<(), String> {
     const OWN: [&str; 5] = ["starts", "ends", "timing", "zone", "reminders"];
@@ -390,7 +395,46 @@ pub(crate) fn shape_overlay(
     for (name, value) in stated {
         overlay.insert(format!("event.{name}"), value);
     }
+    if let Some(day) = overlay.get(crate::history::DAY).and_then(Json::as_object) {
+        let row = day_row(connection, id, day)?;
+        overlay.insert(crate::history::DAY.to_owned(), row);
+    }
     Ok(())
+}
+
+/// The `occurrence` row `event.edit_occurrence` (`override`) writes for what `day` states: only
+/// what was stated is the day's own, the rest is the series'.
+fn day_row(
+    connection: &rusqlite::Connection,
+    id: &str,
+    day: &serde_json::Map<String, Json>,
+) -> std::result::Result<Json, String> {
+    let (Some(key), Some(scope)) = (
+        day.get("original_start").and_then(Json::as_str),
+        day.get("scope").and_then(Json::as_str),
+    ) else {
+        return Err(
+            "`occurrence` names the day and whether it is the day or the days from it".into(),
+        );
+    };
+    if !["occurrence", "future"].contains(&scope) {
+        return Err("`occurrence` is one day or the days from it".to_owned());
+    }
+    let series =
+        row_of(connection, id).map_err(|_| format!("there is nothing with the id `{id}`"))?;
+    if series.rule.is_none() {
+        return Err("That event does not repeat.".to_owned());
+    }
+    let times = day_times(day, &series.times)?;
+    let said = |name: &str| day.get(name).and_then(Json::as_str);
+    Ok(json!({
+        "original_start": key, "scope": scope, "cancelled": 0,
+        "starts": times.starts, "ends": times.ends,
+        "timing": times.own.as_ref().map(|(timing, _)| timing.as_str()),
+        "zone": times.own.as_ref().and_then(|(_, zone)| zone.as_deref()),
+        "title": said("title"), "description": said("description"),
+        "url": said("url"), "place_id": said("place_id"),
+    }))
 }
 
 /// The alerts a source states (minutes before it starts), in the one text the `reminders` column

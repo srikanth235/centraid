@@ -2037,19 +2037,89 @@ fn changing_one_day_of_a_series_that_changed_elsewhere_is_refused_and_the_words_
         .map(|e| e.summary.unwrap_or_default())
         .collect();
     assert_eq!(titles, ["Elsewhere", "Elsewhere", "Elsewhere"]);
+    // The day's words are kept as the day's own override; the series' title is not touched.
     let kept = newest_version(&world, &series);
-    assert_eq!(
-        kept.get("entity.title"),
-        Some(&serde_json::json!("Daily sync"))
-    );
-    assert_eq!(
-        kept.get("event.description"),
-        Some(&serde_json::json!("Bring the numbers"))
-    );
+    let day = kept
+        .get("occurrence[2099-06-16T10:00:00/occurrence]")
+        .unwrap_or_else(|| panic!("the day kept: {kept:?}"));
+    assert_eq!(day["title"], "Daily sync");
+    assert_eq!(day["description"], "Bring the numbers");
+    assert!(day["starts"].is_null() && day["ends"].is_null());
+    assert!(!kept.contains_key("entity.title"));
     // The next change is from the revision just read, and lands.
     world.title(page, "Sync");
     world.save(page);
     world.send_editor(page, scope(Scope::Occurrence));
     world.save(page);
     assert!(world.editor_state(page).dismissed);
+}
+
+#[test]
+fn a_refused_change_to_the_days_times_keeps_the_days_override_and_restore_puts_it_back() {
+    let mut world = World::new();
+    let series = world.weekdays("Stand-up");
+    let key = format!("{series}:2099-06-16T10:00:00");
+    let page = world.open_edit(&series, &key, Some("2099-06-16T10:00:00"), "2099-06-16");
+    world.send_editor(page, start("2099-06-16", "15:00"));
+    world.send_editor(page, end("2099-06-16", "16:00"));
+    world.act(act::calendar::EditEvent {
+        event_id: series.clone(),
+        title: Some("Elsewhere".to_owned()),
+        ..Default::default()
+    });
+    world.save(page);
+    world.send_editor(page, scope(Scope::Occurrence));
+    world.save(page);
+    assert!(!world.editor_state(page).dismissed);
+    let day_of = |world: &World| -> Vec<(String, String)> {
+        world
+            .window("2099-06-15T00:00:00Z", "2099-06-18T00:00:00Z")
+            .into_iter()
+            .filter(|e| e.event_id == series)
+            .map(|e| (e.dtstart, e.summary.unwrap_or_default()))
+            .collect()
+    };
+    let before = day_of(&world);
+    assert!(
+        before
+            .iter()
+            .all(|(starts, _)| !starts.contains("T15:00") && !starts.contains("T13:00")),
+        "the day was not moved: {before:?}"
+    );
+    let kept = newest_version(&world, &series);
+    let day = kept
+        .get("occurrence[2099-06-16T10:00:00/occurrence]")
+        .unwrap_or_else(|| panic!("the day kept: {kept:?}"));
+    assert!(
+        day["starts"]
+            .as_str()
+            .is_some_and(|s| s.starts_with("2099-06-16"))
+    );
+    assert!(day["ends"].as_str().is_some());
+    // Restore on that version moves the day.
+    let wire::app_query_response::Answer::EarlierVersions(listed) =
+        world.load(centraid_screens::catalog::load::shell::EarlierVersions {
+            entity_id: series.clone(),
+        })
+    else {
+        panic!("earlier versions answered something else");
+    };
+    let seq = listed
+        .versions
+        .iter()
+        .map(|v| v.seq)
+        .max()
+        .expect("a version");
+    world.act(act::shell::RestoreVersion {
+        earlier_version_id: series.clone(),
+        seq,
+    });
+    let after = day_of(&world);
+    assert_ne!(after, before, "the restored day reads at its own time");
+    assert!(
+        after
+            .iter()
+            .any(|(starts, _)| starts.contains("2099-06-16") && !starts.contains("T10:00")),
+        "the 16th moved: {after:?}"
+    );
 }

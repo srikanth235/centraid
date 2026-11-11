@@ -105,7 +105,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         scope: None,
         save_tried: false,
         rev: None,
-        saving_day: false,
+        saving_day: None,
         undo: Undo::default(),
         dismissed: false,
     }))
@@ -147,7 +147,7 @@ struct Editor {
     /// The save scope picked.
     scope: Option<wire::AgendaScope>,
     /// The save in flight changes one day or the days from it, not the event itself.
-    saving_day: bool,
+    saving_day: Option<(String, act::calendar::EditOccurrenceScope)>,
     /// Save was pressed, which is when a blocked draft says why even before
     /// anything was typed.
     save_tried: bool,
@@ -386,7 +386,7 @@ impl Editor {
             .map(|a| a.party_id.clone())
             .collect();
         let occurrence = event.original_start_local.clone().unwrap_or_default();
-        self.saving_day = false;
+        self.saving_day = None;
         if !self.is_series_edit() {
             let request = act::calendar::EditEvent {
                 expected_rev: self.rev,
@@ -415,13 +415,13 @@ impl Editor {
                 self.committed(ctx, request, &key, editor_words::event_saved)
             }
             wire::AgendaScope::Occurrence | wire::AgendaScope::Future => {
-                self.saving_day = true;
                 let word = scope_word(scope);
                 let wire_scope = if scope == wire::AgendaScope::Future {
                     act::calendar::EditOccurrenceScope::Future
                 } else {
                     act::calendar::EditOccurrenceScope::Occurrence
                 };
+                self.saving_day = Some((occurrence.clone(), wire_scope));
                 let request = act::calendar::EditOccurrence {
                     expected_rev: self.rev,
                     ..write::override_occurrence(&event_id, &occurrence, wire_scope, &draft, &base)
@@ -473,9 +473,14 @@ impl Editor {
                 .collect()
         });
         let fields = match (&self.draft, &self.baseline) {
-            // A day (or the days from it) has its own times and words, which are no state of the
-            // event: its words are what is kept.
-            (Some(draft), Some(base)) if self.saving_day => write::kept_words(draft, base),
+            // A day (or the days from it) has its own times and words in a row of its own: that
+            // override is what is kept, not the event's.
+            (Some(draft), Some(base)) if self.saving_day.is_some() => self
+                .saving_day
+                .take()
+                .map_or_else(Vec::new, |(day, scope)| {
+                    write::kept_day(&day, scope, draft, base)
+                }),
             (Some(draft), Some(base)) => write::kept_event(draft, base, &owner_ids),
             _ => Vec::new(),
         };
@@ -487,7 +492,7 @@ impl Editor {
             stale,
             fields,
         );
-        self.saving_day = false;
+        self.saving_day = None;
         self.draft = None;
         self.baseline = None;
         self.typed_place.clear();
