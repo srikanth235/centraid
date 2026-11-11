@@ -177,7 +177,7 @@ final class ShellModel: ObservableObject {
                 queue: .main
             ) { [weak self] _ in
                 MainActor.assumeIsolated {
-                    TimeZone.resetSystemTimeZone()
+                    NSTimeZone.resetSystemTimeZone()
                     self?.screens?.reportEnvironment()
                 }
             })
