@@ -153,6 +153,19 @@ pub const TABLES: &[(&str, Role)] = &[
             key: &[],
         },
     ),
+    // A passkey is part of the item: its relying party, names and algorithm, and its private key as
+    // the ciphertext it is, so removing or replacing one is taken back like any other change. The
+    // key is masked on read and never revealed, as it never is live.
+    (
+        "locker_item_passkey",
+        Role::Child {
+            host: "locker_item",
+            via: "item_id",
+            filter: None,
+            alias: "locker_item_passkey",
+            key: &[],
+        },
+    ),
     // Not an entity's state.
     (
         "vault",
@@ -195,10 +208,6 @@ pub const TABLES: &[(&str, Role)] = &[
     (
         "message_attachment",
         Role::Outside("a chat's transcript is appended, never edited"),
-    ),
-    (
-        "locker_item_passkey",
-        Role::Outside("its private key is its whole value and is never kept"),
     ),
     ("locker_key", Role::Outside("custody's own bookkeeping")),
     ("search_word", Role::Outside("the search index")),
@@ -278,6 +287,16 @@ pub const OMITTED: &[(&str, &str, &str)] = &[
     ),
     (
         "locker_item_field",
+        "row_version",
+        "the table's recursion guard",
+    ),
+    (
+        "locker_item_passkey",
+        "updated_at",
+        "stamped by the table's own trigger",
+    ),
+    (
+        "locker_item_passkey",
         "row_version",
         "the table's recursion guard",
     ),

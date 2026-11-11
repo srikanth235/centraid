@@ -55,8 +55,8 @@
 //! else unsealed. Nothing that reads history shows one either: [`earlier_versions`] answers a
 //! changed sealed cell as [`MASK`] (a changed secret is seen to have changed, and that is all), and
 //! the only door to a value is the core's Locker session, which opens a version's cell with the
-//! key behind the member's unlock ([`crate::Vault::locker_sealed_earlier_cell`]). A passkey
-//! (whose key is its whole value) stays outside the history.
+//! key behind the member's unlock ([`crate::Vault::locker_sealed_earlier_cell`]). A passkey is
+//! state like the rest, its private key sealed the same way and, as it is live, never shown.
 //!
 //! A version names a blob by hash and copies no bytes. A document's replaced bytes are kept by
 //! the `revision.blob` foreign key for as long as the document lives, as they always were; any

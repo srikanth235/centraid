@@ -257,13 +257,10 @@ fn every_table_every_kind_and_every_relation_is_classified() {
                 assert!(part.columns.iter().any(|name| name == column), "{table}.{column}");
                 assert!(history::is_sealed(table, column), "{table}.{column}");
             }
-            assert!(
-                history::TABLES
-                    .iter()
-                    .any(|(table, role)| *table == "locker_item_passkey"
-                        && matches!(role, Role::Outside(_))),
-                "a passkey's key is never kept"
-            );
+            // A passkey is state, its key sealed and masked like the rest.
+            let passkey = shape.part("locker_item_passkey").expect("classified");
+            assert!(passkey.columns.iter().any(|name| name == "private_key"));
+            assert!(history::is_sealed("locker_item_passkey", "private_key"));
             Ok(())
         })
         .expect("read");
@@ -799,7 +796,32 @@ fn a_changed_password_is_kept_sealed_masked_on_read_and_restored_with_the_item()
         "a seed is in the file in the clear"
     );
 
-    // A passkey's key stays outside the history.
+    // A passkey is state too: replacing its key and removing it are taken back, the key masked.
+    w.ok(
+        "locker.set_passkey",
+        json!({ "item_id": id, "rp_id": "bank.example", "display_name": "Laptop",
+                "private_key": sealed(id, "PLANTED-KEY-ONE-m4n5b-not-in-any-payload"), "key_id": "k1" }),
+    );
+    w.ok(
+        "locker.set_passkey",
+        json!({ "item_id": id, "rp_id": "bank.example", "display_name": "Laptop",
+                "private_key": sealed(id, "PLANTED-KEY-TWO-v6c7x-not-in-any-payload"), "key_id": "k1" }),
+    );
+    let versions = w.versions(id);
+    let (was, now) = World::change(&versions[0], "locker_item_passkey.private_key");
+    assert_eq!((was, now), (json!(history::MASK), json!(history::MASK)));
+    w.ok("history.undo", json!({ "id": id, "seq": versions[0].seq }));
+    let live: String = w.count_text("SELECT private_key FROM locker_item_passkey WHERE item_id = 'item-1'");
+    assert_eq!(opened(id, &live), "PLANTED-KEY-ONE-m4n5b-not-in-any-payload");
+    w.ok("locker.clear_passkey", json!({ "item_id": id }));
+    let versions = w.versions(id);
+    w.ok("history.undo", json!({ "id": id, "seq": versions[0].seq }));
+    let live: String = w.count_text("SELECT private_key FROM locker_item_passkey WHERE item_id = 'item-1'");
+    assert_eq!(opened(id, &live), "PLANTED-KEY-ONE-m4n5b-not-in-any-payload");
+    let file = std::fs::read(w.scratch.dir().join("vault.db")).expect("file");
+    for key in ["PLANTED-KEY-ONE-m4n5b-not-in-any-payload", "PLANTED-KEY-TWO-v6c7x-not-in-any-payload"] {
+        assert!(!file.windows(key.len()).any(|window| window == key.as_bytes()), "{key} in the file");
+    }
     w.purge_takes_history(id);
 }
 
