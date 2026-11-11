@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.EarlierEvent
 import centraid.core.v1.EarlierRow
+import centraid.core.v1.EarlierSecret
 import centraid.core.v1.EarlierView
 import dev.centraid.android.theme.centraidType
 
@@ -129,7 +130,55 @@ private fun EarlierRowView(row: EarlierRow, onEvent: (EarlierEvent) -> Unit) {
                 )
             }
         }
+        row.secrets.forEach { secret -> EarlierSecretLine(row.seq, secret, onEvent) }
         Spacer(Modifier.fillMaxWidth().height(KitGeometry.HAIRLINE).background(Surface.line))
+    }
+}
+
+/** One sealed value: `label · masked`, or the value while Rust says `revealed`; never kept here. */
+@Composable
+private fun EarlierSecretLine(seq: Long, secret: EarlierSecret, onEvent: (EarlierEvent) -> Unit) {
+    val accent = appAccent()
+    val title = if (secret.revealed) secret.conceal_label else secret.reveal_label
+    Row(
+        Modifier.fillMaxWidth().padding(start = 14.dp, end = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        KitText(
+            "${secret.label} · ${if (secret.revealed) secret.value_ else secret.masked}",
+            KitType.Meta,
+            Surface.meta,
+            maxLines = 1,
+            modifier = Modifier
+                .weight(1f)
+                .semantics {
+                    if (secret.accessibility_label.isNotEmpty()) contentDescription = secret.accessibility_label
+                },
+        )
+        if (secret.reveal_label.isNotEmpty() && title.isNotEmpty()) {
+            Text(
+                title,
+                style = centraidType("smallStrong"),
+                color = accent.text,
+                modifier = Modifier
+                    .heightIn(min = KitGeometry.ROW_MIN)
+                    .clickable {
+                        onEvent(
+                            if (secret.revealed) {
+                                EarlierEvent(conceal = EarlierEvent.SecretTapped(seq = seq, key = secret.key))
+                            } else {
+                                EarlierEvent(reveal = EarlierEvent.SecretTapped(seq = seq, key = secret.key))
+                            },
+                        )
+                    }
+                    .padding(horizontal = 10.dp, vertical = 12.dp)
+                    .testTag("earlier-secret-$seq-${secret.key}")
+                    .semantics {
+                        role = Role.Button
+                        if (secret.accessibility_label.isNotEmpty()) contentDescription = secret.accessibility_label
+                    },
+            )
+        }
     }
 }
 

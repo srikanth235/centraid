@@ -51,7 +51,9 @@ struct CoreEarlierView: View {
                                     ForEach(data.rows, id: \.seq) { row in
                                         EarlierRowView(
                                             row: row,
-                                            onRestore: { event { $0.kind = .restore(.with { $0.seq = row.seq }) } }
+                                            onRestore: { event { $0.kind = .restore(.with { $0.seq = row.seq }) } },
+                                            onReveal: { key in event { $0.kind = .reveal(.with { $0.seq = row.seq; $0.key = key }) } },
+                                            onConceal: { key in event { $0.kind = .conceal(.with { $0.seq = row.seq; $0.key = key }) } }
                                         )
                                     }
                                 }
@@ -91,10 +93,51 @@ struct CoreEarlierView: View {
 private struct EarlierRowView: View {
     let row: Centraid_Core_V1_EarlierRow
     let onRestore: () -> Void
+    let onReveal: (String) -> Void
+    let onConceal: (String) -> Void
 
     @Environment(\.appAccent) private var accent
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            mainRow
+            ForEach(row.secrets, id: \.key) { secret in
+                secretLine(secret)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Surface.line).frame(height: CentraidGeometry.hairline)
+        }
+    }
+
+    /// One sealed value: `label · masked`, or the value while Rust says `revealed`; the value is
+    /// only ever read from the state being drawn.
+    private func secretLine(_ secret: Centraid_Core_V1_EarlierSecret) -> some View {
+        HStack(spacing: 8) {
+            Text("\(secret.label) · \(secret.revealed ? secret.value : secret.masked)")
+                .kitType(.meta)
+                .foregroundStyle(Surface.meta)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel(secret.accessibilityLabel.isEmpty ? secret.label : secret.accessibilityLabel)
+            let title = secret.revealed ? secret.concealLabel : secret.revealLabel
+            if !secret.revealLabel.isEmpty && !title.isEmpty {
+                Button { secret.revealed ? onConceal(secret.key) : onReveal(secret.key) } label: {
+                    Text(title)
+                        .centraidType("smallStrong")
+                        .foregroundStyle(accent.text)
+                        .frame(minWidth: CentraidGeometry.targetMinCoarse, minHeight: CentraidGeometry.targetMinCoarse)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(secret.accessibilityLabel.isEmpty ? title : secret.accessibilityLabel)
+            }
+        }
+        .padding(.leading, 14)
+        .padding(.trailing, 6)
+    }
+
+    private var mainRow: some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(row.label)
@@ -134,9 +177,6 @@ private struct EarlierRowView: View {
         .padding(.leading, 14)
         .padding(.trailing, 6)
         .padding(.vertical, 6)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(Surface.line).frame(height: CentraidGeometry.hairline)
-        }
     }
 }
 
