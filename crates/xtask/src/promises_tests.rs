@@ -1769,7 +1769,7 @@ fn an_exempt_row_is_held_to_the_listed_ruling() {
 }
 
 #[test]
-fn the_committed_register_exempts_only_locker_and_owes_the_six() {
+fn the_committed_register_exempts_only_locker_and_owes_what_is_not_adopted_yet() {
     let status = |app: &str| {
         REGISTER
             .iter()
@@ -1780,7 +1780,8 @@ fn the_committed_register_exempts_only_locker_and_owes_the_six() {
     assert!(matches!(status("locker"), Status::Exempt(_)));
     assert!(matches!(status("calendar"), Status::Kept(_)));
     assert!(matches!(status("reminders"), Status::Kept(_)));
-    for app in ["notes", "people", "photos", "docs", "health", "money"] {
+    assert!(matches!(status("people"), Status::Kept(_)));
+    for app in ["notes", "photos", "docs", "health", "money"] {
         assert!(matches!(status(app), Status::Owed(_)), "{app}");
     }
     assert_eq!(ATTACH_EXEMPT.len(), 1);
