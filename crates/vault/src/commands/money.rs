@@ -351,6 +351,9 @@ fn pre_layout(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         return Ok(Some(sentence));
     }
     let layout = ctx.input.get("layout").cloned().unwrap_or(Json::Null);
+    if layout.is_null() {
+        return Ok(None);
+    }
     let has = |key: &str| layout.get(key).is_some_and(|value| !value.is_null());
     let missing = match layout.get("sign_mode").and_then(Json::as_str) {
         Some("debit_credit") => !(has("debit_col") && has("credit_col")),
@@ -362,15 +365,35 @@ fn pre_layout(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok(missing.then(|| "This layout does not say which columns hold the amount.".to_owned()))
 }
 
-/// Remember how the account's statements are laid out, for the next one.
+/// Remember how the account's statements are laid out, for the next one. A `null` layout forgets
+/// it. The answer names the layout it replaced (`null` when none was remembered), which is how
+/// the act is taken back.
 fn remember_layout(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let layout = ctx.input.get("layout").cloned().unwrap_or(Json::Null);
+    let stored = (!layout.is_null()).then(|| layout.to_string());
+    let account = ctx.required_str("id")?;
+    let held: Option<String> = ctx
+        .connection()
+        .query_row(
+            "SELECT config FROM origin WHERE system = 'statement' AND fills = ?1",
+            [account],
+            |row| row.get(0),
+        )
+        .optional()?
+        .flatten();
     let saved = ctx.connection().execute(
         "UPDATE origin SET config = ?2
           WHERE system = 'statement' AND fills = ?1 AND config IS NOT ?2",
-        rusqlite::params![ctx.required_str("id")?, layout.to_string()],
+        rusqlite::params![account, stored],
     )? > 0;
-    Ok(json!({ "saved": saved }))
+    if !saved {
+        return Ok(json!({ "saved": false }));
+    }
+    let replaced = held
+        .as_deref()
+        .and_then(|text| serde_json::from_str::<Json>(text).ok())
+        .unwrap_or(Json::Null);
+    Ok(json!({ "saved": true, "replaced": { "layout": replaced } }))
 }
 
 // ---------------------------------------------------------------------------
@@ -438,18 +461,36 @@ fn pre_categorize(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 
 fn categorize(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let category = ctx.optional_str("category_id");
-    let mut changed = 0;
+    let mut changed = Vec::new();
+    // The category each changed line held, kept only while they all held the same one: then the
+    // act is taken back by filing those lines under it again. Lines that held different ones are
+    // not put back by one act, so none is named.
+    let mut held: Option<Option<String>> = None;
+    let mut uniform = true;
     for id in ids_of(ctx) {
+        let before: Option<String> = ctx.connection().query_row(
+            "SELECT category_id FROM txn WHERE id = ?1",
+            [&id],
+            |row| row.get(0),
+        )?;
         if ctx.connection().execute(
             "UPDATE txn SET category_id = ?2 WHERE id = ?1 AND category_id IS NOT ?2",
             rusqlite::params![id, category],
         )? > 0
         {
             ctx.touch(&id)?;
-            changed += 1;
+            if held.as_ref().is_some_and(|first| *first != before) {
+                uniform = false;
+            }
+            held.get_or_insert(before);
+            changed.push(id);
         }
     }
-    Ok(json!({ "changed": changed }))
+    let replaced = match held {
+        Some(category) if uniform => Some(json!({ "ids": changed, "category_id": category })),
+        _ => None,
+    };
+    Ok(json!({ "changed": changed.len(), "replaced": replaced }))
 }
 
 /// Let go of a line's transfer, and of the other half's.
@@ -548,7 +589,23 @@ fn link_transfer(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
 }
 
 fn unlink_transfer(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    Ok(json!({ "unlinked": end_transfer(ctx, ctx.required_str("id")?)? }))
+    let id = ctx.required_str("id")?;
+    // The other half, named before the link goes: linking the two again takes the act back.
+    let other: Option<String> = ctx
+        .connection()
+        .query_row(
+            "SELECT COALESCE(transfer_id, (SELECT id FROM txn WHERE transfer_id = ?1 LIMIT 1))
+               FROM txn WHERE id = ?1",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?
+        .flatten();
+    let unlinked = end_transfer(ctx, id)?;
+    Ok(json!({
+        "unlinked": unlinked,
+        "replaced": other.map(|other| json!({ "other_id": other }))
+    }))
 }
 
 // ---------------------------------------------------------------------------
@@ -575,13 +632,34 @@ fn pre_plan(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 
 fn set_plan(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let (month, category) = (ctx.required_str("month")?, ctx.required_str("category_id")?);
+    // What the month held before, so the act is taken back by setting it again (or by removing
+    // the plan when there was none): a plan is no record, so the history keeps none.
+    let before: Option<(i64, String, bool)> = ctx
+        .connection()
+        .query_row(
+            "SELECT amount_minor, currency, carry FROM budget WHERE month = ?1 AND category_id = ?2",
+            [month, category],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()?;
+    let replaced = |changed: bool| -> Json {
+        if !changed {
+            return Json::Null;
+        }
+        match &before {
+            Some((amount, currency, carry)) => {
+                json!({ "amount_minor": amount, "currency": currency, "carry": carry })
+            }
+            None => json!({ "amount_minor": null }),
+        }
+    };
     let Some(amount) = integer(ctx, "amount_minor") else {
         // `null` removes the plan for that month.
         let removed = ctx.connection().execute(
             "DELETE FROM budget WHERE month = ?1 AND category_id = ?2",
             [month, category],
         )? > 0;
-        return Ok(json!({ "changed": removed }));
+        return Ok(json!({ "changed": removed, "replaced": replaced(removed) }));
     };
     let currency = match ctx.optional_str("currency") {
         Some(currency) => currency.trim().to_uppercase(),
@@ -602,7 +680,7 @@ fn set_plan(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             OR (?5 IS NOT NULL AND budget.carry IS NOT ?5)",
         rusqlite::params![category, month, amount, currency, carry],
     )? > 0;
-    Ok(json!({ "changed": changed }))
+    Ok(json!({ "changed": changed, "replaced": replaced(changed) }))
 }
 
 fn pre_carry(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -619,6 +697,14 @@ fn pre_carry(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 }
 
 fn set_carry(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let before: Option<bool> = ctx
+        .connection()
+        .query_row(
+            "SELECT carry FROM budget WHERE month = ?1 AND category_id = ?2",
+            [ctx.required_str("month")?, ctx.required_str("category_id")?],
+            |row| row.get(0),
+        )
+        .optional()?;
     let changed = ctx.connection().execute(
         "UPDATE budget SET carry = ?1 WHERE month = ?2 AND category_id = ?3 AND carry IS NOT ?1",
         rusqlite::params![
@@ -627,7 +713,10 @@ fn set_carry(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             ctx.required_str("category_id")?
         ],
     )? > 0;
-    Ok(json!({ "changed": changed }))
+    Ok(json!({
+        "changed": changed,
+        "replaced": before.filter(|_| changed).map(|carry| json!({ "carry": carry }))
+    }))
 }
 
 fn pre_checkpoint(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -970,7 +1059,7 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "properties": {
                 "id": { "type": "string", "minLength": 1 },
                 "layout": {
-                  "type": "object",
+                  "type": ["object", "null"],
                   "required": ["header_fingerprint", "delimiter", "date_order", "sign_mode", "date_col", "desc_col"],
                   "additionalProperties": false,
                   "properties": {

@@ -80,6 +80,12 @@ pub(crate) enum Input {
     /// inverse is the app's `stop-following` for the named system with the pass's own
     /// `origin.ref`; a call that names no origin (the health follower's day totals) offers none.
     Stops(&'static str),
+    /// The id of what the action created, with fixed fields beside it: a category has no trash, so
+    /// taking its creation back archives it (`{id, flag: "archived"}`).
+    CreatedWith(&'static str, &'static str),
+    /// A transfer ended (`unlink-transfer`), which answers the other half under `replaced`:
+    /// linked again by `link-transfer {id, other_id}`.
+    Relinks,
     /// A figure set by hand (`measurement.log`), whose command answers the value it replaced under
     /// `replaced`, `null` when the day held none. Taken back by the figure that was there, or by
     /// `clear-figure` when there was none.
@@ -182,7 +188,28 @@ const HEALTH: &[Row] = &[
     ("delete-workout", "restore-workout", Input::Id),
     ("restore-workout", "delete-workout", Input::Id),
 ];
+/// Money. A statement import is taken back by nothing and asks first (the Import screen previews
+/// the lines and the statement balance, and writes on the tap), as does the balance it records.
+/// A line's category is taken back by filing the lines it changed under the one they held (when
+/// they held one), a plan, a rule, a saved layout and an ended transfer by the values the command
+/// answers it replaced: none of them is a record the history keeps. A category has no trash, so
+/// its creation is taken back by archiving it, and a new account by closing it (the same flag):
+/// the chat prompt is pinned to `create` being a direct act, which the shell's `undo-create` as
+/// its inverse would turn into a card.
+#[rustfmt::skip]
 const MONEY: &[Row] = &[
+    ("add-account", "close-account", Input::CreatedWith("flag", "archived")),
+    ("edit-account", "edit-account", Input::Earlier),
+    ("set-display-name", "set-display-name", Input::Earlier),
+    ("categorize", "categorize", Input::Prior),
+    ("save-import-profile", "save-import-profile", Input::Prior),
+    ("unlink-transfer", "link-transfer", Input::Relinks),
+    ("set-target", "set-target", Input::Prior),
+    ("set-carry", "set-carry", Input::Prior),
+    ("edit-rule", "edit-rule", Input::Prior),
+    ("add-category", "archive-category", Input::CreatedWith("flag", "archived")),
+    ("archive-category", "unarchive-category", Input::Same),
+    ("unarchive-category", "archive-category", Input::Same),
     ("close-account", "reopen-account", Input::Same),
     ("reopen-account", "close-account", Input::Same),
     ("add-rule", "delete-rule", Input::Created),
@@ -313,6 +340,24 @@ pub(crate) fn of(
             back.insert("rel".to_owned(), Value::String("related".to_owned()));
             back.insert("to".to_owned(), output.get("related_id")?.clone());
             back.insert("label".to_owned(), input.get("kind")?.clone());
+            back
+        }
+        Input::CreatedWith(key, value) => {
+            let mut back = Map::new();
+            back.insert(
+                "id".to_owned(),
+                output.get("id").filter(|id| id.is_string())?.clone(),
+            );
+            back.insert((*key).to_owned(), Value::String((*value).to_owned()));
+            back
+        }
+        Input::Relinks => {
+            let mut back = Map::new();
+            back.insert("id".to_owned(), input.get("id")?.clone());
+            back.insert(
+                "other_id".to_owned(),
+                output.get("replaced")?.get("other_id")?.clone(),
+            );
             back
         }
         Input::Stops(system) => {
@@ -448,6 +493,25 @@ mod tests {
                             );
                         }
                     }
+                    Input::CreatedWith(key, _) => {
+                        for name in ["id", *key] {
+                            assert!(
+                                back.input["properties"]
+                                    .as_object()
+                                    .is_some_and(|offered| offered.contains_key(name)),
+                                "{}.{inverse} does not take `{name}`",
+                                app.id
+                            );
+                        }
+                        assert!(
+                            required.iter().all(|name| ["id", *key].contains(name)),
+                            "{}.{inverse} needs more than the id and `{key}`",
+                            app.id
+                        );
+                    }
+                    Input::Relinks => {
+                        assert_eq!(required, ["id", "other_id"], "{}.{inverse}", app.id);
+                    }
                     Input::Stops(_) => {
                         for name in ["system", "ref"] {
                             assert!(
@@ -530,7 +594,7 @@ mod tests {
     /// The apps whose Undo row of the promise register (`cargo xtask rules`) is still Owed: the
     /// two checks below hold for every other app, and an app leaves this list in the change that
     /// takes its row to Kept.
-    const OWED: &[&str] = &["locker", "money"];
+    const OWED: &[&str] = &["locker"];
 
     /// Single actions still owed in an app whose other actions are held to the check below.
     const OWED_ACTIONS: &[(&str, &str)] = &[];

@@ -2587,7 +2587,7 @@ pub mod act {
             }
         }
 
-        /// Write the new lines of a statement the member reviewed: a line already in the account is left as it is (a line is never edited, and the member's category and name survive), so importing the same file twice writes nothing.
+        /// Write the new lines of a statement the member reviewed (the Import screen previews them and writes only on the member's tap): a line already in the account is left as it is (a line is never edited, and the member's category and name survive), so importing the same file twice writes nothing.
         #[derive(Clone, Debug, Default)]
         pub struct ImportTransactions {
             pub origin: String,
@@ -2613,7 +2613,7 @@ pub mod act {
             }
         }
 
-        /// Record a balance the bank stated on a day; a derived balance is compared with it.
+        /// Record a balance the bank stated on a day; a derived balance is compared with it. The Import screen shows the statement balance in its preview and records it only on the member's tap.
         #[derive(Clone, Debug, Default)]
         pub struct RecordCheckpoint {
             pub account_id: String,
@@ -2641,7 +2641,7 @@ pub mod act {
         #[derive(Clone, Debug, Default)]
         pub struct SaveImportProfile {
             pub account_id: String,
-            pub layout: String,
+            pub layout: Option<String>,
         }
         impl SaveImportProfile {
             pub const NAME: &str = "save-import-profile";
@@ -2649,7 +2649,7 @@ pub mod act {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("id".to_owned(), text(self.account_id));
-                map.insert("layout".to_owned(), text(self.layout));
+                map.insert("layout".to_owned(), match self.layout { Some(it) => text(it), None => null() });
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
         }

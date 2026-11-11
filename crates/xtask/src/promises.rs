@@ -153,7 +153,7 @@ pub const REGISTER: &[Row] = &[
     kept("docs", Promise::Undo, "crates/core/src/act/inverse.rs"),
     kept("health", Promise::Undo, "crates/core/src/act/inverse.rs"),
     owed("locker", Promise::Undo, UNDO_OWED),
-    owed("money", Promise::Undo, UNDO_OWED),
+    kept("money", Promise::Undo, "crates/core/src/act/inverse.rs"),
     kept("notes", Promise::Undo, "crates/core/src/act/inverse.rs"),
     kept("people", Promise::Undo, "crates/core/src/act/inverse.rs"),
     kept("photos", Promise::Undo, "crates/core/src/act/inverse.rs"),

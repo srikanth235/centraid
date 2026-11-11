@@ -468,8 +468,8 @@
         "load the CSV from my checking account",
         "add the lines from last month's statement"
       ],
-      "description": "Write the new lines of a statement the member reviewed: a line already in the account is left as it is (a line is never edited, and the member's category and name survive), so importing the same file twice writes nothing.",
-      "confirmation": "none",
+      "description": "Write the new lines of a statement the member reviewed (the Import screen previews them and writes only on the member's tap): a line already in the account is left as it is (a line is never edited, and the member's category and name survive), so importing the same file twice writes nothing.",
+      "confirmation": "required",
       "input": {
         "additionalProperties": false,
         "properties": {
@@ -561,8 +561,8 @@
         "record a balance of 300 on savings today",
         "the bank says Everyday was 842 yesterday"
       ],
-      "description": "Record a balance the bank stated on a day; a derived balance is compared with it.",
-      "confirmation": "none",
+      "description": "Record a balance the bank stated on a day; a derived balance is compared with it. The Import screen shows the statement balance in its preview and records it only on the member's tap.",
+      "confirmation": "required",
       "input": {
         "additionalProperties": false,
         "properties": {
@@ -600,7 +600,7 @@
       "name": "save-import-profile",
       "verb": "edit",
       "kind": "account",
-      "inverse": null,
+      "inverse": "save-import-profile",
       "sealed": [],
       "command": "account.remember_layout",
       "phrasings": [
@@ -681,7 +681,7 @@
               "date_col",
               "desc_col"
             ],
-            "type": "object"
+            "type": ["object", "null"]
           }
         },
         "required": ["id", "layout"],
@@ -706,7 +706,7 @@
       "name": "categorize",
       "verb": "categorize",
       "kind": "transaction",
-      "inverse": null,
+      "inverse": "categorize",
       "sealed": [],
       "bulk": true,
       "command": "txn.categorize",

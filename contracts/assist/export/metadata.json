@@ -2661,7 +2661,7 @@
         "bulk": false,
         "chat": "card",
         "command": "account.remember_layout",
-        "inverse": null,
+        "inverse": "save-import-profile",
         "kind": "account",
         "phrasings": [
           "remember how this bank's CSV is laid out",
@@ -2679,7 +2679,7 @@
         "bulk": true,
         "chat": "card",
         "command": "txn.categorize",
-        "inverse": null,
+        "inverse": "categorize",
         "kind": "transaction",
         "phrasings": [
           "file that Starbucks charge under coffee",

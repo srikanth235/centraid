@@ -644,6 +644,23 @@ fn health(w: &World) {
     );
 }
 
+fn money(w: &World) {
+    let account = w.first("account");
+    w.round_trip(
+        "money",
+        "edit-account",
+        &account,
+        &json!({ "id": account, "title": "Everyday spending", "on_budget": false }),
+    );
+    let line = w.first("txn");
+    w.round_trip(
+        "money",
+        "set-display-name",
+        &line,
+        &json!({ "id": line, "title": "Corner shop" }),
+    );
+}
+
 fn people(w: &World) {
     let person = w.make("people", "add-person", &json!({ "title": "Una Undo" }));
     let list = w.make(
@@ -905,6 +922,7 @@ fn every_earlier_row_round_trips_and_nothing_else_is_claimed() {
     calendar(&w);
     docs(&w);
     health(&w);
+    money(&w);
     notes(&w);
     people(&w);
     photos(&w);
@@ -1191,4 +1209,227 @@ fn following_the_phones_calendar_is_taken_back_by_stopping_and_its_events_stay()
         })?)
     });
     assert_eq!(kept.expect("a count"), 1, "the followed event remains");
+}
+
+impl World {
+    /// The first column of the first row a query answers, as text; `None` for no row or a NULL.
+    pub fn text(&self, sql: &str) -> Option<String> {
+        self.sample
+            .handle
+            .with_vault(|vault| {
+                Ok(vault.read(|connection| {
+                    Ok(connection
+                        .query_row(sql, [], |row| row.get::<_, Option<String>>(0))
+                        .ok()
+                        .flatten())
+                })?)
+            })
+            .expect("a text")
+    }
+
+    /// The whole of what a query answers, as one string, for comparing a state before and after.
+    pub fn rows(&self, sql: &str) -> String {
+        self.text(&format!(
+            "SELECT COALESCE(group_concat(r, ';'), '') FROM (SELECT {sql} AS r)"
+        ))
+        .unwrap_or_default()
+    }
+}
+
+fn layout(first_col: u32) -> Value {
+    json!({ "header_fingerprint": "date|amount|memo", "delimiter": ",", "date_order": "ymd",
+            "sign_mode": "signed", "date_col": first_col, "amount_col": 1, "desc_col": 2 })
+}
+
+/// Money's acts that the history does not keep as a version, taken back by what the command says
+/// they replaced: do it, undo it, and what the vault holds is what it held.
+#[test]
+fn money_acts_are_taken_back_by_what_they_replaced_and_state_equals_before() {
+    let w = World::new();
+
+    // A new account is closed again, and reopening it is the Undo of that.
+    let flags = |id: &str| {
+        w.rows(&format!(
+            "(SELECT COUNT(*) FROM edge WHERE from_id = '{id}' AND rel = 'tagged')"
+        ))
+    };
+    let made = w.ok(
+        "money",
+        "add-account",
+        &json!({ "title": "Holiday jar", "type": "cash" }),
+    );
+    let (undo, back) = made.inverse().expect("an account is taken back");
+    assert_eq!(undo, "close-account");
+    let id = back["id"].as_str().expect("an id").to_owned();
+    assert_eq!(flags(&id), "0");
+    let closed = w.ok("money", &undo, &back);
+    assert_eq!(flags(&id), "1", "the new account is closed");
+    let (undo, back) = closed.inverse().expect("closing is taken back");
+    assert_eq!(undo, "reopen-account");
+    w.ok("money", &undo, &back);
+    assert_eq!(flags(&id), "0");
+
+    // A category filed on a line: the line goes back to the category it held (or none).
+    let line = w
+        .text("SELECT id FROM txn WHERE category_id IS NULL LIMIT 1")
+        .expect("an unfiled line");
+    let before = w.state(&line);
+    let filed = w.ok(
+        "money",
+        "categorize",
+        &json!({ "ids": [line], "category_id": "category:food.dining" }),
+    );
+    let (undo, back) = filed.inverse().expect("filing is taken back");
+    assert_eq!(undo, "categorize");
+    assert_eq!(back["category_id"], Value::Null);
+    assert_ne!(w.state(&line), before);
+    w.ok("money", &undo, &back);
+    assert_eq!(w.state(&line), before, "filed back under nothing");
+    // Lines that held different categories are not put back by one act, so none is offered.
+    let other = w
+        .text("SELECT id FROM txn WHERE category_id IS NOT NULL AND category_id <> 'category:food.dining' LIMIT 1")
+        .expect("a filed line");
+    let mixed = w.ok(
+        "money",
+        "categorize",
+        &json!({ "ids": [line, other], "category_id": "category:food.dining" }),
+    );
+    assert!(mixed.inverse().is_none());
+
+    // An ended transfer is linked again, both halves as they were.
+    let half = w
+        .text(
+            "SELECT a.id FROM txn a JOIN txn b ON b.amount_minor = -a.amount_minor
+              AND b.account_id <> a.account_id AND b.currency = a.currency
+              AND b.transfer_id IS NULL WHERE a.transfer_id IS NULL AND a.amount_minor < 0
+              AND a.status <> 'void' AND b.status <> 'void' LIMIT 1",
+        )
+        .expect("a line with a matching line on another account");
+    let partner = w
+        .text(&format!(
+            "SELECT b.id FROM txn a JOIN txn b ON b.amount_minor = -a.amount_minor
+              AND b.account_id <> a.account_id AND b.currency = a.currency
+              AND b.transfer_id IS NULL WHERE a.id = '{half}' AND b.status <> 'void' LIMIT 1"
+        ))
+        .expect("its other half");
+    w.ok(
+        "money",
+        "link-transfer",
+        &json!({ "id": half, "other_id": partner }),
+    );
+    let (a, b) = (w.state(&half), w.state(&partner));
+    let ended = w.ok("money", "unlink-transfer", &json!({ "id": half }));
+    let (undo, back) = ended.inverse().expect("an unlink is taken back");
+    assert_eq!(undo, "link-transfer");
+    assert_eq!(back, json!({ "id": half, "other_id": partner }));
+    assert_ne!(w.state(&half), a);
+    w.ok("money", &undo, &back);
+    assert_eq!((w.state(&half), w.state(&partner)), (a, b));
+
+    // A plan: a changed amount comes back, and a month that had none has none again.
+    let plan = "SELECT month || '|' || category_id FROM budget LIMIT 1";
+    let key = w.text(plan).expect("a plan");
+    let (month, category) = key.split_once('|').expect("month|category");
+    let plan_of = |month: &str| {
+        w.rows(&format!(
+            "(SELECT group_concat(amount_minor || currency || carry) FROM budget WHERE month = '{month}' AND category_id = '{category}')"
+        ))
+    };
+    let held = plan_of(month);
+    let amount: i64 = w
+        .text(&format!(
+            "SELECT CAST(amount_minor AS TEXT) FROM budget WHERE month = '{month}' AND category_id = '{category}'"
+        ))
+        .and_then(|text| text.parse().ok())
+        .expect("an amount");
+    let raised = w.ok(
+        "money",
+        "set-target",
+        &json!({ "month": month, "category_id": category, "amount_minor": amount + 1_000 }),
+    );
+    let (undo, back) = raised.inverse().expect("a plan is taken back");
+    assert_ne!(plan_of(month), held);
+    w.ok("money", &undo, &back);
+    assert_eq!(plan_of(month), held, "the plan as it was");
+    let fresh = w.ok(
+        "money",
+        "set-target",
+        &json!({ "month": "2031-01", "category_id": category, "amount_minor": 12_345 }),
+    );
+    let (undo, back) = fresh.inverse().expect("a new plan is taken back");
+    assert_eq!(back["amount_minor"], Value::Null);
+    w.ok("money", &undo, &back);
+    assert_eq!(plan_of("2031-01"), "", "no plan again");
+    // Carrying a plan over comes back the same way.
+    let flipped = w.ok(
+        "money",
+        "set-carry",
+        &json!({ "month": month, "category_id": category, "carry": !held.ends_with('1') }),
+    );
+    let (undo, back) = flipped.inverse().expect("carry is taken back");
+    assert_ne!(plan_of(month), held);
+    w.ok("money", &undo, &back);
+    assert_eq!(plan_of(month), held);
+
+    // A rule's edit: every field it stated is put back, one it set from nothing is nothing again.
+    let rule_row = |id: &str| {
+        w.rows(&format!(
+            "(SELECT pattern || '|' || COALESCE(display_name, '-') || '|' || category_id || '|' || position FROM rule WHERE id = '{id}')"
+        ))
+    };
+    let rule = "demo-money-rule-sbux";
+    let held = rule_row(rule);
+    let edited = w.ok(
+        "money",
+        "edit-rule",
+        &json!({ "id": rule, "text": "STARBUCKS COFFEE", "display_name": "Coffee", "min": 100 }),
+    );
+    let (undo, back) = edited.inverse().expect("a rule edit is taken back");
+    assert_eq!(undo, "edit-rule");
+    assert_ne!(rule_row(rule), held);
+    w.ok("money", &undo, &back);
+    assert_eq!(rule_row(rule), held, "the rule as it was");
+
+    // A remembered layout: the first is forgotten again, a second gives way to the first.
+    let account = w.first("account");
+    let config = || {
+        w.rows(&format!(
+            "(SELECT COALESCE(config, '-') FROM origin WHERE system = 'statement' AND fills = '{account}')"
+        ))
+    };
+    let held = config();
+    let first = w.ok(
+        "money",
+        "save-import-profile",
+        &json!({ "id": account, "layout": layout(0) }),
+    );
+    let (undo, back) = first.inverse().expect("a layout is taken back");
+    assert_ne!(config(), held);
+    let second = w.ok(
+        "money",
+        "save-import-profile",
+        &json!({ "id": account, "layout": layout(3) }),
+    );
+    let (undo_second, back_second) = second.inverse().expect("a second layout too");
+    w.ok("money", &undo_second, &back_second);
+    w.ok("money", &undo, &back);
+    assert_eq!(config(), held, "the layout as it was");
+
+    // A category made and archived: archiving is the Undo of making, un-archiving of archiving.
+    let archived_edges = |id: &str| {
+        w.rows(&format!(
+            "(SELECT COUNT(*) FROM edge WHERE from_id = '{id}' AND rel = 'tagged')"
+        ))
+    };
+    let category = w.ok("money", "add-category", &json!({ "title": "Pets" }));
+    let (undo, back) = category.inverse().expect("a category is taken back");
+    assert_eq!(undo, "archive-category");
+    let pets = back["id"].as_str().expect("an id").to_owned();
+    assert_eq!(archived_edges(&pets), "0");
+    let archived = w.ok("money", &undo, &back);
+    assert_eq!(archived_edges(&pets), "1");
+    let (undo, back) = archived.inverse().expect("archiving is taken back");
+    assert_eq!(undo, "unarchive-category");
+    w.ok("money", &undo, &back);
+    assert_eq!(archived_edges(&pets), "0");
 }

@@ -98,8 +98,9 @@ pub const ACTIONS: [ActionRow; 28] = [
     act("close-account", "flag.set"),
     act("reopen-account", "flag.clear"),
     confirmed("set-opening-balance", "account.set_opening"),
-    act("import-transactions", "follow.statement"),
-    act("record-checkpoint", "checkpoint.record"),
+    // The Import screen previews the lines and the statement balance and writes only on the tap.
+    confirmed("import-transactions", "follow.statement"),
+    confirmed("record-checkpoint", "checkpoint.record"),
     act("save-import-profile", "account.remember_layout"),
     act("categorize", "txn.categorize"),
     // A transaction goes to the trash and comes back through the shared verbs; it is the member's way

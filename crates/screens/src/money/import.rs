@@ -334,7 +334,7 @@ impl Import {
                     ctx,
                     acts::SaveImportProfile {
                         account_id: account.clone(),
-                        layout: layout_json(profile),
+                        layout: Some(layout_json(profile)),
                     },
                     &key,
                 );
