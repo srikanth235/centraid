@@ -242,6 +242,7 @@ private fun TodoDetailBody(
         if (data.subtask_note.isNotEmpty()) FieldNote(data.subtask_note)
         // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the foot actions.
         EarlierEntryCard(state.earlier, onOpen)
+        dev.centraid.android.kit.OriginLineView(state.origin)
         Row(Modifier.padding(KitGeometry.GUTTER)) {
             if (data.can_release && data.release_label.isNotEmpty()) {
                 OutlineButton(data.release_label, testTag = "tasks-release", modifier = Modifier.padding(end = 8.dp)) {

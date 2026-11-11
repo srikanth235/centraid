@@ -13,8 +13,10 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.EarlierEntry
+import centraid.core.v1.OriginLine
 import centraid.core.v1.Route
 
 /** The selector id of the entry row. */
@@ -60,3 +62,36 @@ public fun EarlierEntryCard(
 
 /** True when the entry has words to draw; an absent or empty one draws nothing. */
 public fun earlierEntryDrawn(entry: EarlierEntry?): Boolean = entry != null && entry.label.isNotEmpty()
+
+/** The selector id of the where-from line. */
+public const val ORIGIN_LINE_TAG: String = "origin-line"
+
+/**
+ * WHERE IT CAME FROM (#1185): one quiet line under the Earlier versions entry of a detail page,
+ * "From contacts.vcf". Every word is Rust's ([OriginLine]); it is not a row and takes no tap. An
+ * absent line, or one with no text (a typed item), draws nothing and reserves no space.
+ *
+ * A detail page embeds it right after the entry: `OriginLineView(state.origin)`.
+ * The iOS twin is `OriginLineView` in `EarlierEntry.swift`.
+ */
+@Composable
+public fun OriginLineView(
+    line: OriginLine?,
+    modifier: Modifier = Modifier,
+) {
+    if (!originLineDrawn(line)) return
+    val shown = line!!
+    KitText(
+        shown.text,
+        KitType.Meta,
+        Surface.meta,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(start = KitGeometry.GUTTER + 14.dp, end = KitGeometry.GUTTER + 14.dp, top = 8.dp)
+            .testTag(ORIGIN_LINE_TAG)
+            .semantics { contentDescription = shown.accessibility_label.ifEmpty { shown.text } },
+    )
+}
+
+/** True when the line has words to draw; an absent or empty one draws nothing. */
+public fun originLineDrawn(line: OriginLine?): Boolean = line != null && line.text.isNotEmpty()

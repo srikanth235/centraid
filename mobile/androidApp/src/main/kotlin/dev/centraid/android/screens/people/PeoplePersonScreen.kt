@@ -258,6 +258,7 @@ private fun PersonBody(
 
         // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the entry at the foot, when Rust has one.
         state.earlier?.let { entry -> item(key = "earlier") { EarlierEntryCard(entry, onOpen) } }
+        item(key = "origin") { dev.centraid.android.kit.OriginLineView(state.origin) }
 
         if (chrome != null && !person.is_me) {
             item(key = "foot") {

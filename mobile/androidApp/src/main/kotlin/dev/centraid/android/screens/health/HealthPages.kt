@@ -220,6 +220,7 @@ internal fun HealthWorkoutScreen(
                         item(key = "foot") { HealthNote(data.foot) }
                         // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above Move to trash.
                         state.earlier?.let { entry -> item(key = "earlier") { EarlierEntryCard(entry, onOpen) } }
+                        item(key = "origin") { dev.centraid.android.kit.OriginLineView(state.origin) }
                         // MOVE TO TRASH, outlined and destructive under the figures (#1185): it asks
                         // nothing, the status line carries Undo. Empty while the workout is gone.
                         if (data.trash_label.isNotEmpty()) {

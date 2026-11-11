@@ -254,6 +254,7 @@ struct LockerItemView: View {
         // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row; it is inside the item's
         // data, so it is absent while Locker is locked.
         EarlierEntryRow(entry: item.hasEarlier ? item.earlier : nil, open: open)
+        OriginLineView(line: item.hasOrigin ? item.origin : nil)
     }
 }
 

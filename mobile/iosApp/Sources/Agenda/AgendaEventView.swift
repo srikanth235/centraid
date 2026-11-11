@@ -195,6 +195,7 @@ struct AgendaEventView: View {
                 }
                 // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the actions.
                 EarlierEntryRow(entry: state.hasEarlier ? state.earlier : nil, open: open)
+                OriginLineView(line: state.hasOrigin ? state.origin : nil)
                 // THE ACTIONS IN ONE ROW OF EQUAL KEYS (#1173): Open in Maps, Edit and Cancel share
                 // the width, Cancel in the red outline.
                 KitChoiceRow {

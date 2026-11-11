@@ -95,6 +95,13 @@ struct NotesEditorView: View {
                         Button("\(state.earlier.label)  \(state.earlier.countLabel)") { open(state.earlier.route) }
                             .accessibilityIdentifier(EarlierEntryRow.identifier)
                     }
+                    if state.hasOrigin, OriginLineView.isDrawn(state.origin) {
+                        // WHERE IT CAME FROM (#1185): a quiet line in the menu, nothing to tap.
+                        Button(state.origin.text) {}
+                            .disabled(true)
+                            .accessibilityLabel(state.origin.accessibilityLabel)
+                            .accessibilityIdentifier(OriginLineView.identifier)
+                    }
                     if state.hasSendToAgenda {
                         Button(chrome.sendToAgendaLabel) { open(state.sendToAgenda) }
                     }

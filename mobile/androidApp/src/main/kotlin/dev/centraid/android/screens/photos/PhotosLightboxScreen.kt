@@ -247,6 +247,7 @@ private fun LightViewer(
                         InfoCards(state, photo, words, onEvent, onOpen)
                         // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the foot of the details.
                         EarlierEntryCard(photo.earlier, onOpen)
+                        dev.centraid.android.kit.OriginLineView(photo.origin)
                     }
                 },
             ) {

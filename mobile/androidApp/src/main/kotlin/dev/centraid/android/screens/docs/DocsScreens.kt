@@ -679,6 +679,7 @@ internal fun DocsDocumentScreen(
                 }
                 // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the actions.
                 item(key = "earlier") { dev.centraid.android.kit.EarlierEntryCard(document.earlier, onOpen) }
+                item(key = "origin") { dev.centraid.android.kit.OriginLineView(document.origin) }
             }
             // THE QUICK LOOK BAR under the page.
             if (document.bar.isNotEmpty()) {

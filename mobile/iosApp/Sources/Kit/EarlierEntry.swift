@@ -51,3 +51,36 @@ struct EarlierEntryRow: View {
         return !entry.label.isEmpty
     }
 }
+
+/// WHERE IT CAME FROM (#1185): one quiet line under the Earlier versions entry of a detail page,
+/// "From contacts.vcf". Every word is Rust's (`OriginLine`); it is not a row and takes no tap. An
+/// absent line, or one with no text (a typed item), draws nothing and reserves no space.
+///
+/// A detail page embeds it right after the entry:
+/// `OriginLineView(line: state.hasOrigin ? state.origin : nil)`.
+///
+/// Id: `origin-line`; the Compose twin is `OriginLineView` in `kit/EarlierEntry.kt`.
+struct OriginLineView: View {
+    let line: Centraid_Core_V1_OriginLine?
+
+    var body: some View {
+        if let line, OriginLineView.isDrawn(line) {
+            Text(line.text)
+                .kitType(.meta)
+                .foregroundStyle(Surface.meta)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, CentraidGeometry.pageMargin + 14)
+                .padding(.top, 8)
+                .accessibilityLabel(line.accessibilityLabel.isEmpty ? line.text : line.accessibilityLabel)
+                .accessibilityIdentifier(OriginLineView.identifier)
+        }
+    }
+
+    nonisolated static let identifier = "origin-line"
+
+    /// True when the line has words to draw; an empty one draws nothing.
+    nonisolated static func isDrawn(_ line: Centraid_Core_V1_OriginLine?) -> Bool {
+        guard let line else { return false }
+        return !line.text.isEmpty
+    }
+}

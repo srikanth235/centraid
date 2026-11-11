@@ -54,6 +54,7 @@ struct HealthWorkoutView: View {
                         // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row; Move to trash is pinned below.
                         if !workout.hasGone {
                             EarlierEntryRow(entry: state.hasEarlier ? state.earlier : nil, open: open)
+                            OriginLineView(line: state.hasOrigin ? state.origin : nil)
                         }
                     }
                     .padding(.bottom, 24)

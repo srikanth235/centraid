@@ -896,6 +896,7 @@ internal fun LockerItemScreen(
                     // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row; it is inside
                     // the item's data, so it is absent while Locker is locked.
                     item.earlier?.let { entry -> item(key = "earlier") { dev.centraid.android.kit.EarlierEntryCard(entry, onOpen) } }
+                    item(key = "origin") { dev.centraid.android.kit.OriginLineView(item.origin) }
                 }
             }
         }

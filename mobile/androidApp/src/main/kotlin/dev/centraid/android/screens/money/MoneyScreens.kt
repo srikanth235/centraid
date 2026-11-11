@@ -447,6 +447,7 @@ internal fun MoneyTransactionScreen(
                 }
                 // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the actions.
                 state.earlier?.let { entry -> item(key = "earlier") { EarlierEntryCard(entry, onOpen) } }
+                item(key = "origin") { dev.centraid.android.kit.OriginLineView(state.origin) }
                 // THE ACTIONS ARE ALTERNATIVES: one stack; a destructive one is outlined in `net`.
                 item(key = "actions") {
                     ChoiceStack(Modifier.padding(horizontal = KitGeometry.GUTTER).padding(top = 24.dp)) {

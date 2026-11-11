@@ -221,6 +221,10 @@ public fun NotesEditorScreen(
             state.earlier?.takeIf { dev.centraid.android.kit.earlierEntryDrawn(it) }?.let { entry ->
                 add(SheetOption(key = MENU_EARLIER, label = entry.label, detail = entry.count_label))
             }
+            // WHERE IT CAME FROM (#1185): a quiet line in the menu; picking it only closes the menu.
+            state.origin?.takeIf { dev.centraid.android.kit.originLineDrawn(it) }?.let { line ->
+                add(SheetOption(key = MENU_ORIGIN, label = line.text))
+            }
             if (state.send_to_agenda != null) add(SheetOption(key = MENU_SEND, label = chrome.send_to_agenda_label))
             add(SheetOption(key = MENU_SHARE, label = chrome.share_label))
         }.filter { it.label.isNotEmpty() }
@@ -349,5 +353,6 @@ private fun LinkSheet(sheet: NotesLinkSheet, onEvent: (NotesEditorEvent) -> Unit
 private const val MENU_PIN = "pin"
 private const val MENU_LINK = "link"
 private const val MENU_EARLIER = "earlier-entry"
+private const val MENU_ORIGIN = "origin-line"
 private const val MENU_SEND = "send-to-agenda"
 private const val MENU_SHARE = "share"

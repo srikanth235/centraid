@@ -112,6 +112,7 @@ struct DocsDocumentView: View {
                                 }
                                 // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the actions.
                                 EarlierEntryRow(entry: document.hasEarlier ? document.earlier : nil, open: open)
+                                OriginLineView(line: document.hasOrigin ? document.origin : nil)
                             }
                             .padding(.bottom, 16)
                         }

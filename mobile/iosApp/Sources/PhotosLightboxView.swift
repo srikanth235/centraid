@@ -750,6 +750,7 @@ private struct PhotosLightboxInfo: View {
             .padding(.top, 14)
             // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the foot of the details.
             EarlierEntryRow(entry: photo.hasEarlier ? photo.earlier : nil, open: open)
+            OriginLineView(line: photo.hasOrigin ? photo.origin : nil)
         }
         // THE CARDS' NAME is what a screen reader says on entering them.
         .accessibilityElement(children: .contain)

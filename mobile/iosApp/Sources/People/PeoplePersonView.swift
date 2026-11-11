@@ -260,6 +260,7 @@ private struct PeoplePersonBody: View {
 
                 // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the entry at the foot, when Rust has one.
                 EarlierEntryRow(entry: state.hasEarlier ? state.earlier : nil, open: open)
+                OriginLineView(line: state.hasOrigin ? state.origin : nil)
             }
             .padding(.bottom, CentraidGeometry.pageMargin)
         }
