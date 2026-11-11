@@ -626,6 +626,7 @@ fn a_calendar_read_from_the_phone_offers_no_delete_but_one_plain_line_until_it_i
             .to_string(),
         records: "[]".to_owned(),
         complete: Some(false),
+        gone: None,
         since: None,
     });
     assert_eq!(
