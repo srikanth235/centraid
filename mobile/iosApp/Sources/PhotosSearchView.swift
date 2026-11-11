@@ -138,7 +138,7 @@ private struct EarlierPhotoRow: View {
                     .overlay {
                         if let path { ContentImage(path: path) }
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(row.title)
                         .centraidType("body")

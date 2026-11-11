@@ -34,6 +34,7 @@ import centraid.core.v1.Route
 import dev.centraid.android.kit.BandPolicy
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ContentImage
+import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.LocalBandClearance
 import dev.centraid.android.kit.PhotoCellsGrid
@@ -157,7 +158,7 @@ private fun EarlierPhotoRow(row: PhotosEarlierRow, onOpen: (Route) -> Unit) {
         Box(
             Modifier
                 .size(52.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(KitGeometry.RADIUS))
                 .background(centraidColor("skel")),
         ) {
             if (!path.isNullOrEmpty()) ContentImage(path)
