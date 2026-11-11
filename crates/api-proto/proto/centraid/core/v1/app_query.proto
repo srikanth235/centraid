@@ -282,6 +282,8 @@ message AppQueryResponse {
     EarlierCount earlier_count = 1704;
     // Where one record came from (#1185): `shell.origin-of`.
     OriginOf origin_of = 1706;
+    // Where the last read of a phone store got to (#1183): `shell.origin-cursor`.
+    OriginCursor origin_cursor = 1707;
     // The general link (#1185): what an item is linked to, `shell.links`, and the items the
     // picker offers, `shell.link-candidates`.
     LinkedItems linked_items = 1710;
@@ -307,6 +309,13 @@ message FollowedStore {
   string label = 4;
   // The install that last followed it.
   string device_id = 5;
+}
+
+// The cursor a phone store's origin holds for this install (#1183): the shell query
+// `origin-cursor`. Empty when there is none, the origin is not there, or another install wrote it,
+// which is a complete read.
+message OriginCursor {
+  string cursor = 1;
 }
 
 // A CONSENT DENIAL, the shape every app's payload carries.

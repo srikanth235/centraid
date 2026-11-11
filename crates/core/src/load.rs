@@ -621,6 +621,13 @@ fn read(
             let limit = p.limit(app_query::history::PAGE as u32);
             app_query::history::versions(vault, &p.text("entity_id")?, &tz, &after, limit as usize)?
         }
+        // following (#1183): where the last read of a phone store got to, for this install
+        ("shell", "origin-cursor") => app_query::follow::origin_cursor(
+            vault,
+            &p.text("system")?,
+            &p.text("ref")?,
+            &p.text("device_id")?,
+        )?,
         // arrival (#1185): where one record came from, a followed store or a one-shot arrival
         ("shell", "origin-of") => app_query::follow::origin_of(vault, &p.text("entity_id")?)?,
         ("shell", "earlier-count") => app_query::history::count(vault, &p.text("entity_id")?)?,

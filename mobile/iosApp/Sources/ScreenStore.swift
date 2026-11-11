@@ -450,6 +450,7 @@ final class ScreenStore: ObservableObject {
         case .libraryPermission(let permission)?:
             var read = Centraid_Core_V1_LibraryPermissionRead()
             read.permission = permission.ask ? await PhoneLibrary.requestPermission() : PhoneLibrary.permission()
+            read.deviceID = PhoneCalendar.deviceID
             answer(request, .libraryPermissionRead(read))
         case .rollPage(let page)?:
             let paged = await Task.detached(priority: .utility) {

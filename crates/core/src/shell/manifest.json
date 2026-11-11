@@ -223,6 +223,31 @@
       }
     },
     {
+      "name": "origin-cursor",
+      "kind": "followed_store",
+      "figures": ["cursor"],
+      "description": "(following, #1183) Where the last read of a phone store (the camera roll, the health store) got to: the cursor its origin holds, or empty when there is none, the origin is not there, or another install wrote it, which means a complete read. Never reachable by the assistant.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "system": {
+            "type": "string",
+            "enum": ["camera_roll", "health"]
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "device_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["system", "ref", "device_id"],
+        "additionalProperties": false
+      }
+    },
+    {
       "name": "backup-status",
       "kind": "backup",
       "figures": [
@@ -455,6 +480,45 @@
           }
         },
         "required": ["id", "seq"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "advance-origin-cursor",
+      "verb": "edit",
+      "kind": "followed_store",
+      "inverse": null,
+      "sealed": [],
+      "command": "follow.advance_cursor",
+      "phrasings": [
+        "move the camera roll's cursor on",
+        "remember where the roll read got to",
+        "note how far the phone was read"
+      ],
+      "description": "(following, #1183) Move a phone store's cursor (the camera roll's, the health store's) to where a read got to, as read by one install, through follow.advance_cursor. The records a read brings in carry their own cursor in the same commit; this is for a position no record rides with. The follow, never the assistant's.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "system": {
+            "type": "string",
+            "enum": ["camera_roll", "health"]
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "device_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          }
+        },
+        "required": ["system", "ref", "device_id", "cursor"],
         "additionalProperties": false
       }
     },

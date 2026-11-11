@@ -240,6 +240,17 @@
             "type": "string",
             "maxLength": 200,
             "description": "The file or device it came from: a name, never content. Required with arrived_system."
+          },
+          "roll_cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096,
+            "description": "The camera roll's cursor once this photograph is in: it moves in this commit."
+          },
+          "roll_device": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The install that read the roll; required with roll_cursor."
           }
         },
         "required": ["blob", "media_type"],

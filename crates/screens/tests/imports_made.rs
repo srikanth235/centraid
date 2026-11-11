@@ -187,6 +187,7 @@ fn photos_answered(shell: &mut Shell) {
             effect_id: request.effect_id,
             outcome: Some(O::LibraryPermissionRead(wire::LibraryPermissionRead {
                 permission: wire::PhotosMediaPermission::Denied as i32,
+                device_id: "device-1".to_owned(),
             })),
         }),
     );

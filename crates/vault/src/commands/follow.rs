@@ -64,7 +64,7 @@ use serde_json::{Map, Value as Json};
 use crate::blob;
 use crate::commands::entity::{self, trash_stamp};
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, arrival};
-use crate::commands::{contact_point, container, event, workout};
+use crate::commands::{contact_point, container, event, origin_cursor, workout};
 use crate::error::{Result, VaultError};
 use crate::model::{DEFAULT_CALENDAR_ID, Kind};
 
@@ -1989,6 +1989,15 @@ pub fn definitions() -> Vec<CommandDefinition> {
             check: pre_take,
         }],
         take_stated,
+    ));
+    // Where a read of a phone store got to, moved with no record riding along (#1183).
+    definitions.push(CommandDefinition::plain(
+        "follow.advance_cursor",
+        "follow",
+        origin_cursor::SCHEMA,
+        Idempotency::Idempotent,
+        &[],
+        origin_cursor::advance_cursor,
     ));
     definitions
 }

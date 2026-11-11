@@ -38,6 +38,7 @@ event.propose
 event.respond
 flag.clear
 flag.set
+follow.advance_cursor
 follow.calendar
 follow.contacts
 follow.files

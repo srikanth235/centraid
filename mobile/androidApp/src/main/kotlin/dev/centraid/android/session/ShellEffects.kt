@@ -184,7 +184,7 @@ internal class ShellEffects(
             effect.camera_roll != null -> cameraRoll(effect.camera_roll!!)
             effect.library_permission != null -> {
                 if (effect.library_permission!!.ask) ui?.askMedia()
-                EffectResult(library_permission_read = LibraryPermissionRead(permission = LibraryRoll.permission(context)))
+                EffectResult(library_permission_read = LibraryPermissionRead(permission = LibraryRoll.permission(context), device_id = InstallId.of(context)))
             }
             effect.roll_page != null -> withContext(Dispatchers.IO) {
                 EffectResult(roll_paged = LibraryRoll.page(context, effect.roll_page!!.cursor, effect.roll_page!!.limit))

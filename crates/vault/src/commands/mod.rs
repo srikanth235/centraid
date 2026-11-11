@@ -64,6 +64,7 @@ pub mod measurement;
 pub mod money;
 pub mod note;
 pub mod note_portable;
+pub mod origin_cursor;
 pub mod person;
 pub mod person_portable;
 pub mod photo;

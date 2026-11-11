@@ -22,9 +22,12 @@
 //!   length and the coordinates it was taken at, each only when the asset carries them
 //!   ([`add_request`]).
 //! * **The grant** and its four sentences (never the member's fault); LIMITED is a library.
-//! * **The cursor**: per vault (`camera-roll.cursor.<vault>`, in the keychain through
-//!   `KeychainOp`), advanced after each asset so a pass the OS kills resumes where it was; the
-//!   page's own cursor last, because on iOS it turns a finished walk into a change token.
+//! * **The cursor** lives in the vault, on the camera roll's origin row beside the install that
+//!   wrote it (#1183). It moves in the commit that brings the last part of an asset in
+//!   (`add-photo`'s `roll_cursor`, or an `advance-origin-cursor` when nothing was brought), so a
+//!   pass the OS kills resumes where it was; the page's own cursor last, because on iOS it turns a
+//!   finished walk into a change token. **A cursor another install wrote is not trusted**: the
+//!   read answers none and the walk starts from the beginning, as it does with no cursor at all.
 //! * **The walk to the end**: pages of 25 follow each other while the last ended mid-roll, and a
 //!   trigger during a walk queues exactly one more, after it (never a second reader of one cursor).
 //! * **What may cross which link**: an original that lives only in iCloud is downloaded only when
@@ -59,10 +62,11 @@ use wire::imports_camera_roll_event::Kind as C;
 use wire::screen_event::Kind as E;
 
 use super::effect;
-use crate::catalog::act;
+use crate::catalog::{act, load};
 use crate::custody::secrets::VaultSecrets;
 use crate::field::{Field, Keyed};
 use crate::kit::act as kit_act;
+use crate::kit::read::{self, Reading};
 use crate::passes::{Rules, TransferRule};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, imports as words, photos as photo_words};
@@ -88,13 +92,6 @@ pub fn build(
         };
         Some(Box::new(Roll::new(&args.vault_id, secrets.clone())) as Box<dyn Screen>)
     }
-}
-
-/// The keychain key of a vault's cursor. PER VAULT, because a photograph offered to two vaults is
-/// two imports and two rows, so a device that holds two vaults walks the roll once for each.
-#[must_use]
-pub fn cursor_key(vault_id: &str) -> String {
-    format!("camera-roll.cursor.{vault_id}")
 }
 
 /// Can the roll enumerate? LIMITED counts: a selection is a real library the member chose.
@@ -211,7 +208,6 @@ enum Wait {
     Nothing,
     /// The OS grant: why it was asked, and what follows.
     Permission(Why),
-    Cursor,
     Page,
     Link,
     Stage,
@@ -249,6 +245,8 @@ struct Offer {
     left: usize,
     /// The staged answer waiting on its derivatives.
     staged: Option<wire::LibraryStaged>,
+    /// The cursor went into the vault with one of the asset's own commits.
+    cursor_carried: bool,
 }
 
 /// One walk: pages while the last ended mid-roll.
@@ -282,6 +280,10 @@ enum Job {
 
 struct Roll {
     vault_id: String,
+    /// This install's id, as the shell last said it: the cursor in the vault is this install's
+    /// word. Empty until the first grant read, and then the roll is walked from the start and no
+    /// cursor is written.
+    device_id: String,
     secrets: VaultSecrets,
     /// What every open Photos home was last told: the grant and the backup line.
     told: Option<(Permission, wire::PhotosBackupChanged)>,
@@ -298,18 +300,11 @@ struct Roll {
     fed_rounds: u32,
 }
 
-fn keychain(op: wire::keychain_op::Op, key: &str, value: &str) -> wire::Effect {
-    effect(wire::effect::Kind::Keychain(wire::KeychainOp {
-        op: op as i32,
-        key: key.to_owned(),
-        value: value.as_bytes().to_vec(),
-    }))
-}
-
 impl Roll {
     fn new(vault_id: &str, secrets: VaultSecrets) -> Self {
         Self {
             vault_id: vault_id.to_owned(),
+            device_id: String::new(),
             secrets,
             told: None,
             permission: Permission::NotAsked,
@@ -443,27 +438,14 @@ impl Roll {
                     self.publish(wire::PhotosBackupPhase::Idle, 0, 0, reason);
                     return self.end(ctx);
                 }
-                self.begin_page()
+                self.begin_page(ctx)
             }
         }
     }
 
-    fn begin_page(&mut self) -> Vec<wire::Effect> {
+    fn begin_page(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         self.publish(wire::PhotosBackupPhase::Enumerating, 0, 0, String::new());
-        self.wait = Wait::Cursor;
-        vec![keychain(
-            wire::keychain_op::Op::Get,
-            &cursor_key(&self.vault_id),
-            "",
-        )]
-    }
-
-    fn cursor_read(&mut self, found: &wire::KeychainValue) -> Vec<wire::Effect> {
-        let cursor = if found.found {
-            String::from_utf8_lossy(&found.value).into_owned()
-        } else {
-            String::new()
-        };
+        let cursor = self.held_cursor(ctx);
         let Some(walk) = self.walk() else {
             return Vec::new();
         };
@@ -475,8 +457,49 @@ impl Roll {
         }))]
     }
 
+    /// WHERE THE LAST READ GOT TO, from the vault: empty (a complete read) when there is no cursor,
+    /// when another install wrote it, when this install is not known yet and when the read did not
+    /// land. A walk from the start costs a stage and a hash compare per photograph, never a copy.
+    fn held_cursor(&self, ctx: &Ctx) -> String {
+        use wire::app_query_response::Answer;
+        if self.device_id.is_empty() {
+            return String::new();
+        }
+        match read::read(
+            ctx,
+            load::shell::OriginCursor {
+                system: load::shell::OriginCursorSystem::CameraRoll,
+                r#ref: ORIGIN_LABEL.to_owned(),
+                device_id: self.device_id.clone(),
+            },
+            |answer| match answer {
+                Answer::OriginCursor(held) => Some(held.cursor),
+                _ => None,
+            },
+        ) {
+            Reading::Data(cursor) => cursor,
+            _ => String::new(),
+        }
+    }
+
+    /// Move the vault's cursor with no photograph riding along: an asset with nothing to bring in,
+    /// the page's own cursor. A refusal leaves the cursor where it was, which costs a re-read of
+    /// what is held and nothing else.
+    fn advance_cursor(&self, ctx: &Ctx, cursor: &str) {
+        if self.device_id.is_empty() || cursor.is_empty() {
+            return;
+        }
+        let key = kit_act::key(&["advance-origin-cursor", cursor], kit_act::fresh());
+        let request = act::shell::AdvanceOriginCursor {
+            system: act::shell::AdvanceOriginCursorSystem::CameraRoll,
+            r#ref: ORIGIN_LABEL.to_owned(),
+            device_id: self.device_id.clone(),
+            cursor: cursor.to_owned(),
+        };
+        let _ = ctx.act(&wire::ActRequest::from(request).keyed(key));
+    }
+
     fn paged(&mut self, ctx: &Ctx, page: wire::RollPaged) -> Vec<wire::Effect> {
-        let key = cursor_key(&self.vault_id);
         let Some(walk) = self.walk() else {
             return Vec::new();
         };
@@ -484,19 +507,14 @@ impl Roll {
         if page.assets.is_empty() {
             // A PLATFORM MAY MOVE THE CURSOR WITH NOTHING TO OFFER (iOS trades a finished first
             // walk for a change token) and it is kept.
-            let mut effects = Vec::new();
-            if !page.next_cursor.is_empty() && page.next_cursor != walk.cursor {
-                effects.push(keychain(
-                    wire::keychain_op::Op::Set,
-                    &key,
-                    &page.next_cursor,
-                ));
+            let moved = !page.next_cursor.is_empty() && page.next_cursor != walk.cursor;
+            if moved {
+                self.advance_cursor(ctx, &page.next_cursor);
             }
             // NOTHING NEW IS "DONE", NOT "IDLE": a member whose roll is fully backed up must be
             // able to tell that from a backup that is off.
             self.publish(wire::PhotosBackupPhase::Done, 0, 0, String::new());
-            effects.extend(self.end(ctx));
-            return effects;
+            return self.end(ctx);
         }
         walk.enumerated = page.assets.len();
         walk.assets = page.assets.into();
@@ -526,6 +544,7 @@ impl Roll {
             queued: None,
             left,
             staged: None,
+            cursor_carried: false,
         });
         self.next_resource(ctx)
     }
@@ -663,6 +682,7 @@ impl Roll {
     }
 
     fn commit(&mut self, ctx: &Ctx, staged: wire::LibraryStaged) -> Vec<wire::Effect> {
+        let device = self.device_id.clone();
         let Some(offer) = self.walk().and_then(|walk| walk.offer.as_mut()) else {
             return Vec::new();
         };
@@ -692,6 +712,15 @@ impl Roll {
             video,
             source.as_deref(),
         );
+        // THE LAST PART OF AN ASSET TAKES THE CURSOR WITH IT: one commit, so a refused add leaves
+        // the cursor before the asset, and a crash between two parts re-offers the asset (the core
+        // adopts the bytes it already holds).
+        let carries = offer.todo.is_empty() && !offer.asset.after.is_empty() && !device.is_empty();
+        let mut request = request;
+        if carries {
+            request.roll_cursor = Some(offer.asset.after.clone());
+            request.roll_device = Some(device);
+        }
         let key = kit_act::key(&["add-photo", &staged.content_hash], kit_act::fresh());
         // undo-exempt: a camera-roll pass runs unseen and has no status line; the photographs it brings in are the library's own, taken out one at a time with Move to trash.
         let response = ctx.act(&wire::ActRequest::from(request).keyed(key));
@@ -727,6 +756,7 @@ impl Roll {
         let Some(offer) = self.walk().and_then(|walk| walk.offer.as_mut()) else {
             return Vec::new();
         };
+        offer.cursor_carried |= carries;
         if camera {
             offer.camera_asset = (!added.is_empty()).then_some(added);
             offer.camera_bytes += staged.byte_size;
@@ -762,7 +792,6 @@ impl Roll {
 
     /// An asset is offered whole (or skipped): count it, advance the cursor, say so.
     fn asset_done(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        let key = cursor_key(&self.vault_id);
         let Some(walk) = self.walk() else {
             return Vec::new();
         };
@@ -784,14 +813,10 @@ impl Roll {
             }
         }
         let (queued, left) = (walk.queued, walk.assets.len());
-        let mut effects = Vec::new();
-        // ADVANCED PER ASSET. A pass the OS kills resumes where it was.
-        if !offer.asset.after.is_empty() {
-            effects.push(keychain(
-                wire::keychain_op::Op::Set,
-                &key,
-                &offer.asset.after,
-            ));
+        // ADVANCED PER ASSET. A pass the OS kills resumes where it was. The commit of the asset's
+        // last part took the cursor with it; an asset that brought nothing in moves it alone.
+        if !offer.cursor_carried {
+            self.advance_cursor(ctx, &offer.asset.after);
         }
         self.publish(
             wire::PhotosBackupPhase::Transferring,
@@ -799,28 +824,24 @@ impl Roll {
             left,
             String::new(),
         );
-        effects.extend(self.next_asset(ctx));
-        effects
+        self.next_asset(ctx)
     }
 
     /// A page is offered. The roll goes on while the last page ended mid-roll.
     fn page_done(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        let key = cursor_key(&self.vault_id);
         let locale = ctx.locale();
         let permission = self.permission;
         let Some(walk) = self.walk() else {
             return Vec::new();
         };
+        let next_cursor = walk.next_cursor.clone();
         let mut effects = Vec::new();
         // THE PAGE'S OWN CURSOR LAST: it is the one the platform minted, and on iOS the one that
         // turns a finished walk into a change token.
-        if !walk.next_cursor.is_empty() {
-            effects.push(keychain(
-                wire::keychain_op::Op::Set,
-                &key,
-                &walk.next_cursor,
-            ));
-        }
+        self.advance_cursor(ctx, &next_cursor);
+        let Some(walk) = self.walk() else {
+            return Vec::new();
+        };
         let phase = if walk.exhausted {
             wire::PhotosBackupPhase::Done
         } else {
@@ -1007,9 +1028,11 @@ impl Roll {
                     (Wait::Permission(why), O::LibraryPermissionRead(read)) => {
                         let permission =
                             Permission::try_from(read.permission).unwrap_or(Permission::NotAsked);
+                        if !read.device_id.is_empty() {
+                            self.device_id = read.device_id;
+                        }
                         self.permission_read(ctx, permission, why)
                     }
-                    (Wait::Cursor, O::Keychain(found)) => self.cursor_read(&found),
                     (Wait::Page, O::RollPaged(page)) => self.paged(ctx, page),
                     (Wait::Link, O::LinkReading(link)) => self.linked(&link),
                     (Wait::Stage, O::LibraryStaged(staged)) => self.staged(ctx, staged),
@@ -1020,11 +1043,10 @@ impl Roll {
                     }
                     // A shell that cannot answer an effect leaves the job where it was: a pass
                     // that did nothing, and the next trigger tries again.
-                    (
-                        Wait::Permission(_) | Wait::Cursor | Wait::Page | Wait::Link | Wait::Stage,
-                        O::Failed(_),
-                    ) => self.end(ctx),
-                    // The write of a cursor and every other answer nobody waits on.
+                    (Wait::Permission(_) | Wait::Page | Wait::Link | Wait::Stage, O::Failed(_)) => {
+                        self.end(ctx)
+                    }
+                    // Every other answer nobody waits on.
                     (wait, _) => {
                         self.wait = wait;
                         Vec::new()

@@ -48,6 +48,22 @@ pub(crate) fn origin_of(vault: &Vault, entity_id: &str) -> Result<Answer> {
     Ok(Answer::OriginOf(wire::OriginOf { system, label }))
 }
 
+/// `shell.origin-cursor`: the cursor the origin (`system`, `reference`) holds for `device`; empty
+/// when there is none or another install wrote it (a complete read then).
+pub(crate) fn origin_cursor(
+    vault: &Vault,
+    system: &str,
+    reference: &str,
+    device: &str,
+) -> Result<Answer> {
+    let cursor = vault.read(|connection| {
+        centraid_vault::commands::origin_cursor::read(connection, system, reference, device)
+    })?;
+    Ok(Answer::OriginCursor(wire::OriginCursor {
+        cursor: cursor.unwrap_or_default(),
+    }))
+}
+
 #[cfg(test)]
 mod origin_tests {
     use super::*;

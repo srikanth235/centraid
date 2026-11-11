@@ -44,7 +44,7 @@ use rusqlite::OptionalExtension;
 use crate::commands::blob::{claim, pre_claimable};
 use crate::commands::entity::lookup_live;
 use crate::commands::{
-    CommandCondition, CommandCtx, CommandDefinition, Idempotency, arrival, place,
+    CommandCondition, CommandCtx, CommandDefinition, Idempotency, arrival, origin_cursor, place,
 };
 use crate::error::Result;
 use crate::model::Kind;
@@ -167,6 +167,18 @@ fn adopt(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<()> {
 }
 
 fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    // THE CAMERA ROLL'S CURSOR RIDES WITH THE PHOTOGRAPH (#1183): the commit that brings the last
+    // part of an asset in moves the cursor past it, whether the bytes are new or already held; a
+    // refused add leaves it where it was.
+    if let Some(cursor) = ctx.optional_str("roll_cursor") {
+        origin_cursor::advance(
+            ctx,
+            "camera_roll",
+            origin_cursor::CAMERA_ROLL_REF,
+            ctx.required_str("roll_device")?,
+            cursor,
+        )?;
+    }
     let blob = ctx.required_str("blob")?;
     let media_type = ctx.required_str("media_type")?;
     claim(ctx, "blob")?;
@@ -440,6 +452,10 @@ pub fn definitions() -> Vec<CommandDefinition> {
                 "place_id": { "type": ["string", "null"] },
                 "phash": { "type": ["string", "null"], "maxLength": 128 },
                 "thumbhash": { "type": ["string", "null"], "maxLength": 512 },
+                "roll_cursor": { "type": "string", "minLength": 1, "maxLength": 4096,
+                  "description": "The camera roll's cursor once this photograph is in: it moves in this commit." },
+                "roll_device": { "type": "string", "minLength": 1,
+                  "description": "The install that read the roll; required with roll_cursor." },
                 "#,
                 crate::commands::arrival::arrived_property!(),
                 r#"

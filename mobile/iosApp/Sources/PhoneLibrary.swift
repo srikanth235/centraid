@@ -8,7 +8,7 @@ import UniformTypeIdentifiers
 
 /// THE CAMERA ROLL'S PHOTOKIT HALF (#1025 S6; #1080, the walker; #1135).
 ///
-/// `imports.camera_roll` decides everything (the grant's words, the cursor kept per vault, what
+/// `imports.camera_roll` decides everything (the grant's words, the cursor the vault keeps, what
 /// may cross which link, an edit beside its original, what to render); this file only performs
 /// what it asks, as effects, and answers them:
 ///
@@ -60,8 +60,8 @@ enum PhoneLibrary {
     /// that arrives with an old capture date (an AirDropped photograph from last year), and the
     /// token is what Photos keeps for exactly that question; an update is offered only when the
     /// member edited the asset. A token Photos no longer answers for starts the first walk again,
-    /// which the core's `already_held` makes cheap. A cursor a v0 build wrote
-    /// (`<millis>|<localIdentifier>`) finishes its keyset and then takes the token of that moment.
+    /// which the core's `already_held` makes cheap. No cursor, and one this build did not write, is
+    /// that first walk: the cursor lives in the vault and is trusted for the install that wrote it.
     static func page(cursor: String, limit: Int) async -> Centraid_Core_V1_RollPaged {
         let fields = cursor.components(separatedBy: field)
         if fields.first == tokenWalk, fields.count == 3 {
@@ -73,8 +73,7 @@ enum PhoneLibrary {
             let rest = fields.dropFirst(2).joined(separator: field)
             return await keysetPage(from: KeysetCursor.parse(rest), token: fields[1].isEmpty ? nil : fields[1], limit: limit)
         }
-        let legacy = KeysetCursor.parse(cursor)
-        return await keysetPage(from: legacy, token: legacy == nil ? ChangeTokens.current() : nil, limit: limit)
+        return await keysetPage(from: nil, token: ChangeTokens.current(), limit: limit)
     }
 
     /// The first walk: `creationDate` keyset. **The predicate is `>=`, and the overlap is skipped

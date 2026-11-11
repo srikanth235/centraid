@@ -241,10 +241,14 @@ message LibraryPermission {
 
 message LibraryPermissionRead {
   PhotosMediaPermission permission = 1;
+  // This install's id (the one a phone read carries as `device_id`): the camera roll's cursor in
+  // the vault is this install's word, and another's is not trusted (#1183).
+  string device_id = 2;
 }
 
 // The next page of the library after `cursor` (empty: the start). The cursor is the
-// shell's own; Rust keeps it in the keychain between passes. Answer `RollPaged`.
+// shell's own; Rust keeps it in the vault, on the camera roll's origin, between passes (#1183).
+// Answer `RollPaged`.
 message RollPage {
   string cursor = 1;
   uint32 limit = 2;

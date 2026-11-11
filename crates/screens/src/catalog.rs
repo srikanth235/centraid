@@ -5384,6 +5384,8 @@ pub mod act {
             pub offset_min: Field<i64>,
             pub phash: Field<String>,
             pub place_id: Field<String>,
+            pub roll_cursor: Option<String>,
+            pub roll_device: Option<String>,
             pub size: Option<i64>,
             pub taken_at: Field<String>,
             pub thumbhash: Field<String>,
@@ -5411,6 +5413,8 @@ pub mod act {
                 put_field(&mut map, "offset_min", self.offset_min, |it| whole(it));
                 put_field(&mut map, "phash", self.phash, |it| text(it));
                 put_field(&mut map, "place_id", self.place_id, |it| text(it));
+                if let Some(it) = self.roll_cursor { map.insert("roll_cursor".to_owned(), text(it)); }
+                if let Some(it) = self.roll_device { map.insert("roll_device".to_owned(), text(it)); }
                 if let Some(it) = self.size { map.insert("size".to_owned(), whole(it)); }
                 put_field(&mut map, "taken_at", self.taken_at, |it| text(it));
                 put_field(&mut map, "thumbhash", self.thumbhash, |it| text(it));
@@ -6877,6 +6881,47 @@ pub mod act {
         }
         impl From<RestoreVersion> for wire::ActRequest {
             fn from(value: RestoreVersion) -> Self {
+                value.request()
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum AdvanceOriginCursorSystem {
+            #[default]
+            CameraRoll,
+            Health,
+        }
+        impl AdvanceOriginCursorSystem {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::CameraRoll => "camera_roll",
+                    Self::Health => "health",
+                }
+            }
+        }
+
+        /// (following, #1183) Move a phone store's cursor (the camera roll's, the health store's) to where a read got to, as read by one install, through follow.advance_cursor. The records a read brings in carry their own cursor in the same commit; this is for a position no record rides with. The follow, never the assistant's.
+        #[derive(Clone, Debug, Default)]
+        pub struct AdvanceOriginCursor {
+            pub cursor: String,
+            pub device_id: String,
+            pub r#ref: String,
+            pub system: AdvanceOriginCursorSystem,
+        }
+        impl AdvanceOriginCursor {
+            pub const NAME: &str = "advance-origin-cursor";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("cursor".to_owned(), text(self.cursor));
+                map.insert("device_id".to_owned(), text(self.device_id));
+                map.insert("ref".to_owned(), text(self.r#ref));
+                map.insert("system".to_owned(), text(self.system.wire()));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<AdvanceOriginCursor> for wire::ActRequest {
+            fn from(value: AdvanceOriginCursor) -> Self {
                 value.request()
             }
         }
@@ -8958,6 +9003,45 @@ pub mod load {
         }
         impl From<FollowedStores> for wire::LoadRequest {
             fn from(value: FollowedStores) -> Self {
+                value.request()
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum OriginCursorSystem {
+            #[default]
+            CameraRoll,
+            Health,
+        }
+        impl OriginCursorSystem {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::CameraRoll => "camera_roll",
+                    Self::Health => "health",
+                }
+            }
+        }
+
+        /// (following, #1183) Where the last read of a phone store (the camera roll, the health store) got to: the cursor its origin holds, or empty when there is none, the origin is not there, or another install wrote it, which means a complete read. Never reachable by the assistant.
+        #[derive(Clone, Debug, Default)]
+        pub struct OriginCursor {
+            pub device_id: String,
+            pub r#ref: String,
+            pub system: OriginCursorSystem,
+        }
+        impl OriginCursor {
+            pub const NAME: &str = "origin-cursor";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("device_id".to_owned(), text(self.device_id));
+                map.insert("ref".to_owned(), text(self.r#ref));
+                map.insert("system".to_owned(), text(self.system.wire()));
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<OriginCursor> for wire::LoadRequest {
+            fn from(value: OriginCursor) -> Self {
                 value.request()
             }
         }
