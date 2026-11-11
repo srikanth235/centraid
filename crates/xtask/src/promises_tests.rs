@@ -1100,3 +1100,111 @@ fn only_locker_has_no_share_and_only_docs_and_photos_have_their_own() {
     let own: Vec<&str> = OWN_SHARE.iter().map(|own| own.app).collect();
     assert_eq!(own, ["docs", "photos"]);
 }
+
+// ---------------------------------------------------------------------------
+// Units
+// ---------------------------------------------------------------------------
+
+fn units_tree(name: &str) -> PathBuf {
+    let root = fixture_dir(name);
+    write(
+        &root,
+        "crates/screens/src/notes/home.rs",
+        "use crate::kit::quantity::Quantity;\nfn row(ctx: &Ctx) { Quantity::bytes(4).words(ctx.locale(), ctx.units()); }",
+    );
+    root
+}
+
+fn units_gaps(root: &Path, app: &str) -> String {
+    units_missing(root, app).join("\n")
+}
+
+#[test]
+fn an_app_that_words_every_measure_through_the_quantity_is_clean() {
+    let root = units_tree("units-clean");
+    assert_eq!(units_gaps(&root, "notes"), "");
+}
+
+#[test]
+fn each_hand_worded_measure_is_named_with_its_file() {
+    let root = units_tree("units-by-hand");
+    for (needle, _) in HAND_MEASURES {
+        write(
+            &root,
+            "crates/screens/src/notes/size.rs",
+            &format!("fn size() {{ let _ = {needle}; }}"),
+        );
+        let gaps = units_gaps(&root, "notes");
+        assert!(
+            gaps.contains("crates/screens/src/notes/size.rs") && gaps.contains(needle),
+            "`{needle}` was not named: {gaps}"
+        );
+        assert!(gaps.contains("use kit::quantity"));
+    }
+}
+
+#[test]
+fn a_measure_a_comment_or_a_test_module_spells_does_not_count() {
+    let root = units_tree("units-dead");
+    write(
+        &root,
+        "crates/screens/src/notes/size.rs",
+        "// format_byte_size(4)\nfn ok() {}\n#[cfg(test)]\nmod tests { fn t() { Units::of(ctx); } }",
+    );
+    assert_eq!(units_gaps(&root, "notes"), "");
+}
+
+#[test]
+fn an_app_inherits_the_hand_worded_measures_of_a_file_it_shares() {
+    let root = units_tree("units-shared");
+    write(
+        &root,
+        "crates/screens/src/kit/schedule/attachments.rs",
+        "fn line() { format_byte_size(1); }",
+    );
+    assert_eq!(units_gaps(&root, "notes"), "");
+    write(
+        &root,
+        "crates/screens/src/notes/detail.rs",
+        "use crate::kit::schedule::attachments::Attachments;",
+    );
+    let gaps = units_gaps(&root, "notes");
+    assert!(gaps.contains("crates/screens/src/kit/schedule/attachments.rs"));
+    assert!(gaps.contains("and notes uses it"));
+}
+
+#[test]
+fn the_units_ratchet_fails_both_ways() {
+    let root = units_tree("units-ratchet");
+    let table = |status| {
+        vec![Row {
+            app: "notes",
+            promise: Promise::Units,
+            status,
+        }]
+    };
+    let findings = |report: &RuleReport| report.findings.join("\n");
+
+    // Kept with a gap fails.
+    write(
+        &root,
+        "crates/screens/src/notes/size.rs",
+        "fn s() { format_byte_size(1); }",
+    );
+    let kept = check(
+        &root,
+        &table(Status::Kept("crates/screens/src/notes/home.rs")),
+    );
+    assert!(findings(&kept).contains("notes / Units: claimed Kept, but"));
+
+    // Owed with the gap prints it; Owed with nothing missing fails.
+    let owed = check(&root, &table(Status::Owed("#1185")));
+    assert!(
+        owed.details
+            .iter()
+            .any(|line| line.starts_with("owed notes / Units:") && line.contains("size.rs"))
+    );
+    fs::remove_file(root.join("crates/screens/src/notes/size.rs")).expect("remove");
+    let paid = check(&root, &table(Status::Owed("#1185")));
+    assert!(findings(&paid).contains("listed Owed"));
+}

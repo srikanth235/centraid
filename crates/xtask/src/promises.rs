@@ -21,6 +21,10 @@
 //! HISTORY'S ENTRY HAS TWO PLACEMENTS: the foot of a detail page, and, for a full-screen editor
 //! with no rows, a row of its menu, declared by name in [`MENU_ENTRY`] and held to more, not less.
 //!
+//! UNITS: every measured amount an app shows is a `kit::quantity::Quantity`, worded through the
+//! member's one units preference (metric or imperial, never one switch per kind of measure). The
+//! checker scans an app's live code for a measure worded by hand ([`HAND_MEASURES`]).
+//!
 //! `Owed` is honest debt listed in one place. It is not an exemption from any
 //! other rule: every other gate runs over the same tree whatever this table says.
 //!
@@ -73,21 +77,26 @@ pub enum Promise {
     /// A primary record can be handed, one at a time, to the OS share sheet, the same way in every
     /// app (#1185, take out). Locker's contents leave only through its export (D11).
     Share,
+    /// Every measured amount an app shows is a `kit::quantity::Quantity`, worded through the
+    /// member's one units preference (metric or imperial), never by a formatter of the app's own.
+    Units,
 }
 
 impl Promise {
     /// Every promise, in the order the table is read.
-    pub const ALL: [Promise; 6] = [
+    pub const ALL: [Promise; 7] = [
         Promise::Trash,
         Promise::Undo,
         Promise::History,
         Promise::Arrive,
         Promise::Export,
         Promise::Share,
+        Promise::Units,
     ];
 
     fn name(self) -> &'static str {
         match self {
+            Promise::Units => "Units",
             Promise::Trash => "Trash",
             Promise::Undo => "Undo",
             Promise::History => "History",
@@ -134,6 +143,17 @@ const fn owed(app: &'static str, promise: Promise, why: &'static str) -> Row {
 
 /// THE TABLE. One row per app per promise; it only shrinks truthfully.
 pub const REGISTER: &[Row] = &[
+    // Units (#1185): `kit::quantity` is the one measure formatter; the checker's gaps are the
+    // adopters' work list.
+    kept("locker", Promise::Units, UNITS_PROOF),
+    kept("money", Promise::Units, UNITS_PROOF),
+    kept("notes", Promise::Units, UNITS_PROOF),
+    kept("people", Promise::Units, UNITS_PROOF),
+    owed("calendar", Promise::Units, UNITS_OWED),
+    owed("docs", Promise::Units, UNITS_OWED),
+    owed("health", Promise::Units, UNITS_OWED),
+    owed("photos", Promise::Units, UNITS_OWED),
+    owed("reminders", Promise::Units, UNITS_OWED),
     kept(
         "calendar",
         Promise::Trash,
@@ -325,6 +345,10 @@ pub const REGISTER: &[Row] = &[
 const EXPORT_OWED: &str = "no export screen on the kit's ExportSpec (#1185)";
 const SHARE_OWED: &str = "no share of one record on the kit's share helper (#1185)";
 
+const UNITS_PROOF: &str = "crates/screens/src/kit/quantity.rs";
+
+const UNITS_OWED: &str = "words a measure by hand instead of `kit::quantity` (#1185)";
+
 /// `promises`: the table is complete, and every row is true.
 pub fn promises(root: &Path) -> RuleReport {
     check(root, REGISTER)
@@ -407,6 +431,7 @@ pub(crate) fn check(root: &Path, register: &[Row]) -> RuleReport {
 /// Empty means the promise is kept.
 pub fn missing(root: &Path, app: &str, promise: Promise) -> Vec<String> {
     match promise {
+        Promise::Units => units_missing(root, app),
         Promise::Trash => trash_missing(root, app),
         Promise::Undo => undo_missing(root, app),
         Promise::History => history_missing(root, app),
@@ -1447,6 +1472,91 @@ fn share_missing_in(root: &Path, app: &str, own: &[OwnShare], none: &[NoShare]) 
             gaps.push(format!(
                 "crates/screens/src/{app}/{screen}: the {kind} page does not hand the item to the OS through the kit's share helper (`kit::share`)"
             ));
+        }
+    }
+    gaps
+}
+
+// ---------------------------------------------------------------------------
+// Units
+// ---------------------------------------------------------------------------
+
+/// What an app spells when it words a measure by hand, and what that is (#1185): a byte size
+/// through the vault's phrase or an app's own, a size the core already worded, health's own
+/// formatters, or the region read for units. Each is replaced by a `kit::quantity::Quantity` shown
+/// through `ctx.units()`.
+const HAND_MEASURES: [(&str, &str); 11] = [
+    ("format_byte_size", "words a byte size itself"),
+    ("bytes_phrase(", "words a byte size itself"),
+    ("drain_bytes(", "words a byte size itself"),
+    (".size.clone()", "shows a size the core worded"),
+    ("Units::of(", "picks its own units from the region"),
+    (
+        "figures::distance(",
+        "words a distance with health's own formatter",
+    ),
+    (
+        "figures::climb(",
+        "words a climb with health's own formatter",
+    ),
+    ("figures::pace(", "words a pace with health's own formatter"),
+    (
+        "figures::figure(",
+        "words a figure with health's own formatter",
+    ),
+    (
+        "figures::phrase(",
+        "words a figure with health's own formatter",
+    ),
+    (
+        "figures::duration(",
+        "words a duration with health's own formatter",
+    ),
+];
+
+/// A file several apps share, and what an app spells to use it: its hand-worded measures are
+/// theirs too.
+const SHARED_MEASURERS: [(&str, &str); 1] = [(
+    "schedule::attachments::",
+    "crates/screens/src/kit/schedule/attachments.rs",
+)];
+
+/// The units promise is kept when, for `app`, no file under `crates/screens/src/<app>/` (and no
+/// file it shares, [`SHARED_MEASURERS`]) spells a hand-worded measure ([`HAND_MEASURES`]). A scan
+/// of live code only: a comment or a test module does not count.
+///
+/// Not checked, and why: that every number an app shows IS a quantity. A figure worded from a
+/// bare `f64` in a way none of the needles names would pass; the adopters' tests hold that.
+fn units_missing(root: &Path, app: &str) -> Vec<String> {
+    let mut gaps = Vec::new();
+    let dir = root.join("crates/screens/src").join(app);
+    let mut shared: BTreeSet<&str> = BTreeSet::new();
+    for file in source_files(&dir, "rs") {
+        let Some(text) = live_source(&file) else {
+            continue;
+        };
+        let rel = relative(root, &file);
+        for (needle, what) in HAND_MEASURES {
+            if text.contains(needle) {
+                gaps.push(format!("{rel} {what} (`{needle}`); use kit::quantity"));
+            }
+        }
+        for (needle, path) in SHARED_MEASURERS {
+            if text.contains(needle) {
+                shared.insert(path);
+            }
+        }
+    }
+    for path in shared {
+        let Some(text) = live_source(&root.join(path)) else {
+            continue;
+        };
+        for (needle, what) in HAND_MEASURES {
+            if text.contains(needle) {
+                gaps.push(format!(
+                    "{path} {what} (`{needle}`), and {app} uses it; use kit::quantity"
+                ));
+            }
         }
     }
     gaps
