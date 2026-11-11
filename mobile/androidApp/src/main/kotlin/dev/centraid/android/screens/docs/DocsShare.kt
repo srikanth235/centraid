@@ -8,10 +8,10 @@ import centraid.core.v1.EffectFailed
 import centraid.core.v1.EffectResult
 import centraid.core.v1.ShareBytes
 import centraid.core.v1.ShareFile
+import dev.centraid.android.kit.EffectReason
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.File
-import dev.centraid.android.kit.EffectReason
 
 /**
  * SHARE ONE DOCUMENT'S FILE (`ShareFile`): the store names a file by its digest, so the receiver

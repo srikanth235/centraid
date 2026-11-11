@@ -28,12 +28,12 @@ import dev.centraid.android.screens.performExportOriginals
 import dev.centraid.android.screens.words.CodeScanDoor
 import dev.centraid.android.session.AppSession
 import dev.centraid.android.session.UiHost
+import java.io.File
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import okio.ByteString.Companion.toByteString
-import java.io.File
 
 /**
  * THE ACTIVITY'S HALF OF THE PLATFORM WORK (#1135). The session performs every effect that needs

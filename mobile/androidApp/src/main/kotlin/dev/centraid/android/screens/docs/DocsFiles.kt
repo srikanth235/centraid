@@ -1,6 +1,5 @@
 package dev.centraid.android.screens.docs
 
-import dev.centraid.android.kit.effectAttempt
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -26,14 +25,15 @@ import centraid.core.v1.FilePicked
 import centraid.core.v1.FileProgress
 import centraid.core.v1.FolderFollowed
 import centraid.core.v1.PickFile
+import dev.centraid.android.kit.EffectReason
+import dev.centraid.android.kit.effectAttempt
 import dev.centraid.android.session.Stage
 import dev.centraid.core.CentraidCore
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
-import dev.centraid.android.kit.EffectReason
 
 /**
  * WHAT DOCS' EFFECTS NEED FROM THE SESSION (#1135): the core a picked file streams into (the vault

@@ -32,14 +32,14 @@ import centraid.core.v1.HealthPhoneWorkout
 import centraid.core.v1.HealthRead
 import centraid.core.v1.HealthSnapshot
 import dev.centraid.android.session.InstallId
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.Period
 import java.time.ZoneId
 import kotlin.reflect.KClass
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * HEALTH CONNECT → HEALTH, READ ONLY (#1129, #1135). Everything the Android shell does with Health
