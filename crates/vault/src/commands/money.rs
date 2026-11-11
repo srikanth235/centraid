@@ -490,7 +490,12 @@ fn categorize(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         Some(category) if uniform => Some(json!({ "ids": changed, "category_id": category })),
         _ => None,
     };
-    Ok(json!({ "changed": changed.len(), "replaced": replaced }))
+    let answer = json!({ "changed": changed.len(), "replaced": replaced });
+    // One line named is the record a revision is of: the answer carries the one the next save names.
+    match ids_of(ctx).as_slice() {
+        [only] => with_rev(ctx, only, answer),
+        _ => Ok(answer),
+    }
 }
 
 /// Let go of a line's transfer, and of the other half's.
@@ -929,10 +934,14 @@ pub fn definitions() -> Vec<CommandDefinition> {
         predicate: "layout_names_its_columns",
         check: pre_layout,
     }];
-    const CATEGORIZE: &[CommandCondition] = &[CommandCondition {
-        predicate: "lines_can_be_filed",
-        check: pre_categorize,
-    }];
+    const CATEGORIZE: &[CommandCondition] = &[
+        STALE_GUARD[0],
+        STALE_GUARD[1],
+        CommandCondition {
+            predicate: "lines_can_be_filed",
+            check: pre_categorize,
+        },
+    ];
     const LINE: &[CommandCondition] = &[CommandCondition {
         predicate: "transaction_exists",
         check: pre_line,
@@ -1101,7 +1110,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
                   "type": "array", "minItems": 1, "maxItems": 2000,
                   "items": { "type": "string", "minLength": 1 }
                 },
-                "category_id": { "type": ["string", "null"], "minLength": 1 }
+                "category_id": { "type": ["string", "null"], "minLength": 1 },
+                "expected_rev": { "type": "integer", "minimum": 0 }
               }
             }"#,
             Idempotency::Idempotent,

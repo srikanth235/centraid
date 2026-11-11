@@ -681,3 +681,62 @@ fn naming_a_line_that_changed_elsewhere_is_refused_and_the_typed_name_is_kept() 
         "This transaction changed somewhere else. Your text is in Earlier versions."
     );
 }
+
+#[test]
+fn filing_a_line_that_changed_elsewhere_is_refused_and_the_pick_is_kept() {
+    let mut d = driver();
+    let id = a_line(&mut d);
+    let i = open(&mut d, &id);
+    event(
+        &mut d,
+        i,
+        txn_event(te::Kind::Action(te::ActionPicked {
+            key: "category".into(),
+        })),
+    );
+    let before = txn_data(d.view(i))
+        .facts
+        .iter()
+        .find(|f| f.label == "Category")
+        .unwrap()
+        .detail
+        .clone();
+    // A category the line does not already hold.
+    let pick = txn_data(d.view(i))
+        .category_options
+        .iter()
+        .find(|o| !o.key.is_empty() && o.label != before)
+        .expect("a category")
+        .clone();
+    // Another device renames the line while the sheet is open.
+    arrange(
+        &d,
+        act::money::SetDisplayName {
+            transaction_id: id.clone(),
+            title: "Theirs".into(),
+            expected_rev: None,
+        },
+    );
+    event(
+        &mut d,
+        i,
+        txn_event(te::Kind::Category(te::CategoryPicked {
+            category_id: pick.key.clone(),
+        })),
+    );
+    assert_eq!(txn_data(d.view(i)).title, "Theirs");
+    let status = txn_state(d.view(i)).status.clone().expect("a line");
+    assert_eq!(
+        status.sentence,
+        "This transaction changed somewhere else. Your text is in Earlier versions."
+    );
+    assert!(status.refused);
+    let after = txn_data(d.view(i))
+        .facts
+        .iter()
+        .find(|f| f.label == "Category")
+        .unwrap()
+        .detail
+        .clone();
+    assert_eq!(after, before, "the refused pick did not file the line");
+}

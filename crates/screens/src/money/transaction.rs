@@ -61,6 +61,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         name_draft: String::new(),
         rev: None,
         name_rev: None,
+        category_rev: None,
         undo: Undo::default(),
         dismissed: Vec::new(),
         links: Links::new(&[Kind::Person]),
@@ -91,6 +92,8 @@ struct Transaction {
     /// rename names as the one it replaces (#1185).
     rev: Option<i64>,
     name_rev: Option<i64>,
+    /// The line's revision when the category sheet opened (#1185).
+    category_rev: Option<i64>,
     /// The status line and what its Undo reverses (the kit's one door).
     undo: Undo,
     /// Offers the member waved off this sitting: `transfer`, `rule`, `with`.
@@ -249,6 +252,37 @@ impl Transaction {
         }
     }
 
+    /// The line's category, picked from the sheet. The save names the revision the sheet opened on;
+    /// a line that changed elsewhere since, or went to the trash, is refused, the category picked is
+    /// kept as an earlier version and the page reads the line as it is (#1185).
+    fn categorize(&mut self, ctx: &Ctx, category_id: Option<String>) {
+        let locale = ctx.locale();
+        let key = kit_act::key(&["money", "txn", &self.txn_id], kit_act::fresh());
+        let settled = self.undo.act(
+            ctx,
+            act::money::Categorize {
+                ids: serde_json::json!([self.txn_id]).to_string(),
+                category_id: category_id.clone(),
+                expected_rev: self.category_rev,
+            },
+            &key,
+            words::done_category,
+        );
+        let said = settled.stale().map(|stale| {
+            stale::on_button(
+                ctx,
+                &crate::strings::chat_confirm::noun_transaction(locale),
+                &self.txn_id,
+                stale,
+                vec![("txn.category_id".to_owned(), category_id.into())],
+            )
+        });
+        self.reload(ctx);
+        if let Some(said) = said {
+            self.undo.refuse(said);
+        }
+    }
+
     /// MOVE TO TRASH: the title the status line names is the line's own, as its page shows it.
     fn trash_line(&mut self, ctx: &Ctx) {
         let Some(loaded) = self.page.data() else {
@@ -272,7 +306,10 @@ impl Transaction {
 
     fn action(&mut self, key: &str, ctx: &Ctx) {
         match key {
-            ACTION_CATEGORY => self.sheet = Sheet::Category,
+            ACTION_CATEGORY => {
+                self.category_rev = self.rev;
+                self.sheet = Sheet::Category;
+            }
             ACTION_NAME => {
                 self.name_draft = self
                     .page
@@ -353,18 +390,13 @@ impl Transaction {
     }
 
     fn event(&mut self, event: wire::MoneyTransactionEvent, ctx: &Ctx) {
-        let locale = ctx.locale();
         match event.kind {
             Some(T::Action(picked)) => self.action(&picked.key, ctx),
             Some(T::Category(picked)) => {
                 self.sheet = Sheet::None;
-                self.submit(
+                self.categorize(
                     ctx,
-                    act::money::Categorize {
-                        ids: serde_json::json!([self.txn_id]).to_string(),
-                        category_id: (!picked.category_id.is_empty()).then_some(picked.category_id),
-                    },
-                    words::done_category(locale),
+                    (!picked.category_id.is_empty()).then_some(picked.category_id),
                 );
             }
             Some(T::NameEdited(edited)) => self.name_draft = edited.text,

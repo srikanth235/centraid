@@ -1311,8 +1311,14 @@ fn respond(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     Ok(json!({ "id": id, "state": state }))
 }
 
-/// What happened to one day of a series, or to the series as a whole.
+/// What happened to one day of a series, or to the series as a whole; with the event's revision
+/// when the change named the one it replaces.
 fn edit_occurrence(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let id = ctx.required_str("id")?;
+    with_rev(ctx, id, change_occurrence(ctx)?)
+}
+
+fn change_occurrence(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let id = ctx.required_str("id")?;
     let (scope, action) = (ctx.required_str("scope")?, ctx.required_str("action")?);
     let answer = json!({ "id": id, "scope": scope });
@@ -1823,7 +1829,8 @@ const OCCURRENCE_SCHEMA: &str = r#"{
       "description": "How this one day reads, when not as its series does." },
     "zone": { "type": ["string", "null"] },
     "url": { "type": ["string", "null"], "description": "This day's own link; the series' when none." },
-    "place_id": { "type": ["string", "null"], "description": "This day's own place; the series' when none." }
+    "place_id": { "type": ["string", "null"], "description": "This day's own place; the series' when none." },
+    "expected_rev": { "type": "integer", "minimum": 0 }
   }
 }"#;
 
@@ -1855,10 +1862,14 @@ pub fn definitions() -> Vec<CommandDefinition> {
         predicate: "guest_is_invited_and_event_is_not_cancelled",
         check: pre_respond,
     }];
-    const OCCURRENCE: &[CommandCondition] = &[CommandCondition {
-        predicate: "day_is_one_the_series_lands_on",
-        check: pre_occurrence,
-    }];
+    const OCCURRENCE: &[CommandCondition] = &[
+        STALE_GUARD[0],
+        STALE_GUARD[1],
+        CommandCondition {
+            predicate: "day_is_one_the_series_lands_on",
+            check: pre_occurrence,
+        },
+    ];
     // An edit, a cancellation and a change to one day each restate a commitment
     // other people may hold: they are medium risk.
     let medium = |definition: CommandDefinition| CommandDefinition {

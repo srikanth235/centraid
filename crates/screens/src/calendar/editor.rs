@@ -423,8 +423,10 @@ impl Editor {
                 } else {
                     act::calendar::EditOccurrenceScope::Occurrence
                 };
-                let request =
-                    write::override_occurrence(&event_id, &occurrence, wire_scope, &draft, &base);
+                let request = act::calendar::EditOccurrence {
+                    expected_rev: self.rev,
+                    ..write::override_occurrence(&event_id, &occurrence, wire_scope, &draft, &base)
+                };
                 let key = kit_act::key(
                     &["edit-occurrence", &event_id, &occurrence, word, "override"],
                     kit_act::fresh(),

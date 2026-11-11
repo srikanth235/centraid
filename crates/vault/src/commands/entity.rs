@@ -112,10 +112,16 @@ fn expected_rev(ctx: &CommandCtx<'_, '_>) -> Option<i64> {
         .and_then(serde_json::Value::as_i64)
 }
 
-/// The record a guarded save is of: `id`, or `item_id` for Locker's commands.
+/// The record a guarded save is of: `id`, or `item_id` for Locker's commands, or the one line a
+/// command that files many (`ids`) was given. A save of several records names no revision, so
+/// none is held to one.
 fn subject<'a>(ctx: &'a CommandCtx<'_, '_>) -> Option<&'a str> {
     ctx.optional_str("id")
         .or_else(|| ctx.optional_str("item_id"))
+        .or_else(|| match ctx.input.get("ids")?.as_array()?.as_slice() {
+            [only] => only.as_str(),
+            _ => None,
+        })
 }
 
 fn stale_trashed(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {

@@ -1895,3 +1895,44 @@ fn a_save_over_an_event_that_changed_elsewhere_is_refused_and_the_words_are_kept
         Some("Third title")
     );
 }
+
+#[test]
+fn changing_one_day_of_a_series_that_changed_elsewhere_is_refused_and_the_words_are_kept() {
+    let mut world = World::new();
+    let series = world.weekdays("Stand-up");
+    let key = format!("{series}:2099-06-16T10:00:00");
+    let page = world.open_edit(&series, &key, Some("2099-06-16T10:00:00"), "2099-06-16");
+    world.title(page, "Daily sync");
+    world.send_editor(page, notes("Bring the numbers"));
+    // Another surface edits the series after the page read it.
+    world.act(act::calendar::EditEvent {
+        event_id: series.clone(),
+        title: Some("Elsewhere".to_owned()),
+        ..Default::default()
+    });
+    world.save(page);
+    world.send_editor(page, scope(Scope::Occurrence));
+    world.save(page);
+    // The day was not changed; the editor stays open on the event as the vault has it.
+    let state = world.editor_state(page);
+    assert!(!state.dismissed);
+    let status = state.status.as_ref().expect("a line");
+    assert_eq!(
+        status.sentence,
+        "This event changed somewhere else. Your text is in Earlier versions."
+    );
+    assert!(status.refused);
+    let titles: Vec<String> = world
+        .window("2099-06-15T00:00:00Z", "2099-06-18T00:00:00Z")
+        .into_iter()
+        .filter(|e| e.event_id == series)
+        .map(|e| e.summary.unwrap_or_default())
+        .collect();
+    assert_eq!(titles, ["Elsewhere", "Elsewhere", "Elsewhere"]);
+    // The next change is from the revision just read, and lands.
+    world.title(page, "Sync");
+    world.save(page);
+    world.send_editor(page, scope(Scope::Occurrence));
+    world.save(page);
+    assert!(world.editor_state(page).dismissed);
+}

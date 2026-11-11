@@ -93,6 +93,7 @@ fn categorize(d: &Driver, id: &str, category: &str) {
     let done = d.act(act_key(act::money::Categorize {
         ids: json!([id]).to_string(),
         category_id: Some(category.to_owned()),
+        expected_rev: None,
     }));
     assert_eq!(done.status, wire::ActStatus::Executed as i32, "{done:?}");
 }

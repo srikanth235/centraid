@@ -756,6 +756,10 @@
             "maxItems": 2000,
             "minItems": 1,
             "type": "array"
+          },
+          "expected_rev": {
+            "minimum": 0,
+            "type": "integer"
           }
         },
         "required": ["ids", "category_id"],

@@ -308,3 +308,98 @@ fn a_locker_item_edit_checks_the_revision_it_replaces() {
         },
     );
 }
+
+#[test]
+fn a_change_to_one_day_of_a_series_checks_the_revision_it_replaces() {
+    let w = World::new();
+    let id = w.ok(
+        "event.propose",
+        json!({ "title": "Standup", "starts": "2026-03-02T09:00", "ends": "2026-03-02T09:30",
+                "zone": "Europe/Paris", "rule": "FREQ=WEEKLY" }),
+    )["id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    w.the_four_facts(
+        "event.edit_occurrence",
+        &id,
+        |rev, title| {
+            let mut input = json!({ "id": id, "original_start": "2026-03-09T09:00:00",
+                "scope": "occurrence", "action": "override", "title": title });
+            if let Some(rev) = rev {
+                input["expected_rev"] = rev.into();
+            }
+            input
+        },
+        || {
+            w.ok("entity.trash", json!({ "id": id }));
+        },
+    );
+}
+
+#[test]
+fn filing_one_line_checks_the_revision_it_replaces_and_filing_several_names_none() {
+    let w = World::new();
+    let account = w.ok(
+        "account.add",
+        json!({ "title": "Everyday", "type": "checking", "currency": "USD" }),
+    )["id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    w.ok(
+        "follow.statement",
+        json!({ "origin": { "ref": account, "label": "Everyday", "fills": account },
+                "records": [
+                    { "external_id": "csv:1", "fields": { "title": "GROCER", "posted_on": "2026-03-01",
+                                                         "amount_minor": -1250 } },
+                    { "external_id": "csv:2", "fields": { "title": "CAFE", "posted_on": "2026-03-02",
+                                                         "amount_minor": -450 } },
+                    { "external_id": "csv:3", "fields": { "title": "BAKERY", "posted_on": "2026-03-03",
+                                                         "amount_minor": -300 } }] }),
+    );
+    let lines: Vec<String> = w
+        .scratch
+        .vault
+        .read(|c| {
+            let mut statement = c.prepare("SELECT id FROM txn ORDER BY id")?;
+            let rows = statement.query_map([], |row| row.get(0))?;
+            Ok(rows.collect::<rusqlite::Result<_>>()?)
+        })
+        .expect("the lines");
+    let categories: Vec<String> = ["Zebra a", "Zebra b", "Zebra c"]
+        .iter()
+        .map(|title| {
+            w.ok("category.add", json!({ "title": title }))["id"]
+                .as_str()
+                .expect("an id")
+                .to_owned()
+        })
+        .collect();
+    let pick = |value: &str| match value {
+        "mine" => categories[1].clone(),
+        "again" => categories[2].clone(),
+        _ => categories[0].clone(),
+    };
+    let id = lines[0].clone();
+    w.the_four_facts(
+        "txn.categorize",
+        &id,
+        |rev, value| {
+            let mut input = json!({ "ids": [id], "category_id": pick(value) });
+            if let Some(rev) = rev {
+                input["expected_rev"] = rev.into();
+            }
+            input
+        },
+        || {
+            w.ok("entity.trash", json!({ "id": id }));
+        },
+    );
+    // Several lines are no one record: a revision named with them holds none of them to it.
+    let several = w.ok(
+        "txn.categorize",
+        json!({ "ids": [lines[1], lines[2]], "category_id": categories[1], "expected_rev": 99 }),
+    );
+    assert!(several.get("rev").is_none());
+}

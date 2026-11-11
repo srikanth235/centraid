@@ -335,6 +335,7 @@ pub mod act {
             pub scope: EditOccurrenceScope,
             pub description: Option<String>,
             pub ends: Field<String>,
+            pub expected_rev: Option<i64>,
             pub starts: Option<String>,
             pub timing: Option<EditOccurrenceTiming>,
             pub title: Option<String>,
@@ -351,6 +352,7 @@ pub mod act {
                 map.insert("scope".to_owned(), text(self.scope.wire()));
                 if let Some(it) = self.description { map.insert("description".to_owned(), text(it)); }
                 put_field(&mut map, "ends", self.ends, |it| text(it));
+                if let Some(it) = self.expected_rev { map.insert("expected_rev".to_owned(), whole(it)); }
                 if let Some(it) = self.starts { map.insert("starts".to_owned(), text(it)); }
                 if let Some(it) = self.timing { map.insert("timing".to_owned(), text(it.wire())); }
                 if let Some(it) = self.title { map.insert("title".to_owned(), text(it)); }
@@ -3121,6 +3123,7 @@ pub mod act {
         pub struct Categorize {
             pub category_id: Option<String>,
             pub ids: String,
+            pub expected_rev: Option<i64>,
         }
         impl Categorize {
             pub const NAME: &str = "categorize";
@@ -3129,6 +3132,7 @@ pub mod act {
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("category_id".to_owned(), match self.category_id { Some(it) => text(it), None => null() });
                 map.insert("ids".to_owned(), text(self.ids));
+                if let Some(it) = self.expected_rev { map.insert("expected_rev".to_owned(), whole(it)); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
         }
