@@ -8,6 +8,7 @@
 mod calendar_support;
 mod docs_support;
 mod health_support;
+mod locker_support;
 mod notes_support;
 mod reminders_support;
 
@@ -655,4 +656,94 @@ fn health_an_undo_after_the_workout_came_back_elsewhere_is_refused_plainly() {
     assert_eq!(status.action_label, "");
     assert_eq!(status.sentence, "“Run” is not in the trash");
     assert_eq!(health_workouts(&d).len(), 1, "the workout stays");
+}
+
+// --- Locker: an item ------------------------------------------------------------------
+
+fn locker_item() -> (Driver, u64) {
+    let mut d = locker_support::driver();
+    locker_support::login(&d, "i1", "Bank");
+    d.start();
+    d.answer_effect(locker_support::passed(wire::Biometry::Face));
+    let page = locker_support::push_item(&mut d, "i1");
+    (d, page)
+}
+
+fn locker_line(d: &Driver, page: u64) -> (String, String) {
+    said(locker_support::item(d, page).status.as_ref())
+}
+
+fn locker_action(d: &mut Driver, page: u64, key: &str) {
+    locker_support::item_event(
+        d,
+        page,
+        wire::locker_item_event::Kind::Action(wire::locker_item_event::ActionTapped {
+            key: key.to_owned(),
+        }),
+    );
+}
+
+#[test]
+fn locker_trashing_an_item_says_which_and_undo_brings_it_back() {
+    let (mut d, page) = locker_item();
+    locker_action(&mut d, page, "trash");
+    assert_eq!(locker_line(&d, page), line("Bank moved to trash", "Undo"));
+    assert!(!locker_support::item_data(&d, page).trashed_note.is_empty());
+
+    status_acted(&mut d, page);
+    assert!(locker_support::item_data(&d, page).trashed_note.is_empty());
+    assert_eq!(locker_line(&d, page), line("Undone", ""));
+}
+
+#[test]
+fn locker_a_star_says_so_and_undo_unstars() {
+    let (mut d, page) = locker_item();
+    locker_action(&mut d, page, "star");
+    assert!(locker_support::item_data(&d, page).starred);
+    assert_eq!(locker_line(&d, page), line("Item starred", "Undo"));
+
+    status_acted(&mut d, page);
+    assert!(!locker_support::item_data(&d, page).starred);
+    assert_eq!(locker_line(&d, page), line("Undone", ""));
+}
+
+#[test]
+fn locker_a_memo_says_so_and_a_later_edit_refuses_the_undo_plainly() {
+    let (mut d, page) = locker_item();
+    let send = |d: &mut Driver, kind: wire::locker_item_event::Kind| {
+        locker_support::item_event(d, page, kind);
+    };
+    send(
+        &mut d,
+        wire::locker_item_event::Kind::MemoOpened(wire::locker_item_event::MemoOpened {}),
+    );
+    send(
+        &mut d,
+        wire::locker_item_event::Kind::MemoTyped(wire::locker_item_event::MemoTyped {
+            text: "Branch code 12".to_owned(),
+        }),
+    );
+    send(
+        &mut d,
+        wire::locker_item_event::Kind::MemoSaved(wire::locker_item_event::MemoSaved {}),
+    );
+    // The line names the memo, never its words.
+    assert_eq!(locker_line(&d, page), line("Memo saved", "Undo"));
+
+    // Another surface rewrites it: the Undo no longer fits, and the later memo stays.
+    locker_support::arrange(
+        &d,
+        act::locker::SetMemo {
+            item_id: "i1".to_owned(),
+            note: "Branch code 99".to_owned(),
+        },
+    );
+    status_acted(&mut d, page);
+    let status = locker_support::item(&d, page).status.expect("a line");
+    assert!(status.refused);
+    assert_eq!(status.action_label, "");
+    assert_eq!(
+        status.sentence,
+        "This can no longer be undone: it has changed since."
+    );
 }

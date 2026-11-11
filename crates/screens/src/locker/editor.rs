@@ -41,6 +41,7 @@ use super::wall::{Change, Wall};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::read::{self, Reading};
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, locker as words};
 
@@ -100,7 +101,8 @@ struct Editor {
     form: Option<Form>,
     confirm_discard: bool,
     finished: bool,
-    status: Option<wire::StatusLine>,
+    /// The status line: a refusal, over the form as it still is (a save ends the sitting).
+    undo: Undo,
 }
 
 impl Editor {
@@ -116,7 +118,7 @@ impl Editor {
             form: None,
             confirm_discard: false,
             finished: false,
-            status: None,
+            undo: Undo::default(),
         }
     }
 
@@ -277,7 +279,7 @@ impl Editor {
     fn edited(&mut self, change: impl FnOnce(&mut Form)) {
         if let Some(form) = &mut self.form {
             change(form);
-            self.status = None;
+            self.undo.clear();
         }
     }
 
@@ -415,7 +417,7 @@ impl Editor {
             request.phone = some("phone").filter(|v| !v.is_empty());
             request.url = some("url").filter(|v| !v.is_empty());
             request.username = some("username").filter(|v| !v.is_empty());
-            kit_act::act(ctx, request, &key)
+            self.undo.act_quietly(ctx, request, &key)
         } else {
             let request = act::locker::EditItem {
                 item_id: self.item_id.clone(),
@@ -439,10 +441,9 @@ impl Editor {
                 username: some("username"),
                 ..act::locker::EditItem::default()
             };
-            kit_act::act(ctx, request, &key)
+            self.undo.act_quietly(ctx, request, &key)
         };
         if !settled.committed {
-            self.status = shared::refused(settled.refusal);
             return;
         }
         // THE ITEM IS SAVED; ITS TAGS FOLLOW, one write at a time, the editor
@@ -469,7 +470,7 @@ impl Editor {
         let id = self.item_id.clone();
         for tag in had.iter().filter(|tag| !kept.contains(&tag.to_lowercase())) {
             let key = kit_act::key(&["remove-tag", &id, tag], kit_act::fresh());
-            let settled = kit_act::act(
+            let settled = self.undo.act_also(
                 ctx,
                 act::locker::RemoveTag {
                     locker_item_id: id.clone(),
@@ -478,7 +479,6 @@ impl Editor {
                 &key,
             );
             if !settled.committed {
-                self.status = shared::refused(settled.refusal);
                 return false;
             }
         }
@@ -487,7 +487,7 @@ impl Editor {
             .filter(|tag| !before.contains(&tag.to_lowercase()))
         {
             let key = kit_act::key(&["add-tag", &id, tag], kit_act::fresh());
-            let settled = kit_act::act(
+            let settled = self.undo.act_also(
                 ctx,
                 act::locker::AddTag {
                     locker_item_id: id.clone(),
@@ -496,7 +496,6 @@ impl Editor {
                 &key,
             );
             if !settled.committed {
-                self.status = shared::refused(settled.refusal);
                 return false;
             }
         }
@@ -662,6 +661,7 @@ impl Screen for Editor {
             }
             Some(E::Left(_)) => {
                 self.form = None;
+                self.undo.clear();
                 let step = self.wall.left();
                 self.walled(ctx, step)
             }
@@ -720,7 +720,7 @@ impl Screen for Editor {
                         retry: words::retry(locale),
                     }),
                     finished: self.finished,
-                    status: self.status.clone(),
+                    status: self.undo.status(),
                 },
             )),
             ..wire::ViewState::default()

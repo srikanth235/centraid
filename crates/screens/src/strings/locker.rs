@@ -8,6 +8,10 @@ catalog! {
     plain add_title = ("New item", "New item");
     plain alias = ("Alias", "Alias");
     plain app_name = ("Locker", "Locker");
+    plain archived_said = ("Item archived", "Item archived");
+    plain starred_said = ("Item starred", "Item starred");
+    plain unarchived_said = ("Item unarchived", "Item unarchived");
+    plain unstarred_said = ("Star removed", "Star removed");
     plain archive = ("Archive", "Archive");
     plain archived_empty = ("Nothing is archived", "Nothing is archived");
     plain archived_empty_body = ("Archived items are kept but hidden from lists.", "Archived items are kept but hidden from lists.");

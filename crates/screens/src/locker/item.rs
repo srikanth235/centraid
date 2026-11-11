@@ -40,6 +40,7 @@ use crate::kit::earlier;
 use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::read::{self, Reading};
 use crate::kit::secret::Secrets;
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, links as link_words, locker as words, shared as kit_words};
 
@@ -107,8 +108,9 @@ struct Item {
     secrets: Secrets,
     loaded: Phase<Loaded>,
     shown: Option<Shown>,
-    status: Option<wire::StatusLine>,
-    undo: Option<wire::ActInverse>,
+    /// The status line and what its Undo reverses (the kit's one door). A line never carries a
+    /// secret: it names the field, never the value.
+    undo: Undo,
     confirming: Option<Confirming>,
     memo: Option<String>,
     field: Option<FieldSheet>,
@@ -133,8 +135,7 @@ impl Item {
             secrets: Secrets::view_shielded(),
             loaded: Phase::Loading,
             shown: None,
-            status: None,
-            undo: None,
+            undo: Undo::default(),
             confirming: None,
             memo: None,
             field: None,
@@ -236,8 +237,7 @@ impl Item {
     fn wipe(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         self.loaded = Phase::Loading;
         self.shown = None;
-        self.status = None;
-        self.undo = None;
+        self.undo.clear();
         self.confirming = None;
         self.memo = None;
         self.field = None;
@@ -261,14 +261,17 @@ impl Item {
 
     // --- writes --------------------------------------------------------------
 
-    fn submit(&mut self, ctx: &Ctx, tag: &str, request: impl Into<wire::ActRequest>) -> Settled {
+    /// One write through the kit's door: the line says `said` (with Undo when the core can take
+    /// it back), or the refusal.
+    fn submit(
+        &mut self,
+        ctx: &Ctx,
+        tag: &str,
+        request: impl Into<wire::ActRequest>,
+        said: impl FnOnce(Locale) -> String,
+    ) -> Settled {
         let key = kit_act::key(&[tag, &self.route.item_id], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        if !settled.committed {
-            self.status = shared::refused(settled.refusal.clone());
-            self.undo = None;
-        }
-        settled
+        self.undo.act(ctx, request, &key, said)
     }
 
     fn id(&self) -> String {
@@ -314,7 +317,7 @@ impl Item {
             "copy_code" if stored && self.shown_code(key).is_some() => {
                 let left = self.shown.as_ref().map_or(1, |shown| shown.seconds_left);
                 let code = self.secrets.value(key).unwrap_or_default().to_owned();
-                self.status = shared::status(words::code_copied(locale));
+                self.undo.say(words::code_copied(locale));
                 self.secrets
                     .copy(ctx, &code, Duration::from_secs(u64::from(left.max(1))))
             }
@@ -325,7 +328,7 @@ impl Item {
             // revealed, and the item already says it was used.
             "copy" if stored && key != SEED && self.secrets.value(key).is_some() => {
                 let value = self.secrets.value(key).unwrap_or_default().to_owned();
-                self.status = shared::status(copied_secret(locale, &item, key));
+                self.undo.say(copied_secret(locale, &item, key));
                 self.secrets.copy(ctx, &value, CLIPBOARD_LIFE)
             }
             // THE SEED ITSELF IS NOT SHOWN OR COPIED from this page: its row
@@ -336,7 +339,7 @@ impl Item {
             // A PLAIN VALUE COPIES AS ITSELF — it is metadata, never stamped.
             "copy" => match plain_value(&item, key) {
                 Some(value) => {
-                    self.status = shared::status(fill(
+                    self.undo.say(fill(
                         &words::copied_plain(locale),
                         &[("field", &types::label(locale, key))],
                     ));
@@ -366,16 +369,16 @@ impl Item {
         match shared::reveal(ctx, &item.item_id, key, field_id, copy, 0) {
             Err(Refused::Locked) => self.locked(ctx),
             Err(Refused::Said(sentence)) => {
-                self.status = shared::refused(sentence);
+                self.undo.refuse(sentence);
                 Vec::new()
             }
             Ok(Opened { value, life }) if copy => {
                 let _ = life;
-                self.status = shared::status(copied_secret(locale, item, key));
+                self.undo.say(copied_secret(locale, item, key));
                 self.secrets.copy(ctx, &value, CLIPBOARD_LIFE)
             }
             Ok(Opened { value, life }) => {
-                self.status = None;
+                self.undo.clear();
                 let mut effects = self.secrets.hide_all(ctx);
                 let seconds = u32::try_from(life.as_secs())
                     .unwrap_or(REVEAL_SECONDS)
@@ -406,11 +409,11 @@ impl Item {
         match shared::totp(ctx, &id, field_id, copy) {
             Err(Refused::Locked) => self.locked(ctx),
             Err(Refused::Said(sentence)) => {
-                self.status = shared::refused(sentence);
+                self.undo.refuse(sentence);
                 Vec::new()
             }
             Ok(code) if copy => {
-                self.status = shared::status(words::code_copied(locale));
+                self.undo.say(words::code_copied(locale));
                 self.secrets.copy(
                     ctx,
                     &code.code,
@@ -418,7 +421,7 @@ impl Item {
                 )
             }
             Ok(code) => {
-                self.status = None;
+                self.undo.clear();
                 let mut effects = self.secrets.hide_all(ctx);
                 // The kit's own hide is the safety net a second past the roll,
                 // after the tick that follows it.
@@ -470,60 +473,47 @@ impl Item {
     // --- actions -------------------------------------------------------------
 
     fn action(&mut self, ctx: &Ctx, key: &str) -> Vec<wire::Effect> {
-        let locale = ctx.locale();
         let Some(item) = self.item().cloned() else {
             return Vec::new();
         };
         let id = self.id();
-        let settled = match key {
+        match key {
             "star" if item.starred => self.submit(
                 ctx,
                 "unstar-item",
                 act::locker::UnstarItem { locker_item_id: id },
+                words::unstarred_said,
             ),
             "star" => self.submit(
                 ctx,
                 "star-item",
                 act::locker::StarItem { locker_item_id: id },
+                words::starred_said,
             ),
             "archive" if item.archived => self.submit(
                 ctx,
                 "unarchive-item",
                 act::locker::UnarchiveItem { locker_item_id: id },
+                words::unarchived_said,
             ),
             "archive" => self.submit(
                 ctx,
                 "archive-item",
                 act::locker::ArchiveItem { locker_item_id: id },
+                words::archived_said,
             ),
-            "trash" => {
-                let settled = self.submit(
-                    ctx,
-                    "trash-item",
-                    act::locker::TrashItem { locker_item_id: id },
-                );
-                if settled.committed {
-                    self.status = Some(wire::StatusLine {
-                        sentence: crate::kit::trash::moved_to_trash(locale, &item.title),
-                        action_label: words::undo(locale),
-                        refused: false,
-                    });
-                    self.undo = settled.inverse.clone();
-                }
-                settled
-            }
-            "restore" => {
-                let settled = self.submit(
-                    ctx,
-                    "restore-item",
-                    act::locker::RestoreItem { locker_item_id: id },
-                );
-                if settled.committed {
-                    self.status = shared::status(words::restored(locale));
-                    self.undo = None;
-                }
-                settled
-            }
+            "trash" => self.submit(
+                ctx,
+                "trash-item",
+                act::locker::TrashItem { locker_item_id: id },
+                |locale| crate::kit::trash::moved_to_trash(locale, &item.title),
+            ),
+            "restore" => self.submit(
+                ctx,
+                "restore-item",
+                act::locker::RestoreItem { locker_item_id: id },
+                words::restored,
+            ),
             "add_field" => {
                 if !item.trashed {
                     self.open_field(&item, "");
@@ -553,15 +543,10 @@ impl Item {
             }
             _ => return Vec::new(),
         };
-        if settled.committed && matches!(key, "star" | "archive") {
-            self.status = None;
-            self.undo = None;
-        }
         self.reload(ctx)
     }
 
     fn confirmed(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        let locale = ctx.locale();
         let Some(confirming) = self.confirming.take() else {
             return Vec::new();
         };
@@ -578,61 +563,36 @@ impl Item {
                         item_id: id,
                         field_id,
                     },
+                    words::field_removed,
                 );
                 if settled.committed {
                     self.field = None;
-                    self.status = shared::status(words::field_removed(locale));
                 }
             }
             Confirming::Passkey => {
-                let settled = self.submit(
+                self.submit(
                     ctx,
                     "clear-passkey",
                     act::locker::ClearPasskey { item_id: id },
+                    words::passkey_removed,
                 );
-                if settled.committed {
-                    self.status = shared::status(words::passkey_removed(locale));
-                }
             }
             Confirming::Purge => {
-                let settled = self.submit(
+                // Erased for good: the core knows no inverse, so the line has no verb.
+                self.submit(
                     ctx,
                     "purge-item",
                     act::locker::PurgeItem { locker_item_id: id },
+                    words::purged,
                 );
-                if settled.committed {
-                    self.status = shared::status(words::purged(locale));
-                    self.undo = None;
-                }
             }
         }
-        self.reload(ctx)
-    }
-
-    fn undo(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        let Some(inverse) = self.undo.take() else {
-            return Vec::new();
-        };
-        let request = wire::ActRequest {
-            app: act::locker::APP.to_owned(),
-            action: inverse.action,
-            input: inverse.input,
-            invoke_key: String::new(),
-        };
-        let key = kit_act::key(&["undo", &self.route.item_id], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        self.status = if settled.committed {
-            None
-        } else {
-            shared::refused(settled.refusal)
-        };
         self.reload(ctx)
     }
 
     // --- the memo and the sheets ---------------------------------------------
 
     fn memo_saved(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        let locale = ctx.locale();
         let (Some(item), Some(text)) = (self.item().cloned(), self.memo.clone()) else {
             return Vec::new();
         };
@@ -648,10 +608,10 @@ impl Item {
                 item_id: id,
                 note: text,
             },
+            words::memo_saved,
         );
         if settled.committed {
             self.memo = None;
-            self.status = shared::status(words::memo_saved(locale));
         }
         self.reload(ctx)
     }
@@ -680,7 +640,6 @@ impl Item {
     }
 
     fn field_saved(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        let locale = ctx.locale();
         let (Some(item), Some(sheet)) = (self.item().cloned(), self.field.as_ref()) else {
             return Vec::new();
         };
@@ -737,16 +696,14 @@ impl Item {
             section: Some(section),
             value: Some(value),
         };
-        let settled = self.submit(ctx, "set-field", request);
+        let settled = self.submit(ctx, "set-field", request, words::field_saved);
         if settled.committed {
             self.field = None;
-            self.status = shared::status(words::field_saved(locale));
         }
         self.reload(ctx)
     }
 
     fn passkey_saved(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        let locale = ctx.locale();
         let (Some(item), Some(name)) = (self.item().cloned(), self.passkey_name.clone()) else {
             return Vec::new();
         };
@@ -772,10 +729,10 @@ impl Item {
                 private_key: Some(PLACEHOLDER.to_owned()),
                 user_handle: Some(passkey.user_handle),
             },
+            words::passkey_renamed,
         );
         if settled.committed {
             self.passkey_name = None;
-            self.status = shared::status(words::passkey_renamed(locale));
         }
         self.reload(ctx)
     }
@@ -788,9 +745,8 @@ impl Item {
         };
         let linked: Vec<String> = item.links.iter().map(|link| link.id.clone()).collect();
         let from = self.id();
-        let locale = ctx.locale();
-        let (settled, sentence) = match self.links.update(event, &linked, ctx) {
-            Outcome::Add { id, .. } => (
+        match self.links.update(event, &linked, ctx) {
+            Outcome::Add { id, .. } => {
                 self.submit(
                     ctx,
                     "add-link",
@@ -799,9 +755,9 @@ impl Item {
                         rel: act::locker::AddLinkRel::About,
                         to: id,
                     },
-                ),
-                link_words::saved(locale),
-            ),
+                    link_words::saved,
+                );
+            }
             Outcome::Remove { id } => {
                 let Some(link) = item.links.iter().find(|link| link.id == id) else {
                     return Vec::new();
@@ -811,20 +767,14 @@ impl Item {
                 } else {
                     act::locker::RemoveLinkRel::About
                 };
-                (
-                    self.submit(
-                        ctx,
-                        "remove-link",
-                        act::locker::RemoveLink { from, rel, to: id },
-                    ),
-                    link_words::removed(locale),
-                )
+                self.submit(
+                    ctx,
+                    "remove-link",
+                    act::locker::RemoveLink { from, rel, to: id },
+                    link_words::removed,
+                );
             }
             Outcome::Moved => return Vec::new(),
-        };
-        if settled.committed {
-            self.status = shared::status(sentence);
-            self.undo = None;
         }
         self.reload(ctx)
     }
@@ -879,7 +829,12 @@ impl Item {
                 self.confirming = None;
                 Vec::new()
             }
-            Some(I::StatusActed(_)) => self.undo(ctx),
+            Some(I::StatusActed(_)) => {
+                if self.undo.acted(ctx) {
+                    return self.reload(ctx);
+                }
+                Vec::new()
+            }
             Some(I::MemoOpened(_)) => {
                 if let Some(item) = self.item().filter(|item| !item.trashed) {
                     self.memo = Some(item.memo.clone());
@@ -1839,7 +1794,14 @@ impl Screen for Item {
             }
             // LEAVING CONCEALS: nothing revealed outlives the screen, and a
             // sheet with a typed secret goes with it.
+            Some(E::StatusActed(_)) => {
+                if self.undo.acted(ctx) {
+                    return self.reload(ctx);
+                }
+                Vec::new()
+            }
             Some(E::Left(_)) => {
+                self.undo.clear();
                 self.secrets.conceal();
                 self.shown = None;
                 self.field = None;
@@ -1873,18 +1835,7 @@ impl Screen for Item {
                 wire::locker_item_state::Content::Data(Box::new(self.data(locale, loaded)))
             }
         });
-        let status = self
-            .status
-            .clone()
-            .map(|mut status| {
-                if status.action_label.is_empty() || self.undo.is_some() {
-                    status
-                } else {
-                    status.action_label.clear();
-                    status
-                }
-            })
-            .or_else(|| self.earlier.status(locale));
+        let status = self.undo.status().or_else(|| self.earlier.status(locale));
         wire::ViewState {
             kind: Some(wire::view_state::Kind::LockerItem(Box::new(
                 wire::LockerItemState {
