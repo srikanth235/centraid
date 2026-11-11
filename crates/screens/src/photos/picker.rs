@@ -32,7 +32,7 @@ use wire::screen_event::Kind as S;
 use super::album_choice;
 use super::cells::{self, Link};
 use crate::catalog::load;
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Note, Page, Reading};
 use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, photos as words};
@@ -54,7 +54,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         attach,
         album_id: args.album_id.clone(),
         album_name: args.album_name.clone(),
-        phase: Phase::Loading,
+        page: Page::loading(),
+        more_failed: false,
         cells: Vec::new(),
         next: None,
         taken: BTreeSet::new(),
@@ -64,19 +65,15 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     }))
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Phase {
-    Loading,
-    Failed,
-    Ready,
-}
-
 struct Picker {
     /// The purpose is to attach the pick to a chat question, not to fill an album.
     attach: bool,
     album_id: String,
     album_name: String,
-    phase: Phase,
+    /// The read: `cells` is its data.
+    page: Page<()>,
+    /// A next page was asked for and did not come: what loaded stays, with a note.
+    more_failed: bool,
     cells: Vec<wire::PhotosCell>,
     next: Option<wire::PhotosCursor>,
     taken: BTreeSet<String>,
@@ -110,12 +107,25 @@ fn page(
 }
 
 impl Picker {
+    /// A read that did not come: a gate shows the gate; a failure over photographs shown keeps
+    /// them under a note, and over nothing shown is the failure itself.
+    fn unread(&mut self, reading: Reading<wire::PhotosShelf>, locale: Locale) {
+        let held = std::mem::replace(&mut self.page, Page::loading());
+        self.page = match reading {
+            Reading::Denied(denial) => Page::Refused(denial),
+            _ => held.after(Reading::Failed, locale, |()| false),
+        };
+        if self.page.data().is_none() {
+            self.cells.clear();
+            self.next = None;
+        }
+    }
+
     fn reload(&mut self, ctx: &Ctx) {
         let want = self.cells.len().max(PAGE as usize);
-        let Reading::Data(first) = page(ctx, load::photos::ShelfView::Live, None, None) else {
-            self.phase = Phase::Failed;
-            self.cells.clear();
-            return;
+        let first = match page(ctx, load::photos::ShelfView::Live, None, None) {
+            Reading::Data(first) => first,
+            other => return self.unread(other, ctx.locale()),
         };
         let mut cells = first.cells;
         let mut next = first.next;
@@ -124,11 +134,9 @@ impl Picker {
             if cells.len() >= want || pages >= MAX_PAGES {
                 break;
             }
-            let Reading::Data(more) = page(ctx, load::photos::ShelfView::Live, None, Some(&cursor))
-            else {
-                self.phase = Phase::Failed;
-                self.cells.clear();
-                return;
+            let more = match page(ctx, load::photos::ShelfView::Live, None, Some(&cursor)) {
+                Reading::Data(more) => more,
+                other => return self.unread(other, ctx.locale()),
             };
             cells.extend(more.cells);
             next = more.next;
@@ -136,7 +144,11 @@ impl Picker {
         }
         self.cells = cells;
         self.next = next;
-        self.phase = Phase::Ready;
+        self.page = Page::Ready {
+            data: (),
+            note: None,
+        };
+        self.more_failed = false;
         if !self.attach {
             self.read_members(ctx);
         }
@@ -172,12 +184,15 @@ impl Picker {
         let Some(cursor) = self.next.clone() else {
             return;
         };
-        let Reading::Data(more) = page(ctx, load::photos::ShelfView::Live, None, Some(&cursor))
-        else {
-            self.phase = Phase::Failed;
-            self.cells.clear();
-            return;
+        let more = match page(ctx, load::photos::ShelfView::Live, None, Some(&cursor)) {
+            Reading::Data(more) => more,
+            Reading::Failed => {
+                self.more_failed = true;
+                return;
+            }
+            other => return self.unread(other, ctx.locale()),
         };
+        self.more_failed = false;
         let known: BTreeSet<String> = self.cells.iter().map(|c| c.photo_id.clone()).collect();
         self.cells.extend(
             more.cells
@@ -288,6 +303,7 @@ impl Screen for Picker {
             }
             Some(S::PhotosPicker(picker)) => match picker.kind {
                 Some(E::LoadMore(_)) => self.load_more(ctx),
+                Some(E::Refreshed(_)) => self.reload(ctx),
                 Some(E::Pick(pick)) => self.pick(&pick.photo_id),
                 Some(E::Confirm(_)) => self.confirm(ctx),
                 None => {}
@@ -299,13 +315,10 @@ impl Screen for Picker {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
-        let content = match self.phase {
-            Phase::Loading => {
-                wire::photos_picker_state::Content::Loading(wire::Loading { first_load: true })
-            }
-            Phase::Failed => wire::photos_picker_state::Content::Failure(read::failure(locale)),
-            Phase::Ready => wire::photos_picker_state::Content::Data(Box::new(self.data(locale))),
-        };
+        let page = self
+            .page
+            .clone()
+            .noted(self.more_failed.then(|| Note::more_failed(locale)));
         let add_label = if self.attach {
             words::photos_attach(locale)
         } else if self.picked.is_empty() {
@@ -335,7 +348,12 @@ impl Screen for Picker {
                     } else {
                         words::photos_album_refers(locale)
                     },
-                    content: Some(content),
+                    page: Some(page.wire(
+                        locale,
+                        |denial| super::denied(locale, denial),
+                        wire::EmptyState::default,
+                    )),
+                    data: page.data().map(|()| self.data(locale)),
                     status: self.undo.status(),
                     finished: self.finished,
                 },
@@ -371,7 +389,11 @@ mod tests {
             attach: true,
             album_id: String::new(),
             album_name: String::new(),
-            phase: Phase::Ready,
+            page: Page::Ready {
+                data: (),
+                note: None,
+            },
+            more_failed: false,
             cells,
             next: None,
             picked: vec![picked.to_owned()],

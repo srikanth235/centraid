@@ -30,7 +30,7 @@ use super::cells::{self, Link};
 use super::routes;
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Page, Reading};
 use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, photos as words, photos_shelf as shelf_words};
@@ -47,7 +47,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     };
     Some(Box::new(Places {
         presentation: Presentation::Cards,
-        phase: Phase::Loading,
+        page: Page::loading(),
         places: Vec::new(),
         unplaced: 0,
         naming: None,
@@ -55,15 +55,11 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     }))
 }
 
-enum Phase {
-    Loading,
-    Failed,
-    Ready,
-}
-
 struct Places {
     presentation: Presentation,
-    phase: Phase,
+    /// The read: `places` is its data (no places is still ready, the screen draws its own
+    /// empty state).
+    page: Page<()>,
     places: Vec<wire::PhotosPlaceCard>,
     unplaced: u32,
     /// The place the name sheet is open over.
@@ -174,11 +170,22 @@ impl Places {
             Reading::Data(places) => {
                 self.places = places.places;
                 self.unplaced = places.unplaced;
-                self.phase = Phase::Ready;
+                self.page = Page::Ready {
+                    data: (),
+                    note: None,
+                };
             }
-            Reading::Denied(_) | Reading::Failed => {
+            Reading::Denied(denial) => {
                 self.places.clear();
-                self.phase = Phase::Failed;
+                self.page = Page::Refused(denial);
+            }
+            // The places on screen are still true: they stay under a note.
+            Reading::Failed => {
+                let held = std::mem::replace(&mut self.page, Page::loading());
+                self.page = held.after(Reading::Failed, ctx.locale(), |()| false);
+                if self.page.data().is_none() {
+                    self.places.clear();
+                }
             }
         }
     }
@@ -358,6 +365,7 @@ impl Screen for Places {
                     self.naming = Some(asked.place_id);
                 }
                 Some(E::NameDismissed(_)) => self.naming = None,
+                Some(E::Refreshed(_)) => self.reload(ctx),
                 Some(E::Renamed(renamed)) => self.rename(&renamed.place_id, &renamed.name, ctx),
                 None => {}
             },
@@ -374,13 +382,6 @@ impl Screen for Places {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
-        let content = match self.phase {
-            Phase::Loading => {
-                wire::photos_places_state::Content::Loading(wire::Loading { first_load: true })
-            }
-            Phase::Failed => wire::photos_places_state::Content::Failure(read::failure(locale)),
-            Phase::Ready => wire::photos_places_state::Content::Data(Box::new(self.data(locale))),
-        };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::PhotosPlaces(Box::new(
                 wire::PhotosPlacesState {
@@ -388,7 +389,12 @@ impl Screen for Places {
                     presentation: self.presentation as i32,
                     cards_label: words::photos_places_cards(locale),
                     map_label: words::photos_places_map(locale),
-                    content: Some(content),
+                    page: Some(self.page.wire(
+                        locale,
+                        |denial| super::denied(locale, denial),
+                        wire::EmptyState::default,
+                    )),
+                    data: self.page.data().map(|()| self.data(locale)),
                     status: self.undo.status(),
                     name_sheet: self.sheet(locale),
                 },

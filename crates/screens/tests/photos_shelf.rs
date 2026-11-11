@@ -25,9 +25,10 @@ fn state(d: &Driver, instance: u64) -> &wire::PhotosShelfState {
 }
 
 fn data(d: &Driver, instance: u64) -> &wire::PhotosShelfData {
-    match &state(d, instance).content {
-        Some(wire::photos_shelf_state::Content::Data(data)) => data,
-        other => panic!("the shelf has no data: {other:?}"),
+    let state = state(d, instance);
+    match &state.data {
+        Some(data) => data,
+        None => panic!("the shelf has no data: {:?}", state.page),
     }
 }
 
@@ -490,10 +491,7 @@ fn a_refused_write_keeps_the_rows_and_the_pick_and_says_why() {
     let view = state(&d, shelf);
     let status = view.status.as_ref().expect("the vault's sentence");
     assert!(status.refused && !status.sentence.is_empty());
-    assert!(matches!(
-        view.content,
-        Some(wire::photos_shelf_state::Content::Data(_))
-    ));
+    assert!(view.data.is_some());
     assert_eq!(view.selection.as_ref().unwrap().selected_ids, vec![a]);
 }
 

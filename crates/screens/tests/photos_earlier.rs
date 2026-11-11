@@ -78,9 +78,9 @@ fn entry_of(d: &mut Driver, id: &str) -> Option<wire::EarlierEntry> {
         Some(wire::view_state::Kind::PhotosLightbox(state)) => (**state).clone(),
         other => panic!("not the lightbox: {other:?}"),
     };
-    let entry = match state.content {
-        Some(wire::photos_lightbox_state::Content::Photo(photo)) => photo.earlier,
-        other => panic!("no photograph: {other:?}"),
+    let entry = match state.photo {
+        Some(photo) => photo.earlier,
+        None => panic!("no photograph: {:?}", state.page),
     };
     d.pop("photos", at);
     entry
@@ -289,9 +289,9 @@ fn origin_of(d: &mut Driver, id: &str) -> Option<wire::OriginLine> {
         Some(wire::view_state::Kind::PhotosLightbox(state)) => (**state).clone(),
         other => panic!("not the lightbox: {other:?}"),
     };
-    let origin = match state.content {
-        Some(wire::photos_lightbox_state::Content::Photo(photo)) => photo.origin,
-        other => panic!("no photograph: {other:?}"),
+    let origin = match state.photo {
+        Some(photo) => photo.origin,
+        None => panic!("no photograph: {:?}", state.page),
     };
     d.pop("photos", at);
     origin

@@ -100,6 +100,16 @@ impl Note {
         }
     }
 
+    /// A pager asked for the next page and it did not come: what loaded stays, with Retry.
+    #[must_use]
+    pub fn more_failed(locale: Locale) -> Self {
+        Self {
+            kind: NoteKind::Partial,
+            sentence: shared::read_more_failed(locale),
+            retry: true,
+        }
+    }
+
     /// A follow pass the vault doubted or the phone reported incomplete, in the follow's own
     /// words. No Retry: reconnecting or the follow itself is the remedy, not a re-read.
     #[must_use]

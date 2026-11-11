@@ -82,6 +82,9 @@ struct PageReadStateView<Skeleton: View, Content: View>: View {
     var onEmptyAction: (() -> Void)? = nil
     var onNoteAction: (() -> Void)? = nil
     var retryLabel: String = KitWords.RETRY
+    /// True where the data is rows of a lazy stack the caller owns: the note and the data are
+    /// then siblings in it (no wrapping stack), so the rows stay lazy and pinned headers pin.
+    var flat: Bool = false
     let skeleton: () -> Skeleton
     let data: () -> Content
 
@@ -91,6 +94,7 @@ struct PageReadStateView<Skeleton: View, Content: View>: View {
         onEmptyAction: (() -> Void)? = nil,
         onNoteAction: (() -> Void)? = nil,
         retryLabel: String = KitWords.RETRY,
+        flat: Bool = false,
         @ViewBuilder skeleton: @escaping () -> Skeleton,
         @ViewBuilder data: @escaping () -> Content
     ) {
@@ -99,6 +103,7 @@ struct PageReadStateView<Skeleton: View, Content: View>: View {
         self.onEmptyAction = onEmptyAction
         self.onNoteAction = onNoteAction
         self.retryLabel = retryLabel
+        self.flat = flat
         self.skeleton = skeleton
         self.data = data
     }
@@ -114,11 +119,18 @@ struct PageReadStateView<Skeleton: View, Content: View>: View {
         case let .empty(empty):
             EmptyStateView(empty, onAction: onEmptyAction)
         case nil:
-            VStack(spacing: 0) {
+            if flat {
                 if page.hasNote {
                     PageNoteBanner(note: page.note, onAction: onNoteAction ?? onRetry)
                 }
                 data()
+            } else {
+                VStack(spacing: 0) {
+                    if page.hasNote {
+                        PageNoteBanner(note: page.note, onAction: onNoteAction ?? onRetry)
+                    }
+                    data()
+                }
             }
         }
     }

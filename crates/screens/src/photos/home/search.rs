@@ -18,7 +18,7 @@ use wire::app_query_response::Answer;
 use super::super::cells::{self, Link};
 use super::super::routes;
 use crate::catalog::load;
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Page, Reading};
 use crate::kit::search as ask;
 use crate::screen::Ctx;
 use crate::strings::{Locale, fill, photos as words, photos_home as sentences};
@@ -30,16 +30,36 @@ const LIMIT: u32 = 500;
 pub enum Content {
     #[default]
     Resting,
-    Failed,
     Hits,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Search {
     pub term: String,
     pub content: Content,
+    /// The read. The resting vocabulary draws before any read, so it starts ready; a failed
+    /// read of the term already shown keeps it under a note, and of a new term is the failure.
+    page: Page<()>,
+    /// The term (trimmed, empty for the resting page) the data on screen answers.
+    shown: Option<String>,
     answer: Option<wire::PhotosSearch>,
     resting: Option<wire::PhotosSearch>,
+}
+
+impl Default for Search {
+    fn default() -> Self {
+        Self {
+            term: String::new(),
+            content: Content::Resting,
+            page: Page::Ready {
+                data: (),
+                note: None,
+            },
+            shown: None,
+            answer: None,
+            resting: None,
+        }
+    }
 }
 
 impl Search {
@@ -75,8 +95,14 @@ impl Search {
                 _ => None,
             },
         );
+        let key = self.term.trim().to_owned();
         match reading {
             Reading::Data(found) => {
+                self.page = Page::Ready {
+                    data: (),
+                    note: None,
+                };
+                self.shown = Some(key);
                 if blank {
                     self.resting = Some(found);
                     self.answer = None;
@@ -86,9 +112,17 @@ impl Search {
                     self.content = Content::Hits;
                 }
             }
+            Reading::Failed if self.shown.as_deref() == Some(key.as_str()) => {
+                let held = std::mem::replace(&mut self.page, Page::loading());
+                self.page = held.after(Reading::Failed, ctx.locale(), |()| false);
+            }
             Reading::Denied(_) | Reading::Failed => {
+                self.page = match reading {
+                    Reading::Denied(denial) => Page::Refused(denial),
+                    _ => Page::Failed,
+                };
                 self.answer = None;
-                self.content = Content::Failed;
+                self.shown = None;
             }
         }
     }
@@ -106,10 +140,15 @@ impl Search {
             query: self.term.clone(),
             ..wire::PhotosSearchView::default()
         };
+        view.page = Some(self.page.wire(
+            locale,
+            |denial| super::super::denied(locale, denial),
+            wire::EmptyState::default,
+        ));
+        if self.page.data().is_none() {
+            return view;
+        }
         view.content = Some(match (&self.content, &self.answer) {
-            (Content::Failed, _) => {
-                wire::photos_search_view::Content::Failure(read::failure(locale))
-            }
             (_, Some(found)) if !term.is_empty() => {
                 if !found.corrected.is_empty() {
                     view.corrected = ask::corrected(locale, &found.corrected);

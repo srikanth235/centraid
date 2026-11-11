@@ -23,43 +23,44 @@ struct PhotosSearchBody: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                switch search.content {
-                case let .resting(resting)?:
-                    RestingView(resting: resting, send: send, open: open)
-                case .loading?:
-                    RowSkeleton()
-                case let .failure(failure)?:
-                    ScreenFailureView(sentence: failure.sentence, remedy: failure.remedy)
-                case let .hits(hits)?:
-                    if hits.hasEmpty {
-                        // NOTHING MATCHED IS NOT NOTHING TYPED. Rust quotes the query
-                        // back and says everywhere search looked.
-                        EmptyStateView(hits.empty)
-                            .accessibilityIdentifier("photos-search-no-match")
-                    } else {
-                        // THE DOORS FIRST (v0 §9: "each one tap from the surface that
-                        // owns it"), then why the grid matched, then the grid.
-                        ForEach(Array(hits.doors.enumerated()), id: \.offset) { _, door in
-                            DoorRow(door: door, open: open)
+                PageReadStateView(
+                    page: search.page,
+                    onRetry: { send(PhotosHomeEvents.make { $0.refreshed = .init() }) }
+                ) {
+                    switch search.content {
+                    case let .resting(resting)?:
+                        RestingView(resting: resting, send: send, open: open)
+                    case let .hits(hits)?:
+                        if hits.hasEmpty {
+                            // NOTHING MATCHED IS NOT NOTHING TYPED. Rust quotes the query
+                            // back and says everywhere search looked.
+                            EmptyStateView(hits.empty)
+                                .accessibilityIdentifier("photos-search-no-match")
+                        } else {
+                            // THE DOORS FIRST (v0 §9: "each one tap from the surface that
+                            // owns it"), then why the grid matched, then the grid.
+                            ForEach(Array(hits.doors.enumerated()), id: \.offset) { _, door in
+                                DoorRow(door: door, open: open)
+                            }
+                            if !hits.matchedLabel.isEmpty {
+                                Text(hits.matchedLabel)
+                                    .centraidType("small")
+                                    .foregroundStyle(Theme.color("textSoft", scheme))
+                                    .lineLimit(2)
+                            }
+                            // `onTap` BY NAME AND NOT AS A TRAILING CLOSURE:
+                            // `PhotoCellsGrid`'s last property is `onFetch`, so a trailing
+                            // closure here would silently wire the download arrow to the
+                            // lightbox and leave every cell tap doing nothing.
+                            PhotoCellsGrid(
+                                cells: hits.tiles,
+                                onTap: { photoID in open(PhotosHomeEvents.lightbox(hits.open, photoID)) },
+                                onFetch: { photoID, _ in send(PhotosHomeEvents.make { $0.originalRequested = photoID }) }
+                            )
                         }
-                        if !hits.matchedLabel.isEmpty {
-                            Text(hits.matchedLabel)
-                                .centraidType("small")
-                                .foregroundStyle(Theme.color("textSoft", scheme))
-                                .lineLimit(2)
-                        }
-                        // `onTap` BY NAME AND NOT AS A TRAILING CLOSURE:
-                        // `PhotoCellsGrid`'s last property is `onFetch`, so a trailing
-                        // closure here would silently wire the download arrow to the
-                        // lightbox and leave every cell tap doing nothing.
-                        PhotoCellsGrid(
-                            cells: hits.tiles,
-                            onTap: { photoID in open(PhotosHomeEvents.lightbox(hits.open, photoID)) },
-                            onFetch: { photoID, _ in send(PhotosHomeEvents.make { $0.originalRequested = photoID }) }
-                        )
+                    case nil:
+                        EmptyView()
                     }
-                case nil:
-                    EmptyView()
                 }
                 // THE ASK ROW closes the answer, matched or not (#1135).
                 if search.hasAsk { SearchAskRow(ask: search.ask, inset: false) }

@@ -50,6 +50,7 @@ import centraid.core.v1.PhotosImportNow
 import centraid.core.v1.PhotosLibrary
 import centraid.core.v1.PhotosLibraryData
 import centraid.core.v1.PhotosNextPage
+import centraid.core.v1.PhotosRefreshed
 import centraid.core.v1.PhotosPinched
 import centraid.core.v1.PhotosSelection
 import centraid.core.v1.PhotosSelectionEvent
@@ -62,8 +63,8 @@ import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.PhotoGridSkeleton
 import dev.centraid.android.kit.PhotosAlbumChoiceSheet
+import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.ScreenEmpty
-import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
@@ -137,92 +138,88 @@ internal fun PhotosLibraryBody(
                     BackupBanner(banner, onEvent)
                 }
             }
-            val loading = library.loading
-            val failure = library.failure
-            when {
-                // THE GRID IS THE LOADING STATE (v0 §14): skeleton tiles at the
-                // rung's real geometry, so nothing reflows when the bytes land.
-                // Never a spinner.
-                loading != null -> Column {
-                    top()
-                    PhotoGridSkeleton(loading.skeleton, state.chrome?.title.orEmpty())
-                }
-
-                failure != null -> Column {
-                    top()
-                    ScreenFailure(
-                        failure.sentence,
-                        failure.remedy,
-                        Modifier.padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp),
-                    )
-                }
-
-                data == null -> Column { top() }
-
-                tiles.isEmpty() -> Column {
-                    top()
-                    // THE FILTER EMPTIED THE GRID, NOT THE LIBRARY — its own
-                    // sentence, never the empty-library copy.
-                    data.empty?.let { empty ->
-                        ScreenEmpty(
-                            sentence = empty.headline,
-                            remedy = empty.body,
-                            modifier = Modifier.padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp),
-                        )
-                    }
-                }
-
-                grain == PhotosGrain.PHOTOS_GRAIN_YEARS || grain == PhotosGrain.PHOTOS_GRAIN_MONTHS -> {
-                    LibraryGrains(
-                        items = data.grain_items,
-                        years = grain == PhotosGrain.PHOTOS_GRAIN_YEARS,
-                        placeDay = library.place_day,
-                        complete = data.complete,
-                        cellCount = tiles.size,
-                        undatedNote = data.undated_note,
-                        loadingMoreLabel = data.loading_more_label,
-                        listState = listState,
-                        top = top,
-                        onOpenPeriod = { day -> onEvent(PhotosHomeEvent(period_opened = day)) },
-                        onMore = { onEvent(PhotosHomeEvent(next_page = PhotosNextPage())) },
-                        onPinch = { scale -> onEvent(pinched(scale, visibleDay.value)) },
-                    )
-                    ReportVisibleDay(listState, visibleDay) { index -> grainDayAt(data.grain_items, index) }
-                }
-
-                else -> {
-                    LandOnDay(listState, data, library.place_day)
-                    LibraryTimeline(
-                        tiles = tiles,
-                        rows = data.rows,
-                        rung = library.rung,
-                        selecting = selection.selecting,
-                        selected = selected,
-                        complete = data.complete,
-                        loadingMoreLabel = data.loading_more_label,
-                        scrub = ScrubWords(data.scrub_label, data.scrub_next_label, data.scrub_previous_label),
-                        listState = listState,
-                        top = top,
-                        onTile = { photoId ->
-                            if (selection.selecting) {
-                                onEvent(PhotosHomeEvent(selection = toggled(photoId)))
-                            } else {
-                                // A CELL OPENS THE PHOTOGRAPH, and the loaded
-                                // library's own order rides along as the
-                                // neighbours — so a swipe in the lightbox costs
-                                // no read, and it walks the library in the order
-                                // the member is looking at.
-                                lightboxRoute(data, photoId)?.let(onOpen)
+            // BANNER FIRST while nothing is drawn: a read that has not landed (or came to nothing)
+            // still shows what the camera roll is saying.
+            Column(Modifier.fillMaxSize()) {
+                if (data == null) top()
+                ReadStateView(
+                    page = library.page!!,
+                    onRetry = { onEvent(PhotosHomeEvent(refreshed = PhotosRefreshed())) },
+                    modifier = Modifier.weight(1f),
+                    // THE GRID IS THE LOADING STATE (v0 §14): skeleton tiles at the
+                    // rung's real geometry, so nothing reflows when the bytes land.
+                    // Never a spinner.
+                    skeleton = { PhotoGridSkeleton(library.skeleton, state.chrome?.title.orEmpty()) },
+                ) {
+                    if (data != null) {
+                        when {
+                            tiles.isEmpty() -> Column {
+                                top()
+                                // THE FILTER EMPTIED THE GRID, NOT THE LIBRARY — its own
+                                // sentence, never the empty-library copy.
+                                data.empty?.let { empty ->
+                                    ScreenEmpty(
+                                        sentence = empty.headline,
+                                        remedy = empty.body,
+                                        modifier = Modifier.padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp),
+                                    )
+                                }
                             }
-                        },
-                        onPick = { ids, picked ->
-                            onEvent(PhotosHomeEvent(selection = pickedSet(ids, picked)))
-                        },
-                        onFetch = { photoId, _ -> onEvent(PhotosHomeEvent(original_requested = photoId)) },
-                        onMore = { onEvent(PhotosHomeEvent(next_page = PhotosNextPage())) },
-                        onPinch = { scale -> onEvent(pinched(scale, visibleDay.value)) },
-                    )
-                    ReportVisibleDay(listState, visibleDay) { index -> dayOfRow(data.rows.getOrNull(index - 1)) }
+
+                            grain == PhotosGrain.PHOTOS_GRAIN_YEARS || grain == PhotosGrain.PHOTOS_GRAIN_MONTHS -> {
+                                LibraryGrains(
+                                    items = data.grain_items,
+                                    years = grain == PhotosGrain.PHOTOS_GRAIN_YEARS,
+                                    placeDay = library.place_day,
+                                    complete = data.complete,
+                                    cellCount = tiles.size,
+                                    undatedNote = data.undated_note,
+                                    loadingMoreLabel = data.loading_more_label,
+                                    listState = listState,
+                                    top = top,
+                                    onOpenPeriod = { day -> onEvent(PhotosHomeEvent(period_opened = day)) },
+                                    onMore = { onEvent(PhotosHomeEvent(next_page = PhotosNextPage())) },
+                                    onPinch = { scale -> onEvent(pinched(scale, visibleDay.value)) },
+                                )
+                                ReportVisibleDay(listState, visibleDay) { index -> grainDayAt(data.grain_items, index) }
+                            }
+
+                            else -> {
+                                LandOnDay(listState, data, library.place_day)
+                                LibraryTimeline(
+                                    tiles = tiles,
+                                    rows = data.rows,
+                                    rung = library.rung,
+                                    selecting = selection.selecting,
+                                    selected = selected,
+                                    complete = data.complete,
+                                    loadingMoreLabel = data.loading_more_label,
+                                    scrub = ScrubWords(data.scrub_label, data.scrub_next_label, data.scrub_previous_label),
+                                    listState = listState,
+                                    top = top,
+                                    onTile = { photoId ->
+                                        if (selection.selecting) {
+                                            onEvent(PhotosHomeEvent(selection = toggled(photoId)))
+                                        } else {
+                                            // A CELL OPENS THE PHOTOGRAPH, and the loaded
+                                            // library's own order rides along as the
+                                            // neighbours — so a swipe in the lightbox costs
+                                            // no read, and it walks the library in the order
+                                            // the member is looking at.
+                                            lightboxRoute(data, photoId)?.let(onOpen)
+                                        }
+                                    },
+                                    onPick = { ids, picked ->
+                                        onEvent(PhotosHomeEvent(selection = pickedSet(ids, picked)))
+                                    },
+                                    onFetch = { photoId, _ -> onEvent(PhotosHomeEvent(original_requested = photoId)) },
+                                    onMore = { onEvent(PhotosHomeEvent(next_page = PhotosNextPage())) },
+                                    onPinch = { scale -> onEvent(pinched(scale, visibleDay.value)) },
+                                )
+                                ReportVisibleDay(listState, visibleDay) { index -> dayOfRow(data.rows.getOrNull(index - 1)) }
+                            }
+                        }
+                    }
                 }
             }
         }

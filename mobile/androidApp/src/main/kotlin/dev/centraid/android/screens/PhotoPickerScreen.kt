@@ -22,6 +22,7 @@ import dev.centraid.android.kit.KitText
 import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.PhotoCellsGrid
+import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SheetPage
 import dev.centraid.android.kit.ScreenEmpty
@@ -61,35 +62,38 @@ public fun PhotoPickerScreen(
         ) {
             state.status?.let { ScreenFailure(it.sentence, "") }
 
-            val loading = state.loading
-            val failure = state.failure
             val data = state.data_
-            when {
-                loading != null -> RowSkeleton()
-                failure != null -> ScreenFailure(failure.sentence, failure.remedy)
-                data != null -> {
+            ReadStateView(
+                page = state.page!!,
+                onRetry = { onEvent(PhotosPickerEvent(refreshed = PhotosPickerEvent.Refreshed())) },
+                modifier = Modifier.weight(1f),
+                skeleton = { RowSkeleton() },
+            ) {
+                if (data != null) {
                     val empty = data.empty
                     if (empty != null) {
                         ScreenEmpty(sentence = empty.headline, remedy = empty.body)
                     } else {
                         // TAKEN, NOT HIDDEN: a member hunting for the photograph they
                         // added last week finds it, and finds out why it will not tick.
-                        PhotoCellsGrid(
-                            cells = data.cells.map { it.tile!! },
-                            modifier = Modifier.weight(1f),
-                            selected = data.cells.filter { it.picked }.map { it.tile!!.photo_id }.toSet(),
-                            taken = data.cells.filter { it.taken }.map { it.tile!!.photo_id }.toSet(),
-                            showsRing = true,
-                            takenLabel = data.taken_label,
-                            onTap = { photoId ->
-                                onEvent(PhotosPickerEvent(pick = PhotosPickerEvent.PickToggled(photo_id = photoId)))
-                            },
-                        )
-                        if (data.can_show_more) {
-                            KitLink(
-                                label = data.show_more_label,
-                                onClick = { onEvent(PhotosPickerEvent(load_more = PhotosPickerEvent.LoadMore())) },
+                        Column(Modifier.fillMaxSize()) {
+                            PhotoCellsGrid(
+                                cells = data.cells.map { it.tile!! },
+                                modifier = Modifier.weight(1f),
+                                selected = data.cells.filter { it.picked }.map { it.tile!!.photo_id }.toSet(),
+                                taken = data.cells.filter { it.taken }.map { it.tile!!.photo_id }.toSet(),
+                                showsRing = true,
+                                takenLabel = data.taken_label,
+                                onTap = { photoId ->
+                                    onEvent(PhotosPickerEvent(pick = PhotosPickerEvent.PickToggled(photo_id = photoId)))
+                                },
                             )
+                            if (data.can_show_more) {
+                                KitLink(
+                                    label = data.show_more_label,
+                                    onClick = { onEvent(PhotosPickerEvent(load_more = PhotosPickerEvent.LoadMore())) },
+                                )
+                            }
                         }
                     }
                 }

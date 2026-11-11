@@ -31,12 +31,9 @@ message CameraRead {
 
 message PhotosLightboxState {
   string photo_id = 1;
-  oneof content {
-    Loading loading = 2;
-    Failure failure = 3;
-    Denied denied = 4;
-    PhotosLightboxPhoto photo = 5;
-  }
+  PageState page = 2;
+  // Set when the page is ready.
+  optional PhotosLightboxPhoto photo = 5;
   // CHROME IS A STATE, NOT AN ANIMATION: a member who put the bars away and
   // rotated the phone does not get them back.
   bool chrome_visible = 6;
@@ -412,12 +409,9 @@ message PhotosEditorState {
   string photo_id = 1;
   // "Crop and rotate".
   string title = 2;
-  oneof content {
-    Loading loading = 3;
-    Failure failure = 4;
-    Denied denied = 5;
-    PhotosEditorData data = 6;
-  }
+  PageState page = 3;
+  // Set when the page is ready.
+  optional PhotosEditorData data = 6;
   Phase phase = 7;
   PhotosEditPlan plan = 8;
   // "Crop Square · rotation +90° · flip ↔", or "Saving new photo".

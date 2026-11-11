@@ -69,8 +69,8 @@ struct PhotosLightboxView: View {
         ZStack {
             // THE STAGE IS THE DARKEST SURFACE AND IT IS NOT THE PAGE.
             Theme.color("stage", scheme).ignoresSafeArea()
-            switch state.content {
-            case .loading?, nil:
+            switch state.page.state {
+            case .loading?, .empty?:
                 // BEFORE THE READ LANDS THE STAGE STILL DRAWS what it has — the
                 // strip frame of the photograph a member swiped to — and a ring
                 // only over a stage with nothing at all.
@@ -80,12 +80,13 @@ struct PhotosLightboxView: View {
                         .centraidType("small")
                         .foregroundStyle(Theme.color("onStageSoft", scheme))
                 }
-            case let .denied(denied)?:
+            case let .refused(denied)?:
                 DeniedGate(denied)
-            case let .failure(failure)?:
+            case let .failed(failure)?:
                 ScreenFailureView(sentence: failure.sentence, remedy: failure.remedy)
                     .padding(CentraidGeometry.pageMargin)
-            case let .photo(photo)?:
+            case nil:
+                let photo = state.photo
                 stage(model).ignoresSafeArea()
                 if model.drawablePath == nil {
                     // NEVER A BROKEN IMAGE. Each of these is a truthful state.
@@ -117,29 +118,31 @@ struct PhotosLightboxView: View {
             Surface.page.ignoresSafeArea()
             VStack(spacing: 0) {
                 lightHeader()
-                switch state.content {
-                case .loading?, nil:
-                    band(model, photo: nil, infoOpen: false)
-                case let .denied(denied)?:
-                    DeniedGate(denied)
-                case let .failure(failure)?:
-                    ScreenFailureView(sentence: failure.sentence, remedy: failure.remedy)
-                        .padding(CentraidGeometry.pageMargin)
-                    Spacer(minLength: 0)
-                case let .photo(photo)?:
-                    band(model, photo: photo, infoOpen: infoOpen)
-                    if infoOpen {
-                        ScrollView {
-                            PhotosLightboxInfo(state: state, photo: photo, send: send, open: open)
-                                .padding(.bottom, 16)
+                // THE FIRST READ DRAWS THE BAND ALONE (the frame is already known from the film); a
+                // failed or refused one the shared failure or gate; a failed re-read keeps the
+                // photograph under the one-sentence note.
+                PageReadStateView(
+                    page: state.page,
+                    onRetry: { send(.refreshed(.init())) },
+                    skeleton: { band(model, photo: nil, infoOpen: false) },
+                    data: {
+                        if state.hasPhoto {
+                            let photo = state.photo
+                            band(model, photo: photo, infoOpen: infoOpen)
+                            if infoOpen {
+                                ScrollView {
+                                    PhotosLightboxInfo(state: state, photo: photo, send: send, open: open)
+                                        .padding(.bottom, 16)
+                                }
+                                .scrollDismissesKeyboard(.interactively)
+                                .kitTransition(.move(edge: .bottom).combined(with: .opacity))
+                            }
+                            // THE BAR NEVER COVERS THE DETAILS: it is the page's last row, so the photograph and
+                            // the cards are laid out above it and the Place card's links are never under it.
+                            lightToolbar(photo)
                         }
-                        .scrollDismissesKeyboard(.interactively)
-                        .kitTransition(.move(edge: .bottom).combined(with: .opacity))
                     }
-                    // THE BAR NEVER COVERS THE DETAILS: it is the page's last row, so the photograph and
-                    // the cards are laid out above it and the Place card's links are never under it.
-                    lightToolbar(photo)
-                }
+                )
             }
         }
         .animation(reduceMotion ? nil : .timingCurve(0.3, 0, 0.4, 1, duration: CentraidGeometry.durationOne / 1000), value: infoOpen)
@@ -149,7 +152,7 @@ struct PhotosLightboxView: View {
     /// The top row: close, the stamp (WHEN outranks WHAT), the menu.
     private func lightHeader() -> some View {
         let stamp = { () -> (String, String) in
-            if case let .photo(photo)? = state.content { return (photo.stampDate, photo.stampLine) }
+            if state.hasPhoto { return (state.photo.stampDate, state.photo.stampLine) }
             return ("", "")
         }()
         return HStack(alignment: .center) {
@@ -394,7 +397,7 @@ struct PhotosLightboxView: View {
     private func toolbar(light: Bool = false) -> some View {
         let reasons = Array(Set(state.toolbar.filter { !$0.enabled && !$0.why.isEmpty }.map(\.why))).sorted()
         var trashed = false
-        if case let .photo(photo)? = state.content { trashed = photo.trashed }
+        if state.hasPhoto { trashed = state.photo.trashed }
         // THE POINTER EQUIVALENT FOR SWIPE: nothing here is reachable by gesture alone.
         // The arrows are the ends of the one row, so they line up with the verbs between
         // them; the ids are Rust's `previous_id` and `next_id`, empty at either end.
@@ -846,8 +849,7 @@ struct PhotosLightboxModel {
     let state: Centraid_Core_V1_PhotosLightboxState
 
     var photo: Centraid_Core_V1_PhotosLightboxPhoto? {
-        if case let .photo(value)? = state.content { return value }
-        return nil
+        state.hasPhoto ? state.photo : nil
     }
 
     var photoID: String { state.photoID }

@@ -52,6 +52,7 @@ import dev.centraid.android.kit.ContentImage
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.KitSegmented
+import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.ScreenEmpty
 import dev.centraid.android.kit.ScreenFailure
@@ -103,37 +104,40 @@ public fun PlacesScreen(
         // A REFUSED RENAME, OVER THE LIST AND NEVER INSTEAD OF IT.
         state.status?.let { ScreenFailure(it.sentence, "") }
 
-        val loading = state.loading
-        val failure = state.failure
         val data = state.data_
-        when {
-            loading != null -> RowSkeleton()
-            failure != null -> ScreenFailure(failure.sentence, failure.remedy)
-            data != null -> {
-                val empty = data.empty
-                val mapEmpty = data.map_empty
-                if (empty != null) {
-                    ScreenEmpty(sentence = empty.headline, remedy = empty.body)
-                } else if (map && mapEmpty != null) {
-                    ScreenEmpty(sentence = mapEmpty.headline, remedy = mapEmpty.body)
-                } else if (map) {
-                    PlacesPlot(data, onOpen)
-                } else {
-                    PlaceCards(
-                        places = data.places,
-                        modifier = Modifier.weight(1f),
-                        onOpen = onOpen,
-                        onName = { row ->
-                            seed = row.current_name
-                            onEvent(
-                                PhotosPlacesEvent(
-                                    name_requested = PhotosPlacesEvent.NameRequested(place_id = row.place_id),
-                                ),
-                            )
-                        },
-                    )
+        ReadStateView(
+            page = state.page!!,
+            onRetry = { onEvent(PhotosPlacesEvent(refreshed = PhotosPlacesEvent.Refreshed())) },
+            modifier = Modifier.weight(1f),
+            skeleton = { RowSkeleton() },
+        ) {
+            if (data != null) {
+                Column(Modifier.fillMaxSize()) {
+                    val empty = data.empty
+                    val mapEmpty = data.map_empty
+                    if (empty != null) {
+                        ScreenEmpty(sentence = empty.headline, remedy = empty.body)
+                    } else if (map && mapEmpty != null) {
+                        ScreenEmpty(sentence = mapEmpty.headline, remedy = mapEmpty.body)
+                    } else if (map) {
+                        PlacesPlot(data, onOpen)
+                    } else {
+                        PlaceCards(
+                            places = data.places,
+                            modifier = Modifier.weight(1f),
+                            onOpen = onOpen,
+                            onName = { row ->
+                                seed = row.current_name
+                                onEvent(
+                                    PhotosPlacesEvent(
+                                        name_requested = PhotosPlacesEvent.NameRequested(place_id = row.place_id),
+                                    ),
+                                )
+                            },
+                        )
+                    }
+                    Footer(data = data, isMap = map, onOpen = onOpen)
                 }
-                Footer(data = data, isMap = map, onOpen = onOpen)
             }
         }
     }

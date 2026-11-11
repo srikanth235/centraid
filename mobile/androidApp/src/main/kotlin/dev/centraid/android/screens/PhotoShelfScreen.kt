@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -47,6 +48,7 @@ import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.PhotoCellsGrid
 import dev.centraid.android.kit.PhotosAlbumChoiceSheet
+import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.ScreenEmpty
 import dev.centraid.android.kit.ScreenFailure
@@ -231,32 +233,36 @@ public fun PhotoShelfScreen(
             Text(text = state.notice, style = centraidType("small"), color = centraidColor("textSoft"))
         }
 
-        val loading = state.loading
-        val failure = state.failure
-        when {
-            loading != null -> RowSkeleton()
-            failure != null -> ScreenFailure(failure.sentence, failure.remedy)
-            data != null -> {
+        ReadStateView(
+            page = state.page!!,
+            onRetry = { onEvent(PhotosShelfEvent(refreshed = PhotosShelfEvent.Refreshed())) },
+            modifier = Modifier.weight(1f),
+            skeleton = { RowSkeleton() },
+        ) {
+            if (data != null) {
                 val empty = data.empty
                 if (empty != null) {
                     ScreenEmpty(sentence = empty.headline, remedy = empty.body)
                 } else {
-                    PhotoCellsGrid(
-                        cells = data.cells.map { it.tile!! },
-                        selected = selection?.selected_ids.orEmpty().toSet(),
-                        onTap = { photoId ->
-                            if (selecting) {
-                                select(PhotosSelectionEvent(toggled = PhotosSelectionEvent.Toggled(photo_id = photoId)))
-                            } else {
-                                data.cells.firstOrNull { it.tile?.photo_id == photoId }?.open_?.let(onOpen)
-                            }
-                        },
-                    )
-                    if (data.can_show_more) {
-                        KitLink(
-                            label = data.show_more_label,
-                            onClick = { onEvent(PhotosShelfEvent(load_more = PhotosShelfEvent.LoadMore())) },
+                    Column(Modifier.fillMaxSize()) {
+                        PhotoCellsGrid(
+                            cells = data.cells.map { it.tile!! },
+                            modifier = Modifier.weight(1f),
+                            selected = selection?.selected_ids.orEmpty().toSet(),
+                            onTap = { photoId ->
+                                if (selecting) {
+                                    select(PhotosSelectionEvent(toggled = PhotosSelectionEvent.Toggled(photo_id = photoId)))
+                                } else {
+                                    data.cells.firstOrNull { it.tile?.photo_id == photoId }?.open_?.let(onOpen)
+                                }
+                            },
                         )
+                        if (data.can_show_more) {
+                            KitLink(
+                                label = data.show_more_label,
+                                onClick = { onEvent(PhotosShelfEvent(load_more = PhotosShelfEvent.LoadMore())) },
+                            )
+                        }
                     }
                 }
             }

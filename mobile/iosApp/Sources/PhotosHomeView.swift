@@ -34,7 +34,7 @@ struct PhotosHomeView: View {
     private var collecting: Bool { state.destination == .collections }
     private var selecting: Bool { !collecting && !searching && selection.selecting }
     private var hasTiles: Bool {
-        if state.hasLibrary, case let .data(data)? = state.library.content { return !data.tiles.isEmpty }
+        if state.hasLibrary, state.library.hasData { return !state.library.data.tiles.isEmpty }
         return false
     }
 

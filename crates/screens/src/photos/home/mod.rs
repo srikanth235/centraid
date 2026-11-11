@@ -50,6 +50,7 @@ use super::selection::{Drain, Offer, Outcome, Selection, Verb, Wording};
 use super::{fetch, free_up, routes};
 use crate::kit::owner::{Answer as Owner, Leaving, NoPasscode, OwnerGate};
 use crate::kit::quantity::UnitsPref;
+use crate::kit::read::Page;
 use crate::kit::{civil, menu};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, photos as words, photos_home as sentences};
@@ -637,30 +638,25 @@ impl Home {
     fn library_view(&self, locale: Locale) -> wire::PhotosLibrary {
         let rung = self.rung;
         let target = f64::from(layout::RUNG_HEIGHTS[layout::clamp_rung(rung) as usize]);
-        let content = match self.library.phase {
-            library::Phase::Failed => {
-                wire::photos_library::Content::Failure(crate::kit::read::failure(locale))
-            }
-            library::Phase::Loading => {
-                wire::photos_library::Content::Loading(wire::PhotosLibraryLoading {
-                    skeleton: if self.viewport.0 > 0.0 {
-                        layout::skeleton(self.viewport.0, target, self.viewport.1)
-                            .into_iter()
-                            .map(|row| wire::PhotosPackedRow {
-                                packed: row.into_iter().map(|t| packed(&t)).collect(),
-                            })
-                            .collect()
-                    } else {
-                        Vec::new()
-                    },
-                })
-            }
-            library::Phase::Ready => {
-                wire::photos_library::Content::Data(Box::new(self.library_data(locale, target)))
-            }
-        };
+        let loading = matches!(self.library.page, Page::Loading { .. });
+        let page = self.library.drawn(locale);
         wire::PhotosLibrary {
-            content: Some(content),
+            page: Some(page.wire(
+                locale,
+                |denial| crate::photos::denied(locale, denial),
+                wire::EmptyState::default,
+            )),
+            skeleton: if loading && self.viewport.0 > 0.0 {
+                layout::skeleton(self.viewport.0, target, self.viewport.1)
+                    .into_iter()
+                    .map(|row| wire::PhotosPackedRow {
+                        packed: row.into_iter().map(|t| packed(&t)).collect(),
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            },
+            data: page.data().map(|()| self.library_data(locale, target)),
             grain: self.grain as i32,
             filter: self.filter as i32,
             rung,

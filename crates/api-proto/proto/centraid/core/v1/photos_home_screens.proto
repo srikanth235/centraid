@@ -139,12 +139,13 @@ message PhotosHomeChrome {
 // ---------------------------------------------------------------------------
 
 message PhotosLibrary {
-  oneof content {
-    // The grid is the loading state: the skeleton's rows, packed at the rung.
-    PhotosLibraryLoading loading = 1;
-    Failure failure = 2;
-    PhotosLibraryData data = 3;
-  }
+  // The read: loading, failed, refused, or ready (with a note when a refresh or a next page
+  // failed over the photographs shown).
+  PageState page = 1;
+  // The grid is the loading state: the skeleton's rows, packed at the rung. Only while loading.
+  repeated PhotosPackedRow skeleton = 2;
+  // Set when the page is ready.
+  optional PhotosLibraryData data = 3;
   PhotosGrain grain = 4;
   PhotosFilter filter = 5;
   // 0-3, XS to L.
@@ -152,10 +153,6 @@ message PhotosLibrary {
   // WHERE THE MEMBER IS, capture-local `YYYY-MM-DD`, so a grain switch lands on
   // the same stretch of time; empty is the top.
   string place_day = 7;
-}
-
-message PhotosLibraryLoading {
-  repeated PhotosPackedRow skeleton = 1;
 }
 
 message PhotosLibraryData {
@@ -250,11 +247,9 @@ message PhotosPeriod {
 // ---------------------------------------------------------------------------
 
 message PhotosCollections {
-  oneof content {
-    Loading loading = 1;
-    Failure failure = 2;
-    PhotosCollectionsData data = 3;
-  }
+  PageState page = 1;
+  // Set when the page is ready.
+  optional PhotosCollectionsData data = 2;
   // The sections the member folded.
   repeated string folded = 4;
   // "New album": the field's value and whether Create can run.
@@ -326,10 +321,10 @@ message PhotosCollectionCard {
 
 message PhotosSearchView {
   string query = 1;
+  PageState page = 3;
+  // What a ready page holds: the resting vocabulary, or the hits for the query.
   oneof content {
     PhotosSearchResting resting = 2;
-    Loading loading = 3;
-    Failure failure = 4;
     PhotosSearchHits hits = 5;
   }
   // "Including results for “x”": set only for a current corrected answer.

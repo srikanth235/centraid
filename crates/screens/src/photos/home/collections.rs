@@ -19,7 +19,7 @@ use super::super::routes;
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::export;
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Page};
 use crate::kit::undo::Undo;
 use crate::screen::Ctx;
 use crate::strings::{
@@ -32,25 +32,39 @@ pub const UTILITIES: &str = "utilities";
 pub const DELETED: &str = "deleted";
 const SECTIONS: [&str; 4] = [PINNED, ALBUMS, UTILITIES, DELETED];
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Collections {
-    pub reading: Option<Reading<wire::PhotosAlbums>>,
+    /// The albums read, as a page: nothing yet is loading, and a failed refresh keeps them.
+    pub page: Page<wire::PhotosAlbums>,
     pub folded: Vec<String>,
     pub new_album_name: String,
     /// The album a delete confirm is asking about.
     pub deleting: Option<String>,
 }
 
+impl Default for Collections {
+    fn default() -> Self {
+        Self {
+            page: Page::loading(),
+            folded: Vec::new(),
+            new_album_name: String::new(),
+            deleting: None,
+        }
+    }
+}
+
 impl Collections {
     pub fn read(&mut self, ctx: &Ctx) {
-        self.reading = Some(read::read(
+        let reading = read::read(
             ctx,
             load::photos::Albums::default(),
             |answer| match answer {
                 Answer::PhotosAlbums(albums) => Some(*albums),
                 _ => None,
             },
-        ));
+        );
+        let held = std::mem::replace(&mut self.page, Page::loading());
+        self.page = held.after(reading, ctx.locale(), |_| false);
     }
 
     pub fn toggle(&mut self, section: &str) {
@@ -151,19 +165,15 @@ impl Collections {
     }
 
     pub fn view(&self, locale: Locale, link: Link) -> wire::PhotosCollections {
-        let content = match &self.reading {
-            None => wire::photos_collections::Content::Loading(wire::Loading { first_load: true }),
-            Some(Reading::Data(albums)) => {
-                wire::photos_collections::Content::Data(wire::PhotosCollectionsData {
-                    sections: self.sections(locale, link, albums),
-                })
-            }
-            Some(Reading::Denied(_) | Reading::Failed) => {
-                wire::photos_collections::Content::Failure(read::failure(locale))
-            }
-        };
         wire::PhotosCollections {
-            content: Some(content),
+            page: Some(self.page.wire(
+                locale,
+                |denial| super::super::denied(locale, denial),
+                wire::EmptyState::default,
+            )),
+            data: self.page.data().map(|albums| wire::PhotosCollectionsData {
+                sections: self.sections(locale, link, albums),
+            }),
             folded: self.folded.clone(),
             new_album_name: self.new_album_name.clone(),
             new_album_can_submit: !self.new_album_name.trim().is_empty(),

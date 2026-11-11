@@ -69,11 +69,11 @@ import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.OutlineButton
+import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
 import androidx.compose.ui.text.font.FontWeight
 import dev.centraid.design.CentraidScale
-import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.kit.StageSpinner
 import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
@@ -132,27 +132,24 @@ public fun PhotosEditorScreen(
             if (saved != null) onSaved(saved) else onClose()
         }
     }
-    val loading = state.loading
-    val failure = state.failure
     val data = state.data_
     Box(modifier = Modifier.fillMaxSize().background(Surface.page)) {
-        when {
-            loading != null -> StageSpinner(modifier = Modifier.align(Alignment.Center))
-
-            failure != null -> Column(
-                modifier = Modifier.align(Alignment.Center).padding(KitGeometry.GUTTER),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                ScreenFailure(sentence = failure.sentence, remedy = failure.remedy)
-                OutlineButton(
-                    label = words.cancel,
-                    testTag = "editor-failure-cancel",
-                    ink = "text",
-                    onPress = { onEvent(PhotosEditorEvent(cancel = PhotosEditorEvent.Cancelled())) },
-                )
-            }
-
-            data != null -> Editor(state, data, words, onEvent, ink, soft)
+        ReadStateView(
+            page = state.page!!,
+            onRetry = { onEvent(PhotosEditorEvent(refreshed = PhotosEditorEvent.Refreshed())) },
+            skeleton = { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { StageSpinner() } },
+        ) {
+            if (data != null) Editor(state, data, words, onEvent, ink, soft)
+        }
+        // THE WAY OUT when there is nothing to edit: a failed or refused read has no top bar.
+        if (data == null && state.page?.loading == null) {
+            OutlineButton(
+                label = words.cancel,
+                testTag = "editor-failure-cancel",
+                ink = "text",
+                onPress = { onEvent(PhotosEditorEvent(cancel = PhotosEditorEvent.Cancelled())) },
+                modifier = Modifier.align(Alignment.BottomCenter).padding(KitGeometry.GUTTER),
+            )
         }
     }
     state.discard?.let { discard ->

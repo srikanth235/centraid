@@ -211,9 +211,9 @@ fn opened(bytes: &[u8]) -> (Driver, u64, String) {
 }
 
 fn data(state: &wire::PhotosEditorState) -> &wire::PhotosEditorData {
-    match &state.content {
-        Some(wire::photos_editor_state::Content::Data(data)) => data,
-        other => panic!("no data: {other:?}"),
+    match &state.data {
+        Some(data) => data,
+        None => panic!("no data: {:?}", state.page),
     }
 }
 

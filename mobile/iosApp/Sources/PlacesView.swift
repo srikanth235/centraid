@@ -53,22 +53,20 @@ struct PlacesView: View {
                         .kitCard()
                 }
 
-                switch state.content {
-                case .loading?, nil:
-                    RowSkeleton()
-                case let .failure(failure)?:
-                    ScreenFailureView(sentence: failure.sentence, remedy: failure.remedy)
-                case let .data(data)?:
-                    if data.hasEmpty {
-                        ScreenEmptyView(sentence: data.empty.headline, remedy: data.empty.body)
-                    } else if state.presentation == .map, data.hasMapEmpty {
-                        ScreenEmptyView(sentence: data.mapEmpty.headline, remedy: data.mapEmpty.body)
-                    } else if state.presentation == .map {
-                        PlacesPlot(data: data, open: open)
-                    } else {
-                        cards(data.places)
+                PageReadStateView(page: state.page, onRetry: { event { $0.refreshed = .init() } }) {
+                    if state.hasData {
+                        let data = state.data
+                        if data.hasEmpty {
+                            ScreenEmptyView(sentence: data.empty.headline, remedy: data.empty.body)
+                        } else if state.presentation == .map, data.hasMapEmpty {
+                            ScreenEmptyView(sentence: data.mapEmpty.headline, remedy: data.mapEmpty.body)
+                        } else if state.presentation == .map {
+                            PlacesPlot(data: data, open: open)
+                        } else {
+                            cards(data.places)
+                        }
+                        footer(data)
                     }
-                    footer(data)
                 }
             }
             .padding(.vertical, 12)

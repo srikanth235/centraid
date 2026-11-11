@@ -121,6 +121,7 @@ catalog! {
     plain yesterday = ("Yesterday", "Yesterday");
     plain read_failed = ("Couldn't read this. Try again.", "Couldn't read this. Try again.");
     plain read_refresh_failed = ("Couldn’t refresh; showing what was here.", "Couldn’t refresh; showing what was here.");
+    plain read_more_failed = ("Couldn’t load the rest; showing what loaded.", "Couldn’t load the rest; showing what loaded.");
     plain read_incomplete = ("Part of this didn't arrive. Try again.", "Part of this didn't arrive. Try again.");
     plain write_refused = ("That change wasn't saved.", "That change wasn't saved.");
     plain owner_locked_out = ("Too many tries. Unlock the phone with its passcode, then try again.", "Too many tries. Unlock the phone with its passcode, then try again.");

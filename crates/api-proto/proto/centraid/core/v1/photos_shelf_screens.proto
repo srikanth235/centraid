@@ -24,11 +24,9 @@ message PhotosShelfState {
   // (an album's name, a place's phrase).
   string title = 1;
   PhotosShelfKind kind = 2;
-  oneof content {
-    Loading loading = 3;
-    Failure failure = 4;
-    PhotosShelfData data = 5;
-  }
+  PageState page = 3;
+  // Set when the page is ready.
+  optional PhotosShelfData data = 4;
   // Select mode, the picked set, the bar and the confirm over its destructive
   // verbs.
   PhotosSelection selection = 6;
@@ -167,9 +165,13 @@ message PhotosShelfEvent {
     AlbumRestored album_restored = 11;
     // "Download original": the pick into this device's photos.
     DownloadRequested download = 12;
+    // Retry: read the shelf again (a failed read's Retry, or a note's).
+    Refreshed refreshed = 13;
   }
 
   message LoadMore {}
+
+  message Refreshed {}
 
   message PromptOpened {
     PhotosShelfState.Prompt prompt = 1;
@@ -230,11 +232,9 @@ message PhotosPickerState {
   bool add_enabled = 4;
   // "An album points to a photo where it lives."
   string refers_note = 5;
-  oneof content {
-    Loading loading = 6;
-    Failure failure = 7;
-    PhotosPickerData data = 8;
-  }
+  PageState page = 6;
+  // Set when the page is ready.
+  optional PhotosPickerData data = 7;
   optional StatusLine status = 9;
   // Every pick landed: the shell pops.
   bool finished = 10;
@@ -245,9 +245,13 @@ message PhotosPickerEvent {
     LoadMore load_more = 1;
     PickToggled pick = 2;
     ConfirmRequested confirm = 3;
+    // Retry: read the library again.
+    Refreshed refreshed = 4;
   }
 
   message LoadMore {}
+
+  message Refreshed {}
 
   message PickToggled {
     string photo_id = 1;
@@ -311,11 +315,9 @@ message PhotosPlacesState {
   Presentation presentation = 2;
   string cards_label = 3;
   string map_label = 4;
-  oneof content {
-    Loading loading = 5;
-    Failure failure = 6;
-    PhotosPlacesData data = 7;
-  }
+  PageState page = 5;
+  // Set when the page is ready.
+  optional PhotosPlacesData data = 6;
   // A refused rename, in its own slot.
   optional StatusLine status = 8;
   // The sheet that names a place.
@@ -344,7 +346,11 @@ message PhotosPlacesEvent {
     NameRequested name_requested = 2;
     NameDismissed name_dismissed = 3;
     Renamed renamed = 4;
+    // Retry: read the places again.
+    Refreshed refreshed = 5;
   }
+
+  message Refreshed {}
 
   message PresentationChanged {
     PhotosPlacesState.Presentation presentation = 1;

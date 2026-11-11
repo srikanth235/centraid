@@ -28,9 +28,10 @@ fn state(d: &Driver, instance: u64) -> &wire::PhotosPickerState {
 }
 
 fn data(d: &Driver, instance: u64) -> &wire::PhotosPickerData {
-    match &state(d, instance).content {
-        Some(wire::photos_picker_state::Content::Data(data)) => data,
-        other => panic!("no data: {other:?}"),
+    let state = state(d, instance);
+    match &state.data {
+        Some(data) => data,
+        None => panic!("no data: {:?}", state.page),
     }
 }
 
@@ -146,7 +147,7 @@ fn confirm_adds_each_pick_to_the_album_and_finishes_when_all_landed() {
     let Some(wire::view_state::Kind::PhotosShelf(shelf)) = &d.view(shelf).kind else {
         panic!("a shelf");
     };
-    let Some(wire::photos_shelf_state::Content::Data(members)) = &shelf.content else {
+    let Some(members) = &shelf.data else {
         panic!("data");
     };
     assert_eq!(members.cells.len(), 2);
@@ -167,10 +168,7 @@ fn a_refused_add_keeps_the_pick_and_the_grid_and_says_why() {
     assert!(!view.finished);
     let status = view.status.as_ref().expect("the vault's sentence");
     assert!(status.refused && !status.sentence.is_empty());
-    assert!(matches!(
-        view.content,
-        Some(wire::photos_picker_state::Content::Data(_))
-    ));
+    assert!(view.data.is_some());
     // The one that landed is taken; the one the vault refused is still picked.
     assert!(cell(&d, picker, &good).taken);
     assert_eq!(view.add_label, "Add 1");

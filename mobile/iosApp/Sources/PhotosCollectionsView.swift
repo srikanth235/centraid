@@ -29,30 +29,29 @@ struct PhotosCollectionsBody: View {
         // The room's scroll view is this one: the header and band are `AppPlace`'s.
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                switch collections.content {
-                case .loading?:
-                    RowSkeleton()
-                case let .failure(failure)?:
-                    ScreenFailureView(sentence: failure.sentence, remedy: failure.remedy)
-                case let .data(data)?:
-                    // SHOW ALL / COLLAPSE ALL, ONE LINK — v0's Collections menu without
-                    // the menu: a bulk fold is a command over this list, not a header verb.
-                    if !data.sections.isEmpty {
-                        let everyFolded = data.sections.allSatisfy(\.folded)
-                        HStack {
-                            Spacer(minLength: 0)
-                            KitLink(
-                                label: everyFolded ? state.chrome.showAllLabel : state.chrome.collapseAllLabel,
-                                identifier: "photos.collections.fold-all"
-                            ) { send(PhotosHomeEvents.make { $0.foldAll = .init() }) }
+                PageReadStateView(
+                    page: collections.page,
+                    onRetry: { send(PhotosHomeEvents.make { $0.refreshed = .init() }) }
+                ) {
+                    if collections.hasData {
+                        let data = collections.data
+                        // SHOW ALL / COLLAPSE ALL, ONE LINK — v0's Collections menu without
+                        // the menu: a bulk fold is a command over this list, not a header verb.
+                        if !data.sections.isEmpty {
+                            let everyFolded = data.sections.allSatisfy(\.folded)
+                            HStack {
+                                Spacer(minLength: 0)
+                                KitLink(
+                                    label: everyFolded ? state.chrome.showAllLabel : state.chrome.collapseAllLabel,
+                                    identifier: "photos.collections.fold-all"
+                                ) { send(PhotosHomeEvents.make { $0.foldAll = .init() }) }
+                            }
+                            .padding(.top, 4)
                         }
-                        .padding(.top, 4)
+                        ForEach(data.sections, id: \.key) { section in
+                            sectionView(section)
+                        }
                     }
-                    ForEach(data.sections, id: \.key) { section in
-                        sectionView(section)
-                    }
-                case nil:
-                    EmptyView()
                 }
             }
             .padding(.horizontal, CentraidGeometry.pageMargin)

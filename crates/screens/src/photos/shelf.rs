@@ -51,7 +51,7 @@ use crate::catalog::{act, load};
 use crate::field::Field;
 use crate::kit::act as kit_act;
 use crate::kit::owner::{Answer as Owner, Leaving, NoPasscode, OwnerGate};
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Note, Page, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
     Locale, fill, photos as words, photos_home as home_words, photos_shelf as shelf_words,
@@ -93,7 +93,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         kind,
         id: args.id.clone(),
         route_title: args.title.clone(),
-        phase: Phase::Loading,
+        page: Page::loading(),
+        more_failed: false,
         cells: Vec::new(),
         next: None,
         head: None,
@@ -110,13 +111,6 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     }))
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Phase {
-    Loading,
-    Failed,
-    Ready,
-}
-
 /// The album's keep-originals switch, as the core's list last said it.
 #[derive(Clone, Debug, Default)]
 struct Keep {
@@ -129,7 +123,11 @@ struct Shelf {
     kind: wire::PhotosShelfKind,
     id: String,
     route_title: String,
-    phase: Phase,
+    /// The read: the photographs below are its data (an empty shelf is still ready, it draws
+    /// its own empty state).
+    page: Page<()>,
+    /// A next page was asked for and did not come: what loaded stays, with a note.
+    more_failed: bool,
     /// The owner check a send asks first; no passcode warns and goes ahead.
     gate: OwnerGate,
     /// The send waiting on the check: whether the exact place travels.
@@ -191,10 +189,18 @@ impl Shelf {
         )
     }
 
-    fn failed(&mut self) {
-        self.phase = Phase::Failed;
-        self.cells.clear();
-        self.next = None;
+    /// A read that did not come: a gate shows the gate; a failure over photographs shown keeps
+    /// them under a note, and over nothing shown is the failure itself.
+    fn unread(&mut self, reading: Reading<wire::PhotosShelf>, locale: Locale) {
+        let held = std::mem::replace(&mut self.page, Page::loading());
+        self.page = match reading {
+            Reading::Denied(denial) => Page::Refused(denial),
+            _ => held.after(Reading::Failed, locale, |()| false),
+        };
+        if self.page.data().is_none() {
+            self.cells.clear();
+            self.next = None;
+        }
     }
 
     /// Read the shelf again: at least as many photographs as were on screen, and
@@ -202,9 +208,9 @@ impl Shelf {
     fn reload(&mut self, ctx: &Ctx) {
         let want = self.cells.len().max(PAGE as usize);
         let whole = self.is_trash();
-        let Reading::Data(first) = self.page(ctx, None) else {
-            self.failed();
-            return;
+        let first = match self.page(ctx, None) {
+            Reading::Data(first) => first,
+            other => return self.unread(other, ctx.locale()),
         };
         self.head = first.album.clone();
         self.place = first.place.clone();
@@ -215,9 +221,9 @@ impl Shelf {
             if !(whole || cells.len() < want) || pages >= MAX_PAGES {
                 break;
             }
-            let Reading::Data(more) = self.page(ctx, Some(&cursor)) else {
-                self.failed();
-                return;
+            let more = match self.page(ctx, Some(&cursor)) {
+                Reading::Data(more) => more,
+                other => return self.unread(other, ctx.locale()),
             };
             cells.extend(more.cells);
             next = more.next;
@@ -225,7 +231,11 @@ impl Shelf {
         }
         self.cells = cells;
         self.next = next;
-        self.phase = Phase::Ready;
+        self.page = Page::Ready {
+            data: (),
+            note: None,
+        };
+        self.more_failed = false;
         // An album that is not there (purged, or never was) has nothing to show.
         if self.is_album() && self.head.is_none() {
             self.dismissed = true;
@@ -237,10 +247,15 @@ impl Shelf {
         let Some(cursor) = self.next.clone() else {
             return;
         };
-        let Reading::Data(more) = self.page(ctx, Some(&cursor)) else {
-            self.failed();
-            return;
+        let more = match self.page(ctx, Some(&cursor)) {
+            Reading::Data(more) => more,
+            Reading::Failed => {
+                self.more_failed = true;
+                return;
+            }
+            other => return self.unread(other, ctx.locale()),
         };
+        self.more_failed = false;
         let known: Vec<String> = self.cells.iter().map(|c| c.photo_id.clone()).collect();
         self.cells.extend(
             more.cells
@@ -566,6 +581,7 @@ impl Shelf {
     fn event(&mut self, event: wire::PhotosShelfEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             Some(E::LoadMore(_)) => self.load_more(ctx),
+            Some(E::Refreshed(_)) => self.reload(ctx),
             Some(E::Selection(selection)) => self.selection_event(&selection, ctx),
             Some(E::AlbumChoice(choice)) => self.album_choice_event(&choice, ctx),
             Some(E::PromptOpened(opened)) => {
@@ -806,18 +822,20 @@ impl Screen for Shelf {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
-        let content = match self.phase {
-            Phase::Loading => {
-                wire::photos_shelf_state::Content::Loading(wire::Loading { first_load: true })
-            }
-            Phase::Failed => wire::photos_shelf_state::Content::Failure(read::failure(locale)),
-            Phase::Ready => wire::photos_shelf_state::Content::Data(Box::new(self.data(locale))),
-        };
+        let page = self
+            .page
+            .clone()
+            .noted(self.more_failed.then(|| Note::more_failed(locale)));
         let prompt = self.prompt;
         let state = wire::PhotosShelfState {
             title: self.title(locale),
             kind: self.kind as i32,
-            content: Some(content),
+            page: Some(page.wire(
+                locale,
+                |denial| super::denied(locale, denial),
+                wire::EmptyState::default,
+            )),
+            data: page.data().map(|()| self.data(locale)),
             selection: Some(self.selection.view(locale)),
             status: self.selection.status(locale),
             notice: self.notice.clone(),

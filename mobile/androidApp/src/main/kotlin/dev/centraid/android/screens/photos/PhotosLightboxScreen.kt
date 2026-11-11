@@ -80,6 +80,7 @@ import dev.centraid.android.kit.EarlierEntryCard
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.PhotosAlbumChoiceSheet
+import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
@@ -111,9 +112,9 @@ public fun PhotosLightboxScreen(
 ) {
     val context = LocalContext.current
     val words = state.words ?: PhotosLightboxWords()
-    val loading = state.loading
-    val failure = state.failure
-    val denied = state.denied
+    val loading = state.page?.loading
+    val failure = state.page?.failed
+    val denied = state.page?.refused
     val photo = state.photo
     val screenReader = rememberScreenReader(context)
     val reduceMotion = rememberReducedMotion()
@@ -206,8 +207,6 @@ private fun LightViewer(
     onOpen: (Route) -> Unit,
     onClose: () -> Unit,
 ) {
-    val failure = state.failure
-    val denied = state.denied
     val infoOpen = state.sheet == PhotosLightboxState.Sheet.SHEET_INFO
     Column(Modifier.fillMaxSize().background(Surface.page).statusBarsPadding().navigationBarsPadding()) {
         Row(
@@ -227,21 +226,11 @@ private fun LightViewer(
             }
             MoreMenu(state.menu, words.more, onEvent)
         }
-        when {
-            failure != null -> ScreenFailure(
-                sentence = failure.sentence,
-                remedy = failure.remedy,
-                modifier = Modifier.padding(KitGeometry.GUTTER).weight(1f),
-            )
-            denied != null -> ScreenFailure(
-                sentence = denied.title,
-                remedy = denied.body,
-                modifier = Modifier.padding(KitGeometry.GUTTER).weight(1f),
-            )
-            else -> DetailsSheetHost(
+        val stage: @Composable () -> Unit = {
+            DetailsSheetHost(
                 open = infoOpen,
                 onOpenChanged = { open -> onEvent(sheetEvent(if (open) PhotosLightboxState.Sheet.SHEET_INFO else PhotosLightboxState.Sheet.SHEET_NONE)) },
-                modifier = Modifier.weight(1f).fillMaxWidth(),
+                modifier = Modifier.fillMaxSize(),
                 details = {
                     if (photo != null) {
                         InfoCards(state, photo, words, onEvent, onOpen)
@@ -298,6 +287,16 @@ private fun LightViewer(
                                     }
             }
         }
+        // A FIRST READ DRAWS THE STAGE ALONE (the photograph's frame is already known from the
+        // film); a failed or refused one draws the shared failure or gate; a failed re-read keeps
+        // the photograph under the one-sentence note.
+        ReadStateView(
+            page = state.page!!,
+            onRetry = { onEvent(PhotosLightboxEvent(refreshed = PhotosLightboxEvent.Refreshed())) },
+            modifier = Modifier.weight(1f),
+            skeleton = stage,
+            data = stage,
+        )
         // THE BAR IS THE PAGE'S LAST ROW: the photograph and the details are laid out above it, so
         // it never covers the Place card's links.
         if (photo != null) {

@@ -85,22 +85,18 @@ impl Rig {
     }
 
     fn library(&self) -> &wire::PhotosLibraryData {
-        match self.state().library.as_ref().expect("the library").content {
-            Some(wire::photos_library::Content::Data(ref data)) => data,
-            ref other => panic!("expected the library's data, found {other:?}"),
+        let library = self.state().library.as_ref().expect("the library");
+        match &library.data {
+            Some(data) => data,
+            None => panic!("expected the library's data, found {:?}", library.page),
         }
     }
 
     fn collections(&self) -> &wire::PhotosCollectionsData {
-        match self
-            .state()
-            .collections
-            .as_ref()
-            .expect("collections")
-            .content
-        {
-            Some(wire::photos_collections::Content::Data(ref data)) => data,
-            ref other => panic!("expected collections' data, found {other:?}"),
+        let collections = self.state().collections.as_ref().expect("collections");
+        match &collections.data {
+            Some(data) => data,
+            None => panic!("expected collections' data, found {:?}", collections.page),
         }
     }
 

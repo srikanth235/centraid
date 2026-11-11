@@ -99,6 +99,19 @@ pub fn registry() -> Registry {
         .with(EXPORT, export::build)
 }
 
+/// The gate drawn when the vault will not let Photos read: its words and the denial's receipt.
+pub(crate) fn denied(
+    locale: crate::strings::Locale,
+    denial: &wire::AppQueryDenial,
+) -> wire::Denied {
+    use crate::strings::photos_lightbox as own;
+    wire::Denied {
+        title: own::denied_title(locale),
+        body: own::denied_body(locale),
+        receipt: denial.code.clone().unwrap_or_default(),
+    }
+}
+
 /// A runtime with Photos' screens and one tab, `photos`, rooted at its home. The
 /// shell's real runtime composes [`registry`] with the other apps'; this is what
 /// Photos' own tests drive.

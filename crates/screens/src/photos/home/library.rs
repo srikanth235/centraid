@@ -6,31 +6,26 @@
 //! the grid nor throws the scroll back to the top.
 //!
 //! A refused FIRST read replaces the library with its sentence (a failed read is
-//! not an empty grid). A refused next page or refresh leaves the library EXACTLY
-//! as it is: the photographs on screen are still true.
+//! not an empty grid). A failed next page or refresh leaves the photographs
+//! EXACTLY as they are (still true) under a one-sentence note; a denial is the gate.
 
 use centraid_api_proto::core_v1 as wire;
 use wire::PhotosFilter as Filter;
 use wire::app_query_response::Answer;
 
 use crate::catalog::load;
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Note, Page, Reading};
 use crate::screen::Ctx;
+use crate::strings::Locale;
 
 /// A mosaic's page: bigger than a list's, still well under the door's clamp.
 pub const PAGE: u32 = 120;
 
-#[derive(Clone, Debug, Default)]
-pub enum Phase {
-    #[default]
-    Loading,
-    Failed,
-    Ready,
-}
-
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Library {
-    pub phase: Phase,
+    /// The read's page; the cells below are its data (an empty library is still ready: the
+    /// grid draws its own empty state).
+    pub page: Page<()>,
     /// Every cell read so far, in the shelf's order, none twice.
     pub cells: Vec<wire::PhotosCell>,
     next: Option<wire::PhotosCursor>,
@@ -41,16 +36,28 @@ pub struct Library {
     pub more_failed: bool,
 }
 
+impl Default for Library {
+    fn default() -> Self {
+        Self {
+            page: Page::loading(),
+            cells: Vec::new(),
+            next: None,
+            total: None,
+            more_failed: false,
+        }
+    }
+}
+
 impl Library {
     /// Both walks have ended: every photograph is in `cells`.
     #[must_use]
     pub fn complete(&self) -> bool {
-        matches!(self.phase, Phase::Ready) && self.next.is_none() && !self.more_failed
+        self.loaded() && self.next.is_none() && !self.more_failed
     }
 
     #[must_use]
     pub fn loaded(&self) -> bool {
-        matches!(self.phase, Phase::Ready)
+        self.page.data().is_some()
     }
 
     fn page(
@@ -99,10 +106,28 @@ impl Library {
             Reading::Data(page) => {
                 self.total = page.total;
                 self.append(page);
-                self.phase = Phase::Ready;
+                self.page = ready();
             }
-            Reading::Denied(_) | Reading::Failed => self.phase = Phase::Failed,
+            other => self.unread(&other, ctx.locale()),
         }
+    }
+
+    /// A read that did not come: a gate shows the gate; a failure over photographs shown keeps
+    /// them under a note, and over nothing shown is the failure itself.
+    pub fn unread(&mut self, reading: &Reading<wire::PhotosShelf>, locale: Locale) {
+        let held = std::mem::replace(&mut self.page, Page::loading());
+        self.page = match reading {
+            Reading::Denied(denial) => Page::Refused(denial.clone()),
+            _ => held.after(Reading::Failed, locale, |()| false),
+        };
+    }
+
+    /// The page as drawn: a next page that did not come adds its note over the photographs.
+    #[must_use]
+    pub fn drawn(&self, locale: Locale) -> Page<()> {
+        self.page
+            .clone()
+            .noted(self.more_failed.then(|| Note::more_failed(locale)))
     }
 
     /// The next page, appended. A library that has ended asks for nothing.
@@ -115,12 +140,13 @@ impl Library {
                 self.more_failed = false;
                 self.append(page);
             }
-            _ => self.more_failed = true,
+            Reading::Failed => self.more_failed = true,
+            other => self.unread(&other, ctx.locale()),
         }
     }
 
     /// READ AGAIN IN PLACE: as many pages as the member had scrolled through,
-    /// swapped in whole. A refusal leaves the library as it was.
+    /// swapped in whole. A failed read leaves the photographs as they were, with a note.
     pub fn refresh(&mut self, ctx: &Ctx, filter: Filter) {
         if !self.loaded() {
             self.first(ctx, filter);
@@ -128,7 +154,7 @@ impl Library {
         }
         let target = self.cells.len();
         let mut fresh = Self {
-            phase: Phase::Ready,
+            page: ready(),
             ..Self::default()
         };
         let mut after: Option<wire::PhotosCursor> = None;
@@ -140,7 +166,11 @@ impl Library {
                     }
                     fresh.append(page);
                 }
-                _ => return,
+                // The photographs on screen are still true: they stay, with a note.
+                other => {
+                    self.unread(&other, ctx.locale());
+                    return;
+                }
             }
             after = fresh.next.clone();
             if after.is_none() || fresh.cells.len() >= target {
@@ -148,5 +178,86 @@ impl Library {
             }
         }
         *self = fresh;
+    }
+}
+
+fn ready() -> Page<()> {
+    Page::Ready {
+        data: (),
+        note: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::kit::read::NoteKind;
+    use crate::strings::shared;
+    use wire::page_state::State;
+
+    const EN: Locale = Locale::En;
+
+    fn shown() -> Library {
+        let mut library = Library::default();
+        library.cells.push(wire::PhotosCell {
+            photo_id: "a".to_owned(),
+            ..wire::PhotosCell::default()
+        });
+        library.page = ready();
+        library
+    }
+
+    fn wired(library: &Library) -> wire::PageState {
+        library.drawn(EN).wire(
+            EN,
+            |denial| crate::photos::denied(EN, denial),
+            wire::EmptyState::default,
+        )
+    }
+
+    #[test]
+    fn a_failed_first_read_is_the_failure_and_never_an_empty_grid() {
+        let mut library = Library::default();
+        library.unread(&Reading::Failed, EN);
+        assert!(!library.loaded());
+        assert!(matches!(wired(&library).state, Some(State::Failed(_))));
+    }
+
+    #[test]
+    fn a_denied_read_is_the_gate_with_its_receipt() {
+        let mut library = Library::default();
+        let denial = wire::AppQueryDenial {
+            code: Some("no-read".to_owned()),
+            ..wire::AppQueryDenial::default()
+        };
+        library.unread(&Reading::Denied(denial), EN);
+        match wired(&library).state {
+            Some(State::Refused(gate)) => assert_eq!(gate.receipt, "no-read"),
+            other => panic!("expected the gate, found {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_next_page_that_did_not_come_keeps_the_photographs_under_a_partial_note() {
+        let mut library = shown();
+        library.more_failed = true;
+        let page = wired(&library);
+        assert!(page.state.is_none(), "ready draws the photographs");
+        let note = page.note.expect("a note");
+        assert_eq!(note.kind, wire::page_note::Kind::Partial as i32);
+        assert_eq!(note.sentence, shared::read_more_failed(EN));
+        assert_eq!(note.action_label, shared::kit_retry(EN));
+        assert_eq!(library.cells.len(), 1);
+    }
+
+    #[test]
+    fn a_failed_refresh_over_photographs_keeps_them_with_the_refresh_note() {
+        let mut library = shown();
+        library.unread(&Reading::Failed, EN);
+        assert!(library.loaded());
+        assert_eq!(library.cells.len(), 1);
+        let note = library.page.note().expect("a note");
+        assert_eq!(note.kind, NoteKind::Partial);
+        assert_eq!(note.sentence, shared::read_refresh_failed(EN));
     }
 }

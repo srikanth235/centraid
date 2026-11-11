@@ -57,7 +57,7 @@ use crate::kit::earlier;
 use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::owner::{Answer as Owner, Leaving, NoPasscode, OwnerGate};
 use crate::kit::quantity::{Quantity, UnitsPref};
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Page, Reading};
 use crate::kit::trash;
 use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
@@ -82,7 +82,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         photo_id: args.photo_id.clone(),
         neighbours: args.neighbour_ids.clone(),
         album_id: args.album_id.clone(),
-        content: Content::Loading,
+        content: Page::loading(),
         located: Located::default(),
         camera: None,
         film: HashMap::new(),
@@ -137,13 +137,6 @@ struct Detail {
     people: Vec<wire::PeopleLinked>,
 }
 
-enum Content {
-    Loading,
-    Failed,
-    Denied(wire::AppQueryDenial),
-    Data(Box<Detail>),
-}
-
 /// Where the bytes are on this phone, as the content door located them.
 #[derive(Default)]
 struct Located {
@@ -170,7 +163,9 @@ struct Lightbox {
     photo_id: String,
     neighbours: Vec<String>,
     album_id: String,
-    content: Content,
+    /// The read of this photograph: its detail is the page's data. A failed re-read keeps the
+    /// photograph on screen under a note.
+    content: Page<Box<Detail>>,
     located: Located,
     /// The camera the original's header names, for one photograph.
     camera: Option<(String, String)>,
@@ -217,40 +212,40 @@ impl Lightbox {
             Reading::Data(found) => match found.photo {
                 Some(detail) => {
                     let Some(cell) = detail.cell else {
-                        self.content = Content::Failed;
+                        self.content = Page::Failed;
                         return Vec::new();
                     };
                     let people = match links::read_people(ctx, &self.photo_id) {
                         Reading::Data(people) => people,
-                        _ => match &self.content {
-                            Content::Data(old) if old.cell.photo_id == cell.photo_id => {
-                                old.people.clone()
-                            }
+                        _ => match self.content.data() {
+                            Some(old) if old.cell.photo_id == cell.photo_id => old.people.clone(),
                             _ => Vec::new(),
                         },
                     };
-                    self.content = Content::Data(Box::new(Detail {
-                        cell,
-                        trashed: detail.trashed,
-                        tags: detail.tags,
-                        place: detail.place,
-                        people,
-                    }));
+                    self.content = Page::Ready {
+                        data: Box::new(Detail {
+                            cell,
+                            trashed: detail.trashed,
+                            tags: detail.tags,
+                            place: detail.place,
+                            people,
+                        }),
+                        note: None,
+                    };
                 }
                 // No such photograph: gone (deleted forever here or elsewhere).
                 None => {
-                    if matches!(self.content, Content::Data(_)) {
+                    if self.content.data().is_some() {
                         self.dismissed = true;
                     } else {
-                        self.content = Content::Failed;
+                        self.content = Page::Failed;
                     }
                 }
             },
-            Reading::Denied(denial) => self.content = Content::Denied(denial),
+            Reading::Denied(denial) => self.content = Page::Refused(denial),
             Reading::Failed => {
-                if !matches!(self.content, Content::Data(_)) {
-                    self.content = Content::Failed;
-                }
+                let held = std::mem::replace(&mut self.content, Page::loading());
+                self.content = held.after(Reading::Failed, ctx.locale(), |_| false);
             }
         }
         self.earlier = self.read_foot(ctx);
@@ -261,7 +256,7 @@ impl Lightbox {
 
     /// The entry to this photograph's earlier versions: only a photograph that was read has one.
     fn read_foot(&self, ctx: &Ctx) -> earlier::Foot {
-        let Content::Data(detail) = &self.content else {
+        let Some(detail) = self.content.data() else {
             return earlier::Foot::default();
         };
         let cell = &detail.cell;
@@ -283,7 +278,7 @@ impl Lightbox {
 
     /// The original's file and a Live Photo's movie, once this phone holds them.
     fn locate(&mut self, ctx: &Ctx) {
-        let Content::Data(detail) = &self.content else {
+        let Some(detail) = self.content.data() else {
             return;
         };
         let cell = &detail.cell;
@@ -388,7 +383,7 @@ impl Lightbox {
     /// they were tried on and do not travel.
     fn open(&mut self, ctx: &Ctx, photo_id: &str) -> Vec<wire::Effect> {
         self.photo_id = photo_id.to_owned();
-        self.content = Content::Loading;
+        self.content = Page::loading();
         self.located = Located::default();
         self.chrome_visible = true;
         self.sheet = Sheet::None;
@@ -407,9 +402,10 @@ impl Lightbox {
     }
 
     fn refusal(&self, locale: Locale) -> Option<String> {
-        matches!(self.content, Content::Data(_))
-            .then_some(())
-            .map_or_else(|| Some(own::not_in_vault(locale)), |()| None)
+        self.content
+            .data()
+            .is_none()
+            .then(|| own::not_in_vault(locale))
     }
 
     fn refuse(&mut self, sentence: String) {
@@ -491,10 +487,7 @@ impl Lightbox {
     }
 
     fn detail(&self) -> Option<&Detail> {
-        match &self.content {
-            Content::Data(detail) => Some(detail),
-            _ => None,
-        }
+        self.content.data().map(|detail| &**detail)
     }
 
     fn tap(&mut self, kind: V, ctx: &Ctx) -> Vec<wire::Effect> {
@@ -1439,22 +1432,10 @@ impl Screen for Lightbox {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
-        use wire::photos_lightbox_state::Content as C;
-        let content = match &self.content {
-            Content::Loading => C::Loading(wire::Loading { first_load: true }),
-            Content::Failed => C::Failure(read::failure(locale)),
-            Content::Denied(denial) => C::Denied(wire::Denied {
-                title: own::denied_title(locale),
-                body: own::denied_body(locale),
-                receipt: denial.code.clone().unwrap_or_default(),
-            }),
-            Content::Data(detail) => C::Photo(Box::new(self.photo(
-                detail,
-                locale,
-                ctx.units(),
-                ctx.hour_cycle(),
-            ))),
-        };
+        let photo = self
+            .content
+            .data()
+            .map(|detail| self.photo(detail, locale, ctx.units(), ctx.hour_cycle()));
         let refusal = self.refusal(locale);
         let edit = self
             .detail()
@@ -1491,7 +1472,12 @@ impl Screen for Lightbox {
         });
         let state = wire::PhotosLightboxState {
             photo_id: self.photo_id.clone(),
-            content: Some(content),
+            page: Some(self.content.wire(
+                locale,
+                |denial| super::denied(locale, denial),
+                wire::EmptyState::default,
+            )),
+            photo,
             chrome_visible: self.chrome_visible || self.slideshow,
             sheet: self.sheet as i32,
             slideshow: self.slideshow,

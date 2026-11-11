@@ -21,9 +21,10 @@ fn state(d: &Driver, instance: u64) -> &wire::PhotosPlacesState {
 }
 
 fn data(d: &Driver, instance: u64) -> &wire::PhotosPlacesData {
-    match &state(d, instance).content {
-        Some(wire::photos_places_state::Content::Data(data)) => data,
-        other => panic!("no data: {other:?}"),
+    let state = state(d, instance);
+    match &state.data {
+        Some(data) => data,
+        None => panic!("no data: {:?}", state.page),
     }
 }
 

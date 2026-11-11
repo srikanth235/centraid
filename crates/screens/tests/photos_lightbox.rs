@@ -147,9 +147,9 @@ fn view(d: &Driver, at: u64) -> View {
 }
 
 fn photo_of(state: &View) -> &wire::PhotosLightboxPhoto {
-    match &state.content {
-        Some(wire::photos_lightbox_state::Content::Photo(photo)) => photo,
-        other => panic!("no photograph: {other:?}"),
+    match &state.photo {
+        Some(photo) => photo,
+        None => panic!("no photograph: {:?}", state.page),
     }
 }
 
@@ -390,9 +390,10 @@ fn a_write_over_no_photograph_is_withheld_with_the_not_in_a_vault_sentence_and_n
     let at = open(&mut d, "no-such-photo", &[], "");
     let state = view(&d, at);
     assert!(matches!(
-        state.content,
-        Some(wire::photos_lightbox_state::Content::Failure(_))
+        state.page.as_ref().and_then(|page| page.state.as_ref()),
+        Some(wire::page_state::State::Failed(_))
     ));
+    assert!(state.photo.is_none());
     // Writes over nothing are refused, whatever event arrives.
     send(
         &mut d,
@@ -609,10 +610,8 @@ fn a_refused_write_is_a_sentence_beside_the_photograph_and_does_not_travel_with_
     let status = state.status.expect("the vault's sentence");
     assert!(status.refused && !status.sentence.is_empty());
     // The photograph is still on screen, not replaced by the error.
-    assert!(matches!(
-        state.content,
-        Some(wire::photos_lightbox_state::Content::Photo(_))
-    ));
+    assert!(state.photo.is_some());
+    assert!(state.page.as_ref().is_some_and(|page| page.state.is_none()));
     // A refusal is about the photograph it was tried on.
     send(&mut d, at, ev::Kind::Moved(ev::Moved { photo_id: second }));
     assert!(view(&d, at).status.is_none());

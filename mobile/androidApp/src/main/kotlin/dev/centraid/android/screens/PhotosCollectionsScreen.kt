@@ -57,9 +57,9 @@ import dev.centraid.android.kit.ContentImage
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.LocalBandClearance
 import dev.centraid.android.kit.OutlineButton
+import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.motion
-import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
@@ -86,34 +86,36 @@ internal fun PhotosCollectionsScreen(
 ) {
     val chrome = state.chrome ?: PhotosHomeChrome()
     val data = collections.data_
-    val loading = collections.loading
-    val failure = collections.failure
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = MARGIN)
-            // THE LIST RUNS UNDER THE BAND'S GLASS; its last card scrolls clear of it.
-            .padding(bottom = LocalBandClearance.current + BandPolicy.FOOT_MARGIN.dp),
+    ReadStateView(
+        page = collections.page!!,
+        onRetry = { onEvent(PhotosHomeEvent(refreshed = centraid.core.v1.PhotosRefreshed())) },
+        skeleton = { RowSkeleton() },
     ) {
-        // SHOW ALL / COLLAPSE ALL is one link here — v0's Collections menu without
-        // the menu: a bulk fold is a command over this list, not a header verb.
-        if (data != null && data.sections.isNotEmpty()) {
-            val everyFolded = data.sections.all { it.folded }
-            Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
-                Spacer(Modifier.weight(1f))
-                KitLink(
-                    label = if (everyFolded) chrome.show_all_label else chrome.collapse_all_label,
-                    onClick = { onEvent(PhotosHomeEvent(fold_all = centraid.core.v1.PhotosFoldAll())) },
-                )
-            }
-        }
-        when {
-            loading != null -> RowSkeleton()
-            failure != null -> ScreenFailure(failure.sentence, failure.remedy)
-            data != null -> data.sections.forEach { section ->
-                Section(section.title, section.toggle_label, section.folded, { onEvent(PhotosHomeEvent(section_toggled = section.key)) }) {
-                    SectionBody(section, onEvent, onOpen)
+        if (data != null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = MARGIN)
+                    // THE LIST RUNS UNDER THE BAND'S GLASS; its last card scrolls clear of it.
+                    .padding(bottom = LocalBandClearance.current + BandPolicy.FOOT_MARGIN.dp),
+            ) {
+                // SHOW ALL / COLLAPSE ALL is one link here — v0's Collections menu without
+                // the menu: a bulk fold is a command over this list, not a header verb.
+                if (data.sections.isNotEmpty()) {
+                    val everyFolded = data.sections.all { it.folded }
+                    Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                        Spacer(Modifier.weight(1f))
+                        KitLink(
+                            label = if (everyFolded) chrome.show_all_label else chrome.collapse_all_label,
+                            onClick = { onEvent(PhotosHomeEvent(fold_all = centraid.core.v1.PhotosFoldAll())) },
+                        )
+                    }
+                }
+                data.sections.forEach { section ->
+                    Section(section.title, section.toggle_label, section.folded, { onEvent(PhotosHomeEvent(section_toggled = section.key)) }) {
+                        SectionBody(section, onEvent, onOpen)
+                    }
                 }
             }
         }
