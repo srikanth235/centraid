@@ -71,6 +71,9 @@ message PhotosLightboxState {
   PhotosLightboxWords words = 23;
   // THE PEOPLE PICKER (#1173): who is in the photograph, picked by name. Open while the sheet is up.
   LinkPicker people_picker = 24;
+  // The picker over the "Linked to" section, while it is up (#1185). The kit's generic picker,
+  // over every kind (the people picker above is people only).
+  optional LinkPicker link_picker = 26;
   PageState page = 25;
 
   enum Sheet {
@@ -144,6 +147,11 @@ message PhotosLightboxPhoto {
   optional EarlierEntry earlier = 27;
   // Where it came from, under the Earlier versions entry (#1185). Absent for a typed item.
   optional OriginLine origin = 28;
+  // "Linked to" (#1185): every item the photograph is linked to, from either end, with the add
+  // row. The kit's shared section, after "People in this photo". Absent while what it is linked to
+  // was not read, and on a photograph in the trash. Its events go back as
+  // `PhotosLightboxEvent.link`.
+  optional LinkSection links = 29;
 }
 
 message PhotosLightboxFact {
@@ -288,6 +296,8 @@ message PhotosLightboxEvent {
     ConfirmDismissed confirm_dismissed = 16;
     // The people section's and picker's events (#1173).
     LinkEvent people = 17;
+    // The "Linked to" section and its picker (#1185): the kit's `LinkEvent`.
+    LinkEvent link = 19;
     // The status line's Undo after Move to trash: restores the photograph.
     StatusActed status_acted = 18;
   }

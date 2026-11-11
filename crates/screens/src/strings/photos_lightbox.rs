@@ -23,6 +23,13 @@ catalog! {
     );
     plain edit_fallback_name = ("photo", "photo");
     plain not_in_vault = ("This photo is not in a vault yet.", "This photo is not in a vault yet.");
+    plain link_added = ("Linked", "Linked");
+    plain link_removed = ("Link removed", "Link removed");
+    plain links_empty = ("Nothing linked yet", "Nothing linked yet");
+    plain links_unread = (
+        "Couldn’t read what this photograph is linked to.",
+        "Couldn’t read what this photograph is linked to."
+    );
     plain person_added = ("Person added", "Person added");
     plain person_removed = ("Person removed", "Person removed");
     plain caption_changed = ("Caption changed", "Caption changed");

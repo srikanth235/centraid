@@ -1480,6 +1480,151 @@ fn people_in_a_photo_are_picked_by_name_added_and_removed_by_hand() {
     assert!(people(&d).rows.is_empty());
 }
 
+// -----------------------------------------------------------------------------
+// Linked to (#1185): any item but a Locker one, by link, separate from who is in it
+// -----------------------------------------------------------------------------
+
+fn linked_rows(d: &Driver, at: u64) -> Vec<(String, String)> {
+    photo_of(&view(d, at))
+        .links
+        .clone()
+        .expect("the Linked to section")
+        .rows
+        .into_iter()
+        .map(|row| (row.title, row.meta))
+        .collect()
+}
+
+fn link_to(kind: wire::link_event::Kind) -> ev::Kind {
+    ev::Kind::Link(wire::LinkEvent { kind: Some(kind) })
+}
+
+fn add_link(d: &mut Driver, at: u64, kind: &str, to: &str) {
+    use wire::link_event as le;
+    for step in [
+        le::Kind::Add(le::AddTapped { key: "link".into() }),
+        le::Kind::Pick(le::Picked { id: kind.into() }),
+        le::Kind::Pick(le::Picked { id: to.into() }),
+    ] {
+        send(d, at, link_to(step));
+    }
+}
+
+#[test]
+fn a_photo_lists_what_it_is_linked_to_and_a_pick_links_it_apart_from_who_is_in_it() {
+    use wire::link_event as le;
+    let mut d = driver();
+    let (id, other) = (
+        photo(&d, Shot::new("lb-linked-a")),
+        photo(&d, Shot::new("lb-linked-b")),
+    );
+    let at = open(&mut d, &id, std::slice::from_ref(&id), "");
+    let section = photo_of(&view(&d, at)).links.clone().expect("section");
+    assert_eq!(section.title, "Linked to");
+    assert_eq!(section.empty, "Nothing linked yet");
+    assert_eq!(section.adds.len(), 1, "one Add link row for many kinds");
+    assert!(linked_rows(&d, at).is_empty());
+
+    send(
+        &mut d,
+        at,
+        link_to(le::Kind::Add(le::AddTapped { key: "link".into() })),
+    );
+    let picker = view(&d, at).link_picker.clone().expect("chooser");
+    assert!(picker.open);
+    assert!(
+        picker.candidates.iter().any(|c| c.id == "photo"),
+        "a photograph may link to another photograph"
+    );
+    send(
+        &mut d,
+        at,
+        link_to(le::Kind::Pick(le::Picked { id: "photo".into() })),
+    );
+    let picker = view(&d, at).link_picker.clone().expect("photos");
+    assert!(picker.candidates.iter().any(|c| c.id == other));
+    assert!(
+        picker.candidates.iter().all(|c| c.id != id),
+        "a photograph is never offered itself"
+    );
+    send(
+        &mut d,
+        at,
+        link_to(le::Kind::Pick(le::Picked { id: other.clone() })),
+    );
+
+    let state = view(&d, at);
+    assert!(state.link_picker.is_none_or(|picker| !picker.open));
+    let status = state.status.expect("status");
+    assert_eq!(status.sentence, "Linked");
+    assert_eq!(status.action_label, "Undo");
+    assert_eq!(linked_rows(&d, at).len(), 1);
+    assert_eq!(linked_rows(&d, at)[0].1, "Photo");
+    assert!(
+        photo_of(&view(&d, at))
+            .people
+            .as_ref()
+            .is_some_and(|people| people.rows.is_empty()),
+        "a link is not who is in the photograph"
+    );
+
+    // The link has no direction: the other photograph lists this one.
+    let there = open(&mut d, &other, std::slice::from_ref(&other), "");
+    assert_eq!(linked_rows(&d, there).len(), 1);
+}
+
+#[test]
+fn a_tap_on_remove_unlinks_a_photo_and_undo_links_it_again() {
+    use wire::link_event as le;
+    let mut d = driver();
+    let (id, other) = (
+        photo(&d, Shot::new("lb-unlink-a")),
+        photo(&d, Shot::new("lb-unlink-b")),
+    );
+    let at = open(&mut d, &id, std::slice::from_ref(&id), "");
+    add_link(&mut d, at, "photo", &other);
+    assert_eq!(linked_rows(&d, at).len(), 1);
+
+    send(
+        &mut d,
+        at,
+        link_to(le::Kind::Remove(le::RemoveTapped { id: other.clone() })),
+    );
+    assert!(linked_rows(&d, at).is_empty());
+    let status = view(&d, at).status.expect("status");
+    assert_eq!(status.sentence, "Link removed");
+    assert_eq!(status.action_label, "Undo");
+
+    d.send(at, E::StatusActed(wire::StatusActed {}));
+    assert_eq!(linked_rows(&d, at).len(), 1, "Undo puts the link back");
+}
+
+#[test]
+fn a_photo_in_the_trash_has_no_linked_section() {
+    let mut d = driver();
+    let id = photo(&d, Shot::new("lb-linked-trash"));
+    let at = open(&mut d, &id, std::slice::from_ref(&id), "");
+    assert!(photo_of(&view(&d, at)).links.is_some());
+    let response = d.act(
+        act::photos::DeletePhoto {
+            photo_id: id.clone(),
+        }
+        .request()
+        .keyed(format!("lb:{}", kit_act::fresh())),
+    );
+    assert_eq!(
+        response.status,
+        wire::ActStatus::Executed as i32,
+        "{}",
+        response.reason
+    );
+    d.send(at, E::DataChanged(wire::DataChanged::default()));
+    assert!(
+        photo_of(&view(&d, at)).links.is_none(),
+        "no section on a photograph in the trash"
+    );
+}
+
 fn answer_check(d: &mut Driver, at: u64, outcome: wire::owner_checked::Outcome) {
     d.send(
         at,

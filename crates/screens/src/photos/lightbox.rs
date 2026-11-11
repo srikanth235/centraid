@@ -99,6 +99,10 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         dismissed: false,
         pending: VecDeque::new(),
         links: Links::new(&[Kind::Person]),
+        // A photograph may link to another photograph; the picker leaves this one out.
+        every: Links::new(&Kind::ALL).for_entity(&args.photo_id),
+        linked: None,
+        linked_unread: false,
         earlier: earlier::Foot::default(),
         rev: None,
         stale: None,
@@ -187,6 +191,14 @@ struct Lightbox {
     pending: VecDeque<Pending>,
     /// The people picker (#1173).
     links: Links,
+    /// THE "Linked to" SECTION'S PICKER (#1185): what the photograph can link to, any item but a
+    /// Locker one ("People in this photo", above, is people only and says who is in it).
+    every: Links,
+    /// What the photograph is linked to, either end (`links::read_linked`). `None` until read,
+    /// and while a read did not land.
+    linked: Option<Vec<wire::LinkedItem>>,
+    /// The read of `linked` was refused or failed: the status line says so, no empty section.
+    linked_unread: bool,
     /// The entry to the photograph's earlier versions, read with it (#1185).
     earlier: earlier::Foot,
     /// The photograph's revision when the page was last read: what a caption names as the one it
@@ -261,9 +273,74 @@ impl Lightbox {
             }
         }
         self.earlier = self.read_foot(ctx);
+        self.read_linked(ctx);
         self.locate(ctx);
         self.fill_film(ctx);
         self.camera_effects()
+    }
+
+    /// What the photograph is linked to, in both directions. A refused or failed read is said on
+    /// the status line and never drawn as an empty section; a photograph that was not read or is
+    /// in the trash has none ("People in this photo" is the same).
+    fn read_linked(&mut self, ctx: &Ctx) {
+        if self.detail().is_none_or(|detail| detail.trashed) {
+            self.linked = None;
+            self.linked_unread = false;
+            self.every.close();
+            return;
+        }
+        match links::read_linked(ctx, &self.photo_id) {
+            Reading::Data(items) => {
+                self.linked = Some(items);
+                self.linked_unread = false;
+            }
+            Reading::Denied(_) | Reading::Failed => {
+                self.linked = None;
+                self.linked_unread = true;
+                self.every.close();
+            }
+        }
+        self.every.reload(ctx);
+    }
+
+    fn linked_ids(&self) -> Vec<String> {
+        self.linked.as_deref().map(links::ids).unwrap_or_default()
+    }
+
+    /// One tap in the "Linked to" section or its picker. `add-person` and `remove-person` carry
+    /// rel `links` for every kind, a person included, as a link and not as who is in the photo.
+    fn link_event(&mut self, event: &wire::LinkEvent, ctx: &Ctx) {
+        let linked = self.linked_ids();
+        let id = self.photo_id.clone();
+        match self.every.update(event, &linked, ctx) {
+            Outcome::Add { id: to, .. } => {
+                self.write(
+                    ctx,
+                    "add-link",
+                    &[&id, &to],
+                    act::photos::AddPerson {
+                        from: id.clone(),
+                        rel: act::photos::AddPersonRel::Links,
+                        to: to.clone(),
+                    },
+                    Some(own::link_added(ctx.locale())),
+                );
+            }
+            Outcome::Remove { id: to } => {
+                self.write(
+                    ctx,
+                    "remove-link",
+                    &[&id, &to],
+                    act::photos::RemovePerson {
+                        from: id.clone(),
+                        rel: act::photos::RemovePersonRel::Links,
+                        to: to.clone(),
+                    },
+                    Some(own::link_removed(ctx.locale())),
+                );
+            }
+            Outcome::Moved => {}
+        }
     }
 
     /// The entry to this photograph's earlier versions: only a photograph that was read has one.
@@ -966,6 +1043,14 @@ impl Lightbox {
                 }
                 section
             }),
+            links: self.linked.as_ref().map(|linked| {
+                self.every.section(
+                    locale,
+                    crate::strings::links::section_linked(locale),
+                    links::rows(locale, linked),
+                    own::links_empty(locale),
+                )
+            }),
             has_place: detail.place.is_some(),
             place_phrase: detail
                 .place
@@ -1304,6 +1389,7 @@ impl Screen for Lightbox {
                     }
                     K::AlbumChoice(album) => self.album_event(&album, ctx),
                     K::People(link) => self.people_event(&link, ctx),
+                    K::Link(link) => self.link_event(&link, ctx),
                     K::Share(chosen) => {
                         self.sheet = Sheet::None;
                         let precision =
@@ -1524,9 +1610,21 @@ impl Screen for Lightbox {
                 )
             }),
             slideshow_line: words::photos_slideshow_line(locale),
-            status: self.undo.status().or_else(|| self.earlier.status(locale)),
+            status: self
+                .undo
+                .status()
+                .or_else(|| self.earlier.status(locale))
+                .or_else(|| {
+                    self.linked_unread.then(|| wire::StatusLine {
+                        sentence: own::links_unread(locale),
+                        action_label: String::new(),
+                        refused: false,
+                    })
+                }),
             album_choice: Some(self.albums.view(locale, Link::default())),
             people_picker: Some(self.links.picker(locale, &self.people_ids())),
+            link_picker: (self.linked.is_some() && self.every.is_open())
+                .then(|| self.every.picker(locale, &self.linked_ids())),
             place_choices: self.place_choices(locale),
             confirm: self.confirm.then(|| wire::Confirm {
                 title: words::photos_delete_forever_one(locale),

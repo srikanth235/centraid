@@ -48,6 +48,7 @@ struct PhotosLightboxView: View {
             sheet(item.kind)
         }
         .linkPickerSheet(state.peoplePicker) { link in send(.people(link)) }
+        .linkPickerSheet(state.linkPicker) { link in send(.link(link)) }
         .onChange(of: model.mediaKey, initial: true) { _, _ in
             media.update(
                 videoPath: model.videoPath,
@@ -731,6 +732,11 @@ private struct PhotosLightboxInfo: View {
                 // WHO IS IN IT, by hand: a section of its own (#1173).
                 if photo.hasPeople {
                     LinkSectionView(section: photo.people, send: { link in send(.people(link)) }, open: open, padded: false)
+                }
+
+                // LINKED TO (#1185): the kit's section, after who is in it; Rust makes every word and row.
+                if photo.hasLinks {
+                    LinkSectionView(section: photo.links, send: { link in send(.link(link)) }, open: open, padded: false)
                 }
 
                 // PLACE AND LABELS, one card.

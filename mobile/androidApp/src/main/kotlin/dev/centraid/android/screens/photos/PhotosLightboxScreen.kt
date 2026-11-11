@@ -657,6 +657,9 @@ private fun Sheets(
     state.people_picker?.takeIf { it.open_ }?.let { picker ->
         dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(PhotosLightboxEvent(people = link)) }
     }
+    state.link_picker?.takeIf { it.open_ }?.let { picker ->
+        dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(PhotosLightboxEvent(link = link)) }
+    }
     val album = state.album_choice
     if (album != null && album.open_) {
         PhotosAlbumChoiceSheet(album) { event -> onEvent(PhotosLightboxEvent(album_choice = event)) }
@@ -805,6 +808,16 @@ private fun InfoCards(
             dev.centraid.android.kit.LinkSectionView(
                 people,
                 { link -> onEvent(PhotosLightboxEvent(people = link)) },
+                onOpen,
+                padded = false,
+            )
+        }
+
+        // LINKED TO (#1185): the kit's section, after who is in it; Rust makes every word and row.
+        photo.links?.let { section ->
+            dev.centraid.android.kit.LinkSectionView(
+                section,
+                { link -> onEvent(PhotosLightboxEvent(link = link)) },
                 onOpen,
                 padded = false,
             )
