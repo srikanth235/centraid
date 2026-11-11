@@ -138,6 +138,9 @@ fn rule_of(reminder: &wire::PhoneReminder, has_due: bool) -> (Option<String>, bo
     }
 }
 
+/// The origin's name for a reminder whose phone list is not named: the phone's Reminders app.
+const ORIGIN_FALLBACK: &str = "Reminders";
+
 /// `add-task` for one reminder, in `project`, and whether its rule was dropped.
 #[must_use]
 pub fn request(
@@ -170,6 +173,14 @@ pub fn request(
         },
         project_id: project.map_or(Field::Keep, |id| Field::Is(id.to_owned())),
         done_at: done.map_or(Field::Keep, Field::Is),
+        // Where it came from: the phone's list the reminder sat in, else the app itself.
+        arrived_system: Some(act::reminders::AddTaskArrivedSystem::PhoneReminders),
+        arrived_label: Some(
+            Some(reminder.list_title.trim())
+                .filter(|title| !title.is_empty())
+                .unwrap_or(ORIGIN_FALLBACK)
+                .to_owned(),
+        ),
         ..act::reminders::AddTask::default()
     };
     (task, dropped)
@@ -349,6 +360,23 @@ mod tests {
                 reminder("Call mum", "", ""),
             ]
         );
+    }
+
+    #[test]
+    fn an_imported_reminder_records_the_phone_list_it_came_from() {
+        let label = |list: &str| {
+            let mut one = reminder("Call mum", "", "");
+            one.list_title = list.to_owned();
+            let request: wire::ActRequest = request(&one, None).0.into();
+            let text = |key: &str| match &request.input[key].kind {
+                Some(wire::value::Kind::Text(text)) => text.clone(),
+                other => panic!("{key}: {other:?}"),
+            };
+            assert_eq!(text("arrived_system"), "phone_reminders");
+            text("arrived_label")
+        };
+        assert_eq!(label("Groceries"), "Groceries");
+        assert_eq!(label("  "), "Reminders");
     }
 
     #[test]

@@ -256,7 +256,11 @@ pub const REGISTER: &[Row] = &[
         Promise::Arrive,
         "crates/screens/src/imports/camera_roll.rs",
     ),
-    owed("reminders", Promise::Arrive, ARRIVE_OWED),
+    kept(
+        "reminders",
+        Promise::Arrive,
+        "crates/screens/src/imports/reminders.rs",
+    ),
 ];
 
 const ARRIVE_OWED: &str = "an arrival path brings items in without passing `arrived`, so the vault records no origin for them (#1185)";
