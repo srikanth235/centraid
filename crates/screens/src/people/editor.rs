@@ -45,6 +45,10 @@ struct Profile {
 impl Draft for Profile {
     const ACTION: &'static str = "person.save";
 
+    fn noun(locale: Locale) -> String {
+        crate::strings::chat_confirm::noun_person(locale)
+    }
+
     fn subject(&self) -> &str {
         self.id.as_deref().unwrap_or("new")
     }

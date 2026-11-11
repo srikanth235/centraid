@@ -121,8 +121,10 @@ message SearchContainer {
 // `edit_seq` counts edits; `saved_seq` is the last edit the vault committed;
 // `saving_seq` is the edit in flight. Unsaved words exist exactly when
 // `edit_seq > saved_seq`, and a change arriving from the vault while they do
-// sets `remote_changed` instead of replacing them. There is no vault-side
-// revision check: the last save on this phone wins.
+// sets `remote_changed` instead of replacing them. A save names the revision it
+// was made from (`base_revision_id`, the record's history head as text); the
+// vault refuses one whose record has changed or been trashed since, and the
+// editor rests in CONFLICT (#1185).
 message Autosave {
   Phase phase = 1;
   uint64 edit_seq = 2;
@@ -153,7 +155,8 @@ message Autosave {
     PHASE_SAVING = 3;
     PHASE_SAVED = 4;
     PHASE_REFUSED = 5;
-    // Kept for the stale-base compare a later slice adds; nothing reaches it.
+    // The vault refused the save: the record changed, or was trashed, since the draft was read.
+    // The words stay on screen and nothing saves them again; the status line offers Reload.
     PHASE_CONFLICT = 6;
   }
 }

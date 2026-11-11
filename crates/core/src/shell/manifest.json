@@ -459,6 +459,36 @@
       }
     },
     {
+      "name": "keep-version",
+      "verb": "edit",
+      "kind": "earlier_version",
+      "inverse": null,
+      "sealed": [],
+      "command": "history.keep_version",
+      "phrasings": [
+        "keep what I wrote as an earlier version",
+        "save my words as a version",
+        "keep my edit as an earlier version"
+      ],
+      "description": "(history, #1185) Keep the words a refused stale save held as the record's newest earlier version, beside the record as it is, through history.keep_version; `fields` names each kept field as `table.column`. The record itself is not changed. An editor's Reload, never the assistant's.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "fields": {
+            "type": "object",
+            "minProperties": 1
+          }
+        },
+        "required": ["id", "fields"],
+        "additionalProperties": false
+      }
+    },
+    {
       "name": "undo-change",
       "verb": "edit",
       "kind": "earlier_version",

@@ -3,7 +3,8 @@
 //! [`crate::queries::load_note`] answers only `{note_id, body, format}`. An editor
 //! that autosaves needs more than the text: the title and pin it shows, whether
 //! the note is in the trash (`note.edit` refuses a trashed note) and the notebook
-//! it is filed in. A save names no base: the last write wins (#1146).
+//! it is filed in, and its revision (`rev`), which a save names as `expected_rev` so a note that
+//! changed somewhere else is refused instead of overwritten (#1185).
 //!
 //! Like `load_note`, this does NO memo read (D-1020-N3): a People-journal entry
 //! opens by id.
@@ -28,6 +29,8 @@ pub struct EditorNote {
     pub format: String,
     pub pinned: bool,
     pub body: String,
+    /// The newest version the history holds (0 when none): what a save says it replaces.
+    pub rev: i64,
     pub created_at: String,
     pub updated_at: String,
     pub deleted_at: Option<String>,
@@ -74,6 +77,8 @@ pub fn load_editor_note(
 }
 
 fn editor_body(door: &dyn PageDoor, note_id: &str) -> KitResult<Option<EditorNote>> {
+    // The revision first: a change between the two reads refuses the save, never lets it through.
+    let rev = centraid_apps_kit::revision::head(door, note_id)?;
     let Some(note) = read_note(door, note_id)? else {
         return Ok(None);
     };
@@ -111,6 +116,7 @@ fn editor_body(door: &dyn PageDoor, note_id: &str) -> KitResult<Option<EditorNot
         format: note.format,
         pinned,
         body: note.body,
+        rev,
         created_at: note.created_at,
         updated_at: note.updated_at,
         deleted_at: note.deleted_at,

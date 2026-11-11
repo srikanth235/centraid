@@ -47,6 +47,7 @@ follow.statement
 follow.stop
 follow.take_stated
 health.export_csv
+history.keep_version
 history.restore_version
 history.undo
 locker.add_item

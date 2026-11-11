@@ -94,6 +94,10 @@ struct Typed {
 impl Draft for Typed {
     const ACTION: &'static str = act::reminders::EditTask::NAME;
 
+    fn noun(locale: Locale) -> String {
+        crate::strings::chat_confirm::noun_reminder(locale)
+    }
+
     fn subject(&self) -> &str {
         &self.id
     }

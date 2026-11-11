@@ -410,6 +410,7 @@ pub(crate) fn note(
                 format: note.format,
                 pinned: note.pinned,
                 body: note.body,
+                rev: note.rev,
                 created_at: note.created_at,
                 updated_at: note.updated_at,
                 deleted_at: note.deleted_at,

@@ -443,3 +443,73 @@ fn a_save_into_the_trash_is_refused_as_trashed_whether_or_not_the_revision_match
         "first"
     );
 }
+
+#[test]
+fn the_words_of_a_refused_save_are_kept_as_an_earlier_version_and_the_note_is_untouched() {
+    let w = World::new();
+    let id = w.note("Plan", "first");
+    w.ok("note.edit", json!({ "id": id, "body": "elsewhere" }));
+    assert_eq!(revisions(&w, &id), 1);
+    let kept = w.ok(
+        "history.keep_version",
+        json!({ "id": id, "fields": { "note.body": "my unsaved words", "entity.title": "Plan B" } }),
+    );
+    assert_eq!(kept["kept"], true);
+    assert_eq!(kept["seq"], 2);
+    assert_eq!(revisions(&w, &id), 2);
+    // The note is as the other edit left it.
+    assert_eq!(
+        w.query::<String>("SELECT body FROM note WHERE id = ?1", &[&id]),
+        "elsewhere"
+    );
+    assert_eq!(
+        w.query::<String>("SELECT title FROM entity WHERE id = ?1", &[&id]),
+        "Plan"
+    );
+    // The kept version holds the member's words and restores like any other.
+    assert_eq!(
+        w.query::<String>(
+            "SELECT body FROM revision WHERE entity_id = ?1 AND seq = 2",
+            &[&id]
+        ),
+        "my unsaved words"
+    );
+    w.ok("history.restore_version", json!({ "id": id, "seq": 2 }));
+    assert_eq!(
+        w.query::<String>("SELECT body FROM note WHERE id = ?1", &[&id]),
+        "my unsaved words"
+    );
+}
+
+#[test]
+fn words_the_note_already_holds_keep_nothing_and_a_trashed_note_still_keeps_them() {
+    let w = World::new();
+    let id = w.note("Plan", "first");
+    let same = w.ok(
+        "history.keep_version",
+        json!({ "id": id, "fields": { "note.body": "first" } }),
+    );
+    assert_eq!(same["kept"], false);
+    assert_eq!(revisions(&w, &id), 0);
+    w.ok("entity.trash", json!({ "id": id }));
+    let kept = w.ok(
+        "history.keep_version",
+        json!({ "id": id, "fields": { "note.body": "typed while it was trashed" } }),
+    );
+    assert_eq!(kept["kept"], true);
+    assert_eq!(revisions(&w, &id), 1);
+}
+
+#[test]
+fn a_field_the_history_does_not_keep_is_refused_and_writes_nothing() {
+    let w = World::new();
+    let id = w.note("Plan", "first");
+    for field in ["note.nope", "nothing", "document.blob", "entity.id"] {
+        let sentence = w.refused(
+            "history.keep_version",
+            json!({ "id": id, "fields": { field: "x" } }),
+        );
+        assert!(sentence.contains(field), "{sentence}");
+    }
+    assert_eq!(revisions(&w, &id), 0);
+}

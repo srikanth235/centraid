@@ -72,6 +72,7 @@
 mod read;
 mod restore;
 mod shape;
+mod write;
 
 pub use read::{
     Change, Earlier, MASK, Version, Who, count, current_state, earlier_versions, head, head_after,
@@ -81,6 +82,7 @@ pub use restore::{Restored, Scope, restore_version};
 pub use shape::{
     CONTENT, Cell, OMITTED, Part, RELATIONS_OUTSIDE, Role, Shape, TABLES, is_sealed, shape,
 };
+pub use write::{Kept, keep_overlay, overlay_refusal};
 
 use rusqlite::Connection;
 use serde_json::Value as Json;
@@ -138,7 +140,7 @@ pub(crate) fn settle(connection: &Connection, now: &str, cause: &str) -> Result<
 /// commit left. A note's words the commit did not change are not copied (a title-only edit keeps
 /// no body): the version carries no `note.body`, and a reader takes the words from the next newer
 /// version that holds them, else from the note as it is ([`read::fill_body`]).
-fn keep(
+pub(crate) fn keep(
     connection: &Connection,
     id: &str,
     state: &str,

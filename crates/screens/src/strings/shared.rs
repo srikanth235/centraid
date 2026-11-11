@@ -7,6 +7,11 @@
 catalog! {
     plain all_day = ("All day", "All day");
     plain autosave_changed_elsewhere = ("Changed on another device", "Changed on another device");
+    plain stale_changed_note = ("This {noun} changed somewhere else.", "This {noun} changed somewhere else.");
+    plain stale_kept_note = ("Your text is in Earlier versions.", "Your text is in Earlier versions.");
+    plain stale_reload_label = ("Reload", "Reload");
+    plain stale_trashed_note = ("This {noun} was moved to the trash.", "This {noun} was moved to the trash.");
+    plain stale_trashed_kept_note = ("Restore it to find your text in Earlier versions.", "Restore it to find your text in Earlier versions.");
     plain autosave_edited = ("Edited", "Edited");
     plain autosave_not_saved = ("Not saved", "Not saved");
     plain autosave_saved = ("Saved", "Saved");

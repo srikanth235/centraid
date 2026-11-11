@@ -32,6 +32,10 @@ struct Typed {
 impl Draft for Typed {
     const ACTION: &'static str = act::docs::Edit::NAME;
 
+    fn noun(locale: Locale) -> String {
+        crate::strings::chat_confirm::noun_document(locale)
+    }
+
     fn subject(&self) -> &str {
         &self.id
     }

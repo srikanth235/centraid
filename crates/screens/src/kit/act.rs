@@ -22,9 +22,55 @@ pub struct Settled {
     pub inverse: Option<wire::ActInverse>,
     /// The tables the commit wrote, sorted. Empty when nothing committed.
     pub tables: Vec<String>,
+    /// The check that refused, when one did (the vault's predicate id, `stale_revision`, or the
+    /// core's own such as `input_schema`). Empty when committed and when the core named none.
+    pub check: String,
 }
 
+/// Why a save naming `expected_rev` was refused: the record is not as the screen read it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Stale {
+    /// The record changed since the screen read it (`stale_revision`).
+    Changed,
+    /// The record was moved to the trash since (`stale_trashed`).
+    Trashed,
+}
+
+/// The predicate a save is refused with when the record changed since it was read.
+pub const STALE_REVISION: &str = "stale_revision";
+
+/// The predicate a save is refused with when the record is in the trash.
+pub const STALE_TRASHED: &str = "stale_trashed";
+
 impl Settled {
+    /// Whether the save was refused because the record is not as the screen read it.
+    #[must_use]
+    pub fn stale(&self) -> Option<Stale> {
+        match self.check.as_str() {
+            STALE_REVISION => Some(Stale::Changed),
+            STALE_TRASHED => Some(Stale::Trashed),
+            _ => None,
+        }
+    }
+
+    /// The record's revision a guarded save answered (`rev`), when it did.
+    #[must_use]
+    pub fn rev(&self) -> Option<i64> {
+        serde_json::from_slice::<serde_json::Value>(&self.output)
+            .ok()?
+            .get("rev")?
+            .as_i64()
+    }
+
+    /// One field of the output, as a flag.
+    #[must_use]
+    pub fn output_flag(&self, field: &str) -> Option<bool> {
+        serde_json::from_slice::<serde_json::Value>(&self.output)
+            .ok()?
+            .get(field)?
+            .as_bool()
+    }
+
     /// One field of the output, as text.
     #[must_use]
     pub fn output_text(&self, field: &str) -> Option<String> {
@@ -70,6 +116,7 @@ pub fn act(ctx: &Ctx, request: impl Into<wire::ActRequest>, invoke_key: &str) ->
             output: response.output,
             inverse: response.inverse,
             tables: response.tables,
+            check: String::new(),
         },
         Ok(response) => Settled {
             committed: false,
@@ -81,6 +128,10 @@ pub fn act(ctx: &Ctx, request: impl Into<wire::ActRequest>, invoke_key: &str) ->
             output: Vec::new(),
             inverse: None,
             tables: Vec::new(),
+            check: response
+                .refusal
+                .map(|refusal| refusal.check)
+                .unwrap_or_default(),
         },
         Err(_) => Settled {
             committed: false,
@@ -88,6 +139,7 @@ pub fn act(ctx: &Ctx, request: impl Into<wire::ActRequest>, invoke_key: &str) ->
             output: Vec::new(),
             inverse: None,
             tables: Vec::new(),
+            check: String::new(),
         },
     }
 }

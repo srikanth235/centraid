@@ -169,6 +169,7 @@ impl<'a> Ctx<'a> {
                 output: serde_json::to_vec(&outcome.output).unwrap_or_default(),
                 inverse: None,
                 tables: outcome.tables,
+                check: String::new(),
             },
             Ok(outcome) => Settled {
                 committed: false,
@@ -179,6 +180,7 @@ impl<'a> Ctx<'a> {
                 output: Vec::new(),
                 inverse: None,
                 tables: Vec::new(),
+                check: outcome.predicate.unwrap_or_default(),
             },
             Err(_) => Settled {
                 committed: false,
@@ -186,6 +188,7 @@ impl<'a> Ctx<'a> {
                 output: Vec::new(),
                 inverse: None,
                 tables: Vec::new(),
+                check: String::new(),
             },
         }
     }

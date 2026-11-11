@@ -13,8 +13,14 @@
 //! - **A change from the vault never overwrites words being typed.** While
 //!   there are unsaved words, [`Autosave::loaded`] keeps the draft and notes
 //!   `remote_changed`; once those words are saved the screen is told to read
-//!   again. There is no vault-side revision check: the last save on this
-//!   phone wins.
+//!   again.
+//! - **A save checks what it is replacing (#1185).** A draft knows the revision of the record it
+//!   was read from ([`Draft::base_rev`]) and its save names it (`expected_rev`); the vault refuses
+//!   a save whose record has changed since (`stale_revision`) or was moved to the trash
+//!   (`stale_trashed`). The editor then rests in [`Phase::Conflict`]: the words stay on screen with
+//!   a sentence over them, nothing retries (not the timer, not leaving), and Reload
+//!   ([`Autosave::resolve`]) first keeps the words as an earlier version of the record
+//!   ([`Draft::keep_request`]) and lets the screen read the vault's row.
 //! - A refused save keeps the words on screen with the sentence over them.
 //!
 //! `act` answers at once (the phone is the vault), so SAVING is a phase only
@@ -29,8 +35,10 @@ use centraid_api_proto::core_v1 as wire;
 use wire::autosave::Phase;
 
 use super::act as kit_act;
+pub use super::act::Stale;
+use crate::catalog::act as catalog_act;
 use crate::screen::Ctx;
-use crate::strings::{Locale, shared};
+use crate::strings::{Locale, fill, shared};
 
 /// How long typing pauses before the words are saved.
 pub const DEBOUNCE: Duration = Duration::from_millis(900);
@@ -55,8 +63,39 @@ pub trait Draft: Clone + PartialEq {
     fn request(&self, baseline: &Self) -> Option<wire::ActRequest>;
 
     /// A save of this draft committed, with the action's output (JSON). A draft
-    /// whose save CREATED its row learns the id here and is an edit from now on.
+    /// whose save CREATED its row learns the id here and is an edit from now on, and one whose
+    /// save answered `rev` takes it as its base.
     fn committed(&mut self, _output: &[u8]) {}
+
+    /// The id of the record the draft is of, once there is one (a new draft has none).
+    fn subject_id(&self) -> Option<&str> {
+        None
+    }
+
+    /// What the record is called in the sentences of a refused save: "note", "person".
+    fn noun(locale: Locale) -> String;
+
+    /// The revision of the record this draft was read from, which its save names as
+    /// `expected_rev`; `None` for a draft not yet saved once (a create names none). Shown on the
+    /// wire as `base_revision_id`.
+    fn base_rev(&self) -> Option<i64> {
+        None
+    }
+
+    /// The words this draft holds that the record does not, as `table.column` to value, for the
+    /// vault to keep as an earlier version when a save was refused as stale. Empty keeps nothing.
+    fn kept_fields(&self, _baseline: &Self) -> Vec<(String, serde_json::Value)> {
+        Vec::new()
+    }
+}
+
+/// The shell's action that keeps a draft's words as an earlier version of its record.
+fn keep_request(id: &str, fields: Vec<(String, serde_json::Value)>) -> wire::ActRequest {
+    catalog_act::shell::KeepVersion {
+        earlier_version_id: id.to_owned(),
+        fields: serde_json::Value::Object(fields.into_iter().collect()).to_string(),
+    }
+    .into()
 }
 
 /// One autosaving editor's phase, seqs, draft and baseline.
@@ -75,6 +114,8 @@ pub struct Autosave<D: Draft> {
     /// The refusal's sentence, while the phase is REFUSED.
     failure: Option<String>,
     remote_changed: bool,
+    /// Why the vault refused the save as stale, while the phase is CONFLICT.
+    conflict: Option<Stale>,
     /// The tables this editor's committed saves wrote since a screen last
     /// took them ([`Autosave::take_written`]).
     written: BTreeSet<String>,
@@ -98,6 +139,7 @@ impl<D: Draft> Autosave<D> {
             saving_seq: 0,
             failure: None,
             remote_changed: false,
+            conflict: None,
             written: BTreeSet::new(),
         }
     }
@@ -147,7 +189,16 @@ impl<D: Draft> Autosave<D> {
         self.saved_seq = self.edit_seq;
         self.failure = None;
         self.remote_changed = false;
+        self.conflict = None;
         true
+    }
+
+    /// The vault moved under unsaved words in a way a read cannot show as a row (the record went
+    /// to the trash): the draft stays and the screen is told to read again once they are saved.
+    pub fn vault_moved(&mut self) {
+        if self.unsaved() {
+            self.remote_changed = true;
+        }
     }
 
     /// An edit: DIRTY, a new seq, and a debounce. A change that leaves the
@@ -162,6 +213,10 @@ impl<D: Draft> Autosave<D> {
             return;
         }
         self.edit_seq += 1;
+        // The words go on being typed over a conflict, and nothing saves them: Reload keeps them.
+        if self.phase == Phase::Conflict {
+            return;
+        }
         self.phase = Phase::Dirty;
         self.failure = None;
         ctx.start_timer(TIMER, DEBOUNCE);
@@ -180,7 +235,9 @@ impl<D: Draft> Autosave<D> {
 
     /// SAVE NOW, if there is anything to save: leaving (close = done). A
     /// refused save is tried once more — the member closing over it is asking
-    /// for it to be kept. Returns whether the screen should read again.
+    /// for it to be kept. A CONFLICT is not tried again: the vault said the record is not the one
+    /// these words were made from, and saying it twice changes nothing. Returns whether the screen
+    /// should read again.
     #[must_use]
     pub fn flush(&mut self, ctx: &Ctx) -> bool {
         match self.phase {
@@ -216,6 +273,12 @@ impl<D: Draft> Autosave<D> {
         let settled = kit_act::act(ctx, request, &key);
         if !settled.committed {
             // THE WORDS STAY. The sentence goes over them, never instead.
+            if let Some(stale) = settled.stale() {
+                self.phase = Phase::Conflict;
+                self.conflict = Some(stale);
+                self.failure = Some(stale_sentence::<D>(ctx.locale(), stale));
+                return false;
+            }
             self.phase = Phase::Refused;
             self.failure = Some(settled.refusal);
             return false;
@@ -245,7 +308,11 @@ impl<D: Draft> Autosave<D> {
                 .clone()
                 .filter(|sentence| !sentence.is_empty())
                 .unwrap_or_else(|| shared::autosave_not_saved(locale)),
-            Phase::Conflict => shared::autosave_changed_elsewhere(locale),
+            Phase::Conflict => self
+                .failure
+                .clone()
+                .filter(|sentence| !sentence.is_empty())
+                .unwrap_or_else(|| shared::autosave_changed_elsewhere(locale)),
             Phase::Unspecified => String::new(),
         }
     }
@@ -257,14 +324,81 @@ impl<D: Draft> Autosave<D> {
             phase: self.phase as i32,
             edit_seq: self.edit_seq,
             saved_seq: self.saved_seq,
-            base_revision_id: String::new(),
+            base_revision_id: self
+                .draft
+                .as_ref()
+                .and_then(Draft::base_rev)
+                .map(|rev| rev.to_string())
+                .unwrap_or_default(),
             failure: self.failure.as_ref().map(|sentence| wire::Failure {
                 sentence: sentence.clone(),
                 remedy: String::new(),
             }),
             remote_changed: self.remote_changed,
             label: self.label(locale),
-            refused: self.phase == Phase::Refused,
+            refused: matches!(self.phase, Phase::Refused | Phase::Conflict),
         }
+    }
+}
+
+/// The sentence over the words of a save the vault refused as stale: the noun is the draft's.
+fn stale_sentence<D: Draft>(locale: Locale, stale: Stale) -> String {
+    let noun = D::noun(locale);
+    match stale {
+        Stale::Changed => fill(&shared::stale_changed_note(locale), &[("noun", &noun)]),
+        Stale::Trashed => fill(&shared::stale_trashed_note(locale), &[("noun", &noun)]),
+    }
+}
+
+/// What Reload came to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Resolved {
+    /// The editor was not in conflict: nothing was done.
+    Nothing,
+    /// The words are kept as an earlier version (`kept`) or the record already held them, and the
+    /// editor holds no draft: the screen reads the vault's row.
+    Reloaded { stale: Stale, kept: bool },
+    /// The words could not be kept; they stay on screen under the vault's sentence.
+    Failed,
+}
+
+impl<D: Draft> Autosave<D> {
+    /// Why the save was refused, while the editor rests in conflict.
+    #[must_use]
+    pub fn conflict(&self) -> Option<Stale> {
+        self.conflict.filter(|_| self.phase == Phase::Conflict)
+    }
+
+    /// RELOAD, after a conflict: keep the member's words as an earlier version of the record
+    /// ([`Draft::kept_fields`]), then let go of the draft so the screen's next read replaces it
+    /// with the vault's row. A keep the vault refuses leaves everything as it was, the sentence
+    /// being the vault's, and the words still on screen.
+    pub fn resolve(&mut self, ctx: &Ctx) -> Resolved {
+        let Some(stale) = self.conflict() else {
+            return Resolved::Nothing;
+        };
+        let (Some(draft), Some(baseline)) = (self.draft.as_ref(), self.baseline.as_ref()) else {
+            return Resolved::Nothing;
+        };
+        let fields = draft.kept_fields(baseline);
+        let mut kept = false;
+        if let (false, Some(id)) = (fields.is_empty(), draft.subject_id()) {
+            let key = kit_act::key(&["keep-version", id], kit_act::fresh());
+            let settled = kit_act::act(ctx, keep_request(id, fields), &key);
+            if !settled.committed {
+                self.failure = Some(settled.refusal);
+                return Resolved::Failed;
+            }
+            self.written.extend(settled.tables.iter().cloned());
+            kept = settled.output_flag("kept").unwrap_or(true);
+        }
+        self.draft = None;
+        self.baseline = None;
+        self.saved_seq = self.edit_seq;
+        self.phase = Phase::Clean;
+        self.failure = None;
+        self.conflict = None;
+        self.remote_changed = false;
+        Resolved::Reloaded { stale, kept }
     }
 }

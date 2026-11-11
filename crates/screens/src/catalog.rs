@@ -6831,6 +6831,28 @@ pub mod act {
             }
         }
 
+        /// (history, #1185) Keep the words a refused stale save held as the record's newest earlier version, beside the record as it is, through history.keep_version; `fields` names each kept field as `table.column`. The record itself is not changed. An editor's Reload, never the assistant's.
+        #[derive(Clone, Debug, Default)]
+        pub struct KeepVersion {
+            pub fields: String,
+            pub earlier_version_id: String,
+        }
+        impl KeepVersion {
+            pub const NAME: &str = "keep-version";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("fields".to_owned(), text(self.fields));
+                map.insert("id".to_owned(), text(self.earlier_version_id));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<KeepVersion> for wire::ActRequest {
+            fn from(value: KeepVersion) -> Self {
+                value.request()
+            }
+        }
+
         /// (history, #1185) Put a record back to its newest earlier version through history.undo: the Undo after a restore, and the Undo of any edit of one record (the core offers it as the act's inverse, naming the version the act made in `seq`; with `seq` it is refused when the record changed again since). Any app's screen runs it. A detail screen's tap, never the assistant's.
         #[derive(Clone, Debug, Default)]
         pub struct UndoChange {

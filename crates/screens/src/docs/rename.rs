@@ -24,6 +24,10 @@ struct Title {
 impl Draft for Title {
     const ACTION: &'static str = act::docs::Rename::NAME;
 
+    fn noun(locale: Locale) -> String {
+        crate::strings::chat_confirm::noun_document(locale)
+    }
+
     fn subject(&self) -> &str {
         &self.document_id
     }

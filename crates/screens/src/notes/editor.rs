@@ -59,7 +59,7 @@ use super::rich::{self, LinkTarget};
 use super::{Phase, denied, fold, routes};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
-use crate::kit::autosave::{Autosave, Draft};
+use crate::kit::autosave::{Autosave, Draft, Resolved};
 use crate::kit::civil;
 use crate::kit::earlier;
 use crate::kit::export::ExportFile;
@@ -68,7 +68,7 @@ use crate::kit::read::{self, Reading};
 use crate::kit::share::{self, Share};
 use crate::kit::undo::Undo as Door;
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, fill, links as link_words, notes as words};
+use crate::strings::{Locale, fill, links as link_words, notes as words, shared};
 use std::collections::{BTreeSet, HashMap};
 
 const BRACKETS: &str = "[[";
@@ -111,6 +111,9 @@ struct NoteDraft {
     id: Option<String>,
     title: String,
     body: String,
+    /// The note's revision when it was read, advanced by each save's answer: what a save names as
+    /// the one it replaces (#1185). 0 for a note not yet created.
+    rev: i64,
 }
 
 impl Draft for NoteDraft {
@@ -141,7 +144,8 @@ impl Draft for NoteDraft {
     ///   No first line: a changed title is sent EMPTY, so a name the member
     ///   removed does not stay in the vault and come back on the next read.
     /// * The pin is not an input: it is the shared flag verbs.
-    /// * There is no vault-side version check: the last save on this phone wins.
+    /// * A save names the revision it was made from (`expected_rev`), so a note that changed
+    ///   somewhere else since is refused and never overwritten (#1185).
     fn request(&self, baseline: &Self) -> Option<wire::ActRequest> {
         let title = if self.title.trim().is_empty() {
             fold::first_line(&self.body)
@@ -171,19 +175,47 @@ impl Draft for NoteDraft {
                 title: title_changed.then_some(title),
                 body: body_changed.then(|| self.body.clone()),
                 format: None,
-                expected_rev: None,
+                expected_rev: Some(self.rev),
             }
             .into(),
         )
     }
 
     fn committed(&mut self, output: &[u8]) {
-        if self.id.is_some() {
-            return;
+        let value = serde_json::from_slice::<serde_json::Value>(output).ok();
+        if self.id.is_none() {
+            self.id = value
+                .as_ref()
+                .and_then(|value| value.get("id")?.as_str().map(str::to_owned));
+        } else if let Some(rev) = value.as_ref().and_then(|value| value.get("rev")?.as_i64()) {
+            self.rev = rev;
         }
-        self.id = serde_json::from_slice::<serde_json::Value>(output)
-            .ok()
-            .and_then(|value| value.get("id")?.as_str().map(str::to_owned));
+    }
+
+    fn subject_id(&self) -> Option<&str> {
+        self.id.as_deref()
+    }
+
+    fn base_rev(&self) -> Option<i64> {
+        self.id.as_ref().map(|_| self.rev)
+    }
+
+    fn noun(locale: Locale) -> String {
+        crate::strings::chat_confirm::noun_note(locale)
+    }
+
+    /// The words the note does not hold: the title as a save would have given it and the body.
+    fn kept_fields(&self, baseline: &Self) -> Vec<(String, serde_json::Value)> {
+        let mut fields = Vec::new();
+        if self.body != baseline.body {
+            fields.push(("note.body".to_owned(), self.body.clone().into()));
+        }
+        if self.title != baseline.title
+            || (self.title.trim().is_empty() && self.body != baseline.body)
+        {
+            fields.push(("entity.title".to_owned(), effective_title(self).into()));
+        }
+        fields
     }
 }
 
@@ -346,6 +378,14 @@ impl Editor {
             },
         );
         match reading {
+            // WORDS NOT YET SAVED ARE THE ONLY COPY: a note that went to the trash (or is gone)
+            // does not replace the editor under them. The save will be refused as stale and
+            // Reload keeps the words as an earlier version (#1185).
+            Reading::Data(note)
+                if (!note.found || note.deleted_at.is_some()) && self.auto.unsaved() =>
+            {
+                self.auto.vault_moved();
+            }
             Reading::Data(note) if !note.found => self.refuse(words::note_missing(locale)),
             Reading::Data(note) if note.deleted_at.is_some() => {
                 self.refuse(words::note_trashed(locale));
@@ -370,6 +410,7 @@ impl Editor {
                         id: Some(id),
                         title: note.title,
                         body: note.body,
+                        rev: note.rev,
                     },
                 );
                 if self.auto.loaded(incoming) {
@@ -1097,6 +1138,10 @@ impl Editor {
     /// THE STATUS LINE'S VERB (the kit's `StatusActed`, or the editor's own): a dead link's Create
     /// or Restore, the checklist toggle's Undo, or the Undo of a write that went through the door.
     fn status_acted(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
+        if self.auto.conflict().is_some() {
+            self.reload_after_conflict(ctx);
+            return Vec::new();
+        }
         match self.offer.take() {
             Some(offer) => self.accept(ctx, offer),
             None if self.undo.is_some() => {
@@ -1109,6 +1154,28 @@ impl Editor {
                 }
                 Vec::new()
             }
+        }
+    }
+
+    /// RELOAD after a save the vault refused as stale (#1185): the member's words are kept as an
+    /// earlier version of the note, then the vault's row is read and shown. A note that went to
+    /// the trash is shown as trashed, with where the words went; one that only changed says so on
+    /// the status line.
+    fn reload_after_conflict(&mut self, ctx: &Ctx) {
+        let locale = ctx.locale();
+        let resolved = self.auto.resolve(ctx);
+        self.own.extend(self.auto.take_written());
+        let Resolved::Reloaded { kept, .. } = resolved else {
+            return;
+        };
+        self.forget_sentence();
+        self.reload(ctx);
+        if !kept {
+            return;
+        }
+        match self.blocked.as_mut() {
+            Some(blocked) => blocked.remedy = shared::stale_trashed_kept_note(locale),
+            None => self.say(shared::stale_kept_note(locale)),
         }
     }
 
@@ -1356,6 +1423,7 @@ impl Screen for Editor {
                             id: None,
                             title: String::new(),
                             body: String::new(),
+                            rev: 0,
                         });
                     } else {
                         self.reload(ctx);
@@ -1432,7 +1500,7 @@ impl Screen for Editor {
             // A save and the clean re-read after it are both "Saved".
             wire::autosave::Phase::Saved => words::saved(locale),
             wire::autosave::Phase::Clean if autosave.edit_seq > 0 => words::saved(locale),
-            wire::autosave::Phase::Refused => autosave
+            wire::autosave::Phase::Refused | wire::autosave::Phase::Conflict => autosave
                 .failure
                 .as_ref()
                 .map(|failure| failure.sentence.clone())
@@ -1474,7 +1542,9 @@ impl Screen for Editor {
                 },
                 // Undo, or a dead link's Create or Restore, is offered while its sentence is the
                 // one shown.
-                status_action: if (self.undo.is_some() || self.offer.is_some())
+                status_action: if phase == wire::autosave::Phase::Conflict {
+                    shared::stale_reload_label(locale)
+                } else if (self.undo.is_some() || self.offer.is_some())
                     && !autosave.refused
                     && self.read_failure.is_none()
                     && self.status.is_some()
@@ -1773,6 +1843,7 @@ mod tests {
             id: id.map(str::to_owned),
             title: title.into(),
             body: body.into(),
+            rev: 0,
         }
     }
 
@@ -1788,17 +1859,50 @@ mod tests {
         // The title alone.
         let request = draft(Some("n1"), "New", "words").request(&base).unwrap();
         assert_eq!(request.action, "edit-note");
-        assert_eq!(sent(&request), ["id", "title"]);
+        assert_eq!(sent(&request), ["expected_rev", "id", "title"]);
         // The body alone.
         let request = draft(Some("n1"), "Old", "more words")
             .request(&base)
             .unwrap();
-        assert_eq!(sent(&request), ["body", "id"]);
+        assert_eq!(sent(&request), ["body", "expected_rev", "id"]);
         // Nothing changed: nothing to send.
         assert!(base.request(&base).is_none());
         // A body cleared to nothing is the member's words.
         let request = draft(Some("n1"), "Old", "").request(&base).unwrap();
-        assert_eq!(sent(&request), ["body", "id"]);
+        assert_eq!(sent(&request), ["body", "expected_rev", "id"]);
+    }
+
+    #[test]
+    fn a_save_names_the_revision_it_was_made_from_and_takes_the_one_it_answers() {
+        let mut base = draft(Some("n1"), "Old", "words");
+        base.rev = 3;
+        let mut mine = draft(Some("n1"), "Old", "more words");
+        mine.rev = 3;
+        let request = mine.request(&base).unwrap();
+        assert_eq!(
+            request.input["expected_rev"].kind,
+            Some(wire::value::Kind::Integer(3))
+        );
+        assert_eq!(mine.base_rev(), Some(3));
+        mine.committed(br#"{"id":"n1","rev":4}"#);
+        assert_eq!(mine.base_rev(), Some(4));
+        // A note not yet created has no revision to name.
+        assert_eq!(draft(None, "", "x").base_rev(), None);
+    }
+
+    #[test]
+    fn the_words_kept_for_a_reload_are_the_ones_the_vault_does_not_hold() {
+        let base = draft(Some("n1"), "Old", "words");
+        let kept = draft(Some("n1"), "Old", "mine").kept_fields(&base);
+        assert_eq!(kept, [("note.body".to_owned(), "mine".into())]);
+        let kept = draft(Some("n1"), "", "\nFirst line\nrest").kept_fields(&base);
+        assert_eq!(
+            kept.iter()
+                .map(|(name, _)| name.as_str())
+                .collect::<Vec<_>>(),
+            ["note.body", "entity.title"]
+        );
+        assert!(base.kept_fields(&base).is_empty());
     }
 
     #[test]
@@ -1807,7 +1911,7 @@ mod tests {
         let request = draft(Some("n1"), "", "\n  Shopping list \nmilk")
             .request(&base)
             .unwrap();
-        assert_eq!(sent(&request), ["body", "id", "title"]);
+        assert_eq!(sent(&request), ["body", "expected_rev", "id", "title"]);
         assert_eq!(
             request.input["title"].kind,
             Some(wire::value::Kind::Text("Shopping list".to_owned()))
@@ -1837,11 +1941,13 @@ mod tests {
             id: Some("n".into()),
             title: String::new(),
             body: "Milk".into(),
+            rev: 0,
         };
         let incoming = NoteDraft {
             id: Some("n".into()),
             title: "Milk".into(),
             body: "Milk".into(),
+            rev: 0,
         };
         assert_eq!(keep_derived(Some(&current), incoming.clone()).title, "");
         assert_eq!(keep_derived(None, incoming).title, "Milk");

@@ -2,10 +2,13 @@
 //!
 //! History itself is not a command: the commit door keeps every record's earlier state
 //! ([`crate::history`]). What a member does with it is two verbs, both ordinary writes that make a
-//! version of their own, so a restore is undone by restoring again:
+//! version of their own, so a restore is undone by restoring again (and a third keeps words a stale save
+//! could not):
 //!
 //! - `history.restore_version`: the record goes back to what version `seq` held, field by field
 //!   and row by row.
+//! - `history.keep_version`: the words a refused stale save held, kept as the newest earlier version beside
+//!   the record as it is (the record is not changed).
 //! - `history.undo`: the record goes back to its newest earlier version, "undo the last change".
 //!   It is the generic inverse of every edit; it is not idempotent (twice undoes then redoes).
 //!   Given `seq` it undoes THAT change and nothing else: the version must still be the newest, so
@@ -95,6 +98,44 @@ fn undo(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     ))
 }
 
+fn fields(ctx: &CommandCtx<'_, '_>) -> serde_json::Map<String, serde_json::Value> {
+    ctx.input
+        .get("fields")
+        .and_then(serde_json::Value::as_object)
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// The record is there (in the trash or not: a record trashed elsewhere keeps the words that
+/// were being written to it) and each field is one its history keeps. A Locker item is not kept
+/// this way: its secrets are sealed by the core, not here.
+fn pre_keep(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let id = ctx.required_str("id")?;
+    let Some(found) = crate::commands::entity::find(ctx.connection(), id)? else {
+        return Ok(Some(format!("there is nothing with the id `{id}`")));
+    };
+    if found.kind == crate::model::Kind::LockerItem {
+        return Ok(Some(
+            "A Locker item keeps its earlier values on its own.".to_owned(),
+        ));
+    }
+    history::overlay_refusal(ctx.connection(), id, &fields(ctx))
+}
+
+fn keep_version(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let id = ctx.required_str("id")?;
+    let kept = history::keep_overlay(ctx.connection(), id, &fields(ctx), &ctx.now, ctx.command)?;
+    Ok(match kept {
+        history::Kept::Version(seq) => serde_json::json!({ "id": id, "kept": true, "seq": seq }),
+        history::Kept::Same => serde_json::json!({ "id": id, "kept": false }),
+    })
+}
+
+const KEEP: &[CommandCondition] = &[CommandCondition {
+    predicate: "the record is there and each field is one its history keeps",
+    check: pre_keep,
+}];
+
 const RESTORE: &[CommandCondition] = &[CommandCondition {
     predicate: "the record is live and the version is in its history",
     check: pre_restore,
@@ -123,6 +164,22 @@ pub fn definitions() -> Vec<CommandDefinition> {
             Idempotency::Idempotent,
             RESTORE,
             restore_version,
+        ),
+        CommandDefinition::plain(
+            "history.keep_version",
+            "history",
+            r#"{
+              "type": "object",
+              "required": ["id", "fields"],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "fields": { "type": "object", "minProperties": 1 }
+              }
+            }"#,
+            Idempotency::Once,
+            KEEP,
+            keep_version,
         ),
         CommandDefinition::plain(
             "history.undo",

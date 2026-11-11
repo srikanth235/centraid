@@ -197,7 +197,7 @@ fn an_existing_note_opens_on_its_words_and_saves_the_title_alone() {
 }
 
 #[test]
-fn a_change_from_the_vault_never_takes_the_words_being_typed() {
+fn a_change_from_the_vault_never_takes_the_words_being_typed_and_the_save_is_refused() {
     let mut d = driver();
     let id = note(&d, "Plans", "first draft");
     let i = open(&mut d, &id);
@@ -221,10 +221,194 @@ fn a_change_from_the_vault_never_takes_the_words_being_typed() {
             .remote_changed
     );
     settle(&mut d);
-    // Saved, then the vault is read again: both edits stand.
+    // THE SAVE CHECKED WHAT IT WAS REPLACING: the note is the other surface's, the words stay.
     let stored = note_of(&d, &id);
-    assert_eq!(stored.body, "my typing");
+    assert_eq!(stored.body, "first draft");
+    assert_eq!(stored.title, "Elsewhere");
+    assert_eq!(
+        stored.rev, 1,
+        "the other surface's edit is the note's first version"
+    );
+    assert_eq!(draft(d.view(i)).body, "my typing");
+    let state = editor_state(d.view(i));
+    let autosave = state.autosave.as_ref().unwrap();
+    assert_eq!(
+        autosave.phase,
+        wire::autosave::Phase::Conflict as i32,
+        "a stale save is a conflict, not a refusal to try again"
+    );
+    assert!(autosave.refused);
+    let chrome = state.chrome.as_ref().unwrap();
+    assert_eq!(chrome.status, "This note changed somewhere else.");
+    assert_eq!(chrome.status_action, "Reload");
+}
+
+#[test]
+fn leaving_over_a_conflict_does_not_try_the_save_again() {
+    use centraid_screens::kit::autosave::{Autosave, Draft};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static REQUESTS: AtomicUsize = AtomicUsize::new(0);
+
+    #[derive(Clone, PartialEq)]
+    struct Words {
+        id: String,
+        body: String,
+        rev: i64,
+    }
+    impl Draft for Words {
+        const ACTION: &'static str = "note.edit";
+        fn subject(&self) -> &str {
+            &self.id
+        }
+        fn refusal(&self, _: centraid_screens::strings::Locale) -> Option<String> {
+            None
+        }
+        fn request(&self, baseline: &Self) -> Option<wire::ActRequest> {
+            (self.body != baseline.body).then(|| {
+                REQUESTS.fetch_add(1, Ordering::SeqCst);
+                act::notes::EditNote {
+                    note_id: self.id.clone(),
+                    body: Some(self.body.clone()),
+                    expected_rev: Some(self.rev),
+                    ..Default::default()
+                }
+                .into()
+            })
+        }
+        fn noun(_: centraid_screens::strings::Locale) -> String {
+            "note".into()
+        }
+        fn base_rev(&self) -> Option<i64> {
+            Some(self.rev)
+        }
+    }
+
+    let d = driver();
+    let id = note(&d, "Plans", "first draft");
+    arrange(
+        &d,
+        act::notes::EditNote {
+            note_id: id.clone(),
+            body: Some("elsewhere".into()),
+            ..Default::default()
+        },
+    );
+    let mut auto = Autosave::new();
+    // The draft was read at revision 0; the note has moved since.
+    auto.loaded(Words {
+        id,
+        body: "first draft".into(),
+        rev: 0,
+    });
+    d.with_ctx(|ctx| {
+        auto.edit(ctx, |words| words.body = "mine".into());
+        assert!(!auto.fired(ctx, "elsewhere"), "only its own timer saves");
+        let _ = auto.flush(ctx);
+        assert_eq!(REQUESTS.load(Ordering::SeqCst), 1);
+        assert!(auto.conflict().is_some());
+        // Closing over the conflict saves nothing more, and typing on does not either.
+        let _ = auto.flush(ctx);
+        auto.edit(ctx, |words| words.body = "mine, longer".into());
+        let _ = auto.flush(ctx);
+        assert_eq!(REQUESTS.load(Ordering::SeqCst), 1);
+        assert!(auto.conflict().is_some());
+        assert_eq!(
+            auto.draft().map(|words| words.body.as_str()),
+            Some("mine, longer")
+        );
+    });
+}
+
+#[test]
+fn reload_keeps_the_words_as_an_earlier_version_and_shows_the_vaults_note() {
+    let mut d = driver();
+    let id = note(&d, "Plans", "first draft");
+    let i = open(&mut d, &id);
+    type_body(&mut d, i, "my typing");
+    arrange(
+        &d,
+        act::notes::EditNote {
+            note_id: id.clone(),
+            title: Some("Elsewhere".into()),
+            ..Default::default()
+        },
+    );
+    settle(&mut d);
+    assert_eq!(
+        editor_state(d.view(i))
+            .chrome
+            .as_ref()
+            .unwrap()
+            .status_action,
+        "Reload"
+    );
+    send_editor(&mut d, i, N::StatusActed(ev::StatusActed {}));
+    // The vault's row is shown, the member's words are not lost, and the line says where they are.
     assert_eq!(draft(d.view(i)).title, "Elsewhere");
+    assert_eq!(draft(d.view(i)).body, "first draft");
+    let state = editor_state(d.view(i));
+    let chrome = state.chrome.as_ref().unwrap();
+    assert_eq!(chrome.status, "Your text is in Earlier versions.");
+    assert_eq!(chrome.status_action, "");
+    assert_ne!(
+        state.autosave.as_ref().unwrap().phase,
+        wire::autosave::Phase::Conflict as i32
+    );
+    // Two earlier versions now: the other surface's edit replaced the first, and the member's words.
+    let entry = state.earlier.clone().expect("the entry");
+    assert_eq!(entry.count_label, "2");
+    assert_eq!(note_of(&d, &id).body, "first draft");
+    // And the member can go on from the vault's note: the next save is fresh.
+    type_body(&mut d, i, "now from the new one");
+    settle(&mut d);
+    assert_eq!(note_of(&d, &id).body, "now from the new one");
+}
+
+#[test]
+fn a_note_moved_to_the_trash_elsewhere_refuses_the_save_and_reload_keeps_the_words() {
+    let mut d = driver();
+    let id = note(&d, "Plans", "first draft");
+    let i = open(&mut d, &id);
+    type_body(&mut d, i, "my typing");
+    arrange(
+        &d,
+        act::notes::DeleteNote {
+            note_id: id.clone(),
+        },
+    );
+    settle(&mut d);
+    let state = editor_state(d.view(i));
+    let autosave = state.autosave.as_ref().unwrap();
+    assert_eq!(autosave.phase, wire::autosave::Phase::Conflict as i32);
+    assert_eq!(
+        state.chrome.as_ref().unwrap().status,
+        "This note was moved to the trash."
+    );
+    assert_eq!(draft(d.view(i)).body, "my typing");
+    send_editor(&mut d, i, N::StatusActed(ev::StatusActed {}));
+    // The trashed state is shown, and says where the words went.
+    match &editor_state(d.view(i)).content {
+        Some(wire::notes_editor_state::Content::Failure(failure)) => {
+            assert_eq!(failure.sentence, "This note is in the trash.");
+            assert_eq!(
+                failure.remedy,
+                "Restore it to find your text in Earlier versions."
+            );
+        }
+        other => panic!("not the trashed state: {other:?}"),
+    }
+    // Restored, the words are there as the note's earlier version.
+    arrange(
+        &d,
+        act::notes::RestoreNote {
+            note_id: id.clone(),
+        },
+    );
+    let j = open(&mut d, &id);
+    let entry = editor_state(d.view(j)).earlier.clone().expect("the entry");
+    assert_eq!(entry.count_label, "1");
+    assert_eq!(note_of(&d, &id).body, "first draft");
 }
 
 #[test]
