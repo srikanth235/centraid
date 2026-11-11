@@ -248,8 +248,18 @@ fn root_of(phone: &Phone, tab: &str) -> u64 {
         .expect("a root")
 }
 
+/// Who the roster lists. A vault with no one in it is the page's own empty state and carries no
+/// roster, so it lists no one.
 fn people_names(phone: &Phone) -> Vec<String> {
-    names(roster_data(phone.driver.view(root_of(phone, people::TAB))))
+    let view = phone.driver.view(root_of(phone, people::TAB));
+    let empty = people_support::home_state(view)
+        .page
+        .as_ref()
+        .is_some_and(|page| matches!(page.state, Some(wire::page_state::State::Empty(_))));
+    if empty {
+        return Vec::new();
+    }
+    names(roster_data(view))
 }
 
 fn shown(phone: &Phone) -> String {
