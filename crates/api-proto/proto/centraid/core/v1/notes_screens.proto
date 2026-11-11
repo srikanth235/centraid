@@ -13,6 +13,7 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
+import "centraid/core/v1/agenda_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/route.proto";
 
@@ -507,6 +508,20 @@ message NotesEditorState {
   // THE NOTE'S READ (#1185): loading, failed (also a note that is gone or in the trash, with its
   // own sentence), refused, or ready, with a note when a re-read failed over the words shown.
   PageState page = 21;
+  // The menu's "Attachments   2 ›" row (#1185): absent before the note exists.
+  optional NotesAttachmentsEntry attachments_entry = 22;
+  // THE "Attachments" SHEET, while the member has it open: the photos and files on the note, with
+  // Add photo and Add file. The kit's shared section (`AgendaAttachmentsSection`); its events go
+  // back as `NotesEditorEvent.attachment`.
+  optional AgendaAttachmentsSection attachments = 23;
+}
+
+// The menu row that opens the "Attachments" sheet.
+message NotesAttachmentsEntry {
+  // "Attachments".
+  string label = 1;
+  // How many are shown, "2"; empty when none.
+  string count_label = 2;
 }
 
 // The menu row that opens the "Linked to" sheet.
@@ -725,7 +740,17 @@ message NotesEditorEvent {
     LinksClosed links_closed = 19;
     // A tap in the sheet or its picker (#1185).
     LinkEvent link = 20;
+    // The menu's "Attachments" row: opens the sheet (#1185).
+    AttachmentsOpened attachments_opened = 21;
+    // The sheet was dismissed.
+    AttachmentsClosed attachments_closed = 22;
+    // A tap in the sheet: the kit's `AgendaAttachmentEvent`.
+    AgendaAttachmentEvent attachment = 23;
   }
+
+  message AttachmentsOpened {}
+
+  message AttachmentsClosed {}
 
   message LinksOpened {}
 

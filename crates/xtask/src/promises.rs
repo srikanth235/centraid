@@ -493,7 +493,11 @@ pub const REGISTER: &[Row] = &[
         Promise::Attach,
         "crates/screens/src/money/transaction.rs",
     ),
-    owed("notes", Promise::Attach, ATTACH_OWED),
+    kept(
+        "notes",
+        Promise::Attach,
+        "crates/screens/src/notes/editor.rs",
+    ),
     kept(
         "people",
         Promise::Attach,
@@ -644,9 +648,6 @@ pub const STALE_SAVE_EXEMPT: &[(&str, &str)] = &[(
 )];
 
 const UNITS_PROOF: &str = "crates/screens/src/kit/quantity.rs";
-
-const ATTACH_OWED: &str =
-    "the detail screen does not embed the kit's attachments section yet (#1185)";
 
 const fn exempt(app: &'static str, promise: Promise, ruling: &'static str) -> Row {
     Row {

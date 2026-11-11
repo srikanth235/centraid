@@ -216,6 +216,10 @@ public fun NotesEditorScreen(
         val options = buildList {
             add(SheetOption(key = MENU_PIN, label = chrome.pin_label))
             add(SheetOption(key = MENU_LINK, label = chrome.link_label))
+            // ATTACHMENTS (#1185): the photos and files on the note; a sheet over the editor.
+            state.attachments_entry?.let { entry ->
+                add(SheetOption(key = MENU_ATTACHMENTS, label = entry.label, detail = entry.count_label))
+            }
             // LINKED TO (#1185): everything the note is linked to; a sheet over the editor.
             state.links_entry?.let { entry ->
                 add(SheetOption(key = MENU_LINKS, label = entry.label, detail = entry.count_label))
@@ -238,6 +242,7 @@ public fun NotesEditorScreen(
                 when (key) {
                     MENU_PIN -> onEvent(NotesEditorEvent(pin = NotesEditorEvent.PinToggled()))
                     MENU_LINK -> onEvent(NotesEditorEvent(link_requested = NotesEditorEvent.LinkRequested()))
+                    MENU_ATTACHMENTS -> onEvent(NotesEditorEvent(attachments_opened = NotesEditorEvent.AttachmentsOpened()))
                     MENU_LINKS -> onEvent(NotesEditorEvent(links_opened = NotesEditorEvent.LinksOpened()))
                     MENU_EARLIER -> state.earlier?.route?.let(onOpen)
                     MENU_SEND -> state.send_to_agenda?.let(onOpen)
@@ -267,6 +272,25 @@ public fun NotesEditorScreen(
     }
     state.link_picker?.takeIf { it.open_ }?.let { picker ->
         dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(NotesEditorEvent(link = link)) }
+    }
+    // THE "Attachments" SHEET (#1185): the kit's section; Rust makes every word and row.
+    state.attachments?.let { section ->
+        val closed = { onEvent(NotesEditorEvent(attachments_closed = NotesEditorEvent.AttachmentsClosed())) }
+        SheetRoom(title = state.attachments_entry?.label.orEmpty(), onDismiss = closed) {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                dev.centraid.android.screens.agenda.AgendaAttachmentsView(
+                    section = section,
+                    prefix = "notes-editor",
+                    onEvent = { onEvent(NotesEditorEvent(attachment = it)) },
+                    // The sheet gives way to the page it opens.
+                    onOpen = { route ->
+                        closed()
+                        onOpen(route)
+                    },
+                    padded = false,
+                )
+            }
+        }
     }
 }
 
@@ -373,6 +397,7 @@ private fun LinkSheet(sheet: NotesLinkSheet, onEvent: (NotesEditorEvent) -> Unit
 private const val MENU_PIN = "pin"
 private const val MENU_LINK = "link"
 private const val MENU_LINKS = "linked-to"
+private const val MENU_ATTACHMENTS = "attachments"
 private const val MENU_EARLIER = "earlier-entry"
 private const val MENU_ORIGIN = "origin-line"
 private const val MENU_SEND = "send-to-agenda"

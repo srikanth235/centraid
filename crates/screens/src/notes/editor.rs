@@ -59,6 +59,7 @@ use super::rich::{self, LinkTarget};
 use super::{denied, fold, routes};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
+use crate::kit::attachments::Attachments;
 use crate::kit::autosave::{Autosave, Draft, Resolved};
 use crate::kit::civil;
 use crate::kit::earlier;
@@ -276,6 +277,9 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         linked: None,
         linked_unread: false,
         links_open: false,
+        attachments: None,
+        attachments_for: String::new(),
+        attachments_open: false,
         started: false,
     }))
 }
@@ -361,6 +365,13 @@ struct Editor {
     linked_unread: bool,
     /// The menu's "Linked to" sheet is up.
     links_open: bool,
+    /// The photos and files on the note (#1185): the kit's section, built once the note's id is
+    /// known and read with it. `None` before the note exists.
+    attachments: Option<Attachments>,
+    /// The note's id `attachments` was built for.
+    attachments_for: String,
+    /// The menu's "Attachments" sheet is up.
+    attachments_open: bool,
     /// `Appeared` has been seen.
     started: bool,
 }
@@ -408,6 +419,7 @@ impl Editor {
                 self.about = fold::about_chips(ctx.locale(), &note.about);
                 self.earlier = earlier::foot(ctx, super::EARLIER, &id, "");
                 self.read_linked(ctx, &id);
+                self.read_attachments(ctx, &id);
                 let incoming = keep_derived(
                     self.auto.draft(),
                     NoteDraft {
@@ -477,6 +489,18 @@ impl Editor {
 
     fn linked_ids(&self) -> Vec<String> {
         self.linked.as_deref().map(links::ids).unwrap_or_default()
+    }
+
+    /// The photos and files on the note, read with it. The section is built for the note's id the
+    /// first time it is known (a new note has none until it is saved).
+    fn read_attachments(&mut self, ctx: &Ctx, id: &str) {
+        if self.attachments_for != id {
+            self.attachments = Some(Attachments::of("notes", id));
+            self.attachments_for = id.to_owned();
+        }
+        if let Some(attachments) = &mut self.attachments {
+            attachments.reload(ctx);
+        }
     }
 
     /// One tap in the "Linked to" sheet or its picker. A link is written through the kit's door
@@ -889,6 +913,9 @@ impl Editor {
         self.linked = None;
         self.links_open = false;
         self.links.close();
+        self.attachments = None;
+        self.attachments_for.clear();
+        self.attachments_open = false;
         self.auto = Autosave::new();
         self.denied = None;
         // The note is gone or in the trash: trying again cannot help, so no Retry.
@@ -1150,6 +1177,13 @@ impl Editor {
                 self.links.close();
             }
             Some(N::Link(link)) => self.link_event(ctx, &link),
+            Some(N::AttachmentsOpened(_)) => self.attachments_open = self.attachments.is_some(),
+            Some(N::AttachmentsClosed(_)) => self.attachments_open = false,
+            Some(N::Attachment(attachment)) => {
+                if let Some(attachments) = &mut self.attachments {
+                    return attachments.event(ctx, attachment);
+                }
+            }
             // Retry: the note is read again, and so is the powerbox when it is up.
             Some(N::Refreshed(_)) => {
                 self.own.clear();
@@ -1483,9 +1517,17 @@ impl Screen for Editor {
             // after the check passed.
             Some(E::EffectResult(result)) => {
                 let file = self.markdown();
-                return self
+                let shared = self
                     .share
                     .result(ctx, &result, |_| file.ok_or_else(String::new));
+                if !shared.is_empty() || self.share.status().is_some() {
+                    return shared;
+                }
+                // The shell's answer to a pick: the attachments' (an add under way).
+                if let (Some(attachments), Some(outcome)) = (&mut self.attachments, &result.outcome)
+                {
+                    return attachments.result(ctx, outcome).unwrap_or_default();
+                }
             }
             Some(E::NotesEditor(event)) => return self.event(event, ctx),
             _ => {}
@@ -1686,6 +1728,21 @@ impl Screen for Editor {
                     state.link_picker =
                         Some(Box::new(self.links.picker(locale, &links::ids(linked))));
                 }
+            }
+        }
+        // THE MENU'S "Attachments" ROW and, once opened, its sheet (#1185).
+        if let (true, Some(attachments)) = (exists && self.blocked.is_none(), &self.attachments) {
+            let section = attachments.view(locale, ctx.units());
+            state.attachments_entry = Some(wire::NotesAttachmentsEntry {
+                label: words::attachments_label(locale),
+                count_label: if section.items.is_empty() {
+                    String::new()
+                } else {
+                    section.items.len().to_string()
+                },
+            });
+            if self.attachments_open {
+                state.attachments = Some(Box::new(section));
             }
         }
         // SEND TO REMINDERS: Reminders' quick add, the words waiting in it (the Inbox

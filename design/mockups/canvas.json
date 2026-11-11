@@ -1417,6 +1417,14 @@
       "x": 4160,
       "y": 29520
     },
+    "NoteAttachments.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · A note, attachments",
+      "w": 390,
+      "x": 4160,
+      "y": 30420
+    },
     "NoteLinksDark.dc.html": {
       "h": 844,
       "page": "dark",
@@ -3145,6 +3153,7 @@
     "VersionsLocker.dc.html",
     "NoteMenu.dc.html",
     "NoteLinks.dc.html",
+    "NoteAttachments.dc.html",
     "NotesJournal.dc.html",
     "NotesJournalDark.dc.html",
     "MoneyCashflow.dc.html",

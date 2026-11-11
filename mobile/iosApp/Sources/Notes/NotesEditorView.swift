@@ -82,6 +82,13 @@ struct NotesEditorView: View {
                 Menu {
                     Button(chrome.pinLabel) { send(event { $0.pin = .init() }) }
                     Button(chrome.linkLabel) { send(event { $0.linkRequested = .init() }) }
+                    if state.hasAttachmentsEntry {
+                        // ATTACHMENTS (#1185): the photos and files on the note; a sheet over the editor.
+                        Button([state.attachmentsEntry.label, state.attachmentsEntry.countLabel].filter { !$0.isEmpty }.joined(separator: "  ")) {
+                            send(event { $0.attachmentsOpened = .init() })
+                        }
+                        .accessibilityIdentifier("note-editor-attachments")
+                    }
                     if state.hasLinksEntry {
                         // LINKED TO (#1185): everything the note is linked to; a sheet over the editor.
                         Button([state.linksEntry.label, state.linksEntry.countLabel].filter { !$0.isEmpty }.joined(separator: "  ")) {
@@ -210,6 +217,24 @@ struct NotesEditorView: View {
                 open: { route in
                     // The sheet gives way to the page it opens.
                     send(event { $0.linksClosed = .init() })
+                    open(route)
+                }
+            )
+        }
+        .sheet(isPresented: Binding(
+            get: { state.hasAttachments },
+            set: { shown in
+                guard !shown, state.hasAttachments else { return }
+                send(event { $0.attachmentsClosed = .init() })
+            }
+        )) {
+            NotesAttachmentsSheet(
+                title: state.attachmentsEntry.label,
+                section: state.attachments,
+                send: { attachment in send(event { $0.attachment = attachment }) },
+                open: { route in
+                    // The sheet gives way to the page it opens.
+                    send(event { $0.attachmentsClosed = .init() })
                     open(route)
                 }
             )
@@ -500,6 +525,30 @@ private struct NotesLinkSheet: View {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/// THE "Attachments" SHEET (#1185): the photos and files on the note, Add photo and Add file, and the
+/// remove confirm. Rust makes every word and row; a tap is an `AgendaAttachmentEvent`.
+private struct NotesAttachmentsSheet: View {
+    let title: String
+    let section: Centraid_Core_V1_AgendaAttachmentsSection
+    let send: (Centraid_Core_V1_AgendaAttachmentEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
+
+    var body: some View {
+        SheetRoom(title: title, titleIdentifier: "notes-attachments") {
+            ScrollView {
+                AgendaAttachmentsView(
+                    section: section,
+                    idPrefix: "notes-editor-attachment",
+                    headIdentifier: "notes-editor-attachments",
+                    open: open,
+                    send: send,
+                    padded: false
+                )
             }
         }
     }

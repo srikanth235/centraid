@@ -84,6 +84,7 @@ catalog! {
     plain link_kind_photograph = ("Photo", "Photo");
     plain link_kind_task = ("Task", "Task");
     plain keyboard_hide = ("Hide keyboard", "Hide keyboard");
+    plain attachments_label = ("Attachments", "Attachments");
     plain link_added = ("Linked", "Linked");
     plain link_removed = ("Link removed", "Link removed");
     plain links_empty = ("Nothing linked yet", "Nothing linked yet");
