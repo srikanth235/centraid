@@ -118,6 +118,9 @@ internal fun TodoDetailScreen(
             onDismiss = { onEvent(TodoDetailEvent(field_closed = TodoDetailEvent.FieldClosed())) },
         )
     }
+    state.link_picker?.takeIf { it.open_ }?.let { picker ->
+        dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(TodoDetailEvent(link = link)) }
+    }
     val confirm = state.confirm
     if (confirm != null) {
         ConfirmSheet(
@@ -229,6 +232,10 @@ private fun TodoDetailBody(
                 onEvent = { onEvent(TodoDetailEvent(attachment = it)) },
                 onOpen = onOpen,
             )
+        }
+        // LINKED TO (#1185): the kit's section, after the attachments; Rust makes every word and row.
+        data.links?.let { section ->
+            dev.centraid.android.kit.LinkSectionView(section, { link -> onEvent(TodoDetailEvent(link = link)) }, onOpen)
         }
         if (data.subtasks_label.isNotEmpty() || data.subtasks.isNotEmpty()) {
             SectionHeader(SectionHead(title = data.subtasks_label))

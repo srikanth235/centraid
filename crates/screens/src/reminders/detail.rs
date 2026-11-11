@@ -28,6 +28,7 @@ use crate::kit::autosave::{Autosave, Draft};
 use crate::kit::civil::{self, HourCycle};
 use crate::kit::earlier;
 use crate::kit::follow;
+use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::quantity::UnitsPref;
 use crate::kit::read::{self, Reading};
 use crate::kit::schedule::custom::{Custom, Done};
@@ -41,7 +42,7 @@ use crate::screen::{Ctx, Screen};
 use crate::strings::{
     Locale, agenda_editor as editor_words, agenda_event as link_words,
     agenda_notify as notify_words, agenda_repeat as repeat_words, agenda_tasks as card_words,
-    task as words,
+    links as link_label, task as words,
 };
 
 /// `TodoField.key`s.
@@ -179,6 +180,10 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         earlier: earlier::Foot::default(),
         differences: follow::Phone::default(),
         share: Share::default(),
+        // A task may link to another task; the picker leaves this one out (`for_entity`).
+        links: Links::new(&Kind::ALL).for_entity(&args.task_id),
+        linked: None,
+        linked_unread: false,
     }))
 }
 
@@ -204,6 +209,14 @@ struct Detail {
     differences: follow::Phone,
     /// The task handed to the OS share sheet as a calendar file (#1185).
     share: Share,
+    /// THE "Linked to" SECTION'S PICKER (#1185): what the task can link to, any item but a Locker
+    /// one.
+    links: Links,
+    /// What the task is linked to, either end (`links::read_linked`). `None` until read, and while
+    /// a read did not land.
+    linked: Option<Vec<wire::LinkedItem>>,
+    /// The read of `linked` was refused or failed: the status line says so, no empty section.
+    linked_unread: bool,
 }
 
 impl Detail {
@@ -265,6 +278,57 @@ impl Detail {
             title: task.title.clone(),
             notes: task.description.clone().unwrap_or_default(),
         });
+        self.read_linked(ctx);
+    }
+
+    /// What the task is linked to, in both directions. A refused or failed read is said on the
+    /// status line and never drawn as an empty section.
+    fn read_linked(&mut self, ctx: &Ctx) {
+        match links::read_linked(ctx, &self.task_id) {
+            Reading::Data(items) => {
+                self.linked = Some(items);
+                self.linked_unread = false;
+            }
+            Reading::Denied(_) | Reading::Failed => {
+                self.linked = None;
+                self.linked_unread = true;
+                self.links.close();
+            }
+        }
+        self.links.reload(ctx);
+    }
+
+    fn linked_ids(&self) -> Vec<String> {
+        self.linked.as_deref().map(links::ids).unwrap_or_default()
+    }
+
+    /// One tap in the "Linked to" section or its picker, written through the kit's door (Undo when
+    /// the core can take it back); the page is read again.
+    fn link_event(&mut self, ctx: &Ctx, event: &wire::LinkEvent) {
+        let linked = self.linked_ids();
+        let id = self.task_id.clone();
+        let (request, said): (wire::ActRequest, fn(Locale) -> String) =
+            match self.links.update(event, &linked, ctx) {
+                Outcome::Moved => return,
+                Outcome::Add { id: to, .. } => (
+                    act::reminders::Link {
+                        from: id.clone(),
+                        to,
+                    }
+                    .into(),
+                    words::link_added,
+                ),
+                Outcome::Remove { id: to } => (
+                    act::reminders::Unlink {
+                        from: id.clone(),
+                        to,
+                    }
+                    .into(),
+                    words::link_removed,
+                ),
+            };
+        let name = request.action.clone();
+        self.write(ctx, request, &[&name, &id], said);
     }
 
     fn task(&self) -> Option<wire::AgendaTask> {
@@ -642,6 +706,7 @@ impl Detail {
     fn changed(&mut self, event: wire::TodoDetailEvent, ctx: &Ctx) {
         match event.kind {
             Some(D::Refreshed(_)) => self.reload(ctx),
+            Some(D::Link(link)) => self.link_event(ctx, &link),
             Some(D::Title(typed)) => self.autosave.edit(ctx, |draft| draft.title = typed.title),
             Some(D::Notes(typed)) => self.autosave.edit(ctx, |draft| draft.notes = typed.notes),
             Some(D::FieldChoice(choice)) => self.choose(ctx, &choice.field, &choice.key),
@@ -896,6 +961,14 @@ impl Detail {
             today: today.to_owned(),
             link: link_of(locale, task),
             attachments: Some(self.attachments.view(locale, units)),
+            links: self.linked.as_ref().map(|linked| {
+                self.links.section(
+                    locale,
+                    link_label::section_linked(locale),
+                    links::rows(locale, linked),
+                    words::links_empty(locale),
+                )
+            }),
             custom_repeat: self.custom_sheet(locale, task),
         }
     }
@@ -1001,11 +1074,20 @@ impl Screen for Detail {
                     .status()
                     .or_else(|| self.differences.status(locale, follow::Source::Phone))
                     .or_else(|| self.share.status())
-                    .or_else(|| self.earlier.status(locale)),
+                    .or_else(|| self.earlier.status(locale))
+                    .or_else(|| {
+                        self.linked_unread.then(|| wire::StatusLine {
+                            sentence: words::links_unread(locale),
+                            action_label: String::new(),
+                            refused: false,
+                        })
+                    }),
                 finished: self.finished,
                 earlier: self.earlier.entry.clone(),
                 origin: self.earlier.origin.clone(),
                 phone_says: phone_says(locale, &self.differences),
+                link_picker: (self.linked.is_some() && self.links.is_open())
+                    .then(|| self.links.picker(locale, &self.linked_ids())),
             })),
             ..wire::ViewState::default()
         }
@@ -1505,4 +1587,253 @@ fn phone_says(locale: Locale, differences: &follow::Phone) -> Vec<wire::PhoneSay
     .into_iter()
     .flatten()
     .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::kit::act as kit_act;
+    use crate::testing::Driver;
+    use wire::link_event::Kind as L;
+
+    /// The Driver supplies a real vault; only the `links` read and the act log are replaced.
+    struct Flaky<'a> {
+        core: &'a centraid_core::Handle,
+        fail_links: std::cell::Cell<bool>,
+        /// The `app.action` of each act made through this ctx, in order.
+        acted: std::cell::RefCell<Vec<String>>,
+        /// The `from`/`to` of each link or unlink act, in order.
+        inputs: std::cell::RefCell<Vec<(String, String, String)>>,
+    }
+
+    impl centraid_core::screens::ScreenCtx for Flaky<'_> {
+        fn load(&self, request: &wire::LoadRequest) -> centraid_core::Result<wire::LoadResponse> {
+            if self.fail_links.get() && request.app == "shell" && request.query == "links" {
+                Err(centraid_core::CoreError::Unavailable {
+                    reason: "test read failure".into(),
+                })
+            } else {
+                self.core.load(request)
+            }
+        }
+
+        fn act(&self, request: &wire::ActRequest) -> centraid_core::Result<wire::ActResponse> {
+            self.acted
+                .borrow_mut()
+                .push(format!("{}.{}", request.app, request.action));
+            if request.action == "link" || request.action == "unlink" {
+                let text = |key: &str| match request.input.get(key).and_then(|v| v.kind.as_ref()) {
+                    Some(wire::value::Kind::Text(text)) => text.clone(),
+                    _ => String::new(),
+                };
+                self.inputs
+                    .borrow_mut()
+                    .push((text("from"), text("to"), text("rel")));
+            }
+            self.core.act(request)
+        }
+
+        fn push(&self, _update: wire::ScreenUpdate) {}
+        fn wake_after(&self, _after: std::time::Duration) {}
+    }
+
+    fn flaky(core: &centraid_core::Handle) -> Flaky<'_> {
+        Flaky {
+            core,
+            fail_links: false.into(),
+            acted: Vec::new().into(),
+            inputs: Vec::new().into(),
+        }
+    }
+
+    fn make(driver: &Driver, title: &str) -> String {
+        let mut request: wire::ActRequest = act::reminders::AddTask {
+            title: title.into(),
+            ..Default::default()
+        }
+        .into();
+        request.invoke_key = format!("test:{}", kit_act::fresh());
+        let created = driver.act(request);
+        let output: serde_json::Value = serde_json::from_slice(&created.output).expect("output");
+        output["id"].as_str().expect("id").to_owned()
+    }
+
+    fn opened<'a>(core: &'a Flaky, id: &str) -> (Box<dyn Screen>, Ctx<'a>) {
+        let env: &'static crate::screen::Environment =
+            Box::leak(Box::new(crate::screen::Environment::default()));
+        let ctx = Ctx::new(core, env);
+        let mut screen = build(&routes::task(id)).expect("task page");
+        screen.update(
+            wire::ScreenEvent {
+                kind: Some(E::Appeared(wire::Appeared {})),
+            },
+            &ctx,
+        );
+        (screen, ctx)
+    }
+
+    fn link(screen: &mut Box<dyn Screen>, ctx: &Ctx, kind: L) {
+        screen.update(
+            wire::ScreenEvent {
+                kind: Some(E::TodoDetail(wire::TodoDetailEvent {
+                    kind: Some(D::Link(wire::LinkEvent { kind: Some(kind) })),
+                })),
+            },
+            ctx,
+        );
+    }
+
+    fn state(screen: &dyn Screen, ctx: &Ctx) -> wire::TodoDetailState {
+        let Some(wire::view_state::Kind::TodoDetail(state)) = screen.view(ctx).kind else {
+            panic!("task state")
+        };
+        state
+    }
+
+    fn rows(screen: &dyn Screen, ctx: &Ctx) -> Vec<(String, String)> {
+        let Some(wire::todo_detail_state::Content::Data(data)) = state(screen, ctx).content else {
+            panic!("task data")
+        };
+        data.links
+            .expect("the Linked to section")
+            .rows
+            .into_iter()
+            .map(|row| (row.title, row.meta))
+            .collect()
+    }
+
+    #[test]
+    fn the_page_lists_what_the_task_is_linked_to_and_a_pick_links_through_reminders_link() {
+        let driver = Driver::with_runtime(crate::agenda::runtime());
+        let other = make(&driver, "Book the flat");
+        let id = make(&driver, "Pack");
+        let core = flaky(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        assert!(rows(&*screen, &ctx).is_empty());
+        let Some(wire::todo_detail_state::Content::Data(data)) = state(&*screen, &ctx).content
+        else {
+            panic!("task data")
+        };
+        let section = data.links.expect("section");
+        assert_eq!(section.title, "Linked to");
+        assert_eq!(section.empty, "Nothing linked yet");
+        assert_eq!(section.adds.len(), 1, "one Add link row for many kinds");
+        link(
+            &mut screen,
+            &ctx,
+            L::Add(wire::link_event::AddTapped { key: "link".into() }),
+        );
+        let picker = state(&*screen, &ctx).link_picker.expect("kind chooser");
+        assert!(picker.open);
+        assert!(
+            picker.candidates.iter().any(|row| row.id == "task"),
+            "a task may link to another task"
+        );
+        link(
+            &mut screen,
+            &ctx,
+            L::Pick(wire::link_event::Picked { id: "task".into() }),
+        );
+        let picker = state(&*screen, &ctx).link_picker.expect("tasks");
+        assert!(picker.candidates.iter().any(|row| row.id == other));
+        assert!(
+            picker.candidates.iter().all(|row| row.id != id),
+            "a task is never offered itself"
+        );
+        link(
+            &mut screen,
+            &ctx,
+            L::Pick(wire::link_event::Picked { id: other.clone() }),
+        );
+        assert_eq!(core.acted.borrow().as_slice(), ["reminders.link"]);
+        assert_eq!(
+            core.inputs.borrow().as_slice(),
+            [(id.clone(), other.clone(), "links".to_owned())]
+        );
+        let view = state(&*screen, &ctx);
+        assert!(view.link_picker.is_none_or(|picker| !picker.open));
+        let status = view.status.expect("status");
+        assert_eq!(status.sentence, "Linked");
+        assert_eq!(status.action_label, "Undo");
+        assert_eq!(
+            rows(&*screen, &ctx),
+            [("Book the flat".to_owned(), "Task".to_owned())]
+        );
+        // The link has no direction: the other task's page lists this one.
+        let there = flaky(&driver.handle);
+        let (other_screen, other_ctx) = opened(&there, &other);
+        assert_eq!(rows(&*other_screen, &other_ctx).len(), 1);
+    }
+
+    #[test]
+    fn a_tap_on_remove_unlinks_and_undo_links_again() {
+        let driver = Driver::with_runtime(crate::agenda::runtime());
+        let other = make(&driver, "Book the flat");
+        let id = make(&driver, "Pack");
+        let core = flaky(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        for kind in [
+            L::Add(wire::link_event::AddTapped { key: "link".into() }),
+            L::Pick(wire::link_event::Picked { id: "task".into() }),
+            L::Pick(wire::link_event::Picked { id: other.clone() }),
+        ] {
+            link(&mut screen, &ctx, kind);
+        }
+        assert_eq!(rows(&*screen, &ctx).len(), 1);
+        link(
+            &mut screen,
+            &ctx,
+            L::Remove(wire::link_event::RemoveTapped { id: other.clone() }),
+        );
+        assert_eq!(
+            core.acted.borrow().as_slice(),
+            ["reminders.link", "reminders.unlink"]
+        );
+        assert_eq!(
+            core.inputs.borrow().last(),
+            Some(&(id.clone(), other.clone(), "links".to_owned()))
+        );
+        assert!(rows(&*screen, &ctx).is_empty());
+        let status = state(&*screen, &ctx).status.expect("status");
+        assert_eq!(status.sentence, "Link removed");
+        assert_eq!(status.action_label, "Undo");
+        screen.update(
+            wire::ScreenEvent {
+                kind: Some(E::StatusActed(wire::StatusActed {})),
+            },
+            &ctx,
+        );
+        assert_eq!(rows(&*screen, &ctx).len(), 1);
+    }
+
+    #[test]
+    fn links_that_could_not_be_read_are_said_not_drawn_as_none() {
+        let driver = Driver::with_runtime(crate::agenda::runtime());
+        let id = make(&driver, "Pack");
+        let core = flaky(&driver.handle);
+        core.fail_links.set(true);
+        let (mut screen, ctx) = opened(&core, &id);
+        let view = state(&*screen, &ctx);
+        let Some(wire::todo_detail_state::Content::Data(data)) = view.content else {
+            panic!("task data")
+        };
+        assert!(data.links.is_none(), "no section for what was not read");
+        assert_eq!(
+            view.status.expect("status").sentence,
+            "Couldn’t read what this task is linked to."
+        );
+        // Read again, the section comes back.
+        core.fail_links.set(false);
+        screen.update(
+            wire::ScreenEvent {
+                kind: Some(E::TodoDetail(wire::TodoDetailEvent {
+                    kind: Some(D::Refreshed(wire::todo_detail_event::Refreshed {})),
+                })),
+            },
+            &ctx,
+        );
+        assert!(rows(&*screen, &ctx).is_empty());
+        assert!(state(&*screen, &ctx).status.is_none());
+        assert!(core.acted.borrow().is_empty());
+    }
 }

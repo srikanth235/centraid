@@ -2566,6 +2566,8 @@ message TodoDetailState {
   // What the phone's Reminders say that differs from this task, each with one tap to take it
   // (#1185); empty when the task is not followed or agrees.
   repeated PhoneSays phone_says = 20;
+  // The picker over the "Linked to" section, while it is up (#1185). The kit's generic picker.
+  optional LinkPicker link_picker = 21;
 
   enum Asking {
     ASKING_UNSPECIFIED = 0;
@@ -2615,6 +2617,10 @@ message TodoDetailData {
   optional AgendaCustomRepeatSheet custom_repeat = 22;
   // "Share": the button that hands the task to the OS as a calendar file (#1185).
   string share_label = 23;
+  // "Linked to" (#1185): every item the task is linked to, from either end, with the add row. The
+  // kit's shared section, after the attachments. Absent while what it is linked to was not read
+  // (the status line says so). Its events go back as `TodoDetailEvent.link`.
+  optional LinkSection links = 24;
 }
 
 // A task's address and the one control that opens it in the browser.
@@ -2697,6 +2703,8 @@ message TodoDetailEvent {
     AgendaEditorEvent custom_repeat = 32;
     // The Share button (#1185): Rust asks the owner check, then hands the calendar file to the OS.
     ShareRequested share_requested = 33;
+    // The "Linked to" section and its picker (#1185): the kit's `LinkEvent`.
+    LinkEvent link = 34;
   }
 
   message Refreshed {}

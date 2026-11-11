@@ -96,6 +96,7 @@ struct TodoDetailView: View {
                 onDismiss: { send(event { $0.dismissed = .init() }) }
             )
         }
+        .linkPickerSheet(state.linkPicker) { link in send(event { $0.link = link }) }
         // THE TASK LEFT — deleted, or gone from the vault: the view pops.
         .onChange(of: state.finished) { _, finished in
             if finished { onClose() }
@@ -189,6 +190,12 @@ struct TodoDetailView: View {
                         open: open,
                         send: { attachment in send(event { $0.attachment = attachment }) }
                     )
+                }
+                // LINKED TO (#1185): the kit's section, after the attachments; Rust makes every word and row.
+                if detail.hasLinks {
+                    LinkSectionView(section: detail.links, send: { link in
+                        send(event { $0.link = link })
+                    }, open: open)
                 }
                 // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the foot actions.
                 EarlierEntryRow(entry: state.hasEarlier ? state.earlier : nil, open: open)

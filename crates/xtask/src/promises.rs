@@ -537,7 +537,11 @@ pub const REGISTER: &[Row] = &[
     kept("notes", Promise::Link, "crates/screens/src/notes/editor.rs"),
     owed("people", Promise::Link, LINK_OWED),
     owed("photos", Promise::Link, LINK_OWED),
-    owed("reminders", Promise::Link, LINK_OWED),
+    kept(
+        "reminders",
+        Promise::Link,
+        "crates/screens/src/reminders/detail.rs",
+    ),
 ];
 
 const LINK_OWED: &str = "the detail screen does not embed the kit's general \"Linked to\" section (`kit::links::read_linked`) yet (#1185)";

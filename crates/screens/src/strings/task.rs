@@ -73,6 +73,13 @@ catalog! {
     plain inbox = ("Inbox", "Inbox");
     plain inbox_empty = ("Nothing is waiting to be filed.", "Nothing is waiting to be filed.");
     plain lands_in = ("Add to", "Add to");
+    plain link_added = ("Linked", "Linked");
+    plain link_removed = ("Link removed", "Link removed");
+    plain links_empty = ("Nothing linked yet", "Nothing linked yet");
+    plain links_unread = (
+        "Couldn’t read what this task is linked to.",
+        "Couldn’t read what this task is linked to."
+    );
     plain loading = ("Loading tasks", "Loading tasks");
     plain logbook_empty = ("Nothing is done yet.", "Nothing is done yet.");
     plain mark = ("Mark", "Mark");
