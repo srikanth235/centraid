@@ -420,8 +420,7 @@ fn an_empty_vault_answers_every_read_empty() {
 }
 
 #[test]
-fn in_your_vault_is_what_else_is_about_the_person_events_tasks_notes_in_that_order_capped_by_kind()
-{
+fn in_your_vault_is_what_else_is_about_the_person_events_and_tasks_in_that_order_capped_by_kind() {
     use centraid_apps_people::queries::VAULT_PER_KIND;
     let w = World::new();
     let ada = w.person("Ada", json!({}));
@@ -477,8 +476,9 @@ fn in_your_vault_is_what_else_is_about_the_person_events_tasks_notes_in_that_ord
     w.ok("entity.trash", json!({ "id": trashed }));
     event("Bob's party", json!({ "attendees": [bob] }));
 
-    // A task about them, a note that links to them; a note written about them is theirs in
-    // People (`notes`), not a link from another app.
+    // A task about them, a note that links to them (a link shows once, in the page's "Linked to",
+    // not here); a note written about them is theirs in People (`notes`), not a link from
+    // another app.
     w.clock.advance_days(1);
     let task = w.ok(
         "person.add_task",
@@ -516,9 +516,8 @@ fn in_your_vault_is_what_else_is_about_the_person_events_tasks_notes_in_that_ord
             ("event", "Ada's talk"),
             ("event", "Lunch with Ada"),
             ("task", "Send Ada the book"),
-            ("note", "Chess night"),
         ],
-        "events, tasks, notes; newest first within a kind"
+        "events and tasks, newest first within a kind; a hand-made link is not here"
     );
     let by_id = |id: &str| seen.items.iter().find(|item| item.id == id).unwrap();
     assert_eq!(
@@ -532,9 +531,10 @@ fn in_your_vault_is_what_else_is_about_the_person_events_tasks_notes_in_that_ord
         None,
         "a repeating event has no one start"
     );
-    assert_eq!(
-        (by_id(&task).starts.clone(), by_id(&note).starts.clone()),
-        (None, None)
+    assert_eq!(by_id(&task).starts, None);
+    assert!(
+        seen.items.iter().all(|item| item.id != note),
+        "a note that links to the person is in their Linked to, not in the vault"
     );
     // Bob has his own: only his party.
     assert_eq!(
@@ -567,14 +567,14 @@ fn in_your_vault_is_what_else_is_about_the_person_events_tasks_notes_in_that_ord
         "newest first, {VAULT_PER_KIND} of them"
     );
     assert_eq!(capped.more, 3, "6 tasks - 3 shown");
-    assert_eq!(capped.items.len(), 3 + 3 + 1, "3 events, 3 tasks, 1 note");
+    assert_eq!(capped.items.len(), 3 + 3, "3 events, 3 tasks");
     assert_eq!(
         capped
             .items
             .iter()
             .map(|i| i.kind.key())
             .collect::<Vec<_>>(),
-        ["event", "event", "event", "task", "task", "task", "note"],
+        ["event", "event", "event", "task", "task", "task"],
         "the kinds stay in order after the cap"
     );
 }

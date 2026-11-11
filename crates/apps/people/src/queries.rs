@@ -916,8 +916,9 @@ pub struct VaultLinks {
 
 /// The things in the vault about one person, read through the graph
 /// ([`centraid_apps_kit::graph`]) from the joins that END at them (`edge_to`, one `to_id`): an
-/// event's `attendee` or `about` edge, a task's `about`, a note's `links`, a document's `about`,
-/// a transaction's `with`, a photograph's `depicts`. A yearly all-day event is one of their
+/// event's `attendee` or `about` edge, a task's `about`, a document's `about`, a transaction's
+/// `with`, a photograph's `depicts`. **A plain `links` edge is not here**: a link the member made
+/// by hand shows once, in the person page's "Linked to" section (#1185), never twice. A yearly all-day event is one of their
 /// dates, a cancelled event is not on the calendar, a void line is not a payment, and a row in
 /// the trash is no row. A note's `about` edge is People's own note.
 ///
@@ -932,7 +933,7 @@ pub(crate) fn vault_links(door: &dyn PageDoor, id: &str) -> KitResult<VaultLinks
         WIDE,
         id,
         "person",
-        &["about", "attendee", "links", "with", "depicts"],
+        &["about", "attendee", "with", "depicts"],
     )?;
     let mut sources: Vec<(String, String)> = incoming
         .iter()
@@ -1043,7 +1044,6 @@ pub(crate) fn vault_links(door: &dyn PageDoor, id: &str) -> KitResult<VaultLinks
                 )
             }
             "task" if rels(&["about"]) => (VaultKind::Task, None, None, None),
-            "note" if rels(&["links"]) => (VaultKind::Note, None, None, None),
             "document" if rels(&["about"]) => (VaultKind::Document, None, None, None),
             "txn" if rels(&["with"]) && !void.contains(&item_id) => {
                 (VaultKind::Txn, None, None, None)

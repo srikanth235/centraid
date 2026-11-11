@@ -140,3 +140,39 @@ fn a_person_can_link_to_a_note_and_the_row_says_what_it_is() {
         [("Engine sketch".to_owned(), "Note".to_owned())]
     );
 }
+
+#[test]
+fn a_note_that_links_to_the_person_from_its_own_end_shows_once_in_linked_to_not_in_the_vault() {
+    let mut d = clean();
+    let ada = person(&d, "Ada Lovelace");
+    let note = id_of(&arrange(
+        &d,
+        centraid_screens::catalog::act::notes::CreateNote {
+            title: "Chess night".to_owned(),
+            body: "with Ada".to_owned(),
+            ..Default::default()
+        },
+    ));
+    // The note's end of the link, as a `[[` link or the note's own Linked to would make it.
+    arrange(
+        &d,
+        centraid_screens::catalog::act::notes::Link {
+            from: note.clone(),
+            to: ada.clone(),
+            anchor: None,
+        },
+    );
+    let i = open_person(&mut d, &ada, "Ada Lovelace");
+    assert_eq!(
+        rows(&d, i),
+        [("Chess night".to_owned(), "Note".to_owned())],
+        "the link is in Linked to"
+    );
+    assert!(
+        person_data(d.view(i))
+            .vault
+            .iter()
+            .all(|row| row.title != "Chess night"),
+        "and is not shown a second time in In your vault"
+    );
+}
