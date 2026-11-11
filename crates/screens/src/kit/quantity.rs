@@ -16,6 +16,7 @@
 //! | `Temperature` | degrees Celsius | `36.6 °C` | `97.9 °F` |
 //! | `Volume` | millilitres | `250 ml`, `1.5 L` | `8.5 fl oz` |
 //! | `Bytes` | bytes | `1.4 MB` | the same (bytes ignore the switch) |
+//! | `BytesFloor` | bytes | `340 MB`, `4.9 GB` (rounded down) | the same |
 //! | `Duration` | seconds | `7 h 12 min` | the same |
 //! | `Span` | seconds | `1 h 06 min` | the same |
 //! | `Minutes`, `Beats`, `Steps` | the count | `31 min`, `62 bpm`, `8,412` | the same |
@@ -129,6 +130,9 @@ pub enum Unit {
     Volume,
     /// Bytes; the vault's phrase, whatever the switch.
     Bytes,
+    /// Bytes said ROUNDED DOWN, never a byte more than there is: how much is backed up is a claim
+    /// (#1144). Whole kilobytes and megabytes, a tenth of a gigabyte under a hundred, whole above.
+    BytesFloor,
     /// Seconds, said as `7 h 12 min` (a night's sleep).
     Duration,
     /// Seconds, said as `1 h 06 min` (a workout).
@@ -201,6 +205,13 @@ impl Quantity {
         Self::new(count as f64, Unit::Bytes)
     }
 
+    /// A size that is a claim (what is backed up): said rounded down, never above the count.
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)]
+    pub const fn bytes_floor(count: u64) -> Self {
+        Self::new(count as f64, Unit::BytesFloor)
+    }
+
     /// A night's sleep (or any span said as hours and minutes), in seconds.
     #[must_use]
     pub const fn duration_s(seconds: f64) -> Self {
@@ -252,8 +263,8 @@ impl Quantity {
             Unit::Volume if imperial => (tenths(v / ML_PER_FL_OZ), words::unit_fl_oz(locale)),
             Unit::Volume if v.abs() >= ML_PER_L => (tenths(v / ML_PER_L), words::unit_l(locale)),
             Unit::Volume => (grouped(round(v)), words::unit_ml(locale)),
-            Unit::Bytes => {
-                let said = format_byte_size(round(v));
+            Unit::Bytes | Unit::BytesFloor => {
+                let said = self.byte_phrase();
                 match said.split_once(' ') {
                     Some((number, unit)) => (number.to_owned(), unit.to_owned()),
                     None => (said, String::new()),
@@ -267,11 +278,20 @@ impl Quantity {
         }
     }
 
+    /// The vault's phrase for a size, or the rounded-down one for a size that is a claim.
+    fn byte_phrase(&self) -> String {
+        if self.unit == Unit::BytesFloor {
+            floor_byte_size(round(self.value))
+        } else {
+            format_byte_size(round(self.value))
+        }
+    }
+
     /// The amount as the words a member reads, in `pref`: `5.2 km`, `157.4 lb`, `1.4 MB`.
     #[must_use]
     pub fn words(&self, locale: Locale, pref: UnitsPref) -> String {
-        if self.unit == Unit::Bytes {
-            return format_byte_size(round(self.value));
+        if matches!(self.unit, Unit::Bytes | Unit::BytesFloor) {
+            return self.byte_phrase();
         }
         let (number, unit) = self.figure(locale, pref);
         if unit.is_empty() {
@@ -279,6 +299,25 @@ impl Quantity {
         } else {
             format!("{number} {unit}")
         }
+    }
+}
+
+/// A size rounded DOWN: decimal, whole units, a tenth of a gigabyte under a hundred (`4.9 GB` and
+/// `4 GB` are a phone's worth of photographs apart, #1144), and never a byte more than there is.
+fn floor_byte_size(count: i64) -> String {
+    const KB: i64 = 1_000;
+    const MB: i64 = 1_000_000;
+    const GB: i64 = 1_000_000_000;
+    let count = count.max(0);
+    match count {
+        0..KB => format!("{count} bytes"),
+        KB..MB => format!("{} KB", count / KB),
+        MB..GB => format!("{} MB", count / MB),
+        GB..=99_999_999_999 => {
+            let tenths = count / (GB / 10);
+            format!("{}.{} GB", tenths / 10, tenths % 10)
+        }
+        _ => format!("{} GB", count / GB),
     }
 }
 

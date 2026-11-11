@@ -23,13 +23,8 @@ fn swift_files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-#[test]
-fn the_one_set_plus_its_receipt_fits_what_ios_keeps_pending() {
-    assert!(
-        CAP + RECEIPTS <= OS_PENDING_LIMIT,
-        "{CAP} reminders + {RECEIPTS} receipt must fit {OS_PENDING_LIMIT} pending"
-    );
-}
+// The budget as a compile-time fact: raising CAP past what iOS keeps fails the build.
+const _: () = assert!(CAP + RECEIPTS <= OS_PENDING_LIMIT);
 
 #[test]
 fn only_the_one_set_applier_schedules_a_notification_on_ios() {
