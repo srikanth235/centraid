@@ -60,7 +60,7 @@ use super::event::{
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::civil::{self, HourCycle};
-use crate::kit::read::{self as kit_read, Reading};
+use crate::kit::read::{self as kit_read, Note, Page, Reading};
 use crate::kit::schedule::draft::{
     self, Draft, REMINDER_NONE, REPEAT_BIWEEKLY, REPEAT_CUSTOM, REPEAT_DAILY, REPEAT_MONTHLY,
     REPEAT_NONE, REPEAT_WEEKLY, REPEAT_YEARLY, RULES,
@@ -93,6 +93,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         mode: if create { Mode::Create } else { Mode::Edit },
         route: args,
         phase: Phase::Loading,
+        read_failed: false,
         loaded: None,
         baseline: None,
         draft: None,
@@ -135,6 +136,8 @@ struct Editor {
     route: wire::AgendaEditorRoute,
     mode: Mode,
     phase: Phase,
+    /// A re-read failed over the draft on screen: a note over the words.
+    read_failed: bool,
     loaded: Option<Loaded>,
     /// The values as loaded: what "changed" is measured against.
     baseline: Option<Draft>,
@@ -214,9 +217,12 @@ impl Editor {
             _ => None,
         };
         let Some((upcoming, parties, detail)) = answered else {
-            // A re-read that failed keeps the draft; only a first read has nothing else to show.
+            // A re-read that failed keeps the draft under a note; only a first read has nothing
+            // else to show.
             if self.draft.is_none() {
                 self.phase = Phase::Failed;
+            } else {
+                self.read_failed = true;
             }
             return;
         };
@@ -228,6 +234,7 @@ impl Editor {
             places,
         });
         self.phase = Phase::Ready;
+        self.read_failed = false;
         if self.draft.is_none() {
             self.baseline = match self.mode {
                 Mode::Edit => self.event().map(draft::draft_of),
@@ -794,37 +801,45 @@ impl Screen for Editor {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
-        let content = match &self.phase {
-            Phase::Loading => {
-                wire::agenda_editor_state::Content::Loading(wire::Loading { first_load: true })
-            }
-            Phase::Failed => {
-                wire::agenda_editor_state::Content::Failure(kit_read::incomplete(locale))
-            }
-            Phase::Denied(denial) => wire::agenda_editor_state::Content::Denied(wire::Denied {
+        // Ready with no draft is an event that is no longer there: a failed page with its own
+        // words and no Retry, never a blank.
+        let gone = matches!(self.phase, Phase::Ready) && self.draft.is_none();
+        let page: Page<()> = match &self.phase {
+            Phase::Loading => Page::loading(),
+            Phase::Failed => Page::Failed,
+            Phase::Denied(denial) => Page::Refused(denial.clone()),
+            Phase::Ready if gone => Page::Failed,
+            Phase::Ready => Page::Ready {
+                data: (),
+                note: self.read_failed.then(|| Note::refresh_failed(locale)),
+            },
+        };
+        let mut wired = page.wire(
+            locale,
+            |denial| wire::Denied {
                 title: words::denied_title(locale),
                 body: words::denied_body(locale),
                 receipt: denial.code.clone().unwrap_or_default(),
-            }),
-            Phase::Ready => match &self.draft {
-                Some(draft) => wire::agenda_editor_state::Content::Data(Box::new(self.data(
-                    locale,
-                    ctx.hour_cycle(),
-                    ctx.zone(),
-                    draft,
-                ))),
-                None => wire::agenda_editor_state::Content::Gone(wire::AgendaGone {
-                    title: words::gone_title(locale),
-                    body: words::gone_body(locale),
-                    action_label: words::gone_action(locale),
-                }),
             },
+            wire::EmptyState::default,
+        );
+        if matches!(wired.state, Some(wire::page_state::State::Failed(_))) {
+            wired.state = Some(wire::page_state::State::Failed(if gone {
+                kit_read::gone(words::gone_title(locale), words::gone_body(locale))
+            } else {
+                kit_read::incomplete(locale)
+            }));
+        }
+        let content = match (&self.phase, &self.draft) {
+            (Phase::Ready, Some(draft)) => Some(wire::agenda_editor_state::Content::Data(
+                Box::new(self.data(locale, ctx.hour_cycle(), ctx.zone(), draft)),
+            )),
+            _ => None,
         };
         let state = wire::AgendaEditorState {
             mode: self.mode as i32,
-            content: Some(content),
-            // Calendar still draws `content`'s loading, failure and denied arms (#1185).
-            page: None,
+            content,
+            page: Some(wired),
             sheet: self.sheet as i32,
             confirm: self.confirm(locale),
             chrome: Some(chrome(locale)),

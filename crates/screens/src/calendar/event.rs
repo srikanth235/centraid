@@ -53,7 +53,7 @@ use crate::kit::earlier;
 use crate::kit::follow;
 use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::quantity::UnitsPref;
-use crate::kit::read::{self as kit_read, Reading};
+use crate::kit::read::{self as kit_read, Page, Reading};
 use crate::kit::schedule::rows::hue_role;
 use crate::kit::share::{self, Share};
 use crate::kit::trash;
@@ -96,7 +96,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     let links = Links::new(&Kind::ALL).for_entity(&args.event_id);
     Some(Box::new(EventPage {
         route: args,
-        content: Content::Loading,
+        page: Page::loading(),
+        gone: false,
         sheet: Sheet::None,
         confirm: false,
         scope: None,
@@ -113,16 +114,12 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     }))
 }
 
-enum Content {
-    Loading,
-    Failed,
-    Denied(wire::AppQueryDenial),
-    Data(Box<wire::AgendaEventDetail>),
-}
-
 struct EventPage {
     route: wire::AgendaEventRoute,
-    content: Content,
+    /// The read. An answer with no such occurrence is `gone` (cancelled, moved or deleted since it
+    /// was picked): a failed page with its own words and no Retry, never an empty one.
+    page: Page<Box<wire::AgendaEventDetail>>,
+    gone: bool,
     /// The scope sheet, while a series' cancel is asked.
     sheet: Sheet,
     /// The one-off's confirm, while it is asked.
@@ -191,14 +188,21 @@ impl EventPage {
             },
             _ => earlier::Foot::default(),
         };
-        match reading {
-            Reading::Data(detail) => self.content = Content::Data(detail),
-            Reading::Denied(denial) => self.content = Content::Denied(denial),
-            Reading::Failed => {
-                if !matches!(self.content, Content::Data(_)) {
-                    self.content = Content::Failed;
-                }
-            }
+        // A failed re-read keeps the event on screen under a note; a first read that failed has
+        // nothing else to show.
+        let route_id = self.route.event_id.clone();
+        let held = std::mem::replace(&mut self.page, Page::loading());
+        self.page = held.after(reading, ctx.locale(), |detail| {
+            detail
+                .event
+                .as_ref()
+                .is_none_or(|event| event.event_id != route_id)
+        });
+        // A read that succeeded and found no such occurrence: gone, which is a failure, not an
+        // empty place.
+        self.gone = matches!(self.page, Page::Empty);
+        if self.gone {
+            self.page = Page::Failed;
         }
         self.attachments.reload(ctx);
         self.read_linked(ctx);
@@ -258,13 +262,12 @@ impl EventPage {
 
     /// The answered event, when it is the series this screen is on.
     fn event(&self) -> Option<&wire::AgendaEvent> {
-        match &self.content {
-            Content::Data(detail) => detail
+        self.page.data().and_then(|detail| {
+            detail
                 .event
                 .as_ref()
-                .filter(|event| event.event_id == self.route.event_id),
-            _ => None,
-        }
+                .filter(|event| event.event_id == self.route.event_id)
+        })
     }
 
     fn rsvp(&mut self, ctx: &Ctx, partstat: &str) {
@@ -511,31 +514,42 @@ impl Screen for EventPage {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
-        let content = match &self.content {
-            Content::Loading => {
-                wire::agenda_event_state::Content::Loading(wire::Loading { first_load: true })
-            }
-            Content::Failed => {
-                wire::agenda_event_state::Content::Failure(kit_read::failure(locale))
-            }
-            Content::Denied(denial) => {
-                wire::agenda_event_state::Content::Denied(denied(locale, denial))
-            }
-            Content::Data(detail) => match self.event() {
-                None => wire::agenda_event_state::Content::Gone(gone(locale)),
-                Some(event) => wire::agenda_event_state::Content::Data(Box::new(self.data(
+        // What the phone says that was not checked is a note over the data; a failed refresh
+        // already is one, and the stronger wins.
+        let drawn = self.page.clone().noted(kit_read::Note::unchecked(
+            &self.differences,
+            locale,
+            follow::Source::Phone,
+        ));
+        let mut wired = drawn.wire(
+            locale,
+            |denial| denied(locale, denial),
+            wire::EmptyState::default,
+        );
+        // An occurrence that is no longer there says so in its own words and offers no Retry.
+        if self.gone && matches!(wired.state, Some(wire::page_state::State::Failed(_))) {
+            wired.state = Some(wire::page_state::State::Failed(kit_read::gone(
+                words::gone_title(locale),
+                words::gone_body(locale),
+            )));
+        }
+        let content = match (self.event(), self.page.data()) {
+            (Some(event), Some(detail)) => Some(wire::agenda_event_state::Content::Data(Box::new(
+                self.data(
                     locale,
                     ctx.units(),
                     ctx.hour_cycle(),
                     ctx.zone(),
                     event,
                     detail,
-                ))),
-            },
+                ),
+            ))),
+            _ => None,
         };
         let series_sheet = self.sheet == Sheet::CancelScope;
         let state = wire::AgendaEventState {
-            content: Some(content),
+            content,
+            page: Some(wired),
             sheet: self.sheet as i32,
             confirm: self.confirm.then(|| wire::Confirm {
                 title: words::confirm_cancel_title(locale),
@@ -555,7 +569,6 @@ impl Screen for EventPage {
                 .undo
                 .status()
                 .or_else(|| self.share.status())
-                .or_else(|| self.differences.status(locale, follow::Source::Phone))
                 .or_else(|| self.earlier.status(locale))
                 .or_else(|| {
                     self.linked_unread.then(|| wire::StatusLine {
@@ -946,14 +959,6 @@ pub(crate) fn denied(locale: Locale, denial: &wire::AppQueryDenial) -> wire::Den
     }
 }
 
-fn gone(locale: Locale) -> wire::AgendaGone {
-    wire::AgendaGone {
-        title: words::gone_title(locale),
-        body: words::gone_body(locale),
-        action_label: words::gone_action(locale),
-    }
-}
-
 /// An occurrence of a repeating event: the one a scope question makes sense for.
 #[must_use]
 pub fn is_series_occurrence(event: &wire::AgendaEvent) -> bool {
@@ -1169,8 +1174,9 @@ mod tests {
         let Some(wire::view_state::Kind::AgendaEvent(state)) = view.kind else {
             panic!("not an event page")
         };
-        let Some(wire::agenda_event_state::Content::Denied(denied)) = state.content else {
-            panic!("{:?}", state.content)
+        let Some(wire::page_state::State::Refused(denied)) = state.page.and_then(|page| page.state)
+        else {
+            panic!("the gate")
         };
         assert_eq!(denied.title, "Calendar cannot read this vault");
         assert_eq!(denied.receipt, "consent.revoked");
@@ -1182,8 +1188,9 @@ mod tests {
         let Some(wire::view_state::Kind::AgendaEditor(state)) = view.kind else {
             panic!("not an editor")
         };
-        let Some(wire::agenda_editor_state::Content::Denied(denied)) = state.content else {
-            panic!("{:?}", state.content)
+        let Some(wire::page_state::State::Refused(denied)) = state.page.and_then(|page| page.state)
+        else {
+            panic!("the gate")
         };
         assert_eq!(denied.body, "Ask the owner of this vault for access.");
         assert_eq!(denied.receipt, "consent.revoked");

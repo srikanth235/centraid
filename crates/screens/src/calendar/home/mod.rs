@@ -36,8 +36,8 @@ use super::follow::CalendarFollow;
 use super::routes;
 use crate::follow::Store;
 use crate::kit::civil;
+use crate::kit::read::Page;
 use crate::kit::schedule::ops::Ops;
-use crate::kit::schedule::phase::Phase;
 use crate::kit::schedule::style::{Draft, Subject};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
@@ -45,7 +45,12 @@ use crate::strings::{
 };
 
 pub(super) struct Home {
-    phase: Phase,
+    /// The read of the place on screen: a place with nothing to show is [`Page::Empty`] (in its own
+    /// sentence), never ready data.
+    page: Page<()>,
+    /// What `page` was asked for (place, day, term): data read for another question is not shown
+    /// under a failed read of this one.
+    asked: String,
     destination: Dest,
     /// The day the surface is anchored on; EMPTY until an answer names today.
     anchor: String,
@@ -94,7 +99,8 @@ impl Home {
         let named = Dest::try_from(args.destination).unwrap_or(Dest::Unspecified);
         let destination = if allows(named) { named } else { Dest::Day };
         Self {
-            phase: Phase::Loading,
+            page: Page::loading(),
+            asked: String::new(),
             destination,
             anchor: String::new(),
             today: String::new(),
@@ -124,14 +130,17 @@ impl Home {
     }
 
     fn denied(&self) -> bool {
-        matches!(self.phase, Phase::Denied(_))
+        matches!(self.page, Page::Refused(_))
     }
 
     /// A pull, or a row moved: the held answers are stale whatever search is
     /// doing, so the next read asks again.
     fn refresh(&mut self, ctx: &Ctx) {
-        self.invalidate();
-        self.read(ctx);
+        let before = std::mem::take(&mut self.held);
+        // A refresh that failed keeps what was shown, under its note.
+        if !self.read(ctx) {
+            self.held.keep_unread(before);
+        }
     }
 
     /// A place, by the band or by the shell. Picking one LEAVES SEARCH, even the
@@ -417,8 +426,10 @@ impl Home {
 
     /// A calendar's edit control: its name, colour and icon, from the row on screen.
     fn edit_calendar(&mut self, id: &str, ctx: &Ctx) {
-        let Some(calendar) = self.data(ctx).and_then(|data| {
-            data.calendars
+        let Some(calendar) = self.data(ctx).and_then(|folded| {
+            folded
+                .data
+                .calendars
                 .into_iter()
                 .find(|calendar| calendar.calendar_id == id)
         }) else {
@@ -455,7 +466,7 @@ impl Home {
     }
 
     /// The data the held answers draw, or `None` when they are not for this state.
-    fn data(&self, ctx: &Ctx) -> Option<wire::AgendaHomeData> {
+    fn data(&self, ctx: &Ctx) -> Option<fold::Folded> {
         let term = self.active_term();
         fold::events(&fold::Fold {
             locale: ctx.locale(),
@@ -479,7 +490,7 @@ impl Home {
         }
         let calendars = self
             .data(ctx)
-            .map(|data| data.calendars)
+            .map(|folded| folded.data.calendars)
             .unwrap_or_default();
         chrome::more_rows(ctx.locale(), &calendars, true)
     }
@@ -543,9 +554,21 @@ impl Screen for Home {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
         let denied = self.denied();
-        let mut data = match self.phase {
-            Phase::Ready => self.data(ctx),
-            _ => None,
+        let ready = matches!(self.page, Page::Ready { .. });
+        let folded = if ready { self.data(ctx) } else { None };
+        // A place with nothing to show is the page's own empty state; its data is not drawn.
+        let empty_state = folded.as_ref().and_then(|folded| folded.empty.clone());
+        // The calendars list is the More sheet's even when the place itself has nothing to show.
+        let full = folded.map(|folded| folded.data);
+        let mut data = full.clone().filter(|_| empty_state.is_none());
+        // A ready page with nothing to draw is a failure (an incomplete answer), never a blank.
+        let incomplete = ready && empty_state.is_none() && data.is_none();
+        let page = if incomplete {
+            Page::Failed
+        } else if empty_state.is_some() {
+            Page::Empty
+        } else {
+            self.page.clone()
         };
         let searching = self.active_term().is_some();
         let today_now = data
@@ -561,25 +584,27 @@ impl Screen for Home {
             !denied && !searching,
             data.as_mut(),
         );
-        let content = match &self.phase {
-            Phase::Loading => Some(wire::agenda_home_state::Content::Loading(wire::Loading {
-                first_load: true,
-            })),
-            Phase::Denied(denial) => Some(wire::agenda_home_state::Content::Denied(wire::Denied {
+        let content = data
+            .clone()
+            .map(|data| wire::agenda_home_state::Content::Data(Box::new(data)));
+        let mut wired = page.wire(
+            locale,
+            |denial| wire::Denied {
                 title: words::denied_title(locale),
                 body: words::denied_body(locale),
                 receipt: denial.code.clone().unwrap_or_default(),
-            })),
-            Phase::Failed => Some(wire::agenda_home_state::Content::Failure(
-                crate::kit::read::failure(locale),
-            )),
-            Phase::Ready => match data.clone() {
-                Some(data) => Some(wire::agenda_home_state::Content::Data(Box::new(data))),
-                None => Some(wire::agenda_home_state::Content::Failure(
-                    crate::kit::read::incomplete(locale),
-                )),
             },
-        };
+            || empty_state.clone().unwrap_or_default(),
+        );
+        // A refresh that failed over a window that cannot be drawn is the read's own failure; only an
+        // answer that arrived short is "incomplete".
+        let refresh_failed = matches!(self.page, Page::Ready { note: Some(_), .. });
+        if incomplete && !refresh_failed {
+            wired.state = Some(wire::page_state::State::Failed(
+                crate::kit::read::incomplete(locale),
+            ));
+        }
+        let on_page = matches!(wired.state, None | Some(wire::page_state::State::Empty(_)));
         let term = self.active_term();
         let held_search = term.is_some() && self.held.search.is_some();
         let corrected = if held_search {
@@ -646,14 +671,14 @@ impl Screen for Home {
                     } else {
                         chrome::more_rows(
                             locale,
-                            data.as_ref()
-                                .map_or(&[][..], |data| data.calendars.as_slice()),
-                            data.is_some(),
+                            full.as_ref()
+                                .map_or(&[][..], |full| full.calendars.as_slice()),
+                            full.is_some(),
                         )
                     },
                     search_corrected: corrected,
                     // THE ASK ROW: for the answer to the term on screen, matched or not.
-                    search_ask_row: (held_search && data.is_some()).then(|| {
+                    search_ask_row: (held_search && on_page).then(|| {
                         crate::kit::search::offer(
                             locale,
                             term.as_deref().unwrap_or_default(),
@@ -692,8 +717,12 @@ impl Screen for Home {
                     add_opens_quick_add: false,
                     new_event,
                     content,
-                    // Calendar still draws `content`'s loading, failure and denied arms (#1185).
-                    page: None,
+                    import_label: empty_state
+                        .as_ref()
+                        .filter(|empty| empty.import_source == wire::ImportSource::Calendar as i32)
+                        .map(|_| words::import_calendar(locale))
+                        .unwrap_or_default(),
+                    page: Some(wired),
                 },
             ))),
             ..wire::ViewState::default()

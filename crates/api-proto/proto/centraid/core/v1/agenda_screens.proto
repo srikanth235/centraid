@@ -29,12 +29,12 @@ message AgendaHomeState {
   string search_term = 5;
   // Calendars switched off, FOR THE SESSION (not persisted).
   repeated string hidden_calendar_ids = 6;
+  // 7 to 9 were `loading`, `failure` and `denied`: the read is `page` (#1185). A refusal is the
+  // kit's gate, a state and not a failure: no band, no toolbar.
+  reserved 7, 8, 9;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 7;
-    Failure failure = 8;
-    // The vault would not let Agenda read. A state and not a failure: no band,
-    // no toolbar, the kit's gate.
-    Denied denied = 9;
     AgendaHomeData data = 10;
   }
   Sheet sheet = 11;
@@ -129,11 +129,13 @@ message AgendaHomeState {
   // Present only after the menu's More row `stop` was tapped; `StopConfirmed` stops, `StopDismissed`
   // (or a tap outside) keeps following. Calendar only: Reminders never sets it.
   optional Confirm stop = 41;
-  // THE READ (#1185), set by Reminders' home: loading, failed, refused, empty (a search that matched
-  // nothing) or ready, with a note when a refresh or a wider window failed over what is shown. Over
-  // an open search it is the search's read. Calendar's home does not set it yet and still draws
-  // `content`'s loading, failure and denied arms.
+  // THE READ (#1185): loading, failed, refused, empty (a place with nothing to show, or a search
+  // that matched nothing, each in its own sentence) or ready, with a note when a refresh or a wider
+  // window failed over what is shown. Over an open search it is the search's read.
   PageState page = 42;
+  // The words on the empty state's calendar Import ("Import calendar"), finished: set while the page
+  // is empty and its `import_source` is CALENDAR, else empty.
+  string import_label = 43;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -295,14 +297,10 @@ message AgendaHomeData {
   reserved "now_local";
   // In day order. Past days are not drawn except as search hits.
   repeated AgendaDaySection days = 3;
-  // `AGENDA_EMPTY_NONE` whenever `days` has a section, and under a search
-  // whenever `task_hits` or `containers` has one.
-  AgendaEmpty empty = 4;
-  // The empty state's words; empty strings draw nothing. `empty_action` sends
-  // `NewEventRequested`.
-  string empty_title = 5;
-  string empty_body = 6;
-  string empty_action = 7;
+  // 4 to 7 were `empty`, `empty_title`, `empty_body` and `empty_action`: a place with nothing to
+  // show is the page's own Empty state, in its own sentence and action (#1185).
+  reserved 4, 5, 6, 7;
+  reserved "empty", "empty_title", "empty_body", "empty_action";
   // Every calendar the member has, for the More sheet.
   repeated AgendaCalendarChoice calendars = 8;
   // 9 was `waiting_count`: nothing read it (#1152).
@@ -794,18 +792,6 @@ message AgendaMoreRow {
   string edit_label = 12;
 }
 
-enum AgendaEmpty {
-  AGENDA_EMPTY_UNSPECIFIED = 0;
-  AGENDA_EMPTY_NONE = 1;
-  // Schedule's whole window holds nothing, with no search and no calendar
-  // hidden: "Nothing in your calendar yet."
-  AGENDA_EMPTY_DAY_ONE = 2;
-  // "Nothing on this day." / "Nothing on these days."
-  AGENDA_EMPTY_NOTHING_ON_DAY = 3;
-  AGENDA_EMPTY_NOTHING_WAITING = 4;
-  AGENDA_EMPTY_NO_MATCH = 5;
-}
-
 // What a view sends. A row that opens a page carries its own `Route` and the
 // shell pushes it (`NavPush`): an event row, a task row, a project row or
 // container, the Plus on the add sheet, the Overdue verb, the notice. The
@@ -1100,14 +1086,6 @@ message AgendaScopeChoice {
   string note = 5;
 }
 
-// "This event is no longer on your calendar": the answer has no such
-// occurrence — cancelled, moved or deleted since it was picked.
-message AgendaGone {
-  string title = 1;
-  string body = 2;
-  string action_label = 3;
-}
-
 // A button on the detail. `key` is what `ActionPicked` carries.
 message AgendaAction {
   string key = 1;
@@ -1124,12 +1102,13 @@ message AgendaAction {
 
 // `agenda.event`. Its arguments are its `Route`; this is only what it shows.
 message AgendaEventState {
+  // 6 to 8 and 10 were `loading`, `failure`, `denied` and `gone`: the read is `page`, and an event
+  // that is no longer there is a final failure on it (#1185).
+  reserved 6, 7, 8, 10;
+  reserved "loading", "failure", "denied", "gone";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 6;
-    Failure failure = 7;
-    Denied denied = 8;
     AgendaEventData data = 9;
-    AgendaGone gone = 10;
   }
   Sheet sheet = 12;
   // The confirm step for cancelling an event that does not repeat. Absent
@@ -1151,6 +1130,9 @@ message AgendaEventState {
   optional OriginLine origin = 21;
   // The picker over the "Linked to" section, while it is up (#1185). The kit's generic picker.
   optional LinkPicker link_picker = 22;
+  // The read: loading, failed, refused or ready (with a note when a refresh failed or the phone
+  // could not be checked). An event no longer there is a final failure, never an empty page.
+  PageState page = 23;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -1401,12 +1383,13 @@ message AgendaEventEvent {
 // `agenda.editor`. Its arguments are its `Route`; this is only what it shows.
 message AgendaEditorState {
   Mode mode = 2;
+  // 7 to 9 and 11 were `loading`, `failure`, `denied` and `gone`: the read is `page`, and an event
+  // or task that is no longer there is a final failure on it (#1185).
+  reserved 7, 8, 9, 11;
+  reserved "loading", "failure", "denied", "gone";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 7;
-    Failure failure = 8;
-    Denied denied = 9;
     AgendaEditorData data = 10;
-    AgendaGone gone = 11;
   }
   Sheet sheet = 13;
   // The discard or skip question, while it is asked.
@@ -1425,9 +1408,7 @@ message AgendaEditorState {
   // What the last Save came to when the vault refused it: the core's own
   // sentence, over the draft that stays. Absent otherwise.
   optional StatusLine status = 19;
-  // THE READ (#1185), set by Reminders' new-reminder sheet (the lists it can file in): loading,
-  // failed, refused, or ready, with a note when a re-read failed. Calendar's editor does not set it
-  // yet and still draws `content`'s loading, failure and denied arms.
+  // THE READ (#1185): loading, failed, refused, or ready, with a note when a re-read failed.
   PageState page = 20;
 
   enum Mode {

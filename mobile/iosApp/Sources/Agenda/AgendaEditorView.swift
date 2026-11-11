@@ -61,28 +61,14 @@ struct AgendaEditorView: View {
                 .accessibilityIdentifier("agenda-editor-save")
             }
         } content: {
-            if case let .gone(gone)? = state.content {
-                EmptyStateView(headline: gone.title, body: gone.body, actionLabel: gone.actionLabel, onAction: onDone)
-                    .accessibilityIdentifier("agenda-editor-gone")
-            } else if state.hasPage {
-                // Reminders' new-reminder sheet sends its read as `page` (#1185); Calendar's editor
-                // still sends `content`'s loading, failure and denied arms.
-                PageReadStateView(
-                    page: state.page,
-                    loadingLabel: chrome.loading,
-                    onRetry: { send(event { $0.refreshed = .init() }) }
-                ) {
-                    if let editorData {
-                        form(editorData, state: state)
-                    }
-                }
-            } else {
-                ReadStateView(
-                    content: readContent(state),
-                    loadingLabel: chrome.loading,
-                    onRetry: { send(event { $0.refreshed = .init() }) }
-                ) { editor in
-                    form(editor, state: state)
+            // THE READ IS THE KIT'S PAGE STATE (#1185): a task or event that is gone is its final failure.
+            PageReadStateView(
+                page: state.page,
+                loadingLabel: chrome.loading,
+                onRetry: { send(event { $0.refreshed = .init() }) }
+            ) {
+                if let editorData {
+                    form(editorData, state: state)
                 }
             }
         }
@@ -106,16 +92,6 @@ struct AgendaEditorView: View {
         // SAVED, SKIPPED, OR LEFT WITH NOTHING TO LOSE: the editor is done.
         .onChange(of: state.dismissed) { _, dismissed in
             if dismissed { onDone() }
-        }
-    }
-
-    private func readContent(_ state: Centraid_Core_V1_AgendaEditorState) -> ScreenContent<Centraid_Core_V1_AgendaEditorData> {
-        switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        case .gone?, nil: return .loading(true)
         }
     }
 

@@ -857,17 +857,24 @@ fn an_edit_whose_event_is_gone_says_so_and_a_failed_first_read_is_a_failure() {
     let mut world = World::new();
     let page = world.open_edit("no-such-event", "no-such-event", None, "2099-06-15");
     let state = world.editor_state(page);
-    let Some(wire::agenda_editor_state::Content::Gone(gone)) = &state.content else {
-        panic!("{:?}", state.content)
+    assert!(state.content.is_none());
+    let Some(wire::page_state::State::Failed(gone)) =
+        state.page.as_ref().and_then(|page| page.state.as_ref())
+    else {
+        panic!("gone is a failure: {:?}", state.page)
     };
-    assert_eq!(gone.title, "This event was removed.");
+    assert_eq!(gone.sentence, "This event was removed.");
+    assert!(gone.permanent, "trying again cannot bring it back");
 
     world.zone("Not/A_Zone");
     let failed = world.open_new("2099-06-15", Kind::Event);
-    let Some(wire::agenda_editor_state::Content::Failure(failure)) =
-        &world.editor_state(failed).content
+    let Some(wire::page_state::State::Failed(failure)) = world
+        .editor_state(failed)
+        .page
+        .as_ref()
+        .and_then(|page| page.state.as_ref())
     else {
-        panic!("{:?}", world.editor_state(failed).content)
+        panic!("{:?}", world.editor_state(failed).page)
     };
     assert_eq!(failure.sentence, "Part of this didn't arrive. Try again.");
     world.zone(calendar_support::ZONE);

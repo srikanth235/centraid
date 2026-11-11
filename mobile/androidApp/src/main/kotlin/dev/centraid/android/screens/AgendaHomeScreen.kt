@@ -5,7 +5,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -44,7 +43,6 @@ import androidx.compose.ui.unit.dp
 import centraid.core.v1.AgendaBandTab
 import centraid.core.v1.AgendaChrome
 import centraid.core.v1.AgendaDaySection
-import centraid.core.v1.AgendaEmpty
 import centraid.core.v1.AgendaEventRow
 import centraid.core.v1.AgendaHomeData
 import centraid.core.v1.AgendaHomeEvent
@@ -54,6 +52,7 @@ import centraid.core.v1.AgendaNowLine
 import centraid.core.v1.AgendaRowStatus
 import centraid.core.v1.AgendaToolbar
 import centraid.core.v1.QuickAddChipDismissed
+import centraid.core.v1.ImportSource
 import centraid.core.v1.Route
 import centraid.core.v1.SearchContainer
 import centraid.core.v1.TodoChrome
@@ -61,7 +60,6 @@ import dev.centraid.android.kit.SearchField
 import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace
-import dev.centraid.android.kit.DeniedGate
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.hueColor
@@ -120,10 +118,9 @@ import dev.centraid.android.theme.LocalCentraidTokens
  * search field's text while the IME holds it, and it only ever reports a
  * DIFFERENCE from the state.
  *
- * **FOUR BRANCHES, NEVER TWO**: loading draws skeleton rows (not a spinner),
- * failure a sentence and a retry, denied the gate with no band, data the list
- * or its one empty. Reminders' home sends them as `page` and draws them through the kit's
- * `ReadStateView`; Calendar's still sends `content`'s arms.
+ * **THE READ IS THE KIT'S PAGE STATE** (#1185), drawn by `ReadStateView`: loading draws skeleton
+ * rows (not a spinner), failure a sentence and a retry, the gate has no band, an empty list says
+ * so and data is the list under its note.
  */
 @Composable
 public fun AgendaHomeScreen(
@@ -133,23 +130,13 @@ public fun AgendaHomeScreen(
     onHome: () -> Unit,
 ) {
     val chrome = state.chrome ?: AgendaChrome()
-    // REMINDERS' HOME READS THROUGH THE KIT'S PAGE STATE (`page`, #1185): the gate, the failure, a
-    // search that matched nothing and the first load are drawn by `ReadStateView`. Calendar's home
-    // still sends `content`'s arms (and no page), which are drawn below until it moves too.
-    val page = state.page
+    val page = state.page!!
     // The gate has no band and nothing to search or add to (Rust left the band empty).
-    val gated = page?.refused != null
-    val denied = state.denied
-    if (denied != null) {
-        // THE DENIED GATE KEEPS THE HEADER AND HAS NO BAND, iOS's shape: there
-        // is no Agenda to move around in, search or add to.
-        Box(Modifier.fillMaxSize().testTag("agenda-home")) {
-            AppPlace(app = state.app_key, title = chrome.title) {
-                DeniedGate(denied, Modifier.testTag("agenda-denied"))
-            }
-        }
-        return
-    }
+    val gated = page.refused != null
+    // DAY ONE, WHERE THE PHONE HOLDS A CALENDAR (`import_source` on the empty state): the import, an
+    // event Rust answers with its own `CalendarRead`, in place of the empty state's action. "New
+    // event" stays in the header, so the one action here is the faster way to the member's own events.
+    val offersImport = page.empty?.import_source == ImportSource.IMPORT_SOURCE_CALENDAR
 
     // THE TASK WORDS (`AgendaChrome.tasks`) and the task events every place's rows share.
     val words = chrome.tasks ?: TodoChrome()
@@ -258,33 +245,23 @@ public fun AgendaHomeScreen(
                 }
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     val data = state.data_
-                    if (page != null) {
-                        ReadStateView(
-                            page = page,
-                            onRetry = { onEvent(AgendaHomeEvent(refreshed = AgendaHomeEvent.Refreshed())) },
-                            retryLabel = chrome.retry,
-                            skeleton = { AgendaSkeleton(chrome) },
-                        ) {
-                            if (data != null) AgendaHomeBody(state, data, words, actions, onEvent, onOpen)
-                        }
-                    } else {
-                        val loading = state.loading
-                        val failure = state.failure
-                        when {
-                            loading != null -> AgendaSkeleton(chrome)
-                            failure != null -> Column(Modifier.padding(KitGeometry.GUTTER).testTag("agenda-failure")) {
-                                Text(failure.sentence, style = centraidType("body"), color = centraidColor("text"))
-                                if (failure.remedy.isNotEmpty()) {
-                                    Text(failure.remedy, style = centraidType("small"), color = centraidColor("textSoft"))
-                                }
+                    ReadStateView(
+                        page = page,
+                        onRetry = { onEvent(AgendaHomeEvent(refreshed = AgendaHomeEvent.Refreshed())) },
+                        onEmptyAction = state.new_event?.takeUnless { offersImport }?.let { route -> { onOpen(route) } },
+                        retryLabel = chrome.retry,
+                        emptyExtra = {
+                            if (offersImport) {
                                 OutlineButton(
-                                    label = chrome.retry,
-                                    testTag = "agenda-retry",
-                                    modifier = Modifier.padding(top = 12.dp),
-                                ) { onEvent(AgendaHomeEvent(refreshed = AgendaHomeEvent.Refreshed())) }
+                                    label = state.import_label,
+                                    testTag = "agenda-empty-import",
+                                    modifier = Modifier.padding(start = KitGeometry.GUTTER, top = 4.dp),
+                                ) { onEvent(AgendaHomeEvent(import_requested = AgendaHomeEvent.ImportRequested())) }
                             }
-                            data != null -> AgendaHomeBody(state, data, words, actions, onEvent, onOpen)
-                        }
+                        },
+                        skeleton = { AgendaSkeleton(chrome) },
+                    ) {
+                        if (data != null) AgendaHomeBody(state, data, words, actions, onEvent, onOpen)
                     }
                     // THE FLOATING TODAY: over the content's bottom-start, above the band.
                     val todayLabel = when {
@@ -431,17 +408,9 @@ private fun AgendaList(
     onEvent: (AgendaHomeEvent) -> Unit,
     onOpen: (Route) -> Unit,
 ) {
-    val hasEmpty = data.empty != AgendaEmpty.AGENDA_EMPTY_NONE && data.empty != AgendaEmpty.AGENDA_EMPTY_UNSPECIFIED
     // THE BLOCKS DRAWN ABOVE THE DAYS (#1128): the absence notice and the
     // Overdue group (Day on today), then a search's project containers and task hits.
     val leads = data.notice != null || data.overdue != null || data.task_hits.isNotEmpty() || data.containers.isNotEmpty()
-    // A DAY THAT OWES (Overdue, the notice) is never empty: the fold sends no
-    // sentence for it, so an empty state here has nothing above it.
-    if (hasEmpty) {
-        AgendaEmptyBlock(data, state.new_event, onEvent, onOpen, Modifier.fillMaxSize().padding(24.dp))
-        return
-    }
-
     val listState = rememberLazyListState()
     // NO EVENT OF THE MEMBER'S YET, only marks (due tasks, birthdays): the
     // phone's calendar is offered quietly above them, at the point of use. The
@@ -522,54 +491,6 @@ private fun AgendaList(
 
 /** A search container's list key, as Notes and Docs key theirs. */
 private fun containerKey(container: SearchContainer): String = "c-${container.entity}-${container.id}"
-
-/**
- * THE EMPTY STATE'S WORDS AND ITS ONE ACTION, whole-screen: it is sent only
- * when nothing else is drawn.
- */
-@Composable
-private fun AgendaEmptyBlock(
-    data: AgendaHomeData,
-    newEvent: Route?,
-    onEvent: (AgendaHomeEvent) -> Unit,
-    onOpen: (Route) -> Unit,
-    modifier: Modifier,
-) {
-    Column(
-        modifier.testTag("agenda-empty-${data.empty.name.lowercase()}"),
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text(data.empty_title, style = centraidType("title"), color = centraidColor("text"))
-        if (data.empty_body.isNotEmpty()) {
-            Text(
-                data.empty_body,
-                style = centraidType("body"),
-                color = centraidColor("textSoft"),
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
-        // DAY ONE, WHERE THE PHONE HOLDS A CALENDAR (`import_source`): the import, an event Rust
-        // answers with its own `CalendarRead`, in place of `empty_action`. "New event" stays in the
-        // header, so the one action here is the faster way to the member's own events.
-        val importVerb = data.import_label
-        if (importVerb.isNotEmpty()) {
-            OutlineButton(
-                label = importVerb,
-                testTag = "agenda-empty-import",
-                modifier = Modifier.padding(top = 16.dp),
-            ) { onEvent(AgendaHomeEvent(import_requested = AgendaHomeEvent.ImportRequested())) }
-        } else if (data.empty_action.isNotEmpty() && data.empty != AgendaEmpty.AGENDA_EMPTY_NO_MATCH && newEvent != null) {
-            // THE ONE ACTION is the add sheet, the same route the header's Plus pushes. NO-MATCH'S
-            // ACTION IS ASK (#1097, R-1097-30): drawn only where the shell has a Chat tab, and
-            // Android has none, so it draws the sentence without it.
-            OutlineButton(
-                label = data.empty_action,
-                testTag = "agenda-empty-action",
-                modifier = Modifier.padding(top = 16.dp),
-            ) { onOpen(newEvent) }
-        }
-    }
-}
 
 internal fun LazyListScope.daySection(
     section: AgendaDaySection,

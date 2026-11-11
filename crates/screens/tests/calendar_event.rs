@@ -11,7 +11,7 @@ use centraid_api_proto::core_v1 as wire;
 use centraid_screens::catalog::act;
 use centraid_screens::field::Field;
 use wire::agenda_event_event::Kind as K;
-use wire::agenda_event_state::{Content, Sheet};
+use wire::agenda_event_state::Sheet;
 
 fn rsvp(partstat: &str) -> K {
     K::Rsvp(wire::agenda_event_event::RsvpPicked {
@@ -241,11 +241,9 @@ fn an_occurrence_the_answer_does_not_have_is_gone_not_an_error() {
     let mut world = World::new();
     let page = world.open_event("no-such-event", "no-such-event", None, "2099-06-15");
     let state = world.event_state(page);
-    let Some(Content::Gone(gone)) = &state.content else {
-        panic!("{:?}", state.content)
-    };
-    assert_eq!(gone.title, "This event was removed.");
-    assert_eq!(gone.action_label, "Back to Calendar");
+    assert!(state.content.is_none());
+    let gone = gone_of(&state.page);
+    assert_eq!(gone.sentence, "This event was removed.");
 
     // Skipped since it was picked: the series has no such day any more.
     let series = world.weekdays("Stand-up");
@@ -258,10 +256,8 @@ fn an_occurrence_the_answer_does_not_have_is_gone_not_an_error() {
     });
     let key = format!("{series}:2099-06-16T10:00:00");
     let skipped = world.open_event(&series, &key, Some("2099-06-16T10:00:00"), "2099-06-16");
-    assert!(matches!(
-        world.event_state(skipped).content,
-        Some(Content::Gone(_))
-    ));
+    assert!(world.event_state(skipped).content.is_none());
+    gone_of(&world.event_state(skipped).page);
 }
 
 #[test]
@@ -644,11 +640,14 @@ fn a_first_read_that_fails_is_a_failure_and_a_re_read_that_fails_keeps_the_event
     world.zone("Not/A_Zone");
     let failed = world.open_event(&id, &id, None, "2099-06-15");
     let state = world.event_state(failed);
-    let Some(Content::Failure(failure)) = &state.content else {
-        panic!("{:?}", state.content)
+    let Some(wire::page_state::State::Failed(failure)) =
+        state.page.as_ref().and_then(|page| page.state.as_ref())
+    else {
+        panic!("{:?}", state.page)
     };
     assert_eq!(failure.sentence, "Couldn't read this. Try again.");
     assert_eq!(failure.remedy, "Try again");
+    assert!(!failure.permanent, "a failed read can be tried again");
     // The zone comes right and the member retries.
     world.zone(ZONE);
     world.send_event(failed, K::Refreshed(wire::agenda_event_event::Refreshed {}));
@@ -884,4 +883,12 @@ fn an_event_with_a_location_offers_it_to_the_maps_app_and_one_without_does_not()
         }),
     );
     assert!(calendar_support::asked(&update).is_empty());
+}
+
+/// The page's final failure (an occurrence that is gone), or a panic naming the page.
+fn gone_of(page: &Option<wire::PageState>) -> &wire::Failure {
+    match page.as_ref().and_then(|page| page.state.as_ref()) {
+        Some(wire::page_state::State::Failed(failure)) if failure.permanent => failure,
+        _ => panic!("not a final failure: {page:?}"),
+    }
 }

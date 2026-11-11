@@ -1,18 +1,8 @@
-//! WHERE A HOME'S READ STANDS, shared by the two apps' homes: loading, failed, refused by the vault's
-//! gate, or ready, and the answer a read stopped with.
+//! WHY A HOME'S READ STOPPED, shared by the two apps' homes: it failed, or the vault's gate refused it.
 
 use centraid_api_proto::core_v1 as wire;
 
 use crate::kit::read::Reading;
-
-/// Where a read stands.
-pub enum Phase {
-    Loading,
-    Failed,
-    /// The vault would not let the app read: the kit's gate.
-    Denied(wire::AppQueryDenial),
-    Ready,
-}
 
 /// Why a read stopped.
 pub enum Stop {

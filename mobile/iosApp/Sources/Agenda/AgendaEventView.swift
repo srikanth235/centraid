@@ -46,23 +46,22 @@ struct AgendaEventView: View {
                 .accessibilityIdentifier("agenda-event-menu")
             }
         } content: {
-            if case let .gone(gone)? = state.content {
-                // THE PAGE STAYS ON THE GONE CARD AFTER MOVE TO TRASH, and the status line under it
-                // carries "{title} moved to trash" with Undo (#1185).
-                VStack(spacing: 0) {
-                    EmptyStateView(headline: gone.title, body: gone.body, actionLabel: gone.actionLabel, onAction: onBack)
-                        .accessibilityIdentifier("agenda-event-gone")
+            // THE READ IS THE KIT'S PAGE STATE (#1185): an event that is gone is its final failure, and
+            // the status line under it carries "{title} moved to trash" with Undo.
+            VStack(spacing: 0) {
+                PageReadStateView(
+                    page: state.page,
+                    loadingLabel: chrome.loading,
+                    onRetry: { send(event { $0.refreshed = .init() }) }
+                ) {
+                    if case let .data(detail)? = state.content {
+                        detailView(detail, state: state)
+                    }
+                }
+                if case .failed? = state.page.state {
                     StatusLineView(status: state.status, identifier: "agenda-status-action") {
                         send(event { $0.statusActed = .init() })
                     }
-                }
-            } else {
-                ReadStateView(
-                    content: readContent(state),
-                    loadingLabel: chrome.loading,
-                    onRetry: { send(event { $0.refreshed = .init() }) }
-                ) { detail in
-                    detailView(detail, state: state)
                 }
             }
         }
@@ -111,16 +110,6 @@ struct AgendaEventView: View {
         // A CANCELLATION COMMITTED: the screen is done.
         .onChange(of: state.dismissed) { _, dismissed in
             if dismissed { onBack() }
-        }
-    }
-
-    private func readContent(_ state: Centraid_Core_V1_AgendaEventState) -> ScreenContent<Centraid_Core_V1_AgendaEventData> {
-        switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        case .gone?, nil: return .loading(true)
         }
     }
 

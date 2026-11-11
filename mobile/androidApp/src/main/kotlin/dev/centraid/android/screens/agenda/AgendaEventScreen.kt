@@ -41,17 +41,14 @@ import androidx.compose.ui.unit.dp
 import centraid.core.v1.AgendaEventData
 import centraid.core.v1.AgendaEventEvent
 import centraid.core.v1.AgendaEventState
-import centraid.core.v1.AgendaGone
 import centraid.core.v1.AgendaScopeChoice
 import centraid.core.v1.EarlierEntry
 import dev.centraid.android.kit.EarlierEntryCard
 import centraid.core.v1.PhoneSaysTaken
 import centraid.core.v1.Route
-import centraid.core.v1.EmptyState
 import dev.centraid.android.kit.SectionHead
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.ConfirmSheet
-import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OutlineButton
@@ -67,7 +64,6 @@ import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
-import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -96,29 +92,26 @@ internal fun AgendaEventScreen(
         parentTitle = chrome?.back.orEmpty(),
         onBack = onBack,
         // THE "…" KEY holds the verbs that do not fit the bar of three (Share).
-        trailing = menu.takeIf { state.gone == null && it.isNotEmpty() }?.let {
+        trailing = menu.takeIf { it.isNotEmpty() }?.let {
             RoomAction("MoreHoriz", state.data_?.menu_label.orEmpty(), "agenda-event-menu") { menuOpen = true }
         },
         statusLine = {
-            // "{title} moved to trash" with Undo on the gone card (#1185), and a refusal's sentence.
+            // "{title} moved to trash" with Undo over the removed page (#1185), and a refusal's sentence.
             StatusLine(state.status, actTag = "agenda-status-action") {
                 onEvent(AgendaEventEvent(status_acted = AgendaEventEvent.StatusActed()))
             }
         },
     ) {
-        val gone = state.gone
-        if (gone != null) {
-            GoneCard(gone, onBack)
-            return@PushedPage
-        }
         Column(Modifier.fillMaxSize()) {
             ReadStateView(
-                content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
+                page = state.page!!,
                 onRetry = { onEvent(AgendaEventEvent(refreshed = AgendaEventEvent.Refreshed())) },
                 retryLabel = chrome?.retry?.ifEmpty { null } ?: KitWords.RETRY,
                 skeleton = { RowSkeleton(rows = 5, label = chrome?.loading?.ifEmpty { null } ?: KitWords.OPENING) },
                 modifier = Modifier.weight(1f),
-            ) { data -> EventBody(data, state.earlier, state.origin, onEvent, onOpen, onCall, onPhoneSays) }
+            ) {
+                state.data_?.let { data -> EventBody(data, state.earlier, state.origin, onEvent, onOpen, onCall, onPhoneSays) }
+            }
         }
     }
     if (state.sheet == AgendaEventState.Sheet.SHEET_CANCEL_SCOPE && chrome != null) {
@@ -360,9 +353,4 @@ internal fun ScopeSheet(
             SheetRow(label = keep, testTag = "agenda-scope-keep", onTap = onDismiss)
         }
     }
-}
-
-@Composable
-internal fun GoneCard(gone: AgendaGone, onAction: () -> Unit) {
-    EmptyStateView(EmptyState(headline = gone.title, body = gone.body, action_label = gone.action_label), onAction = onAction)
 }

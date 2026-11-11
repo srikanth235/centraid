@@ -35,7 +35,8 @@ use super::grid::{self, WeekStart};
 use crate::catalog::load::calendar as query_cal;
 use crate::kit::civil;
 use crate::kit::read::read;
-use crate::kit::schedule::phase::{Phase, Stop, get};
+use crate::kit::read::{Page, Reading};
+use crate::kit::schedule::phase::{Stop, get};
 use crate::kit::schedule::rows;
 use crate::screen::Ctx;
 
@@ -70,6 +71,17 @@ impl Held {
             .flat_map(|group| &group.tasks)
             .find(|task| task.task_id == id && task.status != rows::STATUS_PROJECTED)
             .cloned()
+    }
+
+    /// Take back, for what a refresh that failed did not read again, what was held before it.
+    pub fn keep_unread(&mut self, old: Self) {
+        self.window = self.window.take().or(old.window);
+        self.upcoming = self.upcoming.take().or(old.upcoming);
+        self.context = self.context.take().or(old.context);
+        self.dated = self.dated.take().or(old.dated);
+        self.reminders = self.reminders.take().or(old.reminders);
+        self.search_term = self.search_term.take().or(old.search_term);
+        self.search = self.search.take().or(old.search);
     }
 
     /// The day the core named, from whichever held answer has one.
@@ -120,10 +132,10 @@ impl Home {
     /// Read whatever the current place needs and does not hold, and settle the
     /// phase: data, a failure, or the gate. Everything is synchronous, so a
     /// view never draws a window under another window's heading.
-    pub(super) fn read(&mut self, ctx: &Ctx) {
-        self.phase = match self.fill(ctx) {
-            Ok(()) => Phase::Ready,
-            Err(Stop::Failed) => Phase::Failed,
+    pub(super) fn read(&mut self, ctx: &Ctx) -> bool {
+        let reading = match self.fill(ctx) {
+            Ok(()) => Reading::Data(()),
+            Err(Stop::Failed) => Reading::Failed,
             Err(Stop::Denied(denial)) => {
                 // The gate has no search and no sheet.
                 self.search_open = false;
@@ -131,14 +143,28 @@ impl Home {
                 self.held.search = None;
                 self.held.search_term = None;
                 self.sheet = wire::agenda_home_state::Sheet::None;
-                Phase::Denied(denial)
+                Reading::Denied(denial)
             }
         };
-    }
-
-    /// Forget every held answer: a pull, or a row moved.
-    pub(super) fn invalidate(&mut self) {
-        self.held = Held::default();
+        // A refresh never blanks the place shown (a failed one keeps it under a note); a read for
+        // another place, day or term starts from nothing, so a failure of it is the failure and
+        // never the old window.
+        let asked = format!(
+            "{}|{}|{}",
+            self.destination as i32,
+            self.anchor,
+            self.active_term().unwrap_or_default()
+        );
+        let kept = std::mem::replace(&mut self.page, Page::loading());
+        let held = if self.asked == asked {
+            kept.refreshing()
+        } else {
+            Page::loading()
+        };
+        self.asked = asked;
+        let answered = !matches!(reading, Reading::Failed);
+        self.page = held.after(reading, ctx.locale(), |()| false);
+        answered
     }
 
     fn fill(&mut self, ctx: &Ctx) -> Result<(), Stop> {

@@ -65,6 +65,49 @@ impl Rig {
         view_of(&self.driver, self.id)
     }
 
+    /// The data drawn, or none at all while the page is empty (a place with nothing to list).
+    fn data_or_default(&self) -> wire::AgendaHomeData {
+        match &self.state().content {
+            Some(Content::Data(data)) => (**data).clone(),
+            _ => wire::AgendaHomeData::default(),
+        }
+    }
+
+    /// The page's own empty state; a panic when the page is not empty.
+    fn empty(&self) -> &wire::EmptyState {
+        match self
+            .state()
+            .page
+            .as_ref()
+            .and_then(|page| page.state.as_ref())
+        {
+            Some(wire::page_state::State::Empty(empty)) => empty,
+            _ => panic!("not an empty page: {:?}", self.state().page),
+        }
+    }
+
+    /// The page's empty headline, or `None` when the page is not empty.
+    fn empty_headline(&self) -> Option<&str> {
+        match self
+            .state()
+            .page
+            .as_ref()
+            .and_then(|page| page.state.as_ref())
+        {
+            Some(wire::page_state::State::Empty(empty)) => Some(empty.headline.as_str()),
+            _ => None,
+        }
+    }
+
+    /// The page shows something: ready, with data to draw.
+    fn not_empty(&self) {
+        assert!(
+            self.empty_headline().is_none(),
+            "an empty page: {:?}",
+            self.state().page
+        );
+    }
+
     fn data(&self) -> &wire::AgendaHomeData {
         match &self.state().content {
             Some(Content::Data(data)) => data,
@@ -142,7 +185,11 @@ impl Rig {
     }
 
     fn today(&self) -> String {
-        self.data().today.clone()
+        match &self.state().content {
+            Some(Content::Data(data)) => data.today.clone(),
+            // An empty page holds no data: the anchor starts on today.
+            _ => self.state().anchor_day.clone(),
+        }
     }
 
     /// The core's local clock now, as the upcoming answer states it.
@@ -497,11 +544,11 @@ fn a_day_step_moves_the_window_and_the_bar_names_it() {
     assert_eq!(r.state().anchor_day, r.day(1));
     assert!(r.state().calendar_header.as_ref().unwrap().today_shown);
     assert_eq!(
-        mine(r.data(), &["Zq Step"]),
+        mine(&r.data_or_default(), &["Zq Step"]),
         [format!("{}: Zq Step", r.state().anchor_day)]
     );
     r.step(-2);
-    assert!(mine(r.data(), &["Zq Step"]).is_empty());
+    assert!(mine(&r.data_or_default(), &["Zq Step"]).is_empty());
     r.step(3);
     // The chip's month follows the anchor across a month.
     r.step(40);
@@ -599,7 +646,7 @@ fn the_window_is_right_in_any_zone() {
         r.settle();
         let names = ["Zq Soon", "Zq Late", "Zq Before", "Zq After"];
         assert_eq!(
-            mine(r.data(), &names),
+            mine(&r.data_or_default(), &names),
             [format!("{today}: Zq Soon"), format!("{today}: Zq Late")],
             "{zone}"
         );
@@ -611,13 +658,13 @@ fn the_window_is_right_in_any_zone() {
             "{zone}"
         );
         assert_eq!(
-            mine(r.data(), &names),
+            mine(&r.data_or_default(), &names),
             [format!("{}: Zq After", r.state().anchor_day)],
             "{zone}"
         );
         r.step(-2);
         assert_eq!(
-            mine(r.data(), &names),
+            mine(&r.data_or_default(), &names),
             [format!("{}: Zq Before", r.state().anchor_day)],
             "{zone}"
         );
@@ -625,7 +672,7 @@ fn the_window_is_right_in_any_zone() {
         r.step(1);
         r.destination(Dest::Schedule);
         assert_eq!(
-            mine(r.data(), &names),
+            mine(&r.data_or_default(), &names),
             [
                 format!("{today}: Zq Soon"),
                 format!("{today}: Zq Late"),
@@ -668,7 +715,7 @@ fn the_sections_run_in_day_order_with_the_month_named_where_the_list_reaches_a_n
     r.settle();
     let names = ["Zq Stand-up", "Zq Survey", "Zq Dentist", "Zq Yesterday"];
     assert_eq!(
-        mine(r.data(), &names),
+        mine(&r.data_or_default(), &names),
         [
             format!("{a}: Zq Stand-up"),
             format!("{b}: Zq Dentist"),
@@ -723,7 +770,7 @@ fn the_sections_run_in_day_order_with_the_month_named_where_the_list_reaches_a_n
             format!("{count} events")
         }
     );
-    assert_eq!(r.data().empty, wire::AgendaEmpty::None as i32);
+    r.not_empty();
 }
 
 // ---------------------------------------------------------------------------
@@ -925,9 +972,8 @@ fn serde_json_array(ids: &[&str]) -> String {
 fn waiting_is_your_unanswered_invitations_and_a_birthday_does_not_make_a_day() {
     let mut r = rig(Dest::Waiting);
     // Nothing waits in the scenario.
-    assert_eq!(r.data().empty, wire::AgendaEmpty::NothingWaiting as i32);
-    assert_eq!(r.data().empty_title, "Nothing is waiting on you.");
-    assert!(r.data().days.is_empty());
+    assert_eq!(r.empty().headline, "Nothing is waiting on you.");
+    assert!(r.state().content.is_none());
 
     let (me, other) = r.people();
     let day = r.day(2);
@@ -956,7 +1002,7 @@ fn waiting_is_your_unanswered_invitations_and_a_birthday_does_not_make_a_day() {
     // Schedule shows both; moving between them keeps the window.
     r.destination(Dest::Schedule);
     assert_eq!(
-        mine(r.data(), &["Zq Offsite", "Zq Gym"]),
+        mine(&r.data_or_default(), &["Zq Offsite", "Zq Gym"]),
         [format!("{day}: Zq Offsite"), format!("{day}: Zq Gym")]
     );
     r.band("invites");
@@ -979,7 +1025,7 @@ fn a_hidden_calendar_re_folds_and_says_so_in_the_sheet_and_hides_no_task() {
     r.task("zq-cal-task", "Zq Due thing", Some(&day));
     r.settle();
     assert_eq!(
-        mine(r.data(), &["Zq Personal thing", "Zq Due thing"]).len(),
+        mine(&r.data_or_default(), &["Zq Personal thing", "Zq Due thing"]).len(),
         2
     );
     let calendar = r.data().calendars[0].clone();
@@ -998,14 +1044,14 @@ fn a_hidden_calendar_re_folds_and_says_so_in_the_sheet_and_hides_no_task() {
     );
     // THE EVENT GOES, THE TASK STAYS.
     assert_eq!(
-        mine(r.data(), &["Zq Personal thing", "Zq Due thing"]),
+        mine(&r.data_or_default(), &["Zq Personal thing", "Zq Due thing"]),
         [format!("{day}: Zq Due thing")]
     );
     let choice = r.data().calendars[0].clone();
     assert!(choice.hidden);
     assert_eq!(choice.state_label, "Hidden");
     // EVERYTHING HIDDEN IS NOT DAY ONE.
-    assert_ne!(r.data().empty, wire::AgendaEmpty::DayOne as i32);
+    assert_ne!(r.empty_headline(), Some("Nothing in your calendar yet."));
     // Toggled back.
     r.send(H::CalendarToggled(
         wire::agenda_home_event::CalendarToggled {
@@ -1013,7 +1059,7 @@ fn a_hidden_calendar_re_folds_and_says_so_in_the_sheet_and_hides_no_task() {
         },
     ));
     assert!(r.state().hidden_calendar_ids.is_empty());
-    assert_eq!(mine(r.data(), &["Zq Personal thing"]).len(), 1);
+    assert_eq!(mine(&r.data_or_default(), &["Zq Personal thing"]).len(), 1);
 }
 
 #[test]
@@ -1231,10 +1277,9 @@ fn search_with_nothing_found_says_so_and_still_offers_ask() {
     let mut r = rig(Dest::Schedule);
     r.open_search();
     r.term("zzqxj");
-    assert_eq!(r.data().empty, wire::AgendaEmpty::NoMatch as i32);
-    assert_eq!(r.data().empty_title, "Nothing matches that.");
-    assert_eq!(r.data().empty_body, "Try fewer words, or a different day.");
-    assert_eq!(r.data().empty_action, "");
+    assert_eq!(r.empty().headline, "Nothing matches that.");
+    assert_eq!(r.empty().body, "Try fewer words, or a different day.");
+    assert_eq!(r.empty().action_label, "");
     let ask = r.state().search_ask_row.clone().unwrap();
     assert_eq!(
         (
@@ -1253,7 +1298,7 @@ fn search_with_nothing_found_says_so_and_still_offers_ask() {
     // Clearing the term goes back to the window's own list.
     r.term("");
     assert!(r.state().search_ask_row.is_none());
-    assert_ne!(r.data().empty, wire::AgendaEmpty::NoMatch as i32);
+    assert_ne!(r.empty_headline(), Some("Nothing matches that."));
     assert!(r.state().search_open, "the field stays open");
 }
 
@@ -1294,17 +1339,17 @@ fn search_from_waiting_covers_every_event_not_only_the_ones_waiting_on_you() {
     r.event("zq-g", "Zq Gym", &format!("{day}T18:00"), None);
     r.settle();
     assert_eq!(
-        mine(r.data(), &["Zq Offsite", "Zq Gym"]),
+        mine(&r.data_or_default(), &["Zq Offsite", "Zq Gym"]),
         [format!("{day}: Zq Offsite")]
     );
     r.open_search();
     r.term("zq gym");
     assert_eq!(r.state().destination, Dest::Waiting as i32);
     assert_eq!(
-        mine(r.data(), &["Zq Offsite", "Zq Gym"]),
+        mine(&r.data_or_default(), &["Zq Offsite", "Zq Gym"]),
         [format!("{day}: Zq Gym")]
     );
-    assert_eq!(r.data().empty, wire::AgendaEmpty::None as i32);
+    r.not_empty();
     // Picking a destination leaves search, even the lit tab.
     r.band("invites");
     assert!(!r.state().search_open);
@@ -1342,7 +1387,7 @@ fn each_app_searches_its_own_kind_calendar_events_and_reminders_tasks() {
     let mut r = t;
     // TASKS ALONE ARE AN ANSWER: no "nothing matches" over them.
     r.term("zq book podiatrist");
-    assert_eq!(r.data().empty, wire::AgendaEmpty::None as i32);
+    r.not_empty();
     assert_eq!(r.data().task_hits[0].rows.len(), 1);
     // A task hit is checked off in place: its box shows it done, and Undo is on the status line.
     r.check("zq-t");
@@ -1405,7 +1450,7 @@ fn search_finds_a_project_by_name_and_a_tap_opens_its_page() {
         Some(routes::project("zq-garden", "Zqgarden"))
     );
     assert_eq!(data.task_hits[0].rows[0].title, "Water the zqgarden");
-    assert_eq!(data.empty, wire::AgendaEmpty::None as i32);
+    r.not_empty();
 
     // ONLY A PROJECT MATCHED: no "nothing matches" sentence, and Ask still at the foot.
     r.task("zq-other", "Zq Unrelated", None);
@@ -1437,7 +1482,7 @@ fn to_dos_search_draws_the_containers_too() {
     r.term("zqorchard");
     assert_eq!(r.state().destination, Dest::Todo as i32);
     assert_eq!(r.data().containers[0].id, "zq-orchard");
-    assert_eq!(r.data().empty, wire::AgendaEmpty::None as i32);
+    r.not_empty();
     assert!(r.data().todo.is_none(), "a search is the events' fold");
     r.close_search();
     assert!(r.data().todo.is_some());
@@ -1454,22 +1499,21 @@ fn the_empties_are_four_different_screens() {
     let mut r = rig(Dest::Schedule);
     r.clear();
     for _ in 0..12 {
-        if r.data().days.is_empty() {
+        if r.data_or_default().days.is_empty() {
             break;
         }
         r.step(30);
     }
     assert!(
-        r.data().days.is_empty(),
+        r.state().content.is_none(),
         "a window with no birthday exists within a year"
     );
-    let data = r.data();
-    assert_eq!(data.empty, wire::AgendaEmpty::DayOne as i32);
-    assert_eq!(data.empty_title, "Nothing in your calendar yet.");
-    assert_eq!(data.empty_body, "The first event is one field and a time.");
-    assert_eq!(data.empty_action, "New event");
-    assert_eq!(data.import_source, wire::ImportSource::Calendar as i32);
-    assert_eq!(data.import_label, "Import calendar");
+    let empty = r.empty();
+    assert_eq!(empty.headline, "Nothing in your calendar yet.");
+    assert_eq!(empty.body, "The first event is one field and a time.");
+    assert_eq!(empty.action_label, "New event");
+    assert_eq!(empty.import_source, wire::ImportSource::Calendar as i32);
+    assert_eq!(r.state().import_label, "Import calendar");
     // The action pushes the add sheet, on the anchor day.
     let add = r.state().new_event.clone().unwrap();
     assert_eq!(
@@ -1495,40 +1539,48 @@ fn the_empties_are_four_different_screens() {
     r.send(H::CalendarToggled(
         wire::agenda_home_event::CalendarToggled { calendar_id: id },
     ));
-    assert_eq!(r.data().empty, wire::AgendaEmpty::NothingOnDay as i32);
-    assert_eq!(r.data().empty_title, "Nothing on these days.");
+    assert_eq!(r.empty().headline, "Nothing on these days.");
     assert_eq!(
-        r.data().import_source,
+        r.empty().import_source,
         wire::ImportSource::Unspecified as i32
     );
-    assert_eq!(r.data().import_label, "");
+    assert_eq!(r.state().import_label, "");
 
     let mut d = rig(Dest::Day);
     d.clear_day();
-    assert_eq!(d.data().empty, wire::AgendaEmpty::NothingOnDay as i32);
-    assert_eq!(d.data().empty_title, "Nothing on this day.");
-    assert_eq!(d.data().empty_action, "");
-    assert_eq!(d.data().import_source, wire::ImportSource::Calendar as i32);
-    assert_eq!(d.data().import_label, "Import calendar");
+    // Day draws its hour grid whatever the day holds: a drawn grid is the place, not an empty page.
+    d.not_empty();
+    assert!(d.data().time_grid.is_some());
 }
 
 #[test]
 fn a_failed_read_is_a_failure_and_never_an_empty_agenda_and_refreshed_is_its_retry() {
     let mut r = rig(Dest::Day);
+    // A zone that cannot be read fails the refresh: what was shown stays, under the one sentence
+    // and Retry (rule 1), and the band and chrome stay.
     r.in_zone("Not/AZone");
-    let failure = match &r.state().content {
-        Some(Content::Failure(failure)) => failure.clone(),
-        other => panic!("expected a failure, found {other:?}"),
-    };
-    assert_eq!(failure.sentence, "Couldn't read this. Try again.");
-    assert_eq!(failure.remedy, "Try again");
+    let note = r
+        .state()
+        .page
+        .as_ref()
+        .and_then(|page| page.note.clone())
+        .expect("a note over what is shown");
+    assert_eq!(
+        note.sentence,
+        centraid_screens::strings::shared::read_refresh_failed(
+            centraid_screens::strings::Locale::En
+        )
+    );
+    assert_eq!(note.action_label, "Try again");
+    assert!(r.state().page.as_ref().unwrap().state.is_none());
+    assert!(matches!(r.state().content, Some(Content::Data(_))));
     assert_eq!(r.state().chrome.as_ref().unwrap().retry, "Try again");
-    // The band stands and the data is not an empty list.
     assert_eq!(r.state().band.len(), 4);
     r.in_zone("Europe/London");
     assert!(matches!(r.state().content, Some(Content::Data(_))));
+    assert!(r.state().page.as_ref().unwrap().note.is_none());
     r.in_zone("Not/AZone");
-    assert!(matches!(r.state().content, Some(Content::Failure(_))));
+    assert!(r.state().page.as_ref().unwrap().note.is_some());
     r.zone = "UTC".to_owned();
     r.driver
         .call(wire::screen_request::Kind::Environment(wire::Environment {
@@ -1548,13 +1600,16 @@ fn a_write_by_someone_else_redraws_the_screen_once() {
     r.event("zq-live", "Zq Live", &format!("{day}T09:00"), None);
     let arrived = r.driver.pump(Duration::from_millis(500));
     assert!(arrived >= 1, "the change was pushed to the shell");
-    assert_eq!(mine(r.data(), &["Zq Live"]), [format!("{day}: Zq Live")]);
+    assert_eq!(
+        mine(&r.data_or_default(), &["Zq Live"]),
+        [format!("{day}: Zq Live")]
+    );
     assert!(r.driver.view(r.id).revision > before);
     // A task due the same day also arrives (the dated boards are read again).
     r.task("zq-live-task", "Zq Live task", Some(&day));
     r.driver.pump(Duration::from_millis(500));
     assert_eq!(
-        mine(r.data(), &["Zq Live task"]),
+        mine(&r.data_or_default(), &["Zq Live task"]),
         [format!("{day}: Zq Live task")]
     );
 }
@@ -1626,16 +1681,19 @@ fn schedule_gives_a_day_of_only_tasks_its_own_section_and_waiting_draws_none() {
     r.task("zq-c", "Zq Invoice", Some(&b));
     r.settle();
     assert_eq!(
-        mine(r.data(), &["Zq Bins", "Zq Invoice"]),
+        mine(&r.data_or_default(), &["Zq Bins", "Zq Invoice"]),
         [format!("{a}: Zq Bins"), format!("{b}: Zq Invoice")]
     );
     // WAITING DRAWS NO TASK, and makes no day of one.
     r.band("invites");
-    assert!(mine(r.data(), &["Zq Bins", "Zq Invoice"]).is_empty());
-    assert!(section(r.data(), &a).is_none());
+    assert!(mine(&r.data_or_default(), &["Zq Bins", "Zq Invoice"]).is_empty());
+    assert!(section(&r.data_or_default(), &a).is_none());
     // Back on Schedule the tasks draw again.
     r.destination(Dest::Schedule);
-    assert_eq!(mine(r.data(), &["Zq Bins", "Zq Invoice"]).len(), 2);
+    assert_eq!(
+        mine(&r.data_or_default(), &["Zq Bins", "Zq Invoice"]).len(),
+        2
+    );
 }
 
 #[test]

@@ -73,7 +73,6 @@ import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.kitSwitchColors
-import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.screens.CivilDateDialog
 import dev.centraid.android.screens.CivilTimeDialog
 import dev.centraid.android.theme.centraidColor
@@ -113,33 +112,16 @@ internal fun AgendaEditorScreen(
             null
         },
     ) {
-        val gone = state.gone
-        if (gone != null) {
-            GoneCard(gone, leave)
-            return@EditorRoom
-        }
         StatusLine(state.status)
-        // Reminders' new-reminder sheet sends its read as `page` (#1185); Calendar's editor still
-        // sends `content`'s loading, failure and denied arms.
-        val page = state.page
-        if (page != null) {
-            ReadStateView(
-                page = page,
-                onRetry = { onEvent(AgendaEditorEvent(refreshed = AgendaEditorEvent.Refreshed())) },
-                retryLabel = chrome?.retry?.ifEmpty { null } ?: KitWords.RETRY,
-                skeleton = { RowSkeleton(rows = 6, label = chrome?.loading?.ifEmpty { null } ?: KitWords.OPENING) },
-                modifier = Modifier.weight(1f),
-            ) {
-                if (data != null) EditorBody(state, data, onEvent)
-            }
-        } else {
-            ReadStateView(
-                content = screenContentOf(state.loading, state.failure, data, state.denied),
-                onRetry = { onEvent(AgendaEditorEvent(refreshed = AgendaEditorEvent.Refreshed())) },
-                retryLabel = chrome?.retry?.ifEmpty { null } ?: KitWords.RETRY,
-                skeleton = { RowSkeleton(rows = 6, label = chrome?.loading?.ifEmpty { null } ?: KitWords.OPENING) },
-                modifier = Modifier.weight(1f),
-            ) { editor -> EditorBody(state, editor, onEvent) }
+        // THE READ IS THE KIT'S PAGE STATE (#1185): a task or event that is gone is its final failure.
+        ReadStateView(
+            page = state.page!!,
+            onRetry = { onEvent(AgendaEditorEvent(refreshed = AgendaEditorEvent.Refreshed())) },
+            retryLabel = chrome?.retry?.ifEmpty { null } ?: KitWords.RETRY,
+            skeleton = { RowSkeleton(rows = 6, label = chrome?.loading?.ifEmpty { null } ?: KitWords.OPENING) },
+            modifier = Modifier.weight(1f),
+        ) {
+            if (data != null) EditorBody(state, data, onEvent)
         }
     }
     EditorSheets(state, onEvent)

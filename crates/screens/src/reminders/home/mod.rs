@@ -627,6 +627,7 @@ impl Screen for Home {
                     stop: None,
                     content,
                     page: Some(page),
+                    import_label: String::new(),
                 },
             ))),
             ..wire::ViewState::default()

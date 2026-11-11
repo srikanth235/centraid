@@ -17,7 +17,6 @@ use centraid_screens::kit::civil;
 use centraid_screens::strings::Locale;
 use centraid_screens::{Registry, agenda, calendar};
 use wire::agenda_event_event::Kind as K;
-use wire::agenda_event_state::Content;
 use wire::screen_event::Kind as E;
 use wire::trash_event::{self as te, Kind as T};
 
@@ -156,10 +155,8 @@ fn moving_an_event_to_trash_says_so_with_undo_and_takes_it_off_the_calendar_and_
     assert_eq!(status.action_label, "Undo");
     assert!(!status.refused);
     // The page reads the event as gone and keeps the line over it.
-    assert!(matches!(
-        world.event_state(page).content,
-        Some(Content::Gone(_))
-    ));
+    assert!(world.event_state(page).content.is_none());
+    gone_of(&world.event_state(page).page);
     // Off the grid and the agenda, and silent.
     assert!(in_window(&world, "Review").is_empty());
     assert!(world.event_row(&id).is_none());
@@ -428,4 +425,12 @@ fn pick_band(world: &mut World, home: u64, key: &str) {
             )),
         }),
     );
+}
+
+/// The page's final failure (an occurrence that is gone), or a panic naming the page.
+fn gone_of(page: &Option<wire::PageState>) -> &wire::Failure {
+    match page.as_ref().and_then(|page| page.state.as_ref()) {
+        Some(wire::page_state::State::Failed(failure)) if failure.permanent => failure,
+        _ => panic!("not a final failure: {page:?}"),
+    }
 }

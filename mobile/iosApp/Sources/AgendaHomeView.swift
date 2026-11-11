@@ -8,9 +8,9 @@ import SwiftUI
 /// literal below is a bug: the words come through the state's `chrome`. A row
 /// that opens a page carries its `Route`, and a tap hands it to `open`.
 ///
-/// Four content branches, never two — loading, failure, denied, data — and the
-/// denied branch draws no band, because a gate with tabs under it would offer
-/// doors the member cannot open.
+/// The kit's page state draws the read (#1185): loading, failure, the gate, an empty list and data
+/// under its note. The gate draws no band, because a gate with tabs under it would offer doors
+/// the member cannot open.
 ///
 /// **FIVE PLACES, ONE LIST EACH (#1128).** Day and Schedule draw a dated task as
 /// a row of its day, its round box checking it off in place; To-do draws the
@@ -30,10 +30,8 @@ struct AgendaHomeView: View {
     @State private var quickAddTyping = false
 
     var body: some View {
-        let content = readContent(state)
-        // Reminders' read is `page`, Calendar's still `content`'s arms; either way the gate has no band,
-        // search or add.
-        let denied = isDenied(state, content)
+        // The gate has no band, search or add.
+        let denied = isDenied(state)
         // THE SHARED HEADER (Day, Week and Reminders) stands in the bar; Reminders keeps its title under it.
         let header = state.hasCalendarHeader && state.calendarHeader.shown ? state.calendarHeader : nil
         let eventCountText = eventCountLabel(state)
@@ -104,24 +102,14 @@ struct AgendaHomeView: View {
                         .padding(.horizontal, CentraidGeometry.pageMargin)
                 }
                 Group {
-                    if state.hasPage {
-                        // REMINDERS' HOME (#1185): the kit's page state draws loading, failure, the gate and
-                        // a search that matched nothing.
-                        PageReadStateView(
-                            page: state.page,
-                            loadingLabel: state.chrome.loading,
-                            onRetry: { send(AgendaEvents.make { $0.refreshed = .init() }) }
-                        ) {
-                            if case let .data(home)? = state.content {
-                                homeContent(home, state: state)
-                            }
-                        }
-                    } else {
-                        ReadStateView(
-                            content: content,
-                            loadingLabel: state.chrome.loading,
-                            onRetry: { send(AgendaEvents.make { $0.refreshed = .init() }) }
-                        ) { home in
+                    PageReadStateView(
+                        page: state.page,
+                        loadingLabel: state.chrome.loading,
+                        onRetry: { send(AgendaEvents.make { $0.refreshed = .init() }) },
+                        onEmptyAction: offersImport(state) ? nil : { if state.hasNewEvent { open(state.newEvent) } },
+                        emptyExtra: { AnyView(emptyUnder(state)) }
+                    ) {
+                        if case let .data(home)? = state.content {
                             homeContent(home, state: state)
                         }
                     }
@@ -250,28 +238,27 @@ struct AgendaHomeView: View {
         )
     }
 
-    /// The vault refused Agenda: the page's gate, or `content`'s denied arm.
-    private func isDenied(
-        _ state: Centraid_Core_V1_AgendaHomeState,
-        _ content: ScreenContent<Centraid_Core_V1_AgendaHomeData>
-    ) -> Bool {
-        if state.hasPage {
-            if case .refused? = state.page.state { return true }
-            return false
-        }
-        return content.isDenied
+    /// The vault refused Agenda: the page's gate.
+    private func isDenied(_ state: Centraid_Core_V1_AgendaHomeState) -> Bool {
+        if case .refused? = state.page.state { return true }
+        return false
     }
 
-    /// The state's four content branches as the kit's one read shape.
-    private func readContent(
-        _ state: Centraid_Core_V1_AgendaHomeState
-    ) -> ScreenContent<Centraid_Core_V1_AgendaHomeData> {
-        switch state.content {
-        case .loading?, nil: return .loading(true)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(home)?: return .data(home)
+    /// Whether the empty page offers the phone's calendar import, which Rust names on the empty state.
+    private func offersImport(_ state: Centraid_Core_V1_AgendaHomeState) -> Bool {
+        if case let .empty(empty)? = state.page.state { return empty.importSource == .calendar }
+        return false
+    }
+
+    /// WHAT THE EMPTY PAGE DRAWS UNDER ITS WORDS: where the phone holds a calendar, its import is day one's
+    /// action (sent to Rust as `ImportRequested`; "Add" stays in the header), and a search that found
+    /// nothing gets the Ask row.
+    @ViewBuilder
+    private func emptyUnder(_ state: Centraid_Core_V1_AgendaHomeState) -> some View {
+        if offersImport(state) {
+            CalendarImportButton(label: state.importLabel, identifier: "kit-empty-import", send: send)
         }
+        if state.hasSearchAskRow { SearchAskRow(ask: state.searchAskRow) }
     }
 
     /// THE HEADER'S SUBTITLE (HeaderSubtitle): the period, then how many events it holds.
@@ -338,15 +325,6 @@ struct AgendaHomeView: View {
         }
     }
 
-    /// The day-one empty's words and import door, as the kit's message.
-    private func emptyState(_ home: Centraid_Core_V1_AgendaHomeData) -> Centraid_Core_V1_EmptyState {
-        var empty = Centraid_Core_V1_EmptyState()
-        empty.headline = home.emptyTitle
-        empty.body = home.emptyBody
-        empty.actionLabel = home.emptyAction
-        return empty
-    }
-
     @ViewBuilder
     private func homeContent(
         _ home: Centraid_Core_V1_AgendaHomeData,
@@ -361,27 +339,6 @@ struct AgendaHomeView: View {
             AgendaMonthView(home: home, chrome: state.chrome, send: send, open: open)
         } else if home.hasYear {
             AgendaYearView(year: home.year, send: send)
-        } else if home.empty != .none, home.empty != .unspecified {
-            if home.empty == .noMatch {
-                // A SEARCH THAT FOUND NOTHING: the kit's one no-match state, and the Ask row under it.
-                EmptyStateView(emptyState(home))
-                if state.hasSearchAskRow { SearchAskRow(ask: state.searchAskRow) }
-            } else {
-                // WHERE THE PHONE HOLDS A CALENDAR, ITS IMPORT IS DAY ONE'S
-                // ACTION, sent to Rust as `ImportRequested`; "Add" stays in
-                // the header.
-                //
-                // A DAY THAT HOLDS OVERDUE WORK OR THE ABSENCE NOTICE sends no
-                // empty sentence, so it is drawn by the list above.
-                let offersImport = home.importSource == .calendar
-                EmptyStateView(
-                    emptyState(home),
-                    onAction: offersImport ? nil : { if state.hasNewEvent { open(state.newEvent) } }
-                )
-                if offersImport {
-                    CalendarImportButton(label: home.importLabel, identifier: "kit-empty-import", send: send)
-                }
-            }
         } else {
             AgendaList(
                 home: home,
