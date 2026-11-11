@@ -79,6 +79,20 @@ pub struct Undo {
 pub struct Handed {
     offer: Option<Offer>,
     line: wire::StatusLine,
+    /// The page closes AND the shell opens another straight after (a save that lands on what it
+    /// made): the line waits through the pop and goes to the page the shell pushes next.
+    onward: bool,
+}
+
+impl Handed {
+    /// Whether the line goes to the page pushed after the pop, not the page the pop reveals.
+    pub(crate) fn onward(&self) -> bool {
+        self.onward
+    }
+
+    pub(crate) fn mark_onward(&mut self) {
+        self.onward = true;
+    }
 }
 
 fn plain(sentence: String) -> wire::StatusLine {
@@ -120,8 +134,18 @@ impl Undo {
             ctx.hand_down(Handed {
                 offer: self.offer.clone(),
                 line,
+                onward: false,
             });
         }
+    }
+
+    /// THE PAGE CLOSES FOR ANOTHER THE SHELL OPENS NEXT (a Photos editor save lands on the new
+    /// photograph): like [`Self::hand_down`], but the line waits through the pop and is drawn on
+    /// the page the member lands on (taken there with [`Self::take_handed`]). Any other
+    /// navigation drops it, so it never reaches a page the member did not land on.
+    pub fn hand_onward(&mut self, ctx: &Ctx) {
+        self.hand_down(ctx);
+        ctx.mark_handed_onward();
     }
 
     /// THE PAGE ABOVE CLOSED: take the line it handed down, if the runtime kept one for this
@@ -194,6 +218,21 @@ impl Undo {
         let settled = self.act(ctx, request, invoke_key, said);
         if settled.committed {
             self.hand_down(ctx);
+        }
+        settled
+    }
+
+    /// [`Self::act_handing_down`] for a save whose page closes for one the shell opens next.
+    pub fn act_handing_onward(
+        &mut self,
+        ctx: &Ctx,
+        request: impl Into<wire::ActRequest>,
+        invoke_key: &str,
+        said: impl FnOnce(Locale) -> String,
+    ) -> Settled {
+        let settled = self.act(ctx, request, invoke_key, said);
+        if settled.committed {
+            self.hand_onward(ctx);
         }
         settled
     }

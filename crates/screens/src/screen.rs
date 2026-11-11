@@ -138,6 +138,14 @@ impl<'a> Ctx<'a> {
         self.done.borrow_mut().handed = Some(handed);
     }
 
+    /// The line this update hands down goes onward, to the page pushed after the pop
+    /// ([`crate::kit::undo::Undo::hand_onward`]).
+    pub(crate) fn mark_handed_onward(&self) {
+        if let Some(handed) = self.done.borrow_mut().handed.as_mut() {
+            handed.mark_onward();
+        }
+    }
+
     /// The line handed down to this screen: given once, then gone (`Undo::take_handed`).
     pub(crate) fn take_handed(&self) -> Option<Handed> {
         self.handed_in.borrow_mut().take()

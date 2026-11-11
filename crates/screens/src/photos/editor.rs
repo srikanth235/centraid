@@ -595,8 +595,9 @@ impl Editor {
             kit_act::fresh(),
         );
         // The editor leaves for the new photograph on success, so the line (and its Undo, which
-        // moves the new photograph to trash) goes to the page beneath (#1185).
-        let settled = self.undo.act_handing_down(
+        // moves the new photograph to trash) goes to the page the shell opens next, the new
+        // photograph's, where the member lands (#1185).
+        let settled = self.undo.act_handing_onward(
             ctx,
             act::photos::Upload {
                 blob: rendered.content_hash,

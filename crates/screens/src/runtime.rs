@@ -62,6 +62,9 @@ struct State {
     handed: Option<(u64, Handed)>,
     /// The line being handed to one screen during the event the runtime sends it after a pop.
     handing: Option<(u64, Handed)>,
+    /// A line a closed page left for the page the shell opens next (`Undo::hand_onward`): it
+    /// lives between the pop that closed that page and the push that follows it.
+    onward: Option<Handed>,
     /// What the screens and the follow coordinator tell one another (`crate::follow`).
     follows: crate::follow::Follows,
     band: Option<BandFn>,
@@ -125,6 +128,7 @@ impl Runtime {
             state: Mutex::new(State {
                 handed: None,
                 handing: None,
+                onward: None,
                 follows: crate::follow::Follows::default(),
                 band: None,
                 next_instance: 1,
@@ -318,6 +322,7 @@ impl Runtime {
         state.selected = tab.to_owned();
         // A TAB CHANGE IS NOT A POP: a line a closed page left for the one beneath is dropped.
         state.handed = None;
+        state.onward = None;
         for id in hidden {
             Self::dispatch(
                 state,
@@ -546,6 +551,14 @@ impl Runtime {
         if !matches!(kind, N::Popped(_) | N::PopToRoot(_)) {
             state.handed = None;
         }
+        // A LINE FOR THE PAGE OPENED NEXT lives between the pop and the push that follows it:
+        // the push takes it, any other navigation drops it.
+        let onward = if matches!(kind, N::Push(_)) {
+            state.onward.take()
+        } else {
+            state.onward = None;
+            None
+        };
         match kind {
             N::Push(push) => {
                 let index = tab_index(state, &push.tab)?;
@@ -556,6 +569,9 @@ impl Runtime {
                 let id = self.open(state, core, route, false, out)?;
                 state.tabs[index].stack.push(id);
                 Self::select(state, core, &push.tab, out);
+                if let Some(handed) = onward {
+                    Self::hand_to(state, core, id, handed, out);
+                }
             }
             N::Popped(popped) => {
                 let index = tab_index(state, &popped.tab)?;
@@ -621,11 +637,28 @@ impl Runtime {
         if !gone.contains(&from) {
             return;
         }
-        state.handing = Some((top, handed));
+        // THE PAGE CLOSED FOR ANOTHER THE SHELL OPENS NEXT: the line waits for that push.
+        if handed.onward() {
+            state.onward = Some(handed);
+            return;
+        }
+        Self::hand_to(state, core, top, handed, out);
+    }
+
+    /// Give `handed` to screen `id`, once: a `DataChanged` that names no table (the page reloads
+    /// and takes the line).
+    fn hand_to(
+        state: &mut State,
+        core: &dyn ScreenCtx,
+        id: u64,
+        handed: Handed,
+        out: &mut wire::ScreenUpdate,
+    ) {
+        state.handing = Some((id, handed));
         Self::dispatch(
             state,
             core,
-            top,
+            id,
             wire::ScreenEvent {
                 kind: Some(wire::screen_event::Kind::DataChanged(wire::DataChanged {
                     tables: Vec::new(),
@@ -704,6 +737,7 @@ impl Runtime {
         }
         state.foreground = now;
         state.handed = None;
+        state.onward = None;
         let mut reopened = Vec::new();
         for tab in 0..state.tabs.len() {
             for id in std::mem::take(&mut state.tabs[tab].stack) {
