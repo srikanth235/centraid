@@ -95,6 +95,7 @@ import dev.centraid.android.backup.MediaStoreDeleter
 import androidx.compose.runtime.CompositionLocalProvider
 import dev.centraid.android.kit.LocalAppAccentId
 import dev.centraid.android.glance.AgendaIntents
+import dev.centraid.android.glance.HealthIntents
 import dev.centraid.android.kit.HostScreenEffects
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.LocalShellLine
@@ -389,6 +390,7 @@ internal class RustRoot(
         // above it. Sent from the producer, a cold start's fact could beat the performer and be
         // answered cancelled, so the bar never opened.
         LaunchedEffect(runtime) { AgendaIntents.deliver(runtime) }
+        LaunchedEffect(runtime) { HealthIntents.deliver(runtime) }
         val owner = LocalLifecycleOwner.current
         DisposableEffect(owner, runtime) {
             val observer = LifecycleEventObserver { _, event ->

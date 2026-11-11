@@ -37,6 +37,8 @@ import dev.centraid.android.kit.effectAttempt
 import dev.centraid.android.kit.ClipboardDeadline
 import dev.centraid.android.glance.GlanceSnapshot
 import dev.centraid.android.glance.GlanceWidgets
+import dev.centraid.android.glance.HealthSnapshot
+import dev.centraid.android.glance.HealthWidget
 import dev.centraid.android.kit.SecretStores
 import dev.centraid.android.notify.Notify
 import dev.centraid.android.screens.PhotoHandOff
@@ -263,6 +265,18 @@ internal class ShellEffects(
                 } else {
                     effectAttempt { withContext(Dispatchers.IO) { GlanceWidgets.keep(context, glance.document.toByteArray()) } }
                         .fold({ done }, { failed("the widgets' snapshot could not be kept") })
+                }
+            }
+            // ---- Health's widget (#1185) ---------------------------------------------------------
+            // The same path as Agenda's: the document Rust composed, kept under the file name Rust
+            // chose, then the Health widgets redrawn. Another version is refused.
+            effect.health_glance != null -> {
+                val glance = effect.health_glance!!
+                if (glance.version != HealthSnapshot.VERSION) {
+                    failed("the Health widget draws another snapshot version")
+                } else {
+                    effectAttempt { withContext(Dispatchers.IO) { HealthWidget.keep(context, glance.file, glance.document.toByteArray()) } }
+                        .fold({ done }, { failed("the Health widget's snapshot could not be kept") })
                 }
             }
             // ---- generic platform work -----------------------------------------------------------

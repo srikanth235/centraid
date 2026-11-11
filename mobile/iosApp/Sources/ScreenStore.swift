@@ -582,6 +582,14 @@ final class ScreenStore: ObservableObject {
             } catch {
                 answer(request, .failed(Self.failure(String(describing: error))))
             }
+        // HEALTH'S WIDGET SNAPSHOT (#1185): the same path, for the Health widget.
+        case .healthGlance(let glance)?:
+            do {
+                try HealthGlanceWriter.keep(glance)
+                answer(request, done)
+            } catch {
+                answer(request, .failed(Self.failure(String(describing: error))))
+            }
         case .vaultCommand(let command)?:
             // THE SHELF IS RUST'S: only the platform's own doors reach a shell (Settings, for a
             // notification grant or a low disk).

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Health widget's provider (#1185). The app pushes every update (the health glance effect
+  writes the snapshot and redraws the provider), so the platform's periodic update is off; the one
+  timer is the inexact alarm `HealthWidget` sets for the snapshot's `refresh_after`. Sizes: 2x2 by
+  default, resizable to 4x2. Name and description are the generated strings, because the launcher
+  reads them before any code runs.
+  Privacy ruling (as Agenda's, #1173): body figures never show on a locked phone, so the widget is
+  `home_screen` only, never `keyguard`.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/glance_widget_health_description"
+    android:initialLayout="@layout/glance_health_small"
+    android:maxResizeHeight="180dp"
+    android:maxResizeWidth="320dp"
+    android:minHeight="110dp"
+    android:minResizeHeight="110dp"
+    android:minResizeWidth="110dp"
+    android:minWidth="110dp"
+    android:previewLayout="@layout/glance_health_small"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellHeight="2"
+    android:targetCellWidth="2"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />

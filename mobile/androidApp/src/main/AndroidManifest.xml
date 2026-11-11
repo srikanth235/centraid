@@ -192,6 +192,22 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/glance_reminders_info" />
         </receiver>
+        <!-- HEALTH'S HOME-SCREEN WIDGET (#1185): the same kind of provider, drawing
+             `filesDir/health-glance.json` (Rust's `health.glance` service) and never opening the
+             vault. `home_screen` only, never `keyguard`; a tap sends
+             `dev.centraid.action.HEALTH_OPEN` with one opaque key to this app's activity
+             (`glance/HealthIntents.kt`). -->
+        <receiver
+            android:name="dev.centraid.android.glance.HealthWidget"
+            android:exported="true"
+            android:label="@string/glance_widget_health_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/glance_health_info" />
+        </receiver>
 
         <!-- "WHAT HEALTH MAY READ" FOR HEALTH CONNECT (#1129). Health Connect
              shows an app's permissions only when it declares where its

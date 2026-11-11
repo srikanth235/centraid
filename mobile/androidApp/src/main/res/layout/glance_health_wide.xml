@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Health, 4x2 (#1185): up to four figures in a 2x2 grid, each label above its text, or the one
+     sentence the snapshot says. RemoteViews cannot add children without a list service, so the
+     cells are fixed and `HealthWidget` shows or hides them. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/glance_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/glance_card"
+    android:orientation="vertical"
+    android:padding="14dp">
+    <TextView android:id="@+id/glance_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="4dp" android:textSize="@dimen/centraid_text_group" android:textStyle="bold" android:textColor="@color/centraid_text_meta" android:maxLines="1" android:ellipsize="end" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+        <LinearLayout android:id="@+id/health_cell_0" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginBottom="6dp" android:orientation="vertical" android:visibility="gone">
+            <TextView android:id="@+id/health_label_0" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_meta" android:textColor="@color/centraid_text_meta" android:maxLines="1" android:ellipsize="end" />
+            <TextView android:id="@+id/health_text_0" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_row" android:textStyle="bold" android:textColor="@color/centraid_text_ink" android:maxLines="1" android:ellipsize="end" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/health_cell_1" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginBottom="6dp" android:orientation="vertical" android:visibility="gone">
+            <TextView android:id="@+id/health_label_1" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_meta" android:textColor="@color/centraid_text_meta" android:maxLines="1" android:ellipsize="end" />
+            <TextView android:id="@+id/health_text_1" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_row" android:textStyle="bold" android:textColor="@color/centraid_text_ink" android:maxLines="1" android:ellipsize="end" />
+        </LinearLayout>
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+        <LinearLayout android:id="@+id/health_cell_2" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:visibility="gone">
+            <TextView android:id="@+id/health_label_2" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_meta" android:textColor="@color/centraid_text_meta" android:maxLines="1" android:ellipsize="end" />
+            <TextView android:id="@+id/health_text_2" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_row" android:textStyle="bold" android:textColor="@color/centraid_text_ink" android:maxLines="1" android:ellipsize="end" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/health_cell_3" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:visibility="gone">
+            <TextView android:id="@+id/health_label_3" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_meta" android:textColor="@color/centraid_text_meta" android:maxLines="1" android:ellipsize="end" />
+            <TextView android:id="@+id/health_text_3" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_row" android:textStyle="bold" android:textColor="@color/centraid_text_ink" android:maxLines="1" android:ellipsize="end" />
+        </LinearLayout>
+    </LinearLayout>
+    <View android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
+    <TextView android:id="@+id/glance_message" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_row" android:textStyle="bold" android:textColor="@color/centraid_text_ink" android:maxLines="2" android:ellipsize="end" android:visibility="gone" />
+    <TextView android:id="@+id/health_hint" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_meta" android:textColor="@color/centraid_text_meta" android:maxLines="2" android:ellipsize="end" android:visibility="gone" />
+</LinearLayout>
