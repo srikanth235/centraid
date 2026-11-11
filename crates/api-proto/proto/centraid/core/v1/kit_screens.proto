@@ -381,6 +381,16 @@ message EarlierVersions {
   repeated EarlierVersion versions = 1;
   // The page after this one starts below this seq; absent on the last page.
   optional int64 next = 2;
+  // The titles of the other records the page's changes name by id (a list or album a record was
+  // in, an item it was linked to), so the screen can word them. One entry per id, only ones the
+  // vault still holds and may show.
+  repeated EarlierName names = 3;
+}
+
+// A record's title, by id.
+message EarlierName {
+  string id = 1;
+  string title = 2;
 }
 
 message EarlierVersion {
@@ -395,7 +405,9 @@ message EarlierVersion {
   string store_system = 4;
   string since_store_system = 6;
   // What the replacing change moved, field by field: `entity.title`, `<kind table>.<column>`,
-  // `contact_point[<key>].<column>`, `attendee[<person>]`.
+  // `contact_point[<key>].<column>`, `attendee[<person>]`, and what decorates the record: `tag[<id>]`,
+  // `flag[<id>]`, `membership[<list>]`, `link[<id>]` (either end), `about[<id>]`,
+  // `depicts[<id>]`.
   repeated EarlierChange field_changes = 5;
 }
 

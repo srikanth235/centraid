@@ -51,8 +51,10 @@ pub(crate) fn versions(
         Who::Store(system) => system,
     };
     let text = |value: &serde_json::Value| value.to_string();
+    let names = named(vault, &page.versions)?;
     Ok(Answer::EarlierVersions(wire::EarlierVersions {
         next: page.next,
+        names,
         versions: page
             .versions
             .into_iter()
@@ -80,4 +82,30 @@ pub(crate) fn versions(
 pub(crate) fn count(vault: &Vault, entity_id: &str) -> Result<Answer> {
     let count = vault.read(|connection| history::offered(connection, entity_id))?;
     Ok(Answer::EarlierCount(wire::EarlierCount { count }))
+}
+
+/// The fields a version names another record by (the id is the field's key).
+const NAMING: [&str; 4] = ["membership", "link", "about", "depicts"];
+
+/// The titles of the records a page's changes name: a list, an album, an item a record was linked
+/// to. A record the vault no longer holds is not named (the screen says so in its own words); a
+/// Locker item is never named, so a version never carries a title from behind Locker's wall.
+fn named(vault: &Vault, versions: &[history::Version]) -> Result<Vec<wire::EarlierName>> {
+    let mut ids: Vec<String> = versions
+        .iter()
+        .flat_map(|version| version.changes.iter())
+        .filter_map(|change| {
+            let (alias, rest) = change.field.split_once('[')?;
+            let id = rest.split(']').next()?;
+            NAMING.contains(&alias).then(|| id.to_owned())
+        })
+        .collect();
+    ids.sort();
+    ids.dedup();
+    let found = vault.read(|connection| history::titles(connection, &ids))?;
+    let names = found
+        .into_iter()
+        .map(|(id, title)| wire::EarlierName { id, title })
+        .collect();
+    Ok(names)
 }
