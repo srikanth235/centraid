@@ -38,7 +38,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::rules::{RuleReport, relative, source_files};
 
@@ -636,6 +636,9 @@ pub fn promises(root: &Path) -> RuleReport {
     let mut report = check(root, REGISTER);
     // The restore and recovery-words screens are not an app, so no row holds them.
     report.findings.extend(owner_custody_missing(root));
+    // Nor is the rest of the screens crate, and the list of what can leave is held to the proto.
+    report.findings.extend(owner_tree_missing(root));
+    report.findings.extend(effect_kinds_missing(root));
     report
 }
 
@@ -2064,22 +2067,168 @@ fn units_missing(root: &Path, app: &str) -> Vec<String> {
 // OwnerCheck (Confirm it's me)
 // ---------------------------------------------------------------------------
 
-/// What a screen spells to make something leave the phone in the clear.
-const LEAVING_EFFECTS: [&str; 4] = [
-    "Kind::SaveFile",
-    "Kind::ShareFile",
-    "Kind::ExportOriginals",
-    "Kind::Share(",
+/// WHAT HANDS MEMBER DATA OUT OF THE VAULT, by the name of the effect's variant (`Kind::<name>`):
+/// text to the share sheet (`Share`), a document's file (`ShareFile`), one item made in memory
+/// (`ShareBytes`), bytes to the save sheet (`SaveFile`), a staged file's path to the save sheet
+/// (`SaveFilePath`) and photographs' originals (`ExportOriginals`). [`STAYING_EFFECTS`] holds
+/// every other effect the core can ask for, and [`effect_kinds_missing`] fails when the two lists
+/// and `screens.proto` disagree, so a new effect has to be put on one list or the other.
+pub const LEAVING_EFFECTS: [&str; 6] = [
+    "Share",
+    "ShareFile",
+    "ShareBytes",
+    "SaveFile",
+    "SaveFilePath",
+    "ExportOriginals",
 ];
 
-/// What counts as asking the owner: the gate itself, or the kit machines that hold one.
-const OWNER_GATES: [&str; 5] = [
-    "kit::owner",
-    "OwnerGate",
-    "kit::export",
-    "kit::share",
-    "kit::transfer::ExportSpec",
+/// THE EFFECTS THAT HAND NOTHING OUT, by the oneof's field name in `screens.proto`, each with why.
+/// Together with [`LEAVING_EFFECTS`] this is every member of `Effect.kind`: a new effect that
+/// exports or shares has to be named as leaving (and then every screen that raises it asks the
+/// owner), never left unlisted or put here to get past the gate.
+pub const STAYING_EFFECTS: &[(&str, &str)] = &[
+    (
+        "agenda_glance",
+        "writes the widgets' snapshot into the app's own shared container",
+    ),
+    (
+        "announce",
+        "tells the shell something happened inside the app",
+    ),
+    (
+        "background_probe",
+        "asks the platform whether background work is allowed",
+    ),
+    (
+        "browse_gateways",
+        "looks for the member's own gateway on the local network",
+    ),
+    (
+        "calendar_read",
+        "reads the phone's calendars into the vault's screens",
+    ),
+    ("camera_roll", "reads the camera roll into the vault"),
+    ("clipboard_clear", "empties the clipboard"),
+    (
+        "clipboard_set",
+        "one short value the member tapped Copy on; the clipboard clears itself",
+    ),
+    (
+        "contacts_read",
+        "reads the phone's contacts into the vault's screens",
+    ),
+    (
+        "folders_read",
+        "reads a followed folder into the vault's screens",
+    ),
+    (
+        "follow_folder",
+        "starts following a folder the member picked",
+    ),
+    ("haptic", "a tap of feedback"),
+    (
+        "health_glance",
+        "writes the Health widget's snapshot into the app's own shared container",
+    ),
+    (
+        "health_read",
+        "reads the phone's health store into the vault's screens",
+    ),
+    ("keychain", "keeps a secret in the phone's own keychain"),
+    (
+        "library_delete",
+        "removes the member's own photographs from the camera roll",
+    ),
+    (
+        "library_derivatives",
+        "makes thumbnails of photographs already on the phone",
+    ),
+    (
+        "library_permission",
+        "asks the phone for access to its photo library",
+    ),
+    (
+        "library_stage",
+        "copies a photograph from the camera roll into the vault's own staging",
+    ),
+    ("link_read", "reads the title of a link the member pasted"),
+    ("long_run", "asks the platform for time to finish work"),
+    ("model_download", "fetches the on-device assistant's model"),
+    ("open_map", "opens an address in the maps app"),
+    ("open_route", "opens a page inside the app"),
+    (
+        "open_url",
+        "opens a link, a phone number or a mail address in another app",
+    ),
+    (
+        "owner_check",
+        "the phone's own check that the owner is present",
+    ),
+    (
+        "pass_window_done",
+        "tells the platform a background window ended",
+    ),
+    (
+        "phone_watch",
+        "watches the phone's calendars and reminders for changes",
+    ),
+    ("pick_bytes", "the member picks a file to bring in"),
+    ("pick_file", "the member picks a file to bring in"),
+    (
+        "pick_library_photo",
+        "the member picks a photograph to bring in",
+    ),
+    ("read_camera", "reads one capture from the camera"),
+    (
+        "reminders_read",
+        "reads the phone's reminders into the vault's screens",
+    ),
+    (
+        "render_edit",
+        "renders an edit of a photograph into the vault",
+    ),
+    ("roll_page", "reads a page of the camera roll"),
+    ("scan_code", "reads a code through the camera"),
+    (
+        "schedule_notifications",
+        "asks the phone to hold the member's own reminders",
+    ),
+    (
+        "schedule_windows",
+        "asks the platform for background windows",
+    ),
+    ("screenshot_shield", "hides the screen from screenshots"),
+    (
+        "secrets",
+        "moves secrets between the vault and the phone's keychain",
+    ),
+    ("select_tab", "moves to another tab inside the app"),
+    (
+        "stage_folder_file",
+        "copies a followed folder's file into the vault's own staging",
+    ),
+    ("stop_following", "stops following a folder"),
+    (
+        "synced_probe",
+        "asks the keychain whether a synced secret is present",
+    ),
+    (
+        "uploads",
+        "uploads the sealed backup to the member's own gateway",
+    ),
+    (
+        "vault_command",
+        "runs a command on the vault the phone holds",
+    ),
 ];
+
+/// Where the effect oneof is declared.
+const EFFECT_PROTO: &str = "crates/api-proto/proto/centraid/core/v1/screens.proto";
+
+/// What counts as asking the owner. The gate itself, held by the file that raises the effect: the
+/// kit machines (`kit::export`, `kit::share`, `kit::transfer`) hold one and raise the effects
+/// themselves, so a screen that hands a file out by hand cannot borrow their check by naming them.
+const OWNER_GATES: [&str; 1] = ["OwnerGate"];
 
 /// A FILE THAT LEAVES THE GATE OUT, by name, with the reason.
 pub struct OwnerException {
@@ -2104,33 +2253,100 @@ pub const OWNER_CUSTODY: [&str; 3] = [
     "crates/screens/src/custody/show.rs",
 ];
 
+/// The names `effect::Kind` goes by in `text`: itself, and what a `use ... Kind as X` calls it.
+fn kind_names(text: &str) -> Vec<String> {
+    let mut names = vec!["Kind".to_owned()];
+    for (at, _) in text.match_indices("Kind as ") {
+        let alias: String = text[at + "Kind as ".len()..]
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+            .collect();
+        if !alias.is_empty() {
+            names.push(alias);
+        }
+    }
+    names
+}
+
+/// Whether `text` holds `word` as a whole identifier at byte `at`.
+fn whole_word(text: &str, at: usize, word: &str) -> bool {
+    let ident = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    !text[..at].chars().next_back().is_some_and(ident)
+        && !text[at + word.len()..].chars().next().is_some_and(ident)
+}
+
+/// The leaving effects `text` spells, by variant: `Kind::ShareBytes`, the same through an alias
+/// (`use wire::effect::Kind as K` then `K::ShareBytes`), or named in a braced import
+/// (`effect::Kind::{ShareBytes, ..}`). Whole names only, so `SaveFile` is not `SaveFilePath`. A
+/// glob import (`Kind::*`) hides what is raised, so it is a finding of its own
+/// ([`spells_a_glob_of_effects`]).
+fn spelled_leaving_effects(text: &str) -> Vec<&'static str> {
+    let names = kind_names(text);
+    let mut found = Vec::new();
+    for effect in LEAVING_EFFECTS {
+        let direct = names.iter().any(|name| {
+            let path = format!("{name}::{effect}");
+            text.match_indices(&path)
+                .any(|(at, _)| whole_word(text, at, &path))
+        });
+        let braced = text.match_indices("Kind::{").any(|(at, _)| {
+            let list = &text[at + "Kind::{".len()..];
+            let list = list.split('}').next().unwrap_or_default();
+            list.match_indices(effect)
+                .any(|(inner, _)| whole_word(list, inner, effect))
+        });
+        if direct || braced {
+            found.push(effect);
+        }
+    }
+    found
+}
+
+/// Whether `text` imports every effect kind at once (`Kind::*`), which would hide what it raises.
+fn spells_a_glob_of_effects(text: &str) -> bool {
+    kind_names(text)
+        .iter()
+        .any(|name| text.contains(&format!("{name}::*")))
+}
+
 /// OwnerCheck is kept when no live (non-test, non-comment) code under
 /// `crates/screens/src/<app>/` makes something leave the phone ([`LEAVING_EFFECTS`]) in a file
-/// that does not ask the owner ([`OWNER_GATES`]) and is not in [`OWNER_EXCEPTIONS`].
+/// that does not hold the owner gate ([`OWNER_GATES`]) and is not in [`OWNER_EXCEPTIONS`].
 fn owner_check_missing(root: &Path, app: &str) -> Vec<String> {
     owner_check_missing_in(root, app, OWNER_EXCEPTIONS)
 }
 
 fn owner_check_missing_in(root: &Path, app: &str, exceptions: &[OwnerException]) -> Vec<String> {
     let dir = root.join("crates/screens/src").join(app);
+    owner_gaps(root, &source_files(&dir, "rs"), exceptions, true)
+}
+
+/// The gaps in `files`: a file that raises a leaving effect without the gate, raises an owner
+/// check by hand (`by_hand`: only an app's own screens are held to the kit's gate for it; the kit
+/// and the runtime are where the gate is made), or globs the effect kinds, and an exception that
+/// no longer raises anything.
+fn owner_gaps(
+    root: &Path,
+    files: &[PathBuf],
+    exceptions: &[OwnerException],
+    by_hand: bool,
+) -> Vec<String> {
     let mut gaps = Vec::new();
-    for file in source_files(&dir, "rs") {
-        let rel = relative(root, &file);
-        let Some(text) = live_source(&file) else {
+    for file in files {
+        let rel = relative(root, file);
+        let Some(text) = live_source(file) else {
             continue;
         };
-        let raised = LEAVING_EFFECTS
-            .iter()
-            .find(|effect| text.contains(**effect))
-            .copied();
-        let hand_made = text.contains("Kind::OwnerCheck") && !text.contains("kit::owner");
+        let raised = spelled_leaving_effects(&text);
+        let hand_made =
+            by_hand && text.contains("Kind::OwnerCheck") && !text.contains("kit::owner");
         if let Some(exception) = exceptions
             .iter()
             .find(|exception| rel.ends_with(&format!("src/{}", exception.file)))
         {
             // An exception that no longer raises anything is stale: say so, so the table
             // cannot keep a name the code no longer needs.
-            if !hand_made && raised.is_none() {
+            if !hand_made && raised.is_empty() {
                 gaps.push(format!(
                     "{rel}: excepted from the owner gate ({}) but raises nothing; remove the exception",
                     exception.reason
@@ -2143,12 +2359,133 @@ fn owner_check_missing_in(root: &Path, app: &str, exceptions: &[OwnerException])
                 "{rel}: raises `Kind::OwnerCheck` by hand instead of the kit's gate (`kit::owner::OwnerGate`)"
             ));
         }
-        let Some(effect) = raised else {
+        if spells_a_glob_of_effects(&text) {
+            gaps.push(format!(
+                "{rel}: imports every effect kind at once (`Kind::*`), which hides what leaves the phone; name them"
+            ));
+        }
+        if raised.is_empty() {
             continue;
-        };
+        }
         if !OWNER_GATES.iter().any(|gate| text.contains(gate)) {
             gaps.push(format!(
-                "{rel}: raises `{effect}` without asking the owner (`kit::owner::OwnerGate`)"
+                "{rel}: raises `{}` without asking the owner (`kit::owner::OwnerGate`)",
+                raised.join("`, `")
+            ));
+        }
+    }
+    gaps
+}
+
+/// The same check over every file under `crates/screens/src` that is not an app's own folder
+/// (those are held by the app's row): the kit, the shell, custody, anything added later. A leaving
+/// effect raised anywhere has to sit beside the gate.
+fn owner_tree_missing(root: &Path) -> Vec<String> {
+    owner_tree_missing_in(root, OWNER_EXCEPTIONS)
+}
+
+fn owner_tree_missing_in(root: &Path, exceptions: &[OwnerException]) -> Vec<String> {
+    let screens = root.join("crates/screens/src");
+    let files: Vec<PathBuf> = source_files(&screens, "rs")
+        .into_iter()
+        .filter(|file| {
+            !file
+                .strip_prefix(&screens)
+                .ok()
+                .and_then(|inner| inner.components().next())
+                .and_then(|first| first.as_os_str().to_str())
+                .is_some_and(|first| APPS.contains(&first))
+        })
+        .collect();
+    owner_gaps(root, &files, exceptions, false)
+}
+
+/// Every member of `Effect.kind` in `screens.proto`, by field name, in the file's order.
+fn effect_fields(proto: &str) -> Vec<String> {
+    let mut fields = Vec::new();
+    let mut inside = false;
+    for line in proto.lines() {
+        let line = line.trim();
+        if !inside {
+            inside = line.starts_with("oneof kind") && line.ends_with('{');
+            continue;
+        }
+        if line.starts_with('}') {
+            break;
+        }
+        if line.starts_with("//") {
+            continue;
+        }
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() >= 4 && parts[2] == "=" {
+            fields.push(parts[1].to_owned());
+        }
+    }
+    fields
+}
+
+/// `message Effect { oneof kind { ... } }` cut out of the proto's text.
+fn effect_message(proto: &str) -> Option<&str> {
+    let start = proto.find("\nmessage Effect {")?;
+    let rest = &proto[start + 1..];
+    let end = rest.find("\n}\n")?;
+    Some(&rest[..end])
+}
+
+/// `share_bytes` as the variant it generates: `ShareBytes`.
+fn variant_of(field: &str) -> String {
+    pascal(&field.replace('_', "-"))
+}
+
+/// THE FIXED LIST OF WHAT HANDS DATA OUT, checked against the proto: every effect the core can ask
+/// of the shell is either in [`LEAVING_EFFECTS`] (and so gated wherever a screen raises it) or in
+/// [`STAYING_EFFECTS`] with its reason, and neither list names an effect that is gone. A new
+/// export or share effect that nobody listed fails here, before any screen can raise it
+/// ungated.
+pub fn effect_kinds_missing(root: &Path) -> Vec<String> {
+    effect_kinds_missing_in(root, LEAVING_EFFECTS.as_slice(), STAYING_EFFECTS)
+}
+
+fn effect_kinds_missing_in(root: &Path, leaving: &[&str], staying: &[(&str, &str)]) -> Vec<String> {
+    let Ok(proto) = fs::read_to_string(root.join(EFFECT_PROTO)) else {
+        return vec![format!(
+            "{EFFECT_PROTO} is missing: the effects cannot be checked"
+        )];
+    };
+    let Some(message) = effect_message(&proto) else {
+        return vec![format!("{EFFECT_PROTO} has no `message Effect`")];
+    };
+    let fields = effect_fields(message);
+    let mut gaps = Vec::new();
+    if fields.is_empty() {
+        gaps.push(format!("{EFFECT_PROTO}: `message Effect` lists no effects"));
+    }
+    for field in &fields {
+        let variant = variant_of(field);
+        let leaves = leaving.contains(&variant.as_str());
+        let stays = staying.iter().any(|(name, _)| name == field);
+        if leaves && stays {
+            gaps.push(format!(
+                "effect `{field}` is on both lists (leaving and staying); it is one or the other"
+            ));
+        }
+        if !leaves && !stays {
+            gaps.push(format!(
+                "effect `{field}` is on neither list: if it hands member data out of the vault (a share, a save, an export) add `{variant}` to `LEAVING_EFFECTS` so every screen that raises it asks the owner; otherwise add it to `STAYING_EFFECTS` with the reason it hands nothing out"
+            ));
+        }
+    }
+    for name in leaving {
+        if !fields.iter().any(|field| variant_of(field) == *name) {
+            gaps.push(format!(
+                "`LEAVING_EFFECTS` names `{name}`, which is not an effect in {EFFECT_PROTO}"
+            ));
+        }
+    }
+    for (name, why) in staying {
+        if !fields.iter().any(|field| field == name) {
+            gaps.push(format!(
+                "`STAYING_EFFECTS` names `{name}` ({why}), which is not an effect in {EFFECT_PROTO}"
             ));
         }
     }

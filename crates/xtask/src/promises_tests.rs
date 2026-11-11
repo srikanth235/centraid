@@ -1354,26 +1354,230 @@ fn a_screen_that_saves_a_file_through_the_owner_gate_keeps_the_owner_check() {
         "use crate::kit::owner::OwnerGate; fn go() { wire::effect::Kind::SaveFile(file); }",
     );
     assert_eq!(owner_lacking(&root), "");
-    let kit = owner_tree(
-        "owner-kit-export",
-        "use crate::kit::export::ExportSpec; fn go() { wire::effect::Kind::SaveFile(file); }",
-    );
-    assert_eq!(owner_lacking(&kit), "");
+}
+
+#[test]
+fn naming_a_kit_machine_is_not_asking_the_owner() {
+    // The machines hold their own gate and raise the effects themselves; a screen that spells the
+    // effect by hand has to hold a gate of its own, not borrow one by naming the machine.
+    for borrowed in [
+        "use crate::kit::export::ExportSpec;",
+        "use crate::kit::share::Share;",
+        "use crate::kit::transfer::ExportSpec;",
+        "use crate::kit::owner::Leaving;",
+    ] {
+        let root = owner_tree(
+            "owner-borrowed",
+            &format!("{borrowed} fn go() {{ wire::effect::Kind::SaveFile(file); }}"),
+        );
+        assert!(
+            owner_lacking(&root).contains("raises `SaveFile` without asking the owner"),
+            "{borrowed}"
+        );
+    }
 }
 
 #[test]
 fn a_screen_that_lets_data_leave_without_the_gate_is_named_with_its_file() {
-    for effect in ["SaveFile", "ShareFile", "ExportOriginals", "Share("] {
+    // Every effect that hands bytes, a file or a path out, by its real name.
+    for effect in LEAVING_EFFECTS {
         let root = owner_tree(
             "owner-red",
             &format!("fn go() {{ wire::effect::Kind::{effect}(file); }}"),
         );
         let gaps = owner_lacking(&root);
         assert!(
-            gaps.contains("crates/screens/src/notes/transfer.rs") && gaps.contains(effect),
+            gaps.contains("crates/screens/src/notes/transfer.rs")
+                && gaps.contains(&format!("`{effect}`")),
             "{effect}: {gaps}"
         );
     }
+    assert_eq!(
+        LEAVING_EFFECTS,
+        [
+            "Share",
+            "ShareFile",
+            "ShareBytes",
+            "SaveFile",
+            "SaveFilePath",
+            "ExportOriginals"
+        ],
+        "the hand-out effects are the six the core has; a seventh is added in one place"
+    );
+}
+
+#[test]
+fn an_effect_is_matched_whole_so_one_name_does_not_stand_for_another() {
+    let root = owner_tree(
+        "owner-whole",
+        "fn go() { wire::effect::Kind::SaveFilePath(file); }",
+    );
+    let gaps = owner_lacking(&root);
+    assert!(gaps.contains("`SaveFilePath`"), "{gaps}");
+    assert!(!gaps.contains("`SaveFile`"), "{gaps}");
+    // A neighbour that merely starts like a leaving effect hands nothing out.
+    let quiet = owner_tree(
+        "owner-neighbour",
+        "fn go() { wire::effect::Kind::ShareSheetOpened(x); Kind::SaveFileLater(y); }",
+    );
+    assert_eq!(owner_lacking(&quiet), "");
+}
+
+#[test]
+fn an_effect_spelled_through_an_alias_or_a_braced_import_is_still_caught() {
+    for (name, text) in [
+        (
+            "owner-alias",
+            "use wire::effect::Kind as K; fn go() { K::ShareBytes(b); }",
+        ),
+        (
+            "owner-alias-long",
+            "use wire::effect::Kind as EffectKind; fn go() { EffectKind::SaveFilePath(p); }",
+        ),
+        (
+            "owner-braced",
+            "use wire::effect::Kind::{OpenUrl, ShareBytes}; fn go() { ShareBytes(b); }",
+        ),
+    ] {
+        let root = owner_tree(name, text);
+        let gaps = owner_lacking(&root);
+        assert!(
+            gaps.contains("crates/screens/src/notes/transfer.rs")
+                && gaps.contains("without asking"),
+            "{name}: {gaps}"
+        );
+    }
+    let glob = owner_tree(
+        "owner-glob",
+        "use wire::effect::Kind::*; fn go() { ShareBytes(b); }",
+    );
+    assert!(owner_lacking(&glob).contains("every effect kind at once"));
+}
+
+#[test]
+fn a_leaving_effect_outside_an_apps_folder_is_held_to_the_gate_too() {
+    let root = fixture_dir("owner-tree");
+    write(
+        &root,
+        "crates/screens/src/kit/rogue.rs",
+        "fn go() { wire::effect::Kind::ShareBytes(b); }",
+    );
+    write(
+        &root,
+        "crates/screens/src/shell/fine.rs",
+        "use crate::kit::owner::OwnerGate; fn go() { wire::effect::Kind::SaveFilePath(p); }",
+    );
+    // An app's own folder is held by its row, not scanned twice.
+    write(
+        &root,
+        "crates/screens/src/notes/own.rs",
+        "fn go() { wire::effect::Kind::ShareBytes(b); }",
+    );
+    let gaps = owner_tree_missing_in(&root, &[]).join("\n");
+    assert!(gaps.contains("crates/screens/src/kit/rogue.rs"), "{gaps}");
+    assert!(
+        !gaps.contains("shell/fine.rs") && !gaps.contains("notes/own.rs"),
+        "{gaps}"
+    );
+    // The kit and the runtime may make the gate itself; only an app's screens may not by hand.
+    write(
+        &root,
+        "crates/screens/src/kit/owner.rs",
+        "fn ask() { wire::effect::Kind::OwnerCheck(c); }",
+    );
+    assert!(
+        !owner_tree_missing_in(&root, &[])
+            .join("\n")
+            .contains("kit/owner.rs")
+    );
+}
+
+#[test]
+fn the_committed_screens_keep_the_gate_beside_every_effect_that_hands_data_out() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    assert_eq!(owner_tree_missing(&root), Vec::<String>::new());
+    for app in APPS {
+        assert_eq!(
+            owner_check_missing(&root, app),
+            Vec::<String>::new(),
+            "{app}"
+        );
+    }
+}
+
+fn effect_proto(root: &Path, fields: &str) {
+    write(
+        root,
+        EFFECT_PROTO,
+        &format!(
+            "message Other {{ oneof kind {{ Nope nope = 1; }} }}\n\nmessage Effect {{\n  oneof kind {{\n{fields}\n  }}\n  reserved 7;\n}}\n"
+        ),
+    );
+}
+
+#[test]
+fn a_new_effect_that_is_on_neither_list_fails_the_gate_and_says_where_to_put_it() {
+    let root = fixture_dir("effect-new");
+    effect_proto(
+        &root,
+        "    Share share = 4;\n    // a comment\n    OpenUrl open_url = 5;\n    ShareBlob share_blob = 9;",
+    );
+    let gaps =
+        effect_kinds_missing_in(&root, &["Share"], &[("open_url", "opens a link")]).join("\n");
+    assert!(
+        gaps.contains("`share_blob`")
+            && gaps.contains("LEAVING_EFFECTS")
+            && gaps.contains("`ShareBlob`"),
+        "{gaps}"
+    );
+    // The effect of another message's oneof is not an effect.
+    assert!(!gaps.contains("nope"), "{gaps}");
+    // Listed, it is quiet.
+    let listed = effect_kinds_missing_in(
+        &root,
+        &["Share", "ShareBlob"],
+        &[("open_url", "opens a link")],
+    );
+    assert_eq!(listed, Vec::<String>::new());
+}
+
+#[test]
+fn an_effect_that_is_gone_or_listed_twice_is_named() {
+    let root = fixture_dir("effect-stale");
+    effect_proto(&root, "    Share share = 4;\n    OpenUrl open_url = 5;");
+    let gaps = effect_kinds_missing_in(
+        &root,
+        &["Share", "ShareFile"],
+        &[
+            ("open_url", "opens a link"),
+            ("share", "both"),
+            ("haptic", "buzz"),
+        ],
+    )
+    .join("\n");
+    assert!(
+        gaps.contains("`ShareFile`, which is not an effect"),
+        "{gaps}"
+    );
+    assert!(
+        gaps.contains("`haptic`") && gaps.contains("which is not an effect"),
+        "{gaps}"
+    );
+    assert!(gaps.contains("`share` is on both lists"), "{gaps}");
+}
+
+#[test]
+fn the_committed_effects_are_each_on_exactly_one_list() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    assert_eq!(effect_kinds_missing(&root), Vec::<String>::new());
+    let missing = fixture_dir("effect-missing-proto");
+    assert!(
+        effect_kinds_missing(&missing)
+            .join("\n")
+            .contains("cannot be checked")
+    );
+    // Every staying effect says why, in words.
+    assert!(STAYING_EFFECTS.iter().all(|(_, why)| why.len() > 8));
 }
 
 #[test]
