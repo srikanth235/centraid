@@ -20,6 +20,8 @@
 
 use std::collections::BTreeSet;
 
+use crate::portable::zip::ZipWriter;
+
 /// One file as the shell read it: a path relative to the picked folder (or just a name)
 /// and its text.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -275,48 +277,24 @@ pub struct Entry {
     pub bytes: Vec<u8>,
 }
 
-/// A ZIP archive of `entries`, stored (not compressed): every reader opens it, and the
-/// writer is 40 lines. Names are UTF-8 (general purpose flag bit 11).
+/// A ZIP archive of `entries`, stored (not compressed): every reader opens it. A small archive
+/// built in memory through the shared streaming writer ([`crate::portable::zip`]), which a large
+/// export uses to write a file instead. Names are UTF-8 (general purpose flag bit 11).
 #[must_use]
 pub fn zip(entries: &[Entry]) -> Vec<u8> {
-    let mut out: Vec<u8> = Vec::new();
-    let mut central: Vec<u8> = Vec::new();
+    let mut writer = ZipWriter::new(std::io::Cursor::new(Vec::new()));
     for entry in entries {
-        let mut crc = flate2::Crc::new();
-        crc.update(&entry.bytes);
-        let (crc, size, name) = (crc.sum(), entry.bytes.len() as u32, entry.path.as_bytes());
-        let offset = out.len() as u32;
-        // Local header.
-        out.extend_from_slice(&0x0403_4b50_u32.to_le_bytes());
-        out.extend_from_slice(&[20, 0, 0, 8, 0, 0, 0, 0, 0x21, 0]);
-        out.extend_from_slice(&crc.to_le_bytes());
-        out.extend_from_slice(&size.to_le_bytes());
-        out.extend_from_slice(&size.to_le_bytes());
-        out.extend_from_slice(&(name.len() as u16).to_le_bytes());
-        out.extend_from_slice(&0_u16.to_le_bytes());
-        out.extend_from_slice(name);
-        out.extend_from_slice(&entry.bytes);
-        // Central directory header.
-        central.extend_from_slice(&0x0201_4b50_u32.to_le_bytes());
-        central.extend_from_slice(&[20, 0, 20, 0, 0, 8, 0, 0, 0, 0, 0x21, 0]);
-        central.extend_from_slice(&crc.to_le_bytes());
-        central.extend_from_slice(&size.to_le_bytes());
-        central.extend_from_slice(&size.to_le_bytes());
-        central.extend_from_slice(&(name.len() as u16).to_le_bytes());
-        central.extend_from_slice(&[0; 12]);
-        central.extend_from_slice(&offset.to_le_bytes());
-        central.extend_from_slice(name);
+        // A `Vec` sink and an in-memory reader of the declared length cannot fail.
+        let _ = writer.add(
+            &entry.path,
+            entry.bytes.len() as u64,
+            entry.bytes.as_slice(),
+        );
     }
-    let start = out.len() as u32;
-    out.extend_from_slice(&central);
-    out.extend_from_slice(&0x0605_4b50_u32.to_le_bytes());
-    out.extend_from_slice(&[0, 0, 0, 0]);
-    out.extend_from_slice(&(entries.len() as u16).to_le_bytes());
-    out.extend_from_slice(&(entries.len() as u16).to_le_bytes());
-    out.extend_from_slice(&(central.len() as u32).to_le_bytes());
-    out.extend_from_slice(&start.to_le_bytes());
-    out.extend_from_slice(&0_u16.to_le_bytes());
-    out
+    writer
+        .finish()
+        .map(std::io::Cursor::into_inner)
+        .unwrap_or_default()
 }
 
 /// The text of one exported note: its title as a heading when its words do not start with

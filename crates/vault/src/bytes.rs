@@ -90,6 +90,12 @@ pub trait BlobStore {
     /// photograph so a view could buffer it again. `None` is a real answer: the
     /// bytes are not in this store.
     fn path_of(&self, id: &str) -> Result<Option<PathBuf>>;
+    /// THE FOLDER A STREAMED EXPORT IS STAGED IN (#1185, D17): beside the store, never inside it
+    /// (the store lists its own folder as blobs), private to the app, and emptied by the next
+    /// export. `None` for a store with no folder of its own.
+    fn staging_dir(&self) -> Option<PathBuf> {
+        None
+    }
     /// WHERE THESE BYTES ARE ON THIS DEVICE. See the module header.
     ///
     /// The default knows only this store's own files, which is all a store with
@@ -244,6 +250,10 @@ impl BlobStore for FsBlobStore {
         Ok(path.exists().then_some(path))
     }
 
+    fn staging_dir(&self) -> Option<PathBuf> {
+        Some(self.root.with_extension("exports"))
+    }
+
     fn ids(&self) -> Result<BTreeSet<String>> {
         let entries = match fs::read_dir(&self.root) {
             Ok(entries) => entries,
@@ -287,6 +297,16 @@ impl BlobStore for FsBlobStore {
 mod tests {
     use super::*;
     use crate::blob::content_digest;
+
+    #[test]
+    fn the_staging_folder_is_beside_the_store_never_inside_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("vault.bytes");
+        let store = FsBlobStore::open(&root).unwrap();
+        let staging = store.staging_dir().expect("a staging folder");
+        assert_eq!(staging, dir.path().join("vault.exports"));
+        assert!(!staging.starts_with(&root));
+    }
 
     #[test]
     fn a_blob_is_named_by_its_bytes_and_a_second_put_is_one_blob() {

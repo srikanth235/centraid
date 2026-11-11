@@ -3,7 +3,7 @@
 //! with no passcode warns or refuses as the spec says, and leaving withdraws the prompt.
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_screens::kit::export::{self, Choice, ExportFile, ExportSpec};
+use centraid_screens::kit::export::{self, Choice, ExportFile, ExportSpec, Made, StagedFile};
 use centraid_screens::kit::owner::NoPasscode;
 use centraid_screens::kit::read::Reading;
 use centraid_screens::strings::Locale;
@@ -41,15 +41,23 @@ fn refused(_: &Ctx) -> Reading<Vec<Choice>> {
     Reading::Denied(wire::AppQueryDenial::default())
 }
 
-fn file(_: &Ctx, key: &str) -> Result<ExportFile, String> {
-    Ok(ExportFile {
+fn file(_: &Ctx, key: &str) -> Result<Made, String> {
+    Ok(Made::Bytes(ExportFile {
         name: format!("{key}.txt"),
         media_type: "text/plain".to_owned(),
         content: b"hello".to_vec(),
-    })
+    }))
 }
 
-fn breaks(_: &Ctx, _: &str) -> Result<ExportFile, String> {
+fn staged(_: &Ctx, key: &str) -> Result<Made, String> {
+    Ok(Made::Staged(StagedFile {
+        path: format!("/staging/{key}.zip"),
+        name: format!("{key}.zip"),
+        media_type: "application/zip".to_owned(),
+    }))
+}
+
+fn breaks(_: &Ctx, _: &str) -> Result<Made, String> {
     Err(String::new())
 }
 
@@ -72,6 +80,7 @@ spec!(WARNS, two, file, NoPasscode::Warn);
 spec!(REFUSES, two, file, NoPasscode::Refuse);
 spec!(DENIED, refused, file, NoPasscode::Warn);
 spec!(BREAKS, two, breaks, NoPasscode::Warn);
+spec!(STREAMS, two, staged, NoPasscode::Warn);
 
 fn open(spec: &'static ExportSpec) -> (Driver, u64) {
     let route = export::entry(Locale::En, "fake.export").route;
@@ -283,4 +292,64 @@ fn a_denied_read_draws_the_gate_and_offers_nothing() {
     assert_eq!(page.headline, "Not here");
     assert_eq!(page.lede, "The vault said no.");
     assert!(page.rows.is_empty());
+}
+
+fn path_saves(d: &Driver) -> Vec<wire::SaveFilePath> {
+    kinds(d)
+        .into_iter()
+        .filter_map(|kind| match kind {
+            wire::effect::Kind::SaveFilePath(save) => Some(save),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_staged_file_goes_to_the_save_sheet_by_its_path_after_the_owner_check() {
+    let (mut d, i) = open(&STREAMS);
+    d.effects.clear();
+    tap(&mut d, i, "one");
+    assert!(path_saves(&d).is_empty(), "nothing leaves before the check");
+    answer_owner_check(&mut d, wire::owner_checked::Outcome::Succeeded, true);
+    let [save] = path_saves(&d)
+        .try_into()
+        .expect("one staged file to the save sheet");
+    assert_eq!(
+        (
+            save.path.as_str(),
+            save.name.as_str(),
+            save.media_type.as_str()
+        ),
+        ("/staging/one.zip", "one.zip", "application/zip")
+    );
+    assert!(saves(&d).is_empty(), "the bytes are not carried as well");
+    d.answer_effect(wire::effect_result::Outcome::Done(wire::EffectDone {}));
+    assert_eq!(
+        view(&d, i).status.clone().expect("a line").sentence,
+        "Export saved"
+    );
+    assert!(!view(&d, i).busy);
+}
+
+#[test]
+fn a_dismissed_staged_save_says_nothing_and_a_failed_one_says_so() {
+    let (mut d, i) = open(&STREAMS);
+    d.effects.clear();
+    tap(&mut d, i, "all");
+    answer_owner_check(&mut d, wire::owner_checked::Outcome::Succeeded, true);
+    d.answer_effect(wire::effect_result::Outcome::Failed(wire::EffectFailed {
+        reason: "dismissed".to_owned(),
+        cancelled: true,
+        ..wire::EffectFailed::default()
+    }));
+    assert!(view(&d, i).status.is_none());
+    d.effects.clear();
+    tap(&mut d, i, "all");
+    answer_owner_check(&mut d, wire::owner_checked::Outcome::Succeeded, true);
+    d.answer_effect(wire::effect_result::Outcome::Failed(wire::EffectFailed {
+        reason: "the file could not be written".to_owned(),
+        ..wire::EffectFailed::default()
+    }));
+    let status = view(&d, i).status.clone().expect("a line");
+    assert!(status.refused);
 }

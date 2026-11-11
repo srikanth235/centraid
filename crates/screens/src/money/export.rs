@@ -102,6 +102,6 @@ pub fn file(
     export::file_of(&settled, "text/csv", "Transactions.csv")
 }
 
-fn export(ctx: &Ctx, key: &str) -> Result<export::ExportFile, String> {
-    file(ctx, (key != ALL).then_some(key), None)
+fn export(ctx: &Ctx, key: &str) -> Result<export::Made, String> {
+    file(ctx, (key != ALL).then_some(key), None).map(Into::into)
 }

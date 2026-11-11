@@ -30,8 +30,10 @@ import dev.centraid.android.session.AppSession
 import dev.centraid.android.session.UiHost
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import okio.ByteString.Companion.toByteString
+import java.io.File
 
 /**
  * THE ACTIVITY'S HALF OF THE PLATFORM WORK (#1135). The session performs every effect that needs
@@ -125,6 +127,16 @@ internal fun HostScreenEffects(
                         val file = effect.save_file!!
                         saveFile(context, file, saving.ask { saver.launch(file.name) })
                     }
+                    // A STREAMED EXPORT (`SaveFilePath`): the same save sheet, the staged file copied by
+                    // streaming, and the staged file deleted whatever the answer was.
+                    effect.save_file_path != null -> {
+                        val file = effect.save_file_path!!
+                        try {
+                            saveFilePath(file, saving.ask { saver.launch(file.name) }, context)
+                        } finally {
+                            withContext(NonCancellable + Dispatchers.IO) { File(file.path).delete() }
+                        }
+                    }
                     // FREE UP SPACE: the system's own confirmation, then the hashes whose asset went.
                     effect.library_delete != null -> {
                         val done = CompletableDeferred<centraid.core.v1.LibraryDeleted>()
@@ -204,6 +216,23 @@ private suspend fun saveFile(context: Context, file: centraid.core.v1.SaveFile, 
     return withContext(Dispatchers.IO) {
         runCatching {
             context.contentResolver.openOutputStream(uri)?.use { it.write(file.content.toByteArray()) } ?: error("unwritable")
+            EffectResult(done = EffectDone())
+        }.getOrElse { failed("the file could not be written") }
+    }
+}
+
+/**
+ * `SaveFilePath`: the staged file (a streamed export, too large to hold in memory) copied to the
+ * document the member named, in 64 KiB pieces from an input stream to the resolver's output
+ * stream; a dismissal is a cancel. The caller deletes the staged file.
+ */
+private suspend fun saveFilePath(file: centraid.core.v1.SaveFilePath, uri: android.net.Uri?, context: Context): EffectResult {
+    uri ?: return EffectResult(failed = EffectFailed(reason = "the save was cancelled", cancelled = true))
+    return withContext(Dispatchers.IO) {
+        runCatching {
+            File(file.path).inputStream().use { input ->
+                context.contentResolver.openOutputStream(uri)?.use { output -> input.copyTo(output, 64 * 1024) } ?: error("unwritable")
+            }
             EffectResult(done = EffectDone())
         }.getOrElse { failed("the file could not be written") }
     }

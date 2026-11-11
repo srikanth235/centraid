@@ -108,7 +108,7 @@ fn file(
     export::file_of(&settled, "text/csv", "Health.csv")
 }
 
-fn export(ctx: &Ctx, key: &str) -> Result<export::ExportFile, String> {
+fn export(ctx: &Ctx, key: &str) -> Result<export::Made, String> {
     use options::ExportCsvWhat as What;
     match key {
         WORKOUTS => workouts_file(ctx, None),
@@ -118,4 +118,5 @@ fn export(ctx: &Ctx, key: &str) -> Result<export::ExportFile, String> {
             None => Err(String::new()),
         },
     }
+    .map(Into::into)
 }

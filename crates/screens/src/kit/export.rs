@@ -5,7 +5,8 @@
 //! **Choose, confirm it is you, save.** The rows are what the app offers ("All notes", each
 //! notebook; an app with one export has one row). A tap asks the owner check
 //! ([`OwnerGate`], `Leaving::Export`); only on a pass does the spec's `export` run, and the file
-//! it answers goes to the OS save sheet (`SaveFile`). A phone with no passcode exports with a
+//! it answers goes to the OS save sheet (`SaveFile`; `SaveFilePath` for a file the core already
+//! wrote to disk, a streamed export, [`Made::Staged`]). A phone with no passcode exports with a
 //! warning the status line says ([`NoPasscode::Warn`]) or is refused ([`NoPasscode::Refuse`], the
 //! app's choice). A cancelled check does nothing, and leaving the screen withdraws a prompt that is
 //! still up.
@@ -51,6 +52,37 @@ pub struct ExportFile {
     pub content: Vec<u8>,
 }
 
+/// A file the core already wrote to disk: an export too large to build in memory (#1185,
+/// owner decision D17). The shell streams it to the save sheet and deletes it afterwards, so
+/// nothing but its path passes through Rust's screens.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StagedFile {
+    /// Absolute path of the staged file, under the vault's staging folder.
+    pub path: String,
+    pub name: String,
+    pub media_type: String,
+}
+
+/// What a spec's `export` made: bytes in memory (a small file) or a file already on disk (a
+/// streamed one). The machine hands the first to `SaveFile` and the second to `SaveFilePath`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Made {
+    Bytes(ExportFile),
+    Staged(StagedFile),
+}
+
+impl From<ExportFile> for Made {
+    fn from(file: ExportFile) -> Self {
+        Self::Bytes(file)
+    }
+}
+
+impl From<StagedFile> for Made {
+    fn from(file: StagedFile) -> Self {
+        Self::Staged(file)
+    }
+}
+
 /// ONE APP'S EXPORT, as the parameter the one export screen takes. Every field is required: every
 /// app can export, behind the owner check, and says so in the same words (#1185).
 pub struct ExportSpec {
@@ -68,7 +100,7 @@ pub struct ExportSpec {
     pub choices: fn(&Ctx) -> Reading<Vec<Choice>>,
     /// The app's own vault command for one choice, called only after the owner check passed. An
     /// `Err` is the sentence to show; an empty one is the kit's "Could not export".
-    pub export: fn(&Ctx, &str) -> Result<ExportFile, String>,
+    pub export: fn(&Ctx, &str) -> Result<Made, String>,
     /// What a phone with no passcode does: `Warn` everywhere but Locker, which refuses.
     pub no_passcode: NoPasscode,
 }
@@ -131,6 +163,34 @@ pub fn file_of(
             .unwrap_or_else(|| fallback_name.to_owned()),
         media_type: media_type.to_owned(),
         content,
+    })
+}
+
+/// The file a command staged on disk, in the shape a streamed export command answers:
+/// `{path, name, count}`. A refusal is the core's sentence; an answer with no path is empty (the
+/// kit's "Could not export").
+///
+/// # Errors
+/// The core's refusal sentence, or an empty one when the answer was not a staged file.
+pub fn staged_of(
+    settled: &super::act::Settled,
+    media_type: &str,
+    fallback_name: &str,
+) -> Result<StagedFile, String> {
+    if !settled.committed {
+        return Err(settled.refusal.clone());
+    }
+    let path = settled
+        .output_text("path")
+        .filter(|path| !path.is_empty())
+        .ok_or_else(String::new)?;
+    Ok(StagedFile {
+        path,
+        name: settled
+            .output_text("name")
+            .filter(|name| !name.is_empty())
+            .unwrap_or_else(|| fallback_name.to_owned()),
+        media_type: media_type.to_owned(),
     })
 }
 
@@ -229,19 +289,26 @@ impl Export {
     fn save(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         let locale = ctx.locale();
         match (self.spec.export)(ctx, &self.chosen) {
-            Ok(file) => {
+            Ok(made) => {
                 self.stage = Stage::Saving;
                 if !self.warning.is_empty() {
                     let warning = self.warning.clone();
                     self.say(warning, false);
                 }
-                vec![wire::Effect {
-                    kind: Some(wire::effect::Kind::SaveFile(wire::SaveFile {
+                let kind = match made {
+                    Made::Bytes(file) => wire::effect::Kind::SaveFile(wire::SaveFile {
                         name: file.name,
                         media_type: file.media_type,
                         content: file.content,
-                    })),
-                }]
+                    }),
+                    // A streamed export: only its path goes to the shell, which copies it.
+                    Made::Staged(file) => wire::effect::Kind::SaveFilePath(wire::SaveFilePath {
+                        path: file.path,
+                        name: file.name,
+                        media_type: file.media_type,
+                    }),
+                };
+                vec![wire::Effect { kind: Some(kind) }]
             }
             Err(sentence) => {
                 self.stage = Stage::Choosing;

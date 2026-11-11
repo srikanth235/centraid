@@ -541,6 +541,9 @@ final class ScreenStore: ObservableObject {
             FilePerformer.pick(pick) { [weak self] outcome in self?.answer(request, outcome) }
         case .saveFile(let save)?:
             FilePerformer.save(save) { [weak self] outcome in self?.answer(request, outcome) }
+        // A STREAMED EXPORT: the file the core staged, offered to the same save sheet.
+        case .saveFilePath(let save)?:
+            FilePerformer.savePath(save) { [weak self] outcome in self?.answer(request, outcome) }
         // PAIRING (#1135): read one QR code, and browse the network for gateways.
         case .scanCode(let scan)?:
             PairScan.run(scan) { [weak self] outcome in self?.answer(request, outcome) }

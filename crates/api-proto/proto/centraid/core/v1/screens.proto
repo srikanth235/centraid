@@ -533,6 +533,8 @@ message Effect {
     ShareFile share_file = 203;
     // Hand one small item made in memory (a note, a vCard) to the platform's share sheet as a file.
     ShareBytes share_bytes = 204;
+    // Offer a file already on disk (a streamed export) to the OS save sheet, copied by streaming.
+    SaveFilePath save_file_path = 205;
     // ---- pairing (1340-1349, lane H2): pair_screens.proto ----
     ScanCode scan_code = 1340;
     BrowseGateways browse_gateways = 1341;
@@ -1269,6 +1271,23 @@ message ShareBytes {
   bytes content = 3;
   // The share sheet's title.
   string chooser_title = 4;
+}
+
+// SAVE A FILE ALREADY ON DISK (#1185, take out; owner decision D17: a large export is written as
+// a streamed file, never built in memory): the core staged the export at `path` (a file under the
+// vault's staging folder, which holds plaintext, so Rust asks the owner check first) and the
+// shell offers the platform's save sheet for it and copies it by STREAMING, never reading the
+// whole file: iOS `UIDocumentPickerViewController(forExporting:asCopy:)` on the file, Android
+// `ACTION_CREATE_DOCUMENT` named `name`, then an input stream copied to the chosen document's
+// output stream in fixed-size pieces. Answers `EffectDone` once saved, `EffectFailed` with
+// `cancelled` when the sheet is dismissed, `EffectFailed` when the copy fails. The shell deletes
+// the staged file whatever the answer was.
+message SaveFilePath {
+  // Absolute path of the staged file.
+  string path = 1;
+  // The file's name as the member sees it in the save sheet: "Documents.zip".
+  string name = 2;
+  string media_type = 3;
 }
 
 message StopFollowing {
