@@ -505,8 +505,6 @@ const fn exempt(app: &'static str, promise: Promise, ruling: &'static str) -> Ro
 /// only exceptions). A Locker item is sealed: a photo or file beside it would sit outside the seal.
 pub const ATTACH_EXEMPT: &[(&str, &str)] =
     &[("locker", "D11: a Locker item cannot hold attachments")];
-const ORIGIN_OWED: &str =
-    "the detail screen does not say where its item came from (kit::origin, #1185)";
 
 /// `promises`: the table is complete, and every row is true.
 pub fn promises(root: &Path) -> RuleReport {

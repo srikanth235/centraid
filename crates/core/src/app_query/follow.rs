@@ -71,7 +71,7 @@ mod origin_tests {
         handle
             .with_vault(|vault| Ok(vault.found("Home", "Owner")?))
             .expect("it founds");
-        let mut run = |name: &str, input: serde_json::Value| {
+        let run = |name: &str, input: serde_json::Value| {
             let key = format!("origin-test-{name}-{}", input);
             let outcome = handle.command(name, &input, &key).expect("a command");
             assert_eq!(
