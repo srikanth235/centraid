@@ -1240,7 +1240,10 @@ pub fn load_link_targets(
     };
     let mut targets: Vec<Target> = Vec::new();
     // ONE QUERY PER KIND, so each kind keeps its own column of the sheet.
-    for kind in centraid_vault::commands::note::LINKABLE {
+    for kind in centraid_vault::commands::note::LINKABLE
+        .into_iter()
+        .filter(|kind| kind.is_link_end())
+    {
         let mut request = SearchRequest::new(kind.as_str(), term, LINK_TARGET_ROWS);
         if kind == centraid_vault::model::Kind::Note {
             request = request.excluding(memos.clone());

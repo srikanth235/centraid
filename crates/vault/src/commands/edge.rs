@@ -47,6 +47,12 @@ fn pre_add(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         [rel.as_str(), from.kind.as_str(), to.kind.as_str()],
         |row| row.get(0),
     )?;
+    if allowed == 0 && rel == Rel::Links && to.kind == Kind::LockerItem {
+        return Ok(Some(
+            "a Locker item cannot be the target of a link: link from the Locker item instead"
+                .to_owned(),
+        ));
+    }
     if allowed == 0 {
         return Ok(Some(format!(
             "“{}” cannot be `{}` “{}”: nothing joins a {} to a {} that way",
@@ -126,6 +132,18 @@ pub(crate) fn put(
     label_id: Option<&str>,
     extras: &Extras<'_>,
 ) -> Result<()> {
+    // A link has no direction a member can see (#1185): when the other way is there already,
+    // there is nothing to add. An anchor is a note's own words, so it is always written.
+    if rel == Rel::Links && extras.anchor.is_none() {
+        let reverse: i64 = ctx.connection().query_row(
+            "SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'links' AND to_id = ?2",
+            [to, from],
+            |row| row.get(0),
+        )?;
+        if reverse > 0 {
+            return Ok(());
+        }
+    }
     let next = if rel == Rel::Contains {
         Some(ctx.connection().query_row(
             "SELECT COALESCE(MAX(position), 0) + 1 FROM edge WHERE from_id = ?1 AND rel = 'contains'",
@@ -251,6 +269,20 @@ fn remove(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     if removed > 0 && rel.belongs_to_note() && is_note(ctx, from)? {
         ctx.touch(from)?;
         ctx.mark_for_index(to);
+    }
+    // A link is taken off from either end (#1185): the edge the other way, if that is how it was
+    // made, goes too.
+    let mut removed = removed;
+    if rel == Rel::Links {
+        let back = ctx.connection().execute(
+            "DELETE FROM edge WHERE from_id = ?1 AND rel = 'links' AND to_id = ?2",
+            [to, from],
+        )?;
+        if back > 0 && is_note(ctx, to)? {
+            ctx.touch(to)?;
+            ctx.mark_for_index(from);
+        }
+        removed += back;
     }
     if removed > 0 {
         mark_labelled(ctx, from, rel, to)?;

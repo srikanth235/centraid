@@ -37,6 +37,7 @@ pub mod file;
 pub mod format;
 pub mod history;
 pub mod index;
+pub mod links;
 pub mod log;
 pub mod migrations;
 pub mod model;

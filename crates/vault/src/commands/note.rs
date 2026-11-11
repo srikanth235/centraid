@@ -55,9 +55,9 @@ pub const MAX_LINKS: usize = 100;
 /// member can link a note to. One list, because a pick the compile could not
 /// resolve would be a `[[title]]` that links nothing.
 ///
-/// A Locker item is one (#1135): its title is plain and searchable, a link holds
-/// no secret, and opening it asks Locker's gate like any Locker destination. The
-/// compile resolves it for every principal, the assistant's included.
+/// A Locker item is one of Home's rows (#1135), but a `[[title]]` never resolves to it: a Locker
+/// item cannot be the target of a link (owner ruling D11, #1185), so the compile and the
+/// powerbox keep to the kinds that are [`Kind::is_link_end`].
 pub const LINKABLE: [Kind; 7] = [
     Kind::Note,
     Kind::Person,
@@ -302,6 +302,7 @@ fn compile_wikilinks(ctx: &CommandCtx<'_, '_>, note: &str, body: &str) -> Result
     )?;
     let linkable = LINKABLE
         .iter()
+        .filter(|kind| kind.is_link_end())
         .map(|kind| format!("'{}'", kind.as_str()))
         .collect::<Vec<_>>()
         .join(", ");
@@ -388,6 +389,7 @@ fn already_there(ctx: &CommandCtx<'_, '_>, parsed: &Parsed) -> Result<bool> {
 fn names_something(ctx: &CommandCtx<'_, '_>, title: &str) -> Result<bool> {
     let linkable = LINKABLE
         .iter()
+        .filter(|kind| kind.is_link_end())
         .map(|kind| format!("'{}'", kind.as_str()))
         .collect::<Vec<_>>()
         .join(", ");

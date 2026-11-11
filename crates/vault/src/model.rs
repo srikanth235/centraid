@@ -70,6 +70,22 @@ impl Kind {
         Self::LockerItem,
     ];
 
+    /// The kinds a general link (`links`) may END at: the items of the nine apps and the three
+    /// things items are about (#1185). A Locker item is never here: it may start a link and can
+    /// never be the target of one (owner ruling D11).
+    pub const LINK_ENDS: [Self; 10] = [
+        Self::Person,
+        Self::Place,
+        Self::Event,
+        Self::Task,
+        Self::Activity,
+        Self::Note,
+        Self::Document,
+        Self::Photo,
+        Self::Account,
+        Self::Txn,
+    ];
+
     /// The kinds `concept` hosts: the `concept.kind` CHECK.
     pub const CONCEPTS: [Self; 6] = [
         Self::Tag,
@@ -127,6 +143,18 @@ impl Kind {
     #[must_use]
     pub fn parse(word: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|kind| kind.as_str() == word)
+    }
+
+    /// Whether a general link (`links`) may END at this kind ([`Self::LINK_ENDS`]).
+    #[must_use]
+    pub fn is_link_end(self) -> bool {
+        Self::LINK_ENDS.contains(&self)
+    }
+
+    /// Whether a general link (`links`) may START at this kind: every end, and a Locker item.
+    #[must_use]
+    pub fn is_link_start(self) -> bool {
+        self.is_link_end() || self == Self::LockerItem
     }
 
     #[must_use]

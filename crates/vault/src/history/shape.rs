@@ -230,7 +230,10 @@ pub const RELATIONS_OUTSIDE: &[(&str, &str)] = &[
         "about",
         "a link from a note to what it is about, with its own verbs",
     ),
-    ("links", "compiled from a note's words, which are kept"),
+    (
+        "links",
+        "compiled from a note's words, which are kept, or set by hand between two items with its own verbs (link, unlink)",
+    ),
     ("attached", "a file attached, with its own verbs"),
     (
         "with",

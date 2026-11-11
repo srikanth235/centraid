@@ -483,16 +483,16 @@ fn no_sealed_value_goes_into_an_edge_label_or_anchor() {
     assert!(
         w.refused(
             "edge.add",
-            json!({ "from": note, "rel": "links", "to": login,
+            json!({ "from": login, "rel": "links", "to": note,
                     "anchor": { "exact": sealed.clone(), "start": 0 } })
         )
         .contains("sealed"),
-        "the anchor of a link into the Locker"
+        "the anchor of a link from the Locker"
     );
     // The link itself, with an anchor in the note's own words, is the member's to make.
     w.ok(
         "edge.add",
-        json!({ "from": note, "rel": "links", "to": login,
+        json!({ "from": note, "rel": "links", "to": ada,
                 "anchor": { "exact": "the bank", "start": 0 } }),
     );
     assert_eq!(
