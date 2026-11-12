@@ -329,6 +329,7 @@ message ScreenEvent {
     EarlierPreviewEvent earlier_preview = 905;
     // ---- backup (1450-1499, lane H2) ----
     BackupHomeEvent backup_home = 1450;
+    BackupCheckEvent backup_check = 1451;
     // ---- passes (1500-1599): passes_screens.proto ----
     // RUNTIME-ORIGINATED from `ScreenRequest.shell_fact`.
     ShellFact shell_fact = 1500;
@@ -462,6 +463,7 @@ message ViewState {
     EarlierPreviewView earlier_preview = 904;
     // ---- backup (1450-1499, lane H2) ----
     BackupHomeState backup_home = 1450;
+    BackupCheckState backup_check = 1451;
     // ---- the shell (1000-1999): chat (1600-1699) ----
     ChatState chat = 1600;
     // ---- the shell: phone imports (1700-1899) ----

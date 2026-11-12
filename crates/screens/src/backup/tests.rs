@@ -16,6 +16,7 @@ use prost::Message;
 use wire::backup_line::Tone;
 use wire::screen_event::Kind as E;
 
+use super::check::Check;
 use super::line::{self, STALE_MS};
 use super::reading::Reading;
 use super::rule::TransferRule;
@@ -2107,4 +2108,143 @@ fn recovery_has_a_summary_and_a_restore_row_and_a_moved_vault_has_no_restore() {
     })
     .data();
     assert_eq!(moved.restore_label, "");
+}
+
+// ---------------------------------------------------------------------------
+// Check my backup (#1188, B6): the page says what the core found, in the approved words.
+// ---------------------------------------------------------------------------
+
+mod check_my_backup {
+    use wire::device_check::{NotRun, Verdict};
+
+    use super::*;
+
+    /// Tuesday 10 November 2026, 21:40 UTC.
+    const TUESDAY: i64 = 1_794_346_800_000;
+    /// Sunday 8 November 2026, 21:40 UTC.
+    const SUNDAY: i64 = TUESDAY - 2 * 86_400_000;
+
+    fn device(label: &str, verdict: Verdict) -> wire::DeviceCheck {
+        wire::DeviceCheck {
+            gateway_id: format!("id-{label}"),
+            label: label.to_owned(),
+            verdict: verdict as i32,
+            snapshot_ms: TUESDAY,
+            ..Default::default()
+        }
+    }
+
+    fn drawn(page: &Check) -> wire::BackupCheckState {
+        let shell = Page::over(steady());
+        let ctx = Ctx::new(&shell.fake, &shell.env);
+        page.drawn(&ctx)
+    }
+
+    #[test]
+    fn a_backup_that_opens_says_when_and_how_much_was_read() {
+        let mut opens = device("Mac mini", Verdict::Opens);
+        opens.files_held = 91_204;
+        opens.files_opened = 40;
+        let state = drawn(&Check::resting(true, Some((vec![opens], Check::now_ms()))));
+        assert_eq!(state.rows[0].line, "Tuesday 10 November, 21:40 opens.");
+        assert_eq!(
+            state.rows[0].detail,
+            "91,204 files held, 40 opened to check."
+        );
+        assert_eq!(state.rows[0].tone, wire::BackupCheckTone::Ok as i32);
+        assert_eq!(state.status.unwrap().sentence, "Checked just now");
+        assert_eq!(state.action, wire::BackupCheckAction::Check as i32);
+        assert_eq!(state.action_label, "Check again");
+        assert!(state.back_up_now_label.is_empty(), "nothing to send again");
+    }
+
+    #[test]
+    fn a_failure_is_a_failure_and_offers_a_pass() {
+        let mut wont = device("Office NAS", Verdict::WontOpen);
+        wont.older_snapshot_ms = SUNDAY;
+        let mut missing = device("Garage drive", Verdict::MissingFiles);
+        missing.files_missing = 3;
+        let damaged = device("Parents' NAS", Verdict::DamagedFile);
+        let state = drawn(&Check::resting(
+            true,
+            Some((vec![wont, missing, damaged], NOW)),
+        ));
+        let lines: Vec<&str> = state.rows.iter().map(|r| r.line.as_str()).collect();
+        assert_eq!(
+            lines,
+            [
+                "Tuesday 10 November, 21:40 won't open.",
+                "Tuesday 10 November, 21:40 is missing 3 files.",
+                "Tuesday 10 November, 21:40 has a damaged file.",
+            ]
+        );
+        assert_eq!(
+            state.rows[0].detail,
+            "Its backup from Sunday 8 November, 21:40 opens."
+        );
+        assert!(
+            state
+                .rows
+                .iter()
+                .all(|r| r.tone == wire::BackupCheckTone::Bad as i32)
+        );
+        assert_eq!(state.back_up_now_label, "Back up now");
+    }
+
+    #[test]
+    fn a_device_that_was_not_checked_is_never_drawn_as_a_pass() {
+        let reasons = [
+            (NotRun::DidNotAnswer, "It didn't answer."),
+            (NotRun::WaitingForWifi, "Waiting for Wi-Fi."),
+            (NotRun::NeedsSpace, "This phone needs more free space."),
+            (NotRun::Stopped, "It was stopped before it finished."),
+        ];
+        let devices: Vec<wire::DeviceCheck> = reasons
+            .iter()
+            .map(|(why, _)| {
+                let mut d = device("Device", Verdict::NotRun);
+                d.not_run = *why as i32;
+                d
+            })
+            .collect();
+        let state = drawn(&Check::resting(true, Some((devices, Check::now_ms()))));
+        for (row, (_, said)) in state.rows.iter().zip(reasons) {
+            assert_eq!(row.line, "Not checked.");
+            assert_eq!(row.detail, said);
+            assert_eq!(row.tone, wire::BackupCheckTone::NotRun as i32);
+        }
+        assert_eq!(state.status.unwrap().sentence, "Nothing was checked.");
+        assert!(state.back_up_now_label.is_empty());
+    }
+
+    #[test]
+    fn a_running_check_draws_a_determinate_bar_and_names_the_device() {
+        let state = drawn(&Check::running(wire::CheckProgress {
+            running: true,
+            gateway_id: "id".to_owned(),
+            label: "Office NAS".to_owned(),
+            done: 112,
+            total: 260,
+        }));
+        assert!(state.running);
+        assert!((state.fraction - 112.0 / 260.0).abs() < 1e-6);
+        assert_eq!(state.rows[0].detail, "112 of 260 parts");
+        assert_eq!(state.status.unwrap().sentence, "Checking Office NAS");
+        assert_eq!(state.action, wire::BackupCheckAction::Stop as i32);
+        assert_eq!(state.heading, "Checking");
+    }
+
+    #[test]
+    fn nothing_paired_offers_no_check() {
+        let state = drawn(&Check::resting(false, None));
+        assert_eq!(state.action, wire::BackupCheckAction::None as i32);
+        assert_eq!(
+            state.status.unwrap().sentence,
+            "No backup device is paired."
+        );
+        assert_eq!(
+            state.intro,
+            "Opens each backup in a spare copy and reads a sample of its files. Your vault isn't touched."
+        );
+    }
 }

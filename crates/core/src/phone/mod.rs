@@ -41,6 +41,7 @@
 //! state a shell draws ("unlock to back up") and not a failure.
 
 pub(crate) mod backup_reads;
+pub mod check;
 pub mod drain;
 pub mod fetch;
 pub(crate) mod holdings;

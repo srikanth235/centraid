@@ -42,6 +42,7 @@ import dev.centraid.android.kit.AndroidHealth
 import dev.centraid.android.kit.EarlierPreviewScreen
 import dev.centraid.android.kit.EarlierScreen
 import dev.centraid.android.kit.TrashScreen
+import dev.centraid.android.kit.BackupCheckScreen
 import dev.centraid.android.kit.TransferScreen
 import dev.centraid.android.screens.agenda.AgendaEditorScreen
 import dev.centraid.android.screens.agenda.AgendaEventScreen
@@ -499,6 +500,7 @@ internal class RustRoot(
         val healthConnect = view.health_connect
         val pairLaptop = view.pair_laptop
         val backupHome = view.backup_home
+        val backupCheck = view.backup_check
         val wordsMake = view.words_make
         val wordsEnter = view.words_enter
         val wordsShow = view.words_show
@@ -842,6 +844,11 @@ internal class RustRoot(
                 onEvent = { send(ScreenEvent(backup_home = it)) },
                 // The rule is written, and the pass service told, by the Backup screen in Rust.
                 onOpen = open,
+            )
+            backupCheck != null -> BackupCheckScreen(
+                state = backupCheck,
+                onEvent = { send(ScreenEvent(backup_check = it)) },
+                onBack = back,
             )
             wordsMake != null -> VaultWordsScreen(
                 state = wordsMake,

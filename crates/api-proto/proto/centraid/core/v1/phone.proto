@@ -1019,3 +1019,71 @@ message PhraseWord {
 message PhraseSeeded {
   bytes seed = 1;
 }
+
+// CHECK MY BACKUP (#1188, B6). For each backup device the phone can reach: restore the records
+// into a scratch copy and run every restore check, confirm by name that the device holds every
+// file the records refer to, read back and open a sample of those files. It never touches the
+// vault; it obeys the member's transfer rule and a stated scratch-space budget. A sampled file
+// that fails is marked unconfirmed, so the next pass sends it again.
+message CheckBackupRequest {
+  // One device, or every paired one when empty.
+  string gateway_id = 1;
+  // The member's rule, as a drain states it (zero is `WIFI_ONLY`); and whether the link is metered.
+  TransferRule rule = 2;
+  bool metered = 3;
+  // The member left videos out: their files are not expected to be held.
+  bool exclude_videos = 4;
+  // Do not check: answer how far a running check has got (`CheckBackupResponse.progress`).
+  bool progress_only = 5;
+  // Stop the check that is running: the device in hand is "not checked" and so are the rest.
+  bool stop = 6;
+}
+
+message CheckBackupResponse {
+  repeated DeviceCheck devices = 1;
+  CheckProgress progress = 2;
+}
+
+// How far the check this core is running has got; `running` is false when none is.
+message CheckProgress {
+  bool running = 1;
+  string gateway_id = 2;
+  string label = 3;
+  // Parts opened and parts to open for the device in hand.
+  uint64 done = 4;
+  uint64 total = 5;
+}
+
+message DeviceCheck {
+  string gateway_id = 1;
+  string label = 2;
+  Verdict verdict = 3;
+  // The snapshot that was opened (or that would not), vault clock; zero when not known.
+  int64 snapshot_ms = 4;
+  // Files the records refer to that the device holds, and the sample that was opened.
+  uint64 files_held = 5;
+  uint64 files_opened = 6;
+  uint64 files_missing = 7;
+  uint64 files_damaged = 8;
+  NotRun not_run = 9;
+  // When the newest backup would not open and an older one did: that older one, vault clock.
+  int64 older_snapshot_ms = 10;
+
+  enum Verdict {
+    VERDICT_UNSPECIFIED = 0;
+    VERDICT_OPENS = 1;
+    VERDICT_WONT_OPEN = 2;
+    VERDICT_MISSING_FILES = 3;
+    VERDICT_DAMAGED_FILE = 4;
+    VERDICT_NOT_RUN = 5;
+  }
+  enum NotRun {
+    NOT_RUN_UNSPECIFIED = 0;
+    NOT_RUN_DID_NOT_ANSWER = 1;
+    NOT_RUN_WAITING_FOR_WIFI = 2;
+    NOT_RUN_NEEDS_SPACE = 3;
+    NOT_RUN_STOPPED = 4;
+    // Paired and never backed up: there is nothing to open yet.
+    NOT_RUN_NO_BACKUP_YET = 5;
+  }
+}

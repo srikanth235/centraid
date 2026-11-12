@@ -227,6 +227,12 @@ struct RustScreenView: View {
                 onBack: pop
             )
             .environment(\.appAccent, AppAccent("reminders"))
+        case .backupCheck(let state)?:
+            BackupCheckView(
+                state: state,
+                send: { store.send(instance, .backupCheck($0)) },
+                onBack: pop
+            )
         case .backupHome(let state)?:
             BackupHomeView(
                 state: state,

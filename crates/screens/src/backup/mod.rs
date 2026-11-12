@@ -5,6 +5,7 @@
 //! | Piece | What it decides |
 //! |---|---|
 //! | [`home`] | the screen `backup.home`: the line, the gateways, the controls, the key |
+//! | [`check`] | the page `backup.check`, "Check my backup": each device's backup opened in a spare copy |
 //! | [`apps`] | "In this backup": one row per app, what it holds and whether it is backed up |
 //! | [`line`] | the one honest line Home draws too: never more than a gateway acknowledged |
 //! | [`reading`] | the ledger's reading, and the `backup-status` query behind it |
@@ -26,6 +27,7 @@ use crate::Registry;
 use crate::custody::secrets::VaultSecrets;
 
 pub mod apps;
+pub mod check;
 pub mod claim;
 mod doors;
 pub mod freeze;
@@ -47,7 +49,10 @@ pub const TAB: &str = "backup";
 #[must_use]
 pub fn registry(secrets: &VaultSecrets) -> Registry {
     let secrets = secrets.clone();
-    Registry::default().with(HOME, move |route| home::build(route, &secrets))
+    let for_check = secrets.clone();
+    Registry::default()
+        .with(HOME, move |route| home::build(route, &secrets))
+        .with(check::NAME, move |route| check::build(route, &for_check))
 }
 
 /// The routes the backup screens hand to a shell inside a view state, and that
@@ -64,6 +69,16 @@ pub mod routes {
             sheet: false,
             screen: HOME.to_owned(),
             args: Some(wire::route::Args::BackupHome(wire::BackupHomeRoute {})),
+        }
+    }
+
+    /// Check my backup (#1188, B6): pushed from Backup's Recovery section.
+    #[must_use]
+    pub fn check() -> wire::Route {
+        wire::Route {
+            sheet: false,
+            screen: super::check::NAME.to_owned(),
+            args: Some(wire::route::Args::BackupCheck(wire::BackupCheckRoute {})),
         }
     }
 

@@ -257,6 +257,10 @@ message BackupHomeData {
   string key_summary = 38;
   // "Restore my vaults": the row under the recovery key, and its event.
   string restore_label = 39;
+  // "Check my backup": the row under the recovery key that pushes the check page (#1188, B6);
+  // empty with nothing paired or on a vault that moved.
+  string check_label = 42;
+  Route check = 43;
   // A RUN'S BYTES, for the status card's bar under `progress` ("Backing up — 412
   // MB to go"). Known only while a run is going and the phone can say how many
   // bytes the backup covers; the fraction is what a gateway has acknowledged
@@ -332,4 +336,67 @@ message BackgroundProbe {}
 message BackgroundStatus {
   // The platform took at least one window.
   bool registered = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Check my backup (#1188, B6): `backup.check`, pushed from Backup's Recovery section.
+// ---------------------------------------------------------------------------
+
+message BackupCheckState {
+  string title = 1;
+  string intro = 2;
+  // "Result" while a result stands, "Checking" while one runs; empty before the first check.
+  string heading = 3;
+  repeated BackupCheckRow rows = 4;
+  // THE STATUS LINE AT THE FOOT: "Checked just now", "Not checked", "Checking Office NAS".
+  StatusLine status = 5;
+  // A determinate bar while a check runs: `fraction` of the device in hand, 0..1.
+  bool running = 6;
+  float fraction = 7;
+  // The one action: "Check my backup", "Check again", or "Stop" while running.
+  string action_label = 8;
+  BackupCheckAction action = 9;
+  // "Back up now", offered under a result that found something to send again; empty otherwise.
+  string back_up_now_label = 10;
+  // The page it was pushed from, for the back control: "Backup".
+  string back_label = 11;
+}
+
+enum BackupCheckAction {
+  BACKUP_CHECK_ACTION_UNSPECIFIED = 0;
+  BACKUP_CHECK_ACTION_CHECK = 1;
+  BACKUP_CHECK_ACTION_STOP = 2;
+  BACKUP_CHECK_ACTION_NONE = 3;
+}
+
+message BackupCheckRow {
+  string gateway_id = 1;
+  // The name the member gave the device.
+  string name = 2;
+  // "Tuesday 10 November, 21:40 opens." / "Not checked." / "Opens fine · Tuesday 10 November, 21:40".
+  string line = 3;
+  // "91,204 files held, 40 opened to check." / "It didn't answer." / "112 of 260 parts".
+  string detail = 4;
+  BackupCheckTone tone = 5;
+}
+
+enum BackupCheckTone {
+  BACKUP_CHECK_TONE_UNSPECIFIED = 0;
+  BACKUP_CHECK_TONE_OK = 1;
+  BACKUP_CHECK_TONE_BAD = 2;
+  BACKUP_CHECK_TONE_NOT_RUN = 3;
+  BACKUP_CHECK_TONE_RUNNING = 4;
+}
+
+message BackupCheckEvent {
+  oneof kind {
+    Start start = 1;
+    Stop stop = 2;
+    // "Back up now" under a result: the pass service's, asked of the conductor.
+    BackUpNow back_up_now = 3;
+  }
+
+  message Start {}
+  message Stop {}
+  message BackUpNow {}
 }

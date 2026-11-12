@@ -841,6 +841,13 @@ impl Backup {
             } else {
                 crate::strings::home::restore_first_action(locale)
             },
+            // THE CHECK needs a device to open a backup on, and a vault still on this phone.
+            check_label: if frozen || self.destinations().is_empty() {
+                String::new()
+            } else {
+                crate::strings::backup_check::check_row(locale)
+            },
+            check: Some(super::routes::check()),
         }
     }
 }

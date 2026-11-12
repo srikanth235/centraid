@@ -356,7 +356,7 @@ struct BackupHomeView: View {
     /// the key row opens the words behind the passcode. Restore is Home's door.
     @ViewBuilder
     private func recovery(_ model: Centraid_Core_V1_BackupHomeData) -> some View {
-        if !model.keyHeading.isEmpty || !model.restoreLabel.isEmpty {
+        if !model.keyHeading.isEmpty || !model.restoreLabel.isEmpty || !model.checkLabel.isEmpty {
             group(model.keyHeading) {
                 if !model.keyHeading.isEmpty {
                     let row = HStack(spacing: 12) {
@@ -397,8 +397,24 @@ struct BackupHomeView: View {
                         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     }
                 }
-                if !model.restoreLabel.isEmpty {
+                if !model.checkLabel.isEmpty {
                     if !model.keyHeading.isEmpty { hairline() }
+                    Button { open(model.check) } label: {
+                        HStack(spacing: 12) {
+                            KitTile(iconKey: "Check", size: 32)
+                            Text(model.checkLabel).kitType(.row).foregroundStyle(Surface.ink)
+                            Spacer(minLength: 0)
+                            CentraidIconView(iconKey: "ChevronRight", tint: Surface.meta, size: 16)
+                        }
+                        .padding(.horizontal, 12)
+                        .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("backup-check")
+                }
+                if !model.restoreLabel.isEmpty {
+                    if !model.keyHeading.isEmpty || !model.checkLabel.isEmpty { hairline() }
                     Button { send(event { $0.restorePressed = .init() }) } label: {
                         HStack(spacing: 12) {
                             KitTile(iconKey: "History", size: 32)

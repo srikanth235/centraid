@@ -98,6 +98,7 @@ message Route {
     EarlierPreviewRoute earlier_preview = 904;
     // ---- backup (1450-1499, lane H2) ----
     BackupHomeRoute backup_home = 1450;
+    BackupCheckRoute backup_check = 1451;
     // ---- the shell: chat (1600-1699) ----
     ChatRoute chat = 1600;
     ChatThreadRoute chat_thread = 1601;
@@ -525,6 +526,9 @@ message TransferRoute {
 
 // `backup.home`: the Backup screen. No arguments.
 message BackupHomeRoute {}
+
+// `backup.check`: Check my backup (#1188, B6), pushed from Backup. No arguments.
+message BackupCheckRoute {}
 
 // ---------------------------------------------------------------------------
 // Locker

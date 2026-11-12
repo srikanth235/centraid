@@ -179,6 +179,10 @@ pub struct HandleState {
     /// not queued (`phone.proto`): a background window's call must not sit
     /// behind a foreground pass it cannot see and expire holding nothing.
     draining: AtomicBool,
+    /// How far a running "Check my backup" has got (#1188, B6).
+    check_progress: crate::phone::check::Progress,
+    /// One check at a time.
+    checking: AtomicBool,
     /// THE FIRST RECONCILE OF THIS CORE'S LIFE HAS RUN (#1080 ruling 7: "on
     /// every launch"). It asks the gateway about every name the ledger
     /// confirms; every later one only about the queue. The first pass that
@@ -368,6 +372,8 @@ impl Core {
             bytes: Mutex::new(None),
             runtime: Mutex::new(None),
             draining: AtomicBool::new(false),
+            check_progress: crate::phone::check::Progress::default(),
+            checking: AtomicBool::new(false),
             reconciled: AtomicBool::new(false),
             owned_bytes: Mutex::new(None),
             locker: Arc::new(Mutex::new(None)),
@@ -1466,6 +1472,9 @@ impl HandleState {
             K::Drain(request) => Ok(response(wire::response::Kind::Drain(
                 self.drain(request, cancellation)?,
             ))),
+            K::CheckBackup(request) => Ok(response(wire::response::Kind::CheckBackup(
+                self.check_backup(request, &cancellation)?,
+            ))),
             // PAIRING NEEDS NO VAULT TO BE OPEN: it needs the vault's keys,
             // and keeps the gateway in the ledger beside the file.
             K::PairPhone(request) => {
@@ -1683,6 +1692,51 @@ impl HandleState {
     /// This core asked a gateway about every name its ledger confirms.
     pub(crate) fn reconciled_fully(&self) {
         self.reconciled.store(true, Ordering::SeqCst);
+    }
+
+    /// "Check my backup" (#1188, B6): each paired device's backup opened in a spare copy.
+    /// One at a time; a second ask while one runs answers how far it has got.
+    fn check_backup(
+        &self,
+        request: &wire::CheckBackupRequest,
+        cancellation: &Cancellation,
+    ) -> Result<wire::CheckBackupResponse> {
+        if request.stop {
+            self.check_progress.ask_stop();
+            return Ok(wire::CheckBackupResponse::default());
+        }
+        if request.progress_only {
+            return Ok(wire::CheckBackupResponse {
+                devices: Vec::new(),
+                progress: Some(self.check_progress.read()),
+            });
+        }
+        let keyring = self.keyring()?;
+        if !self.holds_a_replica() {
+            return Err(CoreError::Unpaired);
+        }
+        if self
+            .checking
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return Err(CoreError::InvalidRequest {
+                detail: "a check is already running".to_owned(),
+            });
+        }
+        self.check_progress.reset();
+        let answer = self.runtime_handle().and_then(|runtime| {
+            crate::phone::check::run(
+                self,
+                keyring,
+                request,
+                &runtime,
+                cancellation,
+                &self.check_progress,
+            )
+        });
+        self.checking.store(false, Ordering::SeqCst);
+        answer
     }
 
     /// One pass, one at a time.
@@ -2040,7 +2094,14 @@ fn request_kind(request: &wire::Request) -> RequestKind {
         // AND A FETCHED ORIGINAL IS AS LONG AS THE ORIGINAL IS (#1080): a
         // film can be gigabytes, and a member who leaves the lightbox has
         // stopped wanting it.
-        Some(K::Drain(_) | K::Restore(_) | K::FetchOriginal(_)) => RequestKind::Unbounded,
+        // A CHECK READS EVERY DEVICE'S BACKUP BACK, as long as the backup is large; asking how
+        // far it has got is one atomic read.
+        Some(K::CheckBackup(request)) if request.progress_only || request.stop => {
+            RequestKind::Bounded
+        }
+        Some(K::Drain(_) | K::Restore(_) | K::FetchOriginal(_) | K::CheckBackup(_)) => {
+            RequestKind::Unbounded
+        }
     }
 }
 

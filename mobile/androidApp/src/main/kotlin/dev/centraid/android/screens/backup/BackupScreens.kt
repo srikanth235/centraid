@@ -279,7 +279,7 @@ private fun BackupPage(
                 }
             }
         }
-        if (model.key_heading.isNotEmpty() || model.restore_label.isNotEmpty()) {
+        if (model.key_heading.isNotEmpty() || model.restore_label.isNotEmpty() || model.check_label.isNotEmpty()) {
             Group(model.key_heading) {
                 if (model.key_heading.isNotEmpty()) {
                     val open = model.key_show_label.isNotEmpty()
@@ -322,6 +322,22 @@ private fun BackupPage(
                         ) {
                             Text(model.key_sync_label, style = centraidType("body"), color = appAccent("").text)
                         }
+                    }
+                }
+                if (model.check_label.isNotEmpty()) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 56.dp)
+                            .clickable { model.check?.let(onOpen) }
+                            .padding(horizontal = 12.dp)
+                            .testTag("backup-check"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        KitTile(iconKey = "Check", size = 32.dp)
+                        Text(model.check_label, style = centraidType("body"), color = Surface.ink, modifier = Modifier.weight(1f))
+                        CentraidIcon(iconKey = "ChevronRight", tint = Surface.meta, size = 16.dp)
                     }
                 }
                 if (model.restore_label.isNotEmpty()) {
