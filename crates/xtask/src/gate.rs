@@ -1219,11 +1219,24 @@ fn run_ci_policy(ctx: &Ctx) -> Result<Outcome> {
 /// long it takes is information in the timing table, not a verdict (owner
 /// ruling 2026-11-04).
 fn run_release_build(ctx: &Ctx) -> Result<Outcome> {
-    process(
+    let built = process(
         ctx,
         "release-build",
         "cargo",
         &["build", "--workspace", "--release"],
+    )?;
+    if !matches!(built, Outcome::Ok(_)) {
+        return Ok(built);
+    }
+    // THE DEBUG-ONLY LOADERS CANNOT SHIP (#1188): a test that runs only under a release profile
+    // proves nothing here, so the release build's own outputs are searched for their names.
+    let target =
+        std::env::var_os("CARGO_TARGET_DIR").map_or_else(|| ctx.root.join("target"), PathBuf::from);
+    Ok(
+        match crate::dev_paths::release_verdict(&target.join("release")) {
+            Ok(said) => Outcome::Ok(said),
+            Err(why) => Outcome::Failed(why),
+        },
     )
 }
 

@@ -26,6 +26,7 @@ mod design_glance;
 mod design_icon;
 mod design_site;
 mod design_words;
+mod dev_paths;
 mod doc_links;
 mod gate;
 mod ledger;
