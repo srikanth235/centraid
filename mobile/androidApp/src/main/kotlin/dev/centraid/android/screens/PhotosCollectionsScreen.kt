@@ -60,6 +60,7 @@ import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.motion
+import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
@@ -187,8 +188,10 @@ private fun SectionBody(
 
 /** The phone's page margin, emitted beside the tokens. */
 private val MARGIN = 18.dp
-/** Home's tile radius: one card corner in the product, not one per screen. */
-private val CARD_RADIUS = 12.dp
+/** Home's tile radius, the `lg` token: one card corner in the product, not one per screen. */
+@Composable
+private fun cardRadius(): Dp = (LocalCentraidTokens.current.radii["lg"] ?: 0).dp
+
 private val CARD_GAP = 12.dp
 private val ALBUM_SIDE = 150.dp
 private val FOLD_CONTROL = 30.dp
@@ -256,7 +259,7 @@ private fun CoverGround(path: String?, iconKey: String, side: Dp) {
     Box(
         Modifier
             .size(side)
-            .clip(RoundedCornerShape(CARD_RADIUS))
+            .clip(RoundedCornerShape(cardRadius()))
             .background(Brush.verticalGradient(listOf(centraidColor("bgElev"), centraidColor("lineStrong")))),
         contentAlignment = Alignment.Center,
     ) {
@@ -303,7 +306,7 @@ private fun EmptySectionCard(iconKey: String, title: String, caption: String, ve
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(CARD_RADIUS))
+            .clip(RoundedCornerShape(cardRadius()))
             .background(centraidColor("bgElev"))
             .padding(18.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -322,7 +325,7 @@ private fun UtilitiesGroup(cards: List<PhotosCollectionCard>, onOpen: (Route) ->
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(CARD_RADIUS))
+            .clip(RoundedCornerShape(cardRadius()))
             .background(centraidColor("bgElev")),
     ) {
         cards.forEachIndexed { index, card ->
@@ -360,7 +363,7 @@ private fun DeletedGroup(cards: List<PhotosCollectionCard>, onRestore: (String) 
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(CARD_RADIUS))
+            .clip(RoundedCornerShape(cardRadius()))
             .background(centraidColor("bgElev")),
     ) {
         cards.forEachIndexed { index, card ->
