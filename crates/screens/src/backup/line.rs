@@ -58,20 +58,24 @@ pub fn unreached(reading: &Reading, now_ms: i64) -> bool {
 }
 
 /// THE OLDEST ITEM STILL UNCONFIRMED HAS WAITED LONGER THAN [`STALE_MS`] (#1188): a backlog of
-/// originals warns however recent the records' acknowledgement was.
+/// originals warns however recent the records' acknowledgement was. While a pass runs the
+/// backlog is being worked on, so it does not warn. A time ahead of this phone's clock by more
+/// than [`CLOCK_TOLERANCE_MS`] is not believed (a clock set ahead and corrected) and counts as
+/// stood, like an acknowledgement dated in the future.
 #[must_use]
-pub fn backlog_old(reading: &Reading, now_ms: i64) -> bool {
-    reading.unconfirmed() > 0
+pub fn backlog_old(reading: &Reading, now_ms: i64, running: bool) -> bool {
+    !running
+        && reading.unconfirmed() > 0
         && reading
             .oldest_waiting_ms
-            .is_some_and(|at| now_ms - at > STALE_MS)
+            .is_some_and(|at| now_ms - at > STALE_MS || at - now_ms > CLOCK_TOLERANCE_MS)
 }
 
 /// WHETHER ANYTHING ABOUT THIS BACKUP IS OWED A LOOK: the one reading the line's tone and the
 /// status card's condition are both made from, so the card can never be green beside a warning
 /// line. A vault that moved and one with no device are the callers' own cases.
 #[must_use]
-pub fn warns(reading: &Reading, now_ms: i64) -> bool {
+pub fn warns(reading: &Reading, now_ms: i64, running: bool) -> bool {
     if reading.destinations.is_empty() || reading.destinations.iter().all(|d| d.pair_again) {
         return true;
     }
@@ -90,7 +94,7 @@ pub fn warns(reading: &Reading, now_ms: i64) -> bool {
         || reading.waiting_for(wire::WaitReason::Untrusted) > 0
         || reading.destinations.iter().any(|d| d.pair_again)
         || worst(reading).is_some()
-        || backlog_old(reading, now_ms)
+        || backlog_old(reading, now_ms, running)
 }
 
 /// The line for one vault. `reading` `None` is "the core could not be asked" (a
@@ -157,13 +161,14 @@ pub fn line(
     let whole = reading.unconfirmed() == 0;
     let when = ago(locale, acked, now_ms);
     let count = grouped(reading.unconfirmed());
-    let stood = backlog_old(reading, now_ms);
+    let stood = backlog_old(reading, now_ms, running);
     let sentence = if whole {
         fill(&words::backup_line_done(locale), &[("when", &when)])
-    } else if stood {
-        let oldest = reading
-            .oldest_waiting_ms
-            .map_or_else(String::new, |at| ago(locale, at, now_ms));
+    } else if let Some(oldest) = reading
+        .oldest_waiting_ms
+        .filter(|at| stood && now_ms - *at > STALE_MS)
+        .map(|at| ago(locale, at, now_ms))
+    {
         fill(
             &words::backup_line_backlog(locale),
             &[("count", &count), ("when", &oldest)],
@@ -186,7 +191,7 @@ pub fn line(
         sentence,
         status: fill(&status, &[("when", &when), ("count", &count)]),
         detail,
-        tone: if warns(reading, now_ms) {
+        tone: if warns(reading, now_ms, running) {
             Tone::Attention
         } else {
             Tone::Quiet

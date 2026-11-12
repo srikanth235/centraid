@@ -96,6 +96,9 @@ pub enum Restored {
     DidNotCheck,
     /// The newest backup would not open and an older one does: offered, nothing restored.
     Offer(Vec<door::OfferAt>),
+    /// A vault's claim landed (the old phone is stopped) but keeping it on this phone failed:
+    /// nothing was kept, and restoring again finishes it.
+    Unfinished,
     /// No backup the device holds opens in this version. Nothing stored.
     CantOpen,
     /// A newer Centraid made the backup: update, then restore. Nothing stored.
@@ -112,6 +115,7 @@ impl fmt::Debug for Restored {
             Self::Unreachable => f.write_str("Unreachable"),
             Self::NothingHeld => f.write_str("NothingHeld"),
             Self::NotTaken => f.write_str("NotTaken"),
+            Self::Unfinished => f.write_str("Unfinished"),
             Self::DidNotCheck => f.write_str("DidNotCheck"),
             Self::Offer(offers) => write!(f, "Offer({})", offers.len()),
             Self::CantOpen => f.write_str("CantOpen"),
@@ -736,6 +740,11 @@ impl RestoreJob {
                     // AN OLDER BACKUP OFFERED claims and restores nothing: the member decides.
                     if answer.vaults.is_empty() && !answer.offers.is_empty() {
                         return done(Restored::Offer(answer.offers));
+                    }
+                    if answer.vaults.is_empty()
+                        && answer.unclaimed.iter().any(|vault| vault.claimed)
+                    {
+                        return done(Restored::Unfinished);
                     }
                     if answer.vaults.is_empty() {
                         return done(Restored::NothingHeld);

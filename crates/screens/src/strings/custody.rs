@@ -65,6 +65,8 @@ catalog! {
     plain restore_held_title = ("Restore your vaults", "Restore your vaults");
     plain restore_held_words = ("Type recovery key", "Type recovery key");
     plain restore_nothing_held = ("Your backup device has no backup for that recovery key. Check it's the right one.", "Your backup device has no backup for that recovery key. Check it's the right one.");
+    plain restore_unfinished = ("Your old phone has stopped, but this phone couldn't finish restoring. Restore again to finish.", "Your old phone has stopped, but this phone couldn't finish restoring. Restore again to finish.");
+    plain restore_previews_pending = ("Restored. Some previews load when you open them.", "Restored. Some previews load when you open them.");
     plain restore_not_taken = ("Your backup device refused the restore. Try again, and check it's the one you paired.", "Your backup device refused the restore. Try again, and check it's the one you paired.");
     plain restore_primary = ("Restore", "Restore");
     plain restore_title = ("Restore with your recovery key", "Restore with your recovery key");

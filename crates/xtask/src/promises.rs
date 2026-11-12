@@ -3115,6 +3115,10 @@ pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 8] = [
                 "crates/screens/src/backup/tests.rs",
                 "a_backlog_older_than_the_stale_threshold_warns_with_the_count_and_the_reason",
             ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "the_cores_oldest_waiting_age_warns_on_the_page_but_not_while_a_pass_runs",
+            ),
         ],
     ),
     (

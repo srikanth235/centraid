@@ -51,6 +51,8 @@ fn at(path: &str, index: u32, rows: i64) -> door::RestoredVaultAt {
         rows,
         safety_number: String::new(),
         own: None,
+        derivatives_landed: 0,
+        derivatives_total: 0,
     }
 }
 
@@ -66,6 +68,7 @@ fn unclaimed(index: u32) -> UnclaimedVaultAt {
         index,
         vault_id: "ef".repeat(32),
         own: None,
+        claimed: false,
     }
 }
 

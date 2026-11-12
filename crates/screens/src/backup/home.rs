@@ -712,7 +712,7 @@ impl Backup {
             C::Running
         } else if line::unreached(reading, now) {
             C::NotReached
-        } else if line::warns(reading, now) {
+        } else if line::warns(reading, now, self.backing_up_now) {
             C::Attention
         } else if reading.unconfirmed() > 0 {
             C::CatchingUp

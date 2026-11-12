@@ -158,6 +158,30 @@ fn restore_offer(newest_ms: i64, offered_ms: i64) -> wire::OffThreadDone {
     }
 }
 
+/// A restore whose claim LANDED but whose vault could not be kept on this phone: nothing was
+/// restored, the old phone is already stopped.
+fn restore_claimed_unfinished() -> wire::OffThreadDone {
+    let response = wire::Response {
+        kind: Some(wire::response::Kind::Restore(wire::RestoreResponse {
+            unclaimed: vec![wire::UnclaimedVault {
+                index: 0,
+                vault_id: "ab".repeat(32),
+                reason: "logs only".to_owned(),
+                claimed: true,
+            }],
+            ..wire::RestoreResponse::default()
+        })),
+    };
+    wire::OffThreadDone {
+        tag: "restore".to_owned(),
+        bytes: wire::VaultCalled {
+            response: response.encode_to_vec(),
+            error: None,
+        }
+        .encode_to_vec(),
+    }
+}
+
 fn restore_refused(code: wire::ErrorCode) -> wire::OffThreadDone {
     wire::OffThreadDone {
         tag: "restore".to_owned(),
@@ -343,6 +367,45 @@ fn a_valid_phrase_opens_the_one_control_and_a_restore_answer_drops_every_word() 
 }
 
 #[test]
+fn a_restore_with_previews_still_on_the_backup_device_finishes_and_keeps_the_vault() {
+    let mut phone = filled(routes::restore(), Some(CODE));
+    primary(&mut phone);
+    let response = wire::Response {
+        kind: Some(wire::response::Kind::Restore(wire::RestoreResponse {
+            vaults: vec![wire::RestoredVault {
+                vault_id: "id-0".to_owned(),
+                index: 0,
+                path: "/v/a/vault.db".to_owned(),
+                rows: 10,
+                safety_number: "12345 67890".to_owned(),
+                derivatives_landed: 3,
+                derivatives_total: 12,
+            }],
+            ..wire::RestoreResponse::default()
+        })),
+    };
+    deliver(
+        &mut phone,
+        wire::OffThreadDone {
+            tag: "restore".to_owned(),
+            bytes: wire::VaultCalled {
+                response: response.encode_to_vec(),
+                error: None,
+            }
+            .encode_to_vec(),
+        },
+    );
+    assert!(phone.enter().finished);
+    assert_eq!(phone.keeper.log(), vec!["adopt [0] seed=true".to_owned()]);
+    assert_eq!(
+        centraid_screens::strings::custody::restore_previews_pending(
+            centraid_screens::strings::Locale::En
+        ),
+        "Restored. Some previews load when you open them."
+    );
+}
+
+#[test]
 fn an_unreachable_gateway_or_an_empty_one_keeps_the_words_on_screen_with_the_sentence() {
     let cases = [
         (
@@ -364,6 +427,12 @@ fn an_unreachable_gateway_or_an_empty_one_keeps_the_words_on_screen_with_the_sen
         (
             restore_refused(wire::ErrorCode::Unauthorized),
             "Your backup device refused the restore. Try again, and check it's the one you paired.",
+        ),
+        // A CLAIM THAT LANDED says the old phone has stopped and to restore again; it never says
+        // "unclaimed" and never implies the old phone still works.
+        (
+            restore_claimed_unfinished(),
+            "Your old phone has stopped, but this phone couldn't finish restoring. Restore again to finish.",
         ),
         // A BACKUP THIS PHONE WOULD NOT ACCEPT says so, never "could not reach".
         (

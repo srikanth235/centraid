@@ -2740,7 +2740,54 @@ mod what_a_member_reads {
         assert_eq!(warned.waiting[0].sentence, "3 waiting for Wi-Fi");
         // Nothing waiting is never a backlog, whatever the age says.
         waiting_long.content_confirmed = 10;
-        assert!(!line::backlog_old(&waiting_long, NOW));
+        assert!(!line::backlog_old(&waiting_long, NOW, false));
+    }
+
+    #[test]
+    fn the_cores_oldest_waiting_age_warns_on_the_page_but_not_while_a_pass_runs() {
+        let backlog = || {
+            one(|r| {
+                r.content_confirmed = 7;
+                r.waiting = waiting(&[(wire::WaitReason::Wifi, 3)]);
+                r.oldest_waiting_ms = Some(NOW - STALE_MS - 1);
+            })
+        };
+        let data = Page::open(backlog()).data();
+        assert_eq!(data.condition(), C::Attention);
+        assert_eq!(data.line.unwrap().tone(), Tone::Attention);
+        let mut running = Page::open(backlog());
+        running.say(wire::backup_home_event::Kind::BackUpNow(
+            wire::backup_home_event::BackUpNow {},
+        ));
+        let data = running.data();
+        assert_eq!(data.condition(), C::Running);
+        assert_eq!(data.line.unwrap().tone(), Tone::Quiet);
+        // A value of zero on the wire is no age.
+        let none = Page::open(one(|r| {
+            r.content_confirmed = 7;
+            r.oldest_waiting_ms = Some(0);
+        }))
+        .data();
+        assert_eq!(none.condition(), C::CatchingUp);
+    }
+
+    #[test]
+    fn an_oldest_waiting_time_ahead_of_the_clock_is_not_believed_and_still_warns() {
+        let mut ahead = reading(&one(|r| r.content_confirmed = 7));
+        ahead.oldest_waiting_ms = Some(NOW + 10 * MINUTE);
+        let line = line::line(EN, Some(&ahead), false, false, NOW);
+        assert_eq!(line.tone(), Tone::Attention);
+        assert!(
+            line.sentence.starts_with("Records backed up"),
+            "{}",
+            line.sentence
+        );
+        ahead.oldest_waiting_ms = Some(NOW + MINUTE);
+        assert_eq!(
+            line::line(EN, Some(&ahead), false, false, NOW).tone(),
+            Tone::Quiet,
+            "within the tolerance it is only a clock a minute out"
+        );
     }
 
     #[test]

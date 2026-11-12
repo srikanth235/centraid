@@ -166,6 +166,10 @@ pub struct RestoredVaultAt {
     /// The entry it came back from when it is on its own words; `None` for the
     /// member's.
     pub own: Option<String>,
+    /// How many of the thumbnails and previews its backup names came back with it, and how many
+    /// it names. The rest are fetched on demand; both 0 when it names none.
+    pub derivatives_landed: u32,
+    pub derivatives_total: u32,
 }
 
 /// One vault a restore checked and could not claim. The core's `reason` is a
@@ -176,6 +180,9 @@ pub struct UnclaimedVaultAt {
     pub index: u32,
     pub vault_id: String,
     pub own: Option<String>,
+    /// The claim LANDED but keeping the vault on this phone failed: the old phone is already
+    /// stopped and restoring again finishes it. False: the old phone is still the writer.
+    pub claimed: bool,
 }
 
 /// What a restore answered. `Debug` carries counts only: a path or a safety
@@ -312,6 +319,8 @@ pub fn restore_answer(response: &wire::RestoreResponse) -> RestoreAnswer {
                 rows: vault.rows,
                 safety_number: vault.safety_number.clone(),
                 own: None,
+                derivatives_landed: vault.derivatives_landed,
+                derivatives_total: vault.derivatives_total,
             })
             .collect(),
         gap_scanned: response.gap_scanned,
@@ -333,6 +342,7 @@ pub fn restore_answer(response: &wire::RestoreResponse) -> RestoreAnswer {
                 index: vault.index,
                 vault_id: vault.vault_id.clone(),
                 own: None,
+                claimed: vault.claimed,
             })
             .collect(),
     }

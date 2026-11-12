@@ -72,6 +72,8 @@ enum Notice {
     Unreachable,
     NothingHeld,
     NotTaken,
+    /// A claim landed and the vault could not be kept here: restore again.
+    Unfinished,
     DidNotCheck,
     CantOpen,
     NewerBuild,
@@ -213,7 +215,7 @@ impl Enter {
             keeper,
         };
         let progress = self.runner.begin(job, &env);
-        self.progressed(progress)
+        self.progressed(progress, ctx)
     }
 
     fn answered(&mut self, result: &wire::EffectResult, ctx: &Ctx) -> Vec<wire::Effect> {
@@ -226,7 +228,7 @@ impl Enter {
             keeper,
         };
         match self.runner.answered(result, &env) {
-            Some(progress) => self.progressed(progress),
+            Some(progress) => self.progressed(progress, ctx),
             None => Vec::new(),
         }
     }
@@ -241,25 +243,47 @@ impl Enter {
             keeper,
         };
         match self.runner.off_thread(done, &env) {
-            Some(progress) => self.progressed(progress),
+            Some(progress) => self.progressed(progress, ctx),
             None => Vec::new(),
         }
     }
 
-    fn progressed(&mut self, progress: Progress) -> Vec<wire::Effect> {
+    fn progressed(&mut self, progress: Progress, ctx: &Ctx) -> Vec<wire::Effect> {
         if let Some(out) = progress.out {
             // A late answer to a screen that was left changes nothing.
             if !self.finished {
-                self.job_done(out);
+                self.job_done(out, ctx);
             }
         }
         progress.effects
     }
 
-    fn job_done(&mut self, out: Out) {
+    fn job_done(&mut self, out: Out, ctx: &Ctx) {
         match out {
             Out::Done => self.opened(),
-            Out::Restored(outcome) => self.restored(outcome),
+            Out::Restored(outcome) => {
+                // SOME PREVIEWS ARE STILL ON THE BACKUP DEVICE: the vault is kept before they are
+                // fetched, so the line Home draws says they load when opened, never that they are
+                // all here.
+                let pending = matches!(&outcome, Restored::Done { answer, .. }
+                    if answer.vaults.iter().any(|vault| vault.derivatives_landed < vault.derivatives_total));
+                if pending {
+                    ctx.post(
+                        crate::shell::HOME,
+                        wire::ScreenEvent {
+                            kind: Some(E::Home(wire::HomeEvent {
+                                kind: Some(wire::home_event::Kind::OutcomeTold(
+                                    wire::home_event::OutcomeTold {
+                                        status_line: words::restore_previews_pending(ctx.locale()),
+                                        rename_failed: false,
+                                    },
+                                )),
+                            })),
+                        },
+                    );
+                }
+                self.restored(outcome);
+            }
             Out::Rekeyed(outcome) => self.rekeyed(outcome),
             _ => {}
         }
@@ -437,6 +461,7 @@ impl Enter {
             Restored::Unreachable => self.back(Notice::Unreachable),
             Restored::NothingHeld => self.back(Notice::NothingHeld),
             Restored::NotTaken => self.back(Notice::NotTaken),
+            Restored::Unfinished => self.back(Notice::Unfinished),
             Restored::DidNotCheck => self.back(Notice::DidNotCheck),
             Restored::CantOpen => self.back(Notice::CantOpen),
             Restored::NewerBuild => self.back(Notice::NewerBuild),
@@ -647,6 +672,7 @@ impl Enter {
             Notice::Unreachable => words::restore_unreachable(locale),
             Notice::NothingHeld => words::restore_nothing_held(locale),
             Notice::NotTaken => words::restore_not_taken(locale),
+            Notice::Unfinished => words::restore_unfinished(locale),
             Notice::DidNotCheck => words::restore_did_not_check(locale),
             Notice::CantOpen => words::restore_cant_open(locale),
             Notice::NewerBuild => words::restore_newer_build(locale),
