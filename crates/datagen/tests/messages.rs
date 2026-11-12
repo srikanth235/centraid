@@ -97,6 +97,7 @@ fn config(offline: bool) -> Config {
         batch: 5,
         concurrency: 3,
         offline,
+        collect: None,
         limit: None,
         seed: 1,
         style_shares: centraid_datagen::style::DEFAULT_SHARES,

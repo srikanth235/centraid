@@ -91,6 +91,10 @@ enum Command {
         /// Fail on a cache miss instead of calling the model: a rebuild from the cache.
         #[arg(long)]
         offline: bool,
+        /// Instead of calling a model, write each prompt the cache lacks under `<dir>/{writer,reader}/<split>/`
+        /// and stop; answer them elsewhere and put them back with `cache-put`.
+        #[arg(long)]
+        collect: Option<PathBuf>,
         /// At most this many sessions per split, spread evenly over its file.
         #[arg(long)]
         limit: Option<usize>,
@@ -146,6 +150,10 @@ enum Command {
         /// Fail on a messages cache miss instead of calling the model.
         #[arg(long)]
         offline: bool,
+        /// Instead of calling a model, write each prompt the cache lacks under `<dir>/{writer,reader}/<split>/`
+        /// and stop; answer them elsewhere and put them back with `cache-put`.
+        #[arg(long)]
+        collect: Option<PathBuf>,
         /// At most this many sessions per split go through messages (a trial build).
         #[arg(long)]
         limit: Option<usize>,
@@ -214,6 +222,16 @@ enum Command {
         /// The cache directory to fill (`<messages out>/llm-cache`, or `<build out>/stages/messages/llm-cache`).
         #[arg(long)]
         out: PathBuf,
+    },
+    /// Put answers into an LLM cache, one JSON line each (`{"model", "hash", "response"}`), where `hash` is the file
+    /// name of a prompt `--collect` wrote. An entry already in the cache is kept.
+    CachePut {
+        /// The cache directory (`<messages out>/llm-cache`, or `<build out>/stages/messages/llm-cache`).
+        #[arg(long)]
+        cache: PathBuf,
+        /// The answers, a `.jsonl` file.
+        #[arg(long)]
+        answers: PathBuf,
     },
     /// Cut RFT records from a model's rollouts (`assist-eval rollout`) and render them with the data
     /// version's renderer, so each carries `render {input_ids, weights, text}` as a data-version record does. Writes
@@ -601,6 +619,7 @@ fn main() -> Result<()> {
             concurrency,
             batch,
             offline,
+            collect,
             limit,
             seed,
             models,
@@ -611,6 +630,7 @@ fn main() -> Result<()> {
                 batch,
                 concurrency,
                 offline,
+                collect,
                 limit,
                 seed,
                 style_shares: models.style_shares()?,
@@ -654,6 +674,7 @@ fn main() -> Result<()> {
             concurrency,
             batch,
             offline,
+            collect,
             limit,
             typo_seed,
             models,
@@ -700,6 +721,7 @@ fn main() -> Result<()> {
                     batch,
                     concurrency,
                     offline,
+                    collect,
                     limit,
                     seed: typo_seed,
                     style_shares: models.style_shares()?,
@@ -754,6 +776,33 @@ fn main() -> Result<()> {
         Command::TestTokenizer { out } => {
             std::fs::write(&out, centraid_datagen::render::byte_level_tokenizer_json())?;
             eprintln!("wrote {}", out.display());
+        }
+        Command::CachePut { cache, answers } => {
+            let (mut put, mut kept) = (0, 0);
+            for line in std::fs::read_to_string(&answers)?
+                .lines()
+                .filter(|l| !l.trim().is_empty())
+            {
+                let v: Value = serde_json::from_str(line)?;
+                let field = |k: &str| {
+                    v[k].as_str()
+                        .with_context(|| format!("an answer with no `{k}`"))
+                };
+                if centraid_datagen::llm::put(
+                    &cache,
+                    field("model")?,
+                    field("hash")?,
+                    field("response")?,
+                )? {
+                    put += 1;
+                } else {
+                    kept += 1;
+                }
+            }
+            eprintln!(
+                "put {put} answers into {} ({kept} already there)",
+                cache.display()
+            );
         }
         Command::UnpackCache { input, out } => {
             let n = version::unpack_cache(&input, &out)?;

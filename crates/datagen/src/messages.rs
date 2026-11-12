@@ -17,7 +17,7 @@
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use jiff::civil::Date;
@@ -52,6 +52,9 @@ pub struct Config {
     pub concurrency: usize,
     /// A cache miss is an error, not a call.
     pub offline: bool,
+    /// Write each prompt the cache lacks under `<dir>/{writer,reader}/<split>/` instead of asking, and stop with
+    /// an error saying how many are pending (answer them with `datagen cache-put`, then run again).
+    pub collect: Option<PathBuf>,
     /// At most this many sessions per split, spread evenly over its file.
     pub limit: Option<usize>,
     /// The typo stream's seed.
@@ -66,6 +69,7 @@ impl Default for Config {
             batch: BATCH,
             concurrency: 6,
             offline: false,
+            collect: None,
             limit: None,
             seed: 1,
             style_shares: style::DEFAULT_SHARES,
@@ -255,8 +259,43 @@ fn write_all(cache: &Cache<'_>, jobs: &[Job], cfg: &Config) -> Result<Vec<Option
             }
         }
         todo.retain(|i| done[*i].is_none());
+        // a pending prompt is not a failed answer: ask no retry of it
+        if cache.pending() > 0 {
+            break;
+        }
     }
     Ok(done)
+}
+
+/// One cache per split over the shared directory; collecting ones write their pending prompts apart.
+fn open_caches<'a>(
+    role: &str,
+    models: &[&'a dyn Llm; 3],
+    dir: &Path,
+    cfg: &Config,
+) -> Result<Vec<Cache<'a>>> {
+    models
+        .iter()
+        .enumerate()
+        .map(|(s, l)| {
+            let cache = Cache::open(*l, dir, cfg.offline)?;
+            Ok(match &cfg.collect {
+                Some(c) => cache.collecting(&c.join(role).join(Split::ALL[s].name())),
+                None => cache,
+            })
+        })
+        .collect()
+}
+
+/// A collecting run stops where a stage left prompts pending: what follows would read empty answers.
+fn pending_stop(role: &str, caches: &[Cache<'_>]) -> Result<()> {
+    let n: usize = caches.iter().map(Cache::pending).sum();
+    if n > 0 {
+        anyhow::bail!(
+            "pending: {n} {role} prompts written; answer them, `cache-put` them and run again"
+        );
+    }
+    Ok(())
 }
 
 /// Locker stays presence-only: a prompt never holds a sealed placeholder (`placeholder:<key>:<field>`
@@ -501,16 +540,8 @@ pub fn run(
     models.check()?;
     // one cache directory: a key is the model and the prompt, so each split's models keep their own entries
     let cache_dir = out.join("llm-cache");
-    let writers: Vec<Cache<'_>> = models
-        .writer
-        .iter()
-        .map(|l| Cache::open(*l, &cache_dir, cfg.offline))
-        .collect::<Result<_>>()?;
-    let readers: Vec<Cache<'_>> = models
-        .reader
-        .iter()
-        .map(|l| Cache::open(*l, &cache_dir, cfg.offline))
-        .collect::<Result<_>>()?;
+    let writers = open_caches("writer", &models.writer, &cache_dir, cfg)?;
+    let readers = open_caches("reader", &models.reader, &cache_dir, cfg)?;
     let mut items: Vec<Item> = Vec::new();
     for (split, record) in load(input, cfg.limit)? {
         let scenario: Scenario = serde_json::from_value(record["scenario"].clone())
@@ -591,6 +622,7 @@ pub fn run(
             written[*i] = got;
         }
     }
+    pending_stop("writer", &writers)?;
     for (item, messages) in items.iter_mut().zip(written) {
         if item.copies.is_some() {
             continue;
@@ -825,8 +857,12 @@ pub fn run(
                 }
             }
             todo.retain(|i| !reads.contains_key(i));
+            if cache.pending() > 0 {
+                break;
+            }
         }
     }
+    pending_stop("reader", &readers)?;
     for i in readable {
         let item = &mut items[i];
         let Some(got) = reads.remove(&i) else {
