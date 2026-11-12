@@ -32,6 +32,7 @@ pub mod facts;
 mod generate;
 pub mod grid;
 pub mod intent;
+pub mod labels;
 pub mod llm;
 pub mod messages;
 pub mod mix;

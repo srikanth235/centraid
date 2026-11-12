@@ -437,6 +437,27 @@ pub fn write_version(
             }),
         );
     }
+    // nested train subsets: the ids of the sessions, one a line, sorted by position in the train file
+    let mut subsets = serde_json::Map::new();
+    for (name, indices) in &selection.subsets {
+        let mut ids: Vec<&str> = indices
+            .iter()
+            .map(|i| rendered.features[*i].id.as_str())
+            .collect();
+        ids.sort_unstable();
+        let mut body = ids.join("\n");
+        body.push('\n');
+        let rel = format!("{DATA}/{name}.ids");
+        std::fs::write(out.join(&rel), &body)?;
+        let entry = json!({
+            "sessions": ids.len(),
+            "within": "train",
+            "bytes": body.len(),
+            "blake3": blake3::hash(body.as_bytes()).to_hex().to_string(),
+        });
+        files.insert(rel, entry.clone());
+        subsets.insert(name.clone(), entry);
+    }
     let wdir = out.join(WORLDS);
     std::fs::create_dir_all(&wdir)?;
     for id in &worlds {
@@ -461,6 +482,7 @@ pub fn write_version(
     let splits: Vec<Value> = selection
         .reports
         .iter()
+        .chain(&selection.subset_reports)
         .map(|r| {
             json!({
                 "split": r.split,
@@ -471,11 +493,14 @@ pub fn write_version(
                 "minimal_pairs": r.pairs,
                 "multi_turn_share": r.multi_turn_share,
                 "three_plus_share": r.three_plus_share,
+                "ask_or_act_pairs": r.ask_or_act_pairs,
                 "by_turns": r.by_turns,
-                "across": r.across,
+                "shares": r.shares,
                 "apps": r.apps,
+                "cells": r.cells,
                 "duplicates_removed": r.duplicates,
                 "broken_pairs_removed": r.orphan_pairs,
+                "reserved_removed": r.reserved_out,
                 "missed": r.missed,
             })
         })
@@ -501,7 +526,10 @@ pub fn write_version(
         "targets": {
             "train": cfg.targets[0], "val": cfg.targets[1], "test": cfg.targets[2],
             "shares": cfg.shares,
+            "cell_floor": {"train": cfg.floor[0], "val": cfg.floor[1], "test": cfg.floor[2]},
         },
+        "subsets": subsets,
+        "reserved_combinations": selection.reserved,
         "render": {
             "sessions_in": rendered.sessions_in,
             "sessions_rendered": rendered.features.len(),

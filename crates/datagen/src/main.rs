@@ -40,7 +40,7 @@ enum Command {
         seed: u64,
         #[arg(long)]
         out: PathBuf,
-        /// Worlds per split as `train,val,test` (default 48,6,6).
+        /// Worlds per split as `train,val,test` (default 48,8,12).
         #[arg(long, value_delimiter = ',')]
         counts: Option<Vec<usize>>,
         /// Also seed every world into a vault file `<out>/<split>/<id>.vault`.
@@ -54,7 +54,7 @@ enum Command {
         seed: u64,
         #[arg(long)]
         out: PathBuf,
-        /// Worlds per split as `train,val,test` (default 48,6,6).
+        /// Worlds per split as `train,val,test` (default 48,8,12).
         #[arg(long, value_delimiter = ',')]
         counts: Option<Vec<usize>>,
         /// Sessions to keep per world, one number or `train,val,test`; never fewer than one per
@@ -123,7 +123,7 @@ enum Command {
         /// The master seed every world and intent is drawn from.
         #[arg(long, default_value_t = 1)]
         seed: u64,
-        /// Worlds per split as `train,val,test` (default 48,6,6).
+        /// Worlds per split as `train,val,test` (default 48,8,12).
         #[arg(long, value_delimiter = ',')]
         counts: Option<Vec<usize>>,
         /// Sessions to draw per split as `train,val,test`. Default: half as many again as the targets, so the mix
@@ -221,8 +221,8 @@ enum Command {
 /// The targets of the mix and the weight of a deciding token.
 #[derive(clap::Args, Clone)]
 struct MixArgs {
-    /// Sessions wanted per split as `train,val,test` (~18k, ~1k, ~1k).
-    #[arg(long, value_delimiter = ',', default_values_t = [18000_usize, 1000, 1000])]
+    /// Sessions wanted per split as `train,val,test`.
+    #[arg(long, value_delimiter = ',', default_values_t = [5000_usize, 500, 1000])]
     targets: Vec<usize>,
     /// Loss weight of a deciding token (an assistant token weighs 1, everything else 0).
     #[arg(long, default_value_t = DECISION_WEIGHT)]
@@ -230,9 +230,33 @@ struct MixArgs {
     /// Shares of sessions with one, two and three or more turns.
     #[arg(long, value_delimiter = ',', default_values_t = [0.40_f64, 0.30, 0.30])]
     turn_shares: Vec<f64>,
-    /// Share of sessions that join two apps.
-    #[arg(long, default_value_t = 0.30)]
-    across: f64,
+    /// Share of sessions that touch two kinds.
+    #[arg(long, default_value_t = 0.20)]
+    two_kinds: f64,
+    /// Shares of turns by outcome: done, nothing found, ask, decline, repair.
+    #[arg(long, value_delimiter = ',', default_values_t = [0.65_f64, 0.08, 0.10, 0.07, 0.10])]
+    outcome_shares: Vec<f64>,
+    /// Shares of turns by action: read/count/measure, create/edit/other write, recall/undo.
+    #[arg(long, value_delimiter = ',', default_values_t = [0.45_f64, 0.45, 0.10])]
+    action_shares: Vec<f64>,
+    /// Shares of row-pointing turns by reference: name, filters, pronoun or earlier answer, nickname or misspelling.
+    #[arg(long, value_delimiter = ',', default_values_t = [0.40_f64, 0.25, 0.20, 0.15])]
+    reference_shares: Vec<f64>,
+    /// Share of turns that ask for what the vault cannot do.
+    #[arg(long, default_value_t = 0.05)]
+    impossible: f64,
+    /// Share of test sessions that carry a reserved combination.
+    #[arg(long, default_value_t = 0.20)]
+    reserved_share: f64,
+    /// Turns every live cell has at least, per split as `train,val,test`.
+    #[arg(long, value_delimiter = ',', default_values_t = [30_usize, 0, 0])]
+    cell_floor: Vec<usize>,
+    /// Nested train subsets, in sessions (for a learning curve).
+    #[arg(long, value_delimiter = ',', default_values_t = [1000_usize, 2500])]
+    subsets: Vec<usize>,
+    /// Combinations reserved for test (a kind with a filter field, a kind with a verb and a constraint count).
+    #[arg(long, default_value_t = 8)]
+    reserve: usize,
     /// The mix's seed.
     #[arg(long, default_value_t = 1)]
     mix_seed: u64,
@@ -241,13 +265,19 @@ struct MixArgs {
     render_concurrency: usize,
 }
 
+fn exactly<const N: usize>(name: &str, values: &[f64]) -> Result<[f64; N]> {
+    <[f64; N]>::try_from(values)
+        .map_err(|_| anyhow::anyhow!("--{name} takes {N} numbers, got {}", values.len()))
+}
+
 impl MixArgs {
     fn mix(&self) -> Result<mix::Config> {
         let [train, val, test] = self.targets[..] else {
             anyhow::bail!("--targets takes three numbers: train,val,test");
         };
-        let [one, two, three] = self.turn_shares[..] else {
-            anyhow::bail!("--turn-shares takes three numbers");
+        let [one, two, three] = exactly::<3>("turn-shares", &self.turn_shares)?;
+        let [f_train, f_val, f_test] = self.cell_floor[..] else {
+            anyhow::bail!("--cell-floor takes three numbers: train,val,test");
         };
         Ok(mix::Config {
             targets: [train, val, test],
@@ -255,10 +285,19 @@ impl MixArgs {
                 one,
                 two,
                 three_plus: three,
-                across: self.across,
+                two_kinds: self.two_kinds,
+                outcome: exactly::<5>("outcome-shares", &self.outcome_shares)?,
+                action: exactly::<3>("action-shares", &self.action_shares)?,
+                reference: exactly::<4>("reference-shares", &self.reference_shares)?,
+                impossible: self.impossible,
+                reserved: self.reserved_share,
             },
             seed: self.mix_seed,
             live: Vec::new(),
+            floor: [f_train, f_val, f_test],
+            subsets: self.subsets.clone(),
+            reserved: Vec::new(),
+            reserve: self.reserve,
         })
     }
 
@@ -273,7 +312,7 @@ impl MixArgs {
 
 fn spec_counts(counts: Option<&[usize]>) -> Result<[usize; 3]> {
     match counts {
-        None => Ok([48, 6, 6]),
+        None => Ok([48, 8, 12]),
         Some([a, b, c]) => Ok([*a, *b, *c]),
         Some(_) => anyhow::bail!("--counts takes three numbers: train,val,test"),
     }
@@ -372,7 +411,7 @@ fn main() -> Result<()> {
         } => {
             let catalog = Catalog::build()?;
             let counts: [usize; 3] = match counts.as_deref() {
-                None => [48, 6, 6],
+                None => [48, 8, 12],
                 Some([a, b, c]) => [*a, *b, *c],
                 Some(_) => anyhow::bail!("--counts takes three numbers: train,val,test"),
             };

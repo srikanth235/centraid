@@ -52,6 +52,10 @@ fn mix_config() -> mix::Config {
         shares: Shares::default(),
         seed: 1,
         live: Vec::new(),
+        floor: [0; 3],
+        subsets: vec![20, 40],
+        reserved: Vec::new(),
+        reserve: 0,
     }
 }
 

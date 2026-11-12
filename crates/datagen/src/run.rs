@@ -14,12 +14,125 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::catalog::Catalog;
+use crate::facts::Facts;
 use crate::grid::{Cell, Grid};
+use crate::intent::{Scenario, Span};
 use crate::plan::WorldRun;
 use crate::rng::Rng;
 use crate::sample::Sampler;
 use crate::settings::Split;
 use crate::world::{World, plan_sized};
+
+/// One ask-or-act pair for this many sessions drawn.
+const PAIR_EVERY: usize = 60;
+
+/// How many times a cell is drawn against the others as the first turn of a session. A turn the model decides alone
+/// (recalling an answer, undoing a write, declining, asking which row) is a few cells but a large share of what the
+/// mix aims at, so those cells are drawn more often.
+fn weight(cell: &Cell) -> usize {
+    match (cell.tool.as_str(), cell.verb.as_str()) {
+        ("answer", _) => 10,
+        ("do", "undo") => 12,
+        ("decline", "not_found") => 4,
+        ("decline", _) => 7,
+        ("ask", _) => 3,
+        _ => 1,
+    }
+}
+
+/// Every live cell once, then each again as often as its weight says.
+fn schedule(live: &[Cell]) -> Vec<Cell> {
+    let mut out: Vec<Cell> = live.to_vec();
+    let most = live.iter().map(weight).max().unwrap_or(1);
+    for round in 1..most {
+        out.extend(live.iter().filter(|c| weight(c) > round).cloned());
+    }
+    out
+}
+
+/// One ask-or-act pair: the same words said in two worlds of a split, a name that fits several rows in one (the model
+/// asks which) and exactly one row in the other (it acts).
+#[derive(Debug, Clone)]
+struct PairPlan {
+    id: usize,
+    kind: String,
+    name: String,
+    verb: String,
+    ask_world: usize,
+    act_world: usize,
+}
+
+/// The ask-or-act pairs to draw in one split: `want` of them over the split's worlds, each name a pair uses once.
+fn plan_pairs(
+    seed: u64,
+    split: Split,
+    members: &[usize],
+    samplers: &[Sampler<'_>],
+    catalog: &Catalog,
+    want: usize,
+    first_id: usize,
+) -> Vec<PairPlan> {
+    // a very large vault is slow to seed twice and an empty one has no row: pairs live in the ordinary worlds
+    let usable: Vec<usize> = members
+        .iter()
+        .copied()
+        .filter(|w| samplers[*w].world_scale() == 1.0)
+        .collect();
+    let mut shared: Vec<(usize, String, String)> = Vec::new();
+    for w in &usable {
+        for kind in &catalog.kinds {
+            if Sampler::pair_verbs(&kind.name).is_empty() {
+                continue;
+            }
+            for (said, n) in samplers[*w].spoken_names(&kind.name).into_values() {
+                if n >= 2 {
+                    shared.push((*w, kind.name.clone(), said));
+                }
+            }
+        }
+    }
+    let mut rng = Rng::new(seed).fork(&format!("askact:{}", split.name()));
+    for i in (1..shared.len()).rev() {
+        shared.swap(i, rng.below(i + 1));
+    }
+    let mut out: Vec<PairPlan> = Vec::new();
+    let mut used: std::collections::BTreeSet<(String, String)> = std::collections::BTreeSet::new();
+    for (ask_world, kind, name) in shared {
+        if out.len() >= want {
+            break;
+        }
+        if !used.insert((kind.clone(), crate::facts::fold(&name))) {
+            continue;
+        }
+        let mut verbs = Sampler::pair_verbs(&kind);
+        for i in (1..verbs.len()).rev() {
+            verbs.swap(i, rng.below(i + 1));
+        }
+        let start = rng.below(usable.len().max(1));
+        'found: for verb in verbs {
+            for k in 0..usable.len() {
+                let act_world = usable[(start + k) % usable.len()];
+                if act_world == ask_world {
+                    continue;
+                }
+                if samplers[act_world].act_side(&kind, &name, verb).is_some()
+                    && samplers[ask_world].ask_side(&kind, &name, verb).is_some()
+                {
+                    out.push(PairPlan {
+                        id: first_id + out.len(),
+                        kind: kind.clone(),
+                        name: name.clone(),
+                        verb: verb.to_owned(),
+                        ask_world,
+                        act_world,
+                    });
+                    break 'found;
+                }
+            }
+        }
+    }
+    out
+}
 
 /// Extra turns after the first, weighted so that most sessions have two or more turns and a
 /// good share three or more.
@@ -95,6 +208,7 @@ pub fn generate_with(
 ) -> Result<Generated> {
     let grid = Grid::build(catalog);
     let live: Vec<Cell> = grid.live().into_iter().cloned().collect();
+    let order = schedule(&live);
     let specs = plan_sized(config.seed, |split| match split {
         Split::Train => config.counts[0],
         Split::Val => config.counts[1],
@@ -104,6 +218,38 @@ pub fn generate_with(
     for cell in &live {
         out.cells.insert(cell.clone(), CellStat::default());
     }
+    // ask-or-act pairs are planned across the worlds of a split before any is run
+    let pairs: Vec<PairPlan> = {
+        let worlds: Vec<World> = specs.iter().map(|spec| make(*spec)).collect();
+        let facts: Vec<Facts> = worlds.iter().map(|w| Facts::of(w, catalog)).collect();
+        let samplers: Vec<Sampler<'_>> = worlds
+            .iter()
+            .zip(&facts)
+            .map(|(w, f)| Sampler::new(w, f, catalog, &grid))
+            .collect();
+        let mut all: Vec<PairPlan> = Vec::new();
+        for split in Split::ALL {
+            let members: Vec<usize> = (0..specs.len())
+                .filter(|i| specs[*i].split == split)
+                .collect();
+            let want = if config.cell_limit.is_some() {
+                0
+            } else {
+                config.per_world[split_index(split)] * members.len() / PAIR_EVERY
+            };
+            let first = all.len();
+            all.extend(plan_pairs(
+                config.seed,
+                split,
+                &members,
+                &samplers,
+                catalog,
+                want,
+                first,
+            ));
+        }
+        all
+    };
     for (number, spec) in specs.iter().enumerate() {
         let world = make(*spec);
         let dir = scratch.join(world.id());
@@ -118,12 +264,12 @@ pub fn generate_with(
         let root = Rng::new(config.seed).fork(&format!("intents:{}", world.id()));
         let target = config
             .cell_limit
-            .unwrap_or_else(|| config.per_world[split_index(spec.split)].max(live.len()));
+            .unwrap_or_else(|| config.per_world[split_index(spec.split)].max(order.len()));
         let mut kept = 0;
         let mut drawn = 0;
         let offset = number * 31;
         while kept < target && drawn < target * 3 {
-            let cell = &live[(offset + drawn) % live.len()];
+            let cell = &order[(offset + drawn) % order.len()];
             drawn += 1;
             let mut shape = root.fork(&format!("shape:{drawn}"));
             let extra = *shape.weighted(EXTRA_TURNS);
@@ -208,6 +354,40 @@ pub fn generate_with(
                     }
                     break;
                 }
+            }
+        }
+        for pair in pairs
+            .iter()
+            .filter(|p| p.ask_world == number || p.act_world == number)
+        {
+            let asking = pair.ask_world == number;
+            let (turn, side) = if asking {
+                (sampler.ask_side(&pair.kind, &pair.name, &pair.verb), "ask")
+            } else {
+                (sampler.act_side(&pair.kind, &pair.name, &pair.verb), "act")
+            };
+            let Some(turn) = turn else { continue };
+            let scenario = Scenario {
+                id: format!("{}-{side}{:04}", world.id(), pair.id),
+                world: world.id(),
+                span: Span::Single,
+                turns: vec![turn],
+                tags: vec![format!("pair:askact:{}", pair.id), format!("askact:{side}")],
+            };
+            let solved = run.solve(&scenario)?;
+            for (kept_cell, _) in &solved.turns {
+                if let Some(stat) = out.cells.get_mut(kept_cell) {
+                    stat.attempts += 1;
+                    stat.kept += 1;
+                }
+            }
+            if let Some(record) = solved.record.filter(|_| solved.kept == 1) {
+                out.kept.push(Kept {
+                    split: spec.split,
+                    world: world.id(),
+                    record,
+                });
+                kept += 1;
             }
         }
         out.name_fallbacks += sampler.name_fallbacks();

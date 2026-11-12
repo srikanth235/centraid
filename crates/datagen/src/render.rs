@@ -20,7 +20,7 @@
 //!   `<|im_end|>`.
 //! * [`DECISION_WEIGHT`] (a flag) on the deciding tokens inside those: see [`decisions`].
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
@@ -35,6 +35,7 @@ use crate::bpe::Bpe;
 use crate::catalog::Catalog;
 use crate::grid::cell_of;
 use crate::intent::{Intent, Scenario, Span, TurnIntent};
+use crate::labels;
 use crate::plan::WorldRun;
 use crate::trace::{self, RefCall, Setting, show_rows};
 use crate::world::World;
@@ -361,7 +362,7 @@ pub fn weights(
 // ---------------------------------------------------------------------------------------------
 
 /// What a session is, for the mix.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct Features {
     pub id: String,
     pub split: String,
@@ -379,6 +380,23 @@ pub struct Features {
     /// The BLAKE3 of the normalised user texts and the gold, hex.
     pub key: String,
     pub tokens: usize,
+    /// Per turn: how it ends (`done`, `empty`, `ask`, `decline`, `repair`).
+    pub outcomes: Vec<String>,
+    /// Per turn: `read`, `write`, `recall`, or `""` for a decline.
+    pub actions: Vec<String>,
+    /// Per turn: how it points at a row (`name`, `filters`, `pronoun`, `nickname`), or `""`.
+    pub refs: Vec<String>,
+    /// Per turn: it asks for what the vault cannot do.
+    pub impossible: Vec<bool>,
+    /// The kinds any turn touches, sorted.
+    pub kinds: Vec<String>,
+    /// The combinations (`labels::combos`) any turn is an instance of, sorted.
+    pub combos: Vec<String>,
+    /// The combinations of `combos` that are reserved for test; filled by the mix.
+    pub reserved: Vec<String>,
+    /// The style the messages were written in, and the writer's model (tags of the record).
+    pub style: String,
+    pub writer: String,
 }
 
 /// What rendering one session counted.
@@ -680,6 +698,17 @@ fn features_of(
         .take(kept)
         .find_map(|turn| turn.apps.first().cloned())
         .unwrap_or_else(|| "-".to_owned());
+    let kept_turns = || scenario.turns.iter().take(kept);
+    let tag_value = |prefix: &str| {
+        record["tags"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .find_map(|tag| tag.strip_prefix(prefix))
+            .unwrap_or_default()
+            .to_owned()
+    };
     let mut hasher = blake3::Hasher::new();
     for turn in record["turns"].as_array().into_iter().flatten().take(kept) {
         hasher.update(normalise(turn["user"].as_str().unwrap_or_default()).as_bytes());
@@ -711,6 +740,27 @@ fn features_of(
         pair,
         key: hasher.finalize().to_hex().to_string(),
         tokens,
+        outcomes: kept_turns()
+            .map(|t| labels::outcome(t).to_owned())
+            .collect(),
+        actions: kept_turns().map(|t| labels::action(t).to_owned()).collect(),
+        refs: kept_turns()
+            .map(|t| labels::reference(t).to_owned())
+            .collect(),
+        impossible: kept_turns().map(labels::impossible).collect(),
+        kinds: kept_turns()
+            .flat_map(labels::kinds)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect(),
+        combos: kept_turns()
+            .flat_map(labels::combos)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect(),
+        reserved: Vec::new(),
+        style: tag_value("style:"),
+        writer: tag_value("writer:"),
     }
 }
 

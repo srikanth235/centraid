@@ -13,8 +13,50 @@ use crate::settings::Settings;
 use crate::text::{normalize, twin};
 use crate::world::{World, WorldSpec};
 
-/// The base day sessions run on: late September, a Sunday in 2026, moved by up to a month.
+/// The first day of the year sessions run in: a Sunday in late September 2026. A world's "today" is a day of the year
+/// from here (see [`today_of`]).
 const BASE_TODAY: &str = "2026-09-27";
+
+/// Month ends and the year boundary, the days a period reads wrongly if it is wrong at all.
+const SPECIAL_DAYS: [&str; 14] = [
+    "2026-12-31",
+    "2027-01-01",
+    "2026-09-30",
+    "2026-10-31",
+    "2026-11-30",
+    "2027-01-31",
+    "2027-02-28",
+    "2027-03-31",
+    "2027-04-30",
+    "2027-05-31",
+    "2027-06-30",
+    "2027-07-31",
+    "2027-08-31",
+    "2027-01-02",
+];
+
+/// The day world `index` of `split` runs on, spread over a year: every fourth world sits on a month end or the turn of
+/// the year (a different one in each split), the others take a day whose weekday follows the count of ordinary worlds
+/// before it, so seven ordinary worlds meet every weekday, in a week of the year that is spread by a stride.
+pub fn today_of(split: crate::settings::Split, index: usize) -> Date {
+    let base: Date = BASE_TODAY.parse().unwrap_or_default();
+    let shift = match split {
+        crate::settings::Split::Train => 0,
+        crate::settings::Split::Val => 1,
+        crate::settings::Split::Test => 9,
+    };
+    if index % 4 == 3 {
+        return SPECIAL_DAYS[(index / 4 + shift) % SPECIAL_DAYS.len()]
+            .parse()
+            .unwrap_or(base);
+    }
+    let ordinary = index - (index + 1) / 4;
+    // `BASE_TODAY` is a Sunday (6, counting Monday as 0)
+    let weekday = (ordinary + shift) % 7;
+    let week = (ordinary * 9 + shift * 5) % 52;
+    let step = i64::try_from(week * 7 + (weekday + 1) % 7).unwrap_or(0);
+    base.checked_add(step.days()).unwrap_or(base)
+}
 
 struct Ctx {
     rng: Rng,
@@ -22,6 +64,8 @@ struct Ctx {
     profile: Profile,
     today: Date,
     history: i64,
+    /// What an amount of the pools (priced in dollars) comes to in the member's currency: rupees are about eighty to one.
+    fx: f64,
 }
 
 impl Ctx {
@@ -55,7 +99,7 @@ impl Ctx {
 
     /// A count scaled by a profile factor, with jitter.
     fn count(&mut self, low: i64, high: i64, factor: f64) -> usize {
-        let base = self.rng.range(low, high) as f64 * factor;
+        let base = self.rng.range(low, high) as f64 * factor * self.settings.scale.max(1.0);
         (base.round() as usize).max(1)
     }
 
@@ -111,20 +155,14 @@ pub(crate) fn build(spec: WorldSpec, settings: Settings) -> World {
     let root = Rng::new(spec.seed);
     let persona = Persona::draw(spec.split, &mut root.fork("persona"));
     let profile = persona.archetype.profile();
-    let today = BASE_TODAY
-        .parse::<Date>()
-        .ok()
-        .and_then(|day| {
-            day.checked_add(i64::from(root.fork("today").next_u64() as u8 % 30).days())
-                .ok()
-        })
-        .unwrap_or_default();
+    let today = today_of(spec.split, spec.index);
     let mut ctx = Ctx {
         rng: root.fork("sections"),
         settings,
         profile,
         today,
         history: i64::from(settings.history_days),
+        fx: if persona.currency == "INR" { 80.0 } else { 1.0 },
     };
     let epoch = format!("{}T09:00", ctx.ago(ctx.history + 2));
 
@@ -188,6 +226,14 @@ pub(crate) fn build(spec: WorldSpec, settings: Settings) -> World {
         ),
     );
 
+    if settings.is_empty() {
+        // a new member: the same person on the same day, and nothing in the vault
+        for value in doc.values_mut() {
+            if let Value::Array(rows) = value {
+                rows.clear();
+            }
+        }
+    }
     World {
         spec,
         persona,
@@ -228,7 +274,9 @@ fn people(ctx: &mut Ctx, root: &Rng) -> Vec<Value> {
             (f, l)
         } else {
             let mut pair;
+            let mut tries = 0;
             loop {
+                tries += 1;
                 pair = (
                     ctx.rng.pick(pools::FIRST).to_string(),
                     ctx.rng.pick(pools::LAST).to_string(),
@@ -240,7 +288,8 @@ fn people(ctx: &mut Ctx, root: &Rng) -> Vec<Value> {
                         &format!("{} {}", pair.0, pair.1),
                     )
                 });
-                if !firsts_taken && !near {
+                // a very large vault has more people than the pool has first names: after a while a first name repeats
+                if (!firsts_taken && !near) || tries > 400 {
                     break;
                 }
             }
@@ -641,6 +690,8 @@ impl Ledger {
     /// Add a line and return its key.
     fn push(&mut self, ctx: &mut Ctx, month: &str, line: &Line<'_>) -> String {
         let key = format!("x{}", self.rows.len());
+        let amount = (line.amount * ctx.fx).round();
+        let amount = if ctx.fx == 1.0 { line.amount } else { amount };
         let mut name = line.merchant.to_owned();
         if ctx.rng.chance(ctx.settings.near_duplicates * 0.5) {
             name = if let Some((_, spelt)) = self.spellings.iter().find(|(m, _)| m == line.merchant)
@@ -655,16 +706,16 @@ impl Ledger {
         }
         let mut row = json!({
             "key": key, "account": line.account, "date": line.day.to_string(),
-            "amount": (line.amount * 100.0).round() / 100.0, "name": name,
+            "amount": (amount * 100.0).round() / 100.0, "name": name,
             "description": line.description,
         });
         if let Some(category) = line.category.filter(|_| ctx.rng.chance(0.88)) {
             row["category"] = json!(category);
-            if line.amount < 0.0 {
+            if amount < 0.0 {
                 *self
                     .spent
                     .entry((month.to_owned(), category.to_owned()))
-                    .or_default() -= line.amount;
+                    .or_default() -= amount;
             }
         }
         // a removed transaction cannot be part of a transfer, and transfers carry no category
