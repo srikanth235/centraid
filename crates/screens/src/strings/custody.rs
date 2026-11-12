@@ -16,7 +16,7 @@ catalog! {
     plain count_too_many = ("Your recovery key is 24 words. There are more than 24 here.", "Your recovery key is 24 words. There are more than 24 here.");
     plain different_words = ("This phone already has a different recovery key, and its vaults use that one.", "This phone already has a different recovery key, and its vaults use that one.");
     plain done = ("Done", "Done");
-    plain endpoint_label = ("Paste the pairing code your backup device prints with “centraid-gateway pair”.", "Paste the pairing code your backup device prints with “centraid-gateway pair”.");
+    plain endpoint_label = ("Paste the pairing code your backup device shows.", "Paste the pairing code your backup device shows.");
     plain failed_title = ("Your vault was not made", "Your vault was not made");
     plain keep_failed = ("Couldn't keep your recovery key on this phone. Try again.", "Couldn't keep your recovery key on this phone. Try again.");
     plain made_body = ("{name} is on this phone, and your recovery key brings it back.", "{name} is on this phone, and your recovery key brings it back.");

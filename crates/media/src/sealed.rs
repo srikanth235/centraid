@@ -1,7 +1,7 @@
 //! `centraid-sealed/2` — the one format every object a gateway stores wears
 //! ([#1080](https://github.com/srikanth235/centraid/issues/1080)).
 //!
-//! A file — a 4 MiB range of the vault, a snapshot manifest, an original, a
+//! A file — a 64 KiB range of the vault, a snapshot manifest, an original, a
 //! thumbnail — is identified by `h`, the BLAKE3 of its whole plaintext, and is
 //! uploaded as **parts** of at most 64 MiB of plaintext each. Part `i` is
 //! stored under `name(h, i)`, a keyed hash only the vault's key reaches, so the

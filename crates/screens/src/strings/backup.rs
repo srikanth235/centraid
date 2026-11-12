@@ -58,7 +58,7 @@ catalog! {
     plain backup_travel_heading = ("What travels when", "What travels when");
     plain backup_forget = ("Forget", "Forget");
     plain backup_forget_failed = ("Couldn't forget {name}. Try again.", "Couldn't forget {name}. Try again.");
-    plain backup_forgotten_not_revoked = ("Forgot {name}, but it wasn't told. Run “centraid-gateway pairings revoke” there.", "Forgot {name}, but it wasn't told. Run “centraid-gateway pairings revoke” there.");
+    plain backup_forgotten_not_revoked = ("Forgot {name}, but couldn't tell it. It may still accept this phone until you remove this phone on {name}.", "Forgot {name}, but couldn't tell it. It may still accept this phone until you remove this phone on {name}.");
     plain backup_forgotten_revoked = ("Forgot {name}. It now refuses this phone.", "Forgot {name}. It now refuses this phone.");
     plain backup_include_videos = ("Include videos", "Include videos");
     plain backup_key_heading = ("Recovery key", "Recovery key");

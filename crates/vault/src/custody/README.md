@@ -6,7 +6,7 @@ One encryption layer lives in this directory: Locker's secret values, sealed und
 | --- | --- | --- | --- | --- |
 | The Locker key `K` | `locker_key` | `lk1:base64(nonce ‖ ct ‖ tag)` | `<rowId>‖<keyId>` | one row, under the vault's key generation |
 
-AES-256-GCM with a **fresh random 96-bit nonce per value**. The deterministic nonces in this codebase belong to the byte plane and the backup plane (`crates/media`, `crates/vault/src/backup`) and are documented there; the distinction is load-bearing, because a derived nonce over a partial address is a nonce reuse. The backup plane's keys and AADs are its own and are not a cell format: collapsing a cell format into one "encrypt a string" helper shared with them is how a ciphertext becomes movable between rows.
+AES-256-GCM with a **fresh random 96-bit nonce per value**. No nonce in this codebase is derived or counted. The backup plane (`crates/media/src/sealed.rs`, `crates/vault/src/backup`) seals each part with XChaCha20-Poly1305 under a key derived from a fresh random salt, and gives every chunk a fresh random 24-byte nonce; it is documented there, and its keys and AADs are its own. They are not a cell format: collapsing a cell format into one "encrypt a string" helper shared with them is how a ciphertext becomes movable between rows.
 
 **No key material lives in this crate.** Every seal and unseal takes its key by value, so there is no ambient key for a read path to reach for.
 

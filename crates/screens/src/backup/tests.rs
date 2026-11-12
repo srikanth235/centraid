@@ -1322,7 +1322,7 @@ fn forgetting_asks_nothing_reaches_only_a_gateway_the_screen_draws_and_says_whet
             &[("name", "Your backup device")]
         )
     );
-    assert!(words::backup_forgotten_not_revoked(EN).contains("centraid-gateway pairings revoke"));
+    assert!(!words::backup_forgotten_not_revoked(EN).contains("centraid-gateway"));
 
     let mut page = Page::open(both());
     page.say(forget("gw-1"));
