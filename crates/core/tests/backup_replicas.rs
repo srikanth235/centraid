@@ -327,3 +327,7 @@ fn the_oldest_waiting_item_is_reported() {
     drain(&phone, at_home());
     assert_eq!(status(&phone).oldest_waiting_ms, None);
 }
+
+fn pair_id_of(status: &wire::BackupStatusResponse) -> String {
+    status.destinations[0].gateway_id.clone()
+}

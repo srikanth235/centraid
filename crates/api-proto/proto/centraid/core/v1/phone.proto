@@ -486,10 +486,14 @@ message BackupStatusResponse {
   // told it): how many originals, and their bytes. Not in `total_bytes`.
   uint64 left_out_items = 15;
   uint64 left_out_bytes = 16;
-  // HOW OLD THE BACKLOG IS: when the oldest item still waiting entered the vault (ms since the
-  // epoch, this phone's clock; the row's creation time, which is when it began to need a
-  // backup). Videos left out are not waiting. Absent: nothing waits, or no waiting item says
-  // when it was made. The screen subtracts it from now to warn on an old backlog.
+  // HOW OLD THE BACKLOG IS: when the oldest item still waiting began to wait (ms since the
+  // epoch, this phone's clock). Waiting means some paired gateway has not confirmed it; videos
+  // left out are not waiting. It is the time the item's row was WRITTEN INTO THE VAULT on this
+  // phone (the entity's `created_at`, or a derivative's), never a photograph's capture time or a
+  // followed store's date. And it is CLAMPED to no earlier than when the earliest paired
+  // gateway was paired: a wait cannot start before there was a gateway to wait for, so a
+  // member who pairs today with a year of data is not told items waited a year. Absent: nothing
+  // waits, or no waiting item says when it was written. The screen subtracts it from now.
   optional int64 oldest_waiting_ms = 17;
 }
 

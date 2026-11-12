@@ -755,6 +755,9 @@ pub(crate) fn standing(
         .map_err(plane_error)?
         .is_some_and(|text| text == "1");
     let mut replicas: Vec<Replica> = Vec::new();
+    // A WAIT CANNOT BEGIN BEFORE THERE WAS A GATEWAY TO WAIT FOR: the earliest pairing among the
+    // gateways this phone feeds is the floor of the oldest waiting item.
+    let mut earliest_pairing: Option<i64> = None;
     for destination in ledger.destinations().map_err(plane_error)? {
         if ledger
             .moved(&destination.gateway_id)
@@ -763,6 +766,8 @@ pub(crate) fn standing(
         {
             continue;
         }
+        let paired = i64::try_from(destination.paired_at_ms).unwrap_or(0);
+        earliest_pairing = Some(earliest_pairing.map_or(paired, |old| old.min(paired)));
         replicas.push(Replica {
             confirmed: ledger
                 .confirmed_names(&destination.gateway_id)
@@ -851,6 +856,9 @@ pub(crate) fn standing(
         };
         *out.waiting.entry(reason as i32).or_default() += 1;
     }
+    out.oldest_waiting_ms = out
+        .oldest_waiting_ms
+        .map(|made| made.max(earliest_pairing.unwrap_or(0)));
     out.replicas = replicas
         .into_iter()
         .map(|replica| (replica.id, (replica.behind_files, replica.behind_bytes)))
