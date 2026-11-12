@@ -6,7 +6,7 @@
     "bytes": 563036064,
     "tools_mode": "s2",
     "tools_hash": "ba356be186a4c12956bee31f4d0f6ea8c41c4e7a09f216fc19118f756500f729",
-    "prompt_hash": "5d6e87eba02fd6cdfaeddb86c101ee7ef0a0d73de9d07f86c28cfd45dfa2a807",
+    "prompt_hash": "01a3470c43892cb6cdd073f3c0ea1bc45c39df4f514f148cfba37d870b09d94a",
     "special_tokens": [
       "</think>",
       "</tool_call>",
@@ -35,6 +35,7 @@
       "<|vision_pad|>",
       "<|vision_start|>"
     ],
+    "special_tokens_source": "declared",
     "score": null
   },
   "previous": null

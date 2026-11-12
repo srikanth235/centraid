@@ -73,3 +73,15 @@ fn the_escape_breaks_every_special_token_of_every_pinned_model() {
         }
     }
 }
+
+#[test]
+fn a_release_ships_no_declared_token_list() {
+    if std::env::var("CENTRAID_RELEASE_RECORD").as_deref() != Ok("1") {
+        return;
+    }
+    let record = record::record();
+    assert_eq!(
+        record.current.special_tokens_source, "file",
+        "the shipping model's special tokens were declared, not read from its file: run `cargo xtask model-pin`"
+    );
+}

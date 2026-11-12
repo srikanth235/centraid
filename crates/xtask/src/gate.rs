@@ -881,11 +881,19 @@ fn run_prompt_injection(ctx: &Ctx) -> Result<Outcome> {
 }
 
 fn run_model_record(ctx: &Ctx) -> Result<Outcome> {
-    process(
+    // the release profile ships what it checks: a record whose special-token list was only
+    // declared (not read from the file) cannot ship (#1188 C2)
+    let release = if ctx.profile == crate::Profile::Release {
+        "1"
+    } else {
+        "0"
+    };
+    process_with_env(
         ctx,
         "model-record",
         "cargo",
         &["test", "-p", "centraid-assist", "--test", "model_record"],
+        &[("CENTRAID_RELEASE_RECORD", release)],
     )
 }
 

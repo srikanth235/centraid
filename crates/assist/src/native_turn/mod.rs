@@ -342,6 +342,7 @@ impl<'a> NativePlane<'a> {
             if cancel.is_cancelled() {
                 return Err(Refusal::Cancelled);
             }
+            let model_wrote = lookup.len() == 0;
             let sent = if let Some(call) = lookup.next() {
                 call
             } else {
@@ -375,11 +376,18 @@ impl<'a> NativePlane<'a> {
                 }
                 first_call(&written.text).to_owned()
             };
-            let call = parse_call(&sent).ok();
+            // the model may echo a name it read escaped: the call that runs, is shown on the card and
+            // is written carries the member's own words; the log keeps what the model said
+            let run = if model_wrote {
+                crate::escape::unescape(&sent)
+            } else {
+                sent.clone()
+            };
+            let call = parse_call(&run).ok();
             if let Some((app, tool)) = call.as_ref().and_then(|call| activity_of(chat, call)) {
                 sink(Event::Activity { app, tool });
             }
-            let reply = chat.session.call_text(&sent);
+            let reply = chat.session.call_text(&run);
             chat.log.assistant(&sent);
             chat.log.tool(
                 usize_of(&reply["obs"]),

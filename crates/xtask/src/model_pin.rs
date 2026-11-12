@@ -47,6 +47,7 @@ pub fn run(root: &Path, pin: &Pin<'_>) -> Result<()> {
         "tools_hash": mode["tools_hash"],
         "prompt_hash": mode["prompt_hash"],
         "special_tokens": gguf_specials(pin.file)?,
+        "special_tokens_source": "file",
         "score": pin.score,
     });
     let path = root.join(RECORD);

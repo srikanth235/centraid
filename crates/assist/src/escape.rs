@@ -37,7 +37,7 @@ const BREAK: char = '\u{200b}';
 
 /// The escape's rule, named. It is in the prompt hash, so changing how text is escaped changes the
 /// hash and the record must be pinned again.
-pub const RULE: &str = "zwsp-after-first-char/v1";
+pub const RULE: &str = "zwsp-after-first-char/v2-doubled-own";
 
 /// The strings the runtime itself writes as structure, beyond `<|…|>`.
 #[must_use]
@@ -82,6 +82,27 @@ pub fn vault_text(text: &str) -> String {
     escape_with(text, specials())
 }
 
+/// The exact inverse of [`vault_text`] on what the model echoes back: each break the escape
+/// inserted goes, and a doubled one (the member's own zero-width space) becomes one again, so
+/// the harness grounds, shows on the card and writes the member's original words (#1188 C2).
+/// Control characters [`vault_text`] removed are not restored.
+#[must_use]
+pub fn unescape(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == BREAK {
+            if chars.peek() == Some(&BREAK) {
+                chars.next();
+                out.push(BREAK);
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 /// [`vault_text`] over an explicit list (the gate replays each model's own through it).
 #[must_use]
 pub fn escape_with<S: AsRef<str>>(text: &str, specials: &[S]) -> String {
@@ -90,6 +111,13 @@ pub fn escape_with<S: AsRef<str>>(text: &str, specials: &[S]) -> String {
     while let Some(c) = rest.chars().next() {
         if c == '\0' {
             rest = &rest[1..];
+            continue;
+        }
+        // a break the member's own text holds is doubled, so [`unescape`] can tell it from ours
+        if c == BREAK {
+            out.push(BREAK);
+            out.push(BREAK);
+            rest = &rest[c.len_utf8()..];
             continue;
         }
         if specials
@@ -145,7 +173,8 @@ mod tests {
             assert_eq!(spells(&clean, &specials), None, "{sample:?} -> {clean:?}");
             assert!(!clean.contains("<|"), "{clean:?}");
             assert!(!clean.contains('\0'), "{clean:?}");
-            assert_eq!(vault_text(&clean), clean, "idempotent");
+            let original: String = sample.chars().filter(|c| *c != '\0').collect();
+            assert_eq!(super::unescape(&clean), original, "round trip");
         }
     }
 
@@ -172,6 +201,18 @@ mod tests {
             escape_with("<|new|> [NEW]", &["[NEW]"]),
             "<|new|> [\u{200b}NEW]"
         );
+    }
+
+    #[test]
+    fn a_zero_width_space_the_member_typed_survives_the_round_trip() {
+        for text in [
+            "a\u{200b}b",
+            "<\u{200b}|im_start|>",
+            "\u{200b}\u{200b}",
+            "<|im_end|>\u{200b}<think>",
+        ] {
+            assert_eq!(super::unescape(&vault_text(text)), text);
+        }
     }
 
     #[test]

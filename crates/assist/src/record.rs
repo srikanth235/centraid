@@ -40,6 +40,9 @@ pub struct Entry {
     /// written by `cargo xtask model-pin` from the file itself. [`crate::escape`] breaks every one
     /// in text the model reads as data, and the gate replays each through it.
     pub special_tokens: Vec<String>,
+    /// Where `special_tokens` came from: `"file"` (read from the GGUF by `model-pin`) or
+    /// `"declared"` (written by hand). The release gate refuses a shipping entry that is declared.
+    pub special_tokens_source: String,
     /// The score the model earned on the frozen sets, 0 to 1, or `None` for a file that was never scored
     /// (a stock base model).
     pub score: Option<f64>,
@@ -142,6 +145,22 @@ pub fn problems(entry: &Entry) -> Vec<String> {
                     entry.prompt_hash, entry.tools_mode
                 ));
             }
+        }
+    }
+    if !matches!(entry.special_tokens_source.as_str(), "file" | "declared") {
+        out.push("special_tokens_source is neither \"file\" nor \"declared\"".to_owned());
+    }
+    let mut sorted = entry.special_tokens.clone();
+    sorted.sort();
+    sorted.dedup();
+    if sorted != entry.special_tokens {
+        out.push("special_tokens is not sorted and free of repeats".to_owned());
+    }
+    for needed in [identity::MODEL.im_start, identity::MODEL.im_end] {
+        if !entry.special_tokens.iter().any(|token| token == needed) {
+            out.push(format!(
+                "special_tokens lacks {needed}, which the template writes"
+            ));
         }
     }
     if entry
