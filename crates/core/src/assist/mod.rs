@@ -699,9 +699,16 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
 
     let mut session = locked(&slot.session);
     let text = if asked.regenerate {
-        session
+        let earlier = session
             .prepare_regenerate()
-            .ok_or_else(|| invalid("there is no earlier question to ask again"))?
+            .ok_or_else(|| invalid("there is no earlier question to ask again"))?;
+        // EDIT: a regenerate that carries words asks them in place of the question it replaces,
+        // and the answer and the turn the core saved for it go the same way as a retry's.
+        if asked.text.trim().is_empty() {
+            earlier
+        } else {
+            asked.text.clone()
+        }
     } else {
         asked.text.clone()
     };

@@ -122,6 +122,17 @@ message ChatState {
   // One sentence over the Chats list when the last rename or delete was not saved; empty
   // otherwise. The list shows the vault as it is (#1188 C11).
   string threads_error = 60;
+  // EDIT THE LAST QUESTION. `edit_label` is the key under the last member message
+  // (`ChatMessage.can_edit`). While `editing`, the composer holds that question and a banner says
+  // what sending does; the shell fills the composer with `edit_text` whenever `edit_token`
+  // changes (on starting, and on cancelling, when it is empty).
+  string edit_label = 61;
+  bool editing = 62;
+  string edit_text = 63;
+  uint64 edit_token = 64;
+  string editing_title = 65;
+  string editing_body = 66;
+  string cancel_edit_label = 67;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;
@@ -196,6 +207,8 @@ message ChatMessage {
   string note = 9;
   // The write this answer proposes, drawn as a confirm card under the line.
   ChatPending pending = 10;
+  // Edit is offered on this message: the last one the member wrote, once its answer is over.
+  bool can_edit = 11;
 
   enum Role {
     ROLE_UNSPECIFIED = 0;
@@ -307,6 +320,9 @@ message ChatEvent {
     DocumentsClosed documents_closed = 27;
     // The Undo of one write an applied card made (`index` into `ChatPending.undo`).
     PendingUndone pending_undone = 28;
+    // Edit on the last member message; Cancel on the banner over the composer.
+    EditStarted edit_started = 29;
+    EditCancelled edit_cancelled = 30;
   }
   reserved 12;
 
@@ -332,6 +348,10 @@ message ChatEvent {
   }
 
   message Stopped {}
+
+  message EditStarted {}
+
+  message EditCancelled {}
 
   message Regenerated {}
 

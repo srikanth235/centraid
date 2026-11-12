@@ -123,7 +123,7 @@ impl Chat {
     /// (a camera-roll image kept only as a thumbnail, a photo since deleted) would be dropped from
     /// the answer without a word. So the question can be asked again only when everything it
     /// carried still can.
-    fn retry_loses_an_attachment(&self) -> bool {
+    pub(super) fn retry_loses_an_attachment(&self) -> bool {
         self.messages
             .iter()
             .rev()
@@ -198,9 +198,15 @@ impl Chat {
             },
             scope_app: self.scope.clone(),
             messages: if ready {
+                let editable = self.editable().filter(|_| !self.editing);
                 self.messages
                     .iter()
-                    .map(|message| self.message(message, locale))
+                    .enumerate()
+                    .map(|(at, message)| {
+                        let mut drawn = self.message(message, locale);
+                        drawn.can_edit = editable == Some(at);
+                        drawn
+                    })
                     .collect()
             } else {
                 Vec::new()
@@ -232,6 +238,21 @@ impl Chat {
             new_chat_label: words::new_chat(locale),
             retry_label: words::retry(locale),
             copy_label: words::copy(locale),
+            edit_label: words::edit(locale),
+            editing: ready && self.editing,
+            edit_text: if ready && self.editing {
+                self.messages
+                    .iter()
+                    .rfind(|message| message.user)
+                    .map(|message| message.text.clone())
+                    .unwrap_or_default()
+            } else {
+                String::new()
+            },
+            edit_token: self.edit_token,
+            editing_title: words::editing_title(locale),
+            editing_body: words::editing_body(locale),
+            cancel_edit_label: words::cancel_edit(locale),
             can_retry: ready
                 && !self.running
                 && self.asked.is_some()
@@ -386,6 +407,7 @@ impl Chat {
                 String::new()
             },
             pending: message.proposal.as_ref().map(|held| proposal(held, locale)),
+            can_edit: false,
         }
     }
 }

@@ -28,6 +28,7 @@ catalog! {
     plain copied = ("Copied", "Copied");
     plain copy = ("Copy", "Copy");
     plain current_chat = ("Open chat", "Open chat");
+    plain cancel_edit = ("Cancel editing", "Cancel editing");
     plain delete = ("Delete", "Delete");
     plain delete_all = ("Delete all chats", "Delete all chats");
     plain delete_all_body = (
@@ -87,6 +88,12 @@ catalog! {
     plain made_by_chat = ("Made by Chat", "Made by Chat");
     plain reading_document = ("Reading the document", "Reading the document");
     plain reading_photo = ("Reading the photo", "Reading the photo");
+    plain edit = ("Edit", "Edit");
+    plain editing_body = (
+        "Chat’s answer to it is replaced when you send.",
+        "Chat’s answer to it is replaced when you send."
+    );
+    plain editing_title = ("Editing your question", "Editing your question");
     plain proposal_title = ("Proposed change", "Proposed change");
     plain remove_attachment = ("Remove", "Remove");
     plain rename = ("Rename", "Rename");

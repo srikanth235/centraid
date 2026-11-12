@@ -126,6 +126,9 @@ final class ChatModel: ObservableObject {
     }
     func stop() { send(.stopped(.init())) }
     func regenerate() { send(.regenerated(.init())) }
+    /// Edit on the last member message, and the banner's cancel: Rust holds the editing state.
+    func edit() { send(.editStarted(.init())) }
+    func cancelEdit() { send(.editCancelled(.init())) }
 
     func newChat() {
         send(.newChat(.init()))

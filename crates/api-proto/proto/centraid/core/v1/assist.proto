@@ -234,8 +234,9 @@ message AssistStarted {
   string scope_app = 3;
 }
 
-// Ask. `regenerate` drops the last turn and asks its question again, and
-// `text` is then ignored; with no earlier question it is
+// Ask. `regenerate` drops the last turn and asks its question again; `text` then
+// replaces that question when it carries words (an Edit of the last message, the
+// answer to it replaced), and is ignored when empty; with no earlier question it is
 // `ERROR_CODE_INVALID_REQUEST`. One turn runs at a time per session: a second
 // send is answered `ASSIST_REFUSAL_REASON_BUSY` rather than queued.
 //

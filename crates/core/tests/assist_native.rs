@@ -1984,3 +1984,42 @@ fn a_chain_whose_second_call_echoes_an_escaped_name_stores_both_without_the_brea
     assert!(titles.iter().any(|t| t == SECOND_NEW), "{titles:?}");
     assert!(titles.iter().all(|t| !t.contains('\u{200b}')), "{titles:?}");
 }
+
+/// EDIT THE LAST QUESTION: a regenerate that carries words asks them in place of the question it
+/// replaces. The earlier question and its answer are neither in what the model reads nor in the
+/// saved thread, which holds the edited question and the new answer.
+#[test]
+fn an_edit_asks_the_new_words_in_place_of_the_last_question_and_its_answer() {
+    let model = script(&[
+        read_tasks()[0].clone(),
+        read_tasks()[1].clone(),
+        read_tasks()[0].clone(),
+        read_tasks()[1].clone(),
+    ]);
+    let sample = native_sample(model.clone());
+    let session = sample.start("");
+    let first = sample.send(session, 1, "what tasks do I have?");
+    let edited = match sample
+        .assist(Ask::Send(wire::AssistSendRequest {
+            session_id: session,
+            text: "which tasks are open?".to_owned(),
+            tz: common::chat::TZ.to_owned(),
+            regenerate: true,
+            turn_id: 2,
+            ..wire::AssistSendRequest::default()
+        }))
+        .expect("an edit answers")
+        .kind
+    {
+        Some(wire::assist_response::Kind::Sent(sent)) => sent,
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(answered(&edited).text, FOUND_TASKS);
+    let prompt = &model.prompts()[4];
+    assert!(prompt.contains("which tasks are open?"), "{prompt}");
+    assert!(!prompt.contains("what tasks do I have?"), "{prompt}");
+    assert_eq!(edited.thread_id, first.thread_id);
+    let saved = thread(&sample, &edited.thread_id);
+    assert_eq!(saved.messages.len(), 2, "the turn was replaced, not added");
+    assert_eq!(saved.messages[0].text, "which tasks are open?");
+}

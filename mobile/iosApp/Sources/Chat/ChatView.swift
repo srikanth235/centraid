@@ -143,6 +143,12 @@ struct ChatView: View {
             sendingToken = 0
             sendingText = ""
         }
+        // EDIT FILLS THE COMPOSER: whenever Rust moves the token, the field holds what it says (the
+        // last question on starting, nothing on cancelling).
+        .onChange(of: state.editToken) { _, _ in
+            draft = state.editText
+            if state.editing { focused = true }
+        }
         .onChange(of: keyboardUp) { _, up in typing = (up && focused) || state.drawerOpen }
         .onChange(of: focused) { _, now in typing = (now && keyboardUp) || state.drawerOpen }
         .onChange(of: state.drawerOpen) { _, open in typing = (focused && keyboardUp) || open }
@@ -223,6 +229,7 @@ struct ChatView: View {
                             goneCard: state.cardGoneLine.isEmpty ? nil : tappedCard,
                             onCopy: { copy(message.id) },
                             onRetry: { chat.regenerate() },
+                            onEdit: { chat.edit() },
                             onOpenCard: { _, index in open(at: index, of: message) },
                             onConfirmPending: { chat.confirmPending($0) },
                             onCancelPending: { chat.cancelPending($0) },
@@ -305,6 +312,34 @@ struct ChatView: View {
                     .padding(.horizontal, 4)
                     .transition(.opacity)
                     .accessibilityIdentifier("chat-activity")
+            }
+            // THE EDIT BANNER, over the composer: what is being edited and what sending does, with a
+            // cancel (ChatEditResend.dc.html).
+            if state.editing {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(verbatim: state.editingTitle)
+                            .kitScaledFont(CentraidScale.metaSize, weight: .semibold)
+                            .foregroundStyle(Theme.color("text", scheme))
+                        Text(verbatim: state.editingBody)
+                            .kitScaledFont(CentraidScale.metaSize)
+                            .foregroundStyle(Color(CentraidAsset.textMeta))
+                    }
+                    Spacer(minLength: 0)
+                    KitIconKey(
+                        iconKey: "Close",
+                        label: state.cancelEditLabel,
+                        identifier: "chat-edit-cancel",
+                        action: { chat.cancelEdit() }
+                    )
+                }
+                .padding(.leading, 14)
+                .background(
+                    RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous)
+                        .fill(Theme.color("bgElev", scheme))
+                )
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("chat-edit-banner")
             }
             // THE NEXT QUESTIONS, as chips above the composer in a live thread (#1173): the
             // empty thread lists them in the page itself. A tap asks, like any sent line.
@@ -703,6 +738,7 @@ private struct ChatMessageRow: View {
     let goneCard: String?
     let onCopy: () -> Void
     let onRetry: () -> Void
+    let onEdit: () -> Void
     let onOpenCard: (Centraid_Core_V1_ChatCard, Int) -> Void
     /// Confirm and Cancel on the proposed write's card, by its id.
     let onConfirmPending: (String) -> Void
@@ -716,28 +752,33 @@ private struct ChatMessageRow: View {
         if message.role == .user {
             HStack(spacing: 0) {
                 Spacer(minLength: 56)
-                VStack(alignment: .trailing, spacing: 8) {
-                    // WHAT THE MEMBER ATTACHED: a marker and a thumbnail, never
-                    // the photograph again.
-                    ForEach(message.attachments, id: \.id) { attachment in
-                        ChatAttachmentChip(attachment: attachment)
+                VStack(alignment: .trailing, spacing: 0) {
+                    VStack(alignment: .trailing, spacing: 8) {
+                        // WHAT THE MEMBER ATTACHED: a marker and a thumbnail, never
+                        // the photograph again.
+                        ForEach(message.attachments, id: \.id) { attachment in
+                            ChatAttachmentChip(attachment: attachment)
+                        }
+                        Text(verbatim: message.text)
+                            .chatType("body")
+                            // THE MEMBER'S WORDS ARE AN INK PILL (#1173): ink fill, the page's colour as text.
+                            // In the dark it is the raised grey of the border role with white text, not the
+                            // light ink inverted (ChatDark.dc.html).
+                            .foregroundStyle(scheme == .dark ? Color.white : Color(CentraidAsset.surfacePage))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(
+                                RoundedRectangle(cornerRadius: CentraidScale.cardRadius * 1.25, style: .continuous)
+                                    .fill(Color(scheme == .dark ? CentraidAsset.surfaceBorder : CentraidAsset.textInk))
+                            )
                     }
-                    Text(verbatim: message.text)
-                        .chatType("body")
-                        // THE MEMBER'S WORDS ARE AN INK PILL (#1173): ink fill, the page's colour as text.
-                        // In the dark it is the raised grey of the border role with white text, not the
-                        // light ink inverted (ChatDark.dc.html).
-                        .foregroundStyle(scheme == .dark ? Color.white : Color(CentraidAsset.surfacePage))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(
-                            RoundedRectangle(cornerRadius: CentraidScale.cardRadius * 1.25, style: .continuous)
-                                .fill(Color(scheme == .dark ? CentraidAsset.surfaceBorder : CentraidAsset.textInk))
-                        )
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(message.accessibilityLabel)
+                    .accessibilityIdentifier("chat-message-user")
+                    // COPY, AND EDIT ON THE LAST ONE: quiet keys under the pill.
+                    actions
+                        .padding(.trailing, -12)
                 }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(message.accessibilityLabel)
-                .accessibilityIdentifier("chat-message-user")
             }
         } else {
             VStack(alignment: .leading, spacing: 8) {
@@ -787,8 +828,9 @@ private struct ChatMessageRow: View {
         }
     }
 
-    /// COPY AND TRY AGAIN, QUIET: the board's thread draws no buttons under an answer, so these are
-    /// two small icon keys in the faint ink (the words are their spoken labels), 44 to press.
+    /// COPY, EDIT AND TRY AGAIN, QUIET: the board's thread draws no buttons under a message, so
+    /// these are small icon keys in the faint ink (the words are their spoken labels), 44 to press.
+    /// Copy is on every message, Edit on the last one the member wrote, Try again on the last answer.
     private var actions: some View {
         HStack(spacing: 0) {
             if !message.text.isEmpty {
@@ -800,7 +842,17 @@ private struct ChatMessageRow: View {
                     action: onCopy
                 )
             }
-            if isLast, state.canRetry {
+            // EDIT, on the last member message only (Rust says which: `canEdit`).
+            if message.canEdit {
+                KitIconKey(
+                    iconKey: "Pencil",
+                    label: state.editLabel,
+                    tint: "textFaint",
+                    identifier: "chat-edit",
+                    action: onEdit
+                )
+            }
+            if isLast, state.canRetry, message.role != .user {
                 KitIconKey(
                     iconKey: "Refresh",
                     label: state.retryLabel,

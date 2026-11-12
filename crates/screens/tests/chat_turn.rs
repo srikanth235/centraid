@@ -593,3 +593,79 @@ fn a_message_too_long_to_read_is_said_at_once_and_the_draft_stays() {
     assert!(state.messages.is_empty(), "nothing was sent");
     assert_eq!(state.accepted_send, 0, "so the shell keeps the draft");
 }
+
+fn edit_started(chat: &mut Chat) {
+    chat.event(C::EditStarted(wire::chat_event::EditStarted {}));
+}
+
+#[test]
+fn edit_is_offered_on_the_last_member_message_only_and_the_composer_takes_its_words() {
+    let mut chat = proposing();
+    let state = chat.state();
+    let offered: Vec<(bool, i32)> = state
+        .messages
+        .iter()
+        .map(|message| (message.can_edit, message.role))
+        .collect();
+    assert_eq!(
+        offered.iter().filter(|(offer, _)| *offer).count(),
+        1,
+        "one message offers Edit: {offered:?}"
+    );
+    let at = state.messages.iter().position(|m| m.can_edit).unwrap();
+    assert_eq!(state.messages[at].role, wire::chat_message::Role::User as i32);
+    assert_eq!(state.edit_label, "Edit");
+    assert!(!state.editing);
+
+    let before = state.edit_token;
+    edit_started(&mut chat);
+    let state = chat.state();
+    assert!(state.editing);
+    assert_eq!(state.edit_text, state.messages[at].text);
+    assert_ne!(state.edit_token, before, "the shell fills the composer on a new token");
+    assert_eq!(
+        (state.editing_title.as_str(), state.editing_body.as_str()),
+        ("Editing your question", "Chat’s answer to it is replaced when you send.")
+    );
+    assert!(
+        state.messages.iter().all(|message| !message.can_edit),
+        "no second Edit while one is open"
+    );
+
+    // the banner's cancel: the question is a message again and the composer is told to empty
+    let opened = state.edit_token;
+    chat.event(C::EditCancelled(wire::chat_event::EditCancelled {}));
+    let state = chat.state();
+    assert!(!state.editing && state.edit_text.is_empty());
+    assert_ne!(state.edit_token, opened);
+    assert_eq!(state.messages.len(), 2, "nothing was replaced");
+}
+
+#[test]
+fn sending_an_edit_replaces_the_question_and_its_answer_and_leaves_an_applied_write_applied() {
+    let mut chat = proposing();
+    let id = card(&chat).pending_id;
+    chat.event(C::PendingConfirmed(wire::chat_event::PendingConfirmed {
+        pending_id: id,
+    }));
+    assert_eq!(task_status(&chat, DRY_CLEANING), "done");
+    edit_started(&mut chat);
+    chat.event(C::Sent(wire::chat_event::Sent {
+        text: "what is due this week?".to_owned(),
+        token: 9,
+    }));
+    let state = chat.state();
+    // the question and its answer were replaced, not added to
+    let users: Vec<&str> = state
+        .messages
+        .iter()
+        .filter(|message| message.role == wire::chat_message::Role::User as i32)
+        .map(|message| message.text.as_str())
+        .collect();
+    assert_eq!(users, ["what is due this week?"]);
+    assert_eq!(state.messages.len(), 2);
+    assert!(!state.editing);
+    assert_eq!(state.accepted_send, 9);
+    // THE EARLIER ANSWER'S WRITE IS NOT UNDONE BY BEING REPLACED
+    assert_eq!(task_status(&chat, DRY_CLEANING), "done");
+}

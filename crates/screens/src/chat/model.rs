@@ -231,6 +231,11 @@ pub(super) struct Chat {
     pub next_id: u64,
     /// The `Sent.token` of the last question taken: the shell clears its draft when it sees it.
     pub accepted_send: u64,
+    /// The last member message is being edited: the composer holds it, and sending replaces it
+    /// and the answer to it.
+    pub editing: bool,
+    /// Moves whenever the words the composer should hold change by an edit starting or ending.
+    pub edit_token: u64,
     /// The last rename or delete of a chat was refused: the Chats list says so (#1188 C11).
     pub threads_error: bool,
     pub messages: Vec<Msg>,
@@ -280,6 +285,8 @@ impl Default for Chat {
             turn: 0,
             next_id: 1,
             accepted_send: 0,
+            editing: false,
+            edit_token: 0,
             threads_error: false,
             messages: Vec::new(),
             suggestions: Vec::new(),
@@ -391,6 +398,8 @@ impl Chat {
             E::Sent(sent) => self.asked_by_member(&sent.text, sent.token, ctx),
             E::Stopped(_) => self.stopped(ctx),
             E::Regenerated(_) => self.regenerated(ctx),
+            E::EditStarted(_) => self.edit_started(),
+            E::EditCancelled(_) => self.edit_cancelled(),
             E::NewChat(_) => self.new_chat(ctx),
             E::Copied(copied) => self.copied(copied.message_id),
             E::Download(download) => self.download_tapped(download.vision),
