@@ -283,10 +283,10 @@ fn same_moment(ours: Option<&str>, stated: Option<&str>) -> bool {
         if value.len() == 10 {
             return value.to_owned();
         }
-        if has_zone_designator(value) {
-            if let Some(ms) = crate::time::recurrence::parse_instant_ms(value) {
-                return format!("@{ms}");
-            }
+        if has_zone_designator(value)
+            && let Some(ms) = crate::time::recurrence::parse_instant_ms(value)
+        {
+            return format!("@{ms}");
         }
         value.chars().take(16).collect()
     }
