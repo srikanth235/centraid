@@ -187,25 +187,54 @@ impl Chat {
             return None;
         }
         match self.vision.phase {
-            VisionPhase::Needs if self.wants_reader() => Some(wire::ChatModelStep {
-                size_line: fill(
-                    &words::vision_line(locale),
-                    &[("size", &size_text(self.vision_bytes()))],
-                ),
-                action_label: words::vision_action(locale),
-                status_line: self
-                    .vision
-                    .error
-                    .map(|fail| self.fail_line(fail, locale))
-                    .unwrap_or_default(),
-                ..wire::ChatModelStep::default()
-            }),
-            VisionPhase::Downloading => Some(wire::ChatModelStep {
-                progress_known: self.vision.progress.is_some(),
-                progress: self.vision.progress.unwrap_or(0.0),
-                status_line: percent(locale, self.vision.progress),
-                ..wire::ChatModelStep::default()
-            }),
+            // THE PHOTO READER'S SHEET (ChatPhotoDownload.dc.html): Wi-Fi is the first choice, mobile
+            // data an explicit second, Not now takes the photo off. A tap on the offer is never the
+            // member's word for mobile data.
+            VisionPhase::Needs if self.wants_reader() => {
+                let size = size_text(self.vision_bytes());
+                Some(wire::ChatModelStep {
+                    size_line: fill(&words::vision_line(locale), &[("size", &size)]),
+                    title: words::photo_reader_title(locale),
+                    note_line: fill(&words::photo_reader_body(locale), &[("size", &size)]),
+                    action_label: words::download_action(locale),
+                    action_kind: wire::ChatStepAction::Download as i32,
+                    secondary_label: words::use_mobile_data(locale),
+                    secondary_kind: wire::ChatStepAction::DownloadCellular as i32,
+                    tertiary_label: words::not_now(locale),
+                    tertiary_kind: wire::ChatStepAction::NotNow as i32,
+                    status_line: self
+                        .vision
+                        .error
+                        .map(|fail| self.fail_line(fail, locale))
+                        .unwrap_or_default(),
+                    ..wire::ChatModelStep::default()
+                })
+            }
+            VisionPhase::Downloading => {
+                let waiting = !self.vision.cellular_ok
+                    && matches!(self.network, Network::Cellular | Network::Offline);
+                Some(wire::ChatModelStep {
+                    progress_known: self.vision.progress.is_some(),
+                    progress: self.vision.progress.unwrap_or(0.0),
+                    status_line: percent(locale, self.vision.progress),
+                    title: if waiting {
+                        words::waiting_wifi(locale)
+                    } else {
+                        String::new()
+                    },
+                    secondary_label: if waiting {
+                        words::use_mobile_data_rest(locale)
+                    } else {
+                        String::new()
+                    },
+                    secondary_kind: if waiting {
+                        wire::ChatStepAction::DownloadCellular as i32
+                    } else {
+                        0
+                    },
+                    ..wire::ChatModelStep::default()
+                })
+            }
             VisionPhase::Loading => Some(wire::ChatModelStep {
                 status_line: words::vision_loading(locale),
                 ..wire::ChatModelStep::default()

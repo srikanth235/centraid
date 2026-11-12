@@ -336,7 +336,9 @@ fn a_photo_with_no_reader_on_the_phone_is_the_offer_with_the_size_and_a_send_wai
     assert_eq!(state.pending[0].label, "Lake");
     let step = state.vision_step.clone().expect("the reader's offer");
     assert_eq!(step.size_line, "Reading photos needs a 205 MB download");
-    assert_eq!(step.action_label, "Download");
+    assert_eq!(step.action_label, "Download on Wi‑Fi");
+    assert_eq!(step.secondary_label, "Use mobile data instead");
+    assert_eq!(step.tertiary_label, "Not now");
     assert!(state.vision_blocked);
     chat.say("what is this?");
     assert!(
@@ -434,7 +436,46 @@ fn a_reader_download_that_stops_is_offered_again_with_one_line_and_its_events_ne
     }));
     let step = chat.state().vision_step.clone().unwrap();
     assert_eq!(step.status_line, "Download stopped. Try again.");
-    assert_eq!(step.action_label, "Download");
+    assert_eq!(step.action_label, "Download on Wi‑Fi");
+}
+
+fn vision_download(chat: &mut Chat, choice: wire::ChatStepAction) -> Option<wire::ModelDownload> {
+    chat.driver.effects.clear();
+    chat.event(C::Download(wire::chat_event::DownloadTapped {
+        vision: true,
+        choice: choice as i32,
+    }));
+    download_effect(chat)
+}
+
+#[test]
+fn a_tap_on_the_photo_offer_is_not_consent_to_mobile_data_the_explicit_choice_is() {
+    use wire::chat_event::device_facts::Network;
+    let mut chat = Chat::ready(script(&read_tasks()));
+    facts(&mut chat, Network::Cellular, 2_000_000_000);
+    vault_photo(&mut chat);
+    let download = vision_download(&mut chat, wire::ChatStepAction::Unspecified)
+        .expect("the primary button starts the fetch");
+    assert!(
+        !download.allow_cellular,
+        "a default tap never uses mobile data"
+    );
+    let step = chat.state().vision_step.clone().unwrap();
+    assert_eq!(step.secondary_label, "Use mobile data for the rest");
+    let download = vision_download(&mut chat, wire::ChatStepAction::DownloadCellular)
+        .expect("the explicit choice");
+    assert!(download.allow_cellular);
+}
+
+#[test]
+fn not_now_on_the_photo_sheet_drops_the_photo_and_the_offer() {
+    let mut chat = Chat::ready(script(&read_tasks()));
+    vault_photo(&mut chat);
+    assert!(chat.state().vision_step.is_some());
+    assert!(vision_download(&mut chat, wire::ChatStepAction::NotNow).is_none());
+    let state = chat.state();
+    assert!(state.pending.is_empty());
+    assert!(state.vision_step.is_none() && !state.vision_blocked);
 }
 
 #[test]

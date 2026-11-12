@@ -209,6 +209,9 @@ message ChatModelStep {
   ChatStepAction secondary_kind = 10;
   // A second sentence under the note: the photo reader's own download.
   string extra_line = 11;
+  // A third, dismissing action ("Not now") and what it asks.
+  string tertiary_label = 12;
+  ChatStepAction tertiary_kind = 13;
 }
 
 // WHAT A TAP ON A STEP'S ACTION ASKS (#1188 download rules): the shell sends it back as
@@ -223,6 +226,8 @@ enum ChatStepAction {
   CHAT_STEP_ACTION_WAIT_WIFI = 3;
   // Look at the phone's space and network again.
   CHAT_STEP_ACTION_CHECK_AGAIN = 4;
+  // Leave it for now: the photo that asked for the reader is taken off the composer.
+  CHAT_STEP_ACTION_NOT_NOW = 5;
 }
 
 message ChatMessage {

@@ -227,4 +227,5 @@ Home, its Settings and vault sheets, the Backup screen, the welcome screen and C
 | `chat-pending-undo-<n>` | Chat | the n-th write's Undo on an applied card, from 0 (a write that cannot be taken back has its "Made by Chat" line and no key) |
 | `chat-dictate`, `chat-listening`, `chat-dictation-off` | Chat | the microphone key (drawn only where the phone recognises speech without a network), the line while it listens, the sentence when the microphone or speech is refused |
 | `chat-table`, `chat-code` | Chat | a table and a fenced block in an answer |
-| `chat-vision-step`, `chat-vision-line`, `chat-vision-status`, `chat-vision-download` | Chat | the photo reader's banner, its offer line, its status line and its Download |
+| `chat-vision-step`, `chat-vision-title`, `chat-vision-line`, `chat-vision-status` | Chat | the photo reader's sheet, its title, its offer line and its status line |
+| `chat-vision-download`, `chat-vision-download-secondary`, `chat-vision-not-now` | Chat | the sheet's three choices: Download on Wi‑Fi, Use mobile data instead, Not now (mobile data only by the second) |

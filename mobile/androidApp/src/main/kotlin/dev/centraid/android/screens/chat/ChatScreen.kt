@@ -253,7 +253,7 @@ internal fun ChatScreen(
                 if (state.messages.isNotEmpty() && state.suggestions.isNotEmpty()) {
                     SuggestionChips(state.suggestions) { onEvent(ChatEvent(sent = ChatEvent.Sent(text = it))) }
                 }
-                state.vision_step?.let { VisionBanner(it, onDownload = { onEvent(ChatEvent(download = ChatEvent.DownloadTapped(vision = true))) }) }
+                state.vision_step?.let { VisionBanner(it, onChoose = { choice -> onEvent(ChatDeviceFacts.event(context)); onEvent(ChatEvent(download = ChatEvent.DownloadTapped(vision = true, choice = choice))) }) }
                 ChatComposer(
                     state,
                     draft = draft,
@@ -1384,7 +1384,7 @@ private fun DownloadButton(label: String, testTag: String, onPress: () -> Unit) 
 }
 
 @Composable
-private fun VisionBanner(step: ChatModelStep, onDownload: () -> Unit) {
+private fun VisionBanner(step: ChatModelStep, onChoose: (centraid.core.v1.ChatStepAction) -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -1394,14 +1394,49 @@ private fun VisionBanner(step: ChatModelStep, onDownload: () -> Unit) {
             .testTag("chat-vision-step"),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        if (step.size_line.isNotEmpty()) Text(step.size_line, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.testTag("chat-vision-line"))
-        if (step.progress_known) KitProgressBar(step.progress, fill = centraidResource(R.color.centraid_shell))
-        if (step.status_line.isNotEmpty()) {
-            Text(step.status_line, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.testTag("chat-vision-status"))
-        }
         if (step.action_label.isNotEmpty()) {
-            DownloadButton(step.action_label, testTag = "chat-vision-download", onPress = onDownload)
+            // THE PHOTO READER'S SHEET (ChatPhotoDownload.dc.html): what it is, Wi-Fi first, mobile data
+            // an explicit second choice, and Not now.
+            Text(step.title, style = centraidType("smallStrong"), color = centraidColor("text"))
+            Text(step.note_line, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.testTag("chat-vision-line"))
+            if (step.status_line.isNotEmpty()) {
+                Text(step.status_line, style = centraidType("small"), color = centraidColor("net"), modifier = Modifier.testTag("chat-vision-status"))
+            }
+            DownloadButton(step.action_label, testTag = "chat-vision-download", onPress = { onChoose(step.action_kind) })
+            if (step.secondary_label.isNotEmpty()) {
+                SecondaryStepButton(step.secondary_label, "chat-vision-download-secondary") { onChoose(step.secondary_kind) }
+            }
+            if (step.tertiary_label.isNotEmpty()) {
+                SecondaryStepButton(step.tertiary_label, "chat-vision-not-now", outlined = false) { onChoose(step.tertiary_kind) }
+            }
+        } else {
+            if (step.title.isNotEmpty()) Text(step.title, style = centraidType("smallStrong"), color = centraidColor("text"))
+            if (step.progress_known) KitProgressBar(step.progress, fill = centraidResource(R.color.centraid_shell))
+            if (step.status_line.isNotEmpty()) {
+                Text(step.status_line, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.testTag("chat-vision-status"))
+            }
+            if (step.secondary_label.isNotEmpty()) {
+                SecondaryStepButton(step.secondary_label, "chat-vision-download-secondary") { onChoose(step.secondary_kind) }
+            }
         }
+    }
+}
+
+/** A step's quieter action: an outlined pill (or plain words for "Not now"), never a second filled element. */
+@Composable
+private fun SecondaryStepButton(label: String, testTag: String, outlined: Boolean = true, onPress: () -> Unit) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = KitGeometry.ROW_MIN)
+            .clip(CircleShape)
+            .then(if (outlined) Modifier.border(KitGeometry.HAIRLINE, centraidColor("lineStrong"), CircleShape) else Modifier)
+            .clickable(onClick = onPress)
+            .semantics { role = Role.Button }
+            .testTag(testTag),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, color = centraidColor(if (outlined) "text" else "textSoft"), fontSize = tokenSp(R.dimen.centraid_text_row), fontWeight = FontWeight.SemiBold)
     }
 }
 

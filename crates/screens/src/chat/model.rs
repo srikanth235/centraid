@@ -169,6 +169,8 @@ pub(super) struct Vision {
     pub bytes: u64,
     pub progress: Option<f32>,
     pub error: Option<Fail>,
+    /// The member chose mobile data for the photo reader's download: its own word, not the model's.
+    pub cellular_ok: bool,
 }
 
 impl Vision {
@@ -176,6 +178,7 @@ impl Vision {
     pub fn unloaded(&self) -> Self {
         Self {
             bytes: self.bytes,
+            cellular_ok: self.cellular_ok,
             ..Self::default()
         }
     }
@@ -659,19 +662,44 @@ impl Chat {
         if choice == Choice::CheckAgain {
             return Vec::new();
         }
+        // NOT NOW, on the photo reader's sheet: the photo that asked for it is taken off.
+        if choice == Choice::NotNow {
+            if vision {
+                self.pending.retain(|held| !held.photo);
+                if self.vision.phase == VisionPhase::Needs {
+                    self.vision.phase = VisionPhase::None;
+                    self.vision.error = None;
+                }
+            }
+            return Vec::new();
+        }
+        // Mobile data is the member's explicit choice, for the photo reader as for the model, each
+        // with its own word.
+        let held = if vision {
+            self.vision.cellular_ok
+        } else {
+            self.cellular_ok
+        };
         let more_data = match choice {
             Choice::DownloadCellular => true,
             Choice::WaitWifi => false,
-            // The photo reader's own offer names its size on the line the member taps, so that tap is
-            // the consent; the model's step asks on its own (the sheet for the reader is a follow-up).
-            _ => self.cellular_ok || vision,
+            _ => held,
         };
         // NOT ENOUGH SPACE OR MEMORY: nothing is fetched into a phone that cannot keep it or run it.
         if self.too_little_space(model.bytes) || self.too_little_memory() {
             return Vec::new();
         }
-        let waiting = !vision && self.phase == Phase::Downloading;
-        if vision {
+        let waiting = if vision {
+            self.vision.phase == VisionPhase::Downloading
+        } else {
+            self.phase == Phase::Downloading
+        };
+        if vision && waiting {
+            // as for the model: mobile data for the rest takes the same file up again, allowed
+            if choice != Choice::DownloadCellular {
+                return Vec::new();
+            }
+        } else if vision {
             if self.vision.phase != VisionPhase::Needs {
                 return Vec::new();
             }
@@ -692,7 +720,11 @@ impl Chat {
             self.progress = None;
             self.error = None;
         }
-        self.cellular_ok = more_data;
+        if vision {
+            self.vision.cellular_ok = more_data;
+        } else {
+            self.cellular_ok = more_data;
+        }
         vec![effect(wire::effect::Kind::ModelDownload(
             wire::ModelDownload {
                 vision,

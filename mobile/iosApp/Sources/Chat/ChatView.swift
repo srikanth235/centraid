@@ -1240,7 +1240,7 @@ private struct ChatComposerCard: View {
                 }
             }
             if state.hasVisionStep {
-                ChatVisionBanner(step: state.visionStep, onDownload: { chat.visionDownloadTapped() })
+                ChatVisionBanner(step: state.visionStep, onChoose: { chat.visionDownloadTapped($0) })
             }
             // WHILE IT LISTENS the composer says so, and says plainly when the microphone or speech is
             // refused (ChatDictation.dc.html).
@@ -1474,34 +1474,65 @@ private struct ChatAttachmentChip: View {
 /// reaches the network, so its words and its action are in `net`.
 private struct ChatVisionBanner: View {
     let step: Centraid_Core_V1_ChatModelStep
-    let onDownload: () -> Void
+    /// A tap on one of the sheet's actions, by what it asks (`ChatStepAction`).
+    let onChoose: (Centraid_Core_V1_ChatStepAction) -> Void
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                if !step.actionLabel.isEmpty {
-                    // The offer: the size line, or the line that says the last
-                    // attempt stopped, and the one action.
-                    Text(step.statusLine.isEmpty ? step.sizeLine : step.statusLine)
-                        .centraidType("small")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .accessibilityIdentifier("chat-vision-line")
-                    ChatDownloadButton(label: step.actionLabel, action: onDownload)
-                    .accessibilityIdentifier("chat-vision-download")
-                } else {
+            if !step.actionLabel.isEmpty {
+                // THE PHOTO READER'S SHEET (ChatPhotoDownload.dc.html): what it is, Wi-Fi first, mobile
+                // data an explicit second choice, and Not now.
+                Text(step.title)
+                    .centraidType("smallStrong")
+                    .foregroundStyle(Theme.color("text", scheme))
+                    .accessibilityIdentifier("chat-vision-title")
+                Text(step.noteLine)
+                    .centraidType("small")
+                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .accessibilityIdentifier("chat-vision-line")
+                if !step.statusLine.isEmpty {
                     Text(step.statusLine)
                         .centraidType("small")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
+                        .foregroundStyle(Theme.color("net", scheme))
                         .accessibilityIdentifier("chat-vision-status")
-                    Spacer(minLength: 0)
                 }
-            }
-            if step.actionLabel.isEmpty, step.statusLine.hasPrefix("Download") {
-                ProgressTrack(fraction: step.progressKnown ? Double(step.progress) : nil)
-                    .kitAnimation(ChatMotion.state, value: step.progress)
+                ChatDownloadButton(label: step.actionLabel, action: { onChoose(step.actionKind) })
+                    .accessibilityIdentifier("chat-vision-download")
+                if !step.secondaryLabel.isEmpty {
+                    ChatSecondaryButton(label: step.secondaryLabel, action: { onChoose(step.secondaryKind) })
+                        .accessibilityIdentifier("chat-vision-download-secondary")
+                }
+                if !step.tertiaryLabel.isEmpty {
+                    Button(action: { onChoose(step.tertiaryKind) }) {
+                        Text(verbatim: step.tertiaryLabel)
+                            .kitScaledFont(CentraidScale.rowSize, weight: .semibold)
+                            .foregroundStyle(Theme.color("textSoft", scheme))
+                            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("chat-vision-not-now")
+                }
+            } else {
+                if !step.title.isEmpty {
+                    Text(step.title)
+                        .centraidType("smallStrong")
+                        .foregroundStyle(Theme.color("text", scheme))
+                }
+                Text(step.statusLine)
+                    .centraidType("small")
+                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .accessibilityIdentifier("chat-vision-status")
+                if step.progressKnown || step.statusLine.hasPrefix("Download") {
+                    ProgressTrack(fraction: step.progressKnown ? Double(step.progress) : nil)
+                        .kitAnimation(ChatMotion.state, value: step.progress)
+                }
+                if !step.secondaryLabel.isEmpty {
+                    ChatSecondaryButton(label: step.secondaryLabel, action: { onChoose(step.secondaryKind) })
+                        .accessibilityIdentifier("chat-vision-download-secondary")
+                }
             }
         }
         .padding(.horizontal, 12)

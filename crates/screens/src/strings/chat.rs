@@ -136,6 +136,11 @@ catalog! {
     plain scope_all = ("All apps", "All apps");
     plain scope_label = ("Chat scope", "Chat scope");
     plain send = ("Send", "Send");
+    plain photo_reader_body = (
+        "Reading a photo needs a second download of {size}. It stays on this phone, and the photo never leaves it.",
+        "Reading a photo needs a second download of {size}. It stays on this phone, and the photo never leaves it."
+    );
+    plain photo_reader_title = ("Download the photo reader?", "Download the photo reader?");
     plain use_mobile_data = ("Use mobile data instead", "Use mobile data instead");
     plain use_mobile_data_rest = ("Use mobile data for the rest", "Use mobile data for the rest");
     plain wait_wifi = ("Wait for Wi‑Fi", "Wait for Wi‑Fi");
