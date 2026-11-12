@@ -213,6 +213,7 @@ fn run_controlled(
         cert_der: &cert_der,
         runtime,
         cancellation,
+        use_older: request.use_older,
     };
 
     // FIRST, EVERY VAULT IS FETCHED, LAID DOWN AND CHECKED — and no writer
@@ -221,6 +222,8 @@ fn run_controlled(
     let mut staged: Vec<Staged> = Vec::new();
     // A held copy that ran writes its backup lacks is left as it is, and answered as such.
     let mut newer: Vec<wire::UnclaimedVault> = Vec::new();
+    // Vaults whose newest backup will not open and an older one does, offered and not restored.
+    let mut offers: Vec<wire::OlderOffer> = Vec::new();
     let mut visit = |index: u32| -> Result<bool> {
         let keyring = centraid_identity::derive::restore_vault_keys(&seed, index)
             .map(Keyring::of)
@@ -239,6 +242,19 @@ fn run_controlled(
                     Checked::Miss => held,
                     Checked::Staged(one) => {
                         staged.push(*one);
+                        true
+                    }
+                    Checked::Offer {
+                        newest_ms,
+                        offered_ms,
+                    } => {
+                        offers.push(wire::OlderOffer {
+                            index,
+                            vault_id,
+                            newest_taken_at_ms: newest_ms,
+                            offered_taken_at_ms: offered_ms,
+                            device: pair::label_of(&payload),
+                        });
                         true
                     }
                     Checked::HeldIsNewer => {
@@ -276,6 +292,18 @@ fn run_controlled(
         }
     }
 
+    // AN OFFER UNANSWERED CLAIMS NOTHING: the member decides, and a second restore with
+    // `use_older` takes the older backup. What was laid down for the other vaults goes.
+    if !offers.is_empty() {
+        staged.iter().for_each(Staged::forget);
+        return Ok(wire::RestoreResponse {
+            vaults: Vec::new(),
+            gap_scanned,
+            unclaimed: Vec::new(),
+            older_offers: offers,
+        });
+    }
+
     // ONLY THEN, THE CLAIMS. A claim that fails after an earlier one landed
     // cannot take that one back, so the claimed vaults are answered and the
     // rest named.
@@ -311,6 +339,7 @@ fn run_controlled(
         // the token its claim answered, which the restored vault's ledger
         // keeps, so the response carries no device secret (field 3 reserved).
         unclaimed,
+        older_offers: Vec::new(),
     })
 }
 
@@ -358,6 +387,8 @@ struct Scan<'a> {
     cert_der: &'a [u8],
     runtime: &'a tokio::runtime::Handle,
     cancellation: Option<crate::handle::Cancellation>,
+    /// The member said yes to an older backup (`RestoreRequest.use_older`).
+    use_older: bool,
 }
 
 /// What looking at one index came to.
@@ -368,6 +399,8 @@ enum Checked {
     Staged(Box<Staged>),
     /// This phone's held copy has writes the backup lacks, so it is not replaced.
     HeldIsNewer,
+    /// The newest backup would not open and an older one does: offered, nothing laid down.
+    Offer { newest_ms: i64, offered_ms: i64 },
 }
 
 /// Whether the copy at `held` has run writes that the restored file at `restored` has not.
@@ -435,8 +468,12 @@ impl Aside {
 struct Staged {
     keyring: Keyring,
     index: u32,
-    /// The head this phone checked; the claim names it.
+    /// The head this phone checked; the claim names it. When `older` is set it is the gateway's
+    /// head, the one that would not open, which the claim is made against.
     head: WireName,
+    /// Set when the newest backup would not open and the member took an older one: when that
+    /// backup was taken, and the gateway's head is moved to it once the claim lands.
+    older: Option<(WireName, i64)>,
     /// When the gateway set it, on its clock.
     head_set_ms: i64,
     /// The writer epoch the gateway last reported; the claim is one above.
@@ -529,7 +566,34 @@ impl Scan<'_> {
             self.runtime,
         );
         store.set_cancellation(self.cancellation.clone());
-        match lay_down(&store, &keyring, &head.name, &file, index) {
+        let mut older = None;
+        let laid = match lay_down(&store, &keyring, &head.name, &file, index) {
+            Err(CoreError::BackupUnreadable { detail }) => {
+                // THE NEWEST WILL NOT OPEN: the newest older one that does is the member's to
+                // take or leave (#1188, B5). Anything but "will not open" (a gateway that
+                // stopped answering, a newer build) is not a reason to go back in time.
+                match self.newest_that_opens(&store, &keyring, &head, &file, index) {
+                    Ok(Some((entry, restored))) => {
+                        if !self.use_older {
+                            discard(&file);
+                            if let Some(dir) = &made {
+                                let _ = std::fs::remove_dir_all(dir);
+                            }
+                            return Ok(Checked::Offer {
+                                newest_ms: self.taken_at_of(&store, &head),
+                                offered_ms: entry.1,
+                            });
+                        }
+                        older = Some(entry);
+                        Ok(restored)
+                    }
+                    Ok(None) => Err(CoreError::BackupUnreadable { detail }),
+                    Err(error) => Err(error),
+                }
+            }
+            other => other,
+        };
+        match laid {
             Ok(restored) => {
                 // THE SAME PHONE: a copy this phone holds is replaced only when it is the older
                 // one. One that ran writes the head lacks is the newer, and it is left alone.
@@ -541,8 +605,9 @@ impl Scan<'_> {
                 Ok(Checked::Staged(Box::new(Staged {
                     keyring,
                     index,
+                    head_set_ms: older.as_ref().map_or(head.set_at_ms, |(_, taken)| *taken),
                     head: head.name,
-                    head_set_ms: head.set_at_ms,
+                    older,
                     epoch: state.epoch,
                     file,
                     made,
@@ -557,6 +622,56 @@ impl Scan<'_> {
                 Err(error)
             }
         }
+    }
+
+    /// When the gateway says `head` was taken, for the offer's "the newest was ...".
+    fn taken_at_of(
+        &self,
+        store: &GatewayStore,
+        head: &centraid_gateway::rules::wire::HeadView,
+    ) -> i64 {
+        use centraid_vault::backup::store::Store as _;
+        let name = Name::from_bytes(*head.name.as_bytes());
+        store
+            .snapshots()
+            .ok()
+            .and_then(|entries| entries.into_iter().find(|entry| entry.name == name))
+            .map_or(head.set_at_ms, |entry| {
+                i64::try_from(entry.taken_at_ms).unwrap_or(i64::MAX)
+            })
+    }
+
+    /// Lay down, newest first, each snapshot the gateway kept other than `head`, and answer the
+    /// first that passes every check, with when it was taken. `None` when none does.
+    fn newest_that_opens(
+        &self,
+        store: &GatewayStore,
+        keyring: &Keyring,
+        head: &centraid_gateway::rules::wire::HeadView,
+        file: &Path,
+        index: u32,
+    ) -> Result<Option<((WireName, i64), Restored)>> {
+        use centraid_vault::backup::store::Store as _;
+        let mut kept = store.snapshots().map_err(|error| CoreError::Unavailable {
+            reason: format!("the backup device did not list its backups: {error}"),
+        })?;
+        kept.sort_by_key(|entry| std::cmp::Reverse(entry.taken_at_ms));
+        for entry in kept {
+            self.checkpoint()?;
+            let wire = WireName::from_bytes(*entry.name.as_bytes());
+            if wire == head.name {
+                continue;
+            }
+            match lay_down(store, keyring, &wire, file, index) {
+                Ok(restored) => {
+                    let taken = i64::try_from(entry.taken_at_ms).unwrap_or(i64::MAX);
+                    return Ok(Some(((wire, taken), restored)));
+                }
+                Err(CoreError::BackupUnreadable { .. }) => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(None)
     }
 
     /// Claim one checked vault at the head it checked, and adopt it.
@@ -611,6 +726,7 @@ impl Scan<'_> {
                             staged.index,
                         )?;
                         staged.head = view.name;
+                        staged.older = None;
                         staged.head_set_ms = view.set_at_ms;
                         staged.epoch = view.epoch;
                     }
@@ -656,6 +772,25 @@ impl Scan<'_> {
         kept: &Path,
     ) -> Result<wire::RestoredVault> {
         let gateway_id = paired.gateway_id.hex();
+        // AN OLDER BACKUP TAKEN: the gateway's head is the one that would not open. This phone is
+        // the writer now, so the head is moved to the backup it restored, and the first pass
+        // continues from a head that opens.
+        if let Some((older, taken)) = &staged.older {
+            use centraid_vault::backup::store::Store as _;
+            staged.store.client().set_token(paired.token);
+            staged
+                .store
+                .set_head(
+                    &Name::from_bytes(*older.as_bytes()),
+                    Some(&Name::from_bytes(*staged.head.as_bytes())),
+                    u64::try_from(*taken).unwrap_or(0),
+                )
+                .map_err(|error| CoreError::Unavailable {
+                    reason: format!(
+                        "the backup device did not take the older backup as its head: {error}"
+                    ),
+                })?;
+        }
         let plane = Plane::of(kept);
         let ledger = plane.ledger()?;
         ledger.reset().map_err(plane_error)?;

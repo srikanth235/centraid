@@ -94,6 +94,10 @@ pub enum Restored {
     NotTaken,
     /// What the gateway sent did not pass this phone's check (#1047 R3).
     DidNotCheck,
+    /// No backup the device holds opens in this version. Nothing stored.
+    CantOpen,
+    /// A newer Centraid made the backup: update, then restore. Nothing stored.
+    NewerBuild,
     Refused(Refusal),
 }
 
@@ -107,6 +111,8 @@ impl fmt::Debug for Restored {
             Self::NothingHeld => f.write_str("NothingHeld"),
             Self::NotTaken => f.write_str("NotTaken"),
             Self::DidNotCheck => f.write_str("DidNotCheck"),
+            Self::CantOpen => f.write_str("CantOpen"),
+            Self::NewerBuild => f.write_str("NewerBuild"),
             Self::Refused(why) => write!(f, "Refused({why:?})"),
         }
     }
@@ -184,6 +190,8 @@ fn stopped(because: RestoreRefusal) -> Restored {
         RestoreRefusal::Unreachable => Restored::Unreachable,
         RestoreRefusal::NotTaken => Restored::NotTaken,
         RestoreRefusal::DidNotCheck => Restored::DidNotCheck,
+        RestoreRefusal::CantOpen => Restored::CantOpen,
+        RestoreRefusal::NewerBuild => Restored::NewerBuild,
     }
 }
 

@@ -73,6 +73,8 @@ enum Notice {
     NothingHeld,
     NotTaken,
     DidNotCheck,
+    CantOpen,
+    NewerBuild,
     Refusal(Refusal),
     RekeyNone,
     PhotoUnread,
@@ -416,6 +418,8 @@ impl Enter {
             Restored::NothingHeld => self.back(Notice::NothingHeld),
             Restored::NotTaken => self.back(Notice::NotTaken),
             Restored::DidNotCheck => self.back(Notice::DidNotCheck),
+            Restored::CantOpen => self.back(Notice::CantOpen),
+            Restored::NewerBuild => self.back(Notice::NewerBuild),
             Restored::Refused(why) => self.back(Notice::Refusal(why)),
         }
     }
@@ -549,6 +553,8 @@ impl Enter {
             Notice::NothingHeld => words::restore_nothing_held(locale),
             Notice::NotTaken => words::restore_not_taken(locale),
             Notice::DidNotCheck => words::restore_did_not_check(locale),
+            Notice::CantOpen => words::restore_cant_open(locale),
+            Notice::NewerBuild => words::restore_newer_build(locale),
             Notice::Refusal(Refusal::NotAPhrase) => words::not_a_phrase(locale),
             Notice::Refusal(Refusal::DifferentWords) => words::different_words(locale),
             Notice::Refusal(Refusal::StoreRefused) => words::keep_failed(locale),

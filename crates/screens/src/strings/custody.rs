@@ -43,6 +43,8 @@ catalog! {
     plain rekey_primary = ("Use this key", "Use this key");
     plain rekey_title = ("Enter your recovery key", "Enter your recovery key");
     plain restore_body = ("Type your recovery key and paste a pairing code from your backup device.", "Type your recovery key and paste a pairing code from your backup device.");
+    plain restore_cant_open = ("This version of Centraid can't open this backup.", "This version of Centraid can't open this backup.");
+    plain restore_newer_build = ("A newer Centraid made this backup. Update Centraid.", "A newer Centraid made this backup. Update Centraid.");
     plain restore_did_not_check = ("The restore failed a check, so nothing changed. Try again.", "The restore failed a check, so nothing changed. Try again.");
     plain restore_first_action = ("Restore my vaults", "Restore my vaults");
     plain restore_first_body = ("Restore your vaults first, so a new vault doesn't replace one you already have.", "Restore your vaults first, so a new vault doesn't replace one you already have.");
@@ -58,7 +60,7 @@ catalog! {
     plain restore_not_taken = ("Your backup device refused the restore. Try again, and check it's the one you paired.", "Your backup device refused the restore. Try again, and check it's the one you paired.");
     plain restore_primary = ("Restore", "Restore");
     plain restore_title = ("Restore with your recovery key", "Restore with your recovery key");
-    plain restore_unreachable = ("Couldn't reach your backup device. Check “centraid-gateway serve” is running, or paste a new pairing code.", "Couldn't reach your backup device. Check “centraid-gateway serve” is running, or paste a new pairing code.");
+    plain restore_unreachable = ("Couldn't reach your backup device. Check it is on and connected, or paste a new pairing code.", "Couldn't reach your backup device. Check it is on and connected, or paste a new pairing code.");
     plain restoring = ("Looking for your backup device…", "Looking for your backup device…");
     plain save_label = ("Save a copy", "Save a copy");
     plain save_subject = ("Centraid recovery key", "Centraid recovery key");

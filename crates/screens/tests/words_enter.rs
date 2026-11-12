@@ -118,6 +118,7 @@ fn restore_answer(vaults: &[(&str, u32, i64, &str)], unclaimed: &[u32]) -> wire:
                     reason: "logs only".to_owned(),
                 })
                 .collect(),
+            older_offers: Vec::new(),
         })),
     };
     wire::OffThreadDone {
@@ -315,8 +316,16 @@ fn a_valid_phrase_opens_the_one_control_and_a_restore_answer_drops_every_word() 
 fn an_unreachable_gateway_or_an_empty_one_keeps_the_words_on_screen_with_the_sentence() {
     let cases = [
         (
+            restore_refused(wire::ErrorCode::BackupUnreadable),
+            "This version of Centraid can't open this backup.",
+        ),
+        (
+            restore_refused(wire::ErrorCode::BackupFromNewerBuild),
+            "A newer Centraid made this backup. Update Centraid.",
+        ),
+        (
             restore_refused(wire::ErrorCode::PeerUnreachable),
-            "Couldn't reach your backup device. Check “centraid-gateway serve” is running, or paste a new pairing code.",
+            "Couldn't reach your backup device. Check it is on and connected, or paste a new pairing code.",
         ),
         (
             restore_answer(&[], &[]),

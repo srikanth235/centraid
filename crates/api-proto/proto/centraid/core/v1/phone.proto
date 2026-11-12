@@ -319,6 +319,11 @@ message RestoreRequest {
   // (`fetch_original`). The payload's one-use secret is never spent by a
   // restore: a claim needs only the vault's identity key.
   string payload = 6;
+  // TAKE THE OLDER BACKUP THE LAST RESTORE OFFERED (#1188, B5). Unset, a vault whose newest
+  // backup fails a check is not restored: the answer carries `older_offers` and nothing is
+  // claimed. Set, the same restore uses the newest older backup that passes for each such vault.
+  // Never set by a shell before the member said yes to the offer.
+  bool use_older = 7;
 }
 
 // One vault a restore brought back.
@@ -376,6 +381,26 @@ message RestoreResponse {
   // is refused instead, with the first claim's refusal. A second restore
   // naming these in `RestoreRequest.indices` asks for them alone (R-1047-R6).
   repeated UnclaimedVault unclaimed = 4;
+  // AN OLDER BACKUP IN PLACE OF A NEWEST THAT WILL NOT OPEN (#1188, B5, NB4). When any vault's
+  // newest backup failed a check and an older one passes, the restore claims nothing and
+  // restores nothing: `vaults` is empty and each such vault is named here. The member decides;
+  // a second restore with `RestoreRequest.use_older` restores them. Empty is the ordinary answer.
+  repeated OlderOffer older_offers = 5;
+}
+
+// The newest older backup that passes, for one vault whose newest does not (`RestoreResponse.older_offers`).
+message OlderOffer {
+  // The derivation index, as `RestoredVault.index`.
+  uint32 index = 1;
+  // The vault's identity public key, hex, as `RestoredVault.vault_id`.
+  string vault_id = 2;
+  // When the newest backup, the one that will not open, was taken (ms since the epoch, the
+  // backup device's record).
+  int64 newest_taken_at_ms = 3;
+  // When the older backup that passes was taken.
+  int64 offered_taken_at_ms = 4;
+  // The backup device it is on, as the pairing code names it.
+  string device = 5;
 }
 
 // One vault a restore checked and could not claim (`RestoreResponse.unclaimed`).

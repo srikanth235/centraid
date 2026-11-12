@@ -136,6 +136,10 @@ pub enum RestoreRefusal {
     /// Nothing was laid down and nothing was claimed, so the old phone still
     /// backs up (#1047 R3).
     DidNotCheck,
+    /// `BACKUP_UNREADABLE`: no backup the device holds opens in this version (#1188, B2, B5).
+    CantOpen,
+    /// `BACKUP_FROM_NEWER_BUILD`: a newer Centraid made the backup; update, then restore.
+    NewerBuild,
 }
 
 impl RestoreRefusal {
@@ -144,6 +148,8 @@ impl RestoreRefusal {
     pub fn of(code: wire::ErrorCode) -> Self {
         match code {
             wire::ErrorCode::Internal => Self::DidNotCheck,
+            wire::ErrorCode::BackupUnreadable => Self::CantOpen,
+            wire::ErrorCode::BackupFromNewerBuild => Self::NewerBuild,
             wire::ErrorCode::Unauthorized => Self::NotTaken,
             _ => Self::Unreachable,
         }

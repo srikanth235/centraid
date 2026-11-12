@@ -1231,3 +1231,109 @@ fn restoring_onto_a_phone_whose_copy_is_newer_than_the_backup_leaves_that_copy_a
     assert_eq!(rows(&held), with_the_note, "the copy kept its writes");
     assert_eq!(gateway.writer(&vault_id()).0, epoch, "no claim was made");
 }
+
+fn mentions(path: &std::path::Path, text: &str) -> bool {
+    rows(path)
+        .values()
+        .any(|table| table.iter().any(|row| row.contains(text)))
+}
+
+/// **A NEWEST BACKUP THAT WILL NOT OPEN IS NOT THE END; AN OLDER ONE IS OFFERED, NEVER TAKEN
+/// SILENTLY** (#1188, B5, NB4). The first restore claims nothing and says what it found; the
+/// second, after the member's yes, restores the older backup and the gateway's head follows it;
+/// and with every backup damaged the restore says so and moves nothing.
+#[test]
+fn an_older_backup_is_offered_when_the_newest_will_not_open() {
+    let gateway = gateway();
+    let old_dir = tempfile::tempdir().expect("a directory");
+    let old_path = old_dir.path().join("vault.db");
+    // THE VAULT'S CLOCK IS HELD, so the two backups fall on different days and the history
+    // keeps both.
+    let clock = std::sync::Arc::new(centraid_vault::clock::FixedClock::frozen());
+    let old = {
+        let clock = std::sync::Arc::clone(&clock);
+        phone_with(old_dir.path(), move |config| {
+            config.with_clock(
+                clock.clone(),
+                std::sync::Arc::new(centraid_vault::clock::ClockIds::new(Box::new(clock))),
+            )
+        })
+    };
+    let id = pair(&old, &gateway)
+        .destination
+        .expect("a destination")
+        .gateway_id;
+    note(&old, "First", "kept in the older backup");
+    drain(&old, at_home());
+    let older = ledger(&old_path).head(&id).expect("reads").expect("a head");
+    clock.advance_days(2);
+    note(&old, "Second", "only in the newest backup");
+    drain(&old, at_home());
+    let newest = ledger(&old_path).head(&id).expect("reads").expect("a head");
+    assert_ne!(older, newest, "two backups");
+
+    let store = gateway.spawned.shared().store();
+    let file_of = |name: centraid_vault::backup::naming::Name| {
+        store.path(
+            &vault_id(),
+            &centraid_gateway::rules::ids::Name::from_bytes(*name.as_bytes()),
+        )
+    };
+    let sound = std::fs::read(file_of(newest)).expect("reads");
+    Damage::Flip.apply(&file_of(newest));
+
+    // THE OFFER: nothing restored, nothing claimed, nothing laid down.
+    let asked = tempfile::tempdir().expect("a directory");
+    let offered = restore(asked.path(), &gateway);
+    assert!(offered.vaults.is_empty(), "{offered:?}");
+    assert_eq!(offered.older_offers.len(), 1, "{offered:?}");
+    let offer = &offered.older_offers[0];
+    assert!(
+        offer.offered_taken_at_ms < offer.newest_taken_at_ms,
+        "{offer:?}"
+    );
+    assert_eq!(offer.device, "127.0.0.1");
+    assert!(nothing_laid_down(asked.path()).is_empty());
+    assert_eq!(gateway.writer(&vault_id()), (1, Some(newest)), "no claim");
+
+    // THE MEMBER SAYS YES.
+    let took = try_ask(
+        &shelf(asked.path()),
+        wire::request::Kind::Restore(wire::RestoreRequest {
+            phrase: WORDS.to_owned(),
+            payload: gateway.payload(),
+            use_older: true,
+            ..wire::RestoreRequest::default()
+        }),
+    )
+    .expect("restores");
+    let wire::response::Kind::Restore(took) = took else {
+        panic!("a restore answers as a restore");
+    };
+    assert_eq!(took.vaults.len(), 1, "{took:?}");
+    assert!(took.older_offers.is_empty());
+    let path = PathBuf::from(&took.vaults[0].path);
+    assert!(mentions(&path, "First"));
+    assert!(
+        !mentions(&path, "Second"),
+        "the older backup has no later note"
+    );
+    assert_eq!(
+        gateway.writer(&vault_id()),
+        (2, Some(older)),
+        "the head follows the backup that was restored"
+    );
+
+    // WITH EVERY BACKUP DAMAGED THERE IS NOTHING TO OFFER.
+    std::fs::write(file_of(newest), sound).expect("mends");
+    Damage::Flip.apply(&file_of(newest));
+    Damage::Flip.apply(&file_of(older));
+    let none = tempfile::tempdir().expect("a directory");
+    let refused = try_restore(none.path(), &gateway.payload()).expect_err("nothing opens");
+    assert_eq!(
+        refused.code(),
+        wire::ErrorCode::BackupUnreadable,
+        "{refused}"
+    );
+    assert!(nothing_laid_down(none.path()).is_empty());
+}
