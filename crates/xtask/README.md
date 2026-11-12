@@ -7,6 +7,7 @@ cargo xtask gate --profile local     # the edit-run loop
 cargo xtask gate --profile pr        # what every pull request satisfies
 cargo xtask gate --profile nightly   # pr + the deep sim, the e2e runs and the device lanes
 cargo xtask gate --profile nightly --lane <name>   # one step, or one device lane
+cargo xtask gate --profile pr --lane tests         # one CI lane of `pr` (see below)
 cargo xtask gate --profile release   # nightly + the restore drill + the VPS smoke
 cargo xtask gate --profile mobile-jvm  # the Kotlin half, on its own
 cargo xtask rules                    # the structural rules alone
@@ -59,6 +60,19 @@ The step says so in three places: a banner before its line naming every crate an
 
 `restore-drill` runs `cargo test --workspace --test restore_drill` — `centraid-vault`'s drill of the snapshot plane against the in-memory store, and `centraid`'s drill of the phone's core against the real gateway harness: back up a real library, lose the phone, restore from the 24 words at writer epoch 2, compare every row, and see the old phone refused `VAULT_MOVED` ([#1080](https://github.com/srikanth235/centraid/issues/1080)). It is a `local` step, so every profile carries it.
 
+### CI runs `pr` as parallel lanes
+
+`gate.yml` does not run `cargo xtask gate --profile pr` as one job. It runs `--lane <name>` once per matrix entry, in parallel, and a final job named `gate` (the required check) passes only if every lane did. The lanes are the `PR_LANES` table in [`src/gate.rs`](src/gate.rs), the only place that says what is in them:
+
+| Lane | Steps |
+| --- | --- |
+| `static` | `fmt`, `clippy`, `rules`, `doc-links`, `ledgers`, `buf`, `deny`, `ci-policy`, `design`, `lockfile` |
+| `tests` | `test` (whole workspace, then doctests), `restore-drill`, `prompt-injection`, `model-record`, `fault-door`: every `cargo test` step, on one dev build |
+| `build` | `release-build` |
+| `ts` | `ts-static` |
+
+`test` is not sharded: it is about 1130 s of which about 70 s is running tests, so each shard would compile the same workspace again. `every_pr_step_is_in_exactly_one_ci_lane` and `the_workflow_names_every_lane_and_no_other` fail when a `pr` step has no lane or two, or when the workflow's matrix and the table differ. `gate-tools` (`.github/actions/gate-tools`) holds the tool pins for `gate.yml` and `nightly.yml`. Failure artifacts are `gate-pr-<lane>-artifacts`.
+
 ### The `design` step
 
 `cargo xtask design` generates every design artifact from `design/tokens.toml` ([#1173](https://github.com/srikanth235/centraid/issues/1173)): `mobile/iosApp/Design/{Theme,Catalog,Words,DesignScale}.swift`, the `Assets.xcassets/Colors` colour sets (light and dark built in), the font copies, the Android `Tokens.kt`, `Catalog.kt`, `Words.kt`, `res/values/{colors,dimens}.xml`, `res/values-night/colors.xml`, both sites' `centraid-tokens.css` and `fonts/`, and every dark mockup `design/mockups/XDark.dc.html` (from its light screen and `[mockups.dark]`; edit the light screen, never a dark one). The sites' sheet is `design_site.rs`: the colour roles, spacing, radii and touch type scale are the shells' own `[native.*]`, and the rest (desktop overrides, page-scale values, font subsets) is `[site]`. The kit's words are read from the text of `crates/screens/src/strings/{shared,home}.rs` (a row it cannot parse, an unknown escape or a missing key is an error), so this tool does not depend on the screens crate. Output is generated already formatted: nothing runs after it.
@@ -83,13 +97,13 @@ Output is buffered and printed only on failure; **every step prints one line wha
 
 ### Failure artifacts
 
-A failing step writes its whole output under `target/xtask/<profile>/<step>/` — `command.txt`, `stdout.log`, `stderr.log`, or `findings.txt` for the two internal steps — and the step's one line names the directory. `gate.yml` and `nightly.yml` upload `target/xtask/**` on failure.
+A failing step writes its whole output under `target/xtask/<profile>/<step>/` — `command.txt`, `stdout.log`, `stderr.log`, or `findings.txt` for the two internal steps — and the step's one line names the directory. `gate.yml` (one artifact per lane, `gate-pr-<lane>-artifacts`) and `nightly.yml` upload `target/xtask/**` on failure.
 
 ### The `deny` step's posture
 
 `cargo-deny` is a separate binary. When it is absent the step **loud-skips with the install command locally** and **fails in CI**, where the workflow installs it and a missing binary is therefore an infrastructure failure. The contract exists because a guarded skip that could be mistaken for a pass is worse than no lane at all. The policy is the repo's one shared [`deny.toml`](../../deny.toml); there is no per-crate copy to drift.
 
-`cargo nextest` gets the same treatment in the other direction: `test` uses `cargo nextest run --workspace` (with the filter above on `local`) when the binary is on PATH and `cargo test --workspace` when it is not, and the step's line says which one ran. nextest never runs doctests, so its branch is followed by `cargo test --workspace --doc` over the libraries it just built: the two branches run the same tests, and a doctest written tomorrow is not silently skipped because the runner changed. `gate.yml` installs a pinned, checksum-verified nextest release binary, because it runs the ~150 test binaries concurrently rather than back to back — the one part of the `test` step that is not compilation ([#1047](https://github.com/srikanth235/centraid/issues/1047)).
+`cargo nextest` gets the same treatment in the other direction: `test` uses `cargo nextest run --workspace` (with the filter above on `local`) when the binary is on PATH and `cargo test --workspace` when it is not, and the step's line says which one ran. nextest never runs doctests, so its branch is followed by `cargo test --workspace --doc` over the libraries it just built: the two branches run the same tests, and a doctest written tomorrow is not silently skipped because the runner changed. `.github/actions/gate-tools` installs a pinned, checksum-verified nextest release binary, because it runs the ~150 test binaries concurrently rather than back to back — the one part of the `test` step that is not compilation ([#1047](https://github.com/srikanth235/centraid/issues/1047)).
 
 ### The `ci-policy` and `lockfile` steps
 
