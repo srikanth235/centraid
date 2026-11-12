@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -37,6 +38,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import centraid.core.v1.AlertSettingsPressed
 import centraid.core.v1.Autosave
 import centraid.core.v1.PhoneSaysTaken
 import centraid.core.v1.Route
@@ -305,6 +307,19 @@ private fun TodoFieldRow(field: TodoField, onEvent: (TodoDetailEvent) -> Unit) {
             onTap = { onEvent(TodoDetailEvent(field_opened = TodoDetailEvent.FieldOpened(field_ = field.key))) },
         )
         if (field.note.isNotEmpty()) FieldNote(field.note)
+        // "Open Settings" under a line that sends the member there (#1188, NA1).
+        if (field.action_label.isNotEmpty()) {
+            Text(
+                field.action_label,
+                style = centraidType("annotLabel"),
+                color = centraidColor("text"),
+                modifier = Modifier
+                    .heightIn(min = KitGeometry.ROW_MIN)
+                    .clickable(role = Role.Button) { onEvent(TodoDetailEvent(alert_settings = AlertSettingsPressed())) }
+                    .padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp)
+                    .testTag("tasks-field-${field.key}-settings"),
+            )
+        }
     } else {
         FieldRow(key = field.label, value = field.value_, note = field.note)
     }

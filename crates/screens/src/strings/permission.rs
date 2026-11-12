@@ -37,5 +37,6 @@ catalog! {
     plain notifications_channel_off = ("{channel} alerts are off. Turn them on in Settings.", "{channel} alerts are off. Turn them on in Settings.");
     plain notifications_reminders_off = ("Alerts for reminders and events are off. Turn them on in Settings.", "Alerts for reminders and events are off. Turn them on in Settings.");
     plain notifications_backup_channel_fallback = ("Backup", "Backup");
+    plain notifications_open_settings = ("Open Settings", "Open Settings");
     plain notifications_restricted = ("This phone does not allow notifications.", "This phone does not allow notifications.");
 }

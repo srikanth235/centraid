@@ -167,6 +167,13 @@ pub struct AlertFacts {
     pub backup_channel: String,
 }
 
+/// What a screen shows about alerts: the sentence, and the label of the button under it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AlertText {
+    pub line: Option<String>,
+    pub settings: String,
+}
+
 impl AlertFacts {
     /// What a `NotificationsScheduled` answer says.
     #[must_use]
@@ -186,6 +193,35 @@ impl AlertFacts {
     #[must_use]
     pub fn line(&self, locale: Locale) -> Option<String> {
         self.line_for(locale, Channel::Reminders)
+    }
+
+    /// The line and its button, as a screen draws them.
+    #[must_use]
+    pub fn text(&self, locale: Locale) -> AlertText {
+        AlertText {
+            line: self.line(locale),
+            settings: self.settings_label(locale),
+        }
+    }
+
+    /// The button under the line: "Open Settings" while the line sends the member there, else empty.
+    #[must_use]
+    pub fn settings_label(&self, locale: Locale) -> String {
+        if self.line(locale).is_some() {
+            words::notifications_open_settings(locale)
+        } else {
+            String::new()
+        }
+    }
+
+    /// The effect a press of that button asks of the shell.
+    #[must_use]
+    pub fn open_settings() -> wire::Effect {
+        wire::Effect {
+            kind: Some(wire::effect::Kind::OpenNotificationSettings(
+                wire::OpenNotificationSettings {},
+            )),
+        }
     }
 
     /// The same for the notices of one `channel`.

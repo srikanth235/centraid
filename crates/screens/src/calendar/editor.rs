@@ -60,6 +60,7 @@ use super::event::{
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::civil::{self, HourCycle};
+use crate::kit::permission::{AlertFacts, AlertText};
 use crate::kit::read::{self as kit_read, Note, Page, Reading};
 use crate::kit::schedule::draft::{
     self, Draft, REMINDER_NONE, REPEAT_BIWEEKLY, REPEAT_CUSTOM, REPEAT_DAILY, REPEAT_MONTHLY,
@@ -534,6 +535,7 @@ impl Editor {
     fn on_editor_event(&mut self, event: K, ctx: &Ctx) -> Vec<wire::Effect> {
         match event {
             K::Refreshed(_) => self.reload(ctx),
+            K::AlertSettings(_) => return vec![AlertFacts::open_settings()],
             K::Title(change) => self.edit(|d| {
                 Some(Draft {
                     title: change.text,
@@ -844,7 +846,7 @@ impl Screen for Editor {
                     locale,
                     ctx.hour_cycle(),
                     ctx.zone(),
-                    ctx.alerts().get().line(locale),
+                    ctx.alerts().get().text(locale),
                     draft,
                 )),
             )),
@@ -897,7 +899,7 @@ impl Editor {
         locale: Locale,
         cycle: HourCycle,
         device_zone: &str,
-        alert_line: Option<String>,
+        alert: AlertText,
         draft: &Draft,
     ) -> wire::AgendaEditorData {
         let Some(loaded) = &self.loaded else {
@@ -1087,7 +1089,12 @@ impl Editor {
                 String::new()
             } else {
                 // WHAT THE PHONE SAYS ABOUT ALERTS (#1188, NA1): said once an alert is set.
-                alert_line.unwrap_or_default()
+                alert.line.unwrap_or_default()
+            },
+            reminder_settings_label: if draft.all_day || draft.reminder_key == REMINDER_NONE {
+                String::new()
+            } else {
+                alert.settings
             },
             scope_armed: saved_scopes.iter().any(|c| c.selected && c.enabled),
             scopes: saved_scopes,

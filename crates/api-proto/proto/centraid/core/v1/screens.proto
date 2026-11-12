@@ -541,6 +541,7 @@ message Effect {
     // ---- agenda (100-199): notifications (#1173, `notify_screens.proto`) ----
     // Make the OS hold exactly this set of reminders and alerts.
     ScheduleNotifications schedule_notifications = 120;
+    OpenNotificationSettings open_notification_settings = 121;
     // ---- docs (200-299): files ----
     // ---- agenda (100-199): outside the app ----
     // Keep the widgets' snapshot: write the document to the shared container,

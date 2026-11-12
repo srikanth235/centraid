@@ -109,6 +109,14 @@ enum NotificationPermission {
   NOTIFICATION_PERMISSION_DENIED = 3;
 }
 
+// A button under an alert line that says "in Settings" (#1188, NA1): the shell sends this when it
+// is pressed. The same message is the event of a reminder's page and of an event's editor.
+message AlertSettingsPressed {}
+
+// Open this app's notification page in the phone's Settings (Android: the app's notification
+// settings, where the channels are; iOS: the app's page). Answered with `EffectDone`.
+message OpenNotificationSettings {}
+
 // EffectResult 120: the answer to `ScheduleNotifications`.
 message NotificationsScheduled {
   NotificationPermission permission = 1;

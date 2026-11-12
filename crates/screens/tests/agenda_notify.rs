@@ -421,6 +421,39 @@ fn a_refused_grant_is_said_under_the_reminder_that_would_sound() {
         note(&mut d),
         "Notifications are off. Turn them on in Settings."
     );
+    // THE LINE HAS A BUTTON (#1188, NA1): "Open Settings" under a refusal, and a press asks the shell.
+    {
+        answered(
+            &mut d,
+            service,
+            wire::NotificationsScheduled {
+                permission: wire::NotificationPermission::Denied as i32,
+                ..Default::default()
+            },
+        );
+        let i = d.push(agenda::TAB, routes::task(&id));
+        let label = detail_data(d.view(i))
+            .fields
+            .iter()
+            .find(|f| f.key == "reminder")
+            .map(|f| f.action_label.clone())
+            .expect("the reminder row");
+        assert_eq!(label, "Open Settings");
+        d.effects.clear();
+        d.send(
+            i,
+            E::TodoDetail(wire::TodoDetailEvent {
+                kind: Some(wire::todo_detail_event::Kind::AlertSettings(
+                    wire::AlertSettingsPressed {},
+                )),
+            }),
+        );
+        assert!(d.effects.iter().any(|request| matches!(
+            request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+            Some(wire::effect::Kind::OpenNotificationSettings(_))
+        )));
+        d.pop(agenda::TAB, i);
+    }
     answered(
         &mut d,
         service,

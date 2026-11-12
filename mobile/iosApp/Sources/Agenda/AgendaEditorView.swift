@@ -219,6 +219,17 @@ struct AgendaEditorView: View {
                         if !editor.reminderNote.isEmpty {
                             note(editor.reminderNote)
                         }
+                        // "Open Settings" when the note says the phone limits alerts (#1188, NA1).
+                        if !editor.reminderSettingsLabel.isEmpty {
+                            Button(editor.reminderSettingsLabel) {
+                                send(event { $0.alertSettings = .init() })
+                            }
+                            .centraidType("annotLabel")
+                            .foregroundStyle(Theme.color("text", scheme))
+                            .padding(.horizontal, CentraidGeometry.pageMargin)
+                            .frame(minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+                            .accessibilityIdentifier("agenda-editor-reminder-settings")
+                        }
                         // THE SECOND ALERT waits for the first: Rust says when it is drawn.
                         if editor.showSecondReminder {
                             AgendaTileChoiceRow(

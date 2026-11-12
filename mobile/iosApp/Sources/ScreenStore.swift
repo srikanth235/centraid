@@ -453,6 +453,14 @@ final class ScreenStore: ObservableObject {
             }
         case .cameraRoll(let roll)?:
             answer(request, Self.cameraRoll(roll))
+        case .openNotificationSettings?:
+            // THE APP'S PAGE in Settings, where its notifications are switched.
+            #if os(iOS)
+            if let url = URL(string: UIApplication.openSettingsURLString) {
+                UIApplication.shared.open(url, options: [:], completionHandler: nil)
+            }
+            #endif
+            answer(request, done)
         // THE PHONE IMPORTS (#1135, `imports`): the library, its link, its stage and its
         // derivatives; the folders; the reminders. Every decision is Rust's.
         case .libraryPermission(let permission)?:

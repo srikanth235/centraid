@@ -2385,6 +2385,10 @@ pub const STAYING_EFFECTS: &[(&str, &str)] = &[
     ("long_run", "asks the platform for time to finish work"),
     ("model_download", "fetches the on-device assistant's model"),
     ("open_map", "opens an address in the maps app"),
+    (
+        "open_notification_settings",
+        "opens this app's own notification page in the phone's Settings",
+    ),
     ("open_route", "opens a page inside the app"),
     (
         "open_url",
