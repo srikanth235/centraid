@@ -6245,6 +6245,7 @@ pub mod act {
             pub priority: Option<i64>,
             pub remind_before_min: Field<i64>,
             pub rule: Field<String>,
+            pub snoozed_until: Field<String>,
             pub title: Option<String>,
             pub url: Field<String>,
         }
@@ -6261,6 +6262,7 @@ pub mod act {
                 if let Some(it) = self.priority { map.insert("priority".to_owned(), whole(it)); }
                 put_field(&mut map, "remind_before_min", self.remind_before_min, |it| whole(it));
                 put_field(&mut map, "rule", self.rule, |it| text(it));
+                put_field(&mut map, "snoozed_until", self.snoozed_until, |it| text(it));
                 if let Some(it) = self.title { map.insert("title".to_owned(), text(it)); }
                 put_field(&mut map, "url", self.url, |it| text(it));
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new(), autosave: false }

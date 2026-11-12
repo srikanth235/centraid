@@ -157,6 +157,7 @@ pub struct DuePlacement {
 pub fn place_due(
     effective_due: Option<&str>,
     remind_before_min: Option<i64>,
+    snoozed_until: Option<&str>,
     zone: &FireZone,
     today: &Civil,
 ) -> DuePlacement {
@@ -171,8 +172,21 @@ pub fn place_due(
         days_from_today: Some(days),
         overdue: days < 0,
         lands_today: days <= 0,
-        remind_at_local: effective_due
-            .and_then(|due| remind_at(due, remind_before_min?, zone))
+        // A SNOOZE MOVES THE ALERT, NOT THE DUE (#1188, NA5): while one is set the reminder is at
+        // that instant, read in the zone; the due above is untouched.
+        remind_at_local: snoozed_until
+            .filter(|_| remind_before_min.is_some())
+            .and_then(|until| parse_civil_ms(until, zone))
+            .map(|millis| {
+                let wall = zone.zoned_parts(millis);
+                format!(
+                    "{}T{:02}:{:02}",
+                    wall_iso(wall, false),
+                    wall.hour,
+                    wall.minute
+                )
+            })
+            .or_else(|| effective_due.and_then(|due| remind_at(due, remind_before_min?, zone)))
             .unwrap_or_default(),
     }
 }
@@ -249,21 +263,50 @@ mod tests {
         // 02:00Z on the 2nd is still the 1st, 22:00, in New York.
         let today = today(&new_york, "2099-06-02T02:00:00.000Z").expect("now");
         assert_eq!(today.day_text(), "2099-06-01");
-        let yesterday = place_due(Some("2099-05-31"), None, &new_york, &today);
+        let yesterday = place_due(Some("2099-05-31"), None, None, &new_york, &today);
         assert!(yesterday.overdue && yesterday.lands_today);
         assert_eq!(yesterday.days_from_today, Some(-1));
-        let tonight = place_due(Some("2099-06-02T01:00:00.000Z"), None, &new_york, &today);
+        let tonight = place_due(
+            Some("2099-06-02T01:00:00.000Z"),
+            None,
+            None,
+            &new_york,
+            &today,
+        );
         assert!(
             !tonight.overdue && tonight.lands_today,
             "21:00 on the 1st, local"
         );
-        let tomorrow = place_due(Some("2099-06-02"), None, &new_york, &today);
+        let tomorrow = place_due(Some("2099-06-02"), None, None, &new_york, &today);
         assert!(!tomorrow.lands_today);
         assert_eq!(tomorrow.days_from_today, Some(1));
         assert_eq!(
-            place_due(None, Some(10), &new_york, &today),
+            place_due(None, Some(10), None, &new_york, &today),
             DuePlacement::default()
         );
+    }
+
+    #[test]
+    fn a_snooze_moves_the_alert_and_leaves_the_due() {
+        let new_york = zone("America/New_York");
+        let today = today(&new_york, "2099-06-02T02:00:00.000Z").expect("now");
+        let placed = place_due(
+            Some("2099-06-10T13:00:00.000Z"),
+            Some(30),
+            Some("2099-06-02T15:00:00.000Z"),
+            &new_york,
+            &today,
+        );
+        assert_eq!(placed.remind_at_local, "2099-06-02T11:00");
+        assert_eq!(placed.due_local, "2099-06-10T09:00");
+        let plain = place_due(
+            Some("2099-06-10T13:00:00.000Z"),
+            Some(30),
+            None,
+            &new_york,
+            &today,
+        );
+        assert_eq!(plain.remind_at_local, "2099-06-10T08:30");
     }
 
     #[test]

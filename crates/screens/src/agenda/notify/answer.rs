@@ -7,8 +7,8 @@
 //! when the core knows an inverse. A repeating task's completion has no Undo:
 //! the engine has opened its next occurrence already, and reopening this one
 //! would leave two open copies of one series. A snooze and a move to tomorrow
-//! undo by putting the due and the lead back as they were read: the core has no
-//! inverse for an edit.
+//! undo by putting the due and the lead back as they were read when the core
+//! names no inverse. A snooze moves the alert alone (`task.snoozed_until`).
 
 use std::collections::BTreeMap;
 
@@ -99,27 +99,14 @@ pub fn parse(id: &str) -> Option<Target> {
     }
 }
 
-/// An hour from `now_local`, as the wall clock of `zone` (`YYYY-MM-DDTHH:MM`).
-/// The hour is elapsed time: across a spring-forward 01:30 snoozes to 03:30.
-/// An autumn overlap's repeated wall clock reads as its earlier instant, so a
-/// wall clock that would land before the hour is up moves on by what it lacks.
+/// An hour from `now_local` in `zone`, as the UTC instant the alert sounds again (#1188, NA5). The
+/// hour is elapsed time, so a spring-forward or an autumn overlap changes nothing about it.
 #[must_use]
-pub fn snooze_due(now_local: &str, zone: &str) -> Option<String> {
+pub fn snooze_until(now_local: &str, zone: &str) -> Option<String> {
     let zone = FireZone::named(zone).ok()?;
-    let target = parse_civil_ms(now_local, &zone)? + 3_600_000;
-    let wall = |ms: i64| {
-        let at = zone.zoned_parts(ms);
-        format!(
-            "{:04}-{:02}-{:02}T{:02}:{:02}",
-            at.year, at.month, at.day, at.hour, at.minute
-        )
-    };
-    let due = wall(target);
-    let read = parse_civil_ms(&due, &zone)?;
-    if read < target {
-        return Some(wall(target + (target - read)));
-    }
-    Some(due)
+    Some(centraid_vault::clock::format_iso_ms(
+        parse_civil_ms(now_local, &zone)? + 3_600_000,
+    ))
 }
 
 /// Tomorrow at the task's own time of day, as a wall clock the core places
@@ -320,6 +307,20 @@ fn edit_undo(settled: &Settled, task_id: &str, task: &TaskFacts) -> Option<wire:
     ))
 }
 
+/// Move the alert and nothing else: the due and the lead stay as the member set them.
+fn snooze(ctx: &Ctx, task_id: &str, until: String, press: &str) -> Settled {
+    // undo-exempt: a notification has no status line; its receipt offers the Undo.
+    kit_act::act(
+        ctx,
+        act::reminders::EditTask {
+            task_id: task_id.to_owned(),
+            snoozed_until: Field::Is(until),
+            ..Default::default()
+        },
+        &key("snooze-task", task_id, press),
+    )
+}
+
 fn edit(ctx: &Ctx, task_id: &str, due: String, lead: Field<i64>, press: &str) -> Settled {
     // undo-exempt: a notification has no status line; its receipt offers the Undo.
     kit_act::act(
@@ -427,10 +428,10 @@ pub fn handle(
                 }
                 // MOVING A REPEATING TASK'S DUE WOULD MOVE THE WHOLE SERIES.
                 Verb::SnoozeHour if !task.repeats => {
-                    let Some(due) = snooze_due(&facts.now_local, ctx.zone()) else {
+                    let Some(until) = snooze_until(&facts.now_local, ctx.zone()) else {
                         return Handled::Refused;
                     };
-                    let settled = edit(ctx, &task_id, due, Field::Is(0), &answered.press_id);
+                    let settled = snooze(ctx, &task_id, until, &answered.press_id);
                     let undo = edit_undo(&settled, &task_id, task);
                     done(
                         ctx,

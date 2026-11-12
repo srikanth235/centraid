@@ -139,6 +139,64 @@ fn a_task_with_a_moment_and_a_lead_time_holds_one_row_and_done_removes_it() {
     assert!(w.rows().is_empty(), "a done task fires nothing");
 }
 
+/// NA5: A SNOOZE MOVES THE ALERT, NOT THE DUE. While one is set it is the task's one row; editing
+/// the due, the lead or the repeat ends it, and so does finishing the task.
+#[test]
+fn a_snooze_is_the_tasks_one_row_and_the_due_stays() {
+    let w = World::new();
+    let id = w.ok(
+        "task.add",
+        json!({ "title": "Call", "due": "2026-03-01T09:00:00Z", "remind_before_min": 15 }),
+    )["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    w.ok(
+        "task.edit",
+        json!({ "id": id, "snoozed_until": "2026-03-01T10:00:00.000Z" }),
+    );
+    let rows = w.rows();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].fire_key, "2026-03-01T10:00:00.000Z");
+    let due: String = w
+        .scratch
+        .vault
+        .read(|c| Ok(c.query_row("SELECT due FROM task WHERE id = ?1", [&id], |r| r.get(0))?))
+        .expect("due");
+    assert_eq!(due, "2026-03-01T09:00:00Z", "the due is never moved");
+    // Ending it by hand puts the reminder back.
+    w.ok("task.edit", json!({ "id": id, "snoozed_until": null }));
+    assert_eq!(w.rows()[0].fire_key, "2026-03-01T08:45:00.000Z");
+    // A new due ends a snooze set against the old one.
+    w.ok(
+        "task.edit",
+        json!({ "id": id, "snoozed_until": "2026-03-01T10:00:00.000Z" }),
+    );
+    w.ok(
+        "task.edit",
+        json!({ "id": id, "due": "2026-03-02T09:00:00Z" }),
+    );
+    assert_eq!(w.rows()[0].fire_key, "2026-03-02T08:45:00.000Z");
+    // Finishing it clears the snooze, so a reopened task does not wake again at the old moment.
+    w.ok(
+        "task.edit",
+        json!({ "id": id, "snoozed_until": "2026-03-02T10:00:00.000Z" }),
+    );
+    w.ok("task.complete", json!({ "id": id }));
+    let kept: Option<String> = w
+        .scratch
+        .vault
+        .read(|c| {
+            Ok(
+                c.query_row("SELECT snoozed_until FROM task WHERE id = ?1", [&id], |r| {
+                    r.get(0)
+                })?,
+            )
+        })
+        .expect("snooze");
+    assert_eq!(kept, None);
+}
+
 #[test]
 fn a_wall_clock_task_floats() {
     let w = World::new();

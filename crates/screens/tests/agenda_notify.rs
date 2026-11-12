@@ -176,6 +176,45 @@ fn tomorrow_and_snooze_move_a_task_and_undo_puts_it_back() {
     );
 }
 
+/// NA5: A SNOOZE MOVES THE ALERT, NOT THE DUE DATE. The task keeps its due and its lead, the
+/// reminder row says the new moment, and Undo gives the original reminder back.
+#[test]
+fn a_snooze_moves_the_alert_and_leaves_the_due() {
+    let (mut d, service) = rig();
+    clear_tasks(&d);
+    let later = day(&d, 4);
+    let id = add(
+        &d,
+        act::reminders::AddTask {
+            title: "Water plants".to_owned(),
+            due: Field::Is(format!("{later}T09:00")),
+            remind_before_min: Field::Is(15),
+            ..Default::default()
+        },
+    );
+    changed(&mut d, service);
+    let original = format!("task||{id}|{later}T08:45");
+    assert!(has(&latest(&d), &original), "{:?}", latest(&d).all);
+    pressed(&mut d, service, &original, Verb::SnoozeHour);
+    let task = task_of(&d, &id);
+    assert_eq!(task.due_local, format!("{later}T09:00"), "the due stays");
+    assert_eq!(task.remind_before_min, Some(15), "the lead stays");
+    let set = latest(&d);
+    assert!(!has(&set, &original), "{:?}", set.all);
+    assert!(
+        set.all
+            .iter()
+            .any(|n| n.notification_id.starts_with(&format!("task||{id}|")) && !n.immediate),
+        "the alert is at the snoozed moment: {:?}",
+        set.all
+    );
+    let receipt = set.all.iter().find(|n| n.immediate).expect("a receipt");
+    let receipt_id = receipt.notification_id.clone();
+    pressed(&mut d, service, &receipt_id, Verb::Undo);
+    assert!(has(&latest(&d), &original), "{:?}", latest(&d).all);
+    assert_eq!(task_of(&d, &id).due_local, format!("{later}T09:00"));
+}
+
 fn task_of_status(d: &Driver, id: &str) -> String {
     task_of(d, id).status
 }

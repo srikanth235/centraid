@@ -437,6 +437,16 @@ fn set_stated(ctx: &CommandCtx<'_, '_>, id: &str, columns: &[(&str, &str)]) -> R
 
 fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let id = ctx.required_str("id")?;
+    // A SNOOZE BELONGS TO THE DUE, LEAD AND RULE IT WAS SET AGAINST (#1188, NA5): an edit of any of
+    // them that does not state a snooze of its own ends it, so the new reminder is the one set.
+    if ["due", "remind_before_min", "rule"]
+        .iter()
+        .any(|key| ctx.input.get(*key).is_some())
+        && ctx.input.get("snoozed_until").is_none()
+    {
+        ctx.connection()
+            .execute("UPDATE task SET snoozed_until = NULL WHERE id = ?1", [id])?;
+    }
     set_stated(
         ctx,
         id,
@@ -447,6 +457,7 @@ fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             ("effort_min", "effort_min"),
             ("remind_before_min", "remind_before_min"),
             ("rule", "rule"),
+            ("snoozed_until", "snoozed_until"),
             ("url", "url"),
         ],
     )?;
@@ -550,7 +561,8 @@ pub fn complete(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Completion> {
         return Ok(done);
     }
     connection.execute(
-        "UPDATE task SET status = 'done', done_at = ?2, series_id = ?3 WHERE id = ?1",
+        "UPDATE task SET status = 'done', done_at = ?2, series_id = ?3, snoozed_until = NULL
+          WHERE id = ?1",
         rusqlite::params![id, ctx.now, series],
     )?;
     ctx.touch(id)?;
@@ -668,6 +680,7 @@ const EDIT_SCHEMA: &str = r#"{
     "effort_min": { "type": ["integer", "null"], "minimum": 1 },
     "remind_before_min": { "type": ["integer", "null"], "minimum": 0 },
     "rule": { "type": ["string", "null"] },
+    "snoozed_until": { "type": ["string", "null"], "description": "A UTC instant: the reminder sounds again then, the due unmoved." },
     "url": { "type": ["string", "null"], "maxLength": 2048 },
     "expected_rev": { "type": "integer", "minimum": 0 }
   }

@@ -453,6 +453,10 @@ CREATE TABLE task (
   zone              TEXT,
   series_id         TEXT REFERENCES task(id),
   remind_before_min INTEGER CHECK (remind_before_min IS NULL OR remind_before_min >= 0),
+  -- A SNOOZE MOVES THE ALERT, NOT THE DUE (#1188, NA5): the UTC instant the member asked to be
+  -- reminded again. While it is set it is the task's one alert (`alerts::refresh`); an edit of the
+  -- due, the lead or the rule clears it, and so does finishing the task.
+  snoozed_until     TEXT CHECK (snoozed_until IS NULL OR (datetime(snoozed_until) IS NOT NULL AND length(snoozed_until) > 10)),
   url               TEXT CHECK (url IS NULL OR length(trim(url)) > 0),
   effort_min        INTEGER CHECK (effort_min IS NULL OR effort_min > 0),
   parent_id         TEXT REFERENCES task(id) CHECK (parent_id IS NULL OR parent_id <> id),

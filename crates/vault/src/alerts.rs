@@ -509,12 +509,13 @@ type TaskFields = (
     String,
     Option<String>,
     Option<i64>,
+    Option<String>,
 );
 
 fn task_alerts(connection: &Connection, id: &str, now: i64) -> Result<Vec<Alert>> {
     let fields: Option<TaskFields> = connection
         .query_row(
-            "SELECT due, rule, anchor, zone, remind_before_min FROM task
+            "SELECT due, rule, anchor, zone, remind_before_min, snoozed_until FROM task
               WHERE id = ?1 AND status = 'open'",
             [id],
             |row| {
@@ -524,13 +525,28 @@ fn task_alerts(connection: &Connection, id: &str, now: i64) -> Result<Vec<Alert>
                     row.get(2)?,
                     row.get(3)?,
                     row.get(4)?,
+                    row.get(5)?,
                 ))
             },
         )
         .optional()?;
-    let Some((Some(due), rule, anchor, zone, Some(lead))) = fields else {
+    let Some((Some(due), rule, anchor, zone, Some(lead), snoozed)) = fields else {
         return Ok(Vec::new());
     };
+    // A SNOOZE MOVES THE ALERT, NOT THE DUE (#1188, NA5): while one is set it is the task's only
+    // alert, at the instant the member asked for. The due is untouched.
+    if let Some(until) = snoozed
+        .as_deref()
+        .and_then(|text| ms_in(Timing::Fixed, text))
+    {
+        return Ok(vec![Alert {
+            entity_id: id.to_owned(),
+            offset_min: lead,
+            timing: Timing::Fixed,
+            fire_key: Timing::Fixed.key_of(until),
+            repeats: false,
+        }]);
+    }
     // A DAY HAS NO MOMENT: a date-only due sounds at 09:00 that day, wherever the member is, and
     // its lead time means nothing. The due itself is never given the time.
     let date_only = due.len() == 10;

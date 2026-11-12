@@ -423,6 +423,10 @@
             "type": ["integer", "null"],
             "minimum": 0
           },
+          "snoozed_until": {
+            "type": ["string", "null"],
+            "description": "A UTC instant: the reminder sounds again then and the due stays; null ends the snooze. Editing the due, the lead or the repeat ends it."
+          },
           "rule": {
             "type": ["string", "null"],
             "description": "An RFC 5545 recurrence rule; the vault refuses one it cannot expand, and a repeating task needs a due date."
