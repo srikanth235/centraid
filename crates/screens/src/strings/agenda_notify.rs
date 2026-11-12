@@ -7,6 +7,7 @@ catalog! {
     plain mark_done = ("Mark as done", "Mark as done");
     plain moved_tomorrow = ("Moved to tomorrow", "Moved to tomorrow");
     plain snooze_hour = ("Snooze 1 hour", "Snooze 1 hour");
+    plain channel_reminders = ("Reminders and events", "Reminders and events");
     plain private_task_title = ("Reminder", "Reminder");
     plain private_event_title = ("Event", "Event");
     plain private_body = ("Open Centraid to see it.", "Open Centraid to see it.");

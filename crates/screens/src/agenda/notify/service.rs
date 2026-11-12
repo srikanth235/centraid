@@ -22,7 +22,7 @@ use crate::kit::civil;
 use crate::kit::permission::AlertFacts;
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
-use crate::strings::agenda_reminders as reminders;
+use crate::strings::agenda_notify as words;
 use crate::strings::home;
 
 /// The route name of the service.
@@ -230,7 +230,12 @@ impl Service {
             );
         }
         if let Some(Spoken { mut all, live }) = self.sync.next(&vault, reading) {
-            let ask_permission = !all.is_empty();
+            // Only the member's own reminders and events ask by themselves; another producer's
+            // notices wait for its screen to call `ask`.
+            let own = all
+                .iter()
+                .any(|held| !extra.iter().any(|notice| notice.id == held.notification_id));
+            let ask_permission = ctx.alerts().take_ask() || own;
             all.extend(self.receipt.iter().map(|held| held.notification.clone()));
             out.push(wire::Effect {
                 kind: Some(wire::effect::Kind::ScheduleNotifications(
@@ -238,7 +243,7 @@ impl Service {
                         all,
                         categories: desired::categories(ctx.locale()),
                         ask_permission,
-                        channel_name: reminders::band_reminders(ctx.locale()),
+                        channel_name: words::channel_reminders(ctx.locale()),
                         live_ids: live,
                         backup_channel_name: home::band_backup(ctx.locale()),
                     },

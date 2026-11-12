@@ -115,7 +115,7 @@ fn alert_facts_say_the_one_line_that_matters_and_nothing_when_all_is_well() {
     );
     assert_eq!(
         facts(P::Granted, true, true).line(en).as_deref(),
-        Some("Reminders alerts are off. Turn them on in Settings."),
+        Some("Alerts for reminders and events are off. Turn them on in Settings."),
     );
     assert_eq!(
         facts(P::Granted, true, false).line(en).as_deref(),

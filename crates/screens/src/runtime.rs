@@ -156,6 +156,13 @@ impl Runtime {
         }
     }
 
+    /// The board every notification producer writes to and the notification service reads
+    /// (`AlertBoard::offer`, `AlertBoard::ask`).
+    #[must_use]
+    pub fn alerts(&self) -> crate::kit::permission::AlertBoard {
+        self.lock().alerts.clone()
+    }
+
     /// Screens that run for as long as the runtime does, with no view and no
     /// tab: the pass scheduler, which must hear the app's lifecycle, the
     /// environment and the tables it read whether or not any page is open

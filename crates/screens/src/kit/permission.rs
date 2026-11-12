@@ -194,27 +194,18 @@ impl AlertFacts {
         if let Some(state) = self.permission.and_then(State::of_notifications) {
             return Some(says(locale, Resource::Notifications, state));
         }
-        let (off, shown, fallback) = match channel {
-            Channel::Reminders => (
-                self.channel_off,
-                &self.channel,
-                words::notifications_channel_fallback(locale),
-            ),
-            Channel::Backup => (
-                self.backup_channel_off,
-                &self.backup_channel,
-                words::notifications_backup_channel_fallback(locale),
-            ),
-        };
-        if off {
-            let channel = if shown.is_empty() {
-                fallback
+        if channel == Channel::Reminders && self.channel_off {
+            return Some(words::notifications_reminders_off(locale));
+        }
+        if channel == Channel::Backup && self.backup_channel_off {
+            let shown = if self.backup_channel.is_empty() {
+                words::notifications_backup_channel_fallback(locale)
             } else {
-                shown.clone()
+                self.backup_channel.clone()
             };
             return Some(fill(
                 &words::notifications_channel_off(locale),
-                &[("channel", &channel)],
+                &[("channel", &shown)],
             ));
         }
         self.exact_denied
@@ -293,6 +284,8 @@ pub struct Offer {
 struct Inner {
     facts: AlertFacts,
     offers: std::collections::BTreeMap<String, Offer>,
+    /// A screen asked for the system prompt (Backup's "Allow notifications"); the next sync asks.
+    asking: bool,
 }
 
 /// THE ONE BOARD the notification service and every screen that relies on alerts share, so a
@@ -325,22 +318,47 @@ impl AlertBoard {
     /// A PRODUCER'S WORD: what `producer` wants held and which of its delivered notices are still
     /// wanted (an empty offer withdraws it). The service hears of a change and speaks again.
     pub fn offer(&self, ctx: &crate::screen::Ctx, producer: &str, offer: Offer) {
-        let changed = {
-            let mut inner = self.lock();
-            if offer == Offer::default() {
-                inner.offers.remove(producer).is_some()
-            } else {
-                inner.offers.insert(producer.to_owned(), offer.clone()) != Some(offer)
-            }
-        };
-        if changed {
-            ctx.post(
-                crate::agenda::notify::NAME,
-                wire::ScreenEvent {
-                    kind: Some(wire::screen_event::Kind::Signalled(wire::Signalled {})),
-                },
-            );
+        if self.hold(producer, offer) {
+            Self::signal(ctx);
         }
+    }
+
+    /// `offer` for a caller with no `Ctx` (start-up registration, tests): records the offer and
+    /// says whether it changed. It posts nothing; send the service a `Signalled`.
+    pub fn hold(&self, producer: &str, offer: Offer) -> bool {
+        let mut inner = self.lock();
+        if offer == Offer::default() {
+            inner.offers.remove(producer).is_some()
+        } else {
+            inner.offers.insert(producer.to_owned(), offer.clone()) != Some(offer)
+        }
+    }
+
+    fn signal(ctx: &crate::screen::Ctx) {
+        ctx.post(
+            crate::agenda::notify::NAME,
+            wire::ScreenEvent {
+                kind: Some(wire::screen_event::Kind::Signalled(wire::Signalled {})),
+            },
+        );
+    }
+
+    /// THE MEMBER SAID "Allow notifications" on a screen that explained why (Backup's sheet): the
+    /// service's next sync starts the system prompt, through the same one path as the agenda's. A
+    /// producer's notices alone never ask; only this does.
+    pub fn ask(&self, ctx: &crate::screen::Ctx) {
+        self.request_ask();
+        Self::signal(ctx);
+    }
+
+    /// `ask` for a caller with no `Ctx`; send the service a `Signalled` after it.
+    pub fn request_ask(&self) {
+        self.lock().asking = true;
+    }
+
+    /// Whether `ask` was called since the service last spoke; clears it.
+    pub(crate) fn take_ask(&self) -> bool {
+        std::mem::take(&mut self.lock().asking)
     }
 
     /// Every producer's notices, soonest first, each id once.

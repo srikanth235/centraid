@@ -448,3 +448,84 @@ fn answered(d: &mut Driver, service: u64, scheduled: wire::NotificationsSchedule
         }),
     );
 }
+
+/// ANOTHER PRODUCER'S NOTICE (#1188, NB2): held through the one service, it never starts the
+/// system prompt by itself, only its screen's own `ask` does, and a tap on it opens where it says.
+#[test]
+fn another_producers_notice_never_asks_by_itself_and_a_tap_opens_its_route() {
+    use centraid_screens::kit::permission::{Channel, ExtraNotice, Offer};
+    let runtime = centraid_screens::Runtime::new(
+        agenda::registry(),
+        vec![(
+            agenda::TAB.to_owned(),
+            routes::home(wire::AgendaDestination::Day, ""),
+        )],
+    )
+    .with_services(agenda::notify::services());
+    let board = runtime.alerts();
+    let mut d = Driver::with_runtime(runtime);
+    d.start();
+    let service = d
+        .effects
+        .iter()
+        .find(|request| {
+            matches!(
+                request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+                Some(wire::effect::Kind::ScheduleNotifications(_))
+            )
+        })
+        .map(|request| request.instance)
+        .expect("the service spoke when it appeared");
+    clear_tasks(&d);
+    changed(&mut d, service);
+    let opens = routes::home(wire::AgendaDestination::Week, "");
+    let signalled = |d: &mut Driver| {
+        d.effects.clear();
+        d.send(service, E::Signalled(wire::Signalled {}));
+    };
+    let fire_at_ms = 4_000_000_000_000;
+    assert!(board.hold(
+        "backup",
+        Offer {
+            notices: vec![ExtraNotice {
+                id: "backup|stale".to_owned(),
+                channel: Channel::Backup,
+                fire_at_ms,
+                title: "Backup".to_owned(),
+                body: "Your backup is out of date.".to_owned(),
+                opens: opens.clone(),
+            }],
+            wanted: vec![],
+        },
+    ));
+    signalled(&mut d);
+    let set = latest(&d);
+    assert!(has(&set, "backup|stale"), "the notice is held");
+    assert!(!set.ask_permission, "a producer's notices alone never ask");
+    board.request_ask();
+    signalled(&mut d);
+    assert!(latest(&d).ask_permission, "its screen's own ask does");
+    signalled(&mut d);
+    assert!(!latest(&d).ask_permission, "an ask is spent once");
+    d.effects.clear();
+    d.send(
+        service,
+        E::ShellFact(wire::ShellFact {
+            fact: Some(wire::shell_fact::Fact::NotificationAnswered(
+                wire::NotificationAnswered {
+                    notification_id: "backup|stale".to_owned(),
+                    verb: Verb::Open as i32,
+                    press_id: String::new(),
+                },
+            )),
+        }),
+    );
+    let opened =
+        d.effects
+            .iter()
+            .find_map(|request| match request.effect.as_ref()?.kind.as_ref()? {
+                wire::effect::Kind::OpenRoute(open) => open.route.clone(),
+                _ => None,
+            });
+    assert_eq!(opened, Some(opens), "a tap opens the producer's route");
+}
