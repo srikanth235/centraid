@@ -104,6 +104,21 @@ fn plain(sentence: String) -> wire::StatusLine {
 }
 
 impl Undo {
+    /// A write made elsewhere that this screen offers Undo for: the chat's confirm card runs its
+    /// writes in the core and gets each write's inverse back, so the card holds one of these for
+    /// every write, and a tap on its Undo goes through [`Undo::acted`] like any screen's.
+    #[must_use]
+    pub fn adopt(locale: Locale, app: String, inverse: wire::ActInverse, said: String) -> Self {
+        Self {
+            offer: Some(Offer::of(app, inverse)),
+            line: Some(wire::StatusLine {
+                sentence: said,
+                action_label: shared::undo_label(locale),
+                refused: false,
+            }),
+        }
+    }
+
     /// The line to draw, if any.
     #[must_use]
     pub fn status(&self) -> Option<wire::StatusLine> {

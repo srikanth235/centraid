@@ -496,8 +496,37 @@ impl Chat {
             } else {
                 settled.line
             };
+            if outcome == O::Applied {
+                held.undo = settled
+                    .undo
+                    .into_iter()
+                    .map(|step| {
+                        crate::kit::undo::Undo::adopt(
+                            locale,
+                            step.app,
+                            wire::ActInverse {
+                                action: step.action,
+                                input: step.input,
+                            },
+                            words::made_by_chat(locale),
+                        )
+                    })
+                    .collect();
+            }
         }
         Vec::new()
+    }
+
+    /// One write's Undo was tapped on an applied card: the kit's door runs the stored inverse (a
+    /// member's own act, `history.undo` naming the version), says "Undone" or the core's refusal
+    /// sentence on that write's line, and the vault's change reaches the other screens through
+    /// the change feed.
+    pub(super) fn undo_tapped(&mut self, id: &str, index: usize, ctx: &Ctx) {
+        if let Some(held) = self.proposal_mut(id, Stage::Applied)
+            && let Some(undo) = held.undo.get_mut(index)
+        {
+            undo.acted(ctx);
+        }
     }
 
     /// The OS owner check answered for a held confirm: opened, the same confirm goes again; not,
@@ -683,6 +712,7 @@ impl Msg {
             destructive: parked.destructive,
             stage: Stage::Waiting,
             line: String::new(),
+            undo: Vec::new(),
         });
     }
 }

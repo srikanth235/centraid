@@ -283,6 +283,23 @@ fn pending_to_wire(card: &PendingCard) -> wire::AssistPending {
     }
 }
 
+/// What takes each applied write back, on the wire: one entry per write that has an inverse.
+fn undo_of(outcome: &Confirmed) -> Vec<wire::AssistUndo> {
+    let Confirmed::Done { undo, .. } = outcome else {
+        return Vec::new();
+    };
+    undo.iter()
+        .filter_map(|step| {
+            let inverse: wire::ActInverse = prost::Message::decode(step.wire.as_slice()).ok()?;
+            Some(wire::AssistUndo {
+                app: step.app.clone(),
+                action: inverse.action,
+                input: inverse.input,
+            })
+        })
+        .collect()
+}
+
 /// How a confirm ended, on the wire.
 fn settle_outcome_of(outcome: &Confirmed) -> wire::AssistSettleOutcome {
     match outcome {
@@ -299,12 +316,14 @@ fn settled(
     pending_id: &str,
     outcome: wire::AssistSettleOutcome,
     line: String,
+    undo: Vec<wire::AssistUndo>,
 ) -> wire::AssistResponse {
     response(wire::assist_response::Kind::Settled(wire::AssistSettled {
         session_id,
         pending_id: pending_id.to_owned(),
         outcome: outcome as i32,
         line,
+        undo,
     }))
 }
 
@@ -513,6 +532,7 @@ pub fn answer(handle: &Handle, request: &wire::AssistRequest) -> Result<wire::As
                 &asked.pending_id,
                 settle_outcome_of(&tapped.outcome),
                 tapped.line,
+                undo_of(&tapped.outcome),
             ))
         }
         K::Dismiss(asked) => {
@@ -527,6 +547,7 @@ pub fn answer(handle: &Handle, request: &wire::AssistRequest) -> Result<wire::As
                 &asked.pending_id,
                 outcome,
                 dismissed_line(dismissed),
+                Vec::new(),
             ))
         }
         K::Documents(asked) => {
@@ -1060,6 +1081,7 @@ mod tests {
             text: String::new(),
             diff: serde_json::Value::Null,
             steps: 1,
+            undo: Vec::new(),
         };
         let stale = Confirmed::Stale { rows: Vec::new() };
         let cases = [

@@ -180,6 +180,10 @@ final class ChatModel: ObservableObject {
 
     func confirmPending(_ id: String) { send(.pendingConfirmed(.with { $0.pendingID = id })) }
     func cancelPending(_ id: String) { send(.pendingCancelled(.with { $0.pendingID = id })) }
+    /// One write's Undo on an applied card (the kit's door runs it in the core).
+    func undoPending(_ id: String, index: Int) {
+        send(.pendingUndone(.with { $0.pendingID = id; $0.index = UInt32(index) }))
+    }
 
     // MARK: Attachments
 

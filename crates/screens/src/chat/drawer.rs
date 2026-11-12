@@ -398,6 +398,7 @@ fn stored_proposal(
         destructive: false,
         stage: Stage::Inert,
         line: words::not_done(ctx.locale()),
+        undo: Vec::new(),
     })
 }
 

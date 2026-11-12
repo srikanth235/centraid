@@ -345,7 +345,7 @@ fn a_write_the_model_parks_is_a_card_in_the_cores_words_and_writes_nothing_until
 }
 
 #[test]
-fn confirm_runs_the_card_once_and_draws_the_cores_line_with_no_undo() {
+fn confirm_runs_the_card_once_and_draws_the_cores_line_with_an_undo_for_the_write() {
     let mut chat = proposing();
     let id = card(&chat).pending_id;
     chat.event(C::PendingConfirmed(wire::chat_event::PendingConfirmed {
@@ -360,6 +360,101 @@ fn confirm_runs_the_card_once_and_draws_the_cores_line_with_no_undo() {
         pending_id: id,
     }));
     assert_eq!(card(&chat).state(), State::Applied);
+    // ONE UNDO FOR THE ONE WRITE, said as the board has it
+    let pending = card(&chat);
+    assert_eq!(pending.undo.len(), 1);
+    assert_eq!(pending.undo[0].sentence, "Made by Chat");
+    assert_eq!(pending.undo[0].action_label, "Undo");
+}
+
+fn undo(chat: &mut Chat, index: u32) {
+    let id = card(chat).pending_id;
+    chat.event(C::PendingUndone(wire::chat_event::PendingUndone {
+        pending_id: id,
+        index,
+    }));
+}
+
+#[test]
+fn undo_on_the_applied_card_takes_the_write_back_once_through_the_kits_door() {
+    let mut chat = proposing();
+    let id = card(&chat).pending_id;
+    chat.event(C::PendingConfirmed(wire::chat_event::PendingConfirmed {
+        pending_id: id,
+    }));
+    assert_eq!(task_status(&chat, DRY_CLEANING), "done");
+    undo(&mut chat, 0);
+    assert_eq!(task_status(&chat, DRY_CLEANING), "open");
+    let line = &card(&chat).undo[0];
+    assert_eq!(
+        (line.sentence.as_str(), line.action_label.as_str()),
+        ("Undone", "")
+    );
+    // a second tap has nothing on offer, and an index no write has is not heard
+    undo(&mut chat, 0);
+    undo(&mut chat, 7);
+    assert_eq!(task_status(&chat, DRY_CLEANING), "open");
+    assert_eq!(card(&chat).undo[0].sentence, "Undone");
+}
+
+#[test]
+fn an_undo_after_the_record_changed_again_is_refused_in_the_cores_words_and_the_key_is_gone() {
+    use centraid_assist::native::Door as _;
+    use centraid_assist::native::door::text;
+    // a rename: its inverse names the version it made (`history.undo`), so a later change refuses it
+    let mut chat = Chat::ready(script(&[step(
+        "plan: rename",
+        "act",
+        &[
+            ("verb", "edit"),
+            ("kind", "task"),
+            ("name", DRY_CLEANING),
+            ("args", "name: Collect the dry cleaning"),
+        ],
+    )]));
+    chat.say("rename the dry cleaning task");
+    let id = card(&chat).pending_id;
+    chat.event(C::PendingConfirmed(wire::chat_event::PendingConfirmed {
+        pending_id: id,
+    }));
+    assert_eq!(card(&chat).state(), State::Applied);
+    let task = chat
+        .driver
+        .handle
+        .assist_door()
+        .table_where(
+            "entity",
+            "id, title, created_at",
+            "created_at",
+            "id",
+            "kind = ?",
+            &["task".to_owned()],
+        )
+        .unwrap()
+        .iter()
+        .find(|row| text(row, "title").as_deref() == Some("Collect the dry cleaning"))
+        .and_then(|row| text(row, "id"))
+        .expect("the renamed task");
+    chat.driver
+        .handle
+        .command(
+            "entity.retitle",
+            &serde_json::json!({ "id": task, "title": "Dry cleaning, by hand" }),
+            "by-hand",
+        )
+        .unwrap();
+    undo(&mut chat, 0);
+    let line = &card(&chat).undo[0];
+    assert!(line.refused, "{line:?}");
+    assert!(
+        line.action_label.is_empty(),
+        "no Undo key once it was refused"
+    );
+    assert_eq!(
+        task_status(&chat, "Dry cleaning, by hand"),
+        "open",
+        "the later change stays"
+    );
 }
 
 #[test]

@@ -852,7 +852,8 @@ mod tests {
             confirmed_line(&Confirmed::Done {
                 text: String::new(),
                 diff: Value::Null,
-                steps: 1
+                steps: 1,
+                undo: Vec::new(),
             }),
             "Done."
         );

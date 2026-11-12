@@ -272,6 +272,7 @@ impl Handle {
             output: outcome.output,
             reason: outcome.reason,
             predicate: outcome.predicate,
+            inverse: None,
         })
     }
 

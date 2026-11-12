@@ -51,6 +51,7 @@ use centraid_api_proto::core_v1 as wire;
 use centraid_apps_kit::reads::{FanOutBound, read_pages};
 use centraid_apps_kit::row::Row;
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
+use centraid_assist::native::door::Inverse;
 use centraid_assist::native::door::Occurrence;
 use centraid_assist::native::{Call, Door, Ran};
 use centraid_search::Target;
@@ -198,6 +199,7 @@ impl Door for CoreDoor {
             output: Value::Null,
             reason: Some(WRITES_OFF.to_owned()),
             predicate: Some(WRITES_OFF_PREDICATE.to_owned()),
+            inverse: None,
         })
     }
 
@@ -231,7 +233,7 @@ impl Door for CoreDoor {
             }
             .map_err(|error| format!("{}: {error}", call.command))
         })?;
-        Ok(ran_of(&answer))
+        Ok(ran_of(&answer, call.app))
     }
 
     fn events(&self, from_day: &str, to_day: &str, tz: &str) -> Result<Vec<Occurrence>, String> {
@@ -282,13 +284,17 @@ impl Door for CoreDoor {
 /// What the runtime reads of an `act`'s answer. A refusal is a value: the check that failed is the
 /// predicate, except the manifest's own input checks, which are the `schema` the runtime reads a
 /// call the command rejects as.
-fn ran_of(answer: &wire::ActResponse) -> Ran {
+fn ran_of(answer: &wire::ActResponse, app: &str) -> Ran {
     if answer.status == wire::ActStatus::Executed as i32 {
         return Ran {
             ok: true,
             output: serde_json::from_slice(&answer.output).unwrap_or(Value::Null),
             reason: None,
             predicate: None,
+            inverse: answer.inverse.as_ref().map(|inverse| Inverse {
+                app: app.to_owned(),
+                wire: prost::Message::encode_to_vec(inverse),
+            }),
         };
     }
     let check = answer
@@ -307,5 +313,6 @@ fn ran_of(answer: &wire::ActResponse) -> Ran {
             }
             .to_owned(),
         ),
+        inverse: None,
     }
 }

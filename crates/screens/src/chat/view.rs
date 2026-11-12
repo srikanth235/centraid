@@ -475,6 +475,7 @@ fn proposal(held: &Proposal, locale: Locale) -> wire::ChatPending {
         cancel_label: words::not_now(locale),
         destructive: held.destructive,
         settled_line: held.line.clone(),
+        undo: held.undo.iter().filter_map(|undo| undo.status()).collect(),
         accessibility_label: parts.join(". "),
     }
 }

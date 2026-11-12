@@ -1647,6 +1647,7 @@ impl Session {
                         output: Value::Null,
                         reason: Some(reason.to_owned()),
                         predicate: Some(predicate.to_owned()),
+                        inverse: None,
                     };
                     if touched.is_empty()
                         && let Some(ended) = self.refusal(verb, &key, (command, &input), &ran)

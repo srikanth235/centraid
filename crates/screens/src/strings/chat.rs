@@ -84,6 +84,7 @@ catalog! {
     plain note_doc_truncated = ("Read the first part of the document.", "Read the first part of the document.");
     plain not_now = ("Not now", "Not now");
     plain not_done = ("Not done.", "Not done.");
+    plain made_by_chat = ("Made by Chat", "Made by Chat");
     plain reading_document = ("Reading the document", "Reading the document");
     plain reading_photo = ("Reading the photo", "Reading the photo");
     plain proposal_title = ("Proposed change", "Proposed change");

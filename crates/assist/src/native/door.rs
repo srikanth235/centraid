@@ -79,6 +79,18 @@ pub struct Ran {
     pub output: Value,
     pub reason: Option<String>,
     pub predicate: Option<String>,
+    /// What takes the write back, when the act has an inverse (`ActResponse.inverse`): the card's
+    /// Undo runs it through the one door every screen's Undo uses.
+    pub inverse: Option<Inverse>,
+}
+
+/// What takes an executed write back: the app whose action it is, and the core's own encoded
+/// `ActInverse`, carried opaque (this crate does not speak the wire; the core wrote it and the
+/// screen's one Undo door reads it back).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Inverse {
+    pub app: String,
+    pub wire: Vec<u8>,
 }
 
 /// WHAT A WRITE IS: the manifest action chat runs, with the command it invokes. `action` is empty

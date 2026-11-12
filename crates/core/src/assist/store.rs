@@ -507,6 +507,7 @@ mod tests {
             text: String::new(),
             diff: serde_json::json!({}),
             steps: 1,
+            undo: Vec::new(),
         };
         let refused = Confirmed::Refused {
             step: 0,

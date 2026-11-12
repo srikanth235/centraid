@@ -587,6 +587,7 @@ private fun MessageRow(
                 pending,
                 onConfirm = { onEvent(ChatEvent(pending_confirmed = ChatEvent.PendingConfirmed(pending_id = pending.pending_id))) },
                 onCancel = { onEvent(ChatEvent(pending_cancelled = ChatEvent.PendingCancelled(pending_id = pending.pending_id))) },
+                onUndo = { index -> onEvent(ChatEvent(pending_undone = ChatEvent.PendingUndone(pending_id = pending.pending_id, index = index))) },
             )
         }
         if (message.note.isNotEmpty()) {
@@ -715,7 +716,7 @@ private fun CardRow(card: ChatCard, index: Int, appName: String, onOpen: () -> U
  * Rust holds the write until `PendingConfirmed`, and this card only sends the event.
  */
 @Composable
-private fun PendingCard(pending: ChatPending, onConfirm: () -> Unit, onCancel: () -> Unit) {
+private fun PendingCard(pending: ChatPending, onConfirm: () -> Unit, onCancel: () -> Unit, onUndo: (Int) -> Unit) {
     val shape = RoundedCornerShape(dimensionResource(R.dimen.centraid_radius_card))
     val asking = pending.state == ChatPending.State.STATE_WAITING || pending.state == ChatPending.State.STATE_WORKING
     val working = pending.state == ChatPending.State.STATE_WORKING
@@ -792,6 +793,33 @@ private fun PendingCard(pending: ChatPending, onConfirm: () -> Unit, onCancel: (
                 }
             } else if (pending.settled_line.isNotEmpty()) {
                 Text(pending.settled_line, color = centraidResource(R.color.centraid_text_meta), fontSize = tokenSp(R.dimen.centraid_text_meta), modifier = Modifier.testTag("chat-pending-settled"))
+            }
+            // ONE LINE FOR EACH WRITE THE CARD MADE: "Made by Chat" with Undo, then "Undone" or the
+            // core's sentence (and no key once it was refused or taken).
+            pending.undo.forEachIndexed { index, line ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        line.sentence,
+                        modifier = Modifier.weight(1f),
+                        color = centraidResource(if (line.refused) R.color.centraid_state_red_text else R.color.centraid_text_meta),
+                        fontSize = tokenSp(R.dimen.centraid_text_meta),
+                    )
+                    if (line.action_label.isNotEmpty()) {
+                        Box(
+                            Modifier
+                                .heightIn(min = KitGeometry.ROW_MIN)
+                                .clip(CircleShape)
+                                .border(1.dp, centraidResource(R.color.centraid_surface_border), CircleShape)
+                                .clickable { onUndo(index) }
+                                .padding(horizontal = 14.dp)
+                                .semantics { role = Role.Button }
+                                .testTag("chat-pending-undo-$index"),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(line.action_label, color = centraidResource(R.color.centraid_text_ink), fontSize = tokenSp(R.dimen.centraid_text_row), fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
             }
         }
     }

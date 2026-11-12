@@ -90,6 +90,8 @@ pub(super) struct Proposal {
     pub stage: Stage,
     /// How it ended, once it has.
     pub line: String,
+    /// One Undo for each write the card made, in the order they ran (the kit's one door).
+    pub undo: Vec<crate::kit::undo::Undo>,
 }
 
 impl Proposal {
@@ -405,6 +407,10 @@ impl Chat {
             E::AllThreadsDeleted(_) => self.all_threads_deleted(ctx),
             E::PendingConfirmed(confirmed) => self.confirm_tapped(&confirmed.pending_id, ctx),
             E::PendingCancelled(cancelled) => self.cancel_tapped(&cancelled.pending_id, ctx),
+            E::PendingUndone(undone) => {
+                self.undo_tapped(&undone.pending_id, undone.index as usize, ctx);
+                Vec::new()
+            }
             E::DrawerSearchOpened(_) => self.search_opened(),
             E::DrawerSearchTerm(term) => self.search_term(&term.term, ctx),
             E::DrawerSearchClosed(_) => self.search_closed(),
@@ -805,6 +811,7 @@ mod proposal_app_tests {
             destructive: false,
             stage: Stage::Waiting,
             line: String::new(),
+            undo: Vec::new(),
         }
     }
 

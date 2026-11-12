@@ -225,7 +225,8 @@ struct ChatView: View {
                             onRetry: { chat.regenerate() },
                             onOpenCard: { _, index in open(at: index, of: message) },
                             onConfirmPending: { chat.confirmPending($0) },
-                            onCancelPending: { chat.cancelPending($0) }
+                            onCancelPending: { chat.cancelPending($0) },
+                            onUndoPending: { chat.undoPending($0, index: $1) }
                         )
                     }
                     if !state.error.isEmpty, !state.streaming {
@@ -706,6 +707,8 @@ private struct ChatMessageRow: View {
     /// Confirm and Cancel on the proposed write's card, by its id.
     let onConfirmPending: (String) -> Void
     let onCancelPending: (String) -> Void
+    /// One write's Undo on an applied card: the card's id and the write's index.
+    let onUndoPending: (String, Int) -> Void
 
     @Environment(\.colorScheme) private var scheme
 
@@ -767,7 +770,8 @@ private struct ChatMessageRow: View {
                     ChatPendingCard(
                         pending: message.pending,
                         onConfirm: { onConfirmPending(message.pending.pendingID) },
-                        onCancel: { onCancelPending(message.pending.pendingID) }
+                        onCancel: { onCancelPending(message.pending.pendingID) },
+                        onUndo: { onUndoPending(message.pending.pendingID, $0) }
                     )
                 }
                 if !message.note.isEmpty {
@@ -957,6 +961,7 @@ private struct ChatPendingCard: View {
     let pending: Centraid_Core_V1_ChatPending
     let onConfirm: () -> Void
     let onCancel: () -> Void
+    let onUndo: (Int) -> Void
     @Environment(\.colorScheme) private var scheme
 
     /// Confirm and Cancel are drawn while the card waits or the core works.
@@ -1035,6 +1040,29 @@ private struct ChatPendingCard: View {
                         .kitScaledFont(CentraidScale.metaSize)
                         .foregroundStyle(Color(CentraidAsset.textMeta))
                         .accessibilityIdentifier("chat-pending-settled")
+                }
+                // ONE LINE FOR EACH WRITE THE CARD MADE: "Made by Chat" with Undo, then "Undone" or
+                // the core's sentence (and no key once it was refused or taken).
+                ForEach(Array(pending.undo.enumerated()), id: \.offset) { index, line in
+                    HStack(spacing: 8) {
+                        Text(verbatim: line.sentence)
+                            .kitScaledFont(CentraidScale.metaSize)
+                            .foregroundStyle(line.refused ? StateColor.red.text : Color(CentraidAsset.textMeta))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        if !line.actionLabel.isEmpty {
+                            Button(action: { onUndo(index) }) {
+                                Text(verbatim: line.actionLabel)
+                                    .kitScaledFont(CentraidScale.rowSize, weight: .semibold)
+                                    .foregroundStyle(Color(CentraidAsset.textInk))
+                                    .padding(.horizontal, 14)
+                                    .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                                    .overlay(Capsule().strokeBorder(Color(CentraidAsset.surfaceBorder), lineWidth: 1))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("chat-pending-undo-\(index)")
+                        }
+                    }
+                    .accessibilityElement(children: .contain)
                 }
             }
         }

@@ -105,6 +105,8 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
+import "centraid/core/v1/value.proto";
+
 message AssistRequest {
   // 2 `load` and 3 `unload` answer with `status`'s message at `status`'s
   // number: the answer to all three is "where the model stands now".
@@ -557,4 +559,16 @@ message AssistSettled {
   // The one line to say, composed by the runtime from the chat's copy
   // ("Done.", "That changed since. Ask again.").
   string line = 4;
+  // What takes each applied write back, in the order the writes ran: one Undo per write, run
+  // by the kit's one Undo door (`history.undo` through an `ActRequest`). Empty unless `outcome`
+  // is applied; a write with no inverse has no entry.
+  repeated AssistUndo undo = 5;
+}
+
+// ONE WRITE'S WAY BACK: the app whose action the inverse is, and the inverse itself, the
+// fields of an `ActInverse` (`action.proto` imports this file's family, so it cannot be named here).
+message AssistUndo {
+  string app = 1;
+  string action = 2;
+  map<string, Value> input = 3;
 }

@@ -21,6 +21,7 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
+import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/route.proto";
 
 message ChatState {
@@ -222,6 +223,9 @@ message ChatPending {
   // The app every step belongs to, whose colour draws the card; empty (the shell's
   // own colour) when the steps span apps or the kind is no app's.
   string app = 11;
+  // One for each write an applied card made, in the order they ran: "Made by Chat" with Undo,
+  // then "Undone" or the core's sentence once tapped. One Undo per write; there is no undo-all.
+  repeated StatusLine undo = 12;
 
   enum State {
     STATE_UNSPECIFIED = 0;
@@ -301,6 +305,8 @@ message ChatEvent {
     LibraryPhotoTapped library_photo_tapped = 25;
     DocumentsOpened documents_opened = 26;
     DocumentsClosed documents_closed = 27;
+    // The Undo of one write an applied card made (`index` into `ChatPending.undo`).
+    PendingUndone pending_undone = 28;
   }
   reserved 12;
 
@@ -408,6 +414,11 @@ message ChatEvent {
 
   message PendingCancelled {
     string pending_id = 1;
+  }
+
+  message PendingUndone {
+    string pending_id = 1;
+    uint32 index = 2;
   }
 
   message DrawerSearchOpened {}
