@@ -708,8 +708,8 @@ private fun MessageRow(
                         onEvent(ChatEvent(copied = ChatEvent.Copied(message_id = message.id)))
                     }
                 }
-                // a stopped answer is Copy alone (ChatStoppedFailed.dc.html); one that did not finish can be asked again
-                if (isLast && state.can_retry && state.error.isEmpty() && (message.mark.isEmpty() || message.mark_failed)) {
+                // a stopped or failed answer keeps its words and a Try again (#1188 design 5)
+                if (isLast && state.can_retry && state.error.isEmpty()) {
                     ActionButton("Refresh", state.retry_label, "chat-retry") {
                         onEvent(ChatEvent(regenerated = ChatEvent.Regenerated()))
                     }

@@ -896,8 +896,8 @@ private struct ChatMessageRow: View {
                     action: onEdit
                 )
             }
-            // a stopped answer is Copy alone (ChatStoppedFailed.dc.html); one that did not finish can be asked again
-            if isLast, state.canRetry, message.role != .user, message.mark.isEmpty || message.markFailed {
+            // a stopped or failed answer keeps its words and a Try again (#1188 design 5)
+            if isLast, state.canRetry, message.role != .user {
                 KitIconKey(
                     iconKey: "Refresh",
                     label: state.retryLabel,
