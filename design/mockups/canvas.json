@@ -2904,6 +2904,70 @@
       "w": 390,
       "x": 2820,
       "y": 34200
+    },
+    "NotifyRefusedRow.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Notifications: refused, on the editor row",
+      "w": 390,
+      "x": 0,
+      "y": 36400
+    },
+    "NotifyDateOnly.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Notifications: a day with no time",
+      "w": 390,
+      "x": 470,
+      "y": 36400
+    },
+    "NotifyShowDetails.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Notifications: show details",
+      "w": 390,
+      "x": 940,
+      "y": 36400
+    },
+    "NotifyPaused.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Notifications: paused until opened",
+      "w": 390,
+      "x": 1410,
+      "y": 36400
+    },
+    "NotifyRefusedRowDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Notifications: refused, on the editor row · dark",
+      "w": 390,
+      "x": 0,
+      "y": 36400
+    },
+    "NotifyDateOnlyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Notifications: a day with no time · dark",
+      "w": 390,
+      "x": 470,
+      "y": 36400
+    },
+    "NotifyShowDetailsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Notifications: show details · dark",
+      "w": 390,
+      "x": 940,
+      "y": 36400
+    },
+    "NotifyPausedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Notifications: paused until opened · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 36400
     }
   },
   "createdOnFiles": {
@@ -3727,7 +3791,15 @@
     "ChatTooLong.dc.html",
     "ChatTooLongDark.dc.html",
     "ChatCardsMore.dc.html",
-    "ChatCardsMoreDark.dc.html"
+    "ChatCardsMoreDark.dc.html",
+    "NotifyRefusedRow.dc.html",
+    "NotifyDateOnly.dc.html",
+    "NotifyShowDetails.dc.html",
+    "NotifyPaused.dc.html",
+    "NotifyRefusedRowDark.dc.html",
+    "NotifyDateOnlyDark.dc.html",
+    "NotifyShowDetailsDark.dc.html",
+    "NotifyPausedDark.dc.html"
   ],
   "pages": [
     {

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Alerts on a day with no time</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #8E8A84; font-family: Geist, system-ui, sans-serif; color: #1C1B19;">
+<div style="position: absolute; left: 0; right: 0; top: 40px; bottom: 0; background: #F4F2EE; border-radius: 28px 28px 0 0; padding: 10px 16px 0; box-sizing: border-box; overflow: hidden;">
+<div style="display: flex; align-items: center; justify-content: space-between; height: 44px;"><button aria-label="Cancel" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid #E4E0D8; background: #FFFFFF; display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button><span style="font-size: 17px; font-weight: 600;">Pay electricity bill</span><button style="height: 44px; padding: 0 18px; border-radius: 22px; border: none; background: #266FC4; color: #FFFFFF; font-size: 16px; font-weight: 600;">Save</button></div>
+<div style="background: #FFFFFF; border-radius: 16px; margin-top: 12px; overflow: hidden;"><div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; min-height: 44px; border-bottom: 1px solid #EEEBE5;"><span style="font-size: 16px;">Due</span><span style="font-size: 16px; color: #6F6B64;">Fri 13 Nov</span></div><div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; min-height: 44px; border-bottom: 1px solid #EEEBE5;"><span style="font-size: 16px;">Time</span><span style="font-size: 16px; color: #6F6B64;">None</span></div><div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; min-height: 44px;"><span style="font-size: 16px;">Alert</span><span style="font-size: 16px; color: #6F6B64;">On the day, 09:00</span></div></div>
+<p style="margin: 8px 16px 0; font-size: 13px; line-height: 18px; color: #6F6B64;">A reminder for a day with no time sounds at 09:00 that day.</p>
+<p style="margin: 26px 16px 0; font-size: 13px; line-height: 18px; color: #6F6B64;">AN ALL-DAY EVENT</p>
+<div style="background: #FFFFFF; border-radius: 16px; margin-top: 6px; overflow: hidden;"><div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; min-height: 44px; border-bottom: 1px solid #EEEBE5;"><span style="font-size: 16px;">Starts</span><span style="font-size: 16px; color: #6F6B64;">Fri 13 Nov</span></div><div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; min-height: 44px; border-bottom: 1px solid #EEEBE5;"><span style="font-size: 16px;">All-day</span><span style="font-size: 16px; color: #6F6B64;">On</span></div><div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; min-height: 44px;"><span style="font-size: 16px;">Alert</span><span style="font-size: 16px; color: #6F6B64;">On the day, 09:00</span></div></div>
+<p style="margin: 8px 16px 0; font-size: 13px; line-height: 18px; color: #6F6B64;">An alert for an all-day event sounds at 09:00 that day. The day itself keeps no time: 09:00 is when the alert sounds, and Centraid never adds it to the item.</p>
+</div>
+</div>
+</x-dc>
+</body>
+</html>
