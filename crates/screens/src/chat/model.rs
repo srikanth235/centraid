@@ -337,7 +337,7 @@ impl Chat {
 
     /// A model path in the shell's models directory.
     pub fn model_path(&self) -> String {
-        asset::path(&self.models_dir, &asset::MODEL)
+        asset::path(&self.models_dir, &asset::model())
     }
 
     pub fn projector_path(&self) -> String {
@@ -614,7 +614,11 @@ impl Chat {
     }
 
     fn download_tapped(&mut self, vision: bool) -> Vec<wire::Effect> {
-        let model = if vision { asset::VISION } else { asset::MODEL };
+        let model = if vision {
+            asset::VISION
+        } else {
+            asset::model()
+        };
         if vision {
             if self.vision.phase != VisionPhase::Needs {
                 return Vec::new();

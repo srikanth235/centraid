@@ -43,6 +43,7 @@ pub mod model;
 pub mod native;
 pub mod native_turn;
 pub mod prompt;
+pub mod record;
 pub mod result;
 pub mod suggest;
 pub mod testing;

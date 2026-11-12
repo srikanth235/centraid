@@ -35,3 +35,7 @@ A turn with an attachment skips all of it: one streamed answer over the photogra
 | A write on the phone before the member's tap | `Flags::writes` = `Park`: no step reaches the door until `Session::confirm`, which refuses a stale card (`crates/nativetools/tests/park_confirm.rs`); the patch is held to the vault by `tests/park.rs`; the core's door refuses a bare `run` |
 | A claimed action in the free reply | the free reply's system turn says it cannot send, call or change anything, and `prompt::tests::the_free_reply_is_told_it_can_act_on_nothing` pins it; it reads no vault, so it can state no fact about one |
 | A persisted transcript | a chat's session is memory; there is no table and no file (R-1088-10) |
+
+## The model record
+
+The model this release ships is pinned in [`model.json`](model.json) (#1188): a Hugging Face URL at a commit, the file's SHA-256 and size, the tool catalogue (`tools_mode`) it learned, the BLAKE3 hashes of that catalogue and of the static system prompt, and its score. `crates/screens/src/chat/asset.rs` reads the record for the download; nothing is typed twice. `cargo xtask model-pin --url … --file … --tools-mode … --score …` writes it (size and SHA-256 come from the file, the hashes from the runtime, the standing record becomes `previous`, the two-model window). The gate's `model-record` step (`tests/model_record.rs`) refuses a build whose record does not match the runtime's catalogue and prompt, or whose pin is not a commit. The phone fetches a pinned file only when the member asks.

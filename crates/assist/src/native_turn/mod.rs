@@ -1,7 +1,8 @@
 //! THE NATIVE TURN LOOP (#1088): the phone runs the runtime the fine-tuning loop trains.
 //!
 //! The model drives [`native::Session`](crate::native::Session), eight flat tools over a vault, one
-//! call per message, up to [`STEP_CAP`] messages per question. Every question about the vault
+//! call per message, up to [`STEP_CAP`] (6) messages per question: the session itself ends the turn in an `ask` at the sixth
+//! call, and the loop's own bound is two more ([`LOOP_BOUND`]), a backstop that a session which failed to end its turn cannot pass. Every question about the vault
 //! takes this loop; an explicit exact-title Find runs its two read calls without model generation; only a turn with an attachment takes [`Plane::run_attached_turn`] instead
 //! (R-1088-9). The order is the driver loop's of the retired Python rig (`eval/run.py`, `train/hf_backend.py`, #1171), in Rust:
 //!
@@ -93,6 +94,10 @@ use words::{Say, say, say_with};
 /// quarter of it held back, because [`estimate_tokens`](crate::prompt::estimate_tokens) counts
 /// the plane's own text near 1.2x and the template adds words the log does not hold.
 const CONTEXT_BUDGET: u32 = Budget::DEFAULT.context / 4 * 3;
+
+/// The loop's own bound on messages in a turn: [`STEP_CAP`] and two more. The session ends a turn at
+/// [`STEP_CAP`]; these two are slack for a session that did not, so the loop never spins (#1188 C15).
+const LOOP_BOUND: usize = STEP_CAP + 2;
 
 /// The longest user message the loop hands the runtime, in characters. A guard on the prompt's
 /// size, not a product limit: the trained messages are a sentence.
@@ -328,7 +333,7 @@ impl<'a> NativePlane<'a> {
         let mut last = user.get("ended").cloned();
         let mut lookup = lookup::calls(&chat.session, &message).into_iter();
         let mut step = 0;
-        while last.is_none() && step < STEP_CAP + 2 {
+        while last.is_none() && step < LOOP_BOUND {
             step += 1;
             if cancel.is_cancelled() {
                 return Err(Refusal::Cancelled);

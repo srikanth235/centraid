@@ -168,6 +168,9 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         // tokenises with special tokens parsed. This step replays the injection corpus through
         // every path that text takes into a prompt and fails if any adds structure.
         step("prompt-injection", run_prompt_injection),
+        // THE MODEL RECORD AGAINST THE RUNTIME (#1188 C1): the pinned model's tool-catalogue and
+        // prompt hashes are the ones this build computes, and the pin is a commit.
+        step("model-record", run_model_record),
         // NO SIMULATION STEP: there is one writer, the phone, and nothing to
         // converge (#1029 §1).
         //
@@ -874,6 +877,15 @@ fn run_prompt_injection(ctx: &Ctx) -> Result<Outcome> {
         "prompt-injection",
         "cargo",
         &["test", "-p", "centraid-assist", "--test", "injection"],
+    )
+}
+
+fn run_model_record(ctx: &Ctx) -> Result<Outcome> {
+    process(
+        ctx,
+        "model-record",
+        "cargo",
+        &["test", "-p", "centraid-assist", "--test", "model_record"],
     )
 }
 

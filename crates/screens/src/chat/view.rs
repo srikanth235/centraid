@@ -84,7 +84,7 @@ impl Chat {
     }
 
     fn model_bytes(&self) -> u64 {
-        super::asset::MODEL.bytes
+        super::asset::model().bytes
     }
 
     fn vision_step(&self, locale: Locale) -> Option<wire::ChatModelStep> {

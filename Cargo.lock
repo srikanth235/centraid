@@ -598,6 +598,7 @@ dependencies = [
 name = "centraid-assist"
 version = "1.0.0-alpha.0"
 dependencies = [
+ "blake3",
  "centraid-apps-calendar",
  "centraid-apps-kit",
  "centraid-search",

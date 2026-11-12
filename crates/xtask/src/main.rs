@@ -29,6 +29,7 @@ mod design_words;
 mod doc_links;
 mod gate;
 mod ledger;
+mod model_pin;
 mod native_parity;
 mod native_parity_register;
 mod native_rules;
@@ -101,6 +102,27 @@ enum Command {
         /// Compare instead of write.
         #[arg(long)]
         check: bool,
+    },
+    /// Write the model record (`crates/assist/model.json`, #1188): the file this release
+    /// ships by Hugging Face URL at a commit, its size and SHA-256 (read from the file you
+    /// name), the runtime's tool-catalogue and prompt hashes, and its score. The record that
+    /// stood becomes `previous` unless `--replace`. Nothing is fetched.
+    ModelPin {
+        /// `https://huggingface.co/<repo>/resolve/<commit>/<file>`: a commit, never a branch.
+        #[arg(long)]
+        url: String,
+        /// The local copy of that exact file.
+        #[arg(long)]
+        file: PathBuf,
+        /// The catalogue the model learned: sig, s2, compact or full.
+        #[arg(long)]
+        tools_mode: String,
+        /// The score it earned, 0 to 1.
+        #[arg(long)]
+        score: Option<f64>,
+        /// Do not keep the standing record as `previous`.
+        #[arg(long)]
+        replace: bool,
     },
     /// Print the repository root every path-based rule will scan.
     ///
@@ -267,6 +289,28 @@ fn main() -> ExitCode {
             }
         },
         Command::Design { check } => match design_emit::run(&root, check) {
+            Ok(()) => true,
+            Err(error) => {
+                eprintln!("xtask: {error:#}");
+                false
+            }
+        },
+        Command::ModelPin {
+            url,
+            file,
+            tools_mode,
+            score,
+            replace,
+        } => match model_pin::run(
+            &root,
+            &model_pin::Pin {
+                url: &url,
+                file: &file,
+                tools_mode: &tools_mode,
+                score,
+                replace,
+            },
+        ) {
             Ok(()) => true,
             Err(error) => {
                 eprintln!("xtask: {error:#}");

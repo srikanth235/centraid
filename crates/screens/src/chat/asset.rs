@@ -19,13 +19,23 @@ pub struct Asset {
     pub bytes: u64,
 }
 
-/// Qwen3.5 0.8B, 4-bit (`Q4_0`), as a GGUF file.
-pub const MODEL: Asset = Asset {
-    url: "https://huggingface.co/ggml-org/Qwen3.5-0.8B-GGUF/resolve/8fea620810c4afa23dd6443f999a48574c1611a3/Qwen3.5-0.8B-Q4_0.gguf",
-    file_name: "Qwen3.5-0.8B-Q4_0.gguf",
-    sha256: "57d1997790d1744fba5b40a7317df71ea5e2acee28c47e78f0cce39c0703f8cf",
-    bytes: 563_036_064,
-};
+/// THE MODEL THIS RELEASE SHIPS, read from the model record (`crates/assist/model.json`,
+/// #1188 C1): the URL (a Hugging Face file at a commit), the SHA-256 and the size the record pins.
+/// Nothing here is typed by hand; `cargo xtask model-pin` writes the record and the gate's
+/// `model-record` step ties it to the runtime's tool catalogue and prompt.
+#[must_use]
+pub fn model() -> Asset {
+    static MODEL: std::sync::OnceLock<Asset> = std::sync::OnceLock::new();
+    *MODEL.get_or_init(|| {
+        let entry = centraid_assist::record::record().current;
+        Asset {
+            url: Box::leak(entry.url.into_boxed_str()),
+            file_name: Box::leak(entry.file_name.into_boxed_str()),
+            sha256: Box::leak(entry.sha256.into_boxed_str()),
+            bytes: entry.bytes,
+        }
+    })
+}
 
 /// THE VISION PROJECTOR (`mmproj`): Unsloth's F16 projector for Qwen3.5 0.8B, which pairs with
 /// the text weights above (checked by loading both and describing a photograph,
