@@ -10,6 +10,7 @@ A change touches several layers that must agree; tests and gates fail until they
 
 | If you are doing | Read |
 | --- | --- |
+| Before any change: the two doors and who owns what | [action-plane.md](action-plane.md) |
 | A screen, ViewState, ScreenEvent, Effect, Route, string or token | [screen.md](screen.md) |
 | A vault kind, table, column, edge, command or read | [vault-model.md](vault-model.md) |
 | The C ABI, a protobuf request, a binding | [ffi.md](ffi.md), then [ffi-bindings.md](ffi-bindings.md) |

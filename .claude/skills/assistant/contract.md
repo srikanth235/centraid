@@ -1,6 +1,6 @@
 # Changing the tool contract or the prompt
 
-The contract is what the model reads and writes: eight tools (`find`, `compute`, `create`, `edit`, `do`, `answer`, `ask`, `decline`), the kind card, the system turn, the think format and the markers around them. It lives in [`crates/assist/src/native/`](../../../crates/assist/src/native/) (`prompt.rs`, `meta.rs`, `think.rs`, `grammar.rs`, `identity.rs`, `legacy.rs`) and [`escape.rs`](../../../crates/assist/src/escape.rs). The prose is [`SPEC.md`](../../../crates/assist/docs/SPEC.md) and [`CONTRACT_V3.md`](../../../crates/assist/docs/CONTRACT_V3.md). Update them in the same change.
+The contract is what the model reads and writes: eight tools (`find`, `compute`, `create`, `edit`, `do`, `answer`, `ask`, `decline`), the kind card, the system turn, the think format and the markers around them. It lives in [`crates/assist/src/native/`](../../../crates/assist/src/native/) (`prompt.rs`, `meta.rs`, `think.rs`, `grammar.rs`, `identity.rs`, `legacy.rs`) and [`escape.rs`](../../../crates/assist/src/escape.rs). The prose is [`SPEC.md`](../../../crates/assist/docs/SPEC.md) and [`CONTRACT_V3.md`](../../../crates/assist/docs/CONTRACT_V3.md). Update them in the same change. The two doors every app is reached through, and what is generated from the manifests, are in [action-plane](../change/action-plane.md).
 
 ## What is generated, never hand-edited
 

@@ -56,6 +56,7 @@ These are decided. Do not build them, propose them in passing, or leave a hook "
 | Page states, permissions, units, scale | [rulings/see-truthfully.md](rulings/see-truthfully.md) |
 | Notifications, widgets, time | [rulings/be-told-glance.md](rulings/be-told-glance.md) |
 | The shell, rooms, the nine apps | [rulings/home.md](rulings/home.md) |
+| How every app is reached: the two doors and who owns what | [change/action-plane.md](../change/action-plane.md) |
 | How a screen looks, behaves and reads | the [design](../design/SKILL.md) skill |
 | Backup and the gateway | [backup/product.md](../backup/product.md) |
 | The on-device assistant | [assistant/product.md](../assistant/product.md) |
