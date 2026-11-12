@@ -25,7 +25,7 @@ pub static SPEC: EarlierSpec = EarlierSpec {
     app: "docs",
     noun: shared::trash_noun_document,
     denied,
-    line,
+    parts,
     know: Some(know),
     gate: None,
 };
@@ -101,7 +101,7 @@ fn text(value: &Value) -> Option<String> {
 }
 
 /// The one line a document's fields read as: `Lease · PDF · 2.4 MB · Taxes 2025`.
-fn line(look: &Look, fields: &[Field]) -> String {
+fn parts(look: &Look, fields: &[Field]) -> Vec<String> {
     let named = |name: &str| fields.iter().find(|field| field.name == name);
     let title = named("entity.title").and_then(|field| text(&field.value));
     let blob = named("document.blob").and_then(|field| text(&field.value));
@@ -131,6 +131,5 @@ fn line(look: &Look, fields: &[Field]) -> String {
     [title, Some(file).filter(|file| !file.is_empty()), folder]
         .into_iter()
         .flatten()
-        .collect::<Vec<_>>()
-        .join(" · ")
+        .collect()
 }

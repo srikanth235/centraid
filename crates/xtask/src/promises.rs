@@ -1438,8 +1438,9 @@ pub const MENU_ENTRY: &[MenuEntry] = &[MenuEntry {
 /// The shell's catalogue, where the shared read and the two commands live.
 const SHELL_MANIFEST: &str = "crates/core/src/shell/manifest.json";
 
-/// What the spec literal must set: the app, the noun, the gate and the one-line formatter.
-const HISTORY_SPEC_FIELDS: [&str; 4] = ["app", "noun", "denied", "line"];
+/// What the spec literal must set: the app, the noun, the gate and the formatter that words a
+/// version's fields (the list's line and the preview's whole record are both made of its parts).
+const HISTORY_SPEC_FIELDS: [&str; 4] = ["app", "noun", "denied", "parts"];
 
 /// Whether the spec literal sets `field`, long form (`line: format,`) or shorthand (`line,`).
 fn spec_sets(text: &str, field: &str) -> bool {
@@ -1451,11 +1452,12 @@ fn spec_sets(text: &str, field: &str) -> bool {
 
 /// History is kept when, for `app`:
 ///
-/// 1. the shell's manifest declares the shared reads (`earlier-versions`, `earlier-count`) and the
+/// 1. the shell's manifest declares the shared reads (`earlier-versions`, `earlier-record` for the
+///    full preview of one version, `earlier-count`) and the
 ///    two commands (`restore-version` is `history.restore_version`, `undo-change` is
 ///    `history.undo`);
 /// 2. `crates/screens/src/<app>/earlier.rs` defines an `EarlierSpec` built on `kit::earlier`, with
-///    its app, noun, gate and line;
+///    its app, noun, gate and parts;
 /// 3. the app's `mod.rs` registers it (`earlier::build`) under a `<app>.earlier` name;
 /// 4. the detail screen of each primary kind ([`HISTORY_KINDS`]) embeds the shared entry
 ///    (`earlier::foot(` over the app's `EARLIER` route), so a count and a way in are on the page.
@@ -1489,7 +1491,7 @@ fn history_missing_in(root: &Path, app: &str, menus: &[MenuEntry]) -> Vec<String
                         })
                     })
             };
-            for query in ["earlier-versions", "earlier-count"] {
+            for query in ["earlier-versions", "earlier-record", "earlier-count"] {
                 if !named("queries", query, None) {
                     gaps.push(format!("{SHELL_MANIFEST} declares no `{query}` query"));
                 }

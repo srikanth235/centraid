@@ -647,12 +647,12 @@ pub static SPEC: EarlierSpec = EarlierSpec {
     app: "notes",
     noun: shared::trash_noun_note,
     denied,
-    line,
+    parts,
 };
 "#;
 
 const SHELL: &str = r#"{
- "queries":[{"name":"earlier-versions"},{"name":"earlier-count"}],
+ "queries":[{"name":"earlier-versions"},{"name":"earlier-record"},{"name":"earlier-count"}],
  "actions":[
   {"name":"restore-version","command":"history.restore_version"},
   {"name":"undo-change","command":"history.undo"}]}"#;
@@ -751,14 +751,14 @@ fn no_spec_is_named_by_file() {
 }
 
 #[test]
-fn a_spec_with_no_line_is_named() {
-    let root = history_tree("history-no-line");
+fn a_spec_with_no_parts_is_named() {
+    let root = history_tree("history-no-parts");
     write(
         &root,
         "crates/screens/src/notes/earlier.rs",
-        &EARLIER_SPEC.replace("    line,\n", ""),
+        &EARLIER_SPEC.replace("    parts,\n", ""),
     );
-    assert!(history_lacking(&root).contains("the spec has no `line`"));
+    assert!(history_lacking(&root).contains("the spec has no `parts`"));
 }
 
 #[test]
@@ -767,7 +767,7 @@ fn a_spec_that_is_not_the_kits_is_named() {
     write(
         &root,
         "crates/screens/src/notes/earlier.rs",
-        "pub static SPEC: Mine = Mine { app: \"notes\", noun, denied, line };",
+        "pub static SPEC: Mine = Mine { app: \"notes\", noun, denied, parts };",
     );
     assert!(
         history_lacking(&root).contains("does not define an EarlierSpec built on kit::earlier")
@@ -826,6 +826,7 @@ fn a_shell_manifest_without_the_shared_door_is_named() {
     );
     let gaps = history_lacking(&root);
     assert!(gaps.contains("declares no `earlier-versions` query"));
+    assert!(gaps.contains("declares no `earlier-record` query"));
     assert!(
         gaps.contains("declares no `restore-version` action that runs `history.restore_version`")
     );

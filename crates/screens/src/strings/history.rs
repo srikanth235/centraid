@@ -45,4 +45,14 @@ catalog! {
     plain shows_names = ("Shows {names}", "Shows {names}");
     plain not_shows_names = ("Does not show {names}", "Does not show {names}");
     plain item_gone = ("an item that is gone", "an item that is gone");
+    plain preview_title = ("Earlier version", "Earlier version");
+    plain preview_as_it_was = ("As it was on {when}", "As it was on {when}");
+    plain preview_as_it_was_undated = ("As it was earlier", "As it was earlier");
+    plain preview_changed = ("Changed on {when} to {line}", "Changed on {when} to {line}");
+    plain preview_changed_undated = ("Changed to {line}", "Changed to {line}");
+    plain preview_changed_on = ("Changed on {when}", "Changed on {when}");
+    plain preview_note = ("Read only. Nothing changes until you restore it.", "Read only. Nothing changes until you restore it.");
+    plain preview_restore = ("Restore this version", "Restore this version");
+    plain preview_close = ("Close", "Close");
+    plain preview_spoken = ("Earlier version, {headline}. {note}", "Earlier version, {headline}. {note}");
 }

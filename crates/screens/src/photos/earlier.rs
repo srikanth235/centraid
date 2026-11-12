@@ -25,7 +25,7 @@ pub static SPEC: EarlierSpec = EarlierSpec {
     app: "photos",
     noun: shared::trash_noun_photo,
     denied,
-    line,
+    parts,
     know: Some(know),
     gate: None,
 };
@@ -99,7 +99,7 @@ fn text(value: &Value) -> Option<String> {
 }
 
 /// The one line a photograph's fields read as.
-fn line(look: &Look, fields: &[Field]) -> String {
+fn parts(look: &Look, fields: &[Field]) -> Vec<String> {
     let locale = look.locale;
     let named = |name: &str| fields.iter().find(|field| field.name == name);
     let mut parts = Vec::new();
@@ -148,6 +148,5 @@ fn line(look: &Look, fields: &[Field]) -> String {
         .into_iter()
         .flatten()
         .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join(" · ")
+        .collect()
 }

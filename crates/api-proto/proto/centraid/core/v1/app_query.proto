@@ -280,6 +280,8 @@ message AppQueryResponse {
     // holds, `shell.earlier-count`.
     EarlierVersions earlier_versions = 1703;
     EarlierCount earlier_count = 1704;
+    // One earlier version, whole (#1185): `shell.earlier-record`, behind the preview.
+    EarlierRecord earlier_record = 1712;
     // Where one record came from (#1185): `shell.origin-of`.
     OriginOf origin_of = 1706;
     // Where the last read of a phone store got to (#1183): `shell.origin-cursor`.

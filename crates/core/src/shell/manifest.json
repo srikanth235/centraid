@@ -130,6 +130,27 @@
       }
     },
     {
+      "name": "earlier-record",
+      "kind": "earlier_version",
+      "figures": ["fields"],
+      "description": "(history, #1185) One earlier version of a record, whole: every field it held (the entity's and its kind's columns, each child row as a whole JSON object, a sealed cell as the vault's placeholder), when it began and was replaced, who made and replaced it, and what the replacing change moved. Behind the full preview of an earlier version. Never reachable by the assistant.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": ["entity_id", "seq"],
+        "additionalProperties": false
+      }
+    },
+    {
       "name": "earlier-count",
       "kind": "earlier_version",
       "figures": ["count"],

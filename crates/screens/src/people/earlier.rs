@@ -20,7 +20,7 @@ pub static SPEC: EarlierSpec = EarlierSpec {
     app: "people",
     noun: shared::trash_noun_person,
     denied,
-    line,
+    parts,
     know: None,
     gate: None,
 };
@@ -58,7 +58,7 @@ fn birthday(locale: Locale, day: &str) -> String {
 }
 
 /// The one line a person's fields read as: `Ada Lovelace · Countess · 10 December · +44 20 7946 0000`.
-fn line(look: &Look, fields: &[Field]) -> String {
+fn parts(look: &Look, fields: &[Field]) -> Vec<String> {
     let locale = look.locale;
     let named = |name: &str| fields.iter().find(|field| field.name == name);
     let own = |name: &str| named(name).and_then(|field| text(&field.value));
@@ -70,5 +70,5 @@ fn line(look: &Look, fields: &[Field]) -> String {
         own("person.met"),
     ];
     parts.extend(fields.iter().map(point));
-    parts.into_iter().flatten().collect::<Vec<_>>().join(" · ")
+    parts.into_iter().flatten().collect()
 }

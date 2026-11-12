@@ -22,7 +22,7 @@ pub static SPEC: EarlierSpec = EarlierSpec {
     app: "notes",
     noun: shared::trash_noun_note,
     denied,
-    line,
+    parts,
     know: Some(know),
     gate: None,
 };
@@ -64,7 +64,7 @@ fn text(value: &Value) -> Option<String> {
 }
 
 /// The one line a note's fields read as: `Packing list · Pack the passport · Travel`.
-fn line(look: &Look, fields: &[Field]) -> String {
+fn parts(look: &Look, fields: &[Field]) -> Vec<String> {
     let named = |name: &str| fields.iter().find(|field| field.name == name);
     let title = named("entity.title").and_then(|field| text(&field.value));
     let body = named("note.body")
@@ -81,9 +81,5 @@ fn line(look: &Look, fields: &[Field]) -> String {
             },
         )
     });
-    [title, body, notebook]
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>()
-        .join(" · ")
+    [title, body, notebook].into_iter().flatten().collect()
 }

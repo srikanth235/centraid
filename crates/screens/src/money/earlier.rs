@@ -21,7 +21,7 @@ pub static SPEC: EarlierSpec = EarlierSpec {
     app: "money",
     noun: shared::trash_noun_transaction,
     denied: |locale, _| fold::denied(locale),
-    line,
+    parts,
     know: Some(know),
     gate: None,
 };
@@ -50,7 +50,7 @@ fn know(ctx: &Ctx, _txn_id: &str) -> Names {
 }
 
 /// The one line a transaction's fields read as: the name, then the category.
-fn line(look: &Look, fields: &[Field]) -> String {
+fn parts(look: &Look, fields: &[Field]) -> Vec<String> {
     let own = |name: &str| {
         fields
             .iter()
@@ -65,6 +65,5 @@ fn line(look: &Look, fields: &[Field]) -> String {
     ]
     .into_iter()
     .flatten()
-    .collect::<Vec<_>>()
-    .join(" · ")
+    .collect()
 }

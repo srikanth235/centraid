@@ -36,7 +36,7 @@ pub static SPEC: EarlierSpec = EarlierSpec {
     app: "locker",
     noun: kit_words::trash_noun_item,
     denied: shared::gate,
-    line,
+    parts,
     know: Some(know),
     gate: Some(&WALL),
 };
@@ -242,12 +242,12 @@ fn custom(field: &Field) -> Option<(&str, Option<&str>)> {
 }
 
 /// The one line an item's plain fields read as.
-fn line(look: &Look, fields: &[Field]) -> String {
+fn parts(look: &Look, fields: &[Field]) -> Vec<String> {
     let locale = look.locale;
     let named = |name: &str| fields.iter().find(|field| field.name == name);
-    let mut parts = Vec::new();
+    let mut lines = Vec::new();
     if let Some(field) = named("entity.title") {
-        parts.push(said(
+        lines.push(said(
             locale,
             &types::label(locale, "title"),
             text(&field.value),
@@ -268,10 +268,10 @@ fn line(look: &Look, fields: &[Field]) -> String {
                 value
             }
         });
-        parts.push(said(locale, &types::label(locale, column), value));
+        lines.push(said(locale, &types::label(locale, column), value));
     }
     if let Some(field) = named("locker_item_passkey.display_name") {
-        parts.push(said(
+        lines.push(said(
             locale,
             &words::passkey_head(locale),
             text(&field.value),
@@ -286,7 +286,7 @@ fn line(look: &Look, fields: &[Field]) -> String {
                 _ => None,
             };
             if let Some(url) = url {
-                parts.push(said(locale, &types::label(locale, "url"), Some(url)));
+                lines.push(said(locale, &types::label(locale, "url"), Some(url)));
             }
             continue;
         }
@@ -299,7 +299,7 @@ fn line(look: &Look, fields: &[Field]) -> String {
                 let kind = row.get("kind").and_then(Value::as_str).unwrap_or_default();
                 let label = row.get("label").and_then(Value::as_str).unwrap_or_default();
                 if speakable(kind) && !label.trim().is_empty() {
-                    parts.push(said(
+                    lines.push(said(
                         locale,
                         label.trim(),
                         row.get("value_text").and_then(text),
@@ -309,7 +309,7 @@ fn line(look: &Look, fields: &[Field]) -> String {
             // One column of a row that stayed: named from the item as it is now.
             (Some("value_text"), value) => {
                 if let Some(label) = look.names.get(id) {
-                    parts.push(said(locale, label, text(value)));
+                    lines.push(said(locale, label, text(value)));
                 }
             }
             _ => {}
@@ -317,7 +317,18 @@ fn line(look: &Look, fields: &[Field]) -> String {
     }
     // A secret is never worded, only that it changed (or held nothing): its value is not here.
     for (secret, held) in sealed_cells(look, fields) {
-        parts.push(if held {
+        // A whole version shows what it held as dots: a Reveal is on the list, never here.
+        if look.whole {
+            if held {
+                lines.push(said(
+                    locale,
+                    &secret.label,
+                    Some(earlier::MASKED.to_owned()),
+                ));
+            }
+            continue;
+        }
+        lines.push(if held {
             fill(
                 &words::earlier_secret_changed(locale),
                 &[("label", &secret.label)],
@@ -326,5 +337,5 @@ fn line(look: &Look, fields: &[Field]) -> String {
             fill(&words::earlier_cleared(locale), &[("label", &secret.label)])
         });
     }
-    parts.join(" · ")
+    lines
 }

@@ -621,6 +621,12 @@ fn read(
             let limit = p.limit(app_query::history::PAGE as u32);
             app_query::history::versions(vault, &p.text("entity_id")?, &tz, &after, limit as usize)?
         }
+        ("shell", "earlier-record") => app_query::history::record(
+            vault,
+            &p.text("entity_id")?,
+            p.opt_int("seq")?.unwrap_or_default(),
+            &tz,
+        )?,
         // following (#1183): where the last read of a phone store got to, for this install
         ("shell", "origin-cursor") => app_query::follow::origin_cursor(
             vault,

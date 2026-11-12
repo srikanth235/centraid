@@ -145,6 +145,7 @@ mod tests {
                 zone: "UTC",
                 units: UnitsPref::of_region("GB"),
                 names,
+                whole: false,
             },
             fields,
         )

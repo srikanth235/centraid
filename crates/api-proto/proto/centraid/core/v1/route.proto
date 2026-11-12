@@ -94,6 +94,8 @@ message Route {
     TrashRoute trash = 900;
     TransferRoute transfer = 901;
     EarlierRoute earlier = 903;
+    // The full preview of one earlier version (#1185), pushed from a row of the list.
+    EarlierPreviewRoute earlier_preview = 904;
     // ---- backup (1450-1499, lane H2) ----
     BackupHomeRoute backup_home = 1450;
     // ---- the shell: chat (1600-1699) ----
@@ -501,6 +503,17 @@ message EarlierRoute {
   string entity_id = 1;
   // The title of the page it was pushed from: its back control says it.
   string back_label = 2;
+}
+
+// `<app>.earlier` opened on one version (#1185): the kit's full, read-only preview of a record as
+// it was, with Restore and Close.
+message EarlierPreviewRoute {
+  // The entity whose earlier version is shown.
+  string entity_id = 1;
+  // The version's number (`EarlierRow.seq`).
+  int64 seq = 2;
+  // The title of the page it was pushed from: its back control says it.
+  string back_label = 3;
 }
 
 // `<app>.import` and `<app>.export` (#1173, items 14 and 20): the kit's one transfer screen

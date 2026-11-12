@@ -417,6 +417,34 @@ message EarlierChange {
   string after_json = 3;
 }
 
+message EarlierField {
+  string field = 1;
+  string value_json = 2;
+}
+
+// `shell.earlier-record`: one earlier version of a record, whole. Every value is JSON text in the
+// form the vault keeps it, a sealed cell as the vault's placeholder; the app's screen words it.
+message EarlierRecord {
+  // The version's number: what Restore names.
+  int64 seq = 1;
+  // When it was replaced, and when it became the record's state, as civil minutes in the
+  // request's zone; empty when the vault names no zone.
+  string replaced_local = 2;
+  string since_local = 3;
+  // The phone store whose pass replaced it, and the one whose pass made it the record's state;
+  // empty when the member did.
+  string store_system = 4;
+  string since_store_system = 5;
+  // Every field the version held: `entity.title`, `<kind table>.<column>`, and each child row whole
+  // as `contact_point[<key>]`.
+  repeated EarlierField fields = 6;
+  // What the replacing change moved, field by field, as the list gives it.
+  repeated EarlierChange field_changes = 7;
+  // The titles of the other records the version, or its change, names by id, as the list's page
+  // gives them.
+  repeated EarlierName names = 8;
+}
+
 // One row of the earlier-versions list. The first is the record as it is now, tagged "Current",
 // and carries no Restore.
 message EarlierRow {
@@ -437,6 +465,9 @@ message EarlierRow {
   // Never the value: `masked` is dots, and the value arrives in `EarlierSecret.value` only after
   // a Reveal, behind the owner check, for a short life. Empty for every other app.
   repeated EarlierSecret secrets = 8;
+  // Opens the full preview of this version (`<app>.earlier` on one version); absent on the
+  // current row, which is the record itself.
+  optional Route open = 9;
 }
 
 // ONE SEALED VALUE OF AN EARLIER VERSION (Locker, #1185). Shown as `label` and `masked` with the
@@ -468,6 +499,53 @@ message EarlierData {
   reserved "empty";
   // "Show more" when a page below this one exists; empty otherwise.
   string more_label = 3;
+}
+
+// What the full preview of one earlier version shows (#1185): the record as it was, drawn read-only
+// under a banner that says which version it is, with Restore and Close. The screen name
+// (`<app>.earlier`) says which app.
+message EarlierPreviewView {
+  string app_id = 1;
+  // "Earlier version", and the back control's words: the list it was opened from.
+  string title = 2;
+  string back_label = 3;
+  PageState page = 4;
+  // Set when the page is ready.
+  optional EarlierPreviewData data = 5;
+  // A refusal's sentence, or "Already how it is now".
+  StatusLine status = 6;
+  // THE SHELL POPS THIS SCREEN: it was closed, or restored (the list beneath draws the line).
+  bool done = 7;
+}
+
+message EarlierPreviewData {
+  // "As it was on Tue 27 October · 20:40", with "· From your phone" when a store made it.
+  string banner_headline = 1;
+  // "Changed on Wed 4 November · 09:12 to Friend · London"; empty when nothing shows.
+  string banner_changed = 2;
+  // "Read only. Nothing changes until you restore it."
+  string banner_note = 3;
+  // The record's first line, as its own page heads it.
+  string heading = 4;
+  // The rest of what the version held, one worded line each.
+  repeated string details = 5;
+  string restore_label = 6;
+  string close_label = 7;
+  string accessibility_label = 8;
+}
+
+message EarlierPreviewEvent {
+  oneof kind {
+    // The failure's "Try again".
+    Refreshed refreshed = 1;
+    // "Restore this version": it asks nothing, as the list's Restore does.
+    Restored restore = 2;
+    Closed close = 3;
+  }
+
+  message Refreshed {}
+  message Restored {}
+  message Closed {}
 }
 
 // What the earlier-versions screen shows. The screen name (`<app>.earlier`) says which app.

@@ -28,7 +28,7 @@ pub static SPEC: EarlierSpec = EarlierSpec {
     app: "calendar",
     noun: shared::trash_noun_event,
     denied,
-    line,
+    parts,
     know: Some(know),
     gate: None,
 };
@@ -139,7 +139,7 @@ fn leads(value: &Value) -> Vec<i64> {
 }
 
 /// The one line an event's fields read as.
-fn line(look: &Look, fields: &[Field]) -> String {
+fn parts(look: &Look, fields: &[Field]) -> Vec<String> {
     let locale = look.locale;
     let named = |name: &str| fields.iter().find(|field| field.name == name);
     let own = |name: &str| named(name).and_then(|field| text(&field.value));
@@ -243,5 +243,5 @@ fn line(look: &Look, fields: &[Field]) -> String {
             None => name,
         }));
     }
-    parts.into_iter().flatten().collect::<Vec<_>>().join(" · ")
+    parts.into_iter().flatten().collect()
 }

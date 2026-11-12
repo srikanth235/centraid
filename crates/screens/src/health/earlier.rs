@@ -21,7 +21,7 @@ pub static SPEC: EarlierSpec = EarlierSpec {
     app: "health",
     noun: shared::trash_noun_workout,
     denied,
-    line,
+    parts,
     know: None,
     gate: None,
 };
@@ -45,7 +45,7 @@ fn local(look: &Look, stored: &str) -> Option<String> {
 }
 
 /// The one line a workout's fields read as.
-fn line(look: &Look, fields: &[Field]) -> String {
+fn parts(look: &Look, fields: &[Field]) -> Vec<String> {
     let locale = look.locale;
     let units = look.units;
     let named = |name: &str| fields.iter().find(|field| field.name == name);
@@ -88,6 +88,5 @@ fn line(look: &Look, fields: &[Field]) -> String {
     ]
     .into_iter()
     .flatten()
-    .collect::<Vec<_>>()
-    .join(" · ")
+    .collect()
 }

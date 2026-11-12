@@ -326,6 +326,7 @@ message ScreenEvent {
     EarlierEvent earlier = 903;
     // The verb of any status line ("Undo"), from any screen; no per-screen arm is needed (#1185).
     StatusActed status_acted = 904;
+    EarlierPreviewEvent earlier_preview = 905;
     // ---- backup (1450-1499, lane H2) ----
     BackupHomeEvent backup_home = 1450;
     // ---- passes (1500-1599): passes_screens.proto ----
@@ -458,6 +459,7 @@ message ViewState {
     TrashView trash = 900;
     TransferView transfer = 901;
     EarlierView earlier = 903;
+    EarlierPreviewView earlier_preview = 904;
     // ---- backup (1450-1499, lane H2) ----
     BackupHomeState backup_home = 1450;
     // ---- the shell (1000-1999): chat (1600-1699) ----

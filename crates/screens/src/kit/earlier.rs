@@ -66,6 +66,9 @@ pub struct Look<'a> {
     pub units: UnitsPref,
     /// Names by id (a guest, a category), read with the list; empty when the spec has no hook.
     pub names: &'a Names,
+    /// Whether the fields are a WHOLE version (the preview draws the record as it was) and not
+    /// what one change moved (the list's line): a sealed value then reads as dots, not as changed.
+    pub whole: bool,
 }
 
 /// Names by id, as an app's `know` hook reads them.
@@ -79,10 +82,12 @@ pub struct EarlierSpec {
     pub noun: Words,
     /// The gate drawn when the vault will not let the app read.
     pub denied: fn(Locale, &wire::AppQueryDenial) -> wire::Denied,
-    /// The ONE line a set of fields reads as, worded as the app's own detail screen words them: the
-    /// fields a version held, or the ones the record holds now. Empty when none of them is
-    /// something the screen shows.
-    pub line: fn(&Look, &[Field]) -> String,
+    /// The pieces a set of fields reads as, worded as the app's own detail screen words them, the
+    /// record's own first line first (its name, its title): the fields a version held, or the ones
+    /// the record holds now, or the ones one change moved. The list joins them into ONE line; the
+    /// preview draws the first as the heading and each other as a line under it. Empty when none of
+    /// the fields is something the screen shows.
+    pub parts: fn(&Look, &[Field]) -> Vec<String>,
     /// Reads the names a line needs for the ids a record's versions hold (a guest's, a category's)
     /// as the record's page names them; `None` where the fields carry their own words.
     pub know: Option<fn(&Ctx, &str) -> Names>,
@@ -126,9 +131,23 @@ pub struct Secret {
 /// What a sealed value is drawn as, for every value and length alike.
 pub const MASKED: &str = "••••••••";
 
+impl EarlierSpec {
+    /// The ONE line `fields` read as: [`Self::parts`], joined.
+    pub(super) fn line(&self, look: &Look, fields: &[Field]) -> String {
+        // The app words its own fields; what decorates every record is worded once, for all.
+        let mut pieces = (self.parts)(look, fields);
+        pieces.push(super::earlier_decor::line(look, fields));
+        pieces.retain(|piece| !piece.trim().is_empty());
+        pieces.join(" · ")
+    }
+}
+
 /// The registry factory for `spec`'s screen.
 #[must_use]
 pub fn build(spec: &'static EarlierSpec, route: &wire::Route) -> Option<Box<dyn Screen>> {
+    if let Some(wire::route::Args::EarlierPreview(args)) = &route.args {
+        return super::earlier_preview::build(spec, args);
+    }
     let Some(wire::route::Args::Earlier(args)) = &route.args else {
         return None;
     };
@@ -159,6 +178,23 @@ pub fn route(screen: &str, entity_id: &str, back: &str) -> wire::Route {
             entity_id: entity_id.to_owned(),
             back_label: back.to_owned(),
         })),
+    }
+}
+
+/// The route to the full preview of version `seq` of a record; `back` names the page it is pushed
+/// from (the list).
+#[must_use]
+pub fn preview_route(screen: &str, entity_id: &str, seq: i64, back: &str) -> wire::Route {
+    wire::Route {
+        sheet: false,
+        screen: screen.to_owned(),
+        args: Some(wire::route::Args::EarlierPreview(
+            wire::EarlierPreviewRoute {
+                entity_id: entity_id.to_owned(),
+                seq,
+                back_label: back.to_owned(),
+            },
+        )),
     }
 }
 
@@ -287,7 +323,7 @@ fn token(seq: i64, key: &str) -> String {
     format!("{seq}:{key}")
 }
 
-fn json(text: &str) -> Value {
+pub(super) fn json(text: &str) -> Value {
     serde_json::from_str(text).unwrap_or(Value::Null)
 }
 
@@ -369,6 +405,7 @@ impl Earlier {
             zone: ctx.zone(),
             units: ctx.units(),
             names: &self.names,
+            whole: false,
         };
         // Only a secret this version held, and one that can be shown at all.
         let offered = versions
@@ -527,20 +564,20 @@ impl Earlier {
         secrets: Vec<wire::EarlierSecret>,
     ) -> wire::EarlierRow {
         let locale = look.locale;
-        // The app words its own fields; what decorates every record is worded once, for all.
-        let line = [
-            (self.spec.line)(look, fields),
-            super::earlier_decor::line(look, fields),
-        ]
-        .into_iter()
-        .filter(|part| !part.trim().is_empty())
-        .collect::<Vec<_>>()
-        .join(" · ");
+        let line = self.spec.line(look, fields);
         let value = if line.trim().is_empty() {
             words::other_details(locale)
         } else {
             line
         };
+        let open = (!current && seq > 0).then(|| {
+            preview_route(
+                &format!("{}.earlier", self.spec.app),
+                &self.entity_id,
+                seq,
+                &words::title(locale),
+            )
+        });
         let tag = if current {
             words::current(locale)
         } else {
@@ -563,6 +600,7 @@ impl Earlier {
                 shared::trash_restore(locale)
             },
             secrets,
+            open,
         }
     }
 
@@ -644,6 +682,8 @@ impl Screen for Earlier {
             Some(E::EffectResult(result)) => self.secrets.answered(ctx, &result),
             Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => {
                 self.reload(ctx);
+                // THE PREVIEW ABOVE CLOSED: its "Earlier version restored" and Undo are drawn here.
+                self.undo.take_handed(ctx);
             }
             Some(E::Earlier(earlier)) => match earlier.kind {
                 Some(K::Refreshed(_)) => self.reload(ctx),
@@ -673,6 +713,7 @@ impl Screen for Earlier {
                         zone: ctx.zone(),
                         units: ctx.units(),
                         names: &self.names,
+                        whole: false,
                     },
                     &listing.versions,
                 ),

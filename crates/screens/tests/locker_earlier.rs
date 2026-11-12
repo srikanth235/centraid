@@ -492,3 +492,79 @@ fn an_imported_item_says_the_files_name_only_and_a_typed_one_does_not() {
     let page = push_item(&mut d, "typed");
     assert_eq!(item_data(&d, page).origin, None);
 }
+
+fn preview_view(v: &wire::ViewState) -> &wire::EarlierPreviewView {
+    match &v.kind {
+        Some(wire::view_state::Kind::EarlierPreview(view)) => view,
+        other => panic!("not the preview: {other:?}"),
+    }
+}
+
+fn open_preview(d: &mut Driver, list: u64, row: usize) -> u64 {
+    let route = rows(d.view(list))[row].open.clone().expect("a route");
+    d.push(locker::TAB, route)
+}
+
+#[test]
+fn the_preview_shows_a_password_as_dots_and_no_value_reaches_the_screen() {
+    let (mut d, id) = opened();
+    rotated(&d);
+    let list = open_earlier(&mut d, id);
+    let at = open_preview(&mut d, list, 2);
+    let data = preview_view(d.view(at))
+        .data
+        .clone()
+        .expect("a ready preview");
+    assert_eq!(data.heading, "Title: Bank");
+    assert!(
+        data.details.contains(&"Password: ••••••••".to_owned()),
+        "{:?}",
+        data.details
+    );
+    let everything = format!("{:?}", d.view(at));
+    for secret in SECRETS {
+        assert!(!everything.contains(secret), "{secret} reached the preview");
+    }
+    assert!(
+        !everything.contains("lk1:"),
+        "ciphertext reached the preview"
+    );
+}
+
+#[test]
+fn a_shut_wall_closes_the_preview_to_the_gate_and_restores_nothing() {
+    let (mut d, id) = opened();
+    renamed(&d);
+    let list = open_earlier(&mut d, id);
+    let at = open_preview(&mut d, list, 2);
+    assert!(preview_view(d.view(at)).data.is_some());
+
+    d.call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
+        foreground: false,
+    }));
+    d.send(at, E::DataChanged(wire::DataChanged::default()));
+    let view = preview_view(d.view(at));
+    assert!(view.data.is_none(), "a relock is a wipe");
+    assert!(matches!(
+        view.page.as_ref().and_then(|page| page.state.as_ref()),
+        Some(wire::page_state::State::Refused(_))
+    ));
+    d.send(
+        at,
+        E::EarlierPreview(wire::EarlierPreviewEvent {
+            kind: Some(wire::earlier_preview_event::Kind::Restore(
+                wire::earlier_preview_event::Restored {},
+            )),
+        }),
+    );
+    assert!(
+        !preview_view(d.view(at)).done,
+        "nothing restored, nothing closed"
+    );
+    unlock_core(&d);
+    assert_eq!(
+        username_now(&d),
+        "maya@home.example",
+        "nothing was restored"
+    );
+}

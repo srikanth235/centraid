@@ -64,6 +64,9 @@ const FILES_FOLLOWED: &str = "`shell.files-followed` is read by Rust only: core/
 const EARLIER_VERSIONS: &str = "`shell.earlier-versions` is read by Rust only: core/app_query/history.rs builds the answer and kit/earlier.rs reads it; the app's spec words each version and a shell is sent only the finished `EarlierRow`";
 
 /// One reason, several rows.
+const EARLIER_RECORD: &str = "`shell.earlier-record` is read by Rust only: core/app_query/history.rs builds the answer and kit/earlier_preview.rs reads it; the app's spec words the version and a shell is sent only the finished `EarlierPreviewData`";
+
+/// One reason, several rows.
 const PHONE_DIFFERENCES: &str = "`shell.phone-differences` is read by Rust only: core/app_query/follow.rs builds the answer and kit/follow.rs reads it; the detail screens word it and send a shell only the finished `PhoneSays` line";
 
 /// One reason, several rows.
@@ -441,6 +444,15 @@ pub const REGISTER: &[Entry] = &[
         rust_only(EARLIER_VERSIONS),
     ),
     ("EarlierVersion.field_changes", rust_only(EARLIER_VERSIONS)),
+    ("EarlierRecord.replaced_local", rust_only(EARLIER_RECORD)),
+    ("EarlierRecord.since_local", rust_only(EARLIER_RECORD)),
+    ("EarlierRecord.store_system", rust_only(EARLIER_RECORD)),
+    (
+        "EarlierRecord.since_store_system",
+        rust_only(EARLIER_RECORD),
+    ),
+    ("EarlierRecord.field_changes", rust_only(EARLIER_RECORD)),
+    ("EarlierField.value_json", rust_only(EARLIER_RECORD)),
     ("EarlierChange.before_json", rust_only(EARLIER_VERSIONS)),
     ("EarlierChange.after_json", rust_only(EARLIER_VERSIONS)),
     ("ImportsFilesHeld.retired", rust_only(FILES_FOLLOWED)),

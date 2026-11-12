@@ -8948,6 +8948,28 @@ pub mod load {
             }
         }
 
+        /// (history, #1185) One earlier version of a record, whole: every field it held (the entity's and its kind's columns, each child row as a whole JSON object, a sealed cell as the vault's placeholder), when it began and was replaced, who made and replaced it, and what the replacing change moved. Behind the full preview of an earlier version. Never reachable by the assistant.
+        #[derive(Clone, Debug, Default)]
+        pub struct EarlierRecord {
+            pub entity_id: String,
+            pub seq: i64,
+        }
+        impl EarlierRecord {
+            pub const NAME: &str = "earlier-record";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("entity_id".to_owned(), text(self.entity_id));
+                map.insert("seq".to_owned(), whole(self.seq));
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<EarlierRecord> for wire::LoadRequest {
+            fn from(value: EarlierRecord) -> Self {
+                value.request()
+            }
+        }
+
         /// (history, #1185) How many earlier versions one record holds, not counting the current one: the number on a detail screen's Earlier versions entry.
         #[derive(Clone, Debug, Default)]
         pub struct EarlierCount {

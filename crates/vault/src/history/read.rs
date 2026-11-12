@@ -428,6 +428,85 @@ fn mask(shape: &Shape, change: &mut Change) {
     mask_side(shape, table, column, &mut change.after);
 }
 
+/// One earlier version of an entity, whole: every field it held, and what changed it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Record {
+    /// The version as the list reads it: its number, instants, who made and replaced it, and what
+    /// the replacing commit changed.
+    pub version: Version,
+    /// Every captured field the version held, named as [`Change::field`] names them: the entity's
+    /// and its kind row's columns one by one (`entity.title`, `person.role`), and each row of a
+    /// child table whole (`contact_point[<key>]`, the row as a JSON object). A sealed cell reads
+    /// as [`MASK`], as in the list.
+    pub fields: Vec<(String, Json)>,
+}
+
+/// The record as version `seq` held it: `None` when the entity has no such version. A sealed
+/// cell is not in a version at all (see [`super::OMITTED`]), so none is here.
+///
+/// # Errors
+/// A database error.
+pub fn record(connection: &Connection, id: &str, seq: i64) -> Result<Option<Record>> {
+    let Some(state) = version_state(connection, id, seq)? else {
+        return Ok(None);
+    };
+    // The list's own read of this one version: its instants, its authors and its changes.
+    let page = earlier_versions(connection, id, seq.checked_add(1), 1)?;
+    let Some(version) = page.versions.into_iter().find(|version| version.seq == seq) else {
+        return Ok(None);
+    };
+    let shape = shape(connection)?;
+    // Like the list, what leaves here never carries a sealed cell's ciphertext.
+    let fields = fields_of(shape, &state)
+        .into_iter()
+        .map(|(field, value)| {
+            let mut cell = Change {
+                field,
+                before: value,
+                after: Json::Null,
+            };
+            mask(shape, &mut cell);
+            (cell.field, cell.before)
+        })
+        .collect();
+    Ok(Some(Record { version, fields }))
+}
+
+/// Every field a state holds, in a stable order (see [`Record::fields`]).
+fn fields_of(shape: &Shape, state: &Json) -> Vec<(String, Json)> {
+    let mut fields = Vec::new();
+    let Some(state) = state.as_object() else {
+        return fields;
+    };
+    let ordered: BTreeMap<&String, &Json> = state.iter().collect();
+    for (table, value) in ordered {
+        if table == "entity" {
+            for (column, cell) in value.as_object().into_iter().flatten() {
+                fields.push((format!("entity.{column}"), cell.clone()));
+            }
+            continue;
+        }
+        let Some(part) = shape.part(table) else {
+            continue;
+        };
+        if part.is_one() {
+            for (column, cell) in value.as_object().into_iter().flatten() {
+                if part.columns.contains(column) {
+                    fields.push((format!("{}.{column}", part.alias), cell.clone()));
+                }
+            }
+        } else {
+            for row in value.as_array().into_iter().flatten() {
+                fields.push((
+                    format!("{}[{}]", part.alias, key_of(part, row)),
+                    row.clone(),
+                ));
+            }
+        }
+    }
+    fields
+}
+
 fn same(left: &Json, right: &Json) -> bool {
     match (canonical_json(left), canonical_json(right)) {
         (Ok(left), Ok(right)) => left == right,

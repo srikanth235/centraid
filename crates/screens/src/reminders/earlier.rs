@@ -26,7 +26,7 @@ pub static SPEC: EarlierSpec = EarlierSpec {
     app: "reminders",
     noun: shared::trash_noun_task,
     denied: list::denied,
-    line,
+    parts,
     know: Some(know),
     gate: None,
 };
@@ -85,7 +85,7 @@ fn due(look: &Look, value: &str) -> Option<String> {
 }
 
 /// The one line a task's fields read as.
-fn line(look: &Look, fields: &[Field]) -> String {
+fn parts(look: &Look, fields: &[Field]) -> Vec<String> {
     let locale = look.locale;
     let named = |name: &str| fields.iter().find(|field| field.name == name);
     let own = |name: &str| named(name).and_then(|field| text(&field.value));
@@ -127,8 +127,7 @@ fn line(look: &Look, fields: &[Field]) -> String {
     ]
     .into_iter()
     .flatten()
-    .collect::<Vec<_>>()
-    .join(" · ")
+    .collect()
 }
 
 /// The first line of the notes, cut at 80 characters.

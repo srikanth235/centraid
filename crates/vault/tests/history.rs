@@ -692,6 +692,23 @@ fn a_changed_password_is_kept_sealed_masked_on_read_and_restored_with_the_item()
     // (ii) READ: a changed secret is seen to have changed and is shown as nothing else.
     let (was, now) = World::change(&versions[1], "locker_item.password");
     assert_eq!((was, now), (json!(history::MASK), json!(history::MASK)));
+    // The whole version leaves the vault masked too: the cell reads as the placeholder.
+    let whole = w
+        .scratch
+        .vault
+        .read(|c| history::record(c, id, versions[1].seq))
+        .expect("the read")
+        .expect("a record");
+    let sealed_cell = whole
+        .fields
+        .iter()
+        .find(|(field, _)| field == "locker_item.password")
+        .map(|(_, value)| value.clone());
+    assert_eq!(sealed_cell, Some(json!(history::MASK)));
+    assert!(
+        !format!("{whole:?}").contains("lk1:"),
+        "ciphertext left the vault"
+    );
     let read = serde_json::to_string(
         &versions
             .iter()
@@ -1405,6 +1422,55 @@ fn a_changed_secret_is_a_version_of_its_own_even_among_quiet_saves() {
         2,
         "each new password is a version, not a fold"
     );
+
+#[test]
+fn a_whole_version_holds_every_field_it_held_and_what_replaced_it() {
+    let w = World::new();
+    let id = w.id("person.add", json!({ "title": "Ada" }));
+    w.ok(
+        "person.edit",
+        json!({ "id": id, "title": "Ada Lovelace", "role": "Countess" }),
+    );
+    let point = w.ok(
+        "person.save_contact_point",
+        json!({ "id": id, "kind": "email", "value": "ada@analytical.example" }),
+    )["point_id"]
+        .as_str()
+        .expect("a point")
+        .to_owned();
+    w.ok("person.edit", json!({ "id": id, "role": "Poet" }));
+    let versions = w.versions(&id);
+    let held = |seq: i64| {
+        w.scratch
+            .vault
+            .read(|c| history::record(c, &id, seq))
+            .expect("the read")
+    };
+
+    // The version before the role changed: the name, the role, and the contact point whole.
+    let newest = held(versions[0].seq).expect("a record");
+    assert_eq!(newest.version, versions[0], "the list's own version");
+    let field = |record: &history::Record, name: &str| {
+        record
+            .fields
+            .iter()
+            .find(|(field, _)| field == name)
+            .map(|(_, value)| value.clone())
+    };
+    assert_eq!(field(&newest, "entity.title"), Some(json!("Ada Lovelace")));
+    assert_eq!(field(&newest, "person.role"), Some(json!("Countess")));
+    assert_eq!(
+        field(&newest, &format!("contact_point[{point}]")).map(|row| row["value"].clone()),
+        Some(json!("ada@analytical.example"))
+    );
+    // The first state held none of it.
+    let first = held(versions[2].seq).expect("a record");
+    assert_eq!(field(&first, "entity.title"), Some(json!("Ada")));
+    assert_eq!(field(&first, "person.role"), Some(Value::Null));
+    assert!(field(&first, &format!("contact_point[{point}]")).is_none());
+    // A version the record does not hold is nothing, not an empty record.
+    assert!(held(99).is_none());
+    assert!(held(0).is_none());
 }
 
 // ---------------------------------------------------------------------------------------------
