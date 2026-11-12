@@ -57,7 +57,7 @@ State is reported on **one status line** and never a toast. It is a single persi
 
 **Every undoable action says what happened, with Undo.** After a write the core can take back, the line is one fragment of what happened ("Note pinned", "Tag added", "{title} moved to trash") with the verb "Undo"; tapping it runs the core's inverse and the line says "Undone" with nothing more to tap. A write the core cannot take back (it asked first, or it writes nothing) says its fragment with no verb. An Undo whose record changed again is refused in the core's plain sentence ("This can no longer be undone: it has changed since."), and the later change stays. One kit door does all of this (`kit::undo`, see the screen-change skill §11); the verb is the kit's one `StatusActed` event on every screen.
 
-A screen's load is a skeleton (`ReadStateView`). A spinner (`KitSpinner`, `StageSpinner`) exists only for work with no shape to draw (a save in flight, a transfer starting). Work whose count is known gets a determinate bar and exact counts: a local-first product always knows how long.
+A screen's load is a skeleton (`ReadStateView` in Compose, `PageReadStateView` in SwiftUI). A spinner (`KitSpinner`, `StageSpinner`) exists only for work with no shape to draw (a save in flight, a transfer starting). Work whose count is known gets a determinate bar and exact counts: a local-first product always knows how long.
 
 ## Trash
 
@@ -106,7 +106,7 @@ Width belongs to the control, not to the call: there is no per-call width switch
 - **Radii and values** come from the generated tokens; a literal radius or colour is a finding.
 - **Pressed is the one interaction state**, under the finger on the control's own rung: never a ripple, a scale or an opacity. A tappable row is a `Button`, never a tap gesture.
 - **Haptics**: one selection tick when the lit tab of an app's band changes; nothing else buzzes. A success haptic fires when the write resolves, never at the tap.
-- **Loading, empty and failure** go through `ReadStateView`; a bare spinner outside the kit is a finding, and an empty state with something to do carries its action.
+- **Loading, empty and failure** go through the shared read-state view (`ReadStateView`, `PageReadStateView`); a bare spinner outside the kit is a finding, and an empty state with something to do carries its action.
 - **A "…" key opens the platform's own menu** (SwiftUI `Menu`, Material `DropdownMenu`), never a sheet; Rust finishes the rows and their words. The Photos viewer's (Slideshow, Add to album, Adjust location, Download) is the model.
 - **More and Reads** sheets are `OptionSheet`s; a `NavigationStack` inside a sheet is for a sheet that pushes. An `OptionSheet` takes the height of its rows (one fitting detent on iOS, the M3 modal sheet opened at content height on Android), is one surface (the rows stand on the sheet itself, grouped by hairlines with none under the last, no inner card on the sheet's ground) and sits on the system's own sheet background. **Every sheet on iOS 26** (fit or tall, a form, a picker, a confirm, a routed sheet page) sits on the system's own sheet ground (Liquid Glass), set once in the kit's `SheetPresentation`; the cream `sheet` surface is the pre-26 fallback only. A grouped card or field inside a sheet takes the system's grouped fill (`sheetCardGround`), never a cream or white slab of its own. Android keeps the M3 modal bottom sheet.
 
