@@ -8,6 +8,7 @@ import dev.centraid.android.kit.KitText
 import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.StateColor
 import dev.centraid.android.kit.Surface
+import dev.centraid.design.CentraidScale
 import dev.centraid.android.kit.kitTextStyle
 import androidx.compose.foundation.border
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -775,8 +776,8 @@ private fun MarkdownText(text: String, streaming: Boolean, spoken: String) {
                 is ChatMarkdown.Block.Table -> Column(
                     Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .border(KitGeometry.HAIRLINE, centraidColor("line"), RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(CentraidScale.cardRadius.dp))
+                        .border(KitGeometry.HAIRLINE, centraidColor("line"), RoundedCornerShape(CentraidScale.cardRadius.dp))
                         .testTag("chat-table"),
                 ) {
                     block.rows.forEachIndexed { rowAt, row ->
@@ -808,7 +809,7 @@ private fun MarkdownText(text: String, streaming: Boolean, spoken: String) {
                     softWrap = false,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(CentraidScale.cardRadius.dp))
                         .background(centraidColor("bgElev"))
                         .horizontalScroll(androidx.compose.foundation.rememberScrollState())
                         .padding(horizontal = 12.dp, vertical = 10.dp)

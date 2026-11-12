@@ -300,9 +300,9 @@ struct ChatMarkdownText: View {
                             }
                         }
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous)
                             .strokeBorder(Theme.color("line", scheme), lineWidth: CentraidGeometry.hairline)
                     )
                     .accessibilityIdentifier("chat-table")
@@ -318,7 +318,7 @@ struct ChatMarkdownText: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.color("bgElev", scheme))
+                        RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous).fill(Theme.color("bgElev", scheme))
                     )
                     .accessibilityIdentifier("chat-code")
                 }
