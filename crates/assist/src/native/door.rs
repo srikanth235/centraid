@@ -116,6 +116,14 @@ impl Call {
     }
 }
 
+/// The rows [`Door::window`] reached, and whether the table held more.
+#[derive(Debug, Clone, Default)]
+pub struct Window {
+    pub rows: Vec<Row>,
+    /// Rows older than these were left unread.
+    pub more: bool,
+}
+
 /// A live vault, as the runtime sees it. See the module docs for what each implementation
 /// owes. `Send` because a chat's session, which owns its door, is held by the core across the
 /// calls of a turn and moves between the threads a shell calls on.
@@ -141,6 +149,44 @@ pub trait Door: Send {
     ) -> Result<Vec<Row>, String> {
         let _ = (table, columns, sort, pk, predicate, binds);
         Err("this door reads no filtered table".to_owned())
+    }
+
+    /// The newest rows of one table under `predicate` (the oldest when `newest_first` is false), at
+    /// most `limit`, in order of `sort` (then `pk`), and whether more were left behind (#1188, C3). The read is a keyset walk
+    /// that stops after `limit + 1` rows: the cost is the limit, whatever the table holds. The
+    /// default reads the whole filtered table and keeps the newest, which only a harness over a
+    /// small vault should rely on; the phone's door overrides it.
+    fn window(
+        &self,
+        table: &str,
+        columns: &str,
+        sort: &str,
+        pk: &str,
+        predicate: &str,
+        binds: &[String],
+        limit: usize,
+        newest_first: bool,
+    ) -> Result<Window, String> {
+        let mut rows = self.table_where(table, columns, sort, pk, predicate, binds)?;
+        rows.sort_by(|a, b| {
+            let key = |row: &Row| (text(row, sort), text(row, pk));
+            if newest_first {
+                key(b).cmp(&key(a))
+            } else {
+                key(a).cmp(&key(b))
+            }
+        });
+        let more = rows.len() > limit;
+        rows.truncate(limit);
+        Ok(Window { rows, more })
+    }
+
+    /// How many rows of one table satisfy `predicate`, counted by the store and never by walking
+    /// its pages (#1188, C3). The default reads the filtered table and counts it, which only a
+    /// harness over a small vault should rely on; the phone's door overrides it.
+    fn count(&self, table: &str, predicate: &str, binds: &[String]) -> Result<u64, String> {
+        let rows = self.table_where(table, "id", "id", "id", predicate, binds)?;
+        Ok(rows.len() as u64)
     }
 
     /// Every occurrence of an event that occupies a civil day of `from_day..=to_day`

@@ -30,6 +30,21 @@ pub const TRANSACTION_MONTHS: u32 = 3;
 pub const HEALTH_DAYS: i64 = 90;
 /// Transactions read per chunk when the display names are fetched by id.
 const DECORATION_CHUNK: usize = 200;
+/// The newest entities of each kind the world holds (#1188, C3). A world is read before a turn and
+/// after every write, so what it reads is bounded by this and by the days and months above, never
+/// by what the vault holds. A row older than the window is reached by name (`Session::reach`) and
+/// pinned into the world; a kind that left rows unread is in [`World::older`], so an answer over it
+/// says it looked at the newest only.
+pub const WINDOW_ROWS: usize = 500;
+/// The rows reached by name that a session keeps in its world across reloads, oldest dropped first.
+pub const PINNED_ROWS: usize = 1024;
+/// The most rows a call's date range or kind may hold for the runtime to read them all in (see
+/// `Session::store_reach`): past it the answer is not exact and a count says so.
+pub const HYDRATE_ROWS: usize = 1000;
+/// The ids one `IN (…)` read carries.
+const IN_CHUNK: usize = DECORATION_CHUNK;
+/// The columns of an entity the world reads.
+const ENTITY_COLUMNS: &str = "id, kind, title, created_at, updated_at, deleted_at, purge_at";
 
 /// Where and when the person stands: their today, and the zone their days are in.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -233,6 +248,8 @@ pub struct World {
     /// The IANA zone the person's days are in: an instant the vault keeps in UTC (a workout's
     /// start) is shown on their clock, and a time they say is kept as the instant it is.
     pub zone: String,
+    /// The kinds whose rows older than the window were left unread (see [`WINDOW_ROWS`]).
+    pub older: BTreeSet<Kind>,
 }
 
 /// Today in the person's zone, else the door's clock read in UTC.
@@ -366,6 +383,21 @@ impl World {
             .map(|edge| edge.from.clone())
     }
 
+    /// Take the rows and edges of `other` that this world lacks, as a session does with rows it
+    /// reached by name (`Session::reach`): a row this world already holds keeps its own fields,
+    /// which a parked write may have patched.
+    pub fn absorb(&mut self, other: &Self) {
+        for (key, row) in &other.rows {
+            self.rows.entry(key.clone()).or_insert_with(|| row.clone());
+        }
+        self.edges.extend(other.edges.iter().cloned());
+        let rows = &self.rows;
+        self.edges
+            .retain(|edge| rows.contains_key(&edge.from) && rows.contains_key(&edge.to));
+        self.edges.sort();
+        self.edges.dedup();
+    }
+
     /// Load everything, the Locker and the recent transactions included.
     pub fn load(door: &dyn Door) -> Result<Self, String> {
         Self::load_in(door, None)
@@ -380,6 +412,18 @@ impl World {
     /// trash) beside its kind row, and the relations as edges or as the column that holds them.
     /// A container's kind is the container's own.
     pub fn load_in(door: &dyn Door, at: Option<&Standing>) -> Result<Self, String> {
+        Self::load_pinned(door, at, &BTreeSet::new())
+    }
+
+    /// [`load_in`](Self::load_in), and the rows of `pinned` as well, wherever they sit: the rows a
+    /// session reached by name that are older than each kind's window (#1188, C3). Every read is
+    /// bounded: a kind's newest [`WINDOW_ROWS`] entities, then its rows, edges and flags by chunks
+    /// of those ids. Nothing reads a table whole, so the cost follows the windows and not the vault.
+    pub fn load_pinned(
+        door: &dyn Door,
+        at: Option<&Standing>,
+        pinned: &BTreeSet<String>,
+    ) -> Result<Self, String> {
         let mut world = Self {
             zone: at.map_or_else(|| "Etc/UTC".to_owned(), |standing| standing.tz.clone()),
             ..Self::default()
@@ -390,19 +434,46 @@ impl World {
         world.currency = text(vault, "currency").unwrap_or_else(|| "USD".to_owned());
         world.calendar = centraid_vault::model::DEFAULT_CALENDAR_ID.to_owned();
 
-        let flags = Flags::load(door)?;
-        world.load_people(door, &flags)?;
-        world.load_events(door, at)?;
-        world.load_tasks(door, &flags)?;
-        world.load_photos(door, &flags)?;
-        world.load_notes(door, &flags)?;
-        world.load_containers(door)?;
-        world.load_documents(door, &flags)?;
-        world.load_locker(door, &flags)?;
+        // The occurrences of the days around today are read first: a series made years ago that
+        // sounds today is outside the newest events, and its occurrences pin it in.
+        let occurrences = at.and_then(|at| event_occurrences(door, at));
+        let mut pinned = pinned.clone();
+        pinned.extend(
+            occurrences
+                .iter()
+                .flatten()
+                .map(|occurrence| occurrence.event_id.clone()),
+        );
+        let held = entities_by_id(door, &pinned.iter().cloned().collect::<Vec<_>>())?;
+        let mut scopes = Scopes::default();
+        for vault_kind in WINDOWED {
+            scopes
+                .0
+                .insert(*vault_kind, Scope::read(door, vault_kind, &held)?);
+        }
+        let every_id: Vec<String> = scopes
+            .0
+            .values()
+            .flat_map(|scope| scope.entities.keys().cloned())
+            .collect();
+        let flags = Flags::load(door, &every_id)?;
+        world.load_people(door, &flags, scopes.of("person"))?;
+        world.load_events(door, scopes.of("event"), occurrences.as_deref())?;
+        world.load_tasks(door, &flags, scopes.of("task"))?;
+        world.load_photos(door, &flags, scopes.of("photo"))?;
+        world.load_notes(door, &flags, scopes.of("note"))?;
+        world.load_containers(door, &scopes)?;
+        world.load_documents(door, &flags, scopes.of("document"))?;
+        world.load_locker(door, &flags, scopes.of("locker_item"))?;
         world.load_transactions(door, at)?;
-        world.load_money_lists(door)?;
+        world.load_money_lists(door, &scopes)?;
         world.load_health(door, at)?;
         world.load_links(door)?;
+        for (vault_kind, scope) in &scopes.0 {
+            if scope.more {
+                world.older.extend(model_kinds(vault_kind));
+            }
+        }
         // an edge is kept when both of its ends are rows the model talks about
         let rows = &world.rows;
         world
@@ -421,15 +492,15 @@ impl World {
         self.edges.push(Edge { from, to, via });
     }
 
-    fn load_people(&mut self, door: &dyn Door, flags: &Flags) -> Result<(), String> {
-        let entities = entities(door, "person")?;
-        let people = door.table(
+    fn load_people(&mut self, door: &dyn Door, flags: &Flags, scope: &Scope) -> Result<(), String> {
+        let entities = &scope.entities;
+        let people = by_ids(
+            door,
             "person",
             "id, form, role, nickname, met, birthday, cadence_days",
-            "id",
-            "id",
+            &scope.ids(),
         )?;
-        let touched = last_contacts(door)?;
+        let touched = last_contacts(door, &scope.ids())?;
         for person in &people {
             let id = text(person, "id").unwrap_or_default();
             let Some(entity) = entities.get(&id) else {
@@ -464,16 +535,27 @@ impl World {
         Ok(())
     }
 
-    fn load_events(&mut self, door: &dyn Door, at: Option<&Standing>) -> Result<(), String> {
-        let entities = entities(door, "event")?;
-        let events = door.table(
+    fn load_events(
+        &mut self,
+        door: &dyn Door,
+        scope: &Scope,
+        occurrences: Option<&[crate::native::door::Occurrence]>,
+    ) -> Result<(), String> {
+        let entities = &scope.entities;
+        let events = by_ids(
+            door,
             "event",
             "id, starts, ends, timing, zone, rule, status, place_id, description",
-            "id",
-            "id",
+            &scope.ids(),
         )?;
         // the place's name is the card's third part (`Café Lume`), never the model's
-        let places = self::entities(door, "place")?;
+        let place_ids: Vec<String> = events
+            .iter()
+            .filter_map(|event| text(event, "place_id"))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let places = entities_by_id(door, &place_ids)?;
         let spec = Kind::Event.spec();
         for event in &events {
             let id = text(event, "id").unwrap_or_default();
@@ -531,11 +613,11 @@ impl World {
             }
             self.insert(row);
         }
-        for (event, guest) in pairs(door, "attendee")? {
+        for (event, guest) in edges_from(door, "attendee", &scope.ids())? {
             self.edge((Kind::Event, event), (Kind::Person, guest), Via::Attendee);
         }
-        if let Some(at) = at {
-            self.read_event_window(door, at);
+        if let Some(occurrences) = occurrences {
+            self.read_event_window(occurrences);
         }
         Ok(())
     }
@@ -547,19 +629,9 @@ impl World {
     /// occurrence's key (`extra["series"]` names the series): what a write to an occurrence
     /// cannot do yet is declined (`Session::write`). A door that cannot answer leaves every event
     /// as stored.
-    fn read_event_window(&mut self, door: &dyn Door, at: &Standing) {
-        let span = |days: i64| jiff::Span::new().days(days);
-        let (Ok(from), Ok(to)) = (
-            at.today.checked_sub(span(EVENT_DAYS_BACK)),
-            at.today.checked_add(span(EVENT_DAYS_AHEAD)),
-        ) else {
-            return;
-        };
-        let Ok(occurrences) = door.events(&from.to_string(), &to.to_string(), &at.tz) else {
-            return;
-        };
+    fn read_event_window(&mut self, occurrences: &[crate::native::door::Occurrence]) {
         let mut by_event: BTreeMap<String, Vec<&crate::native::door::Occurrence>> = BTreeMap::new();
-        for occurrence in &occurrences {
+        for occurrence in occurrences {
             by_event
                 .entry(occurrence.event_id.clone())
                 .or_default()
@@ -658,14 +730,14 @@ impl World {
         }
     }
 
-    fn load_tasks(&mut self, door: &dyn Door, flags: &Flags) -> Result<(), String> {
-        let entities = entities(door, "task")?;
-        let tasks = door.table(
+    fn load_tasks(&mut self, door: &dyn Door, flags: &Flags, scope: &Scope) -> Result<(), String> {
+        let entities = &scope.entities;
+        let tasks = by_ids(
+            door,
             "task",
             "id, status, priority, due, done_at, rule, effort_min, parent_id, project_id, \
              description",
-            "id",
-            "id",
+            &scope.ids(),
         )?;
         let spec = Kind::Task.spec();
         for task in &tasks {
@@ -719,9 +791,9 @@ impl World {
         Ok(())
     }
 
-    fn load_notes(&mut self, door: &dyn Door, flags: &Flags) -> Result<(), String> {
-        let entities = entities(door, "note")?;
-        let notes = door.table("note", "id, body, notebook_id", "id", "id")?;
+    fn load_notes(&mut self, door: &dyn Door, flags: &Flags, scope: &Scope) -> Result<(), String> {
+        let entities = &scope.entities;
+        let notes = by_ids(door, "note", "id, body, notebook_id", &scope.ids())?;
         for note in &notes {
             let id = text(note, "id").unwrap_or_default();
             let Some(entity) = entities.get(&id) else {
@@ -748,8 +820,8 @@ impl World {
     /// THE CONTAINERS, each of the kind its own row states: an album and a notebook are both
     /// `container` rows, and the row says which. A trashed container is gone to the model (its
     /// members went to the trash with it and read as trashed).
-    fn load_containers(&mut self, door: &dyn Door) -> Result<(), String> {
-        let areas = entities(door, "area")?;
+    fn load_containers(&mut self, door: &dyn Door, scopes: &Scopes) -> Result<(), String> {
+        let areas = &scopes.of("area").entities;
         self.areas = areas
             .iter()
             .filter(|(_, area)| text(area, "deleted_at").is_none())
@@ -761,14 +833,12 @@ impl World {
             ("folder", Kind::Folder),
             ("project", Kind::List),
         ] {
-            let entities = entities(door, vault_kind)?;
-            let containers = door.table_where(
+            let entities = &scopes.of(vault_kind).entities;
+            let containers = by_ids(
+                door,
                 "container",
                 "id, parent_id",
-                "id",
-                "id",
-                "kind = ?",
-                &[vault_kind.to_owned()],
+                &scopes.of(vault_kind).ids(),
             )?;
             for container in &containers {
                 let id = text(container, "id").unwrap_or_default();
@@ -807,15 +877,21 @@ impl World {
                 self.insert(row);
             }
         }
-        for (album, photo) in pairs(door, "contains")? {
+        // an album's photos, by the photos in the world: an album of ninety thousand is not walked
+        for (album, photo) in edges_to(door, "contains", &scopes.of("photo").ids())? {
             self.edge((Kind::Album, album), (Kind::Photo, photo), Via::Entry);
         }
         Ok(())
     }
 
-    fn load_documents(&mut self, door: &dyn Door, flags: &Flags) -> Result<(), String> {
-        let entities = entities(door, "document")?;
-        let documents = door.table("document", "id, folder_id", "id", "id")?;
+    fn load_documents(
+        &mut self,
+        door: &dyn Door,
+        flags: &Flags,
+        scope: &Scope,
+    ) -> Result<(), String> {
+        let entities = &scope.entities;
+        let documents = by_ids(door, "document", "id, folder_id", &scope.ids())?;
         for document in &documents {
             let id = text(document, "id").unwrap_or_default();
             let Some(entity) = entities.get(&id) else {
@@ -839,9 +915,9 @@ impl World {
         Ok(())
     }
 
-    fn load_photos(&mut self, door: &dyn Door, flags: &Flags) -> Result<(), String> {
-        let entities = entities(door, "photo")?;
-        let photos = door.table("photo", "id, form, taken_at", "id", "id")?;
+    fn load_photos(&mut self, door: &dyn Door, flags: &Flags, scope: &Scope) -> Result<(), String> {
+        let entities = &scope.entities;
+        let photos = by_ids(door, "photo", "id, form, taken_at", &scope.ids())?;
         for photo in &photos {
             let id = text(photo, "id").unwrap_or_default();
             let Some(entity) = entities.get(&id) else {
@@ -892,7 +968,8 @@ impl World {
             return Ok(());
         }
         let titles = |kind: &str| -> Result<BTreeMap<String, String>, String> {
-            Ok(entities(door, kind)?
+            Ok(Scope::read(door, kind, &BTreeMap::new())?
+                .entities
                 .into_iter()
                 .filter_map(|(id, row)| Some((id, text(&row, "title")?)))
                 .collect())
@@ -970,13 +1047,13 @@ impl World {
     /// Money's lists (#1135): the accounts, the categories, the monthly targets and the rules,
     /// read as stored. A rule has no entity row: its name is the text it matches, and a budget
     /// row is the category's target for one month, so its id is `<category>:<month>`.
-    fn load_money_lists(&mut self, door: &dyn Door) -> Result<(), String> {
-        let account_entities = entities(door, "account")?;
-        for account in door.table(
+    fn load_money_lists(&mut self, door: &dyn Door, scopes: &Scopes) -> Result<(), String> {
+        let account_entities = &scopes.of("account").entities;
+        for account in by_ids(
+            door,
             "account",
             "id, type, currency, opening_minor, on_budget",
-            "id",
-            "id",
+            &scopes.of("account").ids(),
         )? {
             let id = text(&account, "id").unwrap_or_default();
             let Some(entity) = account_entities.get(&id) else {
@@ -1002,18 +1079,16 @@ impl World {
             );
             self.insert(Row::of(Kind::Account, &id, entity, fields));
         }
-        let category_entities = entities(door, "category")?;
+        let category_entities = &scopes.of("category").entities;
         let titles: BTreeMap<String, String> = category_entities
             .iter()
             .filter_map(|(id, row)| Some((id.clone(), text(row, "title")?)))
             .collect();
-        for concept in door.table_where(
+        for concept in by_ids(
+            door,
             "concept",
             "id, key, parent_id",
-            "id",
-            "id",
-            "kind = ?",
-            &["category".to_owned()],
+            &scopes.of("category").ids(),
         )? {
             let id = text(&concept, "id").unwrap_or_default();
             let Some(entity) = category_entities.get(&id) else {
@@ -1036,12 +1111,21 @@ impl World {
             );
             self.insert(Row::of(Kind::Category, &id, entity, fields));
         }
-        for budget in door.table(
+        // THE NEWEST MONTHS' TARGETS: a window of rows, not the years of them
+        let budgets = door.window(
             "budget",
             "category_id, month, amount_minor, currency, carry",
             "month",
             "category_id",
-        )? {
+            "",
+            &[],
+            WINDOW_ROWS * 4,
+            true,
+        )?;
+        if budgets.more {
+            self.older.insert(Kind::Budget);
+        }
+        for budget in budgets.rows {
             let category = text(&budget, "category_id").unwrap_or_default();
             let month = text(&budget, "month").unwrap_or_default();
             let currency = text(&budget, "currency").unwrap_or_else(|| self.currency.clone());
@@ -1071,12 +1155,20 @@ impl World {
                 extra: BTreeMap::new(),
             });
         }
-        for rule in door.table(
+        let rules = door.window(
             "rule",
             "id, pattern, category_id, position, created_at",
-            "position",
+            "created_at",
             "id",
-        )? {
+            "",
+            &[],
+            WINDOW_ROWS,
+            true,
+        )?;
+        if rules.more {
+            self.older.insert(Kind::Rule);
+        }
+        for rule in rules.rows {
             let id = text(&rule, "id").unwrap_or_default();
             let pattern: serde_json::Value =
                 serde_json::from_str(&text(&rule, "pattern").unwrap_or_default())
@@ -1259,14 +1351,19 @@ impl World {
     /// every kind shares. A sealed cell is `PRESENT` where the item holds one, read as
     /// `<cell> IS NOT NULL` and never as a value: a sealed plaintext is a channel the runtime keeps
     /// closed (#1135), on the phone and in the harness alike.
-    fn load_locker(&mut self, door: &dyn Door, flags: &Flags) -> Result<(), String> {
-        let entities = entities(door, "locker_item")?;
+    fn load_locker(&mut self, door: &dyn Door, flags: &Flags, scope: &Scope) -> Result<(), String> {
+        let entities = &scope.entities;
         let plain = "id, type, username, url, notes, key_id, cardholder, expiry, brand, fullname, \
                      email, phone, address, network";
         let sealed = "password IS NOT NULL AS has_password, otp_seed IS NOT NULL AS has_otp_seed, \
                       card_number IS NOT NULL AS has_card_number, cvv IS NOT NULL AS has_cvv, \
                       content IS NOT NULL AS has_content";
-        let items = door.table("locker_item", &format!("{plain}, {sealed}"), "id", "id")?;
+        let items = by_ids(
+            door,
+            "locker_item",
+            &format!("{plain}, {sealed}"),
+            &scope.ids(),
+        )?;
         let spec = Kind::LockerItem.spec();
         // A sealed cell as the world holds it: the vault's placeholder ("a secret is here, leave it
         // alone") on the presence bit.
@@ -1338,12 +1435,24 @@ impl World {
             .keys()
             .map(|(kind, id)| (id.clone(), *kind))
             .collect();
+        // only a note, a task or an event is the start of a link the model reads
+        let from_ids: Vec<String> = self
+            .rows
+            .keys()
+            .filter(|(kind, _)| {
+                matches!(
+                    kind,
+                    Kind::Note | Kind::Task | Kind::Event | Kind::Photo | Kind::Person
+                )
+            })
+            .map(|(_, id)| id.clone())
+            .collect();
         for (rel, via) in [
             ("about", Via::About),
             ("with", Via::With),
             ("depicts", Via::Depicts),
         ] {
-            for (from, to) in pairs(door, rel)? {
+            for (from, to) in edges_from(door, rel, &from_ids)? {
                 let (Some(from_kind), Some(to_kind)) = (kinds.get(&from), kinds.get(&to)) else {
                     continue;
                 };
@@ -1362,81 +1471,259 @@ struct Flags {
 }
 
 impl Flags {
-    fn load(door: &dyn Door) -> Result<Self, String> {
-        let of = |flag: centraid_vault::model::Flag| -> Result<BTreeSet<String>, String> {
-            Ok(door
-                .table_where(
-                    "edge",
-                    "from_id, to_id",
-                    "from_id",
-                    "to_id",
-                    "rel = ? AND to_id = ?",
-                    &["tagged".to_owned(), flag.id()],
-                )?
-                .iter()
-                .filter_map(|row| text(row, "from_id"))
-                .collect())
+    /// Who among `ids` is starred and who is pinned: the `tagged` edges to the two flags, read for
+    /// a chunk of ids at a time.
+    fn load(door: &dyn Door, ids: &[String]) -> Result<Self, String> {
+        let starred_flag = centraid_vault::model::Flag::Starred.id();
+        let pinned_flag = centraid_vault::model::Flag::Pinned.id();
+        let mut flags = Self {
+            starred: BTreeSet::new(),
+            pinned: BTreeSet::new(),
         };
-        Ok(Self {
-            starred: of(centraid_vault::model::Flag::Starred)?,
-            pinned: of(centraid_vault::model::Flag::Pinned)?,
-        })
+        for chunk in ids.chunks(IN_CHUNK) {
+            let marks = vec!["?"; chunk.len()].join(", ");
+            let mut binds = vec![
+                "tagged".to_owned(),
+                starred_flag.clone(),
+                pinned_flag.clone(),
+            ];
+            binds.extend(chunk.iter().cloned());
+            for edge in door.table_where(
+                "edge",
+                "from_id, to_id",
+                "from_id",
+                "to_id",
+                &format!("rel = ? AND to_id IN (?, ?) AND from_id IN ({marks})"),
+                &binds,
+            )? {
+                let (Some(from), Some(to)) = (text(&edge, "from_id"), text(&edge, "to_id")) else {
+                    continue;
+                };
+                if to == starred_flag {
+                    flags.starred.insert(from);
+                } else if to == pinned_flag {
+                    flags.pinned.insert(from);
+                }
+            }
+        }
+        Ok(flags)
     }
 }
 
-/// Every entity of one kind, live or in the trash, by id.
-fn entities(door: &dyn Door, kind: &str) -> Result<BTreeMap<String, VaultRow>, String> {
-    Ok(door
-        .table_where(
+/// The vault kinds the world holds a window of, and the model kinds each one is.
+const WINDOWED: &[&str] = &[
+    "person",
+    "event",
+    "task",
+    "note",
+    "document",
+    "photo",
+    "locker_item",
+    "notebook",
+    "album",
+    "folder",
+    "project",
+    "area",
+    "account",
+    "category",
+];
+
+/// The vault kind whose entities a model kind's rows are, for the kinds the store can count.
+#[must_use]
+pub fn vault_kind_of(kind: Kind) -> Option<&'static str> {
+    Some(match kind {
+        Kind::Person => "person",
+        Kind::Task => "task",
+        Kind::Note => "note",
+        Kind::Document => "document",
+        Kind::Photo => "photo",
+        Kind::LockerItem => "locker_item",
+        Kind::Notebook => "notebook",
+        Kind::Album => "album",
+        Kind::Folder => "folder",
+        Kind::List => "project",
+        _ => return None,
+    })
+}
+
+/// The model kinds a vault kind's rows become.
+fn model_kinds(vault_kind: &str) -> Vec<Kind> {
+    match vault_kind {
+        "person" => vec![Kind::Person],
+        "event" => vec![Kind::Event],
+        "task" => vec![Kind::Task],
+        "note" => vec![Kind::Note],
+        "document" => vec![Kind::Document],
+        "photo" => vec![Kind::Photo],
+        "locker_item" => vec![Kind::LockerItem],
+        "notebook" => vec![Kind::Notebook],
+        "album" => vec![Kind::Album],
+        "folder" => vec![Kind::Folder],
+        "project" => vec![Kind::List],
+        "account" => vec![Kind::Account],
+        "category" => vec![Kind::Category],
+        _ => Vec::new(),
+    }
+}
+
+/// The entities of one vault kind the world holds: its newest [`WINDOW_ROWS`] (by creation, live or
+/// in the trash) and every row pinned into the session, and whether older ones were left unread.
+#[derive(Debug, Default)]
+struct Scope {
+    entities: BTreeMap<String, VaultRow>,
+    more: bool,
+}
+
+impl Scope {
+    /// One bounded read of the kind's newest entities (`entity_by_created` answers it), with the
+    /// pinned entities of the kind from `held`.
+    fn read(
+        door: &dyn Door,
+        kind: &str,
+        held: &BTreeMap<String, VaultRow>,
+    ) -> Result<Self, String> {
+        let window = door.window(
             "entity",
-            "id, title, created_at, updated_at, deleted_at, purge_at",
+            ENTITY_COLUMNS,
             "created_at",
             "id",
             "kind = ?",
             &[kind.to_owned()],
-        )?
+            WINDOW_ROWS,
+            true,
+        )?;
+        let mut entities: BTreeMap<String, VaultRow> = window
+            .rows
+            .into_iter()
+            .filter_map(|row| Some((text(&row, "id")?, row)))
+            .collect();
+        for (id, row) in held {
+            if text(row, "kind").as_deref() == Some(kind) {
+                entities.entry(id.clone()).or_insert_with(|| row.clone());
+            }
+        }
+        Ok(Self {
+            entities,
+            more: window.more,
+        })
+    }
+
+    fn ids(&self) -> Vec<String> {
+        self.entities.keys().cloned().collect()
+    }
+}
+
+/// Every kind's [`Scope`], by vault kind.
+#[derive(Debug, Default)]
+struct Scopes(BTreeMap<&'static str, Scope>);
+
+impl Scopes {
+    fn of(&self, kind: &str) -> &Scope {
+        static NONE: Scope = Scope {
+            entities: BTreeMap::new(),
+            more: false,
+        };
+        self.0.get(kind).unwrap_or(&NONE)
+    }
+}
+
+/// The entities of `ids`, live or in the trash, a chunk of ids at a time.
+fn entities_by_id(door: &dyn Door, ids: &[String]) -> Result<BTreeMap<String, VaultRow>, String> {
+    Ok(by_ids(door, "entity", ENTITY_COLUMNS, ids)?
         .into_iter()
         .filter_map(|row| Some((text(&row, "id")?, row)))
         .collect())
 }
 
-/// The `(from, to)` ends of every edge of one relation.
-fn pairs(door: &dyn Door, rel: &str) -> Result<Vec<(String, String)>, String> {
-    Ok(door
-        .table_where(
+/// The rows of `table` whose `id` is among `ids`, a chunk of [`IN_CHUNK`] at a time: each read
+/// returns at most a chunk's rows, so none can reach the door's ceiling.
+fn by_ids(
+    door: &dyn Door,
+    table: &str,
+    columns: &str,
+    ids: &[String],
+) -> Result<Vec<VaultRow>, String> {
+    let mut out = Vec::new();
+    for chunk in ids.chunks(IN_CHUNK) {
+        let marks = vec!["?"; chunk.len()].join(", ");
+        out.extend(door.table_where(
+            table,
+            columns,
+            "id",
+            "id",
+            &format!("id IN ({marks})"),
+            chunk,
+        )?);
+    }
+    Ok(out)
+}
+
+/// The edges one chunk of ids may carry, newest first: a person with thousands of interactions
+/// gives their newest, which is what "last contact" reads.
+const EDGES_PER_CHUNK: usize = IN_CHUNK * 8;
+
+/// The `(from, to)` ends of the edges of one relation that start at one of `ids`.
+fn edges_from(door: &dyn Door, rel: &str, ids: &[String]) -> Result<Vec<(String, String)>, String> {
+    edges_by(door, rel, "from_id", ids)
+}
+
+/// The `(from, to)` ends of the edges of one relation that end at one of `ids`.
+fn edges_to(door: &dyn Door, rel: &str, ids: &[String]) -> Result<Vec<(String, String)>, String> {
+    edges_by(door, rel, "to_id", ids)
+}
+
+fn edges_by(
+    door: &dyn Door,
+    rel: &str,
+    column: &str,
+    ids: &[String],
+) -> Result<Vec<(String, String)>, String> {
+    let mut out = Vec::new();
+    for chunk in ids.chunks(IN_CHUNK) {
+        let marks = vec!["?"; chunk.len()].join(", ");
+        let mut binds = vec![rel.to_owned()];
+        binds.extend(chunk.iter().cloned());
+        let found = door.window(
             "edge",
             "from_id, to_id",
             "from_id",
             "to_id",
-            "rel = ?",
-            &[rel.to_owned()],
-        )?
-        .iter()
-        .filter_map(|row| Some((text(row, "from_id")?, text(row, "to_id")?)))
-        .collect())
+            &format!("rel = ? AND {column} IN ({marks})"),
+            &binds,
+            EDGES_PER_CHUNK,
+            true,
+        )?;
+        out.extend(
+            found
+                .rows
+                .iter()
+                .filter_map(|row| Some((text(row, "from_id")?, text(row, "to_id")?))),
+        );
+    }
+    Ok(out)
 }
 
-/// When each person was last touched: the latest `starts` of an activity of an activity kind
+/// When each of `people` was last touched: the latest `starts` of an activity of an activity kind
 /// (a call, a visit; a workout is not a touch) that is `with` them. Computed at read, as
 /// People computes it (`last_contacted` is stored nowhere).
-fn last_contacts(door: &dyn Door) -> Result<BTreeMap<String, String>, String> {
-    let with = pairs(door, "with")?;
+fn last_contacts(door: &dyn Door, people: &[String]) -> Result<BTreeMap<String, String>, String> {
+    let with = edges_to(door, "with", people)?;
     if with.is_empty() {
         return Ok(BTreeMap::new());
     }
-    let starts: BTreeMap<String, String> = door
-        .table_where(
-            "activity",
-            "id, starts",
-            "id",
-            "id",
-            "type_kind = ?",
-            &["activity_kind".to_owned()],
-        )?
+    let activities: Vec<String> = with
         .iter()
-        .filter_map(|row| Some((text(row, "id")?, text(row, "starts")?)))
+        .map(|(activity, _)| activity.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
         .collect();
-    let live: BTreeSet<String> = entities(door, "activity")?
+    let starts: BTreeMap<String, String> =
+        by_ids(door, "activity", "id, starts, type_kind", &activities)?
+            .iter()
+            .filter(|row| text(row, "type_kind").as_deref() == Some("activity_kind"))
+            .filter_map(|row| Some((text(row, "id")?, text(row, "starts")?)))
+            .collect();
+    let live: BTreeSet<String> = entities_by_id(door, &activities)?
         .into_iter()
         .filter(|(_, row)| text(row, "deleted_at").is_none())
         .map(|(id, _)| id)
@@ -1452,6 +1739,18 @@ fn last_contacts(door: &dyn Door) -> Result<BTreeMap<String, String>, String> {
         }
     }
     Ok(last)
+}
+
+/// The occurrences of the days around today as Agenda reads them (R-1088-8), or `None` when the
+/// door cannot answer (every event then reads as stored).
+fn event_occurrences(
+    door: &dyn Door,
+    at: &Standing,
+) -> Option<Vec<crate::native::door::Occurrence>> {
+    let span = |days: i64| jiff::Span::new().days(days);
+    let from = at.today.checked_sub(span(EVENT_DAYS_BACK)).ok()?;
+    let to = at.today.checked_add(span(EVENT_DAYS_AHEAD)).ok()?;
+    door.events(&from.to_string(), &to.to_string(), &at.tz).ok()
 }
 
 /// A field's type, for the where-language and `compute`.

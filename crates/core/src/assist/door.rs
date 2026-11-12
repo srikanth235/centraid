@@ -48,11 +48,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_apps_kit::reads::{FanOutBound, read_pages};
+use centraid_apps_kit::page::PageRequest;
+use centraid_apps_kit::reads::{FanOutBound, PageDoor as _, read_pages};
 use centraid_apps_kit::row::Row;
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 use centraid_assist::native::door::Inverse;
-use centraid_assist::native::door::Occurrence;
+use centraid_assist::native::door::{Occurrence, Window};
 use centraid_assist::native::{Call, Door, Ran};
 use centraid_search::Target;
 use centraid_vault::commands::Registry;
@@ -164,6 +165,88 @@ impl Door for CoreDoor {
                 return Err(format!("reading {table}: {failure}"));
             }
             rows.map_err(|error| format!("reading {table}: {error}"))
+        })
+    }
+
+    fn count(&self, table: &str, predicate: &str, binds: &[String]) -> Result<u64, String> {
+        self.with(|vault| {
+            let counted = vault
+                .keyset_count(&centraid_vault::page::KeysetPage {
+                    name: format!("assist.native.count.{table}"),
+                    select: vec!["id".to_owned()],
+                    from: table.to_owned(),
+                    predicate: (!predicate.is_empty()).then(|| predicate.to_owned()),
+                    binds: binds
+                        .iter()
+                        .cloned()
+                        .map(centraid_vault::value::Value::Text)
+                        .collect(),
+                    sort_column: "id".to_owned(),
+                    pk_column: "id".to_owned(),
+                    descending: false,
+                    limit: 1,
+                    after: None,
+                    held_thumbnail: false,
+                    document_size: false,
+                })
+                .map_err(|error| format!("counting {table}: {error}"))?;
+            Ok(u64::try_from(counted).unwrap_or(0))
+        })
+    }
+
+    fn window(
+        &self,
+        table: &str,
+        columns: &str,
+        sort: &str,
+        pk: &str,
+        predicate: &str,
+        binds: &[String],
+        limit: usize,
+        newest_first: bool,
+    ) -> Result<Window, String> {
+        self.with(|vault| {
+            let door = VaultDoor::new(vault);
+            let mut query = PageQuery::new(
+                &format!("assist.native.{table}"),
+                columns,
+                table,
+                if newest_first {
+                    PageOrder::desc(sort, pk)
+                } else {
+                    PageOrder::asc(sort, pk)
+                },
+            );
+            if !predicate.is_empty() {
+                query = query.filter(
+                    predicate,
+                    binds.iter().cloned().map(PageBindValue::Text).collect(),
+                );
+            }
+            let mut rows: Vec<Row> = Vec::new();
+            let mut after = None;
+            // THE WALK STOPS AT `limit + 1` ROWS: the extra one says more were left, and no page
+            // past it is read, so the cost follows the limit and not the table.
+            while rows.len() <= limit {
+                let want = (limit + 1 - rows.len()).min(PAGE_ROWS);
+                let request = PageRequest {
+                    limit: want,
+                    after: after.clone(),
+                };
+                let page = door.page(&query, &request);
+                if let Some(failure) = door.take_failure() {
+                    return Err(format!("reading {table}: {failure}"));
+                }
+                let page = page.map_err(|error| format!("reading {table}: {error}"))?;
+                rows.extend(page.rows);
+                match page.next {
+                    Some(next) => after = Some(next),
+                    None => break,
+                }
+            }
+            let more = rows.len() > limit;
+            rows.truncate(limit);
+            Ok(Window { rows, more })
         })
     }
 

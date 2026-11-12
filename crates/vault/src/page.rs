@@ -559,6 +559,43 @@ pub fn reaches_locker(name: &str) -> bool {
 /// The prefix of the assistant's reads of the vault's tables.
 const ASSISTANT_READ: &str = "assist.native.";
 
+/// The clauses every read of `page` is held to before its own cursor: the author's predicate, and
+/// the Locker rules (a sealed column is named only by its presence test; a read that is not one of
+/// Locker's neither reads a Locker table nor sees a Locker item through another).
+fn served_clauses(page: &KeysetPage) -> Result<Vec<String>> {
+    let mut clauses: Vec<String> = page
+        .predicate
+        .as_ref()
+        .map(|text| vec![format!("({text})")])
+        .unwrap_or_default();
+    if is_locker_table(&page.from)
+        && !page.name.starts_with("locker.")
+        && withholds_sealed_value(page)
+    {
+        return Err(VaultError::InvalidInput {
+            name: page.name.clone(),
+            detail: format!(
+                "`{}` holds a sealed value, and this read is not one of Locker's; \
+                     a sealed column is named only by its presence test",
+                page.from
+            ),
+        });
+    }
+    if !reaches_locker(&page.name) {
+        if is_locker_table(&page.from) {
+            return Err(VaultError::InvalidInput {
+                name: page.name.clone(),
+                detail: format!(
+                    "`{}` is a Locker table, and this read is not one of Locker's",
+                    page.from
+                ),
+            });
+        }
+        clauses.extend(locker_exclusion(&page.from));
+    }
+    Ok(clauses)
+}
+
 /// Every sealed column of Locker's tables: the five cells of `locker_item`,
 /// `locker_item_field.value_sealed` and `locker_item_passkey.private_key`.
 const SEALED_COLUMNS: [&str; 7] = [
@@ -809,36 +846,7 @@ impl Vault {
         let limit = page.limit.min(MAX_PAGE_ROWS);
         let direction = if page.descending { "DESC" } else { "ASC" };
         let mut binds = page.binds.clone();
-        let mut clauses: Vec<String> = page
-            .predicate
-            .as_ref()
-            .map(|text| vec![format!("({text})")])
-            .unwrap_or_default();
-        if is_locker_table(&page.from)
-            && !page.name.starts_with("locker.")
-            && withholds_sealed_value(page)
-        {
-            return Err(VaultError::InvalidInput {
-                name: page.name.clone(),
-                detail: format!(
-                    "`{}` holds a sealed value, and this read is not one of Locker's; \
-                     a sealed column is named only by its presence test",
-                    page.from
-                ),
-            });
-        }
-        if !reaches_locker(&page.name) {
-            if is_locker_table(&page.from) {
-                return Err(VaultError::InvalidInput {
-                    name: page.name.clone(),
-                    detail: format!(
-                        "`{}` is a Locker table, and this read is not one of Locker's",
-                        page.from
-                    ),
-                });
-            }
-            clauses.extend(locker_exclusion(&page.from));
-        }
+        let mut clauses = served_clauses(page)?;
         if let Some((sort_key, pk)) = &page.after {
             // A TUPLE COMPARISON on the two order columns. A `>` on the sort
             // column alone would skip every row that ties with the cursor's
@@ -934,6 +942,34 @@ impl Vault {
             None
         };
         Ok(KeysetAnswer { rows, next })
+    }
+
+    /// How many rows `page` reaches: its predicate under the same Locker rules as a page of it,
+    /// counted by the store (`SELECT count(*)`), never by walking pages. Its order, cursor and
+    /// limit are not read. The assistant asks it for a whole-kind figure it cannot take from the
+    /// rows it holds (#1188, C3).
+    pub fn keyset_count(&self, page: &KeysetPage) -> Result<i64> {
+        let clauses = served_clauses(page)?;
+        let predicate = if clauses.is_empty() {
+            String::new()
+        } else {
+            format!(" WHERE {}", clauses.join(" AND "))
+        };
+        let sql = format!(
+            "SELECT count(*) AS n FROM {from}{predicate}",
+            from = crate::log::quoted(&page.from),
+        );
+        let composed = RawPage {
+            sql,
+            binds: page.binds.clone(),
+            limit: 1,
+        };
+        self.tapped(&page.name, &composed);
+        let rows = self.page_clamped(&composed, 1)?;
+        Ok(match rows.first().and_then(|row| row.get("n")) {
+            Some(Value::Integer(n)) => *n,
+            _ => 0,
+        })
     }
 
     /// TURN THE HASHES THE STATEMENT PROJECTED INTO A PATH AND A FLAG.

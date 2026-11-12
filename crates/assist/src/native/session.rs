@@ -394,6 +394,12 @@ pub struct Session {
     /// Notes the runtime adds under the observation of the running call: a
     /// date it repaired, a row it resolved from context.
     pub(crate) pending_notes: Vec<String>,
+    /// The ids of rows older than their kind's window that a call reached by name, oldest first
+    /// (`reach`): read into every world this session loads, up to `PINNED_ROWS`.
+    pub(crate) pinned: Vec<String>,
+    /// The kinds the last read could not be made exact over (`store_reach`): rows of the kind
+    /// outside the window may match, and the store could not hand them all in.
+    pub(crate) inexact: BTreeSet<Kind>,
     /// A line that ends the next reply, after every other note (nt12 R5: `only the first call ran`).
     closing_note: Option<String>,
     /// Reads of this turn that came back empty by name and left the turn open
@@ -694,6 +700,8 @@ impl Session {
             message: String::new(),
             prev_message: String::new(),
             pending_notes: Vec::new(),
+            pinned: Vec::new(),
+            inexact: BTreeSet::new(),
             closing_note: None,
             read_misses: 0,
             trace: None,
@@ -723,13 +731,237 @@ impl Session {
         self.now.date()
     }
 
+    /// The world the session reads from now.
+    #[must_use]
+    pub fn world(&self) -> &World {
+        &self.world
+    }
+
+    /// The ids of the rows older than their kind's window that this session reached and keeps.
+    #[must_use]
+    pub fn pinned(&self) -> &[String] {
+        &self.pinned
+    }
+
     /// The vault as the model reads it now, the events in the person's zone.
-    pub(crate) fn load_world(&self) -> Result<World, String> {
+    pub fn load_world(&self) -> Result<World, String> {
         let standing = crate::native::world::Standing {
             today: self.now.date(),
             tz: self.tz.clone(),
         };
-        World::load_in(&*self.door, Some(&standing))
+        let pinned: BTreeSet<String> = self.pinned.iter().cloned().collect();
+        World::load_pinned(&*self.door, Some(&standing), &pinned)
+    }
+
+    /// **BOUNDED RETRIEVAL** (#1188, C3). The world holds each kind's newest rows, so a call that
+    /// names something older would find nothing. Before a call runs, the words it names (`name`,
+    /// `text`, the quoted words of `where`) are searched in the full-text index for the kinds whose
+    /// window left rows unread; a hit that is not in the world is read in and pinned, here and in
+    /// every world this session loads after. The search answers at most 50 rows a kind and the pins
+    /// keep the newest `PINNED_ROWS`, so a call costs a bounded number of reads whatever the vault
+    /// holds. A door with no full-text index finds nothing and the world stays as it was.
+    pub(crate) fn reach(&mut self, args: &Value) {
+        if self.world.older.is_empty() {
+            return;
+        }
+        let words = reach_words(args);
+        if words.is_empty() {
+            return;
+        }
+        let kinds = match args.get("kind").and_then(Value::as_str) {
+            Some(text) if !text.eq_ignore_ascii_case("any") => text
+                .split(',')
+                .filter_map(|part| Kind::parse(part.trim()))
+                .collect::<Vec<_>>(),
+            _ => Kind::ALL.to_vec(),
+        };
+        let mut found: Vec<String> = Vec::new();
+        for (entity, kind) in crate::native::search::FTS {
+            if !kinds.contains(kind) || !self.world.older.contains(kind) {
+                continue;
+            }
+            for text in &words {
+                let Ok(targets) = self.door.search(entity, text, 50) else {
+                    continue;
+                };
+                for target in targets {
+                    if self.world.row(&(*kind, target.id.clone())).is_none()
+                        && !found.contains(&target.id)
+                    {
+                        found.push(target.id);
+                    }
+                }
+            }
+        }
+        if found.is_empty() {
+            return;
+        }
+        self.pin(found);
+    }
+
+    /// Keep `ids` (the newest `PINNED_ROWS` of them) in every world this session loads, and read
+    /// them into the one it holds.
+    fn pin(&mut self, ids: Vec<String>) {
+        for id in ids {
+            self.pinned.retain(|held| *held != id);
+            self.pinned.push(id);
+        }
+        let over = self
+            .pinned
+            .len()
+            .saturating_sub(crate::native::world::PINNED_ROWS);
+        self.pinned.drain(..over);
+        let Ok(reloaded) = self.load_world() else {
+            return;
+        };
+        self.world.absorb(&reloaded);
+        if let Some(parked) = self.park.world.as_mut() {
+            parked.absorb(&reloaded);
+        }
+    }
+
+    /// **EXACT OVER THE STORE, NOT THE WINDOW** (#1188, C3). A kind whose older rows the world left
+    /// unread can still answer a read exactly when the rows the read could match are few enough to
+    /// read in: the rows of a date range come from an indexed range read of the kind's own date
+    /// (`task.due`, `photo.taken_at`, `entity.created_at`), a whole kind under
+    /// [`HYDRATE_ROWS`](crate::native::world::HYDRATE_ROWS) from its entity index, and `order` over
+    /// a date with a `limit` from the same index in that order. Those rows are read into the world
+    /// and the selector runs over them as it always does. The kinds this cannot do for are
+    /// returned: a number over them comes from the store (`store_count`) or is refused, never taken
+    /// from the window, and a list over them carries a note.
+    fn store_reach(&mut self, selector: &Selector) -> BTreeSet<Kind> {
+        let mut inexact = BTreeSet::new();
+        if selector.within.is_some() {
+            return inexact;
+        }
+        let mut wanted: Vec<String> = Vec::new();
+        for kind in selector
+            .kinds
+            .iter()
+            .copied()
+            .filter(|kind| self.world.older.contains(kind))
+        {
+            if kind == Kind::Event && self.event_window_holds(selector) {
+                continue;
+            }
+            let Some(plan) = reach_plan(kind, selector) else {
+                inexact.insert(kind);
+                continue;
+            };
+            let limit = plan.limit.min(crate::native::world::HYDRATE_ROWS);
+            let columns = if plan.sort == "id" {
+                "id".to_owned()
+            } else {
+                format!("id, {}", plan.sort)
+            };
+            match self.door.window(
+                plan.table,
+                &columns,
+                plan.sort,
+                "id",
+                &plan.predicate,
+                &plan.binds,
+                limit,
+                plan.newest_first,
+            ) {
+                // an ordered read takes the first rows in its order and is exact however many follow
+                Ok(window) if plan.ordered || !window.more => {
+                    wanted.extend(
+                        window
+                            .rows
+                            .iter()
+                            .filter_map(|row| crate::native::door::text(row, "id")),
+                    );
+                }
+                _ => {
+                    inexact.insert(kind);
+                }
+            }
+        }
+        wanted.retain(|id| !self.world.rows.keys().any(|(_, held)| held == id));
+        if !wanted.is_empty() {
+            self.pin(wanted);
+        }
+        inexact
+    }
+
+    /// Whether the days an event read asks for lie inside the window the world reads occurrences
+    /// for, where every repeating series is already expanded.
+    fn event_window_holds(&self, selector: &Selector) -> bool {
+        use crate::native::world::{EVENT_DAYS_AHEAD, EVENT_DAYS_BACK};
+        let Some(when) = selector.when else {
+            return false;
+        };
+        let span = |days: i64| jiff::Span::new().days(days);
+        let (Ok(from), Ok(to)) = (
+            self.now.date().checked_sub(span(EVENT_DAYS_BACK)),
+            self.now.date().checked_add(span(EVENT_DAYS_AHEAD)),
+        ) else {
+            return false;
+        };
+        let (start, end) = when.ends();
+        !when.is_open() && from <= start.date() && end.date() <= to
+    }
+
+    /// How many rows of each of `selector`'s kinds the store holds, when the selector asks for
+    /// nothing but the kind and whether it is trashed; `None` when the store cannot say.
+    fn store_count(&self, selector: &Selector) -> Option<u64> {
+        let pure = selector.name.is_none()
+            && selector.conds.is_empty()
+            && selector.when.is_none()
+            && selector.linked_to.is_empty()
+            && selector.exclude.is_empty()
+            && selector.within.is_none();
+        if !pure {
+            return None;
+        }
+        let mut total = 0_u64;
+        for kind in &selector.kinds {
+            let vault_kind = crate::native::world::vault_kind_of(*kind)?;
+            let state = if selector.trashed {
+                "deleted_at IS NOT NULL"
+            } else {
+                "deleted_at IS NULL"
+            };
+            let (table, predicate, binds) = match kind {
+                // a photograph is not a video or a scan, nor a person an organisation
+                Kind::Photo | Kind::Person => (
+                    vault_kind,
+                    format!(
+                        "form = ? AND id IN (SELECT id FROM entity WHERE kind = ? AND {state})"
+                    ),
+                    vec![vault_kind.to_owned(), vault_kind.to_owned()],
+                ),
+                _ => (
+                    "entity",
+                    format!("kind = ? AND {state}"),
+                    vec![vault_kind.to_owned()],
+                ),
+            };
+            total += self.door.count(table, &predicate, &binds).ok()?;
+        }
+        Some(total)
+    }
+
+    /// The note an answer over a kind whose older rows were left unread carries, so a short or
+    /// empty answer is never read as the whole vault's.
+    fn older_note(&self, selector: &Selector) -> Option<String> {
+        if selector.within.is_some() {
+            return None;
+        }
+        let kinds: Vec<Kind> = selector
+            .kinds
+            .iter()
+            .copied()
+            .filter(|kind| self.inexact.contains(kind))
+            .collect();
+        (!kinds.is_empty()).then(|| {
+            format!(
+                "note: read the newest {} {} only; older ones are found by name or by date",
+                crate::native::world::WINDOW_ROWS,
+                render::plural_list(&kinds)
+            )
+        })
     }
 
     /// The session clock follows the request: the person's civil `now` and their zone. The world
@@ -1132,6 +1364,7 @@ impl Session {
     /// `matched "Farrukh Kasimov" for "Farukh"` under the reply when that tier is a typo's, and
     /// the contains reading of a free-text `=` (`read_as_contains`) when nothing was reached.
     pub(crate) fn select_read(&mut self, selector: &mut Selector) -> Vec<Key> {
+        self.inexact = self.store_reach(selector);
         let mut named = self.select_named(selector);
         // THE TRASH DATE IS NOT KEPT (nt11 R6): a row's `date` is the day it was for, not the day
         // it was deleted, so a `when` on a read of trashed rows ("what did I delete last week")
@@ -1161,6 +1394,9 @@ impl Session {
             self.pending_notes.push(line);
         }
         self.read_as_contains(selector, &mut keys);
+        if let Some(note) = self.older_note(selector) {
+            self.pending_notes.push(note);
+        }
         if keys.is_empty()
             && let Some((widened, found, notes)) = self.text_by_tiers(selector)
         {
@@ -2029,6 +2265,7 @@ impl Session {
         // the regrouped tools carry a create's and an edit's fields as parameters of their own: folded into `args` here
         let folded = self.folded(tool, args, self.renamed);
         let args = folded.as_ref().unwrap_or(args);
+        self.reach(args);
         if self.turn == 0 {
             self.user("");
         }
@@ -3338,6 +3575,33 @@ impl Session {
             let keys = self.select_read(&mut selector);
             (selector.kinds.clone(), keys, Some(selector))
         };
+        // A NUMBER OVER ROWS THE WORLD DID NOT HOLD COMES FROM THE STORE OR IS REFUSED (#1188, C3):
+        // a count of a whole kind is the store's own count; any other figure over a kind with
+        // unread rows is not given, because a figure over the window is a wrong figure.
+        let stored = match &selector {
+            Some(selector)
+                if selector
+                    .kinds
+                    .iter()
+                    .any(|kind| self.inexact.contains(kind)) =>
+            {
+                match (
+                    op.as_str(),
+                    arg_str(args, "group"),
+                    self.store_count(selector),
+                ) {
+                    ("count", None, Some(total)) => Some(total),
+                    _ => {
+                        return Err(format!(
+                            "error: there are more {} than can be {} exactly; narrow it with a date.",
+                            render::plural_list(&selector.kinds),
+                            if op == "count" { "counted" } else { "added up" }
+                        ));
+                    }
+                }
+            }
+            _ => None,
+        };
         let field = arg_str(args, "field");
         let group = arg_str(args, "group");
         if op != "count" && kinds.len() > 1 {
@@ -3380,8 +3644,20 @@ impl Session {
             {
                 return Err(whr::no_field(kind, group));
             }
-            crate::native::values::fold(&op, field.as_deref(), group.as_deref(), &rows, &self.world)
+            match stored {
+                Some(total) => {
+                    crate::native::values::counted(i64::try_from(total).unwrap_or(i64::MAX))
+                }
+                None => crate::native::values::fold(
+                    &op,
+                    field.as_deref(),
+                    group.as_deref(),
+                    &rows,
+                    &self.world,
+                ),
+            }
         };
+        let keys = if stored.is_some() { Vec::new() } else { keys };
         // A VALUE KEEPS ITS ROWS: the rows it was computed over, so
         // `within: @n` and `exclude: @n` reach them next turn.
         self.results.push(ResultSet {
@@ -3588,4 +3864,134 @@ mod echo_tests {
         // a reply that is no error is still cut at the plain length
         assert!(first_line(&error[6..], REPEAT_ECHO).ends_with('…'));
     }
+}
+
+/// The words a call names that a row older than the window may answer to: its `name`, its `text`
+/// and the quoted words of a `where`, each trimmed and at most 120 characters, at most eight.
+fn reach_words(args: &Value) -> Vec<String> {
+    let mut words: Vec<String> = Vec::new();
+    for key in ["name", "text"] {
+        if let Some(Value::String(text)) = args.get(key) {
+            words.push(text.clone());
+        }
+    }
+    let quoted = |text: &str, out: &mut Vec<String>| {
+        for (index, part) in text.split('"').enumerate() {
+            if index % 2 == 1 {
+                out.push(part.to_owned());
+            }
+        }
+    };
+    match args.get("where") {
+        Some(Value::String(text)) => quoted(text, &mut words),
+        Some(Value::Array(items)) => {
+            for item in items {
+                if let Value::String(text) = item {
+                    quoted(text, &mut words);
+                }
+            }
+        }
+        _ => {}
+    }
+    let mut out: Vec<String> = Vec::new();
+    for word in words {
+        let word: String = word.trim().chars().take(120).collect();
+        if !word.is_empty() && !out.contains(&word) {
+            out.push(word);
+        }
+    }
+    out.truncate(8);
+    out
+}
+
+/// How a read of `kind` reaches the rows it could match in the store.
+struct ReachPlan {
+    table: &'static str,
+    sort: &'static str,
+    predicate: String,
+    binds: Vec<String>,
+    limit: usize,
+    newest_first: bool,
+    /// The first `limit` rows in the order, not every candidate.
+    ordered: bool,
+}
+
+/// The indexed read that yields a superset of the rows `selector` can match among `kind`'s, or
+/// `None` when the store has no such read for it. A superset is enough: the selector runs over
+/// the rows read in, so the days are widened by one on each side for the zones the stored text
+/// does not carry.
+fn reach_plan(kind: Kind, selector: &Selector) -> Option<ReachPlan> {
+    let hydrate = crate::native::world::HYDRATE_ROWS;
+    let vault_kind = crate::native::world::vault_kind_of(kind)?;
+    // the date column each kind's `date` is read from, and where it lives
+    let (table, sort, kind_scoped): (&'static str, &'static str, bool) = match kind {
+        Kind::Task => ("task", "due", false),
+        Kind::Photo => ("photo", "taken_at", false),
+        Kind::Note | Kind::Document => ("entity", "created_at", true),
+        _ => ("entity", "created_at", true),
+    };
+    let dated = matches!(kind, Kind::Task | Kind::Photo | Kind::Note | Kind::Document);
+    let mut clauses: Vec<String> = Vec::new();
+    let mut binds: Vec<String> = Vec::new();
+    if kind_scoped {
+        clauses.push("kind = ?".to_owned());
+        binds.push(vault_kind.to_owned());
+    }
+    if let Some(when) = selector.when {
+        if !dated {
+            return None;
+        }
+        let (start, end) = when.ends();
+        let day = |date: jiff::civil::Date, by: i64| {
+            if by < 0 {
+                date.checked_sub(jiff::Span::new().days(-by))
+            } else {
+                date.checked_add(jiff::Span::new().days(by))
+            }
+            .ok()
+            .map(|date| date.to_string())
+        };
+        if start.date() != jiff::civil::Date::MIN {
+            clauses.push(format!("{sort} >= ?"));
+            binds.push(day(start.date(), -1)?);
+        }
+        if end.date() != jiff::civil::Date::MAX {
+            clauses.push(format!("{sort} < ?"));
+            binds.push(day(end.date(), 2)?);
+        }
+    }
+    // `order` over the date with a limit: the first rows in that order, when nothing else filters
+    let ordered = match (&selector.order, selector.limit) {
+        (Some((field, descending)), Some(limit))
+            if field == "date"
+                && dated
+                && selector.name.is_none()
+                && selector.conds.is_empty()
+                && selector.linked_to.is_empty()
+                && selector.exclude.is_empty()
+                && limit > 0 =>
+        {
+            Some((*descending, limit))
+        }
+        _ => None,
+    };
+    if matches!(kind, Kind::Task | Kind::Photo) && ordered.is_some() {
+        clauses.push(format!("{sort} IS NOT NULL"));
+    }
+    // a nullable date cannot carry a keyset past its first page: it orders a read only when the
+    // read excludes the rows without one, else the id (minted in order of time) does
+    let sort = if selector.when.is_some() || ordered.is_some() {
+        sort
+    } else {
+        "id"
+    };
+    Some(ReachPlan {
+        table,
+        sort,
+        predicate: clauses.join(" AND "),
+        binds,
+        limit: ordered.map_or(hydrate, |(_, limit)| limit.min(hydrate)),
+        newest_first: ordered.is_none_or(|(descending, _)| descending),
+        ordered: ordered.is_some(),
+    })
 }
