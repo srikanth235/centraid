@@ -940,3 +940,104 @@ fn an_adapter_alone_is_not_a_model_and_does_not_say_an_update_is_needed() {
         );
     });
 }
+
+#[test]
+fn the_offer_cases_in_the_shared_fixture_hold() {
+    let text = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../contracts/assist/adapter-offer-cases.json"),
+    )
+    .unwrap();
+    let all: serde_json::Value = serde_json::from_str(&text).unwrap();
+    for case in all["cases"].as_array().unwrap() {
+        let name = case["name"].as_str().unwrap();
+        let files: Vec<&str> = case["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| f.as_str().unwrap())
+            .collect();
+        centraid_assist::record::held_for(adapter_record(), || {
+            let (mut chat, dir) = with_files(&files);
+            open_in(&mut chat, &dir);
+            let state = chat.state();
+            assert_eq!(state.update_step.is_some(), case["row"], "{name}");
+            if let Some(row) = &state.update_step {
+                let size = case["row_size"].as_str().unwrap_or("40.0 MB");
+                assert_eq!(row.size_line, size, "{name}");
+                assert_eq!(row.title, "A newer model is ready", "{name}");
+            }
+            let want: Vec<String> = case["deleted"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|f| f.as_str().unwrap().to_owned())
+                .collect();
+            assert_eq!(deleted(&chat), want, "{name}");
+        });
+    }
+}
+
+#[test]
+fn nothing_is_fetched_until_the_member_taps_the_row_and_then_only_the_adapter() {
+    centraid_assist::record::held_for(adapter_record(), || {
+        let (mut chat, dir) = with_files(&["New-Q4_0.gguf"]);
+        open_in(&mut chat, &dir);
+        assert_eq!(
+            chat.state().phase(),
+            Phase::Ready,
+            "chat works on the model alone"
+        );
+        assert!(chat.state().update_step.is_some());
+        assert!(download_effect(&chat).is_none(), "an offer fetches nothing");
+        chat.driver.effects.clear();
+        chat.event(C::Download(wire::chat_event::DownloadTapped {
+            update: true,
+            ..Default::default()
+        }));
+        let fetch = download_effect(&chat).expect("the tap fetches");
+        assert_eq!(fetch.file_name, ADAPTER_FILE);
+        assert!(
+            !fetch.allow_cellular,
+            "Wi‑Fi unless the member chose mobile data"
+        );
+        assert_eq!(
+            chat.state().phase(),
+            Phase::Ready,
+            "chat keeps working during the fetch"
+        );
+        chat.event(C::DownloadProgress(wire::chat_event::DownloadProgress {
+            done_bytes: 10_000_000,
+            total_bytes: ADAPTER_BYTES,
+            vision: false,
+        }));
+        let row = chat.state().update_step.clone().unwrap();
+        assert!(row.progress_known);
+        assert!(
+            (row.progress - 0.25).abs() < 0.001,
+            "the bar is the adapter's own"
+        );
+        std::fs::write(dir.join(ADAPTER_FILE), b"lora").unwrap();
+        finished(&mut chat, true);
+        chat.perform();
+        let state = chat.state();
+        assert_eq!(state.phase(), Phase::Ready, "the model reloaded with it");
+        assert!(state.update_step.is_none());
+    });
+}
+
+#[test]
+fn an_adapter_fetch_that_stops_short_is_the_rows_retry_and_chat_keeps_working() {
+    centraid_assist::record::held_for(adapter_record(), || {
+        let (mut chat, dir) = with_files(&["New-Q4_0.gguf"]);
+        open_in(&mut chat, &dir);
+        chat.event(C::Download(wire::chat_event::DownloadTapped {
+            update: true,
+            ..Default::default()
+        }));
+        finished(&mut chat, false);
+        let state = chat.state();
+        assert_eq!(state.phase(), Phase::Ready);
+        assert_eq!(state.update_step.clone().unwrap().action_label, "Try again");
+    });
+}

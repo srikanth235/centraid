@@ -88,6 +88,10 @@ struct Loaded {
     /// `None` for a model installed directly (a test's fake), which answers for
     /// any path.
     path: Option<PathBuf>,
+    /// The adapter the rule allowed for this model when it was loaded (whether or not the engine
+    /// took it). A model loaded before its adapter arrived is not "ready" once the rule allows
+    /// one: the next load replaces it.
+    adapter: Option<PathBuf>,
     model: Arc<dyn Model>,
 }
 
@@ -119,7 +123,11 @@ impl ModelHost {
     /// Put a model in the slot directly. For tests and for an engine that
     /// loads on its own schedule; it answers for any path.
     pub fn install(&self, model: Arc<dyn Model>) {
-        *locked(&self.loaded) = Some(Loaded { path: None, model });
+        *locked(&self.loaded) = Some(Loaded {
+            path: None,
+            adapter: None,
+            model,
+        });
         *locked(&self.vision) = None;
     }
 
@@ -202,9 +210,12 @@ impl ModelHost {
             .ok()
             .filter(std::fs::Metadata::is_file)
             .map_or(0, |meta| meta.len());
-        let loaded = locked(&self.loaded)
-            .as_ref()
-            .is_some_and(|loaded| loaded.path.as_deref().is_none_or(|held| held == path));
+        let loaded = locked(&self.loaded).as_ref().is_some_and(|loaded| {
+            loaded
+                .path
+                .as_deref()
+                .is_none_or(|held| held == path && loaded.adapter == wanted_adapter(path))
+        });
         let state = if loaded {
             ModelState::Ready
         } else if self.loading.load(Ordering::SeqCst) {
@@ -254,6 +265,7 @@ impl ModelHost {
         let outcome = result.map(|model| {
             *locked(&self.loaded) = Some(Loaded {
                 path: Some(path.to_path_buf()),
+                adapter: wanted_adapter(path),
                 model,
             });
             *locked(&self.vision) = None;
@@ -263,18 +275,25 @@ impl ModelHost {
     }
 }
 
+/// The adapter file the rule allows for the model at `path`: it is in the directory, of the
+/// recorded size, made for this base and this build.
+fn wanted_adapter(path: &Path) -> Option<PathBuf> {
+    let record = crate::record::record();
+    let (dir, file) = path
+        .parent()
+        .zip(path.file_name().and_then(|n| n.to_str()))?;
+    crate::adapter::resolve(&record, dir, file)
+        .used()
+        .then_some(())
+        .and(record.adapter.as_ref())
+        .map(|adapter| dir.join(adapter.local_name()))
+}
+
 /// Load `path` with the adapter the record's rule allows for it, or alone: an adapter that will
 /// not load is not an error a member acts on, so the base is loaded without it and the turn runs
 /// stock.
 fn load_best(loader: &dyn ModelLoader, path: &Path) -> Result<Arc<dyn Model>, ModelError> {
-    let record = crate::record::record();
-    let held = path
-        .parent()
-        .zip(path.file_name().and_then(|name| name.to_str()))
-        .filter(|(dir, file)| crate::adapter::resolve(&record, dir, file).used())
-        .zip(record.adapter.as_ref())
-        .map(|((dir, _), adapter)| dir.join(adapter.local_name()));
-    match held {
+    match wanted_adapter(path) {
         Some(adapter) => loader
             .load_with_adapter(path, Some(&adapter))
             .or_else(|_| loader.load(path)),
@@ -493,5 +512,32 @@ mod tests {
         let status = crate::record::held_for(record, || host.load(&base).unwrap());
         assert_eq!(status.state, ModelState::Ready);
         assert_eq!(*loader.seen.lock().unwrap(), [Some(file), None]);
+    }
+
+    #[test]
+    fn a_model_loaded_before_its_adapter_arrived_is_loaded_again_with_it() {
+        let base = scratch("adapter-late", b"base");
+        let (record, file) = with_adapter_beside(&base);
+        std::fs::remove_file(&file).unwrap();
+        let loader = Arc::new(Adapting {
+            seen: Mutex::new(Vec::new()),
+            bad: false,
+        });
+        let host = ModelHost::new();
+        host.set_loader(loader.clone());
+        crate::record::held_for(record, || {
+            host.load(&base).unwrap();
+            assert_eq!(host.status(&base).state, ModelState::Ready);
+            // the member fetched the adapter
+            std::fs::write(&file, b"abc").unwrap();
+            assert_eq!(host.status(&base).state, ModelState::Present);
+            host.load(&base).unwrap();
+            assert_eq!(host.status(&base).state, ModelState::Ready);
+        });
+        assert_eq!(
+            *loader.seen.lock().unwrap(),
+            [None, Some(file)],
+            "the second load carried the adapter"
+        );
     }
 }

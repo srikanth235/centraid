@@ -3173,7 +3173,7 @@ fn backup_missing_in(root: &Path, promises: &[(&str, &[(&str, &str)])]) -> Vec<S
 
 /// **CHAT** (#1188, Part C). The assistant is the phone's, so no app has a row; the same shape and
 /// the same checker as Backup's. `(promise, [(file, test)])`.
-pub const CHAT_PROMISES: [(&str, &[(&str, &str)]); 4] = [
+pub const CHAT_PROMISES: [(&str, &[(&str, &str)]); 5] = [
     (
         "a change is made only after the member confirms it",
         &[
@@ -3201,6 +3201,23 @@ pub const CHAT_PROMISES: [(&str, &[(&str, &str)]); 4] = [
             (
                 "crates/core/tests/assist_native.rs",
                 "every_kind_is_drawn_as_a_card_of_one_of_the_six_apps_and_the_homeless_ones_open_their_apps_home",
+            ),
+        ],
+    ),
+    (
+        "the assistant never fetches a model file the member did not ask for",
+        &[
+            (
+                "crates/screens/tests/chat_model.rs",
+                "nothing_is_fetched_until_the_member_taps_the_row_and_then_only_the_adapter",
+            ),
+            (
+                "crates/screens/tests/chat_model.rs",
+                "the_offer_cases_in_the_shared_fixture_hold",
+            ),
+            (
+                "crates/screens/tests/chat_model.rs",
+                "the_adapter_rides_in_the_assistants_one_download_with_one_size_and_one_bar",
             ),
         ],
     ),

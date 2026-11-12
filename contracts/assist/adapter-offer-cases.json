@@ -1,0 +1,42 @@
+{
+  "about": "The row above the composer for the adapter (#1188 G5): with these files in the models directory, does the chat offer an update (`row`), and which files does it delete once the model in use is the current one. `row_size`, when present, is the size the row quotes (otherwise the adapter's, 40.0 MB). Read by crates/screens/tests/chat_model.rs. The release has the window record with an adapter of 40,000,000 bytes (sha256 starting dddddddddddd). A frozen golden.",
+  "cases": [
+    {
+      "name": "model and the named adapter on the phone: no row",
+      "files": [
+        "New-Q4_0.gguf",
+        "centraid-adapter-dddddddddddd.gguf"
+      ],
+      "row": false,
+      "deleted": []
+    },
+    {
+      "name": "model current, adapter never fetched: the row offers it",
+      "files": [
+        "New-Q4_0.gguf"
+      ],
+      "row": true,
+      "deleted": []
+    },
+    {
+      "name": "model current, an older adapter held: the row offers the newer, the older goes with the leftovers",
+      "files": [
+        "New-Q4_0.gguf",
+        "centraid-adapter-ffffffffffff.gguf"
+      ],
+      "row": true,
+      "deleted": [
+        "centraid-adapter-ffffffffffff.gguf"
+      ]
+    },
+    {
+      "name": "the previous model: the row offers the current model (its adapter follows in the same fetch), not the adapter alone",
+      "files": [
+        "Old-Q4_0.gguf"
+      ],
+      "row": true,
+      "deleted": [],
+      "row_size": "644 MB"
+    }
+  ]
+}

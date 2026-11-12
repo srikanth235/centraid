@@ -290,6 +290,11 @@ pub(super) struct Chat {
     /// The next finished transfer is the adapter's: it rides in the same step as the model and
     /// its failure is silent (the model runs alone).
     pub adapter_fetching: bool,
+    /// The update row offers the adapter alone: the model in use is the current one and the
+    /// adapter the release names is not on the phone. Never fetched until the member taps.
+    pub adapter_only: bool,
+    /// The adapter arrived while a turn ran: the model reloads with it when the tab next opens.
+    pub reload_pending: bool,
     /// The stored thread this chat is saved in, or empty until a turn has been saved.
     pub thread_id: String,
     pub thread_title: String,
@@ -348,6 +353,8 @@ impl Default for Chat {
             others: Vec::new(),
             adapter_files: Vec::new(),
             adapter_fetching: false,
+            adapter_only: false,
+            reload_pending: false,
             thread_id: String::new(),
             thread_title: String::new(),
             drawer_open: false,
@@ -519,7 +526,9 @@ impl Chat {
         if self.opened && !rescope {
             let mut effects = Vec::new();
             // A chat on the older model whose update has arrived loads the new one now.
-            let arrived = self.on_previous && self.update == Update::None && !self.running;
+            let arrived = (self.on_previous || self.reload_pending)
+                && self.update == Update::None
+                && !self.running;
             if matches!(self.phase, Phase::NeedsModel | Phase::Unavailable) || arrived {
                 effects.extend(self.read_status(ctx));
             }
@@ -576,6 +585,11 @@ impl Chat {
         };
         self.others = beside;
         self.adapter_files = adapters;
+        self.reload_pending = false;
+        if self.adapter_only && self.update != Update::Downloading {
+            self.adapter_only = false;
+            self.update = Update::None;
+        }
         self.on_previous = false;
         self.update_needed = false;
         match state {
@@ -600,6 +614,7 @@ impl Chat {
                 Vec::new()
             }
             Some(wire::AssistModelState::Present) => {
+                self.offer_adapter();
                 self.phase = Phase::Loading;
                 // The projector belongs to the loaded model: a model about to be loaded has none.
                 self.vision = self.vision.unloaded();
@@ -609,13 +624,28 @@ impl Chat {
                 self.phase = Phase::Loading;
                 Vec::new()
             }
-            Some(wire::AssistModelState::Ready) => self.became_ready(ctx),
+            Some(wire::AssistModelState::Ready) => {
+                self.offer_adapter();
+                self.became_ready(ctx)
+            }
             // NO_ENGINE, a core that would not answer, and a state this build has no name for
             // are all "not available here".
             _ => {
                 self.phase = Phase::Unavailable;
                 Vec::new()
             }
+        }
+    }
+
+    /// THE ADAPTER ALONE (#1188 G5): the model in use is the current one and the release names an
+    /// adapter that is not on the phone (never fetched, or a newer one). Nothing is fetched until
+    /// the member taps the same row that offers a newer model; chat works as it is meanwhile.
+    fn offer_adapter(&mut self) {
+        let missing = asset::adapter()
+            .is_some_and(|adapter| !self.adapter_files.iter().any(|n| n == adapter.file_name));
+        if missing && self.update == Update::None {
+            self.update = Update::Offered;
+            self.adapter_only = true;
         }
     }
 
@@ -833,15 +863,18 @@ impl Chat {
     /// the member chose mobile data. The chat keeps answering on the model it has.
     fn update_tapped(&mut self, choice: i32) -> Vec<wire::Effect> {
         use wire::ChatStepAction as Choice;
-        let model = asset::model();
+        let adapter = asset::adapter().filter(|_| self.adapter_only);
+        let model = adapter.unwrap_or_else(asset::model);
         let choice = Choice::try_from(choice).unwrap_or(Choice::Unspecified);
         let started = matches!(self.update, Update::Offered | Update::Failed);
         let waiting = self.update == Update::Downloading;
-        if !(started || waiting && choice == Choice::DownloadCellular) || !self.on_previous {
+        if !(started || waiting && choice == Choice::DownloadCellular)
+            || !(self.on_previous || adapter.is_some())
+        {
             return Vec::new();
         }
         // The new file lands beside the old one, so the phone needs room for both.
-        if self.too_little_space(asset::assistant_bytes()) {
+        if self.too_little_space(adapter.map_or_else(asset::assistant_bytes, |a| a.bytes)) {
             return Vec::new();
         }
         let more_data = match choice {
@@ -853,6 +886,7 @@ impl Chat {
         if started {
             self.update = Update::Downloading;
             self.update_progress = None;
+            self.adapter_fetching = adapter.is_some();
         }
         vec![effect(wire::effect::Kind::ModelDownload(
             wire::ModelDownload {
@@ -900,7 +934,7 @@ impl Chat {
     ) -> Vec<wire::Effect> {
         // ONE BAR FOR THE ASSISTANT: the adapter's bytes follow the model's, so the fraction runs
         // over both (the member reads one download).
-        let (before, after) = if progress.vision {
+        let (before, after) = if progress.vision || self.adapter_fetching && self.adapter_only {
             (0, 0)
         } else if self.adapter_fetching {
             (asset::model().bytes, 0)
@@ -967,6 +1001,9 @@ impl Chat {
         // THE ADAPTER ARRIVED (or did not): either way the model loads next. A missing adapter is
         // not an error a member acts on; the model runs alone.
         let adapter_done = std::mem::take(&mut self.adapter_fetching);
+        if self.update == Update::Downloading && self.adapter_only {
+            return self.adapter_only_finished(ok, ctx);
+        }
         if self.update == Update::Downloading {
             if !adapter_done
                 && ok
@@ -996,6 +1033,23 @@ impl Chat {
             let _ = ctx;
             Vec::new()
         }
+    }
+
+    /// The adapter alone arrived (or stopped short). The member asked for it, so a failure is the
+    /// row's Retry; success reloads the model with it between turns.
+    fn adapter_only_finished(&mut self, ok: bool, ctx: &Ctx) -> Vec<wire::Effect> {
+        self.update_progress = None;
+        if !ok {
+            self.update = Update::Failed;
+            return Vec::new();
+        }
+        self.update = Update::None;
+        self.adapter_only = false;
+        if self.running {
+            self.reload_pending = true;
+            return Vec::new();
+        }
+        self.read_status(ctx)
     }
 
     /// The new model arrived whole and verified beside the old one. Between turns it is loaded in

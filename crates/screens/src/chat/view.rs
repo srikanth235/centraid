@@ -194,11 +194,15 @@ impl Chat {
     /// THE UPDATE ROW (ChatModelUpdate.dc.html): a newer model than the one in use, above the
     /// composer, while the older one keeps answering.
     fn update_step(&self, locale: Locale) -> Option<wire::ChatModelStep> {
-        if self.phase != Phase::Ready || !self.on_previous {
+        if self.phase != Phase::Ready || !(self.on_previous || self.adapter_only) {
             return None;
         }
         let title = words::update_title(locale);
-        let bytes = self.model_bytes();
+        let bytes = if self.adapter_only {
+            super::asset::adapter().map_or(0, |adapter| adapter.bytes)
+        } else {
+            self.model_bytes()
+        };
         match self.update {
             Update::None => None,
             Update::Offered | Update::Failed => Some(wire::ChatModelStep {
