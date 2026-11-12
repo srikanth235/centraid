@@ -66,6 +66,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role
@@ -466,6 +467,16 @@ private fun ChatThread(
         pinned = true
         toFoot()
     }
+    // SCREEN READERS HEAR THE WORK: the status line is a polite live region, and the finished answer
+    // is read once when streaming ends, never token by token.
+    var announced by remember { mutableStateOf("") }
+    LaunchedEffect(state.streaming) {
+        if (state.streaming) {
+            announced = ""
+        } else {
+            announced = state.messages.lastOrNull { it.role == ChatMessage.Role.ROLE_ASSISTANT }?.accessibility_label.orEmpty()
+        }
+    }
     LaunchedEffect(last?.text?.length, last?.cards?.size, state.activity) {
         if (pinned) toFoot()
     }
@@ -519,7 +530,9 @@ private fun ChatThread(
                     state.activity,
                     style = centraidType("mono"),
                     color = centraidColor("textFaint"),
-                    modifier = Modifier.testTag("chat-activity"),
+                    modifier = Modifier
+                        .semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite }
+                        .testTag("chat-activity"),
                 )
             }
         }
@@ -536,6 +549,16 @@ private fun ChatThread(
                 )
             }
         }
+    }
+    if (announced.isNotEmpty()) {
+        Box(
+            Modifier
+                .size(1.dp)
+                .semantics {
+                    liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite
+                    contentDescription = announced
+                },
+        )
     }
     if (!pinned && state.messages.isNotEmpty()) {
         Row(

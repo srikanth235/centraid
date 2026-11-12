@@ -143,6 +143,17 @@ struct ChatView: View {
             sendingToken = 0
             sendingText = ""
         }
+        // SCREEN READERS HEAR THE WORK: what the model is doing is said when it changes, and the
+        // finished answer is read once when streaming ends, never token by token.
+        .onChange(of: state.activity) { _, now in
+            if !now.isEmpty, state.streaming { UIAccessibility.post(notification: .announcement, argument: now) }
+        }
+        .onChange(of: state.streaming) { was, now in
+            guard was, !now, let last = state.messages.last(where: { $0.role == .assistant }),
+                !last.accessibilityLabel.isEmpty
+            else { return }
+            UIAccessibility.post(notification: .announcement, argument: last.accessibilityLabel)
+        }
         // EDIT FILLS THE COMPOSER: whenever Rust moves the token, the field holds what it says (the
         // last question on starting, nothing on cancelling).
         .onChange(of: state.editToken) { _, _ in
