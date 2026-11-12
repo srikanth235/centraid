@@ -2181,3 +2181,37 @@ fn the_kits_restore_doors_answer_to_rule_c_once_for_every_app() {
     );
     assert!(kit_door_direct_writes(&root).is_empty());
 }
+
+#[test]
+fn the_backup_promises_name_tests_that_exist() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    assert_eq!(backup_missing(&root), Vec::<String>::new());
+}
+
+#[test]
+fn a_backup_promise_whose_test_is_gone_or_ignored_is_caught() {
+    let dir = fixture_dir("backup-promises");
+    let file = dir.join("proof.rs");
+    fs::write(
+        &file,
+        "#[test]\n#[ignore]\nfn skipped() {}\n#[test]\nfn kept() {}\n",
+    )
+    .expect("written");
+    let promises: [(&str, &[(&str, &str)]); 1] = [(
+        "a promise",
+        &[
+            ("proof.rs", "skipped"),
+            ("proof.rs", "kept"),
+            ("proof.rs", "gone"),
+            ("absent.rs", "x"),
+        ],
+    )];
+    let gaps = backup_missing_in(&dir, &promises).join("\n");
+    assert!(
+        gaps.contains("`skipped` in `proof.rs` is ignored"),
+        "{gaps}"
+    );
+    assert!(gaps.contains("has no test `gone`"), "{gaps}");
+    assert!(gaps.contains("`absent.rs` does not exist"), "{gaps}");
+    assert!(!gaps.contains("`kept`"), "{gaps}");
+}

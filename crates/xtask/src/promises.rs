@@ -675,6 +675,8 @@ pub fn promises(root: &Path) -> RuleReport {
     // Nor is the rest of the screens crate, and the list of what can leave is held to the proto.
     report.findings.extend(owner_tree_missing(root));
     report.findings.extend(effect_kinds_missing(root));
+    // Backup is the vault's, not an app's: its three promises are held to the tests that prove them.
+    report.findings.extend(backup_missing(root));
     report
 }
 
@@ -2938,6 +2940,94 @@ fn link_missing(root: &Path, app: &str) -> Vec<String> {
             gaps.push(format!(
                 "crates/screens/src/{app}/{screen}: the {kind} page does not embed the kit's general \"Linked to\" section (`kit::{LINK_PIECE}`)"
             ));
+        }
+    }
+    gaps
+}
+
+/// **BACKUP** (#1188, Part B). Backup is the vault's, so no app has a row; each promise names the
+/// tests that prove it, and the rule fails when a named test is gone, renamed or `#[ignore]`d.
+/// `(promise, [(file, test)])`.
+pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 3] = [
+    (
+        "every paired backup device receives every pass",
+        &[
+            (
+                "crates/core/tests/backup_replicas.rs",
+                "a_pass_feeds_every_paired_gateway",
+            ),
+            (
+                "crates/core/tests/backup_holes.rs",
+                "a_device_away_past_the_wait_still_restores_the_whole_vault",
+            ),
+        ],
+    ),
+    (
+        "a backup restores on any later build",
+        &[
+            (
+                "crates/vault/src/backup/restore.rs",
+                "a_backup_at_an_older_rung_restores_under_a_longer_ladder",
+            ),
+            (
+                "crates/vault/src/backup/restore.rs",
+                "a_backup_from_a_newer_build_asks_for_an_update",
+            ),
+        ],
+    ),
+    (
+        "backed up is said only when every backup device is current",
+        &[
+            (
+                "crates/screens/src/backup/tests.rs",
+                "a_silent_device_is_named_with_the_day_it_last_answered",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "a_device_holding_an_older_backup_is_a_plain_warning",
+            ),
+            (
+                "crates/core/tests/backup_verify.rs",
+                "a_gateway_that_lies_about_exists_is_found_and_then_refilled",
+            ),
+        ],
+    ),
+];
+
+/// What the Backup promises lack: a named test that does not exist, or is ignored.
+pub fn backup_missing(root: &Path) -> Vec<String> {
+    backup_missing_in(root, &BACKUP_PROMISES)
+}
+
+fn backup_missing_in(root: &Path, promises: &[(&str, &[(&str, &str)])]) -> Vec<String> {
+    let mut gaps = Vec::new();
+    for (promise, proofs) in promises {
+        for (file, test) in *proofs {
+            let Ok(text) = fs::read_to_string(root.join(file)) else {
+                gaps.push(format!(
+                    "backup / {promise}: its proof file `{file}` does not exist"
+                ));
+                continue;
+            };
+            let needle = format!("fn {test}(");
+            let lines: Vec<&str> = text.lines().collect();
+            let Some(at) = lines.iter().position(|line| line.contains(&needle)) else {
+                gaps.push(format!("backup / {promise}: `{file}` has no test `{test}`"));
+                continue;
+            };
+            let ignored = lines[..at]
+                .iter()
+                .rev()
+                .take_while(|line| {
+                    let line = line.trim();
+                    line.starts_with("#[") || line.starts_with("///") || line.starts_with("//")
+                })
+                .any(|line| line.contains("#[ignore"));
+            if ignored {
+                gaps.push(format!(
+                    "backup / {promise}: `{test}` in `{file}` is ignored"
+                ));
+            }
         }
     }
     gaps
