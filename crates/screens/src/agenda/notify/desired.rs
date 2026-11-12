@@ -143,7 +143,8 @@ impl Window {
 
 /// How far back the service reads events for the delivered reading, in days. A bound on the READ
 /// only: an event running longer keeps its banner (the loader keeps what is still running), and a
-/// task reminder is named for `alerts::KEEP_PAST_MS`.
+/// task reminder until its task is resolved (the newest `LIVE_CAP`; an older banner is not named
+/// and goes).
 pub const LIVE_DAYS: i64 = 2;
 /// The most delivered ids named at once.
 pub const LIVE_CAP: usize = 64;

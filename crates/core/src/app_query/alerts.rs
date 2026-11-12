@@ -28,7 +28,7 @@ pub(crate) fn names(vault: &Vault, zone: &FireZone, now: &str, count: u32) -> Re
     );
     let mut rows = vault
         .read(|connection| index::next(connection, &fixed, &floating, count as usize + SPARE))?;
-    // What fired and is still the item's (a task within two days; an event until it ends): it may
+    // What fired and is still the item's (a task until it is resolved; an event until it ends; the newest 64): it may
     // be on the screen. The index drops the rest.
     let recent = vault.read(|connection| {
         index::recent(

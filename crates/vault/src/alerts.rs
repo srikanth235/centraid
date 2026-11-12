@@ -37,7 +37,8 @@ use crate::time::{has_zone_designator, rrule};
 const MINUTE_MS: i64 = 60_000;
 const DAY_MS: i64 = 86_400_000;
 /// How long a one-off item's row outlives its firing, so a reader can still tell a banner that
-/// fired a moment ago is the item's. An event's row also stays while the event is running.
+/// fired a moment ago is the item's. An event's row also stays while the event is running, and a
+/// task's until the task is resolved (the row goes with it).
 pub const KEEP_PAST_MS: i64 = 2 * DAY_MS;
 /// How much earlier than its own now a reader asks for floating rows: a phone in another zone than
 /// the vault's. The widest offset between two zones is 26 hours; a day and a half covers it.
@@ -516,7 +517,8 @@ pub fn has_stale(connection: &Connection, now: i64) -> Result<bool> {
             .prepare_cached(
                 "SELECT EXISTS (SELECT 1 FROM alert WHERE timing = ?1
                    AND (fire_key < ?2 AND repeats = 1
-                        OR fire_key < ?3 AND NOT EXISTS (SELECT 1 FROM event e
+                        OR fire_key < ?3 AND entity_id IN (SELECT id FROM event)
+                           AND NOT EXISTS (SELECT 1 FROM event e
                              WHERE e.id = alert.entity_id AND e.ends IS NOT NULL
                                AND julianday(e.ends) > julianday(?4))))",
             )?
@@ -538,7 +540,7 @@ pub fn has_stale(connection: &Connection, now: i64) -> Result<bool> {
 
 /// Move on the repeating rows whose firing has passed, and drop the one-off rows that came due
 /// before [`KEEP_PAST_MS`] ago (an event's stays until the event has ended, so a long event keeps
-/// its banner). Returns how many items were recomputed; fewer than
+/// its banner; a TASK's stays until the task is resolved, which removes it). Returns how many items were recomputed; fewer than
 /// [`ADVANCE_BATCH`] means none are left.
 ///
 /// # Errors
@@ -563,6 +565,7 @@ pub fn advance(connection: &Connection, now: i64) -> Result<usize> {
         connection
             .prepare_cached(
                 "DELETE FROM alert WHERE timing = ?1 AND repeats = 0 AND fire_key < ?2
+                   AND entity_id IN (SELECT id FROM event)
                    AND NOT EXISTS (SELECT 1 FROM event e WHERE e.id = alert.entity_id
                                      AND e.ends IS NOT NULL AND julianday(e.ends) > julianday(?3))",
             )?

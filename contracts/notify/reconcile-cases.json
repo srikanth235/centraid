@@ -55,6 +55,12 @@
       "wanted": [],
       "live": ["keep"], "pending": ["b", "a"], "showing": ["z", "keep", "y"],
       "plan": { "removePending": ["a", "b"], "removeShowing": ["y", "z"], "schedule": [], "post": [] }
+    },
+    {
+      "name": "a delivered banner past the live bound is not named and goes, though its item is open",
+      "wanted": [],
+      "live": ["newest"], "pending": [], "showing": ["newest", "older"],
+      "plan": { "removePending": [], "removeShowing": ["older"], "schedule": [], "post": [] }
     }
   ]
 }

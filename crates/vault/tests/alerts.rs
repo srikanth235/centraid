@@ -322,3 +322,21 @@ fn the_rows_equal_a_rebuild_from_the_items() {
         .expect("rebuild");
     assert_eq!(w.rows(), before);
 }
+
+/// A FIRED TASK REMINDER'S ROW STAYS UNTIL THE TASK IS RESOLVED, however long ago it fired.
+#[test]
+fn a_fired_task_reminders_row_stays_until_the_task_is_resolved() {
+    let w = World::new();
+    let id = w.ok(
+        "task.add",
+        json!({ "title": "Call", "due": "2026-01-01T09:00:00Z", "remind_before_min": 0 }),
+    )["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    w.scratch.clock.advance_days(30);
+    w.scratch.vault.advance_alerts().expect("advance");
+    assert_eq!(w.rows().len(), 1, "still open after a month");
+    w.ok("task.complete", json!({ "id": id }));
+    assert!(w.rows().is_empty());
+}
