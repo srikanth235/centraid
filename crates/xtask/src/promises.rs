@@ -3065,7 +3065,7 @@ fn link_missing(root: &Path, app: &str) -> Vec<String> {
 /// **BACKUP** (#1188, Part B). Backup is the vault's, so no app has a row; each promise names the
 /// tests that prove it, and the rule fails when a named test is gone, renamed or `#[ignore]`d.
 /// `(promise, [(file, test)])`.
-pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 7] = [
+pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 8] = [
     (
         "every paired backup device receives every pass",
         &[
