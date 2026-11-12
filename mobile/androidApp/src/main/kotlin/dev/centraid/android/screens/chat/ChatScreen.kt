@@ -998,6 +998,16 @@ private fun ChatComposer(
 ) {
     var attachMenu by remember { mutableStateOf(false) }
     val shape = CircleShape
+    // DICTATION, ON THIS PHONE ONLY: the key is drawn only where the recogniser works offline.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val dictation = remember { ChatDictation(context) }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { dictation.stop() } }
+    LaunchedEffect(state.streaming) { if (state.streaming) dictation.stop() }
+    var dictationBase by remember { mutableStateOf("") }
+    val listen = { dictation.start { heard -> onDraft(if (dictationBase.isEmpty()) heard else "$dictationBase $heard") } }
+    val askMicrophone = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { granted -> if (granted) listen() else dictation.refuse() }
     Column(
         Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -1022,6 +1032,23 @@ private fun ChatComposer(
                     onEvent(ChatEvent(edit_cancelled = ChatEvent.EditCancelled()))
                 }
             }
+        }
+        // WHILE IT LISTENS the composer says so, and says plainly when the microphone or speech is
+        // refused (ChatDictation.dc.html).
+        if (dictation.phase == ChatDictation.Phase.Listening) {
+            Text(
+                state.listening_label,
+                color = centraidResource(R.color.centraid_text_meta),
+                fontSize = tokenSp(R.dimen.centraid_text_meta),
+                modifier = Modifier.padding(horizontal = 8.dp).testTag("chat-listening"),
+            )
+        } else if (dictation.phase == ChatDictation.Phase.Refused) {
+            Text(
+                state.dictation_off_label,
+                color = centraidResource(R.color.centraid_state_red_text),
+                fontSize = tokenSp(R.dimen.centraid_text_meta),
+                modifier = Modifier.padding(horizontal = 8.dp).testTag("chat-dictation-off"),
+            )
         }
         if (state.pending.isNotEmpty()) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1086,6 +1113,25 @@ private fun ChatComposer(
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                     modifier = Modifier.fillMaxWidth().testTag("chat-field").semantics { contentDescription = state.composer_placeholder },
                 )
+            }
+            if (dictation.available && !state.streaming) {
+                val listening = dictation.phase == ChatDictation.Phase.Listening
+                KeyButton(
+                    if (listening) "Stop" else "Mic",
+                    if (listening) state.stop_label else state.dictate_label,
+                    "chat-dictate",
+                ) {
+                    if (listening) {
+                        dictation.stop()
+                    } else {
+                        dictationBase = draft.trim()
+                        val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+                            context,
+                            android.Manifest.permission.RECORD_AUDIO,
+                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                        if (granted) listen() else askMicrophone.launch(android.Manifest.permission.RECORD_AUDIO)
+                    }
+                }
             }
             if (state.scopes.isNotEmpty()) ScopePill(state, onScope)
             if (state.streaming) {

@@ -29,6 +29,12 @@ catalog! {
     plain copy = ("Copy", "Copy");
     plain jump_to_latest = ("Jump to latest", "Jump to latest");
     plain latest = ("Latest", "Latest");
+    plain dictate = ("Dictate", "Dictate");
+    plain dictation_off = (
+        "Dictation is off. Allow the microphone and speech in Settings.",
+        "Dictation is off. Allow the microphone and speech in Settings."
+    );
+    plain listening = ("Listening on this phone", "Listening on this phone");
     plain current_chat = ("Open chat", "Open chat");
     plain cancel_edit = ("Cancel editing", "Cancel editing");
     plain delete = ("Delete", "Delete");

@@ -137,6 +137,13 @@ message ChatState {
   // its spoken label.
   string latest_label = 68;
   string jump_to_latest_label = 69;
+  // DICTATION, on this phone only (the shells say whether the phone can: the key is not drawn when
+  // it cannot). `dictate_label` is the key's spoken name, `listening_label` the line over the
+  // composer while it listens, `dictation_off_label` the sentence when the microphone or speech is
+  // refused.
+  string dictate_label = 70;
+  string listening_label = 71;
+  string dictation_off_label = 72;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;

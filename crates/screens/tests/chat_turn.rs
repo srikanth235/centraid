@@ -702,3 +702,12 @@ fn the_latest_key_has_its_words_from_the_core() {
         ("Latest", "Jump to latest")
     );
 }
+
+#[test]
+fn dictation_has_its_words_from_the_core_and_is_on_this_phone() {
+    let chat = proposing();
+    let state = chat.state();
+    assert_eq!(state.dictate_label, "Dictate");
+    assert_eq!(state.listening_label, "Listening on this phone");
+    assert!(state.dictation_off_label.contains("Settings"));
+}

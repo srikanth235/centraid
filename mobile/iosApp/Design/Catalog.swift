@@ -388,6 +388,10 @@ public enum CentraidCatalog {
         "MessageCircle": [
             CentraidIconPath(d: "M20 11.5a7.5 7.5 0 0 1-8 7.5 8.5 8.5 0 0 1-4-.9L4 20l1.1-3.5A7.5 7.5 0 1 1 20 11.5z", filled: false, evenOdd: false),
         ],
+        "Mic": [
+            CentraidIconPath(d: "M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z", filled: false, evenOdd: false),
+            CentraidIconPath(d: "M5 11a7 7 0 0 0 14 0M12 18v3", filled: false, evenOdd: false),
+        ],
         "Monitor": [
             CentraidIconPath(d: "M3 4h18v12H3z", filled: false, evenOdd: false),
             CentraidIconPath(d: "M9 20h6M12 16v4", filled: false, evenOdd: false),

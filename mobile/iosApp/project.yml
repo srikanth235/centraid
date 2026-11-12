@@ -293,6 +293,8 @@ targets:
         # that has not declared this key; the passcode fallback needs nothing.
         # The biometric is a presence gate in front of Locker's session, and
         # the sentence says only that.
+        NSMicrophoneUsageDescription: Centraid listens while you dictate a question to Chat, and the words are made on this phone and never leave it.
+        NSSpeechRecognitionUsageDescription: Centraid turns your dictated question into words with the speech recognition built into this phone, which works without a connection.
         NSFaceIDUsageDescription: Centraid uses Face ID to unlock Locker.
         # WHY CENTRAID ASKS FOR THE CAMERA (#1047): Docs' Scan is VisionKit's
         # document camera, and pairing reads the QR `centraid-gateway serve`

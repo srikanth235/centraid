@@ -1208,6 +1208,8 @@ private struct ChatComposerCard: View {
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// DICTATION, ON THIS PHONE ONLY: the key is drawn only where the recogniser works offline.
+    @StateObject private var dictation = ChatDictation()
 
     private static let radius: CGFloat = 28
 
@@ -1230,6 +1232,21 @@ private struct ChatComposerCard: View {
             if state.hasVisionStep {
                 ChatVisionBanner(step: state.visionStep, onDownload: { chat.visionDownloadTapped() })
             }
+            // WHILE IT LISTENS the composer says so, and says plainly when the microphone or speech is
+            // refused (ChatDictation.dc.html).
+            if dictation.phase == .listening {
+                Text(verbatim: state.listeningLabel)
+                    .kitScaledFont(CentraidScale.metaSize)
+                    .foregroundStyle(Color(CentraidAsset.textMeta))
+                    .padding(.horizontal, 8)
+                    .accessibilityIdentifier("chat-listening")
+            } else if dictation.phase == .refused {
+                Text(verbatim: state.dictationOffLabel)
+                    .kitScaledFont(CentraidScale.metaSize)
+                    .foregroundStyle(Color(CentraidAsset.stateRedText))
+                    .padding(.horizontal, 8)
+                    .accessibilityIdentifier("chat-dictation-off")
+            }
             // THE BOARD'S ONE PILL ROW: attach, the field, the scope chip and Send, on a line.
             HStack(spacing: 6) {
                 attachMenu
@@ -1248,6 +1265,23 @@ private struct ChatComposerCard: View {
                 .padding(.leading, 4)
                 .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
                 .accessibilityIdentifier("chat-field")
+                if dictation.available, !state.streaming {
+                    KitIconKey(
+                        iconKey: dictation.phase == .listening ? "Stop" : "Mic",
+                        label: dictation.phase == .listening ? state.stopLabel : state.dictateLabel,
+                        identifier: "chat-dictate",
+                        action: {
+                            if dictation.phase == .listening {
+                                dictation.stop()
+                            } else {
+                                let base = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+                                dictation.start { heard in
+                                    draft = base.isEmpty ? heard : base + " " + heard
+                                }
+                            }
+                        }
+                    )
+                }
                 ChatScopePill(app: state.scopeApp, state: state, onSetScope: onSetScope)
                 if state.streaming {
                     ChatSendButton(
@@ -1280,6 +1314,9 @@ private struct ChatComposerCard: View {
         ))
         .kitAnimation(ChatMotion.state, value: state.pending.count)
         .kitAnimation(ChatMotion.state, value: state.hasVisionStep)
+        // A QUESTION SENT, OR THE CHAT LEFT, ENDS THE LISTENING.
+        .onChange(of: state.streaming) { _, now in if now { dictation.stop() } }
+        .onDisappear { dictation.stop() }
         .sheet(isPresented: Binding(
             get: { state.documentSheet.open },
             set: { if !$0 { chat.closeDocuments() } }

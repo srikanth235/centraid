@@ -253,6 +253,9 @@ impl Chat {
             editing_title: words::editing_title(locale),
             editing_body: words::editing_body(locale),
             cancel_edit_label: words::cancel_edit(locale),
+            dictate_label: words::dictate(locale),
+            listening_label: words::listening(locale),
+            dictation_off_label: words::dictation_off(locale),
             latest_label: words::latest(locale),
             jump_to_latest_label: words::jump_to_latest(locale),
             can_retry: ready
