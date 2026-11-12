@@ -2524,6 +2524,9 @@ mod tests {
         );
         assert_eq!(heard_of(&Refusal::DiskFull), REACH_REFUSED);
         assert_eq!(heard_of(&Refusal::TooLarge), REACH_TOO_LARGE);
+        // A GATEWAY THAT KEEPS RETURNING A DAMAGED COPY stops its own pass with this refusal: it is
+        // "refusing", never "no room left".
+        assert_eq!(heard_of(&Refusal::DigestMismatch), REACH_REFUSED_OTHER);
         assert_eq!(
             heard_of(&Refusal::Other("X".to_owned())),
             REACH_REFUSED_OTHER

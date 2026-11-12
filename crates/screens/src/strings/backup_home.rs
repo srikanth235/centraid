@@ -66,7 +66,7 @@ catalog! {
     plain device_too_large = ("{name} refused a file", "{name} refused a file");
     plain device_refusing = ("{name} is refusing the backup", "{name} is refusing the backup");
     plain device_too_large_reason = ("{name} refused a file as over its {limit} limit. Update Centraid on this phone and on {name}, then back up again.", "{name} refused a file as over its {limit} limit. Update Centraid on this phone and on {name}, then back up again.");
-    plain device_refusing_reason = ("{name} refused part of the backup. Check on it and update Centraid on it, then back up again.", "{name} refused part of the backup. Check on it and update Centraid on it, then back up again.");
+    plain device_refusing_reason = ("{name} keeps refusing part of the backup. Check its disk and that Centraid on it is up to date, then back up again.", "{name} keeps refusing part of the backup. Check its disk and that Centraid on it is up to date, then back up again.");
     plain device_full_reason = ("{name} has no room left. Free some space on it, then back up again.", "{name} has no room left. Free some space on it, then back up again.");
     plain device_older_reason = ("It holds an older backup than this phone sent. Back up now to bring it up to date.", "It holds an older backup than this phone sent. Back up now to bring it up to date.");
     plain device_catching_up = ("{name} is catching up. Back up now to send what it is missing.", "{name} is catching up. Back up now to send what it is missing.");
