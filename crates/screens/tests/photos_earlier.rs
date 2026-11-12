@@ -131,7 +131,7 @@ fn the_entry_appears_with_its_count_only_once_there_is_something_earlier() {
     let id = upload(&d, "pe-entry", |u| u.title = Some("Walk".to_owned()));
     assert!(entry_of(&mut d, &id).is_none(), "never edited: no entry");
 
-    // A star and a label are flags with their own verbs, not versions.
+    // A star and a label are part of the photo's history: each is a version of its own.
     run(
         &d,
         act::photos::FlagPhoto {
@@ -147,13 +147,14 @@ fn the_entry_appears_with_its_count_only_once_there_is_something_earlier() {
         }
         .request(),
     );
-    assert!(entry_of(&mut d, &id).is_none(), "flags make no version");
+    let entry = entry_of(&mut d, &id).expect("the star and the label are versions");
+    assert_eq!(entry.count_label, "2");
 
     retitle(&d, &id, "Morning walk");
     retitle(&d, &id, "Morning walk before work");
     let entry = entry_of(&mut d, &id).expect("the entry");
     assert_eq!(entry.label, "Earlier versions");
-    assert_eq!(entry.count_label, "2");
+    assert_eq!(entry.count_label, "4");
     let route = entry.route.expect("a route");
     assert_eq!(route.screen, photos::EARLIER);
     let Some(wire::route::Args::Earlier(args)) = route.args else {

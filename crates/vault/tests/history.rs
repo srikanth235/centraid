@@ -1618,3 +1618,20 @@ fn a_row_whose_far_end_is_gone_stays_gone_and_the_rest_of_the_version_comes_back
         "the person is gone, so the link is named and not made: {out}"
     );
 }
+
+#[test]
+fn a_named_undo_still_works_once_the_later_change_was_itself_taken_back() {
+    let w = World::new();
+    let task = w.id("task.add", json!({ "title": "Pay rent" }));
+    w.ok("task.edit", json!({ "id": task, "title": "Pay the rent" }));
+    let edit = w.versions(&task)[0].seq;
+    w.ok("flag.set", json!({ "id": task, "flag": "starred" }));
+    // The record changed again since: refused, and nothing is lost.
+    let sentence = w.refused("history.undo", json!({ "id": task, "seq": edit }));
+    assert!(sentence.contains("changed since"), "{sentence}");
+    // The star taken back leaves the record as the edit left it: the edit can be undone.
+    w.ok("flag.clear", json!({ "id": task, "flag": "starred" }));
+    let out = w.ok("history.undo", json!({ "id": task, "seq": edit }));
+    assert_eq!(out["restored"], true);
+    assert_eq!(w.state(&task)["entity"]["title"], "Pay rent");
+}

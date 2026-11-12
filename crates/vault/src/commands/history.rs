@@ -14,8 +14,9 @@
 //!   changes, stated as `event.edit_occurrence` states it.
 //! - `history.undo`: the record goes back to its newest earlier version, "undo the last change".
 //!   It is the generic inverse of every edit; it is not idempotent (twice undoes then redoes).
-//!   Given `seq` it undoes THAT change and nothing else: the version must still be the newest, so
-//!   a record changed again since is refused ([`CHANGED_SINCE`]) rather than losing the later change.
+//!   Given `seq` it undoes THAT change and nothing else: the version must still be the newest, or
+//!   the record must be back to what that change left (a later change was taken back), so a
+//!   record changed again since is refused ([`CHANGED_SINCE`]) rather than losing the later change.
 //!
 //! The versions are read with [`crate::history::earlier_versions`] through [`crate::Vault::read`].
 
@@ -60,12 +61,30 @@ fn pre_undo(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
             "There is no earlier version to go back to.".to_owned(),
         ));
     };
-    Ok(ctx
-        .input
-        .get("seq")
-        .and_then(serde_json::Value::as_i64)
-        .filter(|seq| *seq != newest)
-        .map(|_| CHANGED_SINCE.to_owned()))
+    let Some(seq) = ctx.input.get("seq").and_then(serde_json::Value::as_i64) else {
+        return Ok(None);
+    };
+    if seq == newest || changed_back_since(ctx, seq)? {
+        return Ok(None);
+    }
+    Ok(Some(CHANGED_SINCE.to_owned()))
+}
+
+/// Whether the record is, now, what the change that made version `seq` left it as: later changes
+/// were made and then taken back (a gesture of two writes is taken back last write first, and the
+/// second of those finds the record as the first left it), so the change can still be undone and
+/// nothing later is lost.
+fn changed_back_since(ctx: &CommandCtx<'_, '_>, seq: i64) -> Result<bool> {
+    let id = ctx.required_str("id")?;
+    let connection = ctx.connection();
+    let (Some(after), Some(now)) = (
+        history::version_state(connection, id, seq + 1)?,
+        history::current_state(connection, id)?,
+    ) else {
+        return Ok(false);
+    };
+    let canonical = |state: &serde_json::Value| crate::canonical::canonical_json(state).ok();
+    Ok(canonical(&after).is_some() && canonical(&after) == canonical(&now))
 }
 
 fn answer(id: &str, seq: i64, restored: Option<history::Restored>) -> serde_json::Value {
@@ -93,7 +112,11 @@ fn restore_version(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
 
 fn undo(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let id = ctx.required_str("id")?;
-    let seq = newest(ctx)?.unwrap_or_default();
+    // The change the caller named (still undoable: see `pre_undo`), else the newest.
+    let seq = match ctx.input.get("seq").and_then(serde_json::Value::as_i64) {
+        Some(seq) => seq,
+        None => newest(ctx)?.unwrap_or_default(),
+    };
     Ok(answer(
         id,
         seq,
