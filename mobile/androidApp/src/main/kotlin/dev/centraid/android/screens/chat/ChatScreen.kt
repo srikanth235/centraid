@@ -179,6 +179,25 @@ internal fun ChatScreen(
         }
     }
     LaunchedEffect(state.accepted_send) { kept.settle(state.accepted_send) }
+    // A TURN THAT IS RUNNING WHEN THE APP GOES AWAY is stopped (it keeps its words and says "Stopped")
+    // once the app has been out of sight for a minute with it still running, instead of being killed
+    // with the answer lost (#1188 C10). Coming back in time cancels it.
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    var away by remember { mutableStateOf(false) }
+    androidx.compose.runtime.DisposableEffect(lifecycle) {
+        val watcher = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) away = true
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_START) away = false
+        }
+        lifecycle.addObserver(watcher)
+        onDispose { lifecycle.removeObserver(watcher) }
+    }
+    LaunchedEffect(away, state.streaming) {
+        if (away && state.streaming) {
+            kotlinx.coroutines.delay(60_000)
+            onEvent(ChatEvent(stopped = ChatEvent.Stopped()))
+        }
+    }
     // THE DOWNLOAD RULES READ THE PHONE: its network and free space are told when the chat appears
     // and whenever the network changes.
     androidx.compose.runtime.DisposableEffect(context) {

@@ -73,6 +73,7 @@ struct ChatView: View {
     /// The thread's foot is on screen: new text follows it. A member who has
     /// scrolled up to read is not pulled back down.
     @State private var pinned = true
+    @State private var backgroundTurn = ChatBackgroundTurn()
     /// The message whose Copy was just pressed, for the one beat "Copied" shows.
     @State private var copied: UInt64?
 
@@ -151,6 +152,11 @@ struct ChatView: View {
         // finished answer is read once when streaming ends, never token by token.
         .onChange(of: state.activity) { _, now in
             if !now.isEmpty, state.streaming { UIAccessibility.post(notification: .announcement, argument: now) }
+        }
+        // A RUNNING TURN ASKS THE SYSTEM FOR TIME to finish if the app goes away, and is stopped (keeping
+        // its words) when the time is up.
+        .onChange(of: state.streaming) { _, now in
+            if now { backgroundTurn.begin(onExpiry: { chat.stop() }) } else { backgroundTurn.end() }
         }
         .onChange(of: state.streaming) { was, now in
             guard was, !now, let last = state.messages.last(where: { $0.role == .assistant }),
