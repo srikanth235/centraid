@@ -7,7 +7,6 @@ What the Rust screens draw, and the code that keeps them honest. The wording rul
 - Every screen reads one query, `shell.backup-status`, through `reading::load`. The core answers it from the ledger and dials nobody. A failed read is `Reading::Failed`, never an empty reading. A refresh that fails keeps what was drawn, under one sentence.
 - Every time that is a gateway's (acknowledgements, last answered) is the gateway's clock. The phone's clock (`now_ms`) is used only for "2 minutes ago" and for dating notices.
 - `Destination::footing` ranks a device worst-first: rolled back, full, too large, refusing, behind, current. Anything but current names the device by the label the member gave it.
-- `Reading::from_wire` leaves `oldest_waiting_ms` as `None`, though the core fills `BackupStatusResponse.oldest_waiting_ms`. So the backlog sentence and the backlog notice cannot fire from a real reading, only from a test.
 
 ## The line (`line.rs`)
 

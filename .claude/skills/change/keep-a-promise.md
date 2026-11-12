@@ -70,3 +70,5 @@ Every undoable action says what happened with "Undo" on the status line, through
 ## Adding a promise row
 
 The register is `crates/xtask/src/promises.rs`. A new promise is a variant of `Promise` (and its place in `Promise::ALL`), one checker arm in `missing`, and one row per app in `REGISTER`. The completeness check fails until every app has a row for every promise, so a column cannot be added to only some apps. Every checker has a fixture that must be caught (`promises_tests.rs`). An exception is a named row with its ruling, never a silent gap.
+
+Backup and Chat keep their own tables in the same file, `BACKUP_PROMISES` and `CHAT_PROMISES`: each row is a sentence a member is promised and the tests that prove it, as (file, test name) pairs. A part of backup or the assistant that a member sees ends with a row there. The array length is written in the type, so change it with the row, and re-run `cargo xtask rules` after a rebase that brought in another row.

@@ -1,6 +1,6 @@
 # Home, the shell and the nine apps
 
-## 9. Apps
+## Apps
 
 - **Calendar and Reminders are two apps, as on iOS (owner, 2026-11-09, reversing "Agenda is one app").** Calendar owns events and invites (Day, Week, Month, List, Year; its band is Calendar, Calendars and Invites, Apple's Inbox); Reminders owns tasks and lists (the smart lists Today, Scheduled, All, Flagged and Completed, then My Lists, with Inbox a list among them; its band is Reminders and More). Each has its own crate, manifest, scopes, screens, tile and Home colour (Reminders is a pine teal that no state colour uses). Calendar may READ a reminder's title, due day, due time and state to show it on its day, as Apple's does: every occurrence of a repeating one, and on today the overdue ones above the day. A reminder on a day can be ticked complete and un-ticked there, and the rule is least privilege: the tick is REMINDERS' OWN `complete-task` or `reopen-task`, sent by the Calendar screen under Reminders' name, so Reminders owns the write and Calendar holds no task write and no complete or uncomplete permission either (its manifest says exactly that and a test pins it); opening a row hands off to Reminders. Calendar never writes a task and Reminders never touches an event. The Plus adds an event in Calendar and a reminder in Reminders, with no Event or Task switch. Catch up, filing and the quick add are Reminders'; Overdue is the top section of Reminders' Today list and the group above Calendar's today, and there is no separate "You were away" notice (Apple has none; the Catch up page stays). Search is split the same way: Calendar finds events, Reminders finds tasks and lists. Both tiles are always on Home, each with its own invitation when empty.
 - **Recurrence has one engine.** A change of timing is for one day. Guests, reminders, links and calendar belong to the whole event. "This and the following" is a row of its own. Cancelling is always confirmed on the phone and then executes.
@@ -14,7 +14,7 @@
 - **Empty states teach or import; they never decorate.** Where the phone already holds the data, offer a one-tap import at the point of use. A first vault gets a few teaching starter rows only where there is no import, and each is trashable.
 - **A new app is a bar the owner sets.** It needs a north star (one product whose functional depth it matches), an identity hue, a place on the ring, a row in the roster, a manifest of what it reads and invokes, and year-3 evidence. Do not add one without the owner.
 
-## 10. The mobile shell and design
+## The mobile shell and design
 
 - **Rust owns every durable fact and every derived read. Views decide nothing.** Every label, sentence, chip, enabled flag and empty-state choice is computed in the shared machine. A field a view needs and Rust does not carry is a Rust gap, never a computation in Kotlin or Swift. Both shells reach parity or the parity register says why.
 - **The band, pushed pages and sheets, colour and the one feedback grammar** are in [design behaviour](../../design/behaviour.md).

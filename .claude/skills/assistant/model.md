@@ -7,7 +7,7 @@ The assistant is the pinned model (the base) plus, when the release names one, a
 - [`crates/assist/model.json`](../../../crates/assist/model.json) holds `current`, `previous` (the two-model window) and an optional `adapter`. [`record.rs`](../../../crates/assist/src/record.rs) reads it, and nothing else types a URL, hash or size.
 - An entry has: a Hugging Face URL pinned to a 40-character commit, file name, SHA-256, size in bytes, `tools_mode`, `tools_hash`, `prompt_hash`, the sorted `special_tokens` and where they came from (`file` or `declared`), and a score.
 - An adapter entry has the URL, SHA-256 and size, `base_sha256` (the base it was trained against), the same two hashes, and a score.
-- Today the record names a base, no `previous` and no adapter. Its token list is `declared`, and the release profile refuses a declared list, so a release needs a re-pin from the file.
+- The release profile refuses a token list that is `declared`, so a record a release ships is pinned from the file.
 - Only `cargo xtask model-pin` writes it ([`model_pin.rs`](../../../crates/xtask/src/model_pin.rs)). It fetches and uploads nothing.
   - Base: `--url --file --tools-mode [--score] [--replace]`. Size and SHA-256 come from the file. The hashes come from `cargo run -p centraid-assist --example runtime_hashes`. The tokens are read from the GGUF metadata. The standing entry becomes `previous` unless `--replace`.
   - Adapter: `--adapter-url --adapter-file [--adapter-score]`, written against the base the record then pins. `--no-adapter` removes it. Pinning a new base drops an adapter made for the old one.

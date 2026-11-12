@@ -2,7 +2,7 @@
 
 The vault, Locker, who may open what, and what never leaves the phone.
 
-## 4. The vault
+## The vault
 
 - **A first-party app is the owner's own screen, not a principal.** It declares what it reads and invokes at build time and a tripwire fails the build when it strays. Do not add grants, scopes a member can revoke, or an "app permissions" plane.
 - **Every writer goes through the same domain operations.** Commands, imports, the assistant, a phone follower: one door, one set of invariants. If a rule lives only in one screen, it is not a rule.
@@ -10,7 +10,7 @@ The vault, Locker, who may open what, and what never leaves the phone.
 - **Identity is never taken from a value.** Two documents with identical bytes are two documents with independent histories. A drive row is the document wrapper, never the content hash. A merchant is not a person.
 - **The vault keeps no record of what the member asked for.** No activity feed, no journal of typed words that survives "Delete forever". It keeps only what it needs to avoid doing a thing twice and to tell which copy is ahead.
 
-## 5. Locker
+## Locker
 
 Locker is the one place where reading is itself the sensitive act. It is deliberately austere.
 
