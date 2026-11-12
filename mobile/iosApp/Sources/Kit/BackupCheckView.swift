@@ -9,6 +9,8 @@ struct BackupCheckView: View {
     let send: (Centraid_Core_V1_BackupCheckEvent) -> Void
     let onBack: () -> Void
 
+    private var shown: [String] { BackupCheckControls.shown(state) }
+
     var body: some View {
         PushedPage(
             title: state.title,
@@ -24,38 +26,38 @@ struct BackupCheckView: View {
                         Text(state.intro)
                             .kitType(.row)
                             .foregroundStyle(Surface.meta)
-                            .accessibilityIdentifier("backup-check-intro")
-                        if !state.heading.isEmpty {
+                            .accessibilityIdentifier(BackupCheckControls.intro)
+                        if shown.contains(BackupCheckControls.heading) {
                             Text(state.heading)
                                 .kitType(.row)
                                 .foregroundStyle(Surface.meta)
-                                .accessibilityIdentifier("backup-check-heading")
+                                .accessibilityIdentifier(BackupCheckControls.heading)
                         }
                         if !state.rows.isEmpty {
                             VStack(spacing: 0) {
                                 ForEach(state.rows, id: \.gatewayID) { row in
                                     CheckRowView(row: row)
                                 }
-                                if state.running {
+                                if shown.contains(BackupCheckControls.bar) {
                                     KitProgressBar(fraction: Double(state.fraction))
                                         .padding(.horizontal, 14)
                                         .padding(.vertical, 10)
-                                        .accessibilityIdentifier("backup-check-bar")
+                                        .accessibilityIdentifier(BackupCheckControls.bar)
                                 }
                             }
                             .kitCard()
                             .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
                         }
-                        if state.action != .none, !state.actionLabel.isEmpty {
-                            let stop = state.action == .stop
+                        if let tag = BackupCheckControls.actionTag(state) {
+                            let stop = tag == BackupCheckControls.stop
                             KitPillButton(label: state.actionLabel) {
                                 var event = Centraid_Core_V1_BackupCheckEvent()
                                 if stop { event.stop = .init() } else { event.start = .init() }
                                 send(event)
                             }
-                            .accessibilityIdentifier(stop ? "backup-check-stop" : "backup-check-start")
+                            .accessibilityIdentifier(tag)
                         }
-                        if !state.backUpNowLabel.isEmpty {
+                        if shown.contains(BackupCheckControls.backUpNow) {
                             Button {
                                 var event = Centraid_Core_V1_BackupCheckEvent()
                                 event.backUpNow = .init()
@@ -69,7 +71,7 @@ struct BackupCheckView: View {
                                     .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-                            .accessibilityIdentifier("backup-check-back-up-now")
+                            .accessibilityIdentifier(BackupCheckControls.backUpNow)
                         }
                     }
                     .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -87,9 +89,9 @@ private struct CheckRowView: View {
     let row: Centraid_Core_V1_BackupCheckRow
 
     private var ink: Color {
-        switch row.tone {
-        case .bad: return StateColor.red.text
-        case .ok: return Surface.ink
+        switch BackupCheckControls.ink(row.tone) {
+        case "bad": return StateColor.red.text
+        case "ok": return Surface.ink
         default: return Surface.meta
         }
     }
@@ -104,6 +106,6 @@ private struct CheckRowView: View {
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
         .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("backup-check-row-\(row.gatewayID)")
+        .accessibilityIdentifier(BackupCheckControls.rowTag(row.gatewayID))
     }
 }

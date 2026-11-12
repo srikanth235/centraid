@@ -38,6 +38,7 @@ public fun BackupCheckScreen(
     onEvent: (BackupCheckEvent) -> Unit,
     onBack: () -> Unit,
 ) {
+    val shown = BackupCheckControls.shown(state)
     PushedPage(
         title = state.title,
         parentTitle = state.back_label,
@@ -47,16 +48,16 @@ public fun BackupCheckScreen(
         LazyColumn(Modifier.padding(horizontal = KitGeometry.GUTTER)) {
             item(key = "intro") {
                 Column(Modifier.padding(top = 4.dp, bottom = 14.dp)) {
-                    KitText(state.intro, KitType.Row, Surface.meta, modifier = Modifier.testTag("backup-check-intro"))
+                    KitText(state.intro, KitType.Row, Surface.meta, modifier = Modifier.testTag(BackupCheckControls.INTRO))
                 }
             }
-            if (state.heading.isNotEmpty()) {
+            if (BackupCheckControls.HEADING in shown) {
                 item(key = "heading") {
                     KitText(
                         state.heading,
                         KitType.Row,
                         Surface.meta,
-                        modifier = Modifier.padding(bottom = 6.dp).testTag("backup-check-heading"),
+                        modifier = Modifier.padding(bottom = 6.dp).testTag(BackupCheckControls.HEADING),
                     )
                 }
             }
@@ -64,16 +65,16 @@ public fun BackupCheckScreen(
                 item(key = "rows") {
                     Column(Modifier.kitCard()) {
                         state.rows.forEach { row -> CheckRow(row) }
-                        if (state.running) {
+                        if (BackupCheckControls.BAR in shown) {
                             KitProgressBar(
                                 fraction = state.fraction,
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp).testTag("backup-check-bar"),
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp).testTag(BackupCheckControls.BAR),
                             )
                         }
                     }
                 }
             }
-            if (state.action != BackupCheckAction.BACKUP_CHECK_ACTION_NONE && state.action_label.isNotEmpty()) {
+            if (BackupCheckControls.actionTag(state) != null) {
                 item(key = "action") {
                     val stop = state.action == BackupCheckAction.BACKUP_CHECK_ACTION_STOP
                     KitPillButton(
@@ -88,11 +89,11 @@ public fun BackupCheckScreen(
                             )
                         },
                         modifier = Modifier.padding(top = 14.dp),
-                        testTag = if (stop) "backup-check-stop" else "backup-check-start",
+                        testTag = BackupCheckControls.actionTag(state) ?: BackupCheckControls.START,
                     )
                 }
             }
-            if (state.back_up_now_label.isNotEmpty()) {
+            if (BackupCheckControls.BACK_UP_NOW in shown) {
                 item(key = "back-up-now") {
                     Text(
                         state.back_up_now_label,
@@ -102,7 +103,7 @@ public fun BackupCheckScreen(
                             .heightIn(min = KitGeometry.ROW_MIN)
                             .clickable { onEvent(BackupCheckEvent(back_up_now = BackupCheckEvent.BackUpNow())) }
                             .padding(vertical = 12.dp)
-                            .testTag("backup-check-back-up-now")
+                            .testTag(BackupCheckControls.BACK_UP_NOW)
                             .semantics { role = Role.Button },
                     )
                 }
@@ -113,9 +114,9 @@ public fun BackupCheckScreen(
 
 @Composable
 private fun CheckRow(row: BackupCheckRow) {
-    val ink = when (row.tone) {
-        BackupCheckTone.BACKUP_CHECK_TONE_BAD -> StateColor.Red.text
-        BackupCheckTone.BACKUP_CHECK_TONE_OK -> Surface.ink
+    val ink = when (BackupCheckControls.ink(row.tone)) {
+        "bad" -> StateColor.Red.text
+        "ok" -> Surface.ink
         else -> Surface.meta
     }
     Column {
@@ -124,7 +125,7 @@ private fun CheckRow(row: BackupCheckRow) {
                 .fillMaxWidth()
                 .heightIn(min = KitGeometry.ROW_MIN)
                 .padding(horizontal = 14.dp, vertical = 10.dp)
-                .testTag("backup-check-row-${row.gateway_id}")
+                .testTag(BackupCheckControls.rowTag(row.gateway_id))
                 .semantics(mergeDescendants = true) {
                     contentDescription = listOf(row.name, row.line, row.detail).filter { it.isNotEmpty() }.joinToString(". ")
                 },

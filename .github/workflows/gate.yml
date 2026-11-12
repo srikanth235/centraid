@@ -10,6 +10,8 @@ name: gate
 #   engine             the on-device chat's llama.cpp build, too slow for the
 #                      `pr` profile (R-CHAT-10).
 #   ios                Swift 6 app/XCTest, HealthSeeder, and the Rust simulator core.
+#   android            the Compose shell's Kotlin compiled against the Android SDK (no native
+#                      core: `compileDebugKotlin` stops before the libraries are packaged).
 #   dependency-review  the PR's dependency diff, read through the API.
 #   pr-title           the squash subject, checked by `.githooks/commit-msg`.
 
@@ -115,6 +117,35 @@ jobs:
   # and `centraid-core-ffi/llama` are off in the workspace build and this job
   # builds, lints and tests the two crates with the engine on. A phone's
   # cross-compile of the engine is `lane-prebuilt-core.yml`'s.
+  # THE COMPOSE SHELL COMPILED, which nothing else in a pull request does: the JVM gate
+  # (`mobile-jvm`) proves the binding, and Linux has no Android SDK in the `gate` job. This is
+  # `compileDebugKotlin`, not `assembleDebug`: it type-checks every Kotlin file of `:androidApp`
+  # and `:core`'s Android target without packaging the native libraries the release lane owns.
+  # A job of its own so `gate` is no longer for it (#1188, B13).
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          # AGP 9 requires JDK 17+; `mobile/*/build.gradle.kts` declares `jvmToolchain(21)`.
+          java-version: "21"
+          cache: gradle
+          cache-dependency-path: |
+            mobile/gradle/libs.versions.toml
+            mobile/**/*.gradle.kts
+            mobile/gradle/wrapper/gradle-wrapper.properties
+      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+      - name: Compile the Android shell's Kotlin
+        working-directory: mobile
+        run: ./gradlew -Pcentraid.android=true :androidApp:compileDebugKotlin --no-daemon --stacktrace
+      # The fixtures both shells read, run where the Kotlin compiles: no emulator, no native core.
+      - name: Run the shared-fixture tests
+        working-directory: mobile
+        run: ./gradlew -Pcentraid.android=true :androidApp:testDebugUnitTest --tests 'dev.centraid.android.kit.BackupCheckControlsTest' --no-daemon --stacktrace
+
   engine:
     runs-on: ubuntu-latest
     timeout-minutes: 45

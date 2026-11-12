@@ -3,8 +3,9 @@
 // INCLUDED ONLY UNDER `-Pcentraid.android=true` with an Android SDK present;
 // `mobile/settings.gradle.kts` is the gate and it refuses loudly rather than
 // skipping. Nothing in this module is compiled on the machines that run
-// `cargo xtask gate` today, which `mobile/README.md` states as an owner
-// hand-off with the exact command.
+// `cargo xtask gate`; the pull request's `android` job in
+// `.github/workflows/gate.yml` compiles it (`compileDebugKotlin`), and
+// `mobile/README.md` states the rest as an owner hand-off with the exact command.
 //
 // A `com.android.application` module over `:core`, the ABI binding, per the
 // AGP 9 layout: the application plugin and the Kotlin Multiplatform plugin are

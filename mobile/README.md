@@ -13,7 +13,7 @@ mobile/
 
 ## What runs here, and what is a hand-off
 
-The Linux `cargo xtask gate` proves Rust and JVM behavior. The separate `ios` job in `.github/workflows/gate.yml` builds the real Rust simulator archive with llama, generates protobuf sources and both Xcode projects, compiles HealthSeeder in Swift 6 mode, and runs the Centraid app’s XCTest bundle in Swift 6 mode on a hosted macOS simulator. It uploads compiler logs and `.xcresult` bundles even on failure. Simulator results do not establish physical-device behavior or performance; the remaining hand-offs are below.
+The Linux `cargo xtask gate` proves Rust and JVM behavior. The separate `ios` job in `.github/workflows/gate.yml` builds the real Rust simulator archive with llama, generates protobuf sources and both Xcode projects, compiles HealthSeeder in Swift 6 mode, and runs the Centraid app’s XCTest bundle in Swift 6 mode on a hosted macOS simulator. It uploads compiler logs and `.xcresult` bundles even on failure. The separate `android` job in the same workflow compiles the Compose shell's Kotlin against the Android SDK (`:androidApp:compileDebugKotlin`, no native core) and runs the fixture tests both shells read (`contracts/backup/check-controls.json`); it does not package or run the app. Simulator results do not establish physical-device behavior or performance; the remaining hand-offs are below.
 
 | Provable on this machine (JVM and Rust) | An owner hand-off |
 | --- | --- |
