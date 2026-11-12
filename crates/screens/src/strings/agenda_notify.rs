@@ -7,6 +7,9 @@ catalog! {
     plain mark_done = ("Mark as done", "Mark as done");
     plain moved_tomorrow = ("Moved to tomorrow", "Moved to tomorrow");
     plain snooze_hour = ("Snooze 1 hour", "Snooze 1 hour");
+    plain private_task_title = ("Reminder", "Reminder");
+    plain private_event_title = ("Event", "Event");
+    plain private_body = ("Open Centraid to see it.", "Open Centraid to see it.");
     plain date_only_task_alert = ("A reminder for a day with no time sounds at 09:00 that day.", "A reminder for a day with no time sounds at 09:00 that day.");
     plain all_day_event_alert = ("An alert for an all-day event sounds at 09:00 that day.", "An alert for an all-day event sounds at 09:00 that day.");
     plain all_day_event_alert_row = ("On the day, {time}", "On the day, {time}");

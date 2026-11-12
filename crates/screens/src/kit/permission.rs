@@ -222,6 +222,22 @@ impl AlertFacts {
     }
 }
 
+/// The phone-store key of the "show details" choice (#1188, NA3): "off" hides what a reminder or an
+/// event notification says; anything else, or nothing stored, shows it.
+const DETAILS_KEY: &str = "alert_details";
+
+/// Whether notifications show their details: on unless the member turned it off.
+#[must_use]
+pub fn details_shown(secrets: &crate::custody::secrets::VaultSecrets) -> bool {
+    secrets.device_value(DETAILS_KEY).as_deref() != Some("off")
+}
+
+/// The op that keeps the choice.
+#[must_use]
+pub fn details_op(shown: bool) -> wire::SecretOp {
+    crate::custody::secrets::VaultSecrets::device_set(DETAILS_KEY, if shown { "" } else { "off" })
+}
+
 /// Which of the app's notification channels a notice posts to (Android shows a channel's name in
 /// system settings; iOS has none). The backup warnings have a channel of their own, so switching
 /// off reminders does not silence them, and the reverse.

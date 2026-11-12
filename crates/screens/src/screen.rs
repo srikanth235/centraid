@@ -64,6 +64,8 @@ pub struct Environment {
     /// The units the member chose (`kit::quantity::stored`), or `None` to follow the region. The
     /// runtime fills it from the phone's store before every call; [`Ctx::units`] is the reader.
     pub units: Option<crate::kit::quantity::UnitsPref>,
+    /// Notifications show their details (`kit::permission::details_shown`); filled like `units`.
+    pub show_details: bool,
 }
 
 impl Default for Environment {
@@ -76,6 +78,7 @@ impl Default for Environment {
             library_deletes: false,
             hour_cycle_12: false,
             units: None,
+            show_details: true,
         }
     }
 }
@@ -360,6 +363,12 @@ impl<'a> Ctx<'a> {
             .borrow_mut()
             .posts
             .push((screen.to_owned(), event));
+    }
+
+    /// Whether a notification says what it is about, or only that something is due (#1188, NA3).
+    #[must_use]
+    pub fn show_details(&self) -> bool {
+        self.env.show_details
     }
 
     /// A SETTING EVERY SCREEN READS CHANGED (the units): every other open screen hears

@@ -35,6 +35,18 @@ message SettingsUnits {
   string note = 3;
 }
 
+// THE NOTIFICATIONS ROW (#1188, NA3): one switch for the vault, on by default. Off, a reminder or an
+// event notification says only that one is due. The choices are "on" and "off", each
+// `SettingsChoice.id`.
+message SettingsNotifications {
+  string title = 1;
+  // "Show details on the lock screen".
+  string label = 2;
+  repeated SettingsChoice choices = 3;
+  // "Off shows only that a reminder or an event is due."
+  string note = 4;
+}
+
 // One row of a section. A row with a route opens a page; one without is read.
 message SettingsRow {
   string id = 1;
@@ -72,6 +84,7 @@ message SettingsData {
   string version = 4;
   string about_title = 5;
   SettingsUnits units = 6;
+  SettingsNotifications notifications = 7;
 }
 
 message SettingsState {
@@ -105,6 +118,12 @@ message SettingsEvent {
     TransferRuleChosen transfer_rule_chosen = 3;
     TransferRulesClosed transfer_rules_closed = 4;
     UnitsPicked units_picked = 5;
+    DetailsPicked details_picked = 6;
+  }
+
+  message DetailsPicked {
+    // A `SettingsChoice.id` of the notifications row: "on" or "off".
+    string id = 1;
   }
 
   message UnitsPicked {

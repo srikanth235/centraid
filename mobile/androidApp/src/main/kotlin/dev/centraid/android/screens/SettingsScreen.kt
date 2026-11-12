@@ -145,6 +145,32 @@ private fun SettingsBody(data: SettingsData, onEvent: (SettingsEvent) -> Unit, o
                 }
             }
         }
+        val notifications = data.notifications
+        if (notifications != null) {
+            item(key = "notifications") {
+                Column {
+                    GroupHead(notifications.title)
+                    KitText(
+                        notifications.label,
+                        KitType.Row,
+                        Surface.ink,
+                        Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+                    )
+                    KitSegmented(
+                        notifications.choices.map { KitSegment(it.id, it.label, it.selected) },
+                        testTag = "settings-notifications",
+                    ) { id ->
+                        onEvent(SettingsEvent(details_picked = SettingsEvent.DetailsPicked(id = id)))
+                    }
+                    KitText(
+                        notifications.note,
+                        KitType.Meta,
+                        Surface.meta,
+                        Modifier.padding(horizontal = 4.dp, vertical = 8.dp).testTag("settings-notifications-note"),
+                    )
+                }
+            }
+        }
         data.sections.forEach { section ->
             item(key = "section-${section.key}") {
                 Column {

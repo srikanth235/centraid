@@ -206,7 +206,10 @@ impl Service {
                 extra: &extra,
                 extra_wanted: &extra_wanted,
             };
-            let set = desired::desired(&inputs);
+            let mut set = desired::desired(&inputs);
+            if !ctx.show_details() {
+                desired::redact(&mut set, ctx.locale());
+            }
             if let Some(now) = FireZone::named(ctx.zone())
                 .ok()
                 .and_then(|zone| parse_civil_ms(&loaded.now_local, &zone))

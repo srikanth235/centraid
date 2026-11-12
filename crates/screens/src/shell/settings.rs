@@ -44,6 +44,9 @@ const DOWNLOAD_ROW: &str = "download-settings";
 /// The Keychain key the appearance is kept under: Home's, the same three values.
 /// The units choice that stores nothing, so the phone's region decides.
 const PHONE_UNITS: &str = "phone";
+/// The ids of the notifications row's two choices.
+const DETAILS_ON: &str = "on";
+const DETAILS_OFF: &str = "off";
 const APPEARANCE_KEY: &str = "appearance";
 
 /// The registry factory.
@@ -104,10 +107,12 @@ pub enum Row {
     Units,
     /// The appearance: kept in the Keychain, then Home draws the scheme it names.
     Appearance,
+    /// Show details: the notification service speaks again, in the words it now says.
+    Details,
 }
 
 impl Row {
-    pub const ALL: [Self; 3] = [Self::Rule, Self::Units, Self::Appearance];
+    pub const ALL: [Self; 4] = [Self::Rule, Self::Units, Self::Appearance, Self::Details];
 
     /// What the member is told when this row's save was refused.
     pub fn refused(self, locale: crate::strings::Locale) -> String {
@@ -115,6 +120,7 @@ impl Row {
             Self::Rule => words::settings_rule_refused(locale),
             Self::Units => words::settings_units_refused(locale),
             Self::Appearance => words::settings_appearance_refused(locale),
+            Self::Details => words::settings_details_refused(locale),
         }
     }
 }
@@ -196,7 +202,7 @@ impl Settings {
                     .secrets
                     .conductor()
                     .ask(ctx, wire::pass_asked::Ask::RuleChanged),
-                Row::Units => ctx.redraw_all(),
+                Row::Units | Row::Details => ctx.redraw_all(),
                 // Appearance goes through the Keychain, not a secret batch.
                 Row::Appearance => {}
             }
@@ -274,6 +280,25 @@ impl Settings {
                 ),
             ],
             note: words::settings_units_note(locale),
+        }
+    }
+
+    /// The notifications row: show details, on unless the member turned it off (#1188, NA3).
+    fn notifications(&self, locale: crate::strings::Locale) -> wire::SettingsNotifications {
+        let shown = crate::kit::permission::details_shown(&self.secrets);
+        let choice = |id: &str, on: bool, label: String| wire::SettingsChoice {
+            id: id.to_owned(),
+            label,
+            selected: on == shown,
+        };
+        wire::SettingsNotifications {
+            title: words::settings_notifications(locale),
+            label: words::settings_details(locale),
+            choices: vec![
+                choice(DETAILS_ON, true, words::settings_details_on(locale)),
+                choice(DETAILS_OFF, false, words::settings_details_off(locale)),
+            ],
+            note: words::settings_details_note(locale),
         }
     }
 
@@ -362,6 +387,7 @@ impl Settings {
                 note: words::settings_appearance_note(locale),
             }),
             units: Some(self.units(locale)),
+            notifications: Some(self.notifications(locale)),
             sections: vec![
                 wire::SettingsSection {
                     key: "vault".to_owned(),
@@ -584,6 +610,17 @@ impl Screen for Settings {
                         self.refused = None;
                         let ops = vec![quantity::set_op(chosen)];
                         self.keeping.push_back((Row::Units, ops.clone()));
+                        return vec![secrets::effect(ops)];
+                    }
+                    Some(S::DetailsPicked(picked)) => {
+                        let shown = match picked.id.as_str() {
+                            DETAILS_ON => true,
+                            DETAILS_OFF => false,
+                            _ => return Vec::new(),
+                        };
+                        self.refused = None;
+                        let ops = vec![crate::kit::permission::details_op(shown)];
+                        self.keeping.push_back((Row::Details, ops.clone()));
                         return vec![secrets::effect(ops)];
                     }
                     _ => {}

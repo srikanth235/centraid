@@ -230,6 +230,25 @@ fn extras(inputs: &Inputs, zone: &FireZone, now: i64) -> Vec<wire::PendingNotifi
         .collect()
 }
 
+/// WITH DETAILS OFF (#1188, NA3) a reminder or an event notification says only that one is due. The
+/// buttons stay, the ids and moments stay; the backup warnings, the receipt and the paused notice
+/// say nothing of the member's items and are left as they are.
+pub fn redact(set: &mut [wire::PendingNotification], locale: Locale) {
+    for held in set {
+        let (title, private) = if held.notification_id.starts_with("task|") {
+            (words::private_task_title(locale), true)
+        } else if held.notification_id.starts_with("event|") {
+            (words::private_event_title(locale), true)
+        } else {
+            (String::new(), false)
+        };
+        if private {
+            held.title = title;
+            held.body = words::private_body(locale);
+        }
+    }
+}
+
 /// THE DELIVERED READING (#1188, A2): the ids of reminders that have already fired and are still
 /// wanted. TIME PASSING NEVER REMOVES A DELIVERED REMINDER; ONLY RESOLVING THE ITEM DOES: a task
 /// done, moved or deleted, an event cancelled, moved, deleted or over. A shell keeps a delivered

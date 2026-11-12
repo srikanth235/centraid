@@ -11,6 +11,12 @@ catalog! {
     plain settings_appearance_note = ("System follows your phone. Text follows your phone's text size.", "System follows your phone. Text follows your phone's text size.");
     plain settings_units = ("Units", "Units");
     plain settings_units_phone = ("Phone's setting", "Phone's setting");
+    plain settings_notifications = ("Notifications", "Notifications");
+    plain settings_details = ("Show details on the lock screen", "Show details on the lock screen");
+    plain settings_details_on = ("On", "On");
+    plain settings_details_off = ("Off", "Off");
+    plain settings_details_note = ("Off shows only that a reminder or an event is due.", "Off shows only that a reminder or an event is due.");
+    plain settings_details_refused = ("Couldn't save that. Try again.", "Couldn't save that. Try again.");
     plain settings_units_refused = ("Couldn't save your units. Try again.", "Couldn't save your units. Try again.");
     plain settings_rule_refused = ("Couldn't save your download settings. Try again.", "Couldn't save your download settings. Try again.");
     plain settings_appearance_refused = ("Couldn't save your appearance. Try again.", "Couldn't save your appearance. Try again.");

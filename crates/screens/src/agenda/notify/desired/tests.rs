@@ -425,3 +425,18 @@ fn an_all_day_event_sounds_at_nine_on_its_day_once() {
         "09:00 wherever the member is"
     );
 }
+
+#[test]
+fn with_details_off_a_notification_says_only_that_something_is_due() {
+    let t = task("a", "2026-11-11", "09:00", "2026-11-11T09:00");
+    let mut set = run(NY, &[t], &[event("e", "2026-11-11T12:00", &[10])]);
+    assert!(
+        set.iter()
+            .all(|n| n.title.starts_with("Task") || n.title == "Lunch")
+    );
+    redact(&mut set, Locale::En);
+    let titles: Vec<_> = set.iter().map(|n| n.title.as_str()).collect();
+    assert_eq!(titles, ["Reminder", "Event"], "{titles:?}");
+    assert!(set.iter().all(|n| n.body == "Open Centraid to see it."));
+    assert!(set[0].category_id == "task", "the buttons stay");
+}

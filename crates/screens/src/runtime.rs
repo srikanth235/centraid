@@ -350,6 +350,10 @@ impl Runtime {
     ) {
         let mut env = state.env.clone();
         env.units = state.units.as_ref().and_then(crate::kit::quantity::stored);
+        env.show_details = state
+            .units
+            .as_ref()
+            .is_none_or(crate::kit::permission::details_shown);
         let follows = state.follows.clone();
         let alerts = state.alerts.clone();
         let Some(instance) = state.instances.get_mut(&id) else {
@@ -906,6 +910,7 @@ impl ScreenHost for Runtime {
                     library_deletes: environment.library_deletes,
                     hour_cycle_12: environment.hour_cycle_12,
                     units: None,
+                    show_details: true,
                 };
                 // The band's words follow the locale.
                 if state.band.is_some() {
