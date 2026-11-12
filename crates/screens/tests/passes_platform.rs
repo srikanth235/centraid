@@ -132,8 +132,8 @@ fn the_scan_finds_the_identifiers_at_all() {
     // A SCAN THAT MATCHES NOTHING PASSES EVERY ASSERTION BELOW.
     assert_eq!(
         submitted().len(),
-        2,
-        "BackgroundPasses.swift was respelled; this scan is stale"
+        3,
+        "BackgroundPasses.swift was respelled (one identifier per window: upload, nudge, sync); this scan is stale"
     );
     assert!(!plist_array(KEY).is_empty() && !yaml_list(KEY).is_empty());
 }
