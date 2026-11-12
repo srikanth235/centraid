@@ -128,6 +128,12 @@ const SHA256_ALLOWED: &[(&str, &str)] = &[
          reason as `assist/src/record.rs`",
     ),
     (
+        "xtask/src/main.rs",
+        "documents the `model-pin` command, which writes the published model file's \
+         SHA-256 (the digest its publisher states) into the record; same reason as \
+         `assist/src/record.rs`",
+    ),
+    (
         "xtask/src/model_pin.rs",
         "`cargo xtask model-pin` computes the SHA-256 of the model file you name for \
          the record, the digest the publisher states for it; same reason as \
