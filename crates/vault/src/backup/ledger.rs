@@ -49,7 +49,13 @@ use super::{Result, invariant};
 pub const LEDGER_APPLICATION_ID: i64 = 0x4342_4c31;
 
 /// The schema this build writes.
-pub const LEDGER_VERSION: i64 = 1;
+pub const LEDGER_VERSION: i64 = 2;
+
+/// The largest part (sealed bytes as recorded) the everyday read-back sample reads whole into
+/// memory; a confirmed part above it is only ever read back by the streamed read-back, one
+/// per gateway per pass ([`Ledger::oldest_verified_large`]). Written into the `confirmed_large`
+/// index, so the two stay one number.
+pub const SAMPLE_MAX_BYTES: u64 = 1 << 20;
 
 const SCHEMA: &str = "
 CREATE TABLE destination (
@@ -84,10 +90,12 @@ CREATE TABLE confirmed (
   gateway_id   TEXT NOT NULL REFERENCES destination(gateway_id) ON DELETE CASCADE,
   confirmed_ms INTEGER NOT NULL CHECK (confirmed_ms >= 0),
   size         INTEGER NOT NULL CHECK (size >= 0),
+  verified_ms  INTEGER CHECK (verified_ms IS NULL OR verified_ms >= 0),
   PRIMARY KEY (name, gateway_id)
 ) STRICT;
 
 CREATE INDEX confirmed_by_gateway ON confirmed (gateway_id);
+CREATE INDEX confirmed_large ON confirmed (gateway_id, verified_ms, name) WHERE size > 1048576;
 
 CREATE TABLE snapshot (
   name          TEXT PRIMARY KEY CHECK (length(name) = 64 AND name NOT GLOB '*[^0-9a-f]*'),
@@ -109,6 +117,21 @@ CREATE TABLE meta (
   v TEXT NOT NULL
 ) STRICT;
 ";
+
+/// Version 2 adds when a confirmed part was last read back from its gateway
+/// (`confirmed.verified_ms`), which is what lets the read-back of large parts cover every
+/// original over time. One transaction: a failure leaves a version 1 ledger.
+fn migrate_1_to_2(connection: &Connection) -> Result<()> {
+    let transaction = connection.unchecked_transaction()?;
+    transaction.execute_batch(
+        "ALTER TABLE confirmed ADD COLUMN verified_ms INTEGER
+           CHECK (verified_ms IS NULL OR verified_ms >= 0);
+         CREATE INDEX confirmed_large ON confirmed (gateway_id, verified_ms, name) WHERE size > 1048576;",
+    )?;
+    transaction.pragma_update(None, "user_version", 2)?;
+    transaction.commit()?;
+    Ok(())
+}
 
 /// One paired gateway.
 #[derive(Clone, PartialEq, Eq)]
@@ -270,6 +293,9 @@ impl Queued {
 pub struct Ledger {
     connection: Connection,
     path: PathBuf,
+    /// Commits this connection has made, so a test can assert on how many syncs a batch cost
+    /// (counts, never durations).
+    commits: std::sync::Arc<std::sync::atomic::AtomicU64>,
 }
 
 fn ms(value: u64) -> Result<i64> {
@@ -309,7 +335,7 @@ impl Ledger {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        let connection = Connection::open(&path)?;
+        let mut connection = Connection::open(&path)?;
         connection.pragma_update(None, "journal_mode", "wal")?;
         connection.pragma_update(None, "synchronous", "FULL")?;
         connection.pragma_update(None, "foreign_keys", "ON")?;
@@ -334,6 +360,7 @@ impl Ledger {
                 connection.execute_batch("COMMIT")?;
             }
             (LEDGER_APPLICATION_ID, LEDGER_VERSION) => {}
+            (LEDGER_APPLICATION_ID, 1) => migrate_1_to_2(&connection)?,
             (LEDGER_APPLICATION_ID, found) if found > LEDGER_VERSION => {
                 return Err(invariant(format!(
                     "{} is a ledger at version {found}; this build writes {LEDGER_VERSION}",
@@ -347,7 +374,24 @@ impl Ledger {
                 )));
             }
         }
-        Ok(Self { connection, path })
+        let commits = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let counted = std::sync::Arc::clone(&commits);
+        connection.commit_hook(Some(move || {
+            counted.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            false
+        }))?;
+        Ok(Self {
+            connection,
+            path,
+            commits,
+        })
+    }
+
+    /// How many transactions this connection has committed (an autocommit statement is one).
+    /// What a test reads to prove a batch cost one sync and not one per part.
+    #[must_use]
+    pub fn commit_count(&self) -> u64 {
+        self.commits.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     #[must_use]
@@ -361,16 +405,16 @@ impl Ledger {
     /// # Errors
     /// SQLite's refusal; nothing is deleted then.
     pub fn reset(&self) -> Result<()> {
-        self.connection.execute_batch(
-            "BEGIN IMMEDIATE;
-             DELETE FROM confirmed;
+        let transaction = self.connection.unchecked_transaction()?;
+        transaction.execute_batch(
+            "DELETE FROM confirmed;
              DELETE FROM queue;
              DELETE FROM snapshot;
              DELETE FROM local_bytes;
              DELETE FROM meta;
-             DELETE FROM destination;
-             COMMIT;",
+             DELETE FROM destination;",
         )?;
+        transaction.commit()?;
         Ok(())
     }
 
@@ -452,25 +496,65 @@ impl Ledger {
             .find(|destination| destination.gateway_id == gateway_id))
     }
 
-    /// Unpair a gateway; its confirmations go with it.
+    /// Unpair a gateway: its row, its confirmations and every fact kept about it (its head, the
+    /// high-water mark, a rolled-back or moved or refused mark, the counts of parts it refused)
+    /// go in ONE transaction, so a gateway paired again starts clean and never inherits an old
+    /// rolled-back flag. The queue is untouched here — a pairing that is replaced (a claim)
+    /// calls this and puts the row back; [`Self::sweep_unowed`] clears what nobody owes.
     ///
     /// # Errors
-    /// SQLite's refusal.
+    /// SQLite's refusal; nothing is deleted then.
     pub fn remove_destination(&self, gateway_id: &str) -> Result<()> {
-        self.connection.execute(
+        let transaction = self.connection.unchecked_transaction()?;
+        transaction.execute(
             "DELETE FROM destination WHERE gateway_id = ?1",
             params![gateway_id],
         )?;
-        self.connection.execute(
-            "DELETE FROM meta WHERE k IN (?1, ?2, ?3, ?4)",
+        transaction.execute(
+            "DELETE FROM meta WHERE k IN (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 head_key(gateway_id),
                 moved_key(gateway_id),
+                head_taken_key(gateway_id),
                 head_acked_key(gateway_id),
-                unauthorized_key(gateway_id)
+                unauthorized_key(gateway_id),
+                highwater_key(gateway_id),
+                rolled_back_key(gateway_id),
             ],
         )?;
+        let prefix = mismatch_prefix(gateway_id);
+        transaction.execute(
+            "DELETE FROM meta WHERE substr(k, 1, ?2) = ?1",
+            params![prefix, i64::try_from(prefix.len()).unwrap_or(0)],
+        )?;
+        transaction.commit()?;
         Ok(())
+    }
+
+    /// With no gateway paired, nothing in the queue is owed to anyone: delete every queue
+    /// row, answering the names that left. Does nothing while any gateway is paired. The
+    /// caller removes the spool files ([`super::mover::sweep_unowed`] does both).
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn sweep_unowed(&self) -> Result<Vec<Name>> {
+        let transaction = self.connection.unchecked_transaction()?;
+        let paired: bool =
+            transaction.query_row("SELECT EXISTS (SELECT 1 FROM destination)", [], |row| {
+                row.get(0)
+            })?;
+        let mut swept = Vec::new();
+        if !paired {
+            let mut statement = transaction.prepare("SELECT name FROM queue")?;
+            let rows = statement.query_map([], |row| read_name(&row.get::<_, String>(0)?))?;
+            for row in rows {
+                swept.push(row?);
+            }
+            drop(statement);
+            transaction.execute("DELETE FROM queue", [])?;
+        }
+        transaction.commit()?;
+        Ok(swept)
     }
 
     /// `gateway_id` answered `UNAUTHORIZED` to this device's token: it no
@@ -576,31 +660,7 @@ impl Ledger {
     /// # Errors
     /// SQLite's refusal.
     pub fn enqueue(&self, queued: &Queued) -> Result<()> {
-        self.connection.execute(
-            "INSERT INTO queue
-               (name, part_path, size, digest, kind, media_type, created_ms,
-                handed_off_ms, attempts, last_error)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
-             ON CONFLICT (name) DO UPDATE SET
-               part_path = excluded.part_path, size = excluded.size,
-               digest = excluded.digest, kind = excluded.kind,
-               media_type = excluded.media_type,
-               created_ms = excluded.created_ms,
-               handed_off_ms = excluded.handed_off_ms,
-               attempts = excluded.attempts, last_error = excluded.last_error",
-            params![
-                queued.name.to_hex(),
-                queued.part_path.to_string_lossy(),
-                ms(queued.size)?,
-                queued.digest.to_hex(),
-                queued.kind.as_str(),
-                queued.media_type,
-                ms(queued.created_ms)?,
-                queued.handed_off_ms.map(ms).transpose()?,
-                i64::from(queued.attempts),
-                queued.last_error,
-            ],
-        )?;
+        self.connection.execute(ENQUEUE, enqueue_params(queued)?)?;
         Ok(())
     }
 
@@ -611,28 +671,10 @@ impl Ledger {
     /// # Errors
     /// SQLite's refusal, or a row this build cannot read.
     pub fn queued(&self) -> Result<Vec<Queued>> {
-        let mut statement = self.connection.prepare(
-            "SELECT name, part_path, size, digest, kind, media_type, created_ms,
-                    handed_off_ms, attempts, last_error
-               FROM queue ORDER BY kind = 'manifest', created_ms, name",
-        )?;
-        let rows = statement.query_map([], |row| {
-            let kind: String = row.get(4)?;
-            Ok(Queued {
-                name: read_name(&row.get::<_, String>(0)?)?,
-                part_path: PathBuf::from(row.get::<_, String>(1)?),
-                size: read_ms(row.get(2)?)?,
-                digest: read_digest(&row.get::<_, String>(3)?)?,
-                kind: PartKind::parse(&kind).ok_or_else(|| {
-                    rusqlite::Error::InvalidColumnType(4, kind.clone(), rusqlite::types::Type::Text)
-                })?,
-                media_type: row.get(5)?,
-                created_ms: read_ms(row.get(6)?)?,
-                handed_off_ms: row.get::<_, Option<i64>>(7)?.map(read_ms).transpose()?,
-                attempts: u32::try_from(row.get::<_, i64>(8)?).unwrap_or(u32::MAX),
-                last_error: row.get(9)?,
-            })
-        })?;
+        let mut statement = self.connection.prepare(&format!(
+            "{QUEUE_SELECT} ORDER BY kind = 'manifest', created_ms, name"
+        ))?;
+        let rows = statement.query_map([], read_queued)?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
@@ -711,6 +753,27 @@ impl Ledger {
         Ok(())
     }
 
+    /// Several parts are no longer with the operating system: one transaction, as
+    /// [`Self::unhand`] says for each.
+    ///
+    /// # Errors
+    /// SQLite's refusal; nothing changes then.
+    pub fn unhand_many(&self, names: &[Name]) -> Result<()> {
+        if names.is_empty() {
+            return Ok(());
+        }
+        let transaction = self.connection.unchecked_transaction()?;
+        {
+            let mut statement =
+                transaction.prepare("UPDATE queue SET handed_off_ms = NULL WHERE name = ?1")?;
+            for name in names {
+                statement.execute(params![name.to_hex()])?;
+            }
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
     /// The paired gateways that do not hold `name`, in pairing order, leaving out one a
     /// newer writer superseded (it takes nothing from this phone). Every gateway is a full
     /// replica (#1188, B1): a part is owed to each of these until it is acknowledged or the
@@ -723,22 +786,117 @@ impl Ledger {
             "SELECT d.gateway_id FROM destination d
               WHERE NOT EXISTS (SELECT 1 FROM confirmed c
                                  WHERE c.name = ?1 AND c.gateway_id = d.gateway_id)
-                AND NOT EXISTS (SELECT 1 FROM meta m WHERE m.k = 'moved:' || d.gateway_id)
+                AND NOT EXISTS (SELECT 1 FROM meta m WHERE m.k = ?2 || d.gateway_id)
               ORDER BY d.paired_at_ms, d.gateway_id",
         )?;
-        let rows = statement.query_map(params![name.to_hex()], |row| row.get::<_, String>(0))?;
+        let rows = statement.query_map(params![name.to_hex(), MOVED_PREFIX], |row| {
+            row.get::<_, String>(0)
+        })?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
-    /// The part `name` as queued, when it is.
+    /// The part `name` as queued, when it is: one keyed lookup, never a scan of the queue.
     ///
     /// # Errors
-    /// As [`Self::queued`].
+    /// SQLite's refusal, or a row this build cannot read.
     pub fn queued_part(&self, name: &Name) -> Result<Option<Queued>> {
         Ok(self
-            .queued()?
-            .into_iter()
-            .find(|queued| queued.name == *name))
+            .connection
+            .query_row(
+                &format!("{QUEUE_SELECT} WHERE name = ?1"),
+                params![name.to_hex()],
+                read_queued,
+            )
+            .optional()?)
+    }
+
+    /// Whether the queue holds `name`.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn is_queued(&self, name: &Name) -> Result<bool> {
+        Ok(self
+            .connection
+            .query_row(
+                "SELECT 1 FROM queue WHERE name = ?1",
+                params![name.to_hex()],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some())
+    }
+
+    /// The queued parts `gateway_id` does not hold, in the order they move: what a pass to
+    /// that gateway sends. The filter is the database's (`NOT EXISTS` over the `confirmed`
+    /// key), so a name the gateway holds is never materialised.
+    ///
+    /// # Errors
+    /// SQLite's refusal, or a row this build cannot read.
+    pub fn queued_unconfirmed(&self, gateway_id: &str) -> Result<Vec<Queued>> {
+        let mut statement = self.connection.prepare(&format!(
+            "{QUEUE_SELECT} AS q
+              WHERE NOT EXISTS (SELECT 1 FROM confirmed c
+                                 WHERE c.name = q.name AND c.gateway_id = ?1)
+              ORDER BY q.kind = 'manifest', q.created_ms, q.name"
+        ))?;
+        let rows = statement.query_map(params![gateway_id], read_queued)?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    /// The queued parts some paired gateway holds that no operating-system hand-off carries
+    /// and that were queued at or before `created_by_ms` (`None`: any time): the candidates
+    /// for ending the wait for the gateways that do not hold them.
+    ///
+    /// # Errors
+    /// SQLite's refusal, or a row this build cannot read.
+    pub fn queued_held_anywhere(&self, created_by_ms: Option<u64>) -> Result<Vec<Queued>> {
+        let mut statement = self.connection.prepare(&format!(
+            "{QUEUE_SELECT} AS q
+              WHERE q.handed_off_ms IS NULL AND q.created_ms <= ?1
+                AND EXISTS (SELECT 1 FROM confirmed c WHERE c.name = q.name)
+              ORDER BY q.kind = 'manifest', q.created_ms, q.name"
+        ))?;
+        let bound = created_by_ms.map_or(Ok(i64::MAX), ms)?;
+        let rows = statement.query_map(params![bound], read_queued)?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    /// Several parts leave the queue: one transaction.
+    ///
+    /// # Errors
+    /// SQLite's refusal; nothing is dequeued then.
+    pub fn dequeue_many(&self, names: &[Name]) -> Result<()> {
+        if names.is_empty() {
+            return Ok(());
+        }
+        let transaction = self.connection.unchecked_transaction()?;
+        {
+            let mut statement = transaction.prepare("DELETE FROM queue WHERE name = ?1")?;
+            for name in names {
+                statement.execute(params![name.to_hex()])?;
+            }
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
+    /// Queue several sealed parts: one transaction, as [`Self::enqueue`] says for each.
+    ///
+    /// # Errors
+    /// SQLite's refusal; nothing is queued then.
+    pub fn enqueue_many(&self, parts: &[Queued]) -> Result<()> {
+        if parts.is_empty() {
+            return Ok(());
+        }
+        let transaction = self.connection.unchecked_transaction()?;
+        {
+            let mut statement = transaction.prepare(ENQUEUE)?;
+            for queued in parts {
+                statement.execute(enqueue_params(queued)?)?;
+            }
+        }
+        transaction.commit()?;
+        Ok(())
     }
 
     // ─── confirmations ──────────────────────────────────────────────────────
@@ -788,6 +946,126 @@ impl Ledger {
         }
         transaction.commit()?;
         Ok(())
+    }
+
+    /// `gateway_id` acknowledged every one of `parts` (name and sealed size) at `now_ms`, as
+    /// [`Self::confirm`] says for one: one transaction for the batch, so a bundle's answer costs
+    /// one sync and not several per part. Each name's count of `DIGEST_MISMATCH` answers from
+    /// this gateway is cleared with it.
+    ///
+    /// # Errors
+    /// SQLite's refusal, including a gateway that is not paired; nothing is recorded then.
+    pub fn acknowledge_many(
+        &self,
+        parts: &[(Name, u64)],
+        gateway_id: &str,
+        now_ms: u64,
+    ) -> Result<()> {
+        if parts.is_empty() {
+            return Ok(());
+        }
+        let transaction = self.connection.unchecked_transaction()?;
+        {
+            let mut confirm = transaction.prepare(
+                "INSERT INTO confirmed (name, gateway_id, confirmed_ms, size)
+                 VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT (name, gateway_id) DO UPDATE SET
+                   confirmed_ms = excluded.confirmed_ms, size = excluded.size",
+            )?;
+            let mut forgive = transaction.prepare("DELETE FROM meta WHERE k = ?1")?;
+            let prefix = mismatch_prefix(gateway_id);
+            for (name, size) in parts {
+                confirm.execute(params![name.to_hex(), gateway_id, ms(now_ms)?, ms(*size)?])?;
+                forgive.execute(params![format!("{prefix}{}", name.to_hex())])?;
+            }
+        }
+        transaction.execute(
+            "UPDATE destination SET last_ack_ms = ?2 WHERE gateway_id = ?1",
+            params![gateway_id, ms(now_ms)?],
+        )?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    /// `gateway_id` answered `DIGEST_MISMATCH` to `name`: one more in a row. Answers the count
+    /// now. An acknowledgement of the name from that gateway ([`Self::acknowledge_many`])
+    /// clears it.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn count_mismatch(&self, name: &Name, gateway_id: &str) -> Result<u32> {
+        let count: i64 = self.connection.query_row(
+            "INSERT INTO meta (k, v) VALUES (?1, '1')
+             ON CONFLICT (k) DO UPDATE SET v = CAST(CAST(v AS INTEGER) + 1 AS TEXT)
+             RETURNING CAST(v AS INTEGER)",
+            params![format!("{}{}", mismatch_prefix(gateway_id), name.to_hex())],
+            |row| row.get(0),
+        )?;
+        Ok(u32::try_from(count).unwrap_or(u32::MAX))
+    }
+
+    /// How many answers of `DIGEST_MISMATCH` in a row `gateway_id` gave for `name`.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn mismatches(&self, name: &Name, gateway_id: &str) -> Result<u32> {
+        Ok(self
+            .meta(&format!("{}{}", mismatch_prefix(gateway_id), name.to_hex()))?
+            .and_then(|text| text.parse::<u32>().ok())
+            .unwrap_or(0))
+    }
+
+    /// The confirmed part above [`SAMPLE_MAX_BYTES`] that `gateway_id` was least recently read
+    /// back for — one never read back first, by name — with its recorded size. Over the passes
+    /// every large part comes up. Planned through `confirmed_large`.
+    ///
+    /// # Errors
+    /// SQLite's refusal, or a row this build cannot read.
+    pub fn oldest_verified_large(&self, gateway_id: &str) -> Result<Option<(Name, u64)>> {
+        Ok(self
+            .connection
+            .query_row(
+                "SELECT name, size FROM confirmed
+                  WHERE gateway_id = ?1 AND size > 1048576
+                  ORDER BY verified_ms, name LIMIT 1",
+                params![gateway_id],
+                |row| Ok((read_name(&row.get::<_, String>(0)?)?, read_ms(row.get(1)?)?)),
+            )
+            .optional()?)
+    }
+
+    /// `name` was read back from `gateway_id` at `now_ms` and opened.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn mark_verified(&self, name: &Name, gateway_id: &str, now_ms: u64) -> Result<()> {
+        self.connection.execute(
+            "UPDATE confirmed SET verified_ms = ?3 WHERE name = ?1 AND gateway_id = ?2",
+            params![name.to_hex(), gateway_id, ms(now_ms)?],
+        )?;
+        Ok(())
+    }
+
+    /// Which of `names` `gateway_id` has not acknowledged, in the order given: one keyed
+    /// lookup per name on the primary key, never the gateway's whole set.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn unconfirmed_among(
+        &self,
+        names: impl IntoIterator<Item = Name>,
+        gateway_id: &str,
+    ) -> Result<Vec<Name>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT 1 FROM confirmed WHERE name = ?1 AND gateway_id = ?2")?;
+        let mut out = Vec::new();
+        for name in names {
+            if !statement.exists(params![name.to_hex(), gateway_id])? {
+                out.push(name);
+            }
+        }
+        Ok(out)
     }
 
     /// `gateway_id` no longer holds `name`.
@@ -908,6 +1186,63 @@ impl Ledger {
             "UPDATE snapshot SET acked_ms = ?2 WHERE name = ?1",
             params![name.to_hex(), ms(now_ms)?],
         )?;
+        Ok(())
+    }
+
+    /// Whether this device took the snapshot `name`: one keyed lookup.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn has_snapshot(&self, name: &Name) -> Result<bool> {
+        Ok(self
+            .connection
+            .query_row(
+                "SELECT 1 FROM snapshot WHERE name = ?1",
+                params![name.to_hex()],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some())
+    }
+
+    /// The head at `gateway_id` is now the snapshot `name`, taken at `taken_at_ms`, and the
+    /// ledger says so in ONE transaction: the head, when it was taken, the high-water mark
+    /// (which only rises), the rolled-back mark cleared, and the snapshot's acknowledgement at
+    /// `now_ms`. A crash leaves all of it or none.
+    ///
+    /// # Errors
+    /// SQLite's refusal, or a value that is not a time; nothing is recorded then.
+    pub fn record_head_set(
+        &self,
+        gateway_id: &str,
+        name: &Name,
+        taken_at_ms: u64,
+        now_ms: u64,
+    ) -> Result<()> {
+        let transaction = self.connection.unchecked_transaction()?;
+        let upsert = "INSERT INTO meta (k, v) VALUES (?1, ?2)
+                      ON CONFLICT (k) DO UPDATE SET v = excluded.v";
+        transaction.execute(upsert, params![head_key(gateway_id), name.to_hex()])?;
+        transaction.execute(
+            upsert,
+            params![head_taken_key(gateway_id), taken_at_ms.to_string()],
+        )?;
+        // Only ever up: kept when the stored mark is higher.
+        transaction.execute(
+            "INSERT INTO meta (k, v) VALUES (?1, ?2)
+             ON CONFLICT (k) DO UPDATE SET v = excluded.v
+              WHERE CAST(excluded.v AS INTEGER) > CAST(v AS INTEGER)",
+            params![highwater_key(gateway_id), taken_at_ms.to_string()],
+        )?;
+        transaction.execute(
+            "DELETE FROM meta WHERE k = ?1",
+            params![rolled_back_key(gateway_id)],
+        )?;
+        transaction.execute(
+            "UPDATE snapshot SET acked_ms = ?2 WHERE name = ?1",
+            params![name.to_hex(), ms(now_ms)?],
+        )?;
+        transaction.commit()?;
         Ok(())
     }
 
@@ -1135,7 +1470,7 @@ impl Ledger {
     /// # Errors
     /// SQLite's refusal, or a value that is not a number.
     pub fn highwater(&self, gateway_id: &str) -> Result<Option<u64>> {
-        self.meta(&format!("highwater:{gateway_id}"))?
+        self.meta(&highwater_key(gateway_id))?
             .map(|text| {
                 text.parse::<u64>()
                     .map_err(|_| invariant(format!("`{text}` is not a time")))
@@ -1152,7 +1487,7 @@ impl Ledger {
             .highwater(gateway_id)?
             .is_none_or(|held| taken_at_ms > held)
         {
-            self.set_meta(&format!("highwater:{gateway_id}"), &taken_at_ms.to_string())?;
+            self.set_meta(&highwater_key(gateway_id), &taken_at_ms.to_string())?;
         }
         Ok(())
     }
@@ -1163,7 +1498,7 @@ impl Ledger {
     /// # Errors
     /// SQLite's refusal.
     pub fn set_rolled_back(&self, gateway_id: &str, rolled_back: bool) -> Result<()> {
-        let key = format!("rolled-back:{gateway_id}");
+        let key = rolled_back_key(gateway_id);
         if rolled_back {
             self.set_meta(&key, "1")
         } else {
@@ -1176,7 +1511,7 @@ impl Ledger {
     /// # Errors
     /// SQLite's refusal.
     pub fn rolled_back(&self, gateway_id: &str) -> Result<bool> {
-        Ok(self.meta(&format!("rolled-back:{gateway_id}"))?.is_some())
+        Ok(self.meta(&rolled_back_key(gateway_id))?.is_some())
     }
 
     /// Up to `limit` of the parts `gateway_id` acknowledged that are at most `max_size` bytes
@@ -1231,12 +1566,75 @@ impl Ledger {
     }
 }
 
+const QUEUE_SELECT: &str = "SELECT name, part_path, size, digest, kind, media_type, created_ms,
+                    handed_off_ms, attempts, last_error FROM queue";
+
+const ENQUEUE: &str = "INSERT INTO queue
+               (name, part_path, size, digest, kind, media_type, created_ms,
+                handed_off_ms, attempts, last_error)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+             ON CONFLICT (name) DO UPDATE SET
+               part_path = excluded.part_path, size = excluded.size,
+               digest = excluded.digest, kind = excluded.kind,
+               media_type = excluded.media_type,
+               created_ms = excluded.created_ms,
+               handed_off_ms = excluded.handed_off_ms,
+               attempts = excluded.attempts, last_error = excluded.last_error";
+
+fn enqueue_params(queued: &Queued) -> Result<[Box<dyn rusqlite::ToSql>; 10]> {
+    Ok([
+        Box::new(queued.name.to_hex()),
+        Box::new(queued.part_path.to_string_lossy().into_owned()),
+        Box::new(ms(queued.size)?),
+        Box::new(queued.digest.to_hex()),
+        Box::new(queued.kind.as_str()),
+        Box::new(queued.media_type.clone()),
+        Box::new(ms(queued.created_ms)?),
+        Box::new(queued.handed_off_ms.map(ms).transpose()?),
+        Box::new(i64::from(queued.attempts)),
+        Box::new(queued.last_error.clone()),
+    ])
+}
+
+fn read_queued(row: &rusqlite::Row<'_>) -> rusqlite::Result<Queued> {
+    let kind: String = row.get(4)?;
+    Ok(Queued {
+        name: read_name(&row.get::<_, String>(0)?)?,
+        part_path: PathBuf::from(row.get::<_, String>(1)?),
+        size: read_ms(row.get(2)?)?,
+        digest: read_digest(&row.get::<_, String>(3)?)?,
+        kind: PartKind::parse(&kind).ok_or_else(|| {
+            rusqlite::Error::InvalidColumnType(4, kind.clone(), rusqlite::types::Type::Text)
+        })?,
+        media_type: row.get(5)?,
+        created_ms: read_ms(row.get(6)?)?,
+        handed_off_ms: row.get::<_, Option<i64>>(7)?.map(read_ms).transpose()?,
+        attempts: u32::try_from(row.get::<_, i64>(8)?).unwrap_or(u32::MAX),
+        last_error: row.get(9)?,
+    })
+}
+
+const MOVED_PREFIX: &str = "moved:";
+
+fn highwater_key(gateway_id: &str) -> String {
+    format!("highwater:{gateway_id}")
+}
+
+fn rolled_back_key(gateway_id: &str) -> String {
+    format!("rolled-back:{gateway_id}")
+}
+
+/// The prefix of the counts of parts `gateway_id` answered `DIGEST_MISMATCH` to.
+fn mismatch_prefix(gateway_id: &str) -> String {
+    format!("mismatch:{gateway_id}:")
+}
+
 fn head_key(gateway_id: &str) -> String {
     format!("head:{gateway_id}")
 }
 
 fn moved_key(gateway_id: &str) -> String {
-    format!("moved:{gateway_id}")
+    format!("{MOVED_PREFIX}{gateway_id}")
 }
 
 fn head_taken_key(gateway_id: &str) -> String {
@@ -1637,5 +2035,232 @@ mod tests {
                 "the table refuses source {source} with ref {reference:?}"
             );
         }
+    }
+
+    fn plan_of(ledger: &Ledger, sql: &str, binds: &[&dyn rusqlite::ToSql]) -> String {
+        let mut statement = ledger
+            .connection
+            .prepare(&format!("EXPLAIN QUERY PLAN {sql}"))
+            .expect("plans");
+        let rows = statement
+            .query_map(binds, |row| row.get::<_, String>(3))
+            .expect("runs")
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .expect("rows");
+        rows.join("\n")
+    }
+
+    /// **EVERY KEYED READ PLANS THROUGH AN INDEX** and none sorts after reading.
+    #[test]
+    fn the_keyed_reads_plan_through_an_index() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let ledger = Ledger::open(dir.path().join("l.backup.db")).expect("opens");
+        let hex = name_of("x").to_hex();
+        let keyed: [(&str, String); 3] = [
+            (
+                "queue by name",
+                plan_of(&ledger, &format!("{QUEUE_SELECT} WHERE name = ?1"), &[&hex]),
+            ),
+            (
+                "is_queued",
+                plan_of(&ledger, "SELECT 1 FROM queue WHERE name = ?1", &[&hex]),
+            ),
+            (
+                "confirmed by key",
+                plan_of(
+                    &ledger,
+                    "SELECT 1 FROM confirmed WHERE name = ?1 AND gateway_id = ?2",
+                    &[&hex, &"gw"],
+                ),
+            ),
+        ];
+        for (what, plan) in &keyed {
+            assert!(
+                plan.contains("SEARCH"),
+                "{what} must search an index: {plan}"
+            );
+            assert!(!plan.contains("SCAN"), "{what} must not scan: {plan}");
+        }
+        let large = plan_of(
+            &ledger,
+            "SELECT name, size FROM confirmed
+              WHERE gateway_id = ?1 AND size > 1048576
+              ORDER BY verified_ms, name LIMIT 1",
+            &[&"gw"],
+        );
+        assert!(
+            large.contains("confirmed_large"),
+            "the partial index serves it: {large}"
+        );
+        assert!(
+            !large.contains("TEMP B-TREE"),
+            "no sort after the read: {large}"
+        );
+        let unconfirmed = plan_of(
+            &ledger,
+            &format!(
+                "{QUEUE_SELECT} AS q WHERE NOT EXISTS (SELECT 1 FROM confirmed c
+                   WHERE c.name = q.name AND c.gateway_id = ?1)
+                 ORDER BY q.kind = 'manifest', q.created_ms, q.name"
+            ),
+            &[&"gw"],
+        );
+        assert!(
+            unconfirmed.contains("SEARCH c USING COVERING INDEX"),
+            "the confirmed lookup is keyed: {unconfirmed}"
+        );
+        assert!(!unconfirmed.contains("TEMP B-TREE"), "{unconfirmed}");
+        let held = plan_of(
+            &ledger,
+            &format!(
+                "{QUEUE_SELECT} AS q WHERE q.handed_off_ms IS NULL AND q.created_ms <= ?1
+                   AND EXISTS (SELECT 1 FROM confirmed c WHERE c.name = q.name)"
+            ),
+            &[&0_i64],
+        );
+        assert!(
+            held.contains("SEARCH c EXISTS USING COVERING INDEX"),
+            "{held}"
+        );
+    }
+
+    /// A version 1 ledger (before `verified_ms`) opens, gains the column and the index, and
+    /// keeps its rows.
+    #[test]
+    fn a_version_1_ledger_migrates_in_place() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let path = dir.path().join("old.backup.db");
+        {
+            let ledger = Ledger::open(&path).expect("creates");
+            ledger.put_destination(&destination("gw")).expect("pairs");
+            ledger
+                .confirm(&name_of("kept"), "gw", 5, 9)
+                .expect("confirms");
+            // Put it back as version 1 wrote it.
+            ledger
+                .connection
+                .execute_batch(
+                    "DROP INDEX confirmed_large;
+                     ALTER TABLE confirmed DROP COLUMN verified_ms;
+                     PRAGMA user_version = 1;",
+                )
+                .expect("downgrades");
+        }
+        let ledger = Ledger::open(&path).expect("migrates");
+        assert!(ledger.is_confirmed(&name_of("kept"), "gw").expect("asks"));
+        ledger
+            .mark_verified(&name_of("kept"), "gw", 77)
+            .expect("the column is there");
+        let version: i64 = ledger
+            .connection
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("reads");
+        assert_eq!(version, LEDGER_VERSION);
+    }
+
+    /// **FORGET THEN PAIR AGAIN STARTS CLEAN:** nothing of the old pairing — a rolled-back flag,
+    /// a high-water mark, a head, a moved or refused mark, a mismatch count, an
+    /// acknowledgement — survives, and it all goes in one commit.
+    #[test]
+    fn forgetting_a_gateway_leaves_nothing_for_a_pairing_to_inherit() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let ledger = Ledger::open(dir.path().join("l.backup.db")).expect("opens");
+        let name = name_of("part");
+        ledger.put_destination(&destination("gw")).expect("pairs");
+        ledger
+            .put_destination(&destination("other"))
+            .expect("pairs");
+        ledger.confirm(&name, "gw", 1, 4).expect("confirms");
+        ledger.set_head("gw", &name).expect("head");
+        ledger.set_head_taken("gw", 9).expect("taken");
+        ledger.set_head_acked("gw", 9).expect("acked");
+        ledger.raise_highwater("gw", 9).expect("high water");
+        ledger.set_rolled_back("gw", true).expect("rolled back");
+        ledger.set_moved("gw", 3).expect("moved");
+        ledger.set_unauthorized("gw").expect("unauthorized");
+        ledger.count_mismatch(&name, "gw").expect("counts");
+        ledger
+            .set_rolled_back("other", true)
+            .expect("another's flag");
+        let before = ledger.commit_count();
+        ledger.remove_destination("gw").expect("forgets");
+        assert_eq!(ledger.commit_count() - before, 1, "one transaction");
+        ledger
+            .put_destination(&destination("gw"))
+            .expect("pairs again");
+        assert!(!ledger.rolled_back("gw").expect("reads"));
+        assert_eq!(ledger.highwater("gw").expect("reads"), None);
+        assert_eq!(ledger.head("gw").expect("reads"), None);
+        assert_eq!(ledger.head_taken("gw").expect("reads"), None);
+        assert_eq!(ledger.head_acked("gw").expect("reads"), None);
+        assert_eq!(ledger.moved("gw").expect("reads"), None);
+        assert!(!ledger.unauthorized("gw").expect("reads"));
+        assert_eq!(ledger.mismatches(&name, "gw").expect("reads"), 0);
+        assert!(!ledger.is_confirmed(&name, "gw").expect("reads"));
+        assert!(
+            ledger.rolled_back("other").expect("reads"),
+            "another gateway's facts are untouched"
+        );
+    }
+
+    /// `reset` is one transaction and leaves the connection usable.
+    #[test]
+    fn reset_clears_everything_and_leaves_no_transaction_open() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let ledger = Ledger::open(dir.path().join("l.backup.db")).expect("opens");
+        ledger.put_destination(&destination("gw")).expect("pairs");
+        ledger.enqueue(&queued("a", 1)).expect("queues");
+        ledger.reset().expect("resets");
+        assert!(ledger.destinations().expect("reads").is_empty());
+        assert!(ledger.queued().expect("reads").is_empty());
+        ledger.reset().expect("a second reset begins cleanly");
+        assert!(ledger.connection.is_autocommit());
+    }
+
+    /// The head's facts are written in one commit, and the high-water mark only rises.
+    #[test]
+    fn a_head_set_is_one_commit_and_the_high_water_mark_only_rises() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let ledger = Ledger::open(dir.path().join("l.backup.db")).expect("opens");
+        ledger.put_destination(&destination("gw")).expect("pairs");
+        let newer = name_of("newer");
+        ledger.record_snapshot(&newer, 200, "{}").expect("records");
+        ledger.set_rolled_back("gw", true).expect("flags");
+        let before = ledger.commit_count();
+        ledger.record_head_set("gw", &newer, 200, 5).expect("sets");
+        assert_eq!(ledger.commit_count() - before, 1);
+        assert!(!ledger.rolled_back("gw").expect("reads"));
+        assert_eq!(ledger.highwater("gw").expect("reads"), Some(200));
+        let older = name_of("older");
+        ledger.record_head_set("gw", &older, 100, 6).expect("sets");
+        assert_eq!(
+            ledger.highwater("gw").expect("reads"),
+            Some(200),
+            "never falls"
+        );
+        assert_eq!(ledger.head("gw").expect("reads"), Some(older));
+    }
+
+    /// Queue rows go in as one commit for a batch, and the keyed lookups answer.
+    #[test]
+    fn a_batch_of_queue_rows_is_one_commit() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let ledger = Ledger::open(dir.path().join("l.backup.db")).expect("opens");
+        let parts: Vec<Queued> = (0..50)
+            .map(|index| queued(&format!("p{index}"), index))
+            .collect();
+        let before = ledger.commit_count();
+        ledger.enqueue_many(&parts).expect("queues");
+        assert_eq!(ledger.commit_count() - before, 1);
+        assert!(ledger.is_queued(&parts[7].name).expect("asks"));
+        assert_eq!(
+            ledger.queued_part(&parts[7].name).expect("reads"),
+            Some(parts[7].clone())
+        );
+        assert_eq!(ledger.queued_part(&name_of("absent")).expect("reads"), None);
+        let names: Vec<Name> = parts.iter().map(|part| part.name).collect();
+        ledger.dequeue_many(&names).expect("dequeues");
+        assert_eq!(ledger.commit_count() - before, 2);
+        assert!(ledger.queued().expect("reads").is_empty());
     }
 }

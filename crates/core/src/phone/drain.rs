@@ -1000,6 +1000,12 @@ fn pass_over(
     // next pass and not by a restore.
     each(&mut live, ledger, pass, |reached, _| {
         verify_sample(ledger, &reached.store, &keyring.backup)?;
+        // ONE LARGE PART PER GATEWAY, STREAMED (#1188): the sample's cap keeps every original out
+        // of it, so the part least recently read back is opened here, over a link that is not
+        // metered (it reads a whole part, which no rule lets cross one).
+        if !conditions.metered {
+            verify_large(ledger, spool, &reached.store, &keyring.backup)?;
+        }
         Ok(Flow::Continue)
     })?;
 
@@ -1031,7 +1037,7 @@ fn pass_over(
 /// How many acknowledged parts a pass reads back from each gateway, and the largest it reads
 /// (plaintext bytes as recorded): a sample is the point, never a second upload.
 const VERIFY_SAMPLE: usize = 3;
-const VERIFY_MAX_BYTES: u64 = 1 << 20;
+const VERIFY_MAX_BYTES: u64 = centraid_vault::backup::ledger::SAMPLE_MAX_BYTES;
 
 /// Read back a random sample of what `store` acknowledged and open each part: a name it no
 /// longer holds, or bytes that no longer open, are unconfirmed (so the next pass sends them
@@ -1068,6 +1074,30 @@ fn verify_sample(
             .map_err(plane_error)?;
     }
     Ok(wrong.len())
+}
+
+/// Read back the one confirmed part above the sample's cap that `store` was least recently read
+/// back for, streamed, and open it: a part no longer held, or no longer opening, is unconfirmed
+/// and sent again. Answers whether it found one wrong.
+fn verify_large(
+    ledger: &Ledger,
+    spool: &Spool,
+    store: &GatewayStore,
+    keys: &centraid_vault::backup::naming::BackupKeys,
+) -> Result<bool> {
+    use centraid_vault::backup::verify::{ReadBack, read_back_large};
+    match read_back_large(ledger, spool, store, keys, now_ms()).map_err(plane_error)? {
+        ReadBack::Wrong(name) => {
+            tracing::warn!(
+                gateway = %store.gateway_id(),
+                %name,
+                "a gateway no longer holds an original it acknowledged"
+            );
+            Ok(true)
+        }
+        ReadBack::Unanswered(error) => Err(store_error(error)),
+        ReadBack::Nothing | ReadBack::Held(_) => Ok(false),
+    }
 }
 
 /// What the records' half of a pass needs, so the pass can run it twice: when

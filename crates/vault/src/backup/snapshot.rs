@@ -775,15 +775,29 @@ pub fn spool(
     let json = std::str::from_utf8(&snapshot.manifest_json)
         .map_err(|_| invariant("the manifest is not UTF-8"))?;
     ledger.record_snapshot(&snapshot.manifest_name, snapshot.manifest.taken_at_ms, json)?;
-    let queued: BTreeSet<Name> = ledger.queued()?.iter().map(|part| part.name).collect();
     let mut held = spool.bytes()?;
     let mut out = Spooled::default();
     let mut file = File::open(&snapshot.path)?;
     let mut buffer = Vec::new();
 
-    let put = |name: Name, kind: PartKind, sealed: &[u8], out: &mut Spooled| -> Result<u64> {
+    // THE QUEUE ROWS GO IN BATCHES, one transaction each (`PENDING_ROWS` parts): a snapshot of
+    // hundreds of ranges is a handful of syncs, not one per range. A part's file is written
+    // before its row, so a crash between leaves a file the opener sweeps.
+    const PENDING_ROWS: usize = 256;
+    let mut pending: Vec<Queued> = Vec::new();
+    let flush = |pending: &mut Vec<Queued>| -> Result<()> {
+        ledger.enqueue_many(pending)?;
+        pending.clear();
+        Ok(())
+    };
+    let put = |name: Name,
+               kind: PartKind,
+               sealed: &[u8],
+               out: &mut Spooled,
+               pending: &mut Vec<Queued>|
+     -> Result<u64> {
         let path = spool.write(&name, sealed)?;
-        ledger.enqueue(&Queued {
+        pending.push(Queued {
             name,
             part_path: path,
             size: sealed.len() as u64,
@@ -794,7 +808,7 @@ pub fn spool(
             handed_off_ms: None,
             attempts: 0,
             last_error: None,
-        })?;
+        });
         out.bytes += sealed.len() as u64;
         out.spooled.push(name);
         Ok(sealed.len() as u64)
@@ -805,7 +819,7 @@ pub fn spool(
             .ranges
             .get(usize::try_from(*index).unwrap_or(usize::MAX))
             .ok_or_else(|| invariant(format!("the plan names range {index}, which is not here")))?;
-        if queued.contains(&range.name) && spool.contains(&range.name) {
+        if spool.contains(&range.name) && ledger.is_queued(&range.name)? {
             out.spooled.push(range.name);
             continue;
         }
@@ -826,12 +840,16 @@ pub fn spool(
             )));
         }
         let sealed = sealed::seal_part(keys, 0, &buffer, true)?;
-        held += put(range.name, PartKind::Range, &sealed, &mut out)?;
+        held += put(range.name, PartKind::Range, &sealed, &mut out, &mut pending)?;
+        if pending.len() >= PENDING_ROWS {
+            flush(&mut pending)?;
+        }
     }
+    flush(&mut pending)?;
 
     if plan.manifest_missing {
         let name = snapshot.manifest_name;
-        if queued.contains(&name) && spool.contains(&name) {
+        if spool.contains(&name) && ledger.is_queued(&name)? {
             out.spooled.push(name);
         } else if !out.deferred.is_empty()
             || !super::spool::admits(held, snapshot.manifest_json.len() as u64, budget)
@@ -839,7 +857,8 @@ pub fn spool(
             out.deferred.push(name);
         } else {
             let sealed = sealed::seal_part(keys, 0, &snapshot.manifest_json, true)?;
-            put(name, PartKind::Manifest, &sealed, &mut out)?;
+            put(name, PartKind::Manifest, &sealed, &mut out, &mut pending)?;
+            flush(&mut pending)?;
         }
     }
     Ok(out)
@@ -875,13 +894,9 @@ pub fn settle(
     clock: &dyn Clock,
 ) -> Result<Settled> {
     let gateway = store.gateway_id().to_owned();
-    let confirmed = ledger.confirmed_names(&gateway)?;
     let mut needed = manifest.range_names();
     needed.insert(*manifest_name);
-    let unconfirmed: Vec<Name> = needed
-        .into_iter()
-        .filter(|name| !confirmed.contains(name))
-        .collect();
+    let unconfirmed = ledger.unconfirmed_among(needed, &gateway)?;
     if !unconfirmed.is_empty() {
         return Ok(Settled::Waiting { unconfirmed });
     }
@@ -891,13 +906,10 @@ pub fn settle(
         match store.set_head(manifest_name, prev.as_ref(), manifest.taken_at_ms) {
             Ok(head) => {
                 let now = u64::try_from(clock.now_ms()).unwrap_or(0);
-                ledger.set_head(&gateway, manifest_name)?;
-                ledger.set_head_taken(&gateway, manifest.taken_at_ms)?;
-                // THE HIGH-WATER MARK RISES WITH EVERY HEAD THIS DEVICE SETS, and a head that went
-                // backwards is mended by setting a current one (#1188, B4).
-                ledger.raise_highwater(&gateway, manifest.taken_at_ms)?;
-                ledger.set_rolled_back(&gateway, false)?;
-                ledger.ack_snapshot(manifest_name, now)?;
+                // ONE TRANSACTION: the head, when it was taken, the high-water mark (which rises
+                // with every head this device sets), the rolled-back mark a current head mends
+                // (#1188, B4) and the snapshot's acknowledgement.
+                ledger.record_head_set(&gateway, manifest_name, manifest.taken_at_ms, now)?;
                 return Ok(Settled::HeadSet(head));
             }
             Err(StoreError::HeadConflict { current }) => {
@@ -911,11 +923,10 @@ pub fn settle(
                         .is_some_and(|head| high.is_some_and(|high| head.taken_at_ms < high))
                 };
                 let ours = behind
-                    || current.as_ref().is_some_and(|head| {
-                        ledger.snapshots().is_ok_and(|taken| {
-                            taken.iter().any(|snapshot| snapshot.name == head.name)
-                        })
-                    });
+                    || match current.as_ref() {
+                        Some(head) => ledger.has_snapshot(&head.name)?,
+                        None => false,
+                    };
                 if attempt == 0 && ours {
                     prev = current.map(|head| head.name);
                     continue;
@@ -1347,7 +1358,17 @@ mod tests {
         use super::super::store::MemoryStore;
 
         let dir = tempfile::tempdir().expect("a directory");
-        let vault = founded(dir.path());
+        // A FIXED CLOCK THE TEST TICKS, so the second manifest is a new name by construction.
+        let tick = std::sync::Arc::new(crate::clock::FixedClock::frozen());
+        let vault = Vault::create_with(
+            dir.path().join("vault.db"),
+            Box::new(std::sync::Arc::clone(&tick)),
+            Box::new(crate::clock::ClockIds::new(Box::new(
+                std::sync::Arc::clone(&tick),
+            ))),
+        )
+        .expect("a vault");
+        vault.found("Household", "Ada").expect("founds");
         add_party(&vault, "Grace");
         let keys = BackupKeys::from_root(&[3; 32]);
         let store = MemoryStore::new("gw");
@@ -1389,9 +1410,9 @@ mod tests {
         let moved = move_queue(&first_ledger, &first_spool, &store, far, &clock).expect("moves");
         assert_eq!(moved.stopped, Stop::Empty);
 
-        // A second ledger, knowing nothing, snapshots the same vault — a
-        // millisecond later at least, so its manifest is a new name.
-        std::thread::sleep(std::time::Duration::from_millis(5));
+        // A second ledger, knowing nothing, snapshots the same vault — a millisecond later,
+        // so its manifest is a new name.
+        tick.advance_ms(1);
         let ledger = Ledger::open(dir.path().join("two.backup.db")).expect("a ledger");
         destination(&ledger);
         let again = take(&vault, &keys, &dir.path().join("b"), &vault_id, APP).expect("takes");

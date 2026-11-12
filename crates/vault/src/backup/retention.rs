@@ -13,8 +13,9 @@
 //! Sunday, UTC) and calendar months. A phone that was off for a month comes
 //! back to the history it left rather than to one snapshot. The rules overlap
 //! — today's newest is also this week's and this month's — so the union is at
-//! most 17. The newest snapshot is always kept, and so is one dated after
-//! `now_ms`: a clock that went backwards cannot be judged against.
+//! most 17. The newest snapshot is always kept. One dated after `now_ms` is
+//! judged as if taken at `now_ms` (see [`keep`]), so a clock that went forwards
+//! and was corrected cannot keep a snapshot for ever.
 //!
 //! ## WHAT IS LIVE
 //!

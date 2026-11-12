@@ -29,6 +29,12 @@
 //! the queue orders after every range, so it can never ride in a bundle ahead
 //! of one.
 //!
+//! **A BUNDLE'S ANSWERS ARE CONFIRMED TOGETHER**: the parts it acknowledged go into the ledger in
+//! one transaction and leave the queue in one more ([`release_many`]), not several commits per
+//! part. A spool file that exists and cannot be read is dropped like a missing one and sealed
+//! again; the same part answered `DIGEST_MISMATCH` [`MISMATCH_LIMIT`] times in a row by one
+//! destination stops the pass to it, as the refusal `DIGEST_MISMATCH`.
+//!
 //! [`reconcile`] makes the ledger a cache of the destination's truth: every
 //! queued and every confirmed name is asked about, and the ledger follows the
 //! answer in both directions.
@@ -71,8 +77,17 @@ pub struct Moved {
     /// Dropped from the queue to be sealed again: their spool file was gone
     /// or was not the bytes queued.
     pub dropped: Vec<Name>,
+    /// Why a part was dropped for a cause worth naming: a spool file that exists and cannot
+    /// be read (it is dropped like a missing one and sealed again), and a part this
+    /// destination refused as damaged. Also a subset of `dropped`.
+    pub errors: Vec<(Name, String)>,
     pub stopped: Stop,
 }
+
+/// How many times in a row one destination may answer `DIGEST_MISMATCH` for the same part
+/// before the pass to it stops: the part was dropped and sealed again each time, so a third
+/// is not a torn spool file but a destination (or a link) that damages what it is sent.
+pub const MISMATCH_LIMIT: u32 = 3;
 
 fn now(clock: &dyn Clock) -> u64 {
     u64::try_from(clock.now_ms()).unwrap_or(0)
@@ -109,25 +124,80 @@ pub fn release(
     Ok(true)
 }
 
+/// [`release`] for a batch of parts a destination just acknowledged: the ones no paired
+/// destination still owes leave the queue in ONE transaction and the spool afterwards, and
+/// the ones still owed are taken back from the operating system (with `unhand`) in one.
+/// Answers how many parts left the spool.
+///
+/// # Errors
+/// The ledger's or the spool's refusal.
+pub fn release_many(
+    ledger: &Ledger,
+    spool: &Spool,
+    parts: &[&Queued],
+    now_ms: u64,
+    unhand: bool,
+) -> Result<usize> {
+    let mut leaving: Vec<Name> = Vec::new();
+    let mut keeping: Vec<Name> = Vec::new();
+    for part in parts {
+        let waiting = !ledger.owing(&part.name)?.is_empty()
+            && now_ms.saturating_sub(part.created_ms) < SPOOL_WAIT_MS;
+        if waiting {
+            keeping.push(part.name);
+        } else {
+            leaving.push(part.name);
+        }
+    }
+    if unhand {
+        ledger.unhand_many(&keeping)?;
+    }
+    ledger.dequeue_many(&leaving)?;
+    for name in &leaving {
+        spool.remove(name)?;
+    }
+    Ok(leaving.len())
+}
+
+/// With no gateway paired nothing in the queue or the spool is owed to anyone: sweep both, so
+/// a member who forgot their last gateway has nothing of the backup left on the phone but the
+/// ledger's own rows. Does nothing while any gateway is paired. Answers how many parts it
+/// swept.
+///
+/// # Errors
+/// The ledger's or the spool's refusal.
+pub fn sweep_unowed(ledger: &Ledger, spool: &Spool) -> Result<usize> {
+    if !ledger.destinations()?.is_empty() {
+        return Ok(0);
+    }
+    let swept = ledger.sweep_unowed()?;
+    for name in &swept {
+        spool.remove(name)?;
+    }
+    // A file no queue row names (a crash left it) is as unowed as one that had a row.
+    spool.sweep_unqueued(&BTreeSet::new())?;
+    Ok(swept.len())
+}
+
 /// Release every queued part that some destination holds and that has waited [`SPOOL_WAIT_MS`]
 /// for the ones that do not: the bounded end of the wait. Answers how many were released.
 ///
 /// # Errors
 /// The ledger's or the spool's refusal.
 pub fn release_expired(ledger: &Ledger, spool: &Spool, now_ms: u64) -> Result<usize> {
-    let held = ledger.confirmed_anywhere()?;
-    let mut released = 0;
-    for part in ledger.queued()? {
-        if part.handed_off_ms.is_none()
-            && held.contains(&part.name)
-            && now_ms.saturating_sub(part.created_ms) >= SPOOL_WAIT_MS
-        {
-            ledger.dequeue(&part.name)?;
-            spool.remove(&part.name)?;
-            released += 1;
-        }
+    let Some(waited_by) = now_ms.checked_sub(SPOOL_WAIT_MS) else {
+        return Ok(0);
+    };
+    let expired: Vec<Name> = ledger
+        .queued_held_anywhere(Some(waited_by))?
+        .iter()
+        .map(|part| part.name)
+        .collect();
+    ledger.dequeue_many(&expired)?;
+    for name in &expired {
+        spool.remove(name)?;
     }
-    Ok(released)
+    Ok(expired.len())
 }
 
 /// End the wait for the destinations that did not answer: every queued part some destination
@@ -138,23 +208,21 @@ pub fn release_expired(ledger: &Ledger, spool: &Spool, now_ms: u64) -> Result<us
 /// # Errors
 /// The ledger's or the spool's refusal.
 pub fn release_to_reachable(ledger: &Ledger, spool: &Spool, reachable: &[String]) -> Result<usize> {
-    let held = ledger.confirmed_anywhere()?;
-    let mut released = 0;
-    for part in ledger.queued()? {
-        if part.handed_off_ms.is_some() || !held.contains(&part.name) {
-            continue;
-        }
+    let mut leaving: Vec<Name> = Vec::new();
+    for part in ledger.queued_held_anywhere(None)? {
         if ledger
             .owing(&part.name)?
             .iter()
             .all(|owed| !reachable.contains(owed))
         {
-            ledger.dequeue(&part.name)?;
-            spool.remove(&part.name)?;
-            released += 1;
+            leaving.push(part.name);
         }
     }
-    Ok(released)
+    ledger.dequeue_many(&leaving)?;
+    for name in &leaving {
+        spool.remove(name)?;
+    }
+    Ok(leaving.len())
 }
 
 /// Whether `part` rides in a bundle: a range or a derivative small enough
@@ -175,47 +243,71 @@ struct Pass<'a> {
 }
 
 impl Pass<'_> {
-    /// The destination holds a sealing of `part`: confirm it, and free the
-    /// spool once no other paired destination owes it.
-    fn acknowledged(&mut self, part: &Queued) -> Result<()> {
+    /// The destination holds a sealing of each of `parts`: confirm them in one transaction and
+    /// free the spool of the ones no other paired destination owes.
+    fn acknowledged(&mut self, parts: &[&Queued]) -> Result<()> {
+        if parts.is_empty() {
+            return Ok(());
+        }
         let at = now(self.clock);
-        self.ledger
-            .confirm(&part.name, &self.gateway, at, part.size)?;
-        release(self.ledger, self.spool, part, at, true)?;
-        self.moved.confirmed.push(part.name);
+        let sized: Vec<(Name, u64)> = parts.iter().map(|part| (part.name, part.size)).collect();
+        self.ledger.acknowledge_many(&sized, &self.gateway, at)?;
+        release_many(self.ledger, self.spool, parts, at, true)?;
+        self.moved
+            .confirmed
+            .extend(parts.iter().map(|part| part.name));
         Ok(())
     }
 
-    /// The spool file is gone or is not the bytes queued: drop the part, to
-    /// be sealed again.
-    fn torn(&mut self, part: &Queued) -> Result<()> {
+    /// The spool file is gone, cannot be read, or is not the bytes queued: drop the part, to be
+    /// sealed again from the vault. `why` is recorded when the file was there and was no good.
+    fn torn(&mut self, part: &Queued, why: Option<String>) -> Result<()> {
         self.ledger.dequeue(&part.name)?;
         self.spool.remove(&part.name)?;
         self.moved.dropped.push(part.name);
+        if let Some(why) = why {
+            self.moved.errors.push((part.name, why));
+        }
         Ok(())
     }
 
-    /// Act on one part's answer; a refusal that stops the pass is returned.
+    /// Act on a batch of answers, one per part; a refusal that stops the pass is returned.
+    /// The acknowledged parts are confirmed together, and the first stop wins.
     fn answered(
         &mut self,
-        part: &Queued,
-        answer: std::result::Result<(), Refusal>,
+        answers: Vec<(&Queued, std::result::Result<(), Refusal>)>,
     ) -> Result<Option<Stop>> {
-        match answer {
-            Ok(()) | Err(Refusal::NameTaken) => self.acknowledged(part)?,
-            Err(Refusal::DigestMismatch) => self.torn(part)?,
-            // EVERY OTHER REFUSAL STOPS THE PASS, `TOO_LARGE` AND A FULL DISK
-            // ALIKE (#1080, the sweep's F1): the destination answered, and
-            // what it answered is a fact the member hears, not a part to skip
-            // — no part of this format is past the cap, so a destination that
-            // says so is not one this phone can finish a pass at. The attempt
-            // is recorded and every part stays queued, spooled, unconfirmed.
-            Err(refusal) => {
-                self.ledger.record_attempt(&part.name, refusal.code())?;
-                return Ok(Some(Stop::Refused(refusal)));
+        let mut acknowledged: Vec<&Queued> = Vec::new();
+        let mut stop = None;
+        for (part, answer) in answers {
+            match answer {
+                Ok(()) | Err(Refusal::NameTaken) => acknowledged.push(part),
+                Err(Refusal::DigestMismatch) => {
+                    // THE PART IS SEALED AGAIN, BUT NOT FOREVER: the same part, refused as
+                    // damaged by the same destination `MISMATCH_LIMIT` times in a row, is a
+                    // destination or a link that damages what it is sent. The pass to it stops,
+                    // named by the refusal's own code, and the count stays until the part is
+                    // acknowledged there.
+                    let count = self.ledger.count_mismatch(&part.name, &self.gateway)?;
+                    self.torn(part, Some(Refusal::DigestMismatch.code().to_owned()))?;
+                    if count >= MISMATCH_LIMIT && stop.is_none() {
+                        stop = Some(Stop::Refused(Refusal::DigestMismatch));
+                    }
+                }
+                // EVERY OTHER REFUSAL STOPS THE PASS, `TOO_LARGE` AND A FULL DISK
+                // ALIKE (#1080, the sweep's F1): the destination answered, and
+                // what it answered is a fact the member hears, not a part to skip
+                // — no part of this format is past the cap, so a destination that
+                // says so is not one this phone can finish a pass at. The attempt
+                // is recorded and every part stays queued, spooled, unconfirmed.
+                Err(refusal) => {
+                    self.ledger.record_attempt(&part.name, refusal.code())?;
+                    stop.get_or_insert(Stop::Refused(refusal));
+                }
             }
         }
-        Ok(None)
+        self.acknowledged(&acknowledged)?;
+        Ok(stop)
     }
 
     /// A request that was not answered at all: every part in it waits.
@@ -242,36 +334,47 @@ impl Pass<'_> {
         })
     }
 
-    /// Send one part as its own `put`.
+    /// Send one part as its own `put`. A spool file that is not there, or is there and cannot
+    /// be opened, drops the part to be sealed again: a poison file never blocks the pass.
     fn single(&mut self, store: &dyn Store, part: &Queued) -> Result<Option<Stop>> {
         let mut body = match self.spool.read(&part.name) {
             Ok(file) => file,
             Err(_) if !self.spool.contains(&part.name) => {
-                self.ledger.dequeue(&part.name)?;
-                self.moved.dropped.push(part.name);
+                self.torn(part, None)?;
                 return Ok(None);
             }
-            Err(error) => return Err(error),
+            Err(error) => {
+                self.torn(
+                    part,
+                    Some(format!("the spool file cannot be read: {error}")),
+                )?;
+                return Ok(None);
+            }
         };
         let put = store.put(&part.name, &part.digest, part.size, &mut body);
         drop(body);
         match put {
-            Ok(_) => self.answered(part, Ok(())),
-            Err(StoreError::Refused(refusal)) => self.answered(part, Err(refusal)),
+            Ok(_) => self.answered(vec![(part, Ok(()))]),
+            Err(StoreError::Refused(refusal)) => self.answered(vec![(part, Err(refusal))]),
             Err(error) => self.unanswered(&[part], error).map(Some),
         }
     }
 
-    /// Send a run of parts as one bundle. A part whose spool file is gone is
-    /// dropped before the request; the rest are answered one by one.
+    /// Send a run of parts as one bundle. A part whose spool file is gone, or is there and is
+    /// not a file that can be opened, is dropped before the request; the rest are answered
+    /// together.
     fn bundle(&mut self, store: &dyn Store, run: &[&Queued]) -> Result<Option<Stop>> {
         let mut sent: Vec<&Queued> = Vec::with_capacity(run.len());
         for part in run {
-            if self.spool.contains(&part.name) {
-                sent.push(part);
+            if !self.spool.contains(&part.name) {
+                self.torn(part, None)?;
+            } else if let Err(error) = self.spool.read(&part.name) {
+                self.torn(
+                    part,
+                    Some(format!("the spool file cannot be read: {error}")),
+                )?;
             } else {
-                self.ledger.dequeue(&part.name)?;
-                self.moved.dropped.push(part.name);
+                sent.push(part);
             }
         }
         if sent.is_empty() {
@@ -291,18 +394,13 @@ impl Pass<'_> {
             Err(error) => return self.unanswered(&sent, error).map(Some),
         };
         let by_name: BTreeMap<Name, &Queued> = sent.iter().map(|part| (part.name, *part)).collect();
-        let mut stop = None;
-        for (name, answer) in answers {
-            // An answer for a name this bundle did not carry says nothing
-            // about the queue; a part left unanswered waits for the next pass.
-            let Some(part) = by_name.get(&name) else {
-                continue;
-            };
-            if let Some(refused) = self.answered(part, answer.map(|_| ()))? {
-                stop.get_or_insert(refused);
-            }
-        }
-        Ok(stop)
+        // An answer for a name this bundle did not carry says nothing about the queue; a part
+        // left unanswered waits for the next pass.
+        let answered: Vec<(&Queued, std::result::Result<(), Refusal>)> = answers
+            .into_iter()
+            .filter_map(|(name, answer)| Some((*by_name.get(&name)?, answer.map(|_| ()))))
+            .collect();
+        self.answered(answered)
     }
 }
 
@@ -342,11 +440,10 @@ pub fn move_queue_where(
 ) -> Result<Moved> {
     // A PART THIS DESTINATION HOLDS IS NOT SENT TO IT AGAIN: it stays queued only for the
     // destinations that still owe it.
-    let held = ledger.confirmed_names(store.gateway_id())?;
     let queue: Vec<Queued> = ledger
-        .queued()?
+        .queued_unconfirmed(store.gateway_id())?
         .into_iter()
-        .filter(|part| !held.contains(&part.name) && admit(part))
+        .filter(|part| admit(part))
         .collect();
     let mut pass = Pass {
         ledger,
@@ -356,6 +453,7 @@ pub fn move_queue_where(
         moved: Moved {
             confirmed: Vec::new(),
             dropped: Vec::new(),
+            errors: Vec::new(),
             stopped: Stop::Empty,
         },
     };
@@ -452,13 +550,16 @@ fn reconcile_names(
     let missing = store::missing(store, &asked)?;
 
     let mut out = Reconciled::default();
-    for part in &queued {
-        if !missing.contains(&part.name) {
-            let at = now(clock);
-            ledger.confirm(&part.name, &gateway, at, part.size)?;
-            release(ledger, spool, part, at, false)?;
-            out.confirmed.push(part.name);
-        }
+    let held: Vec<&Queued> = queued
+        .iter()
+        .filter(|part| !missing.contains(&part.name))
+        .collect();
+    if !held.is_empty() {
+        let at = now(clock);
+        let sized: Vec<(Name, u64)> = held.iter().map(|part| (part.name, part.size)).collect();
+        ledger.acknowledge_many(&sized, &gateway, at)?;
+        release_many(ledger, spool, &held, at, false)?;
+        out.confirmed.extend(held.iter().map(|part| part.name));
     }
     for name in confirmed.intersection(&missing) {
         ledger.unconfirm(name, &gateway)?;
@@ -473,7 +574,7 @@ mod tests {
 
     use super::*;
     use crate::backup::ledger::{Destination, PartKind, Queued};
-    use crate::backup::naming::{Digest, PlaintextHash};
+    use crate::backup::naming::{BackupKeys, Digest, PlaintextHash};
     use crate::backup::store::MemoryStore;
     use crate::clock::FixedClock;
 
@@ -1048,5 +1149,172 @@ mod tests {
         assert!(rig.ledger.queued().expect("reads").is_empty());
         assert!(!rig.spool.contains(&held));
         assert!(!rig.ledger.is_confirmed(&lost, "gw").expect("asks"));
+    }
+
+    /// **A BUNDLE'S ANSWER IS ONE LEDGER TRANSACTION TO CONFIRM AND ONE TO RELEASE,** not several
+    /// per part: counted in commits, never timed.
+    #[test]
+    fn a_bundle_is_confirmed_and_released_in_a_fixed_number_of_commits() {
+        let rig = rig();
+        for index in 0..40 {
+            queue(&rig, &format!("range {index}"), PartKind::Range);
+        }
+        let before = rig.ledger.commit_count();
+        let moved =
+            move_queue(&rig.ledger, &rig.spool, &rig.store, far(), &rig.clock).expect("moves");
+        assert_eq!(moved.confirmed.len(), 40);
+        assert_eq!(
+            rig.ledger.commit_count() - before,
+            2,
+            "forty parts: one commit to confirm, one to dequeue"
+        );
+        assert!(rig.spool.names().expect("lists").is_empty());
+    }
+
+    /// **THE FILTER IS THE DATABASE'S:** a pass reads the queued parts the gateway does not
+    /// hold, and a part another pass confirmed is not loaded again.
+    #[test]
+    fn the_queue_a_pass_reads_leaves_out_what_the_gateway_holds() {
+        let rig = rig();
+        pair_second(&rig);
+        let held = queue(&rig, "held", PartKind::Range);
+        let owed = queue(&rig, "owed", PartKind::Range);
+        rig.ledger.confirm(&held, "gw", 1, 4).expect("confirms");
+        let for_gw: Vec<Name> = rig
+            .ledger
+            .queued_unconfirmed("gw")
+            .expect("reads")
+            .iter()
+            .map(|part| part.name)
+            .collect();
+        assert_eq!(for_gw, vec![owed]);
+        assert_eq!(
+            rig.ledger.queued_unconfirmed("gw2").expect("reads").len(),
+            2
+        );
+    }
+
+    /// **A POISON SPOOL FILE DOES NOT BLOCK THE PASS.** One that exists and cannot be opened is
+    /// dropped like a missing one, to be sealed again, and the error is on the answer; the parts
+    /// after it still move. (Skipped by construction where the file can be opened anyway: a
+    /// process that ignores file modes, such as root.)
+    #[cfg(unix)]
+    #[test]
+    fn an_unreadable_spool_file_is_dropped_and_the_pass_goes_on() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let rig = rig();
+        let poison = queue(&rig, "poison", PartKind::Original);
+        let good = queue(&rig, "good", PartKind::Range);
+        std::fs::set_permissions(
+            rig.spool.path(&poison),
+            std::fs::Permissions::from_mode(0o000),
+        )
+        .expect("locks it");
+        if std::fs::File::open(rig.spool.path(&poison)).is_ok() {
+            return;
+        }
+        let moved =
+            move_queue(&rig.ledger, &rig.spool, &rig.store, far(), &rig.clock).expect("moves");
+        assert_eq!(moved.stopped, Stop::Empty);
+        assert_eq!(moved.dropped, vec![poison]);
+        assert_eq!(moved.errors.len(), 1);
+        assert_eq!(moved.errors[0].0, poison);
+        assert!(moved.errors[0].1.contains("cannot be read"));
+        assert_eq!(moved.confirmed, vec![good]);
+        assert!(!rig.ledger.is_queued(&poison).expect("asks"));
+        assert!(!rig.spool.contains(&poison));
+    }
+
+    /// **THE SAME PART REFUSED AS DAMAGED THREE TIMES IN A ROW STOPS THAT GATEWAY'S PASS,**
+    /// named by the refusal's own code; an acknowledgement clears the count.
+    #[test]
+    fn three_digest_mismatches_in_a_row_stop_the_pass_and_an_acknowledgement_clears_them() {
+        let rig = rig();
+        let flaky = Full {
+            inner: &rig.store,
+            full: std::cell::Cell::new(true),
+            refusal: Refusal::DigestMismatch,
+        };
+        let mut name = None;
+        for round in 1..=MISMATCH_LIMIT {
+            // Sealed again from the vault, as a pass does after dropping it.
+            name = Some(queue(&rig, "torn", PartKind::Original));
+            let moved =
+                move_queue(&rig.ledger, &rig.spool, &flaky, far(), &rig.clock).expect("moves");
+            let name = name.expect("queued");
+            assert_eq!(moved.dropped, vec![name], "round {round}");
+            assert_eq!(rig.ledger.mismatches(&name, "gw").expect("reads"), round);
+            if round < MISMATCH_LIMIT {
+                assert_eq!(moved.stopped, Stop::Empty, "round {round}");
+            } else {
+                assert_eq!(
+                    moved.stopped,
+                    Stop::Refused(Refusal::DigestMismatch),
+                    "the third stops the pass"
+                );
+            }
+        }
+        let name = name.expect("queued");
+        flaky.full.set(false);
+        queue(&rig, "torn", PartKind::Original);
+        let moved = move_queue(&rig.ledger, &rig.spool, &flaky, far(), &rig.clock).expect("moves");
+        assert_eq!(moved.confirmed, vec![name]);
+        assert_eq!(rig.ledger.mismatches(&name, "gw").expect("reads"), 0);
+    }
+
+    /// A zero-byte blob seals to a part like any other, is acknowledged and read back.
+    #[test]
+    fn a_zero_byte_blob_is_sealed_sent_and_acknowledged() {
+        let rig = rig();
+        let keys = BackupKeys::from_root(&[9; 32]);
+        let hash = PlaintextHash::of(b"");
+        let names = super::super::naming::names_of(&keys, &hash, 0);
+        assert_eq!(names.len(), 1, "an empty file is still one part");
+        let sealed = centraid_media::sealed::seal_part(&keys, 0, b"", true).expect("seals");
+        let path = rig.spool.write(&names[0], &sealed).expect("spools");
+        rig.ledger
+            .enqueue(&Queued {
+                name: names[0],
+                part_path: path,
+                size: sealed.len() as u64,
+                digest: Digest::of(&sealed),
+                kind: PartKind::Original,
+                media_type: Some("image/jpeg".to_owned()),
+                created_ms: 1,
+                handed_off_ms: None,
+                attempts: 0,
+                last_error: None,
+            })
+            .expect("queues");
+        let moved =
+            move_queue(&rig.ledger, &rig.spool, &rig.store, far(), &rig.clock).expect("moves");
+        assert_eq!(moved.confirmed, vec![names[0]]);
+        let mut held = Vec::new();
+        rig.store.get(&names[0], &mut held).expect("reads back");
+        let opened = centraid_media::sealed::open_part(&keys, &held).expect("opens");
+        assert!(opened.plaintext.is_empty());
+    }
+
+    /// With the last gateway forgotten nothing on the phone is owed to anyone: the queue and
+    /// the spool are swept; with one still paired they are not.
+    #[test]
+    fn forgetting_the_last_gateway_sweeps_the_queue_and_the_spool() {
+        let rig = rig();
+        pair_second(&rig);
+        let part = queue(&rig, "waiting", PartKind::Range);
+        rig.ledger.remove_destination("gw").expect("forgets one");
+        assert_eq!(sweep_unowed(&rig.ledger, &rig.spool).expect("sweeps"), 0);
+        assert!(rig.spool.contains(&part), "the other still owes it");
+        rig.ledger
+            .remove_destination("gw2")
+            .expect("forgets the last");
+        std::fs::write(rig.spool.dir().join("f".repeat(64)), b"a stray").expect("a stray file");
+        assert_eq!(sweep_unowed(&rig.ledger, &rig.spool).expect("sweeps"), 1);
+        assert!(rig.ledger.queued().expect("reads").is_empty());
+        assert!(
+            rig.spool.names().expect("lists").is_empty(),
+            "stray files go too"
+        );
     }
 }
