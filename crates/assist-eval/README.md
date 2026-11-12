@@ -23,7 +23,7 @@ It prints the summary and writes `runs/val-base.json` (the report), `runs/val-ba
 | flag | meaning |
 | --- | --- |
 | `--model GGUF` / `ASSIST_EVAL_MODEL` | the base model; greedy, trace v4, think limit 200, 512 tokens, context 8192, the phone's grammar: `phone_options()` |
-| `--adapter GGUF` | a LoRA adapter loaded beside the base; its sha256 goes in the label and in `config.adapter_sha256`. **The engine cannot load one yet** (`centraid-assist-llama` has no adapter support on this branch), so the flag stops with a plain message instead of scoring the base under the adapter's name |
+| `--adapter GGUF` | a LoRA adapter loaded beside the base (`LlamaLoader::load_with_adapter`) and run On for every generation of the run; its sha256 goes in the label and in `config.adapter_sha256`. An adapter that will not load is an error, never the base alone. Needs `--features engine` |
 | `--tools s2\|sig\|compact\|full` | the tools block the system prompt shows, and the shape of call the step reads. **Default `sig`**, the eight tools; `s2` is the prompt the shipping model was trained on (`contracts/assist/export/prompt.s2.txt`). Written into the report's label and `config` |
 | `--grammar off\|handles\|full` | how much of the think the decoder holds to. **Default: the phone's** (`full`; `handles` under `--tools s2`, which the step decides). Written into the report's label and `config` |
 | `--stub` | no weights: a model that declines everything. The floor, and a way to check the rig |
@@ -92,7 +92,7 @@ Kept: the matching rules (`match_value`, `diff_match`, `value_match`; the same p
 
 ## Baseline
 
-**No model has been scored, here or on Kaggle: the owner launches the first run.** The first intended run is the baseline: the **stock** Qwen3.5-0.8B GGUF pinned in `crates/assist/model.json` (url, sha256, tools mode), no adapter, on the val split of a data version, decoded as the phone decodes. An adapter is scored the same way later (`--adapter`, once the engine loads one), and `assist-eval compare` says whether it won.
+**No model has been scored, here or on Kaggle: the owner launches the first run.** The first intended run is the baseline: the **stock** Qwen3.5-0.8B GGUF pinned in `crates/assist/model.json` (url, sha256, tools mode), no adapter, on the val split of a data version, decoded as the phone decodes. An adapter is scored the same way (`--adapter`), and `assist-eval compare` says whether it won.
 
 _What can be scored._ A data version's val (`datagen build`, tag `vX.Y` of the private dataset `srikanth235/centraid-native-data`): its records are read as they are (`JsonlSource` reads a plain JSONL set, so decompress `data/val.jsonl.zst` first; `source::seed_document_of` puts a presence-only world's sealed placeholders back as `datagen` does). A set must pass the reference replay first. **The frozen data-v7 val does not** and a run over it is refused: its gold predates the vault rebuild (#1135) and Tally's removal (#1099), its worlds carry Tally sections the seeder refuses (`tally::WithoutTally` and `WithoutInProgress` still read those out and leave the sessions that need them out, counted in the report's `excluded`), and its reference calls name `$key`s the runtime cannot run. The floors and S2 figures that used to stand here were measured on that set and are gone with it.
 

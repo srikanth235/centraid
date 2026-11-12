@@ -251,7 +251,6 @@ fn run() -> Result<()> {
                     &sha[..12]
                 );
                 config.adapter_sha256 = Some(sha);
-                bail_until_the_engine_loads_adapters(adapter)?;
             }
             label += &format!("[{settings}]");
             #[cfg(feature = "engine")]
@@ -462,17 +461,6 @@ fn sha256_of(path: &std::path::Path) -> Result<String> {
         hasher.update(&buffer[..n]);
     }
     Ok(hex::encode(hasher.finalize()))
-}
-
-/// The seam for `--adapter`. The engine (`centraid-assist-llama`) does not load an adapter beside the base yet: that
-/// is its own change (#1188, Part E). Until it lands the flag refuses with this message, and nothing is scored under a
-/// label that claims an adapter the run did not use. The report already records the adapter's sha256.
-fn bail_until_the_engine_loads_adapters(adapter: &std::path::Path) -> Result<()> {
-    bail!(
-        "--adapter {}: this engine cannot load an adapter beside the base GGUF yet, so a run would score the base model \
-         under the adapter's name. Nothing was run",
-        adapter.display()
-    )
 }
 
 fn compare_cmd(argv: &[String]) -> Result<()> {
