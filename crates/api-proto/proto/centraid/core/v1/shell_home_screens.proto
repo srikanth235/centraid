@@ -537,7 +537,7 @@ message VaultCommand {
 // The band, and the one navigation Rust asks of itself
 // ---------------------------------------------------------------------------
 
-// THE BAND (product-intuition/references/design-behaviour.md § App roots): one strip at the foot of every tab root,
+// THE BAND (design/behaviour.md § App roots): one strip at the foot of every tab root,
 // never app-themed, frame destinations only. Which places it holds, in what
 // order, their words and which is lit are Rust's, from the tabs that exist; the
 // shell draws it under a tab's root and presses select a tab.

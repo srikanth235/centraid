@@ -100,7 +100,7 @@ cargo xtask rules                     # the structural rules alone
 cargo xtask repo-root                 # which tree the path-based rules will scan
 ```
 
-**Give every worktree its own `CARGO_TARGET_DIR`** — sharing one silently hands generated Rust between them (`.claude/skills/rust/SKILL.md`, Pitfalls).
+**Give every worktree its own `CARGO_TARGET_DIR`** — sharing one silently hands generated Rust between them (`.claude/skills/stack/rust/centraid.md`, Pitfalls).
 
 The product's binaries:
 

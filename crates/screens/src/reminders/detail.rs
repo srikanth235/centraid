@@ -1613,7 +1613,7 @@ fn fields(
         value: Some(rows::priority_label(locale, task.priority))
             .filter(|label| !label.is_empty())
             .unwrap_or_else(|| words::priority_none(locale)),
-        // THE LABEL CARRIES IT (product-intuition/references/design-behaviour.md § Wording): "None" is a choice on the
+        // THE LABEL CARRIES IT (design/wording.md § Wording): "None" is a choice on the
         // row, so no note says that priority is optional.
         choices: vec![
             simple(NONE, words::priority_none(locale), level == 0),

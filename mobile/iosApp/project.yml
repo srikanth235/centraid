@@ -96,7 +96,7 @@ targets:
         #
         # THE ARCHIVE IS A BUILT FILE AND XCODE DOES NOT KNOW IT IS STALE:
         # re-run `ios-core.sh` after every `crates/core` change
-        # (`.claude/skills/mobile-verify/SKILL.md`).
+        # (`.claude/skills/land/mobile.md`).
         CENTRAID_CORE_LINK: >-
           -Wl,-u,_centraid_open -Wl,-u,_centraid_call -Wl,-u,_centraid_next_event -Wl,-u,_centraid_free -Wl,-u,_centraid_close -framework SystemConfiguration -framework Network -framework Security -framework Metal -framework MetalKit -framework Foundation -framework Accelerate -lc++
         CENTRAID_CORE_TARGET: $(SRCROOT)/../../target

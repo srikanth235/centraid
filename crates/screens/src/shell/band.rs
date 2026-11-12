@@ -1,4 +1,4 @@
-//! THE BAND (#1135; product-intuition/references/design-behaviour.md § App roots): one strip at the foot of every tab
+//! THE BAND (#1135; design/behaviour.md § App roots): one strip at the foot of every tab
 //! root, never app-themed, frame destinations only. Rust words it and lights the
 //! place the member is in; a shell draws it under a tab's root and sends
 //! `select_tab` for a press. The apps are tiles on Home, not places in the band.

@@ -143,7 +143,7 @@ fn the_fields_are_computed_and_repeats_is_the_cores_sentence() {
     assert_eq!(selected(repeats), "monthly");
     assert_eq!(selected(field(v, "anchor")), "completion");
     assert_eq!(field(v, "priority").value, "None");
-    // SIGNAGE, NOT AN ESSAY (product-intuition/references/design-behaviour.md § Wording; #1047): "None" is on the row, so
+    // SIGNAGE, NOT AN ESSAY (design/wording.md § Wording; #1047): "None" is on the row, so
     // no note explains that priority is optional.
     assert_eq!(field(v, "priority").note, "");
     assert_eq!(data.title_placeholder, "Task name");

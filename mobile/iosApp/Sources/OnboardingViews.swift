@@ -3,7 +3,7 @@ import SwiftUI
 // ONBOARDING WITHOUT SAMPLE DATA: what a made vault imports is asked at the point of use, and what came
 // in is one line (`imports.made`). This is the shell's half: the banner it draws.
 
-/// THE IMPORT'S STATUS LINE (product-intuition/references/design-behaviour.md § Status line
+/// THE IMPORT'S STATUS LINE (design/behaviour.md § Status line
 /// channel … docked to the bottom of the frame … no floating overlay, no
 /// auto-dismiss"): what a made vault brought in (`imports.made`, Rust's line),
 /// above the band, on Home and on every app. One fragment, at most one action

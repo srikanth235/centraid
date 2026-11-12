@@ -33,7 +33,7 @@ import dev.centraid.android.theme.centraidType
 
 /**
  * THE CONFIRM (K5): a [SheetRoom] carrying the machine's finished `Confirm` —
- * the title names the noun, the body is the one full sentence product-intuition/references/design-behaviour.md § Wording
+ * the title names the noun, the body is the one full sentence design/wording.md § Wording
  * allows a destructive confirm, and the one act is the primary. Destructive
  * is the outlined `net` button. Dismissing is the grabber, the scrim or
  * [cancelLabel]; each sends [onDismiss].
@@ -73,7 +73,7 @@ public fun ConfirmSheet(
 }
 
 /**
- * A REFUSAL TOLD IN A SHEET, NOT A DIALOG (product-intuition/references/design-behaviour.md § Controls):
+ * A REFUSAL TOLD IN A SHEET, NOT A DIALOG (design/behaviour.md § Controls):
  * the act that was refused as the title, the sentence saying what happened and
  * what to do, and one way out, the outline [doneLabel]. The grabber, the scrim
  * and back are the same as Done.

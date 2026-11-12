@@ -25,7 +25,7 @@ import dev.centraid.android.theme.centraidColor
 public val LocalShellLine: ProvidableCompositionLocal<(@Composable () -> Unit)?> = compositionLocalOf { null }
 
 /**
- * THE IMPORT'S STATUS LINE (product-intuition/references/design-behaviour.md § Status line
+ * THE IMPORT'S STATUS LINE (design/behaviour.md § Status line
  * channel … docked to the bottom of the frame … no floating overlay, no
  * auto-dismiss"): an import's progress and outcome, above the band, on Home
  * and on every app. One fragment, at most one action ([actionLabel], "Open
