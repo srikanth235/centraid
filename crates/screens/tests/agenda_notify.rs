@@ -380,3 +380,71 @@ fn a_long_events_alert_stays_live_until_it_ends() {
     assert_eq!(live.len(), 1, "{live:?}");
     assert!(live[0].starts_with("event||"), "{live:?}");
 }
+
+/// NA1: WHAT THE PHONE SAID ABOUT ALERTS REACHES THE EDITOR. A refusal answered to the service is
+/// the sentence under a reminder that would sound, in the kit's one words; an allowed phone says
+/// nothing of its own.
+#[test]
+fn a_refused_grant_is_said_under_the_reminder_that_would_sound() {
+    let (mut d, service) = rig();
+    clear_tasks(&d);
+    let id = add(
+        &d,
+        act::reminders::AddTask {
+            title: "Call".to_owned(),
+            due: Field::Is(format!("{}T09:00", day(&d, 2))),
+            remind_before_min: Field::Is(10),
+            ..Default::default()
+        },
+    );
+    let note = |d: &mut Driver| {
+        let i = d.push(agenda::TAB, routes::task(&id));
+        let note = detail_data(d.view(i))
+            .fields
+            .iter()
+            .find(|f| f.key == "reminder")
+            .map(|f| f.note.clone())
+            .expect("the reminder row");
+        d.pop(agenda::TAB, i);
+        note
+    };
+    assert_eq!(note(&mut d), "Delivered on your phone.");
+    answered(
+        &mut d,
+        service,
+        wire::NotificationsScheduled {
+            permission: wire::NotificationPermission::Denied as i32,
+            ..Default::default()
+        },
+    );
+    assert_eq!(
+        note(&mut d),
+        "Notifications are off. Turn them on in Settings."
+    );
+    answered(
+        &mut d,
+        service,
+        wire::NotificationsScheduled {
+            permission: wire::NotificationPermission::Granted as i32,
+            exact_denied: true,
+            ..Default::default()
+        },
+    );
+    assert_eq!(
+        note(&mut d),
+        "Alerts may arrive a few minutes late. Allow exact timing in Settings."
+    );
+}
+
+/// The phone's answer to the service's last `ScheduleNotifications`.
+fn answered(d: &mut Driver, service: u64, scheduled: wire::NotificationsScheduled) {
+    d.send(
+        service,
+        E::EffectResult(wire::EffectResult {
+            effect_id: 0,
+            outcome: Some(wire::effect_result::Outcome::NotificationsScheduled(
+                scheduled,
+            )),
+        }),
+    );
+}

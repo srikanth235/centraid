@@ -199,6 +199,33 @@ impl AlertFacts {
     }
 }
 
+/// THE ONE BOARD the notification service writes and every screen that relies on alerts reads, so a
+/// refusal is said in the same words wherever an alert is set (#1188, NA1).
+#[derive(Clone, Debug, Default)]
+pub struct AlertBoard(std::sync::Arc<std::sync::Mutex<AlertFacts>>);
+
+impl AlertBoard {
+    fn lock(&self) -> std::sync::MutexGuard<'_, AlertFacts> {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// What the phone last said.
+    #[must_use]
+    pub fn get(&self) -> AlertFacts {
+        self.lock().clone()
+    }
+
+    /// Record what the phone said; whether it differs from what was known.
+    pub fn set(&self, facts: AlertFacts) -> bool {
+        let mut held = self.lock();
+        let changed = *held != facts;
+        *held = facts;
+        changed
+    }
+}
+
 /// What a refused effect says for `resource`, or `None` when the failure is not a grant's.
 #[must_use]
 pub fn refusal(locale: Locale, resource: Resource, failed: &wire::EffectFailed) -> Option<String> {

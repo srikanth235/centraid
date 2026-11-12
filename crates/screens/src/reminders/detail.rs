@@ -1006,6 +1006,7 @@ impl Detail {
         locale: Locale,
         units: UnitsPref,
         cycle: HourCycle,
+        alert_line: Option<String>,
         answer: &Answered,
         task: &wire::AgendaTask,
     ) -> wire::TodoDetailData {
@@ -1048,7 +1049,7 @@ impl Detail {
                 wire::TodoCheck::InProcess => words::started(locale),
                 _ => String::new(),
             },
-            fields: fields(locale, cycle, task, today, &projects, &sections),
+            fields: fields(locale, cycle, alert_line, task, today, &projects, &sections),
             subtasks_label: if task.children.is_empty() {
                 words::field_subtasks(locale)
             } else {
@@ -1185,6 +1186,7 @@ impl Screen for Detail {
                     locale,
                     ctx.units(),
                     ctx.hour_cycle(),
+                    ctx.alerts().get().line(locale),
                     answer,
                     task,
                 )))
@@ -1342,6 +1344,7 @@ fn reminder_value(
 fn fields(
     locale: Locale,
     cycle: HourCycle,
+    alert_line: Option<String>,
     task: &wire::AgendaTask,
     today: &str,
     projects: &[wire::AgendaTaskProject],
@@ -1443,6 +1446,9 @@ fn fields(
             words::reminder_needs_due(locale)
         } else if task.due_time.is_empty() {
             notify_words::no_alert_without_time(locale)
+        } else if task.remind_before_min.is_some() {
+            // WHAT THE PHONE SAYS ABOUT ALERTS (#1188, NA1): said once the reminder would sound.
+            alert_line.unwrap_or_else(|| words::reminder_note_a(locale))
         } else {
             words::reminder_note_a(locale)
         },

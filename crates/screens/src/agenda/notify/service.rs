@@ -319,6 +319,9 @@ impl Screen for Service {
                 {
                     // DENIED IS QUIET: nothing is scheduled; the state is kept for the rows that say it.
                     self.alerts = AlertFacts::of(&scheduled);
+                    if ctx.alerts().set(self.alerts.clone()) {
+                        ctx.redraw_all();
+                    }
                 }
             }
             _ => {}

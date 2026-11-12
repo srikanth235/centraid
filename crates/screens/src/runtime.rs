@@ -68,6 +68,8 @@ struct State {
     onward: Option<(u64, Handed)>,
     /// What the screens and the follow coordinator tell one another (`crate::follow`).
     follows: crate::follow::Follows,
+    /// What the phone said about alerts, for every screen's row (`kit::permission::AlertBoard`).
+    alerts: crate::kit::permission::AlertBoard,
     band: Option<BandFn>,
     next_instance: u64,
     next_effect: u64,
@@ -131,6 +133,7 @@ impl Runtime {
                 handing: None,
                 onward: None,
                 follows: crate::follow::Follows::default(),
+                alerts: crate::kit::permission::AlertBoard::default(),
                 band: None,
                 next_instance: 1,
                 next_effect: 1,
@@ -348,6 +351,7 @@ impl Runtime {
         let mut env = state.env.clone();
         env.units = state.units.as_ref().and_then(crate::kit::quantity::stored);
         let follows = state.follows.clone();
+        let alerts = state.alerts.clone();
         let Some(instance) = state.instances.get_mut(&id) else {
             return;
         };
@@ -358,6 +362,7 @@ impl Runtime {
             .map(|(_, handed)| handed.clone());
         let ctx = Ctx::new(core, &env)
             .with_follows(follows.clone())
+            .with_alerts(alerts.clone())
             .with_handed(handed);
         let effects = instance.screen.update(event, &ctx);
         let done = ctx.finish();
@@ -400,7 +405,9 @@ impl Runtime {
         instance.screen.effects_numbered(&numbers);
 
         if !instance.service {
-            let view_ctx = Ctx::new(core, &env).with_follows(follows);
+            let view_ctx = Ctx::new(core, &env)
+                .with_follows(follows)
+                .with_alerts(alerts);
             let mut view = instance.screen.view(&view_ctx);
             view.instance = id;
             view.revision = 0;

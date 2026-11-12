@@ -840,7 +840,13 @@ impl Screen for Editor {
         }
         let content = match (&self.page, &self.draft) {
             (Page::Ready { .. }, Some(draft)) => Some(wire::agenda_editor_state::Content::Data(
-                Box::new(self.data(locale, ctx.hour_cycle(), ctx.zone(), draft)),
+                Box::new(self.data(
+                    locale,
+                    ctx.hour_cycle(),
+                    ctx.zone(),
+                    ctx.alerts().get().line(locale),
+                    draft,
+                )),
             )),
             _ => None,
         };
@@ -891,6 +897,7 @@ impl Editor {
         locale: Locale,
         cycle: HourCycle,
         device_zone: &str,
+        alert_line: Option<String>,
         draft: &Draft,
     ) -> wire::AgendaEditorData {
         let Some(loaded) = &self.loaded else {
@@ -1052,8 +1059,11 @@ impl Editor {
             // AN ALERT NEEDS A MOMENT: an all-day event never sounds one, and the row says so.
             reminder_note: if draft.all_day {
                 notify_words::no_alert_without_time(locale)
-            } else {
+            } else if draft.reminder_key == REMINDER_NONE {
                 String::new()
+            } else {
+                // WHAT THE PHONE SAYS ABOUT ALERTS (#1188, NA1): said once an alert is set.
+                alert_line.unwrap_or_default()
             },
             scope_armed: saved_scopes.iter().any(|c| c.selected && c.enabled),
             scopes: saved_scopes,
