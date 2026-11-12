@@ -60,6 +60,8 @@ message BackupWaitingRow {
     REASON_REFUSED = 9;
     // The gateway no longer knows this phone's token: pair it again.
     REASON_PAIR_AGAIN = 10;
+    // This phone has too little free space to copy its vault.
+    REASON_NO_ROOM = 11;
   }
 }
 

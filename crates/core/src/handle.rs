@@ -179,6 +179,10 @@ pub struct HandleState {
     /// not queued (`phone.proto`): a background window's call must not sit
     /// behind a foreground pass it cannot see and expire holding nothing.
     draining: AtomicBool,
+    /// Snapshots copied from the vault by this core, and the pages those copies held: counts a
+    /// test states what a pass cost by, never how long it took.
+    copies: AtomicU64,
+    pages_copied: AtomicU64,
     /// How far a running "Check my backup" has got (#1188, B6).
     check_progress: crate::phone::check::Progress,
     /// One check at a time.
@@ -352,9 +356,12 @@ impl Core {
         };
         let registry = Arc::new(Registry::with_system_commands()?);
         let launched = std::time::SystemTime::now();
+        let plane = crate::phone::Plane::of(&path).with_ceiling(spool_ceiling);
+        // A SNAPSHOT'S COPY OF THE VAULT A CRASH LEFT IN THE CLEAR goes before anything else runs.
+        plane.sweep_scratch();
         let handle = Handle::new(|me| HandleState {
             me,
-            plane: crate::phone::Plane::of(&path).with_ceiling(spool_ceiling),
+            plane,
             path,
             keys,
             vault: Arc::new(Mutex::new(vault)),
@@ -372,6 +379,8 @@ impl Core {
             bytes: Mutex::new(None),
             runtime: Mutex::new(None),
             draining: AtomicBool::new(false),
+            copies: AtomicU64::new(0),
+            pages_copied: AtomicU64::new(0),
             check_progress: crate::phone::check::Progress::default(),
             checking: AtomicBool::new(false),
             reconciled: AtomicBool::new(false),
@@ -1466,8 +1475,8 @@ impl HandleState {
                 self.locker_session(request)?,
             ))),
             // THE PASS (#1080). Not through `with_vault` for its whole length:
-            // the vault is held for the snapshot's copy and the reads a pass
-            // makes, never across the network, so a screen's reads go on while
+            // the vault is held for the reads a pass makes and for the instant
+            // a snapshot's copy begins, never for the copy or across the network, so a screen's reads go on while
             // a backup runs.
             K::Drain(request) => Ok(response(wire::response::Kind::Drain(
                 self.drain(request, cancellation)?,
@@ -1752,6 +1761,30 @@ impl HandleState {
     #[doc(hidden)]
     pub fn pretend_a_pass_is_running(&self, running: bool) {
         self.draining.store(running, Ordering::SeqCst);
+    }
+
+    /// Pretend the phone's volume has `bytes` free (`None`: read it again): see
+    /// [`Self::pretend_a_pass_is_running`].
+    #[doc(hidden)]
+    pub fn pretend_free_bytes(&self, bytes: Option<u64>) {
+        self.plane.pretend_free_bytes(bytes);
+    }
+
+    /// Record one vault copy of `pages` pages.
+    pub(crate) fn note_copy(&self, pages: u32) {
+        self.copies.fetch_add(1, Ordering::Relaxed);
+        self.pages_copied
+            .fetch_add(u64::from(pages), Ordering::Relaxed);
+    }
+
+    /// How many copies of the vault this core has taken, and how many pages they held.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn copies_taken(&self) -> (u64, u64) {
+        (
+            self.copies.load(Ordering::Relaxed),
+            self.pages_copied.load(Ordering::Relaxed),
+        )
     }
 
     /// Pretend a check is running (or is not): see [`Self::pretend_a_pass_is_running`].

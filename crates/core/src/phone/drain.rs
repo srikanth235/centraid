@@ -67,6 +67,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use centraid_api_proto::core_v1 as wire;
@@ -916,8 +917,20 @@ fn pass_over(
     if conditions.may_move(Kind::Records) && !live.is_empty() {
         let owed = snapshot_owed(ledger)?;
         let mut take = false;
-        for reached in &live {
-            take |= snapshot_due(ledger, reached.store.gateway_id(), owed)?;
+        // A VAULT THAT HAS NOT CHANGED SINCE A SNAPSHOT EVERY GATEWAY HOLDS WHOLE IS NOT COPIED
+        // AGAIN, however long ago that was and whoever asked (#1188, design 6).
+        if let Some(acked) = newest_stands(handle, ledger, &live)? {
+            // ASKED FOR, IT IS ANSWERED with the gateway's own time for the head it holds.
+            if owed {
+                pass.acked_at_ms = i64::try_from(acked).ok();
+            }
+            ledger
+                .set_meta(SNAPSHOT_OWED_KEY, "0")
+                .map_err(plane_error)?;
+        } else {
+            for reached in &live {
+                take |= snapshot_due(ledger, reached.store.gateway_id(), owed)?;
+            }
         }
         if round.records(take, &files, &mut live, budget, pass)? {
             return Ok(());
@@ -1082,7 +1095,7 @@ impl Round<'_> {
     ) -> Result<bool> {
         if take {
             let stores: Vec<&GatewayStore> = live.iter().map(|reached| &reached.store).collect();
-            let failures = take_snapshot(
+            let failures = match take_snapshot(
                 self.handle,
                 self.keyring,
                 self.plane,
@@ -1090,12 +1103,27 @@ impl Round<'_> {
                 self.spool,
                 &stores,
                 budget,
-            )?;
-            if failures.len() < stores.len() {
-                self.ledger
-                    .set_meta(SNAPSHOT_OWED_KEY, "0")
-                    .map_err(plane_error)?;
-            }
+            )? {
+                // NOT ENOUGH ROOM TO COPY THE VAULT: the snapshot stays owed, the status says why
+                // (`WAIT_REASON_NO_ROOM`), and the rest of the pass runs.
+                Taken::NoRoom => {
+                    self.ledger
+                        .set_meta(NO_ROOM_KEY, "1")
+                        .map_err(plane_error)?;
+                    Vec::new()
+                }
+                Taken::Done(failures) => {
+                    self.ledger
+                        .set_meta(NO_ROOM_KEY, "0")
+                        .map_err(plane_error)?;
+                    if failures.len() < stores.len() {
+                        self.ledger
+                            .set_meta(SNAPSHOT_OWED_KEY, "0")
+                            .map_err(plane_error)?;
+                    }
+                    failures
+                }
+            };
             for (id, error) in failures {
                 if let Some(at) = live
                     .iter()
@@ -1271,7 +1299,8 @@ fn snapshot_due(ledger: &Ledger, gateway_id: &str, wanted: bool) -> Result<bool>
 
 /// Copy the vault, describe it, ask every gateway what it holds of it, and spool the union
 /// of what they lack: a part is sealed once and sent to each gateway that lacks it. The vault
-/// is held for the copy alone. A snapshot taken before this one that never reached a head is
+/// is held to read where the copy comes from and not for the copy, which a reader of its own
+/// makes in steps; the copy is deleted the moment the last range is spooled. A snapshot taken before this one that never reached a head is
 /// forgotten, and its parts this one does not share leave the queue.
 ///
 /// Answers the gateways whose own questions failed (by id), which the caller takes out of the
@@ -1284,12 +1313,19 @@ fn take_snapshot(
     spool: &Spool,
     stores: &[&GatewayStore],
     budget: u64,
-) -> Result<Vec<(String, CoreError)>> {
-    let scratch = plane.scratch_dir();
-    // A COPY A CRASH LEFT is the only thing that can be here: passes are one
-    // at a time (`Handle`'s drain guard).
-    let _ = std::fs::remove_dir_all(&scratch);
-    let copied = handle.with_vault(|vault| snapshot::copy(vault, &scratch).map_err(plane_error))?;
+) -> Result<Taken> {
+    // A COPY A CRASH LEFT is the only thing that can be here: passes are one at a time
+    // (`Handle`'s drain guard). The guard removes the directory on every way out of this
+    // function, the error and the panic included.
+    let scratch = Scratch::begin(plane.scratch_dir());
+    // THE VAULT IS HELD FOR THIS READ ALONE; the copy runs on a reader of its own, in steps.
+    let source = handle.with_vault(|vault| snapshot::source(vault).map_err(plane_error))?;
+    if plane.free_bytes() < super::check::scratch_budget(source.len) {
+        return Ok(Taken::NoRoom);
+    }
+    let (copied, stats) =
+        snapshot::copy_from(&source, scratch.path(), &mut |_| Ok(())).map_err(plane_error)?;
+    handle.note_copy(stats.pages);
     let outcome = (|| -> Result<Vec<(String, CoreError)>> {
         let taken = snapshot::describe(&copied, &keyring.backup, &keyring.vault_hex(), APP)
             .map_err(plane_error)?;
@@ -1325,6 +1361,8 @@ fn take_snapshot(
             now_ms(),
         )
         .map_err(plane_error)?;
+        // THE COPY HOLDS THE VAULT IN THE CLEAR: it goes the moment the last range is spooled.
+        scratch.clear();
         let mut keep = taken.manifest.range_names();
         keep.insert(taken.manifest_name);
         let queued: BTreeSet<Name> = ledger
@@ -1357,8 +1395,84 @@ fn take_snapshot(
         }
         Ok(failures)
     })();
-    let _ = std::fs::remove_dir_all(&scratch);
-    outcome
+    scratch.clear();
+    outcome.map(Taken::Done)
+}
+
+/// What a pass found when it came to take a snapshot.
+enum Taken {
+    /// Taken and spooled; the gateways whose own questions failed, by id.
+    Done(Vec<(String, CoreError)>),
+    /// This phone has too little free space to copy its vault.
+    NoRoom,
+}
+
+/// The ledger's `meta` key that says the last snapshot could not be taken for want of room.
+pub(super) const NO_ROOM_KEY: &str = "pass.no_room";
+
+/// **THE SCRATCH COPY'S KEEPER.** The directory goes when this is dropped, so no way out of a pass —
+/// an error, a panic, an early return — leaves the vault in the clear on disk; a crash is the one
+/// way left, and the next core open removes what it left (`Plane::spool`).
+pub(super) struct Scratch(PathBuf);
+
+impl Scratch {
+    /// Clear whatever is at `dir` and keep it.
+    pub(super) fn begin(dir: PathBuf) -> Self {
+        let _ = std::fs::remove_dir_all(&dir);
+        Self(dir)
+    }
+
+    pub(super) fn path(&self) -> &Path {
+        &self.0
+    }
+
+    /// Remove the directory now.
+    pub(super) fn clear(&self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        self.clear();
+    }
+}
+
+/// Whether the vault shows what the newest snapshot was taken from and every gateway in the pass
+/// holds that snapshot whole under its head: nothing a copy could add.
+fn newest_stands(handle: &Handle, ledger: &Ledger, live: &[&Reached]) -> Result<Option<u64>> {
+    let all = ledger.snapshots().map_err(plane_error)?;
+    let Some(newest) = all.last() else {
+        return Ok(None);
+    };
+    // A SNAPSHOT THIS PHONE NEVER SAW ACKNOWLEDGED (a restore's) is not one it stands on.
+    if newest.acked_ms.is_none() {
+        return Ok(None);
+    }
+    let manifest = Manifest::from_json(newest.manifest_json.as_bytes()).map_err(plane_error)?;
+    let names = names_of_snapshot(newest)?;
+    let mut oldest: Option<u64> = None;
+    for reached in live {
+        let id = reached.store.gateway_id();
+        let confirmed = ledger.confirmed_names(id).map_err(plane_error)?;
+        // A GATEWAY THIS PHONE HAS SET NO HEAD AT (a restored phone's first pass) is owed one.
+        if ledger.rolled_back(id).map_err(plane_error)?
+            || super::records_at_gateway(ledger, id)?.is_none()
+            || ledger.head(id).map_err(plane_error)? != Some(newest.name)
+            || !names.iter().all(|name| confirmed.contains(name))
+        {
+            return Ok(None);
+        }
+        // THE GATEWAY'S OWN TIME for the head it already holds: what a pass that copied nothing answers.
+        let acked = ledger.head_acked(id).map_err(plane_error)?;
+        oldest = match (oldest, acked) {
+            (Some(held), Some(at)) => Some(held.min(at)),
+            (held, at) => held.or(at),
+        };
+    }
+    let same =
+        handle.with_vault(|vault| snapshot::unchanged(vault, &manifest).map_err(plane_error))?;
+    Ok(if same { oldest } else { None })
 }
 
 /// A plane error from one gateway's question, as the pass's error for that gateway.
@@ -2213,6 +2327,57 @@ pub fn reconcile(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn plant(dir: &Path) {
+        std::fs::create_dir_all(dir).expect("makes");
+        std::fs::write(dir.join("snapshot-1-a.db"), b"the vault in the clear").expect("writes");
+    }
+
+    /// **THE SCRATCH COPY HAS NO WAY OUT THAT KEEPS IT**: normal, early error and panic each
+    /// leave the directory gone; a crash is the next open's (`backup_scratch.rs`).
+    #[test]
+    fn the_scratch_copy_goes_on_every_way_out_of_a_pass() {
+        let root = tempfile::tempdir().expect("a directory");
+        let dir = root.path().join("vault.scratch");
+
+        {
+            let _kept = Scratch::begin(dir.clone());
+            plant(&dir);
+            assert!(dir.exists());
+        }
+        assert!(!dir.exists(), "the end of the pass");
+
+        let failing = || -> Result<()> {
+            let _kept = Scratch::begin(dir.clone());
+            plant(&dir);
+            Err(CoreError::Invariant {
+                context: "the spool refused".to_owned(),
+            })
+        };
+        assert!(failing().is_err());
+        assert!(!dir.exists(), "an error out of the pass");
+
+        let panicked = std::panic::catch_unwind(|| {
+            let _kept = Scratch::begin(dir.clone());
+            plant(&dir);
+            panic!("the pass died");
+        });
+        assert!(panicked.is_err());
+        assert!(!dir.exists(), "a panic out of the pass");
+
+        let kept = Scratch::begin(dir.clone());
+        plant(&dir);
+        kept.clear();
+        assert!(!dir.exists(), "the moment the last range is spooled");
+
+        plant(&dir);
+        let swept = Scratch::begin(dir.clone());
+        assert!(
+            !dir.exists(),
+            "what a crash left is cleared when a pass begins"
+        );
+        drop(swept);
+    }
 
     const RULES: [wire::TransferRule; 3] = [
         wire::TransferRule::WifiOnly,

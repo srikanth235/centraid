@@ -2948,7 +2948,7 @@ fn link_missing(root: &Path, app: &str) -> Vec<String> {
 /// **BACKUP** (#1188, Part B). Backup is the vault's, so no app has a row; each promise names the
 /// tests that prove it, and the rule fails when a named test is gone, renamed or `#[ignore]`d.
 /// `(promise, [(file, test)])`.
-pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 3] = [
+pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 5] = [
     (
         "every paired backup device receives every pass",
         &[
@@ -2989,6 +2989,40 @@ pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 3] = [
             (
                 "crates/core/tests/backup_verify.rs",
                 "a_gateway_that_lies_about_exists_is_found_and_then_refilled",
+            ),
+        ],
+    ),
+    (
+        "a backup never holds the vault's writer for a copy, and the copy goes once spooled",
+        &[
+            (
+                "crates/vault/src/backup/snapshot.rs",
+                "a_commit_between_steps_is_not_blocked_and_is_in_the_next_copy",
+            ),
+            (
+                "crates/core/tests/backup_scratch.rs",
+                "a_commit_lands_between_steps_of_a_copy_a_pass_would_take",
+            ),
+            (
+                "crates/core/tests/backup_scratch.rs",
+                "a_copy_a_crash_left_is_gone_at_the_next_open",
+            ),
+            (
+                "crates/core/src/phone/drain.rs",
+                "the_scratch_copy_goes_on_every_way_out_of_a_pass",
+            ),
+        ],
+    ),
+    (
+        "a phone with no room says so, and an unchanged vault is not copied again",
+        &[
+            (
+                "crates/core/tests/backup_scratch.rs",
+                "a_phone_with_no_room_says_so_and_catches_up_when_it_has_some",
+            ),
+            (
+                "crates/core/tests/backup_scratch.rs",
+                "a_second_pass_with_no_write_copies_nothing",
             ),
         ],
     ),

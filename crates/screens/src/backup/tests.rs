@@ -453,6 +453,29 @@ fn a_gateway_that_refused_for_room_and_one_that_forgot_this_phone_have_rows_of_t
 }
 
 #[test]
+fn a_phone_with_no_room_to_copy_its_vault_says_so_in_a_row_of_its_own() {
+    let line = lined(
+        &wire::BackupStatusResponse {
+            content_confirmed: 1_200,
+            waiting: waiting(&[(wire::WaitReason::NoRoom, 212)]),
+            ..steady()
+        },
+        false,
+    );
+    assert_eq!(
+        line.waiting
+            .iter()
+            .map(|row| row.sentence.as_str())
+            .collect::<Vec<_>>(),
+        vec!["212 waiting. This phone is too full to back up. Free some space."]
+    );
+    assert_eq!(
+        wire::backup_waiting_row::Reason::NoRoom as i32,
+        wire::WaitReason::NoRoom as i32
+    );
+}
+
+#[test]
 fn every_gateway_refusing_this_phones_token_reads_pair_again_never_all_backed_up() {
     // THE LEDGER STILL SAYS EVERYTHING IS ACKNOWLEDGED: nothing waits, so no row
     // can say otherwise; the mark on the gateway does.

@@ -31,7 +31,7 @@ pub const CLOCK_TOLERANCE_MS: i64 = 5 * MINUTE_MS;
 pub const BACKLOG_STOOD_MS: i64 = DAY_MS;
 
 /// Every reason that can hold items, in the order the line lists them.
-const REASONS: [wire::WaitReason; 10] = [
+const REASONS: [wire::WaitReason; 11] = [
     wire::WaitReason::Wifi,
     wire::WaitReason::Charger,
     wire::WaitReason::Gateway,
@@ -42,6 +42,7 @@ const REASONS: [wire::WaitReason; 10] = [
     wire::WaitReason::Untrusted,
     wire::WaitReason::Refused,
     wire::WaitReason::PairAgain,
+    wire::WaitReason::NoRoom,
 ];
 
 /// No paired backup device has answered within [`STALE_MS`] (or none ever has). One predicate for
@@ -391,6 +392,7 @@ fn waiting_words(locale: Locale, reason: wire::WaitReason) -> String {
         R::Untrusted => words::backup_wait_untrusted(locale),
         R::Refused => words::backup_wait_refused(locale),
         R::PairAgain => words::backup_wait_pair_again(locale),
+        R::NoRoom => words::backup_wait_no_room(locale),
     }
 }
 
@@ -411,6 +413,7 @@ fn row_reason(reason: wire::WaitReason) -> wire::backup_waiting_row::Reason {
         R::Untrusted => W::Untrusted,
         R::Refused => W::Refused,
         R::PairAgain => W::PairAgain,
+        R::NoRoom => W::NoRoom,
     }
 }
 

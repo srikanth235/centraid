@@ -292,7 +292,8 @@ impl Vault {
         // **The one connection is SQLite's single writer** (D-1020-D2-9): reads
         // are `query_only` toggled on this same connection ([`Self::read`])
         // rather than served from a pool, and nothing else in the process
-        // opens the file for writing.
+        // opens the file for writing. (The snapshot plane opens it READ-ONLY, on a reader of its
+        // own, to copy it without holding this one: `backup::snapshot::copy_from`.)
         Self::apply_pragmas(&connection)?;
         crate::log::guard::install_without_rowid_census(&connection)?;
         crate::history::install(&connection)?;

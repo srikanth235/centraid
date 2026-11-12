@@ -540,6 +540,9 @@ enum WaitReason {
   // its operator revoked the token — so nothing reaches it until the member
   // pairs again (`Destination.pair_again`; #1080, the sweep's F2).
   WAIT_REASON_PAIR_AGAIN = 10;
+  // This phone has too little free space to copy its vault for a snapshot
+  // (#1188, design 6). Not time and not the gateway: the member frees space.
+  WAIT_REASON_NO_ROOM = 11;
 }
 
 // ----------------------------------------------------------- destinations --

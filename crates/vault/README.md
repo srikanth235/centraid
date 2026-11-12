@@ -34,7 +34,7 @@ cargo run -p centraid-vault --bin export-ontology-page   # the published page's 
 | --- | --- |
 | `naming` | The backup keys from the vault's root key, and the names the vault's content implies. |
 | `files` | Every file the vault knows by hash, read from `blob` (which includes each derivative's own bytes), with what a pass decides by. |
-| `snapshot` | The page-identical copy (`sqlite3_backup`, on the vault's own connection, off the request path once copied), its ranges and manifest, and the census counted on the copy; plan, spool, settle. |
+| `snapshot` | The page-identical copy (`sqlite3_backup` in steps from a read-only reader pinned to one moment, so the writer is never held for it; private, and gone once spooled), its ranges and manifest, and the census counted on the copy; plan, spool, settle. |
 | `store` | The `Store` trait one destination answers, and `MemoryStore`. |
 | `ledger` | `<stem>.backup.db` beside the vault, never inside it: destinations, the queue, confirmations, snapshots, `local_bytes`. |
 | `spool` | `<stem>.spool/`: sealed parts waiting to move, under a byte budget. |

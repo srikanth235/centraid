@@ -139,6 +139,8 @@ pub struct Plane {
     /// The status read draws a video it is sealing as being prepared, not as
     /// waiting for a charger the tap already let it past ([`Plane::ask`]).
     asked: std::sync::atomic::AtomicBool,
+    /// Free bytes a test pretends the volume has; `u64::MAX` reads the volume.
+    pretend_free: std::sync::atomic::AtomicU64,
 }
 
 impl Plane {
@@ -150,7 +152,17 @@ impl Plane {
             spool: std::sync::Mutex::new(None),
             ceiling: centraid_vault::backup::spool::SPOOL_CEILING_BYTES,
             asked: std::sync::atomic::AtomicBool::new(false),
+            pretend_free: std::sync::atomic::AtomicU64::new(u64::MAX),
         }
+    }
+
+    /// Pretend the volume has `bytes` free (`None`: read it again). For tests only.
+    #[doc(hidden)]
+    pub fn pretend_free_bytes(&self, bytes: Option<u64>) {
+        self.pretend_free.store(
+            bytes.unwrap_or(u64::MAX),
+            std::sync::atomic::Ordering::SeqCst,
+        );
     }
 
     /// Mark a pass the member asked for as running until the answer drops.
@@ -193,6 +205,16 @@ impl Plane {
     #[must_use]
     pub fn scratch_dir(&self) -> PathBuf {
         self.vault_file.with_extension("scratch")
+    }
+
+    /// Remove a snapshot's copy of the vault a crash left in `<stem>.scratch/`. A core calls this
+    /// when it opens, before any pass can begin one.
+    pub fn sweep_scratch(&self) {
+        if let Err(error) = std::fs::remove_dir_all(self.scratch_dir())
+            && error.kind() != std::io::ErrorKind::NotFound
+        {
+            tracing::warn!(%error, "a snapshot's scratch copy could not be removed");
+        }
     }
 
     /// Open the ledger, creating it when absent.
@@ -274,7 +296,7 @@ impl Plane {
             let _ = &dir;
             0_u64
         };
-        free
+        free.min(self.pretend_free.load(std::sync::atomic::Ordering::SeqCst))
     }
 }
 
@@ -724,6 +746,11 @@ pub(crate) fn standing(
         asked: asking,
         ..drain::Conditions::remembered(ledger)?
     };
+    // THE LAST SNAPSHOT COULD NOT BE COPIED for want of room on this phone (`drain::NO_ROOM_KEY`).
+    let no_room = ledger
+        .meta(drain::NO_ROOM_KEY)
+        .map_err(plane_error)?
+        .is_some_and(|text| text == "1");
     let mut replicas: Vec<Replica> = Vec::new();
     for destination in ledger.destinations().map_err(plane_error)? {
         if ledger
@@ -793,6 +820,8 @@ pub(crate) fn standing(
             Some(replica) => {
                 if let Some(reason) = replica.reach {
                     reason
+                } else if no_room {
+                    wire::WaitReason::NoRoom
                 } else if held(replica) {
                     // ONLY THE ROW WAITS, for the next snapshot: time, or the link.
                     if conditions.may_move(drain::Kind::Records) {

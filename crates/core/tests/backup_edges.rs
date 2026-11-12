@@ -498,6 +498,13 @@ fn what_the_gateway_lost_is_sent_again_by_the_next_launch() {
     // open, and take the head again. A second close writes nothing.
     drop(phone);
     let phone = reopen(&path);
+    // A WRITE, because a vault no commit has changed is not copied again (#1188) and the planner's
+    // statistics the close wrote are not a commit: the head must be of the file the next launch finds.
+    note(
+        &phone,
+        "Kept too",
+        "so the head is taken from the file as closed once",
+    );
     drain(&phone, at_home());
 
     // THE FILES GO: the photograph's, the thumbnail's, and one range of the
@@ -1408,7 +1415,14 @@ fn an_item_deleted_after_backup_is_collected_once_purged() {
     );
     // Collection runs when retention drops a snapshot; two more snapshots
     // drop one, wherever midnight falls between them.
-    for _ in 0..2 {
+    for round in 0..2 {
+        // A WRITE EACH TIME: a vault no commit has changed is not copied again (#1188), and
+        // retention counts snapshots.
+        note(
+            &phone,
+            &format!("Round {round}"),
+            "a change, so a snapshot is owed",
+        );
         let next = drain(
             &phone,
             wire::DrainRequest {
@@ -1677,6 +1691,8 @@ fn a_deleted_file_stays_while_a_kept_snapshot_may_name_it() {
         .expect("one")
         .name;
     clock.advance_ms(60 * 60 * 1000);
+    // A vault no commit has changed is not copied again (#1188): the hour needs a change in it.
+    note(&phone, "An hour later", "so the next snapshot is owed");
     drain(&phone, at_home());
     let newest = ledger(&path)
         .snapshots()
