@@ -2776,6 +2776,70 @@
       "w": 390,
       "x": 2350,
       "y": 34200
+    },
+    "BackupBehind.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · One backup device behind (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 0
+    },
+    "BackupBehindFull.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · A backup device is full (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 940
+    },
+    "BackupRolledBack.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · A backup device holds an older backup (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 1880
+    },
+    "BackupCheckRunning.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Check my backup, running (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 2820
+    },
+    "BackupCheck.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Check my backup, result (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 3760
+    },
+    "BackupStaleNotice.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Backup is stale: notification (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 4700
+    },
+    "RestoreOlder.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Restore offers an older backup (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 5640
+    },
+    "RecoveryKeyPrompt.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Save your recovery key, after the first backup (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 6580
     }
   },
   "createdOnFiles": {
@@ -3583,7 +3647,15 @@
     "ChatRename.dc.html",
     "ChatRenameDark.dc.html",
     "ChatDelete.dc.html",
-    "ChatDeleteDark.dc.html"
+    "ChatDeleteDark.dc.html",
+    "BackupBehind.dc.html",
+    "BackupBehindFull.dc.html",
+    "BackupRolledBack.dc.html",
+    "BackupCheckRunning.dc.html",
+    "BackupCheck.dc.html",
+    "BackupStaleNotice.dc.html",
+    "RestoreOlder.dc.html",
+    "RecoveryKeyPrompt.dc.html"
   ],
   "pages": [
     {

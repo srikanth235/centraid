@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Check my backup, result (dark)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #0E0D0C; font-family: Geist, system-ui, sans-serif; color: #F2EFEA;">
+<div style="display:flex;align-items:center;gap:8px;margin:56px 12px 0;height:44px;"><button aria-label="Back" style="width:44px;height:44px;border-radius:22px;border:1px solid #3A3733;background:#1F1E1C;display:flex;align-items:center;justify-content:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button><span style="font-size:17px;font-weight:600;">Check my backup</span></div>
+<p style="margin: 14px 20px 0; font-size: 15px; line-height: 1.42; color: #C9C4BA;">Opens each backup in a spare copy to prove it restores. Your vault isn’t touched.</p>
+<div style="font-size: 13px; color: #A39E95; margin: 18px 32px 6px;">RESULT</div>
+<div style="margin: 0 16px; background: #1F1E1C; border-radius: 16px;">
+<div style="display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-bottom: 1px solid #2C2A27;"><span style="width: 30px; height: 30px; border-radius: 8px; background: #2F8556; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg></span><div style="flex-grow: 1; min-width: 0;"><div style="font-size: 16px;">Srikanth’s Mac mini</div><div style="font-size: 13px; color: #A39E95; line-height: 1.35;">Opens fine · Tuesday 10 November, 21:40</div></div></div>
+<div style="display: flex; align-items: center; gap: 12px; padding: 11px 14px;"><span style="width: 30px; height: 30px; border-radius: 8px; background: #CD483D; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></span><div style="flex-grow: 1; min-width: 0;"><div style="font-size: 16px;">Office NAS</div><div style="font-size: 13px; color: #A39E95; line-height: 1.35;">Newest backup won’t open · Newest that does: Sunday 8 November, 21:40</div></div></div>
+</div>
+<div style="margin: 16px 16px 0;"><button style="width:100%;height:50px;border-radius:25px;border:none;background:#3A3733;color:#FFFFFF;font-weight:600;font-size:16px;">Back up now</button></div>
+<div style="margin: 10px 16px 0;"><button style="width:100%;height:46px;border-radius:23px;border:1px solid #3A3733;background:#1F1E1C;font-weight:600;font-size:15px;color:#7FC4B8;">Check again</button></div>
+<div style="position:absolute;left:20px;right:20px;bottom:40px;font-size:14px;color:#C9C4BA;">Checked just now</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
