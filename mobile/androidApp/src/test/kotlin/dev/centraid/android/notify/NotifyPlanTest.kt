@@ -4,55 +4,62 @@ import centraid.core.v1.PendingNotification
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import java.io.File
 
 /**
  * WHAT THE NOTIFICATION PERFORMER OWES RUST'S WHOLE SET (#1173): which alarms go, which are set, which
  * are posted now, which kind of alarm the platform gives and when the permission is asked. Counts and
  * ids only; no clock is waited on.
  */
+@RunWith(RobolectricTestRunner::class)
 class NotifyPlanTest {
     private fun item(id: String, at: Long = 10_000L, immediate: Boolean = false, title: String = "t") =
         PendingNotification(notification_id = id, fire_at_ms = at, immediate = immediate, title = title)
 
+    /**
+     * THE ONE FIXTURE BOTH SHELLS READ (`contracts/notify/reconcile-cases.json`): each case is a set, the
+     * delivered ids still live, what the OS holds pending and showing, and the plan that follows.
+     */
     @Test
-    fun anIdNoLongerWantedIsCancelledAndTheRestAreSetAgain() {
-        val plan = NotifyPlan.diff(
-            recorded = listOf(item("a"), item("b")),
-            wanted = listOf(item("b"), item("c")),
-            nowMs = 1_000L,
-        )
-        assertEquals(listOf("a"), plan.cancel)
-        assertEquals(listOf("b", "c"), plan.arm.map { it.notification_id })
-        assertTrue(plan.drop.isEmpty())
-        assertTrue(plan.post.isEmpty())
+    fun theSharedFixtureHoldsOnThisShell() {
+        val root = JSONObject(File("../../contracts/notify/reconcile-cases.json").readText())
+        val now = root.getLong("now_ms")
+        val cases = root.getJSONArray("cases")
+        assertTrue("the fixture has cases", cases.length() >= 9)
+        for (n in 0 until cases.length()) {
+            val case = cases.getJSONObject(n)
+            val name = case.getString("name")
+            val wanted = case.getJSONArray("wanted").objects().map {
+                item(it.getString("id"), at = it.getLong("fire_at_ms"), immediate = it.optBoolean("immediate"))
+            }
+            val plan = NotifyPlan.reconcile(
+                wanted = wanted,
+                live = case.getJSONArray("live").strings(),
+                pending = case.getJSONArray("pending").strings(),
+                showing = case.getJSONArray("showing").strings(),
+                nowMs = now,
+            )
+            val expected = case.getJSONObject("plan")
+            assertEquals(name, expected.getJSONArray("removePending").strings(), plan.removePending)
+            assertEquals(name, expected.getJSONArray("removeShowing").strings(), plan.removeShowing)
+            assertEquals(name, expected.getJSONArray("schedule").strings(), plan.schedule.map { it.notification_id })
+            assertEquals(name, expected.getJSONArray("post").strings(), plan.post.map { it.notification_id })
+        }
     }
 
-    @Test
-    fun aMomentAlreadyPastIsDroppedNotSet() {
-        val plan = NotifyPlan.diff(recorded = listOf(item("a", at = 500L)), wanted = listOf(item("a", at = 500L)), nowMs = 1_000L)
-        assertEquals(listOf("a"), plan.drop)
-        assertTrue(plan.arm.isEmpty())
-        assertTrue("it is still wanted, so its delivered notification stays", plan.cancel.isEmpty())
-        assertTrue(NotifyPlan.kept(listOf(item("a", at = 500L), item("b")), 1_000L).map { it.notification_id } == listOf("b"))
-    }
+    private fun JSONArray.strings(): List<String> = (0 until length()).map { getString(it) }
+
+    private fun JSONArray.objects(): List<JSONObject> = (0 until length()).map { getJSONObject(it) }
 
     @Test
-    fun anImmediateOneIsPostedOnceAndNotSetAsAnAlarm() {
-        val receipt = item("r", immediate = true)
-        val first = NotifyPlan.diff(recorded = emptyList(), wanted = listOf(receipt), nowMs = 1_000L)
-        assertEquals(listOf("r"), first.post.map { it.notification_id })
-        assertTrue(first.arm.isEmpty())
-        val again = NotifyPlan.diff(recorded = listOf(receipt), wanted = listOf(receipt), nowMs = 2_000L)
-        assertTrue(again.post.isEmpty())
-        val changed = NotifyPlan.diff(recorded = listOf(receipt), wanted = listOf(receipt.copy(title = "other")), nowMs = 2_000L)
-        assertEquals(1, changed.post.size)
-    }
-
-    @Test
-    fun anEmptySetCancelsEverythingHeld() {
-        val plan = NotifyPlan.diff(recorded = listOf(item("a"), item("b")), wanted = emptyList(), nowMs = 1_000L)
-        assertEquals(listOf("a", "b"), plan.cancel)
+    fun theRecordKeepsWhatIsStillToComeAndTheImmediates() {
+        val kept = NotifyPlan.kept(listOf(item("a", at = 500L), item("b"), item("r", immediate = true)), 1_000L)
+        assertEquals(listOf("b", "r"), kept.map { it.notification_id })
     }
 
     @Test

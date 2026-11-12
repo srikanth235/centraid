@@ -1217,6 +1217,57 @@ pub fn load_reminders(
     ))
 }
 
+/// `reminders`, among the tasks the alert index names (#1188): the same rows for exactly those
+/// ids, the open and live ones that carry a lead time and a due. The window is the index's, so a
+/// vault of any size reads only the few tasks that fire next.
+///
+/// # Errors
+///
+/// A door refusal becomes the payload's denial; a reached bound is an `Err`.
+pub fn load_reminders_among(
+    door: &dyn PageDoor,
+    ids: &[String],
+    now: &str,
+    zone: &FireZone,
+) -> KitResult<(RemindersData, Option<Denial>)> {
+    let window = ids.len().max(1);
+    let found = match live_tasks(door, "reminders.reminders.among", "id", ids) {
+        Ok(found) => found,
+        Err(KitError::Door(message)) => {
+            return Ok((
+                RemindersData {
+                    window,
+                    ..RemindersData::default()
+                },
+                Some(denial_of(message)),
+            ));
+        }
+        Err(other) => return Err(other),
+    };
+    let rows: Vec<TaskRow> = found
+        .into_iter()
+        .filter(|task| {
+            task.status == "open" && task.remind_before_min.is_some() && task.due_at.is_some()
+        })
+        .collect();
+    let task_ids: Vec<String> = rows.iter().map(|task| task.task_id.clone()).collect();
+    let decorations = read_decorations(door, &task_ids, true)?;
+    let tasks = rows
+        .iter()
+        .map(|task| family(task, &[], &decorations, now, zone))
+        .collect();
+    let (projects, _) = load_chrome(door)?;
+    Ok((
+        RemindersData {
+            tasks,
+            projects,
+            truncated: false,
+            window,
+        },
+        None,
+    ))
+}
+
 fn reminder_rows(
     door: &dyn PageDoor,
     window: usize,

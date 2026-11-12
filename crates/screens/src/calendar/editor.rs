@@ -168,6 +168,7 @@ impl Editor {
             load::calendar::Upcoming {
                 from: Some(CALENDARS_ONLY.0.to_owned()),
                 to: Some(CALENDARS_ONLY.1.to_owned()),
+                alerts: None,
             },
             |answer| match answer {
                 Answer::AgendaUpcoming(upcoming) => Some(upcoming),

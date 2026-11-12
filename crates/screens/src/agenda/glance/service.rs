@@ -191,6 +191,7 @@ fn document(ctx: &Ctx) -> (Vec<u8>, snapshot::Opens) {
         query_cal::Upcoming {
             from: Some(before),
             to: Some(after),
+            alerts: None,
         },
         |answer| match answer {
             Answer::AgendaUpcoming(upcoming) => Some(upcoming),

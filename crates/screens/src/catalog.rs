@@ -7097,6 +7097,7 @@ pub mod load {
         /// Non-cancelled events, soonest first, with the calendars they could land on, each event's calendar_id, link, reminders, its attachments and its guest list (each `{party_id, name, partstat, is_you}`, read from the event's attendee edges). Defaults to today forward; pass ISO `from`/`to` instants to read any visible range (month and week views do), including still-running multi-day events that began before `from`. A repeating event (rule set) is materialized into one row per occurrence inside the visible range, each carrying the series' real event_id, an `instance_key` for list render and the `original_start_local` an occurrence edit is keyed on; a skipped day is left out and a moved one is where it moved to. Every occurrence also carries where it falls in the request's `tz`.
         #[derive(Clone, Debug, Default)]
         pub struct Upcoming {
+            pub alerts: Option<i64>,
             pub from: Option<String>,
             pub to: Option<String>,
         }
@@ -7105,6 +7106,7 @@ pub mod load {
             pub fn request(self) -> wire::LoadRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                if let Some(it) = self.alerts { map.insert("alerts".to_owned(), whole(it)); }
                 if let Some(it) = self.from { map.insert("from".to_owned(), text(it)); }
                 if let Some(it) = self.to { map.insert("to".to_owned(), text(it)); }
                 wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
@@ -8670,6 +8672,7 @@ pub mod load {
         /// The open tasks that carry a reminder and a due, nearest stored due first, in the board's row shape (a repeating task's next period read as its due): one statement over the due index, at most a caller-sized window of them, so an old task's reminder is never pushed out by newer work. A trashed task is left out; `truncated` says more exist beyond the window.
         #[derive(Clone, Debug, Default)]
         pub struct Reminders {
+            pub alerts: Option<i64>,
             pub limit: u32,
         }
         impl Reminders {
@@ -8677,6 +8680,7 @@ pub mod load {
             pub fn request(self) -> wire::LoadRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                if let Some(it) = self.alerts { map.insert("alerts".to_owned(), whole(it)); }
                 wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, params: map, ..Default::default() }
             }
         }

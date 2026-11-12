@@ -57,6 +57,10 @@ message AgendaUpcomingRequest {
   // `from` is the first instant of TODAY IN THIS ZONE, and a floating or
   // all-day row is read in it when the lower bound asks whether it has ended.
   string tz = 3;
+  // THE ALERT INDEX (#1188): when non-zero, read ONLY the events the vault's alert
+  // index names for its next `alerts` firings, expanded over `from`..`to`, at any
+  // vault size. Zero is the ordinary window read. Used by the notification service.
+  uint32 alerts = 4;
 }
 
 // `agenda.day-context`: the birthdays a calendar grid decorates its days with.
@@ -583,6 +587,10 @@ message AgendaTaskRemindersRequest {
   // The window's size. ZERO IS THE DEFAULT (500); any other value is clamped to
   // 20…500. The answer's `truncated` says more reminders exist beyond it.
   uint32 limit = 2;
+  // THE ALERT INDEX (#1188): when non-zero, read ONLY the tasks the vault's alert
+  // index names for its next `alerts` firings (`limit` is then ignored). Zero is
+  // the ordinary window read.
+  uint32 alerts = 3;
 }
 
 // `agenda.task.smart-counts`: the Today, Overdue and Flagged counts of every open task, at any

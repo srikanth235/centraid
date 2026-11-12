@@ -184,6 +184,18 @@ A zero limit — `handoff`'s `max_bytes` or `max_parts`, `releasable`'s `limit` 
 
 Test: `the_backup_plane_doors_are_request_kinds_and_answer_an_unpaired_phone` (and, below the ABI, `crates/core/src/handle.rs` and `crates/core/tests/phone_backup.rs`, which drives every door against a real gateway)
 
+## 4h. The notify effect: a set the phone holds, delivered ones kept, presses durable
+
+`ScheduleNotifications` (effect 120, answered by `NotificationsScheduled` in effect result 120) is **declarative**: `all` is everything the app wants pending, soonest first, at most 48 plus the receipt of a button just pressed. A shell makes the OS hold exactly that and **words nothing**: every title, body and button label arrives inside the set. Rust speaks again only when the set changed, always on a vault switch (the old vault's notifications must not outlive it), and keeps what the phone holds when a read failed.
+
+**Pending and delivered are separate (#1188, A2).** `all` is what should be pending. `live_ids` are the ids of reminders that have already fired and are still wanted. A shell removes a pending request that is not scheduled again, and removes a delivered notification **only when its id is in neither `all` nor `live_ids`**: time passing never takes a reminder off the screen, resolving the item does (a task done, moved or deleted; an event cancelled, moved, deleted or over). The rule is one pure function in each shell (`NotificationPlan.reconcile`, `NotifyPlan.reconcile`), tested against one fixture, `contracts/notify/reconcile-cases.json`. Android diffs against the notifications the OS is showing, never against a memory of what it once posted. A shell that predates `live_ids` sees it empty.
+
+**Presses are durable (#1188, A6).** A button or a tap reaches Rust as `ShellFact.notification_answered { notification_id, verb, press_id }`. The shell writes the press (with a `press_id` of its own) to a small outbox BEFORE it dismisses the banner and before it asks for the core, removes it once the core has taken it, and sends what is left at the next start. Rust runs the write under a key made from `press_id`, so a press sent twice is applied once (the second is answered `replayed`). This is a press queue for the phone's own writer, applied at once or at next start; it is not a replica log and nothing in it waits for a gateway. A receipt's id carries its task and its Undo (the act that reverses the write, `history.undo` where the core offers it), so Undo works after the app was killed.
+
+**Permission** is asked only when `ask_permission` says something would fire. Refused is a quiet state.
+
+**Which items notify is the alert index's** (`alert` rows, kept by the writer): `agenda_upcoming` and `agenda_task_reminders` take `alerts: N` and then read only the items the next N firings belong to, at any vault size.
+
 ## 5. `next_event` surfaces bounded-queue backpressure as a health event
 
 The event queue is bounded at 1024 and **drops nothing**. When it fills, sync stalls and a `HealthEvent { stalled: true, queue_depth, capacity, behind }` reaches the shell — later, on the first slot a drain frees, if the queue is full of change events, because a change event may not be dropped to make room for the report.

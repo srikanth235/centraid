@@ -493,6 +493,49 @@ pub fn advance(connection: &Connection, now: i64) -> Result<usize> {
     Ok(stale.len())
 }
 
+/// The one-off rows that came due in the last [`KEEP_PAST_MS`], newest first, at most `limit`: the
+/// items whose reminder may be on the member's screen right now. `*_from` and `*_to` are keys in
+/// each timing's own space.
+///
+/// # Errors
+/// SQLite's refusal.
+pub fn recent(
+    connection: &Connection,
+    fixed: (&str, &str),
+    floating: (&str, &str),
+    limit: usize,
+) -> Result<Vec<Alert>> {
+    let mut out = Vec::new();
+    for (timing, (from, to)) in [(Timing::Fixed, fixed), (Timing::Floating, floating)] {
+        let mut statement = connection.prepare_cached(
+            "SELECT entity_id, offset_min, fire_key, repeats FROM alert
+              WHERE timing = ?1 AND fire_key >= ?2 AND fire_key < ?3
+              ORDER BY fire_key DESC, entity_id LIMIT ?4",
+        )?;
+        let rows = statement.query_map(
+            params![
+                timing.as_str(),
+                from,
+                to,
+                i64::try_from(limit).unwrap_or(i64::MAX)
+            ],
+            |row| {
+                Ok(Alert {
+                    entity_id: row.get(0)?,
+                    offset_min: row.get(1)?,
+                    timing,
+                    fire_key: row.get(2)?,
+                    repeats: row.get::<_, i64>(3)? == 1,
+                })
+            },
+        )?;
+        for row in rows {
+            out.push(row?);
+        }
+    }
+    Ok(out)
+}
+
 /// The rows to look at: the next `limit` of each timing at or after the given keys, soonest first
 /// within a timing. `fixed_from` is an instant text, `floating_from` a wall clock.
 ///

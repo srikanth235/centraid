@@ -17,8 +17,12 @@ fn an_id_names_its_vault_and_what_it_is_about() {
         })
     );
     assert_eq!(
-        parse("receipt|v1|77"),
-        Some(Target::Receipt { vault: "v1".into() })
+        parse("receipt|v1|77|t-1|"),
+        Some(Target::Receipt {
+            vault: "v1".into(),
+            task_id: "t-1".into(),
+            undo: None
+        })
     );
     assert_eq!(parse("junk"), None);
     assert_eq!(parse("what|v1|x|y"), None);
@@ -84,4 +88,41 @@ fn tomorrow_on_a_dst_day_is_written_as_the_wall_clock_the_core_places() {
     );
     let zone = FireZone::named("America/New_York").unwrap();
     assert!(parse_civil_ms("2026-03-08T02:30", &zone).is_some());
+}
+
+#[test]
+fn a_receipts_undo_travels_in_its_id_so_it_outlives_the_process() {
+    use base64::Engine as _;
+    use prost::Message as _;
+    let undo = wire::ActRequest {
+        app: "history".into(),
+        action: "undo-change".into(),
+        ..Default::default()
+    };
+    let carried = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(undo.encode_to_vec());
+    let Some(Target::Receipt {
+        task_id,
+        undo: bytes,
+        ..
+    }) = parse(&format!("receipt|v1|9|t-7|{carried}"))
+    else {
+        panic!("a receipt");
+    };
+    assert_eq!(task_id, "t-7");
+    assert_eq!(
+        wire::ActRequest::decode(bytes.expect("the undo").as_slice()).expect("decodes"),
+        undo
+    );
+}
+
+#[test]
+fn a_press_with_an_id_is_run_under_a_key_made_from_it_so_a_second_send_is_a_replay() {
+    assert_eq!(
+        key("complete-task", "t-1", "p-9"),
+        key("complete-task", "t-1", "p-9")
+    );
+    assert_ne!(
+        key("complete-task", "t-1", ""),
+        key("complete-task", "t-1", "")
+    );
 }

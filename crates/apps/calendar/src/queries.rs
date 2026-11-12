@@ -700,6 +700,49 @@ pub fn load_upcoming(
     Ok((UpcomingData { events, calendars }, None))
 }
 
+/// `upcoming`, among the events the alert index names (#1188): the same expansion, lower bound
+/// and row shape for exactly those ids, so a vault of any size reads only the few events that
+/// fire next. `from` and `to` are instants; the expansion is the window's, never the vault's.
+///
+/// # Errors
+///
+/// A door refusal becomes the payload's denial; a bound that is reached is an `Err`.
+pub fn load_upcoming_among(
+    door: &dyn PageDoor,
+    ids: &[String],
+    from: &str,
+    to: &str,
+    zone: &FireZone,
+) -> KitResult<(UpcomingData, Option<Denial>)> {
+    let from_ms = parse_instant_ms(from);
+    let from_lower =
+        from_ms.map_or_else(|| from.to_owned(), |millis| iso_of(millis - SPAN_BUFFER_MS));
+    let calendars = match read_calendars(door) {
+        Ok(calendars) => calendars,
+        Err(KitError::Door(message)) => {
+            return Ok((UpcomingData::default(), Some(denial_of(message))));
+        }
+        Err(other) => return Err(other),
+    };
+    let mut events: Vec<EventRow> = events_among(door, ids)?
+        .into_iter()
+        .filter(|event| event.status.as_deref() != Some("cancelled"))
+        .collect();
+    if events.is_empty() {
+        return Ok((UpcomingData { events, calendars }, None));
+    }
+    let exceptions = read_exceptions(door, &events)?;
+    let mut expanded =
+        expand_recurring_events(std::mem::take(&mut events), &from_lower, to, &exceptions)?;
+    name_places(door, &mut expanded)?;
+    let mut events: Vec<EventRow> = expanded
+        .into_iter()
+        .filter(|event| from_ms.is_none_or(|from| still_running_at(event, from, zone)))
+        .collect();
+    events.sort_by(|left, right| left.dtstart.cmp(&right.dtstart));
+    Ok((UpcomingData { events, calendars }, None))
+}
+
 /// One event by id, live, decorated: what `event` and `search` fold.
 pub(crate) fn events_among(door: &dyn PageDoor, ids: &[String]) -> KitResult<Vec<EventRow>> {
     let rows = by_ids("calendar.events.rows", "event", EVENT_COLUMNS, "id").of(door, ids, None)?;

@@ -1657,6 +1657,12 @@
             "type": "integer",
             "minimum": 20,
             "maximum": 500
+          },
+          "alerts": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "description": "Read only the tasks the alert index names for its next this-many firings (the notification service's read); limit is then ignored."
           }
         },
         "additionalProperties": false

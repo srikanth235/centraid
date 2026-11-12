@@ -101,26 +101,39 @@ internal object Notify {
     /** Make the OS hold [request]'s set; how many alarms are pending now. */
     private fun hold(app: Context, store: NotifyStore, manager: NotificationManagerCompat, request: ScheduleNotifications): Int {
         val now = System.currentTimeMillis()
-        val plan = NotifyPlan.diff(store.load().all, request.all, now)
+        val recorded = store.load().all
+        val showing = showingIds(manager)
+        val plan = NotifyPlan.reconcile(
+            wanted = request.all,
+            live = request.live_ids,
+            pending = recorded.filter { !it.immediate }.map { it.notification_id },
+            showing = showing,
+            nowMs = now,
+        )
         manager.createNotificationChannel(
             NotificationChannelCompat.Builder(CHANNEL, NotificationManagerCompat.IMPORTANCE_DEFAULT)
                 .setName(request.channel_name)
                 .build(),
         )
-        plan.cancel.forEach { cancel(app, manager, it) }
-        plan.drop.forEach { cancelAlarm(app, it) }
+        plan.removePending.forEach { cancelAlarm(app, it) }
+        plan.removeShowing.forEach { cancel(app, manager, it) }
         // THE RECORD FIRST: an alarm that fires the moment it is set finds its words in it.
         val next = ScheduleNotifications(
             all = NotifyPlan.kept(request.all, now),
             categories = request.categories,
             ask_permission = request.ask_permission,
             channel_name = request.channel_name,
+            live_ids = request.live_ids,
         )
         store.save(next)
-        plan.arm.forEach { arm(app, it.notification_id, it.fire_at_ms) }
+        plan.schedule.forEach { arm(app, it.notification_id, it.fire_at_ms) }
         plan.post.forEach { post(app, it, next) }
-        return plan.arm.size
+        return plan.schedule.size
     }
+
+    /** The ids of the notifications this app has on the screen now, asked of the OS and not remembered. */
+    private fun showingIds(manager: NotificationManagerCompat): List<String> =
+        manager.activeNotifications.filter { it.id == SLOT }.mapNotNull { it.tag }
 
     /** An alarm fired: the notification it was set for, worded from the record. */
     fun deliver(context: Context, notificationId: String) {
@@ -155,11 +168,26 @@ internal object Notify {
         store.save(record.copy(all = kept))
     }
 
-    /** A button was pressed (or the notification tapped): tell Rust, as it was handed over. */
+    /**
+     * A button was pressed (or the notification tapped): write it down FIRST, then tell Rust. The press
+     * leaves the outbox only once the core has taken it; a press the process could not deliver is sent
+     * again by [drain] at the next start (#1188, A6).
+     */
     suspend fun answer(context: Context, notificationId: String, verb: Int) {
+        val press = NotifyOutbox(context).add(notificationId, verb)
+        deliverPress(context, press)
+    }
+
+    /** Send every press still in the outbox, once each; called wherever a session is first up. */
+    suspend fun drain(context: Context) {
+        NotifyOutbox(context).pending().forEach { deliverPress(context, it) }
+    }
+
+    private suspend fun deliverPress(context: Context, press: NotifyOutbox.Press) {
         val said = NotificationAnswered(
-            notification_id = notificationId,
-            verb = NotificationVerb.fromValue(verb) ?: NotificationVerb.NOTIFICATION_VERB_UNSPECIFIED,
+            notification_id = press.notificationId,
+            verb = NotificationVerb.fromValue(press.verb) ?: NotificationVerb.NOTIFICATION_VERB_UNSPECIFIED,
+            press_id = press.pressId,
         )
         // HELD UNTIL RUST'S ANSWER IS PERFORMED: the write answers with a new set (the receipt and its
         // Undo, the reminder gone), and letting go of the session first would cancel its performer.
@@ -169,6 +197,8 @@ internal object Notify {
             try {
                 open.screens.shellFact(ShellFact(notification_answered = said))
                 withTimeoutOrNull(ANSWER_GRACE_MS) { done.await() }
+                // THE CORE HAS IT: the press leaves the queue.
+                NotifyOutbox(context).remove(press.pressId)
             } finally {
                 if (performed === done) performed = null
             }

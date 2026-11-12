@@ -152,6 +152,7 @@ impl Scratch {
             .ask(Q::AgendaTaskReminders(wire::AgendaTaskRemindersRequest {
                 tz: TZ.to_owned(),
                 limit,
+                alerts: 0,
             }))
             .expect("the reminders answer")
         {

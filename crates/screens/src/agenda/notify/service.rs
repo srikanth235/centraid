@@ -28,6 +28,9 @@ pub const NAME: &str = "reminders.notify";
 
 /// How many reminders one read looks at (the query's own ceiling).
 const TASK_LIMIT: u32 = 500;
+/// How many of the vault's next firings a read looks at: the index names the items, so the cost
+/// follows this and never the size of the vault (#1188, A5).
+const ALERTS: i64 = desired::CAP as i64;
 /// How long a receipt is held.
 const RECEIPT_FOR: Duration = Duration::from_secs(10 * 60);
 /// How long before a set that could not be read is tried again.
@@ -58,12 +61,19 @@ pub fn build(_route: &wire::Route) -> Option<Box<dyn Screen>> {
     Some(Box::new(Service::default()))
 }
 
+/// What one speaking says: the notifications to hold, and the delivered ones still wanted.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Spoken {
+    pub all: Vec<wire::PendingNotification>,
+    pub live: Vec<String>,
+}
+
 /// WHEN TO SPEAK. `vault` is the vault the last set was for; `last` is the set
 /// last spoken for it.
 #[derive(Clone, Debug, Default)]
 pub struct Sync {
     pub vault: Option<String>,
-    pub last: Option<Vec<wire::PendingNotification>>,
+    pub last: Option<Spoken>,
 }
 
 impl Sync {
@@ -80,11 +90,7 @@ impl Sync {
     }
 
     /// The set to speak, if any. `reading` is `None` when a read failed.
-    pub fn next(
-        &mut self,
-        vault: &str,
-        reading: Option<Vec<wire::PendingNotification>>,
-    ) -> Option<Vec<wire::PendingNotification>> {
+    pub fn next(&mut self, vault: &str, reading: Option<Spoken>) -> Option<Spoken> {
         if self.is_new_vault(vault) {
             // A VAULT SWITCH CLEARS THE OLD VAULT'S NOTIFICATIONS, even when the new one cannot be read.
             self.vault = Some(vault.to_owned());
@@ -129,7 +135,10 @@ impl Service {
     fn read(ctx: &Ctx) -> Option<Loaded> {
         let Reading::Data(board) = read::read(
             ctx,
-            load::reminders::Reminders { limit: TASK_LIMIT },
+            load::reminders::Reminders {
+                limit: TASK_LIMIT,
+                alerts: Some(ALERTS),
+            },
             |answer| match answer {
                 Answer::AgendaTaskReminders(board) => Some(board),
                 _ => None,
@@ -139,11 +148,15 @@ impl Service {
         };
         let to =
             civil::plus_days(&board.today, desired::WINDOW_DAYS + 1).and_then(|d| midnight(&d))?;
+        // The delivered ones too: a reminder that fired within the last days and is still wanted.
+        let since =
+            civil::plus_days(&board.today, -(desired::LIVE_DAYS + 1)).and_then(|d| midnight(&d))?;
         let Reading::Data(upcoming) = read::read(
             ctx,
             load::calendar::Upcoming {
-                from: None,
+                from: Some(since),
                 to: Some(to),
+                alerts: Some(ALERTS),
             },
             |answer| match answer {
                 Answer::AgendaUpcoming(upcoming) => Some(upcoming),
@@ -174,7 +187,7 @@ impl Service {
         let loaded = Self::read(ctx);
         let mut wait = RETRY;
         let reading = loaded.as_ref().map(|loaded| {
-            let set = desired::desired(&Inputs {
+            let inputs = Inputs {
                 vault_id: &vault,
                 zone: ctx.zone(),
                 locale: ctx.locale(),
@@ -183,14 +196,18 @@ impl Service {
                 projects: &loaded.projects,
                 events: &loaded.events,
                 calendars: &loaded.calendars,
-            });
+            };
+            let set = desired::desired(&inputs);
             if let Some(now) = FireZone::named(ctx.zone())
                 .ok()
                 .and_then(|zone| parse_civil_ms(&loaded.now_local, &zone))
             {
                 wait = desired::refresh_after(&set, now);
             }
-            set
+            Spoken {
+                all: set,
+                live: desired::live(&inputs),
+            }
         });
         if let Some(loaded) = &loaded {
             self.facts = Facts::of(
@@ -200,7 +217,7 @@ impl Service {
                 &loaded.events,
             );
         }
-        if let Some(mut all) = self.sync.next(&vault, reading) {
+        if let Some(Spoken { mut all, live }) = self.sync.next(&vault, reading) {
             let ask_permission = !all.is_empty();
             all.extend(self.receipt.iter().map(|held| held.notification.clone()));
             out.push(wire::Effect {
@@ -210,6 +227,7 @@ impl Service {
                         categories: desired::categories(ctx.locale()),
                         ask_permission,
                         channel_name: reminders::band_reminders(ctx.locale()),
+                        live_ids: live,
                     },
                 )),
             });
@@ -314,20 +332,33 @@ impl Screen for Service {
 mod tests {
     use super::*;
 
-    fn set(ids: &[&str]) -> Vec<wire::PendingNotification> {
-        ids.iter()
-            .map(|id| wire::PendingNotification {
-                notification_id: (*id).to_owned(),
-                ..Default::default()
-            })
-            .collect()
+    fn set(ids: &[&str]) -> Spoken {
+        Spoken {
+            all: ids
+                .iter()
+                .map(|id| wire::PendingNotification {
+                    notification_id: (*id).to_owned(),
+                    ..Default::default()
+                })
+                .collect(),
+            live: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_change_only_in_the_delivered_ids_is_spoken() {
+        let mut sync = Sync::default();
+        sync.next("a", Some(set(&["x"])));
+        let mut changed = set(&["x"]);
+        changed.live = vec!["gone-by-time-but-not-resolved".to_owned()];
+        assert_eq!(sync.next("a", Some(changed.clone())), Some(changed));
     }
 
     #[test]
     fn the_first_set_is_spoken_even_when_empty() {
         let mut sync = Sync::default();
-        assert_eq!(sync.next("a", Some(Vec::new())), Some(Vec::new()));
-        assert_eq!(sync.next("a", Some(Vec::new())), None);
+        assert_eq!(sync.next("a", Some(set(&[]))), Some(set(&[])));
+        assert_eq!(sync.next("a", Some(set(&[]))), None);
     }
 
     #[test]
@@ -354,7 +385,7 @@ mod tests {
     fn a_vault_switch_clears_the_old_vaults_set_even_when_the_new_read_fails() {
         let mut sync = Sync::default();
         assert_eq!(sync.next("a", Some(set(&["x"]))), Some(set(&["x"])));
-        assert_eq!(sync.next("b", None), Some(Vec::new()));
+        assert_eq!(sync.next("b", None), Some(set(&[])));
         // The new vault's own failure afterwards is quiet.
         assert_eq!(sync.next("b", None), None);
         assert_eq!(sync.next("a", Some(set(&["x"]))), Some(set(&["x"])));

@@ -151,10 +151,11 @@ final class ScreenStore: ObservableObject {
 
     /// A NOTIFICATION'S BUTTON OR TAP (#1173): tell Rust, and return once the core has it, so a
     /// background action's completion handler is not called before the answer is in.
-    func answerNotification(id: String, verb: Centraid_Core_V1_NotificationVerb) async {
+    func answerNotification(id: String, verb: Centraid_Core_V1_NotificationVerb, pressID: String = "") async {
         var answered = Centraid_Core_V1_NotificationAnswered()
         answered.notificationID = id
         answered.verb = verb
+        answered.pressID = pressID
         var shell = Centraid_Core_V1_ShellFact()
         shell.fact = .notificationAnswered(answered)
         // HELD UNTIL RUST'S ANSWER IS PERFORMED: the write answers with a new set (the receipt and

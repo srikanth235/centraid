@@ -126,6 +126,8 @@ fn titled(untitled: fn(Locale) -> String, locale: Locale, title: &str) -> String
 struct Window {
     from: i64,
     to: i64,
+    /// For the DELIVERED reading ([`live`]): now, so an event that has ended is not wanted.
+    ongoing_at: Option<i64>,
 }
 
 impl Window {
@@ -133,6 +135,12 @@ impl Window {
         (self.from..=self.to).contains(&ms)
     }
 }
+
+/// How far back a delivered reminder can still be wanted, in days: what a member may have left on
+/// the screen. The alert index keeps a one-off item's row this long (`alerts::KEEP_PAST_MS`).
+pub const LIVE_DAYS: i64 = 2;
+/// The most delivered ids named at once.
+pub const LIVE_CAP: usize = 64;
 
 /// Everything the phone should hold, soonest first, at most [`CAP`].
 #[must_use]
@@ -146,6 +154,7 @@ pub fn desired(inputs: &Inputs) -> Vec<wire::PendingNotification> {
     let window = Window {
         from: now,
         to: now + WINDOW_DAYS * DAY_MS,
+        ongoing_at: None,
     };
     let mut all = tasks(inputs, &zone, &window);
     all.extend(events(inputs, &zone, &window));
@@ -153,6 +162,35 @@ pub fn desired(inputs: &Inputs) -> Vec<wire::PendingNotification> {
     all.dedup_by(|a, b| a.notification_id == b.notification_id);
     all.truncate(CAP);
     all
+}
+
+/// THE DELIVERED READING (#1188, A2): the ids of reminders that have already fired and are still
+/// wanted. TIME PASSING NEVER REMOVES A DELIVERED REMINDER; ONLY RESOLVING THE ITEM DOES: a task
+/// done, moved or deleted, an event cancelled, moved, deleted or over. A shell keeps a delivered
+/// notification while its id is in the set or here, and removes it otherwise.
+#[must_use]
+pub fn live(inputs: &Inputs) -> Vec<String> {
+    let Ok(zone) = FireZone::named(inputs.zone) else {
+        return Vec::new();
+    };
+    let Some(now) = parse_civil_ms(inputs.now_local, &zone) else {
+        return Vec::new();
+    };
+    let window = Window {
+        from: now - LIVE_DAYS * DAY_MS,
+        to: now,
+        ongoing_at: Some(now),
+    };
+    let mut ids: Vec<(i64, String)> = tasks(inputs, &zone, &window)
+        .into_iter()
+        .chain(events(inputs, &zone, &window))
+        .map(|n| (n.fire_at_ms, n.notification_id))
+        .collect();
+    // The newest first, so the cap keeps what is most likely on the screen.
+    ids.sort_by(|a, b| b.cmp(a));
+    ids.dedup_by(|a, b| a.1 == b.1);
+    ids.truncate(LIVE_CAP);
+    ids.into_iter().map(|(_, id)| id).collect()
 }
 
 fn pending(
@@ -243,6 +281,13 @@ fn events(inputs: &Inputs, zone: &FireZone, window: &Window) -> Vec<wire::Pendin
             let fire_ms = start_ms - minutes * MINUTE_MS;
             if !window.holds(fire_ms) {
                 continue;
+            }
+            if let Some(now) = window.ongoing_at {
+                // AN EVENT THAT IS OVER IS RESOLVED: its reminder is not wanted on the screen.
+                let end = parse_civil_ms(&event.local_end, zone).unwrap_or(start_ms);
+                if end <= now {
+                    continue;
+                }
             }
             let fire_local = local_of(zone, fire_ms);
             let fire_day = fire_local.get(..10).unwrap_or_default();

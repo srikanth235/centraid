@@ -442,30 +442,33 @@ pub(crate) fn reminders(
     let zone = zone_of(vault, &asked.tz)?;
     let today = today_in(&zone, now)?;
     let since = local::days_before(&today, task::queries::REMINDERS_LOOKBACK_DAYS);
-    settle(
-        door,
-        task::load_reminders(door, limit_of(asked.limit), &since, now, &zone),
-        |data| {
-            let open = placed(&data.tasks, &zone, &today);
-            let groups = views::groups(&View::Reminders, &open, &[], &data.projects, &[]);
-            Answer::AgendaTaskReminders(wire::AgendaTaskBoard {
-                today: today.day_text(),
-                now_local: today.local_text(),
-                view: wire::AgendaTaskView::Reminders as i32,
-                groups: groups.into_iter().map(group_to_wire).collect(),
-                counts: None,
-                projects: data
-                    .projects
-                    .iter()
-                    .map(|project| project_to_wire(project, &open))
-                    .collect(),
-                sections: Vec::new(),
-                tags: Vec::new(),
-                truncated: data.truncated,
-                window: count(data.window),
-            })
-        },
-    )
+    let loaded = if asked.alerts > 0 {
+        // THE ALERT INDEX'S READ: only the tasks that fire next, whatever the vault holds.
+        let ids = super::alerts::names(vault, &zone, now, asked.alerts)?;
+        task::load_reminders_among(door, &ids, now, &zone)
+    } else {
+        task::load_reminders(door, limit_of(asked.limit), &since, now, &zone)
+    };
+    settle(door, loaded, |data| {
+        let open = placed(&data.tasks, &zone, &today);
+        let groups = views::groups(&View::Reminders, &open, &[], &data.projects, &[]);
+        Answer::AgendaTaskReminders(wire::AgendaTaskBoard {
+            today: today.day_text(),
+            now_local: today.local_text(),
+            view: wire::AgendaTaskView::Reminders as i32,
+            groups: groups.into_iter().map(group_to_wire).collect(),
+            counts: None,
+            projects: data
+                .projects
+                .iter()
+                .map(|project| project_to_wire(project, &open))
+                .collect(),
+            sections: Vec::new(),
+            tags: Vec::new(),
+            truncated: data.truncated,
+            window: count(data.window),
+        })
+    })
 }
 
 // ---------------------------------------------------------------------------

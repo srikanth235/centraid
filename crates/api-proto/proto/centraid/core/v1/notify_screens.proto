@@ -7,8 +7,9 @@
 // THE SET IS DECLARATIVE. `ScheduleNotifications.all` is everything the app
 // wants pending, not a change to apply: a shell diffs it against what it put in
 // the OS (iOS `getPendingNotificationRequests`, Android its own record of the
-// alarms it set), removes what is not in the set (delivered ones included),
-// and adds or replaces what is. Sent again whenever the set changes: an edit,
+// alarms it set), removes pending ones not in the set, removes DELIVERED ones
+// only when they are in neither `all` nor `live_ids`, and adds or replaces what
+// is in `all`. Sent again whenever the set changes: an edit,
 // a completion, a delete, a vault switch (the new vault's set, or none), the
 // locale or the zone.
 
@@ -84,6 +85,14 @@ message ScheduleNotifications {
   bool ask_permission = 3;
   // The Android channel's name, as the member sees it in system settings.
   string channel_name = 4;
+  // PENDING AND DELIVERED ARE SEPARATE (#1188, A2). `all` is what should be
+  // pending. `live_ids` are the ids of reminders that have already fired and are
+  // still wanted, so TIME PASSING NEVER REMOVES A DELIVERED NOTIFICATION; ONLY
+  // RESOLVING THE ITEM DOES (a task done, moved or deleted; an event cancelled,
+  // moved, deleted or over). A shell removes a delivered notification only when
+  // its id is in neither `all` nor `live_ids`. A shell that predates the field
+  // sees it empty and keeps the old rule.
+  repeated string live_ids = 5;
 }
 
 // What the OS said about notifications.
@@ -108,4 +117,11 @@ message NotificationsScheduled {
 message NotificationAnswered {
   string notification_id = 1;
   NotificationVerb verb = 2;
+  // DURABLE PRESSES (#1188, A6). The shell writes a press to a small outbox
+  // before it dismisses the banner and gives it a unique id; it sends the same
+  // press again, with the same id, at the next start if it never learned the
+  // core applied it. The core runs a press under a key made from this id, so a
+  // press that is sent twice is applied once. Empty (a shell that predates the
+  // field) is a press with nothing to deduplicate by.
+  string press_id = 3;
 }

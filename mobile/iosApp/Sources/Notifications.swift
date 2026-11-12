@@ -11,9 +11,11 @@ import UserNotifications
 /// `ShellFact.notificationAnswered`. It decides nothing and holds no word: the titles, bodies and
 /// button labels all arrive from Rust.
 ///
-/// THE SET IS DECLARATIVE: `all` is everything wanted pending. Whatever the OS holds (pending or
-/// already delivered) that is not in it is removed; each item in it is added, and adding an
-/// identifier that is already pending replaces it.
+/// THE SET IS DECLARATIVE: `all` is everything wanted pending. A pending request that is not in it
+/// is removed; each item in it is added, and adding an identifier that is already pending replaces
+/// it. PENDING AND DELIVERED ARE SEPARATE (#1188): a delivered notification is removed only when its
+/// id is in neither `all` nor `liveIds`, so time passing never takes a reminder off the screen;
+/// resolving the item does. The rule is `NotificationPlan.reconcile`.
 enum Notifications {
     /// The key the notification's id travels under in `userInfo`, besides the request identifier.
     private static let idKey = "notification_id"
@@ -48,18 +50,22 @@ enum Notifications {
 
         center.setNotificationCategories(Set(schedule.categories.map(category)))
 
-        // THE DIFF: remove every id not wanted, pending and delivered alike.
-        let wanted = Set(schedule.all.map(\.notificationID))
-        let pending = await center.pendingNotificationRequests().map(\.identifier)
-        let delivered = await center.deliveredNotifications().map { $0.request.identifier }
-        let stale = Set(pending + delivered).subtracting(wanted)
-        if !stale.isEmpty {
-            center.removePendingNotificationRequests(withIdentifiers: Array(stale))
-            center.removeDeliveredNotifications(withIdentifiers: Array(stale))
-        }
-
+        // THE DIFF, from what the OS holds now (not from a memory of what was sent).
         let now = Date()
-        for item in schedule.all {
+        let plan = NotificationPlan.reconcile(
+            wanted: schedule.all,
+            live: schedule.liveIds,
+            pending: await center.pendingNotificationRequests().map(\.identifier),
+            delivered: await center.deliveredNotifications().map { $0.request.identifier },
+            nowMs: Int64(now.timeIntervalSince1970 * 1000)
+        )
+        if !plan.removePending.isEmpty {
+            center.removePendingNotificationRequests(withIdentifiers: plan.removePending)
+        }
+        if !plan.removeDelivered.isEmpty {
+            center.removeDeliveredNotifications(withIdentifiers: plan.removeDelivered)
+        }
+        for item in plan.schedule + plan.post {
             guard let request = request(item, now: now) else { continue }
             try? await center.add(request)
         }
@@ -126,9 +132,25 @@ enum Notifications {
             verb = Int(action).flatMap { Centraid_Core_V1_NotificationVerb(rawValue: $0) }
         }
         guard let verb else { return }
+        // WRITTEN DOWN FIRST (#1188, A6): a press the core could not take in the seconds iOS gives
+        // is still in the outbox, and `drain` sends it at the next start.
+        let press = NotificationOutbox.add(notificationID: id, verb: verb.rawValue)
         _ = ShellModel.shared
         guard let store = await BackgroundPasses.installed(within: BackgroundPasses.installWaitSeconds) else { return }
-        await store.answerNotification(id: id, verb: verb)
+        await store.answerNotification(id: id, verb: verb, pressID: press.pressID)
+        NotificationOutbox.remove(press.pressID)
+    }
+
+    /// Send every press still in the outbox, once each; called wherever the store is first up.
+    @MainActor static func drain(_ store: ScreenStore) async {
+        for press in NotificationOutbox.pending() {
+            guard let verb = Centraid_Core_V1_NotificationVerb(rawValue: press.verb) else {
+                NotificationOutbox.remove(press.pressID)
+                continue
+            }
+            await store.answerNotification(id: press.notificationID, verb: verb, pressID: press.pressID)
+            NotificationOutbox.remove(press.pressID)
+        }
     }
 }
 
