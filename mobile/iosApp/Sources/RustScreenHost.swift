@@ -481,6 +481,13 @@ struct RustScreenView: View {
             CoreEarlierView(
                 state: state,
                 send: { store.send(instance, .earlier($0)) },
+                open: open,
+                onBack: pop
+            )
+        case .earlierPreview(let state)?:
+            CoreEarlierPreviewView(
+                state: state,
+                send: { store.send(instance, .earlierPreview($0)) },
                 onBack: pop
             )
         // PAIRING A GATEWAY (#1135).

@@ -25,6 +25,7 @@ import centraid.core.v1.EarlierEvent
 import centraid.core.v1.EarlierRow
 import centraid.core.v1.EarlierSecret
 import centraid.core.v1.EarlierView
+import centraid.core.v1.Route
 import dev.centraid.android.theme.centraidType
 
 /**
@@ -33,6 +34,8 @@ import dev.centraid.android.theme.centraidType
  * the one-line value and a plain "Restore". Every word is the view's; a pop is the shell's
  * ([onBack]) and a tap is an [EarlierEvent].
  *
+ * A row that holds a `preview` route opens it (the full preview, [EarlierPreviewScreen]).
+ *
  * Ids: `earlier-row-<seq>`, `earlier-restore-<seq>`, `earlier-more`, `earlier-status-action`
  * (the iOS twin is `CoreEarlierView.swift`).
  */
@@ -40,6 +43,7 @@ import dev.centraid.android.theme.centraidType
 public fun EarlierScreen(
     view: EarlierView,
     onEvent: (EarlierEvent) -> Unit,
+    onOpen: (Route) -> Unit,
     onBack: () -> Unit,
 ) {
     PushedPage(
@@ -60,7 +64,7 @@ public fun EarlierScreen(
                 LazyColumn(Modifier.padding(horizontal = KitGeometry.GUTTER)) {
                     item(key = "rows") {
                         Column(Modifier.padding(top = 4.dp).kitCard()) {
-                            earlier.rows.forEach { row -> EarlierRowView(row, onEvent) }
+                            earlier.rows.forEach { row -> EarlierRowView(row, onEvent, onOpen) }
                         }
                     }
                     if (earlier.more_label.isNotEmpty()) {
@@ -84,7 +88,7 @@ public fun EarlierScreen(
 }
 
 @Composable
-private fun EarlierRowView(row: EarlierRow, onEvent: (EarlierEvent) -> Unit) {
+private fun EarlierRowView(row: EarlierRow, onEvent: (EarlierEvent) -> Unit, onOpen: (Route) -> Unit) {
     val accent = appAccent()
     Column {
         Row(
@@ -94,6 +98,8 @@ private fun EarlierRowView(row: EarlierRow, onEvent: (EarlierEvent) -> Unit) {
             Column(
                 Modifier
                     .weight(1f)
+                    // A row of an earlier version opens its full preview: the route is Rust's.
+                    .then(row.preview?.let { route -> Modifier.clickable { onOpen(route) } } ?: Modifier)
                     .testTag(earlierRowTag(row.seq))
                     .semantics(mergeDescendants = true) {
                         if (row.accessibility_label.isNotEmpty()) contentDescription = row.accessibility_label

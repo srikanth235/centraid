@@ -570,7 +570,7 @@ impl Earlier {
         } else {
             line
         };
-        let open = (!current && seq > 0).then(|| {
+        let preview = (!current && seq > 0).then(|| {
             preview_route(
                 &format!("{}.earlier", self.spec.app),
                 &self.entity_id,
@@ -600,7 +600,7 @@ impl Earlier {
                 shared::trash_restore(locale)
             },
             secrets,
-            open,
+            preview,
         }
     }
 

@@ -39,6 +39,7 @@ import centraid.core.v1.PhotosHomeEvent
 import centraid.core.v1.Route
 import centraid.core.v1.ScreenEvent
 import dev.centraid.android.kit.AndroidHealth
+import dev.centraid.android.kit.EarlierPreviewScreen
 import dev.centraid.android.kit.EarlierScreen
 import dev.centraid.android.kit.TrashScreen
 import dev.centraid.android.kit.TransferScreen
@@ -466,6 +467,7 @@ internal class RustRoot(
         val catchUp = view.todo_catch_up
         val trash = view.trash
         val earlier = view.earlier
+        val earlierPreview = view.earlier_preview
         val transfer = view.transfer
         val lockerHome = view.locker_home
         val lockerItem = view.locker_item
@@ -503,7 +505,7 @@ internal class RustRoot(
 
         // THE SCREEN IS DONE (a cancel committed, the editor saved or left, the task deleted): its page goes.
         val done = event?.dismissed == true || editor?.dismissed == true || detail?.finished == true ||
-            doc?.dismissed == true || peoplePerson?.done == true || healthConnect?.finished == true ||
+            doc?.dismissed == true || peoplePerson?.done == true || earlierPreview?.done == true || healthConnect?.finished == true ||
             lockerItem?.finished == true || lockerEditor?.finished == true || lockerLock?.finished == true ||
             moneyTarget?.finished == true || moneyImport?.finished == true ||
             wordsMake?.finished == true || wordsEnter?.finished == true || wordsShow?.finished == true
@@ -819,6 +821,13 @@ internal class RustRoot(
             earlier != null -> EarlierScreen(
                 view = earlier,
                 onEvent = { send(ScreenEvent(earlier = it)) },
+                onOpen = open,
+                onBack = back,
+            )
+            // THE FULL PREVIEW OF ONE EARLIER VERSION (#1185).
+            earlierPreview != null -> EarlierPreviewScreen(
+                view = earlierPreview,
+                onEvent = { send(ScreenEvent(earlier_preview = it)) },
                 onBack = back,
             )
             // IMPORT AND EXPORT (#1173): Notes' Markdown and People's vCards.

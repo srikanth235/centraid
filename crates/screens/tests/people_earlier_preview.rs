@@ -77,7 +77,7 @@ fn open_list(d: &mut Driver, id: &str) -> u64 {
 
 /// The preview of the list's row `row` (0 is the current one).
 fn open_preview(d: &mut Driver, list: u64, row: usize) -> u64 {
-    let route = rows(d.view(list))[row].open.clone().expect("a route");
+    let route = rows(d.view(list))[row].preview.clone().expect("a route");
     d.push(people::TAB, route)
 }
 
@@ -103,9 +103,9 @@ fn every_earlier_row_opens_a_preview_and_the_current_row_opens_nothing() {
     let id = renamed(&d);
     let list = open_list(&mut d, &id);
     let listed = rows(d.view(list)).to_vec();
-    assert!(listed[0].current && listed[0].open.is_none());
+    assert!(listed[0].current && listed[0].preview.is_none());
     for row in &listed[1..] {
-        let route = row.open.clone().expect("a route");
+        let route = row.preview.clone().expect("a route");
         assert_eq!(route.screen, people::EARLIER);
         let Some(wire::route::Args::EarlierPreview(args)) = route.args else {
             panic!("the preview's route");

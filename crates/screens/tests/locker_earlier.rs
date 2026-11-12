@@ -501,7 +501,7 @@ fn preview_view(v: &wire::ViewState) -> &wire::EarlierPreviewView {
 }
 
 fn open_preview(d: &mut Driver, list: u64, row: usize) -> u64 {
-    let route = rows(d.view(list))[row].open.clone().expect("a route");
+    let route = rows(d.view(list))[row].preview.clone().expect("a route");
     d.push(locker::TAB, route)
 }
 

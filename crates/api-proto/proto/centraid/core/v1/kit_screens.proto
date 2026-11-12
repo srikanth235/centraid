@@ -467,7 +467,7 @@ message EarlierRow {
   repeated EarlierSecret secrets = 8;
   // Opens the full preview of this version (`<app>.earlier` on one version); absent on the
   // current row, which is the record itself.
-  optional Route open = 9;
+  optional Route preview = 9;
 }
 
 // ONE SEALED VALUE OF AN EARLIER VERSION (Locker, #1185). Shown as `label` and `masked` with the

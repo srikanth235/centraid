@@ -6,11 +6,15 @@ import SwiftUI
 /// version with its words and a plain "Restore". Every word is on the state; the view sends
 /// `EarlierEvent`s and the shell pops it when the back control says so.
 ///
+/// A row that holds a `preview` route opens it (the full preview, `CoreEarlierPreviewView`).
+///
 /// Ids: `earlier-row-<seq>`, `earlier-restore-<seq>`, `earlier-more`, `earlier-status-action`.
 /// The Compose twin is `kit/EarlierScreen.kt`.
 struct CoreEarlierView: View {
     let state: Centraid_Core_V1_EarlierView
     let send: (Centraid_Core_V1_EarlierEvent) -> Void
+    /// Opens a route Rust built: a row of an earlier version opens its full preview.
+    let open: (Centraid_Core_V1_Route) -> Void
     let onBack: () -> Void
 
     private func event(_ build: (inout Centraid_Core_V1_EarlierEvent) -> Void) {
@@ -39,6 +43,7 @@ struct CoreEarlierView: View {
                                     ForEach(data.rows, id: \.seq) { row in
                                         EarlierRowView(
                                             row: row,
+                                            onOpen: row.hasPreview ? { open(row.preview) } : nil,
                                             onRestore: { event { $0.kind = .restore(.with { $0.seq = row.seq }) } },
                                             onReveal: { key in event { $0.kind = .reveal(.with { $0.seq = row.seq; $0.key = key }) } },
                                             onConceal: { key in event { $0.kind = .conceal(.with { $0.seq = row.seq; $0.key = key }) } }
@@ -80,6 +85,7 @@ struct CoreEarlierView: View {
 
 private struct EarlierRowView: View {
     let row: Centraid_Core_V1_EarlierRow
+    let onOpen: (() -> Void)?
     let onRestore: () -> Void
     let onReveal: (String) -> Void
     let onConceal: (String) -> Void
@@ -125,8 +131,20 @@ private struct EarlierRowView: View {
         .padding(.trailing, 6)
     }
 
+    /// A row of an earlier version opens its preview; the current row is the record itself.
+    @ViewBuilder
+    private func openable<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        if let onOpen {
+            Button(action: onOpen) { content().contentShape(Rectangle()) }
+                .buttonStyle(KitRowPress())
+        } else {
+            content()
+        }
+    }
+
     private var mainRow: some View {
         HStack(spacing: 8) {
+            openable {
             VStack(alignment: .leading, spacing: 3) {
                 Text(row.label)
                     .kitType(.row)
@@ -144,6 +162,7 @@ private struct EarlierRowView: View {
             .accessibilityElement(children: .combine)
             .accessibilityLabel(row.accessibilityLabel.isEmpty ? row.label : row.accessibilityLabel)
             .accessibilityIdentifier(CoreEarlierView.rowIdentifier(row.seq))
+            }
             if CoreEarlierView.showsCurrentTag(row) {
                 Text(row.currentLabel)
                     .kitType(.meta)
