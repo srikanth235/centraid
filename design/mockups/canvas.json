@@ -2424,6 +2424,358 @@
       "w": 1200,
       "x": 3840,
       "y": 0
+    },
+    "ChatDownload.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · download",
+      "w": 390,
+      "x": 0,
+      "y": 32000
+    },
+    "ChatDownloadDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · download · dark",
+      "w": 390,
+      "x": 0,
+      "y": 32000
+    },
+    "ChatCellular.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · mobile data choice",
+      "w": 390,
+      "x": 470,
+      "y": 32000
+    },
+    "ChatCellularDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · mobile data choice · dark",
+      "w": 390,
+      "x": 470,
+      "y": 32000
+    },
+    "ChatDownloading.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · downloading",
+      "w": 390,
+      "x": 940,
+      "y": 32000
+    },
+    "ChatDownloadingDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · downloading · dark",
+      "w": 390,
+      "x": 940,
+      "y": 32000
+    },
+    "ChatWaitingWifi.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · waiting for Wi‑Fi",
+      "w": 390,
+      "x": 1410,
+      "y": 32000
+    },
+    "ChatWaitingWifiDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · waiting for Wi‑Fi · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 32000
+    },
+    "ChatLowStorage.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · low storage",
+      "w": 390,
+      "x": 1880,
+      "y": 32000
+    },
+    "ChatLowStorageDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · low storage · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 32000
+    },
+    "ChatUnavailable.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · unavailable",
+      "w": 390,
+      "x": 2350,
+      "y": 32000
+    },
+    "ChatUnavailableDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · unavailable · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 32000
+    },
+    "ChatChecking.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · checking",
+      "w": 390,
+      "x": 2820,
+      "y": 32000
+    },
+    "ChatCheckingDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · checking · dark",
+      "w": 390,
+      "x": 2820,
+      "y": 32000
+    },
+    "ChatModelUpdate.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · model update row",
+      "w": 390,
+      "x": 3290,
+      "y": 32000
+    },
+    "ChatModelUpdateDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · model update row · dark",
+      "w": 390,
+      "x": 3290,
+      "y": 32000
+    },
+    "ChatUpdateNeeded.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · update needed",
+      "w": 390,
+      "x": 0,
+      "y": 33100
+    },
+    "ChatUpdateNeededDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · update needed · dark",
+      "w": 390,
+      "x": 0,
+      "y": 33100
+    },
+    "ChatStreaming.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · streaming, jump to latest",
+      "w": 390,
+      "x": 470,
+      "y": 33100
+    },
+    "ChatStreamingDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · streaming, jump to latest · dark",
+      "w": 390,
+      "x": 470,
+      "y": 33100
+    },
+    "ChatStoppedFailed.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · stopped and failed",
+      "w": 390,
+      "x": 940,
+      "y": 33100
+    },
+    "ChatStoppedFailedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · stopped and failed · dark",
+      "w": 390,
+      "x": 940,
+      "y": 33100
+    },
+    "ChatCards.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · card states",
+      "w": 390,
+      "x": 1410,
+      "y": 33100
+    },
+    "ChatCardsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · card states · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 33100
+    },
+    "ChatMessageActions.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · message actions",
+      "w": 390,
+      "x": 1880,
+      "y": 33100
+    },
+    "ChatMessageActionsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · message actions · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 33100
+    },
+    "ChatEditResend.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · edit and send again",
+      "w": 390,
+      "x": 2350,
+      "y": 33100
+    },
+    "ChatEditResendDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · edit and send again · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 33100
+    },
+    "ChatRichText.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · lists, tables, code",
+      "w": 390,
+      "x": 2820,
+      "y": 33100
+    },
+    "ChatRichTextDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · lists, tables, code · dark",
+      "w": 390,
+      "x": 2820,
+      "y": 33100
+    },
+    "ChatDictation.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · dictation",
+      "w": 390,
+      "x": 3290,
+      "y": 33100
+    },
+    "ChatDictationDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · dictation · dark",
+      "w": 390,
+      "x": 3290,
+      "y": 33100
+    },
+    "ChatsSearch.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chats · search results",
+      "w": 390,
+      "x": 0,
+      "y": 34200
+    },
+    "ChatsSearchDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chats · search results · dark",
+      "w": 390,
+      "x": 0,
+      "y": 34200
+    },
+    "ChatsSearchNone.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chats · search found nothing",
+      "w": 390,
+      "x": 470,
+      "y": 34200
+    },
+    "ChatsSearchNoneDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chats · search found nothing · dark",
+      "w": 390,
+      "x": 470,
+      "y": 34200
+    },
+    "ChatsEmpty.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chats · empty",
+      "w": 390,
+      "x": 940,
+      "y": 34200
+    },
+    "ChatsEmptyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chats · empty · dark",
+      "w": 390,
+      "x": 940,
+      "y": 34200
+    },
+    "ChatsError.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chats · change not saved",
+      "w": 390,
+      "x": 1410,
+      "y": 34200
+    },
+    "ChatsErrorDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chats · change not saved · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 34200
+    },
+    "ChatRename.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · rename sheet",
+      "w": 390,
+      "x": 1880,
+      "y": 34200
+    },
+    "ChatRenameDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · rename sheet · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 34200
+    },
+    "ChatDelete.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · delete sheet",
+      "w": 390,
+      "x": 2350,
+      "y": 34200
+    },
+    "ChatDeleteDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · delete sheet · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 34200
     }
   },
   "createdOnFiles": {
@@ -3187,7 +3539,51 @@
     "PhotosPlacesMap.dc.html",
     "PhotosPlacesMapDark.dc.html",
     "MoneyImportDone.dc.html",
-    "MoneyImportDoneDark.dc.html"
+    "MoneyImportDoneDark.dc.html",
+    "ChatDownload.dc.html",
+    "ChatDownloadDark.dc.html",
+    "ChatCellular.dc.html",
+    "ChatCellularDark.dc.html",
+    "ChatDownloading.dc.html",
+    "ChatDownloadingDark.dc.html",
+    "ChatWaitingWifi.dc.html",
+    "ChatWaitingWifiDark.dc.html",
+    "ChatLowStorage.dc.html",
+    "ChatLowStorageDark.dc.html",
+    "ChatUnavailable.dc.html",
+    "ChatUnavailableDark.dc.html",
+    "ChatChecking.dc.html",
+    "ChatCheckingDark.dc.html",
+    "ChatModelUpdate.dc.html",
+    "ChatModelUpdateDark.dc.html",
+    "ChatUpdateNeeded.dc.html",
+    "ChatUpdateNeededDark.dc.html",
+    "ChatStreaming.dc.html",
+    "ChatStreamingDark.dc.html",
+    "ChatStoppedFailed.dc.html",
+    "ChatStoppedFailedDark.dc.html",
+    "ChatCards.dc.html",
+    "ChatCardsDark.dc.html",
+    "ChatMessageActions.dc.html",
+    "ChatMessageActionsDark.dc.html",
+    "ChatEditResend.dc.html",
+    "ChatEditResendDark.dc.html",
+    "ChatRichText.dc.html",
+    "ChatRichTextDark.dc.html",
+    "ChatDictation.dc.html",
+    "ChatDictationDark.dc.html",
+    "ChatsSearch.dc.html",
+    "ChatsSearchDark.dc.html",
+    "ChatsSearchNone.dc.html",
+    "ChatsSearchNoneDark.dc.html",
+    "ChatsEmpty.dc.html",
+    "ChatsEmptyDark.dc.html",
+    "ChatsError.dc.html",
+    "ChatsErrorDark.dc.html",
+    "ChatRename.dc.html",
+    "ChatRenameDark.dc.html",
+    "ChatDelete.dc.html",
+    "ChatDeleteDark.dc.html"
   ],
   "pages": [
     {
