@@ -2968,6 +2968,46 @@
       "w": 390,
       "x": 1410,
       "y": 36400
+    },
+    "BackupCheckNotRun.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Check my backup, not checked (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 7520
+    },
+    "RestoreNone.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Restore, no backup will open (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 8460
+    },
+    "BackupNotifyAsk.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Backup, notification ask after pairing (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 9400
+    },
+    "BackupNotifyOff.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Backup, notifications off (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 10340
+    },
+    "RestoreNewer.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Restore, a newer Centraid made the backup (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 11280
     }
   },
   "createdOnFiles": {
@@ -3799,7 +3839,12 @@
     "NotifyRefusedRowDark.dc.html",
     "NotifyDateOnlyDark.dc.html",
     "NotifyShowDetailsDark.dc.html",
-    "NotifyPausedDark.dc.html"
+    "NotifyPausedDark.dc.html",
+    "BackupCheckNotRun.dc.html",
+    "RestoreNone.dc.html",
+    "BackupNotifyAsk.dc.html",
+    "BackupNotifyOff.dc.html",
+    "RestoreNewer.dc.html"
   ],
   "pages": [
     {

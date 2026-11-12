@@ -299,6 +299,17 @@ pub fn now_ms() -> u64 {
         .map_or(0, |elapsed| {
             u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX)
         })
+        .saturating_add(CLOCK_SKEW_MS.load(std::sync::atomic::Ordering::Relaxed))
+}
+
+/// How far a test has set the phone's clock ahead; zero everywhere else.
+static CLOCK_SKEW_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Set the phone's clock `ms` ahead of the system's, so a test can pass a day without waiting
+/// one. For tests only: nothing in a shell calls it.
+#[doc(hidden)]
+pub fn set_clock_skew_ms(ms: u64) {
+    CLOCK_SKEW_MS.store(ms, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// What a plane refusal is to a shell.

@@ -475,10 +475,14 @@ fn restore_error(error: RestoreError, index: u32) -> CoreError {
         RestoreError::Plane(PlaneError::Store(StoreError::Untrusted(reason))) => {
             CoreError::GatewayRefused { reason }
         }
-        other => CoreError::Invariant {
-            context: format!(
-                "the snapshot of the vault at index {index} would not restore: {other}"
-            ),
+        // A NEWER BUILD'S BACKUP asks for an update, which is the one remedy a member has.
+        RestoreError::NewerBuild { found, supported } => {
+            CoreError::BackupFromNewerBuild { found, supported }
+        }
+        // EVERYTHING ELSE IS A SNAPSHOT THAT WILL NOT OPEN, said so in a sentence the member can
+        // read: not "restart", which cannot help (#1188, B2, ruling 17).
+        other => CoreError::BackupUnreadable {
+            detail: format!("the snapshot of the vault at index {index}: {other}"),
         },
     }
 }
@@ -755,8 +759,8 @@ fn lay_down(
             // THE LADDER, ONCE, HERE: a snapshot an older build took is
             // migrated forward now, and one that will not open is refused
             // before any claim rather than found by the shell.
-            let vault = Vault::open(file).map_err(|error| CoreError::Invariant {
-                context: format!("the restored vault at index {index} would not open: {error}"),
+            let vault = Vault::open(file).map_err(|error| CoreError::BackupUnreadable {
+                detail: format!("the restored vault at index {index} would not open: {error}"),
             })?;
             vault.close()?;
             Ok(restored)
@@ -942,5 +946,49 @@ mod aside_tests {
             files(dir.path()).is_empty(),
             "the older copy is gone once the restored one is kept"
         );
+    }
+}
+
+#[cfg(test)]
+mod error_tests {
+    use super::*;
+
+    /// **B2, ruling 17.** A backup a newer build made asks for an update; one that predates an
+    /// in-place baseline edit (its rung-one digest is not this baseline's) or will not open is
+    /// said in a plain sentence. Neither is `Internal`, whose remedy ("restart") cannot help.
+    #[test]
+    fn an_unreadable_or_newer_backup_is_said_in_a_sentence_that_helps() {
+        let newer = restore_error(
+            RestoreError::NewerBuild {
+                found: 9,
+                supported: 1,
+            },
+            0,
+        );
+        assert_eq!(
+            newer.code(),
+            centraid_api_proto::core_v1::ErrorCode::BackupFromNewerBuild
+        );
+        assert_eq!(
+            newer.sentence(),
+            "A newer Centraid made this backup. Update Centraid."
+        );
+
+        let early = restore_error(
+            RestoreError::SchemaMismatch {
+                found: "old".to_owned(),
+                expected: "now".to_owned(),
+            },
+            0,
+        );
+        assert_eq!(
+            early.code(),
+            centraid_api_proto::core_v1::ErrorCode::BackupUnreadable
+        );
+        assert_eq!(
+            early.sentence(),
+            "This version of Centraid can't open this backup."
+        );
+        assert!(!early.sentence().contains("Restart"));
     }
 }
