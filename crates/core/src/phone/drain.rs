@@ -1664,12 +1664,12 @@ fn retain(
     let garbage = retention::garbage(listed.iter().map(|entry| entry.name), &live);
 
     // THE OLDEST SNAPSHOT STILL KEPT, on the clock snapshots are dated by.
-    let oldest_kept = decided
+    let kept_taken: Vec<u64> = decided
         .keep
         .iter()
         .filter_map(|kept| registered.iter().find(|entry| entry.name == *kept))
         .map(|entry| entry.taken_at_ms)
-        .min();
+        .collect();
     let graves: BTreeMap<String, u64> = ledger
         .meta_with_prefix(GRAVE_PREFIX)
         .map_err(plane_error)?
@@ -1696,7 +1696,7 @@ fn retain(
             }
         };
         unlive.insert(key);
-        if retention::collectable(first, oldest_kept) {
+        if retention::collectable_among(first, &kept_taken, now) {
             doomed.push(name);
         } else {
             held_back += 1;

@@ -30,7 +30,9 @@
 //! The vault's current files are live, and a file the vault no longer names is
 //! garbage — but a kept snapshot's rows may still name it, and a restore of
 //! that snapshot needs its bytes. [`collectable`] holds such a file until
-//! every kept snapshot was taken after it left (the sweep's F5).
+//! every kept snapshot was taken after it left (the sweep's F5). While any kept
+//! snapshot is dated in the future nothing is collectable at all
+//! ([`collectable_among`]): its real time is unknown, and doubt never deletes.
 
 use std::collections::BTreeSet;
 
@@ -168,6 +170,19 @@ pub fn live_names(
 #[must_use]
 pub fn collectable(first_unlive_ms: u64, oldest_kept_ms: Option<u64>) -> bool {
     oldest_kept_ms.is_some_and(|oldest| oldest > first_unlive_ms)
+}
+
+/// [`collectable`] over every kept snapshot's `taken_at_ms`, with the clock it is judged on.
+///
+/// **DOUBT NEVER DELETES.** While any kept snapshot is dated after `now_ms`, nothing is
+/// collectable: that snapshot's real take time is unknown (its phone's clock was set ahead), so
+/// it may name a file that left the vault after it was really taken, and the oldest date alone
+/// cannot say. It heals itself — once the clock passes the date, or [`keep`] (which clamps the
+/// date) drops that snapshot, the rule is [`collectable`]'s again.
+#[must_use]
+pub fn collectable_among(first_unlive_ms: u64, kept_taken_ms: &[u64], now_ms: u64) -> bool {
+    kept_taken_ms.iter().all(|taken| *taken <= now_ms)
+        && collectable(first_unlive_ms, kept_taken_ms.iter().copied().min())
 }
 
 /// What a destination lists beyond the live set.
@@ -399,5 +414,25 @@ mod tests {
         );
         // The same file, left 200 days ago: older than every kept snapshot.
         assert!(collectable(NOW_MS - 200 * DAY_MS, oldest));
+    }
+
+    /// **A FUTURE-DATED KEPT SNAPSHOT HOLDS EVERY COLLECTION BACK,** and the same data with a
+    /// sane date is collected as before.
+    #[test]
+    fn a_future_dated_kept_snapshot_collects_nothing_until_it_heals() {
+        let left = NOW_MS - 10 * DAY_MS;
+        let sane = [NOW_MS - DAY_MS, NOW_MS - 2 * DAY_MS];
+        assert!(collectable_among(left, &sane, NOW_MS), "as before");
+        // The oldest is sane but a newer kept one is dated ahead: still nothing.
+        let ahead = [NOW_MS - DAY_MS, NOW_MS + 400 * DAY_MS];
+        assert!(!collectable_among(left, &ahead, NOW_MS));
+        // The oldest itself is in the future: it would read as "newer than the leaving".
+        assert!(!collectable_among(left, &[NOW_MS + DAY_MS], NOW_MS));
+        // The clock passes the date: collectable again.
+        assert!(collectable_among(left, &ahead, NOW_MS + 401 * DAY_MS));
+        assert!(
+            !collectable_among(left, &[], NOW_MS),
+            "no kept snapshot collects nothing"
+        );
     }
 }
