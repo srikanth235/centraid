@@ -5,7 +5,7 @@ import SwiftUI
 /// **THE VIEW DECIDES NOTHING.** `MoneyHomeState` carries the band, the header's
 /// filter menu and the month under the title, every word, every figure and every row; this file lays them out and forwards
 /// events. `AppPlace` owns the header, the search door and the band;
-/// `ReadStateView` owns loading, failure and the denied gate (no band while
+/// `PageReadStateView` owns loading, failure and the denied gate (no band while
 /// denied). The header's Plus is the app's create verb: rows enter by import.
 /// Search is a door (R-CHROME-2): the bar never opens in place, it pushes the
 /// search page. Where each intent leads is Rust's (`crates/screens`).

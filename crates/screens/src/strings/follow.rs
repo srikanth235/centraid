@@ -77,8 +77,4 @@ catalog! {
     plain reconnect_contacts = ("Phone contacts", "Phone contacts");
     plain reconnect_calendars = ("Phone calendars", "Phone calendars");
     plain reconnect_folder = ("{label} folder", "{label} folder");
-    plain reconnect_failed = (
-        "Couldn’t read what the vault followed.",
-        "Couldn’t read what the vault followed."
-    );
 }

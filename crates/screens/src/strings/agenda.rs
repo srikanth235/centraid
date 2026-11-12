@@ -67,7 +67,6 @@ catalog! {
     plain foot_new = ("A new event starts tentative.", "A new event starts tentative.");
     plain from = ("From", "From");
     plain from_today = ("From today", "From today");
-    plain gone_action = ("Back to Calendar", "Back to Calendar");
     plain gone_body = ("It was cancelled, moved or deleted.", "It was cancelled, moved or deleted.");
     plain gone_title = ("This event was removed.", "This event was removed.");
     plain guests_none = ("Nobody else", "Nobody else");
