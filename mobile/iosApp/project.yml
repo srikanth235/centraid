@@ -274,12 +274,13 @@ targets:
         # array did not, and the first `submitTaskRequest` on a generated build
         # would have killed the app on launch.
         #
-        # BOTH IDENTIFIERS, and they are `BackgroundPasses.refreshIdentifier` and
-        # `.processingIdentifier` in `Sources/BackgroundPasses.swift`: one fact in two
+        # ALL THREE IDENTIFIERS, and they are `BackgroundPasses.refreshIdentifier`,
+        # `.processingIdentifier` and `.nudgeIdentifier` in `Sources/BackgroundPasses.swift`: one fact in two
         # files, and the plist is xcodegen's output of this one.
         BGTaskSchedulerPermittedIdentifiers:
           - dev.centraid.sync-pass
           - dev.centraid.upload-pass
+          - dev.centraid.nudge-pass
         UIBackgroundModes:
           - fetch
           - processing
