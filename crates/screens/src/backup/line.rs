@@ -11,8 +11,8 @@ use centraid_api_proto::core_v1 as wire;
 use wire::backup_line::Tone;
 
 use super::claim::bytes;
-use super::reading::Reading;
-use crate::strings::{Locale, backup as words, fill};
+use super::reading::{Footing, Reading};
+use crate::strings::{Locale, backup as words, backup_home as words_home, fill};
 
 const MINUTE_MS: i64 = 60_000;
 const HOUR_MS: i64 = 60 * MINUTE_MS;
@@ -125,7 +125,7 @@ pub fn line(
     let attention = stale
         || reading.waiting_for(wire::WaitReason::Untrusted) > 0
         || reading.destinations.iter().any(|d| d.pair_again);
-    finish(wire::BackupLine {
+    let built = wire::BackupLine {
         confirmed: reading.content_confirmed,
         waiting,
         sentence: fill(
@@ -151,7 +151,100 @@ pub fn line(
             Tone::Quiet
         } as i32,
         ..Default::default()
+    };
+    finish(name_the_one_behind(locale, reading, now_ms, built))
+}
+
+/// The name the member gave a backup device, or the plain word for one with none.
+#[must_use]
+pub fn device_name(locale: Locale, destination: &super::reading::Destination) -> String {
+    if destination.label.trim().is_empty() {
+        words::backup_unnamed(locale)
+    } else {
+        destination.label.clone()
+    }
+}
+
+/// The device furthest from current (rolled back, then full, then behind), if any is not current.
+#[must_use]
+pub fn worst(reading: &Reading) -> Option<&super::reading::Destination> {
+    reading
+        .destinations
+        .iter()
+        .filter(|d| d.footing() != Footing::Current)
+        .max_by_key(|d| d.footing())
+}
+
+/// NB1: when one backup device is behind, full or holding an older backup, the card says so by
+/// the name the member gave it, and says what the others hold. "Backed up" is never said while
+/// any device owes anything.
+fn name_the_one_behind(
+    locale: Locale,
+    reading: &Reading,
+    now_ms: i64,
+    mut line: wire::BackupLine,
+) -> wire::BackupLine {
+    let Some(worst) = worst(reading) else {
+        return line;
+    };
+    let name = device_name(locale, worst);
+    let title = match worst.footing() {
+        Footing::RolledBack => words_home::device_older(locale),
+        Footing::Full => words_home::device_full(locale),
+        _ => words_home::device_behind(locale),
+    };
+    line.status = fill(&title, &[("name", &name)]);
+    let current: Vec<&super::reading::Destination> = reading
+        .destinations
+        .iter()
+        .filter(|d| d.footing() == Footing::Current)
+        .collect();
+    if let Some(at) = current.iter().filter_map(|d| d.last_ack_ms).max() {
+        let others = current
+            .iter()
+            .map(|d| device_name(locale, d))
+            .collect::<Vec<_>>()
+            .join(", ");
+        line.sentence = fill(
+            &words_home::device_backed_up_to(locale),
+            &[("others", &others), ("when", &ago(locale, at, now_ms))],
+        );
+    }
+    line.tone = Tone::Attention as i32;
+    line
+}
+
+/// The one sentence under the card for the device that is behind: why, in words a member can act
+/// on. No sentence names a command.
+#[must_use]
+pub fn behind_reason(locale: Locale, zone: &str, reading: &Reading, now_ms: i64) -> Option<String> {
+    let worst = worst(reading)?;
+    let name = device_name(locale, worst);
+    Some(match worst.footing() {
+        Footing::RolledBack => words_home::device_older_reason(locale),
+        Footing::Full => fill(&words_home::device_full_reason(locale), &[("name", &name)]),
+        _ if worst.reach == wire::WaitReason::PairAgain as i32 => {
+            words::backup_line_pair_again(locale)
+        }
+        _ if worst.reach == wire::WaitReason::Gateway as i32 => match worst.last_seen_ms {
+            Some(at) => fill(
+                &words_home::device_silent_since(locale),
+                &[("name", &name), ("day", &since(locale, zone, at, now_ms))],
+            ),
+            None => fill(&words::backup_unreachable(locale), &[("name", &name)]),
+        },
+        _ => fill(&words_home::device_catching_up(locale), &[("name", &name)]),
     })
+}
+
+/// "Friday" within the week, else "Friday 30 October".
+fn since(locale: Locale, zone: &str, at_ms: i64, now_ms: i64) -> String {
+    let day = super::stale::since_day(locale, zone, at_ms);
+    if now_ms - at_ms < 6 * DAY_MS {
+        day.split(' ').next().unwrap_or_default().to_owned()
+    } else {
+        day
+    }
 }
 
 /// THE LINE'S SECOND CLAUSE, IN BYTES (#1144): "All 5.0 GB from 8 apps is

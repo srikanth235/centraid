@@ -31,7 +31,7 @@ use wire::screen_event::Kind as E;
 use super::claim::bytes;
 use super::doors::{self, Done};
 use super::key::KeyCustody;
-use super::reading::{self, Destination, Standing};
+use super::reading::{self, Destination, Footing, Standing};
 use super::rule::{self, TransferRule};
 use super::{apps, line, routes};
 use crate::custody::secrets::{self, SeedWrite, VaultSecrets};
@@ -529,6 +529,22 @@ impl Backup {
             .collect()
     }
 
+    /// How a device that is not current stands, for its row: how many files it owes.
+    fn standing_words(locale: Locale, destination: &Destination) -> Option<String> {
+        match destination.footing() {
+            Footing::Current => None,
+            Footing::Full | Footing::RolledBack => None,
+            Footing::Behind => Some(match destination.behind_files {
+                0 => return None,
+                1 => backup_home::row_behind_one(locale),
+                n => fill(
+                    &backup_home::row_behind_many(locale),
+                    &[("n", &line::grouped(n))],
+                ),
+            }),
+        }
+    }
+
     fn destination_row(
         &self,
         locale: Locale,
@@ -561,14 +577,26 @@ impl Backup {
         .flatten()
         .collect::<Vec<_>>()
         .join(" · ");
-        // WHAT IT HOLDS, as this phone recorded its acknowledgements (#1144).
-        let held = if destination.held_bytes == 0 {
-            String::new()
-        } else {
-            fill(
-                &words::backup_held(locale),
-                &[("size", &bytes(destination.held_bytes))],
-            )
+        // WHAT IT HOLDS, as this phone recorded its acknowledgements (#1144), and when it is not
+        // current how it stands (#1188, NB1).
+        let held = [
+            (destination.held_bytes != 0).then(|| {
+                fill(
+                    &words::backup_held(locale),
+                    &[("size", &bytes(destination.held_bytes))],
+                )
+            }),
+            Self::standing_words(locale, destination),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join(" \u{b7} ");
+        // A FULL OR ROLLED-BACK DEVICE says that where it says when it was reached.
+        let detail = match destination.footing() {
+            Footing::Full => backup_home::row_full(locale),
+            Footing::RolledBack => backup_home::row_older(locale),
+            _ => detail,
         };
         let accessibility_label = [label.as_str(), &held, &detail]
             .into_iter()
@@ -749,6 +777,11 @@ impl Backup {
                     fill(&words::backup_unreachable(locale), &[("name", &name)]),
                 )
             }
+            // ONE DEVICE BEHIND, FULL OR HOLDING AN OLDER BACKUP names its reason (#1188, NB1).
+            (_, Some(reading)) if !frozen => (
+                String::new(),
+                line::behind_reason(locale, ctx.zone(), reading, now).unwrap_or_default(),
+            ),
             _ => (String::new(), String::new()),
         };
         let key_summary = if key_heading.is_empty() {

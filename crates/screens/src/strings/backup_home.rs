@@ -55,4 +55,20 @@ catalog! {
     counted claim_behind = ("{n} change not backed up. Last backup {when}.", "{n} changes not backed up. Last backup {when}.");
     plain claim_moved_nothing = ("Moved to another phone. Nothing unsent here.", "Moved to another phone. Nothing unsent here.");
     counted claim_moved_unsent = ("Moved to another phone. {n} change since {since} is only here.", "Moved to another phone. {n} changes since {since} are only here.");
+
+    // WHICH BACKUP DEVICE IS BEHIND, FULL OR HOLDING AN OLDER BACKUP (#1188, NB1): the card names
+    // it by the name the member gave it, and each row says how it stands.
+    plain device_behind = ("{name} is behind", "{name} is behind");
+    plain device_full = ("{name} is full", "{name} is full");
+    plain device_older = ("{name} has an older backup", "{name} has an older backup");
+    plain device_backed_up_to = ("Backed up to {others} {when}", "Backed up to {others} {when}");
+    plain device_silent_since = ("{name} hasn't answered since {day}. Check it's awake and on the same network as this phone.", "{name} hasn't answered since {day}. Check it's awake and on the same network as this phone.");
+    plain device_full_reason = ("{name} has no room left. Free some space on it, then back up again.", "{name} has no room left. Free some space on it, then back up again.");
+    plain device_older_reason = ("It holds an older backup than this phone sent. Back up now to bring it up to date.", "It holds an older backup than this phone sent. Back up now to bring it up to date.");
+    plain device_catching_up = ("{name} is catching up. Back up now to send what it is missing.", "{name} is catching up. Back up now to send what it is missing.");
+    plain row_up_to_date = ("Up to date", "Up to date");
+    plain row_behind_one = ("1 file behind", "1 file behind");
+    plain row_behind_many = ("{n} files behind", "{n} files behind");
+    plain row_full = ("Full", "Full");
+    plain row_older = ("Older backup than this phone sent", "Older backup than this phone sent");
 }

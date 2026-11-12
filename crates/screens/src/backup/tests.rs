@@ -2248,3 +2248,99 @@ mod check_my_backup {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// One backup device behind, full, or holding an older backup (#1188, NB1, B4): the card names
+// it by the name the member gave it, and "backed up" is never said while a device owes anything.
+// ---------------------------------------------------------------------------
+
+mod one_device_behind {
+    use super::*;
+
+    fn office(change: impl FnOnce(&mut wire::Destination)) -> wire::BackupStatusResponse {
+        let mut behind = gateway(
+            "gw-2",
+            "Office NAS",
+            Some("192.168.1.30:7443"),
+            NOW - 2 * 86_400_000,
+            NOW - 2 * 86_400_000,
+        );
+        behind.held_bytes = 4_700 * MB;
+        change(&mut behind);
+        wire::BackupStatusResponse {
+            destinations: vec![
+                wire::Destination {
+                    held_bytes: 5_100 * MB,
+                    ..home_laptop()
+                },
+                behind,
+            ],
+            ..status(Vec::new())
+        }
+    }
+
+    #[test]
+    fn every_device_current_says_backed_up() {
+        let data = Page::open(office(|_| {})).data();
+        let line = data.line.expect("a line");
+        assert_eq!(line.status, "Backed up 2 minutes ago");
+        assert!(data.reason.is_empty());
+    }
+
+    #[test]
+    fn a_silent_device_is_named_with_the_day_it_last_answered() {
+        let data = Page::open(office(|d| {
+            d.behind_files = 184;
+            d.reach = wire::WaitReason::Gateway as i32;
+        }))
+        .data();
+        let line = data.line.expect("a line");
+        assert_eq!(line.status, "Office NAS is behind");
+        assert_eq!(line.sentence, "Backed up to Home laptop just now");
+        assert_eq!(line.tone, Tone::Attention as i32);
+        assert!(
+            data.reason.starts_with("Office NAS hasn't answered since "),
+            "{}",
+            data.reason
+        );
+        assert!(
+            data.reason
+                .ends_with("Check it's awake and on the same network as this phone.")
+        );
+        let row = &data.destinations[1];
+        assert!(row.held.ends_with("184 files behind"), "{}", row.held);
+        assert!(!data.destinations[0].held.contains("behind"));
+    }
+
+    #[test]
+    fn a_full_device_says_so_in_its_card_and_its_row() {
+        let data = Page::open(office(|d| {
+            d.behind_files = 184;
+            d.reach = wire::WaitReason::Refused as i32;
+        }))
+        .data();
+        assert_eq!(data.line.expect("a line").status, "Office NAS is full");
+        assert_eq!(
+            data.reason,
+            "Office NAS has no room left. Free some space on it, then back up again."
+        );
+        assert_eq!(data.destinations[1].detail, "Full");
+    }
+
+    #[test]
+    fn a_device_holding_an_older_backup_is_a_plain_warning() {
+        let data = Page::open(office(|d| d.rolled_back = true)).data();
+        assert_eq!(
+            data.line.expect("a line").status,
+            "Office NAS has an older backup"
+        );
+        assert_eq!(
+            data.reason,
+            "It holds an older backup than this phone sent. Back up now to bring it up to date."
+        );
+        assert_eq!(
+            data.destinations[1].detail,
+            "Older backup than this phone sent"
+        );
+    }
+}

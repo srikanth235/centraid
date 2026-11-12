@@ -98,7 +98,7 @@ pub fn stale_backup_notices(
 }
 
 /// `Monday 9 November`, in the member's zone.
-fn since_day(locale: Locale, zone: &str, ms: i64) -> String {
+pub(super) fn since_day(locale: Locale, zone: &str, ms: i64) -> String {
     let Some(zone) = FireZone::named(zone)
         .or_else(|_| FireZone::named("UTC"))
         .ok()
@@ -129,6 +129,11 @@ mod tests {
             last_ack_ms: ack,
             pair_again: false,
             held_bytes: 0,
+            behind_files: 0,
+            behind_bytes: 0,
+            records_behind: false,
+            reach: 0,
+            rolled_back: false,
         }
     }
 
