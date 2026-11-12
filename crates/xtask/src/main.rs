@@ -104,7 +104,7 @@ enum Command {
         check: bool,
     },
     /// Write the model record (`crates/assist/model.json`, #1188): the file this release
-    /// ships by Hugging Face URL at a commit, its size and SHA-256 (read from the file you
+    /// ships by Hugging Face URL at a commit, its size and the publisher's digest (read from the file you
     /// name), the runtime's tool-catalogue and prompt hashes, and its score. The record that
     /// stood becomes `previous` unless `--replace`. Nothing is fetched.
     ModelPin {
