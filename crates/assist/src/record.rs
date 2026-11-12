@@ -8,6 +8,12 @@
 //! `model-record` step (`tests/model_record.rs`) recomputes both from the runtime and fails when an
 //! entry disagrees. The file is written by `cargo xtask model-pin`, never by hand.
 //!
+//! BESIDE `current` the record may carry one [`Adapter`]: a small LoRA file made for the vault
+//! turns, trained against one exact base file and one exact tool catalogue and prompt. It is
+//! updated far more often than the base, so it is its own entry with its own hashes; absent means
+//! the stock model runs alone, exactly as before. [`crate::adapter`] decides, per turn, whether the
+//! file on the phone is the one to use.
+//!
 //! Nothing here fetches anything. The phone fetches a pinned file only when the member asks, only from
 //! Hugging Face, only by the commit in `url`.
 
@@ -48,11 +54,53 @@ pub struct Entry {
     pub score: Option<f64>,
 }
 
-/// The release's pin: the model it ships and the one before.
+/// The adapter a release ships beside its base model: a LoRA file that is on for vault turns.
+///
+/// It is trained against ONE base file (`base_sha256`) and ONE catalogue and prompt (`tools_hash`,
+/// `prompt_hash`: the same hashes an [`Entry`] carries, computed by the same runtime). It is used
+/// only while all three still match what the phone holds and what the app serves
+/// ([`crate::adapter::decide`]); otherwise the base runs alone.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct Adapter {
+    /// `https://huggingface.co/<repo>/resolve/<40-hex commit>/<file>`. Never a branch or a tag.
+    pub url: String,
+    /// The file's name in that repository.
+    pub file_name: String,
+    /// The file's SHA-256, lowercase hex. The shell keeps a download only when it matches.
+    pub sha256: String,
+    /// The file's size in bytes, quoted before a byte has moved.
+    pub bytes: u64,
+    /// The SHA-256 of the base model file it was trained against (an [`Entry::sha256`]).
+    pub base_sha256: String,
+    /// BLAKE3 of the tool catalogue it was trained on: the [`Entry::tools_hash`] of its base.
+    pub tools_hash: String,
+    /// BLAKE3 of the static system turn it was trained on: the [`Entry::prompt_hash`] of its base.
+    pub prompt_hash: String,
+    /// The score it earned on the frozen sets, 0 to 1.
+    pub score: Option<f64>,
+}
+
+impl Adapter {
+    /// What the file is called on the phone: the name carries the start of its SHA-256, so a file
+    /// by that name of the right size is this exact adapter (the shell keeps only a download whose
+    /// digest matched), and an updated adapter is a different file beside the old one.
+    #[must_use]
+    pub fn local_name(&self) -> String {
+        format!(
+            "centraid-adapter-{}.gguf",
+            self.sha256.get(..12).unwrap_or(&self.sha256)
+        )
+    }
+}
+
+/// The release's pin: the model it ships and the one before, and the adapter made for the former.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Record {
     pub current: Entry,
     pub previous: Option<Entry>,
+    /// Absent (and absent from the file) when the release ships the stock model alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub adapter: Option<Adapter>,
 }
 
 /// The record this build was made with.
@@ -69,6 +117,7 @@ pub fn record() -> Record {
     if let Some(entry) = dev_model() {
         record.current = entry;
         record.previous = None;
+        record.adapter = None;
     }
     record
 }
@@ -165,17 +214,84 @@ pub fn runtime_hashes(mode: ToolsMode) -> (String, String) {
     )
 }
 
+/// Everything wrong with the adapter `record` ships, one sentence each: empty when there is none or
+/// it is fit to ship. It must be pinned to a commit, be trained against the base this release
+/// ships and on the catalogue and prompt this runtime serves.
+#[must_use]
+pub fn adapter_problems(record: &Record) -> Vec<String> {
+    let Some(adapter) = &record.adapter else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let hex = |text: &str, len: usize| {
+        text.len() == len && text.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+    };
+    if !commit_pinned(&adapter.url) {
+        out.push(format!(
+            "adapter {} is not a Hugging Face URL pinned to a commit",
+            adapter.url
+        ));
+    }
+    if !adapter.url.ends_with(&adapter.file_name) {
+        out.push(format!(
+            "adapter {} does not end in {}",
+            adapter.url, adapter.file_name
+        ));
+    }
+    if !hex(&adapter.sha256, 64) {
+        out.push("adapter sha256 is not 64 lowercase hex digits".to_owned());
+    }
+    if !hex(&adapter.base_sha256, 64) {
+        out.push("adapter base_sha256 is not 64 lowercase hex digits".to_owned());
+    }
+    if adapter.bytes == 0 {
+        out.push("adapter bytes is zero".to_owned());
+    }
+    if adapter.base_sha256 != record.current.sha256 {
+        out.push(format!(
+            "adapter was trained on base {}, not the base this release ships ({})",
+            adapter.base_sha256, record.current.sha256
+        ));
+    }
+    if adapter.sha256 == record.current.sha256 {
+        out.push("adapter is the base file".to_owned());
+    }
+    if let Some(mode) = ToolsMode::parse(&record.current.tools_mode) {
+        let (tools, prompt) = runtime_hashes(mode);
+        if adapter.tools_hash != tools {
+            out.push(format!(
+                "adapter tools_hash {} is not the runtime's catalogue ({tools})",
+                adapter.tools_hash
+            ));
+        }
+        if adapter.prompt_hash != prompt {
+            out.push(format!(
+                "adapter prompt_hash {} is not the runtime's prompt ({prompt})",
+                adapter.prompt_hash
+            ));
+        }
+    }
+    if adapter
+        .score
+        .is_some_and(|score| !(0.0..=1.0).contains(&score))
+    {
+        out.push("adapter score is outside 0 to 1".to_owned());
+    }
+    out
+}
+
+fn commit_pinned(url: &str) -> bool {
+    url.strip_prefix("https://huggingface.co/")
+        .and_then(|rest| rest.split("/resolve/").nth(1))
+        .and_then(|rest| rest.split('/').next())
+        .is_some_and(|commit| commit.len() == 40 && commit.bytes().all(|b| b.is_ascii_hexdigit()))
+}
+
 /// Everything wrong with `entry`, one sentence each: empty when it is fit to ship.
 #[must_use]
 pub fn problems(entry: &Entry) -> Vec<String> {
     let mut out = Vec::new();
-    let commit_pinned = entry
-        .url
-        .strip_prefix("https://huggingface.co/")
-        .and_then(|rest| rest.split("/resolve/").nth(1))
-        .and_then(|rest| rest.split('/').next())
-        .is_some_and(|commit| commit.len() == 40 && commit.bytes().all(|b| b.is_ascii_hexdigit()));
-    if !commit_pinned {
+    if !commit_pinned(&entry.url) {
         out.push(format!(
             "{} is not a Hugging Face URL pinned to a commit",
             entry.url

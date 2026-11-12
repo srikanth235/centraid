@@ -671,6 +671,7 @@ fn window_record() -> centraid_assist::record::Record {
         ..current.clone()
     };
     centraid_assist::record::Record {
+        adapter: None,
         current: entry("New-Q4_0.gguf", "b", 604_000_000),
         previous: Some(entry("Old-Q4_0.gguf", "c", 563_000_000)),
     }

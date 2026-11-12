@@ -35,6 +35,7 @@
 //! A write the model makes parks behind a confirm card (R-1088-2); nothing in
 //! this crate writes until the member taps it.
 
+pub mod adapter;
 pub mod app;
 pub mod attach;
 pub mod escape;

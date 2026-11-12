@@ -20,6 +20,70 @@ fn every_pinned_model_matches_the_runtime_it_runs_on() {
 }
 
 #[test]
+fn the_adapter_a_release_ships_is_made_for_this_base_and_this_runtime() {
+    let problems = record::adapter_problems(&record::record());
+    assert!(problems.is_empty(), "{problems:#?}");
+}
+
+#[test]
+fn a_drifted_adapter_is_refused() {
+    let base = record::record();
+    let good = record::Adapter {
+        url: format!(
+            "https://huggingface.co/acme/a/resolve/{}/a.gguf",
+            "d".repeat(40)
+        ),
+        file_name: "a.gguf".to_owned(),
+        sha256: "e".repeat(64),
+        bytes: 9,
+        base_sha256: base.current.sha256.clone(),
+        tools_hash: base.current.tools_hash.clone(),
+        prompt_hash: base.current.prompt_hash.clone(),
+        score: Some(0.5),
+    };
+    let with = |adapter: record::Adapter| record::Record {
+        adapter: Some(adapter),
+        ..base.clone()
+    };
+    assert!(record::adapter_problems(&with(good.clone())).is_empty());
+    let mut other = good.clone();
+    other.base_sha256 = "0".repeat(64);
+    assert!(
+        record::adapter_problems(&with(other))
+            .iter()
+            .any(|p| p.contains("trained on base"))
+    );
+    let mut other = good.clone();
+    other.tools_hash = "0".repeat(64);
+    assert!(
+        record::adapter_problems(&with(other))
+            .iter()
+            .any(|p| p.contains("tools_hash"))
+    );
+    let mut other = good.clone();
+    other.prompt_hash = "0".repeat(64);
+    assert!(
+        record::adapter_problems(&with(other))
+            .iter()
+            .any(|p| p.contains("prompt_hash"))
+    );
+    let mut other = good;
+    other.url = "https://huggingface.co/acme/a/resolve/main/a.gguf".to_owned();
+    assert!(
+        record::adapter_problems(&with(other))
+            .iter()
+            .any(|p| p.contains("pinned to a commit"))
+    );
+}
+
+#[test]
+fn a_record_with_no_adapter_is_unchanged_on_the_wire() {
+    let record = record::record();
+    let text = serde_json::to_string(&record).unwrap();
+    assert!(!text.contains("adapter"));
+}
+
+#[test]
 fn the_two_model_window_never_pins_the_same_file_twice() {
     let record = record::record();
     if let Some(previous) = record.previous {

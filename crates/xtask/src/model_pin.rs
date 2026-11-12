@@ -17,7 +17,7 @@ use sha2::{Digest, Sha256};
 /// Where the record lives, from the repository root.
 const RECORD: &str = "crates/assist/model.json";
 
-pub struct Pin<'a> {
+pub struct Base<'a> {
     pub url: &'a str,
     pub file: &'a Path,
     pub tools_mode: &'a str,
@@ -25,7 +25,93 @@ pub struct Pin<'a> {
     pub replace: bool,
 }
 
+/// An adapter, pinned against whichever base the record holds once the base (if any) is written.
+pub struct AdapterPin<'a> {
+    pub url: &'a str,
+    pub file: &'a Path,
+    pub score: Option<f64>,
+}
+
+pub struct Pin<'a> {
+    pub base: Option<Base<'a>>,
+    pub adapter: Option<AdapterPin<'a>>,
+    pub no_adapter: bool,
+}
+
 pub fn run(root: &Path, pin: &Pin<'_>) -> Result<()> {
+    if pin.base.is_none() && pin.adapter.is_none() && !pin.no_adapter {
+        bail!(
+            "name a base (--url, --file, --tools-mode), an adapter (--adapter-url, --adapter-file) or --no-adapter"
+        );
+    }
+    let path = root.join(RECORD);
+    let mut record: Value = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_else(|| serde_json::json!({"current": Value::Null, "previous": Value::Null}));
+    if let Some(base) = &pin.base {
+        write_base(root, base, &mut record)?;
+    }
+    if pin.no_adapter {
+        record.as_object_mut().map(|o| o.remove("adapter"));
+    }
+    if let Some(adapter) = &pin.adapter {
+        let entry = adapter_entry(root, adapter, &record)?;
+        println!(
+            "model-pin: adapter {}, {} bytes, sha256 {}, trained against the base {}",
+            adapter.url, entry["bytes"], entry["sha256"], entry["base_sha256"]
+        );
+        record["adapter"] = entry;
+    } else if let Some(standing) = record.get("adapter").cloned() {
+        // a new base leaves the adapter made for the old one behind: it would never be used
+        if standing["base_sha256"] != record["current"]["sha256"] {
+            record.as_object_mut().map(|o| o.remove("adapter"));
+            println!("model-pin: dropped the adapter, which was made for the base that stood");
+        }
+    }
+    std::fs::write(&path, serde_json::to_string_pretty(&record)? + "\n")
+        .with_context(|| format!("write {}", path.display()))?;
+    println!("model-pin: wrote {RECORD}");
+    Ok(())
+}
+
+/// The adapter's entry: size and digest from the file, the base it is for from the record, the
+/// catalogue and prompt hashes from the runtime in the base's mode.
+fn adapter_entry(root: &Path, adapter: &AdapterPin<'_>, record: &Value) -> Result<Value> {
+    let file_name = adapter
+        .url
+        .rsplit('/')
+        .next()
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| anyhow!("{} has no file name", adapter.url))?
+        .to_owned();
+    let (sha256, bytes) = digest(adapter.file)?;
+    let current = record
+        .get("current")
+        .filter(|current| !current.is_null())
+        .ok_or_else(|| anyhow!("pin the base first: the record holds none"))?;
+    let mode = current["tools_mode"]
+        .as_str()
+        .ok_or_else(|| anyhow!("the base names no tools_mode"))?;
+    let hashes = runtime_hashes(root)?;
+    let hashes = hashes
+        .get(mode)
+        .ok_or_else(|| anyhow!("{mode:?} is not a catalogue mode"))?;
+    Ok(serde_json::json!({
+        "url": adapter.url,
+        "file_name": file_name,
+        "sha256": sha256,
+        "bytes": bytes,
+        "base_sha256": current["sha256"],
+        "tools_hash": hashes["tools_hash"],
+        "prompt_hash": hashes["prompt_hash"],
+        "score": adapter.score,
+    }))
+}
+
+/// Write `current` (and `previous`) into `record`, leaving anything else in it (the adapter) as it
+/// stood.
+fn write_base(root: &Path, pin: &Base<'_>, record: &mut Value) -> Result<()> {
     let file_name = pin
         .url
         .rsplit('/')
@@ -50,11 +136,7 @@ pub fn run(root: &Path, pin: &Pin<'_>) -> Result<()> {
         "special_tokens_source": "file",
         "score": pin.score,
     });
-    let path = root.join(RECORD);
-    let standing: Option<Value> = std::fs::read_to_string(&path)
-        .ok()
-        .and_then(|text| serde_json::from_str(&text).ok())
-        .and_then(|record: Value| record.get("current").cloned());
+    let standing = record.get("current").filter(|c| !c.is_null()).cloned();
     let previous = if pin.replace {
         Value::Null
     } else {
@@ -62,12 +144,10 @@ pub fn run(root: &Path, pin: &Pin<'_>) -> Result<()> {
             .filter(|current| current["sha256"] != entry["sha256"])
             .unwrap_or(Value::Null)
     };
-    let record = serde_json::json!({"current": entry, "previous": previous});
-    std::fs::write(&path, serde_json::to_string_pretty(&record)? + "\n")
-        .with_context(|| format!("write {}", path.display()))?;
-    // the same entry must now pass the checks the gate makes
+    record["current"] = entry;
+    record["previous"] = previous;
     println!(
-        "model-pin: wrote {RECORD}: {file_name}, {bytes} bytes, sha256 {sha256}, mode {}",
+        "model-pin: base {file_name}, {bytes} bytes, sha256 {sha256}, mode {}",
         pin.tools_mode
     );
     Ok(())
