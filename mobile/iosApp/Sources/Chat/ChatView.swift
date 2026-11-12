@@ -847,6 +847,13 @@ private struct ChatMessageRow: View {
                         .foregroundStyle(Theme.color("textFaint", scheme))
                         .accessibilityIdentifier("chat-note")
                 }
+                // STOPPED OR DID NOT FINISH: the words it kept stay, with one quiet line under them.
+                if !message.mark.isEmpty {
+                    Text(verbatim: message.mark)
+                        .kitScaledFont(CentraidScale.metaSize)
+                        .foregroundStyle(message.markFailed ? Color(CentraidAsset.stateRedText) : Color(CentraidAsset.textMeta))
+                        .accessibilityIdentifier("chat-mark")
+                }
                 if !message.streaming, !message.text.isEmpty || !message.cards.isEmpty {
                     actions
                 }
@@ -878,7 +885,8 @@ private struct ChatMessageRow: View {
                     action: onEdit
                 )
             }
-            if isLast, state.canRetry, message.role != .user {
+            // a stopped answer is Copy alone (ChatStoppedFailed.dc.html); one that did not finish can be asked again
+            if isLast, state.canRetry, message.role != .user, message.mark.isEmpty || message.markFailed {
                 KitIconKey(
                     iconKey: "Refresh",
                     label: state.retryLabel,

@@ -22,6 +22,8 @@ pub(super) struct Msg {
     pub cards: Vec<wire::ChatCard>,
     pub streaming: bool,
     pub stopped: bool,
+    /// The turn failed after drawing some of its answer (not a Stop): the text is kept and says so.
+    pub failed: bool,
     /// What the member attached to this question: shown as chips, never as bytes.
     pub attachments: Vec<Pending>,
     /// The attached document was cut before the model read it.

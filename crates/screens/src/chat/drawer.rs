@@ -205,7 +205,8 @@ impl Chat {
                         .filter(|card| card.entity != STEP_ENTITY)
                         .map(stored_card)
                         .collect(),
-                    stopped: matches!(outcome, O::Stopped | O::Refused),
+                    stopped: matches!(outcome, O::Stopped),
+                    failed: matches!(outcome, O::Refused),
                     truncated: message
                         .notices
                         .contains(&(wire::AssistNotice::DocTruncated as i32)),

@@ -196,6 +196,17 @@ fn stopping_keeps_the_part_that_was_drawn_says_nothing_and_offers_retry() {
     );
     assert!(!state.streaming);
     assert!(state.can_retry);
+    // what was drawn stays, under one quiet line (ChatStoppedFailed.dc.html)
+    if let Some(answer) = state
+        .messages
+        .iter()
+        .find(|m| m.role == wire::chat_message::Role::Assistant as i32)
+    {
+        assert_eq!(
+            (answer.mark.as_str(), answer.mark_failed),
+            ("Stopped", false)
+        );
+    }
 }
 
 #[test]

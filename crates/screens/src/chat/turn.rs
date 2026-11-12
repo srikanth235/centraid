@@ -472,7 +472,9 @@ impl Chat {
                 // A turn that failed after parking a write does not offer it: the turn is over.
                 last.supersede(ctx);
                 last.streaming = false;
-                last.stopped = true;
+                // a Stop is "Stopped"; any other failure that kept words is "Did not finish"
+                last.stopped = Self::refusal_fail(reason).is_none();
+                last.failed = !last.stopped;
             }
             Some(last) if !last.user => {
                 self.messages.pop();

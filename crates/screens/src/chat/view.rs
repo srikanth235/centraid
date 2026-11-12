@@ -383,9 +383,16 @@ impl Chat {
             label.push_str(": ");
             label.push_str(&attachment_label(held, locale));
         }
-        if message.stopped {
+        let mark = if message.failed {
+            words::did_not_finish(locale)
+        } else if message.stopped {
+            words::stopped(locale)
+        } else {
+            String::new()
+        };
+        if !mark.is_empty() {
             label.push_str(". ");
-            label.push_str(&words::stopped(locale));
+            label.push_str(&mark);
         }
         wire::ChatMessage {
             id: message.id,
@@ -410,6 +417,8 @@ impl Chat {
             },
             pending: message.proposal.as_ref().map(|held| proposal(held, locale)),
             can_edit: false,
+            mark,
+            mark_failed: message.failed,
         }
     }
 }

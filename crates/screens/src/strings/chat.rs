@@ -107,6 +107,7 @@ catalog! {
     plain send = ("Send", "Send");
     plain size_line = ("{size} download", "{size} download");
     plain stop = ("Stop", "Stop");
+    plain did_not_finish = ("Did not finish", "Did not finish");
     plain stopped = ("Stopped", "Stopped");
     plain subtitle = ("On this phone", "On this phone");
     plain subtitle_vault = ("{vault} · on this phone", "{vault} · on this phone");

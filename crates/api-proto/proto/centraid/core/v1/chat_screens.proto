@@ -213,6 +213,10 @@ message ChatMessage {
   ChatPending pending = 10;
   // Edit is offered on this message: the last one the member wrote, once its answer is over.
   bool can_edit = 11;
+  // "Stopped" or "Did not finish", under an answer whose turn ended before its end, with the
+  // words it had kept; empty otherwise. `mark_failed` draws it in the error ink.
+  string mark = 12;
+  bool mark_failed = 13;
 
   enum Role {
     ROLE_UNSPECIFIED = 0;

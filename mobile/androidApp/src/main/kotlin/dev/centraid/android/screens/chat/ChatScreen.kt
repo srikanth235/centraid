@@ -668,6 +668,15 @@ private fun MessageRow(
         if (message.note.isNotEmpty()) {
             Text(message.note, style = centraidType("mono"), color = centraidColor("textFaint"), modifier = Modifier.testTag("chat-note"))
         }
+        // STOPPED OR DID NOT FINISH: the words it kept stay, with one quiet line under them.
+        if (message.mark.isNotEmpty()) {
+            Text(
+                message.mark,
+                color = centraidResource(if (message.mark_failed) R.color.centraid_state_red_text else R.color.centraid_text_meta),
+                fontSize = tokenSp(R.dimen.centraid_text_meta),
+                modifier = Modifier.testTag("chat-mark"),
+            )
+        }
         if (!message.streaming && (message.text.isNotEmpty() || message.cards.isNotEmpty())) {
             Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
                 if (message.text.isNotEmpty()) {
@@ -676,7 +685,8 @@ private fun MessageRow(
                         onEvent(ChatEvent(copied = ChatEvent.Copied(message_id = message.id)))
                     }
                 }
-                if (isLast && state.can_retry && state.error.isEmpty()) {
+                // a stopped answer is Copy alone (ChatStoppedFailed.dc.html); one that did not finish can be asked again
+                if (isLast && state.can_retry && state.error.isEmpty() && (message.mark.isEmpty() || message.mark_failed)) {
                     ActionButton("Refresh", state.retry_label, "chat-retry") {
                         onEvent(ChatEvent(regenerated = ChatEvent.Regenerated()))
                     }
