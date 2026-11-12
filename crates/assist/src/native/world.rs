@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use centraid_apps_kit::row::{Cell, Row as VaultRow};
 
 use crate::native::dates::Stamp;
-use crate::native::door::{Door, int, text};
+use crate::native::door::{Door, WindowQuery, int, text};
 use crate::native::meta::{Field, FieldType, Kind, Via};
 
 /// The days before today the runtime reads events in, in the person's zone, with every repeating
@@ -1112,16 +1112,16 @@ impl World {
             self.insert(Row::of(Kind::Category, &id, entity, fields));
         }
         // THE NEWEST MONTHS' TARGETS: a window of rows, not the years of them
-        let budgets = door.window(
-            "budget",
-            "category_id, month, amount_minor, currency, carry",
-            "month",
-            "category_id",
-            "",
-            &[],
-            WINDOW_ROWS * 4,
-            true,
-        )?;
+        let budgets = door.window(&WindowQuery {
+            table: "budget",
+            columns: "category_id, month, amount_minor, currency, carry",
+            sort: "month",
+            pk: "category_id",
+            predicate: "",
+            binds: &[],
+            limit: WINDOW_ROWS * 4,
+            newest_first: true,
+        })?;
         if budgets.more {
             self.older.insert(Kind::Budget);
         }
@@ -1155,16 +1155,16 @@ impl World {
                 extra: BTreeMap::new(),
             });
         }
-        let rules = door.window(
-            "rule",
-            "id, pattern, category_id, position, created_at",
-            "created_at",
-            "id",
-            "",
-            &[],
-            WINDOW_ROWS,
-            true,
-        )?;
+        let rules = door.window(&WindowQuery {
+            table: "rule",
+            columns: "id, pattern, category_id, position, created_at",
+            sort: "created_at",
+            pk: "id",
+            predicate: "",
+            binds: &[],
+            limit: WINDOW_ROWS,
+            newest_first: true,
+        })?;
         if rules.more {
             self.older.insert(Kind::Rule);
         }
@@ -1582,16 +1582,16 @@ impl Scope {
         kind: &str,
         held: &BTreeMap<String, VaultRow>,
     ) -> Result<Self, String> {
-        let window = door.window(
-            "entity",
-            ENTITY_COLUMNS,
-            "created_at",
-            "id",
-            "kind = ?",
-            &[kind.to_owned()],
-            WINDOW_ROWS,
-            true,
-        )?;
+        let window = door.window(&WindowQuery {
+            table: "entity",
+            columns: ENTITY_COLUMNS,
+            sort: "created_at",
+            pk: "id",
+            predicate: "kind = ?",
+            binds: &[kind.to_owned()],
+            limit: WINDOW_ROWS,
+            newest_first: true,
+        })?;
         let mut entities: BTreeMap<String, VaultRow> = window
             .rows
             .into_iter()
@@ -1683,16 +1683,16 @@ fn edges_by(
         let marks = vec!["?"; chunk.len()].join(", ");
         let mut binds = vec![rel.to_owned()];
         binds.extend(chunk.iter().cloned());
-        let found = door.window(
-            "edge",
-            "from_id, to_id",
-            "from_id",
-            "to_id",
-            &format!("rel = ? AND {column} IN ({marks})"),
-            &binds,
-            EDGES_PER_CHUNK,
-            true,
-        )?;
+        let found = door.window(&WindowQuery {
+            table: "edge",
+            columns: "from_id, to_id",
+            sort: "from_id",
+            pk: "to_id",
+            predicate: &format!("rel = ? AND {column} IN ({marks})"),
+            binds: &binds,
+            limit: EDGES_PER_CHUNK,
+            newest_first: true,
+        })?;
         out.extend(
             found
                 .rows

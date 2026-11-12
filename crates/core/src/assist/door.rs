@@ -53,7 +53,7 @@ use centraid_apps_kit::reads::{FanOutBound, PageDoor as _, read_pages};
 use centraid_apps_kit::row::Row;
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 use centraid_assist::native::door::Inverse;
-use centraid_assist::native::door::{Occurrence, Window};
+use centraid_assist::native::door::{Occurrence, Window, WindowQuery};
 use centraid_assist::native::{Call, Door, Ran};
 use centraid_search::Target;
 use centraid_vault::commands::Registry;
@@ -194,17 +194,17 @@ impl Door for CoreDoor {
         })
     }
 
-    fn window(
-        &self,
-        table: &str,
-        columns: &str,
-        sort: &str,
-        pk: &str,
-        predicate: &str,
-        binds: &[String],
-        limit: usize,
-        newest_first: bool,
-    ) -> Result<Window, String> {
+    fn window(&self, request: &WindowQuery<'_>) -> Result<Window, String> {
+        let WindowQuery {
+            table,
+            columns,
+            sort,
+            pk,
+            predicate,
+            binds,
+            limit,
+            newest_first,
+        } = *request;
         self.with(|vault| {
             let door = VaultDoor::new(vault);
             let mut query = PageQuery::new(

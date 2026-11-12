@@ -116,6 +116,20 @@ impl Call {
     }
 }
 
+/// What [`Door::window`] reads: the newest (or oldest) `limit` rows of `table` under `predicate`,
+/// in order of `sort` then `pk`.
+#[derive(Debug, Clone, Copy)]
+pub struct WindowQuery<'a> {
+    pub table: &'a str,
+    pub columns: &'a str,
+    pub sort: &'a str,
+    pub pk: &'a str,
+    pub predicate: &'a str,
+    pub binds: &'a [String],
+    pub limit: usize,
+    pub newest_first: bool,
+}
+
 /// The rows [`Door::window`] reached, and whether the table held more.
 #[derive(Debug, Clone, Default)]
 pub struct Window {
@@ -156,28 +170,25 @@ pub trait Door: Send {
     /// that stops after `limit + 1` rows: the cost is the limit, whatever the table holds. The
     /// default reads the whole filtered table and keeps the newest, which only a harness over a
     /// small vault should rely on; the phone's door overrides it.
-    fn window(
-        &self,
-        table: &str,
-        columns: &str,
-        sort: &str,
-        pk: &str,
-        predicate: &str,
-        binds: &[String],
-        limit: usize,
-        newest_first: bool,
-    ) -> Result<Window, String> {
-        let mut rows = self.table_where(table, columns, sort, pk, predicate, binds)?;
+    fn window(&self, query: &WindowQuery<'_>) -> Result<Window, String> {
+        let mut rows = self.table_where(
+            query.table,
+            query.columns,
+            query.sort,
+            query.pk,
+            query.predicate,
+            query.binds,
+        )?;
         rows.sort_by(|a, b| {
-            let key = |row: &Row| (text(row, sort), text(row, pk));
-            if newest_first {
+            let key = |row: &Row| (text(row, query.sort), text(row, query.pk));
+            if query.newest_first {
                 key(b).cmp(&key(a))
             } else {
                 key(a).cmp(&key(b))
             }
         });
-        let more = rows.len() > limit;
-        rows.truncate(limit);
+        let more = rows.len() > query.limit;
+        rows.truncate(query.limit);
         Ok(Window { rows, more })
     }
 

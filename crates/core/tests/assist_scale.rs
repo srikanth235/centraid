@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 use centraid_apps_kit::row::Row;
 use centraid_apps_kit::search_corpus::{SearchCorpusShape, YEAR3_ROWS};
 use centraid_assist::native::dates::parse_now;
-use centraid_assist::native::door::{Occurrence, Window};
+use centraid_assist::native::door::{Occurrence, Window, WindowQuery};
 use centraid_assist::native::meta::Kind;
 use centraid_assist::native::session::{Flags, Session};
 use centraid_assist::native::world::{PINNED_ROWS, Standing, WINDOW_ROWS, World};
@@ -85,27 +85,8 @@ impl Door for Counting {
         Ok(rows)
     }
 
-    fn window(
-        &self,
-        table: &str,
-        columns: &str,
-        sort: &str,
-        pk: &str,
-        predicate: &str,
-        binds: &[String],
-        limit: usize,
-        newest_first: bool,
-    ) -> Result<Window, String> {
-        let window = self.inner.window(
-            table,
-            columns,
-            sort,
-            pk,
-            predicate,
-            binds,
-            limit,
-            newest_first,
-        )?;
+    fn window(&self, query: &WindowQuery<'_>) -> Result<Window, String> {
+        let window = self.inner.window(query)?;
         self.note(window.rows.len());
         Ok(window)
     }
@@ -207,16 +188,16 @@ fn a_year_three_world_holds_each_kinds_newest_rows_and_says_it_left_older_ones()
         .expect("a note is held");
     let (door, _) = Counting::of(&year3.handle);
     let newer = door
-        .window(
-            "entity",
-            "id, created_at",
-            "created_at",
-            "id",
-            "kind = ? AND created_at > ?",
-            &["note".to_owned(), oldest_held],
-            WINDOW_ROWS * 2,
-            true,
-        )
+        .window(&WindowQuery {
+            table: "entity",
+            columns: "id, created_at",
+            sort: "created_at",
+            pk: "id",
+            predicate: "kind = ? AND created_at > ?",
+            binds: &["note".to_owned(), oldest_held],
+            limit: WINDOW_ROWS * 2,
+            newest_first: true,
+        })
         .expect("a window");
     assert!(
         newer.rows.len() < WINDOW_ROWS,
@@ -236,16 +217,16 @@ fn a_row_older_than_the_window_is_reached_by_name_and_kept() {
         .expect("a note is held");
     // a note the window dropped: the newest one created before the oldest held
     let dropped = door
-        .window(
-            "entity",
-            "id, title, created_at",
-            "created_at",
-            "id",
-            "kind = ? AND created_at < ?",
-            &["note".to_owned(), oldest_held],
-            1,
-            true,
-        )
+        .window(&WindowQuery {
+            table: "entity",
+            columns: "id, title, created_at",
+            sort: "created_at",
+            pk: "id",
+            predicate: "kind = ? AND created_at < ?",
+            binds: &["note".to_owned(), oldest_held],
+            limit: 1,
+            newest_first: true,
+        })
         .expect("a window")
         .rows
         .into_iter()
@@ -354,39 +335,33 @@ fn a_count_of_a_whole_kind_is_the_stores_and_any_other_is_refused_not_guessed() 
 #[test]
 fn a_task_due_on_a_day_is_found_though_it_was_made_before_the_window() {
     let year3 = year3_corpus::found_rows();
+    let add = |title: &str, due: Option<&str>, key: &str| -> String {
+        let outcome = year3
+            .handle
+            .command("task.add", &json!({"title": title, "due": due}), key)
+            .expect("the task is added");
+        outcome.output["id"].as_str().expect("an id").to_owned()
+    };
+    // the corpus gives no task a due date: one is made, then more tasks than a window holds
+    let id = add("Renew the passport", Some(TODAY), "scale:dated");
+    for index in 0..WINDOW_ROWS + 100 {
+        add(
+            &format!("Filler {index}"),
+            None,
+            &format!("scale:filler:{index}"),
+        );
+    }
     let (mut session, asked) = session_of(&year3);
-    let door = year3.handle.assist_door();
-    // the earliest due date among tasks the world does not hold
-    let dated = door
-        .window(
-            "task",
-            "id, due",
-            "due",
-            "id",
-            "due >= ?",
-            &["0001-01-01".to_owned()],
-            2_000,
-            false,
-        )
-        .expect("a window");
-    let (id, due) = dated
-        .rows
-        .iter()
-        .filter_map(|row| {
-            Some((
-                centraid_assist::native::door::text(row, "id")?,
-                centraid_assist::native::door::text(row, "due")?,
-            ))
-        })
-        .find(|(id, _)| session.world().row(&(Kind::Task, id.clone())).is_none())
-        .expect("a dated task older than the window");
-    let day: String = due.chars().take(10).collect();
+    assert!(
+        session.world().row(&(Kind::Task, id.clone())).is_none(),
+        "the dated task is older than the newest {WINDOW_ROWS} tasks"
+    );
     let before = *asked.lock().expect("counts");
-    session.call("find", &json!({"kind": "task", "when": day}));
+    session.call("find", &json!({"kind": "task", "when": TODAY}));
     let after = *asked.lock().expect("counts");
     assert!(
         session.world().row(&(Kind::Task, id)).is_some(),
-        "the task due {day} was reached by its date"
+        "the task due {TODAY} was reached by its date"
     );
     assert!(
         after.statements - before.statements <= LOAD_STATEMENTS + 16,
@@ -402,16 +377,16 @@ fn the_oldest_note_is_the_oldest_in_the_store_not_in_the_window() {
     let (mut session, _) = session_of(&year3);
     let door = year3.handle.assist_door();
     let oldest = door
-        .window(
-            "entity",
-            "id, created_at",
-            "created_at",
-            "id",
-            "kind = ?",
-            &["note".to_owned()],
-            1,
-            false,
-        )
+        .window(&WindowQuery {
+            table: "entity",
+            columns: "id, created_at",
+            sort: "created_at",
+            pk: "id",
+            predicate: "kind = ?",
+            binds: &["note".to_owned()],
+            limit: 1,
+            newest_first: false,
+        })
         .expect("a window")
         .rows
         .into_iter()

@@ -7,7 +7,7 @@ use jiff::civil::DateTime;
 use serde_json::{Map, Value, json};
 
 use crate::native::dates::{self, Resolved};
-use crate::native::door::Door;
+use crate::native::door::{Door, WindowQuery};
 use crate::native::meta::{self, FieldType, Kind, ROW_CAP, STEP_CAP};
 use crate::native::render;
 use crate::native::resolve::{Resolution, Tier};
@@ -854,16 +854,16 @@ impl Session {
             } else {
                 format!("id, {}", plan.sort)
             };
-            match self.door.window(
-                plan.table,
-                &columns,
-                plan.sort,
-                "id",
-                &plan.predicate,
-                &plan.binds,
+            match self.door.window(&WindowQuery {
+                table: plan.table,
+                columns: &columns,
+                sort: plan.sort,
+                pk: "id",
+                predicate: &plan.predicate,
+                binds: &plan.binds,
                 limit,
-                plan.newest_first,
-            ) {
+                newest_first: plan.newest_first,
+            }) {
                 // an ordered read takes the first rows in its order and is exact however many follow
                 Ok(window) if plan.ordered || !window.more => {
                     wanted.extend(
@@ -3848,24 +3848,6 @@ pub fn canonical_json(value: &Value) -> String {
     }
 }
 
-#[cfg(test)]
-mod echo_tests {
-    use super::*;
-
-    #[test]
-    fn a_repeat_after_an_error_quotes_the_fix_the_error_ends_in() {
-        let error = format!(
-            "error: tasks have no field \"notes\". task editable fields: {}. For that use description.",
-            "name, status, effort, priority, description, and a long list of more fields to push it past the plain echo"
-        );
-        assert!(error.len() > REPEAT_ECHO && error.len() < REPEAT_ECHO_ERROR);
-        let echoed = first_line(&error, REPEAT_ECHO_ERROR);
-        assert!(repeat_hint(&echoed).contains("For that use description."));
-        // a reply that is no error is still cut at the plain length
-        assert!(first_line(&error[6..], REPEAT_ECHO).ends_with('…'));
-    }
-}
-
 /// The words a call names that a row older than the window may answer to: its `name`, its `text`
 /// and the quoted words of a `where`, each trimmed and at most 120 characters, at most eight.
 fn reach_words(args: &Value) -> Vec<String> {
@@ -3994,4 +3976,22 @@ fn reach_plan(kind: Kind, selector: &Selector) -> Option<ReachPlan> {
         newest_first: ordered.is_none_or(|(descending, _)| descending),
         ordered: ordered.is_some(),
     })
+}
+
+#[cfg(test)]
+mod echo_tests {
+    use super::*;
+
+    #[test]
+    fn a_repeat_after_an_error_quotes_the_fix_the_error_ends_in() {
+        let error = format!(
+            "error: tasks have no field \"notes\". task editable fields: {}. For that use description.",
+            "name, status, effort, priority, description, and a long list of more fields to push it past the plain echo"
+        );
+        assert!(error.len() > REPEAT_ECHO && error.len() < REPEAT_ECHO_ERROR);
+        let echoed = first_line(&error, REPEAT_ECHO_ERROR);
+        assert!(repeat_hint(&echoed).contains("For that use description."));
+        // a reply that is no error is still cut at the plain length
+        assert!(first_line(&error[6..], REPEAT_ECHO).ends_with('…'));
+    }
 }
