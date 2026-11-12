@@ -285,6 +285,11 @@ pub(super) struct Chat {
     /// No model on the phone is one this release supports: the current one is needed.
     pub update_needed: bool,
     pub others: Vec<String>,
+    /// The adapter files in the models directory, as the core last listed them.
+    pub adapter_files: Vec<String>,
+    /// The next finished transfer is the adapter's: it rides in the same step as the model and
+    /// its failure is silent (the model runs alone).
+    pub adapter_fetching: bool,
     /// The stored thread this chat is saved in, or empty until a turn has been saved.
     pub thread_id: String,
     pub thread_title: String,
@@ -341,6 +346,8 @@ impl Default for Chat {
             update_progress: None,
             update_needed: false,
             others: Vec::new(),
+            adapter_files: Vec::new(),
+            adapter_fetching: false,
             thread_id: String::new(),
             thread_title: String::new(),
             drawer_open: false,
@@ -558,14 +565,17 @@ impl Chat {
             projector_path: String::new(),
         })));
         let mut beside = Vec::new();
+        let mut adapters = Vec::new();
         let state = match answer.ok().and_then(|answer| answer.kind) {
             Some(wire::assist_response::Kind::Status(status)) => {
                 beside = status.other_model_files.clone();
+                adapters = status.adapter_files.clone();
                 wire::AssistModelState::try_from(status.state).ok()
             }
             _ => None,
         };
         self.others = beside;
+        self.adapter_files = adapters;
         self.on_previous = false;
         self.update_needed = false;
         match state {
@@ -655,8 +665,14 @@ impl Chat {
         if self.on_previous {
             return Vec::new();
         }
+        // the adapter files this release does not name go with the leftovers
+        let keep = asset::adapter().map(|adapter| adapter.file_name);
+        let stale = std::mem::take(&mut self.adapter_files)
+            .into_iter()
+            .filter(|name| Some(name.as_str()) != keep);
         std::mem::take(&mut self.others)
             .into_iter()
+            .chain(stale)
             .map(|file_name| {
                 effect(wire::effect::Kind::DeleteModelFile(wire::DeleteModelFile {
                     models_dir: self.models_dir.clone(),
@@ -756,7 +772,12 @@ impl Chat {
             _ => held,
         };
         // NOT ENOUGH SPACE OR MEMORY: nothing is fetched into a phone that cannot keep it or run it.
-        if self.too_little_space(model.bytes) || self.too_little_memory() {
+        if self.too_little_space(if vision {
+            model.bytes
+        } else {
+            asset::assistant_bytes()
+        }) || self.too_little_memory()
+        {
             return Vec::new();
         }
         let waiting = if vision {
@@ -820,7 +841,7 @@ impl Chat {
             return Vec::new();
         }
         // The new file lands beside the old one, so the phone needs room for both.
-        if self.too_little_space(model.bytes) {
+        if self.too_little_space(asset::assistant_bytes()) {
             return Vec::new();
         }
         let more_data = match choice {
@@ -877,8 +898,19 @@ impl Chat {
         progress: &wire::chat_event::DownloadProgress,
         _ctx: &Ctx,
     ) -> Vec<wire::Effect> {
-        let fraction = (progress.total_bytes > 0)
-            .then(|| (progress.done_bytes as f32 / progress.total_bytes as f32).clamp(0.0, 1.0));
+        // ONE BAR FOR THE ASSISTANT: the adapter's bytes follow the model's, so the fraction runs
+        // over both (the member reads one download).
+        let (before, after) = if progress.vision {
+            (0, 0)
+        } else if self.adapter_fetching {
+            (asset::model().bytes, 0)
+        } else {
+            (0, asset::adapter().map_or(0, |adapter| adapter.bytes))
+        };
+        let fraction = (progress.total_bytes > 0).then(|| {
+            ((progress.done_bytes + before) as f32 / (progress.total_bytes + before + after) as f32)
+                .clamp(0.0, 1.0)
+        });
         if progress.vision {
             self.vision.phase = VisionPhase::Downloading;
             self.vision.progress = fraction;
@@ -901,17 +933,59 @@ impl Chat {
         Vec::new()
     }
 
+    /// The effect that fetches the current model's adapter, when the release ships one, none is on
+    /// the phone and there is room for it. It uses the same rules as the model: Wi-Fi unless the
+    /// member allowed mobile data. `None` means load the model as it is.
+    fn fetch_adapter(&mut self) -> Option<wire::Effect> {
+        let adapter = asset::adapter()?;
+        if self
+            .adapter_files
+            .iter()
+            .any(|name| name == adapter.file_name)
+            || self.too_little_space(adapter.bytes)
+        {
+            return None;
+        }
+        self.adapter_fetching = true;
+        Some(effect(wire::effect::Kind::ModelDownload(
+            wire::ModelDownload {
+                vision: false,
+                url: adapter.url.to_owned(),
+                file_name: adapter.file_name.to_owned(),
+                sha256: adapter.sha256.to_owned(),
+                bytes: adapter.bytes,
+                models_dir: self.models_dir.clone(),
+                allow_cellular: self.cellular_ok,
+            },
+        )))
+    }
+
     fn download_finished(&mut self, vision: bool, ok: bool, ctx: &Ctx) -> Vec<wire::Effect> {
         if vision {
             return self.vision_finished(ok, ctx);
         }
+        // THE ADAPTER ARRIVED (or did not): either way the model loads next. A missing adapter is
+        // not an error a member acts on; the model runs alone.
+        let adapter_done = std::mem::take(&mut self.adapter_fetching);
         if self.update == Update::Downloading {
-            return self.update_finished(ok, ctx);
+            if !adapter_done
+                && ok
+                && let Some(fetch) = self.fetch_adapter()
+            {
+                return vec![fetch];
+            }
+            return self.update_finished(ok || adapter_done, ctx);
         }
         if self.phase != Phase::Downloading {
             return Vec::new();
         }
-        if ok {
+        if ok
+            && !adapter_done
+            && let Some(fetch) = self.fetch_adapter()
+        {
+            return vec![fetch];
+        }
+        if ok || adapter_done {
             self.phase = Phase::Loading;
             self.progress = None;
             self.load_effect(ctx)

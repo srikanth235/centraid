@@ -199,6 +199,10 @@ message AssistStatus {
   // excluded): what an older release left behind. The chat tells the second model of the
   // two-model window from one older than that.
   repeated string other_model_files = 5;
+  // The names of the assistant's adapter files in that directory (a `.gguf` the shell kept after
+  // its digest matched). They are part of the assistant, not "other models": the chat keeps the
+  // one this release names and deletes the rest with the leftovers.
+  repeated string adapter_files = 6;
 }
 
 enum AssistVisionState {

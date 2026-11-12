@@ -87,11 +87,14 @@ impl Adapter {
     #[must_use]
     pub fn local_name(&self) -> String {
         format!(
-            "centraid-adapter-{}.gguf",
+            "{LOCAL_PREFIX}{}.gguf",
             self.sha256.get(..12).unwrap_or(&self.sha256)
         )
     }
 }
+
+/// What every adapter file on the phone is called before its digest.
+pub const LOCAL_PREFIX: &str = "centraid-adapter-";
 
 /// The release's pin: the model it ships and the one before, and the adapter made for the former.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]

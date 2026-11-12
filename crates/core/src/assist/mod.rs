@@ -418,13 +418,23 @@ fn status_to_wire(
             }) as i32,
             projector_bytes: vision.map_or(0, |held| held.bytes),
             other_model_files: Vec::new(),
+            adapter_files: Vec::new(),
         })),
     }
 }
 
 /// The other model files beside `model_path` (sorted names): `.gguf` files that are neither the
-/// model nor a vision projector. An unreadable directory has none.
+/// model, a vision projector nor an adapter ([`adapter_files`]). An unreadable directory has none.
 fn other_model_files(model_path: &str) -> Vec<String> {
+    gguf_files(model_path, false)
+}
+
+/// The assistant's adapter files beside `model_path` (sorted names).
+fn adapter_files(model_path: &str) -> Vec<String> {
+    gguf_files(model_path, true)
+}
+
+fn gguf_files(model_path: &str, adapters: bool) -> Vec<String> {
     let path = std::path::Path::new(model_path);
     let Some(dir) = path.parent().filter(|dir| !dir.as_os_str().is_empty()) else {
         return Vec::new();
@@ -438,6 +448,7 @@ fn other_model_files(model_path: &str) -> Vec<String> {
         .filter(|entry| Some(entry.file_name().as_os_str()) != own)
         .filter_map(|entry| entry.file_name().into_string().ok())
         .filter(|name| name.ends_with(".gguf") && !name.contains("mmproj"))
+        .filter(|name| name.starts_with(centraid_assist::record::LOCAL_PREFIX) == adapters)
         .collect();
     names.sort();
     names
@@ -495,6 +506,7 @@ pub fn answer(handle: &Handle, request: &wire::AssistRequest) -> Result<wire::As
             );
             if let Some(wire::assist_response::Kind::Status(status)) = &mut answer.kind {
                 status.other_model_files = other_model_files(&asked.model_path);
+                status.adapter_files = adapter_files(&asked.model_path);
             }
             Ok(answer)
         }

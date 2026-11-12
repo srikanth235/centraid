@@ -35,6 +35,39 @@ pub fn previous() -> Option<Asset> {
     centraid_assist::record::record().previous.as_ref().map(of)
 }
 
+/// THE ADAPTER THAT RIDES WITH THE CURRENT MODEL, when the release ships one made for it: fetched
+/// after the model by the same transfer rules, under its local name (which carries the start of its
+/// SHA-256, so a newer adapter is a different file). It is part of "the assistant": the member
+/// reads one download and one size.
+#[must_use]
+pub fn adapter() -> Option<Asset> {
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+    static SEEN: std::sync::OnceLock<Mutex<HashMap<String, Asset>>> = std::sync::OnceLock::new();
+    let record = centraid_assist::record::record();
+    let adapter = record
+        .adapter
+        .filter(|adapter| adapter.base_sha256 == record.current.sha256)?;
+    let mut seen = SEEN
+        .get_or_init(Mutex::default)
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    Some(
+        *seen.entry(adapter.sha256.clone()).or_insert_with(|| Asset {
+            url: Box::leak(adapter.url.clone().into_boxed_str()),
+            file_name: Box::leak(adapter.local_name().into_boxed_str()),
+            sha256: Box::leak(adapter.sha256.clone().into_boxed_str()),
+            bytes: adapter.bytes,
+        }),
+    )
+}
+
+/// What fetching the assistant takes: the model, and its adapter when there is one.
+#[must_use]
+pub fn assistant_bytes() -> u64 {
+    model().bytes + adapter().map_or(0, |adapter| adapter.bytes)
+}
+
 /// An entry as an asset. The strings are leaked once per distinct entry, so asking again costs
 /// nothing and a record is read for every question about the files.
 fn of(entry: &centraid_assist::record::Entry) -> Asset {
