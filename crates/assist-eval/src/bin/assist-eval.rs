@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! cargo build --release -p centraid-assist-eval --features engine --bin assist-eval
-//! assist-eval --model native-s2-Q4_0.gguf --set experiments/toolchat/native/data/v7/val.jsonl --out runs/val-s2
+//! assist-eval --model Qwen3.5-0.8B-Q4_0.gguf --set val.jsonl --worlds worlds --out runs/val-base
 //! assist-eval --stub --set … --worlds …        # no weights: a model that declines everything
 //! ```
 //!
@@ -32,7 +32,7 @@ use centraid_assist_eval::tally::{WithoutInProgress, WithoutTally};
 struct Args {
     model: Option<PathBuf>,
     stub: bool,
-    set: PathBuf,
+    set: Option<PathBuf>,
     worlds: Vec<PathBuf>,
     out: Option<PathBuf>,
     threads: Option<i32>,
@@ -55,11 +55,10 @@ const USAGE: &str = "usage: assist-eval (--model GGUF | --stub) --set SET.jsonl 
 [--tools s2|sig|compact|full] [--grammar off|handles|full] [--adapter GGUF] [--threads N] [--limit N] [--only ID,ID] [--shard K/N] [--resume] [--gpu-layers N] [--label TEXT]\n       assist-eval --rescore RUN.sessions.jsonl… --set SET.jsonl [--out PREFIX] [--tools …] [--grammar …]\n       assist-eval replay --set SET.jsonl [--worlds DIR]… [--tools …]   (the reference calls must replay to 100%)\n       assist-eval compare A.json B.json [--out FILE.json]   (B against the baseline A, paired by session)";
 
 fn args() -> Result<Args> {
-    let native = PathBuf::from("experiments/toolchat/native");
     let mut out = Args {
         model: std::env::var_os("ASSIST_EVAL_MODEL").map(PathBuf::from),
         stub: false,
-        set: native.join("data/v7/val.jsonl"),
+        set: None,
         worlds: Vec::new(),
         out: None,
         threads: std::env::var("ASSIST_EVAL_THREADS")
@@ -89,7 +88,7 @@ fn args() -> Result<Args> {
         match flag.as_str() {
             "--model" => out.model = Some(value("--model")?.into()),
             "--stub" => out.stub = true,
-            "--set" => out.set = value("--set")?.into(),
+            "--set" => out.set = Some(value("--set")?.into()),
             "--worlds" => out.worlds.push(value("--worlds")?.into()),
             "--out" => out.out = Some(value("--out")?.into()),
             "--threads" => out.threads = Some(value("--threads")?.parse().context("--threads N")?),
@@ -127,9 +126,6 @@ fn args() -> Result<Args> {
             }
             other => bail!("unknown argument {other}\n{USAGE}"),
         }
-    }
-    if out.worlds.is_empty() {
-        out.worlds = vec![native.join("data/v7/worlds")];
     }
     Ok(out)
 }
@@ -174,12 +170,12 @@ fn run() -> Result<()> {
         _ => {}
     }
     let args = args()?;
-    // the held-out worlds predate the vault rebuild: Tally and the `in_progress` status are gone from the runtime.
-    // The wrappers read them out and the report counts the sessions this leaves out
-    let source = WithoutInProgress::new(WithoutTally::new(JsonlSource::new(
-        &args.set,
-        args.worlds.clone(),
-    )));
+    let (set, worlds) =
+        centraid_assist_eval::source::require_set(args.set.clone(), args.worlds.clone())
+            .map_err(anyhow::Error::msg)?;
+    // a set written before the vault rebuild may carry Tally and the `in_progress` status, which the runtime no longer
+    // has: the wrappers read them out and the report counts the sessions this leaves out (a data version has none)
+    let source = WithoutInProgress::new(WithoutTally::new(JsonlSource::new(&set, worlds)));
     let prefix = args.out.clone();
     let mut set_total = None;
     let word = |mode: ToolsMode| format!("{mode:?}").to_lowercase();
@@ -491,22 +487,21 @@ fn compare_cmd(argv: &[String]) -> Result<()> {
 
 /// `assist-eval replay`: only the precondition, with no model.
 fn replay_cmd(argv: &[String]) -> Result<()> {
-    let mut set = PathBuf::from("experiments/toolchat/native/data/v7/val.jsonl");
+    let mut set = None;
     let mut worlds = Vec::new();
     let mut tools = centraid_assist::native_turn::phone_options().tools;
     let mut it = argv.iter();
     while let Some(arg) = it.next() {
         let mut value = |name: &str| it.next().with_context(|| format!("{name} takes a value"));
         match arg.as_str() {
-            "--set" => set = value("--set")?.into(),
+            "--set" => set = Some(value("--set")?.into()),
             "--worlds" => worlds.push(PathBuf::from(value("--worlds")?)),
             "--tools" => tools = tools_of(value("--tools")?)?,
             other => bail!("unknown argument {other}\n{USAGE}"),
         }
     }
-    if worlds.is_empty() {
-        worlds = vec![PathBuf::from("experiments/toolchat/native/data/v7/worlds")];
-    }
+    let (set, worlds) =
+        centraid_assist_eval::source::require_set(set, worlds).map_err(anyhow::Error::msg)?;
     let source = WithoutInProgress::new(WithoutTally::new(JsonlSource::new(&set, worlds)));
     let sessions = source.sessions()?;
     let report = centraid_assist_eval::replay::require(&source, &sessions, tools)?;

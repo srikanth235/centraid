@@ -19,7 +19,7 @@
 //! (the sessions of a data version, chosen to the grid's shares) and [`version`] (the files and the manifest of
 //! a data version, and the record contract M6 reads).
 //!
-//! M7 adds [`rollout`]: the RFT records and DPO pairs `assist-eval` cuts from a model's rollouts, rendered by the M4
+//! M7 adds [`rollout`]: the RFT records `assist-eval` cuts from a model's rollouts, rendered by the M4
 //! renderer (`datagen rollout-records`).
 
 #![forbid(unsafe_code)]

@@ -1,4 +1,4 @@
-//! `assist-eval rollout …`: sample k decodes over a set, report them, compare two reports, cut RFT/DPO records.
+//! `assist-eval rollout …`: sample k decodes over a set, report them, compare two reports, cut RFT records.
 //!
 //! ```text
 //! assist-eval rollout         (--model GGUF | --stub) --set SET.jsonl [--worlds DIR]… --out PREFIX [--k 4] [--temperature 0.6]
@@ -7,7 +7,7 @@
 //! assist-eval rollout-report  --rollouts PREFIX.rollouts.jsonl… --out PREFIX [--label TEXT]
 //! assist-eval rollout-compare BEFORE.rollout.json AFTER.rollout.json [--out FILE.json]
 //! assist-eval rollout-records --rollouts PREFIX.rollouts.jsonl… --set SET.jsonl [--worlds DIR]… --out DIR
-//!                             [--needs REPORT.json] [--min-samples 5] [--max-copies 4] [--pairs-per-turn 2]
+//!                             [--needs REPORT.json] [--min-samples 5] [--max-copies 4]
 //!                             (unrendered; `datagen rollout-records` writes the same files with `render`)
 //! ```
 
@@ -50,7 +50,6 @@ struct Flags {
     label: Option<String>,
     min_samples: Option<usize>,
     max_copies: Option<usize>,
-    pairs_per_turn: Option<usize>,
 }
 
 fn flags(argv: &[String]) -> Result<Flags> {
@@ -113,13 +112,6 @@ fn flags(argv: &[String]) -> Result<Flags> {
             "--max-copies" => {
                 out.max_copies = Some(value("--max-copies")?.parse().context("--max-copies N")?)
             }
-            "--pairs-per-turn" => {
-                out.pairs_per_turn = Some(
-                    value("--pairs-per-turn")?
-                        .parse()
-                        .context("--pairs-per-turn N")?,
-                )
-            }
             other if !other.starts_with("--") => out.positional.push(other.into()),
             other => bail!("unknown argument {other}"),
         }
@@ -143,13 +135,9 @@ fn with_ext(prefix: &Path, ext: &str) -> PathBuf {
     PathBuf::from(name)
 }
 
-fn source(f: &Flags, native: &Path) -> Result<impl EvalSource> {
-    let set = f.set.clone().context("give --set SET.jsonl")?;
-    let worlds = if f.worlds.is_empty() {
-        vec![native.join("data/v7/worlds")]
-    } else {
-        f.worlds.clone()
-    };
+fn source(f: &Flags) -> Result<impl EvalSource> {
+    let (set, worlds) = centraid_assist_eval::source::require_set(f.set.clone(), f.worlds.clone())
+        .map_err(anyhow::Error::msg)?;
     Ok(WithoutInProgress::new(WithoutTally::new(JsonlSource::new(
         set, worlds,
     ))))
@@ -201,8 +189,7 @@ pub fn run(command: &str, argv: &[String]) -> Result<()> {
 }
 
 fn sample(f: &Flags) -> Result<()> {
-    let native = PathBuf::from("experiments/toolchat/native");
-    let source = source(f, &native)?;
+    let source = source(f)?;
     let tools = match f.tools.as_deref() {
         Some(word) => tools_of(word)?,
         None => centraid_assist::native_turn::phone_options().tools,
@@ -339,8 +326,7 @@ fn sample(f: &Flags) -> Result<()> {
 }
 
 fn cut_records(f: &Flags) -> Result<()> {
-    let native = PathBuf::from("experiments/toolchat/native");
-    let source = source(f, &native)?;
+    let source = source(f)?;
     let out = f.out.clone().context("give --out DIR")?;
     let rollouts = read_rollouts(&f.rollouts)?;
     let sessions = source.sessions()?;
@@ -357,7 +343,6 @@ fn cut_records(f: &Flags) -> Result<()> {
                 max_copies: f.max_copies.unwrap_or(4),
                 ..Weighing::default()
             },
-            pairs_per_turn: f.pairs_per_turn.unwrap_or(2),
         },
         None,
         &out,

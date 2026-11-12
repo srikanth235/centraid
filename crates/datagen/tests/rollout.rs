@@ -217,7 +217,6 @@ fn the_scripted_model_gives_records_with_a_render_the_trainer_can_read() {
         &Cutting {
             needs: &Needs::default(),
             weighing: Weighing::default(),
-            pairs_per_turn: 2,
         },
         Some(&renderer),
         out.path(),

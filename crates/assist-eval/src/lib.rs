@@ -19,7 +19,7 @@
 //! | [`replay`] | the reference calls replayed through the runner and judge: the precondition of a scoring run |
 //! | [`compare`] | two reports paired by session: won, lost, z |
 //! | [`report`] | the JSON report and the text summary |
-//! | [`rollout`] | k sampled decodes per session, rollout reports and their comparison, RFT records and DPO pairs (#1171, M7) |
+//! | [`rollout`] | k sampled decodes per session, rollout reports and their comparison, RFT records (#1171, M7) |
 
 #![forbid(unsafe_code)]
 

@@ -1,9 +1,10 @@
 //! WHERE A SET COMES FROM. The eval reads sessions and worlds through [`EvalSource`], so the record the `datagen`
 //! crate will write (#1166, stage 7) is one more implementation, not a change to the runner.
 //!
-//! Today's source is the frozen JSONL set the retired Python eval scored (`data/v7/val.jsonl`, `data/v7/FROZEN.md`) and the
-//! world JSON files its sessions name (`data/v7/worlds`). Both are held out: `experiments/toolchat/native/artefacts.py
-//! fetch` brings them from the private data version.
+//! The source is a JSONL set (one session per line) and the world JSON files its sessions name. A data version's split is
+//! `data/<split>.jsonl.zst` (decompress it) and its `worlds/`; the version comes from the private Hugging Face repository
+//! `srikanth235/centraid-native-data` at a pinned revision. There is no default set and no default worlds: see
+//! [`require_set`].
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -84,6 +85,23 @@ pub fn seed_document_of(doc: &Value) -> Value {
     doc
 }
 
+/// The set and the worlds a command was given, or a plain error saying what to pass. There is no default: a run names
+/// the data it scores.
+///
+/// # Errors
+/// A message naming the missing flag.
+pub fn require_set(
+    set: Option<PathBuf>,
+    worlds: Vec<PathBuf>,
+) -> Result<(PathBuf, Vec<PathBuf>), String> {
+    const FROM: &str = "a data version of the private Hugging Face dataset srikanth235/centraid-native-data at a pinned revision: data/<split>.jsonl.zst decompressed, and its worlds/ directory";
+    let set = set.ok_or_else(|| format!("give --set SET.jsonl ({FROM})"))?;
+    if worlds.is_empty() {
+        return Err(format!("give --worlds DIR, the set's worlds ({FROM})"));
+    }
+    Ok((set, worlds))
+}
+
 /// The split a set file is named for: `val.jsonl`, `test.jsonl.zst`, or `<dir>/val/sessions.jsonl` (what
 /// `datagen intents` writes). `None` for any other name.
 #[must_use]
@@ -99,7 +117,7 @@ pub fn split_of_path(path: &Path) -> Option<String> {
 }
 
 /// A frozen JSONL set (one session per line) and the directories its worlds live in, searched in order
-/// (by default `data/v7/worlds`).
+/// (a data version's `worlds/`).
 #[derive(Debug, Clone)]
 pub struct JsonlSource {
     set: PathBuf,
@@ -158,7 +176,7 @@ impl EvalSource for JsonlSource {
         Err(EvalError::Read {
             path: name.to_owned(),
             message: format!(
-                "no world {name}.json in {}; `python3 experiments/toolchat/native/artefacts.py fetch` brings the held-out worlds",
+                "no world {name}.json in {}, and the set's worlds are in its data version's `worlds/` directory (pass it with --worlds)",
                 self.worlds
                     .iter()
                     .map(|d| d.display().to_string())
@@ -214,6 +232,18 @@ mod tests {
         std::fs::write(&path, format!("{good}\n{{\"id\": 3}}\n")).expect("write");
         let error = source.sessions().expect_err("bad line").to_string();
         assert!(error.contains("line 2"), "{error}");
+    }
+
+    #[test]
+    fn a_run_names_its_set_and_worlds_there_is_no_default() {
+        let none = require_set(None, vec![]).unwrap_err();
+        assert!(
+            none.contains("--set") && none.contains("srikanth235/centraid-native-data"),
+            "{none}"
+        );
+        let no_worlds = require_set(Some("val.jsonl".into()), vec![]).unwrap_err();
+        assert!(no_worlds.contains("--worlds"), "{no_worlds}");
+        assert!(require_set(Some("val.jsonl".into()), vec!["worlds".into()]).is_ok());
     }
 
     #[test]
@@ -274,7 +304,7 @@ mod tests {
                 .world("X")
                 .expect_err("missing")
                 .to_string()
-                .contains("artefacts.py fetch")
+                .contains("--worlds")
         );
     }
 }

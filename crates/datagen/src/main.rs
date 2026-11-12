@@ -178,9 +178,9 @@ enum Command {
         #[arg(long)]
         out: PathBuf,
     },
-    /// Cut RFT records and DPO pairs from a model's rollouts (`assist-eval rollout`) and render them with the data
+    /// Cut RFT records from a model's rollouts (`assist-eval rollout`) and render them with the data
     /// version's renderer, so each carries `render {input_ids, weights, text}` as a data-version record does. Writes
-    /// `rft.jsonl`, `dpo.jsonl` and `stats.json` under `--out`.
+    /// `rft.jsonl` and `stats.json` under `--out`.
     RolloutRecords {
         /// The data version the rollouts were sampled over (`datagen render --out`): its sessions and its worlds.
         #[arg(long = "in")]
@@ -202,8 +202,6 @@ enum Command {
         min_samples: usize,
         #[arg(long, default_value_t = 4)]
         max_copies: usize,
-        #[arg(long, default_value_t = 2)]
-        pairs_per_turn: usize,
         /// The weight of a deciding token.
         #[arg(long, default_value_t = DECISION_WEIGHT)]
         decision_weight: f32,
@@ -570,7 +568,6 @@ fn main() -> Result<()> {
             needs,
             min_samples,
             max_copies,
-            pairs_per_turn,
             decision_weight,
         } => {
             use centraid_assist_eval::rollout::records::{self, Cutting, Needs, Weighing};
@@ -611,7 +608,6 @@ fn main() -> Result<()> {
                         max_copies,
                         ..Weighing::default()
                     },
-                    pairs_per_turn,
                 },
                 Some(&renderer),
                 &out,
