@@ -5,8 +5,8 @@
 //! gate that has none, so the proof is made of what the gate does run:
 //!
 //! * the release build's linked outputs (the core's shared and static libraries and binaries; not
-//!   the rlibs, whose metadata carries doc comments) hold none of the names, and the scan fails
-//!   when it found no core library to look in;
+//!   the rlibs, whose metadata carries doc comments, and not `xtask`, which is this list and never
+//!   ships) hold none of the names, and the scan fails when it found no core library to look in;
 //! * every place a name is read in source sits in a function gated on `debug_assertions`, with a
 //!   release twin that looks at nothing.
 
@@ -27,12 +27,15 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
         .any(|window| window == needle)
 }
 
-/// A linked output of a release build: a shared or static library, or an executable.
+/// A linked output of a release build: a shared or static library, or an executable. `xtask` is
+/// left out: it holds [`NEEDLES`] because it is the scan, and it is a build tool no member is sent.
 fn linked(path: &Path) -> bool {
     let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
         return false;
     };
-    if name.starts_with('.')
+    if name == "xtask"
+        || name == "xtask.exe"
+        || name.starts_with('.')
         || name.ends_with(".d")
         || name.ends_with(".rlib")
         || name.ends_with(".rmeta")
@@ -184,6 +187,13 @@ mod tests {
         );
         fs::write(dir.join("libcentraid_core_ffi.so"), b"nothing here").unwrap();
         assert!(release_verdict(&dir).is_ok());
+        // the scan's own binary holds the list and is not a shipped output; any other binary is
+        fs::write(dir.join("xtask"), b"xx CENTRAID_DEV_MODEL xx").unwrap();
+        assert!(release_verdict(&dir).is_ok());
+        fs::write(dir.join("centraid-gateway"), b"xx CENTRAID_DEV_MODEL xx").unwrap();
+        assert!(release_verdict(&dir).unwrap_err().contains("gateway"));
+        fs::remove_file(dir.join("centraid-gateway")).unwrap();
+        fs::remove_file(dir.join("xtask")).unwrap();
         // nothing to look in is a failure, not a pass
         fs::remove_file(dir.join("libcentraid_core_ffi.so")).unwrap();
         fs::write(dir.join("other"), b"x").unwrap();
