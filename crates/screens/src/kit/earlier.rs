@@ -356,8 +356,8 @@ fn parsed(version: wire::EarlierVersion) -> Version {
         since_local: version.since_local,
         replaced_by: version.store_system,
         since_by: version.since_store_system,
-        replaced_actor: version.actor,
-        since_actor: version.since_actor,
+        replaced_actor: version.made_by,
+        since_actor: version.since_made_by,
     }
 }
 
@@ -674,7 +674,7 @@ impl Earlier {
                     cycle,
                     &version.since_local,
                     &version.since_by,
-                    &version.since_actor,
+                    &version.since_made_by,
                 ),
                 &version.before,
                 version.seq,

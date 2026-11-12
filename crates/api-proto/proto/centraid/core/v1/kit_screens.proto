@@ -406,8 +406,8 @@ message EarlierVersion {
   string since_store_system = 6;
   // `assist` when the chat made the change that replaced it, and when the chat made it the record's
   // state; empty otherwise.
-  string actor = 7;
-  string since_actor = 8;
+  string made_by = 7;
+  string since_made_by = 8;
   // What the replacing change moved, field by field: `entity.title`, `<kind table>.<column>`,
   // `contact_point[<key>].<column>`, `attendee[<person>]`, and what decorates the record: `tag[<id>]`,
   // `flag[<id>]`, `membership[<list>]`, `link[<id>]` (either end), `about[<id>]`,
@@ -449,8 +449,8 @@ message EarlierRecord {
   repeated EarlierName names = 8;
   // `assist` when the chat made the change that replaced it, and when it made it the record's
   // state; empty otherwise.
-  string actor = 9;
-  string since_actor = 10;
+  string made_by = 9;
+  string since_made_by = 10;
 }
 
 // One row of the earlier-versions list. The first is the record as it is now, tagged "Current",

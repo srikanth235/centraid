@@ -64,8 +64,8 @@ pub(crate) fn versions(
                 seq: version.seq,
                 replaced_local: local(&version.at),
                 since_local: local(&version.since),
-                actor: actor(&version.by),
-                since_actor: actor(&version.since_by),
+                made_by: actor(&version.by),
+                since_made_by: actor(&version.since_by),
                 store_system: system(version.by),
                 since_store_system: system(version.since_by),
                 field_changes: version
@@ -117,8 +117,8 @@ pub(crate) fn record(vault: &Vault, entity_id: &str, seq: i64, zone: &str) -> Re
         seq: version.seq,
         replaced_local: local(&version.at),
         since_local: local(&version.since),
-        actor: actor(&version.by),
-        since_actor: actor(&version.since_by),
+        made_by: actor(&version.by),
+        since_made_by: actor(&version.since_by),
         store_system: system(&version.by),
         since_store_system: system(&version.since_by),
         fields: record
