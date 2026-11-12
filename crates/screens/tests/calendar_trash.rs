@@ -81,6 +81,8 @@ fn alerts(world: &World, title: &str) -> usize {
         projects: &[],
         events: &upcoming.events,
         calendars: &upcoming.calendars,
+        extra: &[],
+        extra_wanted: &[],
     })
     .iter()
     .filter(|pending| pending.title == title)

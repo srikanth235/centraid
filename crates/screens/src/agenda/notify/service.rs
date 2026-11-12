@@ -23,6 +23,7 @@ use crate::kit::permission::AlertFacts;
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::agenda_reminders as reminders;
+use crate::strings::home;
 
 /// The route name of the service.
 pub const NAME: &str = "reminders.notify";
@@ -188,6 +189,8 @@ impl Service {
             self.receipt = None;
         }
         let loaded = Self::read(ctx);
+        let extra = ctx.alerts().notices();
+        let extra_wanted = ctx.alerts().wanted();
         let mut wait = RETRY;
         let reading = loaded.as_ref().map(|loaded| {
             let inputs = Inputs {
@@ -199,6 +202,8 @@ impl Service {
                 projects: &loaded.projects,
                 events: &loaded.events,
                 calendars: &loaded.calendars,
+                extra: &extra,
+                extra_wanted: &extra_wanted,
             };
             let set = desired::desired(&inputs);
             if let Some(now) = FireZone::named(ctx.zone())
@@ -231,6 +236,7 @@ impl Service {
                         ask_permission,
                         channel_name: reminders::band_reminders(ctx.locale()),
                         live_ids: live,
+                        backup_channel_name: home::band_backup(ctx.locale()),
                     },
                 )),
             });
@@ -256,6 +262,20 @@ impl Service {
                 &loaded.tasks,
                 &loaded.events,
             );
+        }
+        // ANOTHER PRODUCER'S NOTICE opens where it says; it has no buttons to run.
+        if let Some(notice) = ctx
+            .alerts()
+            .notices()
+            .into_iter()
+            .find(|notice| notice.id == answered.notification_id)
+        {
+            out.push(wire::Effect {
+                kind: Some(wire::effect::Kind::OpenRoute(wire::OpenRoute {
+                    route: Some(notice.opens),
+                })),
+            });
+            return;
         }
         match answer::handle(ctx, &vault, &self.facts, self.receipt.as_ref(), answered) {
             Handled::Ignored => return,
@@ -294,6 +314,11 @@ impl Screen for Service {
                 | E::ScreenOpened(_)
                 | E::Lifecycle(wire::AppLifecycle { foreground: true }),
             ) => self.recompute(ctx, &mut out),
+            Some(E::Signalled(_)) => {
+                // A producer's offer changed: the set is spoken again.
+                self.sync.invalidate();
+                self.recompute(ctx, &mut out);
+            }
             Some(E::ShellFact(fact)) => match fact.fact {
                 Some(wire::shell_fact::Fact::NotificationAnswered(answered)) => {
                     self.answered(&answered, ctx, &mut out);

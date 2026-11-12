@@ -194,6 +194,8 @@ Test: `the_backup_plane_doors_are_request_kinds_and_answer_an_unpaired_phone` (a
 
 **Permission** is asked only when `ask_permission` says something would fire. Refused is a quiet state, but it is not forgotten: `NotificationsScheduled` carries what the phone will do with what is held (`permission`, and on Android `exact_denied` when exact alarms are not allowed, `channel_off` and `channel_shown` when the member switched the channel off). Rust keeps them as one `AlertFacts` and `kit::permission` says the one sentence for them, so every screen that relies on alerts says the same thing.
 
+**One service, more than one producer (#1188, NB2).** Another screen (the stale-backup warnings) offers fixed-instant notices to the service through `kit::permission::AlertBoard`; they ride in `all` with `channel_id = "backup"` (Android posts them to `ScheduleNotifications.backup_channel_name`'s channel; iOS has none), carry no buttons, and a tap opens the route the producer named. Up to two slots of the cap are theirs, so agenda fill never starves them, and the ids the producer still wants ride in `live_ids`. `NotificationsScheduled` reports the backup channel's state beside the reminders channel's.
+
 **Which items notify is the alert index's** (`alert` rows, kept by the writer): `agenda_upcoming` and `agenda_task_reminders` take `alerts: N` and then read only the items the next N firings belong to, at any vault size.
 
 ## 5. `next_event` surfaces bounded-queue backpressure as a health event

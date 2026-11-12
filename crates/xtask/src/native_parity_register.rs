@@ -176,6 +176,18 @@ pub const REGISTER: &[Entry] = &[
         platform(Shell::Android, EDITED_IN_PLACE),
     ),
     (
+        "NotificationsScheduled.backup_channel_off",
+        platform(Shell::Android, ALERT_LIMITS),
+    ),
+    (
+        "NotificationsScheduled.backup_channel_shown",
+        platform(Shell::Android, ALERT_LIMITS),
+    ),
+    (
+        "ScheduleNotifications.backup_channel_name",
+        platform(Shell::Android, ALERT_LIMITS),
+    ),
+    (
         "NotificationsScheduled.channel_off",
         platform(Shell::Android, ALERT_LIMITS),
     ),

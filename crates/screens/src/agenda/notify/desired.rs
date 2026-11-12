@@ -16,6 +16,7 @@ use centraid_api_proto::core_v1 as wire;
 use centraid_vault::time::{FireZone, parse_civil_ms};
 
 use crate::kit::civil;
+use crate::kit::permission::ExtraNotice;
 use crate::strings::{
     Locale, agenda as agenda_words, agenda_notify as words, fill, shared, task as task_words,
 };
@@ -62,6 +63,10 @@ pub struct Inputs<'a> {
     pub projects: &'a [wire::AgendaTaskProject],
     pub events: &'a [wire::AgendaEvent],
     pub calendars: &'a [wire::AgendaCalendar],
+    /// What other screens want held through this service (`kit::permission::AlertBoard`), soonest
+    /// first, and the delivered ids they still want.
+    pub extra: &'a [ExtraNotice],
+    pub extra_wanted: &'a [String],
 }
 
 /// Every task of a board's groups and of their children, each once, the
@@ -161,8 +166,37 @@ pub fn desired(inputs: &Inputs) -> Vec<wire::PendingNotification> {
     all.extend(events(inputs, &zone, &window));
     all.sort_by(|a, b| (a.fire_at_ms, &a.notification_id).cmp(&(b.fire_at_ms, &b.notification_id)));
     all.dedup_by(|a, b| a.notification_id == b.notification_id);
-    all.truncate(CAP);
+    // THE OTHER PRODUCERS' SLOTS ARE THEIR OWN: agenda fill never starves them.
+    let extra = extras(inputs, &zone, now);
+    all.truncate(CAP - extra.len());
+    all.extend(extra);
+    all.sort_by(|a, b| (a.fire_at_ms, &a.notification_id).cmp(&(b.fire_at_ms, &b.notification_id)));
     all
+}
+
+/// The most slots of the cap other producers' notices take, kept for them when they exist (the stale-backup warnings, #1188).
+pub const EXTRA_RESERVE: usize = 2;
+
+fn extras(inputs: &Inputs, zone: &FireZone, now: i64) -> Vec<wire::PendingNotification> {
+    inputs
+        .extra
+        .iter()
+        .filter(|notice| notice.fire_at_ms >= now)
+        .take(EXTRA_RESERVE)
+        .map(|notice| {
+            let mut held = pending(
+                zone,
+                notice.channel.thread(),
+                notice.id.clone(),
+                notice.fire_at_ms,
+                notice.title.clone(),
+                notice.body.clone(),
+                "",
+            );
+            held.channel_id = notice.channel.id().to_owned();
+            held
+        })
+        .collect()
 }
 
 /// THE DELIVERED READING (#1188, A2): the ids of reminders that have already fired and are still
@@ -183,10 +217,16 @@ pub fn live(inputs: &Inputs) -> Vec<String> {
         to: now,
         ongoing_at: Some(now),
     };
-    let mut ids: Vec<(i64, String)> = tasks(inputs, &zone, &window)
-        .into_iter()
-        .chain(events(inputs, &zone, &window))
-        .map(|n| (n.fire_at_ms, n.notification_id))
+    let mut ids: Vec<(i64, String)> = inputs
+        .extra_wanted
+        .iter()
+        .map(|id| (i64::MAX, id.clone()))
+        .chain(
+            tasks(inputs, &zone, &window)
+                .into_iter()
+                .chain(events(inputs, &zone, &window))
+                .map(|n| (n.fire_at_ms, n.notification_id)),
+        )
         .collect();
     // The newest first, so the cap keeps what is most likely on the screen.
     ids.sort_by(|a, b| b.cmp(a));
@@ -214,6 +254,7 @@ fn pending(
         category_id: category.to_owned(),
         thread_id: thread.to_owned(),
         immediate: false,
+        channel_id: String::new(),
     }
 }
 

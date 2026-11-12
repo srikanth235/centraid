@@ -270,6 +270,7 @@ fn receipt(
                 String::new()
             },
             thread_id: THREAD.to_owned(),
+            channel_id: String::new(),
             immediate: true,
         },
         task_id: task_id.to_owned(),

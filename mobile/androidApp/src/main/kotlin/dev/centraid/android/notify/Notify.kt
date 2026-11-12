@@ -40,6 +40,9 @@ import kotlinx.coroutines.withTimeoutOrNull
  */
 internal object Notify {
     const val CHANNEL: String = "agenda-reminders"
+
+    /** The backup warnings' own channel, so switching off reminders does not silence them (and the reverse). */
+    const val BACKUP_CHANNEL: String = "backup-warnings"
     const val EXTRA_ID: String = "dev.centraid.notify.ID"
     const val EXTRA_VERB: String = "dev.centraid.notify.VERB"
 
@@ -97,6 +100,7 @@ internal object Notify {
         performed?.complete(Unit)
         // WHAT THE PHONE WILL DO WITH WHAT IS HELD: said back so the editor row can say it.
         val channel = manager.getNotificationChannelCompat(CHANNEL)
+        val backup = manager.getNotificationChannelCompat(BACKUP_CHANNEL)
         val alarms = app.getSystemService(AlarmManager::class.java)
         val canExact = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && alarms?.canScheduleExactAlarms() == true
         return NotificationsScheduled(
@@ -105,6 +109,8 @@ internal object Notify {
             exact_denied = !NotifyPlan.exact(Build.VERSION.SDK_INT, canExact),
             channel_off = channel != null && channel.importance == NotificationManagerCompat.IMPORTANCE_NONE,
             channel_shown = channel?.name?.toString().orEmpty(),
+            backup_channel_off = backup != null && backup.importance == NotificationManagerCompat.IMPORTANCE_NONE,
+            backup_channel_shown = backup?.name?.toString().orEmpty(),
         )
     }
 
@@ -125,6 +131,11 @@ internal object Notify {
                 .setName(request.channel_name)
                 .build(),
         )
+        manager.createNotificationChannel(
+            NotificationChannelCompat.Builder(BACKUP_CHANNEL, NotificationManagerCompat.IMPORTANCE_DEFAULT)
+                .setName(request.backup_channel_name)
+                .build(),
+        )
         plan.removePending.forEach { cancelAlarm(app, it) }
         plan.removeShowing.forEach { cancel(app, manager, it) }
         // THE RECORD FIRST: an alarm that fires the moment it is set finds its words in it.
@@ -133,6 +144,7 @@ internal object Notify {
             categories = request.categories,
             ask_permission = request.ask_permission,
             channel_name = request.channel_name,
+            backup_channel_name = request.backup_channel_name,
             live_ids = request.live_ids,
         )
         store.save(next)
@@ -267,13 +279,14 @@ internal object Notify {
                 .putExtra(EXTRA_VERB, NotificationVerb.NOTIFICATION_VERB_OPEN.value),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val builder = NotificationCompat.Builder(app, CHANNEL)
+        val backupWarning = item.channel_id == "backup"
+        val builder = NotificationCompat.Builder(app, if (backupWarning) BACKUP_CHANNEL else CHANNEL)
             // THE PLATFORM'S OWN REMINDER GLYPH: the app ships no drawable of its own (as `BackupNotices`).
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle(item.title)
             .setContentText(item.body)
             .setWhen(item.fire_at_ms)
-            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setCategory(if (backupWarning) NotificationCompat.CATEGORY_STATUS else NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
             .setContentIntent(open)
         if (item.thread_id.isNotEmpty()) builder.setGroup(item.thread_id)

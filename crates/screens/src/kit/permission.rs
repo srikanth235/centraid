@@ -162,6 +162,9 @@ pub struct AlertFacts {
     /// Android: the channel is switched off; `channel` is its name as the system shows it.
     pub channel_off: bool,
     pub channel: String,
+    /// The same for the backup channel.
+    pub backup_channel_off: bool,
+    pub backup_channel: String,
 }
 
 impl AlertFacts {
@@ -173,6 +176,8 @@ impl AlertFacts {
             exact_denied: scheduled.exact_denied,
             channel_off: scheduled.channel_off,
             channel: scheduled.channel_shown.clone(),
+            backup_channel_off: scheduled.backup_channel_off,
+            backup_channel: scheduled.backup_channel_shown.clone(),
         }
     }
 
@@ -180,14 +185,32 @@ impl AlertFacts {
     /// grant says its own sentence; a granted one that the phone still limits says which limit.
     #[must_use]
     pub fn line(&self, locale: Locale) -> Option<String> {
+        self.line_for(locale, Channel::Reminders)
+    }
+
+    /// The same for the notices of one `channel`.
+    #[must_use]
+    pub fn line_for(&self, locale: Locale, channel: Channel) -> Option<String> {
         if let Some(state) = self.permission.and_then(State::of_notifications) {
             return Some(says(locale, Resource::Notifications, state));
         }
-        if self.channel_off {
-            let channel = if self.channel.is_empty() {
-                words::notifications_channel_fallback(locale)
+        let (off, shown, fallback) = match channel {
+            Channel::Reminders => (
+                self.channel_off,
+                &self.channel,
+                words::notifications_channel_fallback(locale),
+            ),
+            Channel::Backup => (
+                self.backup_channel_off,
+                &self.backup_channel,
+                words::notifications_backup_channel_fallback(locale),
+            ),
+        };
+        if off {
+            let channel = if shown.is_empty() {
+                fallback
             } else {
-                self.channel.clone()
+                shown.clone()
             };
             return Some(fill(
                 &words::notifications_channel_off(locale),
@@ -199,13 +222,71 @@ impl AlertFacts {
     }
 }
 
-/// THE ONE BOARD the notification service writes and every screen that relies on alerts reads, so a
-/// refusal is said in the same words wherever an alert is set (#1188, NA1).
+/// Which of the app's notification channels a notice posts to (Android shows a channel's name in
+/// system settings; iOS has none). The backup warnings have a channel of their own, so switching
+/// off reminders does not silence them, and the reverse.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Channel {
+    Reminders,
+    Backup,
+}
+
+impl Channel {
+    /// The id the wire names it by (`PendingNotification.channel_id`); empty is Reminders.
+    #[must_use]
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Reminders => "",
+            Self::Backup => "backup",
+        }
+    }
+}
+
+impl Channel {
+    /// The thread its notices are grouped under.
+    #[must_use]
+    pub const fn thread(self) -> &'static str {
+        match self {
+            Self::Reminders => "reminders",
+            Self::Backup => "backup",
+        }
+    }
+}
+
+/// A notice a screen other than Agenda wants held, posted through the one notification service
+/// (#1188): a fixed instant, no buttons, a tap that opens `opens`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExtraNotice {
+    /// Deterministic: the same notice has the same id, so the shell replaces rather than doubles it.
+    pub id: String,
+    pub channel: Channel,
+    pub fire_at_ms: i64,
+    pub title: String,
+    pub body: String,
+    pub opens: wire::Route,
+}
+
+/// What one producer wants held, and which of its delivered notices are still wanted.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Offer {
+    pub notices: Vec<ExtraNotice>,
+    pub wanted: Vec<String>,
+}
+
+#[derive(Debug, Default)]
+struct Inner {
+    facts: AlertFacts,
+    offers: std::collections::BTreeMap<String, Offer>,
+}
+
+/// THE ONE BOARD the notification service and every screen that relies on alerts share, so a
+/// refusal is said in the same words wherever an alert is set, and a second producer posts through
+/// the one service (#1188, NA1/NB2).
 #[derive(Clone, Debug, Default)]
-pub struct AlertBoard(std::sync::Arc<std::sync::Mutex<AlertFacts>>);
+pub struct AlertBoard(std::sync::Arc<std::sync::Mutex<Inner>>);
 
 impl AlertBoard {
-    fn lock(&self) -> std::sync::MutexGuard<'_, AlertFacts> {
+    fn lock(&self) -> std::sync::MutexGuard<'_, Inner> {
         self.0
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -214,15 +295,60 @@ impl AlertBoard {
     /// What the phone last said.
     #[must_use]
     pub fn get(&self) -> AlertFacts {
-        self.lock().clone()
+        self.lock().facts.clone()
     }
 
     /// Record what the phone said; whether it differs from what was known.
     pub fn set(&self, facts: AlertFacts) -> bool {
         let mut held = self.lock();
-        let changed = *held != facts;
-        *held = facts;
+        let changed = held.facts != facts;
+        held.facts = facts;
         changed
+    }
+
+    /// A PRODUCER'S WORD: what `producer` wants held and which of its delivered notices are still
+    /// wanted (an empty offer withdraws it). The service hears of a change and speaks again.
+    pub fn offer(&self, ctx: &crate::screen::Ctx, producer: &str, offer: Offer) {
+        let changed = {
+            let mut inner = self.lock();
+            if offer == Offer::default() {
+                inner.offers.remove(producer).is_some()
+            } else {
+                inner.offers.insert(producer.to_owned(), offer.clone()) != Some(offer)
+            }
+        };
+        if changed {
+            ctx.post(
+                crate::agenda::notify::NAME,
+                wire::ScreenEvent {
+                    kind: Some(wire::screen_event::Kind::Signalled(wire::Signalled {})),
+                },
+            );
+        }
+    }
+
+    /// Every producer's notices, soonest first, each id once.
+    #[must_use]
+    pub fn notices(&self) -> Vec<ExtraNotice> {
+        let mut all: Vec<ExtraNotice> = self
+            .lock()
+            .offers
+            .values()
+            .flat_map(|offer| offer.notices.clone())
+            .collect();
+        all.sort_by(|a, b| (a.fire_at_ms, &a.id).cmp(&(b.fire_at_ms, &b.id)));
+        all.dedup_by(|a, b| a.id == b.id);
+        all
+    }
+
+    /// The delivered ids the producers still want.
+    #[must_use]
+    pub fn wanted(&self) -> Vec<String> {
+        self.lock()
+            .offers
+            .values()
+            .flat_map(|offer| offer.wanted.clone())
+            .collect()
     }
 }
 

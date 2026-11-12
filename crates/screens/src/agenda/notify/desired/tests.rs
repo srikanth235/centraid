@@ -53,6 +53,8 @@ fn run(
             color: None,
             icon: None,
         }],
+        extra: &[],
+        extra_wanted: &[],
     })
 }
 
@@ -288,6 +290,8 @@ fn a_fire_time_in_the_spring_gap_reads_forward_and_one_in_the_autumn_overlap_fir
             projects: &[],
             events: &[],
             calendars: &[],
+            extra: &[],
+            extra_wanted: &[],
         })
     };
     // 2027-03-14 02:30 does not exist in New York; the clocks go from 02:00 to 03:00.
@@ -298,4 +302,74 @@ fn a_fire_time_in_the_spring_gap_reads_forward_and_one_in_the_autumn_overlap_fir
     let set = at("2026-10-31T08:00", "2026-11-01T01:30");
     assert_eq!(set.len(), 1);
     assert_eq!(set[0].fire_at_ms, 1_793_511_000_000);
+}
+
+fn stale_notice(n: u32, at: i64) -> ExtraNotice {
+    use crate::kit::permission::Channel;
+    ExtraNotice {
+        id: format!("backup-stale:T:{n}"),
+        channel: Channel::Backup,
+        fire_at_ms: at,
+        title: "Backup".to_owned(),
+        body: "No backup in 3 days".to_owned(),
+        opens: wire::Route::default(),
+    }
+}
+
+/// ANOTHER PRODUCER'S NOTICES ARE HELD EVEN WHEN AGENDA FILLS THE CAP, on their own channel, and a
+/// delivered one stays live while its producer wants it.
+#[test]
+fn a_second_producers_notices_keep_their_slots_when_agenda_fills_the_cap() {
+    let tasks: Vec<_> = (0..70)
+        .map(|n| {
+            let minute = format!("2026-11-11T{:02}:{:02}", 9 + n / 60, n % 60);
+            task(&n.to_string(), "2026-11-11", "09:00", &minute)
+        })
+        .collect();
+    let ms_now = parse_civil_ms(NOW, &FireZone::named(NY).unwrap()).unwrap();
+    let late = [
+        stale_notice(1, ms_now + 10 * 24 * HOUR),
+        stale_notice(2, ms_now + 17 * 24 * HOUR),
+    ];
+    let wanted = ["backup-stale:T:0".to_owned()];
+    let inputs = Inputs {
+        vault_id: "v1",
+        zone: NY,
+        locale: Locale::En,
+        now_local: NOW,
+        tasks: &tasks,
+        projects: &[],
+        events: &[],
+        calendars: &[],
+        extra: &late,
+        extra_wanted: &wanted,
+    };
+    let set = desired(&inputs);
+    assert!(set.len() <= CAP, "{}", set.len());
+    let backup: Vec<_> = set.iter().filter(|n| n.channel_id == "backup").collect();
+    assert_eq!(backup.len(), 2, "both warnings are held");
+    assert!(
+        backup.iter().all(|n| n.category_id.is_empty()),
+        "no buttons"
+    );
+    assert!(live(&inputs).contains(&"backup-stale:T:0".to_owned()));
+}
+
+#[test]
+fn a_notice_in_the_past_is_not_held() {
+    let ms_now = parse_civil_ms(NOW, &FireZone::named(NY).unwrap()).unwrap();
+    let past = [stale_notice(1, ms_now - HOUR)];
+    let set = desired(&Inputs {
+        vault_id: "v1",
+        zone: NY,
+        locale: Locale::En,
+        now_local: NOW,
+        tasks: &[],
+        projects: &[],
+        events: &[],
+        calendars: &[],
+        extra: &past,
+        extra_wanted: &[],
+    });
+    assert!(set.is_empty());
 }

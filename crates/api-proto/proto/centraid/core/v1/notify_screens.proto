@@ -70,6 +70,9 @@ message PendingNotification {
   // Deliver now rather than at `fire_at_ms`: a receipt for a button just
   // pressed, which carries Undo.
   bool immediate = 9;
+  // WHICH CHANNEL (#1188, NB2). Empty is the reminders-and-events channel; "backup" is the
+  // backup warnings' own, so switching one off does not silence the other. Android only.
+  string channel_id = 10;
 }
 
 // Effect 120: make the operating system hold exactly `all`.
@@ -93,6 +96,8 @@ message ScheduleNotifications {
   // its id is in neither `all` nor `live_ids`. A shell that predates the field
   // sees it empty and keeps the old rule.
   repeated string live_ids = 5;
+  // The backup channel's name, as the member sees it in system settings (Android).
+  string backup_channel_name = 6;
 }
 
 // What the OS said about notifications.
@@ -117,6 +122,9 @@ message NotificationsScheduled {
   bool exact_denied = 3;
   bool channel_off = 4;
   string channel_shown = 5;
+  // The same for the backup channel.
+  bool backup_channel_off = 6;
+  string backup_channel_shown = 7;
 }
 
 // ShellFact 8: the member pressed a button on a notification, or tapped it.
