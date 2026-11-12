@@ -98,6 +98,8 @@ struct Step {
     tool: &'static str,
     args: Vec<(&'static str, String)>,
     bad: bool,
+    /// The family of the mistake, for a bad call ([`crate::mistakes`]).
+    mistake: Option<&'static str>,
     /// The result of this step is what the turn's later turns lean on.
     primary: bool,
 }
@@ -107,6 +109,7 @@ fn step(tool: &'static str, args: Vec<(&'static str, String)>) -> Step {
         tool,
         args,
         bad: false,
+        mistake: None,
         primary: false,
     }
 }
@@ -202,6 +205,9 @@ pub struct WorldRun<'a> {
     /// Whether the runtime gives an empty `find` a handle, so `answer rows=@k` can end a read that
     /// found nothing. The regroup adds it; the runtime this was built against may not have it.
     pub empty_reads: bool,
+    /// Refused read calls from a model's rollouts (`--mistakes`); a repair turn of the same tool shows one of these
+    /// in place of a constructed mistake.
+    pub observed: Vec<crate::mistakes::Observed>,
 }
 
 /// A session on a private copy of a world's vault ([`WorldRun::open`]).
@@ -270,6 +276,7 @@ impl<'a> WorldRun<'a> {
             me: world.persona.me.clone(),
             today_at,
             empty_reads,
+            observed: Vec::new(),
         })
     }
 
@@ -459,9 +466,56 @@ impl<'a> WorldRun<'a> {
     fn plan(&self, turn: &TurnIntent, left: &[Left]) -> Result<Plan, (Drop, String)> {
         let mut plan = self.plan_inner(turn, left)?;
         if turn.outcome == Outcome::Repair {
-            apply_repair(&mut plan);
+            self.apply_repair(&mut plan, turn);
         }
         Ok(plan)
+    }
+
+    /// Put a call the runtime refuses ahead of the right one: a mistake of one of the families of
+    /// [`crate::mistakes`], chosen by the turn so a rebuild chooses the same one.
+    fn apply_repair(&self, plan: &mut Plan, turn: &TurnIntent) {
+        use crate::mistakes::{Mistake, for_read, for_write, pick};
+        let seed = format!("{:?}|{}", turn.intent, plan.kind);
+        let reads = plan.steps.last().is_some_and(|s| s.tool == "answer");
+        if reads {
+            let computes = plan.steps.iter().any(|s| s.tool == "compute");
+            let tool = if computes { "compute" } else { "find" };
+            let seen: Vec<Mistake> = self
+                .observed
+                .iter()
+                .filter(|o| o.tool == tool)
+                .cloned()
+                .map(Mistake::from)
+                .collect();
+            let built = for_read(self.catalog, &plan.kind, computes);
+            let chosen = pick(&seen, &seed).or_else(|| pick(&built, &seed));
+            let Some(mistake) = chosen else { return };
+            let mut bad = step(mistake.tool, mistake.args.clone());
+            bad.bad = true;
+            bad.mistake = Some(mistake.family);
+            for s in &mut plan.steps {
+                for (_, v) in &mut s.args {
+                    *v = shift_markers(v, 1);
+                }
+            }
+            if let Check::Rows { at, .. } = &mut plan.check {
+                *at += 1;
+            }
+            plan.steps.insert(0, bad);
+            return;
+        }
+        let last = plan.steps.len().saturating_sub(1);
+        let Some(real) = plan.steps.get(last) else {
+            return;
+        };
+        let built = for_write(self.catalog, &plan.kind, real.tool, &real.args);
+        let Some(mistake) = pick(&built, &seed) else {
+            return;
+        };
+        let mut bad = step(mistake.tool, mistake.args.clone());
+        bad.bad = true;
+        bad.mistake = Some(mistake.family);
+        plan.steps.insert(last, bad);
     }
 
     fn plan_inner(&self, turn: &TurnIntent, left: &[Left]) -> Result<Plan, (Drop, String)> {
@@ -1025,7 +1079,7 @@ impl<'a> WorldRun<'a> {
             "user": placeholder,
             "gold": [gold],
             "ref": calls,
-            "tags": tags_of(turn),
+            "tags": tags_with_mistakes(turn, &plan.steps),
         });
         let constraints = {
             let t: centraid_assist_eval::gold::Turn =
@@ -1073,62 +1127,22 @@ pub fn is_placeholder(user: &str) -> bool {
     user.starts_with("⟨m3:") && user.ends_with('⟩')
 }
 
+fn tags_with_mistakes(turn: &TurnIntent, steps: &[Step]) -> Vec<String> {
+    let mut tags = tags_of(turn);
+    tags.extend(
+        steps
+            .iter()
+            .filter_map(|s| s.mistake)
+            .map(|m| format!("mistake:{m}")),
+    );
+    tags
+}
+
 fn tags_of(turn: &TurnIntent) -> Vec<String> {
     vec![
         format!("outcome:{}", turn.outcome.word()),
         format!("reference:{}", turn.reference.word()),
     ]
-}
-
-/// Put a call the runtime refuses ahead of the right one.
-fn apply_repair(plan: &mut Plan) {
-    let reads = plan.steps.last().is_some_and(|s| s.tool == "answer");
-    if reads {
-        let kind = plan.kind.clone();
-        let computes = plan.steps.iter().any(|s| s.tool == "compute");
-        let mut bad = if computes {
-            step(
-                "compute",
-                vec![
-                    ("kind", kind),
-                    ("op", "sum".to_owned()),
-                    ("where", "colour = red".to_owned()),
-                ],
-            )
-        } else {
-            step(
-                "find",
-                vec![("kind", kind), ("where", "colour = red".to_owned())],
-            )
-        };
-        bad.bad = true;
-        for s in &mut plan.steps {
-            for (_, v) in &mut s.args {
-                *v = shift_markers(v, 1);
-            }
-        }
-        if let Check::Rows { at, .. } = &mut plan.check {
-            *at += 1;
-        }
-        plan.steps.insert(0, bad);
-        return;
-    }
-    let last = plan.steps.len().saturating_sub(1);
-    let tool = plan.steps.get(last).map_or("do", |s| s.tool);
-    let mut bad = if tool == "create" {
-        let kind = plan.kind.clone();
-        step(
-            "create",
-            vec![("kind", kind), ("args", "colour: red".to_owned())],
-        )
-    } else {
-        step(
-            "do",
-            vec![("verb", "complete".to_owned()), ("rows", "@99".to_owned())],
-        )
-    };
-    bad.bad = true;
-    plan.steps.insert(last, bad);
 }
 
 fn is_money(steps: &[Step]) -> bool {

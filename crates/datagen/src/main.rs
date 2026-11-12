@@ -2,17 +2,20 @@
 //! `intents`, `messages`, `render`), and `build --version vN` runs them in order into one data
 //! version.
 
+use centraid_datagen::mistakes as datagen_mistakes;
+use centraid_datagen::rehearsal as datagen_rehearsal;
+use centraid_datagen::style as datagen_style;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use centraid_datagen::ambiguity::{self, Ambiguity};
-use centraid_datagen::llm::ClaudeCli;
+use centraid_datagen::llm::{ClaudeCli, Llm};
 use centraid_datagen::mix::{self, Shares};
 use centraid_datagen::render::DECISION_WEIGHT;
 use centraid_datagen::version::{self, Provenance, RenderConfig};
 use centraid_datagen::world::{World, WorldSpec, plan, plan_sized};
-use centraid_datagen::{Catalog, Split, messages, run};
+use centraid_datagen::{Catalog, Split, messages, publish, run};
 use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
 
@@ -65,6 +68,10 @@ enum Command {
         /// sets `--per-world` from the world counts.
         #[arg(long, value_delimiter = ',')]
         sessions: Option<Vec<usize>>,
+        /// Refused calls from a model's rollouts (`*.rollouts.jsonl`): a repair turn that reads shows one of
+        /// these, refused by the runtime again, in place of a constructed mistake.
+        #[arg(long)]
+        mistakes: Option<PathBuf>,
     },
     /// Write phone-style messages for an intents run and verify them (stages 4 and 5): Claude
     /// Haiku through headless Claude Code writes and reads back, every output cached by prompt
@@ -90,9 +97,8 @@ enum Command {
         /// The typo stream's seed.
         #[arg(long, default_value_t = 1)]
         seed: u64,
-        /// The model passed to `claude --model`.
-        #[arg(long, default_value = "haiku")]
-        model: String,
+        #[command(flatten)]
+        models: ModelArgs,
     },
     /// Render a messages run (stage 6) and mix it (stage 7) into a data version: `data/{train,val,test,noise}.jsonl.zst`,
     /// `worlds/`, `build/` and a manifest. The sessions are rendered as the phone renders them, tokenized, with per-token loss weights.
@@ -123,6 +129,9 @@ enum Command {
         /// The master seed every world and intent is drawn from.
         #[arg(long, default_value_t = 1)]
         seed: u64,
+        /// Refused calls from a model's rollouts (`*.rollouts.jsonl`) for the repair turns that read.
+        #[arg(long)]
+        mistakes: Option<PathBuf>,
         /// Worlds per split as `train,val,test` (default 48,8,12).
         #[arg(long, value_delimiter = ',')]
         counts: Option<Vec<usize>>,
@@ -143,13 +152,41 @@ enum Command {
         /// The typo stream's seed.
         #[arg(long, default_value_t = 1)]
         typo_seed: u64,
-        #[arg(long, default_value = "haiku")]
-        model: String,
+        #[command(flatten)]
+        models: ModelArgs,
         /// Reuse the output of a stage that already has a manifest under `<out>/stages/`.
         #[arg(long)]
         reuse: bool,
         #[command(flatten)]
         mix: MixArgs,
+    },
+    /// Publish a built data version to a Hugging Face dataset repo, one revision per version. A DRY RUN unless `--upload`:
+    /// it checks the version (file hashes, a clean build, publishable, no sealed placeholder), lists every file with
+    /// its size and hash and uploads nothing. A real upload needs `--upload`, `--repo` and `HF_TOKEN` in the
+    /// environment; the repo is private unless `--public`, the revision is the version's name, and an existing
+    /// revision is never overwritten.
+    Publish {
+        /// A data version (`datagen build --out`).
+        #[arg(long = "in")]
+        input: PathBuf,
+        /// The dataset repo, as owner/name. For this project: srikanth235/centraid-native-data.
+        #[arg(long)]
+        repo: Option<String>,
+        /// Really upload (needs `--repo` and `HF_TOKEN`).
+        #[arg(long)]
+        upload: bool,
+        /// Make the repo public when it is created. Private by default.
+        #[arg(long)]
+        public: bool,
+        /// The Python that runs `huggingface_hub` for the upload.
+        #[arg(long, default_value = "python3")]
+        python: String,
+    },
+    /// Write the byte-level TEST tokenizer to a file, for a rehearsal build that needs no model and no download. A
+    /// version rendered with it is marked not publishable.
+    TestTokenizer {
+        #[arg(long)]
+        out: PathBuf,
     },
     /// Print one session of a data version with its loss mask drawn on the decoded tokens: weight 0 as it is, weight 1
     /// in `[[ ]]`, deciding tokens in `{{ }}`.
@@ -319,6 +356,124 @@ fn spec_counts(counts: Option<&[usize]>) -> Result<[usize; 3]> {
 }
 
 /// The seeds a messages manifest records, with the mix's own.
+/// Which model writes and which reads back, split by split.
+#[derive(clap::Args, Debug)]
+struct ModelArgs {
+    /// The writer: one model for every split (`haiku`) or one per split (`train=haiku,val=haiku,test=sonnet`). Names go
+    /// to `claude --model`; `rehearsal` (or `rehearsal-b`) is the offline stand-in that makes no call. The test split's
+    /// writer must differ from train's, and no split's reader may be its writer.
+    #[arg(long, default_value = "train=haiku,val=haiku,test=sonnet")]
+    writer: String,
+    /// The reader that reads each message back, in the same forms as `--writer`.
+    #[arg(long, default_value = "train=sonnet,val=sonnet,test=haiku")]
+    reader: String,
+    /// The share of sessions in each style: terse, dictated, typos, long_polite, correction.
+    #[arg(long, value_delimiter = ',', default_values_t = datagen_style::DEFAULT_SHARES)]
+    style_shares: Vec<f64>,
+}
+
+/// The language models of a run, owned once each.
+struct BuiltModels {
+    all: Vec<Box<dyn Llm>>,
+    writer: [usize; 3],
+    reader: [usize; 3],
+}
+
+impl BuiltModels {
+    fn models(&self) -> messages::Models<'_> {
+        let at = |i: [usize; 3]| [&*self.all[i[0]], &*self.all[i[1]], &*self.all[i[2]]];
+        messages::Models {
+            writer: at(self.writer),
+            reader: at(self.reader),
+        }
+    }
+}
+
+fn per_split(spec: &str) -> Result<[String; 3]> {
+    if !spec.contains('=') {
+        return Ok([spec.to_owned(), spec.to_owned(), spec.to_owned()]);
+    }
+    let mut out: [Option<String>; 3] = [None, None, None];
+    for part in spec.split(',') {
+        let (split, model) = part
+            .split_once('=')
+            .with_context(|| format!("`{part}`: expected split=model"))?;
+        let at = Split::ALL
+            .iter()
+            .position(|s| s.name() == split.trim())
+            .with_context(|| format!("`{split}` is not a split (train, val, test)"))?;
+        out[at] = Some(model.trim().to_owned());
+    }
+    let [a, b, c] = out;
+    match (a, b, c) {
+        (Some(a), Some(b), Some(c)) => Ok([a, b, c]),
+        _ => anyhow::bail!("`{spec}` must name train, val and test, or one model for all"),
+    }
+}
+
+impl ModelArgs {
+    fn style_shares(&self) -> Result<[f64; 5]> {
+        let [a, b, c, d, e] = self.style_shares[..] else {
+            anyhow::bail!(
+                "--style-shares takes five numbers: terse,dictated,typos,long_polite,correction"
+            );
+        };
+        Ok([a, b, c, d, e])
+    }
+
+    fn build(&self, catalog: &Catalog, intents: &std::path::Path) -> Result<BuiltModels> {
+        let mut all: Vec<Box<dyn Llm>> = Vec::new();
+        let mut seen: Vec<(&str, String)> = Vec::new();
+        let mut pick = |role: &'static str, names: &[String; 3]| -> Result<[usize; 3]> {
+            let mut at = [0; 3];
+            for (i, name) in names.iter().enumerate() {
+                let known = seen.iter().position(|(r, n)| *r == role && n == name);
+                at[i] = if let Some(k) = known {
+                    k
+                } else {
+                    let llm: Box<dyn Llm> = if let Some(suffix) = name.strip_prefix("rehearsal") {
+                        Box::new(datagen_rehearsal::Rehearsal::new(
+                            &format!("{role}{suffix}"),
+                            catalog,
+                            intents,
+                        )?)
+                    } else {
+                        let mut cli = ClaudeCli::haiku();
+                        cli.model.clone_from(name);
+                        Box::new(cli)
+                    };
+                    all.push(llm);
+                    seen.push((role, name.clone()));
+                    all.len() - 1
+                };
+            }
+            Ok(at)
+        };
+        let writer = pick("writer", &per_split(&self.writer)?)?;
+        let reader = pick("reader", &per_split(&self.reader)?)?;
+        Ok(BuiltModels {
+            all,
+            writer,
+            reader,
+        })
+    }
+}
+
+/// The refused calls `--mistakes` names, with a line on what was read.
+fn load_mistakes(path: Option<&std::path::Path>) -> Result<Vec<datagen_mistakes::Observed>> {
+    let Some(path) = path else {
+        return Ok(Vec::new());
+    };
+    let loaded = datagen_mistakes::observed(path)?;
+    eprintln!(
+        "mistakes: {} refused read calls from {} refused turns ({} calls left out: not a read, or an argument that cannot be spelled)",
+        loaded.calls.len(),
+        loaded.refused_turns,
+        loaded.unspellable
+    );
+    Ok(loaded.calls)
+}
+
 fn seeds_of(messages: &std::path::Path, mix_seed: u64) -> Value {
     let manifest: Value = std::fs::read_to_string(messages.join("manifest.json"))
         .ok()
@@ -408,8 +563,10 @@ fn main() -> Result<()> {
             counts,
             per_world,
             sessions,
+            mistakes,
         } => {
             let catalog = Catalog::build()?;
+            let mistakes = load_mistakes(mistakes.as_deref())?;
             let counts: [usize; 3] = match counts.as_deref() {
                 None => [48, 8, 12],
                 Some([a, b, c]) => [*a, *b, *c],
@@ -432,6 +589,7 @@ fn main() -> Result<()> {
                 counts,
                 per_world,
                 cell_limit: None,
+                mistakes,
             };
             let generated = run::generate(&config, &catalog, scratch.path())?;
             let report = run::write(&out, &config, &catalog, &generated)?;
@@ -445,19 +603,19 @@ fn main() -> Result<()> {
             offline,
             limit,
             seed,
-            model,
+            models,
         } => {
             let catalog = Catalog::build()?;
-            let mut llm = ClaudeCli::haiku();
-            llm.model = model;
+            let built = models.build(&catalog, &input)?;
             let config = messages::Config {
                 batch,
                 concurrency,
                 offline,
                 limit,
                 seed,
+                style_shares: models.style_shares()?,
             };
-            let report = messages::run(&config, &catalog, &llm, &input, &out)?;
+            let report = messages::run(&config, &catalog, &built.models(), &input, &out)?;
             print!("{}", report.text);
             eprintln!("model calls: {}, cache hits: {}", report.calls, report.hits);
         }
@@ -490,6 +648,7 @@ fn main() -> Result<()> {
             out,
             tokenizer,
             seed,
+            mistakes,
             counts,
             sessions,
             concurrency,
@@ -497,13 +656,14 @@ fn main() -> Result<()> {
             offline,
             limit,
             typo_seed,
-            model,
+            models,
             reuse,
             mix: mix_args,
         } => {
             let catalog = Catalog::build()?;
             let counts = spec_counts(counts.as_deref())?;
             let mix_config = mix_args.mix()?;
+            let mistakes = load_mistakes(mistakes.as_deref())?;
             let stages = out.join("stages");
             let (intents_dir, messages_dir) = (stages.join("intents"), stages.join("messages"));
             let ready = |dir: &std::path::Path| reuse && dir.join("manifest.json").exists();
@@ -526,6 +686,7 @@ fn main() -> Result<()> {
                         per(drawn[2], counts[2]),
                     ],
                     cell_limit: None,
+                    mistakes: mistakes.clone(),
                 };
                 let generated = run::generate(&config, &catalog, scratch.path())?;
                 run::write(&intents_dir, &config, &catalog, &generated)?;
@@ -534,16 +695,22 @@ fn main() -> Result<()> {
             if ready(&messages_dir) {
                 eprintln!("messages: reusing {}", messages_dir.display());
             } else {
-                let mut llm = ClaudeCli::haiku();
-                llm.model = model;
+                let built = models.build(&catalog, &intents_dir)?;
                 let config = messages::Config {
                     batch,
                     concurrency,
                     offline,
                     limit,
                     seed: typo_seed,
+                    style_shares: models.style_shares()?,
                 };
-                let report = messages::run(&config, &catalog, &llm, &intents_dir, &messages_dir)?;
+                let report = messages::run(
+                    &config,
+                    &catalog,
+                    &built.models(),
+                    &intents_dir,
+                    &messages_dir,
+                )?;
                 eprintln!("model calls: {}, cache hits: {}", report.calls, report.hits);
             }
             let provenance = Provenance {
@@ -562,6 +729,31 @@ fn main() -> Result<()> {
                 &provenance,
             )?;
             print!("{text}");
+        }
+        Command::Publish {
+            input,
+            repo,
+            upload,
+            public,
+            python,
+        } => {
+            let named = repo.as_deref().unwrap_or(publish::EXAMPLE_REPO);
+            let publication = publish::prepare(&input, named)?;
+            if upload {
+                let repo = repo.context("--upload needs --repo owner/name")?;
+                let token = publish::token_from_env()?;
+                let done = publish::upload(&publication, &repo, !public, &python, &token)?;
+                println!("{done}");
+            } else {
+                print!(
+                    "{}",
+                    publish::dry_run(&publication, repo.as_deref(), !public)
+                );
+            }
+        }
+        Command::TestTokenizer { out } => {
+            std::fs::write(&out, centraid_datagen::render::byte_level_tokenizer_json())?;
+            eprintln!("wrote {}", out.display());
         }
         Command::UnpackCache { input, out } => {
             let n = version::unpack_cache(&input, &out)?;

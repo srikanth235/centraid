@@ -34,6 +34,7 @@ fn version_dir() -> &'static tempfile::TempDir {
             counts: [3, 1, 1],
             per_world: [0; 3],
             cell_limit: Some(40),
+            mistakes: Vec::new(),
         };
         let scratch = tempfile::tempdir().expect("tempdir");
         let generated = run::generate(&config, catalog(), scratch.path()).expect("run");

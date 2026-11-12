@@ -147,6 +147,8 @@ pub struct Config {
     pub per_world: [usize; 3],
     /// Visit only this many cells per world (tests that need a quick run); `None` for all.
     pub cell_limit: Option<usize>,
+    /// Refused read calls from a model's rollouts, for the repair turns that read ([`crate::mistakes`]).
+    pub mistakes: Vec<crate::mistakes::Observed>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -255,6 +257,7 @@ pub fn generate_with(
         let dir = scratch.join(world.id());
         let mut run = WorldRun::seed(&world, catalog, &dir)
             .with_context(|| format!("world {}", world.id()))?;
+        run.observed.clone_from(&config.mistakes);
         let facts = run.facts.clone();
         if std::env::var_os("DATAGEN_DEBUG").is_some() {
             eprintln!("world {} empty reads {}", world.id(), run.empty_reads);

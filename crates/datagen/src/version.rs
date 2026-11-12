@@ -437,23 +437,26 @@ pub fn write_version(
             }),
         );
     }
-    // nested train subsets: the ids of the sessions, one a line, sorted by position in the train file
+    // nested train subsets: each is a file of its own, `data/<name>.jsonl.zst`, holding the same records as the train file
+    // does for those sessions, in the train file's order, so a job names a subset and fetches one file
     let mut subsets = serde_json::Map::new();
     for (name, indices) in &selection.subsets {
-        let mut ids: Vec<&str> = indices
-            .iter()
-            .map(|i| rendered.features[*i].id.as_str())
-            .collect();
-        ids.sort_unstable();
-        let mut body = ids.join("\n");
-        body.push('\n');
-        let rel = format!("{DATA}/{name}.ids");
-        std::fs::write(out.join(&rel), &body)?;
+        let mut indices = indices.clone();
+        indices.sort_unstable();
+        let rel = format!("{DATA}/{name}.jsonl.zst");
+        let path = out.join(&rel);
+        let file = std::fs::File::create(&path)?;
+        let mut encoder = zstd::stream::Encoder::new(std::io::BufWriter::new(file), 6)?;
+        for i in &indices {
+            encoder.write_all(&rendered.spool.read(&rendered.slots[*i])?)?;
+        }
+        encoder.finish()?.flush()?;
+        let bytes = std::fs::read(&path)?;
         let entry = json!({
-            "sessions": ids.len(),
+            "sessions": indices.len(),
             "within": "train",
-            "bytes": body.len(),
-            "blake3": blake3::hash(body.as_bytes()).to_hex().to_string(),
+            "bytes": bytes.len(),
+            "blake3": blake3::hash(&bytes).to_hex().to_string(),
         });
         files.insert(rel, entry.clone());
         subsets.insert(name.clone(), entry);
@@ -474,6 +477,7 @@ pub fn write_version(
     for (from, to) in [
         ("manifest.json", "messages.json"),
         ("report.txt", "messages.txt"),
+        ("models.json", "models.json"),
     ] {
         if input.join(from).exists() {
             std::fs::copy(input.join(from), out.join(BUILD).join(to))?;
@@ -505,13 +509,40 @@ pub fn write_version(
             })
         })
         .collect();
+    let models: Value = std::fs::read_to_string(input.join("models.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or(Value::Null);
+    let test_tokenizer = rendered.tokenizer_hash
+        == blake3::hash(crate::render::byte_level_tokenizer_json().as_bytes())
+            .to_hex()
+            .to_string();
+    let rehearsal = models["writers"]
+        .as_object()
+        .into_iter()
+        .chain(models["readers"].as_object())
+        .flat_map(serde_json::Map::values)
+        .filter_map(Value::as_str)
+        .any(|m| m.starts_with(crate::rehearsal::PREFIX));
+    let mut blockers: Vec<&str> = Vec::new();
+    if test_tokenizer {
+        blockers.push("rendered with the test (byte-level) tokenizer, not the chat model's own");
+    }
+    if provenance.runtime_commit.ends_with("-dirty") || provenance.runtime_commit == "unknown" {
+        blockers.push("built from a tree with uncommitted changes, or an unknown commit");
+    }
+    if rehearsal {
+        blockers.push("written or read back by a rehearsal model, not a language model");
+    }
     let manifest = json!({
         "version": provenance.version,
+        "publishable": {"value": blockers.is_empty(), "blockers": blockers},
+        "messages": models,
         "stage": "render+mix",
         "catalog_hash": catalog.hash(),
         "runtime_commit": provenance.runtime_commit,
         "seeds": provenance.seeds,
-        "tokenizer": {"file": provenance.tokenizer_path, "blake3": rendered.tokenizer_hash},
+        "tokenizer": {"file": provenance.tokenizer_path, "blake3": rendered.tokenizer_hash, "test_tokenizer": test_tokenizer},
         "llm_cache": {"blake3": cache, "entries": entries, "packed": format!("{BUILD}/{PACKED_CACHE}"), "packed_entries": packed},
         "weights": {
             "decision": decision_weight,

@@ -35,6 +35,7 @@ fn input() -> &'static (tempfile::TempDir, PathBuf) {
             counts: [3, 1, 1],
             per_world: [0; 3],
             cell_limit: Some(40),
+            mistakes: Vec::new(),
         };
         let scratch = tempfile::tempdir().expect("tempdir");
         let generated = run::generate(&config, catalog(), scratch.path()).expect("run");
@@ -278,6 +279,11 @@ fn the_manifest_names_the_data_version() {
         assert!(manifest.get(key).is_some(), "{key}");
     }
     assert_eq!(manifest["weights"]["decision"], 2.0);
+    // a version rendered with the test (byte-level) tokenizer is never publishable
+    assert_eq!(manifest["tokenizer"]["test_tokenizer"], true);
+    assert_eq!(manifest["publishable"]["value"], false);
+    let blockers = manifest["publishable"]["blockers"].to_string();
+    assert!(blockers.contains("byte-level"), "{blockers}");
     // the files are what the manifest says
     for (name, file) in manifest["files"].as_object().expect("files") {
         let bytes = std::fs::read(dir.path().join(name)).expect("file");
@@ -415,4 +421,36 @@ fn a_version_is_its_publishable_tree() {
         manifest["llm_cache"]["packed_entries"],
         manifest["llm_cache"]["entries"]
     );
+}
+
+fn ids_of(dir: &std::path::Path, rel: &str) -> std::collections::BTreeSet<String> {
+    let bytes = std::fs::read(dir.join(rel)).expect("file");
+    let text = String::from_utf8(zstd::decode_all(&bytes[..]).expect("zstd")).expect("utf8");
+    text.lines()
+        .map(|l| {
+            let v: Value = serde_json::from_str(l).expect("json");
+            v["id"].as_str().expect("id").to_owned()
+        })
+        .collect()
+}
+
+#[test]
+fn nested_train_subsets_are_files_of_their_own_inside_each_other_and_inside_train() {
+    let (dir, manifest) = version_dir();
+    let train = ids_of(dir.path(), "data/train.jsonl.zst");
+    let (small, large) = (
+        ids_of(dir.path(), "data/train-20.jsonl.zst"),
+        ids_of(dir.path(), "data/train-40.jsonl.zst"),
+    );
+    assert!(!small.is_empty() && small.len() <= 20, "{}", small.len());
+    assert!(large.len() <= 40 && large.len() >= small.len());
+    assert!(
+        small.is_subset(&large),
+        "the smaller subset is inside the larger"
+    );
+    assert!(large.is_subset(&train), "a subset is inside train");
+    for name in ["train-20", "train-40"] {
+        assert_eq!(manifest["subsets"][name]["within"], "train");
+        assert!(manifest["files"][format!("data/{name}.jsonl.zst")].is_object());
+    }
 }

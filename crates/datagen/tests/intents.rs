@@ -24,6 +24,7 @@ const CONFIG: Config = Config {
     counts: [3, 0, 0],
     per_world: [0; 3],
     cell_limit: None,
+    mistakes: Vec::new(),
 };
 
 fn catalog() -> &'static Catalog {
@@ -54,6 +55,7 @@ fn a_run_is_a_pure_function_of_its_seed() {
         counts: [1, 0, 0],
         per_world: [0; 3],
         cell_limit: Some(30),
+        mistakes: Vec::new(),
     };
     let go = || {
         let scratch = tempfile::tempdir().expect("tempdir");
