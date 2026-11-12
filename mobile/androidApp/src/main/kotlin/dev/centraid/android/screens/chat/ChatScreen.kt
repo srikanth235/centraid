@@ -887,7 +887,7 @@ private fun ChatComposer(
                     Text(state.editing_title, color = centraidColor("text"), fontSize = tokenSp(R.dimen.centraid_text_meta), fontWeight = FontWeight.SemiBold)
                     Text(state.editing_body, color = centraidResource(R.color.centraid_text_meta), fontSize = tokenSp(R.dimen.centraid_text_meta))
                 }
-                ActionButton("Close", state.cancel_edit_label, "chat-edit-cancel") {
+                ActionButton("X", state.cancel_edit_label, "chat-edit-cancel") {
                     onEvent(ChatEvent(edit_cancelled = ChatEvent.EditCancelled()))
                 }
             }

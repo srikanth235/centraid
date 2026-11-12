@@ -327,7 +327,7 @@ struct ChatView: View {
                     }
                     Spacer(minLength: 0)
                     KitIconKey(
-                        iconKey: "Close",
+                        iconKey: "X",
                         label: state.cancelEditLabel,
                         identifier: "chat-edit-cancel",
                         action: { chat.cancelEdit() }
