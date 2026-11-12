@@ -151,10 +151,18 @@ impl Config {
 /// holds that.
 #[cfg(all(feature = "engine", debug_assertions))]
 fn dev_chat_script() -> Option<Arc<dyn centraid_assist::model::Model>> {
-    let path = std::env::var_os("CENTRAID_DEV_CHAT_SCRIPT")?;
+    let path = std::env::var_os("CENTRAID_DEV_CHAT_SCRIPT").or_else(android_dev_script)?;
     let text = std::fs::read_to_string(&path).ok()?;
     let model = centraid_assist::testing::KeyedModel::from_json(&text).ok()?;
     Some(Arc::new(model))
+}
+
+/// An Android debug build cannot be started with an environment variable, so the script is the file
+/// `adb push` leaves in the directory every shell may write. Debug builds only, like the variable.
+#[cfg(all(feature = "engine", debug_assertions))]
+fn android_dev_script() -> Option<std::ffi::OsString> {
+    let path = "/data/local/tmp/centraid-dev-chat-script.json";
+    (cfg!(target_os = "android") && std::path::Path::new(path).is_file()).then(|| path.into())
 }
 
 #[cfg(all(feature = "engine", not(debug_assertions)))]

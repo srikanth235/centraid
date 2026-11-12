@@ -1,9 +1,11 @@
 # Chat on Android: the same band place, the same ids, the same states as `chat.yaml`.
 #
 # `selectors.md` is one set for both shells, so the flow body is the iOS one; only the package
-# differs (`dev.centraid`). The ready branch needs a DEBUG build with the chat script hook of
-# `chat.yaml`; how an Android debug build is given that script is not wired yet, so on a phone with a
-# real model the ready branch draws as it does for a member. An owner hand-off like the rest
+# differs (`dev.centraid`). The ready branch needs a DEBUG build and the chat script of `chat.yaml`:
+# `adb push script.json /data/local/tmp/centraid-dev-chat-script.json`, then start the app fresh. A
+# debug library reads that file in place of the environment variable (`dev_chat_script` in
+# `crates/assist-llama`); without the file, or in a release library, which has no such path, the
+# ready branch draws as it does for a member with a real model. An owner hand-off like the rest
 # (`maestro/README.md`): written here, run on a device by the owner.
 appId: dev.centraid
 name: chat-android
