@@ -320,16 +320,14 @@ fn the_oldest_waiting_item_is_reported() {
     assert_eq!(status(&phone).oldest_waiting_ms, None);
     originals(&phone, "a photograph that waits", 2, 60_000);
     let waiting = status(&phone);
+    // Never before the gateway was paired: a wait starts when there was something to wait for.
+    let paired = waiting.destinations[0].paired_at_ms;
     assert!(
-        waiting.oldest_waiting_ms.is_some_and(|at| at > 0),
+        waiting.oldest_waiting_ms.is_some_and(|at| at >= paired),
         "{waiting:?}"
     );
     drain(&phone, at_home());
     assert_eq!(status(&phone).oldest_waiting_ms, None);
-}
-
-fn pair_id_of(status: &wire::BackupStatusResponse) -> String {
-    status.destinations[0].gateway_id.clone()
 }
 
 /// **FORGETTING THE LAST GATEWAY LEAVES NOTHING OF IT** (#1188). Its spooled parts are no one's,
@@ -345,12 +343,21 @@ fn forgetting_the_only_gateway_leaves_nothing_queued_and_no_stale_state() {
     originals(&phone, "a photograph left in the spool", 3, 60_000);
     gateway.spawned.fill_disk(true);
     drain(&phone, at_home());
-    assert!(!ledger(&path).queued().expect("reads").is_empty(), "parts wait in the spool");
-    assert_eq!(row(&status(&phone), &id).reach, wire::WaitReason::Refused as i32);
+    assert!(
+        !ledger(&path).queued().expect("reads").is_empty(),
+        "parts wait in the spool"
+    );
+    assert_eq!(
+        row(&status(&phone), &id).reach,
+        wire::WaitReason::Refused as i32
+    );
 
     forget(&phone, &id);
     let book = ledger(&path);
-    assert!(book.queued().expect("reads").is_empty(), "nothing is queued");
+    assert!(
+        book.queued().expect("reads").is_empty(),
+        "nothing is queued"
+    );
     let spooled: u64 = std::fs::read_dir(dir.path().join("vault.spool"))
         .map(|entries| {
             entries
@@ -367,6 +374,10 @@ fn forgetting_the_only_gateway_leaves_nothing_queued_and_no_stale_state() {
     let again = pair_id(&phone, &gateway);
     let after = status(&phone);
     let paired = row(&after, &again);
-    assert_eq!(paired.reach, wire::WaitReason::Unspecified as i32, "{paired:?}");
+    assert_eq!(
+        paired.reach,
+        wire::WaitReason::Unspecified as i32,
+        "{paired:?}"
+    );
     assert!(!paired.rolled_back, "{paired:?}");
 }

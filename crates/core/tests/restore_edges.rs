@@ -366,7 +366,9 @@ fn a_gateway_that_dies_mid_fetch_is_restored_from_next_time() {
     drain(&old, at_home());
 
     let new_dir = tempfile::tempdir().expect("a directory");
-    gateway.cable().cut_after_answers(64 * 1024);
+    // The scan shares one connection now (#1188), so far fewer answered bytes are spent before the
+    // fetch begins: the budget is what lets the handshake and the head through, and cuts the fetch.
+    gateway.cable().cut_after_answers(16 * 1024);
     let cut =
         try_restore(new_dir.path(), &gateway.payload()).expect_err("the gateway went mid-fetch");
     assert_eq!(cut.code(), wire::ErrorCode::PeerUnreachable, "{cut}");
