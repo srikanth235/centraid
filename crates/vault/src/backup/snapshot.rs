@@ -1049,6 +1049,14 @@ mod tests {
         .expect("checks");
         let second = copy(&vault, &dir.path().join("two")).expect("copies");
         assert_eq!(parties(&second.path), 402, "the next copy holds the commit");
+        // THE COMMIT LEAVES A SNAPSHOT OWED, not skipped as unchanged: the first copy's manifest
+        // no longer describes the vault.
+        let keys = BackupKeys::from_root(&[3; 32]);
+        let described = describe(&first, &keys, &"ab".repeat(32), APP).expect("describes");
+        assert!(
+            !unchanged(&vault, &described.manifest).expect("compares"),
+            "a commit that landed during the copy is a vault that changed since it"
+        );
     }
 
     /// **Scratch hygiene.** A copy that fails part-way is removed, and the directory and file are

@@ -2310,6 +2310,31 @@ mod one_device_behind {
         assert!(data.reason.is_empty());
     }
 
+    /// **"UP TO DATE" IS SAID ONLY OF A DEVICE NOTHING WAITS FOR** (#1188, NB1): a phone too full to
+    /// copy its vault leaves every device that lacks something with its count behind, state first,
+    /// and no row reads "Up to date" while it does.
+    #[test]
+    fn no_room_with_items_waiting_never_yields_up_to_date_on_a_row_that_waits() {
+        for lagging in [212_u64, 0] {
+            let mut status = office(|d| {
+                d.behind_files = lagging;
+                d.records_behind = lagging == 0;
+            });
+            status.waiting = waiting(&[(wire::WaitReason::NoRoom, 212)]);
+            let data = Page::open(status).data();
+            let behind = &data.destinations[1].held;
+            assert!(!behind.starts_with("Up to date"), "{behind}");
+            if lagging > 0 {
+                assert!(
+                    behind.starts_with("212 files behind \u{b7} Holds"),
+                    "{behind}"
+                );
+            } else {
+                assert!(behind.starts_with("Catching up"), "{behind}");
+            }
+        }
+    }
+
     #[test]
     fn a_silent_device_is_named_with_the_day_it_last_answered() {
         let data = Page::open(office(|d| {
