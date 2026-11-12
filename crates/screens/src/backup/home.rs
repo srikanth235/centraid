@@ -542,19 +542,20 @@ impl Backup {
             .collect()
     }
 
-    /// How a device that is not current stands, for its row: how many files it owes.
-    fn standing_words(locale: Locale, destination: &Destination) -> Option<String> {
+    /// How a device stands, for its row.
+    fn standing_words(locale: Locale, destination: &Destination) -> String {
         match destination.footing() {
-            Footing::Current => None,
-            Footing::Full | Footing::RolledBack => None,
-            Footing::Behind => Some(match destination.behind_files {
-                0 => return None,
+            Footing::Current => backup_home::row_up_to_date(locale),
+            Footing::Full => backup_home::row_full(locale),
+            Footing::RolledBack => backup_home::row_older(locale),
+            Footing::Behind => match destination.behind_files {
+                0 => backup_home::row_catching_up(locale),
                 1 => backup_home::row_behind_one(locale),
                 n => fill(
                     &backup_home::row_behind_many(locale),
                     &[("n", &line::grouped(n))],
                 ),
-            }),
+            },
         }
     }
 
@@ -590,27 +591,21 @@ impl Backup {
         .flatten()
         .collect::<Vec<_>>()
         .join(" · ");
-        // WHAT IT HOLDS, as this phone recorded its acknowledgements (#1144), and when it is not
-        // current how it stands (#1188, NB1).
+        // HOW IT STANDS LEADS, then what it holds (#1144): a row that said nothing would read as
+        // health by absence, so every device says its state, "Up to date" included (#1188, NB1).
         let held = [
+            Some(Self::standing_words(locale, destination)),
             (destination.held_bytes != 0).then(|| {
                 fill(
                     &words::backup_held(locale),
                     &[("size", &bytes(destination.held_bytes))],
                 )
             }),
-            Self::standing_words(locale, destination),
         ]
         .into_iter()
         .flatten()
         .collect::<Vec<_>>()
         .join(" \u{b7} ");
-        // A FULL OR ROLLED-BACK DEVICE says that where it says when it was reached.
-        let detail = match destination.footing() {
-            Footing::Full => backup_home::row_full(locale),
-            Footing::RolledBack => backup_home::row_older(locale),
-            _ => detail,
-        };
         let accessibility_label = [label.as_str(), &held, &detail]
             .into_iter()
             .filter(|part| !part.is_empty())
@@ -762,7 +757,17 @@ impl Backup {
             };
             (waiting, heading)
         } else {
-            (Vec::new(), String::new())
+            // A DEVICE BEHIND, FULL OR OLDER names what it still owes, per app, by its own name.
+            let rows = self
+                .reading()
+                .map(|reading| apps::device_waiting(locale, reading))
+                .unwrap_or_default();
+            let heading = if rows.is_empty() {
+                String::new()
+            } else {
+                words::backup_not_backed_up_heading(locale)
+            };
+            (rows, heading)
         };
         let (last_good, reason) = match (condition, self.reading()) {
             (wire::BackupCondition::NotReached, Some(reading)) => {

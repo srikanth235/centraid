@@ -43,6 +43,10 @@ pub struct Destination {
     pub reach: i32,
     /// Its head went backwards: it holds an older backup than this phone sent (B4).
     pub rolled_back: bool,
+    /// When this phone paired with it, phone clock; `None` when the core did not say.
+    pub paired_at_ms: Option<i64>,
+    /// The originals it still owes, per app: (app id, files).
+    pub waiting_apps: Vec<(String, u64)>,
 }
 
 /// Where one backup device stands, worst first (#1188, NB1).
@@ -145,6 +149,12 @@ impl Reading {
                     records_behind: destination.records_behind,
                     reach: destination.reach,
                     rolled_back: destination.rolled_back,
+                    paired_at_ms: Some(destination.paired_at_ms).filter(|at| *at > 0),
+                    waiting_apps: destination
+                        .waiting_apps
+                        .iter()
+                        .map(|w| (w.app_id.clone(), w.files))
+                        .collect(),
                 })
                 .collect(),
             last_snapshot_ms: status.last_snapshot_ms,

@@ -69,6 +69,8 @@ catalog! {
     plain row_up_to_date = ("Up to date", "Up to date");
     plain row_behind_one = ("1 file behind", "1 file behind");
     plain row_behind_many = ("{n} files behind", "{n} files behind");
+    plain device_waiting = ("{count} waiting for {name}", "{count} waiting for {name}");
+    plain row_catching_up = ("Catching up", "Catching up");
     plain row_full = ("Full", "Full");
     plain row_older = ("Older backup than this phone sent", "Older backup than this phone sent");
 

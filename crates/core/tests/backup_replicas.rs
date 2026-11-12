@@ -131,6 +131,14 @@ fn a_gateway_that_is_away_is_waited_for_and_fed_when_it_is_back() {
     );
     assert_eq!(row(&behind, &one).behind_files, 0);
     assert!(row(&behind, &two).behind_files > 0);
+    // WHAT IT OWES IS SAID BY APP, so the screen can name the device and the app.
+    let owed: Vec<(&str, u64)> = row(&behind, &two)
+        .waiting_apps
+        .iter()
+        .map(|w| (w.app_id.as_str(), w.files))
+        .collect();
+    assert_eq!(owed, [("photos", 3)], "{behind:?}");
+    assert!(row(&behind, &one).waiting_apps.is_empty());
     assert_eq!(row(&behind, &two).reach, wire::WaitReason::Gateway as i32);
     assert!(
         waiting(&behind, wire::WaitReason::Gateway) > 0,

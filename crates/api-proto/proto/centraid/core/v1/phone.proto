@@ -602,6 +602,18 @@ message Destination {
   // set there, or none. This phone remembers the newest it set at each gateway and
   // flags the gateway until it sets a current head again. Set only by `backup_status`.
   bool rolled_back = 14;
+  // When this phone paired with it, on this phone's clock (#1188, NB2): the age a device that
+  // never confirmed anything is counted from.
+  int64 paired_at_ms = 15;
+  // WHAT IT STILL OWES, BY APP (#1188, NB1): the originals this gateway has not acknowledged whole,
+  // per app, for the Backup screen's "waiting for <device>" rows. Set only by `backup_status`.
+  repeated DeviceWaiting waiting_apps = 16;
+}
+
+// One app's originals a gateway still owes (`Destination.waiting_apps`).
+message DeviceWaiting {
+  string app_id = 1;
+  uint64 files = 2;
 }
 
 // A PAIRED GATEWAY, FOUND AGAIN AT NEW ADDRESSES (#1080, Q-1080-D3).
@@ -1085,5 +1097,7 @@ message DeviceCheck {
     NOT_RUN_STOPPED = 4;
     // Paired and never backed up: there is nothing to open yet.
     NOT_RUN_NO_BACKUP_YET = 5;
+    // A backup pass is running: files in flight would read as missing.
+    NOT_RUN_BACKUP_RUNNING = 6;
   }
 }

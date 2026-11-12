@@ -841,7 +841,7 @@ fn a_read_draws_the_line_the_gateways_and_the_controls_every_word_finished() {
     );
     assert_eq!(
         data.destinations[0].accessibility_label,
-        "Home laptop. 192.168.1.20:7443 · Reached 2 minutes ago"
+        "Home laptop. Up to date. 192.168.1.20:7443 · Reached 2 minutes ago"
     );
     assert_eq!(data.devices_heading, words::backup_devices_heading(EN));
     assert_eq!(
@@ -1915,7 +1915,7 @@ fn in_this_backup_lists_every_app_biggest_first_with_what_it_holds() {
     // EACH BACKUP DEVICE SAYS WHAT IT HOLDS.
     assert_eq!(
         data.destinations[0].held,
-        "Holds 5.1 GB \u{b7} can't open it"
+        "Up to date \u{b7} Holds 5.1 GB \u{b7} can't open it"
     );
     assert!(
         data.destinations[0]
@@ -2292,6 +2292,10 @@ mod one_device_behind {
         let data = Page::open(office(|d| {
             d.behind_files = 184;
             d.reach = wire::WaitReason::Gateway as i32;
+            d.waiting_apps = vec![wire::DeviceWaiting {
+                app_id: "photos".to_owned(),
+                files: 184,
+            }];
         }))
         .data();
         let line = data.line.expect("a line");
@@ -2309,8 +2313,15 @@ mod one_device_behind {
                 .ends_with("Check it's awake and on the same network as this phone.")
         );
         let row = &data.destinations[1];
-        assert!(row.held.ends_with("184 files behind"), "{}", row.held);
-        assert!(!data.destinations[0].held.contains("behind"));
+        assert!(row.held.starts_with("184 files behind"), "{}", row.held);
+        assert_eq!(data.apps_waiting.len(), 1, "{:?}", data.apps_waiting);
+        assert_eq!(data.apps_waiting[0].status, "184 waiting for Office NAS");
+        assert_eq!(data.waiting_heading, "Not backed up yet");
+        assert!(
+            data.destinations[0].held.starts_with("Up to date"),
+            "{}",
+            data.destinations[0].held
+        );
     }
 
     #[test]
@@ -2325,7 +2336,10 @@ mod one_device_behind {
             data.reason,
             "Office NAS has no room left. Free some space on it, then back up again."
         );
-        assert_eq!(data.destinations[1].detail, "Full");
+        assert_eq!(
+            data.destinations[1].held.split(" \u{b7} ").next(),
+            Some("Full")
+        );
     }
 
     #[test]
@@ -2340,8 +2354,8 @@ mod one_device_behind {
             "It holds an older backup than this phone sent. Back up now to bring it up to date."
         );
         assert_eq!(
-            data.destinations[1].detail,
-            "Older backup than this phone sent"
+            data.destinations[1].held.split(" \u{b7} ").next(),
+            Some("Older backup than this phone sent")
         );
     }
 }

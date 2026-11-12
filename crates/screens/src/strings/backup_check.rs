@@ -26,6 +26,7 @@ catalog! {
     plain check_wifi = ("Waiting for Wi-Fi.", "Waiting for Wi-Fi.");
     plain check_space = ("This phone needs more free space.", "This phone needs more free space.");
     plain check_stopped = ("It was stopped before it finished.", "It was stopped before it finished.");
+    plain check_pass_running = ("A backup is running. Check when it finishes.", "A backup is running. Check when it finishes.");
     plain check_nothing_yet = ("Nothing is backed up here yet.", "Nothing is backed up here yet.");
 
     // WHILE IT RUNS: the bar's words and the foot's.
@@ -44,4 +45,6 @@ catalog! {
     // THE STALE NOTICE (`backup::stale`), written before the day comes: no reason is claimed.
     plain stale_title = ("Backup is {n} days old", "Backup is {n} days old");
     plain stale_body = ("Nothing has reached {device} since {since}. Open Centraid to see why.", "Nothing has reached {device} since {since}. Open Centraid to see why.");
+    plain stale_never_title = ("Not backed up yet", "Not backed up yet");
+    plain stale_never_body = ("Nothing has reached {device} since it was paired on {since}. Open Centraid to see why.", "Nothing has reached {device} since it was paired on {since}. Open Centraid to see why.");
 }

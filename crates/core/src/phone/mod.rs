@@ -372,6 +372,8 @@ pub fn wire_destination(destination: &Destination) -> wire::Destination {
         head_snapshot_ms: None,
         reach: wire::WaitReason::Unspecified as i32,
         rolled_back: false,
+        paired_at_ms: i64::try_from(destination.paired_at_ms).unwrap_or(0),
+        waiting_apps: Vec::new(),
     }
 }
 
@@ -654,6 +656,9 @@ pub(crate) struct Standing {
     pub outcomes: Vec<Outcome>,
     /// Each paired gateway's own count of the files it is behind on, by id (NB1).
     pub replicas: BTreeMap<String, (u64, u64)>,
+    /// For each file counted, in the same order, the gateways still behind on it (empty when it
+    /// is backed up everywhere or left out).
+    pub lagging: Vec<Vec<String>>,
 }
 
 /// Where one file the vault knows stands.
@@ -754,6 +759,7 @@ pub(crate) fn standing(
         if !replicas.is_empty() && lagging.is_empty() {
             out.confirmed += 1;
             out.outcomes.push(Outcome::Confirmed);
+            out.lagging.push(Vec::new());
             continue;
         }
         let kind = drain::Kind::of_file(file);
@@ -763,6 +769,7 @@ pub(crate) fn standing(
             // up without a reason to wait out. Nor are its bytes still to
             // back up: "380 MB to go" counts what will move (#1144).
             out.outcomes.push(Outcome::LeftOut);
+            out.lagging.push(Vec::new());
             continue;
         }
         let bytes_held = !replicas.is_empty() && replicas.iter().all(held);
@@ -770,6 +777,12 @@ pub(crate) fn standing(
             out.pending_bytes = out.pending_bytes.saturating_add(file.len);
         }
         out.outcomes.push(Outcome::Waiting);
+        out.lagging.push(
+            lagging
+                .iter()
+                .map(|index| replicas[*index].id.clone())
+                .collect(),
+        );
         for index in &lagging {
             replicas[*index].behind_files += 1;
             replicas[*index].behind_bytes = replicas[*index].behind_bytes.saturating_add(file.len);
@@ -850,7 +863,13 @@ pub fn backup_status(
         (Some(vault), Some(keys)) => {
             let files = content_files(vault).map_err(plane_error)?;
             let standing = standing(&ledger, &files, &keys.backup, plane.asking())?;
-            let held = holdings::read(vault, &ledger, &files, &standing.outcomes)?;
+            let held = holdings::read(
+                vault,
+                &ledger,
+                &files,
+                &standing.outcomes,
+                &standing.lagging,
+            )?;
             (standing, held)
         }
         _ => (Standing::default(), holdings::Held::default()),
@@ -889,6 +908,18 @@ pub fn backup_status(
             (Some(held), Some(newest)) => held < newest,
             (Some(_), None) => false,
         };
+        row.waiting_apps = held
+            .behind
+            .get(&destination.gateway_id)
+            .map(|apps| {
+                apps.iter()
+                    .map(|(app, files)| wire::DeviceWaiting {
+                        app_id: (*app).to_owned(),
+                        files: *files,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
         row.rolled_back = ledger
             .rolled_back(&destination.gateway_id)
             .map_err(plane_error)?;

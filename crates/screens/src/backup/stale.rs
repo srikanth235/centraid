@@ -34,12 +34,28 @@ pub struct StaleNotice {
     /// `backup-stale:<T>:<n>`, deterministic from the last confirmed backup and the step.
     pub id: String,
     pub channel: &'static str,
-    /// When it is due, this phone's clock.
-    pub due_ms: i64,
+    /// When it fires, this phone's clock; a step already due fires now.
+    pub fire_at_ms: i64,
     pub title: String,
     pub body: String,
     /// Where a tap goes: Backup.
     pub opens: wire::Route,
+}
+
+/// THE ONE PRODUCER the notification service asks on every sync: the notices to schedule and the
+/// ids still wanted (a delivered notice stays on screen while its id is listed; once a backup is
+/// confirmed the ids change and the old ones are no longer wanted). It depends on the ledger's
+/// reading and the clock alone, never on the Backup screen being open.
+#[must_use]
+pub fn producer(
+    locale: Locale,
+    zone: &str,
+    reading: &Reading,
+    now_ms: i64,
+) -> (Vec<StaleNotice>, Vec<String>) {
+    let notices = stale_backup_notices(locale, zone, reading, now_ms);
+    let wanted = notices.iter().map(|n| n.id.clone()).collect();
+    (notices, wanted)
 }
 
 /// The notices to have scheduled now: none with no device paired, or with no confirmed backup to
@@ -52,15 +68,22 @@ pub fn stale_backup_notices(
     now_ms: i64,
 ) -> Vec<StaleNotice> {
     // THE OLDEST DEVICE sets the age: a backup is only as current as the device furthest behind.
+    // A device that never confirmed anything is counted from the day it was paired, and it is the
+    // worst case, never a silent one (the owner's ruling).
     let Some(behind) = reading
         .destinations
         .iter()
-        .filter_map(|d| d.last_ack_ms.map(|at| (at, d)))
-        .min_by_key(|(at, _)| *at)
+        .filter_map(|d| {
+            d.last_ack_ms
+                .map(|at| (at, false, d))
+                .or_else(|| d.paired_at_ms.map(|at| (at, true, d)))
+        })
+        .min_by_key(|(at, _, _)| *at)
     else {
         return Vec::new();
     };
-    let (raw, device) = behind;
+    let (raw, never, device) = behind;
+
     // A TIME AHEAD OF THIS PHONE'S CLOCK is a clock that was set ahead and corrected: it counts
     // as stale now (the first step is due now) and is not waited for.
     let future = raw - now_ms > CLOCK_TOLERANCE_MS;
@@ -85,10 +108,18 @@ pub fn stale_backup_notices(
             StaleNotice {
                 id: format!("backup-stale:{raw}:{step}"),
                 channel: CHANNEL,
-                due_ms: due_of(step).max(if now_ms >= due_of(step) { now_ms } else { 0 }),
-                title: fill(&words::stale_title(locale), &[("n", &days.to_string())]),
+                fire_at_ms: due_of(step).max(if now_ms >= due_of(step) { now_ms } else { 0 }),
+                title: if never {
+                    words::stale_never_title(locale)
+                } else {
+                    fill(&words::stale_title(locale), &[("n", &days.to_string())])
+                },
                 body: fill(
-                    &words::stale_body(locale),
+                    &if never {
+                        words::stale_never_body(locale)
+                    } else {
+                        words::stale_body(locale)
+                    },
                     &[("device", &device.label), ("since", &since)],
                 ),
                 opens: super::routes::home(),
@@ -134,6 +165,8 @@ mod tests {
             records_behind: false,
             reach: 0,
             rolled_back: false,
+            paired_at_ms: None,
+            waiting_apps: Vec::new(),
         }
     }
 
@@ -165,15 +198,47 @@ mod tests {
     #[test]
     fn no_device_paired_schedules_nothing() {
         assert!(notices(Vec::new(), T).is_empty());
-        assert!(notices(vec![device("Mac mini", None)], T).is_empty());
+    }
+
+    #[test]
+    fn a_device_that_never_confirmed_is_counted_from_its_pairing_and_never_silent() {
+        let mut never = device("Mac mini", None);
+        never.paired_at_ms = Some(T);
+        let n = notices(vec![never.clone()], T + DAY_MS);
+        assert_eq!(n.len(), 2);
+        assert_eq!(n[0].fire_at_ms, T + 3 * DAY_MS);
+        assert_eq!(n[0].title, "Not backed up yet");
+        assert_eq!(
+            n[0].body,
+            "Nothing has reached Mac mini since it was paired on Sunday 8 November. Open Centraid to see why."
+        );
+        assert_eq!(n[0].id, format!("backup-stale:{T}:1"));
+        // With no pairing time either, there is nothing to count from.
+        never.paired_at_ms = None;
+        assert!(notices(vec![never], T).is_empty());
+    }
+
+    #[test]
+    fn the_producer_wants_every_id_it_offers() {
+        let (notices, wanted) = producer(
+            Locale::En,
+            "UTC",
+            &reading(vec![device("Mac mini", Some(T))]),
+            T + 12 * DAY_MS,
+        );
+        assert_eq!(
+            wanted,
+            notices.iter().map(|n| n.id.clone()).collect::<Vec<_>>()
+        );
+        assert_eq!(wanted.len(), 2);
     }
 
     #[test]
     fn a_fresh_backup_schedules_the_first_two_ahead() {
         let n = notices(vec![device("Mac mini", Some(T))], T + 60_000);
         assert_eq!(n.len(), 2);
-        assert_eq!(n[0].due_ms, T + 3 * DAY_MS);
-        assert_eq!(n[1].due_ms, T + 10 * DAY_MS);
+        assert_eq!(n[0].fire_at_ms, T + 3 * DAY_MS);
+        assert_eq!(n[1].fire_at_ms, T + 10 * DAY_MS);
         assert_eq!(n[0].title, "Backup is 3 days old");
         assert_eq!(n[1].title, "Backup is 10 days old");
         assert_eq!(
@@ -189,9 +254,9 @@ mod tests {
     fn exactly_three_days_the_first_is_due_now_and_the_next_waits() {
         let n = notices(vec![device("Mac mini", Some(T))], T + 3 * DAY_MS);
         assert_eq!(n[0].id, format!("backup-stale:{T}:1"));
-        assert_eq!(n[0].due_ms, T + 3 * DAY_MS);
+        assert_eq!(n[0].fire_at_ms, T + 3 * DAY_MS);
         assert_eq!(n[1].id, format!("backup-stale:{T}:2"));
-        assert_eq!(n[1].due_ms, T + 10 * DAY_MS);
+        assert_eq!(n[1].fire_at_ms, T + 10 * DAY_MS);
     }
 
     #[test]
@@ -200,11 +265,11 @@ mod tests {
         let n = notices(vec![device("Mac mini", Some(T))], now);
         assert_eq!(n[0].id, format!("backup-stale:{T}:2"));
         assert_eq!(
-            n[0].due_ms, now,
+            n[0].fire_at_ms, now,
             "already past: due now, the service knows it was delivered"
         );
         assert_eq!(n[1].id, format!("backup-stale:{T}:3"));
-        assert_eq!(n[1].due_ms, T + 17 * DAY_MS);
+        assert_eq!(n[1].fire_at_ms, T + 17 * DAY_MS);
         assert_eq!(n[1].title, "Backup is 17 days old");
     }
 
@@ -216,7 +281,7 @@ mod tests {
             T + 4 * DAY_MS,
         );
         assert!(old.iter().all(|o| new.iter().all(|n| n.id != o.id)));
-        assert_eq!(new[0].due_ms, T + 7 * DAY_MS);
+        assert_eq!(new[0].fire_at_ms, T + 7 * DAY_MS);
     }
 
     #[test]
@@ -228,7 +293,7 @@ mod tests {
             ],
             T + DAY_MS,
         );
-        assert_eq!(n[0].due_ms, T + 3 * DAY_MS);
+        assert_eq!(n[0].fire_at_ms, T + 3 * DAY_MS);
         assert!(n[0].body.contains("Office NAS"));
     }
 
@@ -237,7 +302,7 @@ mod tests {
         let now = T;
         let ahead = now + 40 * DAY_MS;
         let n = notices(vec![device("Mac mini", Some(ahead))], now);
-        assert_eq!(n[0].due_ms, now, "due now, not in 40 days");
+        assert_eq!(n[0].fire_at_ms, now, "due now, not in 40 days");
         assert_eq!(n[0].id, format!("backup-stale:{ahead}:1"));
     }
 }

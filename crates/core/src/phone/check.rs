@@ -78,6 +78,12 @@ impl Progress {
         self.stop.store(true, Ordering::SeqCst);
     }
 
+    /// Whether a stop was asked of the check in hand.
+    #[must_use]
+    pub fn stop_asked(&self) -> bool {
+        self.stop.load(Ordering::SeqCst)
+    }
+
     /// A new check starts unstopped.
     pub fn reset(&self) {
         self.stop.store(false, Ordering::SeqCst);

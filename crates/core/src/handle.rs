@@ -1724,7 +1724,15 @@ impl HandleState {
                 detail: "a check is already running".to_owned(),
             });
         }
+        // A PASS IS WRITING (or is about to): files in flight would read as missing, a false
+        // failure on the one screen that must not lie. So no check starts under a pass; the
+        // order of the two flags (each side sets its own, then reads the other's) means one of
+        // them always sees the other.
         self.check_progress.reset();
+        if self.draining.load(Ordering::SeqCst) {
+            self.checking.store(false, Ordering::SeqCst);
+            return Ok(self.check_refused(request, wire::device_check::NotRun::BackupRunning));
+        }
         let answer = self.runtime_handle().and_then(|runtime| {
             crate::phone::check::run(
                 self,
@@ -1737,6 +1745,53 @@ impl HandleState {
         });
         self.checking.store(false, Ordering::SeqCst);
         answer
+    }
+
+    /// Pretend a backup pass is running (or is not), so a test can state what a check does under
+    /// one without racing a real pass. For tests only: nothing in a shell calls it.
+    #[doc(hidden)]
+    pub fn pretend_a_pass_is_running(&self, running: bool) {
+        self.draining.store(running, Ordering::SeqCst);
+    }
+
+    /// Pretend a check is running (or is not): see [`Self::pretend_a_pass_is_running`].
+    #[doc(hidden)]
+    pub fn pretend_a_check_is_running(&self, running: bool) {
+        self.checking.store(running, Ordering::SeqCst);
+    }
+
+    /// Whether the check in hand was asked to stop (a member's Stop, or a pass starting).
+    #[doc(hidden)]
+    #[must_use]
+    pub fn check_was_asked_to_stop(&self) -> bool {
+        self.check_progress.stop_asked()
+    }
+
+    /// Every device the check would have visited, not run for `why`.
+    fn check_refused(
+        &self,
+        request: &wire::CheckBackupRequest,
+        why: wire::device_check::NotRun,
+    ) -> wire::CheckBackupResponse {
+        let devices = self
+            .plane
+            .ledger()
+            .and_then(|ledger| ledger.destinations().map_err(crate::phone::plane_error))
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|d| request.gateway_id.is_empty() || d.gateway_id == request.gateway_id)
+            .map(|d| wire::DeviceCheck {
+                gateway_id: d.gateway_id,
+                label: d.label,
+                verdict: wire::device_check::Verdict::NotRun as i32,
+                not_run: why as i32,
+                ..Default::default()
+            })
+            .collect();
+        wire::CheckBackupResponse {
+            devices,
+            progress: None,
+        }
     }
 
     /// One pass, one at a time.
@@ -1757,6 +1812,10 @@ impl HandleState {
             return Err(CoreError::InvalidRequest {
                 detail: "a drain is already running".to_owned(),
             });
+        }
+        // A CHECK RUNNING WHEN A PASS STARTS ENDS AS NOT RUN, never as a failure (#1188, B6).
+        if self.checking.load(Ordering::SeqCst) {
+            self.check_progress.ask_stop();
         }
         let runtime = self.runtime_handle();
         let asked = request.asked.then(|| self.plane.ask());
@@ -2847,6 +2906,39 @@ mod tests {
             .handle
             .call(&wire::Request { kind: Some(kind) })
             .map(|answer| answer.kind.expect("an answer has a kind"))
+    }
+
+    /// **A CHECK AND A PASS NEVER OVERLAP AS A FALSE FAILURE (#1188, B6).** Under a running pass no
+    /// check starts (it answers every device "not run: a backup is running"), and a pass that
+    /// starts while a check runs asks the check to stop, so it ends as "not run" and never as a
+    /// failure.
+    #[test]
+    fn a_check_does_not_start_under_a_pass_and_a_pass_stops_a_check() {
+        let scratch = unlocked();
+        scratch.handle.pretend_a_pass_is_running(true);
+        let Ok(wire::response::Kind::CheckBackup(refused)) = ask(
+            &scratch,
+            wire::request::Kind::CheckBackup(wire::CheckBackupRequest::default()),
+        ) else {
+            panic!("a check answers");
+        };
+        assert!(refused.devices.is_empty(), "nothing is paired to check");
+        assert!(
+            !scratch.handle.check_was_asked_to_stop(),
+            "a refused check is not a stopped one"
+        );
+        scratch.handle.pretend_a_pass_is_running(false);
+
+        scratch.handle.pretend_a_check_is_running(true);
+        let _ = ask(
+            &scratch,
+            wire::request::Kind::Drain(wire::DrainRequest::default()),
+        );
+        assert!(
+            scratch.handle.check_was_asked_to_stop(),
+            "a pass that starts ends the check"
+        );
+        scratch.handle.pretend_a_check_is_running(false);
     }
 
     /// THE BACKUP PLANE'S DOORS ANSWER OVER A PHONE THAT IS PAIRED WITH

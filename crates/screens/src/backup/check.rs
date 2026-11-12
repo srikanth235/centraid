@@ -249,6 +249,7 @@ impl Check {
                     NotRun::WaitingForWifi => words::check_wifi(locale),
                     NotRun::NeedsSpace => words::check_space(locale),
                     NotRun::Stopped => words::check_stopped(locale),
+                    NotRun::BackupRunning => words::check_pass_running(locale),
                     NotRun::NoBackupYet => words::check_nothing_yet(locale),
                     NotRun::DidNotAnswer | NotRun::Unspecified => words::check_no_answer(locale),
                 },
