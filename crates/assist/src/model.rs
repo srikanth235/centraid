@@ -150,6 +150,16 @@ pub enum ModelError {
     NoVision,
 }
 
+/// Whether a generation runs with the Centraid adapter on (#1188 G4). The adapter is loaded once
+/// with the model and applies per fresh context: it is never switched inside a live one. `Off` is
+/// the stock model, token for token.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AdapterUse {
+    #[default]
+    Off,
+    On,
+}
+
 /// A loaded model.
 ///
 /// `Send + Sync` because one model serves every vault handle in the process
@@ -171,6 +181,22 @@ pub trait Model: Send + Sync {
         Err(ModelError::Load("this engine reads no images".to_owned()))
     }
 
+    /// [`Model::generate`] with the adapter on or off, for an engine that has one loaded. The
+    /// default ignores the choice, so an engine without an adapter, or before one is wired in,
+    /// answers exactly as [`Model::generate`] does. An engine that loads an adapter overrides this
+    /// and makes `generate` the `Off` case.
+    ///
+    /// # Errors
+    /// As [`Model::generate`].
+    fn generate_with(
+        &self,
+        request: &GenerateRequest<'_>,
+        _adapter: AdapterUse,
+        on_token: &mut dyn FnMut(&str) -> Control,
+    ) -> Result<Generation, ModelError> {
+        self.generate(request, on_token)
+    }
+
     /// Generate, calling `on_token` with each piece as it is produced.
     ///
     /// # Errors
@@ -181,4 +207,107 @@ pub trait Model: Send + Sync {
         request: &GenerateRequest<'_>,
         on_token: &mut dyn FnMut(&str) -> Control,
     ) -> Result<Generation, ModelError>;
+}
+
+/// A model with the turn's adapter choice made: every generation through it carries `adapter`.
+/// This is the one place a turn's choice reaches the engine; the plane's steps need no new
+/// parameter and an attached or free reply, which uses the model unwrapped, is always `Off`.
+pub struct Switched<'a> {
+    pub model: &'a dyn Model,
+    pub adapter: AdapterUse,
+}
+
+impl Model for Switched<'_> {
+    fn has_vision(&self) -> bool {
+        self.model.has_vision()
+    }
+
+    fn attach_vision(&self, projector: &std::path::Path) -> Result<(), ModelError> {
+        self.model.attach_vision(projector)
+    }
+
+    fn generate_with(
+        &self,
+        request: &GenerateRequest<'_>,
+        adapter: AdapterUse,
+        on_token: &mut dyn FnMut(&str) -> Control,
+    ) -> Result<Generation, ModelError> {
+        // an inner switch can only narrow: Off stays Off
+        let adapter = if self.adapter == AdapterUse::On {
+            adapter
+        } else {
+            AdapterUse::Off
+        };
+        self.model.generate_with(request, adapter, on_token)
+    }
+
+    fn generate(
+        &self,
+        request: &GenerateRequest<'_>,
+        on_token: &mut dyn FnMut(&str) -> Control,
+    ) -> Result<Generation, ModelError> {
+        self.model.generate_with(request, self.adapter, on_token)
+    }
+}
+
+#[cfg(test)]
+mod switch_tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    /// An engine with an adapter: records what each generation was asked.
+    struct Spy(Mutex<Vec<AdapterUse>>);
+
+    impl Model for Spy {
+        fn generate_with(
+            &self,
+            _: &GenerateRequest<'_>,
+            adapter: AdapterUse,
+            _: &mut dyn FnMut(&str) -> Control,
+        ) -> Result<Generation, ModelError> {
+            self.0.lock().unwrap().push(adapter);
+            Ok(Generation {
+                text: String::new(),
+                finish: Finish::Stop,
+                prompt_tokens: 0,
+                generated_tokens: 0,
+            })
+        }
+
+        fn generate(
+            &self,
+            request: &GenerateRequest<'_>,
+            on_token: &mut dyn FnMut(&str) -> Control,
+        ) -> Result<Generation, ModelError> {
+            self.generate_with(request, AdapterUse::Off, on_token)
+        }
+    }
+
+    #[test]
+    fn a_switched_model_carries_the_turns_choice_to_every_generation() {
+        let cancel = Cancel::new();
+        let request = GenerateRequest {
+            prompt: "p",
+            grammar: None,
+            max_tokens: 1,
+            stop: &[],
+            temperature: 0.0,
+            cancel: &cancel,
+            images: &[],
+        };
+        for choice in [AdapterUse::On, AdapterUse::Off] {
+            let spy = Spy(Mutex::new(Vec::new()));
+            let switched = Switched {
+                model: &spy,
+                adapter: choice,
+            };
+            switched
+                .generate(&request, &mut |_| Control::Continue)
+                .unwrap();
+            switched
+                .generate(&request, &mut |_| Control::Continue)
+                .unwrap();
+            assert_eq!(*spy.0.lock().unwrap(), [choice, choice]);
+        }
+    }
 }

@@ -115,6 +115,14 @@ impl ModelHost {
             .map(|loaded| Arc::clone(&loaded.model))
     }
 
+    /// The file the loaded model was read from, when it was loaded from one.
+    #[must_use]
+    pub fn loaded_path(&self) -> Option<PathBuf> {
+        locked(&self.loaded)
+            .as_ref()
+            .and_then(|loaded| loaded.path.clone())
+    }
+
     /// Free the model's memory. A shell does this under memory pressure; the
     /// next turn loads it again.
     pub fn unload(&self) {

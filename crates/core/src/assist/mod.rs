@@ -860,10 +860,19 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
         // keeps no record: a reopened thread starts fresh (R-1088-10), so there is nothing a
         // stored record would restore.
         session.note_question(&text);
+        // THE ONE SWITCH (#1188 G4): a vault turn runs with the adapter on when the record's
+        // adapter is the one for the model in use; the attached path above never does.
+        let switched = centraid_assist::Switched {
+            model: &*model,
+            adapter: centraid_assist::adapter::for_vault_turn(
+                &centraid_assist::record::record(),
+                hub.host().loaded_path().as_deref(),
+            ),
+        };
         let outcome = native_turn(
             handle,
             &slot,
-            &*model,
+            &switched,
             &text,
             &asked.tz,
             asked.regenerate,

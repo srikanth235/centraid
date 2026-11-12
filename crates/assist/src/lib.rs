@@ -53,6 +53,6 @@ pub mod turn;
 pub use app::App;
 pub use attach::{Attachments, ImageData, Notice, TextDoc};
 pub use host::{ModelHost, ModelLoader, ModelState, ModelStatus, VisionState, VisionStatus};
-pub use model::{Cancel, Model};
+pub use model::{AdapterUse, Cancel, Model, Switched};
 pub use result::Card;
 pub use turn::{Answered, Event, Plane, Reading, Refusal, Session};

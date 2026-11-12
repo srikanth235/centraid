@@ -21,6 +21,7 @@
 
 use std::path::Path;
 
+use crate::model::AdapterUse;
 use crate::native::prompt::ToolsMode;
 use crate::record::{Adapter, Record, runtime_hashes};
 
@@ -141,6 +142,25 @@ pub fn resolve(record: &Record, models_dir: &Path, base_file: &str) -> Verdict {
     )
 }
 
+/// THE SWITCH, per turn: a vault turn (the native plane's) runs with the adapter on when
+/// [`resolve`] says it is used for the model loaded from `loaded`; anything else (an attached or
+/// free reply, no loaded path, no adapter) is off. The only place the choice is made.
+#[must_use]
+pub fn for_vault_turn(record: &Record, loaded: Option<&Path>) -> AdapterUse {
+    let Some(loaded) = loaded else {
+        return AdapterUse::Off;
+    };
+    let (Some(dir), Some(file)) = (loaded.parent(), loaded.file_name().and_then(|f| f.to_str()))
+    else {
+        return AdapterUse::Off;
+    };
+    if resolve(record, dir, file).used() {
+        AdapterUse::On
+    } else {
+        AdapterUse::Off
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -189,6 +209,31 @@ mod tests {
             assert_eq!(verdict.used(), case["used"], "{name}");
             assert_eq!(verdict.file_is_dead(), case["delete_file"], "{name}");
         }
+    }
+
+    #[test]
+    fn a_vault_turn_switches_on_only_when_the_adapter_is_used() {
+        let dir = std::env::temp_dir().join(format!("centraid-switch-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut record = crate::record::record();
+        let base = dir.join(&record.current.file_name);
+        assert_eq!(for_vault_turn(&record, Some(&base)), AdapterUse::Off);
+        let (tools, prompt) = runtime_hashes(ToolsMode::parse(&record.current.tools_mode).unwrap());
+        let adapter = Adapter {
+            url: String::new(),
+            file_name: "a.gguf".into(),
+            sha256: "cd".repeat(32),
+            bytes: 3,
+            base_sha256: record.current.sha256.clone(),
+            tools_hash: tools,
+            prompt_hash: prompt,
+            score: None,
+        };
+        std::fs::write(dir.join(adapter.local_name()), b"abc").unwrap();
+        record.adapter = Some(adapter);
+        assert_eq!(for_vault_turn(&record, Some(&base)), AdapterUse::On);
+        assert_eq!(for_vault_turn(&record, None), AdapterUse::Off);
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
