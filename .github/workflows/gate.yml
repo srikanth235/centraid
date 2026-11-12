@@ -11,7 +11,8 @@ name: gate
 #                      `pr` profile (R-CHAT-10).
 #   ios                Swift 6 app/XCTest, HealthSeeder, and the Rust simulator core.
 #   android            the Compose shell's Kotlin compiled against the Android SDK (no native
-#                      core: `compileDebugKotlin` stops before the libraries are packaged).
+#                      core: `compileDebugKotlin` stops before the libraries are packaged), on
+#                      the runner's own SDK.
 #   dependency-review  the PR's dependency diff, read through the API.
 #   pr-title           the squash subject, checked by `.githooks/commit-msg`.
 
@@ -137,7 +138,11 @@ jobs:
             mobile/gradle/libs.versions.toml
             mobile/**/*.gradle.kts
             mobile/gradle/wrapper/gradle-wrapper.properties
-      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+      # THE RUNNER'S OWN SDK (ANDROID_HOME, /usr/local/lib/android/sdk): `android-actions/setup-android`
+      # failed in sdkmanager ("Failed to find package 'tools'") on top of it. Licences are accepted here
+      # so AGP can fetch the platform and build-tools it names.
+      - name: Accept the Android SDK licences
+        run: yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
       - name: Compile the Android shell's Kotlin
         working-directory: mobile
         run: ./gradlew -Pcentraid.android=true :androidApp:compileDebugKotlin --no-daemon --stacktrace
