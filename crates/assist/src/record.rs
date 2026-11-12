@@ -115,6 +115,13 @@ pub fn record() -> Record {
     if let Some(held) = HELD.with(|held| held.borrow().clone()) {
         return held;
     }
+    if let Some(held) = HELD_EVERYWHERE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone()
+    {
+        return held;
+    }
     let mut record =
         parse(RECORD).expect("model.json is valid; the gate's model-record step reads it");
     if let Some(entry) = dev_model() {
@@ -171,6 +178,27 @@ fn dev_entry(named: &str, sha256: &str, bytes: u64) -> Option<Entry> {
 
 thread_local! {
     static HELD: std::cell::RefCell<Option<Record>> = const { std::cell::RefCell::new(None) };
+}
+
+static HELD_EVERYWHERE: std::sync::Mutex<Option<Record>> = std::sync::Mutex::new(None);
+
+/// Run `f` with `record` standing in for the committed one on EVERY thread: for a test binary whose
+/// one test drives work that a core runs on its own pool threads (a model load), which
+/// [`held_for`] cannot reach. Nothing ships it a record; use it only in a test binary that runs no
+/// other test at the same time.
+pub fn held_for_all_threads<T>(record: Record, f: impl FnOnce() -> T) -> T {
+    let lock = |held: Option<Record>| {
+        std::mem::replace(
+            &mut *HELD_EVERYWHERE
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+            held,
+        )
+    };
+    let before = lock(Some(record));
+    let out = f();
+    lock(before);
+    out
 }
 
 /// Run `f` with `record` standing in for the committed one on THIS thread: how a test drives the

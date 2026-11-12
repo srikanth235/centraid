@@ -540,4 +540,100 @@ mod tests {
             "the second load carried the adapter"
         );
     }
+
+    /// A model whose generation blocks until released, so "a turn is running" is a fact the test
+    /// holds with channels and no clock.
+    struct Held {
+        started: Mutex<std::sync::mpsc::Sender<()>>,
+        release: Mutex<std::sync::mpsc::Receiver<()>>,
+        generated: std::sync::atomic::AtomicUsize,
+    }
+
+    impl Model for Held {
+        fn generate(
+            &self,
+            _: &crate::model::GenerateRequest<'_>,
+            _: &mut dyn FnMut(&str) -> crate::model::Control,
+        ) -> Result<crate::model::Generation, ModelError> {
+            self.started.lock().unwrap().send(()).unwrap();
+            let _ = self.release.lock().unwrap().recv();
+            self.generated
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(crate::model::Generation {
+                text: "done".to_owned(),
+                finish: crate::model::Finish::Stop,
+                prompt_tokens: 0,
+                generated_tokens: 1,
+            })
+        }
+    }
+
+    #[test]
+    fn an_adapter_landing_under_a_running_generation_changes_nothing_until_the_next_load() {
+        let base = scratch("adapter-running", b"base");
+        let (record, file) = with_adapter_beside(&base);
+        std::fs::remove_file(&file).unwrap();
+        let (started_tx, started) = std::sync::mpsc::channel();
+        let (release, release_rx) = std::sync::mpsc::channel();
+        let held = Arc::new(Held {
+            started: Mutex::new(started_tx),
+            release: Mutex::new(release_rx),
+            generated: 0.into(),
+        });
+        struct Gate(Arc<Held>, Mutex<Vec<Option<PathBuf>>>);
+        impl ModelLoader for Gate {
+            fn load(&self, path: &Path) -> Result<Arc<dyn Model>, ModelError> {
+                self.load_with_adapter(path, None)
+            }
+            fn load_with_adapter(
+                &self,
+                _: &Path,
+                adapter: Option<&Path>,
+            ) -> Result<Arc<dyn Model>, ModelError> {
+                self.1.lock().unwrap().push(adapter.map(Path::to_path_buf));
+                Ok(Arc::clone(&self.0) as Arc<dyn Model>)
+            }
+        }
+        let loader = Arc::new(Gate(held.clone(), Mutex::new(Vec::new())));
+        let host = Arc::new(ModelHost::new());
+        host.set_loader(loader.clone());
+        crate::record::held_for(record, || {
+            host.load(&base).unwrap();
+            let running = host.model().expect("loaded");
+            let turn = std::thread::spawn(move || {
+                let cancel = crate::model::Cancel::new();
+                running.generate(
+                    &crate::model::GenerateRequest {
+                        prompt: "p",
+                        grammar: None,
+                        max_tokens: 1,
+                        stop: &[],
+                        temperature: 0.0,
+                        cancel: &cancel,
+                        images: &[],
+                    },
+                    &mut |_| crate::model::Control::Continue,
+                )
+            });
+            started.recv().expect("the generation is running");
+            // the adapter lands under it: nothing loads, the generation is untouched
+            std::fs::write(&file, b"abc").unwrap();
+            assert_eq!(loader.1.lock().unwrap().len(), 1, "no reload under a turn");
+            assert_eq!(held.generated.load(std::sync::atomic::Ordering::SeqCst), 0);
+            release.send(()).unwrap();
+            let out = turn.join().unwrap().unwrap();
+            assert_eq!(
+                out.text, "done",
+                "the turn finished on the model it began with"
+            );
+            assert_eq!(loader.1.lock().unwrap().len(), 1, "its end reloads nothing");
+            // the next load carries the adapter, once
+            host.load(&base).unwrap();
+            assert_eq!(
+                *loader.1.lock().unwrap(),
+                [None, Some(file.clone())],
+                "load_with_adapter ran once with Some"
+            );
+        });
+    }
 }
