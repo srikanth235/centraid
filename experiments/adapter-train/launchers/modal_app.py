@@ -1,4 +1,4 @@
-"""Modal: the same image and the same command on an A10G.
+"""Modal: the same image and the same command on an A10G. UNTESTED: never run, and `modal` is not even installed where this was written.
 
     modal run launchers/modal_app.py --config s3://BUCKET/run/job.json --image REGISTRY/adapter-train:COMMIT
 

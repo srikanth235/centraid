@@ -38,10 +38,6 @@ def _datagen():
     return datagen
 
 
-class NotBuilt(NotImplementedError):
-    """A seam that is a decision with a cost, not an accident: the message says the cost."""
-
-
 def batch_for_step(n: int, bs: int, seed: int, step: int) -> list[int]:
     """The record indices step `step` reads, as a pure function of the seed: epochs are seeded shuffles of range(n), laid end to end."""
     first = step * bs
@@ -69,18 +65,21 @@ def lr_at(job, step: int) -> float:
 
 
 def load_base(job, device):
-    """The base model as the job names it. `q4_0_dequantised` (fit the adapter to the phone's own weights) is the seam below."""
+    """The base model as the job names it. `q4_0_dequantised` fits the adapter to the phone's own weights (`q4_0.py`)."""
     import torch
     from transformers import AutoModelForCausalLM
 
-    if job.base_weights == "q4_0_dequantised":
-        raise NotBuilt(
-            "base.weights 'q4_0_dequantised' is not built. Cost: map the Q4_0 GGUF's tensors back to Hugging Face names (the converter's inverse: "
-            "ssm_a = -exp(A_log), conv1d unsqueezed, token_embd Q8_0), dequantise with gguf-py, load into the same architecture, and prove it "
-            "by matching llama.cpp's logits on a prompt: about a day with a GPU and the pinned llama.cpp tree, and the parity step needs it."
-        )
     dtype = torch.bfloat16 if device == "cuda" else torch.float32
     model = AutoModelForCausalLM.from_pretrained(job.base_model, revision=job.base_revision, dtype=dtype)
+    if job.base_weights == "q4_0_dequantised":
+        # Fit the adapter to what the phone runs: the same architecture, its language-model weights replaced by the Q4_0 file's, dequantised.
+        from . import q4_0  # noqa: PLC0415
+
+        with tempfile.TemporaryDirectory(prefix="gguf-") as tmp:
+            local = storage.get_file(job.base_gguf, Path(tmp) / "base.gguf")
+            moved = q4_0.load_into(model, q4_0.read_tensors(local), torch=torch)
+        worst = max(moved.items(), key=lambda kv: kv[1])
+        print("q4_0_dequantised: %d tensors replaced; largest distance from the bf16 weights %.4g (%s)" % (len(moved), worst[1], worst[0]))
     return model.to(device)
 
 
@@ -183,9 +182,9 @@ def run(job, work, *, stop=lambda: False, base_loader=None, device=None, log=pri
     if job.hf:
         from . import hf  # noqa: PLC0415
 
-        got = hf.fetch_version(job.hf, work / "data", with_val=job.with_val, fetch=hf_fetch or hf.https_fetch)
+        got = hf.fetch_version(job.hf, work / "data", with_val=job.with_val, subset=job.subset, fetch=hf_fetch or hf.https_fetch)
         paths, source = got["paths"], got["source"]
-        wanted = {"train": (job.hf + "#" + hf.FILES["train"], job.train_sha256), "val": (job.hf + "#" + hf.FILES["val"], job.val_sha256)}
+        wanted = {"train": (job.hf + "#" + hf.train_path(job.subset), job.train_sha256), "val": (job.hf + "#" + hf.FILES["val"], job.val_sha256)}
     else:
         wanted = {"train": (job.train, job.train_sha256), "val": (job.val, job.val_sha256)}
         for key, (uri, _) in wanted.items():

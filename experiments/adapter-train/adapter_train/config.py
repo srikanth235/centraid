@@ -10,7 +10,8 @@ engine vendors can ship (`SHIPPABLE`): the adapter is useless if it cannot be wr
       "lora": {"rank": 16, "alpha": 32, "dropout": 0.0, "targets": [...]},          # targets optional: DEFAULT_TARGETS
       "data": {"train": "s3://b/train.jsonl.zst", "val": "s3://b/val.jsonl.zst"},   # optional "train_sha256", "val_sha256"
       # or a data version on the private Hugging Face dataset, pinned (never a branch; train and val only, never test):
-      "data": {"hf": "hf://datasets/srikanth235/centraid-native-data@v0.2"},          # token: HF_TOKEN in the environment, never here
+      "data": {"hf": "hf://datasets/srikanth235/centraid-native-data@v0.2"},          # token: HF_TOKEN (or HF_TOKEN_SECRET_ID on AWS), never here
+      "data": {"hf": "...@v0.2", "subset": "NAME"},                                   # a nested train subset: data/NAME.jsonl.zst instead of train
       "checkpoints": "s3://b/run/checkpoints",                                        # a path, s3:// or gs:// prefix
       "outputs": "s3://b/run/outputs",
       "train": {"seed": 0, "lr": 2e-4, "bs": 8, "steps": 1000, ...}
@@ -92,6 +93,7 @@ class Job:
     outputs: str
     hf: str | None = None
     with_val: bool = True
+    subset: str | None = None
     schedule: Schedule = field(default_factory=Schedule)
     raw: dict = field(default_factory=dict, compare=False)
 
@@ -174,19 +176,20 @@ def parse(obj: dict) -> Job:
     if not (isinstance(dropout, (int, float)) and 0.0 <= dropout < 1.0):
         raise ConfigError("lora.dropout must be in [0, 1)")
     lora = Lora(rank, alpha, float(dropout), targets_of(lo["targets"]) if "targets" in lo else DEFAULT_TARGETS)
-    data = _only(obj["data"], {"train", "val", "train_sha256", "val_sha256", "hf", "with_val"}, "data")
+    data = _only(obj["data"], {"train", "val", "train_sha256", "val_sha256", "hf", "with_val", "subset"}, "data")
     if "hf" in data:
         from . import hf  # noqa: PLC0415 - hf imports this module's ConfigError
 
         if "train" in data or "val" in data:
             raise ConfigError("data: give either hf or train/val locations, not both")
         hf.parse(data["hf"])
+        hf.train_path(data.get("subset"))
         if not isinstance(data.get("with_val", True), bool):
             raise ConfigError("data.with_val must be true or false")
     elif "train" not in data:
         raise ConfigError("data.train (or data.hf) is required")
-    elif "with_val" in data:
-        raise ConfigError("data.with_val goes with data.hf")
+    elif "with_val" in data or "subset" in data:
+        raise ConfigError("data.with_val and data.subset go with data.hf")
     for k in ("train_sha256", "val_sha256"):
         if data.get(k) is not None and not HEX64.match(str(data[k])):
             raise ConfigError("data.%s must be 64 lowercase hex characters" % k)
@@ -206,7 +209,7 @@ def parse(obj: dict) -> Job:
         name=name, base_model=str(base["model"]), base_revision=str(base["revision"]), base_weights=weights, base_gguf=gguf, lora=lora,
         train=_location(data["train"], "data.train") if "train" in data else None,
         val=_location(data["val"], "data.val") if data.get("val") else None,
-        hf=data.get("hf"), with_val=data.get("with_val", True),
+        hf=data.get("hf"), with_val=data.get("with_val", True), subset=data.get("subset"),
         train_sha256=data.get("train_sha256"), val_sha256=data.get("val_sha256"),
         checkpoints=_location(obj["checkpoints"], "checkpoints"), outputs=_location(obj["outputs"], "outputs"),
         schedule=schedule, raw=obj,

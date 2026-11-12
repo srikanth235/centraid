@@ -22,6 +22,72 @@ def layout(root: Path, manifest=None):
     return root
 
 
+class SecretTokenTest(unittest.TestCase):
+    class Secrets:
+        def __init__(self, value=None, fail=False):
+            self.value, self.fail, self.asked = value, fail, []
+
+        def get_secret_value(self, SecretId):
+            self.asked.append(SecretId)
+            if self.fail:
+                raise RuntimeError("request had Authorization: Bearer hf_leaky")
+            return {"SecretString": self.value}
+
+    def test_the_environment_token_wins_and_no_secret_is_asked(self):
+        c = self.Secrets("from-secret")
+        self.assertEqual(hf.token({"HF_TOKEN": " t1 ", "HF_TOKEN_SECRET_ID": "s"}, c), "t1")
+        self.assertEqual(c.asked, [])
+
+    def test_a_secret_id_is_read_with_the_jobs_role_and_a_json_secret_is_unwrapped(self):
+        self.assertEqual(hf.token({"HF_TOKEN_SECRET_ID": "arn:s"}, self.Secrets("plain\n")), "plain")
+        self.assertEqual(hf.token({"HF_TOKEN_SECRET_ID": "arn:s"}, self.Secrets('{"HF_TOKEN": "inner"}')), "inner")
+
+    def test_no_token_is_the_empty_string_and_a_failed_read_never_quotes_the_sdk(self):
+        self.assertEqual(hf.token({}, None), "")
+        with self.assertRaises(OSError) as cm:
+            hf.token({"HF_TOKEN_SECRET_ID": "arn:s"}, self.Secrets(fail=True))
+        self.assertIn("arn:s", str(cm.exception))
+        self.assertIn("RuntimeError", str(cm.exception))
+        self.assertNotIn("hf_leaky", str(cm.exception))
+
+
+class SubsetTest(unittest.TestCase):
+    def test_a_named_subset_replaces_the_train_file_and_nothing_else(self):
+        self.assertEqual(hf.train_path(), "data/train.jsonl.zst")
+        self.assertEqual(hf.train_path("train-1000"), "data/train-1000.jsonl.zst")
+
+    def test_the_test_split_and_odd_names_are_never_a_subset(self):
+        for bad in ("test", "noise", "val", "train", "../test", "a/b", "", "x" * 80, "-x"):
+            with self.assertRaises(config.ConfigError, msg=bad):
+                hf.train_path(bad)
+
+    def test_the_subset_is_fetched_and_recorded_and_val_still_comes_from_val(self):
+        tmp = Path(tempfile.mkdtemp(prefix="hf-sub-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        repo = layout(tmp / "repo")
+        (repo / "data" / "train-1000.jsonl.zst").write_bytes(b"rows of 1000\n")
+        asked = []
+        inner = hf.local_fetch(repo)
+
+        def fetch(r, rev, path, dest):
+            asked.append(path)
+            inner(r, rev, path, dest)
+
+        got = hf.fetch_version(REF, tmp / "d", subset="train-1000", fetch=fetch)
+        self.assertEqual(asked, ["manifest.json", "data/train-1000.jsonl.zst", "data/val.jsonl.zst"])
+        self.assertEqual(got["source"]["files"], {"train": "data/train-1000.jsonl.zst", "val": "data/val.jsonl.zst"})
+        self.assertEqual(got["paths"]["train"].read_bytes(), b"rows of 1000\n")
+
+    def test_a_subset_goes_in_the_job_file_with_hf_only(self):
+        base = {"name": "t", "base": {"model": "m", "revision": "b" * 40}, "checkpoints": "/c", "outputs": "/o"}
+        job = config.parse({**base, "data": {"hf": REF, "subset": "train-2500"}})
+        self.assertEqual(job.subset, "train-2500")
+        with self.assertRaises(config.ConfigError):
+            config.parse({**base, "data": {"train": "/t", "subset": "train-2500"}})
+        with self.assertRaises(config.ConfigError):
+            config.parse({**base, "data": {"hf": REF, "subset": "test"}})
+
+
 class HfTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="hf-test-"))
@@ -128,7 +194,7 @@ class TokenTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, d, ignore_errors=True)
         env = {k: v for k, v in os.environ.items() if k != "HF_TOKEN"}
         with mock.patch.dict(os.environ, env, clear=True), mock.patch("urllib.request.urlopen", urlopen):
-            with self.assertRaisesRegex(OSError, "no HF_TOKEN is set"):
+            with self.assertRaisesRegex(OSError, "no HF_TOKEN or HF_TOKEN_SECRET_ID is set"):
                 hf.https_fetch("o/r", "v1", "manifest.json", d / "m")
         for key in ("token", "hf_token", "HF_TOKEN"):
             with self.assertRaises(config.ConfigError):

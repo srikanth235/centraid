@@ -186,11 +186,6 @@ class RunTest(Base):
             trainer.run(job, self.tmp / "w", base_loader=lambda j, d: loaded.append(1), device="cpu", log=lambda *_: None)
         self.assertEqual(loaded, [])
 
-    def test_the_phones_own_weights_are_a_named_seam_with_a_cost(self):
-        job = config.parse({**self.job().raw, "base": {"model": "tiny", "revision": "b" * 40, "weights": "q4_0_dequantised", "gguf": "q.gguf"}})
-        with self.assertRaisesRegex(trainer.NotBuilt, "about a day"):
-            trainer.load_base(job, "cpu")
-
     def test_a_data_version_from_the_dataset_repo_trains_and_is_named_in_the_record(self):
         import zstandard
 

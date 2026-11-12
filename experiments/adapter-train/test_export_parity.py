@@ -72,5 +72,15 @@ class ParityTest(unittest.TestCase):
         self.assertFalse(r["passed"])
 
 
+class PromptsTest(unittest.TestCase):
+    def test_a_prompt_is_what_comes_before_the_first_counted_token(self):
+        recs = [{"id": "a", "input_ids": [5, 6, 7, 8, 9], "weights": [0, 0, 0, 1, 1]},
+                {"id": "b", "input_ids": [1, 2], "weights": [0, 0]},          # nothing to learn: no prompt
+                {"id": "c", "input_ids": [1, 2], "weights": [1, 1]},          # starts on a label: no prompt
+                {"id": "d", "input_ids": [4, 4, 4], "weights": [0, 3, 1]}]
+        self.assertEqual(parity.make_prompts(recs, 5), [{"id": "a", "prompt_ids": [5, 6, 7]}, {"id": "d", "prompt_ids": [4]}])
+        self.assertEqual(len(parity.make_prompts(recs, 1)), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -21,7 +21,7 @@ def request(args) -> dict:
     common.need(args.role.startswith("arn:aws:iam::"), "--role must be an IAM role ARN")
     common.need(".dkr.ecr." in args.image or args.image.startswith("public.ecr.aws/"), "--image must be an ECR image")
     max_run = int(args.max_hours * 3600)
-    return {
+    req = {
         "TrainingJobName": common.job_name(args.name, args.suffix),
         "RoleArn": args.role,
         "AlgorithmSpecification": {
@@ -35,7 +35,13 @@ def request(args) -> dict:
         "EnableManagedSpotTraining": True,
         "OutputDataConfig": {"S3OutputPath": args.config.rsplit("/", 1)[0] + "/sagemaker-output/"},
         "EnableNetworkIsolation": False,
+        "RetryStrategy": {"MaximumRetryAttempts": 1},
+        "Tags": [{"Key": "project", "Value": "centraid-adapter-train"}],
     }
+    if args.hf_secret:
+        # The id of the secret, never the token: DescribeTrainingJob shows Environment in plain. The container reads the token itself, with the role.
+        req["Environment"] = {"HF_TOKEN_SECRET_ID": args.hf_secret}
+    return req
 
 
 def submit(req, args):
@@ -52,6 +58,7 @@ def extras():
         ap.add_argument("--suffix", default="", help="appended to the job name (SageMaker names are unique per region)")
         ap.add_argument("--max-hours", type=float, default=8.0)
         ap.add_argument("--volume-gb", type=int, default=50)
+        ap.add_argument("--hf-secret", default=None, help="Secrets Manager secret id/ARN holding the Hugging Face token (the role needs secretsmanager:GetSecretValue on it)")
 
     return [add]
 

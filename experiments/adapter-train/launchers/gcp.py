@@ -1,4 +1,4 @@
-"""GCP: a Vertex AI custom job on Spot VMs, one GPU.
+"""GCP: a Vertex AI custom job on Spot VMs, one GPU. UNTESTED: the request was built from the API's documentation and never submitted.
 
     python -m launchers.gcp --config gs://BUCKET/run/job.json --image REGION-docker.pkg.dev/PROJECT/REPO/adapter-train:COMMIT \
         --project PROJECT [--region us-central1] [--machine g2-standard-8 --accelerator NVIDIA_L4] [--submit]
