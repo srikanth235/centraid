@@ -280,7 +280,7 @@ internal class ShellEffects(
                 if (glance.version != HealthSnapshot.VERSION) {
                     failed(EffectReason.UNSUPPORTED)
                 } else {
-                    effectAttempt { withContext(Dispatchers.IO) { HealthWidget.keep(context, glance.file, glance.document.toByteArray()) } }
+                    effectAttempt { withContext(Dispatchers.IO) { HealthWidget.keep(context, glance.file_, glance.document.toByteArray()) } }
                         .fold({ done }, { failed(EffectReason.UNWRITABLE) })
                 }
             }
