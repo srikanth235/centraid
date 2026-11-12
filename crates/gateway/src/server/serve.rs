@@ -122,6 +122,7 @@ impl TlsListener {
                 let cable = Arc::clone(&cable);
                 tokio::spawn(async move {
                     let _ = socket.set_nodelay(true);
+                    cable.connections.fetch_add(1, Ordering::SeqCst);
                     let socket = Cabled { socket, cable };
                     match tokio::time::timeout(HANDSHAKE_TIMEOUT, acceptor.accept(socket)).await {
                         Ok(Ok(stream)) => {
@@ -185,12 +186,18 @@ impl axum::serve::Listener for TlsListener {
 #[derive(Debug, Default)]
 pub struct Cable {
     cut: AtomicBool,
+    /// Every connection is open and silent: reads and writes never complete. A laptop that
+    /// went to sleep, or a network that changed under a live connection, as the phone sees it
+    /// when nothing resets the connection.
+    stalled: AtomicBool,
     /// Whether either way has a budget: the one load an uncut cable costs
     /// beyond `cut`.
     budgeted: AtomicBool,
     budgets: Mutex<Budgets>,
     /// Every byte the phones have sent.
     sent: AtomicU64,
+    /// Every TCP connection accepted: what "one handshake, not one per question" counts.
+    connections: AtomicU64,
 }
 
 /// What may still cross each way before the cable is cut; `None` is no limit.
@@ -224,6 +231,12 @@ impl Cable {
         self.cut.store(true, Ordering::SeqCst);
     }
 
+    /// Hold every connection open and answer nothing on it: a read or a write on it waits for
+    /// ever. [`Self::mend`] is for connections made after it.
+    pub fn stall(&self) {
+        self.stalled.store(true, Ordering::SeqCst);
+    }
+
     /// Let `bytes` more of what the phones send through, then cut.
     pub fn cut_after(&self, bytes: u64) {
         self.budget(Way::Sent, bytes);
@@ -240,6 +253,13 @@ impl Cable {
         *self.budgets() = Budgets::default();
         self.budgeted.store(false, Ordering::SeqCst);
         self.cut.store(false, Ordering::SeqCst);
+        self.stalled.store(false, Ordering::SeqCst);
+    }
+
+    /// Every connection accepted so far.
+    #[must_use]
+    pub fn connections(&self) -> u64 {
+        self.connections.load(Ordering::SeqCst)
     }
 
     /// Every byte the phones have sent so far.
@@ -255,6 +275,10 @@ impl Cable {
 
     fn budgets(&self) -> std::sync::MutexGuard<'_, Budgets> {
         self.budgets.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn is_stalled(&self) -> bool {
+        self.stalled.load(Ordering::SeqCst)
     }
 
     fn is_cut(&self) -> bool {
@@ -283,6 +307,10 @@ impl AsyncRead for Cabled {
         let this = self.get_mut();
         if this.cable.is_cut() {
             return Poll::Ready(Err(cut_error()));
+        }
+        if this.cable.is_stalled() {
+            // Never woken: the socket is held open and silent.
+            return Poll::Pending;
         }
         let before = buf.filled().len();
         if !this.cable.budgeted.load(Ordering::SeqCst) {
@@ -335,6 +363,9 @@ impl AsyncWrite for Cabled {
         let this = self.get_mut();
         if this.cable.is_cut() {
             return Poll::Ready(Err(cut_error()));
+        }
+        if this.cable.is_stalled() {
+            return Poll::Pending;
         }
         if !this.cable.budgeted.load(Ordering::SeqCst) {
             return Pin::new(&mut this.socket).poll_write(context, data);

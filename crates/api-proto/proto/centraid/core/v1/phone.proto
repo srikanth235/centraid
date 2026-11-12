@@ -350,6 +350,12 @@ message RestoredVault {
   // own identity key — one number for all of them would confirm nothing about
   // any of them.
   string safety_number = 6;
+  // How many derivatives (thumbnails, previews) the restore brought back, of how many the
+  // restored vault names. The vault is kept before they are fetched, so a gateway that stops
+  // answering leaves `landed` below `total` and the rest is fetched on demand. Both 0 when
+  // the vault names none.
+  uint32 derivatives_landed = 7;
+  uint32 derivatives_total = 8;
 }
 
 message RestoreResponse {
@@ -412,6 +418,11 @@ message UnclaimedVault {
   // Why the claim did not land, for a support log. Carries no key and no
   // word.
   string reason = 3;
+  // True when the claim LANDED on the gateway and keeping the vault on this phone failed: the
+  // old phone is already frozen, this phone kept the checked file, and restoring must be
+  // finished by restoring again naming this index. False when the claim did not land and the
+  // old phone is still the writer.
+  bool claimed = 4;
 }
 
 // ----------------------------------------------------------------- status --

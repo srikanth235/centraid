@@ -77,6 +77,23 @@ pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 /// How long a TLS handshake gets.
 pub const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// How long a request may go without the gateway answering its headers, measured from the last
+/// byte of progress (a body frame handed to the socket, or the request's end): a gateway that is
+/// asleep, or a network that changed under the connection, ends here and not at the kernel's
+/// TCP timeout.
+pub const HEADER_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// How long a body read may go without one more byte arriving.
+pub const IDLE_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// How often a waiting call looks at the stop it was given, so a Cancel is observed during a
+/// transfer and not only between calls ([`Limits::poll`]).
+const STOP_POLL: Duration = Duration::from_millis(250);
+
+/// TCP keepalive on the dial: idle time before the first probe and between probes, so a dead
+/// peer under an otherwise silent connection is found by the kernel too.
+const KEEPALIVE: Duration = Duration::from_secs(20);
+
 /// The largest JSON answer read: a page of a thousand objects is far less.
 const MAX_ANSWER_BYTES: u64 = 16 * 1024 * 1024;
 
@@ -211,6 +228,30 @@ pub struct Handoff {
     pub headers: Vec<(String, String)>,
 }
 
+/// A stop the caller can raise while a call waits: true means give up now.
+pub type Stop = Arc<dyn Fn() -> bool + Send + Sync>;
+
+/// How long a call may wait without progress.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Limits {
+    /// Until the answer's headers, from the last progress of the request.
+    pub header: Duration,
+    /// Between two chunks of an answer's body.
+    pub idle: Duration,
+    /// How often a waiting call looks at its stop.
+    pub poll: Duration,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self {
+            header: HEADER_TIMEOUT,
+            idle: IDLE_TIMEOUT,
+            poll: STOP_POLL,
+        }
+    }
+}
+
 type Body = UnsyncBoxBody<Bytes, std::io::Error>;
 type Sender = hyper::client::conn::http1::SendRequest<Body>;
 
@@ -220,9 +261,15 @@ pub struct Client {
     trust: Trust,
     config: Arc<ClientConfig>,
     token: Mutex<Option<Token>>,
-    preferred: AtomicUsize,
-    seen: Mutex<Option<Vec<u8>>>,
-    live: tokio::sync::Mutex<Option<(Sender, String)>>,
+    preferred: Arc<AtomicUsize>,
+    seen: Arc<Mutex<Option<Vec<u8>>>>,
+    live: Arc<tokio::sync::Mutex<Option<(Sender, String)>>>,
+    /// TCP connections this client and its [siblings](Self::sibling) have opened.
+    dials: Arc<AtomicUsize>,
+    limits: Mutex<Limits>,
+    stop: Mutex<Option<Stop>>,
+    /// Counts the body frames handed to the socket, so an upload that is moving is not a stall.
+    progress: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl core::fmt::Debug for Client {
@@ -242,10 +289,119 @@ impl Client {
             addrs,
             trust,
             token: Mutex::new(token),
-            preferred: AtomicUsize::new(0),
-            seen: Mutex::new(None),
-            live: tokio::sync::Mutex::new(None),
+            preferred: Arc::new(AtomicUsize::new(0)),
+            seen: Arc::new(Mutex::new(None)),
+            live: Arc::new(tokio::sync::Mutex::new(None)),
+            dials: Arc::new(AtomicUsize::new(0)),
+            limits: Mutex::new(Limits::default()),
+            stop: Mutex::new(None),
+            progress: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
+    }
+
+    /// A client for the same gateway with **its own token** and the same connection: what a
+    /// scan that asks about many vaults uses, so that it handshakes once and not once per
+    /// question. It starts with this client's trust, limits and stop.
+    #[must_use]
+    pub fn sibling(&self) -> Self {
+        Self {
+            addrs: self.addrs.clone(),
+            trust: self.trust.clone(),
+            config: Arc::clone(&self.config),
+            token: Mutex::new(None),
+            preferred: Arc::clone(&self.preferred),
+            seen: Arc::clone(&self.seen),
+            live: Arc::clone(&self.live),
+            dials: Arc::clone(&self.dials),
+            limits: Mutex::new(self.limits()),
+            stop: Mutex::new(self.stop.lock().ok().and_then(|held| held.clone())),
+            progress: Arc::clone(&self.progress),
+        }
+    }
+
+    /// How many TCP connections this client, and every [sibling](Self::sibling), has opened.
+    #[must_use]
+    pub fn dials(&self) -> usize {
+        self.dials.load(Ordering::Relaxed)
+    }
+
+    /// Replace the header and idle limits. The product keeps the defaults; a test with a
+    /// stalled transport shortens them.
+    pub fn set_limits(&self, limits: Limits) {
+        if let Ok(mut held) = self.limits.lock() {
+            *held = limits;
+        }
+    }
+
+    /// Give calls a stop to watch: while one waits on the gateway it looks at `stop` every
+    /// [`Limits::poll`] and ends with an interrupted [`ClientError::Io`] when it is true.
+    pub fn set_stop(&self, stop: Option<Stop>) {
+        if let Ok(mut held) = self.stop.lock() {
+            *held = stop;
+        }
+    }
+
+    fn limits(&self) -> Limits {
+        self.limits.lock().map(|held| *held).unwrap_or_default()
+    }
+
+    fn stopped(&self) -> bool {
+        self.stop
+            .lock()
+            .ok()
+            .and_then(|held| held.clone())
+            .is_some_and(|stop| stop())
+    }
+
+    /// Wait for `future`, ending it when the stop is raised or when `limit` passes with no
+    /// progress. Progress is a body frame handed to the socket since the wait began.
+    async fn guarded<T>(
+        &self,
+        limit: Duration,
+        what: &str,
+        future: impl std::future::Future<Output = T>,
+    ) -> Result<T, ClientError> {
+        let poll = self.limits().poll;
+        let mut future = Box::pin(future);
+        let mut seen = self.progress.load(Ordering::Relaxed);
+        let mut since = tokio::time::Instant::now();
+        loop {
+            if self.stopped() {
+                return Err(ClientError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Interrupted,
+                    "stopped by the caller",
+                )));
+            }
+            match tokio::time::timeout(poll.min(limit), &mut future).await {
+                Ok(value) => return Ok(value),
+                Err(_) => {
+                    let now = self.progress.load(Ordering::Relaxed);
+                    if now != seen {
+                        seen = now;
+                        since = tokio::time::Instant::now();
+                    } else if since.elapsed() >= limit {
+                        return Err(ClientError::Unreachable(format!(
+                            "the gateway stopped answering ({what}: no progress for {}s)",
+                            limit.as_secs()
+                        )));
+                    }
+                }
+            }
+        }
+    }
+
+    /// A body stream that counts each chunk it hands on.
+    fn counting<S>(
+        &self,
+        stream: S,
+    ) -> impl futures::Stream<Item = Result<Bytes, std::io::Error>> + Send + 'static
+    where
+        S: futures::Stream<Item = Result<Bytes, std::io::Error>> + Send + 'static,
+    {
+        let progress = Arc::clone(&self.progress);
+        stream.inspect(move |_| {
+            progress.fetch_add(1, Ordering::Relaxed);
+        })
     }
 
     /// First contact, from a scanned pairing payload: trust the certificate
@@ -439,7 +595,9 @@ impl Client {
         path: &Path,
     ) -> Result<Put, ClientError> {
         let length = tokio::fs::metadata(path).await?.len();
-        let chunks = file_chunks(path.to_path_buf(), length).map_ok(BodyFrame::data);
+        let chunks = self
+            .counting(file_chunks(path.to_path_buf(), length))
+            .map_ok(BodyFrame::data);
         let body = StreamBody::new(chunks).boxed_unsync();
         self.put_body(vault, name, digest, length, body).await
     }
@@ -462,7 +620,7 @@ impl Client {
         headers.insert(DIGEST_HEADER, header_value(&digest.header())?);
         let response = self.send(request).await?;
         let status = response.status();
-        match read_answer::<ObjectEntry>(response).await {
+        match self.read_answer::<ObjectEntry>(response).await {
             Ok(entry) if status == StatusCode::CREATED => Ok(Put::Stored(entry)),
             Ok(entry) if status == StatusCode::OK => Ok(Put::AlreadyStored(entry)),
             Ok(_) => Err(ClientError::Protocol(format!(
@@ -498,7 +656,7 @@ impl Client {
         let status = response.status();
         if !status.is_success() {
             let headers = response.headers().clone();
-            let body = read_capped(response, MAX_ANSWER_BYTES).await?;
+            let body = self.read_capped(response, MAX_ANSWER_BYTES).await?;
             return Err(refusal_of(status, &headers, &body));
         }
         let declared = response
@@ -506,7 +664,9 @@ impl Client {
             .get(DIGEST_HEADER)
             .and_then(|value| value.to_str().ok())
             .and_then(|value| Digest::from_header(value).ok());
-        let bytes = read_capped(response, crate::rules::limits::MAX_OBJECT_BYTES).await?;
+        let bytes = self
+            .read_capped(response, crate::rules::limits::MAX_OBJECT_BYTES)
+            .await?;
         if status == StatusCode::OK
             && let Some(declared) = declared
             && Digest::of(&bytes) != declared
@@ -607,7 +767,11 @@ impl Client {
             }
             .into());
         }
-        let body = StreamBody::new(parts_stream(measured).map_ok(BodyFrame::data)).boxed_unsync();
+        let body = StreamBody::new(
+            self.counting(parts_stream(measured))
+                .map_ok(BodyFrame::data),
+        )
+        .boxed_unsync();
         let mut request = self.request(Method::POST, &route(vault, "bundle"), body, true)?;
         let headers = request.headers_mut();
         headers.insert(header::CONTENT_LENGTH, HeaderValue::from(length));
@@ -616,7 +780,7 @@ impl Client {
             HeaderValue::from_static("application/octet-stream"),
         );
         let response = self.send(request).await?;
-        read_answer(response).await
+        self.read_answer(response).await
     }
 
     /// `POST fetch`, collected: every frame [`Self::fetch_each`] hands over,
@@ -666,18 +830,14 @@ impl Client {
         let status = response.status();
         if !status.is_success() {
             let headers = response.headers().clone();
-            let body = read_capped(response, MAX_ANSWER_BYTES).await?;
+            let body = self.read_capped(response, MAX_ANSWER_BYTES).await?;
             return Err(refusal_of(status, &headers, &body));
         }
         let mut stream = response.into_body().into_data_stream();
         let mut decoder = Decoder::new();
         let mut current = None;
         let mut count = 0;
-        while let Some(chunk) = stream
-            .try_next()
-            .await
-            .map_err(|error| ClientError::Unreachable(error.to_string()))?
-        {
+        while let Some(chunk) = self.next_chunk(&mut stream).await? {
             let mut rest: &[u8] = &chunk;
             loop {
                 let (step, used) = decoder.step(rest).map_err(not_a_bundle)?;
@@ -779,6 +939,48 @@ impl Client {
 
     // ─── the plumbing ────────────────────────────────────────────────────────
 
+    /// The next chunk of a response body, within the idle limit.
+    async fn next_chunk(
+        &self,
+        body: &mut http_body_util::BodyDataStream<Incoming>,
+    ) -> Result<Option<Bytes>, ClientError> {
+        self.guarded(self.limits().idle, "reading the answer", body.try_next())
+            .await?
+            .map_err(|error| ClientError::Unreachable(error.to_string()))
+    }
+
+    /// A response body, refusing one longer than `cap`.
+    async fn read_capped(
+        &self,
+        response: Response<Incoming>,
+        cap: u64,
+    ) -> Result<Vec<u8>, ClientError> {
+        let mut body = response.into_body().into_data_stream();
+        let mut bytes = Vec::new();
+        while let Some(chunk) = self.next_chunk(&mut body).await? {
+            if (bytes.len() + chunk.len()) as u64 > cap {
+                return Err(ClientError::Protocol(format!("an answer over {cap} bytes")));
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        Ok(bytes)
+    }
+
+    /// A JSON answer, or the refusal it is.
+    async fn read_answer<T: DeserializeOwned>(
+        &self,
+        response: Response<Incoming>,
+    ) -> Result<T, ClientError> {
+        let status = response.status();
+        let headers = response.headers().clone();
+        let bytes = self.read_capped(response, MAX_ANSWER_BYTES).await?;
+        if status.is_success() {
+            serde_json::from_slice(&bytes).map_err(|error| ClientError::Protocol(error.to_string()))
+        } else {
+            Err(refusal_of(status, &headers, &bytes))
+        }
+    }
+
     async fn call<T: DeserializeOwned, B: Serialize>(
         &self,
         method: Method,
@@ -792,7 +994,7 @@ impl Client {
         };
         let request = self.request(method, path, body, authorized)?;
         let response = self.send(request).await?;
-        read_answer(response).await
+        self.read_answer(response).await
     }
 
     fn request(
@@ -817,12 +1019,16 @@ impl Client {
         Ok(request)
     }
 
-    /// Send on the kept connection, dialling one when there is none.
+    /// Send on the kept connection, dialling one when there is none. Every wait is bounded and
+    /// watches the stop (the module header's "no timeout once connected" is gone).
     async fn send(&self, mut request: Request<Body>) -> Result<Response<Incoming>, ClientError> {
+        let limits = self.limits();
+        let dial = (CONNECT_TIMEOUT + HANDSHAKE_TIMEOUT * 2)
+            .saturating_mul(u32::try_from(self.addrs.len().max(1)).unwrap_or(u32::MAX));
         let mut live = self.live.lock().await;
         for attempt in 0..2 {
             if live.as_ref().is_none_or(|(sender, _)| sender.is_closed()) {
-                *live = Some(self.connect().await?);
+                *live = Some(self.guarded(dial, "dialling", self.connect()).await??);
             }
             let Some((sender, host)) = live.as_mut() else {
                 continue;
@@ -830,11 +1036,37 @@ impl Client {
             request
                 .headers_mut()
                 .insert(header::HOST, header_value(host)?);
-            if sender.ready().await.is_err() {
-                *live = None;
-                continue;
+            let ready = self
+                .guarded(limits.header, "waiting for the connection", sender.ready())
+                .await;
+            match ready {
+                Ok(Ok(())) => {}
+                Ok(Err(_)) => {
+                    *live = None;
+                    continue;
+                }
+                Err(error) => {
+                    *live = None;
+                    return Err(error);
+                }
             }
-            match sender.try_send_request(request).await {
+            // A request whose answer never came may have reached the gateway: the connection is
+            // dropped so the next call dials fresh, and the request is not repeated here.
+            let sent = self
+                .guarded(
+                    limits.header,
+                    "waiting for the answer",
+                    sender.try_send_request(request),
+                )
+                .await;
+            let sent = match sent {
+                Ok(sent) => sent,
+                Err(error) => {
+                    *live = None;
+                    return Err(error);
+                }
+            };
+            match sent {
                 Ok(response) => return Ok(response),
                 Err(mut failed) => {
                     *live = None;
@@ -877,7 +1109,13 @@ impl Client {
                     continue;
                 }
             };
+            self.dials.fetch_add(1, Ordering::Relaxed);
             let _ = socket.set_nodelay(true);
+            // A peer that vanishes under a silent connection is found by the kernel as well.
+            let keepalive = socket2::TcpKeepalive::new()
+                .with_time(KEEPALIVE)
+                .with_interval(KEEPALIVE);
+            let _ = socket2::SockRef::from(&socket).set_tcp_keepalive(&keepalive);
             let connector = TlsConnector::from(Arc::clone(&self.config));
             // The name is not the trust — the verifier compares bytes — but a
             // handshake needs one, and the certificate carries `localhost`.
@@ -909,9 +1147,13 @@ impl Client {
             {
                 *seen = Some(der.to_vec());
             }
-            let (sender, connection) = hyper::client::conn::http1::handshake(TokioIo::new(stream))
-                .await
-                .map_err(|error| ClientError::Unreachable(format!("{addr}: {error}")))?;
+            let (sender, connection) = tokio::time::timeout(
+                HANDSHAKE_TIMEOUT,
+                hyper::client::conn::http1::handshake(TokioIo::new(stream)),
+            )
+            .await
+            .map_err(|_| ClientError::Unreachable(format!("{addr}: the HTTP handshake timed out")))?
+            .map_err(|error| ClientError::Unreachable(format!("{addr}: {error}")))?;
             // The connection task drives the stream and ends with it; its
             // error is the one the next request reports.
             tokio::spawn(async move {
@@ -1053,35 +1295,6 @@ fn json_body<B: Serialize>(body: &B) -> Result<Body, ClientError> {
 
 fn header_value(text: &str) -> Result<HeaderValue, ClientError> {
     HeaderValue::from_str(text).map_err(|error| ClientError::Protocol(error.to_string()))
-}
-
-/// A response body, refusing one longer than `cap`.
-async fn read_capped(response: Response<Incoming>, cap: u64) -> Result<Vec<u8>, ClientError> {
-    let mut body = response.into_body().into_data_stream();
-    let mut bytes = Vec::new();
-    while let Some(chunk) = body
-        .try_next()
-        .await
-        .map_err(|error| ClientError::Unreachable(error.to_string()))?
-    {
-        if (bytes.len() + chunk.len()) as u64 > cap {
-            return Err(ClientError::Protocol(format!("an answer over {cap} bytes")));
-        }
-        bytes.extend_from_slice(&chunk);
-    }
-    Ok(bytes)
-}
-
-/// A JSON answer, or the refusal it is.
-async fn read_answer<T: DeserializeOwned>(response: Response<Incoming>) -> Result<T, ClientError> {
-    let status = response.status();
-    let headers = response.headers().clone();
-    let bytes = read_capped(response, MAX_ANSWER_BYTES).await?;
-    if status.is_success() {
-        serde_json::from_slice(&bytes).map_err(|error| ClientError::Protocol(error.to_string()))
-    } else {
-        Err(refusal_of(status, &headers, &bytes))
-    }
 }
 
 /// What a non-success answer means. The body's code is the answer; a body

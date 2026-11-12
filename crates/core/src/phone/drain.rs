@@ -381,7 +381,10 @@ struct Pass {
     stopped: wire::DrainStop,
     acked_at_ms: Option<i64>,
     need: Vec<wire::NeedBytes>,
-    asked_for: BTreeSet<Name>,
+    /// The part names of each file, worked out once a pass (see [`NameCache`]).
+    names: NameCache,
+    /// How many names this pass asked a gateway about: each name once a pass, per gateway.
+    asks: usize,
     waiting_bytes: BTreeSet<Name>,
     /// The spool volume's free bytes, read when the pass began: the floor an
     /// oversize part keeps (the sweep's F6).
@@ -417,7 +420,8 @@ impl Pass {
             stopped: wire::DrainStop::Empty,
             acked_at_ms: None,
             need: Vec::new(),
-            asked_for: BTreeSet::new(),
+            names: NameCache::default(),
+            asks: 0,
             waiting_bytes: BTreeSet::new(),
             free: 0,
             media_confirmed: 0,
@@ -937,61 +941,51 @@ fn pass_over(
         }
     }
 
-    // 2. THE MEDIA, in rounds per gateway: seal what fits the spool, move it, again.
+    // 2. THE MEDIA, INTERLEAVED: one bounded round per gateway in turn (seal what fits the
+    // spool, move it), again, until every gateway has finished or left. A slow gateway takes
+    // its round and no more, so every reachable gateway makes progress in every pass and in
+    // every background window (#1188, item 16).
     let bytes = handle.bytes();
     let mut all_finished = true;
-    each(&mut live, ledger, pass, |reached, pass| {
-        let store = &reached.store;
-        let finished = loop {
-            if spool.bytes().map_err(plane_error)? >= budget {
-                // THE SPOOL IS FULL OF PARTS A GATEWAY THAT DID NOT ANSWER STILL OWES: the
-                // room is needed more than the wait.
-                mover::release_to_reachable(ledger, spool, &reachable).map_err(plane_error)?;
-            }
-            pass.asked_for.clear();
-            let sealed = prepare(
+    let mut feeds: Vec<Feed<'_>> = live.iter().map(|reached| Feed::new(reached)).collect();
+    let mut left: BTreeSet<String> = BTreeSet::new();
+    while feeds.iter().any(|feed| !feed.finished) {
+        for feed in feeds.iter_mut().filter(|feed| !feed.finished) {
+            pass.heard = None;
+            let id = feed.reached.destination.gateway_id.clone();
+            let step = media_round(
+                feed,
                 &files,
                 ledger,
                 spool,
-                store,
                 &keyring.backup,
                 bytes.as_ref().map(centraid_blobs::ContentBytes::store),
                 conditions,
                 budget,
                 deadline,
+                &reachable,
                 pass,
-            )?;
-            if Instant::now() >= deadline {
-                pass.stopped = wire::DrainStop::Deadline;
-                break false;
+            );
+            match step {
+                Ok(Flow::Continue) => {}
+                Ok(Flow::Stop) => {
+                    feed.finished = true;
+                    all_finished = false;
+                    left.insert(id.clone());
+                    if let Some(heard) = pass.heard.take() {
+                        set_reach(ledger, &id, heard)?;
+                    }
+                }
+                Err(error) => {
+                    feed.finished = true;
+                    all_finished = false;
+                    left.insert(id);
+                    absorb(ledger, pass, feed.reached, error)?;
+                }
             }
-            let moved =
-                mover::move_queue_where(ledger, spool, store, deadline, &SystemClock, &|part| {
-                    let kind = Kind::of_part(part);
-                    part.handed_off_ms.is_none()
-                        && kind != Kind::Records
-                        && conditions.may_move(kind)
-                })
-                .map_err(plane_error)?;
-            pass.count(moved.confirmed.len());
-            pass.media_confirmed = pass.media_confirmed.saturating_add(moved.confirmed.len());
-            if pass.stopped_by(&moved.stopped)? {
-                break false;
-            }
-            // A ROUND THAT MOVED PARTS FREED ROOM, so one more prepare asks for the next
-            // window of a library item larger than the spool (R-1080-C39) before the pass
-            // answers; a round that did neither is the end.
-            if sealed == 0 && moved.confirmed.is_empty() {
-                break true;
-            }
-        };
-        if !finished {
-            all_finished = false;
-            return Ok(Flow::Stop);
         }
-        pass.fed += 1;
-        Ok(Flow::Continue)
-    })?;
+    }
+    live.retain(|reached| !left.contains(&reached.destination.gateway_id));
     // A gateway that left the pass was not finished.
     all_finished &= live.len() == fleet.len();
 
@@ -1735,15 +1729,109 @@ fn retain(
 
 // ─── the media ──────────────────────────────────────────────────────────────
 
+/// One gateway's side of a pass's media rounds, and what a pass works out once for it: the
+/// names it holds, the files it still lacks something of, and the names already asked of it.
+struct Feed<'a> {
+    reached: &'a Reached,
+    /// Set when the gateway has had its last round: it finished, or left the pass.
+    finished: bool,
+    /// The names this gateway holds, read once and kept current by what its rounds confirm.
+    confirmed: Option<BTreeSet<Name>>,
+    /// The files with a part this gateway does not hold. Only ever shrinks in a pass.
+    todo: Option<Vec<&'a ContentFile>>,
+    /// Each name once a pass: asked of this gateway already.
+    asked: BTreeSet<Name>,
+}
+
+impl<'a> Feed<'a> {
+    fn new(reached: &'a Reached) -> Self {
+        Self {
+            reached,
+            finished: false,
+            confirmed: None,
+            todo: None,
+            asked: BTreeSet::new(),
+        }
+    }
+}
+
+/// The part names of each file, worked out once a pass: a name is a keyed hash, and a library of
+/// ninety thousand files would otherwise have them hashed again every round.
+#[derive(Default)]
+struct NameCache {
+    names: BTreeMap<[u8; 32], Vec<Name>>,
+}
+
+impl NameCache {
+    fn of(&mut self, keys: &BackupKeys, file: &ContentFile) -> &[Name] {
+        self.names
+            .entry(*file.h.as_bytes())
+            .or_insert_with(|| names_of(keys, &file.h, file.len))
+    }
+}
+
+/// One bounded round for one gateway: seal what fits the spool, move it. `Continue` when more
+/// remains (another round is owed), `Stop` when the gateway left the pass; a gateway whose
+/// round sealed and moved nothing is finished.
+#[allow(clippy::too_many_arguments)]
+fn media_round<'a>(
+    feed: &mut Feed<'a>,
+    files: &'a [ContentFile],
+    ledger: &Ledger,
+    spool: &Spool,
+    keys: &BackupKeys,
+    bytes: Option<&centraid_blobs::ByteStore>,
+    conditions: &Conditions,
+    budget: u64,
+    deadline: Instant,
+    reachable: &[String],
+    pass: &mut Pass,
+) -> Result<Flow> {
+    if spool.bytes().map_err(plane_error)? >= budget {
+        // THE SPOOL IS FULL OF PARTS A GATEWAY THAT DID NOT ANSWER STILL OWES: the
+        // room is needed more than the wait.
+        mover::release_to_reachable(ledger, spool, reachable).map_err(plane_error)?;
+    }
+    let sealed = prepare(
+        files, feed, ledger, spool, keys, bytes, conditions, budget, deadline, pass,
+    )?;
+    if Instant::now() >= deadline {
+        pass.stopped = wire::DrainStop::Deadline;
+        return Ok(Flow::Stop);
+    }
+    let store = &feed.reached.store;
+    let moved = mover::move_queue_where(ledger, spool, store, deadline, &SystemClock, &|part| {
+        let kind = Kind::of_part(part);
+        part.handed_off_ms.is_none() && kind != Kind::Records && conditions.may_move(kind)
+    })
+    .map_err(plane_error)?;
+    pass.count(moved.confirmed.len());
+    pass.media_confirmed = pass.media_confirmed.saturating_add(moved.confirmed.len());
+    if let Some(held) = feed.confirmed.as_mut() {
+        held.extend(moved.confirmed.iter().copied());
+    }
+    if pass.stopped_by(&moved.stopped)? {
+        return Ok(Flow::Stop);
+    }
+    // A ROUND THAT MOVED PARTS FREED ROOM, so one more prepare asks for the next window of a
+    // library item larger than the spool (R-1080-C39) before the pass answers; a round that
+    // did neither is the end.
+    if sealed == 0 && moved.confirmed.is_empty() {
+        feed.finished = true;
+        pass.fed += 1;
+    }
+    Ok(Flow::Continue)
+}
+
 /// Seal what no gateway holds of the vault's files into the spool, up to its
 /// budget: derivatives first, the grid, then originals, newest first within
 /// each. Answers how many parts were sealed.
 #[allow(clippy::too_many_arguments)]
-fn prepare(
-    files: &[ContentFile],
+fn prepare<'a>(
+    files: &'a [ContentFile],
+    feed: &mut Feed<'a>,
     ledger: &Ledger,
     spool: &Spool,
-    store: &GatewayStore,
     keys: &BackupKeys,
     bytes: Option<&centraid_blobs::ByteStore>,
     conditions: &Conditions,
@@ -1751,50 +1839,71 @@ fn prepare(
     deadline: Instant,
     pass: &mut Pass,
 ) -> Result<usize> {
+    let reached = feed.reached;
+    let store = &reached.store;
     // WHAT THIS GATEWAY HOLDS, not what any does: every gateway is a full replica (#1188, B1).
-    let mut confirmed = ledger
-        .confirmed_names(store.gateway_id())
-        .map_err(plane_error)?;
+    // Read once a pass; its rounds keep it current.
+    if feed.confirmed.is_none() {
+        feed.confirmed = Some(
+            ledger
+                .confirmed_names(store.gateway_id())
+                .map_err(plane_error)?,
+        );
+    }
+    let confirmed = feed.confirmed.get_or_insert_with(BTreeSet::new);
     let queued: BTreeSet<Name> = ledger
         .queued()
         .map_err(plane_error)?
         .iter()
         .map(|part| part.name)
         .collect();
-    let wanted = |file: &ContentFile, confirmed: &BTreeSet<Name>| -> Vec<(u32, Name)> {
-        names_of(keys, &file.h, file.len)
-            .into_iter()
-            .zip(0_u32..)
-            .filter(|(name, _)| !confirmed.contains(name) && !queued.contains(name))
-            .map(|(name, index)| (index, name))
-            .collect()
-    };
     // ASK ABOUT EVERYTHING THE MEMBER BACKS UP, SEAL ONLY WHAT THE RULE
     // ALLOWS NOW. Asking moves no bytes, so it is not the rule's to withhold:
     // a restored phone whose first pass runs off the charger may not seal a
     // video, and must still learn the gateway holds it — or the line says
     // "waiting for a charger" for a film this phone does not even hold
-    // (#1080, the simulator restore).
-    let unconfirmed: Vec<&ContentFile> = files
+    // (#1080, the simulator restore). The files lacking a part are worked out once and only
+    // shrink, so a round looks at what is left and not at the whole library.
+    let todo = feed.todo.get_or_insert_with(|| files.iter().collect());
+    todo.retain(|file| {
+        conditions.counts(Kind::of_file(file))
+            && pass
+                .names
+                .of(keys, file)
+                .iter()
+                .any(|name| !confirmed.contains(name))
+    });
+    let wanted = |names: &mut NameCache, file: &ContentFile, confirmed: &BTreeSet<Name>| {
+        names
+            .of(keys, file)
+            .iter()
+            .copied()
+            .zip(0_u32..)
+            .filter(|(name, _)| !confirmed.contains(name) && !queued.contains(name))
+            .map(|(name, index)| (index, name))
+            .collect::<Vec<(u32, Name)>>()
+    };
+    let unconfirmed: Vec<&'a ContentFile> = todo
         .iter()
-        .filter(|file| {
-            conditions.counts(Kind::of_file(file)) && !wanted(file, &confirmed).is_empty()
-        })
+        .copied()
+        .filter(|file| !wanted(&mut pass.names, file, confirmed).is_empty())
         .collect();
 
     // ASK BEFORE SEALING (#1080 ruling 7): a name the gateway holds is
-    // confirmed from its answer, never sealed again. Each name once a pass.
+    // confirmed from its answer, never sealed again. Each name once a pass,
+    // per gateway.
     let mut ask: Vec<Name> = Vec::new();
     let mut sizes: BTreeMap<Name, u64> = BTreeMap::new();
     for file in &unconfirmed {
-        for (_, name) in wanted(file, &confirmed) {
-            if pass.asked_for.insert(name) {
+        for (_, name) in wanted(&mut pass.names, file, confirmed) {
+            if feed.asked.insert(name) {
                 ask.push(name);
                 sizes.insert(name, file.len);
             }
         }
     }
     if !ask.is_empty() {
+        pass.asks += ask.len();
         let missing = plane_store::missing(store, &ask).map_err(store_error)?;
         let held: Vec<(Name, u64)> = ask
             .iter()
@@ -1807,6 +1916,10 @@ fn prepare(
         confirmed.extend(held.iter().map(|(name, _)| *name));
         pass.media_confirmed = pass.media_confirmed.saturating_add(held.len());
     }
+    let unconfirmed: Vec<&ContentFile> = unconfirmed
+        .into_iter()
+        .filter(|file| !wanted(&mut pass.names, file, confirmed).is_empty())
+        .collect();
 
     let mut candidates: Vec<&ContentFile> = unconfirmed
         .into_iter()
@@ -1827,7 +1940,7 @@ fn prepare(
         if Instant::now() >= deadline {
             break;
         }
-        let parts = wanted(file, &confirmed);
+        let parts = wanted(&mut pass.names, file, confirmed);
         if parts.is_empty() {
             continue;
         }
@@ -1861,7 +1974,9 @@ fn prepare(
         }
         let local = ledger.local(&file.h).map_err(plane_error)?;
         if let Some(local) = local.filter(|local| local.source == LocalSource::Os) {
-            let first = names_of(keys, &file.h, file.len)
+            let first = pass
+                .names
+                .of(keys, file)
                 .first()
                 .copied()
                 .unwrap_or_else(|| part_name(keys, &file.h, 0));

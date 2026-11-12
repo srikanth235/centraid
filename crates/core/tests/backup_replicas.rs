@@ -215,3 +215,66 @@ fn a_full_gateway_is_named_while_the_other_is_fed() {
     assert_eq!(backed.content_confirmed, backed.content_total, "{backed:?}");
     assert!(ledger(&path).queued().expect("reads").is_empty());
 }
+
+/// **EACH NAME IS ASKED ONCE A PASS** (#1188, item 12). The same twelve photographs are backed
+/// up under a spool that holds two parts (many rounds) and under one that holds them all (one
+/// round). Every round used to ask the gateway about every name still not held, again; now the
+/// gateway is asked about the same number of names either way.
+#[test]
+fn a_name_is_asked_of_a_gateway_once_however_many_rounds_the_pass_takes() {
+    let asked_under = |ceiling: u64| -> u64 {
+        let gateway = gateway();
+        let dir = tempfile::tempdir().expect("a directory");
+        let phone = phone_with(dir.path(), |config| config.with_spool_ceiling(ceiling));
+        pair(&phone, &gateway);
+        originals(&phone, "a photograph for many rounds", 12, 80_000);
+        let before = gateway.spawned.exists_asked().1;
+        let drained = drain(&phone, at_home());
+        assert_eq!(
+            drained.stopped,
+            wire::DrainStop::Empty as i32,
+            "{drained:?}"
+        );
+        let backed = status(&phone);
+        assert_eq!(backed.content_confirmed, backed.content_total, "{backed:?}");
+        gateway.spawned.exists_asked().1 - before
+    };
+    assert_eq!(asked_under(170_000), asked_under(64 << 20));
+}
+
+/// **EVERY GATEWAY IS FED IN TURN, NOT ONE TO THE END BEFORE THE NEXT** (#1188, item 16). A
+/// first gateway that took every round of a pass left a second one nothing when the pass (or
+/// the background window) ended early. The spool holds two parts, so the library takes many
+/// rounds; the gateways share one commit counter, and the second's first part must land before
+/// the first's last.
+#[test]
+fn the_gateways_are_fed_in_turn_round_by_round() {
+    let (first, second) = (gateway(), gateway());
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone_with(dir.path(), |config| config.with_spool_ceiling(170_000));
+    pair_id(&phone, &first);
+    pair_id(&phone, &second);
+    originals(&phone, "a photograph for two gateways in turn", 12, 80_000);
+
+    let drained = drain(&phone, at_home());
+    assert_eq!(
+        drained.stopped,
+        wire::DrainStop::Empty as i32,
+        "{drained:?}"
+    );
+    let (one, two) = (first.spawned.commit_order(), second.spawned.commit_order());
+    // THE GATEWAYS' COMMITS IN THE ORDER THEY HAPPENED: fed in turn, the sequence changes
+    // gateway at nearly every round; fed one to the end first, it changes twice or so.
+    let mut merged: Vec<(u64, bool)> = one.iter().map(|at| (*at, true)).collect();
+    merged.extend(two.iter().map(|at| (*at, false)));
+    merged.sort_unstable();
+    let switches = merged
+        .windows(2)
+        .filter(|pair| pair[0].1 != pair[1].1)
+        .count();
+    assert!(
+        switches >= 8,
+        "the gateways were fed one after the other ({switches} changes of gateway): {one:?} then {two:?}"
+    );
+    assert_eq!(one.len(), two.len(), "both hold the same parts");
+}

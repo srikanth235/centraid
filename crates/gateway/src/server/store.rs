@@ -50,6 +50,12 @@ pub struct ObjectStore {
     /// it ([`ObjectStore::pretend_to_hold_everything`]): a gateway that lies about what it holds
     /// is what a phone's read-back is for (#1188, B4, B13).
     lying: Arc<AtomicBool>,
+    /// How many `exists` calls were answered and how many names they asked about: what a test
+    /// counts to prove a phone asks each name once.
+    exists_asked: Arc<(std::sync::atomic::AtomicU64, std::sync::atomic::AtomicU64)>,
+    /// When each object was committed, as a number from one counter every store in the process
+    /// shares: a test reads the order two gateways were fed in.
+    commits: Arc<std::sync::Mutex<Vec<u64>>>,
 }
 
 /// Why staging stopped.
@@ -108,6 +114,8 @@ impl ObjectStore {
             incoming,
             full: Arc::new(AtomicBool::new(false)),
             lying: Arc::new(AtomicBool::new(false)),
+            exists_asked: Arc::default(),
+            commits: Arc::default(),
         })
     }
 
@@ -122,6 +130,32 @@ impl ObjectStore {
     /// Not reachable from the product — only the test harness calls it.
     pub fn pretend_to_hold_everything(&self, lying: bool) {
         self.lying.store(lying, Ordering::SeqCst);
+    }
+
+    /// Note one `exists` call about `names` names.
+    pub fn note_exists(&self, names: usize) {
+        self.exists_asked.0.fetch_add(1, Ordering::SeqCst);
+        self.exists_asked
+            .1
+            .fetch_add(names as u64, Ordering::SeqCst);
+    }
+
+    /// `(calls, names)` the gateway has been asked by `exists`.
+    #[must_use]
+    pub fn exists_asked(&self) -> (u64, u64) {
+        (
+            self.exists_asked.0.load(Ordering::SeqCst),
+            self.exists_asked.1.load(Ordering::SeqCst),
+        )
+    }
+
+    /// The order every object was committed in, from one process-wide counter.
+    #[must_use]
+    pub fn commit_order(&self) -> Vec<u64> {
+        self.commits
+            .lock()
+            .map(|held| held.clone())
+            .unwrap_or_default()
     }
 
     /// Whether `exists` is lying (a test set it).
@@ -197,6 +231,10 @@ impl ObjectStore {
         std::fs::rename(&staged.path, &target).map_err(StageError::from)?;
         staged.committed = true;
         sync_dir(parent).map_err(StageError::from)?;
+        static ORDER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        if let Ok(mut commits) = self.commits.lock() {
+            commits.push(ORDER.fetch_add(1, Ordering::SeqCst));
+        }
         Ok(())
     }
 

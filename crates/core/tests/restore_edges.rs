@@ -118,6 +118,10 @@ fn a_damaged_thumbnail_costs_a_restore_that_thumbnail_alone() {
     let restored = restore(new_dir.path(), &gateway);
     assert_eq!(restored.vaults.len(), 1, "{restored:?}");
     let path = PathBuf::from(&restored.vaults[0].path);
+    // THE ANSWER SAYS HOW MANY CAME BACK OF HOW MANY (#1188): the vault is kept first, then the
+    // grid is fetched, and a damaged one is the one that did not land.
+    assert_eq!(restored.vaults[0].derivatives_total, 3, "{restored:?}");
+    assert_eq!(restored.vaults[0].derivatives_landed, 2, "{restored:?}");
     let bytes = centraid_blobs::ByteStore::open(path.with_extension("bytes")).expect("opens");
     for (hash, thumb) in &thumbs {
         let held = bytes
@@ -1336,4 +1340,121 @@ fn an_older_backup_is_offered_when_the_newest_will_not_open() {
         "{refused}"
     );
     assert!(nothing_laid_down(none.path()).is_empty());
+}
+
+/// Where a restore laid a vault down, by the file it keeps until the claim is adopted.
+fn laid_down(dir: &std::path::Path) -> Option<PathBuf> {
+    fn walk(dir: &std::path::Path) -> Option<PathBuf> {
+        for entry in std::fs::read_dir(dir).ok()? {
+            let path = entry.ok()?.path();
+            if path.is_dir() {
+                if let Some(found) = walk(&path) {
+                    return Some(found);
+                }
+            } else if path
+                .file_name()
+                .is_some_and(|name| name == "vault.db.restoring")
+            {
+                return Some(path);
+            }
+        }
+        None
+    }
+    walk(dir)
+}
+
+/// **A CLAIM THAT LANDED IS NEVER FORGOTTEN** (#1188, item 7). The gateway moved the writer to
+/// this phone and froze the old one; adopting the vault then failed (here the ledger cannot be
+/// written). The checked file stays, the answer names the vault as claimed and unfinished
+/// (never "unclaimed" with the file deleted), and restoring again finishes it.
+#[test]
+fn a_claim_that_landed_is_never_forgotten_when_adopting_fails() {
+    let gateway = gateway();
+    let old_dir = tempfile::tempdir().expect("a directory");
+    let old_path = old_dir.path().join("vault.db");
+    let old = phone(old_dir.path());
+    pair(&old, &gateway);
+    note(&old, "Before", "written before the phone was lost");
+    drain(&old, at_home());
+
+    let new_dir = tempfile::tempdir().expect("a directory");
+    let runtime = runtime();
+    let mut broken = None;
+    let first = centraid_core::phone::restore::run_hooked(
+        &new_dir.path().join("custody.db"),
+        &wire::RestoreRequest {
+            phrase: WORDS.to_owned(),
+            payload: gateway.payload(),
+            ..wire::RestoreRequest::default()
+        },
+        runtime.handle(),
+        &mut |_| {},
+        &mut |_| {
+            // THE CLAIM LANDED; the ledger's place is taken by a directory, so adopting fails.
+            let file = laid_down(new_dir.path()).expect("the checked file is laid down");
+            let ledger =
+                centraid_vault::backup::ledger::Ledger::path_for(&file.with_file_name("vault.db"));
+            std::fs::create_dir_all(&ledger).expect("a directory where the ledger goes");
+            broken = Some(ledger);
+        },
+    )
+    .expect("a claim that landed is answered, not refused");
+    assert!(first.vaults.is_empty(), "{first:?}");
+    assert_eq!(first.unclaimed.len(), 1, "{first:?}");
+    assert!(
+        first.unclaimed[0].claimed,
+        "the claim landed, and the answer says so: {first:?}"
+    );
+    assert_eq!(gateway.writer(&vault_id()).0, 2, "the claim landed");
+    let kept = laid_down(new_dir.path()).expect("the checked file was not forgotten");
+    assert!(
+        !kept.with_file_name("vault.db").exists(),
+        "nothing reads as held yet"
+    );
+    let refused = try_drain(&old, quietly()).expect_err("the old phone is frozen");
+    assert_eq!(refused.code(), wire::ErrorCode::VaultMoved, "{refused}");
+
+    // THE MEMBER RESTORES AGAIN, naming the vault, and it is finished.
+    std::fs::remove_dir_all(broken.expect("the hook ran")).expect("the way is clear");
+    let again = centraid_core::phone::restore::run(
+        &new_dir.path().join("custody.db"),
+        &wire::RestoreRequest {
+            phrase: WORDS.to_owned(),
+            payload: gateway.payload(),
+            indices: first.unclaimed.iter().map(|vault| vault.index).collect(),
+            ..wire::RestoreRequest::default()
+        },
+        runtime.handle(),
+    )
+    .expect("restores again");
+    assert_eq!(again.vaults.len(), 1, "{again:?}");
+    assert!(again.unclaimed.is_empty(), "{again:?}");
+    assert_eq!(rows(&PathBuf::from(&again.vaults[0].path)), rows(&old_path));
+}
+
+/// **A SCAN HANDSHAKES ONCE, NOT ONCE PER INDEX** (#1188, item 17). A restore asks about the
+/// vault's index and twenty more past it; every question was a new TCP and TLS connection.
+#[test]
+fn a_restore_scan_reuses_one_connection() {
+    let gateway = gateway();
+    let old_dir = tempfile::tempdir().expect("a directory");
+    let old = phone(old_dir.path());
+    pair(&old, &gateway);
+    note(&old, "Before", "written before the phone was lost");
+    drain(&old, at_home());
+    let before = gateway.cable().connections();
+
+    let new_dir = tempfile::tempdir().expect("a directory");
+    let restored = restore(new_dir.path(), &gateway);
+    assert_eq!(restored.vaults.len(), 1, "{restored:?}");
+    assert!(
+        restored.gap_scanned >= 20,
+        "the scan walked the gap: {restored:?}"
+    );
+    let dialled = gateway.cable().connections() - before;
+    assert!(
+        dialled <= 3,
+        "{} indices were asked about over {dialled} connections",
+        restored.gap_scanned
+    );
 }

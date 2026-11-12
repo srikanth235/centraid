@@ -112,6 +112,10 @@ const HELD: &str = "vault.db";
 /// wrong, and `centraid_identity::VaultMint` lets them skip none.
 pub const GAP: u32 = 20;
 
+/// How many times a claimed vault is adopted before it is answered as claimed and unfinished.
+/// The claim is already on the gateway, so this is retried rather than given up on at once.
+const ADOPT_ATTEMPTS: u32 = 2;
+
 /// How many times one vault's claim is tried when the epoch or the head moved
 /// under it. A vault still moving after this is being fought over, which is
 /// for the member to see rather than for a loop to win.
@@ -163,6 +167,28 @@ pub fn run_observed(
     )
 }
 
+/// [`run_observed`] that also calls `after_claim` once a claim has landed and before it is
+/// adopted: the window in which a failure must not forget a vault the gateway already moved.
+///
+/// # Errors
+/// As [`run`].
+pub fn run_hooked(
+    vault_file: &Path,
+    request: &wire::RestoreRequest,
+    runtime: &tokio::runtime::Handle,
+    before_claim: &mut dyn FnMut(u32),
+    after_claim: &mut dyn FnMut(u32),
+) -> Result<wire::RestoreResponse> {
+    run_controlled(
+        vault_file,
+        request,
+        runtime,
+        before_claim,
+        after_claim,
+        None,
+    )
+}
+
 pub(crate) fn run_cancellable(
     vault_file: &Path,
     request: &wire::RestoreRequest,
@@ -207,10 +233,16 @@ fn run_controlled(
         .parent()
         .unwrap_or_else(|| Path::new("."))
         .to_path_buf();
+    // A STOP IS WATCHED WHILE A CALL WAITS, and every question about an index (the read grant
+    // included) is bounded by the client's own header and idle limits.
+    client.set_stop(cancellation.clone().map(|held| {
+        std::sync::Arc::new(move || held.check().is_err()) as centraid_gateway::client::Stop
+    }));
     let scan = Scan {
         open: vault_file,
         payload: &payload,
         cert_der: &cert_der,
+        client: &client,
         runtime,
         cancellation,
         use_older: request.use_older,
@@ -262,6 +294,7 @@ fn run_controlled(
                             index,
                             vault_id,
                             reason: "this phone's copy is newer than its backup".to_owned(),
+                            claimed: false,
                         });
                         true
                     }
@@ -314,13 +347,26 @@ fn run_controlled(
     for mut one in staged {
         match scan.claim(&mut one, before_claim, after_claim) {
             Ok(restored) => vaults.push(restored),
-            Err(error) => {
+            // THE CLAIM LANDED AND ADOPTING FAILED: the old phone is frozen already, so this
+            // phone keeps the checked file and says the vault was claimed. A second restore
+            // names it again and finishes it.
+            Err(ClaimFailure::Adopt(error)) => {
+                // NOT A REFUSAL: a claim that landed is answered, never returned as an error.
+                unclaimed.push(wire::UnclaimedVault {
+                    index: one.index,
+                    vault_id: one.keyring.vault_hex(),
+                    reason: error.to_string(),
+                    claimed: true,
+                });
+            }
+            Err(ClaimFailure::Claim(error)) => {
                 let error = scan.checkpoint().err().unwrap_or(error);
                 one.forget();
                 unclaimed.push(wire::UnclaimedVault {
                     index: one.index,
                     vault_id: one.keyring.vault_hex(),
                     reason: error.to_string(),
+                    claimed: false,
                 });
                 first_refusal.get_or_insert(error);
             }
@@ -385,6 +431,8 @@ struct Scan<'a> {
     open: &'a Path,
     payload: &'a PairPayload,
     cert_der: &'a [u8],
+    /// The scan's connection: every question about an index is a [`Client::sibling`] of it.
+    client: &'a Client,
     runtime: &'a tokio::runtime::Handle,
     cancellation: Option<crate::handle::Cancellation>,
     /// The member said yes to an older backup (`RestoreRequest.use_older`).
@@ -464,6 +512,16 @@ impl Aside {
     }
 }
 
+/// Why a claim did not give the member a vault. The two are told apart because the first leaves
+/// the gateway as it was and the second does not.
+enum ClaimFailure {
+    /// The claim did not land: the old phone is still the writer, and the file goes.
+    Claim(CoreError),
+    /// The claim landed and keeping the vault failed: the old phone is frozen and the checked
+    /// file stays, so a second restore finishes the vault.
+    Adopt(CoreError),
+}
+
 /// One vault fetched, laid down and checked, and not yet claimed.
 struct Staged {
     keyring: Keyring,
@@ -531,8 +589,11 @@ impl Scan<'_> {
             .map_or(Ok(()), crate::handle::Cancellation::check)
     }
 
+    /// A client for one vault's questions: its own token, **the scan's one connection**. A scan
+    /// asks about twenty indices past the last vault it found, and a handshake per question
+    /// (#1188, item 17) was a TLS negotiation each.
     fn client(&self) -> Client {
-        Client::trusting(self.payload.addrs.clone(), self.cert_der.to_vec())
+        self.client.sibling()
     }
 
     /// Ask about one index, and fetch, lay down and check its snapshot when
@@ -680,11 +741,11 @@ impl Scan<'_> {
         staged: &mut Staged,
         before_claim: &mut dyn FnMut(u32),
         after_claim: &mut dyn FnMut(u32),
-    ) -> Result<wire::RestoredVault> {
+    ) -> std::result::Result<wire::RestoredVault, ClaimFailure> {
         for _ in 0..CLAIM_ATTEMPTS {
-            self.checkpoint()?;
+            self.checkpoint().map_err(ClaimFailure::Claim)?;
             before_claim(staged.index);
-            self.checkpoint()?;
+            self.checkpoint().map_err(ClaimFailure::Claim)?;
             match pair::try_claim(
                 staged.store.client(),
                 &staged.keyring,
@@ -692,23 +753,25 @@ impl Scan<'_> {
                 staged.epoch.saturating_add(1),
                 Some(staged.head),
                 self.runtime,
-            )? {
+            )
+            .map_err(ClaimFailure::Claim)?
+            {
                 ClaimAnswer::Claimed(paired) => {
                     after_claim(staged.index);
                     // Once writer authority moved, finish keeping the vault and
                     // its token before honoring a stop at the next vault.
                     staged.store.set_cancellation(None);
-                    return self.adopt(staged, &paired);
+                    return self.adopt_retrying(staged, &paired);
                 }
                 ClaimAnswer::Conflict { epoch, head } => {
                     staged.epoch = epoch;
                     let Some(head) = head else {
-                        return Err(CoreError::Invariant {
+                        return Err(ClaimFailure::Claim(CoreError::Invariant {
                             context: format!(
                                 "the gateway's head for index {} went back to none",
                                 staged.index
                             ),
-                        });
+                        }));
                     };
                     if head != staged.head {
                         // THE HEAD MOVED BETWEEN THE CHECK AND THE CLAIM: the
@@ -717,14 +780,16 @@ impl Scan<'_> {
                         let view = self
                             .runtime
                             .block_on(staged.store.client().head(&staged.keyring.vault_id()))
-                            .map_err(pair::pairing_error)?;
+                            .map_err(pair::pairing_error)
+                            .map_err(ClaimFailure::Claim)?;
                         staged.restored = lay_down(
                             &staged.store,
                             &staged.keyring,
                             &view.name,
                             &staged.file,
                             staged.index,
-                        )?;
+                        )
+                        .map_err(ClaimFailure::Claim)?;
                         staged.head = view.name;
                         staged.older = None;
                         staged.head_set_ms = view.set_at_ms;
@@ -733,12 +798,31 @@ impl Scan<'_> {
                 }
             }
         }
-        Err(CoreError::GatewayRefused {
+        Err(ClaimFailure::Claim(CoreError::GatewayRefused {
             reason: format!(
                 "the gateway's head for index {} kept moving; restore again",
                 staged.index
             ),
-        })
+        }))
+    }
+
+    /// Adopt a vault whose claim landed, once more if the first try fails: the old phone is
+    /// frozen already, so giving up costs the member a second restore.
+    fn adopt_retrying(
+        &self,
+        staged: &Staged,
+        paired: &centraid_gateway::rules::wire::Paired,
+    ) -> std::result::Result<wire::RestoredVault, ClaimFailure> {
+        let mut last = None;
+        for _ in 0..ADOPT_ATTEMPTS {
+            match self.adopt(staged, paired) {
+                Ok(restored) => return Ok(restored),
+                Err(error) => last = Some(error),
+            }
+        }
+        Err(ClaimFailure::Adopt(last.unwrap_or(CoreError::Invariant {
+            context: "adopting a claimed vault was not attempted".to_owned(),
+        })))
     }
 
     /// The claim landed: keep the gateway and the restored head beside the
@@ -838,40 +922,64 @@ impl Scan<'_> {
             .confirm_many(&held, &gateway_id, now)
             .map_err(plane_error)?;
 
-        // THE GRID, WHOLE: every derivative, in fetch bundles. A gateway that
-        // stops answering here does not undo a claim that landed; what did
-        // not come back is fetched on demand like any original.
-        let vault = Vault::open(&staged.file)?;
-        let files = content_files(&vault).map_err(plane_error);
-        vault.close()?;
-        let files = files?;
-        let derivatives: Vec<&ContentFile> =
-            files.iter().filter(|file| file.variant.is_some()).collect();
-        let bytes =
-            centraid_blobs::ByteStore::open(kept.with_extension("bytes")).map_err(|error| {
-                CoreError::Invariant {
-                    context: format!("the restored vault's content store: {error}"),
-                }
-            })?;
-        match super::fetch::fetch_all(&staged.store, &staged.keyring.backup, &derivatives, &bytes) {
-            Ok(landed) => tracing::info!(
-                landed,
-                of = derivatives.len(),
-                "a restore brought the derivatives back"
-            ),
-            Err(error) => tracing::warn!(%error, "a restore's derivatives did not all come back"),
-        }
-
+        // THE FILE FIRST: it takes the name `vault.db`, so a failure fetching the grid below can
+        // never lose the vault itself.
         std::fs::rename(&staged.file, kept).map_err(|error| CoreError::Invariant {
             context: format!("keeping the restored vault as {}: {error}", kept.display()),
         })?;
+        // THE GRID, WHOLE: every derivative, in fetch bundles. A gateway that
+        // stops answering here does not undo a claim that landed; what did
+        // not come back is fetched on demand like any original, and the answer
+        // says how many landed of how many.
+        let (landed, total) = self.bring_derivatives(staged, kept);
         Ok(wire::RestoredVault {
             vault_id: staged.keyring.vault_hex(),
             index: staged.index,
             path: kept.to_string_lossy().into_owned(),
             rows: manifest.census.values().sum(),
             safety_number: pair::safety_number(&staged.keyring, &self.payload.pin),
+            derivatives_landed: landed,
+            derivatives_total: total,
         })
+    }
+
+    /// Fetch every derivative the kept vault names; `(landed, of)`. A failure is logged and
+    /// leaves the rest to on-demand fetches.
+    fn bring_derivatives(&self, staged: &Staged, kept: &Path) -> (u32, u32) {
+        let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
+        let files: Result<Vec<ContentFile>> = (|| {
+            let vault = Vault::open(kept)?;
+            let files = content_files(&vault).map_err(plane_error);
+            vault.close()?;
+            files
+        })();
+        let files = match files {
+            Ok(files) => files,
+            Err(error) => {
+                tracing::warn!(%error, "a restore could not list the derivatives to bring back");
+                return (0, 0);
+            }
+        };
+        let derivatives: Vec<&ContentFile> =
+            files.iter().filter(|file| file.variant.is_some()).collect();
+        let total = count(derivatives.len());
+        let bytes = match centraid_blobs::ByteStore::open(kept.with_extension("bytes")) {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                tracing::warn!(%error, "a restore could not open the content store");
+                return (0, total);
+            }
+        };
+        match super::fetch::fetch_all(&staged.store, &staged.keyring.backup, &derivatives, &bytes) {
+            Ok(landed) => {
+                tracing::info!(landed, of = total, "a restore brought the derivatives back");
+                (count(landed), total)
+            }
+            Err(error) => {
+                tracing::warn!(%error, "a restore's derivatives did not all come back");
+                (0, total)
+            }
+        }
     }
 }
 

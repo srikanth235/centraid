@@ -116,6 +116,7 @@ fn restore_answer(vaults: &[(&str, u32, i64, &str)], unclaimed: &[u32]) -> wire:
                     index: *index,
                     vault_id: "ab".repeat(32),
                     reason: "logs only".to_owned(),
+                    claimed: false,
                 })
                 .collect(),
             older_offers: Vec::new(),

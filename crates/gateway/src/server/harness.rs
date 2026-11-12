@@ -246,6 +246,19 @@ impl Spawned {
         self.shared.store().pretend_full(full);
     }
 
+    /// `(calls, names)` this gateway has been asked by `exists` since it started.
+    #[must_use]
+    pub fn exists_asked(&self) -> (u64, u64) {
+        self.shared.store().exists_asked()
+    }
+
+    /// When each object this gateway committed was committed, from a counter every gateway in
+    /// the process shares: two gateways' lists show whether they were fed in turn.
+    #[must_use]
+    pub fn commit_order(&self) -> Vec<u64> {
+        self.shared.store().commit_order()
+    }
+
     /// Make `exists` answer that everything is held, whatever the disk holds, or answer honestly.
     pub fn lie_about_exists(&self, lying: bool) {
         self.shared.store().pretend_to_hold_everything(lying);

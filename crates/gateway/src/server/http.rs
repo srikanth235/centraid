@@ -314,6 +314,7 @@ async fn exists(
         Ok(names) => names,
         Err(refusal) => return refused(&refusal, shared.now()),
     };
+    shared.store().note_exists(names.names.len());
     // A TEST'S LYING GATEWAY says it holds every name (#1188, B13).
     if shared.store().lies_about_exists() {
         return answer(
