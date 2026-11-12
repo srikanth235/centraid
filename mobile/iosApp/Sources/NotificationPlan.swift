@@ -19,10 +19,10 @@ enum NotificationPlan {
         /// The immediates (receipts) not already on the screen.
         var post: [Centraid_Core_V1_PendingNotification]
 
-        static func == (left: Plan, right: Plan) -> Bool {
-            left.removePending == right.removePending && left.removeDelivered == right.removeDelivered
-                && left.schedule.map(\.notificationID) == right.schedule.map(\.notificationID)
-                && left.post.map(\.notificationID) == right.post.map(\.notificationID)
+        static func == (lhs: Plan, rhs: Plan) -> Bool {
+            lhs.removePending == rhs.removePending && lhs.removeDelivered == rhs.removeDelivered
+                && lhs.schedule.map(\.notificationID) == rhs.schedule.map(\.notificationID)
+                && lhs.post.map(\.notificationID) == rhs.post.map(\.notificationID)
         }
     }
 

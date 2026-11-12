@@ -5,7 +5,7 @@ import Foundation
 ///
 /// A button on a notification must not be lost because the core could not start in the seconds iOS
 /// gives a background action. The press is written here BEFORE the shell asks for the store, and
-/// leaves only when the core has taken it; whatever is left is sent again at the next start
+/// leaves only when the core has taken it; whatever remains is sent again at the next start
 /// (`Notifications.drain`). Each press has an id of its own that travels to Rust
 /// (`NotificationAnswered.pressID`), which runs the write under a key made from it, so a press sent
 /// twice is applied once. The file is excluded from the device backup, like the vault.

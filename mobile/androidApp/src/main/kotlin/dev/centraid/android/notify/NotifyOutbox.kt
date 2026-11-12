@@ -9,7 +9,7 @@ import java.util.UUID
  *
  * A button on a notification must not be lost because the core could not start in the seconds a receiver
  * is given. The press is written here BEFORE the banner is dismissed and BEFORE the session is asked for;
- * it leaves only when the core has taken it (`answer` returned), and whatever is left is sent again at
+ * it leaves only when the core has taken it (`answer` returned), and whatever remains is sent again at
  * the next start ([Notify.drain]). Each press has an id of its own that travels to Rust
  * (`NotificationAnswered.press_id`), which runs the write under a key made from it, so a press sent twice
  * is applied once. A dedicated preferences file, kept out of every backup like the notification record.
