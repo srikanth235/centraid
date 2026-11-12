@@ -191,6 +191,20 @@ internal object ChatEffects {
         )
     }
 
+    /**
+     * Remove the thumbnails in `cacheDir/chat-attach` that no chat on screen holds (#1188 C11): a
+     * deleted chat's, a closed one's, and any a crash left. `keep` is every `thumbnail_path` the
+     * state draws. A file written in the last minute stays: its path may be on its way to Rust.
+     */
+    fun sweepThumbnails(context: Context, keep: Set<String>, now: Long = System.currentTimeMillis()) {
+        val directory = File(context.cacheDir, "chat-attach")
+        directory.listFiles()?.forEach { file ->
+            if (file.path !in keep && now - file.lastModified() > FRESH_MS) file.delete()
+        }
+    }
+
+    private const val FRESH_MS = 60_000L
+
     private fun rotated(bitmap: Bitmap, orientation: Int): Bitmap {
         val matrix = Matrix()
         when (orientation) {

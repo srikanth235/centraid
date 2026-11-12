@@ -114,6 +114,13 @@ message ChatState {
   string scope_all_label = 56;
   string scope_label = 57;
   repeated ChatScopeOption scopes = 58;
+  // The `Sent.token` of the last question Rust accepted. A shell that kept the typed words
+  // as a draft clears them when this reaches the token it sent; a send Rust refused (a turn
+  // running, no model yet) leaves the draft where it is.
+  uint64 accepted_send = 59;
+  // One sentence over the Chats list when the last rename or delete was not saved; empty
+  // otherwise. The list shows the vault as it is (#1188 C11).
+  string threads_error = 60;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;
@@ -312,6 +319,10 @@ message ChatEvent {
 
   message Sent {
     string text = 1;
+    // The shell's number for this send, nonzero when it holds the text as a draft. Rust
+    // echoes it as `ChatState.accepted_send` once the question is taken, and only then
+    // does the shell clear the draft (#1188 C9). A suggestion's tap sends 0.
+    uint64 token = 2;
   }
 
   message Stopped {}

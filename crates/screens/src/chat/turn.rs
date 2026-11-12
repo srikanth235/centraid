@@ -10,10 +10,19 @@ use crate::shell::row_routes::{self, RowRef};
 use crate::strings::chat as words;
 
 impl Chat {
-    pub(super) fn asked_by_member(&mut self, text: &str, ctx: &Ctx) -> Vec<wire::Effect> {
+    pub(super) fn asked_by_member(
+        &mut self,
+        text: &str,
+        token: u64,
+        ctx: &Ctx,
+    ) -> Vec<wire::Effect> {
         let line = text.trim();
         if !self.ready() || self.running || line.is_empty() || self.vision_blocked() {
             return Vec::new();
+        }
+        // taken: the shell may clear the words it kept as a draft (#1188 C9)
+        if token != 0 {
+            self.accepted_send = token;
         }
         self.ask(line, false, ctx)
     }
@@ -70,7 +79,9 @@ impl Chat {
         let models_dir = std::mem::take(&mut self.models_dir);
         let vault_name = std::mem::take(&mut self.vault_name);
         let turn = self.turn + 1;
+        let accepted_send = self.accepted_send;
         *self = Self {
+            accepted_send,
             opened: true,
             scope: scope.to_owned(),
             models_dir,

@@ -118,7 +118,12 @@ final class ChatModel: ObservableObject {
         ChatModelDownloader.shared.reportRunning()
     }
 
-    func sendText(_ text: String) { send(.sent(.with { $0.text = text })) }
+    func sendText(_ text: String, token: UInt64 = 0) {
+        send(.sent(.with {
+            $0.text = text
+            $0.token = token
+        }))
+    }
     func stop() { send(.stopped(.init())) }
     func regenerate() { send(.regenerated(.init())) }
 

@@ -62,6 +62,10 @@ catalog! {
     plain error_model = ("The model stopped. Retry.", "The model stopped. Retry.");
     plain error_no_tool = ("Nothing in your vault answers that.", "Nothing in your vault answers that.");
     plain error_read = ("Chat could not read your vault. Retry.", "Chat could not read your vault. Retry.");
+    plain error_thread_write = (
+        "That change was not saved. Try again.",
+        "That change was not saved. Try again."
+    );
     plain error_thread_gone = ("This chat is gone.", "This chat is gone.");
     plain error_vision = ("The photo reader is not loaded. Retry.", "The photo reader is not loaded. Retry.");
     plain loading = ("Loading model", "Loading model");

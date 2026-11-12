@@ -75,6 +75,7 @@ fn a_turn_settles_once_and_what_arrives_after_it_changes_nothing() {
     let mut chat = ready();
     chat.event(C::Sent(wire::chat_event::Sent {
         text: "tasks?".to_owned(),
+        ..Default::default()
     }));
     // While the turn runs the thread already shows the question and a streaming answer.
     assert!(chat.state().streaming);
@@ -109,6 +110,7 @@ fn an_event_for_another_turn_or_session_is_not_heard() {
     let mut chat = ready();
     chat.event(C::Sent(wire::chat_event::Sent {
         text: "tasks?".to_owned(),
+        ..Default::default()
     }));
     let session = {
         // The running turn is 1 on the chat's session; an event for turn 99 is stale.
@@ -142,9 +144,11 @@ fn a_blank_message_a_message_while_one_runs_and_a_message_before_ready_are_not_s
     assert!(chat.state().messages.is_empty());
     chat.event(C::Sent(wire::chat_event::Sent {
         text: "first".to_owned(),
+        ..Default::default()
     }));
     chat.event(C::Sent(wire::chat_event::Sent {
         text: "second".to_owned(),
+        ..Default::default()
     }));
     assert_eq!(chat.state().messages.len(), 2, "one turn runs at a time");
     chat.perform();
@@ -180,6 +184,7 @@ fn stopping_keeps_the_part_that_was_drawn_says_nothing_and_offers_retry() {
     let mut chat = Chat::ready(model);
     chat.event(C::Sent(wire::chat_event::Sent {
         text: "tasks?".to_owned(),
+        ..Default::default()
     }));
     // The member taps Stop while the send is still running; here the model fires the token.
     chat.perform();
@@ -440,4 +445,39 @@ fn a_card_whose_rows_moved_says_so_and_runs_nothing() {
     let pending = card(&chat);
     assert_eq!(pending.state(), State::Stale);
     assert_eq!(pending.settled_line, "That changed since. Ask again.");
+}
+
+#[test]
+fn a_sent_token_is_echoed_only_when_the_question_is_taken() {
+    let mut chat = ready();
+    // the shell kept the words as a draft and sent them under token 7
+    chat.event(C::Sent(wire::chat_event::Sent {
+        text: "tasks?".to_owned(),
+        token: 7,
+    }));
+    assert_eq!(chat.state().accepted_send, 7);
+    // a second send while the turn runs is refused, so its token is not echoed
+    chat.event(C::Sent(wire::chat_event::Sent {
+        text: "again".to_owned(),
+        token: 8,
+    }));
+    assert_eq!(
+        chat.state().accepted_send,
+        7,
+        "the draft stays for a refused send"
+    );
+    chat.perform();
+    // a blank send is refused too; a suggestion's tap (token 0) never moves the echo
+    chat.event(C::Sent(wire::chat_event::Sent {
+        text: "  ".to_owned(),
+        token: 9,
+    }));
+    assert_eq!(chat.state().accepted_send, 7);
+    // before the model is ready nothing is taken
+    let mut early = Chat::with(None);
+    early.event(C::Sent(wire::chat_event::Sent {
+        text: "early".to_owned(),
+        token: 1,
+    }));
+    assert_eq!(early.state().accepted_send, 0);
 }

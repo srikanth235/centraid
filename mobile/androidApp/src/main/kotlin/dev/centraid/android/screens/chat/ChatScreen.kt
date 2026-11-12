@@ -41,9 +41,12 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -102,6 +105,41 @@ import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
 /**
+ * The composer's words and the send waiting on Rust's answer. [text] is what the field shows;
+ * [sending] numbers a send and remembers its words; [settle] clears the field once Rust echoes the
+ * number (`ChatState.accepted_send`), and only if the member has not typed on since.
+ */
+internal class ChatDraft(text: String = "", var token: Long = 0, var sentText: String = "") {
+    var text by mutableStateOf(text)
+
+    fun sending(words: String): Long {
+        token += 1
+        sentText = words
+        return token
+    }
+
+    fun settle(accepted: Long) {
+        if (token != 0L && accepted == token) {
+            if (text.trim() == sentText) text = ""
+            token = 0
+            sentText = ""
+        }
+    }
+
+    companion object {
+        val Saver = listSaver<ChatDraft, Any>(
+            save = { listOf(it.text, it.token, it.sentText) },
+            restore = { ChatDraft(it[0] as String, it[1] as Long, it[2] as String) },
+        )
+    }
+}
+
+/** The one draft of the process: the tab can leave composition and come back to the same words. */
+internal object ChatDrafts {
+    var current: ChatDraft = ChatDraft()
+}
+
+/**
  * THE CHAT TAB (#1135, lane I), drawn from Rust's `ChatState`. Android's twin of iOS's `ChatView`:
  * a header (the chat's title and where it runs, the Chats key and, inside a saved chat, New
  * chat's pencil), the thread or the model's step, the composer, and the Chats page of past chats
@@ -120,7 +158,23 @@ internal fun ChatScreen(
     onScope: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var draft by remember { mutableStateOf("") }
+    // THE DRAFT SURVIVES ROTATION, A TAB SWITCH AND PROCESS DEATH, and clears only when Rust
+    // takes the send (#1188 C9): `ChatDrafts` outlives the composition, the saver outlives the
+    // process, and `accepted_send` is Rust's word that the words were taken.
+    val kept = rememberSaveable(saver = ChatDraft.Saver) { ChatDrafts.current }
+    SideEffect { ChatDrafts.current = kept }
+    var draft by kept::text
+    // THE THUMBNAILS A DELETED OR LEFT CHAT LEFT BEHIND go when no chat on screen holds them.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val held = state.pending.map { it.thumbnail_path } +
+        state.messages.flatMap { message -> message.attachments.map { it.thumbnail_path } }
+    LaunchedEffect(state.thread_id, state.messages.size, state.pending.size, state.threads.size) {
+        val keep = held.filter { it.isNotEmpty() }.toSet()
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            dev.centraid.android.kit.ChatEffects.sweepThumbnails(context, keep)
+        }
+    }
+    LaunchedEffect(state.accepted_send) { kept.settle(state.accepted_send) }
     // The message whose Copy was just pressed: its button says `copied_label` for a moment.
     var copied by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(copied) {
@@ -165,8 +219,8 @@ internal fun ChatScreen(
                     onSend = {
                         val text = draft.trim()
                         if (text.isNotEmpty()) {
-                            draft = ""
-                            onEvent(ChatEvent(sent = ChatEvent.Sent(text = text)))
+                            // the words stay in the field until Rust says it took them
+                            onEvent(ChatEvent(sent = ChatEvent.Sent(text = text, token = kept.sending(text))))
                         }
                     },
                     onEvent = onEvent,
@@ -1115,6 +1169,15 @@ private fun ChatsPage(
             color = Surface.ink,
             modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp).semantics { heading() },
         )
+        if (state.threads_error.isNotEmpty()) {
+            // A rename or delete the vault refused: the list below is the vault as it is.
+            Text(
+                state.threads_error,
+                style = kitTextStyle(KitType.Meta),
+                color = StateColor.Red.text,
+                modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp).testTag("chat-chats-error"),
+            )
+        }
         LazyColumn(Modifier.weight(1f)) {
             if (state.threads.isEmpty() && state.threads_empty_line.isNotEmpty()) {
                 item(key = "empty") {

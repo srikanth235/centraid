@@ -324,6 +324,12 @@ impl Chat {
             copied_label: words::copied(locale),
             scope_all_label: words::scope_all(locale),
             scope_label: words::scope_label(locale),
+            accepted_send: self.accepted_send,
+            threads_error: if self.threads_error {
+                words::error_thread_write(locale)
+            } else {
+                String::new()
+            },
             scopes: super::scopable_apps()
                 .into_iter()
                 .map(|app| wire::ChatScopeOption {

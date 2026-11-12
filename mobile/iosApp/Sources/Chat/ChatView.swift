@@ -50,7 +50,14 @@ struct ChatView: View {
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var draft = ""
+    /// The words in the composer survive a tab switch and the app being killed (`SceneStorage`),
+    /// and clear only when Rust says it took the send (`acceptedSend`), never when Send is
+    /// pressed (#1188 C9).
+    @SceneStorage("chat.draft") private var draft = ""
+    /// The number of the send waiting on Rust's answer, and the words it carried.
+    @State private var lastToken: UInt64 = 0
+    @State private var sendingToken: UInt64 = 0
+    @State private var sendingText = ""
     @FocusState private var focused: Bool
     /// The on-screen keyboard is up. Focus alone is not enough: with a hardware
     /// keyboard the field has focus and no keyboard shows, so the band stays.
@@ -130,6 +137,12 @@ struct ChatView: View {
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
             keyboardUp = false
         }
+        .onChange(of: state.acceptedSend) { _, accepted in
+            guard sendingToken != 0, accepted == sendingToken else { return }
+            if draft.trimmingCharacters(in: .whitespacesAndNewlines) == sendingText { draft = "" }
+            sendingToken = 0
+            sendingText = ""
+        }
         .onChange(of: keyboardUp) { _, up in typing = (up && focused) || state.drawerOpen }
         .onChange(of: focused) { _, now in typing = (now && keyboardUp) || state.drawerOpen }
         .onChange(of: state.drawerOpen) { _, open in typing = (focused && keyboardUp) || open }
@@ -199,7 +212,7 @@ struct ChatView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
                     if state.messages.isEmpty {
-                        ChatEmpty(state: state, onPick: { send($0) })
+                        ChatEmpty(state: state, onPick: { send($0, fromDraft: false) })
                     }
                     ForEach(state.messages, id: \.id) { message in
                         ChatMessageRow(
@@ -298,7 +311,7 @@ struct ChatView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(Array(state.suggestions.enumerated()), id: \.offset) { index, text in
-                            ChatSuggestionChip(text: text, identifier: "chat-suggestion-\(index)") { send(text) }
+                            ChatSuggestionChip(text: text, identifier: "chat-suggestion-\(index)") { send(text, fromDraft: false) }
                         }
                     }
                 }
@@ -309,7 +322,7 @@ struct ChatView: View {
                 state: state,
                 draft: $draft,
                 focused: $focused,
-                onSend: { send($0) },
+                onSend: { send($0, fromDraft: true) },
                 onSetScope: onSetScope,
                 onOpenRoute: onOpenRoute
             )
@@ -320,11 +333,19 @@ struct ChatView: View {
         .kitAnimation(ChatMotion.state, value: state.activity)
     }
 
-    private func send(_ text: String) {
+    /// A suggestion's tap asks without touching the draft; the composer's Send keeps the words
+    /// in the field until `acceptedSend` reaches the number it sent.
+    private func send(_ text: String, fromDraft: Bool) {
         let line = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !line.isEmpty else { return }
-        draft = ""
-        chat.sendText(line)
+        guard fromDraft else {
+            chat.sendText(line)
+            return
+        }
+        lastToken += 1
+        sendingToken = lastToken
+        sendingText = line
+        chat.sendText(line, token: lastToken)
     }
 
     /// A card was tapped. Rust asks the vault whether its row is still there, and answers with the
@@ -509,6 +530,15 @@ private struct ChatsPage: View {
             .padding(.top, 8)
             .padding(.bottom, 8)
 
+            if !state.threadsError.isEmpty {
+                // A rename or delete the vault refused: the list below is the vault as it is.
+                Text(verbatim: state.threadsError)
+                    .kitType(.meta)
+                    .foregroundStyle(StateColor.red.text)
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                    .padding(.bottom, 4)
+                    .accessibilityIdentifier("chat-chats-error")
+            }
             if state.threads.isEmpty {
                 Text(verbatim: state.threadsEmptyLine)
                     .kitType(.meta)

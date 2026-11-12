@@ -226,6 +226,10 @@ pub(super) struct Chat {
     /// The last turn id minted; the running turn's, while `running`.
     pub turn: u64,
     pub next_id: u64,
+    /// The `Sent.token` of the last question taken: the shell clears its draft when it sees it.
+    pub accepted_send: u64,
+    /// The last rename or delete of a chat was refused: the Chats list says so (#1188 C11).
+    pub threads_error: bool,
     pub messages: Vec<Msg>,
     pub suggestions: Vec<String>,
     pub running: bool,
@@ -272,6 +276,8 @@ impl Default for Chat {
             session: 0,
             turn: 0,
             next_id: 1,
+            accepted_send: 0,
+            threads_error: false,
             messages: Vec::new(),
             suggestions: Vec::new(),
             running: false,
@@ -379,7 +385,7 @@ impl Chat {
         }
         match event {
             E::Opened(opened) => self.opened(opened, ctx),
-            E::Sent(sent) => self.asked_by_member(&sent.text, ctx),
+            E::Sent(sent) => self.asked_by_member(&sent.text, sent.token, ctx),
             E::Stopped(_) => self.stopped(ctx),
             E::Regenerated(_) => self.regenerated(ctx),
             E::NewChat(_) => self.new_chat(ctx),

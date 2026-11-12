@@ -462,6 +462,7 @@ fn attaching_waits_for_a_thread_and_not_while_a_turn_runs() {
     let mut chat = Chat::ready(script(&read_tasks()));
     chat.event(C::Sent(wire::chat_event::Sent {
         text: "tasks?".to_owned(),
+        ..Default::default()
     }));
     vault_photo(&mut chat);
     assert!(chat.state().pending.is_empty());
