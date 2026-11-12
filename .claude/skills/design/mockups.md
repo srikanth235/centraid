@@ -28,7 +28,7 @@ The kit's fixed words are not authored here. The generator reads them from `crat
 
 - `cargo xtask design --check` regenerates into memory and fails listing every file that is changed, missing or stray in a directory the generator owns. It also lints what the two sites author on top of their sheet: a font CDN, a literal `font-family`, a retired theme name, or a `var(--x)` that names nothing declared.
 - The gate runs that check as the `design` step in `pr` and above, and `mobile-jvm` runs it after its Gradle suite. It also fails on a generated file that git does not track. See [gate](../land/gate.md).
-- `crates/xtask/src/design_checks.rs` is test code. It holds guarantees the generator does not give by construction: both schemes carry every colour role, the type styles are concrete, the shells' sources carry no path data outside the catalogue, and an app's icon stays under 24 path commands.
+- `crates/xtask/src/design_checks.rs` is test code. It holds guarantees the generator does not give by construction: both schemes carry every colour role, the type styles are concrete, the shells' sources carry no path data outside the catalogue, and an app's icon stays at most 24 path commands.
 - `crates/xtask/src/design_dark_tests.rs` checks the dark conversion. `crates/design/src/tokens.rs` validates the token file, including the contrast floors, and a value that fails a floor is a failing test.
 - `crates/screens/tests/icon_keys.rs` fails when a screen names an icon key that is not in `design/icons.toml`.
 - `design_words.rs` and `design_glance.rs` read the Rust string catalogues strictly. A row they cannot parse, or a missing word, is an error and not an empty label.

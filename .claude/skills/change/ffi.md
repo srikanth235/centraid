@@ -1,6 +1,6 @@
 # Changing the Rust/shell C ABI
 
-The ABI has five symbols. A feature normally adds a protobuf request kind to `centraid_call`, not a symbol. The normative rules are [crates/core-ffi/CONTRACT.md](../../../crates/core-ffi/CONTRACT.md); read it and [crates/core-ffi/README.md](../../../crates/core-ffi/README.md) in full before changing the boundary. The contract's clauses and tests settle ownership, status, lifecycle, cancellation, configuration, and request behavior on the C side. The binding-side rules the contract does not state (threading, event buffering, one handle per vault, seed redaction, feature sets, JNA packaging) and the final checklist are in [references/bindings.md](ffi-bindings.md); read it before touching either binding.
+The ABI has five symbols. A feature normally adds a protobuf request kind to `centraid_call`, not a symbol. The normative rules are [crates/core-ffi/CONTRACT.md](../../../crates/core-ffi/CONTRACT.md); read it and [crates/core-ffi/README.md](../../../crates/core-ffi/README.md) in full before changing the boundary. The contract's clauses and tests settle ownership, status, lifecycle, cancellation, configuration, and request behavior on the C side. The binding-side rules the contract does not state (threading, event buffering, one handle per vault, seed redaction, feature sets, JNA packaging) and the final checklist are in [ffi-bindings.md](ffi-bindings.md); read it before touching either binding.
 
 ## Change path
 

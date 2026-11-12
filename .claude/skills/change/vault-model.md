@@ -74,7 +74,7 @@ Reading alone found none of the reproduced purge and merge bugs. For any model c
 
 ## 6. Year-3 scale tests
 
-Every app has `crates/apps/<app>/tests/year3.rs` (calendar, reminders, docs, health, money, notes, people, photos). Each builds a deterministic, seeded year-3 corpus with `centraid_apps_kit::fixtures` (a `Year3...Shape` struct whose fields are all named so a new field fails the literal), runs the app's real queries through `TestDoor`, and asserts what a count cannot: windows are walked and bounded, truncation is reported, pinned or special rows outlive the window. When your change adds a hot read or grows a table that scales with years of use (notes, transactions, photos, events), extend the fixture shape and the test in the same change. Timings are reported as provenance, never as ceilings.
+Every app has `crates/apps/<app>/tests/year3.rs` (calendar, docs, health, money, notes, people, photos; reminders is `tests/task_year3.rs`). Each builds a deterministic, seeded year-3 corpus with `centraid_apps_kit::fixtures` (a `Year3...Shape` struct whose fields are all named so a new field fails the literal), runs the app's real queries through `TestDoor`, and asserts what a count cannot: windows are walked and bounded, truncation is reported, pinned or special rows outlive the window. When your change adds a hot read or grows a table that scales with years of use (notes, transactions, photos, events), extend the fixture shape and the test in the same change. Timings are reported as provenance, never as ceilings.
 
 ## 7. How to check it
 

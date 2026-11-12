@@ -26,7 +26,7 @@ A test says what must stay true, on counts and data, the same on every machine. 
 ## Year-three scale tests
 
 - `centraid_apps_kit::fixtures` writes a declared profile for an app (`YEAR3_NOTES`, `YEAR3_PEOPLE`, `YEAR3_EVENTS`, `YEAR3_TASKS`, `YEAR3_DOCS`, `YEAR3_PHOTOS`). Money has its own `centraid_apps_money::year3`.
-- Each app has `crates/apps/<app>/tests/year3.rs` (reminders is `task_year3.rs`). They use a fixed seed, so two runs write identical rows.
+- Each app except Locker has `crates/apps/<app>/tests/year3.rs` (reminders is `task_year3.rs`). They use a fixed seed, so two runs write identical rows.
 - The unignored tests run a smaller profile of the same shape through the same statements, so the generator cannot rot. The full profile is `#[ignore]`d and runs with `cargo test -p <crate> --test year3 -- --ignored --nocapture`.
 - They assert properties a count cannot state: a window is walked past one page, trash and pins outlive the window, a memo is on no shelf. Any timing they print is information.
 - Reads go through `centraid_apps_kit::testdoor::TestDoor`.

@@ -34,7 +34,7 @@ The phone's own stores (contacts, calendars, reminders, a picked folder, the hea
 ## Adding or changing a followed store
 
 1. Vault first. Add or edit the `SystemMap` row, and use [vault-model](vault-model.md) for the schema digest, the `origin.system` and `source` CHECKs in `contracts/migrations/001_baseline.sql`, `contracts/schema/vault-commands.txt` and the app manifest action.
-2. Add the `Store` variant, its `key`, its `source` words and its `shown_by` screen. Write the follower's `habit_read`, `followed_in`, `read_effect` and `run`, and add the arm to `begin`, `habit` and `read` in the coordinator.
+2. Add the `Store` variant, its `key`, its `source` words and its `shown_by` screen. Write the follower's `habit_read`, `followed_in`, `read_effect` and `run`, add the `Read` variant and its arm in `result`, and add the arm to `begin`, `habit` and `read` in the coordinator. Add a `PhoneWatch` source in `start` if the OS announces changes. Health reads through `device_of` and `window` and has no `followed_in`; Files wakes `imports.files` instead of `begin`, `habit` and `read`.
 3. A new read or watch is a new effect in the screens protobuf. Use [screen](screen.md) for the proto, the registry and the parity rule, and [ffi](ffi.md) if the ABI is touched.
 4. Write the reader in both shells (below). Say in the one that cannot read the store why (Android's `reminders_read` answers `UNAVAILABLE`).
 5. A refused or partial read is one plain status line, the same words for every store (`Report::sentence`). It is not a failure.

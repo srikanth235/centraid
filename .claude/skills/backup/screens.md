@@ -6,7 +6,7 @@ What the Rust screens draw, and the code that keeps them honest. The wording rul
 
 - Every screen reads one query, `shell.backup-status`, through `reading::load`. The core answers it from the ledger and dials nobody. A failed read is `Reading::Failed`, never an empty reading. A refresh that fails keeps what was drawn, under one sentence.
 - Every time that is a gateway's (acknowledgements, last answered) is the gateway's clock. The phone's clock (`now_ms`) is used only for "2 minutes ago" and for dating notices.
-- `Destination::footing` ranks a device worst-first: rolled back, full, too large, refusing, behind, current. Anything but current names the device by the label the member gave it.
+- `Destination::footing` ranks a device worst-first: rolled back, refusing, too large, full, behind, current. Anything but current names the device by the label the member gave it.
 
 ## The line (`line.rs`)
 
@@ -44,7 +44,7 @@ What the Rust screens draw, and the code that keeps them honest. The wording rul
 
 ## Restore entry
 
-- Backup's restore row is hidden on a moved vault. Pressing it posts Home's restore press, and Home closes its sheet and sends the vault command `Restore`.
+- Backup's restore row is hidden on a moved vault. Pressing it posts Home's restore press, and Home closes its sheet and sends the vault command `Restore`. The vault service (`vault/service.rs`) opens `custody::routes::restore()`, which is `words.enter` with purpose Restore.
 - `words.enter` (`custody/enter.rs`) has three purposes. Restore takes 24 words plus a gateway's pairing code. A held seed takes only the pairing code. Re-key takes the words alone.
 - The core judges each word as it is typed, and the primary control opens only on a valid phrase and, for a restore, a non-empty pairing code (a held seed needs no phrase).
 - A restore asks the owner check first, and warns and goes ahead on a phone with no passcode. A re-key asks nothing. The words are dropped on success and on leaving.

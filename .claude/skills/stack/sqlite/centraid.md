@@ -4,9 +4,9 @@
 
 Apply these before general SQLite advice:
 
-- **Vault ownership:** `vault.db` lives on the phone, and the Rust core is its only writer. Writes go through `Vault::commit` in [`crates/vault/src/lib.rs`](../../../../crates/vault/src/lib.rs); reads go through `Vault::read`. SQL belongs in the vault, ontology, search, or apps-kit crates. The gateway's `state.db` is separate bookkeeping.
+- **Vault ownership:** `vault.db` lives on the phone, and the Rust core is its only writer. Writes go through `Vault::commit` in [`crates/vault/src/log/guard.rs`](../../../../crates/vault/src/log/guard.rs); reads go through `Vault::read` in [`file.rs`](../../../../crates/vault/src/file.rs). SQL belongs in the vault, ontology, search, or apps-kit crates. The gateway's `state.db` is separate bookkeeping.
 - **Current vault schema policy:** [`contracts/migrations/001_baseline.sql`](../../../../contracts/migrations/001_baseline.sql) is the only rung and is edited directly until the first release; from the first release on it is frozen and a schema change appends a new rung, because compatibility between releases is a requirement. [`contracts/schema/vault-ddl.sql`](../../../../contracts/schema/vault-ddl.sql) is generated. Follow [change/vault-model](../../change/vault-model.md) for model changes.
-- **Fixed file behavior:** the opener sets WAL, `synchronous = FULL`, a busy timeout, foreign keys on, and `auto_vacuum = NONE`. `VACUUM` does not run because backups preserve page ranges. Live vault copies use SQLite's online backup API on the vault connection.
+- **Fixed file behavior:** the opener sets WAL, `synchronous = FULL`, a busy timeout, foreign keys on, and `auto_vacuum = NONE`. `VACUUM` does not run on the live vault because backups preserve page ranges. Live vault copies use SQLite's online backup API on the vault connection.
 - **Write discipline:** use short `BEGIN IMMEDIATE` transactions and `INSERT ... ON CONFLICT ... DO UPDATE`; never `OR REPLACE`. Keep list reads bounded and paginate by key rather than `OFFSET`.
 - **Identity and types:** vault ids are UUIDv7 text and timestamps are ISO-8601 text; gateway timestamps are integer milliseconds.
 

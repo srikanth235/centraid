@@ -35,14 +35,14 @@ What the phone does to back its vault up and to get it back. Wording and rules a
 ## Retention
 
 - Keep 7 daily, 4 weekly and 6 monthly snapshots, UTC. A period counts only if it holds a snapshot. The newest is always kept. A snapshot dated after now is judged as taken now.
-- It runs after a head is set. Dropped manifests and their ranges are deleted at once. Other garbage is every listed name that no kept manifest, vault content hash, queued part or in-flight snapshot implies.
-- A file the vault deleted stays until every kept snapshot was taken after it left. While any kept snapshot is future-dated, nothing is collected.
+- It runs after a head is set, and only when retention drops at least one snapshot. A dropped snapshot's manifest and ranges are deleted at once. Any other listed name that no kept manifest, vault content hash, queued part or not-yet-acknowledged snapshot implies is held back until every kept snapshot was taken after this phone first saw it unlive.
+- A file the vault deleted stays until every kept snapshot was taken after this phone first saw it unlive. While any kept snapshot is future-dated, none of that held garbage is collected.
 
 ## The pass
 
 - `drain` reaches every paired gateway, refuses with `VaultMoved` if one holds a later writer epoch, then takes a snapshot if one is due and moves the records. The head is set before media move.
 - Media then go in interleaved rounds, one gateway at a time: prepare what it lacks (derivatives, then originals, newest first), then move it.
-- A snapshot is due an hour after the head each gateway holds. It is due at once when asked, when a gateway has no head, when its head went backwards, or when it no longer holds its head whole.
+- A snapshot is due an hour after the newest snapshot a head named was taken, and not while a newer one is still on its way whole. It is due at once when asked, when a gateway has no head set by this phone, when its head went backwards, or when it no longer holds its head whole. A snapshot dated more than a few minutes ahead of now does not count as recent.
 - If a pass confirmed files whose rows no snapshot covers, it takes another snapshot (or owes one to the next pass).
 - Read-back: each pass opens 3 random acknowledged parts of at most 1 MiB per gateway, and streams the large part read back least recently, off a metered link. A part that is gone or will not open is unconfirmed and sent again.
 - Originals only the OS library holds are named in `need_bytes` (at most 64). The shell streams them through the stage door, which seals them.
@@ -61,6 +61,6 @@ What the phone does to back its vault up and to get it back. Wording and rules a
 
 ## Drill and check
 
-- `backup::drill::run` backs a vault up to a `MemoryStore`, destroys everything on the device, restores, and proves the census, `db_hash` and a row-for-row dump match. The `restore-drill` gate step runs it in every profile, with a second drill that runs the core against a real gateway: [`vault`](../../../crates/vault/tests/restore_drill.rs), [`centraid`](../../../crates/centraid/tests/restore_drill.rs).
+- `backup::drill::run` backs a vault up to a `MemoryStore`, destroys everything on the device, restores, and proves the census, `db_hash` and a row-for-row dump match. The `restore-drill` gate step runs it in every profile except `mobile-jvm`, with a second drill that runs the core against a real gateway: [`vault`](../../../crates/vault/tests/restore_drill.rs), [`centraid`](../../../crates/centraid/tests/restore_drill.rs).
 - "Check my backup" (`phone/check.rs`) restores each reachable gateway's records into a scratch copy, confirms every file by name, and opens a sample (at most 40 files of 8 MiB, 128 MiB in all). It needs the vault's size plus a tenth plus 64 MiB free.
 - A file a check finds missing or damaged is unconfirmed, so the next pass sends it again. That is the only thing a check writes.
