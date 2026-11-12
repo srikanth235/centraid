@@ -5,6 +5,7 @@ The mockups for the native redesign tracked in #1173: one HTML file per screen, 
 ## What is here
 
 - `*.dc.html`: one screen each, 390×844 for iPhone and 412×915 for Android. Open any of them in a browser. A file named `…Dark.dc.html` is the dark version of the screen without the suffix, generated from it (see below).
+- **Android boards exist only where Android draws a screen differently from iOS** (`Android…dc.html`, 412×915). Where the two draw the same screen from the same Rust state and the same kit components, the iOS board is the reference for both and no Android board is drawn.
 - `canvas.json`: the pages (Design rules, App icon, Light mode, Dark mode, Archive), each screen's place and title, and the row titles.
 - `DesignRules.dc.html` and `Decisions.dc.html`: the colour, type and layout rules, and the decisions the owner has made.
 - `QuartersIcon.dc.html`: the app icon. Earlier icon rounds are on the Archive page.
