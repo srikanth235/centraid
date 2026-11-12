@@ -160,7 +160,7 @@ fn replace(connection: &Connection, id: &str, now: i64) -> Result<()> {
         // ONE ALERT PER REAL THING (#1188, NA2): a record the phone's own app holds is alerted by
         // that app. Whether the follow is still on makes no difference: a retired origin's items
         // keep their source and stay silent.
-        Some(_) if phone_holds(connection, id)? => Vec::new(),
+        Some((ref kind, _)) if phone_holds(connection, id, kind)? => Vec::new(),
         Some((kind, None)) if kind == "event" => event_alerts(connection, id, now)?,
         Some((kind, None)) if kind == "task" => task_alerts(connection, id, now)?,
         _ => Vec::new(),
@@ -186,15 +186,66 @@ fn replace(connection: &Connection, id: &str, now: i64) -> Result<()> {
     Ok(())
 }
 
-/// Whether the phone's own calendar or reminders app holds this record (it came from one: followed
-/// now, or by an origin that was retired).
-fn phone_holds(connection: &Connection, id: &str) -> Result<bool> {
-    Ok(connection
-        .prepare_cached(
-            "SELECT EXISTS (SELECT 1 FROM source s JOIN origin o ON o.id = s.origin_id
-              WHERE s.entity_id = ?1 AND o.system IN ('calendar', 'phone_reminders'))",
-        )?
-        .query_row([id], |row| row.get(0))?)
+/// Whether the phone's own calendar or reminders app alerts for this record (#1188, NA2): it came
+/// from one (followed now, stopped, or imported once) AND its alert is still what that source
+/// stated. An alert the member set or changed in Centraid is Centraid's own and notifies, because a
+/// control that never fires would lie. Decided by comparing with `source.stated` (the follower's
+/// three-way rule), never by a stored flag.
+fn phone_holds(connection: &Connection, id: &str, kind: &str) -> Result<bool> {
+    let mut statement = connection.prepare_cached(
+        "SELECT s.stated FROM source s JOIN origin o ON o.id = s.origin_id
+          WHERE s.entity_id = ?1 AND o.system IN ('calendar', 'phone_reminders')",
+    )?;
+    let stated = statement
+        .query_map([id], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    if stated.is_empty() {
+        return Ok(false);
+    }
+    let now_alert: AlertNow = if kind == "event" {
+        AlertNow::Event(
+            connection
+                .query_row("SELECT reminders FROM event WHERE id = ?1", [id], |row| {
+                    row.get::<_, Option<String>>(0)
+                })
+                .optional()?
+                .flatten()
+                .as_deref()
+                .map(offsets_of)
+                .unwrap_or_default(),
+        )
+    } else {
+        AlertNow::Task(
+            connection
+                .query_row(
+                    "SELECT remind_before_min FROM task WHERE id = ?1",
+                    [id],
+                    |row| row.get::<_, Option<i64>>(0),
+                )
+                .optional()?
+                .flatten(),
+        )
+    };
+    Ok(stated.iter().any(|text| {
+        let json: serde_json::Value = serde_json::from_str(text).unwrap_or_default();
+        match &now_alert {
+            AlertNow::Task(lead) => json.get("remind_before_min").and_then(|v| v.as_i64()) == *lead,
+            AlertNow::Event(offsets) => {
+                let said = match json.get("reminders") {
+                    Some(serde_json::Value::String(text)) => offsets_of(text),
+                    Some(other) => offsets_of(&other.to_string()),
+                    None => Vec::new(),
+                };
+                said == *offsets
+            }
+        }
+    }))
+}
+
+/// The alert of an item, as the comparison reads it.
+enum AlertNow {
+    Task(Option<i64>),
+    Event(Vec<i64>),
 }
 
 fn offsets_of(json: &str) -> Vec<i64> {

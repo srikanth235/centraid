@@ -216,8 +216,51 @@ fn a_followed_phone_reminder_holds_no_alert_and_stopping_the_follow_changes_noth
             )?)
         })
         .expect("the task");
+    // Stopping the follow changes nothing: the alert is still the phone's own.
+    w.ok("task.edit", json!({ "id": id, "title": "Milk and eggs" }));
+    assert_eq!(
+        w.rows().len(),
+        1,
+        "a retired origin's untouched alert stays silent"
+    );
+    // THE MEMBER CHANGED THE ALERT: it is Centraid's own now, and it fires.
     w.ok("task.edit", json!({ "id": id, "remind_before_min": 5 }));
-    assert_eq!(w.rows().len(), 1, "a retired origin never notifies");
+    assert_eq!(w.rows().len(), 2, "an alert the member set notifies");
+    w.ok("task.edit", json!({ "id": id, "remind_before_min": 10 }));
+    assert_eq!(
+        w.rows().len(),
+        1,
+        "put back to what the phone stated, it is silent again"
+    );
+}
+
+/// An event from the phone's calendar: silent while its reminders are what the phone stated, and
+/// Centraid's own the moment the member changes them.
+#[test]
+fn a_followed_calendar_event_is_silent_until_the_member_changes_its_alert() {
+    let w = World::new();
+    w.ok(
+        "follow.calendar",
+        json!({ "origin": { "ref": "calendar:work", "label": "Work", "device_id": "phone-1" },
+                "complete": true, "records": [{ "external_id": "uid:1", "device_id": "phone-1",
+                  "fields": { "title": "Sync", "starts": "2026-03-02T09:00", "ends": "2026-03-02T10:00",
+                              "timing": "floating", "rule": null, "busy": 1,
+                              "reminders": [10] } }] }),
+    );
+    assert!(w.rows().is_empty(), "the phone alerts for it");
+    let id: String = w
+        .scratch
+        .vault
+        .read(|c| {
+            Ok(c.query_row(
+                "SELECT entity_id FROM source WHERE external_id = 'uid:1'",
+                [],
+                |r| r.get(0),
+            )?)
+        })
+        .expect("the event");
+    w.ok("event.edit", json!({ "id": id, "reminders": [10, 60] }));
+    assert_eq!(w.rows().len(), 2, "an alert the member added notifies");
 }
 
 /// A LONG EVENT KEEPS ITS BANNER: a row outlives its firing while the event is running, and goes
