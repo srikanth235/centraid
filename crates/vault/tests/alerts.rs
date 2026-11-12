@@ -259,6 +259,42 @@ fn a_followed_phone_reminder_holds_no_alert_and_stopping_the_follow_changes_noth
     );
 }
 
+/// A CHANGED DUE IS CENTRAID'S (#1188): the phone would sound at the old moment and nothing at the new
+/// one, so a moved due notifies, and is silent again once it agrees with the source.
+#[test]
+fn a_followed_reminder_whose_due_moved_is_centraids_until_it_agrees_again() {
+    let w = World::new();
+    w.ok(
+        "follow.reminders",
+        json!({ "origin": { "ref": "list:1", "label": "Groceries" }, "complete": true,
+                "records": [{ "external_id": "r1", "fields": {
+                    "title": "Milk", "status": "open", "done_at": null,
+                    "due": "2026-03-01T09:00:00Z", "remind_before_min": 10 } }] }),
+    );
+    assert!(w.rows().is_empty());
+    let id: String = w
+        .scratch
+        .vault
+        .read(|c| {
+            Ok(c.query_row(
+                "SELECT entity_id FROM source WHERE external_id = 'r1'",
+                [],
+                |r| r.get(0),
+            )?)
+        })
+        .expect("the task");
+    w.ok(
+        "task.edit",
+        json!({ "id": id, "due": "2026-03-02T09:00:00Z" }),
+    );
+    assert_eq!(w.rows().len(), 1, "a moved due fires");
+    w.ok(
+        "task.edit",
+        json!({ "id": id, "due": "2026-03-01T09:00:00Z" }),
+    );
+    assert!(w.rows().is_empty(), "moved back, it is silent again");
+}
+
 /// An event from the phone's calendar: silent while its reminders are what the phone stated, and
 /// Centraid's own the moment the member changes them.
 #[test]

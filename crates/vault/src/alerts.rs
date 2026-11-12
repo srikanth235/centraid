@@ -209,6 +209,12 @@ fn phone_holds(connection: &Connection, id: &str, kind: &str) -> Result<bool> {
     let now_alert: AlertNow = if kind == "event" {
         AlertNow::Event(
             connection
+                .query_row("SELECT starts FROM event WHERE id = ?1", [id], |row| {
+                    row.get::<_, Option<String>>(0)
+                })
+                .optional()?
+                .flatten(),
+            connection
                 .query_row("SELECT reminders FROM event WHERE id = ?1", [id], |row| {
                     row.get::<_, Option<String>>(0)
                 })
@@ -220,6 +226,12 @@ fn phone_holds(connection: &Connection, id: &str, kind: &str) -> Result<bool> {
         )
     } else {
         AlertNow::Task(
+            connection
+                .query_row("SELECT due FROM task WHERE id = ?1", [id], |row| {
+                    row.get::<_, Option<String>>(0)
+                })
+                .optional()?
+                .flatten(),
             connection
                 .query_row(
                     "SELECT remind_before_min FROM task WHERE id = ?1",
@@ -233,8 +245,17 @@ fn phone_holds(connection: &Connection, id: &str, kind: &str) -> Result<bool> {
     Ok(stated.iter().any(|text| {
         let json: serde_json::Value = serde_json::from_str(text).unwrap_or_default();
         match &now_alert {
-            AlertNow::Task(lead) => json.get("remind_before_min").and_then(|v| v.as_i64()) == *lead,
-            AlertNow::Event(offsets) => {
+            AlertNow::Task(due, lead) => {
+                same_moment(due.as_deref(), json.get("due").and_then(|v| v.as_str()))
+                    && json.get("remind_before_min").and_then(|v| v.as_i64()) == *lead
+            }
+            AlertNow::Event(starts, offsets) => {
+                if !same_moment(
+                    starts.as_deref(),
+                    json.get("starts").and_then(|v| v.as_str()),
+                ) {
+                    return false;
+                }
                 let said = match json.get("reminders") {
                     Some(serde_json::Value::String(text)) => offsets_of(text),
                     Some(other) => offsets_of(&other.to_string()),
@@ -248,8 +269,32 @@ fn phone_holds(connection: &Connection, id: &str, kind: &str) -> Result<bool> {
 
 /// The alert of an item, as the comparison reads it.
 enum AlertNow {
-    Task(Option<i64>),
-    Event(Vec<i64>),
+    /// The due and the lead time.
+    Task(Option<String>, Option<i64>),
+    /// The start and the lead times.
+    Event(Option<String>, Vec<i64>),
+}
+
+/// Whether two stated moments are the same one: an item is the phone's to alert only while the
+/// moment Centraid would sound (the stated moment and the stated lead) is the one the source
+/// stated. A day is compared as a day, never given a time.
+fn same_moment(ours: Option<&str>, stated: Option<&str>) -> bool {
+    fn key(value: &str) -> String {
+        if value.len() == 10 {
+            return value.to_owned();
+        }
+        if has_zone_designator(value) {
+            if let Some(ms) = crate::time::recurrence::parse_instant_ms(value) {
+                return format!("@{ms}");
+            }
+        }
+        value.chars().take(16).collect()
+    }
+    match (ours, stated) {
+        (Some(ours), Some(stated)) => key(ours) == key(stated),
+        (None, None) => true,
+        _ => false,
+    }
 }
 
 fn offsets_of(json: &str) -> Vec<i64> {
