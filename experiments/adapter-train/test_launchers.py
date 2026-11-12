@@ -76,7 +76,7 @@ class DockerfileTest(unittest.TestCase):
         text = (HERE / "Dockerfile").read_text()
         self.assertIn("ARG GIT_COMMIT", text)
         self.assertRegex(text, r"FROM pytorch/pytorch:\d+\.\d+\.\d+-cuda")
-        self.assertIn("to_gguf.check_tree", text)
+        self.assertIn("llama_pin.check_tree", text)
         self.assertIn('ENTRYPOINT ["python", "-m", "adapter_train"]', text)
 
     def test_the_requirements_name_what_the_code_imports_beyond_the_base_image(self):

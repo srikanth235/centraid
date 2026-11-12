@@ -3,8 +3,7 @@
     python -m adapter_train.export ADAPTER_DIR (--base-config BASE_DIR | --job JOB.json) --out FILE.gguf [--llama-cpp TREE]
 
 The converter is `convert_lora_to_gguf.py` of the llama.cpp tree at `LLAMA_CPP_COMMIT` (the commit `llama-cpp-sys-2 0.1.158` vendors; the
-constant and the tree check live in `experiments/toolchat/native/train/to_gguf.py` and are reused, not copied: one pin). **Never master**:
-`to_gguf.check_tree` refuses any other checkout. `--base-config` is a directory holding the base model's `config.json` and tokenizer files
+constant and the tree check live in `llama_pin.py`: one pin). **Never master**: `llama_pin.check_tree` refuses any other checkout. `--base-config` is a directory holding the base model's `config.json` and tokenizer files
 (no weights are read). The output is F16; the engine applies it over the Q4_0 base at run time.
 
 Not run on a GPU box or against a trained adapter by any test: the tests build the command and check the refusal of a wrong tree.
@@ -16,15 +15,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-_NATIVE = Path(__file__).resolve().parents[2] / "toolchat" / "native" / "train"
-
-
 def pin():
-    if str(_NATIVE) not in sys.path:
-        sys.path.insert(0, str(_NATIVE))
-    import to_gguf  # noqa: PLC0415 - the one pin of the llama.cpp commit
+    from . import llama_pin  # noqa: PLC0415
 
-    return to_gguf
+    return llama_pin
 
 
 def command(tree, adapter_dir, base_config, out) -> list[str]:
@@ -33,7 +27,7 @@ def command(tree, adapter_dir, base_config, out) -> list[str]:
 
 
 def export(adapter_dir, base_config, out, tree, *, run=subprocess.run) -> Path:
-    """Convert. `tree` must be a llama.cpp checkout at the pinned commit (cloned by `to_gguf.ensure_tree` when absent)."""
+    """Convert. `tree` must be a llama.cpp checkout at the pinned commit (cloned by `llama_pin.ensure_tree` when absent)."""
     tg = pin()
     tg.ensure_tree(Path(tree))
     tg.check_tree(Path(tree))

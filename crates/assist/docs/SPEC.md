@@ -382,7 +382,7 @@ The new scorer judges each turn by **effect**, never by the call or echo text:
 1. **Sessions are generated per world** by `crates/datagen`: worlds, a catalog, typed intents with reference calls and gold effects, and phone-style messages written by Claude Haiku and verified against the runtime (`crates/datagen/README.md`). A world is seeded only through the runtime's seeder. The ~450 recipe-authored sessions and the Python generators that came before (`authored/`) were retired in #1171.
 2. **Train equals inference.** `crates/datagen` renders every session with the runtime's own transcript renderer (`crates/assist/src/native/transcript.rs`): the prompt exactly as the harness renders it (§6.4 compaction, the vault block, earlier thinking kept), the §7 slot trace in front of every call (v4), and the call rendered from that trace (`CONTRACT_V3.md`). A record whose think does not round-trip through the runtime's compiler is not written. `cargo run -p centraid-datagen -- build --version vN` is the only way to make a data version.
 3. **Loss** only on assistant tokens (trace and call); the system and catalog block, user text and tool results carry weight 0, every assistant think and call weight 1, and the deciding tokens (op, filters, dates, handles, numbers) more. The weights are part of the record (`render.weights`); the trainer reads them as they are and normalises each step by their sum (`train/datagen.py`).
-4. **SFT** on one GPU: Kaggle (`train/kaggle/`) or a Spot VM (`train/bundle.py` stages the job, `train/vm/` runs it; `train/vm/README.md`). Checkpoints at 25, 50, 75 and 100 percent; the last is the candidate: the trainer evaluates val at every mark and `out/best.json` names the mark with the lowest val decision loss (`out/marks.json` keeps every mark's numbers). The two records of a minimal pair (`pair` on the record, or a `pair:<id>` tag) share one optimizer step (`--pair-batches`, default).
+4. **Training** is a LoRA adapter on the stock base, trained by `experiments/adapter-train` on a cloud GPU; checkpoints are written to the job's storage and the run resumes from the newest complete one.
 5. **Training unit is one session.** One sequence = system prompt + every turn as the harness renders it at inference; a session longer than `--max-len` after rendering is dropped and counted, never cut.
 6. **Gates on the corpus** are datagen's: the per-cell report, no world seed in more than one split, no duplicate of a val or test message in train, and the round trip of §11.2 (`crates/datagen/README.md`).
 7. **The built artefacts** of a version are `train.jsonl.zst`, `val.jsonl.zst`, `test.jsonl.zst`, `noise.jsonl.zst` and a manifest; a training run is tied to a data version (`README.md`). data-v7, which S2 was trained on, is fetched under `data/v7/` (`data/README.md`) and no longer rebuilt.
@@ -393,7 +393,7 @@ The state of the work and its evidence: `README.md` in this directory and [#1044
 
 ## 13. Metric strategy
 
-**Two sets**, frozen (data-v7: `data/v7/`, `data/v7/FROZEN.md`; a datagen version has its own val and test), scored by `crates/assist-eval` with greedy decoding:
+**Two sets**, frozen per data version (a datagen version has its own val and test; the retired data-v7 sets are gone), scored by `crates/assist-eval` with greedy decoding:
 
 | set | size | use |
 | --- | --- | --- |

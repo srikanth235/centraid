@@ -10,7 +10,7 @@ from adapter_train import export, parity
 
 
 class ExportTest(unittest.TestCase):
-    def test_the_converter_is_the_trees_and_the_pin_is_the_native_trainers(self):
+    def test_the_converter_is_the_trees_and_the_pin_is_llama_pin(self):
         cmd = export.command("/tree", "/ad", "/base", "/out.gguf")
         self.assertEqual(cmd[1], "/tree/convert_lora_to_gguf.py")
         self.assertEqual(cmd[2:4], ["--base", "/base"])
@@ -24,7 +24,7 @@ class ExportTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         tg = export.pin()
         real_ensure, real_check = tg.ensure_tree, tg.check_tree
-        tg.ensure_tree = tg.check_tree = lambda *a, **k: None  # the tree itself is checked by test_to_gguf
+        tg.ensure_tree = tg.check_tree = lambda *a, **k: None  # the tree itself is checked by test_llama_pin
         self.addCleanup(lambda: (setattr(tg, "ensure_tree", real_ensure), setattr(tg, "check_tree", real_check)))
         with self.assertRaisesRegex(SystemExit, "not a PEFT adapter"):
             export.export(tmp, tmp, tmp / "o.gguf", tmp / "tree")

@@ -1,4 +1,4 @@
-//! Phase 7 of #1044, slice M4: the v4 slot trace (`CONTRACT_V3.md` §8) in the compile step.
+//! Phase 7 of #1044, slice M4: the v4 slot trace (`crates/assist/docs/CONTRACT_V3.md` §8) in the compile step.
 //!
 //! A v4 trace is `"trace": "v4"` among the slots. The model writes fewer of them and `compile` infers the rest
 //! and says so (`inferred`): the `kind` a verb fixes, the `scope` and the `refer` a v3.1 trace had to state. A v3.1

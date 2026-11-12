@@ -1,8 +1,8 @@
 """LoRA on the stock base, resumable on any storage. The one place that imports torch.
 
 What is trained: adapters on `config.target_regex(job.lora.targets)` of the language model's layers; every other parameter (embeddings,
-head, norms, the vision tower) is frozen, and nothing is added to the vocabulary. The loss is the datagen records' own (`datagen.py` of the
-native trainer: the rendered token ids and per-token weights, taken as they are):
+head, norms, the vision tower) is frozen, and nothing is added to the vocabulary. The loss is the datagen records' own (`datagen.py`: the rendered
+token ids and per-token weights, taken as they are):
 
     sum_t weight[t] * CE(logits[t-1], ids[t]) / sum_t weight[t]      over a step's `bs` records
 
@@ -27,13 +27,8 @@ from pathlib import Path
 
 from . import checkpoints, config, record, storage
 
-_NATIVE = Path(__file__).resolve().parents[2] / "toolchat" / "native" / "train"
-
-
 def _datagen():
-    if str(_NATIVE) not in sys.path:
-        sys.path.insert(0, str(_NATIVE))
-    import datagen  # noqa: PLC0415 - the native trainer's record reader: one implementation of the loss's input
+    from . import datagen  # noqa: PLC0415 - the record reader: one implementation of the loss's input
 
     return datagen
 

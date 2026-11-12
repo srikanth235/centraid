@@ -31,10 +31,10 @@ Fix the first error first: later ones are often its echo.
 
 | Symptom | Fix |
 | --- | --- |
-| `ModuleNotFoundError` for a sibling module under `python3 -I` | `-I` leaves both the script's directory and the current directory off `sys.path`. Insert `HERE` (`sys.path.insert(0, str(Path(__file__).resolve().parent))`, as `train/train.py` does), or run the test with `python -m unittest test_x` from inside its directory, as `run_tests.py` does |
+| `ModuleNotFoundError` for a sibling module under `python3 -I` | `-I` leaves both the script's directory and the current directory off `sys.path`. Run the test with `python -m unittest test_x` from inside `experiments/adapter-train`, as `run_tests.py` does, or insert the script's directory into `sys.path` first |
 | `pip` reports `THESE PACKAGES DO NOT MATCH THE HASHES` or requires pinned versions | Install only from `requirements-ci.txt` with `--require-hashes`. After editing `requirements-ci.in`, recompile the pinned file (its header holds the `uv pip compile` command) instead of installing loose |
 | `run_tests.py` red on `skipped:` or a module that ran zero tests | A skip is a failure here. Provide what the test looks for (torch, transformers, peft, zstandard) rather than catching `SkipTest` |
-| `check` or `fetch` fails because the data-v7 files are missing | They are held out of the tree: `python3 experiments/toolchat/native/artefacts.py fetch` brings them from the private Hub dataset (`HF_TOKEN`, or `ARTEFACTS_SOURCE`). The tests do not need them |
+| A job fails to fetch the data version | The dataset is private: set `HF_TOKEN` (or `HF_TOKEN_SECRET_ID` on AWS) and pin the revision to a tag or commit, never a branch. The tests read a local directory in the same layout |
 | A test dirtied the tree (`git status` shows a tracked file changed) | Point the output at a `tempfile` directory; the suite's tests must not write tracked files |
 
 ## 4. Errors
@@ -104,12 +104,12 @@ reproduce -> measure (same interpreter, same inputs) -> find the line -> fix -> 
    | Which function is slow | `python3 -m cProfile -o out.prof script.py args`, then `python3 -m pstats out.prof` (`sort cumtime`, `stats 20`) |
    | One loop or call is slow | `time.perf_counter()` before and after; `timeit` for a pure expression |
    | Memory grows | `tracemalloc.start()`, then `tracemalloc.take_snapshot().statistics("lineno")[:10]` |
-   | Many interpreters run slower than one | Oversubscribed threads: `run_tests.py` gives each interpreter `cores // jobs` of `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, `OPENBLAS_NUM_THREADS`; set them the same way for your own parallel runs |
+   | Many interpreters run slower than one | Oversubscribed threads: set `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, `OPENBLAS_NUM_THREADS` to `cores // jobs` for your own parallel runs |
 
 4. **Fix:** stream instead of loading, batch, move hot loops into vectorised library calls, cache pure results keyed by their inputs, parallelise independent processes with a bounded pool.
 5. **Measure again** with the same command and put before and after in the commit message: "eval pass 9 s, was 31 s".
 
-A `.prof` file or profiler output can capture the environment, and a shell started by an agent carries its tokens. Write it to the scratchpad, delete it after reading, never commit it. The training and VM jobs under `train/` are outside CI; measure them where they run.
+A `.prof` file or profiler output can capture the environment, and a shell started by an agent carries its tokens. Write it to the scratchpad, delete it after reading, never commit it. The cloud training jobs of `experiments/adapter-train` are outside CI; measure them where they run.
 
 ## 10. Final checklist
 

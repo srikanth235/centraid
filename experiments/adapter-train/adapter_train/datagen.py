@@ -13,8 +13,8 @@ THE LOSS of a batch of records is
 
     sum over tokens t of  weight[t] * CE(logits[t - 1], input_ids[t])  /  sum over tokens t of  weight[t]
 
-(the first token is never a target). It is a weighted mean, so the step's gradient scale is that of a mean, as in train.py. The sums run over
-the whole batch (`--bs` records), not per record. Weight 0 tokens contribute nothing to either sum.
+(the first token is never a target). It is a weighted mean, so the step's gradient scale is that of a mean, as in trainer.py. The sums run over
+the whole batch (`train.bs` records), not per record. Weight 0 tokens contribute nothing to either sum.
 
 No third-party import here except `zstandard`, imported when a `.zst` file is opened, so the module loads without torch.
 """

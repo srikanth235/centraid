@@ -10,7 +10,7 @@
 //!
 //! | Module | What it owns |
 //! |---|---|
-//! | [`native`] | The tool runtime: eight flat tools over a vault, one metadata table, the date evaluator, observations and the system prompt (`experiments/toolchat/native/SPEC.md`). |
+//! | [`native`] | The tool runtime: eight flat tools over a vault, one metadata table, the date evaluator, observations and the system prompt (`crates/assist/docs/SPEC.md`). |
 //! | [`native_turn`] | The turn loop (#1088): the model drives [`native`] one call per message; the chat's own cards, a line composed from the effect, and the free reply when a question is out of scope. |
 //! | [`app`] | The seven apps a card can name and a chat can be scoped to (Tasks are Agenda's, #1128). |
 //! | [`result`] | The result card: a reference to a real row. |

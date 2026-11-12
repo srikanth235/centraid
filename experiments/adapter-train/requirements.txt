@@ -1,5 +1,5 @@
 # The image's Python dependencies. torch comes with the base image (2.8.0, the version the GCP VM trainer uses).
-# UNPINNED BY HASH: the CPU tests' pins (experiments/toolchat/native/requirements-ci.txt) are hashed; this file is the seam to compile
+# UNPINNED BY HASH: the CPU tests' pins (requirements-ci.txt, beside this file) are hashed; this file is the seam to compile
 # the same way (uv pip compile --generate-hashes) before the first real job. transformers is the version the tiny-model tests build against.
 transformers==5.17.0
 peft

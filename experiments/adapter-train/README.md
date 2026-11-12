@@ -1,6 +1,6 @@
 # The adapter trainer
 
-[#1188](https://github.com/srikanth235/centraid/issues/1188), Part E. The on-device assistant is the **stock** Qwen3.5-0.8B (the GGUF pinned in `crates/assist/model.json`) plus a small Centraid **LoRA adapter** that the app switches on for vault turns and off elsewhere, so the stock behaviour is kept by construction. This directory trains that adapter. LoRA on the stock base only: rank and targets are config, embeddings and the head are frozen, no tokens are added. Full fine-tunes, edited bases, checkpoint soups and DPO are out of scope until a first adapter is scored; the older trainer in `../toolchat/native/train/` is not touched (its record reader, `datagen.py`, and its llama.cpp pin, `to_gguf.py`, are reused, not copied).
+[#1188](https://github.com/srikanth235/centraid/issues/1188), Part E. The on-device assistant is the **stock** Qwen3.5-0.8B (the GGUF pinned in `crates/assist/model.json`) plus a small Centraid **LoRA adapter** that the app switches on for vault turns and off elsewhere, so the stock behaviour is kept by construction. This directory trains that adapter. Scoring is not here: Kaggle is for scoring only, through the score-only kit in `crates/assist-eval/kaggle/`. LoRA on the stock base only: rank and targets are config, embeddings and the head are frozen, no tokens are added. Full fine-tunes, edited bases, checkpoint soups and DPO are out of scope until a first adapter is scored; the older full-model trainer, its Kaggle and VM kits and data v7 are gone.
 
 **Nothing here has been run on a GPU, on a cloud, or against a real model. The Modal and GCP launchers are untested. No job has been started and nothing was uploaded.** The CPU tests (below) run the whole loop on a tiny random Qwen3.5.
 
@@ -22,6 +22,8 @@ The job file (`adapter_train/config.py` documents every key; unknown keys are re
 | `adapter_train/trainer.py` | the loop (torch, peft); which records step N reads is a pure function of (seed, N); SIGTERM checkpoints at the next step and exits 0; `base.weights: q4_0_dequantised` loads the phone's Q4_0 weights via `q4_0.py` |
 | `adapter_train/q4_0.py` | the phone's Q4_0 GGUF read back into Hugging Face form: Q4_0/Q8_0 dequantised, the converter's rewrites undone (`ssm_a`, conv1d, norms +1); fails by name on a missing, extra or misshapen tensor |
 | `adapter_train/record.py` | `run.json` in the outputs: git commit, job-file hash, base model and revision, the hash and size of every data file as read, the HF repo, revision and manifest, package versions, seed, resumed-from step, final metrics, adapter file hashes. No clock, host name or absolute path |
+| `adapter_train/datagen.py` | the datagen record reader: the rendered token ids and per-token loss weights, taken as they are |
+| `adapter_train/llama_pin.py` | the one pin of the llama.cpp commit the engine vendors, and the refusal of any other checkout |
 | `adapter_train/export.py`, `parity.py` | PEFT directory to the adapter GGUF with `convert_lora_to_gguf.py` of the **pinned** llama.cpp commit (never master); then a parity comparison of trainer output against the phone's engine |
 | `launchers/` | `sagemaker.py` (default: managed Spot, `ml.g5.xlarge`, us-east-1), `modal_app.py`, `gcp.py` (Vertex AI Spot). Each builds its platform's request and **prints it**; only `--submit` calls an SDK (`modal run` for Modal). Launching spends money and is the owner's |
 | `Dockerfile`, `requirements.txt` | the image; build from the repository root with `--build-arg GIT_COMMIT=...` (the record needs it) |
@@ -42,10 +44,19 @@ A reclaim sends SIGTERM; the trainer writes a checkpoint at the next step and ex
 
 From the spike (#1188), against the vendored llama.cpp (`llama-cpp-sys-2 0.1.158`, commit `26394b4e6`): the engine loads a LoRA GGUF for `qwen35`, applies it on a fresh context, off is token-identical to no adapter, on costs about 5-10% speed on a CPU. The converter reads a PEFT directory and writes `<tensor>.lora_a` / `.lora_b`; it skips norms and refuses embeddings and `lm_head`. Qwen3.5-0.8B has 16 key and 16 value heads in its linear-attention layers, so the converter's V-head reorder does not apply.
 
+## Rules
+
+The owner's standing rules for this work:
+
+- **Ask the owner before any training launch, GPU scoring run, VM start or bucket upload.** Launchers print their request and submit only with `--submit`.
+- **Credentials only in environment variables** (or the platform's secret store), never saved to a file, a job file or a log. A credential posted in chat is rotated, not used.
+- **Authors of training data never open val or test gold**, run outputs or audit reports. The trainer fetches `train` and `val` only; the test split is never requested.
+- Back a claim with a paired comparison (sessions won and lost, `z = (won - lost) / sqrt(won + lost)`); `|z| < 2` is noise.
+
 ## Tests
 
 ```text
 python3 experiments/adapter-train/run_tests.py
 ```
 
-No GPU, no network, no paid call, no model weights. `test_trainer.py` needs torch, transformers, peft, safetensors and zstandard (the CPU pins of `../toolchat/native/requirements-ci.txt`); the other modules need only the standard library. Not covered by any test: the Docker build, CUDA, a real model, a real S3 or GCS or Hugging Face call, any launcher's SDK call, the Modal file's `modal` calls (the package is not installed here), the converter on a trained adapter, the parity run, the Dockerfile build.
+No GPU, no network, no paid call, no model weights. `test_trainer.py` needs torch, transformers, peft, safetensors and zstandard (the hashed CPU pins of `requirements-ci.txt`); the other modules need only the standard library. Not covered by any test: the Docker build, CUDA, a real model, a real S3 or GCS or Hugging Face call, any launcher's SDK call, the Modal file's `modal` calls (the package is not installed here), the converter on a trained adapter, the parity run, the Dockerfile build.

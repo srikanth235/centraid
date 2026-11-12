@@ -4,7 +4,7 @@
     python3 experiments/adapter-train/run_tests.py
 
 No GPU, no network, no paid call. The trainer's tests need torch, transformers, peft, safetensors and zstandard (the CPU pins of
-experiments/toolchat/native/requirements-ci.txt); the rest need only the standard library.
+requirements-ci.txt); the rest need only the standard library.
 """
 import subprocess
 import sys

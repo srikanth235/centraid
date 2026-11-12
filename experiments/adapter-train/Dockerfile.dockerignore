@@ -2,6 +2,4 @@
 *
 !experiments/adapter-train/requirements.txt
 !experiments/adapter-train/adapter_train
-!experiments/toolchat/native/train/datagen.py
-!experiments/toolchat/native/train/to_gguf.py
 **/__pycache__
