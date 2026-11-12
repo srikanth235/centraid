@@ -21,7 +21,7 @@ A report gives sessions, clean turns (turns not downstream of a session's first 
 
 | path | what |
 | --- | --- |
-| `train/` | `train.py` (SFT and DPO on datagen records, `render.input_ids` and `render.weights` as they are; `--arm A\|B\|C`; `--ema D` saves a weight EMA beside every mark as `ckpt-NNN-ema`; `--dpo PAIRS` runs DPO against the frozen initial model), `datagen.py` (the record reader), `arms.py` (the three M6 arms), `soup.py` (uniform weight average of checkpoints), `to_gguf.py` (a checkpoint to the Q4_0 GGUF the phone loads, with llama.cpp at the commit the engine vendors), `bundle.py` (stages a training job: the trainer, the data, `job.json`; `--continue-from gs://CKPT` is the continuation preset), `vm/` (the GCP Spot GPU VM that trains a staged job and nothing else: `vm/README.md`), `kaggle/` (the Kaggle kernel of M6: train an arm, export the GGUF, score val with `assist-eval`), and the `test_*.py` of all of it |
+| `train/` | `train.py` (SFT and DPO on datagen records, `render.input_ids` and `render.weights` as they are; `--arm A\|B\|C`; `--ema D` saves a weight EMA beside every mark as `ckpt-NNN-ema`; `--dpo PAIRS` runs DPO against the frozen initial model), `datagen.py` (the record reader), `arms.py` (the three M6 arms), `soup.py` (uniform weight average of checkpoints), `to_gguf.py` (a checkpoint to the Q4_0 GGUF the phone loads, with llama.cpp at the commit the engine vendors), `bundle.py` (stages a training job: the trainer, the data, `job.json`; `--continue-from gs://CKPT` is the continuation preset), `vm/` (the GCP Spot GPU VM that trains a staged job and nothing else: `vm/README.md`), `kaggle/` (the Kaggle kernel of M6: train an arm, export the GGUF, score val with `assist-eval`; superseded for training by `experiments/adapter-train/`, #1188), and the `test_*.py` of all of it |
 | `data/` | fetched data-v7 artefacts (`data/v7/`, gitignored) and `README.md` |
 | `artefacts.py`, `artefacts.json` | the pin of data-v7 and its fetch and check; the model card and the publishing of a model and of its GGUF |
 | `requirements-ci.in`, `requirements-ci.txt` | the hashed pins of the trainer's CPU tests |
@@ -38,7 +38,7 @@ They are **not** part of the pull-request gate (`gate.yml` has no Python job). `
 ## The loop
 
 1. Build a data version: `cargo run -p centraid-datagen -- build --version vN`.
-2. Train on Kaggle (`train/kaggle/`) or the GCP VM (`train/bundle.py build JOB --train train.jsonl.zst --val val.jsonl.zst --arm A --data-version data-vN`; `train/vm/launch.sh`; `train/vm/watch.sh`). The trainer's order and marks defaults (minimal pairs in one step, marks at 25 / 50 / 75 / 100 %) are in the `train/train.py` docstring.
+2. Train an adapter on the stock base with [`../../adapter-train/`](../../adapter-train/README.md) (AWS by default, Modal or GCP; Kaggle is for scoring only). The older paths, full SFT on the GCP VM (`train/bundle.py build JOB --train train.jsonl.zst --val val.jsonl.zst --arm A --data-version data-vN`; `train/vm/launch.sh`; `train/vm/watch.sh`) and the Kaggle arms kit (`train/kaggle/`), are kept for history and not extended. The trainer's order and marks defaults (minimal pairs in one step, marks at 25 / 50 / 75 / 100 %) are in the `train/train.py` docstring.
 3. Export (`train/to_gguf.py`), then score with `assist-eval` (below). Diagnose on val.
 4. Rollouts and a second round: `crates/assist-eval/README.md` ("Rollouts"). Test at a milestone only.
 

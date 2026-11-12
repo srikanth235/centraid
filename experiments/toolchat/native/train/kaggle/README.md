@@ -2,6 +2,8 @@
 
 [#1171](https://github.com/srikanth235/centraid/issues/1171), M6: train one arm (`../arms.py`: A stock full SFT, B edited full SFT, C edited LoRA that skips the two edited tensors) on a datagen data version, export a Q4_0 GGUF, score it on val.
 
+**Superseded for training (#1188).** The owner's direction is the stock model plus a LoRA adapter, trained by [`experiments/adapter-train/`](../../../adapter-train/README.md) on AWS by default (SageMaker Spot), Modal or GCP, and **Kaggle is for scoring only** (`crates/assist-eval/kaggle/`). This kit's full-fine-tune arms are kept as they were, with their tests, and are not extended; whether to delete them is the owner's call.
+
 **Status: written without a GPU and without Kaggle. Nothing here has been run on either, and nothing has been pushed.** The CPU tests (`../test_datagen.py`, `../test_kaggle_kit.py`) cover the trainer's input and loss, the arms and the report scripts, not the kernel. It sits beside the eval kit (`crates/assist-eval/kaggle/`, also never run) and builds `assist-eval` the same way, so run that kit first.
 
 | file | what |
