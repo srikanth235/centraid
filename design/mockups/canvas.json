@@ -2305,6 +2305,22 @@
       "x": 3290,
       "y": 29520
     },
+    "VersionPreview.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "9 · Preview of an earlier version",
+      "w": 390,
+      "x": 0,
+      "y": 30400
+    },
+    "VersionPreviewDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "9 · Preview of an earlier version · dark",
+      "w": 390,
+      "x": 0,
+      "y": 30400
+    },
     "VersionsPerson.dc.html": {
       "h": 844,
       "page": "light",
@@ -3160,6 +3176,7 @@
     "VersionsPhoto.dc.html",
     "VersionsWorkout.dc.html",
     "VersionsLocker.dc.html",
+    "VersionPreview.dc.html",
     "NoteMenu.dc.html",
     "NoteLinks.dc.html",
     "NoteAttachments.dc.html",
