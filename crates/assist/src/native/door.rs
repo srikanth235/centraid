@@ -192,12 +192,11 @@ pub trait Door: Send {
         Ok(Window { rows, more })
     }
 
-    /// How many rows of one table satisfy `predicate`, counted by the store and never by walking
-    /// its pages (#1188, C3). The default reads the filtered table and counts it, which only a
-    /// harness over a small vault should rely on; the phone's door overrides it.
-    fn count(&self, table: &str, predicate: &str, binds: &[String]) -> Result<u64, String> {
-        let rows = self.table_where(table, "id", "id", "id", predicate, binds)?;
-        Ok(rows.len() as u64)
+    /// How many entities of one kind the store holds (see `Vault::count_kind`), counted by the
+    /// store and never by walking its pages (#1188, C3). A door with no store to ask says so.
+    fn count_kind(&self, query: &centraid_vault::page::KindCount<'_>) -> Result<u64, String> {
+        let _ = query;
+        Err("this door counts nothing".to_owned())
     }
 
     /// Every occurrence of an event that occupies a civil day of `from_day..=to_day`

@@ -19,6 +19,7 @@ use centraid_assist::native::session::{Flags, Session};
 use centraid_assist::native::world::{PINNED_ROWS, Standing, WINDOW_ROWS, World};
 use centraid_assist::native::{Call, Door, Ran};
 use centraid_search::Target;
+use centraid_vault::page::{ColumnTest, KindCount};
 use serde_json::{Value, json};
 
 /// What the door was asked, by counts.
@@ -89,6 +90,12 @@ impl Door for Counting {
         let window = self.inner.window(query)?;
         self.note(window.rows.len());
         Ok(window)
+    }
+
+    fn count_kind(&self, query: &KindCount<'_>) -> Result<u64, String> {
+        let counted = self.inner.count_kind(query)?;
+        self.note(1);
+        Ok(counted)
     }
 
     fn events(&self, from_day: &str, to_day: &str, tz: &str) -> Result<Vec<Occurrence>, String> {
@@ -288,11 +295,12 @@ fn live_count(year3: &year3_corpus::Year3, vault_kind: &str) -> u64 {
     year3
         .handle
         .assist_door()
-        .count(
-            "entity",
-            "kind = ? AND deleted_at IS NULL",
-            &[vault_kind.to_owned()],
-        )
+        .count_kind(&KindCount {
+            kind: vault_kind,
+            table: vault_kind,
+            trashed: false,
+            tests: &[],
+        })
         .expect("the store counts")
 }
 
@@ -401,5 +409,126 @@ fn the_oldest_note_is_the_oldest_in_the_store_not_in_the_window() {
     assert!(
         session.world().row(&(Kind::Note, oldest)).is_some(),
         "the oldest note in the store was read in"
+    );
+}
+
+/// A COUNT THE STORE CAN FILTER IS THE STORE'S: "how many open tasks" over more tasks than a
+/// window holds counts a fixed list on a real column in one statement. A condition that is no
+/// such column is refused, and so is a sum over a kind too large to read.
+#[test]
+fn open_tasks_are_counted_by_the_store_and_other_filters_or_sums_are_refused() {
+    let year3 = year3_corpus::found_shape(SearchCorpusShape {
+        notes: 100,
+        long_notes: 0,
+        documents: 20,
+        photos: 50,
+        people: 30,
+        events: 60,
+        recurring_events: 5,
+        transactions: 50,
+        tasks: 1_500,
+        locker_items: 10,
+        activities: 20,
+        threads: 3,
+        revisions: 30,
+        used: 20,
+        measurement_days: 20,
+        ..YEAR3_ROWS
+    });
+    let open = year3
+        .handle
+        .assist_door()
+        .count_kind(&KindCount {
+            kind: "task",
+            table: "task",
+            trashed: false,
+            tests: &[ColumnTest {
+                column: "status",
+                equals: true,
+                value: "open",
+            }],
+        })
+        .expect("the store counts");
+    assert!(
+        open > WINDOW_ROWS as u64,
+        "the corpus holds more open tasks than a window"
+    );
+    assert!(
+        open < live_count(&year3, "task"),
+        "and some that are done, so the filter is what is counted"
+    );
+    let (mut session, asked) = session_of(&year3);
+    let before = *asked.lock().expect("counts");
+    let answered = session.call(
+        "compute",
+        &json!({"op": "count", "kind": "task", "where": "status = open"}),
+    );
+    let after = *asked.lock().expect("counts");
+    assert!(
+        answered.to_string().contains(&format!("= {open} ")),
+        "the open count is the store's {open}: {answered}"
+    );
+    assert!(
+        after.statements - before.statements <= 3,
+        "a filtered count is a handful of statements: {}",
+        after.statements - before.statements
+    );
+    let filtered = session.call(
+        "compute",
+        &json!({"op": "count", "kind": "task", "where": "effort > 5"}),
+    );
+    assert!(
+        filtered.to_string().contains("narrow it with a date"),
+        "a condition the store cannot count is refused: {filtered}"
+    );
+    let summed = session.call(
+        "compute",
+        &json!({"op": "sum", "field": "effort", "kind": "task"}),
+    );
+    assert!(
+        summed.to_string().contains("added up exactly"),
+        "a sum over a kind too large to read is refused: {summed}"
+    );
+}
+
+/// EVENTS OUTSIDE THE DAYS THE WORLD EXPANDS ARE NEVER ANSWERED AS IF WHOLE: a repeating event is
+/// one row there, so a number is refused and a list says what it did not read.
+#[test]
+fn events_outside_the_occurrence_window_are_refused_or_say_so() {
+    let year3 = year3_corpus::found_rows();
+    let (mut session, _) = session_of(&year3);
+    assert!(
+        session.world().older.contains(&Kind::Event),
+        "the corpus holds repeating events"
+    );
+    let refused = session.call("compute", &json!({"op": "count", "kind": "event"}));
+    assert!(
+        refused
+            .to_string()
+            .contains("ask about a day in that range"),
+        "a count of every event is refused: {refused}"
+    );
+    let far = session.call(
+        "compute",
+        &json!({"op": "count", "kind": "event", "when": "2031-01-05"}),
+    );
+    assert!(
+        far.to_string().contains("ask about a day in that range"),
+        "a count outside the window is refused: {far}"
+    );
+    let inside = session.call(
+        "compute",
+        &json!({"op": "count", "kind": "event", "when": TODAY}),
+    );
+    assert!(
+        !inside.to_string().contains("error:"),
+        "a count inside the window is answered: {inside}"
+    );
+    let listed = session.call("find", &json!({"kind": "event", "when": "2031-01-05"}));
+    assert!(
+        listed
+            .to_string()
+            .contains("events are read from 31 days back"),
+        "a list outside the window says what it did not read: {listed}"
     );
 }

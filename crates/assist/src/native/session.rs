@@ -841,7 +841,12 @@ impl Session {
             .copied()
             .filter(|kind| self.world.older.contains(kind))
         {
-            if kind == Kind::Event && self.event_window_holds(selector) {
+            // A repeating event is expanded only for the days the world reads occurrences for:
+            // outside them it reads as stored, once. A read that reaches past them is not exact.
+            if kind == Kind::Event {
+                if !self.event_window_holds(selector) {
+                    inexact.insert(kind);
+                }
                 continue;
             }
             let Some(plan) = reach_plan(kind, selector) else {
@@ -907,7 +912,6 @@ impl Session {
     /// nothing but the kind and whether it is trashed; `None` when the store cannot say.
     fn store_count(&self, selector: &Selector) -> Option<u64> {
         let pure = selector.name.is_none()
-            && selector.conds.is_empty()
             && selector.when.is_none()
             && selector.linked_to.is_empty()
             && selector.exclude.is_empty()
@@ -917,28 +921,41 @@ impl Session {
         }
         let mut total = 0_u64;
         for kind in &selector.kinds {
+            if *kind == Kind::Event {
+                return None;
+            }
             let vault_kind = crate::native::world::vault_kind_of(*kind)?;
-            let state = if selector.trashed {
-                "deleted_at IS NOT NULL"
-            } else {
-                "deleted_at IS NULL"
+            // THE CONDITIONS THE STORE CAN COUNT: a fixed list on a real column of the kind's own
+            // row (`status = open`), each one clause of one statement. Any other condition is not
+            // counted by the store, and the count is refused.
+            let (own, all_pushed) = pushable_enums(*kind, &selector.conds);
+            if !all_pushed {
+                return None;
+            }
+            // A photograph is not a video or a scan, nor a person an organisation: the `form`
+            // that says so has no index, so the store counts neither without a scan, and the
+            // count is refused rather than read off the window.
+            if matches!(kind, Kind::Photo | Kind::Person) {
+                return None;
+            }
+            if !own.is_empty() && kind.spec().table == "container" {
+                return None;
+            }
+            let tests: Vec<centraid_vault::page::ColumnTest<'_>> = own
+                .iter()
+                .map(|test| centraid_vault::page::ColumnTest {
+                    column: test.column,
+                    equals: test.equals,
+                    value: &test.value,
+                })
+                .collect();
+            let query = centraid_vault::page::KindCount {
+                kind: vault_kind,
+                table: kind.spec().table,
+                trashed: selector.trashed,
+                tests: &tests,
             };
-            let (table, predicate, binds) = match kind {
-                // a photograph is not a video or a scan, nor a person an organisation
-                Kind::Photo | Kind::Person => (
-                    vault_kind,
-                    format!(
-                        "form = ? AND id IN (SELECT id FROM entity WHERE kind = ? AND {state})"
-                    ),
-                    vec![vault_kind.to_owned(), vault_kind.to_owned()],
-                ),
-                _ => (
-                    "entity",
-                    format!("kind = ? AND {state}"),
-                    vec![vault_kind.to_owned()],
-                ),
-            };
-            total += self.door.count(table, &predicate, &binds).ok()?;
+            total += self.door.count_kind(&query).ok()?;
         }
         Some(total)
     }
@@ -953,15 +970,20 @@ impl Session {
             .kinds
             .iter()
             .copied()
-            .filter(|kind| self.inexact.contains(kind))
+            .filter(|kind| self.inexact.contains(kind) && *kind != Kind::Event)
             .collect();
-        (!kinds.is_empty()).then(|| {
-            format!(
+        let mut notes: Vec<String> = Vec::new();
+        if !kinds.is_empty() {
+            notes.push(format!(
                 "note: read the newest {} {} only; older ones are found by name or by date",
                 crate::native::world::WINDOW_ROWS,
                 render::plural_list(&kinds)
-            )
-        })
+            ));
+        }
+        if self.inexact.contains(&Kind::Event) && selector.kinds.contains(&Kind::Event) {
+            notes.push(events_window_note());
+        }
+        (!notes.is_empty()).then(|| notes.join("; "))
     }
 
     /// The session clock follows the request: the person's civil `now` and their zone. The world
@@ -3591,6 +3613,11 @@ impl Session {
                     self.store_count(selector),
                 ) {
                     ("count", None, Some(total)) => Some(total),
+                    _ if selector.kinds.contains(&Kind::Event)
+                        && self.inexact.contains(&Kind::Event) =>
+                    {
+                        return Err(events_window_error(&op));
+                    }
                     _ => {
                         return Err(format!(
                             "error: there are more {} than can be {} exactly; narrow it with a date.",
@@ -3919,6 +3946,19 @@ fn reach_plan(kind: Kind, selector: &Selector) -> Option<ReachPlan> {
         clauses.push("kind = ?".to_owned());
         binds.push(vault_kind.to_owned());
     }
+    // a fixed list on a real column of the kind's own row narrows the candidates in the store; the
+    // conditions it cannot push still run over the rows read in
+    if !kind_scoped {
+        let (own, _) = pushable_enums(kind, &selector.conds);
+        for test in own {
+            clauses.push(format!(
+                "{} {} ?",
+                test.column,
+                if test.equals { "=" } else { "!=" }
+            ));
+            binds.push(test.value);
+        }
+    }
     if let Some(when) = selector.when {
         if !dated {
             return None;
@@ -3976,6 +4016,60 @@ fn reach_plan(kind: Kind, selector: &Selector) -> Option<ReachPlan> {
         newest_first: ordered.is_none_or(|(descending, _)| descending),
         ordered: ordered.is_some(),
     })
+}
+
+/// One condition of a read that the store can test: `column = value` or `!=`, on the kind's own row.
+struct OwnTest {
+    column: &'static str,
+    equals: bool,
+    value: String,
+}
+
+/// The conditions of a read that are a fixed list on a real column of the kind's own row (a task's
+/// `status = open`), and whether every condition of the read was one of these. Only `=` and `!=`
+/// on an enum whose column is in the kind's own table.
+fn pushable_enums(kind: Kind, conds: &[Cond]) -> (Vec<OwnTest>, bool) {
+    let spec = kind.spec();
+    let (mut tests, mut all) = (Vec::new(), true);
+    for cond in conds {
+        let pushed = match cond {
+            Cond::Enum { field, op, value } if matches!(op, whr::Op::Eq | whr::Op::Ne) => spec
+                .field(field)
+                .filter(|field| field.source.table == spec.table)
+                .and_then(|field| Some((field.source.column, field.vault_value(value)?)))
+                .map(|(column, vault)| OwnTest {
+                    column,
+                    equals: matches!(op, whr::Op::Eq),
+                    value: vault.to_owned(),
+                }),
+            _ => None,
+        };
+        match pushed {
+            Some(test) => tests.push(test),
+            None => all = false,
+        }
+    }
+    (tests, all)
+}
+
+/// The sentence a list over events carries when the days it reaches are not all inside the window
+/// the world reads occurrences for.
+fn events_window_note() -> String {
+    format!(
+        "note: events are read from {} days back to {} days ahead; a day outside that is not read",
+        crate::native::world::EVENT_DAYS_BACK,
+        crate::native::world::EVENT_DAYS_AHEAD
+    )
+}
+
+/// The refusal of a number over events the window does not hold.
+fn events_window_error(op: &str) -> String {
+    format!(
+        "error: events can only be {} for the days from {} back to {} ahead; ask about a day in that range.",
+        if op == "count" { "counted" } else { "added up" },
+        crate::native::world::EVENT_DAYS_BACK,
+        crate::native::world::EVENT_DAYS_AHEAD
+    )
 }
 
 #[cfg(test)]

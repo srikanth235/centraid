@@ -2734,6 +2734,16 @@
       "why_no_example": ""
     },
     {
+      "argument": "when",
+      "example": null,
+      "family": "value",
+      "id": "session.events_can_only_be_x_for",
+      "source": "session.rs",
+      "template": "error: events can only be {} for the days from {} back to {} ahead; ask about a day in that range.",
+      "tool": "compute",
+      "why_no_example": "needs a vault with a repeating event, which the example vault lacks; crates/core/tests/assist_scale.rs produces it over a year-3 vault"
+    },
+    {
       "argument": "where",
       "example": [
         {

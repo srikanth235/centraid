@@ -168,28 +168,11 @@ impl Door for CoreDoor {
         })
     }
 
-    fn count(&self, table: &str, predicate: &str, binds: &[String]) -> Result<u64, String> {
+    fn count_kind(&self, query: &centraid_vault::page::KindCount<'_>) -> Result<u64, String> {
         self.with(|vault| {
             let counted = vault
-                .keyset_count(&centraid_vault::page::KeysetPage {
-                    name: format!("assist.native.count.{table}"),
-                    select: vec!["id".to_owned()],
-                    from: table.to_owned(),
-                    predicate: (!predicate.is_empty()).then(|| predicate.to_owned()),
-                    binds: binds
-                        .iter()
-                        .cloned()
-                        .map(centraid_vault::value::Value::Text)
-                        .collect(),
-                    sort_column: "id".to_owned(),
-                    pk_column: "id".to_owned(),
-                    descending: false,
-                    limit: 1,
-                    after: None,
-                    held_thumbnail: false,
-                    document_size: false,
-                })
-                .map_err(|error| format!("counting {table}: {error}"))?;
+                .count_kind(query)
+                .map_err(|error| format!("counting {}: {error}", query.kind))?;
             Ok(u64::try_from(counted).unwrap_or(0))
         })
     }

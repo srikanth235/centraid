@@ -638,6 +638,15 @@ impl World {
                 .push(occurrence);
         }
         let mut removed = false;
+        // A live repeating event is expanded only inside the window: beyond it the series reads as
+        // stored, once, and a read that reaches there is not whole (`Session::store_reach`).
+        if self
+            .rows
+            .values()
+            .any(|row| row.kind == Kind::Event && !row.trashed && row.extra.contains_key("rrule"))
+        {
+            self.older.insert(Kind::Event);
+        }
         for (event_id, list) in &by_event {
             let key = (Kind::Event, event_id.clone());
             let Some(base) = self.rows.get(&key).cloned() else {

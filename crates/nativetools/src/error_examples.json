@@ -1342,6 +1342,11 @@
       }
     ]
   },
+  "session.events_can_only_be_x_for": {
+    "tool": "compute",
+    "argument": "when",
+    "why_none": "needs a vault with a repeating event, which the example vault lacks; crates/core/tests/assist_scale.rs produces it over a year-3 vault"
+  },
   "session.there_are_more_x_than_can": {
     "tool": "compute",
     "argument": "when",

@@ -361,6 +361,24 @@ pub struct KeysetPage {
     pub document_size: bool,
 }
 
+/// One test of a column of a kind's own row: `column = value`, or `!=`.
+#[derive(Debug, Clone, Copy)]
+pub struct ColumnTest<'a> {
+    pub column: &'a str,
+    pub equals: bool,
+    pub value: &'a str,
+}
+
+/// What [`Vault::count_kind`] counts: the entities of `kind`, live or trashed, whose own row (in
+/// `table`) passes every test.
+#[derive(Debug, Clone, Copy)]
+pub struct KindCount<'a> {
+    pub kind: &'a str,
+    pub table: &'a str,
+    pub trashed: bool,
+    pub tests: &'a [ColumnTest<'a>],
+}
+
 /// The computed column [`KeysetPage::held_thumbnail`] appends: the path of a
 /// picture a cell can draw, from the bytes THIS DEVICE holds, or NULL.
 ///
@@ -944,6 +962,67 @@ impl Vault {
         Ok(KeysetAnswer { rows, next })
     }
 
+    /// How many entities of one kind the store holds, live or trashed, with each of `query.tests`
+    /// holding on the kind's own row: one statement, read off an index (#1188, C3). It is the
+    /// typed form of what the assistant asks for, so no caller writes the statement.
+    ///
+    /// # Errors
+    /// An identifier that is not a plain name, or SQLite's refusal.
+    pub fn count_kind(&self, query: &KindCount<'_>) -> Result<i64> {
+        let plain = |word: &str| {
+            !word.is_empty() && word.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        };
+        if !plain(query.kind) || !plain(query.table) || !query.tests.iter().all(|t| plain(t.column))
+        {
+            return Err(VaultError::InvalidInput {
+                name: "count_kind".to_owned(),
+                detail: "a kind, table or column that is not a plain name".to_owned(),
+            });
+        }
+        let state = if query.trashed {
+            "deleted_at IS NOT NULL"
+        } else {
+            "deleted_at IS NULL"
+        };
+        let (from, predicate, binds) = if query.tests.is_empty() {
+            (
+                "entity".to_owned(),
+                format!("kind = ? AND {state}"),
+                vec![Value::Text(query.kind.to_owned())],
+            )
+        } else {
+            let mut clauses: Vec<String> = query
+                .tests
+                .iter()
+                .map(|test| format!("{} {} ?", test.column, if test.equals { "=" } else { "!=" }))
+                .collect();
+            clauses.push(format!(
+                "id IN (SELECT id FROM entity WHERE kind = ? AND {state})"
+            ));
+            let mut binds: Vec<Value> = query
+                .tests
+                .iter()
+                .map(|test| Value::Text(test.value.to_owned()))
+                .collect();
+            binds.push(Value::Text(query.kind.to_owned()));
+            (query.table.to_owned(), clauses.join(" AND "), binds)
+        };
+        self.keyset_count(&KeysetPage {
+            name: format!("assist.native.count.{}", query.kind),
+            select: vec!["id".to_owned()],
+            from,
+            predicate: Some(predicate),
+            binds,
+            sort_column: "id".to_owned(),
+            pk_column: "id".to_owned(),
+            descending: false,
+            limit: 1,
+            after: None,
+            held_thumbnail: false,
+            document_size: false,
+        })
+    }
+
     /// How many rows `page` reaches: its predicate under the same Locker rules as a page of it,
     /// counted by the store (`SELECT count(*)`), never by walking pages. Its order, cursor and
     /// limit are not read. The assistant asks it for a whole-kind figure it cannot take from the
@@ -1434,6 +1513,41 @@ mod keyset_tests {
             ]
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// THE ASSISTANT'S COUNTS ARE INDEXED READS (#1188, C3): a kind's live rows by `entity`'s
+    /// (kind, deleted_at, ...) index, and a task's open rows by the status prefix of
+    /// `task_by_due`. A count that would scan a table is not one the assistant asks for.
+    #[test]
+    fn the_assistants_counts_read_an_index_and_scan_no_table() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let vault = founded(dir.path());
+        let plans = [
+            "SELECT count(*) FROM entity WHERE kind = 'note' AND deleted_at IS NULL",
+            "SELECT count(*) FROM task WHERE status = 'open' AND id IN \
+             (SELECT id FROM entity WHERE kind = 'task' AND deleted_at IS NULL)",
+        ];
+        for sql in plans {
+            let plan: Vec<String> = vault
+                .read(|connection| {
+                    let mut statement = connection.prepare(&format!("EXPLAIN QUERY PLAN {sql}"))?;
+                    let rows = statement
+                        .query_map([], |row| row.get::<_, String>(3))?
+                        .collect::<std::result::Result<Vec<_>, _>>()?;
+                    Ok(rows)
+                })
+                .expect("a plan");
+            for line in &plan {
+                assert!(
+                    !line.starts_with("SCAN ") || line.contains("INDEX"),
+                    "`{sql}` scans a table: {line}"
+                );
+            }
+            assert!(
+                plan.iter().any(|line| line.contains("INDEX")),
+                "`{sql}` uses no index: {plan:?}"
+            );
+        }
     }
 
     #[test]
