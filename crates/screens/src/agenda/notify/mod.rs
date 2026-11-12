@@ -18,5 +18,5 @@ pub mod answer;
 pub mod desired;
 pub mod service;
 
-pub use desired::{CAP, Inputs, OS_PENDING_LIMIT, RECEIPTS, WINDOW_DAYS, categories, desired};
+pub use desired::{CAP, HORIZON_DAYS, Inputs, OS_PENDING_LIMIT, RECEIPTS, categories, desired};
 pub use service::{NAME, Sync, build, route, services};

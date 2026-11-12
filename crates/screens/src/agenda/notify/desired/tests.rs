@@ -97,7 +97,7 @@ fn a_repeating_event_alerts_each_occurrence_in_the_window() {
     let events = [
         event("ev@1", "2026-11-11T12:00", &[10, 60]),
         event("ev@2", "2026-11-12T12:00", &[10, 60]),
-        event("ev@far", "2026-12-12T12:00", &[10]),
+        event("ev@far", "2027-12-12T12:00", &[10]),
     ];
     let set = run(NY, &[], &events);
     assert_eq!(set.len(), 4);
@@ -158,16 +158,19 @@ fn a_reminder_at_this_minute_is_kept() {
 }
 
 #[test]
-fn the_window_is_two_weeks() {
-    let inside = task("in", "2026-11-24", "08:00", "2026-11-24T08:00");
-    let outside = task("out", "2026-11-25", "09:00", "2026-11-25T09:00");
+fn the_horizon_is_ninety_days() {
+    let inside = task("in", "2027-02-06", "08:00", "2027-02-06T08:00");
+    let outside = task("out", "2027-02-10", "09:00", "2027-02-10T09:00");
     let set = run(NY, &[inside, outside], &[]);
     assert_eq!(set.len(), 1);
     assert!(set[0].notification_id.contains("|in|"));
 }
 
+/// A4: THE HORIZON IS FILLED BY TIME. The soonest reminders are held, and when more remain than
+/// the phone can hold the last slot says reminders are paused, at the moment the last held one
+/// would have sounded, with no buttons.
 #[test]
-fn the_cap_keeps_the_soonest_forty_eight() {
+fn the_cap_holds_the_soonest_and_ends_in_the_paused_notice() {
     let tasks: Vec<_> = (0..60)
         .map(|i| {
             let minute = format!("2026-11-11T09:{:02}", 59 - i % 60);
@@ -177,8 +180,41 @@ fn the_cap_keeps_the_soonest_forty_eight() {
     let set = run(NY, &tasks, &[]);
     assert_eq!(set.len(), CAP);
     assert_eq!(set[0].fire_local, "2026-11-11T09:00");
-    assert_eq!(set[CAP - 1].fire_local, "2026-11-11T09:47");
+    let paused = set.last().expect("paused");
+    assert!(paused.notification_id.starts_with("paused|"), "{paused:?}");
+    assert!(paused.category_id.is_empty(), "no buttons");
+    assert_eq!(paused.title, "Reminders paused");
+    let real: Vec<_> = set
+        .iter()
+        .filter(|n| !n.notification_id.starts_with("paused|"))
+        .collect();
+    assert_eq!(real.len(), CAP - 1, "the last slot is the notice");
+    assert_eq!(
+        paused.fire_at_ms,
+        real.iter().map(|n| n.fire_at_ms).max().unwrap(),
+        "it sounds when the last held reminder would have"
+    );
     assert!(set.windows(2).all(|w| w[0].fire_at_ms <= w[1].fire_at_ms));
+}
+
+#[test]
+fn a_set_that_fits_has_no_paused_notice() {
+    let tasks: Vec<_> = (0..CAP)
+        .map(|i| {
+            task(
+                &format!("t{i:02}"),
+                "2026-11-11",
+                "09:00",
+                &format!("2026-11-11T09:{:02}", i % 60),
+            )
+        })
+        .collect();
+    let set = run(NY, &tasks, &[]);
+    assert_eq!(set.len(), CAP);
+    assert!(
+        set.iter()
+            .all(|n| !n.notification_id.starts_with("paused|"))
+    );
 }
 
 #[test]

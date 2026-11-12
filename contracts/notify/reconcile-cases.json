@@ -61,6 +61,15 @@
       "wanted": [],
       "live": ["newest"], "pending": [], "showing": ["newest", "older"],
       "plan": { "removePending": [], "removeShowing": ["older"], "schedule": [], "post": [] }
+    },
+    {
+      "name": "the paused notice is one more scheduled id and is replaced when its moment moves, and goes when opened",
+      "wanted": [
+        { "id": "last", "fire_at_ms": 30000 },
+        { "id": "paused|v", "fire_at_ms": 30000 }
+      ],
+      "live": [], "pending": ["last", "paused|v", "old-last"], "showing": [],
+      "plan": { "removePending": ["old-last"], "removeShowing": [], "schedule": ["last", "paused|v"], "post": [] }
     }
   ]
 }

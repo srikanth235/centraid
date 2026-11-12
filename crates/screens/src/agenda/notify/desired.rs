@@ -16,12 +16,17 @@ use centraid_vault::time::{FireZone, parse_civil_ms};
 
 use crate::kit::civil;
 use crate::kit::permission::ExtraNotice;
+use crate::strings::agenda_reminders as reminders_words;
 use crate::strings::{
     Locale, agenda as agenda_words, agenda_notify as words, fill, shared, task as task_words,
 };
 
-/// How far ahead a reminder is scheduled, in days.
-pub const WINDOW_DAYS: i64 = 14;
+/// The furthest ahead a reminder is looked for, in days. THE HORIZON IS FILLED BY TIME, NOT BY A
+/// FIXED WINDOW: the soonest reminders are held until the cap is full, and when more remain beyond
+/// it the last slot says reminders are paused until Centraid is opened (#1188, A4).
+pub const HORIZON_DAYS: i64 = 90;
+/// The id of that last notification.
+const PAUSED: &str = "paused";
 /// The most notifications held at once. iOS keeps at most 64 pending; the rest
 /// is headroom for the receipt of a button just pressed.
 pub const CAP: usize = 48;
@@ -159,7 +164,7 @@ pub fn desired(inputs: &Inputs) -> Vec<wire::PendingNotification> {
     };
     let window = Window {
         from: now,
-        to: now + WINDOW_DAYS * DAY_MS,
+        to: now + HORIZON_DAYS * DAY_MS,
         ongoing_at: None,
     };
     let mut all = tasks(inputs, &zone, &window);
@@ -168,9 +173,35 @@ pub fn desired(inputs: &Inputs) -> Vec<wire::PendingNotification> {
     all.dedup_by(|a, b| a.notification_id == b.notification_id);
     // THE OTHER PRODUCERS' SLOTS ARE THEIR OWN: agenda fill never starves them.
     let extra = extras(inputs, &zone, now);
-    all.truncate(CAP - extra.len());
+    let room = CAP - extra.len();
+    if all.len() > room {
+        // MORE REMAIN THAN THE PHONE CAN HOLD: the last slot says so, at the moment the last
+        // reminder it holds would have sounded, so the member learns reminders have stopped
+        // before one is missed. Opening Centraid brings them back.
+        all.truncate(room - 1);
+        if let Some(last) = all.last() {
+            let locale = inputs.locale;
+            let paused = pending(
+                &zone,
+                THREAD,
+                format!("{PAUSED}|{}", inputs.vault_id),
+                last.fire_at_ms,
+                reminders_words::paused_title(locale),
+                reminders_words::paused_body(locale),
+                "",
+            );
+            all.push(paused);
+        }
+    }
     all.extend(extra);
-    all.sort_by(|a, b| (a.fire_at_ms, &a.notification_id).cmp(&(b.fire_at_ms, &b.notification_id)));
+    // The paused notice comes after the reminder whose moment it shares.
+    all.sort_by_key(|n| {
+        (
+            n.fire_at_ms,
+            n.notification_id.starts_with("paused|"),
+            n.notification_id.clone(),
+        )
+    });
     all
 }
 

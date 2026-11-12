@@ -32,7 +32,8 @@ pub const NAME: &str = "reminders.notify";
 const TASK_LIMIT: u32 = 500;
 /// How many of the vault's next firings a read looks at: the index names the items, so the cost
 /// follows this and never the size of the vault (#1188, A5).
-const ALERTS: i64 = desired::CAP as i64;
+/// One more than the cap, so the service can tell that more remain than it can hold.
+const ALERTS: i64 = desired::CAP as i64 + 1;
 /// How long a receipt is held.
 const RECEIPT_FOR: Duration = Duration::from_secs(10 * 60);
 /// How long before a set that could not be read is tried again.
@@ -151,7 +152,7 @@ impl Service {
             return None;
         };
         let to =
-            civil::plus_days(&board.today, desired::WINDOW_DAYS + 1).and_then(|d| midnight(&d))?;
+            civil::plus_days(&board.today, desired::HORIZON_DAYS + 1).and_then(|d| midnight(&d))?;
         // The delivered ones too: a reminder that fired within the last days and is still wanted.
         let since =
             civil::plus_days(&board.today, -(desired::LIVE_DAYS + 1)).and_then(|d| midnight(&d))?;
