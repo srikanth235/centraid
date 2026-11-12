@@ -674,7 +674,7 @@ impl Earlier {
                     cycle,
                     &version.since_local,
                     &version.since_by,
-                    &version.since_made_by,
+                    &version.since_actor,
                 ),
                 &version.before,
                 version.seq,

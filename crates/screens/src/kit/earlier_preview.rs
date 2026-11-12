@@ -196,7 +196,11 @@ impl Preview {
             })
             .collect();
         let line = self.spec.line(&self.look(ctx, false), &moved);
-        let replaced = when(&record.replaced_local, &record.store_system, &record.made_by);
+        let replaced = when(
+            &record.replaced_local,
+            &record.store_system,
+            &record.made_by,
+        );
         let changed = match (replaced.is_empty(), line.trim().is_empty()) {
             (false, false) => fill(
                 &words::preview_changed(locale),
