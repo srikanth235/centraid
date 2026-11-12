@@ -281,6 +281,7 @@ impl Runtime {
             // or an effect for a screen the same update closes would be drawn
             // or performed for nothing.
             out.views.retain(|view| view.instance != id);
+            out.deltas.retain(|delta| delta.instance != id);
             // ...EXCEPT A WITHDRAWN PROMPT: the screen's goodbye asked the shell to
             // take down the OS prompt it raised, and that must outlive the screen.
             out.effects
@@ -422,15 +423,36 @@ impl Runtime {
             let mut view = instance.screen.view(&view_ctx);
             view.instance = id;
             view.revision = 0;
-            let encoded = view.encode_to_vec();
-            if encoded != instance.last {
+            // A STREAMING ANSWER GROWING AT ITS END is sent as the words alone (#1188 C14), and the
+            // chat is not encoded again for it: the revision moves, the echo check starts afresh.
+            let growth = crate::chat::delta::append(&mut instance.view, &mut view);
+            if let Some(add) = growth {
+                let base = instance.revision;
                 instance.revision += 1;
-                instance.last = encoded;
-            }
-            view.revision = instance.revision;
-            if view != instance.view {
+                instance.last.clear();
+                view.revision = instance.revision;
                 instance.view = view.clone();
-                out.views.push(view);
+                match out.views.iter_mut().find(|held| held.instance == id) {
+                    // the same update already carries this screen whole: it carries the newest
+                    Some(held) => *held = view,
+                    None => out.deltas.push(wire::ViewDelta {
+                        instance: id,
+                        base,
+                        revision: instance.revision,
+                        kind: Some(wire::view_delta::Kind::ChatAppend(add)),
+                    }),
+                }
+            } else {
+                let encoded = view.encode_to_vec();
+                if encoded != instance.last {
+                    instance.revision += 1;
+                    instance.last = encoded;
+                }
+                view.revision = instance.revision;
+                if view != instance.view {
+                    instance.view = view.clone();
+                    out.views.push(view);
+                }
             }
         }
 
@@ -861,6 +883,7 @@ impl Runtime {
     fn empty(update: &wire::ScreenUpdate) -> bool {
         update.navigation.is_none()
             && update.views.is_empty()
+            && update.deltas.is_empty()
             && update.effects.is_empty()
             && update.closed.is_empty()
     }

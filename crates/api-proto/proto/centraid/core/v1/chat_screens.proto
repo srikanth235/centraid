@@ -287,6 +287,15 @@ message ChatAttachment {
 
 // A REFERENCE TO ONE REAL ROW. The app's own tile draws it; a shell with none draws
 // the title, subtitle and meta.
+// The next words of the answer being written, and the status line as it now reads. The shell
+// appends `text` to the message `message_id` and sets `ChatState.activity`; every other field of
+// the state, and the message's spoken label, are as they were until the next full view.
+message ChatAppend {
+  uint64 message_id = 1;
+  string text = 2;
+  string activity = 3;
+}
+
 message ChatCard {
   string app = 1;
   string entity = 2;

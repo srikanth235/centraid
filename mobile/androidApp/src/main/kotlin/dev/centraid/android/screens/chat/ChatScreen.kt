@@ -469,12 +469,12 @@ private fun ChatThread(
     }
     // SCREEN READERS HEAR THE WORK: the status line is a polite live region, and the finished answer
     // is read once when streaming ends, never token by token.
-    var announced by remember { mutableStateOf("") }
+    var spokenAnswer by remember { mutableStateOf("") }
     LaunchedEffect(state.streaming) {
         if (state.streaming) {
-            announced = ""
+            spokenAnswer = ""
         } else {
-            announced = state.messages.lastOrNull { it.role == ChatMessage.Role.ROLE_ASSISTANT }?.accessibility_label.orEmpty()
+            spokenAnswer = state.messages.lastOrNull { it.role == ChatMessage.Role.ROLE_ASSISTANT }?.accessibility_label.orEmpty()
         }
     }
     LaunchedEffect(last?.text?.length, last?.cards?.size, state.activity) {
@@ -550,13 +550,13 @@ private fun ChatThread(
             }
         }
     }
-    if (announced.isNotEmpty()) {
+    if (spokenAnswer.isNotEmpty()) {
         Box(
             Modifier
                 .size(1.dp)
                 .semantics {
                     liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite
-                    contentDescription = announced
+                    contentDescription = spokenAnswer
                 },
         )
     }

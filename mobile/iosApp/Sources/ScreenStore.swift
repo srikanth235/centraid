@@ -363,6 +363,13 @@ final class ScreenStore: ObservableObject {
                 sendRoot(RustScreens.madeTab, .importsMade(made))
             }
         }
+        // THE NEXT WORDS OF A STREAMING ANSWER (#1188 C14), applied in order to the view they were
+        // made against; one made against another revision is dropped and the next full view repairs it.
+        for delta in update.deltas where !closed.contains(delta.instance) {
+            if let held = views[delta.instance], let grown = ViewDeltas.apply(delta, to: held) {
+                views[delta.instance] = grown
+            }
+        }
         for effect in update.effects { enqueue(effect) }
     }
 

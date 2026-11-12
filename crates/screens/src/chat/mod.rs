@@ -45,6 +45,7 @@
 mod asset;
 mod attach;
 mod confirm;
+pub mod delta;
 mod drawer;
 mod model;
 mod turn;

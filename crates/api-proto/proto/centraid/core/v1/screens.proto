@@ -146,6 +146,22 @@ message ScreenUpdate {
   // Instances closed by this update (popped off a stack): a shell frees their
   // view models.
   repeated uint64 closed = 4;
+  // Small changes to views the shell already holds, applied in order after `views`. A delta whose
+  // `base` is not the held view's revision is dropped: the next full view repairs it.
+  repeated ViewDelta deltas = 5;
+}
+
+// WHAT CHANGED IN A VIEW, when that is a few words: a streaming answer's next tokens are sent
+// alone, not with the whole chat (#1188 C14).
+message ViewDelta {
+  uint64 instance = 1;
+  // The revision of the view this applies to.
+  uint64 base = 2;
+  // The revision the view has once it is applied.
+  uint64 revision = 3;
+  oneof kind {
+    ChatAppend chat_append = 10;
+  }
 }
 
 message ScreenResponse {
