@@ -23,6 +23,22 @@ pub trait ModelLoader: Send + Sync {
     /// # Errors
     /// [`ModelError::Load`] when the file is not a model this engine reads.
     fn load(&self, path: &Path) -> Result<Arc<dyn Model>, ModelError>;
+
+    /// Load the model at `path` with the adapter file at `adapter`, when there is one (#1188 G4).
+    /// The default ignores the adapter, so an engine that has none is unchanged. An engine that
+    /// reads adapters overrides this; a file that is not a valid adapter comes back as
+    /// [`ModelError::Load`] and the host then loads the base alone.
+    ///
+    /// # Errors
+    /// [`ModelError::Load`] when the base or the adapter would not load.
+    fn load_with_adapter(
+        &self,
+        path: &Path,
+        adapter: Option<&Path>,
+    ) -> Result<Arc<dyn Model>, ModelError> {
+        let _ = adapter;
+        self.load(path)
+    }
 }
 
 /// Where the model stands, for the shell's one decision: what to show.
@@ -234,7 +250,7 @@ impl ModelHost {
             .ok_or_else(|| {
                 ModelError::Load("this build has no engine to read a model with".to_owned())
             })
-            .and_then(|loader| loader.load(path));
+            .and_then(|loader| load_best(&*loader, path));
         let outcome = result.map(|model| {
             *locked(&self.loaded) = Some(Loaded {
                 path: Some(path.to_path_buf()),
@@ -247,10 +263,30 @@ impl ModelHost {
     }
 }
 
+/// Load `path` with the adapter the record's rule allows for it, or alone: an adapter that will
+/// not load is not an error a member acts on, so the base is loaded without it and the turn runs
+/// stock.
+fn load_best(loader: &dyn ModelLoader, path: &Path) -> Result<Arc<dyn Model>, ModelError> {
+    let record = crate::record::record();
+    let held = path
+        .parent()
+        .zip(path.file_name().and_then(|name| name.to_str()))
+        .filter(|(dir, file)| crate::adapter::resolve(&record, dir, file).used())
+        .zip(record.adapter.as_ref())
+        .map(|((dir, _), adapter)| dir.join(adapter.local_name()));
+    match held {
+        Some(adapter) => loader
+            .load_with_adapter(path, Some(&adapter))
+            .or_else(|_| loader.load(path)),
+        None => loader.load(path),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::testing::ScriptedModel;
+    use std::sync::Mutex;
 
     struct Loader(Arc<dyn Model>);
 
@@ -372,5 +408,90 @@ mod tests {
         assert_eq!(host.status(Path::new("anywhere")).state, ModelState::Ready);
         host.unload();
         assert!(host.model().is_none());
+    }
+
+    /// An engine that reads adapters: it records what it was given and refuses a bad adapter.
+    struct Adapting {
+        seen: Mutex<Vec<Option<PathBuf>>>,
+        bad: bool,
+    }
+
+    impl ModelLoader for Adapting {
+        fn load(&self, _: &Path) -> Result<Arc<dyn Model>, ModelError> {
+            self.seen.lock().unwrap().push(None);
+            Ok(Arc::new(ScriptedModel::new(Vec::<String>::new())))
+        }
+
+        fn load_with_adapter(
+            &self,
+            path: &Path,
+            adapter: Option<&Path>,
+        ) -> Result<Arc<dyn Model>, ModelError> {
+            if let Some(adapter) = adapter {
+                self.seen.lock().unwrap().push(Some(adapter.to_path_buf()));
+                if self.bad {
+                    return Err(ModelError::Load("not an adapter".to_owned()));
+                }
+                return Ok(Arc::new(ScriptedModel::new(Vec::<String>::new())));
+            }
+            self.load(path)
+        }
+    }
+
+    /// A record whose base is `model.gguf` and whose adapter file (3 bytes) sits beside `base`.
+    fn with_adapter_beside(base: &Path) -> (crate::record::Record, PathBuf) {
+        let mut record = crate::record::record();
+        record.current.file_name = "model.gguf".to_owned();
+        let (tools, prompt) = crate::record::runtime_hashes(
+            crate::native::prompt::ToolsMode::parse(&record.current.tools_mode).unwrap(),
+        );
+        let adapter = crate::record::Adapter {
+            url: String::new(),
+            file_name: "a.gguf".to_owned(),
+            sha256: "ef".repeat(32),
+            bytes: 3,
+            base_sha256: record.current.sha256.clone(),
+            tools_hash: tools,
+            prompt_hash: prompt,
+            score: None,
+        };
+        let file = base.parent().unwrap().join(adapter.local_name());
+        std::fs::write(&file, b"abc").unwrap();
+        record.adapter = Some(adapter);
+        (record, file)
+    }
+
+    #[test]
+    fn the_adapter_is_handed_to_the_engine_when_the_rule_allows_and_not_otherwise() {
+        let base = scratch("adapter-ok", b"base");
+        let (record, file) = with_adapter_beside(&base);
+        let loader = Arc::new(Adapting {
+            seen: Mutex::new(Vec::new()),
+            bad: false,
+        });
+        let host = ModelHost::new();
+        host.set_loader(loader.clone());
+        crate::record::held_for(record.clone(), || host.load(&base).unwrap());
+        assert_eq!(*loader.seen.lock().unwrap(), [Some(file.clone())]);
+        // the file is gone: the base loads alone
+        std::fs::remove_file(&file).unwrap();
+        host.unload();
+        crate::record::held_for(record, || host.load(&base).unwrap());
+        assert_eq!(loader.seen.lock().unwrap().last(), Some(&None));
+    }
+
+    #[test]
+    fn an_adapter_that_will_not_load_leaves_the_base_loaded_alone() {
+        let base = scratch("adapter-bad", b"base");
+        let (record, file) = with_adapter_beside(&base);
+        let loader = Arc::new(Adapting {
+            seen: Mutex::new(Vec::new()),
+            bad: true,
+        });
+        let host = ModelHost::new();
+        host.set_loader(loader.clone());
+        let status = crate::record::held_for(record, || host.load(&base).unwrap());
+        assert_eq!(status.state, ModelState::Ready);
+        assert_eq!(*loader.seen.lock().unwrap(), [Some(file), None]);
     }
 }
