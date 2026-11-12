@@ -165,13 +165,15 @@ internal object Notify {
         post(app, item, record)
     }
 
-    /** After a reboot, a change of the clock or the zone or an update: every recorded timed item again. */
+    /** After a reboot, a change of the clock or the zone or an update: every recorded timed item again; one whose moment passed while the phone was off is said now. */
     fun rearm(context: Context) {
         val app = context.applicationContext
         val store = NotifyStore(app)
         val record = store.load()
         if (record.all.isEmpty() || !NotificationManagerCompat.from(app).areNotificationsEnabled()) return
         val now = System.currentTimeMillis()
+        // ONE THAT ALREADY SOUNDED (its alarm fired before this broadcast) IS NOT SAID AGAIN.
+        val showing = showingIds(NotificationManagerCompat.from(app)).toSet()
         val kept = mutableListOf<PendingNotification>()
         for (item in record.all) {
             if (item.immediate) {
@@ -184,7 +186,11 @@ internal object Notify {
                 arm(app, item.notification_id, at)
                 kept += item.copy(fire_at_ms = at)
             } else {
+                // MISSED WHILE THE PHONE WAS OFF (#1188, NA7): its moment passed with no alarm to
+                // sound it, so it is said now, late. It stays on the screen until Rust says the item
+                // is resolved (the next session's `live_ids`), like any delivered reminder.
                 cancelAlarm(app, item.notification_id)
+                if (item.notification_id !in showing) post(app, item, record)
             }
         }
         store.save(record.copy(all = kept))
