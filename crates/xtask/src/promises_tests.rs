@@ -2189,6 +2189,12 @@ fn the_backup_promises_name_tests_that_exist() {
 }
 
 #[test]
+fn the_chat_promises_name_tests_that_exist() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    assert_eq!(chat_missing(&root), Vec::<String>::new());
+}
+
+#[test]
 fn a_backup_promise_whose_test_is_gone_or_ignored_is_caught() {
     let dir = fixture_dir("backup-promises");
     let file = dir.join("proof.rs");

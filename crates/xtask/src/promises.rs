@@ -713,6 +713,7 @@ pub fn promises(root: &Path) -> RuleReport {
     report.findings.extend(effect_kinds_missing(root));
     // Backup is the vault's, not an app's: its three promises are held to the tests that prove them.
     report.findings.extend(backup_missing(root));
+    report.findings.extend(chat_missing(root));
     report
 }
 
@@ -3146,19 +3147,103 @@ pub fn backup_missing(root: &Path) -> Vec<String> {
 }
 
 fn backup_missing_in(root: &Path, promises: &[(&str, &[(&str, &str)])]) -> Vec<String> {
+    proofs_missing_in("backup", root, promises)
+}
+
+/// **CHAT** (#1188, Part C). The assistant is the phone's, so no app has a row; the same shape and
+/// the same checker as Backup's. `(promise, [(file, test)])`.
+pub const CHAT_PROMISES: [(&str, &[(&str, &str)]); 4] = [
+    (
+        "a change is made only after the member confirms it",
+        &[
+            (
+                "crates/core/tests/assist_native.rs",
+                "a_write_parks_behind_a_card_and_nothing_is_written_until_the_member_taps",
+            ),
+            (
+                "crates/core/tests/assist_native.rs",
+                "a_dismissed_card_writes_nothing_and_cannot_be_confirmed_afterwards",
+            ),
+            (
+                "crates/screens/tests/chat_turn.rs",
+                "cancel_settles_the_card_at_once_and_writes_nothing",
+            ),
+        ],
+    ),
+    (
+        "an answer shows the rows it came from",
+        &[
+            (
+                "crates/core/tests/assist_native.rs",
+                "a_read_turn_finds_then_answers_with_its_events_in_order_its_cards_mapped_and_its_line_composed",
+            ),
+            (
+                "crates/core/tests/assist_native.rs",
+                "every_kind_is_drawn_as_a_card_of_one_of_the_six_apps_and_the_homeless_ones_open_their_apps_home",
+            ),
+        ],
+    ),
+    (
+        "nothing the member asks or the assistant reads leaves the device",
+        &[
+            (
+                "crates/assist/tests/nothing_leaves.rs",
+                "the_assistant_crate_depends_on_no_network_library",
+            ),
+            (
+                "crates/assist/tests/nothing_leaves.rs",
+                "no_assistant_or_chat_source_names_a_socket_or_an_http_client",
+            ),
+            (
+                "crates/core/tests/assist_native.rs",
+                "an_attachment_never_leaves_the_attached_path_whichever_plane_answers_the_rest",
+            ),
+        ],
+    ),
+    (
+        "a sealed Locker value never reaches the model",
+        &[
+            (
+                "crates/core/tests/assist_channel.rs",
+                "no_sealed_value_reaches_the_model_an_event_the_thread_an_action_key_or_the_index",
+            ),
+            (
+                "crates/core/tests/assist_plane.rs",
+                "no_sealed_value_is_in_any_prompt_a_session_ever_builds",
+            ),
+            (
+                "crates/core/tests/assist_native.rs",
+                "a_locker_item_is_found_and_drawn_like_any_row_and_its_secrets_reach_no_byte",
+            ),
+        ],
+    ),
+];
+
+/// What the Chat promises lack: a named test that does not exist, or is ignored.
+pub fn chat_missing(root: &Path) -> Vec<String> {
+    proofs_missing_in("chat", root, &CHAT_PROMISES)
+}
+
+fn proofs_missing_in(
+    label: &str,
+    root: &Path,
+    promises: &[(&str, &[(&str, &str)])],
+) -> Vec<String> {
     let mut gaps = Vec::new();
     for (promise, proofs) in promises {
         for (file, test) in *proofs {
             let Ok(text) = fs::read_to_string(root.join(file)) else {
                 gaps.push(format!(
-                    "backup / {promise}: its proof file `{file}` does not exist"
+                    "{label} / {promise}: its proof file `{file}` does not exist"
                 ));
                 continue;
             };
             let needle = format!("fn {test}(");
             let lines: Vec<&str> = text.lines().collect();
             let Some(at) = lines.iter().position(|line| line.contains(&needle)) else {
-                gaps.push(format!("backup / {promise}: `{file}` has no test `{test}`"));
+                gaps.push(format!(
+                    "{label} / {promise}: `{file}` has no test `{test}`"
+                ));
                 continue;
             };
             let ignored = lines[..at]
@@ -3171,7 +3256,7 @@ fn backup_missing_in(root: &Path, promises: &[(&str, &[(&str, &str)])]) -> Vec<S
                 .any(|line| line.contains("#[ignore"));
             if ignored {
                 gaps.push(format!(
-                    "backup / {promise}: `{test}` in `{file}` is ignored"
+                    "{label} / {promise}: `{test}` in `{file}` is ignored"
                 ));
             }
         }
