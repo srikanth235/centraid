@@ -724,15 +724,29 @@ pub fn settle(
                 let now = u64::try_from(clock.now_ms()).unwrap_or(0);
                 ledger.set_head(&gateway, manifest_name)?;
                 ledger.set_head_taken(&gateway, manifest.taken_at_ms)?;
+                // THE HIGH-WATER MARK RISES WITH EVERY HEAD THIS DEVICE SETS, and a head that went
+                // backwards is mended by setting a current one (#1188, B4).
+                ledger.raise_highwater(&gateway, manifest.taken_at_ms)?;
+                ledger.set_rolled_back(&gateway, false)?;
                 ledger.ack_snapshot(manifest_name, now)?;
                 return Ok(Settled::HeadSet(head));
             }
             Err(StoreError::HeadConflict { current }) => {
-                let ours = current.is_some_and(|head| {
-                    ledger
-                        .snapshots()
-                        .is_ok_and(|taken| taken.iter().any(|snapshot| snapshot.name == head.name))
-                });
+                // A HEAD OLDER THAN THE NEWEST THIS DEVICE EVER SET THERE (the high-water mark,
+                // #1188 B4) is this device's own past: a gateway put back as it was a backup
+                // ago names a snapshot retention has since dropped from the ledger.
+                let behind = ledger.rolled_back(&gateway)? && {
+                    let high = ledger.highwater(&gateway)?;
+                    current
+                        .as_ref()
+                        .is_some_and(|head| high.is_some_and(|high| head.taken_at_ms < high))
+                };
+                let ours = behind
+                    || current.as_ref().is_some_and(|head| {
+                        ledger.snapshots().is_ok_and(|taken| {
+                            taken.iter().any(|snapshot| snapshot.name == head.name)
+                        })
+                    });
                 if attempt == 0 && ours {
                     prev = current.map(|head| head.name);
                     continue;

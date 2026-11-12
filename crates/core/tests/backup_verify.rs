@@ -1,0 +1,229 @@
+//! THE PHONE VERIFIES WHAT A GATEWAY SAYS IT HOLDS (#1188, B4), through the core's doors
+//! against a real gateway.
+//!
+//! A gateway's `exists` and `put` answers are trusted only so far: each pass reads back a small
+//! random sample of what a gateway acknowledged and opens it, and the phone remembers the newest
+//! head it set at each gateway, so a head that goes backwards (a restored copy of the gateway's
+//! own disk) is flagged and then mended by the next head the phone sets.
+
+mod common;
+
+use std::path::Path;
+
+use centraid_api_proto::core_v1 as wire;
+use serde_json::json;
+
+use common::*;
+
+fn note(handle: &centraid_core::Handle, title: &str) {
+    command(
+        handle,
+        "note.create",
+        &json!({ "title": title, "body": "a note", "format": "plain" }),
+        &format!("note:{title}"),
+    );
+}
+
+fn copy_dir(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).expect("makes the directory");
+    for entry in std::fs::read_dir(from).expect("lists") {
+        let entry = entry.expect("an entry");
+        let target = to.join(entry.file_name());
+        if entry.path().is_dir() {
+            copy_dir(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), &target).expect("copies");
+        }
+    }
+}
+
+fn wipe(dir: &Path) {
+    for entry in std::fs::read_dir(dir).expect("lists") {
+        let path = entry.expect("an entry").path();
+        if path.is_dir() {
+            std::fs::remove_dir_all(&path).expect("removes");
+        } else {
+            std::fs::remove_file(&path).expect("removes");
+        }
+    }
+}
+
+/// **A GATEWAY THAT NO LONGER HOLDS WHAT IT ACKNOWLEDGED IS FOUND BY A PASS.** Its `exists` was
+/// trusted once; the sample read back finds the damage and the ledger stops confirming the part.
+#[test]
+fn a_pass_reads_back_a_sample_and_finds_a_part_a_gateway_damaged() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = phone(dir.path());
+    let id = pair(&phone, &gateway)
+        .destination
+        .expect("a destination")
+        .gateway_id;
+    note(&phone, "something to back up");
+    drain(&phone, at_home());
+    let before = ledger(&path).confirmed_names(&id).expect("reads");
+    assert!(!before.is_empty());
+
+    // EVERY OBJECT THE GATEWAY HOLDS LOSES A BIT, so any sample finds one.
+    for name in gateway.held(&vault_id()) {
+        let wire_name = centraid_gateway::rules::ids::Name::from_bytes(*name.as_bytes());
+        gateway
+            .spawned
+            .corrupt(&vault_id(), &wire_name)
+            .expect("damages");
+    }
+    drain(&phone, quietly());
+    let after = ledger(&path).confirmed_names(&id).expect("reads");
+    assert!(
+        after.len() < before.len(),
+        "the damaged parts are no longer confirmed: {} of {}",
+        after.len(),
+        before.len()
+    );
+}
+
+/// **A HEAD THAT GOES BACKWARDS IS FLAGGED, AND MENDED BY THE NEXT HEAD THE PHONE SETS.** The
+/// gateway's disk is put back as it was a backup ago; the phone remembers the newest head it set
+/// there, says so on the gateway's row, and the pass that may carry the records sets a current
+/// head and clears it.
+#[test]
+fn a_head_that_goes_backwards_is_flagged_until_the_phone_sets_a_current_one() {
+    let first = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    let id = pair(&phone, &first)
+        .destination
+        .expect("a destination")
+        .gateway_id;
+    note(&phone, "before");
+    drain(&phone, at_home());
+
+    // THE GATEWAY'S DISK AS IT IS NOW, kept; then another backup moves the head on.
+    let Gateway {
+        runtime: asleep,
+        dir: gateway_dir,
+        spawned,
+    } = first;
+    let addr = spawned.addr;
+    asleep.block_on(spawned.shutdown());
+    drop(asleep);
+    let saved = tempfile::tempdir().expect("a directory");
+    copy_dir(gateway_dir.path(), saved.path());
+    let rt = runtime();
+    let spawned = rt
+        .block_on(centraid_gateway::server::harness::spawn_on(
+            gateway_dir.path(),
+            addr,
+        ))
+        .expect("the gateway starts again");
+    let mut gateway = Gateway {
+        runtime: rt,
+        dir: gateway_dir,
+        spawned,
+    };
+    note(&phone, "after");
+    let moved = drain(&phone, at_home());
+    assert!(moved.acked_at_ms.is_some(), "{moved:?}");
+    let newest = gateway.writer(&vault_id()).1;
+
+    // PUT BACK AS IT WAS.
+    let Gateway {
+        runtime: asleep,
+        dir: gateway_dir,
+        spawned,
+    } = gateway;
+    asleep.block_on(spawned.shutdown());
+    drop(asleep);
+    wipe(gateway_dir.path());
+    copy_dir(saved.path(), gateway_dir.path());
+    let rt = runtime();
+    let spawned = rt
+        .block_on(centraid_gateway::server::harness::spawn_on(
+            gateway_dir.path(),
+            addr,
+        ))
+        .expect("the gateway starts again");
+    gateway = Gateway {
+        runtime: rt,
+        dir: gateway_dir,
+        spawned,
+    };
+    let rolled = gateway.writer(&vault_id()).1;
+    assert_ne!(rolled, newest, "the head went back");
+
+    // A PASS THAT MAY NOT CARRY THE RECORDS (a metered link under Wi-Fi only) sees it and
+    // cannot mend it: the gateway's row says so.
+    let metered = wire::DrainRequest {
+        metered: true,
+        wants_snapshot: false,
+        ..quietly()
+    };
+    drain(&phone, metered);
+    let flagged = status(&phone);
+    let row = flagged
+        .destinations
+        .iter()
+        .find(|row| row.gateway_id == id)
+        .expect("paired");
+    assert!(row.rolled_back, "{row:?}");
+
+    // THE NEXT PASS THAT MAY SETS A CURRENT HEAD, and the flag goes.
+    let mended = drain(&phone, quietly());
+    assert!(mended.acked_at_ms.is_some(), "{mended:?}");
+    let head = gateway.writer(&vault_id()).1;
+    assert_ne!(
+        head, rolled,
+        "the head moved on from the one it was put back to"
+    );
+    assert_ne!(head, None);
+    let after = status(&phone);
+    let row = after
+        .destinations
+        .iter()
+        .find(|row| row.gateway_id == id)
+        .expect("paired");
+    assert!(!row.rolled_back, "{row:?}");
+}
+
+/// **B11. A CLOCK SET AHEAD AND CORRECTED DOES NOT HOLD THE HOURLY SNAPSHOT OFF.** A snapshot
+/// dated a year ahead used to read as "taken a moment ago" until the real date caught up; it
+/// is not believed now, and an ordinary pass takes one.
+#[test]
+fn a_snapshot_dated_in_the_future_does_not_suppress_the_next_one() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = phone(dir.path());
+    pair(&phone, &gateway);
+    note(&phone, "first");
+    drain(&phone, at_home());
+    note(&phone, "second");
+    let quiet = drain(&phone, quietly());
+    assert!(
+        quiet.acked_at_ms.is_none(),
+        "within the hour, none: {quiet:?}"
+    );
+
+    // THE CLOCK WAS A YEAR AHEAD WHEN THAT SNAPSHOT WAS TAKEN.
+    let year = 365 * 24 * 60 * 60 * 1_000_u64;
+    let book = ledger(&path);
+    for snapshot in book.snapshots().expect("reads") {
+        book.forget_snapshot(&snapshot.name).expect("forgets");
+        book.record_snapshot(
+            &snapshot.name,
+            snapshot.taken_at_ms + year,
+            &snapshot.manifest_json,
+        )
+        .expect("re-dates");
+        if let Some(acked) = snapshot.acked_ms {
+            book.ack_snapshot(&snapshot.name, acked)
+                .expect("acknowledged");
+        }
+    }
+    let next = drain(&phone, quietly());
+    assert!(
+        next.acked_at_ms.is_some(),
+        "a future-dated snapshot is not recent: {next:?}"
+    );
+}

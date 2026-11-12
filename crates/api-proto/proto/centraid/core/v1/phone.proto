@@ -573,6 +573,10 @@ message Destination {
   // Why it is behind, as its last answer says: GATEWAY (silent), UNTRUSTED,
   // REFUSED (its own limit), PAIR_AGAIN. Unspecified: it answered.
   WaitReason reach = 13;
+  // ITS HEAD WENT BACKWARDS (#1188, B4): it names an older snapshot than this phone
+  // set there, or none. This phone remembers the newest it set at each gateway and
+  // flags the gateway until it sets a current head again. Set only by `backup_status`.
+  bool rolled_back = 14;
 }
 
 // A PAIRED GATEWAY, FOUND AGAIN AT NEW ADDRESSES (#1080, Q-1080-D3).

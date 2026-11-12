@@ -845,8 +845,8 @@ fn pass_over(
         // Another phone that restored the vault claimed a later epoch; this phone's token is
         // refused `MOVED` only when it writes, and a pass with nothing to write would never
         // learn it. The head answers the writer epoch on every read, so the pass asks first.
-        match store.writer_epoch() {
-            Ok(epoch) if epoch > reached.destination.epoch => {
+        match store.head_and_epoch() {
+            Ok((epoch, _)) if epoch > reached.destination.epoch => {
                 return Err(CoreError::VaultMoved {
                     current_epoch: epoch,
                     moved_at_ms: 0,
@@ -854,10 +854,22 @@ fn pass_over(
             }
             // THE GATEWAY KNOWS THIS PHONE'S TOKEN, whatever it refused before: a mark that
             // said to pair again is spent (the sweep's F2).
-            Ok(_) => {
-                ledger
-                    .clear_unauthorized(&reached.destination.gateway_id)
-                    .map_err(plane_error)?;
+            Ok((_, head)) => {
+                let id = &reached.destination.gateway_id;
+                ledger.clear_unauthorized(id).map_err(plane_error)?;
+                // A HEAD THAT WENT BACKWARDS (#1188, B4): the gateway names an older snapshot
+                // than this phone set there, or none (a restored backup of the gateway's own
+                // disk, a swapped store). The phone remembers the newest it set, and flags
+                // the gateway until it sets a current head again, which the pass does next.
+                let rolled = match (ledger.highwater(id).map_err(plane_error)?, head) {
+                    (Some(_), None) => true,
+                    (Some(high), Some(head)) => head.taken_at_ms < high,
+                    (None, _) => false,
+                };
+                if rolled {
+                    tracing::warn!(gateway = %id, "the gateway's head went backwards");
+                }
+                ledger.set_rolled_back(id, rolled).map_err(plane_error)?;
             }
             Err(StoreError::Unreachable(reason)) => {
                 pass.stopped_by(&Stop::Unreachable(reason))?;
@@ -871,7 +883,12 @@ fn pass_over(
             }
             Err(error) => return Err(store_error(error)),
         }
-        if owes_reconcile {
+        // A GATEWAY THAT WENT BACKWARDS lost what it held since: ask it about every name now,
+        // so the ledger stops confirming what it no longer has.
+        let rolled = ledger
+            .rolled_back(&reached.destination.gateway_id)
+            .map_err(plane_error)?;
+        if owes_reconcile || rolled {
             let squared =
                 mover::reconcile(ledger, spool, store, &SystemClock).map_err(plane_error)?;
             // NAMES THE GATEWAY HELD ARE FILES CONFIRMED, here as in a pass's own rounds:
@@ -965,6 +982,14 @@ fn pass_over(
     // A gateway that left the pass was not finished.
     all_finished &= live.len() == fleet.len();
 
+    // 2b. THE PHONE VERIFIES (#1188, B4): a small random sample of what each gateway said it
+    // holds is read back and opened, so a gateway that lost or damaged a part is found by the
+    // next pass and not by a restore.
+    each(&mut live, ledger, pass, |reached, _| {
+        verify_sample(ledger, &reached.store, &keyring.backup)?;
+        Ok(Flow::Continue)
+    })?;
+
     // 3. THE RECORDS AGAIN, WHEN THIS PASS CONFIRMED FILES THEIR ROWS ARE NOT IN A SNAPSHOT
     // FOR (R-1080-C15). A pass that was cut off owes it to the next, which takes it first.
     if pass.media_confirmed > 0 && conditions.may_move(Kind::Records) {
@@ -988,6 +1013,48 @@ fn pass_over(
         }
     }
     Ok(())
+}
+
+/// How many acknowledged parts a pass reads back from each gateway, and the largest it reads
+/// (plaintext bytes as recorded): a sample is the point, never a second upload.
+const VERIFY_SAMPLE: usize = 3;
+const VERIFY_MAX_BYTES: u64 = 1 << 20;
+
+/// Read back a random sample of what `store` acknowledged and open each part: a name it no
+/// longer holds, or bytes that no longer open, are unconfirmed (so the next pass sends them
+/// again, and the head is retaken). Answers how many it found wrong.
+fn verify_sample(
+    ledger: &Ledger,
+    store: &GatewayStore,
+    keys: &centraid_vault::backup::naming::BackupKeys,
+) -> Result<usize> {
+    let sample = ledger
+        .confirmed_sample(store.gateway_id(), VERIFY_MAX_BYTES, VERIFY_SAMPLE)
+        .map_err(plane_error)?;
+    let mut wrong: Vec<Name> = Vec::new();
+    for name in sample {
+        let mut bytes = Vec::new();
+        match plane_store::Store::get(store, &name, &mut bytes) {
+            Ok(_) => {
+                if sealed::open_part(keys, &bytes).is_err() {
+                    wrong.push(name);
+                }
+            }
+            Err(StoreError::Missing(_) | StoreError::Damaged(_)) => wrong.push(name),
+            Err(error) => return Err(store_error(error)),
+        }
+    }
+    if !wrong.is_empty() {
+        tracing::warn!(
+            gateway = %store.gateway_id(),
+            wrong = wrong.len(),
+            "a gateway no longer holds what it acknowledged"
+        );
+        ledger
+            .unconfirm_many(&wrong, store.gateway_id())
+            .map_err(plane_error)?;
+    }
+    Ok(wrong.len())
 }
 
 /// What the records' half of a pass needs, so the pass can run it twice: when
@@ -1130,13 +1197,24 @@ fn snapshot_owed(ledger: &Ledger) -> Result<bool> {
         .is_some_and(|text| text == "1"))
 }
 
+/// How far ahead of this phone's clock a snapshot's date may read before it is not believed.
+const CLOCK_TOLERANCE_MS: u64 = 5 * 60 * 1000;
+
+/// Whether `taken_at_ms` is within the snapshot interval of `now`. **A date in the future
+/// is not recent** (#1188, B11): a clock set ahead and corrected dated a snapshot after now,
+/// and trusting it would have held the hourly snapshot off until the real date caught up.
+fn recent(now: u64, taken_at_ms: u64) -> bool {
+    taken_at_ms <= now.saturating_add(CLOCK_TOLERANCE_MS)
+        && now.saturating_sub(taken_at_ms) < SNAPSHOT_EVERY_MS
+}
+
 /// Whether a snapshot is due. One the shell asked for (`wants_snapshot`,
 /// kept until taken: [`snapshot_owed`]) always is; otherwise
 /// one is due an hour after the newest a head named, and not while a younger
 /// one is still on its way whole — every part of it queued or held; and one
 /// is due at once at a gateway this phone has set no head at.
 fn snapshot_due(ledger: &Ledger, gateway_id: &str, wanted: bool) -> Result<bool> {
-    if wanted {
+    if wanted || ledger.rolled_back(gateway_id).map_err(plane_error)? {
         return Ok(true);
     }
     let now = now_ms();
@@ -1144,7 +1222,7 @@ fn snapshot_due(ledger: &Ledger, gateway_id: &str, wanted: bool) -> Result<bool>
     let head = ledger.head(gateway_id).map_err(plane_error)?;
     if let Some(newest) = snapshots.last()
         && head != Some(newest.name)
-        && now.saturating_sub(newest.taken_at_ms) < SNAPSHOT_EVERY_MS
+        && recent(now, newest.taken_at_ms)
     {
         let queued: BTreeSet<Name> = ledger
             .queued()
@@ -1188,7 +1266,7 @@ fn snapshot_due(ledger: &Ledger, gateway_id: &str, wanted: bool) -> Result<bool>
     // THE HOUR RUNS FROM THE SNAPSHOT THIS GATEWAY'S OWN HEAD NAMES: another gateway being
     // current does not make this one so (#1188, B1).
     let last_set = super::records_at_gateway(ledger, gateway_id)?;
-    Ok(last_set.is_none_or(|at| now.saturating_sub(at) >= SNAPSHOT_EVERY_MS))
+    Ok(last_set.is_none_or(|at| !recent(now, at)))
 }
 
 /// Copy the vault, describe it, ask every gateway what it holds of it, and spool the union
@@ -1305,12 +1383,19 @@ fn settle_newest(
     // THE NEWEST SNAPSHOT THIS GATEWAY'S HEAD DOES NOT NAME YET: each gateway is settled
     // on its own (#1188, B1), whatever another's head says.
     let head = ledger.head(store.gateway_id()).map_err(plane_error)?;
-    let Some(newest) = ledger
-        .snapshots()
-        .map_err(plane_error)?
-        .into_iter()
-        .next_back()
-        .filter(|snapshot| head != Some(snapshot.name))
+    let rolled = ledger
+        .rolled_back(store.gateway_id())
+        .map_err(plane_error)?;
+    // THE ONE IN FLIGHT FIRST, then the newest: a snapshot no gateway has set is the one this
+    // phone took last, whatever date its clock gave it (#1188, B11).
+    let all = ledger.snapshots().map_err(plane_error)?;
+    let Some(newest) = all
+        .iter()
+        .rfind(|snapshot| snapshot.acked_ms.is_none())
+        .or_else(|| all.last())
+        // A GATEWAY WHOSE HEAD WENT BACKWARDS is set again, whatever the ledger remembers (B4).
+        .filter(|snapshot| rolled || head != Some(snapshot.name))
+        .cloned()
     else {
         return Ok(());
     };

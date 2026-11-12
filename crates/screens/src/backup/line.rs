@@ -22,6 +22,10 @@ const DAY_MS: i64 = 24 * HOUR_MS;
 /// attention.
 pub const STALE_MS: i64 = 3 * DAY_MS;
 
+/// How far ahead of this phone's clock an acknowledgement may read before it is not believed:
+/// two clocks differ by seconds, not by hours (#1188, B11).
+pub const CLOCK_TOLERANCE_MS: i64 = 5 * MINUTE_MS;
+
 /// A day: one night shift missed is ordinary, a whole day without an
 /// acknowledgement is not.
 pub const BACKLOG_STOOD_MS: i64 = DAY_MS;
@@ -111,7 +115,11 @@ pub fn line(
     };
     let whole = reading.unconfirmed() == 0;
     let when = ago(locale, acked, now_ms);
-    let stale = now_ms - acked > STALE_MS || unreached(reading, now_ms);
+    // AN ACKNOWLEDGEMENT DATED IN THE FUTURE is a clock that was set ahead and corrected: it
+    // says nothing of when the backup last ran, so it does not hold the stale warning off
+    // until the real date catches up (#1188, B11).
+    let from_the_future = acked - now_ms > CLOCK_TOLERANCE_MS;
+    let stale = now_ms - acked > STALE_MS || from_the_future || unreached(reading, now_ms);
     // A MACHINE THAT IS NOT THE GATEWAY answered at its address (#1080): the
     // member is owed a look, however recent the ack.
     let attention = stale

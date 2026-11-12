@@ -1128,6 +1128,84 @@ impl Ledger {
             .transpose()
     }
 
+    /// The newest snapshot this device has ever set as the head at `gateway_id`, by the
+    /// moment it was taken: the **high-water mark** a head that goes backwards is judged
+    /// against (#1188, B4). It only rises.
+    ///
+    /// # Errors
+    /// SQLite's refusal, or a value that is not a number.
+    pub fn highwater(&self, gateway_id: &str) -> Result<Option<u64>> {
+        self.meta(&format!("highwater:{gateway_id}"))?
+            .map(|text| {
+                text.parse::<u64>()
+                    .map_err(|_| invariant(format!("`{text}` is not a time")))
+            })
+            .transpose()
+    }
+
+    /// Raise the high-water mark at `gateway_id` to `taken_at_ms` when it is higher.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn raise_highwater(&self, gateway_id: &str, taken_at_ms: u64) -> Result<()> {
+        if self
+            .highwater(gateway_id)?
+            .is_none_or(|held| taken_at_ms > held)
+        {
+            self.set_meta(&format!("highwater:{gateway_id}"), &taken_at_ms.to_string())?;
+        }
+        Ok(())
+    }
+
+    /// `gateway_id`'s head went backwards: it names an older snapshot than this device set,
+    /// or none. Kept until this device sets a head there again.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn set_rolled_back(&self, gateway_id: &str, rolled_back: bool) -> Result<()> {
+        let key = format!("rolled-back:{gateway_id}");
+        if rolled_back {
+            self.set_meta(&key, "1")
+        } else {
+            self.forget_meta(&key)
+        }
+    }
+
+    /// Whether `gateway_id`'s head was found to have gone backwards.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn rolled_back(&self, gateway_id: &str) -> Result<bool> {
+        Ok(self.meta(&format!("rolled-back:{gateway_id}"))?.is_some())
+    }
+
+    /// Up to `limit` of the parts `gateway_id` acknowledged that are at most `max_size` bytes
+    /// sealed-side (as recorded), chosen at random: what a pass reads back to see the
+    /// gateway still holds what it said it did (#1188, B4).
+    ///
+    /// # Errors
+    /// SQLite's refusal, or a row this build cannot read.
+    pub fn confirmed_sample(
+        &self,
+        gateway_id: &str,
+        max_size: u64,
+        limit: usize,
+    ) -> Result<Vec<Name>> {
+        let mut statement = self.connection.prepare(
+            "SELECT name FROM confirmed WHERE gateway_id = ?1 AND size <= ?2
+              ORDER BY random() LIMIT ?3",
+        )?;
+        let rows = statement.query_map(
+            params![
+                gateway_id,
+                ms(max_size)?,
+                i64::try_from(limit).unwrap_or(i64::MAX)
+            ],
+            |row| read_name(&row.get::<_, String>(0)?),
+        )?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
     /// `gateway_id` moved the head to a snapshot this device took, at
     /// `gateway_ms` on the GATEWAY's clock — the only moment a member may be
     /// shown as "last backed up" (#1029 §2).

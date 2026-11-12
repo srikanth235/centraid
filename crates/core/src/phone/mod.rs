@@ -359,6 +359,7 @@ pub fn wire_destination(destination: &Destination) -> wire::Destination {
         records_behind: false,
         head_snapshot_ms: None,
         reach: wire::WaitReason::Unspecified as i32,
+        rolled_back: false,
     }
 }
 
@@ -876,6 +877,9 @@ pub fn backup_status(
             (Some(held), Some(newest)) => held < newest,
             (Some(_), None) => false,
         };
+        row.rolled_back = ledger
+            .rolled_back(&destination.gateway_id)
+            .map_err(plane_error)?;
         row.reach = drain::gateway_reach(&ledger, &destination.gateway_id)?
             .unwrap_or(wire::WaitReason::Unspecified) as i32;
         wired.push(row);

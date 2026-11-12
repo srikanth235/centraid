@@ -525,6 +525,23 @@ fn an_old_acknowledgement_or_a_gateway_unreached_for_days_earns_attention() {
     assert_eq!(STALE_MS, 3 * DAY);
 }
 
+/// **B11.** A clock set a year ahead and corrected leaves an acknowledgement dated in the
+/// future; it must not read as a recent, healthy backup.
+#[test]
+fn an_acknowledgement_dated_in_the_future_earns_attention() {
+    let ahead = wire::BackupStatusResponse {
+        acked_at_ms: Some(NOW + 300 * DAY),
+        ..steady()
+    };
+    assert_eq!(lined(&ahead, false).tone, Tone::Attention as i32);
+    // Two clocks a few minutes apart are not a clock that was set ahead.
+    let close = wire::BackupStatusResponse {
+        acked_at_ms: Some(NOW + MINUTE),
+        ..steady()
+    };
+    assert_ne!(lined(&close, false).tone, Tone::Attention as i32);
+}
+
 #[test]
 fn a_vault_the_core_could_not_be_asked_about_draws_no_line_at_all() {
     assert_eq!(

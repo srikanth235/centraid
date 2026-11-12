@@ -230,6 +230,19 @@ impl GatewayStore {
         Ok(info)
     }
 
+    /// The writer epoch and the head this gateway holds, in one answer: what a pass asks first
+    /// (the epoch is a supersession check; the head is the rollback check).
+    ///
+    /// # Errors
+    /// As [`Self::writer_epoch`].
+    pub fn head_and_epoch(&self) -> std::result::Result<(u64, Option<Head>), StoreError> {
+        self.check_transfer()?;
+        self.runtime
+            .block_on(self.client.head_state(&self.vault))
+            .map(|state| (state.epoch, state.head.as_ref().map(head_of)))
+            .map_err(store_error)
+    }
+
     /// The vault's writer epoch at this gateway, as its head answers it — a
     /// head or `NO_HEAD`, both carry it. A token minted below it is one
     /// another phone's claim superseded.

@@ -82,22 +82,26 @@ fn month(taken_at_ms: u64) -> i64 {
 }
 
 /// Decide which snapshots to keep.
+///
+/// **A DATE IN THE FUTURE IS CLAMPED, NOT KEPT FOR EVER** (#1188, B11). A phone whose clock was
+/// set ahead and corrected dated snapshots after `now`; they were kept untouched until the real
+/// date caught up, which for a year-9999 clock is never. A snapshot's time is judged as at most
+/// `now`, and where two share it the one registered later is the newer — the gateway's own
+/// clock says which is the head, so a bad phone clock never makes retention drop the head.
 #[must_use]
 pub fn keep(entries: &[SnapshotEntry], now_ms: u64) -> Keep {
+    let judged_at = |entry: &SnapshotEntry| entry.taken_at_ms.min(now_ms);
     let mut ordered: Vec<&SnapshotEntry> = entries.iter().collect();
-    ordered
-        .sort_by(|left, right| (right.taken_at_ms, right.name).cmp(&(left.taken_at_ms, left.name)));
+    ordered.sort_by(|left, right| {
+        (judged_at(right), right.registered_at_ms, right.name).cmp(&(
+            judged_at(left),
+            left.registered_at_ms,
+            left.name,
+        ))
+    });
 
-    let mut kept: BTreeSet<Name> = ordered
-        .iter()
-        .filter(|entry| entry.taken_at_ms > now_ms)
-        .map(|entry| entry.name)
-        .collect();
-    let judged: Vec<&SnapshotEntry> = ordered
-        .iter()
-        .copied()
-        .filter(|entry| entry.taken_at_ms <= now_ms)
-        .collect();
+    let mut kept: BTreeSet<Name> = BTreeSet::new();
+    let judged: Vec<&SnapshotEntry> = ordered.clone();
     if let Some(newest) = judged.first() {
         kept.insert(newest.name);
     }
@@ -110,7 +114,7 @@ pub fn keep(entries: &[SnapshotEntry], now_ms: u64) -> Keep {
         let mut last: Option<i64> = None;
         let mut periods = 0;
         for entry in &judged {
-            let this = period(entry.taken_at_ms);
+            let this = period(judged_at(entry));
             if last == Some(this) {
                 continue;
             }
@@ -294,20 +298,36 @@ mod tests {
     }
 
     #[test]
-    fn the_newest_is_always_kept_and_the_future_is_never_judged() {
+    fn the_newest_is_always_kept() {
         let only = [entry(NOW_MS - 400 * DAY_MS)];
         assert_eq!(keep(&only, NOW_MS).keep, vec![only[0].name]);
         assert_eq!(keep(&[], NOW_MS), Keep::default());
+    }
 
-        let ahead = entry(NOW_MS + 30 * DAY_MS);
+    /// **B11.** A snapshot dated ahead of now (a clock set forward and corrected) is judged as
+    /// today's and ages out like any other, and the head — registered last — is never the one
+    /// dropped for it.
+    #[test]
+    fn a_snapshot_dated_in_the_future_is_clamped_and_never_costs_the_head() {
+        let ahead = SnapshotEntry {
+            name: name_at(NOW_MS + 30 * DAY_MS),
+            taken_at_ms: NOW_MS + 30 * DAY_MS,
+            registered_at_ms: NOW_MS - 2 * HOUR_MS,
+        };
+        let head = SnapshotEntry {
+            name: name_at(NOW_MS),
+            taken_at_ms: NOW_MS,
+            registered_at_ms: NOW_MS,
+        };
         let mut entries: Vec<SnapshotEntry> =
-            (0..20).map(|day| entry(NOW_MS - day * DAY_MS)).collect();
+            (1..20).map(|day| entry(NOW_MS - day * DAY_MS)).collect();
         entries.push(ahead);
+        entries.push(head);
         let decided = keep(&entries, NOW_MS);
-        assert!(decided.keep.contains(&ahead.name));
+        assert!(decided.keep.contains(&head.name), "the head stays");
         assert!(
-            decided.keep.contains(&name_at(NOW_MS)),
-            "the newest judged one"
+            decided.drop.contains(&ahead.name),
+            "the future-dated one shares today with the head and goes"
         );
     }
 
