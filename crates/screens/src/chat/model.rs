@@ -1088,7 +1088,7 @@ impl Chat {
     pub fn on_effect(&mut self, result: wire::EffectResult, ctx: &Ctx) -> Vec<wire::Effect> {
         use wire::effect_result::Outcome as O;
         // The owner check of a held confirm is answered by the confirm; any other is a card's.
-        if self.unlocking.is_none() {
+        if self.unlocking.is_none() && !matches!(result.outcome, Some(O::LibraryPhotoPicked(_))) {
             return self.reveal_answered(&result, ctx);
         }
         match result.outcome {
