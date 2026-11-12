@@ -417,8 +417,30 @@ fn status_to_wire(
                 vision_to_wire(held.state)
             }) as i32,
             projector_bytes: vision.map_or(0, |held| held.bytes),
+            other_model_files: Vec::new(),
         })),
     }
+}
+
+/// The other model files beside `model_path` (sorted names): `.gguf` files that are neither the
+/// model nor a vision projector. An unreadable directory has none.
+fn other_model_files(model_path: &str) -> Vec<String> {
+    let path = std::path::Path::new(model_path);
+    let Some(dir) = path.parent().filter(|dir| !dir.as_os_str().is_empty()) else {
+        return Vec::new();
+    };
+    let own = path.file_name();
+    let mut names: Vec<String> = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_file()))
+        .filter(|entry| Some(entry.file_name().as_os_str()) != own)
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .filter(|name| name.ends_with(".gguf") && !name.contains("mmproj"))
+        .collect();
+    names.sort();
+    names
 }
 
 /// The projector's state, when the request named a path for one.
@@ -467,10 +489,14 @@ pub fn answer(handle: &Handle, request: &wire::AssistRequest) -> Result<wire::As
     match kind {
         K::Status(asked) => {
             let host = hub.host();
-            Ok(status_to_wire(
+            let mut answer = status_to_wire(
                 host.status(std::path::Path::new(&asked.model_path)),
                 vision_of(&host, &asked.projector_path),
-            ))
+            );
+            if let Some(wire::assist_response::Kind::Status(status)) = &mut answer.kind {
+                status.other_model_files = other_model_files(&asked.model_path);
+            }
+            Ok(answer)
         }
         K::Load(asked) => {
             let host = hub.host();

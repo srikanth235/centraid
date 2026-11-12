@@ -576,6 +576,7 @@ message Effect {
     // ---- the shell (1000-1999): chat (1600-1699) ----
     ModelDownload model_download = 1600;
     PickLibraryPhoto pick_library_photo = 1601;
+    DeleteModelFile delete_model_file = 1602;
     // ---- the shell: phone imports (1700-1899) ----
     LibraryPermission library_permission = 1700;
     RollPage roll_page = 1701;

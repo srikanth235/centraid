@@ -253,6 +253,7 @@ internal fun ChatScreen(
                 if (state.messages.isNotEmpty() && state.suggestions.isNotEmpty()) {
                     SuggestionChips(state.suggestions) { onEvent(ChatEvent(sent = ChatEvent.Sent(text = it))) }
                 }
+                state.update_step?.let { UpdateRow(it, onUpdate = { onEvent(ChatDeviceFacts.event(context)); onEvent(ChatEvent(download = ChatEvent.DownloadTapped(update = true))) }) }
                 state.vision_step?.let { VisionBanner(it, onChoose = { choice -> onEvent(ChatDeviceFacts.event(context)); onEvent(ChatEvent(download = ChatEvent.DownloadTapped(vision = true, choice = choice))) }) }
                 ChatComposer(
                     state,
@@ -1380,6 +1381,30 @@ private fun DownloadButton(label: String, testTag: String, onPress: () -> Unit) 
         contentAlignment = Alignment.Center,
     ) {
         Text(label, color = Color.White, fontSize = tokenSp(R.dimen.centraid_text_row), fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/** THE UPDATE ROW (ChatModelUpdate.dc.html): a newer model is ready while the older one keeps answering. */
+@Composable
+private fun UpdateRow(step: ChatModelStep, onUpdate: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)
+            .background(centraidColor("bgSunken"))
+            .padding(12.dp)
+            .testTag("chat-update-step"),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(step.title, style = centraidType("smallStrong"), color = centraidColor("text"), modifier = Modifier.testTag("chat-update-title"))
+        if (step.size_line.isNotEmpty()) {
+            Text(step.size_line, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.testTag("chat-update-line"))
+        }
+        if (step.status_line.isNotEmpty()) {
+            Text(step.status_line, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.testTag("chat-update-status"))
+        }
+        if (step.progress_known) KitProgressBar(step.progress, fill = centraidResource(R.color.centraid_shell))
+        if (step.action_label.isNotEmpty()) DownloadButton(step.action_label, testTag = "chat-update", onPress = onUpdate)
     }
 }
 

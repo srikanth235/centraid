@@ -2349,6 +2349,10 @@ pub const STAYING_EFFECTS: &[(&str, &str)] = &[
         "reads the phone's contacts into the vault's screens",
     ),
     (
+        "delete_model_file",
+        "removes a model file the assistant no longer needs from the app's own models folder",
+    ),
+    (
         "folders_read",
         "reads a followed folder into the vault's screens",
     ),

@@ -647,6 +647,13 @@ final class ScreenStore: ObservableObject {
         case .modelDownload(let download)?:
             ChatModelDownloader.shared.start(ChatAsset(download))
             answer(request, done)
+        // THE MODEL FILE THE NEW ONE REPLACED: a name in the models folder, nothing else.
+        case .deleteModelFile(let gone)?:
+            if !gone.fileName.isEmpty, !gone.fileName.contains("/"), !gone.fileName.contains("..") {
+                try? FileManager.default.removeItem(
+                    at: URL(fileURLWithPath: gone.modelsDir).appendingPathComponent(gone.fileName))
+            }
+            answer(request, done)
         // THE CAPTURE SHIELD, per screen: the host wraps the instance's content in `WordsShield`
         // while it holds one. No screen asks today (Locker shields through its own `secure`).
         case .screenshotShield(let shield)?:

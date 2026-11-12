@@ -224,6 +224,15 @@ pub(super) struct Sheet {
     pub rows: Vec<wire::AssistDocument>,
 }
 
+/// Where the update to the current model stands while the chat works on the one before it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Update {
+    None,
+    Offered,
+    Downloading,
+    Failed,
+}
+
 /// The chat's state.
 pub(super) struct Chat {
     pub phase: Phase,
@@ -267,6 +276,15 @@ pub(super) struct Chat {
     pub free_bytes: u64,
     pub memory_bytes: u64,
     pub cellular_ok: bool,
+    /// THE TWO-MODEL WINDOW (#1188): the chat is using the model before the current one, and the
+    /// newer one is on offer (`update`). `others` are the model files beside the one in use, which
+    /// go once the current model has loaded.
+    pub on_previous: bool,
+    pub update: Update,
+    pub update_progress: Option<f32>,
+    /// No model on the phone is one this release supports: the current one is needed.
+    pub update_needed: bool,
+    pub others: Vec<String>,
     /// The stored thread this chat is saved in, or empty until a turn has been saved.
     pub thread_id: String,
     pub thread_title: String,
@@ -318,6 +336,11 @@ impl Default for Chat {
             free_bytes: 0,
             memory_bytes: 0,
             cellular_ok: false,
+            on_previous: false,
+            update: Update::None,
+            update_progress: None,
+            update_needed: false,
+            others: Vec::new(),
             thread_id: String::new(),
             thread_title: String::new(),
             drawer_open: false,
@@ -366,7 +389,11 @@ impl Chat {
 
     /// A model path in the shell's models directory.
     pub fn model_path(&self) -> String {
-        asset::path(&self.models_dir, &asset::model())
+        let asset = match asset::previous() {
+            Some(previous) if self.on_previous => previous,
+            _ => asset::model(),
+        };
+        asset::path(&self.models_dir, &asset)
     }
 
     pub fn projector_path(&self) -> String {
@@ -421,6 +448,7 @@ impl Chat {
             E::EditCancelled(_) => self.edit_cancelled(),
             E::NewChat(_) => self.new_chat(ctx),
             E::Copied(copied) => self.copied(copied.message_id),
+            E::Download(download) if download.update => self.update_tapped(download.choice),
             E::Download(download) => self.download_tapped(download.vision, download.choice),
             E::DeviceFacts(facts) => self.device_facts(&facts),
             E::DownloadProgress(progress) => self.progressed(&progress, ctx),
@@ -483,7 +511,9 @@ impl Chat {
         let rescope = self.opened && self.scope != asked && (opened.scope_chosen || untouched);
         if self.opened && !rescope {
             let mut effects = Vec::new();
-            if matches!(self.phase, Phase::NeedsModel | Phase::Unavailable) {
+            // A chat on the older model whose update has arrived loads the new one now.
+            let arrived = self.on_previous && self.update == Update::None && !self.running;
+            if matches!(self.phase, Phase::NeedsModel | Phase::Unavailable) || arrived {
                 effects.extend(self.read_status(ctx));
             }
             if !self.running {
@@ -527,14 +557,34 @@ impl Chat {
             model_path: self.model_path(),
             projector_path: String::new(),
         })));
+        let mut beside = Vec::new();
         let state = match answer.ok().and_then(|answer| answer.kind) {
             Some(wire::assist_response::Kind::Status(status)) => {
+                beside = status.other_model_files.clone();
                 wire::AssistModelState::try_from(status.state).ok()
             }
             _ => None,
         };
+        self.others = beside;
+        self.on_previous = false;
+        self.update_needed = false;
         match state {
             Some(wire::AssistModelState::Absent) => {
+                // THE TWO-MODEL WINDOW: the model before this one still works with this release,
+                // so the chat uses it and offers the new one. Any other model file is older than
+                // the window: the chat needs the current one before it can answer.
+                let previous = asset::previous()
+                    .filter(|previous| self.others.iter().any(|n| n == previous.file_name));
+                if let Some(previous) = previous {
+                    self.others.retain(|name| name != previous.file_name);
+                    self.others.push(previous.file_name.to_owned());
+                    self.on_previous = true;
+                    self.update = Update::Offered;
+                    self.phase = Phase::Loading;
+                    self.vision = self.vision.unloaded();
+                    return self.load_effect(ctx);
+                }
+                self.update_needed = !self.others.is_empty();
                 self.phase = Phase::NeedsModel;
                 self.progress = None;
                 Vec::new()
@@ -589,11 +639,31 @@ impl Chat {
         self.phase = Phase::Ready;
         self.progress = None;
         self.error = None;
+        // THE SWAP'S LAST STEP: the current model is loaded, so the files beside it (the model
+        // before it, or an older one this release cannot use) are deleted.
+        let mut effects = self.remove_leftovers();
         if self.session != 0 {
-            return Vec::new();
+            return effects;
         }
         self.start_session(ctx);
-        self.ask_waiting(ctx)
+        effects.extend(self.ask_waiting(ctx));
+        effects
+    }
+
+    /// Delete the other model files, once, when the model in use is the current one.
+    fn remove_leftovers(&mut self) -> Vec<wire::Effect> {
+        if self.on_previous {
+            return Vec::new();
+        }
+        std::mem::take(&mut self.others)
+            .into_iter()
+            .map(|file_name| {
+                effect(wire::effect::Kind::DeleteModelFile(wire::DeleteModelFile {
+                    models_dir: self.models_dir.clone(),
+                    file_name,
+                }))
+            })
+            .collect()
     }
 
     /// Open a session on the scope; a refusal is "not available here".
@@ -738,6 +808,44 @@ impl Chat {
         ))]
     }
 
+    /// The update row's Update: the current model is fetched beside the one in use, over Wi-Fi unless
+    /// the member chose mobile data. The chat keeps answering on the model it has.
+    fn update_tapped(&mut self, choice: i32) -> Vec<wire::Effect> {
+        use wire::ChatStepAction as Choice;
+        let model = asset::model();
+        let choice = Choice::try_from(choice).unwrap_or(Choice::Unspecified);
+        let started = matches!(self.update, Update::Offered | Update::Failed);
+        let waiting = self.update == Update::Downloading;
+        if !(started || waiting && choice == Choice::DownloadCellular) || !self.on_previous {
+            return Vec::new();
+        }
+        // The new file lands beside the old one, so the phone needs room for both.
+        if self.too_little_space(model.bytes) {
+            return Vec::new();
+        }
+        let more_data = match choice {
+            Choice::DownloadCellular => true,
+            Choice::WaitWifi => false,
+            _ => self.cellular_ok,
+        };
+        self.cellular_ok = more_data;
+        if started {
+            self.update = Update::Downloading;
+            self.update_progress = None;
+        }
+        vec![effect(wire::effect::Kind::ModelDownload(
+            wire::ModelDownload {
+                vision: false,
+                url: model.url.to_owned(),
+                file_name: model.file_name.to_owned(),
+                sha256: model.sha256.to_owned(),
+                bytes: model.bytes,
+                models_dir: self.models_dir.clone(),
+                allow_cellular: more_data,
+            },
+        ))]
+    }
+
     /// The phone told how it is: kept, and the step is drawn from it.
     fn device_facts(&mut self, facts: &wire::chat_event::DeviceFacts) -> Vec<wire::Effect> {
         self.network = Network::try_from(facts.network).unwrap_or(Network::Unspecified);
@@ -777,6 +885,10 @@ impl Chat {
             self.vision.error = None;
             return Vec::new();
         }
+        if self.update == Update::Downloading {
+            self.update_progress = fraction;
+            return Vec::new();
+        }
         let resumed = matches!(self.phase, Phase::Checking | Phase::NeedsModel);
         if self.phase != Phase::Downloading && !resumed {
             return Vec::new();
@@ -793,6 +905,9 @@ impl Chat {
         if vision {
             return self.vision_finished(ok, ctx);
         }
+        if self.update == Update::Downloading {
+            return self.update_finished(ok, ctx);
+        }
         if self.phase != Phase::Downloading {
             return Vec::new();
         }
@@ -807,6 +922,24 @@ impl Chat {
             let _ = ctx;
             Vec::new()
         }
+    }
+
+    /// The new model arrived whole and verified beside the old one. Between turns it is loaded in
+    /// the old one's place and the old file goes (`became_ready`); while a turn runs the old one
+    /// finishes it and the new one loads the next time the tab opens.
+    fn update_finished(&mut self, ok: bool, ctx: &Ctx) -> Vec<wire::Effect> {
+        self.update_progress = None;
+        if !ok {
+            self.update = Update::Failed;
+            return Vec::new();
+        }
+        self.update = Update::None;
+        if self.running {
+            return Vec::new();
+        }
+        self.on_previous = false;
+        self.phase = Phase::Loading;
+        self.load_effect(ctx)
     }
 
     pub fn on_data_changed(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {

@@ -136,6 +136,13 @@ catalog! {
     plain scope_all = ("All apps", "All apps");
     plain scope_label = ("Chat scope", "Chat scope");
     plain send = ("Send", "Send");
+    plain update_title = ("A newer model is ready", "A newer model is ready");
+    plain update_action = ("Update", "Update");
+    plain update_needed_title = ("Chat needs a newer model", "Chat needs a newer model");
+    plain update_needed_body = (
+        "This version of Centraid can’t use the model on this phone any more. The new one is {size}, and the old one is removed after it arrives.",
+        "This version of Centraid can’t use the model on this phone any more. The new one is {size}, and the old one is removed after it arrives."
+    );
     plain photo_reader_body = (
         "Reading a photo needs a second download of {size}. It stays on this phone, and the photo never leaves it.",
         "Reading a photo needs a second download of {size}. It stays on this phone, and the photo never leaves it."

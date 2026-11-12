@@ -144,6 +144,9 @@ message ChatState {
   string dictate_label = 70;
   string listening_label = 71;
   string dictation_off_label = 72;
+  // A newer model than the one the chat is using is ready to fetch (the two-model window): a row
+  // above the composer while the older one keeps working. Absent when there is none.
+  ChatModelStep update_step = 73;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;
@@ -419,6 +422,8 @@ message ChatEvent {
     bool vision = 1;
     // Which of the step's actions was tapped; unspecified is its primary one.
     ChatStepAction choice = 2;
+    // The update row's Update, not a first download: the chat keeps working on the model it has.
+    bool update = 3;
   }
 
   // What the phone is like now, told on every appearance of the chat and when it changes: the
@@ -571,6 +576,13 @@ message ModelDownload {
 // library holds (HEIC) to JPEG, bounds it to 1024 pixels on the long edge and
 // writes a small thumbnail to a temporary file it sweeps with the chat.
 message PickLibraryPhoto {}
+
+// Delete a model file the chat no longer needs: the new one arrived whole, was verified beside the
+// old and loaded, so the old one goes. A name in the models directory, never a path.
+message DeleteModelFile {
+  string models_dir = 1;
+  string file_name = 2;
+}
 
 message LibraryPhotoPicked {
   // The member dismissed the picker.

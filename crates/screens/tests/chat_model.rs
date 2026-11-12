@@ -444,6 +444,7 @@ fn vision_download(chat: &mut Chat, choice: wire::ChatStepAction) -> Option<wire
     chat.event(C::Download(wire::chat_event::DownloadTapped {
         vision: true,
         choice: choice as i32,
+        ..Default::default()
     }));
     download_effect(chat)
 }
@@ -602,6 +603,7 @@ fn on_mobile_data_the_chat_asks_first_and_waiting_for_wifi_is_a_download_that_wi
     chat.event(C::Download(wire::chat_event::DownloadTapped {
         vision: false,
         choice: wire::ChatStepAction::WaitWifi as i32,
+        ..Default::default()
     }));
     assert!(!download_effect(&chat).expect("a download").allow_cellular);
     let step = chat.state().model_step.clone().expect("a step");
@@ -612,6 +614,7 @@ fn on_mobile_data_the_chat_asks_first_and_waiting_for_wifi_is_a_download_that_wi
     chat.event(C::Download(wire::chat_event::DownloadTapped {
         vision: false,
         choice: wire::ChatStepAction::DownloadCellular as i32,
+        ..Default::default()
     }));
     assert!(download_effect(&chat).expect("a download").allow_cellular);
     assert_eq!(chat.state().model_step.clone().unwrap().title, "");
@@ -651,4 +654,142 @@ fn a_phone_with_too_little_memory_is_told_why_and_is_offered_no_download() {
         download_effect(&chat).is_none(),
         "nothing is fetched for a phone that cannot run it"
     );
+}
+
+// ------------------------------------------------------ the two-model window --
+
+fn window_record() -> centraid_assist::record::Record {
+    let current = centraid_assist::record::record().current;
+    let entry = |file: &str, sha: &str, bytes: u64| centraid_assist::record::Entry {
+        url: format!(
+            "https://huggingface.co/x/y/resolve/{}/{file}",
+            "a".repeat(40)
+        ),
+        file_name: file.to_owned(),
+        sha256: sha.repeat(64),
+        bytes,
+        ..current.clone()
+    };
+    centraid_assist::record::Record {
+        current: entry("New-Q4_0.gguf", "b", 604_000_000),
+        previous: Some(entry("Old-Q4_0.gguf", "c", 563_000_000)),
+    }
+}
+
+/// A chat whose models directory holds exactly `files`, over a loader that accepts any of them.
+fn with_files(files: &[&str]) -> (Chat, std::path::PathBuf) {
+    let dir = centraid_ontology::scratch::scratch_dir();
+    std::fs::create_dir_all(&dir).unwrap();
+    for file in files {
+        std::fs::write(dir.join(file), b"weights").unwrap();
+    }
+    let chat = Chat::with(None);
+    chat.driver
+        .handle
+        .assist()
+        .host()
+        .set_loader(Arc::new(Loader(script(&read_tasks()))));
+    (chat, dir)
+}
+
+fn deleted(chat: &Chat) -> Vec<String> {
+    chat.asked(|kind| match kind {
+        wire::effect::Kind::DeleteModelFile(gone) => Some(gone.file_name.clone()),
+        _ => None,
+    })
+}
+
+#[test]
+fn the_model_before_the_current_one_keeps_working_and_a_row_offers_the_new_one_with_its_size() {
+    centraid_assist::record::held_for(window_record(), || {
+        let (mut chat, dir) = with_files(&["Old-Q4_0.gguf"]);
+        open_in(&mut chat, &dir);
+        let state = chat.state();
+        assert_eq!(
+            state.phase(),
+            Phase::Ready,
+            "the older model is in the window"
+        );
+        let row = state.update_step.clone().expect("the update row");
+        assert_eq!(row.title, "A newer model is ready");
+        assert_eq!(row.size_line, "604 MB");
+        assert_eq!(row.action_label, "Update");
+        assert!(
+            deleted(&chat).is_empty(),
+            "nothing goes before the new one is in use"
+        );
+    });
+}
+
+#[test]
+fn the_update_is_fetched_beside_the_old_file_swapped_in_and_the_old_file_deleted() {
+    centraid_assist::record::held_for(window_record(), || {
+        let (mut chat, dir) = with_files(&["Old-Q4_0.gguf"]);
+        open_in(&mut chat, &dir);
+        chat.driver.effects.clear();
+        chat.event(C::Download(wire::chat_event::DownloadTapped {
+            update: true,
+            ..Default::default()
+        }));
+        let fetch = download_effect(&chat).expect("the fetch of the new file");
+        assert_eq!(fetch.file_name, "New-Q4_0.gguf");
+        assert!(!fetch.allow_cellular, "the update waits for Wi‑Fi");
+        assert_eq!(
+            chat.state().phase(),
+            Phase::Ready,
+            "the old model keeps answering"
+        );
+        chat.event(C::DownloadProgress(wire::chat_event::DownloadProgress {
+            done_bytes: 151,
+            total_bytes: 604,
+            vision: false,
+        }));
+        assert!(chat.state().update_step.clone().unwrap().progress_known);
+        // the shell verified the file and put it beside the old one
+        std::fs::write(dir.join("New-Q4_0.gguf"), b"weights").unwrap();
+        chat.event(C::DownloadFinished(wire::chat_event::DownloadFinished {
+            ok: true,
+            vision: false,
+        }));
+        chat.perform();
+        let state = chat.state();
+        assert_eq!(state.phase(), Phase::Ready);
+        assert!(state.update_step.is_none());
+        assert_eq!(deleted(&chat), vec!["Old-Q4_0.gguf".to_owned()]);
+    });
+}
+
+#[test]
+fn a_model_older_than_the_window_says_an_update_is_needed_and_is_removed_after_the_new_one_arrives()
+{
+    centraid_assist::record::held_for(window_record(), || {
+        let (mut chat, dir) = with_files(&["Ancient-Q4_0.gguf"]);
+        open_in(&mut chat, &dir);
+        let state = chat.state();
+        assert_eq!(state.phase(), Phase::NeedsModel);
+        let step = state.model_step.clone().expect("the step");
+        assert_eq!(step.title, "Chat needs a newer model");
+        assert!(step.note_line.contains("604 MB"), "{}", step.note_line);
+        assert_eq!(step.action_label, "Download on Wi‑Fi");
+        chat.event(C::Download(wire::chat_event::DownloadTapped::default()));
+        std::fs::write(dir.join("New-Q4_0.gguf"), b"weights").unwrap();
+        chat.event(C::DownloadFinished(wire::chat_event::DownloadFinished {
+            ok: true,
+            vision: false,
+        }));
+        chat.perform();
+        assert_eq!(chat.state().phase(), Phase::Ready);
+        assert_eq!(deleted(&chat), vec!["Ancient-Q4_0.gguf".to_owned()]);
+    });
+}
+
+#[test]
+fn a_phone_on_the_current_model_has_no_update_row_and_deletes_nothing() {
+    centraid_assist::record::held_for(window_record(), || {
+        let (mut chat, dir) = with_files(&["New-Q4_0.gguf"]);
+        open_in(&mut chat, &dir);
+        assert_eq!(chat.state().phase(), Phase::Ready);
+        assert!(chat.state().update_step.is_none());
+        assert!(deleted(&chat).is_empty());
+    });
 }

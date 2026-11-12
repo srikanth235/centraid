@@ -7,6 +7,7 @@ import android.graphics.Matrix
 import android.media.ExifInterface
 import android.net.Uri
 import centraid.core.v1.ChatEvent
+import centraid.core.v1.DeleteModelFile
 import centraid.core.v1.EffectDone
 import centraid.core.v1.EffectFailed
 import centraid.core.v1.EffectRequest
@@ -53,6 +54,18 @@ internal object ChatEffects {
 
     private const val SEND_EDGE = 1024
     private const val THUMB_EDGE = 160
+
+    /**
+     * The model file the new one replaced: a name in the models folder, nothing else. The new file
+     * was fetched, verified and loaded before Rust asks, and a name that is not a plain file name
+     * deletes nothing.
+     */
+    fun deleteModelFile(asked: DeleteModelFile): EffectResult {
+        val name = asked.file_name
+        if (name.isEmpty() || name.contains('/') || name.contains("..")) return EffectResult(done = EffectDone())
+        File(asked.models_dir, name).delete()
+        return EffectResult(done = EffectDone())
+    }
 
     /** Start the download Rust asked for; answers at once. */
     fun download(context: Context, screens: Screens, request: EffectRequest, asked: ModelDownload): EffectResult {

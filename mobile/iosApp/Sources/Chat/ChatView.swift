@@ -1239,6 +1239,11 @@ private struct ChatComposerCard: View {
                     Spacer(minLength: 0)
                 }
             }
+            // THE UPDATE ROW (ChatModelUpdate.dc.html): a newer model is ready while the older one
+            // keeps answering.
+            if state.hasUpdateStep {
+                ChatUpdateRow(step: state.updateStep, onUpdate: { chat.updateTapped() })
+            }
             if state.hasVisionStep {
                 ChatVisionBanner(step: state.visionStep, onChoose: { chat.visionDownloadTapped($0) })
             }
@@ -1472,6 +1477,40 @@ private struct ChatAttachmentChip: View {
 /// THE PHOTO READER'S STEP, as a compact notice inside the composer card: one
 /// line and one action. The second download is the only other moment Centraid
 /// reaches the network, so its words and its action are in `net`.
+private struct ChatUpdateRow: View {
+    let step: Centraid_Core_V1_ChatModelStep
+    let onUpdate: () -> Void
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(step.title)
+                .centraidType("smallStrong")
+                .foregroundStyle(Theme.color("text", scheme))
+                .accessibilityIdentifier("chat-update-title")
+            if !step.sizeLine.isEmpty {
+                Text(step.sizeLine)
+                    .centraidType("small")
+                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .accessibilityIdentifier("chat-update-line")
+            }
+            if !step.statusLine.isEmpty {
+                Text(step.statusLine)
+                    .centraidType("small")
+                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .accessibilityIdentifier("chat-update-status")
+            }
+            if step.progressKnown {
+                ProgressTrack(fraction: Double(step.progress))
+            }
+            if !step.actionLabel.isEmpty {
+                ChatDownloadButton(label: step.actionLabel, action: onUpdate)
+                    .accessibilityIdentifier("chat-update")
+            }
+        }
+    }
+}
+
 private struct ChatVisionBanner: View {
     let step: Centraid_Core_V1_ChatModelStep
     /// A tap on one of the sheet's actions, by what it asks (`ChatStepAction`).

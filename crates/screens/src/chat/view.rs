@@ -4,7 +4,7 @@ use centraid_api_proto::core_v1 as wire;
 use wire::chat_event::device_facts::Network;
 use wire::chat_state::Phase;
 
-use super::model::{Chat, Msg, Pending, Proposal, Row, Stage, VisionPhase};
+use super::model::{Chat, Fail, Msg, Pending, Proposal, Row, Stage, Update, VisionPhase};
 use super::when;
 use crate::kit::quantity::{Quantity, UnitsPref};
 use crate::screen::Ctx;
@@ -134,6 +134,19 @@ impl Chat {
         } else {
             String::new()
         };
+        if self.update_needed && !self.too_little_space(bytes) {
+            // OLDER THAN THE WINDOW (ChatUpdateNeeded.dc.html): the same two choices as a first
+            // download, under the reason.
+            return wire::ChatModelStep {
+                title: words::update_needed_title(locale),
+                note_line: fill(&words::update_needed_body(locale), &[("size", &size)]),
+                action_label: words::download_action(locale),
+                action_kind: wire::ChatStepAction::Download as i32,
+                secondary_label: words::use_mobile_data(locale),
+                secondary_kind: wire::ChatStepAction::DownloadCellular as i32,
+                ..wire::ChatModelStep::default()
+            };
+        }
         if self.too_little_space(bytes) {
             return wire::ChatModelStep {
                 size_line,
@@ -175,6 +188,52 @@ impl Chat {
             secondary_label: words::use_mobile_data(locale),
             secondary_kind: wire::ChatStepAction::DownloadCellular as i32,
             ..wire::ChatModelStep::default()
+        }
+    }
+
+    /// THE UPDATE ROW (ChatModelUpdate.dc.html): a newer model than the one in use, above the
+    /// composer, while the older one keeps answering.
+    fn update_step(&self, locale: Locale) -> Option<wire::ChatModelStep> {
+        if self.phase != Phase::Ready || !self.on_previous {
+            return None;
+        }
+        let title = words::update_title(locale);
+        let bytes = self.model_bytes();
+        match self.update {
+            Update::None => None,
+            Update::Offered | Update::Failed => Some(wire::ChatModelStep {
+                title,
+                size_line: size_text(bytes),
+                action_label: if self.update == Update::Failed {
+                    words::retry(locale)
+                } else {
+                    words::update_action(locale)
+                },
+                action_kind: wire::ChatStepAction::Download as i32,
+                status_line: if self.update == Update::Failed {
+                    self.fail_line(Fail::DownloadStopped, locale)
+                } else if self.too_little_space(bytes) {
+                    words::low_space_title(locale)
+                } else {
+                    String::new()
+                },
+                ..wire::ChatModelStep::default()
+            }),
+            Update::Downloading => {
+                let waiting = !self.cellular_ok
+                    && matches!(self.network, Network::Cellular | Network::Offline);
+                Some(wire::ChatModelStep {
+                    title,
+                    progress_known: self.update_progress.is_some(),
+                    progress: self.update_progress.unwrap_or(0.0),
+                    status_line: if waiting {
+                        words::waiting_wifi(locale)
+                    } else {
+                        percent(locale, self.update_progress)
+                    },
+                    ..wire::ChatModelStep::default()
+                })
+            }
         }
     }
 
@@ -356,6 +415,7 @@ impl Chat {
                 .map(|fail| self.fail_line(fail, locale))
                 .unwrap_or_default(),
             model_step: self.model_step(locale),
+            update_step: self.update_step(locale),
             composer_placeholder: words::composer_placeholder(locale),
             send_label: words::send(locale),
             stop_label: words::stop(locale),

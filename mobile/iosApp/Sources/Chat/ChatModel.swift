@@ -212,6 +212,11 @@ final class ChatModel: ObservableObject {
             $0.choice = choice
         }))
     }
+    /// The update row's Update: the newer model is fetched beside the one in use.
+    func updateTapped() {
+        tellDevice()
+        send(.download(.with { $0.update = true }))
+    }
     func removeAttachment(_ id: UInt64) { send(.attachmentRemoved(.with { $0.id = id })) }
     func libraryPhotoTapped() { send(.libraryPhotoTapped(.init())) }
     func openDocuments() { send(.documentsOpened(.init())) }

@@ -61,7 +61,74 @@ pub struct Record {
 /// Never in a build the gate passed: `model_record` parses it.
 #[must_use]
 pub fn record() -> Record {
-    parse(RECORD).expect("model.json is valid; the gate's model-record step reads it")
+    if let Some(held) = HELD.with(|held| held.borrow().clone()) {
+        return held;
+    }
+    let mut record =
+        parse(RECORD).expect("model.json is valid; the gate's model-record step reads it");
+    if let Some(entry) = dev_model() {
+        record.current = entry;
+        record.previous = None;
+    }
+    record
+}
+
+/// A DEBUG LOADER (#1188): a model to try before it is pinned, named by Hugging Face repository
+/// and commit, with the file's name, SHA-256 and size (the shell still verifies what it fetches).
+/// A debug build started with `CENTRAID_DEV_MODEL=<repo>@<commit>/<file>` and
+/// `CENTRAID_DEV_MODEL_SHA256` and `CENTRAID_DEV_MODEL_BYTES` fetches that file in place of the
+/// pinned one; the hashes of the tool catalogue and prompt are those of the pinned entry.
+///
+/// **IT CANNOT SHIP.** Like the dev chat script, the reading exists only under `debug_assertions`;
+/// a release build compiles the second definition, which looks at nothing
+/// (`a_release_build_has_no_debug_model_loader`).
+#[cfg(debug_assertions)]
+fn dev_model() -> Option<Entry> {
+    let named = std::env::var("CENTRAID_DEV_MODEL").ok()?;
+    let sha256 = std::env::var("CENTRAID_DEV_MODEL_SHA256").ok()?;
+    let bytes = std::env::var("CENTRAID_DEV_MODEL_BYTES")
+        .ok()?
+        .parse()
+        .ok()?;
+    dev_entry(&named, &sha256, bytes)
+}
+
+#[cfg(not(debug_assertions))]
+fn dev_model() -> Option<Entry> {
+    None
+}
+
+/// The entry a `<repo>@<commit>/<file>` names, on the pinned entry's tools and prompt.
+#[cfg(debug_assertions)]
+fn dev_entry(named: &str, sha256: &str, bytes: u64) -> Option<Entry> {
+    let (repo, rest) = named.split_once('@')?;
+    let (commit, file) = rest.split_once('/')?;
+    if repo.is_empty() || file.is_empty() || commit.len() != 40 {
+        return None;
+    }
+    let pinned = parse(RECORD).ok()?.current;
+    Some(Entry {
+        url: format!("https://huggingface.co/{repo}/resolve/{commit}/{file}"),
+        file_name: file.to_owned(),
+        sha256: sha256.to_owned(),
+        bytes,
+        score: None,
+        ..pinned
+    })
+}
+
+thread_local! {
+    static HELD: std::cell::RefCell<Option<Record>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Run `f` with `record` standing in for the committed one on THIS thread: how a test drives the
+/// two-model window from a fixture record with a `previous` entry. Nothing ships it a record; it
+/// reads no file and changes nothing for another thread.
+pub fn held_for<T>(record: Record, f: impl FnOnce() -> T) -> T {
+    let before = HELD.with(|held| held.replace(Some(record)));
+    let out = f();
+    HELD.with(|held| *held.borrow_mut() = before);
+    out
 }
 
 /// Read a record.
@@ -170,4 +237,41 @@ pub fn problems(entry: &Entry) -> Vec<String> {
         out.push("score is outside 0 to 1".to_owned());
     }
     out
+}
+
+#[cfg(test)]
+mod dev_model_tests {
+    /// In a release build the loader is not compiled in: the function that would read the
+    /// variables is the one that returns `None`.
+    #[cfg(not(debug_assertions))]
+    #[test]
+    fn a_release_build_has_no_debug_model_loader() {
+        assert!(super::dev_model().is_none());
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn a_debug_loader_names_a_file_by_repo_and_commit_and_nothing_else() {
+        let commit = "d".repeat(40);
+        let entry = super::dev_entry(
+            &format!("acme/models@{commit}/Try-Q4_0.gguf"),
+            &"e".repeat(64),
+            7,
+        )
+        .expect("an entry");
+        assert_eq!(
+            entry.url,
+            format!("https://huggingface.co/acme/models/resolve/{commit}/Try-Q4_0.gguf")
+        );
+        assert_eq!(entry.file_name, "Try-Q4_0.gguf");
+        assert_eq!(entry.bytes, 7);
+        assert!(
+            super::problems(&entry)
+                .iter()
+                .all(|p| !p.contains("pinned to a commit"))
+        );
+        // a branch is not a commit
+        assert!(super::dev_entry("acme/models@main/Try.gguf", "e", 1).is_none());
+        assert!(super::dev_entry("no-commit", "e", 1).is_none());
+    }
 }

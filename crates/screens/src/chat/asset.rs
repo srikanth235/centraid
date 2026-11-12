@@ -25,15 +25,31 @@ pub struct Asset {
 /// `model-record` step ties it to the runtime's tool catalogue and prompt.
 #[must_use]
 pub fn model() -> Asset {
-    static MODEL: std::sync::OnceLock<Asset> = std::sync::OnceLock::new();
-    *MODEL.get_or_init(|| {
-        let entry = centraid_assist::record::record().current;
-        Asset {
-            url: Box::leak(entry.url.into_boxed_str()),
-            file_name: Box::leak(entry.file_name.into_boxed_str()),
-            sha256: Box::leak(entry.sha256.into_boxed_str()),
-            bytes: entry.bytes,
-        }
+    of(&centraid_assist::record::record().current)
+}
+
+/// THE MODEL BEFORE IT, while the release still supports it (the two-model window): a phone that
+/// holds it keeps chatting with it and is offered the current one.
+#[must_use]
+pub fn previous() -> Option<Asset> {
+    centraid_assist::record::record().previous.as_ref().map(of)
+}
+
+/// An entry as an asset. The strings are leaked once per distinct entry, so asking again costs
+/// nothing and a record is read for every question about the files.
+fn of(entry: &centraid_assist::record::Entry) -> Asset {
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+    static SEEN: std::sync::OnceLock<Mutex<HashMap<String, Asset>>> = std::sync::OnceLock::new();
+    let mut seen = SEEN
+        .get_or_init(Mutex::default)
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    *seen.entry(entry.sha256.clone()).or_insert_with(|| Asset {
+        url: Box::leak(entry.url.clone().into_boxed_str()),
+        file_name: Box::leak(entry.file_name.clone().into_boxed_str()),
+        sha256: Box::leak(entry.sha256.clone().into_boxed_str()),
+        bytes: entry.bytes,
     })
 }
 

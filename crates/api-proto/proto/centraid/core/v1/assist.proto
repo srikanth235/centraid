@@ -195,6 +195,10 @@ message AssistStatus {
   AssistVisionState vision = 3;
   // The projector file's size, 0 when there is none.
   uint64 projector_bytes = 4;
+  // The names of the other `.gguf` model files in the model's directory (the vision projector
+  // excluded): what an older release left behind. The chat tells the second model of the
+  // two-model window from one older than that.
+  repeated string other_model_files = 5;
 }
 
 enum AssistVisionState {
