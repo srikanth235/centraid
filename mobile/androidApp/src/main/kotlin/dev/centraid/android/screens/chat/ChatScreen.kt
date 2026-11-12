@@ -743,7 +743,15 @@ private fun PendingCard(pending: ChatPending, onConfirm: () -> Unit, onCancel: (
             )
             pending.steps.forEach { step ->
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Box(Modifier.size(20.dp).border(1.6.dp, centraidColor("textFaint"), CircleShape))
+                    // Not yet done is an empty ring; once the core has done it, the board's green disc with its check.
+                    if (pending.state == ChatPending.State.STATE_APPLIED) {
+                        Box(
+                            Modifier.size(20.dp).clip(CircleShape).background(centraidResource(R.color.centraid_state_green)),
+                            contentAlignment = Alignment.Center,
+                        ) { CentraidIcon(iconKey = "Check", tint = Color.White, size = 13.dp) }
+                    } else {
+                        Box(Modifier.size(20.dp).border(1.6.dp, centraidColor("textFaint"), CircleShape))
+                    }
                     // THE ROW'S NAME, then its second line ("Reminders · today, 10:45"); a step the
                     // core did not name by title keeps its composed sentence.
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {

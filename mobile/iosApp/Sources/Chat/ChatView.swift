@@ -955,8 +955,8 @@ private struct ChatCardPress: ButtonStyle {
 /// whose row it changes (`pending.app`; the shell's teal when it spans apps). NOTHING the model
 /// wrote reaches the vault before the member confirms: Rust holds the write until
 /// `PendingConfirmed`, and this card only sends the event. A card that asks twice draws its
-/// confirm in the red state colour. There is no toast and no Undo: an applied card says "Done."
-/// and stays.
+/// confirm in the red state colour. There is no toast: an applied card says "Done." with a green
+/// check on each row, and a line with an Undo key under it for each write the core can take back.
 private struct ChatPendingCard: View {
     let pending: Centraid_Core_V1_ChatPending
     let onConfirm: () -> Void
@@ -980,9 +980,18 @@ private struct ChatPendingCard: View {
                         .foregroundStyle(Color(CentraidAsset.textMeta))
                     ForEach(Array(pending.steps.enumerated()), id: \.offset) { _, step in
                         HStack(alignment: .center, spacing: 10) {
-                            Circle()
-                                .strokeBorder(Theme.color("textFaint", scheme), lineWidth: 1.6)
-                                .frame(width: 20, height: 20)
+                            // A thing not yet done is an empty ring; once the core has done it the
+                            // board's card draws the green disc with its check ("DONE").
+                            if pending.state == .applied {
+                                Circle()
+                                    .fill(Color(CentraidAsset.stateGreen))
+                                    .frame(width: 20, height: 20)
+                                    .overlay(CentraidIconView(iconKey: "Check", tint: .white, size: 13, solid: false))
+                            } else {
+                                Circle()
+                                    .strokeBorder(Theme.color("textFaint", scheme), lineWidth: 1.6)
+                                    .frame(width: 20, height: 20)
+                            }
                             // THE ROW'S NAME, then its second line ("Reminders · today, 10:45"); a step
                             // the core did not name by title keeps its composed sentence.
                             VStack(alignment: .leading, spacing: 2) {
