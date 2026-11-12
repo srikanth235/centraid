@@ -246,13 +246,21 @@ CREATE TABLE revision (
   body       TEXT,
   blob       TEXT REFERENCES blob(hash),
   media_type TEXT,
+  -- Whether a quiet save (an editor's autosave) made this version, and when its session last
+  -- folded another in (NULL: never; the session is only its first commit, at `at`). A quiet save
+  -- of the same command by the same actor within ten idle minutes, and within an hour of `at`,
+  -- writes no version: this one already holds the state before the session began.
+  autosave   INTEGER NOT NULL DEFAULT 0 CHECK (autosave IN (0, 1)),
+  touched_at TEXT,
   CHECK (body IS NULL OR blob IS NULL),
   CHECK ((blob IS NULL) = (media_type IS NULL)),
   PRIMARY KEY (entity_id, seq)
 ) STRICT, WITHOUT ROWID;
 -- Dropping a blob's last holder looks for the revisions that name it; most revisions are text.
 CREATE INDEX revision_by_blob ON revision(blob) WHERE blob IS NOT NULL;
-CREATE TRIGGER revision_is_history BEFORE UPDATE ON revision
+-- Only `touched_at` moves, when a quiet save folds into the version's session; what it holds never.
+CREATE TRIGGER revision_is_history
+  BEFORE UPDATE OF entity_id, seq, at, cause, state, body, blob, media_type, autosave ON revision
   BEGIN SELECT RAISE(ABORT, 'a revision is history'); END;
 -- Nothing deletes a revision by hand: it goes only with its entity (the foreign key's cascade runs
 -- after the entity row is gone, so it finds no entity and is allowed).

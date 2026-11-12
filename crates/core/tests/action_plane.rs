@@ -88,6 +88,7 @@ fn act_on(
             action: action.to_owned(),
             input: params(pairs),
             invoke_key: key.to_owned(),
+            autosave: false,
         }))),
     })?;
     match answer.kind {

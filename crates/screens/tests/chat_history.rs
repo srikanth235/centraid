@@ -400,6 +400,7 @@ fn a_tapped_card_opens_its_row_and_a_card_whose_row_is_gone_says_so() {
             )]
             .into(),
             invoke_key: format!("test:gone:{n}"),
+            autosave: false,
         });
         assert_eq!(
             done.status,

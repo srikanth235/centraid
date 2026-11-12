@@ -418,6 +418,9 @@ impl Registry {
 pub struct Command {
     pub name: String,
     pub input: serde_json::Value,
+    /// A QUIET save: an editor's autosave, which the caller says it is (never inferred from the
+    /// name). Its history may fold into the session of the last one; see [`crate::history`].
+    pub quiet: bool,
 }
 
 impl Command {
@@ -426,7 +429,15 @@ impl Command {
         Self {
             name: name.into(),
             input,
+            quiet: false,
         }
+    }
+
+    /// This command as a quiet save (an editor's autosave).
+    #[must_use]
+    pub const fn quiet(mut self) -> Self {
+        self.quiet = true;
+        self
     }
 }
 
@@ -524,6 +535,7 @@ impl Vault {
 
         let ran = self.commit(|tx| {
             tx.set_producer(&command.name);
+            tx.set_quiet(command.quiet);
             let connection = tx.connection();
             if let Some(mark) = keyed
                 && action_key::recall(connection, mark.key)?.is_some()

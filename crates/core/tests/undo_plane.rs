@@ -126,6 +126,7 @@ impl World {
                     action: action.to_owned(),
                     input: wire_input(input),
                     invoke_key: self.key(),
+                    autosave: false,
                 }))),
             })
             .unwrap_or_else(|error| panic!("{app}.{action}: {error}"));

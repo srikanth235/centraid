@@ -151,6 +151,7 @@ pub(crate) fn act(ctx: &Ctx<'_>, request: &wire::ActRequest) -> Result<wire::Act
             context: format!("a decoded input is not JSON: {error}"),
         })?,
         invoke_key: request.invoke_key.clone(),
+        quiet: request.autosave,
     };
     let mark = centraid_vault::action_key::KeyMark {
         key: &request.invoke_key,
@@ -341,6 +342,7 @@ pub(crate) fn command_keyed(
             context: format!("an input is not JSON: {error}"),
         })?,
         invoke_key: key.to_owned(),
+        quiet: false,
     };
     let mark = centraid_vault::action_key::KeyMark { key, asked: &asked };
     let outcome = match crate::api::command(

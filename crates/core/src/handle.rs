@@ -1332,6 +1332,7 @@ impl HandleState {
                 context: format!("a command's input is not JSON: {error}"),
             })?,
             invoke_key: invoke_key.to_owned(),
+            quiet: false,
         };
         let changes = crate::events::ChangeFeed::new(self.events());
         let owner = self.owner();

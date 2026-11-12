@@ -1159,3 +1159,250 @@ fn a_trashed_item_offers_no_earlier_versions_and_gets_the_entry_back_with_the_it
         assert_eq!(offered(&w), 1, "restored, it offers them again");
     }
 }
+
+// ---------------------------------------------------------------------------------------------
+// Sessions: a quiet save (an editor's autosave) folds into the version the last one wrote
+// ---------------------------------------------------------------------------------------------
+
+const MINUTE: i64 = 60_000;
+
+impl World {
+    /// Run a command `after_ms` after the last one, as a QUIET save when `quiet`.
+    fn at(
+        &self,
+        after_ms: i64,
+        quiet: bool,
+        name: &str,
+        input: Value,
+    ) -> centraid_vault::CommandOutcome {
+        self.scratch.clock.advance_ms(after_ms);
+        let command = Command::new(name, input);
+        let command = if quiet { command.quiet() } else { command };
+        let outcome = self
+            .scratch
+            .vault
+            .execute(&self.registry, &Principal::owner("phone"), &command)
+            .unwrap_or_else(|error| panic!("`{name}`: {error}"));
+        assert_eq!(
+            outcome.status,
+            CommandStatus::Executed,
+            "{name}: {:?}",
+            outcome.reason
+        );
+        outcome
+    }
+
+    fn type_into(&self, after_ms: i64, note: &str, words: &str) {
+        self.at(
+            after_ms,
+            true,
+            "note.edit",
+            json!({ "id": note, "body": words }),
+        );
+    }
+
+    fn touched(&self, id: &str) -> Vec<(i64, Option<String>)> {
+        self.scratch
+            .vault
+            .read(|c| {
+                let mut statement = c.prepare(
+                    "SELECT seq, touched_at FROM revision WHERE entity_id = ?1 ORDER BY seq",
+                )?;
+                let rows = statement
+                    .query_map([id], |row| Ok((row.get(0)?, row.get(1)?)))?
+                    .collect::<rusqlite::Result<Vec<_>>>()?;
+                Ok(rows)
+            })
+            .expect("revisions")
+    }
+}
+
+#[test]
+fn quiet_saves_within_the_gap_are_one_version_holding_the_state_before_the_session() {
+    let w = World::new();
+    let note = w.id("note.create", json!({ "title": "Plan", "body": "start" }));
+    w.type_into(1_000, &note, "one");
+    w.type_into(1_000, &note, "one two");
+    w.type_into(MINUTE, &note, "one two three");
+    assert_eq!(w.revisions(), 1, "a sitting of autosaves is one version");
+    let rows = w.touched(&note);
+    assert!(
+        rows[0].1.is_some(),
+        "the fold moved the session's last commit: {rows:?}"
+    );
+    let versions = w.versions(&note);
+    assert_eq!(
+        World::change(&versions[0], "note.body"),
+        (json!("start"), json!("one two three")),
+        "the version holds the words from before the session, and the record the last ones"
+    );
+    // Restoring it brings back the state before the whole session.
+    w.ok(
+        "history.restore_version",
+        json!({ "id": note, "seq": versions[0].seq }),
+    );
+    assert_eq!(w.state(&note)["note"]["body"], "start");
+}
+
+#[test]
+fn the_idle_gap_is_ten_minutes_to_the_millisecond() {
+    let w = World::new();
+    let note = w.id("note.create", json!({ "title": "Plan", "body": "start" }));
+    w.type_into(1_000, &note, "one");
+    w.type_into(10 * MINUTE, &note, "two");
+    assert_eq!(
+        w.revisions(),
+        1,
+        "exactly the gap after the last commit still folds"
+    );
+    w.type_into(10 * MINUTE + 1, &note, "three");
+    assert_eq!(
+        w.revisions(),
+        2,
+        "one millisecond more starts a new version"
+    );
+}
+
+#[test]
+fn a_sitting_ends_an_hour_after_its_first_commit_even_while_typing_continues() {
+    let w = World::new();
+    let note = w.id("note.create", json!({ "title": "Plan", "body": "start" }));
+    w.type_into(1_000, &note, "w0");
+    // Every nine minutes, so the idle gap never ends it: 54 minutes in, still one version.
+    for step in 1..=6 {
+        w.type_into(9 * MINUTE, &note, &format!("w{step}"));
+    }
+    assert_eq!(w.revisions(), 1);
+    // 63 minutes after the first commit.
+    w.type_into(9 * MINUTE, &note, "w7");
+    assert_eq!(
+        w.revisions(),
+        2,
+        "the cap cut a sitting that never went idle"
+    );
+    // The new session runs on from its own first commit.
+    w.type_into(MINUTE, &note, "w8");
+    assert_eq!(w.revisions(), 2);
+}
+
+#[test]
+fn an_act_that_is_not_quiet_ends_the_session_on_both_sides() {
+    let w = World::new();
+    let note = w.id("note.create", json!({ "title": "Plan", "body": "start" }));
+    w.type_into(1_000, &note, "one");
+    w.at(
+        1_000,
+        false,
+        "note.edit",
+        json!({ "id": note, "title": "Plan B" }),
+    );
+    assert_eq!(
+        w.revisions(),
+        2,
+        "a rename made no fold and is folded into nothing"
+    );
+    w.type_into(1_000, &note, "two");
+    assert_eq!(
+        w.revisions(),
+        3,
+        "the save after it is a new session, not part of the first"
+    );
+    w.type_into(1_000, &note, "three");
+    assert_eq!(w.revisions(), 3, "and it folds the next into itself");
+}
+
+#[test]
+fn a_different_command_does_not_fold_into_a_session() {
+    let w = World::new();
+    let id = w.id("person.add", json!({ "title": "Ada" }));
+    w.at(
+        1_000,
+        true,
+        "person.edit",
+        json!({ "id": id, "title": "Ada L." }),
+    );
+    w.at(
+        1_000,
+        true,
+        "person.save_contact_point",
+        json!({ "id": id, "kind": "email", "value": "ada@analytical.example" }),
+    );
+    assert_eq!(
+        w.revisions(),
+        2,
+        "another command is another kind of action"
+    );
+    w.at(
+        1_000,
+        true,
+        "person.edit",
+        json!({ "id": id, "title": "Ada Lovelace" }),
+    );
+    assert_eq!(
+        w.revisions(),
+        3,
+        "and the command before it is no longer the newest"
+    );
+}
+
+#[test]
+fn a_restore_or_an_undo_never_folds_even_marked_quiet() {
+    let w = World::new();
+    let note = w.id("note.create", json!({ "title": "Plan", "body": "start" }));
+    w.type_into(1_000, &note, "one");
+    let seq = w.versions(&note)[0].seq;
+    w.at(
+        1_000,
+        true,
+        "history.restore_version",
+        json!({ "id": note, "seq": seq }),
+    );
+    assert_eq!(w.revisions(), 2, "a restore is a version of its own");
+    w.at(1_000, true, "history.undo", json!({ "id": note }));
+    assert_eq!(
+        w.revisions(),
+        3,
+        "so is an undo, and neither folded into the other"
+    );
+    w.type_into(1_000, &note, "two");
+    assert_eq!(w.revisions(), 4, "a save after them starts its own session");
+}
+
+#[test]
+fn a_changed_secret_is_a_version_of_its_own_even_among_quiet_saves() {
+    let w = World::new();
+    w.scratch
+        .vault
+        .commit(|tx| {
+            tx.connection().execute(
+                "INSERT INTO locker_key (key_id, created_at) VALUES ('k1', '2026-01-01T00:00:00.000Z')",
+                [],
+            )?;
+            Ok(())
+        })
+        .expect("the key plane");
+    let id = "item-q";
+    w.ok(
+        "locker.add_item",
+        json!({ "item_id": id, "type": "login", "title": "The bank", "username": "ada",
+                "url": "https://bank.example", "password": sealed(id, FIRST),
+                "password_rotated": true, "key_id": "k1" }),
+    );
+    let edit = |username: &str, password: &str| {
+        w.at(
+            1_000,
+            true,
+            "locker.edit_item",
+            json!({ "item_id": id, "title": "The bank", "username": username,
+                    "url": "https://bank.example", "password": password,
+                    "password_rotated": true, "key_id": "k1" }),
+        );
+    };
+    edit("ada", &sealed(id, SECOND));
+    edit("ada", &sealed(id, THIRD));
+    assert_eq!(
+        w.revisions(),
+        2,
+        "each new password is a version, not a fold"
+    );
+}

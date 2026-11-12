@@ -210,6 +210,7 @@ impl Door for CoreDoor {
             action: call.action.to_owned(),
             input: crate::act::input_to_wire(object),
             invoke_key: key.to_owned(),
+            autosave: false,
         };
         let changes = ChangeFeed::new(Arc::clone(&self.events));
         let answer = self.with(|vault| {

@@ -46,6 +46,18 @@
 //! were (a title or notebook edit) copies none: that version carries no `note.body`, and a reader
 //! takes the words from the next newer version that holds them, else from the note itself.
 //!
+//! ## A sitting of autosaves is one version
+//!
+//! A QUIET save (an editor's autosave, which the caller says it is: `Command::quiet`, never
+//! inferred from a name) that continues the session of the newest version writes nothing: that
+//! version holds the state before the session began, and the record holds the state now. It
+//! continues it when the newest version was itself a quiet save of the same command by the same
+//! actor, no more than [`SESSION_IDLE_MS`] (ten minutes) have passed since the session's last
+//! commit, no more than [`SESSION_CAP_MS`] (an hour) since its first, the command is not the
+//! history's own, and no sealed cell changed. Any act that offers an Undo is not quiet, so it is a
+//! version of its own and ends the session on both sides. A fold moves `revision.touched_at` and
+//! nothing else.
+//!
 //! A trashed record offers no "Earlier versions" entry ([`offered`]); its versions are kept and the
 //! entry returns with the record.
 //!
@@ -84,7 +96,7 @@ pub use shape::{
 };
 pub use write::{DAY, Kept, keep_overlay, overlay_refusal};
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use serde_json::Value as Json;
 
 use crate::canonical::canonical_json;
@@ -110,7 +122,12 @@ pub(crate) fn install(connection: &Connection) -> Result<()> {
 /// if it is not the state it has now. Called with the body's writes made, before `COMMIT`.
 ///
 /// Returns how many versions were written.
-pub(crate) fn settle(connection: &Connection, now: &str, cause: &str) -> Result<usize> {
+pub(crate) fn settle(
+    connection: &Connection,
+    now: &str,
+    cause: &str,
+    quiet: bool,
+) -> Result<usize> {
     let seen: Vec<(String, String, Option<String>)> = {
         let mut statement = connection.prepare_cached(&format!(
             "SELECT s.entity_id, s.state,
@@ -130,7 +147,10 @@ pub(crate) fn settle(connection: &Connection, now: &str, cause: &str) -> Result<
         if before == after {
             continue;
         }
-        keep(connection, &id, &before, &after, now, cause)?;
+        if quiet && folds(connection, &id, &before, &after, now, cause)? {
+            continue;
+        }
+        keep_as(connection, &id, &before, &after, now, cause, quiet)?;
         written += 1;
     }
     Ok(written)
@@ -147,6 +167,132 @@ pub(crate) fn keep(
     after: &str,
     now: &str,
     cause: &str,
+) -> Result<()> {
+    keep_as(connection, id, state, after, now, cause, false)
+}
+
+/// How long a quiet-save session may sit idle before the next quiet save starts a new version.
+pub const SESSION_IDLE_MS: i64 = 10 * 60 * 1000;
+
+/// How long a quiet-save session lasts at most, from its first commit, however steadily the
+/// member keeps typing: a long sitting leaves a version at least this often.
+pub const SESSION_CAP_MS: i64 = 60 * 60 * 1000;
+
+/// Whether this QUIET save continues the session of the entity's newest version, so it writes
+/// no version of its own: that version already holds the state before the session began, and
+/// the state now is the entity's own. All of: the newest version was itself written by a quiet
+/// save of the same command (so a star, a rename from a menu, a restore, an undo or any other
+/// act that offers one in between has ended the session on both sides), it is the same actor
+/// (the same cause says so), the command is not the history's own, no secret was sealed anew,
+/// the last commit of the session was at most [`SESSION_IDLE_MS`] ago and its first at most
+/// [`SESSION_CAP_MS`] ago. A fold moves the version's `touched_at` and nothing else.
+fn folds(
+    connection: &Connection,
+    id: &str,
+    before: &str,
+    after: &str,
+    now: &str,
+    cause: &str,
+) -> Result<bool> {
+    if cause.starts_with("history.") {
+        return Ok(false);
+    }
+    let newest: Option<(i64, String, Option<String>, String, bool)> = connection
+        .query_row(
+            "SELECT seq, at, touched_at, cause, autosave FROM revision
+              WHERE entity_id = ?1 ORDER BY seq DESC LIMIT 1",
+            [id],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )
+        .optional()?;
+    let Some((seq, began, touched, newest_cause, quiet)) = newest else {
+        return Ok(false);
+    };
+    if !quiet || newest_cause != cause {
+        return Ok(false);
+    }
+    let ms = |text: &str| crate::time::recurrence::parse_instant_ms(text);
+    let (Some(at_now), Some(first), Some(last)) = (
+        ms(now),
+        ms(&began),
+        ms(touched.as_deref().unwrap_or(&began)),
+    ) else {
+        return Ok(false);
+    };
+    if at_now - last > SESSION_IDLE_MS || at_now - first > SESSION_CAP_MS {
+        return Ok(false);
+    }
+    if sealed_changed(connection, before, after)? {
+        return Ok(false);
+    }
+    connection.execute(
+        "UPDATE revision SET touched_at = ?3 WHERE entity_id = ?1 AND seq = ?2",
+        rusqlite::params![id, seq, now],
+    )?;
+    Ok(true)
+}
+
+/// Whether a sealed cell (a Locker secret) differs between two states: a changed secret is
+/// always a version of its own.
+fn sealed_changed(connection: &Connection, before: &str, after: &str) -> Result<bool> {
+    let (before, after): (Json, Json) = (
+        serde_json::from_str(before).unwrap_or(Json::Null),
+        serde_json::from_str(after).unwrap_or(Json::Null),
+    );
+    let shape = shape::shape(connection)?;
+    for part in &shape.parts {
+        let sealed: Vec<&String> = part
+            .columns
+            .iter()
+            .filter(|column| shape::is_sealed(part.name, column))
+            .collect();
+        if sealed.is_empty() {
+            continue;
+        }
+        let cells = |state: &Json| -> Json {
+            let rows: Vec<&Json> = match state.get(part.alias) {
+                Some(Json::Array(rows)) => rows.iter().collect(),
+                Some(row @ Json::Object(_)) => vec![row],
+                _ => Vec::new(),
+            };
+            Json::Array(
+                rows.into_iter()
+                    .map(|row| {
+                        Json::Array(
+                            sealed
+                                .iter()
+                                .map(|column| {
+                                    row.get(column.as_str()).cloned().unwrap_or(Json::Null)
+                                })
+                                .collect(),
+                        )
+                    })
+                    .collect(),
+            )
+        };
+        if cells(&before) != cells(&after) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn keep_as(
+    connection: &Connection,
+    id: &str,
+    state: &str,
+    after: &str,
+    now: &str,
+    cause: &str,
+    quiet: bool,
 ) -> Result<()> {
     let parse = |text: &str| -> Result<Json> {
         serde_json::from_str(text).map_err(|source| crate::error::VaultError::Json {
@@ -180,8 +326,8 @@ pub(crate) fn keep(
         .query_row([id], |row| row.get(0))?;
     connection
         .prepare_cached(
-            "INSERT INTO revision (entity_id, seq, at, cause, state, body, blob, media_type)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO revision (entity_id, seq, at, cause, state, body, blob, media_type, autosave)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         )?
         .execute(rusqlite::params![
             id,
@@ -192,6 +338,7 @@ pub(crate) fn keep(
             text(0),
             text(1),
             text(2),
+            quiet,
         ])?;
     // The words this version replaced are findable, in the same commit that replaced them.
     crate::index::version_kept(connection, id, seq, &parsed, text(0))?;

@@ -166,6 +166,7 @@ impl World {
                     action: action.to_owned(),
                     input,
                     invoke_key: format!("photos-screens-act-{}", self.writes.get()),
+                    autosave: false,
                 }))),
             })?
             .kind

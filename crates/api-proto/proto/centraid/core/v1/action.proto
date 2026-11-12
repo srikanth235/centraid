@@ -77,6 +77,11 @@ message ActRequest {
   map<string, Value> input = 3;
   // THE DUPLICATE-TAP KEY. The same key twice runs the action once. Required.
   string invoke_key = 4;
+  // A QUIET SAVE (#1185): an editor's autosave, a write the screen makes with no status line and
+  // no Undo. The screen says so; the core never infers it from the action's name. A quiet save
+  // may fold into the version the same action's last quiet save wrote, within the vault's idle
+  // gap and hourly cap, instead of writing a version of its own.
+  bool autosave = 5;
 }
 
 enum ActStatus {

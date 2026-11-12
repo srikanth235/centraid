@@ -642,6 +642,12 @@ CREATE TABLE revision (
   body       TEXT,
   blob       TEXT REFERENCES blob(hash),
   media_type TEXT,
+  -- Whether a quiet save (an editor's autosave) made this version, and when its session last
+  -- folded another in (NULL: never; the session is only its first commit, at `at`). A quiet save
+  -- of the same command by the same actor within ten idle minutes, and within an hour of `at`,
+  -- writes no version: this one already holds the state before the session began.
+  autosave   INTEGER NOT NULL DEFAULT 0 CHECK (autosave IN (0, 1)),
+  touched_at TEXT,
   CHECK (body IS NULL OR blob IS NULL),
   CHECK ((blob IS NULL) = (media_type IS NULL)),
   PRIMARY KEY (entity_id, seq)
@@ -897,7 +903,8 @@ CREATE TRIGGER message_outcome_settles_once BEFORE UPDATE OF outcome ON message
   END;
 
 -- trigger revision_is_history on revision
-CREATE TRIGGER revision_is_history BEFORE UPDATE ON revision
+CREATE TRIGGER revision_is_history
+  BEFORE UPDATE OF entity_id, seq, at, cause, state, body, blob, media_type, autosave ON revision
   BEGIN SELECT RAISE(ABORT, 'a revision is history'); END;
 
 -- trigger revision_is_kept on revision

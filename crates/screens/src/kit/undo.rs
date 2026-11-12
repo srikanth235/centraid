@@ -441,6 +441,7 @@ impl Undo {
                 action: step.inverse.action,
                 input: step.inverse.input,
                 invoke_key: String::new(),
+                autosave: false,
             };
             let key = kit_act::key(&["undo", &request.action], kit_act::fresh());
             let settled = kit_act::act(ctx, request, &key);

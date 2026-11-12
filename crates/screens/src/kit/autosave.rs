@@ -255,7 +255,7 @@ impl<D: Draft> Autosave<D> {
         let baseline = self.baseline.clone().unwrap_or_else(|| draft.clone());
         // NOTHING CHANGED against the baseline (an edit typed and undone):
         // saved, with no action.
-        let Some(request) = draft.request(&baseline) else {
+        let Some(mut request) = draft.request(&baseline) else {
             self.phase = Phase::Saved;
             self.saved_seq = self.edit_seq;
             self.failure = None;
@@ -264,6 +264,8 @@ impl<D: Draft> Autosave<D> {
         self.phase = Phase::Saving;
         self.saving_seq = self.edit_seq;
         let key = kit_act::key(&[D::ACTION, draft.subject()], kit_act::fresh());
+        // A QUIET SAVE: the vault may fold it into the version the last one wrote (#1185).
+        request.autosave = true;
         let settled = kit_act::act(ctx, request, &key);
         if !settled.committed {
             // THE WORDS STAY. The sentence goes over them, never instead.

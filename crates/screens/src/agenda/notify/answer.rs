@@ -351,6 +351,7 @@ pub fn handle(
                             action: inverse.action,
                             input: inverse.input,
                             invoke_key: String::new(),
+                            autosave: false,
                         });
                     done(
                         ctx,

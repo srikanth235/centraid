@@ -731,3 +731,54 @@ fn a_tag_is_its_own_write_added_and_removed_at_once_and_waits_for_the_first_save
     assert!(editor_state(d.view(i)).tags.is_empty());
     assert!(note_of(&d, &id).tags.is_empty());
 }
+
+/// How many earlier versions the open note holds, as the editor's entry counts them.
+fn versions_held(d: &mut Driver, i: u64) -> u32 {
+    refresh_editor(d, i);
+    editor_state(d.view(i))
+        .earlier
+        .as_ref()
+        .map_or(0, |entry| entry.count_label.parse().expect("a count"))
+}
+
+fn refresh_editor(d: &mut Driver, i: u64) {
+    send_editor(d, i, N::Refreshed(ev::Refreshed {}));
+}
+
+#[test]
+fn autosaves_of_one_sitting_are_one_earlier_version_and_a_menu_act_ends_the_sitting() {
+    let mut d = driver();
+    let id = note(&d, "Plan", "start");
+    let i = open(&mut d, &id);
+    type_body(&mut d, i, "start one");
+    settle(&mut d);
+    type_body(&mut d, i, "start one two");
+    settle(&mut d);
+    type_body(&mut d, i, "start one two three");
+    settle(&mut d);
+    assert_eq!(
+        versions_held(&mut d, i),
+        1,
+        "three autosaves of a sitting are one version"
+    );
+    // A rename from a menu offers an Undo, so it is a version of its own and ends the sitting.
+    arrange(
+        &d,
+        act::notes::EditNote {
+            note_id: id.clone(),
+            title: Some("Plan B".to_owned()),
+            ..Default::default()
+        },
+    );
+    assert_eq!(versions_held(&mut d, i), 2);
+    type_body(&mut d, i, "start one two three four");
+    settle(&mut d);
+    assert_eq!(
+        versions_held(&mut d, i),
+        3,
+        "typing after it is a new sitting"
+    );
+    type_body(&mut d, i, "start one two three four five");
+    settle(&mut d);
+    assert_eq!(versions_held(&mut d, i), 3);
+}

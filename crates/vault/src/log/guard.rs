@@ -81,6 +81,8 @@ pub struct Pending {
     stamped: BTreeSet<String>,
     /// The command (or other producer) the commit is for: the `cause` of the history it keeps.
     producer: String,
+    /// Whether the commit is a quiet save (an editor's autosave): see [`CommitTx::set_quiet`].
+    quiet: bool,
 }
 
 impl<'conn> CommitTx<'conn> {
@@ -97,6 +99,14 @@ impl<'conn> CommitTx<'conn> {
         let producer = producer.into();
         self.pending.borrow_mut().producer.clone_from(&producer);
         *self.producer.borrow_mut() = producer;
+    }
+
+    /// Mark this commit as a QUIET save: an editor's autosave, a write the screen makes with no
+    /// status line and no Undo. The caller says so; the vault never infers it from the command's
+    /// name. A quiet save may fold into the session of the version the same command's last quiet
+    /// save wrote ([`crate::history::settle`]) instead of writing another.
+    pub fn set_quiet(&self, quiet: bool) {
+        self.pending.borrow_mut().quiet = quiet;
     }
 
     /// Stamp an entity as changed: `updated_at`, and a place on the
@@ -262,6 +272,7 @@ impl Vault {
             // The history is part of the commit too: the states it replaced are kept with the
             // change that replaced them, or neither lands.
             let producer = std::mem::take(&mut self.pending.borrow_mut().producer);
+            let quiet = self.pending.borrow().quiet;
             let now = self.clock().now_text();
             crate::history::settle(
                 &connection,
@@ -271,6 +282,7 @@ impl Vault {
                 } else {
                     &producer
                 },
+                quiet,
             )?;
             bump_writes(&connection, &census, &self.clock().now_text())?;
             Ok(value)

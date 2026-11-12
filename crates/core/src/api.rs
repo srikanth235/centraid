@@ -380,6 +380,8 @@ pub(crate) struct Invocation {
     pub input: Vec<u8>,
     /// THE CALLER'S CORRELATION KEY. Required; see [`invoke_raw`].
     pub invoke_key: String,
+    /// A QUIET SAVE: an editor's autosave, which the screen says it is (`ActRequest.autosave`).
+    pub quiet: bool,
 }
 
 /// Run a command through D1's gate order, **under the principal the HANDLE
@@ -474,8 +476,12 @@ pub(crate) fn invoke_raw(
         })?
     };
 
-    let outcome =
-        vault.execute_keyed(registry, principal, &Command::new(&call.name, input), keyed)?;
+    let command = if call.quiet {
+        Command::new(&call.name, input).quiet()
+    } else {
+        Command::new(&call.name, input)
+    };
+    let outcome = vault.execute_keyed(registry, principal, &command, keyed)?;
     // AFTER THE COMMIT, because that is when the guard reads its census, and a
     // screen redrawn from a transaction that could still roll back is the
     // failure this ordering exists to prevent.
