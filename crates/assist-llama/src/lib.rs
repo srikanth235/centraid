@@ -8,6 +8,7 @@
 //! | Module | What it owns | Built |
 //! |---|---|---|
 //! | [`generate`] | The generation loop — cancel polling, chunked prefill, images as prefill, stop strings, UTF-8 — over a [`generate::Backend`] a test can fake. | always |
+//! | [`adapter`] | A LoRA adapter file's header, read before llama.cpp is asked to load it, so a file that is not an adapter (or is for another architecture) is refused in words; and a tiny writer for test fixtures. | always |
 //! | [`wire`] | The JSON lines `assist-step` speaks: request, reply, error, ready. | always |
 //! | `engine` | llama.cpp as that backend: weights, an optional vision projector (`mtmd`), a fresh context per generation, the grammar + greedy sampler chain (a sampled generation, `temperature > 0`, draws through `sampling`). | `engine` feature |
 //! | `sampling` | temperature and top-p picking with a seeded generator, for rollouts (#1171); the phone decodes greedily and never calls it. | always |
@@ -51,6 +52,7 @@
 //! With `engine`: `cmake` on `PATH` and a C++17 toolchain (Xcode's, or the
 //! Android NDK's). Without it, nothing beyond Rust.
 
+pub mod adapter;
 #[cfg(feature = "engine")]
 pub mod engine;
 pub mod generate;

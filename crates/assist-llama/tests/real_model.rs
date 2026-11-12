@@ -15,17 +15,24 @@
 //! window is a typed error, the token estimate never under-counts — and that the
 //! native plane's step (a think, then one call) runs over it. How often a 0.8B
 //! model picks the right call is the fine-tune's measurement, not this file's.
+//!
+//! The adapter tests (#1188) hold the rule the fine-tune rests on: an adapter that is attached
+//! and off, or a zero-delta one that is on, leaves the output of the stock model byte for byte
+//! as it was; a live one changes it only when asked; a file that is not an adapter is refused in
+//! words. They build their adapters with `adapter::fixture` for Qwen3.5-0.8B's shapes (the FFN
+//! of all 24 blocks), so they need the 0.8B file in `CENTRAID_ASSIST_MODEL`, and no trainer.
 
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use centraid_assist::host::ModelLoader;
-use centraid_assist::model::{Cancel, Control, Finish, GenerateRequest, Model};
+use centraid_assist::model::{AdapterUse, Cancel, Control, Finish, GenerateRequest, Model};
 use centraid_assist::native::step::{StepOptions, decode_step};
 use centraid_assist::native::think::TraceMode;
 use centraid_assist::native::transcript::render_prompt_for_generation;
 use centraid_assist::prompt::{Budget, END_OF_TURN};
+use centraid_assist_llama::adapter::fixture::{Fixture, write};
 use centraid_assist_llama::{Config, LlamaLoader};
 
 /// One model for the whole file: a load is seconds and the backend starts once
@@ -395,4 +402,201 @@ fn the_token_estimate_never_undercounts_the_real_tokenizer() {
         println!("{label:<12} real {real:>5} estimate {estimate:>5}");
     }
     println!("estimate/real over the plane's prompts: min {worst:.2}x");
+}
+
+/// Qwen3.5-0.8B's FFN LoRA pairs (rank 8) for all 24 blocks. `strength` is the standard deviation
+/// of both factors' values: `0.0` is an all-zero delta.
+fn ffn_adapter(path: &std::path::Path, strength: f32) {
+    const RANK: u64 = 8;
+    let mut state = 0x9E37_79B9_7F4A_7C15_u64;
+    let mut value = move || {
+        state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        // Uniform in [-1, 1) scaled to the requested spread.
+        (((state >> 40) as f32) / 8_388_608.0 - 1.0) * strength
+    };
+    let mut tensors = Vec::new();
+    for block in 0..24 {
+        for (module, ne_in, ne_out) in [
+            ("ffn_gate", 1024u64, 3584u64),
+            ("ffn_up", 1024, 3584),
+            ("ffn_down", 3584, 1024),
+        ] {
+            let a: Vec<f32> = (0..ne_in * RANK).map(|_| value()).collect();
+            let b: Vec<f32> = (0..RANK * ne_out).map(|_| value()).collect();
+            tensors.push((
+                format!("blk.{block}.{module}.weight.lora_a"),
+                [ne_in, RANK],
+                a,
+            ));
+            tensors.push((
+                format!("blk.{block}.{module}.weight.lora_b"),
+                [RANK, ne_out],
+                b,
+            ));
+        }
+    }
+    let fixture = Fixture {
+        architecture: "qwen35",
+        general_type: "adapter",
+        adapter_type: "lora",
+        alpha: 16.0,
+        tensors,
+    };
+    write(path, &fixture).expect("the adapter fixture is written");
+}
+
+fn model_path() -> Option<PathBuf> {
+    Some(PathBuf::from(std::env::var_os("CENTRAID_ASSIST_MODEL")?))
+}
+
+/// The stock model's answer, from a model loaded with no adapter at all.
+fn stock_text() -> Option<String> {
+    let model = LlamaLoader::new(Config::default())
+        .load(&model_path()?)
+        .expect("the model loads");
+    Some(adapter_text(&*model, AdapterUse::Off))
+}
+
+/// A model loaded with the adapter at `file`.
+fn with_adapter(file: &std::path::Path) -> Arc<dyn Model> {
+    LlamaLoader::new(Config::default())
+        .load_with_adapter(&model_path().expect("set"), Some(file))
+        .expect("the model and its adapter load")
+}
+
+fn adapter_text(model: &dyn Model, adapter: AdapterUse) -> String {
+    let prompt = native_prompt("what tasks do I have?");
+    let cancel = Cancel::new();
+    let ask = request(&prompt, None, 32, &[], &cancel);
+    model
+        .generate_with(&ask, adapter, &mut |_| Control::Continue)
+        .expect("a generation")
+        .text
+}
+
+fn scratch(name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("centraid-real-adapter-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("a temp directory");
+    dir.join(name)
+}
+
+#[test]
+#[ignore = "needs a model file: set CENTRAID_ASSIST_MODEL"]
+fn a_loaded_adapter_that_is_off_or_zero_changes_nothing() {
+    let Some(stock) = stock_text() else { return };
+    let file = scratch("zero.gguf");
+    ffn_adapter(&file, 0.0);
+    let model = with_adapter(&file);
+    assert_eq!(
+        adapter_text(&*model, AdapterUse::Off),
+        stock,
+        "loaded and off"
+    );
+    assert_eq!(
+        adapter_text(&*model, AdapterUse::On),
+        stock,
+        "a zero delta, on"
+    );
+    // `generate` is `generate_with(.., Off, ..)`.
+    let prompt = native_prompt("what tasks do I have?");
+    let cancel = Cancel::new();
+    let plain = model
+        .generate(&request(&prompt, None, 32, &[], &cancel), &mut |_| {
+            Control::Continue
+        })
+        .expect("a generation")
+        .text;
+    assert_eq!(plain, stock, "generate");
+}
+
+#[test]
+#[ignore = "needs a model file: set CENTRAID_ASSIST_MODEL"]
+fn a_live_adapter_changes_the_output_only_when_asked() {
+    let Some(stock) = stock_text() else { return };
+    let file = scratch("live.gguf");
+    ffn_adapter(&file, 0.3);
+    let model = with_adapter(&file);
+    assert_eq!(
+        adapter_text(&*model, AdapterUse::Off),
+        stock,
+        "off, after loading"
+    );
+    let on = adapter_text(&*model, AdapterUse::On);
+    assert_ne!(on, stock, "on");
+    assert_eq!(
+        adapter_text(&*model, AdapterUse::On),
+        on,
+        "on is repeatable"
+    );
+    assert_eq!(
+        adapter_text(&*model, AdapterUse::Off),
+        stock,
+        "off again, on the same model"
+    );
+}
+
+#[test]
+#[ignore = "needs a model file: set CENTRAID_ASSIST_MODEL"]
+fn on_without_an_adapter_is_the_stock_model() {
+    let Some(stock) = stock_text() else { return };
+    let model = LlamaLoader::new(Config::default())
+        .load_with_adapter(&model_path().expect("set"), None)
+        .expect("loads");
+    assert_eq!(adapter_text(&*model, AdapterUse::On), stock);
+}
+
+#[test]
+#[ignore = "needs a model file: set CENTRAID_ASSIST_MODEL"]
+fn a_file_that_is_not_an_adapter_for_this_model_is_refused_in_words() {
+    use centraid_assist::model::ModelError;
+    let Some(base) = model_path() else { return };
+    let loader = LlamaLoader::new(Config::default());
+    let refused = |file: &std::path::Path| match loader.load_with_adapter(&base, Some(file)) {
+        Err(ModelError::Load(why)) => why,
+        Err(other) => panic!("not a load error: {other}"),
+        Ok(_) => panic!("{} was accepted", file.display()),
+    };
+    assert!(refused(&base).contains("not an adapter"));
+    assert!(refused(&scratch("nowhere.gguf")).contains("cannot be read"));
+    // Right kind, wrong shapes: llama.cpp's own check, wrapped.
+    let wrong = scratch("wrong.gguf");
+    write(
+        &wrong,
+        &Fixture {
+            architecture: "qwen35",
+            general_type: "adapter",
+            adapter_type: "lora",
+            alpha: 8.0,
+            tensors: vec![
+                (
+                    "blk.0.ffn_down.weight.lora_a".to_owned(),
+                    [7, 2],
+                    vec![0.0; 14],
+                ),
+                (
+                    "blk.0.ffn_down.weight.lora_b".to_owned(),
+                    [2, 5],
+                    vec![0.0; 10],
+                ),
+            ],
+        },
+    )
+    .expect("written");
+    assert!(refused(&wrong).contains("llama.cpp refused"));
+    // Another architecture is named before llama.cpp is asked.
+    let llama = scratch("llama.gguf");
+    write(
+        &llama,
+        &Fixture {
+            architecture: "llama",
+            general_type: "adapter",
+            adapter_type: "lora",
+            alpha: 8.0,
+            tensors: vec![],
+        },
+    )
+    .expect("written");
+    assert!(refused(&llama).contains("made for 'llama'"));
 }
