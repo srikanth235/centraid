@@ -2215,3 +2215,37 @@ fn a_backup_promise_whose_test_is_gone_or_ignored_is_caught() {
     assert!(gaps.contains("`absent.rs` does not exist"), "{gaps}");
     assert!(!gaps.contains("`kept`"), "{gaps}");
 }
+
+// ---------------------------------------------------------------------------
+// Notify
+// ---------------------------------------------------------------------------
+
+#[test]
+fn notify_is_kept_by_the_two_apps_that_alert_and_exempt_for_the_rest() {
+    let status = |app: &str| {
+        REGISTER
+            .iter()
+            .find(|row| row.app == app && row.promise == Promise::Notify)
+            .map(|row| row.status)
+            .expect("a row")
+    };
+    for app in ["reminders", "calendar"] {
+        assert!(matches!(status(app), Status::Kept(_)), "{app}");
+    }
+    for (app, _) in NOTIFY_EXEMPT {
+        assert!(matches!(status(app), Status::Exempt(_)), "{app}");
+    }
+    assert_eq!(NOTIFY_EXEMPT.len(), 7);
+}
+
+#[test]
+fn an_exempt_app_that_grows_an_alerts_read_fails_the_promise() {
+    let root = std::env::temp_dir().join(format!("notify-exempt-{}", std::process::id()));
+    let dir = root.join("crates/apps/notes");
+    std::fs::create_dir_all(&dir).expect("dir");
+    std::fs::write(dir.join("manifest.json"), r#"{"inputs":{"alerts":{}}}"#).expect("write");
+    let gaps = missing(&root, "notes", Promise::Notify);
+    assert_eq!(gaps.len(), 1, "{gaps:?}");
+    assert!(gaps[0].contains("exempt"));
+    std::fs::remove_dir_all(&root).ok();
+}

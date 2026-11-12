@@ -104,11 +104,17 @@ pub enum Promise {
     /// screen under a sentence and Reload keeps them as an earlier version. Health has no editor,
     /// a named exception.
     StaleSave,
+    /// Whatever can alert the member does it through the ONE notification service
+    /// (`reminders.notify`, #1188), whoever produces the alert: the ids are deterministic, a
+    /// delivered notification stays until its item is resolved, a button press is durable, and
+    /// nothing from Locker is ever a notification. An app with nothing to alert for is a named
+    /// exception, and fails when it grows an `alerts` read.
+    Notify,
 }
 
 impl Promise {
     /// Every promise, in the order the table is read.
-    pub const ALL: [Promise; 12] = [
+    pub const ALL: [Promise; 13] = [
         Promise::Trash,
         Promise::Undo,
         Promise::History,
@@ -121,6 +127,7 @@ impl Promise {
         Promise::Origin,
         Promise::Link,
         Promise::StaleSave,
+        Promise::Notify,
     ];
 
     fn name(self) -> &'static str {
@@ -137,6 +144,7 @@ impl Promise {
             Promise::Origin => "Origin",
             Promise::Link => "Link",
             Promise::StaleSave => "Stale save",
+            Promise::Notify => "Notify",
         }
     }
 }
@@ -643,6 +651,34 @@ pub const REGISTER: &[Row] = &[
         Promise::Link,
         "crates/screens/src/reminders/detail.rs",
     ),
+    // Notify (#1188): one service for every alert. Reminders and Calendar hold items with a moment
+    // and a lead time; the other apps have nothing to alert for.
+    kept("reminders", Promise::Notify, NOTIFY_PROOF),
+    kept("calendar", Promise::Notify, NOTIFY_PROOF),
+    exempt("locker", Promise::Notify, NOTIFY_EXEMPT[0].1),
+    exempt("docs", Promise::Notify, NOTIFY_EXEMPT[1].1),
+    exempt("health", Promise::Notify, NOTIFY_EXEMPT[2].1),
+    exempt("money", Promise::Notify, NOTIFY_EXEMPT[3].1),
+    exempt("notes", Promise::Notify, NOTIFY_EXEMPT[4].1),
+    exempt("people", Promise::Notify, NOTIFY_EXEMPT[5].1),
+    exempt("photos", Promise::Notify, NOTIFY_EXEMPT[6].1),
+];
+
+const NOTIFY_PROOF: &str = "crates/screens/src/agenda/notify/service.rs";
+
+/// The apps with nothing to alert for, with the ruling that says so (the Notify promise's only
+/// exceptions). Locker's is the owner's: its contents never leave as a notification.
+pub const NOTIFY_EXEMPT: &[(&str, &str)] = &[
+    (
+        "locker",
+        "Locker's contents never appear in a notification (D11)",
+    ),
+    ("docs", "A document has no moment to alert at"),
+    ("health", "A measurement has no moment to alert at"),
+    ("money", "A transaction has no moment to alert at"),
+    ("notes", "A note has no moment to alert at"),
+    ("people", "A person has no moment to alert at"),
+    ("photos", "A photo has no moment to alert at"),
 ];
 
 /// The apps with no editor, with the ruling that says so (the Stale save promise's only
@@ -744,11 +780,14 @@ pub(crate) fn check(root: &Path, register: &[Row]) -> RuleReport {
                     Promise::StaleSave => STALE_SAVE_EXEMPT
                         .iter()
                         .any(|(app, said)| *app == row.app && *said == ruling),
+                    Promise::Notify => NOTIFY_EXEMPT
+                        .iter()
+                        .any(|(app, said)| *app == row.app && *said == ruling),
                     _ => false,
                 };
                 if !named {
                     findings.push(format!(
-                        "{} / {}: Exempt, but `{ruling}` is not a ruling listed in ATTACH_EXEMPT or STALE_SAVE_EXEMPT",
+                        "{} / {}: Exempt, but `{ruling}` is not a ruling listed in ATTACH_EXEMPT, STALE_SAVE_EXEMPT or NOTIFY_EXEMPT",
                         row.app,
                         row.promise.name()
                     ));
@@ -799,6 +838,7 @@ pub fn missing(root: &Path, app: &str, promise: Promise) -> Vec<String> {
         Promise::Origin => origin_missing(root, app),
         Promise::Link => link_missing(root, app),
         Promise::StaleSave => stale_save_missing(root, app),
+        Promise::Notify => notify_missing(root, app),
     }
 }
 
@@ -1638,6 +1678,74 @@ fn stale_save_missing(root: &Path, app: &str) -> Vec<String> {
         if !text.contains("kit::autosave") && !text.contains("kit::stale") {
             gaps.push(format!(
                 "{shown}: the editor does not answer a stale refusal through the kit (`kit::autosave` or `kit::stale`)"
+            ));
+        }
+    }
+    gaps
+}
+
+// ---------------------------------------------------------------------------
+// Notify
+// ---------------------------------------------------------------------------
+
+/// What the service must say, whoever the producer is: the proof of each rule, as a fragment of the
+/// file that holds it.
+const NOTIFY_RULES: &[(&str, &str, &str)] = &[
+    (
+        "crates/screens/src/agenda/notify/desired.rs",
+        "pub fn live(",
+        "the delivered reading: a notification stays until its item is resolved",
+    ),
+    (
+        "crates/screens/src/agenda/notify/desired.rs",
+        "task|{}|{}|{fire_local}",
+        "deterministic ids, made from the item and its firing",
+    ),
+    (
+        "crates/screens/src/agenda/notify/service.rs",
+        "live_ids",
+        "the shell is told which delivered notifications are still wanted",
+    ),
+    (
+        "crates/screens/src/agenda/notify/answer.rs",
+        "press_id",
+        "a button press is durable and applies once",
+    ),
+];
+
+/// Notify is kept when the service's four rules ([`NOTIFY_RULES`]) hold, nothing in the service
+/// names Locker, and the app declares the `alerts` read the service names its items with. An app in
+/// [`NOTIFY_EXEMPT`] is held the other way: it fails when its manifest grows an `alerts` input.
+fn notify_missing(root: &Path, app: &str) -> Vec<String> {
+    let manifest = fs::read_to_string(root.join("crates/apps").join(app).join("manifest.json"))
+        .unwrap_or_default();
+    let declares = manifest.contains("\"alerts\"");
+    if NOTIFY_EXEMPT.iter().any(|(exempt, _)| *exempt == app) {
+        return if declares {
+            vec![format!(
+                "crates/apps/{app}/manifest.json declares an `alerts` read, but {app} is exempt from the Notify promise as an app with nothing to alert for"
+            )]
+        } else {
+            Vec::new()
+        };
+    }
+    let mut gaps = Vec::new();
+    if !declares {
+        gaps.push(format!(
+            "crates/apps/{app}/manifest.json declares no `alerts` read for the service to name its items with"
+        ));
+    }
+    for (file, fragment, rule) in NOTIFY_RULES {
+        if !live_source(&root.join(file)).is_some_and(|text| text.contains(fragment)) {
+            gaps.push(format!("{file}: `{fragment}` is missing ({rule})"));
+        }
+    }
+    let dir = root.join("crates/screens/src/agenda/notify");
+    for file in source_files(&dir, "rs") {
+        if live_source(&file).is_some_and(|text| text.to_lowercase().contains("locker")) {
+            gaps.push(format!(
+                "{} names Locker; nothing from Locker is ever a notification",
+                file.strip_prefix(root).unwrap_or(&file).display()
             ));
         }
     }
