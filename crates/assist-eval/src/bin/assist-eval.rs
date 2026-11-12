@@ -141,6 +141,7 @@ fn engine(
     gpu_layers: Option<u32>,
     top_p: f32,
     seed: u64,
+    adapter: Option<&std::path::Path>,
 ) -> Result<std::sync::Arc<dyn centraid_assist::Model>> {
     use centraid_assist::host::ModelLoader;
     use centraid_assist_llama::{Config, LlamaLoader};
@@ -157,7 +158,8 @@ fn engine(
         config.gpu_layers = layers;
     }
     LlamaLoader::new(config)
-        .load(path)
+        .load_with_adapter(path, adapter)
+        // a scoring run never falls back to the base alone: an adapter that will not load is an error
         .map_err(|error| anyhow::anyhow!("loading {}: {error}", path.display()))
 }
 
@@ -214,7 +216,7 @@ fn run() -> Result<()> {
         config.grammar = Some(grammar.name().to_owned());
         let settings = format!("tools={},grammar={}", word(args.tools), grammar.name());
         #[cfg(feature = "engine")]
-        let loaded;
+        let (loaded, switched);
         let (label, stepper): (String, Box<dyn Stepper>) = if args.stub {
             if args.adapter.is_some() {
                 bail!(
@@ -254,8 +256,24 @@ fn run() -> Result<()> {
             label += &format!("[{settings}]");
             #[cfg(feature = "engine")]
             {
-                loaded = engine(&path, args.threads, args.gpu_layers, 1.0, 0)?;
-                let mut stepper = centraid_assist_eval::run::ModelStepper::new(loaded.as_ref());
+                loaded = engine(
+                    &path,
+                    args.threads,
+                    args.gpu_layers,
+                    1.0,
+                    0,
+                    args.adapter.as_deref(),
+                )?;
+                // with an adapter every generation of the run is a vault turn: On
+                switched = centraid_assist::Switched {
+                    model: loaded.as_ref(),
+                    adapter: if args.adapter.is_some() {
+                        centraid_assist::AdapterUse::On
+                    } else {
+                        centraid_assist::AdapterUse::Off
+                    },
+                };
+                let mut stepper = centraid_assist_eval::run::ModelStepper::new(&switched);
                 stepper.options.grammar = grammar;
                 (label, Box::new(stepper))
             }

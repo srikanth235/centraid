@@ -254,6 +254,7 @@ fn sample(f: &Flags) -> Result<()> {
                 f.gpu_layers,
                 sampling.top_p,
                 sampling.seed,
+                None,
             )?;
             let name = path
                 .file_name()
