@@ -192,7 +192,7 @@ Test: `the_backup_plane_doors_are_request_kinds_and_answer_an_unpaired_phone` (a
 
 **Presses are durable (#1188, A6).** A button or a tap reaches Rust as `ShellFact.notification_answered { notification_id, verb, press_id }`. The shell writes the press (with a `press_id` of its own) to a small outbox BEFORE it dismisses the banner and before it asks for the core, removes it once the core has taken it, and sends what is left at the next start. Rust runs the write under a key made from `press_id`, so a press sent twice is applied once (the second is answered `replayed`). This is a press queue for the phone's own writer, applied at once or at next start; it is not a replica log and nothing in it waits for a gateway. A receipt's id carries its task and its Undo (the act that reverses the write, `history.undo` where the core offers it), so Undo works after the app was killed.
 
-**Permission** is asked only when `ask_permission` says something would fire. Refused is a quiet state.
+**Permission** is asked only when `ask_permission` says something would fire. Refused is a quiet state, but it is not forgotten: `NotificationsScheduled` carries what the phone will do with what is held (`permission`, and on Android `exact_denied` when exact alarms are not allowed, `channel_off` and `channel_shown` when the member switched the channel off). Rust keeps them as one `AlertFacts` and `kit::permission` says the one sentence for them, so every screen that relies on alerts says the same thing.
 
 **Which items notify is the alert index's** (`alert` rows, kept by the writer): `agenda_upcoming` and `agenda_task_reminders` take `alerts: N` and then read only the items the next N firings belong to, at any vault size.
 

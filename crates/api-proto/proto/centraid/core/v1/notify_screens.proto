@@ -109,6 +109,14 @@ message NotificationsScheduled {
   NotificationPermission permission = 1;
   // How many the OS holds pending for the app now.
   uint32 held = 2;
+  // WHAT THE PHONE WILL DO WITH WHAT IS HELD (#1188, NA1). Android only; iOS
+  // leaves both false. `exact_denied`: the app may not set exact alarms, so an
+  // alert can arrive minutes late. `channel_off`: the member switched the
+  // channel the alerts post to off in system settings; `channel_shown` is its
+  // name as the system shows it, for the sentence that says so.
+  bool exact_denied = 3;
+  bool channel_off = 4;
+  string channel_shown = 5;
 }
 
 // ShellFact 8: the member pressed a button on a notification, or tapped it.

@@ -19,6 +19,7 @@ use super::answer::{self, Facts, Handled, Receipt};
 use super::desired::{self, Inputs};
 use crate::catalog::load;
 use crate::kit::civil;
+use crate::kit::permission::AlertFacts;
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::agenda_reminders as reminders;
@@ -121,7 +122,9 @@ struct Loaded {
 struct Service {
     sync: Sync,
     receipt: Option<Receipt>,
-    permission: Option<i32>,
+    /// What the phone last said about alerts (permission, exact timing, the channel): the one
+    /// state every editor's row and the Backup screen's line read (#1188, NA1).
+    alerts: AlertFacts,
     facts: Facts,
 }
 
@@ -314,8 +317,8 @@ impl Screen for Service {
                 if let Some(wire::effect_result::Outcome::NotificationsScheduled(scheduled)) =
                     result.outcome
                 {
-                    // DENIED IS QUIET: nothing else happens.
-                    self.permission = Some(scheduled.permission);
+                    // DENIED IS QUIET: nothing is scheduled; the state is kept for the rows that say it.
+                    self.alerts = AlertFacts::of(&scheduled);
                 }
             }
             _ => {}

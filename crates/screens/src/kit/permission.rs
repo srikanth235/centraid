@@ -17,7 +17,7 @@
 
 use centraid_api_proto::core_v1 as wire;
 
-use crate::strings::{Locale, permission as words};
+use crate::strings::{Locale, fill, permission as words};
 
 /// What a phone grant is for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -147,6 +147,55 @@ pub fn says(locale: Locale, resource: Resource, state: State) -> String {
         (R::Files, S::NotAsked) => words::files_not_asked(locale),
         (R::Files, S::Refused | S::Limited) => words::files_refused(locale),
         (R::Files, S::Restricted) => words::files_restricted(locale),
+    }
+}
+
+/// WHAT THE PHONE SAYS ABOUT ALERTS (#1188, NA1), as the one notification service last heard it.
+/// Everything that asks for or relies on notifications (a reminder's or an event's editor, the
+/// Backup screen's stale-backup line) reads the same facts and says the same sentence.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AlertFacts {
+    /// `None` while the phone has not answered yet.
+    pub permission: Option<wire::NotificationPermission>,
+    /// Android: exact alarms are not allowed, so an alert can be minutes late.
+    pub exact_denied: bool,
+    /// Android: the channel is switched off; `channel` is its name as the system shows it.
+    pub channel_off: bool,
+    pub channel: String,
+}
+
+impl AlertFacts {
+    /// What a `NotificationsScheduled` answer says.
+    #[must_use]
+    pub fn of(scheduled: &wire::NotificationsScheduled) -> Self {
+        Self {
+            permission: wire::NotificationPermission::try_from(scheduled.permission).ok(),
+            exact_denied: scheduled.exact_denied,
+            channel_off: scheduled.channel_off,
+            channel: scheduled.channel_shown.clone(),
+        }
+    }
+
+    /// The one line to show, or `None` when alerts will arrive on time. A refused or never-asked
+    /// grant says its own sentence; a granted one that the phone still limits says which limit.
+    #[must_use]
+    pub fn line(&self, locale: Locale) -> Option<String> {
+        if let Some(state) = self.permission.and_then(State::of_notifications) {
+            return Some(says(locale, Resource::Notifications, state));
+        }
+        if self.channel_off {
+            let channel = if self.channel.is_empty() {
+                words::notifications_channel_fallback(locale)
+            } else {
+                self.channel.clone()
+            };
+            return Some(fill(
+                &words::notifications_channel_off(locale),
+                &[("channel", &channel)],
+            ));
+        }
+        self.exact_denied
+            .then(|| words::notifications_inexact(locale))
     }
 }
 

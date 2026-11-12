@@ -95,3 +95,34 @@ fn the_camera_roll_and_notifications_answer_with_the_same_states() {
     assert_eq!(State::of_notifications(N::Denied), Some(State::Refused));
     assert_eq!(State::of_notifications(N::Granted), None);
 }
+
+#[test]
+fn alert_facts_say_the_one_line_that_matters_and_nothing_when_all_is_well() {
+    use wire::NotificationPermission as P;
+    let en = Locale::En;
+    let facts = |permission, exact_denied, channel_off| AlertFacts {
+        permission: Some(permission),
+        exact_denied,
+        channel_off,
+        channel: "Reminders".to_owned(),
+    };
+    assert_eq!(facts(P::Granted, false, false).line(en), None);
+    assert_eq!(
+        facts(P::Denied, true, true).line(en).as_deref(),
+        Some("Notifications are off. Turn them on in Settings."),
+        "a refusal outranks the limits"
+    );
+    assert_eq!(
+        facts(P::Granted, true, true).line(en).as_deref(),
+        Some("Reminders alerts are off. Turn them on in Settings."),
+    );
+    assert_eq!(
+        facts(P::Granted, true, false).line(en).as_deref(),
+        Some("Alerts may arrive a few minutes late. Allow exact timing in Settings."),
+    );
+    assert_eq!(
+        AlertFacts::default().line(en),
+        None,
+        "unanswered says nothing"
+    );
+}

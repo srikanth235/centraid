@@ -19,6 +19,9 @@ use crate::native_parity::{
 const CLEAN_GATE: &str = "Compose re-seeds a field's remembered text from the machine only while the draft is clean (`edit_seq == saved_seq`); SwiftUI's `MachineTextField` follows the machine's echo (`TypedText`) instead. A Rust `clean` would end the Kotlin sum, which views-decide-nothing would prefer";
 
 /// One reason, several rows.
+const ALERT_LIMITS: &str = "Android lets the member switch an app's notification channel off and revoke exact alarms; iOS has one grant and no channel, and its triggers are exact";
+
+/// One reason, several rows.
 const DOZE: &str =
     "Doze and the battery-optimisation exemption are Android settings; iOS has no setting to open";
 
@@ -171,6 +174,18 @@ pub const REGISTER: &[Entry] = &[
     (
         "RollAsset.changed_in_place",
         platform(Shell::Android, EDITED_IN_PLACE),
+    ),
+    (
+        "NotificationsScheduled.channel_off",
+        platform(Shell::Android, ALERT_LIMITS),
+    ),
+    (
+        "NotificationsScheduled.channel_shown",
+        platform(Shell::Android, ALERT_LIMITS),
+    ),
+    (
+        "NotificationsScheduled.exact_denied",
+        platform(Shell::Android, ALERT_LIMITS),
     ),
     // Platform, iOS only: Android has no such thing.
     // Agenda's "Import reminders" More row and its option sheet: only where the platform has a

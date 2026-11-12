@@ -95,7 +95,17 @@ internal object Notify {
             else -> 0
         }
         performed?.complete(Unit)
-        return NotificationsScheduled(permission = permission, held = count)
+        // WHAT THE PHONE WILL DO WITH WHAT IS HELD: said back so the editor row can say it.
+        val channel = manager.getNotificationChannelCompat(CHANNEL)
+        val alarms = app.getSystemService(AlarmManager::class.java)
+        val canExact = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && alarms?.canScheduleExactAlarms() == true
+        return NotificationsScheduled(
+            permission = permission,
+            held = count,
+            exact_denied = !NotifyPlan.exact(Build.VERSION.SDK_INT, canExact),
+            channel_off = channel != null && channel.importance == NotificationManagerCompat.IMPORTANCE_NONE,
+            channel_shown = channel?.name?.toString().orEmpty(),
+        )
     }
 
     /** Make the OS hold [request]'s set; how many alarms are pending now. */
