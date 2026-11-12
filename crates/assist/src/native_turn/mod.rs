@@ -136,7 +136,7 @@ impl NativeChat {
         // its way of calling. The retrained model sets this (and `StepOptions::tools`) to `Sig`.
         let flags = Flags {
             writes: Writes::Park,
-            tools: crate::native::prompt::ToolsMode::S2,
+            tools: phone_tools(),
             ..Flags::default()
         };
         let mut session = Session::with_door_in(door, now, tz, "", flags)?;
@@ -266,6 +266,25 @@ pub fn dismissed_line(was_waiting: bool) -> String {
     }
 }
 
+/// The tools the shipped model was trained on, from the model record.
+fn phone_tools() -> crate::native::prompt::ToolsMode {
+    crate::native::prompt::ToolsMode::parse(&crate::record::record().current.tools_mode)
+        .unwrap_or(crate::native::prompt::ToolsMode::S2)
+}
+
+/// THE PHONE'S DECODE OPTIONS (#1188): the think is held to the strongest grammar the model's tools
+/// have. `Full` limits it to the catalogue's tools, kinds, verbs and fields and to handles the
+/// prompt shows, so only a valid call to one of the tools can be written; a model trained on the
+/// tools before the regroup (S2) writes words that grammar does not know, so the engine gives it
+/// the handles rule alone (`grammar_for_step`).
+fn phone_options() -> StepOptions {
+    StepOptions {
+        tools: phone_tools(),
+        grammar: crate::native::grammar::GrammarMode::Full,
+        ..StepOptions::default()
+    }
+}
+
 /// What a native turn needs besides its chat.
 pub struct NativePlane<'a> {
     pub model: &'a dyn Model,
@@ -278,7 +297,7 @@ impl<'a> NativePlane<'a> {
     pub fn new(model: &'a dyn Model) -> Self {
         Self {
             model,
-            options: StepOptions::default(),
+            options: phone_options(),
         }
     }
 
