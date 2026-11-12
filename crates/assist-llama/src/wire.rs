@@ -277,8 +277,15 @@ mod tests {
                 .starts_with("root ::= think\n")
         );
         assert_eq!(reply["unspanned"], json!([]));
-        // S2's tools get the handle rule only, and off sends no grammar at all
+        // S2's tools get the full grammar with S2's own words, and off sends no grammar at all
         let (reply, grammars) = through_the_step(&request("full", "s2")).unwrap();
+        let reply: Value = serde_json::from_str(&reply).unwrap();
+        assert_eq!(reply["grammar"], "full", "{reply}");
+        let s2 = grammars[0].as_deref().unwrap();
+        assert!(s2.starts_with("root ::= think\n"), "{s2}");
+        assert!(s2.contains("\"search\""), "{s2}");
+        // handles asked for is handles that ran
+        let (reply, grammars) = through_the_step(&request("handles", "s2")).unwrap();
         let reply: Value = serde_json::from_str(&reply).unwrap();
         assert_eq!(reply["grammar"], "handles", "{reply}");
         assert!(
