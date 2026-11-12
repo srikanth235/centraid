@@ -41,7 +41,7 @@ catalog! {
     );
     plain delete_title = ("Delete this chat?", "Delete this chat?");
     plain download_action = ("Download model", "Download model");
-    plain download_failed = ("Download stopped. Retry.", "Download stopped. Retry.");
+    plain download_failed = ("Download stopped. Try again.", "Download stopped. Try again.");
     plain download_note = (
         "This is the only time Centraid fetches anything.",
         "This is the only time Centraid fetches anything."
@@ -58,10 +58,10 @@ catalog! {
         "Chat reads photos and text documents.",
         "Chat reads photos and text documents."
     );
-    plain error_generic = ("Chat could not answer. Retry.", "Chat could not answer. Retry.");
-    plain error_model = ("The model stopped. Retry.", "The model stopped. Retry.");
+    plain error_generic = ("Chat could not answer. Try again.", "Chat could not answer. Try again.");
+    plain error_model = ("The model stopped. Try again.", "The model stopped. Try again.");
     plain error_no_tool = ("Nothing in your vault answers that.", "Nothing in your vault answers that.");
-    plain error_read = ("Chat could not read your vault. Retry.", "Chat could not read your vault. Retry.");
+    plain error_read = ("Chat could not read your vault. Try again.", "Chat could not read your vault. Try again.");
     plain error_too_long = (
         "That is too long for Chat to read at once. Shorten it and try again.",
         "That is too long for Chat to read at once. Shorten it and try again."
@@ -71,7 +71,7 @@ catalog! {
         "That change was not saved. Try again."
     );
     plain error_thread_gone = ("This chat is gone.", "This chat is gone.");
-    plain error_vision = ("The photo reader is not loaded. Retry.", "The photo reader is not loaded. Retry.");
+    plain error_vision = ("The photo reader is not loaded. Try again.", "The photo reader is not loaded. Try again.");
     plain loading = ("Loading model", "Loading model");
     plain load_failed = (
         "The model would not load. Download it again.",

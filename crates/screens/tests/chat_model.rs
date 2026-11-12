@@ -167,7 +167,7 @@ fn the_download_step_tap_progress_then_a_load_and_a_failure_goes_back_with_one_l
     }));
     let state = chat.state();
     assert_eq!(state.phase(), Phase::NeedsModel);
-    assert_eq!(state.error, "Download stopped. Retry.");
+    assert_eq!(state.error, "Download stopped. Try again.");
     // and again, to a load
     chat.event(C::Download(wire::chat_event::DownloadTapped {
         vision: false,
@@ -417,7 +417,7 @@ fn a_reader_download_that_stops_is_offered_again_with_one_line_and_its_events_ne
         vision: true,
     }));
     let step = chat.state().vision_step.clone().unwrap();
-    assert_eq!(step.status_line, "Download stopped. Retry.");
+    assert_eq!(step.status_line, "Download stopped. Try again.");
     assert_eq!(step.action_label, "Download");
 }
 

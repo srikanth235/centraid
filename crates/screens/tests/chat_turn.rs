@@ -167,7 +167,7 @@ fn a_decline_is_a_composed_line_and_an_exhausted_model_is_the_generic_failure() 
     let mut chat = Chat::ready(std::sync::Arc::new(ScriptedModel::empty()));
     chat.say("anything");
     let state = chat.state();
-    assert_eq!(state.error, "The model stopped. Retry.");
+    assert_eq!(state.error, "The model stopped. Try again.");
     assert_eq!(
         state.messages.len(),
         1,
