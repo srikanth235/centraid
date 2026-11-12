@@ -175,6 +175,9 @@ internal fun ChatScreen(
         }
     }
     LaunchedEffect(state.accepted_send) { kept.settle(state.accepted_send) }
+    // EDIT FILLS THE COMPOSER: whenever Rust moves the token, the field holds what it says (the last
+    // question on starting, nothing on cancelling). Token 0 is a chat that has never edited.
+    LaunchedEffect(state.edit_token) { if (state.edit_token != 0L) draft = state.edit_text }
     // The message whose Copy was just pressed: its button says `copied_label` for a moment.
     var copied by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(copied) {
@@ -548,9 +551,9 @@ private fun MessageRow(
 ) {
     if (message.role == ChatMessage.Role.ROLE_USER) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Column(Modifier.widthIn(max = 320.dp), horizontalAlignment = Alignment.End) {
             Column(
                 Modifier
-                    .widthIn(max = 320.dp)
                     .clearAndSetSemantics { contentDescription = message.accessibility_label }
                     .testTag("chat-message-user"),
                 horizontalAlignment = Alignment.End,
@@ -569,6 +572,23 @@ private fun MessageRow(
                         .background(centraidResource(if (androidx.compose.foundation.isSystemInDarkTheme()) R.color.centraid_surface_border else R.color.centraid_text_ink))
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                 )
+            }
+            // COPY, AND EDIT ON THE LAST ONE: quiet keys under the pill.
+            if (message.text.isNotEmpty() || message.can_edit) {
+                Row {
+                    if (message.text.isNotEmpty()) {
+                        ActionButton(if (copied) "Check" else "Copy", if (copied) state.copied_label.ifEmpty { state.copy_label } else state.copy_label, "chat-copy") {
+                            onCopied()
+                            onEvent(ChatEvent(copied = ChatEvent.Copied(message_id = message.id)))
+                        }
+                    }
+                    if (message.can_edit) {
+                        ActionButton("Pencil", state.edit_label, "chat-edit") {
+                            onEvent(ChatEvent(edit_started = ChatEvent.EditStarted()))
+                        }
+                    }
+                }
+            }
             }
         }
         return
@@ -851,6 +871,27 @@ private fun ChatComposer(
         Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        // THE EDIT BANNER, over the composer: what is being edited and what sending does, with a
+        // cancel (ChatEditResend.dc.html).
+        if (state.editing) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(dimensionResource(R.dimen.centraid_radius_card)))
+                    .background(centraidColor("bgElev"))
+                    .padding(start = 14.dp)
+                    .testTag("chat-edit-banner"),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(state.editing_title, color = centraidColor("text"), fontSize = tokenSp(R.dimen.centraid_text_meta), fontWeight = FontWeight.SemiBold)
+                    Text(state.editing_body, color = centraidResource(R.color.centraid_text_meta), fontSize = tokenSp(R.dimen.centraid_text_meta))
+                }
+                ActionButton("Close", state.cancel_edit_label, "chat-edit-cancel") {
+                    onEvent(ChatEvent(edit_cancelled = ChatEvent.EditCancelled()))
+                }
+            }
+        }
         if (state.pending.isNotEmpty()) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 state.pending.forEach { chip ->

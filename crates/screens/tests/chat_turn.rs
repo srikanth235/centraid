@@ -613,7 +613,10 @@ fn edit_is_offered_on_the_last_member_message_only_and_the_composer_takes_its_wo
         "one message offers Edit: {offered:?}"
     );
     let at = state.messages.iter().position(|m| m.can_edit).unwrap();
-    assert_eq!(state.messages[at].role, wire::chat_message::Role::User as i32);
+    assert_eq!(
+        state.messages[at].role,
+        wire::chat_message::Role::User as i32
+    );
     assert_eq!(state.edit_label, "Edit");
     assert!(!state.editing);
 
@@ -622,10 +625,16 @@ fn edit_is_offered_on_the_last_member_message_only_and_the_composer_takes_its_wo
     let state = chat.state();
     assert!(state.editing);
     assert_eq!(state.edit_text, state.messages[at].text);
-    assert_ne!(state.edit_token, before, "the shell fills the composer on a new token");
+    assert_ne!(
+        state.edit_token, before,
+        "the shell fills the composer on a new token"
+    );
     assert_eq!(
         (state.editing_title.as_str(), state.editing_body.as_str()),
-        ("Editing your question", "Chat’s answer to it is replaced when you send.")
+        (
+            "Editing your question",
+            "Chat’s answer to it is replaced when you send."
+        )
     );
     assert!(
         state.messages.iter().all(|message| !message.can_edit),
