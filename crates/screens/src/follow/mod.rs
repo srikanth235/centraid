@@ -15,7 +15,7 @@
 //!
 //! - **The app came to the foreground**: every store.
 //! - **The OS said a store changed** while the app runs (`PhoneChanged`, from the watches the
-//!   coordinator asks for): contacts and calendar. Files and Health have no cheap change
+//!   coordinator asks for): contacts, calendar and reminders. Files and Health have no cheap change
 //!   notice on both platforms, so for them the foreground is the trigger.
 //! - **A background window the pass service was granted** (the one that walks the camera roll
 //!   and backs up), once that work has ended: every store once, before the window is reported

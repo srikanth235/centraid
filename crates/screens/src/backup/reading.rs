@@ -51,7 +51,7 @@ pub struct Destination {
     pub waiting_apps: Vec<(String, u64)>,
 }
 
-/// Where one backup device stands, worst first (#1188, NB1).
+/// Where one backup device stands, best first: the order is the ranking, so the greatest is the worst (#1188, NB1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Footing {
     /// Everything this phone sent is held.

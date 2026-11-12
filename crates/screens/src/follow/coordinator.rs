@@ -8,7 +8,7 @@
 //! | Trigger | How it arrives |
 //! |---|---|
 //! | the app came to the foreground | `Lifecycle`, which the runtime tells every service: every store |
-//! | the OS says a store changed | `PhoneChanged`, answering the `PhoneWatch` this service asks for contacts and calendar |
+//! | the OS says a store changed | `PhoneChanged`, answering the `PhoneWatch` this service asks for contacts, calendar and reminders |
 //! | a screen asked | [`Follows::changed`], woken by `Signalled`: a home appearing or pulled, an import that turned a store on |
 //! | a background window | [`Follows::window`], from the pass service once the camera roll and the backup ended |
 //!
