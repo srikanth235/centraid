@@ -182,6 +182,26 @@ impl Vault {
             .value)
     }
 
+    /// Move the repeating alerts whose firing has passed on to their next, in a commit of its own
+    /// (a commit that wrote nothing reports nothing, so no screen re-reads for it); returns how
+    /// many items were moved. A caller about to read the next alerts runs this first.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn advance_alerts(&self) -> Result<usize> {
+        let now = crate::alerts::now_ms(&self.clock().now_text());
+        let stale = self.read(|connection| crate::alerts::has_stale(connection, now))?;
+        if !stale {
+            return Ok(0);
+        }
+        Ok(self
+            .commit(|tx| {
+                tx.set_producer("alert.advance");
+                crate::alerts::advance(tx.connection(), now)
+            })?
+            .value)
+    }
+
     /// Whether any search row is owed.
     ///
     /// # Errors

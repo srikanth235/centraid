@@ -326,6 +326,24 @@ CREATE TABLE search_owed (
   after TEXT NOT NULL
 ) STRICT;
 
+-- ALERTS (#1188, A5): the index of "what fires next". One row per (event or task, lead time): the
+-- writer keeps `fire_key`, the moment of its next firing, at every commit that touches the
+-- item (`alerts::refresh`), so the notification service reads "the next 48" off `alert_by_fire`
+-- whatever the vault's size. `timing` says how `fire_key` reads: 'fixed' is a UTC instant
+-- (an event with a zone, a due that names one), 'floating' a wall clock (09:00 wherever the member
+-- is). A repeating item holds its NEXT firing (`repeats`) and the launch and idle passes move it on
+-- (`alerts::advance`). Derived like `search`: a rebuild rewrites it, a restore carries it, nothing
+-- a member made.
+CREATE TABLE alert (
+  entity_id  TEXT NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
+  offset_min INTEGER NOT NULL CHECK (offset_min >= 0),
+  timing     TEXT NOT NULL CHECK (timing IN ('fixed','floating')),
+  fire_key   TEXT NOT NULL,
+  repeats    INTEGER NOT NULL DEFAULT 0 CHECK (repeats IN (0,1)),
+  PRIMARY KEY (entity_id, offset_min)
+) STRICT, WITHOUT ROWID;
+CREATE INDEX alert_by_fire ON alert(timing, fire_key, entity_id);
+
 -- ---------------------------------------------------------------------------------------------
 -- The kinds. Every kind row is its entity's own: kind is a generated constant, and the
 -- composite foreign key is what keeps a person row from naming a note.

@@ -458,6 +458,8 @@ fn delete_rules_cascade_only_where_a_row_cannot_outlive_its_parent() {
             ("edge", "to_id"),
             ("edge", "label_id"),
             ("revision", "entity_id"),
+            // The index of when an item fires next goes with the item.
+            ("alert", "entity_id"),
             ("budget", "category_id,category_kind"),
             ("rule", "category_id,category_kind"),
         ]
@@ -1437,6 +1439,7 @@ fn the_founded_file_holds_the_spec_s_tables_and_nothing_else() {
         "search_past_vocab",
         "search_word",
         "search_owed",
+        "alert",
         // the kinds' own rows and their children
         "person",
         "contact_point",
@@ -1702,6 +1705,11 @@ const CENSUS: &[(&str, &str, Reach)] = &[
         "search_owed",
         "after",
         Reach::Not("a cursor in id order over what a label feeds, not prose"),
+    ),
+    (
+        "alert",
+        "fire_key",
+        Reach::Not("a time key for the index, not prose"),
     ),
     ("person", "nickname", Reach::Own),
     ("person", "role", Reach::Own),
