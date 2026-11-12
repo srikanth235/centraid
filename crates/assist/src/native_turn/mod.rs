@@ -274,9 +274,9 @@ fn phone_tools() -> crate::native::prompt::ToolsMode {
 
 /// THE PHONE'S DECODE OPTIONS (#1188): the think is held to the strongest grammar the model's tools
 /// have. `Full` limits it to the catalogue's tools, kinds, verbs and fields and to handles the
-/// prompt shows, so only a valid call to one of the tools can be written; a model trained on the
-/// tools before the regroup (S2) writes words that grammar does not know, so the engine gives it
-/// the handles rule alone (`grammar_for_step`).
+/// prompt shows, so only a valid call to one of the tools can be written. A model trained on the
+/// tools before the regroup (S2) is held to the same grammar with its own words (`search`, `open`,
+/// a create's kind in `set`; `grammar_for_step`).
 fn phone_options() -> StepOptions {
     StepOptions {
         tools: phone_tools(),

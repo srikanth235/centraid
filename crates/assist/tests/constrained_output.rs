@@ -10,7 +10,7 @@ use centraid_assist::native_turn::NativePlane;
 use centraid_assist::testing::ScriptedModel;
 
 const END: &str = "";
-const VIA: &[&str] = &["find", "search", "open", "compute"];
+const VIA: &[&str] = &["find", "compute", "search", "open"];
 
 /// The handles a think names are shown: what a prompt that led to it would show.
 fn showing(think: &str) -> Visible {
@@ -79,15 +79,24 @@ fn the_phone_holds_the_think_to_the_strongest_grammar_its_tools_have() {
     assert_eq!(options.grammar, GrammarMode::Full);
     let record = centraid_assist::record::record();
     assert_eq!(options.tools.name(), record.current.tools_mode);
-    // the mode in effect: the full grammar for the regrouped tools, the handles rule for S2's
+    // the mode in effect, for the tools the record names
     let (mode, gbnf) = grammar_for_step(options.grammar, options.tools, &Visible::default(), "")
         .expect("a grammar");
-    let expected = if options.tools == ToolsMode::S2 {
-        GrammarMode::Handles
+    assert_eq!(
+        mode,
+        GrammarMode::Full,
+        "full for the regrouped tools and for S2's"
+    );
+    // the grammar the scripted stream below is held to is the one the step sends, for the tools
+    // the record names (the shipped record is S2's)
+    let seen = Visible::default();
+    let via: &[&str] = if options.tools == ToolsMode::S2 {
+        VIA
     } else {
-        GrammarMode::Full
+        &["find", "compute"]
     };
-    assert_eq!(mode, expected);
+    let end = centraid_assist::native::identity::MODEL.think_close;
+    assert_eq!(gbnf, full_ending(&seen, false, via, end).to_gbnf());
     assert!(!gbnf.is_empty());
 }
 
@@ -149,4 +158,21 @@ fn an_invalid_call_cannot_be_emitted_and_a_valid_one_is_unchanged() {
     assert_eq!(under(vec![valid.clone()]), valid);
     // nothing derivable: nothing is emitted
     assert_eq!(under(vec![invalid]), "");
+}
+
+#[test]
+fn what_s2_writes_is_derivable_a_create_with_its_kind_in_set_and_search_and_open() {
+    let all = goldens();
+    let derivable = |shape: &dyn Fn(&str) -> bool| {
+        let shaped: Vec<&String> = all.iter().filter(|think| shape(think)).collect();
+        assert!(!shaped.is_empty());
+        for think in shaped {
+            assert!(
+                full_ending(&showing(think), false, VIA, END).accepts(&finished(think)),
+                "{think}"
+            );
+        }
+    };
+    derivable(&|think| think.contains("verb: create") && think.contains("set: kind ="));
+    derivable(&|think| think.contains("via: search") || think.contains("via: open"));
 }

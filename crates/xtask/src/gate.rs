@@ -1232,6 +1232,10 @@ fn run_release_build(ctx: &Ctx) -> Result<Outcome> {
     // proves nothing here, so the release build's own outputs are searched for their names.
     let target =
         std::env::var_os("CARGO_TARGET_DIR").map_or_else(|| ctx.root.join("target"), PathBuf::from);
+    let gaps = crate::dev_paths::source_gaps(&ctx.root);
+    if !gaps.is_empty() {
+        return Ok(Outcome::Failed(gaps.join("; ")));
+    }
     Ok(
         match crate::dev_paths::release_verdict(&target.join("release")) {
             Ok(said) => Outcome::Ok(said),

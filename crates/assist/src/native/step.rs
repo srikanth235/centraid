@@ -59,7 +59,7 @@ pub struct StepOptions {
     /// regrouped tools sets `Sig` (#1166).
     pub tools: ToolsMode,
     /// How much of the think the decoder holds to (`native/grammar.rs`). `Off` is the phone's and S2's: the think is free.
-    /// `Full` is the grammar of the regrouped tools; under `ToolsMode::S2` it is `Handles`, because S2 writes `search`
+    /// `Full` is the grammar of the tools; under `ToolsMode::S2` it admits `search`
     /// and `open` and puts a create's kind in `set`.
     pub grammar: GrammarMode,
 }
@@ -706,7 +706,7 @@ mod tests {
     }
 
     #[test]
-    fn s2_is_held_to_the_handles_only_and_off_sends_nothing() {
+    fn s2_is_held_to_the_full_grammar_with_its_own_words_and_off_sends_nothing() {
         let model = ScriptedModel::new([THINK, THINK, THINK]);
         let run = |grammar, tools| {
             decode_step(
@@ -725,15 +725,11 @@ mod tests {
         let requests = model.requests();
         assert_eq!(requests[0].grammar, None);
         assert_eq!(off.info.grammar, None);
-        // `full` over S2's tools is `handles`: S2 writes `search` and `open`, and a create's kind in `set`
-        assert_eq!(s2.info.grammar, Some(GrammarMode::Handles));
-        assert!(
-            requests[1]
-                .grammar
-                .as_deref()
-                .unwrap()
-                .starts_with("root ::= any-s0\n")
-        );
+        // `full` over S2's tools stays full, with S2's words: `search` and `open` for `find`
+        assert_eq!(s2.info.grammar, Some(GrammarMode::Full));
+        let s2_grammar = requests[1].grammar.as_deref().unwrap();
+        assert!(s2_grammar.starts_with("root ::= think\n"), "{s2_grammar}");
+        assert!(s2_grammar.contains("\"search\""), "{s2_grammar}");
         assert_eq!(sig.info.grammar, Some(GrammarMode::Handles));
     }
 
