@@ -5,62 +5,135 @@
     {
       "name": "a future one is scheduled and nothing else happens",
       "wanted": [{ "id": "a", "fire_at_ms": 20000 }],
-      "live": [], "pending": [], "showing": [],
-      "plan": { "removePending": [], "removeShowing": [], "schedule": ["a"], "post": [] }
+      "live": [],
+      "pending": [],
+      "showing": [],
+      "plan": {
+        "removePending": [],
+        "removeShowing": [],
+        "schedule": ["a"],
+        "post": []
+      }
     },
     {
       "name": "an id no longer wanted leaves pending and showing",
       "wanted": [{ "id": "b", "fire_at_ms": 20000 }],
-      "live": [], "pending": ["a", "b"], "showing": ["a"],
-      "plan": { "removePending": ["a"], "removeShowing": ["a"], "schedule": ["b"], "post": [] }
+      "live": [],
+      "pending": ["a", "b"],
+      "showing": ["a"],
+      "plan": {
+        "removePending": ["a"],
+        "removeShowing": ["a"],
+        "schedule": ["b"],
+        "post": []
+      }
     },
     {
       "name": "a delivered reminder whose time has passed stays while the item is live",
       "wanted": [],
-      "live": ["fired"], "pending": [], "showing": ["fired"],
-      "plan": { "removePending": [], "removeShowing": [], "schedule": [], "post": [] }
+      "live": ["fired"],
+      "pending": [],
+      "showing": ["fired"],
+      "plan": {
+        "removePending": [],
+        "removeShowing": [],
+        "schedule": [],
+        "post": []
+      }
     },
     {
       "name": "a delivered reminder whose item was resolved goes",
       "wanted": [],
-      "live": [], "pending": [], "showing": ["fired"],
-      "plan": { "removePending": [], "removeShowing": ["fired"], "schedule": [], "post": [] }
+      "live": [],
+      "pending": [],
+      "showing": ["fired"],
+      "plan": {
+        "removePending": [],
+        "removeShowing": ["fired"],
+        "schedule": [],
+        "post": []
+      }
     },
     {
       "name": "a wanted one already past is not scheduled and a banner for it stays",
       "wanted": [{ "id": "p", "fire_at_ms": 5000 }],
-      "live": [], "pending": ["p"], "showing": ["p"],
-      "plan": { "removePending": ["p"], "removeShowing": [], "schedule": [], "post": [] }
+      "live": [],
+      "pending": ["p"],
+      "showing": ["p"],
+      "plan": {
+        "removePending": ["p"],
+        "removeShowing": [],
+        "schedule": [],
+        "post": []
+      }
     },
     {
       "name": "an immediate receipt is posted once",
       "wanted": [{ "id": "r", "fire_at_ms": 0, "immediate": true }],
-      "live": [], "pending": [], "showing": [],
-      "plan": { "removePending": [], "removeShowing": [], "schedule": [], "post": ["r"] }
+      "live": [],
+      "pending": [],
+      "showing": [],
+      "plan": {
+        "removePending": [],
+        "removeShowing": [],
+        "schedule": [],
+        "post": ["r"]
+      }
     },
     {
       "name": "an immediate receipt already showing is not posted again",
       "wanted": [{ "id": "r", "fire_at_ms": 0, "immediate": true }],
-      "live": [], "pending": [], "showing": ["r"],
-      "plan": { "removePending": [], "removeShowing": [], "schedule": [], "post": [] }
+      "live": [],
+      "pending": [],
+      "showing": ["r"],
+      "plan": {
+        "removePending": [],
+        "removeShowing": [],
+        "schedule": [],
+        "post": []
+      }
     },
     {
       "name": "the last of a repeated id wins",
-      "wanted": [{ "id": "a", "fire_at_ms": 20000 }, { "id": "a", "fire_at_ms": 30000 }],
-      "live": [], "pending": [], "showing": [],
-      "plan": { "removePending": [], "removeShowing": [], "schedule": ["a"], "post": [] }
+      "wanted": [
+        { "id": "a", "fire_at_ms": 20000 },
+        { "id": "a", "fire_at_ms": 30000 }
+      ],
+      "live": [],
+      "pending": [],
+      "showing": [],
+      "plan": {
+        "removePending": [],
+        "removeShowing": [],
+        "schedule": ["a"],
+        "post": []
+      }
     },
     {
       "name": "an empty set cancels everything pending and everything showing that is not live",
       "wanted": [],
-      "live": ["keep"], "pending": ["b", "a"], "showing": ["z", "keep", "y"],
-      "plan": { "removePending": ["a", "b"], "removeShowing": ["y", "z"], "schedule": [], "post": [] }
+      "live": ["keep"],
+      "pending": ["b", "a"],
+      "showing": ["z", "keep", "y"],
+      "plan": {
+        "removePending": ["a", "b"],
+        "removeShowing": ["y", "z"],
+        "schedule": [],
+        "post": []
+      }
     },
     {
       "name": "a delivered banner past the live bound is not named and goes, though its item is open",
       "wanted": [],
-      "live": ["newest"], "pending": [], "showing": ["newest", "older"],
-      "plan": { "removePending": [], "removeShowing": ["older"], "schedule": [], "post": [] }
+      "live": ["newest"],
+      "pending": [],
+      "showing": ["newest", "older"],
+      "plan": {
+        "removePending": [],
+        "removeShowing": ["older"],
+        "schedule": [],
+        "post": []
+      }
     },
     {
       "name": "the paused notice is one more scheduled id and is replaced when its moment moves, and goes when opened",
@@ -68,8 +141,15 @@
         { "id": "last", "fire_at_ms": 30000 },
         { "id": "paused|v", "fire_at_ms": 30000 }
       ],
-      "live": [], "pending": ["last", "paused|v", "old-last"], "showing": [],
-      "plan": { "removePending": ["old-last"], "removeShowing": [], "schedule": ["last", "paused|v"], "post": [] }
+      "live": [],
+      "pending": ["last", "paused|v", "old-last"],
+      "showing": [],
+      "plan": {
+        "removePending": ["old-last"],
+        "removeShowing": [],
+        "schedule": ["last", "paused|v"],
+        "post": []
+      }
     }
   ]
 }
