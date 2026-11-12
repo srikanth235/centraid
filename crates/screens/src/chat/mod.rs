@@ -48,6 +48,7 @@ mod confirm;
 pub mod delta;
 mod drawer;
 mod model;
+mod reveal;
 mod turn;
 mod view;
 mod when;
@@ -169,7 +170,7 @@ pub fn scope_of(app: &str) -> String {
 
 impl Screen for Chat {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
-        match event.kind {
+        let mut effects = match event.kind {
             Some(S::Chat(chat)) => match chat.kind {
                 Some(kind) => self.on_event(kind, ctx),
                 None => Vec::new(),
@@ -179,8 +180,16 @@ impl Screen for Chat {
             Some(S::EffectResult(result)) => self.on_effect(result, ctx),
             Some(S::DataChanged(_)) => self.on_data_changed(ctx),
             Some(S::EnvironmentChanged(_)) => Vec::new(),
+            // A SHOWN SECRET LIVES ONLY WHILE THIS PAGE IS IN FRONT (#1188): the app going to
+            // the background, the tab going out of view and the page being popped each end it.
+            Some(S::Lifecycle(lifecycle)) => self.reveal_lifecycle(lifecycle.foreground, ctx),
+            Some(S::TabHidden(_)) => self.reveal_hidden(ctx),
+            Some(S::Left(_)) => self.reveal_left(ctx),
+            Some(S::TimerFired(fired)) => self.reveal_timer(&fired.timer, ctx),
             _ => Vec::new(),
-        }
+        };
+        effects.extend(self.reveal_sweep(ctx));
+        effects
     }
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {

@@ -252,6 +252,7 @@ struct ChatView: View {
                             onRetry: { chat.regenerate() },
                             onEdit: { chat.edit() },
                             onOpenCard: { _, index in open(at: index, of: message) },
+                            onRevealVerb: { index, key in chat.revealVerb(message: message.id, index: index, key: key) },
                             onConfirmPending: { chat.confirmPending($0) },
                             onCancelPending: { chat.cancelPending($0) },
                             onUndoPending: { chat.undoPending($0, index: $1) }
@@ -787,6 +788,8 @@ private struct ChatMessageRow: View {
     let onRetry: () -> Void
     let onEdit: () -> Void
     let onOpenCard: (Centraid_Core_V1_ChatCard, Int) -> Void
+    /// A verb on a card's sealed row (a Locker secret shown on the card, #1188): the card's index and the verb's key.
+    let onRevealVerb: (Int, String) -> Void
     /// Confirm and Cancel on the proposed write's card, by its id.
     let onConfirmPending: (String) -> Void
     let onCancelPending: (String) -> Void
@@ -844,6 +847,18 @@ private struct ChatMessageRow: View {
                     VStack(alignment: .leading, spacing: 4) {
                         ChatCardRow(card: card, state: state, onOpen: { onOpenCard(card, index) })
                             .accessibilityIdentifier("chat-card-\(index)")
+                        // A LOCKER SECRET SHOWN ON THE CARD (#1188): Rust's sealed row, drawn as Locker
+                        // draws it. The value is Rust's to show and to drop; this only sends the verb.
+                        if card.hasReveal {
+                            LockerFieldRowView(row: card.reveal) { verb in onRevealVerb(index, verb.key) }
+                        }
+                        if !card.note.isEmpty {
+                            Text(verbatim: card.note)
+                                .chatType("mono")
+                                .foregroundStyle(Theme.color("textSoft", scheme))
+                                .padding(.horizontal, 4)
+                                .accessibilityIdentifier("chat-card-note-\(index)")
+                        }
                         if goneCard == "\(message.id)-\(index)" {
                             Text(verbatim: state.cardGoneLine)
                                 .chatType("mono")

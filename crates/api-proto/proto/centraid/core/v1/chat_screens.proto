@@ -23,6 +23,7 @@ package centraid.core.v1;
 
 import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/route.proto";
+import "centraid/core/v1/locker_screens.proto";
 
 message ChatState {
   Phase phase = 1;
@@ -341,6 +342,12 @@ message ChatCard {
   string title = 5;
   string subtitle = 6;
   string meta = 7;
+  // A Locker card that offers a reveal or a code (`qualifier` `reveal:<column>`, `code:<column>`):
+  // the sealed row the card shows under its title, shut with Reveal, or revealed with Copy and
+  // Conceal (#1188). The core read the value; the model never did. Absent on every other card.
+  optional LockerFieldRow reveal = 8;
+  // A sentence under the row: a refusal, a copy, "This item is gone." (then there is no row).
+  string note = 9;
 }
 
 message ChatEvent {
@@ -378,6 +385,8 @@ message ChatEvent {
     EditStarted edit_started = 29;
     EditCancelled edit_cancelled = 30;
     DeviceFacts device_facts = 31;
+    // A verb tapped on a card's sealed row (`reveal`, `copy`, `conceal`, `code`, `copy_code`).
+    RevealVerb reveal_verb = 32;
   }
   reserved 12;
 
@@ -400,6 +409,13 @@ message ChatEvent {
     // echoes it as `ChatState.accepted_send` once the question is taken, and only then
     // does the shell clear the draft (#1188 C9). A suggestion's tap sends 0.
     uint64 token = 2;
+  }
+
+  message RevealVerb {
+    uint64 message_id = 1;
+    // The card's index in the message.
+    uint32 index = 2;
+    string key = 3;
   }
 
   message Stopped {}

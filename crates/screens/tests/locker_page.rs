@@ -297,14 +297,14 @@ fn a_failed_refresh_keeps_the_shelf_shown_under_one_sentence() {
 fn an_item_that_is_gone_is_a_final_failure_and_a_failed_or_refused_read_is_not() {
     let d = locker_support::driver();
     let mut shell = Shell::new(&d.handle, Mode::Answers);
-    let gone = shell.push(routes::item("no-such-item", "Locker", ""));
+    let gone = shell.push(routes::item("no-such-item", "Locker"));
     let failure = failed(&shell.item(gone).page);
     assert_eq!(failure.sentence, "This item is gone");
     assert!(failure.permanent, "trying again cannot bring it back");
     assert!(shell.item(gone).content.is_none());
 
     shell.reads(Mode::Fails);
-    let unread = shell.push(routes::item("no-such-item", "Locker", ""));
+    let unread = shell.push(routes::item("no-such-item", "Locker"));
     assert!(!failed(&shell.item(unread).page).permanent);
     shell.reads(Mode::Refuses);
     shell.retry_item(unread);

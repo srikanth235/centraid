@@ -176,6 +176,15 @@ final class ChatModel: ObservableObject {
         }))
     }
 
+    /// A verb on a Locker card's sealed row; Rust decides what it does (the owner check, the value).
+    func revealVerb(message: UInt64, index: Int, key: String) {
+        send(.revealVerb(.with {
+            $0.messageID = message
+            $0.index = UInt32(index)
+            $0.key = key
+        }))
+    }
+
     func copy(_ messageID: UInt64) { send(.copied(.with { $0.messageID = messageID })) }
     func downloadTapped(_ choice: Centraid_Core_V1_ChatStepAction = .unspecified) {
         tellDevice()

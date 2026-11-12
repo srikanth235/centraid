@@ -165,16 +165,6 @@ fn relocking_wipes_a_revealed_value_and_the_page() {
 }
 
 #[test]
-fn a_chat_cards_member_action_runs_once_the_page_has_loaded() {
-    let mut d = driver();
-    login(&d, "i1", "Bank");
-    d.start();
-    d.answer_effect(passed(wire::Biometry::Face));
-    let id = d.push(locker::TAB, routes::item("i1", "Locker", "reveal:password"));
-    assert!(row_of(&item_data(&d, id), "password").revealed);
-}
-
-#[test]
 fn trashing_offers_undo_which_restores() {
     let (mut d, id) = opened_item();
     item_event(

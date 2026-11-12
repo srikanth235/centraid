@@ -35,7 +35,7 @@ The rules that never bend are in [safety.md](./safety.md). This file follows one
 
 - A write is planned against a patched copy of the world. The turn ends in one `PendingWrite`, put on the wire as `AssistPending`. The card is built from structured row changes in [`native_turn/pending.rs`](../../../crates/assist/src/native_turn/pending.rs), not from the text the model saw.
 - Confirm runs the steps through the door, one key per step, and refuses a stale card. Dismiss, or any new message, drops it.
-- A reveal never parks. It ends the turn in a member action card. Why: [safety.md](./safety.md).
+- A reveal never parks. It ends the turn in a member action card, and the value is shown on that card, not by the model: the member taps Reveal, the phone asks its owner check, and the core reads the value through Locker's reveal into the screen ([`chat/reveal.rs`](../../../crates/screens/src/chat/reveal.rs), driving the same controller as Locker's item page). It is in memory only: dropped on a relock, when the app leaves the foreground, the tab or page is left or the thread changes, and never saved, so a reopened thread shows Reveal again. Why: [safety.md](./safety.md).
 
 ## The engine
 

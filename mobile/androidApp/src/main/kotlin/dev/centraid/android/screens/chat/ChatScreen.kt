@@ -79,6 +79,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import centraid.core.v1.ChatAttachment
 import centraid.core.v1.ChatCard
+import dev.centraid.android.screens.locker.LockerFieldView
 import centraid.core.v1.ChatDocumentSheet
 import centraid.core.v1.ChatEvent
 import centraid.core.v1.ChatMessage
@@ -715,6 +716,21 @@ private fun MessageRow(
         }
         message.cards.forEachIndexed { index, card ->
             CardRow(card, index, appName = state.scopes.firstOrNull { it.app == card.app }?.name.orEmpty()) { onEvent(ChatEvent(card_tapped = ChatEvent.CardTapped(message_id = message.id, index = index))) }
+            // A LOCKER SECRET SHOWN ON THE CARD (#1188): Rust's sealed row, drawn as Locker draws it.
+            // The value is Rust's to show and to drop; this only sends the verb.
+            card.reveal?.let { row ->
+                LockerFieldView(row) { key ->
+                    onEvent(ChatEvent(reveal_verb = ChatEvent.RevealVerb(message_id = message.id, index = index, key = key)))
+                }
+            }
+            if (card.note.isNotEmpty()) {
+                Text(
+                    card.note,
+                    color = centraidResource(R.color.centraid_text_meta),
+                    fontSize = tokenSp(R.dimen.centraid_text_meta),
+                    modifier = Modifier.padding(horizontal = 14.dp).testTag("chat-card-note-$index"),
+                )
+            }
         }
         val pending = message.pending
         if (pending != null && !message.streaming) {

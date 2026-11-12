@@ -1,7 +1,7 @@
 //! A SECRET ON SCREEN OR ON THE CLIPBOARD, and what ends each (#1135).
 //!
 //! The one piece every screen that shows a sealed value uses — Locker's item
-//! page today, chat's inline reveal in wave 4. It owns four things so no screen
+//! page and chat's card reveal (`chat/reveal.rs`). It owns four things so no screen
 //! restates them:
 //!
 //! - **A shown value lives for a while.** [`Secrets::show`] keeps the plaintext

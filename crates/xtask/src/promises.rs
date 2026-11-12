@@ -3235,7 +3235,7 @@ fn backup_missing_in(root: &Path, promises: &[(&str, &[(&str, &str)])]) -> Vec<S
 
 /// **CHAT** (#1188, Part C). The assistant is the phone's, so no app has a row; the same shape and
 /// the same checker as Backup's. `(promise, [(file, test)])`.
-pub const CHAT_PROMISES: [(&str, &[(&str, &str)]); 5] = [
+pub const CHAT_PROMISES: [(&str, &[(&str, &str)]); 9] = [
     (
         "a change is made only after the member confirms it",
         &[
@@ -3314,6 +3314,56 @@ pub const CHAT_PROMISES: [(&str, &[(&str, &str)]); 5] = [
             (
                 "crates/core/tests/assist_native.rs",
                 "a_locker_item_is_found_and_drawn_like_any_row_and_its_secrets_reach_no_byte",
+            ),
+        ],
+    ),
+    (
+        "a Locker secret shows on the chat card only after the phone's owner check",
+        &[
+            (
+                "crates/screens/tests/chat_reveal.rs",
+                "a_reveal_shows_only_after_the_owner_check_and_a_cancel_shows_nothing",
+            ),
+            (
+                "crates/screens/tests/chat_reveal.rs",
+                "a_phone_that_refuses_the_member_is_counted_and_said_on_the_card",
+            ),
+            (
+                "crates/screens/tests/chat_reveal.rs",
+                "a_one_time_code_shows_the_current_code_and_never_the_seed",
+            ),
+        ],
+    ),
+    (
+        "a secret shown on a chat card is in no prompt, no saved turn and no reopened thread",
+        &[(
+            "crates/screens/tests/chat_reveal.rs",
+            "the_revealed_value_is_in_no_prompt_and_no_saved_turn",
+        )],
+    ),
+    (
+        "a secret shown on a chat card is dropped on a relock, on leaving, and when its item is gone",
+        &[
+            (
+                "crates/screens/tests/chat_reveal.rs",
+                "a_relock_or_leaving_drops_the_value",
+            ),
+            (
+                "crates/screens/tests/chat_reveal.rs",
+                "an_item_deleted_since_makes_the_card_say_it_is_gone",
+            ),
+        ],
+    ),
+    (
+        "a secret typed into chat is masked on the card, masked in the saved message and sealed on save",
+        &[
+            (
+                "crates/core/tests/assist_native.rs",
+                "a_secret_typed_in_chat_parks_masked_and_the_thread_never_holds_it",
+            ),
+            (
+                "crates/core/tests/assist_channel.rs",
+                "no_sealed_value_reaches_the_model_an_event_the_thread_an_action_key_or_the_index",
             ),
         ],
     ),

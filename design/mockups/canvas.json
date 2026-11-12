@@ -3080,6 +3080,22 @@
       "w": 390,
       "x": 7520,
       "y": 18800
+    },
+    "ChatReveal.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · card reveal: shut, revealed, a code, gone, check cancelled",
+      "w": 390,
+      "x": 3290,
+      "y": 34200
+    },
+    "ChatRevealDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · card reveal: shut, revealed, a code, gone, check cancelled · dark",
+      "w": 390,
+      "x": 3290,
+      "y": 34200
     }
   },
   "createdOnFiles": {
@@ -3905,6 +3921,8 @@
     "ChatTooLongDark.dc.html",
     "ChatCardsMore.dc.html",
     "ChatCardsMoreDark.dc.html",
+    "ChatReveal.dc.html",
+    "ChatRevealDark.dc.html",
     "NotifyRefusedRow.dc.html",
     "NotifyDateOnly.dc.html",
     "NotifyShowDetails.dc.html",

@@ -314,6 +314,8 @@ pub(super) struct Chat {
     pub unlocking: Option<String>,
     /// Invoke-key sequence for this screen's writes.
     pub seq: u64,
+    /// What the cards show of Locker secrets, in memory only (`reveal.rs`).
+    pub(super) reveals: super::reveal::Reveals,
 }
 
 impl Default for Chat {
@@ -369,6 +371,7 @@ impl Default for Chat {
             reopen: None,
             unlocking: None,
             seq: crate::kit::act::fresh(),
+            reveals: super::reveal::Reveals::default(),
         }
     }
 }
@@ -465,6 +468,9 @@ impl Chat {
             E::Download(download) if download.update => self.update_tapped(download.choice),
             E::Download(download) => self.download_tapped(download.vision, download.choice),
             E::DeviceFacts(facts) => self.device_facts(&facts),
+            E::RevealVerb(tapped) => {
+                self.reveal_verb(tapped.message_id, tapped.index as usize, &tapped.key, ctx)
+            }
             E::DownloadProgress(progress) => self.progressed(&progress, ctx),
             E::DownloadFinished(done) => self.download_finished(done.vision, done.ok, ctx),
             E::Attached(attached) => self.attached(attached, ctx),
@@ -556,6 +562,7 @@ impl Chat {
             threads,
             now_ms: self.now_ms,
             turn: self.turn + 1,
+            reveals: std::mem::take(&mut self.reveals),
             ..Self::default()
         };
         effects.extend(self.read_status(ctx));
@@ -1074,12 +1081,16 @@ impl Chat {
         if self.opened {
             self.read_threads(ctx);
         }
-        Vec::new()
+        self.reveal_data_changed(ctx)
     }
 
     /// What a shell's answer to an effect means to this screen.
     pub fn on_effect(&mut self, result: wire::EffectResult, ctx: &Ctx) -> Vec<wire::Effect> {
         use wire::effect_result::Outcome as O;
+        // The owner check of a held confirm is answered by the confirm; any other is a card's.
+        if self.unlocking.is_none() {
+            return self.reveal_answered(&result, ctx);
+        }
         match result.outcome {
             Some(O::OwnerChecked(checked)) => self.owner_checked(&checked, ctx),
             Some(O::LibraryPhotoPicked(picked)) => self.library_photo_picked(picked, ctx),

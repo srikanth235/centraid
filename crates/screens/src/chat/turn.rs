@@ -155,6 +155,7 @@ impl Chat {
             threads,
             now_ms: self.now_ms,
             turn,
+            reveals: std::mem::take(&mut self.reveals),
             ..Self::default()
         };
         let effects = self.read_status(ctx);
@@ -697,6 +698,16 @@ impl Chat {
             title: tapped.title.clone(),
             qualifier: tapped.qualifier.clone(),
         };
+        // A Locker secret is shown on its own card; the card's body opens nothing (#1188).
+        if super::reveal::is_reveal_card(&wire::ChatCard {
+            app: tapped.app.clone(),
+            entity: tapped.entity.clone(),
+            id: tapped.id.clone(),
+            qualifier: tapped.qualifier.clone(),
+            ..wire::ChatCard::default()
+        }) {
+            return Vec::new();
+        }
         // A conversation opens in this chat: no page to push.
         if row.app == "chat" && row.entity == "thread" {
             return self.thread_opened(&row.id, &row.title, ctx);
@@ -831,6 +842,8 @@ pub(super) fn card(card: &wire::AssistCard) -> wire::ChatCard {
         title: card.title.clone(),
         subtitle: card.subtitle.clone(),
         meta: card.meta.clone(),
+        reveal: None,
+        note: String::new(),
     }
 }
 
@@ -843,6 +856,8 @@ pub(super) fn stored_card(card: &wire::ChatStoredCard) -> wire::ChatCard {
         title: card.title.clone(),
         subtitle: card.subtitle.clone(),
         meta: card.meta.clone(),
+        reveal: None,
+        note: String::new(),
     }
 }
 
@@ -851,12 +866,12 @@ pub(super) fn app_name(id: &str) -> String {
     centraid_assist::App::from_id(id).map_or_else(|| id.to_owned(), |app| app.display().to_owned())
 }
 
-/// A Locker card that asks the member for a secret action (`reveal:password`, `code:otp_seed`,
-/// `edit_secret:cvv`, `export:`): it names no row to look for.
+/// A Locker card that asks the member for a secret action that opens a page (`edit_secret:cvv`,
+/// `export:`): it names no row to look for. A reveal or a code is shown on the card itself.
 fn is_member_action(row: &RowRef) -> bool {
     row.app == "locker"
         && row.entity == "locker_item"
-        && ["reveal:", "code:", "edit_secret:", "export:"]
+        && ["edit_secret:", "export:"]
             .iter()
             .any(|word| row.qualifier.starts_with(word))
 }

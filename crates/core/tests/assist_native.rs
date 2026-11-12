@@ -503,6 +503,13 @@ fn a_secret_typed_in_chat_parks_masked_and_the_thread_never_holds_it() {
     let first = &stored.messages[0];
     assert!(first.from_member);
     assert_eq!(first.text, "save my gym login, password «sealed»");
+    // …nor did the thread's title, which is that question trimmed
+    let title = stored
+        .thread
+        .as_ref()
+        .map(|row| row.title.clone())
+        .unwrap_or_default();
+    assert!(!title.contains("PLANTED-NEW-PASSWORD"), "{title}");
 }
 
 #[test]

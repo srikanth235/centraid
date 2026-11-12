@@ -188,7 +188,7 @@ pub fn verb(d: &mut Driver, id: u64, key: &str, verb: &str) {
 }
 
 pub fn push_item(d: &mut Driver, item_id: &str) -> u64 {
-    d.push(locker::TAB, routes::item(item_id, "Locker", ""))
+    d.push(locker::TAB, routes::item(item_id, "Locker"))
 }
 
 pub fn effects_of(d: &Driver, from: usize) -> Vec<wire::effect::Kind> {

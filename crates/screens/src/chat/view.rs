@@ -593,7 +593,12 @@ impl Chat {
                 wire::chat_message::Role::Assistant
             } as i32,
             text: message.text.clone(),
-            cards: message.cards.clone(),
+            cards: message
+                .cards
+                .iter()
+                .enumerate()
+                .map(|(at, card)| self.reveals.card(card, message.id, at, locale))
+                .collect(),
             streaming: message.streaming,
             accessibility_label: label,
             attachments: message

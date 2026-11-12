@@ -34,6 +34,7 @@ mod handoff;
 pub mod home;
 pub mod item;
 pub mod lock;
+pub(crate) mod reveal;
 mod shared;
 pub mod transfer;
 pub mod trash;
@@ -100,16 +101,15 @@ pub mod routes {
         )
     }
 
-    /// One item. `parent` is the pushing page's title; `follow` a chat card's
-    /// member action (`reveal:password`).
+    /// One item. `parent` is the pushing page's title.
     #[must_use]
-    pub fn item(item_id: &str, parent: &str, follow: &str) -> wire::Route {
+    pub fn item(item_id: &str, parent: &str) -> wire::Route {
         route(
             ITEM,
             wire::route::Args::LockerItem(wire::LockerItemRoute {
                 item_id: item_id.to_owned(),
                 parent: parent.to_owned(),
-                follow: follow.to_owned(),
+                follow: String::new(),
             }),
         )
     }
