@@ -76,6 +76,8 @@ enum Notifications {
     private static func category(_ category: Centraid_Core_V1_NotificationCategory) -> UNNotificationCategory {
         // THE ACTION'S IDENTIFIER IS THE VERB'S NUMBER, sent back unchanged. No `.foreground`:
         // Done, Snooze, Tomorrow and Undo run in the background; the tap is the default action.
+        // No `.authenticationRequired` either: they work from the lock screen without unlocking
+        // (#1188, NA4), and each is reversible through Undo and history.
         let actions = category.actions.map { action in
             UNNotificationAction(identifier: String(action.verb.rawValue), title: action.label, options: [])
         }

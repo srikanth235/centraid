@@ -288,6 +288,9 @@ internal object Notify {
             .setWhen(item.fire_at_ms)
             .setCategory(if (backupWarning) NotificationCompat.CATEGORY_STATUS else NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
+            // WHAT THE LOCK SCREEN SHOWS IS DECIDED IN RUST: with "show details" off the title and body
+            // it sends already say only that something is due, so the notification itself is public.
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setContentIntent(open)
         if (item.thread_id.isNotEmpty()) builder.setGroup(item.thread_id)
         val buttons = record.categories.firstOrNull { it.category_id == item.category_id && item.category_id.isNotEmpty() }
@@ -301,7 +304,11 @@ internal object Notify {
                     .putExtra(EXTRA_VERB, action.verb.value),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
-            builder.addAction(NotificationCompat.Action.Builder(0, action.label, answered).build())
+            // DONE, SNOOZE AND THE REST WORK FROM THE LOCK SCREEN with no unlock (#1188, NA4): a broadcast
+            // that records the press, never an activity. Each is reversible through Undo and history.
+            builder.addAction(
+                NotificationCompat.Action.Builder(0, action.label, answered).setAuthenticationRequired(false).build(),
+            )
         }
         manager.notify(item.notification_id, SLOT, builder.build())
     }
