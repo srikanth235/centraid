@@ -9,13 +9,17 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 import java.io.File
 
 /**
  * THE ONE FIXTURE BOTH SHELLS READ (`contracts/backup/check-controls.json`, #1188 B13): for each state,
  * the selectors the Check my backup page draws in order, the event each tap sends and how a row is inked.
- * The iOS shell's `BackupCheckControlsTests` reads the same file. Plain JUnit: nothing here draws.
+ * The iOS shell's `BackupCheckControlsTests` reads the same file. Robolectric because `org.json` is the
+ * platform's; nothing here draws.
  */
+@RunWith(RobolectricTestRunner::class)
 class BackupCheckControlsTest {
     private fun action(name: String) = when (name) {
         "start" -> BackupCheckAction.BACKUP_CHECK_ACTION_CHECK
