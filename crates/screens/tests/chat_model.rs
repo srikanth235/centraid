@@ -80,7 +80,7 @@ fn no_model_draws_the_download_step_with_the_size_the_sentence_and_the_action() 
     );
     assert_eq!(
         step.extra_line,
-        "Photos need a second download of 205 MB, asked for the first time you attach one."
+        "Photos need another 205 MB download, asked when you attach one."
     );
     assert_eq!(step.action_label, "Download on Wi‑Fi");
     assert_eq!(step.secondary_label, "Use mobile data instead");

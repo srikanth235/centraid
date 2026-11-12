@@ -63,8 +63,8 @@ catalog! {
         "It stays on this phone, and nothing you ask leaves it."
     );
     plain download_photo_note = (
-        "Photos need a second download of {size}, asked for the first time you attach one.",
-        "Photos need a second download of {size}, asked for the first time you attach one."
+        "Photos need another {size} download, asked when you attach one.",
+        "Photos need another {size} download, asked when you attach one."
     );
     plain downloading_note = (
         "If the download stops, it carries on from here.",
