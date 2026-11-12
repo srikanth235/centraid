@@ -342,9 +342,30 @@ fn an_undo_names_the_version_the_act_made_and_a_changed_record_refuses_it() {
 
 #[test]
 fn an_act_the_history_does_not_capture_offers_no_earlier_undo() {
-    // A tag is not a part of any record's state (`history::RELATIONS_OUTSIDE`): the act makes no
-    // version, so a row giving it the earlier-version inverse would offer a lie. The core offers
-    // exactly what the vault answers, and the table names the act's own inverse instead.
+    // An attachment is not a part of any record's state (`history::RELATIONS_OUTSIDE`): the act
+    // makes no version, so a row giving it the earlier-version inverse would offer a lie. The core
+    // offers exactly what the vault answers, and the table names the act's own inverse instead.
+    let w = World::new();
+    let task = w.make("reminders", "add-task", &json!({ "title": "Attached" }));
+    let photo = w.make(
+        "photos",
+        "upload",
+        &json!({ "blob": "0".repeat(64), "media_type": "image/jpeg", "size": 1 }),
+    );
+    let attached = w.ok(
+        "reminders",
+        "attach",
+        &json!({ "from": task, "to": photo, "rel": "attached" }),
+    );
+    assert_eq!(w.versions(&task), 0);
+    assert_eq!(
+        attached.inverse().map(|(action, _)| action).as_deref(),
+        Some("detach")
+    );
+}
+
+#[test]
+fn a_tag_is_part_of_the_record_and_its_act_offers_the_earlier_undo() {
     let w = World::new();
     let task = w.make("reminders", "add-task", &json!({ "title": "Tagged" }));
     let tagged = w.ok(
@@ -352,11 +373,8 @@ fn an_act_the_history_does_not_capture_offers_no_earlier_undo() {
         "add-task-tag",
         &json!({ "id": task, "label": "home" }),
     );
-    assert_eq!(w.versions(&task), 0);
-    assert_eq!(
-        tagged.inverse().map(|(action, _)| action).as_deref(),
-        Some("remove-task-tag")
-    );
+    assert_eq!(w.versions(&task), 1, "a tag is a version");
+    assert!(tagged.inverse().is_some(), "and it can be taken back");
 }
 
 fn reminders(w: &World) {
