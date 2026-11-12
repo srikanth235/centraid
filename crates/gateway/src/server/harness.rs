@@ -246,6 +246,20 @@ impl Spawned {
         self.shared.store().pretend_full(full);
     }
 
+    /// Make `exists` answer that everything is held, whatever the disk holds, or answer honestly.
+    pub fn lie_about_exists(&self, lying: bool) {
+        self.shared.store().pretend_to_hold_everything(lying);
+    }
+
+    /// Delete a stored object from disk, leaving the index as it was: a gateway that lost a file.
+    ///
+    /// # Errors
+    ///
+    /// If the object cannot be removed.
+    pub fn lose(&self, vault: &VaultId, name: &Name) -> std::io::Result<()> {
+        std::fs::remove_file(self.shared.store().path(vault, name))
+    }
+
     /// Stop serving and wait for the server to finish.
     pub async fn shutdown(mut self) {
         if let Some(stop) = self.stop.take() {

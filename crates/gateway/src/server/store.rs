@@ -46,6 +46,10 @@ pub struct ObjectStore {
     /// a test sets it ([`ObjectStore::pretend_full`]): a real full disk is not
     /// something a test can make on any machine it runs on.
     full: Arc<AtomicBool>,
+    /// Whether `exists` answers that everything is held, whatever is on disk. Only a test sets
+    /// it ([`ObjectStore::pretend_to_hold_everything`]): a gateway that lies about what it holds
+    /// is what a phone's read-back is for (#1188, B4, B13).
+    lying: Arc<AtomicBool>,
 }
 
 /// Why staging stopped.
@@ -103,6 +107,7 @@ impl ObjectStore {
             objects,
             incoming,
             full: Arc::new(AtomicBool::new(false)),
+            lying: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -111,6 +116,18 @@ impl ObjectStore {
     /// reachable from the product — only the test harness calls it.
     pub fn pretend_full(&self, full: bool) {
         self.full.store(full, Ordering::SeqCst);
+    }
+
+    /// Make `exists` answer that every name is held, whatever the disk holds: a gateway that lies.
+    /// Not reachable from the product — only the test harness calls it.
+    pub fn pretend_to_hold_everything(&self, lying: bool) {
+        self.lying.store(lying, Ordering::SeqCst);
+    }
+
+    /// Whether `exists` is lying (a test set it).
+    #[must_use]
+    pub fn lies_about_exists(&self) -> bool {
+        self.lying.load(Ordering::SeqCst)
     }
 
     /// Remove every upload a crash left staged. **Only the process that

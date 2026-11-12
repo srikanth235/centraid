@@ -227,3 +227,52 @@ fn a_snapshot_dated_in_the_future_does_not_suppress_the_next_one() {
         "a future-dated snapshot is not recent: {next:?}"
     );
 }
+
+/// **A GATEWAY THAT LIES ABOUT WHAT IT HOLDS IS FOUND BY THE READ-BACK (#1188, B13).** It loses
+/// its files and says `exists` for every name; the phone believes it until a pass reads a sample
+/// back. Once the gateway is honest again, the next pass sends the lost parts again.
+#[test]
+fn a_gateway_that_lies_about_exists_is_found_and_then_refilled() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = phone(dir.path());
+    let id = pair(&phone, &gateway)
+        .destination
+        .expect("a destination")
+        .gateway_id;
+    note(&phone, "something to back up");
+    drain(&phone, at_home());
+    let before = ledger(&path).confirmed_names(&id).expect("reads").len();
+    assert!(before > 0);
+
+    gateway.spawned.lie_about_exists(true);
+    for name in gateway.held(&vault_id()) {
+        let wire_name = centraid_gateway::rules::ids::Name::from_bytes(*name.as_bytes());
+        gateway
+            .spawned
+            .lose(&vault_id(), &wire_name)
+            .expect("the file is lost");
+    }
+    drain(&phone, quietly());
+    let after = ledger(&path).confirmed_names(&id).expect("reads").len();
+    assert!(
+        after < before,
+        "the read-back found what exists denied: {after} of {before}"
+    );
+
+    gateway.spawned.lie_about_exists(false);
+    // EACH PASS READS BACK A SAMPLE, so parts it never sampled are found over later passes and
+    // sent again; a small bound is enough for a handful of parts.
+    for _ in 0..40 {
+        drain(&phone, at_home());
+        if ledger(&path).confirmed_names(&id).expect("reads").len() == before {
+            break;
+        }
+    }
+    assert_eq!(
+        ledger(&path).confirmed_names(&id).expect("reads").len(),
+        before,
+        "an honest gateway is refilled"
+    );
+}
