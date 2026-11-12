@@ -329,6 +329,7 @@ impl Settings {
                 ctx.locale(),
                 Some(&standing.reading),
                 standing.reading.frozen,
+                self.secrets.conductor().facts().running,
                 standing.now_ms,
             )
             .sentence

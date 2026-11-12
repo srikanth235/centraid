@@ -90,16 +90,16 @@ struct BackupHomeView: View {
     private func markKey(_ model: Centraid_Core_V1_BackupHomeData) -> String {
         switch model.condition {
         case .upToDate: return "Check"
-        case .running: return "Refresh"
-        default: return model.line.tone == .urgent || model.condition == .notReached ? "AlertCircle" : "Refresh"
+        case .running, .catchingUp: return "Refresh"
+        default: return "AlertCircle"
         }
     }
 
     private func tint(_ model: Centraid_Core_V1_BackupHomeData) -> Color {
         switch model.condition {
         case .upToDate: return StateColor.green.text
-        case .running: return Surface.meta
-        case .notReached: return StateColor.amber.text
+        case .running, .catchingUp: return Surface.meta
+        case .notReached, .attention: return StateColor.amber.text
         default: return model.line.tone == .urgent ? StateColor.red.text : StateColor.amber.text
         }
     }
@@ -196,7 +196,8 @@ struct BackupHomeView: View {
                     }
                 }
             }
-            // WHY THE DEVICE IS NOT ANSWERING is an amber callout of its own, not a quiet line.
+            // WHY THE DEVICE IS NOT ANSWERING is an amber callout of its own, not a quiet line: the
+            // same kit callout on both platforms (`WordsCallout`), the sentence beside its mark.
             if !model.reason.isEmpty {
                 WordsCallout(text: model.reason, state: .amber, identifier: "backup-reason")
             }
@@ -323,6 +324,7 @@ struct BackupHomeView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(row.label).kitType(.row).foregroundStyle(Surface.ink)
                     if !row.held.isEmpty { sentence(row.held) }
+                    if !row.backedUp.isEmpty { sentence(row.backedUp) }
                     if !row.detail.isEmpty { sentence(row.detail) }
                 }
                 .accessibilityElement(children: .ignore)
@@ -407,6 +409,12 @@ struct BackupHomeView: View {
                 .accessibilityIdentifier("backup-rule-\(choice.stored)")
             }
         }
+        if !model.posture.isEmpty {
+            sentence(model.posture, id: "backup-posture")
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
         if !model.includeVideosLabel.isEmpty {
             Rectangle().fill(Surface.line).frame(height: CentraidGeometry.hairline).padding(.leading, 16)
             Toggle(isOn: Binding(
@@ -474,7 +482,15 @@ struct BackupHomeView: View {
                     Button { open(model.check) } label: {
                         HStack(spacing: 12) {
                             KitTile(iconKey: "Check", size: 32)
-                            Text(model.checkLabel).kitType(.row).foregroundStyle(Surface.ink)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(model.checkLabel).kitType(.row).foregroundStyle(Surface.ink)
+                                if !model.checkStatus.isEmpty {
+                                    Text(model.checkStatus)
+                                        .kitType(.meta)
+                                        .foregroundStyle(model.checkWarning ? StateColor.amber.text : Surface.meta)
+                                        .accessibilityIdentifier("backup-check-status")
+                                }
+                            }
                             Spacer(minLength: 0)
                             CentraidIconView(iconKey: "ChevronRight", tint: Surface.meta, size: 16)
                         }

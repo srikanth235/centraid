@@ -151,8 +151,69 @@ pub fn notify_ask_dismissed(answers: &[wire::SecretAnswer]) -> bool {
         .is_some_and(|answer| answer.ok && answer.found)
 }
 
-/// The four reads, in this order: the rule, whether videos are included, whether the
-/// recovery-key prompt was answered, and whether the notification ask was dismissed.
+/// The device-store key that keeps what "Check my backup" last found and when (#1188, B6).
+pub const CHECK_KEY: &str = "backup.check";
+
+/// What the last check that actually opened a backup found.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CheckKind {
+    /// Every backup it checked opened.
+    Opens,
+    /// A backup would not open, lacked files or held a damaged one.
+    Problem,
+}
+
+/// The kept verdict and the moment this phone finished the check (its own clock).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KeptCheck {
+    pub kind: CheckKind,
+    pub at_ms: i64,
+}
+
+/// Keep `check`. A check that opened nothing (a device that did not answer) is not a verdict and
+/// is never kept: the last real one stays.
+#[must_use]
+pub fn write_check(check: KeptCheck) -> wire::SecretOp {
+    let word = match check.kind {
+        CheckKind::Opens => "opens",
+        CheckKind::Problem => "problem",
+    };
+    device(
+        wire::secret_op::Op::Set,
+        CHECK_KEY,
+        &format!("{word}:{}", check.at_ms),
+    )
+}
+
+/// Where the kept check's answer sits among [`read_ops`]'s.
+pub const CHECK_ANSWER: usize = 4;
+
+/// The read of the kept check.
+#[must_use]
+pub fn read_check() -> wire::SecretOp {
+    device(wire::secret_op::Op::Get, CHECK_KEY, "")
+}
+
+/// The kept check from its answer; a value this build cannot read is no verdict.
+#[must_use]
+pub fn kept_check(answer: Option<&wire::SecretAnswer>) -> Option<KeptCheck> {
+    let answer = answer.filter(|answer| answer.ok && answer.found)?;
+    let text = String::from_utf8_lossy(&answer.value);
+    let (word, at) = text.split_once(':')?;
+    let kind = match word {
+        "opens" => CheckKind::Opens,
+        "problem" => CheckKind::Problem,
+        _ => return None,
+    };
+    Some(KeptCheck {
+        kind,
+        at_ms: at.parse().ok()?,
+    })
+}
+
+/// The five reads, in this order: the rule, whether videos are included, whether the
+/// recovery-key prompt was answered, whether the notification ask was dismissed, and what the
+/// last check found.
 #[must_use]
 pub fn read_ops() -> Vec<wire::SecretOp> {
     vec![
@@ -160,6 +221,7 @@ pub fn read_ops() -> Vec<wire::SecretOp> {
         device(wire::secret_op::Op::Get, INCLUDE_VIDEOS_KEY, ""),
         device(wire::secret_op::Op::Get, KEY_PROMPT_KEY, ""),
         device(wire::secret_op::Op::Get, NOTIFY_ASK_KEY, ""),
+        read_check(),
     ]
 }
 

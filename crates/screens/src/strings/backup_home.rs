@@ -33,28 +33,13 @@ catalog! {
     plain background_off_ios = ("Background App Refresh is off, so Centraid only catches up when you open it.", "Background App Refresh is off, so Centraid only catches up when you open it.");
     plain background_off_android = ("Centraid cannot catch up in the background on this phone.", "Centraid cannot catch up in the background on this phone.");
 
-    // WHAT A MEMBER IS TOLD ABOUT A PASS (`DrainCopy`): one sentence per reason it
-    // stopped. A window that ran out with bytes left is the ordinary case for a
-    // first backup of a camera roll, so a deadline is not an error and does not say
-    // so. "Everything" would be a claim, so an empty spool says only what was ready.
+    // HOW BACKUP RUNS, on the Backup page under "What travels when": it is foreground work and
+    // the windows the OS grants, never continuous, and a force-quit stops it until the next launch.
     plain pass_in_flight_title = ("Backing up", "Backing up");
-    plain pass_stopped_empty = ("Your backup device has everything that was ready.", "Your backup device has everything that was ready.");
-    plain pass_stopped_deadline = ("Still backing up. {size} to go.", "Still backing up. {size} to go.");
-    plain pass_stopped_unreachable = ("Backup device didn't answer. Will try again.", "Backup device didn't answer. Will try again.");
-    plain pass_stopped_untrusted = ("That isn't your backup device. Nothing was sent.", "That isn't your backup device. Nothing was sent.");
-    plain pass_stopped_moved = ("Moved to another phone. This phone is read-only.", "Moved to another phone. This phone is read-only.");
     plain pass_posture = ("Centraid backs up while open. Your phone keeps uploading after you leave.", "Centraid backs up while open. Your phone keeps uploading after you leave.");
     plain pass_force_quit = ("If you swipe Centraid away, your phone cancels those uploads until you open it again. Low Power Mode pauses them.", "If you swipe Centraid away, your phone cancels those uploads until you open it again. Low Power Mode pauses them.");
+    plain pass_force_quit_android = ("If you force-stop Centraid, backup waits until you open it again.", "If you force-stop Centraid, backup waits until you open it again.");
     plain pass_android_unmetered = ("Centraid backs up in the background on Wi-Fi, and on cellular when your setting allows it.", "Centraid backs up in the background on Wi-Fi, and on cellular when your setting allows it.");
-
-    // WHAT MAY BE CLAIMED as backed up (`BackupClaim`): the sentence leads with
-    // what is NOT backed up when anything is behind, because that is the part a
-    // member would be wrong about.
-    plain claim_never = ("Not backed up yet.", "Not backed up yet.");
-    plain claim_up_to_date = ("Records backed up {when}.", "Records backed up {when}.");
-    counted claim_behind = ("{n} change not backed up. Last backup {when}.", "{n} changes not backed up. Last backup {when}.");
-    plain claim_moved_nothing = ("Moved to another phone. Nothing unsent here.", "Moved to another phone. Nothing unsent here.");
-    counted claim_moved_unsent = ("Moved to another phone. {n} change since {since} is only here.", "Moved to another phone. {n} changes since {since} are only here.");
 
     // WHICH BACKUP DEVICE IS BEHIND, FULL OR HOLDING AN OLDER BACKUP (#1188, NB1): the card names
     // it by the name the member gave it, and each row says how it stands.

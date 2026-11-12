@@ -69,7 +69,7 @@ catalog! {
     plain restore_primary = ("Restore", "Restore");
     plain restore_title = ("Restore with your recovery key", "Restore with your recovery key");
     plain restore_unreachable = ("Couldn't reach your backup device. Check it is on and connected, or paste a new pairing code.", "Couldn't reach your backup device. Check it is on and connected, or paste a new pairing code.");
-    plain restoring = ("Looking for your backup device…", "Looking for your backup device…");
+    plain restoring = ("Looking for your backup device and checking what it holds. This can take a minute.", "Looking for your backup device and checking what it holds. This can take a minute.");
     plain save_label = ("Save a copy", "Save a copy");
     plain save_subject = ("Centraid recovery key", "Centraid recovery key");
     plain show_a11y = ("Your recovery key, 24 words. Save it or write it down.", "Your recovery key, 24 words. Save it or write it down.");

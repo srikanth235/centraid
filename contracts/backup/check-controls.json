@@ -82,6 +82,20 @@
       "ink": { "nas": "bad" }
     },
     {
+      "name": "the check did not finish: no rows, and Retry starts it again",
+      "state": {
+        "heading": "",
+        "running": false,
+        "action": "start",
+        "action_label": "Retry",
+        "back_up_now_label": "",
+        "rows": []
+      },
+      "shown": ["backup-check-intro", "backup-check-start"],
+      "taps": { "backup-check-start": "start" },
+      "ink": {}
+    },
+    {
       "name": "an action with no label is not drawn",
       "state": {
         "heading": "",

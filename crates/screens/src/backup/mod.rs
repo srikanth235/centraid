@@ -12,7 +12,7 @@
 //! | [`rule`] | the member's transfer rule and the videos bit, as this phone keeps them |
 //! | [`key`] | where the recovery key is, worded for the platform |
 //! | [`freeze`] | what is only on this phone when the vault moved |
-//! | [`claim`] | what a sentence may claim about backup, and what a pass is told in words |
+//! | [`claim`] | how a size is said, in decimal units rounded down |
 //!
 //! **"Free up space" is Photos'**: the count, the verb and its sentences are
 //! `photos::keep_originals::FreeUpRow` over `photos::free_up`, so this

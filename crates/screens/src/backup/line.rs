@@ -57,14 +57,52 @@ pub fn unreached(reading: &Reading, now_ms: i64) -> bool {
         .any(|d| d.last_seen_ms.is_some_and(|at| now_ms - at <= STALE_MS))
 }
 
+/// THE OLDEST ITEM STILL UNCONFIRMED HAS WAITED LONGER THAN [`STALE_MS`] (#1188): a backlog of
+/// originals warns however recent the records' acknowledgement was.
+#[must_use]
+pub fn backlog_old(reading: &Reading, now_ms: i64) -> bool {
+    reading.unconfirmed() > 0
+        && reading
+            .oldest_waiting_ms
+            .is_some_and(|at| now_ms - at > STALE_MS)
+}
+
+/// WHETHER ANYTHING ABOUT THIS BACKUP IS OWED A LOOK: the one reading the line's tone and the
+/// status card's condition are both made from, so the card can never be green beside a warning
+/// line. A vault that moved and one with no device are the callers' own cases.
+#[must_use]
+pub fn warns(reading: &Reading, now_ms: i64) -> bool {
+    if reading.destinations.is_empty() || reading.destinations.iter().all(|d| d.pair_again) {
+        return true;
+    }
+    let Some(acked) = reading.last_ack_ms else {
+        return true;
+    };
+    // AN ACKNOWLEDGEMENT DATED IN THE FUTURE is a clock that was set ahead and corrected: it
+    // says nothing of when the backup last ran, so it does not hold the stale warning off
+    // until the real date catches up (#1188, B11).
+    let from_the_future = acked - now_ms > CLOCK_TOLERANCE_MS;
+    // A MACHINE THAT IS NOT THE GATEWAY answered at its address (#1080): the member is owed a
+    // look, however recent the ack.
+    now_ms - acked > STALE_MS
+        || from_the_future
+        || unreached(reading, now_ms)
+        || reading.waiting_for(wire::WaitReason::Untrusted) > 0
+        || reading.destinations.iter().any(|d| d.pair_again)
+        || worst(reading).is_some()
+        || backlog_old(reading, now_ms)
+}
+
 /// The line for one vault. `reading` `None` is "the core could not be asked" (a
-/// resting vault): the line is empty and the view draws nothing. `now_ms` is
-/// this phone's clock, for "2 minutes ago" only.
+/// resting vault): the line is empty and the view draws nothing. `running` is whether a pass is
+/// going right now: "Backing up" is said only then. `now_ms` is this phone's clock, for
+/// "2 minutes ago" only.
 #[must_use]
 pub fn line(
     locale: Locale,
     reading: Option<&Reading>,
     frozen: bool,
+    running: bool,
     now_ms: i64,
 ) -> wire::BackupLine {
     if frozen {
@@ -118,37 +156,37 @@ pub fn line(
     };
     let whole = reading.unconfirmed() == 0;
     let when = ago(locale, acked, now_ms);
-    // AN ACKNOWLEDGEMENT DATED IN THE FUTURE is a clock that was set ahead and corrected: it
-    // says nothing of when the backup last ran, so it does not hold the stale warning off
-    // until the real date catches up (#1188, B11).
-    let from_the_future = acked - now_ms > CLOCK_TOLERANCE_MS;
-    let stale = now_ms - acked > STALE_MS || from_the_future || unreached(reading, now_ms);
-    // A MACHINE THAT IS NOT THE GATEWAY answered at its address (#1080): the
-    // member is owed a look, however recent the ack.
-    let attention = stale
-        || reading.waiting_for(wire::WaitReason::Untrusted) > 0
-        || reading.destinations.iter().any(|d| d.pair_again);
+    let count = grouped(reading.unconfirmed());
+    let stood = backlog_old(reading, now_ms);
+    let sentence = if whole {
+        fill(&words::backup_line_done(locale), &[("when", &when)])
+    } else if stood {
+        let oldest = reading
+            .oldest_waiting_ms
+            .map_or_else(String::new, |at| ago(locale, at, now_ms));
+        fill(
+            &words::backup_line_backlog(locale),
+            &[("count", &count), ("when", &oldest)],
+        )
+    } else {
+        fill(&words::backup_line_records(locale), &[("when", &when)])
+    };
+    // "BACKING UP" IS SAID ONLY WHILE A PASS RUNS; otherwise the status says what a gateway
+    // acknowledged and how many wait, which stays true when nothing is moving.
+    let status = if whole {
+        words::backup_status_done(locale)
+    } else if running {
+        words::backup_status_catching_up(locale)
+    } else {
+        words::backup_status_waiting(locale)
+    };
     let built = wire::BackupLine {
         confirmed: reading.content_confirmed,
         waiting,
-        sentence: fill(
-            &if whole {
-                words::backup_line_done(locale)
-            } else {
-                words::backup_line_records(locale)
-            },
-            &[("when", &when)],
-        ),
-        status: fill(
-            &if whole {
-                words::backup_status_done(locale)
-            } else {
-                words::backup_status_catching_up(locale)
-            },
-            &[("when", &when)],
-        ),
+        sentence,
+        status: fill(&status, &[("when", &when), ("count", &count)]),
         detail,
-        tone: if attention {
+        tone: if warns(reading, now_ms) {
             Tone::Attention
         } else {
             Tone::Quiet

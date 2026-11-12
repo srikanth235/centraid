@@ -36,6 +36,10 @@ catalog! {
     plain check_foot_never = ("Not checked", "Not checked");
     plain check_foot_nothing = ("Nothing was checked.", "Nothing was checked.");
     plain check_foot_unpaired = ("No backup device is paired.", "No backup device is paired.");
+    plain check_failed = ("The check didn't finish. Try again.", "The check didn't finish. Try again.");
+    plain check_retry = ("Retry", "Retry");
+    plain check_foot_problem = ("Found a problem {when}", "Found a problem {when}");
+    plain check_row_never = ("Never checked", "Never checked");
     plain check_start = ("Check my backup", "Check my backup");
     plain check_again = ("Check again", "Check again");
     plain check_stop = ("Stop", "Stop");
@@ -45,6 +49,8 @@ catalog! {
     // THE STALE NOTICE (`backup::stale`), written before the day comes: no reason is claimed.
     plain stale_title = ("Backup is {n} days old", "Backup is {n} days old");
     plain stale_body = ("Nothing has reached {device} since {since}. Open Centraid to see why.", "Nothing has reached {device} since {since}. Open Centraid to see why.");
+    plain stale_backlog_title = ("Some files are not backed up", "Some files are not backed up");
+    plain stale_backlog_body = ("Items added {since} still haven't reached a backup device. Open Centraid to see why.", "Items added {since} still haven't reached a backup device. Open Centraid to see why.");
     plain stale_never_title = ("Not backed up yet", "Not backed up yet");
     plain stale_never_body = ("Nothing has reached {device} since it was paired on {since}. Open Centraid to see why.", "Nothing has reached {device} since it was paired on {since}. Open Centraid to see why.");
 }

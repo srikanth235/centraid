@@ -3016,6 +3016,46 @@
       "w": 390,
       "x": 8000,
       "y": 940
+    },
+    "BackupWaiting.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Backup, records backed up, items waiting (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 12220
+    },
+    "BackupBacklog.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Backup, a backlog that waited too long (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 13160
+    },
+    "BackupCheckKept.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Check my backup, last result kept (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 14100
+    },
+    "BackupCheckFailed.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Check my backup, the check did not finish (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 15040
+    },
+    "RestoreWorking.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Restore, looking for the backup (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 15980
     }
   },
   "createdOnFiles": {
@@ -3853,7 +3893,12 @@
     "RestoreNone.dc.html",
     "BackupNotifyAsk.dc.html",
     "BackupNotifyOff.dc.html",
-    "RestoreNewer.dc.html"
+    "RestoreNewer.dc.html",
+    "BackupWaiting.dc.html",
+    "BackupBacklog.dc.html",
+    "BackupCheckKept.dc.html",
+    "BackupCheckFailed.dc.html",
+    "RestoreWorking.dc.html"
   ],
   "pages": [
     {

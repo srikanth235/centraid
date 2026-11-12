@@ -67,6 +67,16 @@ pub fn stale_backup_notices(
     reading: &Reading,
     now_ms: i64,
 ) -> Vec<StaleNotice> {
+    // A PHONE THE VAULT MOVED FROM is frozen: it backs up nothing, so it has no staleness to
+    // warn of, and a notice would send the member to fix what only the new phone can.
+    if reading.frozen || reading.destinations.is_empty() {
+        return Vec::new();
+    }
+    // A BACKLOG OF ORIGINALS counts like an old acknowledgement: the oldest item still waiting
+    // sets its own clock, and the earlier of the two wins the notice's wording.
+    let backlog = (reading.unconfirmed() > 0)
+        .then_some(reading.oldest_waiting_ms)
+        .flatten();
     // THE OLDEST DEVICE sets the age: a backup is only as current as the device furthest behind.
     // A device that never confirmed anything is counted from the day it was paired, and it is the
     // worst case, never a silent one (the owner's ruling).
@@ -80,10 +90,24 @@ pub fn stale_backup_notices(
         })
         .min_by_key(|(at, _, _)| *at)
     else {
-        return Vec::new();
+        return backlog.map_or_else(Vec::new, |at| notices_from(locale, zone, at, now_ms, None));
     };
     let (raw, never, device) = behind;
+    if let Some(at) = backlog.filter(|at| *at < raw) {
+        return notices_from(locale, zone, at, now_ms, None);
+    }
+    notices_from(locale, zone, raw, now_ms, Some((never, device)))
+}
 
+/// The two notices counted from `raw`: a device's last confirmed backup (or its pairing), or,
+/// with no device named, the moment the oldest item still waiting was queued.
+fn notices_from(
+    locale: Locale,
+    zone: &str,
+    raw: i64,
+    now_ms: i64,
+    device: Option<(bool, &super::reading::Destination)>,
+) -> Vec<StaleNotice> {
     // A TIME AHEAD OF THIS PHONE'S CLOCK is a clock that was set ahead and corrected: it counts
     // as stale now (the first step is due now) and is not waited for.
     let future = raw - now_ms > CLOCK_TOLERANCE_MS;
@@ -105,23 +129,33 @@ pub fn stale_backup_notices(
         .into_iter()
         .map(|step| {
             let days = (due_of(step) - base) / DAY_MS;
+            let (title, body) = match device {
+                None => (
+                    words::stale_backlog_title(locale),
+                    fill(&words::stale_backlog_body(locale), &[("since", &since)]),
+                ),
+                Some((never, device)) => (
+                    if never {
+                        words::stale_never_title(locale)
+                    } else {
+                        fill(&words::stale_title(locale), &[("n", &days.to_string())])
+                    },
+                    fill(
+                        &if never {
+                            words::stale_never_body(locale)
+                        } else {
+                            words::stale_body(locale)
+                        },
+                        &[("device", &device.label), ("since", &since)],
+                    ),
+                ),
+            };
             StaleNotice {
                 id: format!("backup-stale:{raw}:{step}"),
                 channel: CHANNEL,
                 fire_at_ms: due_of(step).max(if now_ms >= due_of(step) { now_ms } else { 0 }),
-                title: if never {
-                    words::stale_never_title(locale)
-                } else {
-                    fill(&words::stale_title(locale), &[("n", &days.to_string())])
-                },
-                body: fill(
-                    &if never {
-                        words::stale_never_body(locale)
-                    } else {
-                        words::stale_body(locale)
-                    },
-                    &[("device", &device.label), ("since", &since)],
-                ),
+                title,
+                body,
                 opens: super::routes::home(),
             }
         })
@@ -181,6 +215,7 @@ mod tests {
             pending_bytes: 0,
             spool_bytes: 0,
             waiting: std::collections::BTreeMap::new(),
+            oldest_waiting_ms: None,
             frozen: false,
             apps: Vec::new(),
             total_bytes: 0,

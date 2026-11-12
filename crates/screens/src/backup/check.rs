@@ -19,7 +19,8 @@ use wire::device_check::{NotRun, Verdict};
 use wire::screen_event::Kind as E;
 
 use super::line;
-use crate::custody::secrets::VaultSecrets;
+use super::rule::{self, CheckKind, KeptCheck};
+use crate::custody::secrets::{self, VaultSecrets};
 use crate::passes::rule::Rules;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, backup_check as words, fill};
@@ -27,7 +28,7 @@ use crate::strings::{Locale, backup_check as words, fill};
 /// The route name.
 pub const NAME: &str = "backup.check";
 
-const JOB: &str = "backup.check.run";
+pub(super) const JOB: &str = "backup.check.run";
 const POLL: &str = "backup.check.poll";
 const POLL_EVERY: Duration = Duration::from_secs(1);
 
@@ -48,6 +49,12 @@ pub struct Check {
     running: bool,
     progress: Option<wire::CheckProgress>,
     done: Option<Done>,
+    /// The core could not do the check (or answered nothing): said as a failure with Retry, never
+    /// as "Not checked".
+    failed: bool,
+    /// What the last check that opened a backup found, kept in the device store so the page and
+    /// Backup's row still say it after the page closes.
+    kept: Option<KeptCheck>,
     /// Whether a backup device is paired; unknown until the page has asked.
     paired: Option<bool>,
 }
@@ -70,6 +77,16 @@ impl Check {
         page
     }
 
+    pub(super) fn kept(mut self, kept: Option<KeptCheck>) -> Self {
+        self.kept = kept;
+        self
+    }
+
+    pub(super) fn failed(mut self) -> Self {
+        self.failed = true;
+        self
+    }
+
     pub(super) fn drawn(&self, ctx: &Ctx) -> wire::BackupCheckState {
         self.state(ctx)
     }
@@ -82,6 +99,8 @@ impl Check {
             running: false,
             progress: None,
             done: None,
+            failed: false,
+            kept: None,
             paired: None,
         }
     }
@@ -109,6 +128,7 @@ impl Check {
         let rules = Rules::read(&self.secrets);
         let facts = self.secrets.conductor().facts();
         self.running = true;
+        self.failed = false;
         self.progress = None;
         ctx.vault_async(
             JOB,
@@ -149,7 +169,8 @@ impl Check {
         ctx.start_timer(POLL, POLL_EVERY);
     }
 
-    fn finished(&mut self, bytes: &[u8], ctx: &Ctx) {
+    /// The core answered, or did not. Returns the effect that keeps a real verdict.
+    fn finished(&mut self, bytes: &[u8], ctx: &Ctx) -> Vec<wire::Effect> {
         self.running = false;
         self.progress = None;
         ctx.cancel_timer(POLL);
@@ -161,12 +182,58 @@ impl Check {
                 Some(wire::response::Kind::CheckBackup(answer)) => Some(answer),
                 _ => None,
             });
-        // NO ANSWER (the core refused, or was gone) IS NOT A PASS: the devices it would have
-        // checked read as not checked, because nothing was.
-        self.done = answer.map(|answer| Done {
+        // NO ANSWER (the core refused, or was gone) IS A FAILURE the page says in a sentence with
+        // Retry: it is neither a pass nor "Not checked", because the member asked and it did not
+        // happen.
+        let Some(answer) = answer else {
+            self.failed = true;
+            self.done = None;
+            return Vec::new();
+        };
+        self.failed = false;
+        let at_ms = Self::now_ms();
+        self.done = Some(Done {
             devices: answer.devices,
-            at_ms: Self::now_ms(),
+            at_ms,
         });
+        // A VERDICT IS KEPT only when a backup was actually opened: a device that did not answer
+        // says nothing about whether a backup restores, so it must not replace what was found.
+        match self.verdict() {
+            Some(kind) => {
+                let kept = KeptCheck { kind, at_ms };
+                self.kept = Some(kept);
+                vec![secrets::effect(vec![rule::write_check(kept)])]
+            }
+            None => Vec::new(),
+        }
+    }
+
+    /// What the check on screen found: `None` when no backup was opened.
+    fn verdict(&self) -> Option<CheckKind> {
+        let done = self.done.as_ref()?;
+        let found =
+            |d: &wire::DeviceCheck| Verdict::try_from(d.verdict).unwrap_or(Verdict::Unspecified);
+        done.devices
+            .iter()
+            .any(|d| !matches!(found(d), Verdict::NotRun | Verdict::Unspecified))
+            .then(|| {
+                if self.owes() {
+                    CheckKind::Problem
+                } else {
+                    CheckKind::Opens
+                }
+            })
+    }
+
+    /// The page's foot for a verdict kept earlier, before anything was checked on this visit.
+    fn kept_foot(&self, locale: Locale) -> Option<String> {
+        let kept = self.kept?;
+        let when = line::ago(locale, kept.at_ms, Self::now_ms()).to_lowercase();
+        let sentence = match kept.kind {
+            CheckKind::Opens => words::check_foot_done(locale),
+            CheckKind::Problem => words::check_foot_problem(locale),
+        };
+        Some(fill(&sentence, &[("when", &when)]))
     }
 
     /// `Tuesday 10 November, 21:40`, in the member's zone.
@@ -326,6 +393,12 @@ impl Check {
             state.action = wire::BackupCheckAction::Stop as i32;
             return state;
         }
+        if self.failed {
+            state.status = Self::foot(words::check_failed(locale));
+            state.action_label = words::check_retry(locale);
+            state.action = wire::BackupCheckAction::Check as i32;
+            return state;
+        }
         match (&self.done, self.paired) {
             (Some(done), _) => {
                 state.heading = words::check_heading_result(locale);
@@ -356,8 +429,15 @@ impl Check {
                 state.action = wire::BackupCheckAction::None as i32;
             }
             (None, _) => {
-                state.status = Self::foot(words::check_foot_never(locale));
-                state.action_label = words::check_start(locale);
+                state.status = Self::foot(
+                    self.kept_foot(locale)
+                        .unwrap_or_else(|| words::check_foot_never(locale)),
+                );
+                state.action_label = if self.kept.is_some() {
+                    words::check_again(locale)
+                } else {
+                    words::check_start(locale)
+                };
                 state.action = wire::BackupCheckAction::Check as i32;
             }
         }
@@ -368,7 +448,18 @@ impl Check {
 impl Screen for Check {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
-            Some(E::Appeared(_)) => self.open(ctx),
+            Some(E::Appeared(_)) => {
+                self.open(ctx);
+                return vec![secrets::effect(vec![rule::read_check()])];
+            }
+            Some(E::EffectResult(result)) => {
+                if let Some(wire::effect_result::Outcome::Secrets(batched)) = result.outcome {
+                    // A VERDICT THIS VISIT ALREADY MADE is newer than what the store held.
+                    if self.done.is_none() {
+                        self.kept = rule::kept_check(batched.answers.first());
+                    }
+                }
+            }
             Some(E::BackupCheck(event)) => match event.kind {
                 Some(wire::backup_check_event::Kind::Start(_)) => self.start(ctx),
                 Some(wire::backup_check_event::Kind::Stop(_)) => self.stop(ctx),
@@ -380,7 +471,9 @@ impl Screen for Check {
                 None => {}
             },
             Some(E::TimerFired(fired)) if fired.timer == POLL => self.poll(ctx),
-            Some(E::OffThreadDone(done)) if done.tag == JOB => self.finished(&done.bytes, ctx),
+            Some(E::OffThreadDone(done)) if done.tag == JOB => {
+                return self.finished(&done.bytes, ctx);
+            }
             _ => {}
         }
         Vec::new()

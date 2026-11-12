@@ -56,6 +56,13 @@ pub fn build(_route: &wire::Route) -> Option<Box<dyn Screen>> {
 /// The offer a reading makes: the stale notices and the ids still wanted.
 #[must_use]
 pub fn offer_of(locale: crate::strings::Locale, zone: &str, standing: &reading::Standing) -> Offer {
+    // A PHONE THE VAULT MOVED FROM offers nothing, and an empty offer withdraws what was scheduled.
+    if standing.reading.frozen {
+        return Offer {
+            notices: Vec::new(),
+            wanted: Vec::new(),
+        };
+    }
     let (notices, wanted) = stale::producer(locale, zone, &standing.reading, standing.now_ms);
     Offer {
         notices: notices

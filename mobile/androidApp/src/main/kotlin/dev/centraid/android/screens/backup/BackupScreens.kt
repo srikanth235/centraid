@@ -47,6 +47,7 @@ import dev.centraid.android.kit.StateColor
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.tokenSp
+import dev.centraid.android.screens.words.WordsCallout
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -248,14 +249,23 @@ private fun BackupPage(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(Modifier.padding(top = 6.dp).size(10.dp).clip(CircleShape).background(conditionTint(model)))
+                // THE STATE'S MARK (Backup, BackupRunning, BackupFailed): a round badge in the state's
+                // pale ground, its glyph in the state's colour. The iOS twin draws the same.
+                val tint = conditionTint(model)
+                Box(
+                    Modifier.size(40.dp).clip(CircleShape).background(tint.copy(alpha = 0.14f)).clearAndSetSemantics { },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CentraidIcon(iconKey = conditionMark(model), tint = tint, size = 20.dp)
+                }
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(line?.sentence.orEmpty(), style = centraidType("title").copy(fontSize = tokenSp(R.dimen.centraid_text_section)), color = Surface.ink)
                     if (!line?.detail.isNullOrEmpty()) Sentence(line?.detail.orEmpty())
                     if (model.last_good.isNotEmpty()) Sentence(model.last_good, "backup-last-good")
-                    if (model.reason.isNotEmpty()) Sentence(model.reason, "backup-reason")
                 }
             }
+            // WHY THE DEVICE IS NOT ANSWERING is an amber callout of its own, not a quiet line.
+            if (model.reason.isNotEmpty()) WordsCallout(model.reason, StateColor.Amber, testTag = "backup-reason")
             if (model.progress.isNotEmpty()) {
                 if (model.progress_known) {
                     // THE RUN'S BAR (BackupRunning): what a gateway has acknowledged of the whole,
@@ -346,6 +356,9 @@ private fun BackupPage(
                         }
                     }
                 }
+                if (model.posture.isNotEmpty()) {
+                    Box(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) { Sentence(model.posture, "backup-posture") }
+                }
                 if (model.include_videos_label.isNotEmpty()) {
                     Row(
                         Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 16.dp).testTag("backup-include-videos"),
@@ -422,7 +435,17 @@ private fun BackupPage(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         KitTile(iconKey = "Check", size = 32.dp)
-                        Text(model.check_label, style = centraidType("body"), color = Surface.ink, modifier = Modifier.weight(1f))
+                        Column(Modifier.weight(1f)) {
+                            Text(model.check_label, style = centraidType("body"), color = Surface.ink)
+                            if (model.check_status.isNotEmpty()) {
+                                Text(
+                                    model.check_status,
+                                    style = centraidType("annotLabel"),
+                                    color = if (model.check_warning) StateColor.Amber.text else Surface.meta,
+                                    modifier = Modifier.testTag("backup-check-status"),
+                                )
+                            }
+                        }
                         CentraidIcon(iconKey = "ChevronRight", tint = Surface.meta, size = 16.dp)
                     }
                 }
@@ -452,9 +475,16 @@ private val CardRadius = 16.dp
 @Composable
 private fun conditionTint(model: BackupHomeData) = when (model.condition) {
     BackupCondition.BACKUP_CONDITION_UP_TO_DATE -> StateColor.Green.text
-    BackupCondition.BACKUP_CONDITION_RUNNING -> Surface.meta
-    BackupCondition.BACKUP_CONDITION_NOT_REACHED -> StateColor.Amber.text
+    BackupCondition.BACKUP_CONDITION_RUNNING, BackupCondition.BACKUP_CONDITION_CATCHING_UP -> Surface.meta
+    BackupCondition.BACKUP_CONDITION_NOT_REACHED, BackupCondition.BACKUP_CONDITION_ATTENTION -> StateColor.Amber.text
     else -> if (model.line?.tone == BackupLine.Tone.TONE_URGENT) StateColor.Red.text else StateColor.Amber.text
+}
+
+/** The badge's glyph: a tick only for a backup that is whole and warns of nothing (iOS `markKey`). */
+private fun conditionMark(model: BackupHomeData): String = when (model.condition) {
+    BackupCondition.BACKUP_CONDITION_UP_TO_DATE -> "Check"
+    BackupCondition.BACKUP_CONDITION_RUNNING, BackupCondition.BACKUP_CONDITION_CATCHING_UP -> "Refresh"
+    else -> "AlertCircle"
 }
 
 private fun needsNotificationGrant(context: Context): Boolean =
@@ -560,6 +590,7 @@ private fun Destinations(model: BackupHomeData, onEvent: (BackupHomeEvent) -> Un
             ) {
                 Text(row.label, style = centraidType("body"), color = Surface.ink)
                 if (row.held.isNotEmpty()) Sentence(row.held)
+                if (row.backed_up.isNotEmpty()) Sentence(row.backed_up)
                 if (row.detail.isNotEmpty()) Sentence(row.detail)
             }
             // FORGET IS PLAIN AND VISIBLE, and needs no confirmation: it forgets this phone's pairing and

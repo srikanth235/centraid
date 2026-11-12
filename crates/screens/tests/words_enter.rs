@@ -322,7 +322,10 @@ fn a_valid_phrase_opens_the_one_control_and_a_restore_answer_drops_every_word() 
     primary(&mut phone);
     let state = phone.enter();
     assert_eq!(state.phase, Phase::Working as i32);
-    assert_eq!(state.progress, "Looking for your backup device…");
+    assert_eq!(
+        state.progress,
+        "Looking for your backup device and checking what it holds. This can take a minute."
+    );
 
     deliver(
         &mut phone,

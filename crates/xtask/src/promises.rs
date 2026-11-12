@@ -3107,6 +3107,14 @@ pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 7] = [
                 "crates/core/tests/backup_verify.rs",
                 "a_gateway_that_lies_about_exists_is_found_and_then_refilled",
             ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "the_card_is_never_green_beside_a_warning_line",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "a_backlog_older_than_the_stale_threshold_warns_with_the_count_and_the_reason",
+            ),
         ],
     ),
     (
@@ -3157,6 +3165,39 @@ pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 7] = [
             (
                 "crates/screens/src/backup/tests.rs",
                 "a_refused_grant_says_so_and_offers_settings",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "a_frozen_phone_gets_no_stale_notice",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "an_old_backlog_schedules_its_notice_from_the_oldest_waiting_item",
+            ),
+        ],
+    ),
+    (
+        "what a member reads about backup is what happened: Backing up only while a pass runs, each device's last backup, how backup runs on this platform, and the check's kept result",
+        &[
+            (
+                "crates/screens/src/backup/tests.rs",
+                "backing_up_is_said_only_while_a_pass_runs",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "each_device_says_when_it_last_acknowledged_a_backup",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "the_page_says_how_backup_runs_on_each_platform_and_never_claims_always",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "check_my_backup_says_what_it_last_found_or_that_it_never_ran",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "a_check_the_core_could_not_do_says_it_failed_with_retry",
             ),
         ],
     ),

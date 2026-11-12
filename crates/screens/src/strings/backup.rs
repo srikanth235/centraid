@@ -70,6 +70,7 @@ catalog! {
     plain backup_key_sync_on = ("Save my key in {place}", "Save my key in {place}");
     plain backup_line_all = ("All {total} photos and files", "All {total} photos and files");
     plain backup_line_count = ("{confirmed} of {total} photos and files", "{confirmed} of {total} photos and files");
+    plain backup_line_backlog = ("{count} not backed up. The oldest was added {when}.", "{count} not backed up. The oldest was added {when}.");
     plain backup_line_done = ("Backed up {when}.", "Backed up {when}.");
     plain backup_line_frozen = ("Moved to another phone. Read-only here.", "Moved to another phone. Read-only here.");
     plain backup_line_never = ("Not backed up yet.", "Not backed up yet.");
@@ -80,11 +81,14 @@ catalog! {
     plain backup_now_running = ("Backing up…", "Backing up…");
     plain backup_progress = ("Backing up — {size} to go", "Backing up — {size} to go");
     plain backup_refused = ("Your backup device refused the backup. It may be full. Nothing was lost.", "Your backup device refused the backup. It may be full. Nothing was lost.");
+    plain backup_dest_acked = ("Last backup {when}", "Last backup {when}");
+    plain backup_dest_acked_never = ("Not backed up yet", "Not backed up yet");
     plain backup_seen = ("Reached {when}", "Reached {when}");
     plain backup_seen_never = ("Not reached yet", "Not reached yet");
     plain backup_status_catching_up = ("Backing up, last {when}", "Backing up, last {when}");
     plain backup_status_done = ("Backed up {when}", "Backed up {when}");
     plain backup_status_frozen = ("Moved to your other phone", "Moved to your other phone");
+    plain backup_status_waiting = ("Records backed up {when}, {count} waiting", "Records backed up {when}, {count} waiting");
     plain backup_status_never = ("Not backed up yet", "Not backed up yet");
     plain backup_status_pair_again = ("Pair your backup device again", "Pair your backup device again");
     plain backup_status_unpaired = ("Not backed up. Pair a backup device.", "Not backed up. Pair a backup device.");

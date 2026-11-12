@@ -105,6 +105,9 @@ pub struct Reading {
     /// Why the unconfirmed wait, by the core's `WaitReason` number; a reason
     /// with no items is absent.
     pub waiting: BTreeMap<i32, u64>,
+    /// When the oldest item still unconfirmed was first queued, on this phone's clock; `None`
+    /// when nothing waits or the core does not say (item 2 of #1188 needs the core's field).
+    pub oldest_waiting_ms: Option<i64>,
     /// The vault moved to another phone; this one is read-only.
     pub frozen: bool,
     /// WHAT EACH APP'S BACKUP HOLDS (#1144), in the catalogue's order; empty
@@ -176,6 +179,9 @@ impl Reading {
             pending_bytes: status.pending_bytes,
             spool_bytes: status.spool_bytes,
             waiting,
+            // THE CORE DOES NOT CARRY THE AGE OF THE OLDEST WAITING ITEM YET: it is read here once
+            // `BackupStatusResponse` names it.
+            oldest_waiting_ms: None,
             frozen: status.frozen,
             apps: status.apps.clone(),
             total_bytes: status.total_bytes,

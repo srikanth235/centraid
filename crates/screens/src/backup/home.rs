@@ -64,6 +64,8 @@ enum Job {
     Prompt,
     /// The notification ask was dismissed with Not now: remember it.
     NotifyDismissed,
+    /// What the last check found, read again after the check page closes.
+    CheckKept,
     /// Moving the recovery key into the keychain, or out of it: the first batch,
     /// then (once it said whether the platform took it) the second.
     Seed {
@@ -106,6 +108,8 @@ struct Backup {
     /// The one-time recovery-key prompt was answered (read from the device store).
     key_prompt_answered: bool,
     notify_ask_dismissed: bool,
+    /// What the last "Check my backup" found and when, from the device store; `None` before one.
+    check_kept: Option<rule::KeptCheck>,
     /// The platform took a background window; `None` before it says.
     registered: Option<bool>,
     /// The platform's reading of its synchronised store; `None` before it says.
@@ -138,6 +142,7 @@ impl Backup {
             include_videos: true,
             key_prompt_answered: false,
             notify_ask_dismissed: false,
+            check_kept: None,
             registered: None,
             synced: None,
             backing_up_now: false,
@@ -232,6 +237,7 @@ impl Backup {
             Job::Videos => vec![rule::write_include_videos(self.include_videos)],
             Job::Prompt => vec![rule::write_key_prompt_answered()],
             Job::NotifyDismissed => vec![rule::write_notify_ask_dismissed()],
+            Job::CheckKept => vec![rule::read_check()],
             Job::Seed { write, stage, .. } => match stage {
                 Stage::First => write.first(),
                 // The second batch is built from the first's answers, in `answered`.
@@ -268,8 +274,10 @@ impl Backup {
                     rule::key_prompt_answered(answers.get(2..).unwrap_or_default());
                 self.notify_ask_dismissed =
                     rule::notify_ask_dismissed(answers.get(2..).unwrap_or_default());
+                self.check_kept = rule::kept_check(answers.get(rule::CHECK_ANSWER + 2));
                 self.settled = true;
             }
+            Job::CheckKept => self.check_kept = rule::kept_check(answers.first()),
             Job::Prompt | Job::NotifyDismissed => {}
             Job::Rule(_) | Job::Videos => {
                 // Written as the member set it; a store that refused leaves the
@@ -630,7 +638,18 @@ impl Backup {
         .flatten()
         .collect::<Vec<_>>()
         .join(" \u{b7} ");
-        let accessibility_label = [label.as_str(), &held, &detail]
+        // WHEN THIS GATEWAY LAST ACKNOWLEDGED A BACKUP, apart from when it was reached: a device
+        // can answer every hour and hold nothing newer than last week (#1188).
+        let backed_up = destination.last_ack_ms.map_or_else(
+            || words::backup_dest_acked_never(locale),
+            |at| {
+                fill(
+                    &words::backup_dest_acked(locale),
+                    &[("when", &line::ago(locale, at, self.now_ms()))],
+                )
+            },
+        );
+        let accessibility_label = [label.as_str(), &held, &backed_up, &detail]
             .into_iter()
             .filter(|part| !part.is_empty())
             .collect::<Vec<_>>()
@@ -641,6 +660,7 @@ impl Backup {
             label,
             detail,
             held,
+            backed_up,
         }
     }
 
@@ -675,20 +695,27 @@ impl Backup {
         Some(u16::try_from(thousandths).map_or(1.0, |t| f32::from(t) / 1000.0))
     }
 
-    /// Where the backup stands, for the status card.
+    /// Where the backup stands, for the status card. Green ("up to date") is said only when the
+    /// line's own reading finds nothing to warn of and nothing waiting: the card and the line are
+    /// made from [`line::warns`], so one can never be calm beside the other's warning.
     fn condition(&self) -> wire::BackupCondition {
         use wire::BackupCondition as C;
+        let now = self.now_ms();
+        let Some(reading) = self.reading() else {
+            return if self.frozen() { C::Moved } else { C::Unpaired };
+        };
         if self.frozen() {
             C::Moved
         } else if self.destinations().is_empty() {
             C::Unpaired
         } else if self.backing_up_now {
             C::Running
-        } else if self
-            .reading()
-            .is_some_and(|reading| line::unreached(reading, self.now_ms()))
-        {
+        } else if line::unreached(reading, now) {
             C::NotReached
+        } else if line::warns(reading, now) {
+            C::Attention
+        } else if reading.unconfirmed() > 0 {
+            C::CatchingUp
         } else {
             C::UpToDate
         }
@@ -846,7 +873,13 @@ impl Backup {
                 words::backup_apps_heading(locale)
             },
             apps: app_rows,
-            line: Some(line::line(locale, self.reading(), frozen, now)),
+            line: Some(line::line(
+                locale,
+                self.reading(),
+                frozen,
+                self.backing_up_now,
+                now,
+            )),
             devices_heading: if destinations.is_empty() {
                 String::new()
             } else {
@@ -922,6 +955,15 @@ impl Backup {
             } else {
                 crate::strings::backup_check::check_row(locale)
             },
+            check_status: if frozen || self.destinations().is_empty() {
+                String::new()
+            } else {
+                self.check_status(locale, now)
+            },
+            check_warning: self
+                .check_kept
+                .is_some_and(|kept| kept.kind == rule::CheckKind::Problem),
+            posture: Self::posture(locale, ctx.platform()),
             check: Some(super::routes::check()),
             // ONCE, AFTER THE FIRST CONFIRMED BACKUP, while the key is nowhere but this phone.
             key_prompt: (!frozen
@@ -944,6 +986,38 @@ impl Backup {
                 String::new()
             },
         }
+    }
+
+    /// "Checked 2 days ago", "Found a problem 2 days ago" or "Never checked", from the verdict
+    /// this phone kept.
+    fn check_status(&self, locale: Locale, now_ms: i64) -> String {
+        use crate::strings::backup_check as check;
+        let Some(kept) = self.check_kept else {
+            return check::check_row_never(locale);
+        };
+        let when = line::ago(locale, kept.at_ms, now_ms).to_lowercase();
+        let sentence = match kept.kind {
+            rule::CheckKind::Opens => check::check_foot_done(locale),
+            rule::CheckKind::Problem => check::check_foot_problem(locale),
+        };
+        fill(&sentence, &[("when", &when)])
+    }
+
+    /// HOW BACKUP RUNS on this platform, never as continuous: what the OS keeps going after the
+    /// member leaves, and that a force-quit stops it until the next launch.
+    fn posture(locale: Locale, platform: &str) -> String {
+        if platform == "android" {
+            [
+                backup_home::pass_android_unmetered(locale),
+                backup_home::pass_force_quit_android(locale),
+            ]
+        } else {
+            [
+                backup_home::pass_posture(locale),
+                backup_home::pass_force_quit(locale),
+            ]
+        }
+        .join(" ")
     }
 
     /// Whether the system said no to notifications: the one case the platform's Settings mends.
@@ -993,9 +1067,15 @@ impl Screen for Backup {
             Some(E::BackupHome(event)) => self.on_event(event, ctx),
             // The ledger or the vault's files moved, or a run that goes on is due
             // another look: read again.
-            Some(E::DataChanged(_)) => {
+            Some(E::DataChanged(changed)) => {
                 self.read(ctx);
-                self.rediscover()
+                let mut effects = self.rediscover();
+                // THE PAGE ABOVE WAS POPPED (a change with no tables): the check page may have
+                // kept a new verdict, so the "Check my backup" row reads it again.
+                if changed.tables.is_empty() && self.settled {
+                    effects.extend(self.run(Job::CheckKept));
+                }
+                effects
             }
             Some(E::TimerFired(fired)) if fired.timer == PROGRESS_TIMER => {
                 if self.backing_up_now {
