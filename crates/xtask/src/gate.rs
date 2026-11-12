@@ -38,69 +38,6 @@ pub const DEVICE_LANES: [&str; 4] = [
     "battery-per-background-pass",
 ];
 
-/// One CI job of the `pr` profile: `cargo xtask gate --profile pr --lane <name>`.
-///
-/// `gate.yml` splits the `pr` profile into parallel jobs so a cheap failure shows
-/// in minutes and the wall time is the slowest lane, not the sum. The workflow
-/// names a lane and nothing else: **what is in it is stated here, once**, and
-/// `every_pr_step_is_in_exactly_one_ci_lane` fails when a step of `pr` has no
-/// lane or sits in two, and `the_workflow_names_every_lane_and_no_other` when
-/// `gate.yml` names a lane this table does not (or omits one), so a step added to
-/// `pr` cannot silently stop running in CI.
-pub struct Lane {
-    pub name: &'static str,
-    /// Steps of the `pr` profile, run in profile order.
-    pub steps: &'static [&'static str],
-}
-
-/// The `pr` profile's CI lanes. Measured times (one past `gate` job, seconds):
-/// `test` 1131 (about 70 of it running tests; the rest is the dev-profile
-/// compile), `release-build` 215, `clippy` 66, `fault-door` 25, `restore-drill`
-/// 14, `ts-static` 7, everything else under 4.
-///
-/// `tests` holds every step that runs `cargo test`, so they ride one warm dev
-/// build instead of each paying a cold one in another lane. The test step is
-/// not sharded: each shard would compile the same workspace again.
-pub const PR_LANES: [Lane; 4] = [
-    Lane {
-        name: "static",
-        steps: &[
-            "fmt",
-            "clippy",
-            "rules",
-            "doc-links",
-            "ledgers",
-            "buf",
-            "deny",
-            "ci-policy",
-            "design",
-            "lockfile",
-        ],
-    },
-    Lane {
-        name: "tests",
-        steps: &[
-            "test",
-            "restore-drill",
-            "prompt-injection",
-            "model-record",
-            "fault-door",
-        ],
-    },
-    Lane {
-        name: "build",
-        steps: &["release-build"],
-    },
-    Lane {
-        name: "ts",
-        steps: &["ts-static"],
-    },
-];
-
-fn pr_lane(name: &str) -> Option<&'static Lane> {
-    PR_LANES.iter().find(|lane| lane.name == name)
-}
-
 /// Everything a step needs to know about the run it is part of.
 pub struct Ctx {
     pub root: PathBuf,
@@ -495,14 +432,6 @@ fn select(profile: Profile, lane: Option<&str>) -> Result<Vec<Step>> {
     let Some(wanted) = lane else {
         return Ok(selected);
     };
-    // A CI lane of the `pr` profile: several steps, named once in `PR_LANES`.
-    if profile == Profile::Pr
-        && let Some(group) = pr_lane(wanted)
-    {
-        selected.retain(|entry| group.steps.contains(&entry.name));
-        println!("  --lane {wanted}: running {}", group.steps.join(", "));
-        return Ok(selected);
-    }
     let keep = if DEVICE_LANES.contains(&wanted) {
         "device-lanes"
     } else {
@@ -510,16 +439,8 @@ fn select(profile: Profile, lane: Option<&str>) -> Result<Vec<Step>> {
     };
     if !selected.iter().any(|entry| entry.name == keep) {
         anyhow::bail!(
-            "--lane {wanted} names no step of the `{}` profile, and no device lane{}. Steps: {}. Device lanes: {}",
+            "--lane {wanted} names no step of the `{}` profile, and no device lane. Steps: {}. Device lanes: {}",
             profile.name(),
-            if profile == Profile::Pr {
-                format!(
-                    " or CI lane (CI lanes: {})",
-                    PR_LANES.map(|lane| lane.name).join(", ")
-                )
-            } else {
-                String::new()
-            },
             selected
                 .iter()
                 .map(|entry| entry.name)
@@ -1880,94 +1801,6 @@ mod tests {
                 );
             }
         }
-    }
-
-    /// The lanes of `gate.yml` are a partition of the `pr` profile: every step
-    /// runs in exactly one lane and no lane names a step `pr` lacks. Without this
-    /// a step added to `pr` runs locally and never in CI.
-    #[test]
-    fn every_pr_step_is_in_exactly_one_ci_lane() {
-        let pr = names(Profile::Pr);
-        for lane in &PR_LANES {
-            for step in lane.steps {
-                assert!(
-                    pr.contains(step),
-                    "lane `{}` names `{step}`, not a `pr` step",
-                    lane.name
-                );
-            }
-        }
-        for step in &pr {
-            let holders: Vec<&str> = PR_LANES
-                .iter()
-                .filter(|lane| lane.steps.contains(step))
-                .map(|lane| lane.name)
-                .collect();
-            assert_eq!(
-                holders.len(),
-                1,
-                "`{step}` must be in exactly one CI lane: {holders:?}"
-            );
-        }
-        let mut seen: Vec<&str> = PR_LANES.iter().map(|lane| lane.name).collect();
-        seen.sort_unstable();
-        seen.dedup();
-        assert_eq!(seen.len(), PR_LANES.len(), "duplicate lane name");
-    }
-
-    /// `gate.yml` runs exactly the lanes the table has, through xtask's own
-    /// `--lane`, and the required `gate` job waits on them.
-    #[test]
-    fn the_workflow_names_every_lane_and_no_other() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let text = fs::read_to_string(root.join(".github/workflows/gate.yml")).expect("gate.yml");
-        let mut named: Vec<&str> = text
-            .lines()
-            .filter_map(|line| line.trim().strip_prefix("- lane:"))
-            .map(str::trim)
-            .collect();
-        named.sort_unstable();
-        let mut wanted: Vec<&str> = PR_LANES.iter().map(|lane| lane.name).collect();
-        wanted.sort_unstable();
-        assert_eq!(named, wanted, "gate.yml's matrix and PR_LANES disagree");
-        assert!(
-            text.contains("cargo xtask gate --profile pr --lane ${{ matrix.lane }}"),
-            "the lane job must run its lane through xtask"
-        );
-        assert!(
-            text.contains("\n  gate:\n    if: always()\n    needs: [lane]"),
-            "the required `gate` job must run always and need the lane job"
-        );
-        assert!(
-            text.contains("[ \"${LANES}\" = success ]"),
-            "the required `gate` job must fail unless every lane succeeded"
-        );
-    }
-
-    /// A CI lane name selects its steps, in profile order, on `pr` only.
-    #[test]
-    fn a_ci_lane_selects_its_steps_in_profile_order() {
-        let picked: Vec<&str> = select(Profile::Pr, Some("tests"))
-            .expect("a CI lane")
-            .iter()
-            .map(|entry| entry.name)
-            .collect();
-        assert_eq!(
-            picked,
-            [
-                "test",
-                "restore-drill",
-                "prompt-injection",
-                "model-record",
-                "fault-door"
-            ]
-        );
-        assert!(select(Profile::Local, Some("static")).is_err());
-        // No lane: the whole profile, exactly as before.
-        assert_eq!(
-            select(Profile::Pr, None).expect("whole").len(),
-            names(Profile::Pr).len()
-        );
     }
 
     #[test]

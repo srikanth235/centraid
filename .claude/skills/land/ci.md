@@ -4,16 +4,17 @@
 
 ## The jobs
 
-- **`lane`** (shown as `gate-<lane>`): a matrix job, ubuntu, 60 minutes each, `fail-fast: false`, running `cargo xtask gate --profile pr --lane <lane>` for `static`, `tests`, `build` and `ts` in parallel. Which steps a lane holds is `PR_LANES` in `crates/xtask/src/gate.rs`, and only there: `static` is the cheap checks, `tests` is every cargo-test step (`test` with nextest and the doctests, `restore-drill`, `prompt-injection`, `model-record`, `fault-door`) on one dev build; it is not sharded, because `test` is about 1130 s of which about 70 s is running tests and each shard would compile the workspace again, `build` is `release-build`, `ts` is `ts-static`. A unit test fails if a `pr` step is in no lane or two, or if the workflow matrix and `PR_LANES` differ, so a new `pr` step needs a lane. Full history is fetched, because `buf breaking` compares against `main` and the released tags.
-- **`gate`**: the required check. It runs `if: always()` after every `lane` and fails unless all of them succeeded. Never rename it.
-- **Tool pins** (nextest with a SHA-256 check, actionlint, buf, cargo-deny) are in `.github/actions/gate-tools`, used by `lane` and by `nightly.yml`'s `gate` job. Change them there only.
-- **Caches**: `tests` uses the key `gate`, and `static`, `build` and `ts` have `gate-static`, `gate-build` and `gate-xtask`, so no lane's `target/` evicts another's. Caches are saved from `main`, and from a pull request only by `tests` (`save_pr` in the matrix, `cargo-cache-save-pr` in the setup action), because its cold compile is what made PR runs take 50 to 70 minutes against about 24 warm. GitHub scopes a PR's cache to its own ref: `main`'s is the fallback and a PR can never replace it. The other lanes stay main-only so the 10 GB pool is not filled (#637).
+- **`gate`**: ubuntu, 60 minutes. Full history is fetched, because `buf breaking` compares against `main` and the released tags. It installs the gate's tools, then runs `cargo xtask gate --profile pr`. The pins (nextest with a SHA-256 check, actionlint, buf, and `cargo-deny` if absent) are in `.github/actions/gate-tools` only; `nightly.yml`'s `gate` job uses the same action. The cargo cache (key `gate`) is saved from pull requests as well as `main`; see below.
 - **`engine`**: the on-device chat's llama.cpp build is too slow for the `pr` profile, so this job runs `clippy` and `cargo test` over `centraid-assist-llama` and `centraid-core-ffi` with the `llama` feature on. The real-model tests are `#[ignore]`d because they need a GGUF file the repo does not carry.
 - **`ios`**: macOS, 90 minutes. It builds the simulator core with llama, compiles the Swift app, runs XCTest and compiles HealthSeeder.
 - **`android`**: ubuntu, 45 minutes. It runs `compileDebugKotlin` on the runner's SDK, which type-checks the Compose shell without packaging the native libraries, and one shared-fixture unit test (`BackupCheckControlsTest`).
 - **`dependency-review`**: pull requests only. It reads the PR's dependency diff and fails on high severity or an AGPL or GPL-3.0 licence in a new dependency.
 - **`pr-title`**: pull requests, except Dependabot. It runs `.githooks/commit-msg` over the title, because a squash merge's subject is the PR title. The form is `type(scope): subject (#N)`.
 - `crates/xtask/README.md` names `gate`, `engine`, `dependency-review` and `pr-title` as the required checks. Branch protection is set outside the repository, so renaming a job is an owner change.
+
+## The cargo cache
+
+`.github/actions/setup` restores `Swatinem/rust-cache` under the `cargo-cache` key everywhere. It saved only from `main` so that PR branches would not fill the repository's 10 GB cache pool (#637); the cost was that a PR far from `main` compiled cold on every push (50 to 70 minutes against about 24 warm). The `cargo-cache-save-pr` input (default false) lets a job save from a pull request too, and only the `gate` job sets it. GitHub scopes a PR's cache to its own ref, so a PR can read `main`'s as the fallback and can never replace it. The pool still evicts least recently used first, and `main`'s `gate` cache is read on every PR run, so it stays fresh. `engine`, `ios` and `android` stay main-only: they would gain a warm second push too, but each PR would add a cache of its own to the pool.
 
 ## One push cancels the run in flight
 
@@ -29,11 +30,11 @@ The workflow has `concurrency: group: gate-<PR number, or the ref>` with `cancel
 ## Where the failure detail lives
 
 1. The job log shows the one line per step and, for a failed step, the last line of stderr and the artifact directory. A step that runs a command buffers its output and prints none of it. The `rules`, `doc-links`, `design`, `ledgers` and `lockfile` steps, and the pin check of `ci-policy`, do print their findings.
-2. A failing lane uploads the artifact **`gate-pr-<lane>-artifacts`** (for example `gate-pr-tests-artifacts`; `target/xtask/**`, kept 7 days). Inside, the paths start at the profile: `pr/test/stderr.log` for the test step, and `pr/<step>/command.txt`, `stdout.log` and `stderr.log` for any command step. `findings.txt` is the evidence for the internal steps. If xtask itself fails to compile there is no artifact: read the job log.
-3. Download it with `gh run download <run-id> -n gate-pr-<lane>-artifacts`.
+2. When the `gate` job fails it uploads the artifact **`gate-pr-artifacts`** (`target/xtask/**`, kept 7 days). Inside, the paths start at the profile: `pr/test/stderr.log` for the test step, and `pr/<step>/command.txt`, `stdout.log` and `stderr.log` for any command step. `findings.txt` is the evidence for the internal steps. If xtask itself fails to compile there is no artifact: read the job log.
+3. Download it with `gh run download <run-id> -n gate-pr-artifacts`.
 4. `ios` uploads `ios-verification` (compiler and test logs, the `.xcresult`) every time. `android` and `engine` upload nothing, so their detail is the job log.
-5. To reproduce a failed step, run `cargo xtask gate --profile pr --lane <step>`; to reproduce a whole lane, `--lane <lane>` .
+5. To reproduce a failed step, run `cargo xtask gate --profile pr --lane <step>`.
 
 ## Other workflows
 
-`nightly.yml` runs at 05:30 UTC (its `gate` job is still one job): `gate --profile nightly`, `gate --profile mobile-jvm` and the prebuilt-core lane. Its artifacts are `nightly-gate-artifacts` and `nightly-mobile-jvm-artifacts`. When all three pass it moves `refs/candidates/latest`, which `release.yml` requires a tag to point at. `codeql.yml`, `trainer.yml` and the `lane-*.yml` and `release.yml` files are separate and are not part of the PR gate.
+`nightly.yml` runs at 05:30 UTC: `gate --profile nightly`, `gate --profile mobile-jvm` and the prebuilt-core lane. Its artifacts are `nightly-gate-artifacts` and `nightly-mobile-jvm-artifacts`. When all three pass it moves `refs/candidates/latest`, which `release.yml` requires a tag to point at. `codeql.yml`, `trainer.yml` and the `lane-*.yml` and `release.yml` files are separate and are not part of the PR gate.

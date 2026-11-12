@@ -4,15 +4,11 @@ name: gate
 # Nothing here is path-filtered: a filtered-out job reports no status, and a
 # required check that never reports blocks the PR forever (#557).
 #
-#   lane               `cargo xtask gate --profile pr --lane <name>`, once per
-#                      matrix entry: static, tests, build and ts, in
-#                      parallel. `PR_LANES` in crates/xtask/src/gate.rs says
-#                      which steps each runs, and a unit test keeps that table,
-#                      the `pr` profile and the matrix below in step, so a step
-#                      added to `pr` cannot silently stop running here.
-#   gate               the REQUIRED check: runs after every lane and passes
-#                      only if all of them did. Same name as when it was one
-#                      job, because branch protection is set outside the repo.
+#   gate               `cargo xtask gate --profile pr` — every step a PR must
+#                      pass, Rust, protobuf, TypeScript and CI policy alike
+#                      (crates/xtask/README.md). Its cargo cache is saved from
+#                      pull requests too, so a PR's second push starts warm
+#                      (.github/actions/setup, `cargo-cache-save-pr`).
 #   engine             the on-device chat's llama.cpp build, too slow for the
 #                      `pr` profile (R-CHAT-10).
 #   ios                Swift 6 app/XCTest, HealthSeeder, and the Rust simulator core.
@@ -73,81 +69,41 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
-  # One lane of the `pr` profile per job (`PR_LANES` in crates/xtask/src/gate.rs
-  # names what is in each; a unit test keeps this list and that table equal).
-  # `fail-fast: false`: a red lane must not hide what the others found.
-  lane:
-    name: gate-${{ matrix.lane }}
+  gate:
     runs-on: ubuntu-latest
     # A backstop against a hung job, not a performance budget: the gate does not
-    # fail a profile for taking long (owner ruling 2026-11-04).
+    # fail a profile for taking long (owner ruling 2026-11-04), so this sits well
+    # above a cold `pr` run on a loaded runner.
     timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        # `cache` is the Swatinem key; lanes build different profiles, so each
-        # has its own and none evicts another's. `tests` keeps the key the single
-        # job used, so it inherits that warm dev/test `target/`. `save_pr`: the
-        # tests lane's cold compile is the cost (50 to 70 minutes cold against
-        # 24 warm), so it alone also saves its cache from a pull request, scoped
-        # by GitHub to that PR's ref: main's is the fallback and is never
-        # replaced. The others stay main-only so the 10 GB pool is not filled.
-        include:
-          - lane: static
-            cache: gate-static
-            save_pr: "false"
-          - lane: tests
-            cache: gate
-            save_pr: "true"
-          - lane: build
-            cache: gate-build
-            save_pr: "false"
-          # `bun run check` is cargo-free, but the lane is still entered through
-          # `cargo xtask`, so it builds xtask: a small key of its own.
-          - lane: ts
-            cache: gate-xtask
-            save_pr: "false"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # `buf breaking` compares against `main` and the released tags, and
-          # `ledgers` reads its merge base, out of the local clone.
+          # `buf breaking` compares against `main` and the released tags, read
+          # out of the local clone.
           fetch-depth: 0
       # buf reads `.git#branch=main` as a LOCAL branch; a PR checkout is a
       # detached merge commit with only `origin/main` (#1047).
       - run: git show-ref --verify --quiet refs/heads/main || git branch main origin/main
       - uses: ./.github/actions/setup
         with:
-          bun: ${{ matrix.lane == 'ts' }}
           rust: "true"
-          cargo-cache: ${{ matrix.cache }}
-          cargo-cache-save-pr: ${{ matrix.save_pr }}
-      # Under CI a missing tool FAILS its step rather than skips.
+          cargo-cache: gate
+          # A cold compile is what made PR runs take 50 to 70 minutes against
+          # about 24 warm. Saved from the PR too, so its second push is warm;
+          # GitHub scopes a PR's cache to its ref, and `main`'s stays the
+          # restore fallback and is never replaced.
+          cargo-cache-save-pr: "true"
+      # The profile's external tools, pinned in the action and nowhere else.
+      # Under CI each step FAILS rather than skips when its binary is missing.
       - uses: ./.github/actions/gate-tools
-        if: matrix.lane != 'ts'
-      - run: cargo xtask gate --profile pr --lane ${{ matrix.lane }}
+      - run: cargo xtask gate --profile pr
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: failure()
         with:
-          name: gate-pr-${{ matrix.lane }}-artifacts
+          name: gate-pr-artifacts
           path: target/xtask/**
           retention-days: 7
           if-no-files-found: warn
-
-  # THE REQUIRED CHECK. Its name is what branch protection knows, so it stays
-  # `gate`; it passes only when every lane did (a skipped or cancelled lane is
-  # not a pass).
-  gate:
-    if: always()
-    needs: [lane]
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - env:
-          LANES: ${{ needs.lane.result }}
-        run: |
-          echo "lanes: ${LANES}"
-          [ "${LANES}" = success ]
 
   # llama.cpp is a ~5 minute cmake build, so `centraid-assist-llama/engine`
   # and `centraid-core-ffi/llama` are off in the workspace build and this job

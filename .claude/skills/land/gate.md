@@ -14,7 +14,7 @@
 - **`nightly`** adds `device-lanes`. They need a runner with devices (`CENTRAID_DEVICE_RUNNER=1`) and are a loud `SKIP` elsewhere.
 - **`release`** adds `artifact-identity` and `prebuilt-core-required`.
 - **`mobile-jvm`** is one step and is not a superset of anything: it builds `centraid-core-ffi`, runs `./gradlew mobileJvm`, then the `design` drift check. It does not compile Compose or touch a device; see [mobile](mobile.md).
-- `--lane <name>` runs one step, one device lane, or (on `pr`) one CI lane: `static`, `tests`, `build`, `ts`. The CI lanes are `PR_LANES` in `gate.rs`; together they are exactly the `pr` steps, and a test enforces it. A name that matches nothing is an error. With no `--lane`, `pr` runs every step as before.
+- `--lane <name>` runs one step, or one device lane. A name that matches nothing is an error.
 
 ## Reading the output
 
