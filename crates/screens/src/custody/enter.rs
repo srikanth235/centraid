@@ -63,6 +63,21 @@ pub fn build(
     )))
 }
 
+/// WHAT HOME SAYS AFTER A RESTORE THAT CLOSED THIS SCREEN, when something is left to say: a vault
+/// whose claim landed but could not be kept here (the old phone has stopped, restore again, said
+/// in the same words as when nothing came back), else that some previews are still on the backup
+/// device. `None` when the restore left nothing to say.
+fn after_restore(locale: Locale, answer: &door::RestoreAnswer) -> Option<String> {
+    if answer.unclaimed.iter().any(|vault| vault.claimed) {
+        return Some(words::restore_unfinished(locale));
+    }
+    answer
+        .vaults
+        .iter()
+        .any(|vault| vault.derivatives_landed < vault.derivatives_total)
+        .then(|| words::restore_previews_pending(locale))
+}
+
 /// A sentence the screen says about what just happened, kept as the fact so it
 /// is worded in the viewer's locale when drawn.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -265,16 +280,18 @@ impl Enter {
                 // SOME PREVIEWS ARE STILL ON THE BACKUP DEVICE: the vault is kept before they are
                 // fetched, so the line Home draws says they load when opened, never that they are
                 // all here.
-                let pending = matches!(&outcome, Restored::Done { answer, .. }
-                    if answer.vaults.iter().any(|vault| vault.derivatives_landed < vault.derivatives_total));
-                if pending {
+                let said = match &outcome {
+                    Restored::Done { answer, .. } => after_restore(ctx.locale(), answer),
+                    _ => None,
+                };
+                if let Some(status_line) = said {
                     ctx.post(
                         crate::shell::HOME,
                         wire::ScreenEvent {
                             kind: Some(E::Home(wire::HomeEvent {
                                 kind: Some(wire::home_event::Kind::OutcomeTold(
                                     wire::home_event::OutcomeTold {
-                                        status_line: words::restore_previews_pending(ctx.locale()),
+                                        status_line,
                                         rename_failed: false,
                                     },
                                 )),
@@ -953,5 +970,72 @@ impl Screen for Enter {
             kind: Some(wire::view_state::Kind::WordsEnter(self.render())),
             ..wire::ViewState::default()
         }
+    }
+}
+
+#[cfg(test)]
+mod after_restore_tests {
+    use super::*;
+    use crate::custody::door::{RestoreAnswer, RestoredVaultAt, UnclaimedVaultAt};
+
+    fn vault(landed: u32, total: u32) -> RestoredVaultAt {
+        RestoredVaultAt {
+            path: String::new(),
+            index: 0,
+            rows: 1,
+            safety_number: String::new(),
+            own: None,
+            derivatives_landed: landed,
+            derivatives_total: total,
+        }
+    }
+
+    fn unclaimed(claimed: bool) -> UnclaimedVaultAt {
+        UnclaimedVaultAt {
+            index: 1,
+            vault_id: String::new(),
+            own: None,
+            claimed,
+        }
+    }
+
+    #[test]
+    fn a_vault_whose_claim_landed_unfinished_is_said_beside_the_ones_that_came_back() {
+        let answer = RestoreAnswer {
+            vaults: vec![vault(0, 0)],
+            unclaimed: vec![unclaimed(true)],
+            ..RestoreAnswer::default()
+        };
+        let said = after_restore(Locale::En, &answer).expect("something to say");
+        assert_eq!(said, words::restore_unfinished(Locale::En));
+        assert!(!said.to_lowercase().contains("unclaimed"));
+        // The unfinished vault outranks a preview note.
+        let both = RestoreAnswer {
+            vaults: vec![vault(1, 5)],
+            ..answer
+        };
+        assert_eq!(
+            after_restore(Locale::En, &both),
+            Some(words::restore_unfinished(Locale::En))
+        );
+    }
+
+    #[test]
+    fn previews_still_on_the_backup_device_are_said_and_a_whole_restore_says_nothing() {
+        let pending = RestoreAnswer {
+            vaults: vec![vault(3, 12)],
+            ..RestoreAnswer::default()
+        };
+        assert_eq!(
+            after_restore(Locale::En, &pending),
+            Some("Restored. Some previews load when you open them.".to_owned())
+        );
+        let whole = RestoreAnswer {
+            vaults: vec![vault(12, 12), vault(0, 0)],
+            // A claim that did not land leaves the old phone the writer: nothing to finish here.
+            unclaimed: vec![unclaimed(false)],
+            ..RestoreAnswer::default()
+        };
+        assert_eq!(after_restore(Locale::En, &whole), None);
     }
 }

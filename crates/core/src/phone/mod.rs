@@ -950,7 +950,9 @@ pub fn backup_status(
         let records_at = records_at_gateway(&ledger, &destination.gateway_id)?;
         row.head_snapshot_ms = records_at.and_then(|at| i64::try_from(at).ok());
         row.records_behind = match (records_at, newest_taken) {
-            (None, _) => true,
+            // A GATEWAY WHOSE HEAD NAMES NO SNAPSHOT is behind only when this phone has taken one:
+            // with none taken there is nothing for it to be behind on.
+            (None, newest) => newest.is_some(),
             (Some(held), Some(newest)) => held < newest,
             (Some(_), None) => false,
         };
