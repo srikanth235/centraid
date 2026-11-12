@@ -3,37 +3,25 @@
   "cases": [
     {
       "name": "model and the named adapter on the phone: no row",
-      "files": [
-        "New-Q4_0.gguf",
-        "centraid-adapter-dddddddddddd.gguf"
-      ],
+      "files": ["New-Q4_0.gguf", "centraid-adapter-dddddddddddd.gguf"],
       "row": false,
       "deleted": []
     },
     {
       "name": "model current, adapter never fetched: the row offers it",
-      "files": [
-        "New-Q4_0.gguf"
-      ],
+      "files": ["New-Q4_0.gguf"],
       "row": true,
       "deleted": []
     },
     {
       "name": "model current, an older adapter held: the row offers the newer, the older goes with the leftovers",
-      "files": [
-        "New-Q4_0.gguf",
-        "centraid-adapter-ffffffffffff.gguf"
-      ],
+      "files": ["New-Q4_0.gguf", "centraid-adapter-ffffffffffff.gguf"],
       "row": true,
-      "deleted": [
-        "centraid-adapter-ffffffffffff.gguf"
-      ]
+      "deleted": ["centraid-adapter-ffffffffffff.gguf"]
     },
     {
       "name": "the previous model: the row offers the current model (its adapter follows in the same fetch), not the adapter alone",
-      "files": [
-        "Old-Q4_0.gguf"
-      ],
+      "files": ["Old-Q4_0.gguf"],
       "row": true,
       "deleted": [],
       "row_size": "644 MB"
