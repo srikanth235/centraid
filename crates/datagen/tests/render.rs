@@ -454,3 +454,56 @@ fn nested_train_subsets_are_files_of_their_own_inside_each_other_and_inside_trai
         assert!(manifest["files"][format!("data/{name}.jsonl.zst")].is_object());
     }
 }
+
+fn tool_names(mode: centraid_assist::native::prompt::ToolsMode) -> Vec<String> {
+    centraid_assist::native::prompt::tools_for(mode)
+        .iter()
+        .map(|t| t["function"]["name"].as_str().expect("name").to_owned())
+        .collect()
+}
+
+#[test]
+fn the_records_carry_the_tools_block_the_model_record_names() {
+    use centraid_assist::native::prompt::ToolsMode;
+    // the record is read from its file here, not from the code that reads it for the build
+    let file = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../assist/model.json"),
+    )
+    .expect("model.json");
+    let record: Value = serde_json::from_str(&file).expect("json");
+    let named = ToolsMode::parse(
+        record["current"]["tools_mode"]
+            .as_str()
+            .expect("tools_mode"),
+    )
+    .expect("a catalogue mode");
+    assert_eq!(
+        centraid_datagen::plan::tools_mode(),
+        named,
+        "datagen takes the tools block from the model record"
+    );
+    let (dir, manifest) = version_dir();
+    assert_eq!(manifest["tools_block"]["mode"], named.name());
+    let bytes = std::fs::read(dir.path().join("data/train.jsonl.zst")).expect("train");
+    let text = String::from_utf8(zstd::decode_all(&bytes[..]).expect("zstd")).expect("utf8");
+    let first: Value = serde_json::from_str(text.lines().next().expect("a record")).expect("json");
+    let rendered = first["render"]["text"].as_str().expect("text");
+    let names = tool_names(named);
+    for name in &names {
+        assert!(
+            rendered.contains(&format!("\"name\": \"{name}\""))
+                || rendered.contains(&format!("\"name\":\"{name}\"")),
+            "the record's system turn lacks the tool `{name}`"
+        );
+    }
+    for other in ToolsMode::ALL.into_iter().filter(|m| *m != named) {
+        for name in tool_names(other).iter().filter(|n| !names.contains(n)) {
+            assert!(
+                !rendered.contains(&format!("\"name\": \"{name}\""))
+                    && !rendered.contains(&format!("\"name\":\"{name}\"")),
+                "the record shows `{name}` of the {} block",
+                other.name()
+            );
+        }
+    }
+}

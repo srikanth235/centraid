@@ -26,7 +26,6 @@ use std::collections::BTreeMap;
 
 use centraid_assist::native::meta::{self, Kind};
 use centraid_assist::native::nums;
-use centraid_assist::native::prompt::ToolsMode;
 use centraid_assist::native::think::{
     Call, Context, RowText, TraceMode, compile_think_with, date_to_compact, pick_reason_of,
     where_slot,
@@ -592,9 +591,13 @@ fn dates_slot(
             let mut candidate = slots.clone();
             candidate.when_slot = Some((slot.clone(), Vec::new()));
             let think = candidate.think(setting);
-            if let Ok(compiled) =
-                compile_think_with(&think, Some(line), nums_line, TraceMode::V4, ToolsMode::Sig)
-                && let Some((_, when)) = compiled.args.iter().find(|(key, _)| key == "when")
+            if let Ok(compiled) = compile_think_with(
+                &think,
+                Some(line),
+                nums_line,
+                TraceMode::V4,
+                crate::plan::tools_mode(),
+            ) && let Some((_, when)) = compiled.args.iter().find(|(key, _)| key == "when")
                 && serde_json::from_str::<Value>(when).is_ok_and(|got| &got == expr)
             {
                 return Some((slot, Vec::new()));
@@ -684,8 +687,14 @@ fn check(
     nums_line: Option<&str>,
     kind: Option<Kind>,
 ) -> Result<Call, Failure> {
-    let compiled = compile_think_with(think, dates, nums_line, TraceMode::V4, ToolsMode::Sig)
-        .map_err(|refusal| Failure::Roundtrip(format!("does not compile: {}", refusal.message)))?;
+    let compiled = compile_think_with(
+        think,
+        dates,
+        nums_line,
+        TraceMode::V4,
+        crate::plan::tools_mode(),
+    )
+    .map_err(|refusal| Failure::Roundtrip(format!("does not compile: {}", refusal.message)))?;
     match same(call, &compiled, kind) {
         Ok(()) => Ok(compiled),
         Err(why) => Err(Failure::Roundtrip(why)),

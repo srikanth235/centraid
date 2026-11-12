@@ -531,11 +531,18 @@ pub fn write_version(
     if provenance.runtime_commit.ends_with("-dirty") || provenance.runtime_commit == "unknown" {
         blockers.push("built from a tree with uncommitted changes, or an unknown commit");
     }
+    let tools = crate::plan::tools_mode();
+    if tools == centraid_assist::native::prompt::ToolsMode::S2 {
+        blockers.push(
+            "the model record's tools block is s2, the tools before the regroup: it does not list create, edit or do, which the reference calls use",
+        );
+    }
     if rehearsal {
         blockers.push("written or read back by a rehearsal model, not a language model");
     }
     let manifest = json!({
         "version": provenance.version,
+        "tools_block": {"mode": tools.name(), "from": "crates/assist/model.json"},
         "publishable": {"value": blockers.is_empty(), "blockers": blockers},
         "messages": models,
         "stage": "render+mix",

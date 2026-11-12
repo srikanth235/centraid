@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use centraid_assist::native::Flags;
+use centraid_assist::native::prompt::ToolsMode;
 use centraid_assist_eval::effect::{Effect, Ending, NetDiff, turn_effect};
 use centraid_nativetools::{dates, vaultio};
 use serde::{Deserialize, Serialize};
@@ -90,6 +91,22 @@ pub struct Dropped {
     pub cell: Cell,
     pub why: Drop,
     pub detail: String,
+}
+
+/// The tools block the phone sends the model: the one the model record names (`crates/assist/model.json`, read by
+/// `centraid_assist::record`, the way the phone reads it). It is the one source: the prompts the records are rendered with
+/// and the compiler that reads their think both take it from here, so what the model is trained on is what the phone shows.
+#[must_use]
+pub fn tools_mode() -> ToolsMode {
+    ToolsMode::parse(&centraid_assist::record::record().current.tools_mode).unwrap_or(ToolsMode::S2)
+}
+
+/// The flags a session runs with: the phone's defaults and the model record's tools block.
+fn flags() -> Flags {
+    Flags {
+        tools: tools_mode(),
+        ..Flags::default()
+    }
 }
 
 /// One reference call.
@@ -252,7 +269,7 @@ impl<'a> WorldRun<'a> {
             let probe = scratch.join(format!("{}-probe.vault", world.id()));
             vaultio::copy_vault(&base, &probe).map_err(anyhow::Error::msg)?;
             let now = dates::parse_now(&today_at).map_err(anyhow::Error::msg)?;
-            let mut live = vaultio::open_session(&probe, now, &world.persona.me, Flags::default())
+            let mut live = vaultio::open_session(&probe, now, &world.persona.me, flags())
                 .map_err(anyhow::Error::msg)?;
             live.user("");
             let found = live.call_text(&call_xml(
@@ -309,8 +326,8 @@ impl<'a> WorldRun<'a> {
             .join(format!("{}-run{}.vault", self.world.id(), self.copies));
         vaultio::copy_vault(&self.base, &vault).map_err(anyhow::Error::msg)?;
         let now = dates::parse_now(&self.today_at).map_err(anyhow::Error::msg)?;
-        let mut live = vaultio::open_session(&vault, now, &self.me, Flags::default())
-            .map_err(anyhow::Error::msg)?;
+        let mut live =
+            vaultio::open_session(&vault, now, &self.me, flags()).map_err(anyhow::Error::msg)?;
         let mut created: Vec<String> = Vec::new();
         let mut left: Vec<Left> = Vec::new();
         let mut out_turns: Vec<Value> = Vec::new();
@@ -391,8 +408,8 @@ impl<'a> WorldRun<'a> {
             .join(format!("{}-live{}.vault", self.world.id(), self.copies));
         vaultio::copy_vault(&self.base, &vault).map_err(anyhow::Error::msg)?;
         let now = dates::parse_now(&self.today_at).map_err(anyhow::Error::msg)?;
-        let session = vaultio::open_session(&vault, now, &self.me, Flags::default())
-            .map_err(anyhow::Error::msg)?;
+        let session =
+            vaultio::open_session(&vault, now, &self.me, flags()).map_err(anyhow::Error::msg)?;
         Ok(Live { session, vault })
     }
 
