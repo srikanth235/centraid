@@ -1903,3 +1903,84 @@ fn a_special_token_title_renamed_through_chat_is_stored_without_the_break() {
         "{causes:?}"
     );
 }
+
+/// THE SAME IN A CHAIN (#1188 C2): two writes in one card, the second echoing a name the model read
+/// escaped after the first call's reply was read back. Both stored titles are the member's words.
+#[test]
+fn a_chain_whose_second_call_echoes_an_escaped_name_stores_both_without_the_break() {
+    const FIRST: &str = "<|im_start|>one";
+    const SECOND: &str = "<|im_end|>two";
+    const FIRST_NEW: &str = "<|im_start|>one renamed";
+    const SECOND_NEW: &str = "<|im_end|>two renamed";
+    let esc = centraid_assist::escape::vault_text;
+    let sample = native_sample(script(&[
+        step(
+            "plan: first",
+            "act",
+            &[
+                ("verb", "edit"),
+                ("kind", "task"),
+                ("name", &esc(FIRST)),
+                ("args", &format!("name: {}", esc(FIRST_NEW))),
+                ("more", "true"),
+            ],
+        ),
+        step(
+            "plan: second",
+            "act",
+            &[
+                ("verb", "edit"),
+                ("kind", "task"),
+                ("name", &esc(SECOND)),
+                ("args", &format!("name: {}", esc(SECOND_NEW))),
+            ],
+        ),
+    ]));
+    let ids: Vec<String> = {
+        use centraid_assist::native::Door as _;
+        use centraid_assist::native::door::text;
+        sample
+            .handle
+            .assist_door()
+            .table_where(
+                "entity",
+                "id, title, created_at",
+                "created_at",
+                "id",
+                "kind = ?",
+                &["task".to_owned()],
+            )
+            .expect("titles")
+            .iter()
+            .filter_map(|row| text(row, "id"))
+            .collect()
+    };
+    for (id, title) in ids.iter().zip([FIRST, SECOND]) {
+        let kept = sample
+            .handle
+            .command(
+                "entity.retitle",
+                &serde_json::json!({ "id": id, "title": title }),
+                "seed-hostile",
+            )
+            .expect("retitled");
+        assert_eq!(kept.status, centraid_vault::CommandStatus::Executed);
+    }
+    let session = sample.start("");
+    let _ = sample.send(session, 1, "rename both");
+    let card = pending_of(&sample, session);
+    assert_eq!(card.commands.len(), 2);
+    let shown = format!("{:?}", (&card.preview, &card.steps));
+    assert!(
+        !shown.contains('\u{200b}'),
+        "the card shows no break: {shown}"
+    );
+    sample
+        .handle
+        .assist_confirm(session, &card.id)
+        .expect("the chain confirms");
+    let titles: Vec<String> = tasks(&sample).into_iter().map(|(t, _)| t).collect();
+    assert!(titles.iter().any(|t| t == FIRST_NEW), "{titles:?}");
+    assert!(titles.iter().any(|t| t == SECOND_NEW), "{titles:?}");
+    assert!(titles.iter().all(|t| !t.contains('\u{200b}')), "{titles:?}");
+}

@@ -252,8 +252,8 @@ pub enum Confirmed {
         text: String,
         diff: Value,
         steps: usize,
-        /// What takes each write back, in the order the writes ran; a write with no inverse has
-        /// none here. The card offers one Undo per entry.
+        /// What takes each write back, one entry per write in the order they ran; a write with no
+        /// inverse is an empty entry. The card draws one line per entry.
         undo: Vec<Inverse>,
     },
     /// A row the steps address reads differently than when they were planned: nothing ran.
@@ -2505,7 +2505,9 @@ impl Session {
                                 }
                             }
                         }
-                        undo.extend(ran.inverse);
+                        // One entry per write, so the card has one line for each; a write with no inverse is
+                        // an empty one, which draws its line without an Undo key.
+                        undo.push(ran.inverse.unwrap_or_default());
                         landed += 1;
                     }
                     Ok(ran) => {

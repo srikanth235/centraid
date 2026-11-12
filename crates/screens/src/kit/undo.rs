@@ -119,6 +119,19 @@ impl Undo {
         }
     }
 
+    /// A write the core cannot take back: its line is drawn all the same, and carries no Undo key.
+    #[must_use]
+    pub fn sealed(said: String) -> Self {
+        Self {
+            offer: None,
+            line: Some(wire::StatusLine {
+                sentence: said,
+                action_label: String::new(),
+                refused: false,
+            }),
+        }
+    }
+
     /// The line to draw, if any.
     #[must_use]
     pub fn status(&self) -> Option<wire::StatusLine> {
@@ -481,5 +494,19 @@ impl Undo {
             self.refuse(shared::undo_partial(locale, failed as u64));
         }
         undone > 0
+    }
+}
+
+#[cfg(test)]
+mod sealed_tests {
+    use super::*;
+
+    #[test]
+    fn a_write_the_core_cannot_take_back_draws_its_line_without_a_key() {
+        let line = Undo::sealed("Made by Chat".to_owned());
+        assert!(!line.can_undo());
+        let status = line.status().expect("its line is drawn");
+        assert_eq!(status.sentence, "Made by Chat");
+        assert!(status.action_label.is_empty() && !status.refused);
     }
 }

@@ -501,6 +501,9 @@ impl Chat {
                     .undo
                     .into_iter()
                     .map(|step| {
+                        if step.action.is_empty() {
+                            return crate::kit::undo::Undo::sealed(words::made_by_chat(locale));
+                        }
                         crate::kit::undo::Undo::adopt(
                             locale,
                             step.app,

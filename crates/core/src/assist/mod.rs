@@ -283,19 +283,21 @@ fn pending_to_wire(card: &PendingCard) -> wire::AssistPending {
     }
 }
 
-/// What takes each applied write back, on the wire: one entry per write that has an inverse.
+/// What takes each applied write back, on the wire: one entry per write, in order; a write the
+/// core cannot take back is an entry with no action.
 fn undo_of(outcome: &Confirmed) -> Vec<wire::AssistUndo> {
     let Confirmed::Done { undo, .. } = outcome else {
         return Vec::new();
     };
     undo.iter()
-        .filter_map(|step| {
-            let inverse: wire::ActInverse = prost::Message::decode(step.wire.as_slice()).ok()?;
-            Some(wire::AssistUndo {
+        .map(|step| {
+            let inverse: wire::ActInverse =
+                prost::Message::decode(step.wire.as_slice()).unwrap_or_default();
+            wire::AssistUndo {
                 app: step.app.clone(),
                 action: inverse.action,
                 input: inverse.input,
-            })
+            }
         })
         .collect()
 }
@@ -1100,6 +1102,35 @@ mod tests {
             !seen.contains(&(S::Dismissed as i32)),
             "a dismissal is its own"
         );
+    }
+
+    #[test]
+    fn a_mixed_chain_has_one_undo_entry_per_write_and_one_with_no_way_back_is_empty() {
+        use centraid_assist::native::door::Inverse;
+        let back = wire::ActInverse {
+            action: "reopen-task".to_owned(),
+            input: std::collections::HashMap::new(),
+        };
+        let done = Confirmed::Done {
+            text: String::new(),
+            diff: serde_json::Value::Null,
+            steps: 3,
+            undo: vec![
+                Inverse {
+                    app: "reminders".to_owned(),
+                    wire: prost::Message::encode_to_vec(&back),
+                },
+                Inverse::default(),
+                Inverse {
+                    app: "reminders".to_owned(),
+                    wire: prost::Message::encode_to_vec(&back),
+                },
+            ],
+        };
+        let entries = undo_of(&done);
+        let actions: Vec<&str> = entries.iter().map(|e| e.action.as_str()).collect();
+        assert_eq!(actions, ["reopen-task", "", "reopen-task"]);
+        assert!(entries[1].app.is_empty() && entries[1].input.is_empty());
     }
 
     #[test]

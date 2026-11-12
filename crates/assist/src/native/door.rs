@@ -86,8 +86,8 @@ pub struct Ran {
 
 /// What takes an executed write back: the app whose action it is, and the core's own encoded
 /// `ActInverse`, carried opaque (this crate does not speak the wire; the core wrote it and the
-/// screen's one Undo door reads it back).
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// screen's one Undo door reads it back). An empty one is a write the core cannot take back.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Inverse {
     pub app: String,
     pub wire: Vec<u8>,
