@@ -1422,6 +1422,7 @@ fn a_changed_secret_is_a_version_of_its_own_even_among_quiet_saves() {
         2,
         "each new password is a version, not a fold"
     );
+}
 
 #[test]
 fn a_whole_version_holds_every_field_it_held_and_what_replaced_it() {
