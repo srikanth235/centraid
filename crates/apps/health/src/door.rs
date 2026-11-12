@@ -169,7 +169,11 @@ pub fn origin_statement() -> PageQuery {
         "origin",
         PageOrder::asc("id", "id"),
     )
-    .filter("system = ?", vec![PageBindValue::from(HEALTH_SYSTEM)])
+    .filter(
+        // A retired origin (Stop was pressed) is followed by nobody.
+        "system = ? AND retired_at IS NULL",
+        vec![PageBindValue::from(HEALTH_SYSTEM)],
+    )
 }
 
 /// `health.kinds` — every workout kind's key, seeded and minted.

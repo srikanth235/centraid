@@ -443,6 +443,7 @@ pub const REGISTER: &[Entry] = &[
     ("EarlierVersion.field_changes", rust_only(EARLIER_VERSIONS)),
     ("EarlierChange.before_json", rust_only(EARLIER_VERSIONS)),
     ("EarlierChange.after_json", rust_only(EARLIER_VERSIONS)),
+    ("ImportsFilesHeld.retired", rust_only(FILES_FOLLOWED)),
     ("ImportsHeldFile.stat", rust_only(FILES_FOLLOWED)),
     ("ImportsHeldFolder.documents", rust_only(FILES_FOLLOWED)),
     ("ImportsHeldFolder.docs_folder", rust_only(FILES_FOLLOWED)),

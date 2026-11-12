@@ -262,7 +262,7 @@ fn followed_by(connection: &rusqlite::Connection, id: &str) -> Result<Option<Str
     Ok(connection
         .query_row(
             "SELECT o.label FROM source s JOIN origin o ON o.id = s.origin_id
-              WHERE s.entity_id = ?1 AND s.system = 'health'",
+              WHERE s.entity_id = ?1 AND s.system = 'health' AND o.retired_at IS NULL",
             [id],
             |row| row.get(0),
         )

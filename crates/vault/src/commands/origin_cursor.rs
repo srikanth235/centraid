@@ -37,7 +37,7 @@ pub fn read(
     let row: Option<(Option<String>, Option<String>)> = connection
         .query_row(
             "SELECT device_id, json_extract(config, '$.cursor') FROM origin
-              WHERE system = ?1 AND ref = ?2",
+              WHERE system = ?1 AND ref = ?2 AND retired_at IS NULL",
             [system, reference],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
@@ -65,6 +65,19 @@ pub fn advance(
     cursor: &str,
 ) -> Result<()> {
     let connection = ctx.connection();
+    // A RETIRED ORIGIN HOLDS NO CURSOR: Stop cleared it, and a stray batch still in flight must not
+    // write one back, or the store followed again would resume from a position nobody read to.
+    let retired: bool = connection
+        .query_row(
+            "SELECT 1 FROM origin WHERE system = ?1 AND ref = ?2 AND retired_at IS NOT NULL",
+            [system, reference],
+            |_| Ok(true),
+        )
+        .optional()?
+        .unwrap_or(false);
+    if retired {
+        return Ok(());
+    }
     let changed = connection.execute(
         "UPDATE origin SET device_id = ?3, config = json_set(COALESCE(config, '{}'), '$.cursor', ?4)
           WHERE system = ?1 AND ref = ?2",

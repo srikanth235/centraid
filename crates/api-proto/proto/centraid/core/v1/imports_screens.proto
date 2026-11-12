@@ -140,6 +140,10 @@ message ImportsFilesState {
 // What the vault holds of followed folders: the shell query `files-followed`.
 message ImportsFilesHeld {
   repeated ImportsHeldFolder folders = 1;
+  // The folders Stop retired (#1185): followed by nobody, but kept with the Docs folder they filled,
+  // so picking the same folder again follows it into that folder and finds its documents. Only the
+  // pick reads them; `origin_id`, `origin_ref`, `label` and `docs_folder` are set.
+  repeated ImportsHeldFolder retired = 2;
 }
 
 message ImportsHeldFolder {

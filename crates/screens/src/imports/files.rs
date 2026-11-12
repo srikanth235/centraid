@@ -69,6 +69,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     };
     Some(Box::new(Files {
         held: Vec::new(),
+        retired: Vec::new(),
         refusal: String::new(),
         pass: None,
     }))
@@ -170,11 +171,19 @@ struct Pass {
 
 struct Files {
     held: Vec<Held>,
+    /// The folders Stop retired, kept with the Docs folder they filled: only a pick reads them.
+    retired: Vec<Held>,
     refusal: String,
     pass: Option<Pass>,
 }
 
-fn read_held(ctx: &Ctx) -> Reading<Vec<Held>> {
+/// What the vault holds of folders: the ones it follows, and the ones Stop retired.
+struct Holdings {
+    followed: Vec<Held>,
+    retired: Vec<Held>,
+}
+
+fn read_held(ctx: &Ctx) -> Reading<Holdings> {
     match read::read(
         ctx,
         load::shell::FilesFollowed::default(),
@@ -183,21 +192,22 @@ fn read_held(ctx: &Ctx) -> Reading<Vec<Held>> {
             _ => None,
         },
     ) {
-        Reading::Data(held) => Reading::Data(
-            held.folders
-                .into_iter()
-                .map(|folder| Held {
-                    phone_origin: folder.origin_ref,
-                    label: folder.label,
-                    fills: Some(folder.docs_folder).filter(|folder| !folder.is_empty()),
-                    stats: folder
-                        .files
-                        .into_iter()
-                        .map(|file| (file.path, file.stat))
-                        .collect(),
-                })
-                .collect(),
-        ),
+        Reading::Data(held) => {
+            let held_of = |folder: wire::ImportsHeldFolder| Held {
+                phone_origin: folder.origin_ref,
+                label: folder.label,
+                fills: Some(folder.docs_folder).filter(|folder| !folder.is_empty()),
+                stats: folder
+                    .files
+                    .into_iter()
+                    .map(|file| (file.path, file.stat))
+                    .collect(),
+            };
+            Reading::Data(Holdings {
+                followed: held.folders.into_iter().map(held_of).collect(),
+                retired: held.retired.into_iter().map(held_of).collect(),
+            })
+        }
         Reading::Denied(denial) => Reading::Denied(denial),
         Reading::Failed => Reading::Failed,
     }
@@ -207,7 +217,8 @@ impl Files {
     fn reload(&mut self, ctx: &Ctx) -> bool {
         match read_held(ctx) {
             Reading::Data(held) => {
-                self.held = held;
+                self.held = held.followed;
+                self.retired = held.retired;
                 true
             }
             _ => false,
@@ -445,10 +456,23 @@ impl Files {
                 &kit_act::key(&["follow-folder", origin], kit_act::fresh()),
             )
         };
+        // THE SAME FOLDER PICKED AGAIN AFTER STOP: the vault kept its origin and the Docs folder it
+        // filled, so following it again names no folder and finds that one, and its documents by
+        // their sources. A Docs folder the member deleted meanwhile is not filled again: a new one
+        // is made below, and the vault starts the folder over in it.
+        let retired_home = self
+            .retired
+            .iter()
+            .find(|retired| retired.phone_origin == origin)
+            .and_then(|retired| retired.fills.as_deref())
+            .filter(|fills| docs_folder_is_live(ctx, fills))
+            .is_some();
         let mut told = None;
         if !known && let Some(fills) = earlier.as_ref().and_then(|(_, fills)| fills.as_deref()) {
             // A folder the vault refuses is made anew.
             told = Some(tell(Some(fills))).filter(|told| told.committed);
+        } else if !known && earlier.is_none() && retired_home {
+            told = Some(tell(None)).filter(|told| told.committed);
         }
         let told = match told {
             Some(told) => told,
@@ -487,7 +511,7 @@ impl Files {
         self.request(ctx);
     }
 
-    /// The member stopped following: the sources are forgotten and the origin retired. Every
+    /// The member stopped following: the origin is retired, kept with its Docs folder and its sources. Every
     /// document stays.
     fn stop(&mut self, ctx: &Ctx, origin: &str) {
         // undo-exempt: Stop reading asks first and is itself the Undo of a follow.

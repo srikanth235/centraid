@@ -66,6 +66,11 @@
       },
       {
         "schema": "vault",
+        "table": "origin",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
         "table": "task",
         "verbs": "read"
       },

@@ -159,7 +159,7 @@ pub fn origin_of(
     Ok(connection
         .query_row(
             "SELECT o.system, o.label FROM source s JOIN origin o ON o.id = s.origin_id
-              WHERE s.entity_id = ?1",
+              WHERE s.entity_id = ?1 AND o.retired_at IS NULL",
             [entity_id],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )

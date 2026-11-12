@@ -50,6 +50,24 @@ fn files_only(name: &str, select: &str, from: &str) -> PageQuery {
         .filter("system = ?", vec![PageBindValue::Text("files".to_owned())])
 }
 
+/// The origins of the folders the vault follows: a retired origin (one Stop was pressed on) is
+/// followed by nobody, whatever it kept.
+fn followed_origins(name: &str, select: &str) -> PageQuery {
+    PageQuery::new(name, select, "origin", PageOrder::asc("id", "id")).filter(
+        "system = ? AND retired_at IS NULL",
+        vec![PageBindValue::Text("files".to_owned())],
+    )
+}
+
+/// The origins Stop retired: kept with the Docs folder they filled, so picking the same folder again
+/// finds it. Nothing but the pick reads them.
+fn retired_origins(name: &str, select: &str) -> PageQuery {
+    PageQuery::new(name, select, "origin", PageOrder::asc("id", "id")).filter(
+        "system = ? AND retired_at IS NOT NULL",
+        vec![PageBindValue::Text("files".to_owned())],
+    )
+}
+
 /// The `stat` a source last stated, out of its `stated` JSON.
 fn stat_of(stated: &str) -> Option<String> {
     let value: serde_json::Value = serde_json::from_str(stated).ok()?;
@@ -66,7 +84,8 @@ pub(crate) fn followed_stores(door: &VaultDoor<'_>) -> Result<Answer> {
             PageOrder::asc("id", "id"),
         )
         .filter(
-            "system IN (?, ?, ?, ?, ?)",
+            // A RETIRED ORIGIN IS FOLLOWED BY NOBODY: after Stop a store reads as "Turn on" again.
+            "system IN (?, ?, ?, ?, ?) AND retired_at IS NULL",
             ["contacts", "calendar", "files", "health", "phone_reminders"]
                 .map(|system| PageBindValue::Text(system.to_owned()))
                 .to_vec(),
@@ -96,7 +115,11 @@ pub(crate) fn files_followed(door: &VaultDoor<'_>) -> Result<Answer> {
     let loaded = (|| -> KitResult<(wire::ImportsFilesHeld, Option<centraid_apps_kit::Denial>)> {
         let origins = all(
             door,
-            &files_only("files.origins", "id, ref, label, fills", "origin"),
+            &followed_origins("files.origins", "id, ref, label, fills"),
+        )?;
+        let retired = all(
+            door,
+            &retired_origins("files.retired", "id, ref, label, fills"),
         )?;
         let sources = all(
             door,
@@ -137,7 +160,18 @@ pub(crate) fn files_followed(door: &VaultDoor<'_>) -> Result<Answer> {
         }
         let mut folders: Vec<_> = folders.into_values().collect();
         folders.sort_by(|a, b| a.label.to_lowercase().cmp(&b.label.to_lowercase()));
-        Ok((wire::ImportsFilesHeld { folders }, None))
+        // A folder Stop retired is not followed; the pick that follows it again reads what it filled.
+        let retired = retired
+            .iter()
+            .map(|row| wire::ImportsHeldFolder {
+                origin_id: text_of(row, "id").unwrap_or_default(),
+                origin_ref: text_of(row, "ref").unwrap_or_default(),
+                label: text_of(row, "label").unwrap_or_default(),
+                docs_folder: text_of(row, "fills").unwrap_or_default(),
+                ..Default::default()
+            })
+            .collect();
+        Ok((wire::ImportsFilesHeld { folders, retired }, None))
     })();
     settle(door, loaded, Answer::ImportsFilesHeld)
 }

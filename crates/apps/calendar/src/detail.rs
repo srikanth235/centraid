@@ -55,13 +55,28 @@ fn followed_guests(door: &dyn PageDoor, event_id: &str) -> KitResult<Vec<Followe
     let rows = Read {
         name: "calendar.event.followed-guests",
         table: "source",
-        select: "entity_id, stated",
+        select: "entity_id, stated, origin_id",
         order: ("entity_id", "entity_id"),
         column: "entity_id",
     }
     .of(door, &[event_id.to_owned()], None)?;
+    // WHAT A RETIRED ORIGIN STATED IS NOBODY'S: after Stop the phone's guests are not drawn.
+    let followed = match rows.first().and_then(|row| text_of(row, "origin_id")) {
+        Some(origin) => Read {
+            name: "calendar.event.followed-origin",
+            table: "origin",
+            select: "id, retired_at",
+            order: ("id", "id"),
+            column: "id",
+        }
+        .of(door, &[origin], None)?
+        .iter()
+        .any(|row| text_of(row, "retired_at").is_none()),
+        None => false,
+    };
     let stated = rows
         .first()
+        .filter(|_| followed)
         .and_then(|row| text_of(row, "stated"))
         .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok());
     let text = |guest: &serde_json::Value, key: &str| {

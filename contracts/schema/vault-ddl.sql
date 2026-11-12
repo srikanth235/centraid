@@ -570,8 +570,14 @@ CREATE TABLE origin (
   fills      TEXT REFERENCES entity(id),
   config     TEXT CHECK (config IS NULL OR json_valid(config)),
   created_at TEXT NOT NULL,
+  -- Stop following RETIRES a store's origin instead of deleting it: it keeps its `fills` (the
+  -- calendar, folder or project it filled) and its sources, so following the same `ref` again
+  -- finds them and neither makes the home twice nor adds each record twice. A retired origin is
+  -- followed by nobody: every read of what a phone follows leaves it out.
+  retired_at TEXT,
   UNIQUE (system, ref),
   UNIQUE (id, system),
+  CHECK (retired_at IS NULL OR system IN ('contacts','calendar','files','health','phone_reminders')),
   -- A statement is an account's, not a phone's store (#1146).
   CHECK (system <> 'statement' OR device_id IS NULL)
 ) STRICT;

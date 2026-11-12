@@ -1109,14 +1109,15 @@ fn a_label_colour_is_taken_back_by_the_colour_it_replaced() {
 }
 
 impl World {
-    /// Whether the vault follows a phone store: the origin of a system and ref, if it holds one.
+    /// Whether the vault follows a phone store: the origin of a system and ref, if it holds one
+    /// that Stop has not retired.
     pub fn followed(&self, system: &str, reference: &str) -> bool {
         self.sample
             .handle
             .with_vault(|vault| {
                 Ok(vault.read(|connection| {
                     Ok(connection.query_row(
-                        "SELECT EXISTS (SELECT 1 FROM origin WHERE system = ?1 AND ref = ?2)",
+                        "SELECT EXISTS (SELECT 1 FROM origin WHERE system = ?1 AND ref = ?2 AND retired_at IS NULL)",
                         [system, reference],
                         |row| row.get::<_, bool>(0),
                     )?)

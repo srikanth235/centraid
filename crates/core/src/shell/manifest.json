@@ -435,7 +435,7 @@
         "unfollow a folder",
         "forget this folder's link"
       ],
-      "description": "(imports, lane I) Stop following a folder through follow.stop: its sources are forgotten and the origin retired; every document stays.",
+      "description": "(imports, lane I) Stop following a folder through follow.stop: the origin is retired (kept with the folder it filled and its sources, so picking the same folder again finds them); every document stays.",
       "confirmation": "none",
       "input": {
         "type": "object",

@@ -147,7 +147,8 @@ fn record(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
 fn followed_by(connection: &rusqlite::Connection) -> Result<Option<String>> {
     Ok(connection
         .query_row(
-            "SELECT label FROM origin WHERE system = 'health' ORDER BY created_at LIMIT 1",
+            "SELECT label FROM origin WHERE system = 'health' AND retired_at IS NULL
+              ORDER BY created_at LIMIT 1",
             [],
             |row| row.get(0),
         )

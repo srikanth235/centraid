@@ -675,7 +675,7 @@ fn a_followed_folder_fills_its_folder_and_a_changed_file_is_a_new_version() {
 }
 
 #[test]
-fn stopping_a_followed_folder_keeps_every_document_and_forgets_the_follow() {
+fn stopping_a_followed_folder_retires_the_follow_and_keeps_every_document() {
     let w = World::new();
     let folder = w.folder("Taxes", None);
     files(
@@ -693,21 +693,166 @@ fn stopping_a_followed_folder_keeps_every_document_and_forgets_the_follow() {
         json!({ "system": "files", "ref": "/Documents/Taxes" }),
     );
     assert_eq!(stopped["stopped"], json!(true));
+    // THE FOLLOW IS RETIRED, NOT DELETED: the origin keeps its Docs folder, and its source keeps
+    // naming the document, so the same folder followed again finds both.
     assert_eq!(
-        w.one::<i64>("SELECT COUNT(*) FROM source", &[]),
-        0,
-        "no source names the document any more"
+        w.one::<String>("SELECT fills FROM origin WHERE system = 'files'", &[]),
+        folder
     );
-    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM origin", &[]), 0);
+    assert_eq!(
+        w.one::<i64>("SELECT retired_at IS NOT NULL FROM origin", &[]),
+        1
+    );
+    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM source", &[]), 1);
     assert!(
         w.one::<Option<String>>("SELECT deleted_at FROM entity WHERE id = ?1", &[&a])
             .is_none(),
         "the document is the member's own, not trashed"
     );
-    // The next read of the folder files it as new again, beside the one kept.
-    let again = files(
+    // Stopping what is not followed (never followed, or already retired) is nothing.
+    for reference in ["/nowhere", "/Documents/Taxes"] {
+        let none = w.ok(
+            "follow.stop",
+            json!({ "system": "files", "ref": reference }),
+        );
+        assert_eq!(none["stopped"], json!(false), "{reference}");
+    }
+}
+
+#[test]
+fn a_folder_picked_again_after_stop_reuses_its_origin_and_its_docs_folder() {
+    let w = World::new();
+    let folder = w.folder("Taxes", None);
+    let read = |w: &World| {
+        files(
+            w,
+            &folder,
+            true,
+            json!([
+                file(w, "/a.pdf", "a.pdf", "a v1"),
+                file(w, "/b.pdf", "b.pdf", "b v1")
+            ]),
+        )
+    };
+    read(&w);
+    let origin = w.one::<String>("SELECT id FROM origin WHERE system = 'files'", &[]);
+    let folders = w.one::<i64>("SELECT COUNT(*) FROM entity WHERE kind = 'folder'", &[]);
+    w.ok(
+        "follow.stop",
+        json!({ "system": "files", "ref": "/Documents/Taxes" }),
+    );
+
+    // THE SAME FOLDER PICKED AGAIN: the origin revives with no `fills` named, the Docs folder is the
+    // one it filled, and every file is found by its source, not filed a second time.
+    w.ok(
+        "follow.files",
+        json!({ "origin": { "ref": "/Documents/Taxes", "label": "Taxes" },
+                "records": [], "complete": false }),
+    );
+    assert_eq!(
+        w.one::<String>("SELECT id FROM origin WHERE system = 'files'", &[]),
+        origin
+    );
+    assert_eq!(
+        w.one::<i64>("SELECT retired_at IS NULL FROM origin", &[]),
+        1,
+        "followed again"
+    );
+    assert_eq!(
+        w.one::<String>("SELECT fills FROM origin WHERE system = 'files'", &[]),
+        folder
+    );
+    let again = read(&w);
+    assert_eq!(
+        (
+            again["added"].clone(),
+            again["matched"].clone(),
+            again["unchanged"].clone()
+        ),
+        (json!(0), json!(0), json!(2)),
+        "found by their sources"
+    );
+    assert_eq!(
+        w.one::<i64>("SELECT COUNT(*) FROM entity WHERE kind = 'folder'", &[]),
+        folders,
+        "no second Docs folder"
+    );
+    assert_eq!(
+        w.one::<i64>("SELECT COUNT(*) FROM entity WHERE kind = 'document'", &[]),
+        2,
+        "no second document"
+    );
+}
+
+#[test]
+fn what_the_member_trashed_or_edited_while_the_folder_was_stopped_stays_as_they_left_it() {
+    let w = World::new();
+    let folder = w.folder("Taxes", None);
+    let read = |w: &World| {
+        files(
+            w,
+            &folder,
+            true,
+            json!([
+                file(w, "/a.pdf", "a.pdf", "a v1"),
+                file(w, "/b.pdf", "b.pdf", "b v1")
+            ]),
+        )
+    };
+    read(&w);
+    let id = |w: &World, path: &str| {
+        w.one::<String>(
+            "SELECT entity_id FROM source WHERE external_id = ?1",
+            &[path],
+        )
+    };
+    let (a, b) = (id(&w, "/a.pdf"), id(&w, "/b.pdf"));
+    w.ok(
+        "follow.stop",
+        json!({ "system": "files", "ref": "/Documents/Taxes" }),
+    );
+    w.ok("entity.trash", json!({ "id": a }));
+    w.ok("entity.retitle", json!({ "id": b, "title": "My B" }));
+
+    read(&w);
+    assert!(
+        w.one::<Option<String>>("SELECT deleted_at FROM entity WHERE id = ?1", &[&a])
+            .is_some(),
+        "the file the member trashed while stopped is not brought back"
+    );
+    assert_eq!(
+        w.one::<String>("SELECT title FROM entity WHERE id = ?1", &[&b]),
+        "My B",
+        "the title the member gave stands"
+    );
+    assert_eq!(
+        w.one::<i64>("SELECT COUNT(*) FROM entity WHERE kind = 'document'", &[]),
+        2,
+        "no document was added for either file"
+    );
+}
+
+#[test]
+fn a_folder_picked_again_into_a_new_docs_folder_starts_over_in_it() {
+    // The member trashed the Docs folder the follow filled and picked the folder again: a new Docs
+    // folder is named. The old sources name documents that are not its own, so they go, and the
+    // files are found by name among the documents nothing follows.
+    let w = World::new();
+    let folder = w.folder("Taxes", None);
+    files(
         &w,
         &folder,
+        true,
+        json!([file(&w, "/a.pdf", "a.pdf", "a v1")]),
+    );
+    w.ok(
+        "follow.stop",
+        json!({ "system": "files", "ref": "/Documents/Taxes" }),
+    );
+    let fresh = w.folder("Taxes again", None);
+    let again = files(
+        &w,
+        &fresh,
         true,
         json!([file(&w, "/a.pdf", "a.pdf", "a v1")]),
     );
@@ -716,10 +861,12 @@ fn stopping_a_followed_folder_keeps_every_document_and_forgets_the_follow() {
         (json!(0), json!(1)),
         "the kept document is found by its name, not filed twice"
     );
-    // Stopping what is not followed is nothing.
-    let none = w.ok(
-        "follow.stop",
-        json!({ "system": "files", "ref": "/nowhere" }),
+    assert_eq!(
+        w.one::<String>("SELECT fills FROM origin WHERE system = 'files'", &[]),
+        fresh
     );
-    assert_eq!(none["stopped"], json!(false));
+    assert_eq!(
+        w.one::<i64>("SELECT COUNT(*) FROM entity WHERE kind = 'document'", &[]),
+        1
+    );
 }

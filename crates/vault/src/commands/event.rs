@@ -663,7 +663,8 @@ fn held_guests(
 pub(crate) fn attendees_read(connection: &Connection, id: &str) -> Result<Json> {
     let stated: Option<String> = connection
         .query_row(
-            "SELECT stated FROM source WHERE entity_id = ?1",
+            "SELECT stated FROM source WHERE entity_id = ?1 AND origin_id IN
+               (SELECT id FROM origin WHERE retired_at IS NULL)",
             [id],
             |row| row.get(0),
         )
@@ -1686,7 +1687,8 @@ fn held(connection: &Connection, id: &str) -> Result<std::collections::BTreeMap<
 pub(crate) fn overrides_read(connection: &Connection, id: &str) -> Result<Json> {
     let said: Option<Json> = connection
         .query_row(
-            "SELECT stated FROM source WHERE entity_id = ?1",
+            "SELECT stated FROM source WHERE entity_id = ?1 AND origin_id IN
+               (SELECT id FROM origin WHERE retired_at IS NULL)",
             [id],
             |row| row.get::<_, String>(0),
         )

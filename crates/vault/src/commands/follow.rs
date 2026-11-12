@@ -356,7 +356,8 @@ fn statement_defaults(
 fn stated_read(connection: &Connection, id: &str, name: &str) -> Result<Json> {
     let stated: Option<String> = connection
         .query_row(
-            "SELECT stated FROM source WHERE entity_id = ?1",
+            "SELECT stated FROM source WHERE entity_id = ?1 AND origin_id IN
+               (SELECT id FROM origin WHERE retired_at IS NULL)",
             [id],
             |row| row.get(0),
         )
@@ -730,6 +731,27 @@ fn upsert_origin(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<OriginRow>
             )
             .optional()?
     };
+    // A RETIRED ORIGIN IS REVIVED, never made again: Stop kept its row, its home (`fills`) and its
+    // sources, so the same `ref` followed again finds all three. Naming a different home than the
+    // retired one filled (the member trashed it, and a new one was made) starts over: the sources
+    // of the old home name documents that are not the new home's.
+    let retired: Option<(Option<String>, bool)> = match &known {
+        Some(id) if !account_origin => connection
+            .query_row(
+                "SELECT fills, retired_at IS NOT NULL FROM origin WHERE id = ?1",
+                [id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?
+            .filter(|(_, retired)| *retired),
+        _ => None,
+    };
+    if let (Some(id), Some((old_home, _))) = (&known, &retired)
+        && fills.is_some()
+        && fills != *old_home
+    {
+        connection.execute("DELETE FROM source WHERE origin_id = ?1", [id])?;
+    }
     let label_was: Option<String> = match &known {
         Some(id) => connection
             .query_row("SELECT label FROM origin WHERE id = ?1", [id], |row| {
@@ -753,7 +775,7 @@ fn upsert_origin(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<OriginRow>
                 "UPDATE origin SET label = ?2, fills = COALESCE(?4, fills),
                         config = CASE WHEN device_id IS ?3 THEN COALESCE(?5, config)
                                       ELSE json_remove(COALESCE(?5, config), '$.cursor') END,
-                        device_id = ?3
+                        device_id = ?3, retired_at = NULL
                   WHERE id = ?1",
                 rusqlite::params![id, label, device, fills, config],
             )?;
@@ -1121,7 +1143,8 @@ fn matchable(map: &SystemMap, record: &Record) -> bool {
 /// The first row of this kind that nothing follows and the record's match key
 /// names, never the owner. A row followed only by another phone's id (a vault
 /// restored onto a new phone) is not followed: its source is that phone's, and
-/// the row is the new phone's to re-find.
+/// the row is the new phone's to re-find. A row whose only sources belong to a RETIRED origin is
+/// not followed either (a reconnected folder's new origin re-finds what the old one filled).
 fn match_existing(
     connection: &Connection,
     map: &SystemMap,
@@ -1154,6 +1177,7 @@ fn match_existing(
             AND NOT EXISTS (SELECT 1 FROM source s WHERE s.entity_id = e.id
                               AND s.system NOT IN ({})
                               AND s.stated <> '{{}}'
+                              AND s.origin_id IN (SELECT id FROM origin WHERE retired_at IS NULL)
                               AND (?2 IS NULL OR s.device_id IS NULL OR s.device_id = ?2))
             AND {}
           ORDER BY e.created_at, e.id",
@@ -1298,6 +1322,7 @@ pub(crate) fn live_link(
         .query_row(
             "SELECT s.system, s.stated FROM source s JOIN entity e ON e.id = s.entity_id
               WHERE s.entity_id = ?1 AND s.gone_at IS NULL AND e.deleted_at IS NULL
+                AND s.origin_id IN (SELECT id FROM origin WHERE retired_at IS NULL)
               LIMIT 1",
             [id],
             |row| Ok((row.get(0)?, row.get(1)?)),
@@ -1904,15 +1929,19 @@ fn pre_stop(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     }))
 }
 
-/// Stop following one origin: the sources that name its rows are forgotten and
-/// the origin is retired. **Every row stays** and is the member's own from now
-/// on; nothing is trashed. Stopping what is not followed is nothing.
+/// Stop following one origin: it is RETIRED, not deleted. **Every row stays** and is the member's own
+/// from now on (nothing is trashed, and a followed row's "Phone says" lines go), and the origin keeps
+/// its home (`fills`) and its sources, so following the same `ref` again finds both: no second
+/// calendar, folder or project, and no record added twice. Its cursor goes, so a followed-again
+/// store starts with a complete read. Stopping what is not followed (never followed, or already
+/// retired) is nothing. A reconnected folder's NEW origin finds the rows the retired one filled by
+/// the record's match key, as it finds any row nothing follows, and takes their sources over.
 fn stop(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let (system, reference) = (ctx.required_str("system")?, ctx.required_str("ref")?);
     let connection = ctx.connection();
     let origin: Option<String> = connection
         .query_row(
-            "SELECT id FROM origin WHERE system = ?1 AND ref = ?2",
+            "SELECT id FROM origin WHERE system = ?1 AND ref = ?2 AND retired_at IS NULL",
             [system, reference],
             |row| row.get(0),
         )
@@ -1920,9 +1949,12 @@ fn stop(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let Some(origin) = origin else {
         return Ok(serde_json::json!({ "stopped": false, "forgotten": 0 }));
     };
-    let forgotten = connection.execute("DELETE FROM source WHERE origin_id = ?1", [&origin])?;
-    connection.execute("DELETE FROM origin WHERE id = ?1", [&origin])?;
-    Ok(serde_json::json!({ "stopped": true, "forgotten": forgotten }))
+    connection.execute(
+        "UPDATE origin SET retired_at = ?2, config = json_remove(COALESCE(config, '{}'), '$.cursor')
+          WHERE id = ?1",
+        rusqlite::params![origin, ctx.now],
+    )?;
+    Ok(serde_json::json!({ "stopped": true, "forgotten": 0 }))
 }
 
 const TAKE_SCHEMA: &str = r#"{

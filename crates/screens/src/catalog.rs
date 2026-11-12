@@ -6913,7 +6913,7 @@ pub mod act {
             }
         }
 
-        /// (imports, lane I) Stop following a folder through follow.stop: its sources are forgotten and the origin retired; every document stays.
+        /// (imports, lane I) Stop following a folder through follow.stop: the origin is retired (kept with the folder it filled and its sources, so picking the same folder again finds them); every document stays.
         #[derive(Clone, Debug, Default)]
         pub struct StopFollowingFiles {
             pub r#ref: String,

@@ -27,7 +27,7 @@ pub const EARLIER_APPLICATION_ID: i64 = 0x4345_4e31;
 
 /// The digest of the schema this build founds: see [`schema_digest`]. Updated with every change
 /// to the baseline, and held to the founded file by a test.
-pub const SCHEMA_DIGEST: &str = "31fa130eecfd0a57bec5a60a841b061618c9d39b9bea6ee27a95311479cb4f51";
+pub const SCHEMA_DIGEST: &str = "ae1d6560fb3c295eb226d188b813a5879122d89ff232580796f18073be959a39";
 
 /// BLAKE3, in hex, over the file's `sqlite_schema` rows: type, name, table name and statement,
 /// ordered by name.

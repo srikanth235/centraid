@@ -243,7 +243,7 @@ pub const TABLES: [(&str, &str, &str); 44] = [
     (
         "follow",
         "origin",
-        "Where rows came from: a system the member follows (a phone's contacts, calendar, files or health store, a bank statement) or a file or device an item arrived from once (camera roll, picker, vCard, Markdown, CSV, scan, upload, Reminders). A typed row has none.",
+        "Where rows came from: a system the member follows (a phone's contacts, calendar, files or health store, a bank statement) or a file or device an item arrived from once (camera roll, picker, vCard, Markdown, CSV, scan, upload, Reminders). A typed row has none. Stopping a followed store retires its origin instead of deleting it, so following it again finds the home it filled and its sources.",
     ),
     (
         "follow",

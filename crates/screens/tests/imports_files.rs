@@ -520,6 +520,86 @@ fn stopping_a_folder_is_the_vaults_follow_stop_and_every_document_stays() {
 }
 
 #[test]
+fn a_folder_stopped_then_picked_again_reuses_its_origin_its_docs_folder_and_its_documents() {
+    let mut shell = followed_with_a_file();
+    let before = drive(&shell);
+    let filled = held(&shell).folders[0].docs_folder.clone();
+    let origin = held(&shell).folders[0].origin_id.clone();
+    send(
+        &mut shell,
+        files::Kind::FolderStopped(files::FolderStopped {
+            origin: "folder:abc".to_owned(),
+        }),
+    );
+    // STOP RETIRES: followed by nobody, kept with the Docs folder it filled.
+    let stopped = held(&shell);
+    assert!(stopped.folders.is_empty());
+    assert_eq!(stopped.retired.len(), 1);
+    assert_eq!(stopped.retired[0].origin_ref, "folder:abc");
+    assert_eq!(stopped.retired[0].docs_folder, filled);
+
+    // THE SAME FOLDER PICKED AGAIN follows it into the Docs folder it filled: no second folder.
+    follow(&mut shell, "folder:abc", "Taxes");
+    let after = held(&shell);
+    assert!(after.retired.is_empty());
+    assert_eq!(after.folders.len(), 1);
+    assert_eq!(after.folders[0].origin_id, origin, "the same origin record");
+    assert_eq!(after.folders[0].docs_folder, filled);
+    assert_eq!(
+        after.folders[0].documents, 1,
+        "its document is still its own"
+    );
+    assert_eq!(drive(&shell).folders.len(), before.folders.len());
+
+    // The next read finds the document by its source: no second one, and the file is not read again.
+    settle(&mut shell);
+    assert_eq!(asked(&shell), vec!["read"]);
+    answer_listing(
+        &mut shell,
+        listing("folder:abc", vec![file("2026/report.pdf", 12, 100)], true),
+    );
+    assert!(
+        asked(&shell).is_empty(),
+        "an unchanged file is not staged again"
+    );
+    assert_eq!(drive(&shell).documents.len(), before.documents.len());
+}
+
+#[test]
+fn a_folder_picked_again_after_its_docs_folder_was_deleted_gets_a_folder_of_its_own() {
+    use centraid_screens::field::Keyed;
+    let mut shell = followed_with_a_file();
+    let filled = held(&shell).folders[0].docs_folder.clone();
+    send(
+        &mut shell,
+        files::Kind::FolderStopped(files::FolderStopped {
+            origin: "folder:abc".to_owned(),
+        }),
+    );
+    let deleted = shell.d.act(
+        centraid_screens::catalog::act::docs::DeleteFolder {
+            folder_id: filled.clone(),
+        }
+        .request()
+        .keyed("arrange:delete-folder".to_owned()),
+    );
+    assert_eq!(
+        deleted.status,
+        wire::ActStatus::Executed as i32,
+        "{}",
+        deleted.reason
+    );
+    follow(&mut shell, "folder:abc", "Taxes");
+    let after = held(&shell);
+    assert_eq!(after.folders.len(), 1);
+    assert!(!after.folders[0].docs_folder.is_empty());
+    assert_ne!(
+        after.folders[0].docs_folder, filled,
+        "a deleted folder is not filled again"
+    );
+}
+
+#[test]
 fn the_followed_list_is_the_vaults_origins_with_the_documents_each_holds_by_name() {
     let mut shell = shell();
     follow(&mut shell, "folder:b", "zebra");
