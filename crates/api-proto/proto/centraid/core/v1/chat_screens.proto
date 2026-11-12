@@ -201,6 +201,28 @@ message ChatModelStep {
   bool progress_known = 4;
   float progress = 5;
   string status_line = 6;
+  // A heading over the step when its state has one ("Waiting for Wi-Fi", "Not enough space").
+  string title = 7;
+  // What the primary action does, and a second, quieter one beside it (empty when there is none).
+  ChatStepAction action_kind = 8;
+  string secondary_label = 9;
+  ChatStepAction secondary_kind = 10;
+  // A second sentence under the note: the photo reader's own download.
+  string extra_line = 11;
+}
+
+// WHAT A TAP ON A STEP'S ACTION ASKS (#1188 download rules): the shell sends it back as
+// `DownloadTapped.choice` and Rust decides what follows.
+enum ChatStepAction {
+  CHAT_STEP_ACTION_UNSPECIFIED = 0;
+  // Fetch it, over Wi-Fi (waiting for Wi-Fi when the phone is on mobile data).
+  CHAT_STEP_ACTION_DOWNLOAD = 1;
+  // Fetch it now, over mobile data too.
+  CHAT_STEP_ACTION_DOWNLOAD_CELLULAR = 2;
+  // Keep to Wi-Fi: the member declined mobile data.
+  CHAT_STEP_ACTION_WAIT_WIFI = 3;
+  // Look at the phone's space and network again.
+  CHAT_STEP_ACTION_CHECK_AGAIN = 4;
 }
 
 message ChatMessage {
@@ -347,6 +369,7 @@ message ChatEvent {
     // Edit on the last member message; Cancel on the banner over the composer.
     EditStarted edit_started = 29;
     EditCancelled edit_cancelled = 30;
+    DeviceFacts device_facts = 31;
   }
   reserved 12;
 
@@ -389,6 +412,22 @@ message ChatEvent {
   message DownloadTapped {
     // The photo reader's step and not the model's.
     bool vision = 1;
+    // Which of the step's actions was tapped; unspecified is its primary one.
+    ChatStepAction choice = 2;
+  }
+
+  // What the phone is like now, told on every appearance of the chat and when it changes: the
+  // network it is on and the space it has free (0 is unknown). The download rules read it.
+  message DeviceFacts {
+    Network network = 1;
+    uint64 free_bytes = 2;
+
+    enum Network {
+      NETWORK_UNSPECIFIED = 0;
+      NETWORK_WIFI = 1;
+      NETWORK_CELLULAR = 2;
+      NETWORK_OFFLINE = 3;
+    }
   }
 
   message DownloadProgress {
@@ -515,6 +554,9 @@ message ModelDownload {
   string sha256 = 4;
   uint64 bytes = 5;
   string models_dir = 6;
+  // The member allowed mobile data for this transfer. Without it the shell fetches over Wi-Fi only
+  // and waits for it when the phone has none.
+  bool allow_cellular = 7;
 }
 
 // Let the member choose ONE image from the photo library (the system picker, which

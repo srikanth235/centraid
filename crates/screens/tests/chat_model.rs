@@ -70,9 +70,14 @@ fn no_model_draws_the_download_step_with_the_size_the_sentence_and_the_action() 
     assert_eq!(step.size_line, "563 MB download");
     assert_eq!(
         step.note_line,
-        "This is the only time Centraid fetches anything."
+        "It stays on this phone, and nothing you ask leaves it."
     );
-    assert_eq!(step.action_label, "Download model");
+    assert_eq!(
+        step.extra_line,
+        "Photos need a second download of 205 MB, asked for the first time you attach one."
+    );
+    assert_eq!(step.action_label, "Download on Wi‑Fi");
+    assert_eq!(step.secondary_label, "Use mobile data instead");
     assert!(
         state.messages.is_empty(),
         "a member never types into a chat with no model"
@@ -130,6 +135,7 @@ fn the_download_step_tap_progress_then_a_load_and_a_failure_goes_back_with_one_l
     chat.open("");
     chat.event(C::Download(wire::chat_event::DownloadTapped {
         vision: false,
+        ..Default::default()
     }));
     assert_eq!(chat.state().phase(), Phase::Downloading);
     let asked = chat.asked(|kind| match kind {
@@ -171,6 +177,7 @@ fn the_download_step_tap_progress_then_a_load_and_a_failure_goes_back_with_one_l
     // and again, to a load
     chat.event(C::Download(wire::chat_event::DownloadTapped {
         vision: false,
+        ..Default::default()
     }));
     assert!(chat.state().error.is_empty());
     chat.event(C::DownloadFinished(wire::chat_event::DownloadFinished {
@@ -186,6 +193,7 @@ fn a_download_tap_outside_the_download_step_does_nothing_and_a_stale_status_cann
     chat.driver.effects.clear();
     chat.event(C::Download(wire::chat_event::DownloadTapped {
         vision: false,
+        ..Default::default()
     }));
     assert_eq!(chat.state().phase(), Phase::Ready);
     assert!(chat.driver.effects.is_empty());
@@ -194,6 +202,7 @@ fn a_download_tap_outside_the_download_step_does_nothing_and_a_stale_status_cann
     chat.open("");
     chat.event(C::Download(wire::chat_event::DownloadTapped {
         vision: false,
+        ..Default::default()
     }));
     // the tab appears again while the transfer runs: the status read must not step back
     chat.open("");
@@ -390,6 +399,7 @@ fn a_reader_download_that_stops_is_offered_again_with_one_line_and_its_events_ne
     vault_photo(&mut chat);
     chat.event(C::Download(wire::chat_event::DownloadTapped {
         vision: true,
+        ..Default::default()
     }));
     let asked = chat.asked(|kind| match kind {
         wire::effect::Kind::ModelDownload(download) if download.vision => {
@@ -484,4 +494,88 @@ fn the_scopes_are_the_vaults_roster() {
             .iter()
             .all(|app| centraid_screens::chat::scope_of(app) == *app)
     );
+}
+
+fn facts(chat: &mut Chat, network: wire::chat_event::device_facts::Network, free_bytes: u64) {
+    chat.event(C::DeviceFacts(wire::chat_event::DeviceFacts {
+        network: network as i32,
+        free_bytes,
+    }));
+}
+
+fn download_effect(chat: &Chat) -> Option<wire::ModelDownload> {
+    chat.asked(|kind| match kind {
+        wire::effect::Kind::ModelDownload(download) => Some(download.clone()),
+        _ => None,
+    })
+    .pop()
+}
+
+#[test]
+fn a_phone_with_too_little_space_is_told_so_and_nothing_is_fetched_until_it_has_it() {
+    use wire::chat_event::device_facts::Network;
+    let mut chat = Chat::with(None);
+    chat.open("");
+    facts(&mut chat, Network::Wifi, 310_000_000);
+    let step = chat.state().model_step.clone().expect("a step");
+    assert_eq!(step.title, "Not enough space");
+    assert_eq!(
+        step.note_line,
+        "The model needs 563 MB and this phone has 310 MB free. Free up 253 MB, then check again."
+    );
+    assert_eq!(step.action_label, "Check again");
+    assert_eq!(step.action_kind, wire::ChatStepAction::CheckAgain as i32);
+    chat.driver.effects.clear();
+    chat.event(C::Download(wire::chat_event::DownloadTapped::default()));
+    assert!(download_effect(&chat).is_none());
+    assert_eq!(chat.state().phase(), Phase::NeedsModel);
+    // space was made: the same chat offers the download
+    facts(&mut chat, Network::Wifi, 2_000_000_000);
+    assert_eq!(
+        chat.state().model_step.clone().unwrap().action_kind,
+        wire::ChatStepAction::Download as i32
+    );
+}
+
+#[test]
+fn on_mobile_data_the_chat_asks_first_and_waiting_for_wifi_is_a_download_that_will_not_use_it() {
+    use wire::chat_event::device_facts::Network;
+    let mut chat = Chat::with(None);
+    chat.open("");
+    facts(&mut chat, Network::Cellular, 2_000_000_000);
+    let step = chat.state().model_step.clone().expect("a step");
+    assert_eq!(step.title, "Use mobile data?");
+    assert_eq!(
+        (step.action_label.as_str(), step.secondary_label.as_str()),
+        ("Download now", "Wait for Wi‑Fi")
+    );
+    // Wait for Wi-Fi: the download starts and the shell is told not to use mobile data
+    chat.driver.effects.clear();
+    chat.event(C::Download(wire::chat_event::DownloadTapped {
+        vision: false,
+        choice: wire::ChatStepAction::WaitWifi as i32,
+    }));
+    assert!(!download_effect(&chat).expect("a download").allow_cellular);
+    let step = chat.state().model_step.clone().expect("a step");
+    assert_eq!(step.title, "Waiting for Wi‑Fi");
+    assert_eq!(step.secondary_label, "Use mobile data for the rest");
+    // …and the rest over mobile data takes the same file up again, allowed
+    chat.driver.effects.clear();
+    chat.event(C::Download(wire::chat_event::DownloadTapped {
+        vision: false,
+        choice: wire::ChatStepAction::DownloadCellular as i32,
+    }));
+    assert!(download_effect(&chat).expect("a download").allow_cellular);
+    assert_eq!(chat.state().model_step.clone().unwrap().title, "");
+}
+
+#[test]
+fn wifi_is_the_default_the_download_carries_no_permission_for_mobile_data() {
+    use wire::chat_event::device_facts::Network;
+    let mut chat = Chat::with(None);
+    chat.open("");
+    facts(&mut chat, Network::Wifi, 2_000_000_000);
+    chat.driver.effects.clear();
+    chat.event(C::Download(wire::chat_event::DownloadTapped::default()));
+    assert!(!download_effect(&chat).expect("a download").allow_cellular);
 }

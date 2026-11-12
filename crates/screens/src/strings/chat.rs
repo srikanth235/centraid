@@ -49,12 +49,32 @@ catalog! {
         "Its messages are removed from this vault. This cannot be undone."
     );
     plain delete_title = ("Delete this chat?", "Delete this chat?");
-    plain download_action = ("Download model", "Download model");
+    plain check_again = ("Check again", "Check again");
+    plain download_action = ("Download on Wi‑Fi", "Download on Wi‑Fi");
+    plain download_now = ("Download now", "Download now");
     plain download_failed = ("Download stopped. Try again.", "Download stopped. Try again.");
     plain download_note = (
-        "This is the only time Centraid fetches anything.",
-        "This is the only time Centraid fetches anything."
+        "It stays on this phone, and nothing you ask leaves it.",
+        "It stays on this phone, and nothing you ask leaves it."
     );
+    plain download_photo_note = (
+        "Photos need a second download of {size}, asked for the first time you attach one.",
+        "Photos need a second download of {size}, asked for the first time you attach one."
+    );
+    plain downloading_note = (
+        "If the download stops, it carries on from here.",
+        "If the download stops, it carries on from here."
+    );
+    plain low_space_body = (
+        "The model needs {need} and this phone has {free} free. Free up {short}, then check again.",
+        "The model needs {need} and this phone has {free} free. Free up {short}, then check again."
+    );
+    plain low_space_title = ("Not enough space", "Not enough space");
+    plain mobile_data_body = (
+        "The model is {size}. Downloading it now uses that much of your mobile data.",
+        "The model is {size}. Downloading it now uses that much of your mobile data."
+    );
+    plain mobile_data_title = ("Use mobile data?", "Use mobile data?");
     plain download_progress = ("Downloading {percent}", "Downloading {percent}");
     plain download_progress_unknown = ("Downloading", "Downloading");
     plain drawer_label = ("Chats", "Chats");
@@ -111,6 +131,14 @@ catalog! {
     plain scope_all = ("All apps", "All apps");
     plain scope_label = ("Chat scope", "Chat scope");
     plain send = ("Send", "Send");
+    plain use_mobile_data = ("Use mobile data instead", "Use mobile data instead");
+    plain use_mobile_data_rest = ("Use mobile data for the rest", "Use mobile data for the rest");
+    plain wait_wifi = ("Wait for Wi‑Fi", "Wait for Wi‑Fi");
+    plain waiting_wifi = ("Waiting for Wi‑Fi", "Waiting for Wi‑Fi");
+    plain waiting_wifi_note = (
+        "The download carries on by itself when this phone joins Wi‑Fi.",
+        "The download carries on by itself when this phone joins Wi‑Fi."
+    );
     plain size_line = ("{size} download", "{size} download");
     plain stop = ("Stop", "Stop");
     plain did_not_finish = ("Did not finish", "Did not finish");

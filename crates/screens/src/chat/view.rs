@@ -1,6 +1,7 @@
 //! The finished state the shells draw: every label, count and line is made here.
 
 use centraid_api_proto::core_v1 as wire;
+use wire::chat_event::device_facts::Network;
 use wire::chat_state::Phase;
 
 use super::model::{Chat, Msg, Pending, Proposal, Row, Stage, VisionPhase};
@@ -52,25 +53,36 @@ fn spoken(text: &str) -> String {
 impl Chat {
     fn model_step(&self, locale: Locale) -> Option<wire::ChatModelStep> {
         match self.phase {
-            Phase::NeedsModel => Some(wire::ChatModelStep {
-                size_line: if self.model_bytes() > 0 {
-                    fill(
-                        &words::size_line(locale),
-                        &[("size", &size_text(self.model_bytes()))],
-                    )
-                } else {
-                    String::new()
-                },
-                note_line: words::download_note(locale),
-                action_label: words::download_action(locale),
-                ..wire::ChatModelStep::default()
-            }),
-            Phase::Downloading => Some(wire::ChatModelStep {
-                progress_known: self.progress.is_some(),
-                progress: self.progress.unwrap_or(0.0),
-                status_line: percent(locale, self.progress),
-                ..wire::ChatModelStep::default()
-            }),
+            Phase::NeedsModel => Some(self.needs_step(locale)),
+            Phase::Downloading => {
+                let waiting = self.waiting_for_wifi();
+                Some(wire::ChatModelStep {
+                    progress_known: self.progress.is_some(),
+                    progress: self.progress.unwrap_or(0.0),
+                    status_line: percent(locale, self.progress),
+                    title: if waiting {
+                        words::waiting_wifi(locale)
+                    } else {
+                        String::new()
+                    },
+                    note_line: if waiting {
+                        words::waiting_wifi_note(locale)
+                    } else {
+                        words::downloading_note(locale)
+                    },
+                    secondary_label: if waiting {
+                        words::use_mobile_data_rest(locale)
+                    } else {
+                        String::new()
+                    },
+                    secondary_kind: if waiting {
+                        wire::ChatStepAction::DownloadCellular as i32
+                    } else {
+                        0
+                    },
+                    ..wire::ChatModelStep::default()
+                })
+            }
             Phase::Loading => Some(wire::ChatModelStep {
                 status_line: words::loading(locale),
                 ..wire::ChatModelStep::default()
@@ -80,6 +92,67 @@ impl Chat {
                 ..wire::ChatModelStep::default()
             }),
             _ => None,
+        }
+    }
+
+    /// The download is going, but this phone is on mobile data (or offline) and the member has not
+    /// allowed it: the shell holds the transfer until Wi-Fi comes.
+    fn waiting_for_wifi(&self) -> bool {
+        !self.cellular_ok && matches!(self.network, Network::Cellular | Network::Offline)
+    }
+
+    /// THE STEP BEFORE A DOWNLOAD, by what the phone says: not enough space says so and offers a
+    /// look again; on mobile data it asks first; otherwise it offers Wi-Fi, and mobile data as the
+    /// second choice. The photo reader's own download is named, so the first is not "the only one".
+    fn needs_step(&self, locale: Locale) -> wire::ChatModelStep {
+        let bytes = self.model_bytes();
+        let size = size_text(bytes);
+        let size_line = if bytes > 0 {
+            fill(&words::size_line(locale), &[("size", &size)])
+        } else {
+            String::new()
+        };
+        if self.too_little_space(bytes) {
+            return wire::ChatModelStep {
+                size_line,
+                title: words::low_space_title(locale),
+                note_line: fill(
+                    &words::low_space_body(locale),
+                    &[
+                        ("need", &size),
+                        ("free", &size_text(self.free_bytes)),
+                        ("short", &size_text(bytes - self.free_bytes)),
+                    ],
+                ),
+                action_label: words::check_again(locale),
+                action_kind: wire::ChatStepAction::CheckAgain as i32,
+                ..wire::ChatModelStep::default()
+            };
+        }
+        if self.network == Network::Cellular && !self.cellular_ok {
+            return wire::ChatModelStep {
+                size_line,
+                title: words::mobile_data_title(locale),
+                note_line: fill(&words::mobile_data_body(locale), &[("size", &size)]),
+                action_label: words::download_now(locale),
+                action_kind: wire::ChatStepAction::DownloadCellular as i32,
+                secondary_label: words::wait_wifi(locale),
+                secondary_kind: wire::ChatStepAction::WaitWifi as i32,
+                ..wire::ChatModelStep::default()
+            };
+        }
+        wire::ChatModelStep {
+            size_line,
+            note_line: words::download_note(locale),
+            extra_line: fill(
+                &words::download_photo_note(locale),
+                &[("size", &size_text(super::asset::VISION.bytes))],
+            ),
+            action_label: words::download_action(locale),
+            action_kind: wire::ChatStepAction::Download as i32,
+            secondary_label: words::use_mobile_data(locale),
+            secondary_kind: wire::ChatStepAction::DownloadCellular as i32,
+            ..wire::ChatModelStep::default()
         }
     }
 

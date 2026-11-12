@@ -4,6 +4,7 @@ use centraid_api_proto::core_v1 as wire;
 use prost::Message;
 use wire::assist_request::Kind as Ask;
 use wire::chat_event::Kind as E;
+use wire::chat_event::device_facts::Network;
 use wire::chat_state::Phase;
 
 use super::{asset, when};
@@ -254,6 +255,11 @@ pub(super) struct Chat {
     /// The last turn's attachments, asked again by Retry.
     pub last_sent: Vec<Pending>,
     pub vision: Vision,
+    /// THE DOWNLOAD RULES' FACTS (#1188): what the phone said about its network and free space, and
+    /// whether the member allowed mobile data. Unknown until the shell tells.
+    pub network: Network,
+    pub free_bytes: u64,
+    pub cellular_ok: bool,
     /// The stored thread this chat is saved in, or empty until a turn has been saved.
     pub thread_id: String,
     pub thread_title: String,
@@ -301,6 +307,9 @@ impl Default for Chat {
             next_pending: 1,
             last_sent: Vec::new(),
             vision: Vision::default(),
+            network: Network::Unspecified,
+            free_bytes: 0,
+            cellular_ok: false,
             thread_id: String::new(),
             thread_title: String::new(),
             drawer_open: false,
@@ -404,7 +413,8 @@ impl Chat {
             E::EditCancelled(_) => self.edit_cancelled(),
             E::NewChat(_) => self.new_chat(ctx),
             E::Copied(copied) => self.copied(copied.message_id),
-            E::Download(download) => self.download_tapped(download.vision),
+            E::Download(download) => self.download_tapped(download.vision, download.choice),
+            E::DeviceFacts(facts) => self.device_facts(&facts),
             E::DownloadProgress(progress) => self.progressed(&progress, ctx),
             E::DownloadFinished(done) => self.download_finished(done.vision, done.ok, ctx),
             E::Attached(attached) => self.attached(attached, ctx),
@@ -631,12 +641,29 @@ impl Chat {
         }
     }
 
-    fn download_tapped(&mut self, vision: bool) -> Vec<wire::Effect> {
+    fn download_tapped(&mut self, vision: bool, choice: i32) -> Vec<wire::Effect> {
+        use wire::ChatStepAction as Choice;
         let model = if vision {
             asset::VISION
         } else {
             asset::model()
         };
+        let choice = Choice::try_from(choice).unwrap_or(Choice::Unspecified);
+        // CHECK AGAIN asks nothing of the transfer: the shell told the facts again just before, and
+        // the step is drawn from them.
+        if choice == Choice::CheckAgain {
+            return Vec::new();
+        }
+        let more_data = match choice {
+            Choice::DownloadCellular => true,
+            Choice::WaitWifi => false,
+            _ => self.cellular_ok,
+        };
+        // NOT ENOUGH SPACE: nothing is fetched into a phone that cannot keep it.
+        if self.too_little_space(model.bytes) {
+            return Vec::new();
+        }
+        let waiting = !vision && self.phase == Phase::Downloading;
         if vision {
             if self.vision.phase != VisionPhase::Needs {
                 return Vec::new();
@@ -644,6 +671,12 @@ impl Chat {
             self.vision.phase = VisionPhase::Downloading;
             self.vision.progress = None;
             self.vision.error = None;
+        } else if waiting {
+            // Mobile data was allowed for the rest of a transfer that was waiting for Wi-Fi: the
+            // shell takes the same file up again with the new rule. Nothing else restarts it.
+            if choice != Choice::DownloadCellular {
+                return Vec::new();
+            }
         } else {
             if self.phase != Phase::NeedsModel {
                 return Vec::new();
@@ -652,6 +685,7 @@ impl Chat {
             self.progress = None;
             self.error = None;
         }
+        self.cellular_ok = more_data;
         vec![effect(wire::effect::Kind::ModelDownload(
             wire::ModelDownload {
                 vision,
@@ -660,8 +694,21 @@ impl Chat {
                 sha256: model.sha256.to_owned(),
                 bytes: model.bytes,
                 models_dir: self.models_dir.clone(),
+                allow_cellular: more_data,
             },
         ))]
+    }
+
+    /// The phone told how it is: kept, and the step is drawn from it.
+    fn device_facts(&mut self, facts: &wire::chat_event::DeviceFacts) -> Vec<wire::Effect> {
+        self.network = Network::try_from(facts.network).unwrap_or(Network::Unspecified);
+        self.free_bytes = facts.free_bytes;
+        Vec::new()
+    }
+
+    /// Whether the phone says it has less free than `needed` (an unknown amount is not "less").
+    pub(super) fn too_little_space(&self, needed: u64) -> bool {
+        self.free_bytes > 0 && self.free_bytes < needed
     }
 
     /// A transfer reported progress.
