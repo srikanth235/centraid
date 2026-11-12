@@ -555,6 +555,24 @@ message Destination {
   // every snapshot range and file it holds for this vault, old snapshots'
   // included. Set only by `backup_status`.
   uint64 held_bytes = 8;
+  // HOW THIS GATEWAY STANDS AGAINST THE VAULT (#1188, NB1). Every paired
+  // gateway is a full replica, fed on its own, so each has its own standing;
+  // "backed up" means every one is current and otherwise the line names the one
+  // behind. Set only by `backup_status`.
+  //
+  // Files whose bytes this gateway has not acknowledged whole, or whose row no
+  // snapshot its head names covers, and the plaintext bytes of those. A video
+  // the member left out is not counted.
+  uint64 behind_files = 9;
+  uint64 behind_bytes = 10;
+  // Its head names no snapshot, or one older than the newest this phone took.
+  bool records_behind = 11;
+  // When the snapshot its head names was taken, on the vault's clock. Absent:
+  // this phone has set no head there.
+  optional int64 head_snapshot_ms = 12;
+  // Why it is behind, as its last answer says: GATEWAY (silent), UNTRUSTED,
+  // REFUSED (its own limit), PAIR_AGAIN. Unspecified: it answered.
+  WaitReason reach = 13;
 }
 
 // A PAIRED GATEWAY, FOUND AGAIN AT NEW ADDRESSES (#1080, Q-1080-D3).

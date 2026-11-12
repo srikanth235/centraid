@@ -515,6 +515,28 @@ pub fn plan(snapshot: &Snapshot, store: &dyn Store) -> Result<Plan> {
     })
 }
 
+/// What several destinations are missing between them: every range any of them lacks, once
+/// by name, and the manifest if any lacks it. Every destination is a full replica (#1188, B1),
+/// so a part is sealed for the union and each destination is sent what it lacks.
+#[must_use]
+pub fn union(snapshot: &Snapshot, plans: &[Plan]) -> Plan {
+    let mut wanted: BTreeSet<u32> = BTreeSet::new();
+    for plan in plans {
+        wanted.extend(plan.missing_ranges.iter().copied());
+    }
+    let mut seen = BTreeSet::new();
+    let missing_ranges = snapshot
+        .ranges
+        .iter()
+        .filter(|range| wanted.contains(&range.i) && seen.insert(range.name))
+        .map(|range| range.i)
+        .collect();
+    Plan {
+        missing_ranges,
+        manifest_missing: plans.iter().any(|plan| plan.manifest_missing),
+    }
+}
+
 /// Record what `plan` found `gateway_id` already holds: every range and the
 /// manifest its `exists` did not name missing. Answers how many names that
 /// was.
@@ -701,6 +723,7 @@ pub fn settle(
             Ok(head) => {
                 let now = u64::try_from(clock.now_ms()).unwrap_or(0);
                 ledger.set_head(&gateway, manifest_name)?;
+                ledger.set_head_taken(&gateway, manifest.taken_at_ms)?;
                 ledger.ack_snapshot(manifest_name, now)?;
                 return Ok(Settled::HeadSet(head));
             }

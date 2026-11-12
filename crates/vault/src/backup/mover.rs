@@ -8,9 +8,15 @@
 //! already holds a sealing of exactly these bytes — the one a crash kept this
 //! device from recording.
 //!
-//! A part is released from the spool when the destination it was moved to
-//! confirms it. Every other paired destination reaches it by mirroring
-//! (#1080 ruling 8) or by its own `exists` answer on a later pass.
+//! **EVERY PAIRED DESTINATION IS A FULL REPLICA** (#1188, B1). A part leaves
+//! the spool when no paired destination still owes it ([`release`]): one
+//! destination's acknowledgement frees nothing while another, paired and
+//! not superseded, has not yet been sent the part. The wait for a destination
+//! that is away or full is bounded by [`SPOOL_WAIT_MS`]; past it the part
+//! is released and that destination is re-fed from the vault by its own `exists`
+//! on a later pass (names are functions of the plaintext, so sealing again
+//! is cheap and exact). [`release_to_reachable`] ends the wait early when the
+//! spool needs the room.
 //!
 //! ## RANGES AND DERIVATIVES TRAVEL IN BUNDLES
 //!
@@ -72,6 +78,85 @@ fn now(clock: &dyn Clock) -> u64 {
     u64::try_from(clock.now_ms()).unwrap_or(0)
 }
 
+/// How long a sealed part is kept in the spool for a paired destination that has not
+/// acknowledged it (away, full, refusing): a day. Past it the part is released and that
+/// destination is fed again from the vault when it next answers.
+pub const SPOOL_WAIT_MS: u64 = 24 * 60 * 60 * 1000;
+
+/// A part a destination just acknowledged: free it from the spool if no paired destination
+/// still owes it, else keep it for them (and, with `unhand`, take it back from the operating
+/// system, which was carrying it to the one that has it). Answers whether the part left the spool.
+///
+/// # Errors
+/// The ledger's or the spool's refusal.
+pub fn release(
+    ledger: &Ledger,
+    spool: &Spool,
+    part: &Queued,
+    now_ms: u64,
+    unhand: bool,
+) -> Result<bool> {
+    let owed = ledger.owing(&part.name)?;
+    let waiting = !owed.is_empty() && now_ms.saturating_sub(part.created_ms) < SPOOL_WAIT_MS;
+    if waiting {
+        if unhand {
+            ledger.unhand(&part.name)?;
+        }
+        return Ok(false);
+    }
+    ledger.dequeue(&part.name)?;
+    spool.remove(&part.name)?;
+    Ok(true)
+}
+
+/// Release every queued part that some destination holds and that has waited [`SPOOL_WAIT_MS`]
+/// for the ones that do not: the bounded end of the wait. Answers how many were released.
+///
+/// # Errors
+/// The ledger's or the spool's refusal.
+pub fn release_expired(ledger: &Ledger, spool: &Spool, now_ms: u64) -> Result<usize> {
+    let held = ledger.confirmed_anywhere()?;
+    let mut released = 0;
+    for part in ledger.queued()? {
+        if part.handed_off_ms.is_none()
+            && held.contains(&part.name)
+            && now_ms.saturating_sub(part.created_ms) >= SPOOL_WAIT_MS
+        {
+            ledger.dequeue(&part.name)?;
+            spool.remove(&part.name)?;
+            released += 1;
+        }
+    }
+    Ok(released)
+}
+
+/// End the wait for the destinations that did not answer: every queued part some destination
+/// holds and every destination in `reachable` holds leaves the spool, whoever else owes it.
+/// What a pass runs when the spool is at its budget and the room is needed. Answers how many
+/// parts were released.
+///
+/// # Errors
+/// The ledger's or the spool's refusal.
+pub fn release_to_reachable(ledger: &Ledger, spool: &Spool, reachable: &[String]) -> Result<usize> {
+    let held = ledger.confirmed_anywhere()?;
+    let mut released = 0;
+    for part in ledger.queued()? {
+        if part.handed_off_ms.is_some() || !held.contains(&part.name) {
+            continue;
+        }
+        if ledger
+            .owing(&part.name)?
+            .iter()
+            .all(|owed| !reachable.contains(owed))
+        {
+            ledger.dequeue(&part.name)?;
+            spool.remove(&part.name)?;
+            released += 1;
+        }
+    }
+    Ok(released)
+}
+
 /// Whether `part` rides in a bundle: a range or a derivative small enough
 /// for one. Everything else goes as its own `put`.
 fn bundled(part: &Queued) -> bool {
@@ -90,13 +175,13 @@ struct Pass<'a> {
 }
 
 impl Pass<'_> {
-    /// The destination holds a sealing of `part`: confirm it and free the
-    /// spool.
+    /// The destination holds a sealing of `part`: confirm it, and free the
+    /// spool once no other paired destination owes it.
     fn acknowledged(&mut self, part: &Queued) -> Result<()> {
+        let at = now(self.clock);
         self.ledger
-            .confirm(&part.name, &self.gateway, now(self.clock), part.size)?;
-        self.ledger.dequeue(&part.name)?;
-        self.spool.remove(&part.name)?;
+            .confirm(&part.name, &self.gateway, at, part.size)?;
+        release(self.ledger, self.spool, part, at, true)?;
         self.moved.confirmed.push(part.name);
         Ok(())
     }
@@ -255,10 +340,13 @@ pub fn move_queue_where(
     clock: &dyn Clock,
     admit: &dyn Fn(&Queued) -> bool,
 ) -> Result<Moved> {
+    // A PART THIS DESTINATION HOLDS IS NOT SENT TO IT AGAIN: it stays queued only for the
+    // destinations that still owe it.
+    let held = ledger.confirmed_names(store.gateway_id())?;
     let queue: Vec<Queued> = ledger
         .queued()?
         .into_iter()
-        .filter(|part| admit(part))
+        .filter(|part| !held.contains(&part.name) && admit(part))
         .collect();
     let mut pass = Pass {
         ledger,
@@ -366,9 +454,9 @@ fn reconcile_names(
     let mut out = Reconciled::default();
     for part in &queued {
         if !missing.contains(&part.name) {
-            ledger.confirm(&part.name, &gateway, now(clock), part.size)?;
-            ledger.dequeue(&part.name)?;
-            spool.remove(&part.name)?;
+            let at = now(clock);
+            ledger.confirm(&part.name, &gateway, at, part.size)?;
+            release(ledger, spool, part, at, false)?;
             out.confirmed.push(part.name);
         }
     }
@@ -500,6 +588,101 @@ mod tests {
             move_queue(&rig.ledger, &rig.spool, &rig.store, far(), &rig.clock).expect("moves");
         assert_eq!(moved.confirmed, vec![original]);
         assert_eq!(rig.store.bundles(), 1, "an original goes as its own put");
+    }
+
+    /// The part as if sealed just now, on the rig's clock.
+    fn fresh(rig: &Rig, name: &Name) {
+        let mut part = rig
+            .ledger
+            .queued_part(name)
+            .expect("reads")
+            .expect("queued");
+        part.created_ms = now(&rig.clock);
+        rig.ledger.enqueue(&part).expect("requeues");
+    }
+
+    fn pair_second(rig: &Rig) {
+        rig.ledger
+            .put_destination(&Destination {
+                gateway_id: "gw2".to_owned(),
+                addrs: Vec::new(),
+                cert_der: Vec::new(),
+                token: "t".to_owned(),
+                epoch: 1,
+                label: "nas".to_owned(),
+                paired_at_ms: 1,
+                last_seen_ms: None,
+                last_ack_ms: None,
+            })
+            .expect("pairs a second");
+    }
+
+    /// **B1.** One destination's acknowledgement frees nothing while another still owes the
+    /// part; it is sent to the other, and only then does the spool let go.
+    #[test]
+    fn a_part_stays_spooled_until_every_paired_destination_holds_it() {
+        let rig = rig();
+        pair_second(&rig);
+        let range = queue(&rig, "range", PartKind::Range);
+        fresh(&rig, &range);
+        let moved =
+            move_queue(&rig.ledger, &rig.spool, &rig.store, far(), &rig.clock).expect("moves");
+        assert_eq!(moved.confirmed, vec![range]);
+        assert!(rig.spool.contains(&range), "the second still owes it");
+        assert_eq!(
+            rig.ledger.owing(&range).expect("reads"),
+            vec!["gw2".to_owned()]
+        );
+        // The first is not sent it again.
+        let again =
+            move_queue(&rig.ledger, &rig.spool, &rig.store, far(), &rig.clock).expect("moves");
+        assert!(again.confirmed.is_empty());
+
+        let second = MemoryStore::new("gw2");
+        let moved = move_queue(&rig.ledger, &rig.spool, &second, far(), &rig.clock).expect("moves");
+        assert_eq!(moved.confirmed, vec![range]);
+        assert!(!rig.spool.contains(&range), "nobody owes it now");
+        assert!(rig.ledger.queued().expect("reads").is_empty());
+    }
+
+    /// The wait for a destination that is away is bounded, and the spool's need ends it early.
+    #[test]
+    fn the_wait_for_a_destination_that_is_away_is_bounded() {
+        let rig = rig();
+        pair_second(&rig);
+        let range = queue(&rig, "range", PartKind::Range);
+        fresh(&rig, &range);
+        move_queue(&rig.ledger, &rig.spool, &rig.store, far(), &rig.clock).expect("moves");
+        assert!(rig.spool.contains(&range));
+        let created = now(&rig.clock);
+        assert_eq!(
+            release_expired(&rig.ledger, &rig.spool, created + SPOOL_WAIT_MS - 1).expect("sweeps"),
+            0
+        );
+        assert!(rig.spool.contains(&range));
+        assert_eq!(
+            release_expired(&rig.ledger, &rig.spool, created + SPOOL_WAIT_MS + 1).expect("sweeps"),
+            1
+        );
+        assert!(!rig.spool.contains(&range));
+        assert!(rig.ledger.queued().expect("reads").is_empty());
+
+        // The spool's need ends the wait at once for a destination that did not answer.
+        let again = queue(&rig, "again", PartKind::Range);
+        fresh(&rig, &again);
+        move_queue(&rig.ledger, &rig.spool, &rig.store, far(), &rig.clock).expect("moves");
+        assert!(rig.spool.contains(&again));
+        let released = release_to_reachable(
+            &rig.ledger,
+            &rig.spool,
+            &["gw".to_owned(), "gw2".to_owned()],
+        )
+        .expect("releases");
+        assert_eq!(released, 0, "a destination that answered is still sent it");
+        let released =
+            release_to_reachable(&rig.ledger, &rig.spool, &["gw".to_owned()]).expect("releases");
+        assert_eq!(released, 1);
+        assert!(!rig.spool.contains(&again));
     }
 
     /// A destination whose certificate is not the pinned one: every call is

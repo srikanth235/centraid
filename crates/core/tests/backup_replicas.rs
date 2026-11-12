@@ -1,0 +1,209 @@
+//! EVERY PAIRED GATEWAY IS A FULL REPLICA (#1188, B1), through the core's doors against
+//! real gateways.
+//!
+//! A pass feeds each gateway that answers, on its own: one being away or full does not starve
+//! another, and does not stop the one that is away being fed when it is back. The spool keeps a
+//! part for a gateway that still owes it and frees it once none does; the status names the
+//! gateway that is behind, and "backed up" is said only when all are current.
+
+mod common;
+
+use std::collections::BTreeSet;
+
+use centraid_api_proto::core_v1 as wire;
+use centraid_vault::backup::naming::Name;
+
+use common::*;
+
+fn originals(handle: &centraid_core::Handle, label: &str, count: usize, size: usize) {
+    for index in 0..count {
+        let bytes = bytes_of(&format!("{label} {index}"), size);
+        let staged = stage(handle, owned("image/heic", &bytes), &bytes);
+        add_asset(handle, &staged, "photo");
+    }
+}
+
+fn pair_id(handle: &centraid_core::Handle, gateway: &Gateway) -> String {
+    pair(handle, gateway)
+        .destination
+        .expect("a destination")
+        .gateway_id
+}
+
+fn row<'a>(status: &'a wire::BackupStatusResponse, id: &str) -> &'a wire::Destination {
+    status
+        .destinations
+        .iter()
+        .find(|row| row.gateway_id == id)
+        .expect("the gateway is paired")
+}
+
+/// **A SECOND GATEWAY IS FED BY THE SAME PASS.** Before, the pass used the first gateway that
+/// answered and freed the spool on its acknowledgement, so the second received nothing while
+/// the first was up and the status read healthy.
+#[test]
+fn a_pass_feeds_every_paired_gateway() {
+    let (first, second) = (gateway(), gateway());
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = phone(dir.path());
+    let (one, two) = (pair_id(&phone, &first), pair_id(&phone, &second));
+    originals(&phone, "a photograph for two gateways", 3, 80_000);
+
+    let drained = drain(&phone, at_home());
+    assert_eq!(
+        drained.stopped,
+        wire::DrainStop::Empty as i32,
+        "{drained:?}"
+    );
+    assert_eq!(
+        drained.pending_bytes, 0,
+        "nothing is left owed: {drained:?}"
+    );
+
+    let book = ledger(&path);
+    let (held_one, held_two) = (
+        book.confirmed_names(&one).expect("reads"),
+        book.confirmed_names(&two).expect("reads"),
+    );
+    assert!(!held_one.is_empty());
+    assert_eq!(
+        held_one, held_two,
+        "the same names are acknowledged at both"
+    );
+    let on_disk = |gateway: &Gateway| -> BTreeSet<Name> { gateway.held(&vault_id()) };
+    assert_eq!(on_disk(&first), held_one, "and held by the first");
+    assert_eq!(on_disk(&second), held_two, "and held by the second");
+    assert_eq!(
+        first.writer(&vault_id()).1,
+        second.writer(&vault_id()).1,
+        "the same head"
+    );
+
+    let backed = status(&phone);
+    assert_eq!(backed.content_confirmed, backed.content_total, "{backed:?}");
+    for id in [&one, &two] {
+        let row = row(&backed, id);
+        assert_eq!(
+            (row.behind_files, row.records_behind),
+            (0, false),
+            "{row:?}"
+        );
+    }
+}
+
+/// **A GATEWAY THAT IS AWAY DOES NOT STARVE THE OTHER, AND IS FED WHEN IT IS BACK.** The
+/// spool keeps each part for the one that is away; the status names it; nothing reads "backed
+/// up" until it has caught up; and once it has, the spool is empty.
+#[test]
+fn a_gateway_that_is_away_is_waited_for_and_fed_when_it_is_back() {
+    let (first, second) = (gateway(), gateway());
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = phone(dir.path());
+    let (one, two) = (pair_id(&phone, &first), pair_id(&phone, &second));
+    originals(&phone, "a photograph while a laptop sleeps", 3, 80_000);
+
+    second.cable().cut();
+    let drained = drain(&phone, at_home());
+    assert_eq!(
+        drained.stopped,
+        wire::DrainStop::Empty as i32,
+        "{drained:?}"
+    );
+    let book = ledger(&path);
+    assert!(!book.confirmed_names(&one).expect("reads").is_empty());
+    assert!(
+        book.confirmed_names(&two).expect("reads").is_empty(),
+        "the second took nothing"
+    );
+    // THE PARTS ARE KEPT FOR THE ONE THAT IS AWAY.
+    assert!(
+        !book.queued().expect("reads").is_empty(),
+        "parts still owed to the second stay queued"
+    );
+    assert!(drained.pending_bytes > 0, "{drained:?}");
+
+    let behind = status(&phone);
+    assert_eq!(
+        behind.content_confirmed, 0,
+        "not backed up while one is behind: {behind:?}"
+    );
+    assert_eq!(row(&behind, &one).behind_files, 0);
+    assert!(row(&behind, &two).behind_files > 0);
+    assert_eq!(row(&behind, &two).reach, wire::WaitReason::Gateway as i32);
+    assert!(
+        waiting(&behind, wire::WaitReason::Gateway) > 0,
+        "{:?}",
+        behind.waiting
+    );
+
+    second.cable().mend();
+    let caught_up = drain(&phone, quietly());
+    assert_eq!(
+        caught_up.stopped,
+        wire::DrainStop::Empty as i32,
+        "{caught_up:?}"
+    );
+    let book = ledger(&path);
+    assert_eq!(
+        book.confirmed_names(&one).expect("reads"),
+        book.confirmed_names(&two).expect("reads")
+    );
+    assert!(
+        book.queued().expect("reads").is_empty(),
+        "nothing is owed any more"
+    );
+    assert_eq!(caught_up.pending_bytes, 0, "{caught_up:?}");
+    let backed = status(&phone);
+    assert_eq!(backed.content_confirmed, backed.content_total, "{backed:?}");
+    assert_eq!(row(&backed, &two).behind_files, 0);
+}
+
+/// **A GATEWAY THAT IS FULL IS NAMED, AND THE OTHER IS STILL FED.** Its answer is its own
+/// limit, not an absence.
+#[test]
+fn a_full_gateway_is_named_while_the_other_is_fed() {
+    let (first, second) = (gateway(), gateway());
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = phone(dir.path());
+    let (one, two) = (pair_id(&phone, &first), pair_id(&phone, &second));
+    originals(&phone, "a photograph for a full disk", 3, 60_000);
+
+    second.spawned.fill_disk(true);
+    let drained = drain(&phone, at_home());
+    assert_eq!(
+        drained.stopped,
+        wire::DrainStop::Refused as i32,
+        "{drained:?}"
+    );
+    let book = ledger(&path);
+    assert!(
+        !book.confirmed_names(&one).expect("reads").is_empty(),
+        "the first is fed"
+    );
+    assert!(book.confirmed_names(&two).expect("reads").is_empty());
+    let behind = status(&phone);
+    assert_eq!(
+        row(&behind, &two).reach,
+        wire::WaitReason::Refused as i32,
+        "{behind:?}"
+    );
+    assert_eq!(
+        row(&behind, &one).reach,
+        wire::WaitReason::Unspecified as i32
+    );
+    assert!(
+        waiting(&behind, wire::WaitReason::Refused) > 0,
+        "{:?}",
+        behind.waiting
+    );
+
+    second.spawned.fill_disk(false);
+    let moved = drain(&phone, quietly());
+    assert_eq!(moved.stopped, wire::DrainStop::Empty as i32, "{moved:?}");
+    let backed = status(&phone);
+    assert_eq!(backed.content_confirmed, backed.content_total, "{backed:?}");
+    assert!(ledger(&path).queued().expect("reads").is_empty());
+}

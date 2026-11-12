@@ -544,6 +544,81 @@ pub fn reach(
     Ok(Err(unreached))
 }
 
+/// Every paired destination a pass found, the way [`reach`] finds one: those that answered as
+/// themselves, and for the rest whether they were silent or another machine answered. Every
+/// paired gateway is fed in a pass (#1188, B1), so none is skipped for another having answered.
+pub struct Fleet {
+    /// The ledger's order, a gateway that refused this phone's token last.
+    pub reached: Vec<Reached>,
+    pub silent: Vec<String>,
+    pub untrusted: Vec<String>,
+}
+
+/// Ask every destination `info`, as [`reach`] asks them; a destination this phone was
+/// superseded at is left out (its writes are refused and its reads have nothing a pass needs).
+///
+/// # Errors
+/// The ledger's refusal, or a destination row whose token will not read.
+pub fn reach_all(
+    destinations: &[Destination],
+    ledger: &Ledger,
+    vault: VaultId,
+    runtime: &tokio::runtime::Handle,
+) -> Result<Fleet> {
+    let mut ordered: Vec<(bool, &Destination)> = Vec::with_capacity(destinations.len());
+    for destination in destinations {
+        let refused = ledger
+            .unauthorized(&destination.gateway_id)
+            .map_err(super::plane_error)?;
+        ordered.push((refused, destination));
+    }
+    ordered.sort_by_key(|(refused, _)| *refused);
+    let mut fleet = Fleet {
+        reached: Vec::new(),
+        silent: Vec::new(),
+        untrusted: Vec::new(),
+    };
+    for (_, destination) in ordered {
+        if ledger
+            .moved(&destination.gateway_id)
+            .map_err(super::plane_error)?
+            .is_some()
+        {
+            continue;
+        }
+        let store = GatewayStore::for_destination(destination, vault, runtime)?;
+        match store.info() {
+            Ok(info) => {
+                ledger
+                    .touch_seen(&destination.gateway_id, super::now_ms())
+                    .map_err(super::plane_error)?;
+                fleet.reached.push(Reached {
+                    destination: destination.clone(),
+                    store,
+                    gateway_ms: info.time_ms,
+                });
+            }
+            Err(error @ StoreError::Untrusted(_)) => {
+                tracing::warn!(
+                    gateway = %destination.gateway_id,
+                    %error,
+                    "a machine that is not the pinned gateway answered"
+                );
+                fleet.untrusted.push(destination.gateway_id.clone());
+            }
+            Err(error) => {
+                tracing::debug!(
+                    gateway = %destination.gateway_id,
+                    %error,
+                    "a paired gateway did not answer"
+                );
+                fleet.silent.push(destination.gateway_id.clone());
+            }
+        }
+    }
+    Ok(fleet)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

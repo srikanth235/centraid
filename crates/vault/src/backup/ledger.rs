@@ -698,6 +698,38 @@ impl Ledger {
         Ok(changed > 0)
     }
 
+    /// The part is no longer with the operating system: another gateway still
+    /// owes it, so the next hand-off may carry it there. Not an attempt.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn unhand(&self, name: &Name) -> Result<()> {
+        self.connection.execute(
+            "UPDATE queue SET handed_off_ms = NULL WHERE name = ?1",
+            params![name.to_hex()],
+        )?;
+        Ok(())
+    }
+
+    /// The paired gateways that do not hold `name`, in pairing order, leaving out one a
+    /// newer writer superseded (it takes nothing from this phone). Every gateway is a full
+    /// replica (#1188, B1): a part is owed to each of these until it is acknowledged or the
+    /// wait for it ends.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn owing(&self, name: &Name) -> Result<Vec<String>> {
+        let mut statement = self.connection.prepare(
+            "SELECT d.gateway_id FROM destination d
+              WHERE NOT EXISTS (SELECT 1 FROM confirmed c
+                                 WHERE c.name = ?1 AND c.gateway_id = d.gateway_id)
+                AND NOT EXISTS (SELECT 1 FROM meta m WHERE m.k = 'moved:' || d.gateway_id)
+              ORDER BY d.paired_at_ms, d.gateway_id",
+        )?;
+        let rows = statement.query_map(params![name.to_hex()], |row| row.get::<_, String>(0))?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
     /// The part `name` as queued, when it is.
     ///
     /// # Errors
@@ -1073,6 +1105,29 @@ impl Ledger {
         self.set_meta(&head_key(gateway_id), &name.to_hex())
     }
 
+    /// When the snapshot `gateway_id`'s head names was taken, on the vault's clock: the moment
+    /// the records at that gateway are current as of. Set with the head.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn set_head_taken(&self, gateway_id: &str, taken_at_ms: u64) -> Result<()> {
+        self.set_meta(&head_taken_key(gateway_id), &taken_at_ms.to_string())
+    }
+
+    /// When the snapshot `gateway_id`'s head names was taken; `None` for a gateway this phone
+    /// has set no head at.
+    ///
+    /// # Errors
+    /// SQLite's refusal, or a value that is not a number.
+    pub fn head_taken(&self, gateway_id: &str) -> Result<Option<u64>> {
+        self.meta(&head_taken_key(gateway_id))?
+            .map(|text| {
+                text.parse::<u64>()
+                    .map_err(|_| invariant(format!("`{text}` is not a time")))
+            })
+            .transpose()
+    }
+
     /// `gateway_id` moved the head to a snapshot this device took, at
     /// `gateway_ms` on the GATEWAY's clock — the only moment a member may be
     /// shown as "last backed up" (#1029 §2).
@@ -1104,6 +1159,10 @@ fn head_key(gateway_id: &str) -> String {
 
 fn moved_key(gateway_id: &str) -> String {
     format!("moved:{gateway_id}")
+}
+
+fn head_taken_key(gateway_id: &str) -> String {
+    format!("head-taken:{gateway_id}")
 }
 
 fn head_acked_key(gateway_id: &str) -> String {
