@@ -702,6 +702,49 @@ private fun MarkdownText(text: String, streaming: Boolean, spoken: String) {
                     Text(block.marker, style = centraidType("body"), color = centraidColor("textSoft"), modifier = Modifier.widthIn(min = 16.dp))
                     Text(block.text, style = centraidType("body"), color = centraidColor("text"), modifier = Modifier.weight(1f))
                 }
+                // A TABLE, as the board has it: a header row on the raised ground, a hairline over each row.
+                is ChatMarkdown.Block.Table -> Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .border(KitGeometry.HAIRLINE, centraidColor("line"), RoundedCornerShape(12.dp))
+                        .testTag("chat-table"),
+                ) {
+                    block.rows.forEachIndexed { rowAt, row ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .then(if (rowAt == 0) Modifier.background(centraidColor("bgElev")) else Modifier)
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            row.forEachIndexed { cellAt, cell ->
+                                Text(
+                                    cell,
+                                    style = centraidType("small"),
+                                    fontWeight = if (rowAt == 0) FontWeight.SemiBold else null,
+                                    color = centraidColor("text"),
+                                    textAlign = if (cellAt == 0) androidx.compose.ui.text.style.TextAlign.Start else androidx.compose.ui.text.style.TextAlign.End,
+                                    modifier = Modifier.weight(if (cellAt == 0) 2f else 1f),
+                                )
+                            }
+                        }
+                    }
+                }
+                // CODE, as it was written: the monospace face on the raised ground, scrolling sideways.
+                is ChatMarkdown.Block.Code -> Text(
+                    block.text,
+                    style = centraidType("mono"),
+                    color = centraidColor("text"),
+                    softWrap = false,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(centraidColor("bgElev"))
+                        .horizontalScroll(androidx.compose.foundation.rememberScrollState())
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                        .testTag("chat-code"),
+                )
             }
         }
     }

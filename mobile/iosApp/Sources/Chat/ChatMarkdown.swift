@@ -32,6 +32,10 @@ enum ChatMarkdown {
         case paragraph(AttributedString)
         case item(marker: String, text: AttributedString)
         case heading(AttributedString)
+        /// A table: the first row is the header; every cell is its inline text.
+        case table([[AttributedString]])
+        /// A fenced block, as it was written (verbatim), drawn in the monospace face.
+        case code(String)
     }
 
     static func blocks(_ text: String, streaming: Bool = false) -> [Block] {
@@ -44,8 +48,35 @@ enum ChatMarkdown {
             paragraph = []
         }
 
-        for raw in text.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n") {
-            let line = raw.trimmingCharacters(in: .whitespaces)
+        let lines = text.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
+        var at = 0
+        while at < lines.count {
+            let line = lines[at].trimmingCharacters(in: .whitespaces)
+            at += 1
+            // A fence runs to its closing fence, or to the end of what has arrived so far.
+            if line.hasPrefix("```") {
+                flush()
+                var body: [String] = []
+                while at < lines.count, !lines[at].trimmingCharacters(in: .whitespaces).hasPrefix("```") {
+                    body.append(lines[at])
+                    at += 1
+                }
+                at += 1
+                out.append(.code(body.joined(separator: "\n")))
+                continue
+            }
+            // A table is a row of cells, a rule under it, and the rows that follow.
+            if line.hasPrefix("|"), at < lines.count, isRule(lines[at].trimmingCharacters(in: .whitespaces)) {
+                flush()
+                var rows = [cells(line)]
+                at += 1
+                while at < lines.count, lines[at].trimmingCharacters(in: .whitespaces).hasPrefix("|") {
+                    rows.append(cells(lines[at].trimmingCharacters(in: .whitespaces)))
+                    at += 1
+                }
+                out.append(.table(rows.map { row in row.map { inline($0, streaming: streaming) } }))
+                continue
+            }
             if line.isEmpty {
                 flush()
             } else if let item = listItem(line) {
@@ -88,12 +119,31 @@ enum ChatMarkdown {
                 return String(content.characters)
             case let .item(marker, content):
                 return marker + " " + String(content.characters)
+            case let .table(rows):
+                return rows.map { row in row.map { String($0.characters) }.joined(separator: ", ") }
+                    .joined(separator: ". ")
+            case let .code(code):
+                return code
             }
         }
         .joined(separator: ". ")
     }
 
     // MARK: Reading one line
+
+    /// `| --- | :-: |`: only dashes, colons, spaces and bars, with at least one dash.
+    private static func isRule(_ line: String) -> Bool {
+        line.hasPrefix("|") && line.contains("-") && line.allSatisfy { "|-: ".contains($0) }
+    }
+
+    /// The cells of one row, outer bars dropped.
+    private static func cells(_ line: String) -> [String] {
+        var inner = Substring(line)
+        if inner.hasPrefix("|") { inner = inner.dropFirst() }
+        if inner.hasSuffix("|") { inner = inner.dropLast() }
+        return inner.split(separator: "|", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+    }
 
     private static func listItem(_ line: String) -> (marker: String, text: String)? {
         let characters = Array(line)
@@ -226,6 +276,51 @@ struct ChatMarkdownText: View {
                             .foregroundStyle(Theme.color("text", scheme))
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
+                case let .table(rows):
+                    // A TABLE, as the board has it: a header row on the raised ground, a hairline over each row.
+                    VStack(spacing: 0) {
+                        ForEach(Array(rows.enumerated()), id: \.offset) { rowAt, row in
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                ForEach(Array(row.enumerated()), id: \.offset) { cellAt, cell in
+                                    Text(styled(cell))
+                                        .kitScaledFont(CentraidScale.metaSize, weight: rowAt == 0 ? .semibold : .regular)
+                                        .foregroundStyle(Theme.color("text", scheme))
+                                        .multilineTextAlignment(cellAt == 0 ? .leading : .trailing)
+                                        .frame(maxWidth: .infinity, alignment: cellAt == 0 ? .leading : .trailing)
+                                        .layoutPriority(cellAt == 0 ? 2 : 1)
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(rowAt == 0 ? Theme.color("bgElev", scheme) : Color.clear)
+                            .overlay(alignment: .top) {
+                                if rowAt > 0 {
+                                    Rectangle().fill(Theme.color("line", scheme)).frame(height: CentraidGeometry.hairline)
+                                }
+                            }
+                        }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(Theme.color("line", scheme), lineWidth: CentraidGeometry.hairline)
+                    )
+                    .accessibilityIdentifier("chat-table")
+                case let .code(code):
+                    // CODE, as it was written: the monospace face on the raised ground, scrolling sideways.
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        Text(verbatim: code)
+                            .chatType("mono")
+                            .foregroundStyle(Theme.color("text", scheme))
+                            .fixedSize(horizontal: true, vertical: false)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.color("bgElev", scheme))
+                    )
+                    .accessibilityIdentifier("chat-code")
                 }
             }
         }

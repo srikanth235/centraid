@@ -1,0 +1,95 @@
+# ONE SET OF CASES FOR BOTH SHELLS' MARKDOWN READERS (ChatMarkdown.swift, ChatMarkdown.kt).
+# A case: `name:`, `streaming:`, `--- input` then the answer's text, `--- blocks` then one line per
+# block. p: paragraph, h: heading, i: item (marker, a space, the words), c: code (newlines written \n),
+# t: table (rows by `;`, cells by `|`). Every shell's test reads this file; the words are the
+# answer's words with no markers. Cases are separated by a line of four equals signs.
+name: bold italic and code lose their markers
+streaming: no
+--- input
+You spent **$380.50** on *food* and `gas`.
+--- blocks
+p:You spent $380.50 on food and gas.
+====
+name: bullets and numbers become items
+streaming: no
+--- input
+Three things:
+
+- one
+* two
+1. first
+2) second
+--- blocks
+p:Three things:
+i:• one
+i:• two
+i:1. first
+i:2. second
+====
+name: a heading drops its hash
+streaming: no
+--- input
+## Today
+--- blocks
+h:Today
+====
+name: a table has a header, a rule and rows
+streaming: no
+--- input
+Here:
+
+| Week | Spent |
+| --- | ---: |
+| 3 – 9 Nov | 98.20 USD |
+| 10 – 16 Nov | 211.40 USD |
+
+Done
+--- blocks
+p:Here:
+t:Week|Spent;3 – 9 Nov|98.20 USD;10 – 16 Nov|211.40 USD
+p:Done
+====
+name: a table cell keeps its words and loses its markers
+streaming: no
+--- input
+| **A** | b |
+|-|-|
+| 1 | `2` |
+--- blocks
+t:A|b;1|2
+====
+name: a row with no rule under it is a paragraph
+streaming: no
+--- input
+| x | y |
+--- blocks
+p:| x | y |
+====
+name: a fence is code as written
+streaming: no
+--- input
+It lists:
+```sh
+git pull
+  cargo build --release
+```
+ok
+--- blocks
+p:It lists:
+c:git pull\n  cargo build --release
+p:ok
+====
+name: a fence not yet closed while streaming is code so far
+streaming: yes
+--- input
+```
+ls
+--- blocks
+c:ls
+====
+name: an unclosed marker while streaming shows no asterisks
+streaming: yes
+--- input
+You spent **$38
+--- blocks
+p:You spent $38
