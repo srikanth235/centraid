@@ -14,9 +14,11 @@
 //!   changes, stated as `event.edit_occurrence` states it.
 //! - `history.undo`: the record goes back to its newest earlier version, "undo the last change".
 //!   It is the generic inverse of every edit; it is not idempotent (twice undoes then redoes).
-//!   Given `seq` it undoes THAT change and nothing else: the version must still be the newest, or
-//!   the record must be back to what that change left (a later change was taken back), so a
-//!   record changed again since is refused ([`CHANGED_SINCE`]) rather than losing the later change.
+//!   Given `seq` it undoes THAT change and nothing else: the version is the newest, or the record is
+//!   back to what that change left (a later change was taken back), or no later change touched a
+//!   field that change moved (a star, a tag or an edit of another field since): then the fields it
+//!   changed go back and the rest stays. A record whose same fields were changed again since is
+//!   refused ([`CHANGED_SINCE`]) rather than losing the later change.
 //!
 //! The versions are read with [`crate::history::earlier_versions`] through [`crate::Vault::read`].
 
@@ -67,7 +69,14 @@ fn pre_undo(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if seq == newest || changed_back_since(ctx, seq)? {
         return Ok(None);
     }
-    Ok(Some(CHANGED_SINCE.to_owned()))
+    // A later change to OTHER fields (a star, a tag, another edit) does not stand in the way of
+    // taking this one back; one to the same field does, because undoing would lose it.
+    let id = ctx.required_str("id")?;
+    let held = history::changes_by(ctx.connection(), id, seq)?.is_some();
+    Ok(
+        (!held || history::changed_since(ctx.connection(), id, seq)?)
+            .then(|| CHANGED_SINCE.to_owned()),
+    )
 }
 
 /// Whether the record is, now, what the change that made version `seq` left it as: later changes
@@ -117,11 +126,15 @@ fn undo(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         Some(seq) => seq,
         None => newest(ctx)?.unwrap_or_default(),
     };
-    Ok(answer(
-        id,
-        seq,
-        history::restore_version(ctx, id, seq, Scope::All)?,
-    ))
+    // The newest change, or one the record is back to (a later change was taken back): the whole
+    // version. Any other named change is taken back alone, the fields it changed and nothing else.
+    let whole = newest(ctx)? == Some(seq) || changed_back_since(ctx, seq)?;
+    let restored = if whole {
+        history::restore_version(ctx, id, seq, Scope::All)?
+    } else {
+        history::restore_changes(ctx, id, seq)?
+    };
+    Ok(answer(id, seq, restored))
 }
 
 fn fields(ctx: &CommandCtx<'_, '_>) -> serde_json::Map<String, serde_json::Value> {

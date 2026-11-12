@@ -380,6 +380,63 @@ pub fn earlier_versions(
     })
 }
 
+/// The state a version was replaced by: the next version up, else the record as it is.
+fn replacement_of(connection: &Connection, id: &str, seq: i64) -> Result<Option<Json>> {
+    match version_state(connection, id, seq + 1)? {
+        Some(state) => Ok(Some(state)),
+        None => current_state(connection, id),
+    }
+}
+
+/// What version `seq` changed, as the values themselves (a sealed cell is its ciphertext, never
+/// masked), in the form [`earlier_versions`] reads it. `None` when there is no such version.
+///
+/// # Errors
+/// A database error.
+pub fn changes_by(connection: &Connection, id: &str, seq: i64) -> Result<Option<Vec<Change>>> {
+    let Some(state) = version_state(connection, id, seq)? else {
+        return Ok(None);
+    };
+    let shape = shape(connection)?;
+    Ok(replacement_of(connection, id, seq)?.map(|after| diff(shape, &state, &after)))
+}
+
+/// Whether two field names are one field or one holds the other (`contact_point[a]` and
+/// `contact_point[a].value`).
+fn touches(left: &str, right: &str) -> bool {
+    let inside = |outer: &str, inner: &str| {
+        inner.len() > outer.len()
+            && inner.starts_with(outer)
+            && inner[outer.len()..].starts_with('.')
+    };
+    left == right || inside(left, right) || inside(right, left)
+}
+
+/// Whether any version newer than `seq` changed a field that version `seq` changed. A newer
+/// change to something else (a star, a tag, another field) does not stand in the way of taking
+/// `seq` back; one to the same field does, because taking `seq` back would lose it.
+///
+/// # Errors
+/// A database error.
+pub fn changed_since(connection: &Connection, id: &str, seq: i64) -> Result<bool> {
+    let Some(mine) = changes_by(connection, id, seq)? else {
+        return Ok(false);
+    };
+    let newest = head(connection, id)?;
+    for later in seq + 1..=newest {
+        let Some(theirs) = changes_by(connection, id, later)? else {
+            continue;
+        };
+        if theirs
+            .iter()
+            .any(|a| mine.iter().any(|b| touches(&a.field, &b.field)))
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 /// What a sealed cell reads as in a [`Change`]: the vault's own placeholder, so a change to a
 /// secret is shown as a change and its value (or its ciphertext) is shown to no one. A cell that
 /// held nothing stays `null`, which is how a reader tells "set" from "changed".

@@ -1687,17 +1687,57 @@ fn a_row_whose_far_end_is_gone_stays_gone_and_the_rest_of_the_version_comes_back
 }
 
 #[test]
-fn a_named_undo_still_works_once_the_later_change_was_itself_taken_back() {
+fn a_named_undo_is_refused_only_when_a_field_it_changed_was_changed_again() {
     let w = World::new();
     let task = w.id("task.add", json!({ "title": "Pay rent" }));
     w.ok("task.edit", json!({ "id": task, "title": "Pay the rent" }));
     let edit = w.versions(&task)[0].seq;
+    // (a) A star left standing is another field: the edit can still be taken back, and the star
+    // stays.
     w.ok("flag.set", json!({ "id": task, "flag": "starred" }));
-    // The record changed again since: refused, and nothing is lost.
+    let out = w.ok("history.undo", json!({ "id": task, "seq": edit }));
+    assert_eq!(out["restored"], true);
+    let state = w.state(&task);
+    assert_eq!(
+        state["entity"]["title"], "Pay rent",
+        "the edit's fields are back"
+    );
+    let flags: Vec<&str> = state["flag"]
+        .as_array()
+        .expect("the flags")
+        .iter()
+        .filter_map(|row| row["to_id"].as_str())
+        .collect();
+    assert_eq!(flags, ["flag:starred"], "and the star still stands");
+
+    // (b) The SAME field changed again since: refused, and nothing is lost.
+    w.ok("task.edit", json!({ "id": task, "title": "Pay rent now" }));
+    let first = w.versions(&task)[0].seq;
+    w.ok(
+        "task.edit",
+        json!({ "id": task, "title": "Pay rent today" }),
+    );
+    let sentence = w.refused("history.undo", json!({ "id": task, "seq": first }));
+    assert!(sentence.contains("changed since"), "{sentence}");
+    assert_eq!(w.state(&task)["entity"]["title"], "Pay rent today");
+}
+
+#[test]
+fn a_named_undo_still_works_once_the_later_change_to_the_same_field_was_itself_taken_back() {
+    // (c) A gesture of two writes on one field is taken back last first: the second undo finds the
+    // record as the first write left it.
+    let w = World::new();
+    let task = w.id("task.add", json!({ "title": "Pay rent" }));
+    w.ok("task.edit", json!({ "id": task, "title": "Pay the rent" }));
+    let edit = w.versions(&task)[0].seq;
+    w.ok(
+        "task.edit",
+        json!({ "id": task, "title": "Pay the rent now" }),
+    );
+    let later = w.versions(&task)[0].seq;
     let sentence = w.refused("history.undo", json!({ "id": task, "seq": edit }));
     assert!(sentence.contains("changed since"), "{sentence}");
-    // The star taken back leaves the record as the edit left it: the edit can be undone.
-    w.ok("flag.clear", json!({ "id": task, "flag": "starred" }));
+    w.ok("history.undo", json!({ "id": task, "seq": later }));
     let out = w.ok("history.undo", json!({ "id": task, "seq": edit }));
     assert_eq!(out["restored"], true);
     assert_eq!(w.state(&task)["entity"]["title"], "Pay rent");
@@ -1745,4 +1785,36 @@ fn purging_a_tag_or_a_list_writes_no_versions_for_the_records_that_carried_it() 
     // The tag goes the same way.
     w.ok("entity.purge", json!({ "id": "tag:phone" }));
     assert_eq!(w.versions(&task).len(), task_versions);
+}
+
+#[test]
+fn undoing_a_change_alone_survives_a_star_or_a_tag_made_since_but_not_an_edit_of_the_same_field() {
+    let w = World::new();
+    let id = w.id("person.add", json!({ "title": "Ada" }));
+    w.ok("person.edit", json!({ "id": id, "title": "Ada L." }));
+    let renamed = w.versions(&id)[0].seq;
+    // A star and a tag after the rename: other fields, so the rename can still be taken back.
+    w.ok("flag.set", json!({ "id": id, "flag": "starred" }));
+    w.ok("tag.add", json!({ "id": id, "label": "Friend" }));
+    w.ok("history.undo", json!({ "id": id, "seq": renamed }));
+    let state = w.state(&id);
+    assert_eq!(state["entity"]["title"], "Ada", "the rename is taken back");
+    let ids = |alias: &str| -> Vec<String> {
+        state[alias]
+            .as_array()
+            .expect("the relations")
+            .iter()
+            .filter_map(|row| row["to_id"].as_str().map(str::to_owned))
+            .collect()
+    };
+    assert_eq!(ids("flag"), ["flag:starred"], "the star stands");
+    assert_eq!(ids("tag"), ["tag:friend"], "and so does the tag");
+
+    // An edit of the same field since stands in the way.
+    w.ok("person.edit", json!({ "id": id, "title": "Ada Byron" }));
+    let first = w.versions(&id)[0].seq;
+    w.ok("person.edit", json!({ "id": id, "title": "Ada King" }));
+    let sentence = w.refused("history.undo", json!({ "id": id, "seq": first }));
+    assert!(sentence.contains("no longer be undone"), "{sentence}");
+    assert_eq!(w.state(&id)["entity"]["title"], "Ada King");
 }

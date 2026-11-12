@@ -58,6 +58,104 @@ pub fn restore_version(
     let Some(now) = current_state(connection, id)? else {
         return Ok(None);
     };
+    restore_state(ctx, id, &wanted, &now, scope).map(Some)
+}
+
+/// Take back only what version `seq` changed (`history.undo` naming a version that is not the
+/// newest): the record as it is now, with each field the version changed put back to the value it
+/// held. What was changed since in other fields stays. `None` when the record or the version is
+/// not there.
+///
+/// # Errors
+/// A database error, including a table's own refusal of the state.
+pub fn restore_changes(ctx: &CommandCtx<'_, '_>, id: &str, seq: i64) -> Result<Option<Restored>> {
+    let connection = ctx.connection();
+    let Some(changes) = super::read::changes_by(connection, id, seq)? else {
+        return Ok(None);
+    };
+    let Some(now) = current_state(connection, id)? else {
+        return Ok(None);
+    };
+    let shape = shape(connection)?;
+    let mut wanted = now.clone();
+    for change in &changes {
+        put_back(shape, &mut wanted, change);
+    }
+    restore_state(ctx, id, &wanted, &now, Scope::All).map(Some)
+}
+
+/// Put one change's earlier value over `state`: a column, or a whole child row (`null` removes it).
+fn put_back(shape: &super::shape::Shape, state: &mut Json, change: &super::read::Change) {
+    let field = change.field.as_str();
+    // `link[<other item>]`: a link has no direction a member can see; it sits under whichever end
+    // held it.
+    if let Some(other) = field
+        .strip_prefix("link[")
+        .and_then(|rest| rest.strip_suffix(']'))
+    {
+        for (alias, end) in [("link_out", "to_id"), ("link_in", "from_id")] {
+            if let Some(rows) = state.get_mut(alias).and_then(Json::as_array_mut) {
+                rows.retain(|row| row.get(end).and_then(Json::as_str) != Some(other));
+            }
+        }
+        if let Some(row) = change.before.as_object() {
+            let alias = if row.get("to_id").and_then(Json::as_str) == Some(other) {
+                "link_out"
+            } else {
+                "link_in"
+            };
+            if let Some(rows) = state.get_mut(alias).and_then(Json::as_array_mut) {
+                rows.push(change.before.clone());
+            }
+        }
+        return;
+    }
+    // `alias[key]` or `alias[key].column`: a row of a child table.
+    if let Some((alias, rest)) = field.split_once('[')
+        && let Some((key, column)) = rest.rsplit_once(']')
+        && let Some(part) = shape.part(alias)
+    {
+        let Some(rows) = state.get_mut(alias).and_then(Json::as_array_mut) else {
+            return;
+        };
+        let at = rows.iter().position(|row| key_of(part, row) == key);
+        match (column.strip_prefix('.'), at) {
+            (Some(column), Some(at)) => {
+                if let Some(row) = rows[at].as_object_mut() {
+                    row.insert(column.to_owned(), change.before.clone());
+                }
+            }
+            (None, Some(at)) if change.before.is_null() => {
+                rows.remove(at);
+            }
+            (None, Some(at)) => rows[at] = change.before.clone(),
+            (None, None) if !change.before.is_null() => rows.push(change.before.clone()),
+            _ => {}
+        }
+        return;
+    }
+    // `table.column`: a column of the entity or of a kind's row (or a one-to-one child's).
+    if let Some((table, column)) = field.split_once('.')
+        && let Some(row) = state.get_mut(table).and_then(Json::as_object_mut)
+    {
+        row.insert(column.to_owned(), change.before.clone());
+        return;
+    }
+    // A whole one-to-one child (`workout`): present or not.
+    if let Some(object) = state.as_object_mut() {
+        object.insert(field.to_owned(), change.before.clone());
+    }
+}
+
+/// Write `wanted` over `now` for entity `id` (see [`restore_version`]).
+fn restore_state(
+    ctx: &CommandCtx<'_, '_>,
+    id: &str,
+    wanted: &Json,
+    now: &Json,
+    scope: Scope,
+) -> Result<Restored> {
+    let connection = ctx.connection();
     let shape = shape(connection)?;
     let mut writer = Writer {
         ctx,
@@ -112,7 +210,7 @@ pub fn restore_version(
         }
     }
     if scope == Scope::All {
-        writer.links(shape, &wanted, &now)?;
+        writer.links(shape, wanted, now)?;
     }
     if writer.changed {
         ctx.touch(id)?;
@@ -121,10 +219,10 @@ pub fn restore_version(
             crate::commands::note::relink(ctx, id)?;
         }
     }
-    Ok(Some(Restored {
+    Ok(Restored {
         restored: writer.changed,
         kept_current: writer.kept,
-    }))
+    })
 }
 
 /// The aliases of the two directions of a link set by hand.

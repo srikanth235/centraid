@@ -87,10 +87,10 @@ mod shape;
 mod write;
 
 pub use read::{
-    Change, Earlier, MASK, Record, Version, Who, count, current_state, earlier_versions, head,
-    head_after, offered, record, titles, version_state,
+    Change, Earlier, MASK, Record, Version, Who, changed_since, changes_by, count, current_state,
+    earlier_versions, head, head_after, offered, record, titles, version_state,
 };
-pub use restore::{Restored, Scope, restore_version};
+pub use restore::{Restored, Scope, restore_changes, restore_version};
 pub use shape::{
     CONTENT, Cell, OMITTED, Part, RELATIONS_OUTSIDE, Role, Shape, TABLES, is_sealed, shape,
 };
