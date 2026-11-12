@@ -301,3 +301,42 @@ fn a_fired_reminder_stays_live_until_its_task_is_resolved() {
     changed(&mut d, service);
     assert!(!latest(&d).live_ids.contains(&fired));
 }
+
+/// A8: AN EVENT'S ALERT LEAVES THE SET WITH ITS TRASH AND COMES BACK WITH ITS RESTORE.
+#[test]
+fn an_events_alert_leaves_with_its_trash_and_returns_with_its_restore() {
+    use centraid_screens::catalog::act::calendar::{
+        Propose, ProposeTiming, RestoreEvent, TrashEvent,
+    };
+    let (mut d, service) = rig();
+    clear_tasks(&d);
+    let first = day(&d, 2);
+    let id = id_of(&arrange(
+        &d,
+        Propose {
+            title: "Standup".to_owned(),
+            starts: format!("{first}T10:00:00Z"),
+            timing: Some(ProposeTiming::Zoned),
+            zone: Field::Is("UTC".to_owned()),
+            reminders: Field::Is("[10]".to_owned()),
+            busy: Some(false),
+            ..Default::default()
+        },
+    ));
+    changed(&mut d, service);
+    assert_eq!(latest(&d).all.len(), 1);
+    arrange(
+        &d,
+        TrashEvent {
+            event_id: id.clone(),
+        },
+    );
+    changed(&mut d, service);
+    assert!(
+        latest(&d).all.is_empty(),
+        "a trashed event is gone from the set"
+    );
+    arrange(&d, RestoreEvent { event_id: id });
+    changed(&mut d, service);
+    assert_eq!(latest(&d).all.len(), 1, "a restored event alerts again");
+}

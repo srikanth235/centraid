@@ -272,3 +272,30 @@ fn a_full_set_is_read_again_when_its_last_item_arrives() {
     let soon: Vec<_> = (0..CAP).map(|_| at(1_000)).collect();
     assert_eq!(refresh_after(&soon, 0), REFRESH_LEAST);
 }
+
+/// DST ON A FIRE TIME (#1188, A8): a wall clock that does not exist (the spring gap) fires at the
+/// next real one, and one that happens twice (the autumn overlap) fires once, at the earlier.
+#[test]
+fn a_fire_time_in_the_spring_gap_reads_forward_and_one_in_the_autumn_overlap_fires_once() {
+    let at = |now_local: &str, remind: &str| {
+        let t = task("a", &remind[..10], &remind[11..], remind);
+        desired(&Inputs {
+            vault_id: "v1",
+            zone: NY,
+            locale: Locale::En,
+            now_local,
+            tasks: &[t],
+            projects: &[],
+            events: &[],
+            calendars: &[],
+        })
+    };
+    // 2027-03-14 02:30 does not exist in New York; the clocks go from 02:00 to 03:00.
+    let set = at("2027-03-13T08:00", "2027-03-14T02:30");
+    assert_eq!(set.len(), 1);
+    assert_eq!(set[0].fire_local, "2027-03-14T03:30");
+    // 01:30 on 2026-11-01 happens twice: once, at the earlier, 01:30 EDT = 05:30Z.
+    let set = at("2026-10-31T08:00", "2026-11-01T01:30");
+    assert_eq!(set.len(), 1);
+    assert_eq!(set[0].fire_at_ms, 1_793_511_000_000);
+}

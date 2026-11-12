@@ -181,3 +181,41 @@ fn the_next_few_are_one_bounded_read_whatever_the_vault_holds() {
             .all(|pair| pair[0].fire_key <= pair[1].fire_key)
     );
 }
+
+/// NA2: ONE ALERT PER REAL THING. A reminder the phone's own app holds is alerted by that app, so
+/// Centraid holds no alert for it, whether the follow is on or was stopped.
+#[test]
+fn a_followed_phone_reminder_holds_no_alert_and_stopping_the_follow_changes_nothing() {
+    let w = World::new();
+    w.ok(
+        "follow.reminders",
+        json!({ "origin": { "ref": "list:1", "label": "Groceries" }, "complete": true,
+                "records": [{ "external_id": "r1", "fields": {
+                    "title": "Milk", "status": "open", "done_at": null,
+                    "due": "2026-03-01T09:00:00Z", "remind_before_min": 10 } }] }),
+    );
+    assert!(w.rows().is_empty(), "the phone alerts for it already");
+    w.ok(
+        "task.add",
+        json!({ "title": "Mine", "due": "2026-03-01T09:00:00Z", "remind_before_min": 10 }),
+    );
+    assert_eq!(w.rows().len(), 1, "an item Centraid owns still alerts");
+    w.ok(
+        "follow.stop",
+        json!({ "system": "phone_reminders", "ref": "list:1" }),
+    );
+    // Touch the followed task again: the retired origin's items stay silent.
+    let id: String = w
+        .scratch
+        .vault
+        .read(|c| {
+            Ok(c.query_row(
+                "SELECT entity_id FROM source WHERE external_id = 'r1'",
+                [],
+                |r| r.get(0),
+            )?)
+        })
+        .expect("the task");
+    w.ok("task.edit", json!({ "id": id, "remind_before_min": 5 }));
+    assert_eq!(w.rows().len(), 1, "a retired origin never notifies");
+}

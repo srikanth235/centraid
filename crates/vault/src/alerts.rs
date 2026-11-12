@@ -157,6 +157,10 @@ fn replace(connection: &Connection, id: &str, now: i64) -> Result<()> {
         )
         .optional()?;
     let rows = match kind {
+        // ONE ALERT PER REAL THING (#1188, NA2): a record the phone's own app holds is alerted by
+        // that app. Whether the follow is still on makes no difference: a retired origin's items
+        // keep their source and stay silent.
+        Some(_) if phone_holds(connection, id)? => Vec::new(),
         Some((kind, None)) if kind == "event" => event_alerts(connection, id, now)?,
         Some((kind, None)) if kind == "task" => task_alerts(connection, id, now)?,
         _ => Vec::new(),
@@ -180,6 +184,17 @@ fn replace(connection: &Connection, id: &str, now: i64) -> Result<()> {
         ])?;
     }
     Ok(())
+}
+
+/// Whether the phone's own calendar or reminders app holds this record (it came from one: followed
+/// now, or by an origin that was retired).
+fn phone_holds(connection: &Connection, id: &str) -> Result<bool> {
+    Ok(connection
+        .prepare_cached(
+            "SELECT EXISTS (SELECT 1 FROM source s JOIN origin o ON o.id = s.origin_id
+              WHERE s.entity_id = ?1 AND o.system IN ('calendar', 'phone_reminders'))",
+        )?
+        .query_row([id], |row| row.get(0))?)
 }
 
 fn offsets_of(json: &str) -> Vec<i64> {
