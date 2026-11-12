@@ -89,6 +89,11 @@ use log::Log;
 pub use pending::CardStep;
 use words::{Say, say, say_with};
 
+/// The prompt budget in tokens, less the room a message may take: the engine's context with a
+/// quarter of it held back, because [`estimate_tokens`](crate::prompt::estimate_tokens) counts
+/// the plane's own text near 1.2x and the template adds words the log does not hold.
+const CONTEXT_BUDGET: u32 = Budget::DEFAULT.context / 4 * 3;
+
 /// The longest user message the loop hands the runtime, in characters. A guard on the prompt's
 /// size, not a product limit: the trained messages are a sentence.
 pub const MESSAGE_MAX: usize = 800;
@@ -331,6 +336,10 @@ impl<'a> NativePlane<'a> {
             let sent = if let Some(call) = lookup.next() {
                 call
             } else {
+                // a long chat keeps working: the oldest turns go, inside the context less the room
+                // the message may take and a margin for the template's own words (#1188 C4)
+                chat.log
+                    .fit(CONTEXT_BUDGET.saturating_sub(self.options.max_new));
                 let prompt = chat.log.prompt().map_err(Refusal::ModelFailed)?;
                 let written = decode_step(
                     self.model,

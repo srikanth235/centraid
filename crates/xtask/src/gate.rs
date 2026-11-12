@@ -161,11 +161,13 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         // NO DESKTOP OR EXTENSION STEPS: the only shell is mobile, and there is
         // no desktop shell and no browser extension (#1029 §6, R-1047-D3).
         step("lockfile", run_lockfile),
-        // `prompt-injection` STOOD HERE (#1029 §1). It ran the #842 corpus
-        // against the ASSISTANT's standing answer when content inside the
-        // member's own data asked it to exceed its grant. `crates/assist` is
-        // deleted and so is `Principal::Agent`, so there is no assistant to
-        // hold an answer and no grant to exceed.
+        // `prompt-injection` WAS RETIRED WITH THE FIRST ASSISTANT (#1029 §1) AND IS BACK (#1188
+        // C2). The first one ran the #842 corpus against a standing answer that could exceed a
+        // grant; there is no grant now. The assistant that stands today (`crates/assist`) has a
+        // different exposure: record text and the member's words enter a prompt the engine
+        // tokenises with special tokens parsed. This step replays the injection corpus through
+        // every path that text takes into a prompt and fails if any adds structure.
+        step("prompt-injection", run_prompt_injection),
         // NO SIMULATION STEP: there is one writer, the phone, and nothing to
         // converge (#1029 §1).
         //
@@ -863,6 +865,15 @@ fn run_fault_door(ctx: &Ctx) -> Result<Outcome> {
             "contract",
             "a_real_panic_inside_call_poisons_the_handle_through_the_abi",
         ],
+    )
+}
+
+fn run_prompt_injection(ctx: &Ctx) -> Result<Outcome> {
+    process(
+        ctx,
+        "prompt-injection",
+        "cargo",
+        &["test", "-p", "centraid-assist", "--test", "injection"],
     )
 }
 

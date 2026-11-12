@@ -9,10 +9,12 @@
 //! call is not a record the renderer can write byte for byte, so it is spliced in as it was said,
 //! under the renderer's own framing, and the history around it is rendered in segments.
 
+use crate::escape::vault_text;
 use crate::native::identity::MODEL;
 use crate::native::transcript::{
     self, Json, Message, assistant_open, py_strip, render, render_prompt_for_generation,
 };
+use crate::prompt::estimate_tokens;
 
 /// One entry of the conversation.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60,10 +62,13 @@ impl Log {
         self.entries.is_empty()
     }
 
+    /// Vault text is data (#1188 C2): the member's words, the runtime's block (it quotes row
+    /// names) and every observation pass [`vault_text`] on the way in, so none can spell a
+    /// special token or a tag of the call format.
     pub fn user(&mut self, text: &str, block: Option<&str>) {
         self.entries.push(Entry::User {
-            text: text.to_owned(),
-            block: block.map(str::to_owned),
+            text: vault_text(text),
+            block: block.map(vault_text),
         });
     }
 
@@ -74,8 +79,44 @@ impl Log {
     pub fn tool(&mut self, obs: Option<usize>, text: &str) {
         self.entries.push(Entry::Tool {
             obs,
-            text: text.to_owned(),
+            text: vault_text(text),
         });
+    }
+
+    /// Drop the oldest whole turns (a user entry and everything up to the next) until the prompt
+    /// fits `limit` tokens by [`estimate_tokens`], keeping the newest turn always (#1188 C4).
+    /// Returns how many turns went. A chat that outgrows the context loses its oldest words, not
+    /// its ability to answer; the engine's own count remains the backstop for a single turn that
+    /// is too large.
+    pub fn fit(&mut self, limit: u32) -> usize {
+        let mut dropped = 0;
+        loop {
+            let used = estimate_tokens(&self.system)
+                + self
+                    .entries
+                    .iter()
+                    .map(|entry| match entry {
+                        Entry::User { text, block } => {
+                            estimate_tokens(text) + block.as_deref().map_or(0, estimate_tokens)
+                        }
+                        Entry::Assistant(text) | Entry::Tool { text, .. } => estimate_tokens(text),
+                    })
+                    .sum::<u32>();
+            let next_turn = self
+                .entries
+                .iter()
+                .enumerate()
+                .skip(1)
+                .find(|(_, entry)| matches!(entry, Entry::User { .. }))
+                .map(|(at, _)| at);
+            match next_turn {
+                Some(at) if used > limit => {
+                    self.entries.drain(..at);
+                    dropped += 1;
+                }
+                _ => return dropped,
+            }
+        }
     }
 
     /// Replace each typed secret by the placeholder everywhere the conversation holds it: the
@@ -230,6 +271,30 @@ pub fn assistant_record(said: &str) -> Option<Message> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn fit_drops_the_oldest_whole_turns_and_keeps_the_newest() {
+        let mut log = Log::new("sys".to_owned());
+        for n in 0..6 {
+            log.user(&format!("question {n} {}", "word ".repeat(200)), None);
+            log.assistant(
+                "<think>\nt\n</think>\n\n<tool_call>\n<function=answer>\n</function>\n</tool_call>",
+            );
+            log.tool(None, &"row ".repeat(200));
+        }
+        assert_eq!(log.fit(u32::MAX), 0, "room enough keeps everything");
+        let before = log.len();
+        let dropped = log.fit(1_000);
+        assert!(dropped > 0 && log.len() < before);
+        assert!(
+            log.prompt().unwrap().contains("question 5"),
+            "the newest turn stays"
+        );
+        assert!(!log.prompt().unwrap().contains("question 0"));
+        // a single turn too large for the budget is kept: the engine's own count is the backstop
+        log.fit(1);
+        assert!(log.len() >= 3, "the newest turn is never dropped");
+    }
+
     use super::*;
 
     const SYSTEM: &str = "<|im_start|>system\nsystem text<|im_end|>\n";

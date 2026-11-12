@@ -37,6 +37,7 @@
 
 pub mod app;
 pub mod attach;
+pub mod escape;
 pub mod host;
 pub mod model;
 pub mod native;

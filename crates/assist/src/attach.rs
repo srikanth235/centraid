@@ -41,7 +41,8 @@
 
 use crate::model::MEDIA_MARKER;
 use crate::prompt::{
-    ASSISTANT_TURN, Budget, HISTORY_TURNS, Recorded, Turn, estimate_tokens, message, question,
+    ASSISTANT_TURN, Budget, HISTORY_TURNS, Recorded, Turn, data_message, estimate_tokens, message,
+    question,
 };
 
 /// The longest edge, in pixels, an image is scaled to before it reaches the
@@ -314,13 +315,13 @@ pub fn attach_prompt(
     let render = |history: &[&Turn], doc: Option<(String, Option<(usize, usize)>)>| {
         let mut out = message("system", ATTACH_SYSTEM);
         for turn in history {
-            out.push_str(&message("user", &turn.user));
+            out.push_str(&data_message("user", &turn.user));
             let said = match &turn.record {
                 Recorded::Tool { answer, .. } => answer.as_str(),
                 Recorded::Answer(text) | Recorded::Attachment(text) => text.as_str(),
                 Recorded::NoTool => continue,
             };
-            out.push_str(&message("assistant", said));
+            out.push_str(&data_message("assistant", said));
         }
         let mut content = String::new();
         if let (Some(source), Some((text, truncated))) = (&attachments.doc, doc) {
