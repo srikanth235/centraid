@@ -185,15 +185,29 @@ pub struct RestoreAnswer {
     pub vaults: Vec<RestoredVaultAt>,
     pub gap_scanned: u32,
     pub unclaimed: Vec<UnclaimedVaultAt>,
+    /// An older backup offered in place of a newest that will not open (#1188, B5). When set,
+    /// nothing was restored or claimed.
+    pub offers: Vec<OfferAt>,
+}
+
+/// One vault whose newest backup would not open and whose older one does.
+#[derive(Clone, PartialEq, Eq)]
+pub struct OfferAt {
+    pub index: u32,
+    pub newest_taken_at_ms: i64,
+    pub offered_taken_at_ms: i64,
+    /// The backup device, as its pairing code names it.
+    pub device: String,
 }
 
 impl fmt::Debug for RestoreAnswer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "RestoreAnswer(vaults={}, unclaimed={}, gap_scanned={})",
+            "RestoreAnswer(vaults={}, unclaimed={}, offers={}, gap_scanned={})",
             self.vaults.len(),
             self.unclaimed.len(),
+            self.offers.len(),
             self.gap_scanned
         )
     }
@@ -231,6 +245,7 @@ impl RestoreAnswer {
                     ..vault.clone()
                 })
                 .collect(),
+            offers: self.offers.clone(),
         }
     }
 
@@ -244,6 +259,7 @@ impl RestoreAnswer {
             vaults: answers.iter().flat_map(|a| a.vaults.clone()).collect(),
             gap_scanned: answers.iter().map(|a| a.gap_scanned).sum(),
             unclaimed: answers.iter().flat_map(|a| a.unclaimed.clone()).collect(),
+            offers: answers.iter().flat_map(|a| a.offers.clone()).collect(),
         }
     }
 }
@@ -299,6 +315,16 @@ pub fn restore_answer(response: &wire::RestoreResponse) -> RestoreAnswer {
             })
             .collect(),
         gap_scanned: response.gap_scanned,
+        offers: response
+            .older_offers
+            .iter()
+            .map(|offer| OfferAt {
+                index: offer.index,
+                newest_taken_at_ms: offer.newest_taken_at_ms,
+                offered_taken_at_ms: offer.offered_taken_at_ms,
+                device: offer.device.clone(),
+            })
+            .collect(),
         // A VAULT THAT STAYED WITH THE OLD PHONE (R-1047-R5), by index and id.
         unclaimed: response
             .unclaimed

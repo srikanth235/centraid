@@ -106,6 +106,12 @@ pub struct Enter {
     notice: Notice,
     /// A re-key found nothing to key; the primary control restores instead.
     offer_restore: bool,
+    /// The older backups offered in place of a newest that would not open, while the member
+    /// decides (`Phase::Offer`); empty otherwise.
+    offers: Vec<door::OfferAt>,
+    /// The member's zone and clock, as the last event said, for dating the offer.
+    zone: String,
+    cycle: crate::kit::civil::HourCycle,
     /// A held-seed restore: the name of each vault on its own words it will
     /// also ask for (R-1047-E18).
     held_keys: Vec<String>,
@@ -167,6 +173,9 @@ impl Enter {
             verdict: None,
             notice: Notice::None,
             offer_restore: false,
+            offers: Vec::new(),
+            zone: String::new(),
+            cycle: crate::kit::civil::HourCycle::default(),
             held_keys: Vec::new(),
             gate: OwnerGate::default(),
             going: None,
@@ -316,6 +325,12 @@ impl Enter {
             self.close();
             return Vec::new();
         }
+        // YES TO THE OLDER BACKUP: the owner check was passed for this restore already.
+        if self.phase == Phase::Offer {
+            let typed = self.cells.clone();
+            self.work();
+            return self.begin(Job::restore_older(typed, &self.endpoint), ctx);
+        }
         if !self.entering() {
             return Vec::new();
         }
@@ -414,6 +429,11 @@ impl Enter {
                 self.fresh(Phase::Entering, Purpose::Restore, Origin::Unspecified);
                 self.close();
             }
+            Restored::Offer(offers) => {
+                self.offers = offers;
+                self.phase = Phase::Offer;
+                self.notice = Notice::None;
+            }
             Restored::Unreachable => self.back(Notice::Unreachable),
             Restored::NothingHeld => self.back(Notice::NothingHeld),
             Restored::NotTaken => self.back(Notice::NotTaken),
@@ -504,6 +524,13 @@ impl Enter {
                 Vec::new()
             }
             Some(K::Primary(_)) => self.primary(ctx),
+            // A DIFFERENT BACKUP DEVICE: back to the scan step, the code field empty.
+            Some(K::Another(_)) if self.phase == Phase::Offer => {
+                self.offers.clear();
+                self.endpoint.clear();
+                self.back(Notice::None);
+                Vec::new()
+            }
             Some(K::Secondary(_) | K::Dismissed(_)) => {
                 self.close();
                 Vec::new()
@@ -543,6 +570,74 @@ impl Enter {
             Judged::BadChecksum => words::bad_checksum(locale),
             Judged::TooMany => words::count_too_many(locale),
         }
+    }
+
+    /// When an offer's backup was taken, in the member's zone and clock.
+    fn when(&self, ms: i64) -> String {
+        let Ok(zone) = centraid_vault::time::FireZone::named(&self.zone) else {
+            return String::new();
+        };
+        let at = zone.zoned_parts(ms);
+        let local = format!(
+            "{:04}-{:02}-{:02}T{:02}:{:02}",
+            at.year, at.month, at.day, at.hour, at.minute
+        );
+        crate::kit::earlier::dated(self.locale, self.cycle, &local)
+    }
+
+    fn offer_body(&self) -> String {
+        let Some(offer) = self.offers.first() else {
+            return String::new();
+        };
+        let days =
+            u64::try_from((offer.newest_taken_at_ms - offer.offered_taken_at_ms) / 86_400_000)
+                .unwrap_or(0);
+        let older = if days < 1 {
+            words::offer_under_a_day(self.locale)
+        } else {
+            words::offer_days_older(self.locale, days)
+        };
+        fill(
+            &words::offer_body(self.locale),
+            &[
+                ("date", &self.when(offer.offered_taken_at_ms)),
+                ("older", &older),
+            ],
+        )
+    }
+
+    fn offer_action(&self) -> String {
+        let Some(offer) = self.offers.first() else {
+            return String::new();
+        };
+        // The day alone: the button is short, and the line above it says the hour.
+        let day = self.when(offer.offered_taken_at_ms);
+        let day = day.split(" · ").next().unwrap_or_default();
+        fill(&words::offer_action(self.locale), &[("date", day)])
+    }
+
+    fn offer_rows(&self) -> Vec<wire::WordsOfferRow> {
+        let Some(offer) = self.offers.first() else {
+            return Vec::new();
+        };
+        vec![
+            wire::WordsOfferRow {
+                title: offer.device.clone(),
+                detail: fill(
+                    &words::offer_wont_open(self.locale),
+                    &[("date", &self.when(offer.newest_taken_at_ms))],
+                ),
+                opens: false,
+            },
+            wire::WordsOfferRow {
+                title: offer.device.clone(),
+                detail: fill(
+                    &words::offer_opens(self.locale),
+                    &[("date", &self.when(offer.offered_taken_at_ms))],
+                ),
+                opens: true,
+            },
+        ]
     }
 
     fn notice_text(&self) -> String {
@@ -616,7 +711,10 @@ impl Enter {
             Vec::new()
         };
         // DONE IS A RE-KEY'S: a restore finishes the screen instead.
-        let title = if done {
+        let offering = phase == Phase::Offer;
+        let title = if offering {
+            words::offer_title(locale)
+        } else if done {
             words::rekeyed_title(locale)
         } else if rekey {
             words::rekey_title(locale)
@@ -625,7 +723,9 @@ impl Enter {
         } else {
             words::restore_title(locale)
         };
-        let body = if done && from_pairing {
+        let body = if offering {
+            self.offer_body()
+        } else if done && from_pairing {
             words::rekeyed_pair_body(locale)
         } else if done {
             words::rekeyed_body(locale)
@@ -644,6 +744,7 @@ impl Enter {
             Phase::Entering if rekey => words::rekey_primary(locale),
             Phase::Entering => words::restore_primary(locale),
             Phase::Done => words::done(locale),
+            Phase::Offer => self.offer_action(),
             _ => String::new(),
         };
         // THE SCAN IS DRAWN WHEREVER THE CODE'S FIELD IS, and only while entering.
@@ -700,11 +801,21 @@ impl Enter {
             primary_enabled: match phase {
                 Phase::Entering if self.restores() && self.endpoint.trim().is_empty() => false,
                 Phase::Entering => held || self.offer_restore || self.valid(),
-                Phase::Done => true,
+                Phase::Done | Phase::Offer => true,
                 _ => false,
             },
             primary_label: primary,
-            secondary_label: if entering {
+            offer_rows: if offering {
+                self.offer_rows()
+            } else {
+                Vec::new()
+            },
+            another_label: if offering {
+                words::offer_another(locale)
+            } else {
+                String::new()
+            },
+            secondary_label: if entering || offering {
                 words::cancel(locale)
             } else {
                 String::new()
@@ -766,6 +877,8 @@ impl Enter {
 impl Screen for Enter {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         self.locale = ctx.locale();
+        self.zone = ctx.zone().to_owned();
+        self.cycle = ctx.hour_cycle();
         self.platform = ctx.platform().to_owned();
         if self.finished {
             return Vec::new();

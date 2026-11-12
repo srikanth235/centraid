@@ -124,6 +124,9 @@ impl Phone {
                         } else {
                             "restore-stayed"
                         };
+                        if request.use_older {
+                            log.push("use_older".to_owned());
+                        }
                         let seed = request.seed.as_ref().map(|seed| door::to_hex(seed));
                         let prefix = seed.as_deref().map(|s| s[..4].to_owned());
                         log.push(match &prefix {
@@ -702,4 +705,32 @@ fn a_job_and_what_it_holds_never_print_a_word() {
         )
         .contains('/')
     );
+}
+
+/// **#1188, B5.** An offer of an older backup comes back as the offer, with nothing kept; the
+/// restore the member says yes to asks for the older backup.
+#[test]
+fn an_older_backup_is_an_offer_and_the_yes_asks_for_it() {
+    let mut phone = Phone::new();
+    phone.answer = Some(RestoreAnswer {
+        offers: vec![door::OfferAt {
+            index: 0,
+            newest_taken_at_ms: 2_000,
+            offered_taken_at_ms: 1_000,
+            device: "Office NAS".to_owned(),
+        }],
+        ..RestoreAnswer::default()
+    });
+    let Restored::Offer(offers) = phone.restore(words_a(), "code") else {
+        panic!("an offer came back");
+    };
+    assert_eq!(offers.len(), 1);
+    assert!(!phone.log.iter().any(|line| line == "use_older"));
+    phone.answer = Some(answer(vec![at("/v/a/vault.db", 0, 0)]));
+    let restored = match phone.run(Job::restore_older(words_a(), "code")) {
+        Out::Restored(restored) => restored,
+        other => panic!("restore answered {other:?}"),
+    };
+    assert!(matches!(restored, Restored::Done { .. }));
+    assert!(phone.log.iter().any(|line| line == "use_older"));
 }

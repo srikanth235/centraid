@@ -43,6 +43,14 @@ catalog! {
     plain rekey_primary = ("Use this key", "Use this key");
     plain rekey_title = ("Enter your recovery key", "Enter your recovery key");
     plain restore_body = ("Type your recovery key and paste a pairing code from your backup device.", "Type your recovery key and paste a pairing code from your backup device.");
+    plain offer_title = ("Newest backup won't open", "Newest backup won't open");
+    plain offer_body = ("The one from {date} does. It is {older}, so anything since is not in it. Another backup device may hold a newer one.", "The one from {date} does. It is {older}, so anything since is not in it. Another backup device may hold a newer one.");
+    plain offer_action = ("Restore {date}", "Restore {date}");
+    plain offer_another = ("Scan another QR code", "Scan another QR code");
+    plain offer_opens = ("{date} opens.", "{date} opens.");
+    plain offer_wont_open = ("{date} won't open.", "{date} won't open.");
+    plain offer_under_a_day = ("less than a day older", "less than a day older");
+    counted offer_days_older = ("{n} day older", "{n} days older");
     plain restore_cant_open = ("This version of Centraid can't open this backup.", "This version of Centraid can't open this backup.");
     plain restore_newer_build = ("A newer Centraid made this backup. Update Centraid.", "A newer Centraid made this backup. Update Centraid.");
     plain restore_did_not_check = ("The restore failed a check, so nothing changed. Try again.", "The restore failed a check, so nothing changed. Try again.");
