@@ -62,6 +62,8 @@ enum Job {
     Videos,
     /// The recovery-key prompt was answered: remember it.
     Prompt,
+    /// The notification ask was dismissed with Not now: remember it.
+    NotifyDismissed,
     /// Moving the recovery key into the keychain, or out of it: the first batch,
     /// then (once it said whether the platform took it) the second.
     Seed {
@@ -103,6 +105,7 @@ struct Backup {
     include_videos: bool,
     /// The one-time recovery-key prompt was answered (read from the device store).
     key_prompt_answered: bool,
+    notify_ask_dismissed: bool,
     /// The platform took a background window; `None` before it says.
     registered: Option<bool>,
     /// The platform's reading of its synchronised store; `None` before it says.
@@ -134,6 +137,7 @@ impl Backup {
             rule: TransferRule::default(),
             include_videos: true,
             key_prompt_answered: false,
+            notify_ask_dismissed: false,
             registered: None,
             synced: None,
             backing_up_now: false,
@@ -227,6 +231,7 @@ impl Backup {
             Job::Rule(rule) => vec![rule::write_rule(*rule)],
             Job::Videos => vec![rule::write_include_videos(self.include_videos)],
             Job::Prompt => vec![rule::write_key_prompt_answered()],
+            Job::NotifyDismissed => vec![rule::write_notify_ask_dismissed()],
             Job::Seed { write, stage, .. } => match stage {
                 Stage::First => write.first(),
                 // The second batch is built from the first's answers, in `answered`.
@@ -261,9 +266,11 @@ impl Backup {
                 self.include_videos = include;
                 self.key_prompt_answered =
                     rule::key_prompt_answered(answers.get(2..).unwrap_or_default());
+                self.notify_ask_dismissed =
+                    rule::notify_ask_dismissed(answers.get(2..).unwrap_or_default());
                 self.settled = true;
             }
-            Job::Prompt => {}
+            Job::Prompt | Job::NotifyDismissed => {}
             Job::Rule(_) | Job::Videos => {
                 // Written as the member set it; a store that refused leaves the
                 // value on screen until the next load says what it holds.
@@ -449,6 +456,21 @@ impl Backup {
                 self.key_prompt_answered = true;
                 self.run(Job::Prompt)
             }
+            // ALLOW NOTIFICATIONS goes to the one notification service, which starts the system prompt
+            // through the path the agenda's own reminders use.
+            Some(B::NotifyAllow(_)) => {
+                ctx.alerts().ask(ctx);
+                Vec::new()
+            }
+            Some(B::NotifyNotNow(_)) => {
+                self.notify_ask_dismissed = true;
+                self.run(Job::NotifyDismissed)
+            }
+            Some(B::NotifyOpenSettings(_)) => vec![wire::Effect {
+                kind: Some(wire::effect::Kind::CameraRoll(wire::CameraRoll {
+                    action: wire::camera_roll::Action::OpenSettings as i32,
+                })),
+            }],
             Some(B::Retry(_)) => self.open(ctx),
             // RESTORE IS HOME'S: the same door the vault sheet opens, asked from here.
             Some(B::RestorePressed(_)) => {
@@ -912,7 +934,53 @@ impl Backup {
                 not_now_label: backup_home::key_prompt_not_now(locale),
                 save: Some(super::routes::show_key()),
             }),
+            notify_ask: self.notify_ask(ctx),
+            notify_off: self.notify_off(ctx),
+            notify_settings_label: if self.notify_refused(ctx) {
+                backup_home::notify_open_settings(locale)
+            } else {
+                String::new()
+            },
         }
+    }
+
+    /// Whether the system said no to notifications: the one case the platform's Settings mends.
+    fn notify_refused(&self, ctx: &Ctx) -> bool {
+        !self.frozen()
+            && !self.destinations().is_empty()
+            && ctx.alerts().get().permission == Some(wire::NotificationPermission::Denied)
+    }
+
+    /// THE ASK, once a device is paired and the phone has not been asked or told "Not now": the
+    /// explanation first, the system prompt only after "Allow notifications".
+    fn notify_ask(&self, ctx: &Ctx) -> Option<wire::BackupNotifyAsk> {
+        let locale = ctx.locale();
+        let asked = ctx.alerts().get().permission == Some(wire::NotificationPermission::NotAsked);
+        let first = self.destinations().first()?;
+        (!self.frozen() && asked && !self.notify_ask_dismissed).then(|| wire::BackupNotifyAsk {
+            title: fill(
+                &backup_home::notify_ask_title(locale),
+                &[("name", &line::device_name(locale, first))],
+            ),
+            body: backup_home::notify_ask_body(locale),
+            allow_label: backup_home::notify_ask_allow(locale),
+            not_now_label: backup_home::notify_ask_not_now(locale),
+        })
+    }
+
+    /// What the phone says when backup alerts cannot arrive on time; empty while they can, and
+    /// while the ask above is the thing on screen.
+    fn notify_off(&self, ctx: &Ctx) -> String {
+        let facts = ctx.alerts().get();
+        if self.frozen()
+            || self.destinations().is_empty()
+            || facts.permission == Some(wire::NotificationPermission::NotAsked)
+        {
+            return String::new();
+        }
+        facts
+            .line_for(ctx.locale(), crate::kit::permission::Channel::Backup)
+            .unwrap_or_default()
     }
 }
 

@@ -134,14 +134,32 @@ pub fn key_prompt_answered(answers: &[wire::SecretAnswer]) -> bool {
         .is_some_and(|answer| answer.ok && answer.found)
 }
 
-/// The three reads, in this order: the rule, whether videos are included, and whether the
-/// recovery-key prompt was answered.
+/// The device-store key that remembers the notification ask was answered with Not now (#1188, NB2).
+pub const NOTIFY_ASK_KEY: &str = "backup.notify-ask";
+
+/// Keep that the notification ask was dismissed.
+#[must_use]
+pub fn write_notify_ask_dismissed() -> wire::SecretOp {
+    device(wire::secret_op::Op::Set, NOTIFY_ASK_KEY, "dismissed")
+}
+
+/// Whether the ask was dismissed, from the fourth answer to [`read_ops`].
+#[must_use]
+pub fn notify_ask_dismissed(answers: &[wire::SecretAnswer]) -> bool {
+    answers
+        .get(3)
+        .is_some_and(|answer| answer.ok && answer.found)
+}
+
+/// The four reads, in this order: the rule, whether videos are included, whether the
+/// recovery-key prompt was answered, and whether the notification ask was dismissed.
 #[must_use]
 pub fn read_ops() -> Vec<wire::SecretOp> {
     vec![
         device(wire::secret_op::Op::Get, RULE_KEY, ""),
         device(wire::secret_op::Op::Get, INCLUDE_VIDEOS_KEY, ""),
         device(wire::secret_op::Op::Get, KEY_PROMPT_KEY, ""),
+        device(wire::secret_op::Op::Get, NOTIFY_ASK_KEY, ""),
     ]
 }
 

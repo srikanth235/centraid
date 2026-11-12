@@ -3065,7 +3065,7 @@ fn link_missing(root: &Path, app: &str) -> Vec<String> {
 /// **BACKUP** (#1188, Part B). Backup is the vault's, so no app has a row; each promise names the
 /// tests that prove it, and the rule fails when a named test is gone, renamed or `#[ignore]`d.
 /// `(promise, [(file, test)])`.
-pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 5] = [
+pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 6] = [
     (
         "every paired backup device receives every pass",
         &[
@@ -3140,6 +3140,23 @@ pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 5] = [
             (
                 "crates/core/tests/backup_scratch.rs",
                 "a_second_pass_with_no_write_copies_nothing",
+            ),
+        ],
+    ),
+    (
+        "a stale backup is warned of with the app closed, and notifications are asked for in words",
+        &[
+            (
+                "crates/screens/src/backup/tests.rs",
+                "a_fresh_start_with_a_stale_device_offers_the_notice_without_backup_ever_opening",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "a_paired_device_and_an_unasked_phone_show_the_ask_and_allow_calls_the_service",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "a_refused_grant_says_so_and_offers_settings",
             ),
         ],
     ),

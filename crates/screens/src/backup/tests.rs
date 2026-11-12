@@ -162,6 +162,8 @@ struct Page {
     /// Whether the platform took a background window.
     background: bool,
     timers: Vec<(String, bool)>,
+    /// What the phone said about alerts, shared by every turn as the runtime shares it.
+    alerts: crate::kit::permission::AlertBoard,
 }
 
 impl Page {
@@ -191,6 +193,7 @@ impl Page {
             jobs: Vec::new(),
             background: true,
             timers: Vec::new(),
+            alerts: crate::kit::permission::AlertBoard::default(),
         }
     }
 
@@ -203,7 +206,7 @@ impl Page {
     }
 
     fn send(&mut self, event: E) {
-        let ctx = Ctx::new(&self.fake, &self.env);
+        let ctx = Ctx::new(&self.fake, &self.env).with_alerts(self.alerts.clone());
         let effects = self
             .screen
             .update(wire::ScreenEvent { kind: Some(event) }, &ctx);
@@ -278,7 +281,7 @@ impl Page {
     }
 
     fn state(&self) -> wire::BackupHomeState {
-        let ctx = Ctx::new(&self.fake, &self.env);
+        let ctx = Ctx::new(&self.fake, &self.env).with_alerts(self.alerts.clone());
         match self.screen.view(&ctx).kind {
             Some(wire::view_state::Kind::BackupHome(state)) => state,
             other => panic!("not the backup screen: {other:?}"),
@@ -2470,5 +2473,216 @@ mod recovery_key_prompt {
 
     fn rule_key_prompt() -> &'static str {
         super::super::rule::KEY_PROMPT_KEY
+    }
+}
+
+mod stale_notice_offered {
+    use super::*;
+    use crate::backup::alerts;
+    use crate::kit::permission::Channel;
+
+    fn stale_by(days: i64) -> wire::BackupStatusResponse {
+        let at = NOW - days * DAY;
+        wire::BackupStatusResponse {
+            destinations: vec![gateway(
+                "gw-1",
+                "Home laptop",
+                Some("192.168.1.20:7443"),
+                NOW,
+                at,
+            )],
+            acked_at_ms: Some(at),
+            last_snapshot_ms: Some(at),
+            content_total: 10,
+            content_confirmed: 10,
+            ..Default::default()
+        }
+    }
+
+    /// **A PAIRED DEVICE TWO DAYS STALE, BACKUP NEVER OPENED**: a fresh start of the service alone
+    /// ends with the first warning offered to the notification service, scheduled for three days
+    /// after the last confirmed backup. No Backup screen is built anywhere in this test.
+    #[test]
+    fn a_fresh_start_with_a_stale_device_offers_the_notice_without_backup_ever_opening() {
+        let fake = Fake {
+            status: RefCell::new(Some(stale_by(2))),
+            reads: Cell::new(0),
+        };
+        let env = Environment::default();
+        let mut service = alerts::build(&alerts::route()).expect("the service builds");
+        let ctx = Ctx::new(&fake, &env);
+        service.update(
+            wire::ScreenEvent {
+                kind: Some(E::Appeared(wire::Appeared {})),
+            },
+            &ctx,
+        );
+        let notices = ctx.alerts().notices();
+        assert_eq!(notices.len(), 2, "{notices:?}");
+        assert!(
+            notices
+                .iter()
+                .all(|notice| notice.channel == Channel::Backup)
+        );
+        assert!(
+            notices[0].id.starts_with("backup-stale:"),
+            "{}",
+            notices[0].id
+        );
+        assert_eq!(notices[0].fire_at_ms, NOW - 2 * DAY + 3 * DAY);
+        assert_eq!(notices[0].opens, routes::home());
+        assert_eq!(ctx.alerts().wanted().len(), 2);
+    }
+
+    /// **A READ THAT FAILED IS NOT AN EMPTY LEDGER**: the offer stands; a new confirmed backup replaces
+    /// its ids.
+    #[test]
+    fn a_failed_read_keeps_the_offer_and_a_new_backup_replaces_its_ids() {
+        let fake = Fake {
+            status: RefCell::new(Some(stale_by(2))),
+            reads: Cell::new(0),
+        };
+        let env = Environment::default();
+        let mut service = alerts::build(&alerts::route()).expect("the service builds");
+        let ctx = Ctx::new(&fake, &env);
+        let appear = || wire::ScreenEvent {
+            kind: Some(E::Appeared(wire::Appeared {})),
+        };
+        service.update(appear(), &ctx);
+        assert_eq!(ctx.alerts().notices().len(), 2);
+        let before: Vec<String> = ctx.alerts().notices().into_iter().map(|n| n.id).collect();
+
+        *fake.status.borrow_mut() = None;
+        service.update(appear(), &ctx);
+        assert_eq!(
+            ctx.alerts().notices().len(),
+            2,
+            "a failed read changes nothing"
+        );
+
+        *fake.status.borrow_mut() = Some(status(vec![home_laptop()]));
+        service.update(appear(), &ctx);
+        // THE NEW BACKUP REPLACES THE OLD IDS (deterministic from the last confirmed backup): the
+        // notices stay scheduled ahead from the fresh one, and none of the old are wanted.
+        let after = ctx.alerts().notices();
+        assert_eq!(after[0].fire_at_ms, NOW + 3 * DAY, "{after:?}");
+        assert!(
+            after.iter().all(|notice| !before.contains(&notice.id)),
+            "{after:?} against {before:?}"
+        );
+        assert!(ctx.alerts().wanted().iter().all(|id| !before.contains(id)));
+    }
+}
+
+mod notification_ask {
+    use super::*;
+    use crate::kit::permission::AlertFacts;
+
+    fn opened(permission: Option<wire::NotificationPermission>) -> Page {
+        let mut page = Page::over(status(vec![home_laptop()]));
+        page.alerts.set(AlertFacts {
+            permission,
+            ..AlertFacts::default()
+        });
+        page.send(E::Appeared(wire::Appeared {}));
+        page.serve();
+        page
+    }
+
+    /// **THE ASK**: a paired device and a phone never asked show the explanation; "Allow
+    /// notifications" asks the one notification service (and nothing else does).
+    #[test]
+    fn a_paired_device_and_an_unasked_phone_show_the_ask_and_allow_calls_the_service() {
+        let mut page = opened(Some(wire::NotificationPermission::NotAsked));
+        let data = page.data();
+        let ask = data.notify_ask.expect("the ask is shown");
+        assert_eq!(ask.title, "Home laptop is paired");
+        assert_eq!(ask.allow_label, "Allow notifications");
+        assert!(data.notify_off.is_empty(), "the ask is the thing on screen");
+        assert!(!page.alerts.take_ask(), "showing the ask asks nothing");
+        page.say(wire::backup_home_event::Kind::NotifyAllow(
+            wire::backup_home_event::NotifyAllow {},
+        ));
+        assert!(
+            page.alerts.take_ask(),
+            "Allow notifications asks the service"
+        );
+    }
+
+    /// **NOT NOW IS KEPT**: the ask goes, nothing asks the system, and it stays gone on a reopen.
+    #[test]
+    fn not_now_removes_the_ask_for_good_and_asks_nothing() {
+        let mut page = opened(Some(wire::NotificationPermission::NotAsked));
+        page.say(wire::backup_home_event::Kind::NotifyNotNow(
+            wire::backup_home_event::NotifyNotNow {},
+        ));
+        page.serve();
+        assert!(page.data().notify_ask.is_none());
+        assert!(!page.alerts.take_ask());
+        page.send(E::Appeared(wire::Appeared {}));
+        page.serve();
+        assert!(
+            page.data().notify_ask.is_none(),
+            "still gone after a reopen"
+        );
+    }
+
+    /// **A REFUSAL IS SAID, IN THE BACKUP CHANNEL'S WORDS, WITH THE WAY TO MEND IT.**
+    #[test]
+    fn a_refused_grant_says_so_and_offers_settings() {
+        let mut page = opened(Some(wire::NotificationPermission::Denied));
+        let data = page.data();
+        assert!(data.notify_ask.is_none());
+        assert_eq!(
+            data.notify_off,
+            "Notifications are off. Turn them on in Settings."
+        );
+        assert_eq!(data.notify_settings_label, "Open Settings");
+        page.effects.clear();
+        page.say(wire::backup_home_event::Kind::NotifyOpenSettings(
+            wire::backup_home_event::NotifyOpenSettings {},
+        ));
+        assert!(page.effects.iter().any(|effect| matches!(
+            effect.kind,
+            Some(wire::effect::Kind::CameraRoll(ref roll))
+                if roll.action == wire::camera_roll::Action::OpenSettings as i32
+        )));
+    }
+
+    /// A granted phone with the backup channel switched off says which channel; nothing is said
+    /// of a phone that will deliver on time, and nothing before a device is paired.
+    #[test]
+    fn an_off_channel_is_named_and_a_healthy_phone_or_no_device_says_nothing() {
+        let mut page = Page::over(status(vec![home_laptop()]));
+        page.alerts.set(AlertFacts {
+            permission: Some(wire::NotificationPermission::Granted),
+            backup_channel_off: true,
+            backup_channel: "Backup warnings".to_owned(),
+            ..AlertFacts::default()
+        });
+        page.send(E::Appeared(wire::Appeared {}));
+        page.serve();
+        let data = page.data();
+        assert!(
+            data.notify_off.contains("Backup warnings"),
+            "{}",
+            data.notify_off
+        );
+        assert!(
+            data.notify_settings_label.is_empty(),
+            "Settings mends a refusal, not a channel"
+        );
+
+        let healthy = opened(Some(wire::NotificationPermission::Granted)).data();
+        assert!(healthy.notify_ask.is_none() && healthy.notify_off.is_empty());
+
+        let mut unpaired = Page::over(status(Vec::new()));
+        unpaired.alerts.set(AlertFacts {
+            permission: Some(wire::NotificationPermission::NotAsked),
+            ..AlertFacts::default()
+        });
+        unpaired.send(E::Appeared(wire::Appeared {}));
+        unpaired.serve();
+        assert!(unpaired.data().notify_ask.is_none(), "no device, no ask");
     }
 }

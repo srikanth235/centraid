@@ -26,6 +26,7 @@
 use crate::Registry;
 use crate::custody::secrets::VaultSecrets;
 
+pub mod alerts;
 pub mod apps;
 pub mod check;
 pub mod claim;
@@ -54,6 +55,7 @@ pub fn registry(secrets: &VaultSecrets) -> Registry {
     Registry::default()
         .with(HOME, move |route| home::build(route, &secrets))
         .with(check::NAME, move |route| check::build(route, &for_check))
+        .with(alerts::NAME, alerts::build)
 }
 
 /// The routes the backup screens hand to a shell inside a view state, and that

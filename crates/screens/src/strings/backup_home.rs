@@ -80,4 +80,9 @@ catalog! {
     plain key_prompt_body = ("Your first backup is done. Without the recovery key it can't be opened on a new phone.", "Your first backup is done. Without the recovery key it can't be opened on a new phone.");
     plain key_prompt_save = ("Save recovery key", "Save recovery key");
     plain key_prompt_not_now = ("Not now", "Not now");
+    plain notify_ask_title = ("{name} is paired", "{name} is paired");
+    plain notify_ask_body = ("Allow notifications so Centraid can tell you when a backup falls behind.", "Allow notifications so Centraid can tell you when a backup falls behind.");
+    plain notify_ask_allow = ("Allow notifications", "Allow notifications");
+    plain notify_ask_not_now = ("Not now", "Not now");
+    plain notify_open_settings = ("Open Settings", "Open Settings");
 }

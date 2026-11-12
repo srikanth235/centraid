@@ -152,6 +152,50 @@ struct BackupHomeView: View {
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("backup-key-prompt")
             }
+            // THE ASK FOR NOTIFICATIONS after the first device is paired (#1188, NB2): the explanation first,
+            // the system prompt only after "Allow notifications".
+            if model.hasNotifyAsk {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(model.notifyAsk.title).kitType(.section).foregroundStyle(Surface.ink)
+                    sentence(model.notifyAsk.body)
+                    HStack(spacing: 16) {
+                        Button {
+                            send(event { $0.notifyAllow = .init() })
+                        } label: {
+                            Text(model.notifyAsk.allowLabel).kitType(.row).foregroundStyle(AppAccent.shell.text)
+                                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("backup-notify-allow")
+                        Button {
+                            send(event { $0.notifyNotNow = .init() })
+                        } label: {
+                            Text(model.notifyAsk.notNowLabel).kitType(.row).foregroundStyle(Surface.meta)
+                                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("backup-notify-not-now")
+                    }
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("backup-notify-ask")
+            }
+            // WHEN BACKUP ALERTS CANNOT ARRIVE, the phone's sentence, with Settings when Settings mends it.
+            if !model.notifyOff.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    sentence(model.notifyOff, id: "backup-notify-off")
+                    if !model.notifySettingsLabel.isEmpty {
+                        Button {
+                            send(event { $0.notifyOpenSettings = .init() })
+                        } label: {
+                            Text(model.notifySettingsLabel).kitType(.row).foregroundStyle(AppAccent.shell.text)
+                                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("backup-notify-settings")
+                    }
+                }
+            }
             // WHY THE DEVICE IS NOT ANSWERING is an amber callout of its own, not a quiet line.
             if !model.reason.isEmpty {
                 WordsCallout(text: model.reason, state: .amber, identifier: "backup-reason")

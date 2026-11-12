@@ -192,6 +192,57 @@ private fun BackupPage(
                 }
             }
         }
+        // THE ASK FOR NOTIFICATIONS after the first device is paired (#1188, NB2): the explanation first,
+        // the system prompt only after "Allow notifications".
+        model.notify_ask?.let { ask ->
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(CardRadius)).background(Surface.card).padding(16.dp).testTag("backup-notify-ask"),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(ask.title, style = centraidType("title").copy(fontSize = tokenSp(R.dimen.centraid_text_section)), color = Surface.ink)
+                Sentence(ask.body)
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        ask.allow_label,
+                        style = centraidType("body"),
+                        color = appAccent("").text,
+                        modifier = Modifier
+                            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+                            .clickable(role = Role.Button) { onEvent(BackupHomeEvent(notify_allow = BackupHomeEvent.NotifyAllow())) }
+                            .testTag("backup-notify-allow"),
+                    )
+                    Text(
+                        ask.not_now_label,
+                        style = centraidType("body"),
+                        color = Surface.meta,
+                        modifier = Modifier
+                            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+                            .clickable(role = Role.Button) { onEvent(BackupHomeEvent(notify_not_now = BackupHomeEvent.NotifyNotNow())) }
+                            .testTag("backup-notify-not-now"),
+                    )
+                }
+            }
+        }
+        // WHEN BACKUP ALERTS CANNOT ARRIVE, the phone's sentence, with Settings when Settings mends it.
+        if (model.notify_off.isNotEmpty()) {
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(CardRadius)).background(Surface.card).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Sentence(model.notify_off, "backup-notify-off")
+                if (model.notify_settings_label.isNotEmpty()) {
+                    Text(
+                        model.notify_settings_label,
+                        style = centraidType("body"),
+                        color = appAccent("").text,
+                        modifier = Modifier
+                            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+                            .clickable(role = Role.Button) { onEvent(BackupHomeEvent(notify_open_settings = BackupHomeEvent.NotifyOpenSettings())) }
+                            .testTag("backup-notify-settings"),
+                    )
+                }
+            }
+        }
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(CardRadius)).background(Surface.card).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
