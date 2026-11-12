@@ -4,6 +4,7 @@
 //! (`strings::shared`).
 
 catalog! {
+    plain changed_by_chat = ("Changed by Chat", "Changed by Chat");
     plain current = ("Current", "Current");
     plain empty_body = (
         "When this {noun} changes, what it was is kept here.",

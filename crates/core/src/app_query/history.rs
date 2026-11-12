@@ -49,7 +49,9 @@ pub(crate) fn versions(
     let system = |who: Who| match who {
         Who::Member => String::new(),
         Who::Store(system) => system,
+        Who::Assistant => String::new(),
     };
+    let actor = |who: &Who| if *who == Who::Assistant { "assist" } else { "" }.to_owned();
     let text = |value: &serde_json::Value| value.to_string();
     let names = named(vault, &page.versions)?;
     Ok(Answer::EarlierVersions(wire::EarlierVersions {
@@ -62,6 +64,8 @@ pub(crate) fn versions(
                 seq: version.seq,
                 replaced_local: local(&version.at),
                 since_local: local(&version.since),
+                actor: actor(&version.by),
+                since_actor: actor(&version.since_by),
                 store_system: system(version.by),
                 since_store_system: system(version.since_by),
                 field_changes: version
@@ -95,7 +99,9 @@ pub(crate) fn record(vault: &Vault, entity_id: &str, seq: i64, zone: &str) -> Re
     let system = |who: &Who| match who {
         Who::Member => String::new(),
         Who::Store(system) => system.clone(),
+        Who::Assistant => String::new(),
     };
+    let actor = |who: &Who| if *who == Who::Assistant { "assist" } else { "" }.to_owned();
     let version = record.version;
     // The titles of the lists, albums and items the version, or its change, names by id.
     let names = named_by(
@@ -111,6 +117,8 @@ pub(crate) fn record(vault: &Vault, entity_id: &str, seq: i64, zone: &str) -> Re
         seq: version.seq,
         replaced_local: local(&version.at),
         since_local: local(&version.since),
+        actor: actor(&version.by),
+        since_actor: actor(&version.since_by),
         store_system: system(&version.by),
         since_store_system: system(&version.since_by),
         fields: record

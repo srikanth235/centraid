@@ -221,6 +221,7 @@ impl Door for CoreDoor {
                 owner: &self.owner,
                 changes: &changes,
                 plane: &self.plane,
+                actor: Some("assist"),
             };
             // A write no manifest action names yet runs as its bare command, keyed the same.
             if call.action.is_empty() {

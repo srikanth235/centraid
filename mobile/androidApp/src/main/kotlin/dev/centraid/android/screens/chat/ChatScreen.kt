@@ -579,7 +579,7 @@ private fun MessageRow(
             MarkdownText(message.text, message.streaming, message.accessibility_label)
         }
         message.cards.forEachIndexed { index, card ->
-            CardRow(card, appName = state.scopes.firstOrNull { it.app == card.app }?.name.orEmpty()) { onEvent(ChatEvent(card_tapped = ChatEvent.CardTapped(message_id = message.id, index = index))) }
+            CardRow(card, index, appName = state.scopes.firstOrNull { it.app == card.app }?.name.orEmpty()) { onEvent(ChatEvent(card_tapped = ChatEvent.CardTapped(message_id = message.id, index = index))) }
         }
         val pending = message.pending
         if (pending != null && !message.streaming) {
@@ -637,7 +637,7 @@ private fun MarkdownText(text: String, streaming: Boolean, spoken: String) {
  * under it, and the app's name in the app's colour at the right.
  */
 @Composable
-private fun CardRow(card: ChatCard, appName: String, onOpen: () -> Unit) {
+private fun CardRow(card: ChatCard, index: Int, appName: String, onOpen: () -> Unit) {
     val shape = RoundedCornerShape(dimensionResource(R.dimen.centraid_radius_card))
     Row(
         Modifier
@@ -653,7 +653,7 @@ private fun CardRow(card: ChatCard, appName: String, onOpen: () -> Unit) {
                 contentDescription = listOf(card.title, card.subtitle, card.meta, appName).filter { it.isNotEmpty() }.joinToString(", ")
                 role = Role.Button
             }
-            .testTag("chat-card"),
+            .testTag("chat-card-$index"),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -771,7 +771,7 @@ private fun PendingCard(pending: ChatPending, onConfirm: () -> Unit, onCancel: (
                             .background(centraidResource(if (pending.destructive) R.color.centraid_state_red else R.color.centraid_shell))
                             .clickable(enabled = !working, onClick = onConfirm)
                             .semantics { role = Role.Button }
-                            .testTag("chat-confirm"),
+                            .testTag("chat-pending-confirm"),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(pending.confirm_label, color = Color.White, fontSize = tokenSp(R.dimen.centraid_text_row), fontWeight = FontWeight.SemiBold)
@@ -784,14 +784,14 @@ private fun PendingCard(pending: ChatPending, onConfirm: () -> Unit, onCancel: (
                             .border(1.dp, centraidResource(R.color.centraid_surface_border), CircleShape)
                             .clickable(enabled = !working, onClick = onCancel)
                             .semantics { role = Role.Button }
-                            .testTag("chat-cancel"),
+                            .testTag("chat-pending-cancel"),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(pending.cancel_label, color = centraidResource(R.color.centraid_text_ink), fontSize = tokenSp(R.dimen.centraid_text_row), fontWeight = FontWeight.SemiBold)
                     }
                 }
             } else if (pending.settled_line.isNotEmpty()) {
-                Text(pending.settled_line, color = centraidResource(R.color.centraid_text_meta), fontSize = tokenSp(R.dimen.centraid_text_meta), modifier = Modifier.testTag("chat-settled"))
+                Text(pending.settled_line, color = centraidResource(R.color.centraid_text_meta), fontSize = tokenSp(R.dimen.centraid_text_meta), modifier = Modifier.testTag("chat-pending-settled"))
             }
         }
     }
@@ -876,7 +876,7 @@ private fun ChatComposer(
                     cursorBrush = SolidColor(centraidColor("text")),
                     maxLines = 6,
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                    modifier = Modifier.fillMaxWidth().testTag("chat-composer").semantics { contentDescription = state.composer_placeholder },
+                    modifier = Modifier.fillMaxWidth().testTag("chat-field").semantics { contentDescription = state.composer_placeholder },
                 )
             }
             if (state.scopes.isNotEmpty()) ScopePill(state, onScope)
@@ -965,7 +965,7 @@ private fun AttachmentChip(chip: ChatAttachment, removeLabel: String, onRemove: 
             .clip(shape)
             .border(KitGeometry.HAIRLINE, centraidColor("lineStrong"), shape)
             .padding(end = 4.dp)
-            .testTag("chat-chip"),
+            .testTag("chat-attachment"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(36.dp).background(centraidColor("skel")), contentAlignment = Alignment.Center) {
@@ -998,7 +998,7 @@ private fun AttachmentChip(chip: ChatAttachment, removeLabel: String, onRemove: 
                     .size(32.dp)
                     .clip(CircleShape)
                     .clickable(onClick = onRemove)
-                    .testTag("chat-chip-remove")
+                    .testTag("chat-attachment-remove")
                     .semantics { contentDescription = removeLabel; role = Role.Button },
                 contentAlignment = Alignment.Center,
             ) { CentraidIcon("X", tint = centraidColor("textSoft"), size = 14.dp) }
@@ -1076,7 +1076,7 @@ private fun VisionBanner(step: ChatModelStep, onDownload: () -> Unit) {
             .padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)
             .background(centraidColor("bgSunken"))
             .padding(12.dp)
-            .testTag("chat-vision"),
+            .testTag("chat-vision-line"),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (step.size_line.isNotEmpty()) Text(step.size_line, style = centraidType("small"), color = centraidColor("textSoft"))

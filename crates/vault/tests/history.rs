@@ -47,6 +47,22 @@ impl World {
         outcome.output
     }
 
+    /// `ok`, as the chat's door runs it (the actor the confirm card's write carries).
+    fn ok_by_assistant(&self, name: &str, input: Value) -> Value {
+        self.scratch.clock.advance_ms(1_000);
+        let outcome = self
+            .scratch
+            .vault
+            .execute(
+                &self.registry,
+                &Principal::owner("phone"),
+                &Command::new(name, input).by("assist"),
+            )
+            .unwrap_or_else(|error| panic!("`{name}`: {error}"));
+        assert_eq!(outcome.status, CommandStatus::Executed, "{name}");
+        outcome.output
+    }
+
     fn refused(&self, name: &str, input: Value) -> String {
         let outcome = self.run(name, input);
         assert_eq!(outcome.status, CommandStatus::Failed, "{name} not refused");
@@ -1870,4 +1886,82 @@ fn a_member_put_back_by_a_restore_goes_to_the_end_and_the_others_keep_their_orde
         "SELECT COUNT(*) FROM edge WHERE from_id = '{list}' AND rel = 'contains' AND position IS NULL"
     ));
     assert_eq!(nulls, 0, "every member has a position");
+}
+
+// ---------------------------------------------------------------------------------------------
+// Who made a change: the chat (#1188)
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn a_change_the_chat_made_says_so_in_two_apps_and_the_members_own_does_not() {
+    let w = World::new();
+    let note = w.id("note.create", json!({ "title": "Plan", "body": "words" }));
+    let task = w.id("task.add", json!({ "title": "Ring the bank" }));
+    for (id, kind) in [(&note, "a note"), (&task, "a task")] {
+        // the chat's edit, then the member's own
+        w.ok_by_assistant("entity.retitle", json!({ "id": id, "title": "By chat" }));
+        w.ok("entity.retitle", json!({ "id": id, "title": "By hand" }));
+        let versions = w.versions(id);
+        assert_eq!(versions.len(), 2, "{kind}");
+        assert_eq!(versions[0].by, Who::Member, "{kind}: the member's own edit");
+        assert_eq!(
+            versions[0].since_by,
+            Who::Assistant,
+            "{kind}: it became current by chat"
+        );
+        assert_eq!(versions[1].by, Who::Assistant, "{kind}: the chat's edit");
+        assert_eq!(versions[1].cause, "assist.entity.retitle", "{kind}");
+        assert_eq!(versions[1].since_by, Who::Member, "{kind}: created by hand");
+    }
+}
+
+#[test]
+fn a_trash_by_the_chat_leaves_no_version_and_its_restore_is_the_members() {
+    let w = World::new();
+    let task = w.id("task.add", json!({ "title": "Ring the bank" }));
+    w.ok_by_assistant("entity.retitle", json!({ "id": task, "title": "Renamed" }));
+    let before = w.revisions();
+    w.ok_by_assistant("entity.trash", json!({ "id": task }));
+    // a trash is not a version (the trashed item's versions wait for it): nothing to mark
+    assert_eq!(w.revisions(), before);
+    w.ok("entity.restore", json!({ "id": task }));
+    assert_eq!(w.versions(&task)[0].by, Who::Assistant);
+}
+
+#[test]
+fn undoing_a_change_the_chat_made_still_works_and_is_the_members() {
+    let w = World::new();
+    let task = w.id("task.add", json!({ "title": "Ring the bank" }));
+    w.ok_by_assistant("entity.retitle", json!({ "id": task, "title": "By chat" }));
+    w.ok("history.undo", json!({ "id": task }));
+    assert_eq!(w.state(&task)["entity"]["title"], "Ring the bank");
+    assert_eq!(
+        w.versions(&task)[0].by,
+        Who::Member,
+        "an undo is the member's"
+    );
+}
+
+#[test]
+fn a_followed_record_edited_by_the_chat_is_the_members_edit_to_the_next_follow_pass() {
+    let outcome = |by_chat: bool| {
+        let w = World::new();
+        w.ok("follow.contacts", contact("Grace Hopper"));
+        let id: String = w.count_text("SELECT id FROM entity WHERE title = 'Grace Hopper'");
+        let edit = json!({ "id": id, "title": "Grace" });
+        if by_chat {
+            w.ok_by_assistant("person.edit", edit);
+        } else {
+            w.ok("person.edit", edit);
+        }
+        w.ok("follow.contacts", contact("Grace Hopper"));
+        let kept = w.state(&id)["entity"]["title"].clone();
+        w.ok("follow.contacts", contact("Grace B. Hopper"));
+        (kept, w.state(&id)["entity"]["title"].clone(), w.revisions())
+    };
+    assert_eq!(
+        outcome(true),
+        outcome(false),
+        "the chat's edit is treated as the member's"
+    );
 }

@@ -179,7 +179,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `chat-suggestion-chips` | Chat | the chips' row above the composer in a live thread |
 | `chat-card-<n>` | Chat | the n-th row-card under an answer, from 0 |
 | `chat-pending` | Chat | the lines of the confirm card under an answer that proposes a write, read as one element |
-| `chat-pending-confirm` | Chat | its confirm, worded by its verb ("Add reminder"; "Confirm" when the steps differ) (outlined in `net` when the card asks twice) |
+| `chat-pending-confirm` | Chat | (the same id on both shells) its confirm, worded by its verb ("Add reminder"; "Confirm" when the steps differ) (outlined in `net` when the card asks twice) |
 | `chat-pending-cancel` | Chat | its Cancel |
 | `chat-pending-settled` | Chat | the one clause that says how the card ended ("Done.", "Not done.") |
 | `chat-new` | Chat | the header's round New chat key (the pencil, trailing); drawn only inside a saved chat, never on a fresh conversation |

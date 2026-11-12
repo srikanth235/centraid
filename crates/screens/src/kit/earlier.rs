@@ -15,8 +15,9 @@
 //!   by restoring again. It ends in "Earlier version restored" with Undo, which is
 //!   `history.undo`. A refusal is the core's sentence over the list.
 //! - **Who made a change** reads in the member's words: a change a phone's store made says "From
-//!   your phone", "From the folder", "From Apple Health" or "From a statement"; the member's own
-//!   say nothing.
+//!   your phone", "From the folder", "From Apple Health" or "From a statement"; a change the chat
+//!   made on the member's word says "Changed by Chat" (the commit's cause is `assist.<command>`,
+//!   set only by the chat's door); the member's own say nothing. A creation carries no mark.
 //! - **A secret a version held** (Locker's replaced password; only an app with a [`Wall`]) is
 //!   drawn as dots with a Reveal on its row ([`wire::EarlierSecret`]), never worded in the line. A
 //!   Reveal asks the wall's owner check ([`Wall::open`]), shows the value for its life, and a
@@ -274,7 +275,10 @@ pub fn dated(locale: Locale, cycle: HourCycle, local: &str) -> String {
 
 /// Who made a change, in the member's words; empty for the member.
 #[must_use]
-pub fn from(locale: Locale, system: &str) -> String {
+pub fn from(locale: Locale, system: &str, actor: &str) -> String {
+    if actor == "assist" {
+        return words::changed_by_chat(locale);
+    }
     match system {
         "" => String::new(),
         "contacts" | "calendar" => words::from_phone(locale),
@@ -292,6 +296,8 @@ struct Version {
     since_local: String,
     replaced_by: String,
     since_by: String,
+    replaced_actor: String,
+    since_actor: String,
     before: Vec<Field>,
     after: Vec<Field>,
 }
@@ -350,6 +356,8 @@ fn parsed(version: wire::EarlierVersion) -> Version {
         since_local: version.since_local,
         replaced_by: version.store_system,
         since_by: version.since_store_system,
+        replaced_actor: version.actor,
+        since_actor: version.since_actor,
     }
 }
 
@@ -546,8 +554,8 @@ impl Earlier {
     }
 
     /// `Wed 4 November · 09:12 · From your phone`.
-    fn when(locale: Locale, cycle: HourCycle, local: &str, system: &str) -> String {
-        [dated(locale, cycle, local), from(locale, system)]
+    fn when(locale: Locale, cycle: HourCycle, local: &str, system: &str, actor: &str) -> String {
+        [dated(locale, cycle, local), from(locale, system, actor)]
             .into_iter()
             .filter(|part| !part.is_empty())
             .collect::<Vec<_>>()
@@ -645,7 +653,13 @@ impl Earlier {
         if let Some(newest) = versions.first() {
             rows.push(self.row(
                 look,
-                Self::when(locale, cycle, &newest.replaced_local, &newest.replaced_by),
+                Self::when(
+                    locale,
+                    cycle,
+                    &newest.replaced_local,
+                    &newest.replaced_by,
+                    &newest.replaced_actor,
+                ),
                 &newest.after,
                 0,
                 true,
@@ -655,7 +669,13 @@ impl Earlier {
         for version in versions {
             rows.push(self.row(
                 look,
-                Self::when(locale, cycle, &version.since_local, &version.since_by),
+                Self::when(
+                    locale,
+                    cycle,
+                    &version.since_local,
+                    &version.since_by,
+                    &version.since_actor,
+                ),
                 &version.before,
                 version.seq,
                 false,
@@ -748,5 +768,22 @@ impl Screen for Earlier {
             })),
             ..wire::ViewState::default()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::from;
+    use crate::strings::Locale;
+
+    #[test]
+    fn a_change_the_chat_made_says_so_in_the_members_words() {
+        assert_eq!(from(Locale::En, "", "assist"), "Changed by Chat");
+        assert_eq!(
+            from(Locale::En, "", ""),
+            "",
+            "a member's own change says nothing"
+        );
+        assert_eq!(from(Locale::En, "contacts", ""), "From your phone");
     }
 }

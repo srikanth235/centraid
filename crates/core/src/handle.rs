@@ -943,6 +943,7 @@ impl HandleState {
                     owner: &owner,
                     changes: &changes,
                     plane: &self.plane,
+                    actor: None,
                 },
                 request,
             )
@@ -1333,6 +1334,7 @@ impl HandleState {
             })?,
             invoke_key: invoke_key.to_owned(),
             quiet: false,
+            actor: None,
         };
         let changes = crate::events::ChangeFeed::new(self.events());
         let owner = self.owner();

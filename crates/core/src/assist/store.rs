@@ -283,6 +283,7 @@ fn run(
         input,
         invoke_key: key.to_owned(),
         quiet: false,
+        actor: None,
     };
     let changes = crate::events::ChangeFeed::new(handle.events());
     let outcome = handle
@@ -365,6 +366,7 @@ fn settle(handle: &Handle, thread: &str, key: &str, outcome: &str, text: &str) -
         input,
         invoke_key: key.to_owned(),
         quiet: false,
+        actor: None,
     };
     let changes = crate::events::ChangeFeed::new(handle.events());
     let ran = handle
