@@ -131,6 +131,9 @@ pub struct CellLine {
 #[derive(Debug, Clone, Serialize)]
 pub struct Line {
     pub name: String,
+    /// What was asked for: the nominal share of the realised total (the flags' share, before the supply caps it).
+    pub requested: f64,
+    /// The share's target once what the input holds is taken into account (water-filled, capped by supply).
     pub target: f64,
     pub realised: f64,
     pub supply: f64,
@@ -140,6 +143,7 @@ impl Default for Line {
     fn default() -> Self {
         Self {
             name: String::new(),
+            requested: 0.0,
             target: 0.0,
             realised: 0.0,
             supply: 0.0,
@@ -650,6 +654,7 @@ fn report_of(
         .enumerate()
         .map(|(b, name)| Line {
             name: (*name).to_owned(),
+            requested: [cfg.shares.one, cfg.shares.two, cfg.shares.three_plus][b] * n,
             target: target(&format!("turns:{b}")),
             realised: got(&format!("turns:{b}")) as f64,
             supply: supply(&format!("turns:{b}")) as f64,
@@ -657,37 +662,72 @@ fn report_of(
         .collect();
     report.multi_turn_share = (got("turns:1") + got("turns:2")) as f64 / n;
     report.three_plus_share = got("turns:2") as f64 / n;
-    let mut dim = |label: &str, unit: &'static str, dim: &str, names: &[&str]| {
+    let mut dim = |label: &str, unit: &'static str, dim: &str, names: &[&str], asked: &[f64]| {
+        let total: f64 = names
+            .iter()
+            .map(|n| got(&format!("{dim}:{n}")) as f64)
+            .sum();
         let lines: Vec<Line> = names
             .iter()
-            .map(|name| {
+            .zip(asked)
+            .map(|(name, share)| {
                 let k = format!("{dim}:{name}");
                 Line {
                     name: (*name).to_owned(),
+                    requested: share * total,
                     target: target(&k),
                     realised: got(&k) as f64,
                     supply: supply(&k) as f64,
                 }
             })
             .collect();
+        for l in &lines {
+            // a share the input could not fill: say so against what was asked, not against the capped target
+            if total > 0.0 && l.realised < 0.8 * l.requested && l.requested - l.realised >= 2.0 {
+                report.missed.push(format!(
+                    "{label} {}: {:.0} of {:.0} asked for (the input holds {:.0})",
+                    l.name, l.realised, l.requested, l.supply
+                ));
+            }
+        }
         report.shares.push(ShareReport {
             share: label.to_owned(),
             unit,
             lines,
         });
     };
-    dim("outcome", "turns", "outcome", &OUTCOMES);
-    dim("action", "turns", "action", &ACTIONS);
-    dim("reference", "turns", "reference", &REFERENCES);
+    let sh = &cfg.shares;
+    dim("outcome", "turns", "outcome", &OUTCOMES, &sh.outcome);
+    dim("action", "turns", "action", &ACTIONS, &sh.action);
+    dim(
+        "reference",
+        "turns",
+        "reference",
+        &REFERENCES,
+        &sh.reference,
+    );
     dim(
         "impossible",
         "turns",
         "impossible",
         &["impossible", "possible"],
+        &[sh.impossible, 1.0 - sh.impossible],
     );
-    dim("kinds", "sessions", "kinds", &["two_kinds", "one_kind"]);
+    dim(
+        "kinds",
+        "sessions",
+        "kinds",
+        &["two_kinds", "one_kind"],
+        &[sh.two_kinds, 1.0 - sh.two_kinds],
+    );
     if name.starts_with("test") {
-        dim("reserved", "sessions", "reserved", &["reserved", "plain"]);
+        dim(
+            "reserved",
+            "sessions",
+            "reserved",
+            &["reserved", "plain"],
+            &[sh.reserved, 1.0 - sh.reserved],
+        );
     }
     // apps: a tag, read only
     let mut apps: BTreeMap<String, (usize, usize)> = BTreeMap::new();
@@ -698,6 +738,7 @@ fn report_of(
         .into_iter()
         .map(|(app, (count, _))| Line {
             name: app,
+            requested: 0.0,
             target: 0.0,
             realised: count as f64,
             supply: 0.0,

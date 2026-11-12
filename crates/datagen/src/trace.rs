@@ -964,29 +964,34 @@ mod tests {
 
     #[test]
     fn a_write_on_one_row_picks_it_and_a_create_sets_its_fields() {
-        let mut rows = BTreeMap::new();
-        show_rows(&mut rows, "#31 task \"Pay rent\" · open");
-        let mut s = setting("complete pay rent", "", &rows);
-        s.intent = "write";
-        let c = call("do", &[("rows", "#31"), ("verb", "complete")]);
-        let traced = trace(&c, &s).expect("round trip");
-        assert!(traced.think.contains("verb: complete\npick: #31 (name)"));
+        // the regrouped tools' compiler: the build reads the model record's block, which is `s2` until the stock base is pinned
+        let mut record = centraid_assist::record::record();
+        record.current.tools_mode = "sig".to_owned();
+        centraid_assist::record::held_for(record, || {
+            let mut rows = BTreeMap::new();
+            show_rows(&mut rows, "#31 task \"Pay rent\" · open");
+            let mut s = setting("complete pay rent", "", &rows);
+            s.intent = "write";
+            let c = call("do", &[("rows", "#31"), ("verb", "complete")]);
+            let traced = trace(&c, &s).expect("round trip");
+            assert!(traced.think.contains("verb: complete\npick: #31 (name)"));
 
-        let c = call(
-            "create",
-            &[
-                ("args", "name: Sort the receipts\neffort: 30"),
-                ("kind", "task"),
-            ],
-        );
-        let traced = trace(&c, &s).expect("round trip");
-        assert!(
-            traced
-                .think
-                .contains("set: name = Sort the receipts · effort = 30")
-        );
-        // the compiler writes the fields as parameters of their own
-        assert!(traced.call.args.iter().any(|(k, _)| k == "effort"));
+            let c = call(
+                "create",
+                &[
+                    ("args", "name: Sort the receipts\neffort: 30"),
+                    ("kind", "task"),
+                ],
+            );
+            let traced = trace(&c, &s).expect("round trip");
+            assert!(
+                traced
+                    .think
+                    .contains("set: name = Sort the receipts · effort = 30")
+            );
+            // the compiler writes the fields as parameters of their own
+            assert!(traced.call.args.iter().any(|(k, _)| k == "effort"));
+        });
     }
 
     #[test]

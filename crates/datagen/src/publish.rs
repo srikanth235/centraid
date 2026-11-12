@@ -192,11 +192,18 @@ pub fn card(manifest: &Value, repo: &str) -> String {
                 .into_iter()
                 .flatten()
                 .map(|l| {
+                    let total: f64 = share["lines"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .map(|x| x["realised"].as_f64().unwrap_or(0.0))
+                        .sum();
+                    let of = |k: &str| l[k].as_f64().unwrap_or(0.0) / total.max(1.0);
                     format!(
-                        "{} {} (target {})",
+                        "{} {} (asked {})",
                         text(&l["name"]),
-                        pct(l["realised"].as_f64().unwrap_or(0.0)),
-                        pct(l["target"].as_f64().unwrap_or(0.0))
+                        pct(of("realised")),
+                        pct(of("requested"))
                     )
                 })
                 .collect();

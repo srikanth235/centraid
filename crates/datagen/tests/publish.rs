@@ -49,7 +49,7 @@ fn version(dir: &Path, commit: &str, publishable: bool) {
         "tokenizer": {"file": "tokenizer.json", "blake3": "ab12"},
         "messages": {"writers": {"train": "w1"}, "readers": {"train": "r1"}, "styles": {"terse": {"written": 4, "complying": 3}}},
         "splits": [{"split": "train", "sessions": 1, "turns": 1, "target": 1,
-            "shares": [{"share": "outcome", "unit": "turns", "lines": [{"name": "done", "target": 0.65, "realised": 0.6, "supply": 1.0}]}],
+            "shares": [{"share": "outcome", "unit": "turns", "lines": [{"name": "done", "requested": 65.0, "target": 65.0, "realised": 60.0, "supply": 100.0}, {"name": "other", "requested": 35.0, "target": 35.0, "realised": 40.0, "supply": 100.0}]}],
             "missed": ["repair turns: 0 of 1 wanted"]}],
         "files": files,
     });
@@ -121,7 +121,7 @@ fn the_card_says_what_the_data_is_and_what_it_was_built_from() {
         "cafe1234",
         "0123456789abcdef",
         "sealed",
-        "done 60.0% (target 65.0%)",
+        "done 60.0% (asked 65.0%)",
         "not hit: repair turns",
         "lakh",
         "test/test.jsonl.zst",
