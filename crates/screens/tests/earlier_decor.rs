@@ -109,13 +109,13 @@ fn a_tag_a_star_and_a_link_are_versions_worded_by_the_kit_and_restore_puts_them_
     assert_eq!(
         lines,
         [
-            "Not tagged #errand",
-            "Tagged #errand",
+            "Without #Errand",
+            "#Errand",
             "Starred",
             "Linked to Book flights",
             "Not linked to Book flights",
             "Not starred",
-            "Not tagged #errand",
+            "Without #Errand",
         ],
         "{lines:?}"
     );

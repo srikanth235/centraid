@@ -29,8 +29,7 @@ catalog! {
     plain restored = ("Earlier version restored", "Earlier version restored");
     plain restored_already = ("Already how it is now", "Already how it is now");
     plain title = ("Earlier versions", "Earlier versions");
-    plain tagged = ("Tagged {tags}", "Tagged {tags}");
-    plain not_tagged = ("Not tagged {tags}", "Not tagged {tags}");
+    plain not_tagged = ("Without {tags}", "Without {tags}");
     plain flag_starred = ("Starred", "Starred");
     plain flag_pinned = ("Pinned", "Pinned");
     plain flag_archived = ("Archived", "Archived");

@@ -1635,3 +1635,47 @@ fn a_named_undo_still_works_once_the_later_change_was_itself_taken_back() {
     assert_eq!(out["restored"], true);
     assert_eq!(w.state(&task)["entity"]["title"], "Pay rent");
 }
+
+#[test]
+fn reordering_a_list_writes_no_history() {
+    let w = World::new();
+    let ada = w.id("person.add", json!({ "title": "Ada" }));
+    let list = w.id(
+        "container.create",
+        json!({ "kind": "list", "title": "Family" }),
+    );
+    w.ok(
+        "edge.add",
+        json!({ "from": list, "rel": "contains", "to": ada }),
+    );
+    let before = w.revisions();
+    w.ok(
+        "edge.move",
+        json!({ "from": list, "to": ada, "position": 7.5 }),
+    );
+    assert_eq!(w.revisions(), before, "a position alone is not a version");
+}
+
+#[test]
+fn purging_a_tag_or_a_list_writes_no_versions_for_the_records_that_carried_it() {
+    let w = World::new();
+    let task = w.id("task.add", json!({ "title": "Call" }));
+    let ada = w.id("person.add", json!({ "title": "Ada" }));
+    let list = w.id(
+        "container.create",
+        json!({ "kind": "list", "title": "Family" }),
+    );
+    w.ok("tag.add", json!({ "id": task, "label": "Phone" }));
+    w.ok(
+        "edge.add",
+        json!({ "from": list, "rel": "contains", "to": ada }),
+    );
+    let (task_versions, ada_versions) = (w.versions(&task).len(), w.versions(&ada).len());
+    // The list goes: its member keeps the history it had.
+    w.ok("entity.trash", json!({ "id": list }));
+    w.ok("entity.purge", json!({ "id": list }));
+    assert_eq!(w.versions(&ada).len(), ada_versions);
+    // The tag goes the same way.
+    w.ok("entity.purge", json!({ "id": "tag:phone" }));
+    assert_eq!(w.versions(&task).len(), task_versions);
+}

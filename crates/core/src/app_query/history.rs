@@ -85,7 +85,7 @@ pub(crate) fn count(vault: &Vault, entity_id: &str) -> Result<Answer> {
 }
 
 /// The fields a version names another record by (the id is the field's key).
-const NAMING: [&str; 4] = ["membership", "link", "about", "depicts"];
+const NAMING: [&str; 5] = ["tag", "membership", "link", "about", "depicts"];
 
 /// The titles of the records a page's changes name: a list, an album, an item a record was linked
 /// to. A record the vault no longer holds is not named (the screen says so in its own words); a

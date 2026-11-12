@@ -68,17 +68,26 @@ pub fn line(look: &Look, fields: &[Field]) -> String {
     let joined = |fields: Vec<&Held>, word: &dyn Fn(&Held) -> String| -> String {
         fields.into_iter().map(word).collect::<Vec<_>>().join(", ")
     };
-    let tag = |field: &Held| format!("#{}", field.id.strip_prefix("tag:").unwrap_or(field.id));
+    // A tag reads as the member typed it (`#Travel`) when the page names it, else by its key.
+    let tag = |field: &Held| {
+        let key = field.id.strip_prefix("tag:").unwrap_or(field.id);
+        let label = look
+            .names
+            .get(field.id)
+            .map(|title| title.trim())
+            .filter(|title| !title.is_empty())
+            .unwrap_or(key);
+        format!("#{label}")
+    };
     let title = |field: &Held| name(look, field.id);
     let mut parts: Vec<String> = Vec::new();
-    for (held, word) in [
-        (true, words::tagged as fn(Locale) -> String),
-        (false, words::not_tagged),
-    ] {
-        let tags = joined(of("tag", held), &tag);
-        if !tags.is_empty() {
-            parts.push(fill(&word(locale), &[("tags", &tags)]));
-        }
+    let held = joined(of("tag", true), &tag);
+    if !held.is_empty() {
+        parts.push(held);
+    }
+    let lacked = joined(of("tag", false), &tag);
+    if !lacked.is_empty() {
+        parts.push(fill(&words::not_tagged(locale), &[("tags", &lacked)]));
     }
     for field in all.iter().filter(|field| field.alias == "flag") {
         parts.extend(flag(locale, field.id, field.held));
@@ -145,6 +154,7 @@ mod tests {
     fn a_side_holding_tags_a_star_a_list_and_links_reads_each_in_words() {
         let mut names = Names::new();
         names.insert("l1".into(), "Family".into());
+        names.insert("tag:home".into(), "Home".into());
         names.insert("n1".into(), "Lisbon trip".into());
         let fields = [
             field("tag[tag:errand]", true),
@@ -155,7 +165,7 @@ mod tests {
         ];
         assert_eq!(
             worded(&fields, &names),
-            "Tagged #errand, #home · Starred · In Family · Linked to Lisbon trip"
+            "#errand, #Home · Starred · In Family · Linked to Lisbon trip"
         );
     }
 
@@ -170,7 +180,7 @@ mod tests {
         ];
         assert_eq!(
             worded(&fields, &Names::new()),
-            "Not tagged #errand · Not pinned · Not linked to an item that is gone"
+            "Without #errand · Not pinned · Not linked to an item that is gone"
         );
     }
 

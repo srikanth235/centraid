@@ -331,6 +331,11 @@ pub const OMITTED: &[(&str, &str, &str)] = &[
     ("entity", "created_at", "stamp, never edited"),
     ("entity", "updated_at", "stamp; every commit moves it"),
     (
+        "edge",
+        "position",
+        "the order of a list or album is the container's: reordering is not a change to a record, and a restore puts a member back unordered",
+    ),
+    (
         "entity",
         "deleted_at",
         "trash is not state: a trashed record is the same record",
@@ -656,7 +661,7 @@ impl Shape {
         // The entity's state, recorded once per commit, the first time a row of it is about to
         // change. A table that holds other things than state (`edge`) wakes it only for a row
         // that is state: the filter reads the row through a one-row subquery of `old` or `new`.
-        let seen = |id: &str, part: Option<(&Part, &str)>| {
+        let seen = |id: &str, part: Option<(&Part, &str)>, extra: &str| {
             let (from, scope) = match part {
                 Some((part, row)) if part.filter().is_some() => {
                     let columns: Vec<String> = std::iter::once(part.via().to_owned())
@@ -673,7 +678,7 @@ impl Shape {
             format!(
                 "INSERT INTO temp.{SEEN} (entity_id, state)
                    SELECT {id}, (SELECT state FROM temp.{STATE_VIEW} WHERE entity_id = {id}){from}
-                    WHERE {scope}NOT EXISTS (SELECT 1 FROM temp.{SEEN} WHERE entity_id = {id});"
+                    WHERE {scope}{extra}NOT EXISTS (SELECT 1 FROM temp.{SEEN} WHERE entity_id = {id});"
             )
         };
         let mut trigger = |name: &str, when: &str, table: &str, body: String| {
@@ -700,29 +705,45 @@ impl Shape {
             "entity_title",
             "BEFORE UPDATE OF title",
             "entity",
-            seen("old.id", None),
+            seen("old.id", None, ""),
         );
         for part in &self.parts {
             let via = quoted(part.via());
             let alias = part.alias;
+            // An edge that goes because its OTHER end is being deleted (a tag or a list purged)
+            // is not a change to the record that carried it: the end is marked as it is deleted
+            // (`entity_gone`), before the cascade reaches the edge.
+            let far = if part.name == "edge" {
+                let other = if part.via() == "from_id" {
+                    "to_id"
+                } else {
+                    "from_id"
+                };
+                format!(
+                    "NOT EXISTS (SELECT 1 FROM temp.{SEEN} gone
+                                  WHERE gone.entity_id = old.{other} AND gone.state IS NULL) AND "
+                )
+            } else {
+                String::new()
+            };
             trigger(
                 &format!("{alias}_update"),
                 "BEFORE UPDATE",
                 part.name,
-                seen(&format!("old.{via}"), Some((part, "old"))),
+                seen(&format!("old.{via}"), Some((part, "old")), ""),
             );
             trigger(
                 &format!("{alias}_delete"),
                 "BEFORE DELETE",
                 part.name,
-                seen(&format!("old.{via}"), Some((part, "old"))),
+                seen(&format!("old.{via}"), Some((part, "old")), &far),
             );
             if matches!(part.role, Role::Child { .. }) {
                 trigger(
                     &format!("{alias}_insert"),
                     "BEFORE INSERT",
                     part.name,
-                    seen(&format!("new.{via}"), Some((part, "new"))),
+                    seen(&format!("new.{via}"), Some((part, "new")), ""),
                 );
             }
         }
