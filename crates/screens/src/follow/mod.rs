@@ -1,9 +1,9 @@
 //! THE FOLLOW COORDINATOR (#1183): when the phone's own stores are followed into the vault.
 //!
 //! The apps follow the phone's stores ONE WAY into the vault: contacts into People, calendars
-//! into Calendar, a picked folder into Docs, the health store into Health (the camera roll has
+//! into Calendar, reminders into Reminders, a picked folder into Docs, the health store into Health (the camera roll has
 //! its own importer, `imports.camera_roll`). Whether a store changed is a question the whole
-//! session asks, not a home screen, so one service answers it for all four.
+//! session asks, not a home screen, so one service answers it for all five.
 //!
 //! | Piece | What it is |
 //! |---|---|

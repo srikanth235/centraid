@@ -30,7 +30,7 @@ Each of `local`, `pr`, `nightly` and `release` is a **superset** of the one befo
 | Profile | Steps it adds | Where it runs |
 | --- | --- | --- |
 | `local` | `fmt`, `clippy`, `test` (**only the crates the change touches, and their dependents** — see below), `restore-drill`, `rules`, `doc-links`, `ledgers` | by hand, before a push |
-| `pr` | `buf`, `deny`, `ci-policy`, `release-build`, `ts-static`, `design`, `lockfile`, `fault-door` — and its `test` step runs the **whole** workspace | `.github/workflows/gate.yml`, every PR and every push to `main` |
+| `pr` | `buf`, `deny`, `ci-policy`, `release-build`, `ts-static`, `design`, `lockfile`, `prompt-injection`, `model-record`, `fault-door` — and its `test` step runs the **whole** workspace | `.github/workflows/gate.yml`, every PR and every push to `main` |
 | `nightly` | `device-lanes` | `.github/workflows/nightly.yml`, 05:30 UTC |
 | `release` | `artifact-identity`, `prebuilt-core-required` (and `restore-drill`, inherited from `local`) | the release workflows |
 | `mobile-jvm` | `mobile-jvm` — one step, not a superset of anything | `.github/workflows/nightly.yml`; on demand from `mobile/` |

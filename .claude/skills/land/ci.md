@@ -26,7 +26,7 @@ The workflow has `concurrency: group: gate-<PR number, or the ref>` with `cancel
 ## Where the failure detail lives
 
 1. The job log shows the one line per step and, for a failed step, the last line of stderr and the artifact directory. A step that runs a command buffers its output and prints none of it. The `rules`, `doc-links`, `design`, `ledgers` and `lockfile` steps, and the pin check of `ci-policy`, do print their findings.
-2. When the `gate` job fails it uploads the artifact **`gate-pr-artifacts`** (`target/xtask/**`, kept 7 days). Inside, the paths start at the profile: `pr/test/stderr.log` for the test step, and `pr/<step>/command.txt`, `stdout.log` and `stderr.log` for any command step. `findings.txt` is the evidence for the internal steps.
+2. When the `gate` job fails it uploads the artifact **`gate-pr-artifacts`** (`target/xtask/**`, kept 7 days). Inside, the paths start at the profile: `pr/test/stderr.log` for the test step, and `pr/<step>/command.txt`, `stdout.log` and `stderr.log` for any command step. `findings.txt` is the evidence for the internal steps. If xtask itself fails to compile there is no artifact: read the job log.
 3. Download it with `gh run download <run-id> -n gate-pr-artifacts`.
 4. `ios` uploads `ios-verification` (compiler and test logs, the `.xcresult`) every time. `android` and `engine` upload nothing, so their detail is the job log.
 5. To reproduce a failed step, run `cargo xtask gate --profile pr --lane <step>`.
