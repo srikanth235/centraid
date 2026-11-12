@@ -104,7 +104,7 @@ struct ChatView: View {
                     thread(state)
                     composer(state)
                 case .needsModel, .downloading, .loading, .unavailable:
-                    ChatModelStepView(state: state, onDownload: { chat.downloadTapped() })
+                    ChatModelStepView(state: state, onChoose: { chat.downloadTapped($0) })
                     Spacer(minLength: 0)
                 case .checking, .unspecified, .UNRECOGNIZED:
                     Spacer(minLength: 0)
@@ -130,6 +130,10 @@ struct ChatView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .kitAnimation(ChatMotion.entry, value: state.drawerOpen)
+        // THE DOWNLOAD RULES READ THE PHONE: its network and free space are told when the chat
+        // appears and whenever the network changes.
+        .onAppear { chat.tellDevice() }
+        .onReceive(NotificationCenter.default.publisher(for: .chatNetworkChanged)) { _ in chat.tellDevice() }
         // THE BAND STEPS ASIDE while the on-screen keyboard is up and while the Chats page is up.
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
             keyboardUp = true
@@ -1545,7 +1549,8 @@ private struct ChatSendButton: View {
 /// Centraid fetches anything, and `net` is the colour of what leaves the device.
 private struct ChatModelStepView: View {
     let state: Centraid_Core_V1_ChatState
-    let onDownload: () -> Void
+    /// A tap on the step's primary or second action, by what it asks (`ChatStepAction`).
+    let onChoose: (Centraid_Core_V1_ChatStepAction) -> Void
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -1555,6 +1560,12 @@ private struct ChatModelStepView: View {
         VStack(alignment: .leading, spacing: 12) {
             switch state.phase {
             case .needsModel:
+                if !step.title.isEmpty {
+                    Text(step.title)
+                        .chatType("labelOn")
+                        .foregroundStyle(Theme.color("text", scheme))
+                        .accessibilityIdentifier("chat-model-title")
+                }
                 if !step.sizeLine.isEmpty {
                     Text(step.sizeLine)
                         .chatType("labelOn")
@@ -1565,21 +1576,47 @@ private struct ChatModelStepView: View {
                     .chatType("body")
                     .foregroundStyle(Theme.color("textSoft", scheme))
                     .accessibilityIdentifier("chat-model-note")
+                if !step.extraLine.isEmpty {
+                    Text(step.extraLine)
+                        .chatType("small")
+                        .foregroundStyle(Theme.color("textSoft", scheme))
+                        .accessibilityIdentifier("chat-model-extra")
+                }
                 if !state.error.isEmpty {
                     Text(state.error)
                         .chatType("small")
                         .foregroundStyle(Theme.color("net", scheme))
                         .accessibilityIdentifier("chat-error")
                 }
-                ChatDownloadButton(label: step.actionLabel, action: onDownload)
+                ChatDownloadButton(label: step.actionLabel, action: { onChoose(step.actionKind) })
                     .accessibilityIdentifier("chat-download")
+                if !step.secondaryLabel.isEmpty {
+                    ChatSecondaryButton(label: step.secondaryLabel, action: { onChoose(step.secondaryKind) })
+                        .accessibilityIdentifier("chat-download-secondary")
+                }
             case .downloading:
+                if !step.title.isEmpty {
+                    Text(step.title)
+                        .chatType("labelOn")
+                        .foregroundStyle(Theme.color("text", scheme))
+                        .accessibilityIdentifier("chat-model-title")
+                }
                 Text(step.statusLine)
                     .chatType("labelOn")
                     .foregroundStyle(Theme.color("text", scheme))
                     .accessibilityIdentifier("chat-model-status")
                 ProgressTrack(fraction: step.progressKnown ? Double(step.progress) : nil)
                     .kitAnimation(ChatMotion.state, value: step.progress)
+                if !step.noteLine.isEmpty {
+                    Text(step.noteLine)
+                        .chatType("small")
+                        .foregroundStyle(Theme.color("textSoft", scheme))
+                        .accessibilityIdentifier("chat-model-note")
+                }
+                if !step.secondaryLabel.isEmpty {
+                    ChatSecondaryButton(label: step.secondaryLabel, action: { onChoose(step.secondaryKind) })
+                        .accessibilityIdentifier("chat-download-secondary")
+                }
             case .loading, .unavailable:
                 Text(step.statusLine)
                     .chatType("body")
@@ -1603,6 +1640,25 @@ private struct ChatModelStepView: View {
         .padding(.top, 24)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("chat-model-step")
+    }
+}
+
+/// THE STEP'S SECOND ACTION, quiet: an outlined pill beside the filled one, never a second filled element.
+private struct ChatSecondaryButton: View {
+    let label: String
+    let action: () -> Void
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        Button(action: action) {
+            Text(verbatim: label)
+                .kitScaledFont(CentraidScale.rowSize, weight: .semibold)
+                .foregroundStyle(Theme.color("text", scheme))
+                .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
+                .overlay(Capsule().strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 }
 

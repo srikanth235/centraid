@@ -177,7 +177,21 @@ final class ChatModel: ObservableObject {
     }
 
     func copy(_ messageID: UInt64) { send(.copied(.with { $0.messageID = messageID })) }
-    func downloadTapped() { send(.download(.with { $0.vision = false })) }
+    func downloadTapped(_ choice: Centraid_Core_V1_ChatStepAction = .unspecified) {
+        tellDevice()
+        send(.download(.with {
+            $0.vision = false
+            $0.choice = choice
+        }))
+    }
+
+    /// The network and the free space, as the phone has them now: the download rules read them.
+    func tellDevice() {
+        send(.deviceFacts(.with {
+            $0.network = ChatDeviceWatcher.shared.network
+            $0.freeBytes = ChatDeviceWatcher.shared.freeBytes
+        }))
+    }
 
     // MARK: A proposed write
 
@@ -190,7 +204,13 @@ final class ChatModel: ObservableObject {
 
     // MARK: Attachments
 
-    func visionDownloadTapped() { send(.download(.with { $0.vision = true })) }
+    func visionDownloadTapped(_ choice: Centraid_Core_V1_ChatStepAction = .unspecified) {
+        tellDevice()
+        send(.download(.with {
+            $0.vision = true
+            $0.choice = choice
+        }))
+    }
     func removeAttachment(_ id: UInt64) { send(.attachmentRemoved(.with { $0.id = id })) }
     func libraryPhotoTapped() { send(.libraryPhotoTapped(.init())) }
     func openDocuments() { send(.documentsOpened(.init())) }

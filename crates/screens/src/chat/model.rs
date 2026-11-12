@@ -657,7 +657,9 @@ impl Chat {
         let more_data = match choice {
             Choice::DownloadCellular => true,
             Choice::WaitWifi => false,
-            _ => self.cellular_ok,
+            // The photo reader's own offer names its size on the line the member taps, so that tap is
+            // the consent; the model's step asks on its own (the sheet for the reader is a follow-up).
+            _ => self.cellular_ok || vision,
         };
         // NOT ENOUGH SPACE: nothing is fetched into a phone that cannot keep it.
         if self.too_little_space(model.bytes) {

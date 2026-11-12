@@ -179,6 +179,22 @@ internal fun ChatScreen(
         }
     }
     LaunchedEffect(state.accepted_send) { kept.settle(state.accepted_send) }
+    // THE DOWNLOAD RULES READ THE PHONE: its network and free space are told when the chat appears
+    // and whenever the network changes.
+    androidx.compose.runtime.DisposableEffect(context) {
+        onEvent(ChatDeviceFacts.event(context))
+        val manager = context.getSystemService(android.net.ConnectivityManager::class.java)
+        val callback = object : android.net.ConnectivityManager.NetworkCallback() {
+            override fun onCapabilitiesChanged(network: android.net.Network, capabilities: android.net.NetworkCapabilities) {
+                onEvent(ChatDeviceFacts.event(context))
+            }
+            override fun onLost(network: android.net.Network) {
+                onEvent(ChatDeviceFacts.event(context))
+            }
+        }
+        runCatching { manager?.registerDefaultNetworkCallback(callback) }
+        onDispose { runCatching { manager?.unregisterNetworkCallback(callback) } }
+    }
     // EDIT FILLS THE COMPOSER: whenever Rust moves the token, the field holds what it says (the last
     // question on starting, nothing on cancelling). Token 0 is a chat that has never edited.
     LaunchedEffect(state.edit_token) { if (state.edit_token != 0L) draft = state.edit_text }
@@ -1265,6 +1281,7 @@ private fun AttachmentChip(chip: ChatAttachment, removeLabel: String, onRemove: 
 @Composable
 private fun ChatModelStepView(state: ChatState, onEvent: (ChatEvent) -> Unit) {
     val step = state.model_step ?: return
+    val context = androidx.compose.ui.platform.LocalContext.current
     val shape = RoundedCornerShape(KitGeometry.RADIUS)
     Column(
         Modifier.fillMaxSize().padding(KitGeometry.GUTTER),
@@ -1280,11 +1297,17 @@ private fun ChatModelStepView(state: ChatState, onEvent: (ChatEvent) -> Unit) {
                 .testTag("chat-model-step"),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            if (step.title.isNotEmpty()) {
+                Text(step.title, style = centraidType("smallStrong"), color = centraidColor("text"), modifier = Modifier.testTag("chat-model-title"))
+            }
             if (step.size_line.isNotEmpty()) {
                 Text(step.size_line, style = centraidType("smallStrong"), color = centraidColor("text"))
             }
             if (step.note_line.isNotEmpty()) {
                 Text(step.note_line, style = centraidType("small"), color = centraidColor("textSoft"))
+            }
+            if (step.extra_line.isNotEmpty()) {
+                Text(step.extra_line, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.testTag("chat-model-extra"))
             }
             if (state.phase == ChatState.Phase.PHASE_DOWNLOADING && step.progress_known) {
                 KitProgressBar(step.progress, fill = centraidResource(R.color.centraid_shell))
@@ -1294,7 +1317,26 @@ private fun ChatModelStepView(state: ChatState, onEvent: (ChatEvent) -> Unit) {
             }
             if (step.action_label.isNotEmpty()) {
                 DownloadButton(step.action_label, testTag = "chat-download") {
-                    onEvent(ChatEvent(download = ChatEvent.DownloadTapped(vision = false)))
+                    onEvent(ChatDeviceFacts.event(context))
+                    onEvent(ChatEvent(download = ChatEvent.DownloadTapped(vision = false, choice = step.action_kind)))
+                }
+            }
+            if (step.secondary_label.isNotEmpty()) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = KitGeometry.ROW_MIN)
+                        .clip(CircleShape)
+                        .border(KitGeometry.HAIRLINE, centraidColor("lineStrong"), CircleShape)
+                        .clickable {
+                            onEvent(ChatDeviceFacts.event(context))
+                            onEvent(ChatEvent(download = ChatEvent.DownloadTapped(vision = false, choice = step.secondary_kind)))
+                        }
+                        .semantics { role = Role.Button }
+                        .testTag("chat-download-secondary"),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(step.secondary_label, color = centraidColor("text"), fontSize = tokenSp(R.dimen.centraid_text_row), fontWeight = FontWeight.SemiBold)
                 }
             }
             if (state.error.isNotEmpty()) {
