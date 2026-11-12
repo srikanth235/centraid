@@ -3065,7 +3065,7 @@ fn link_missing(root: &Path, app: &str) -> Vec<String> {
 /// **BACKUP** (#1188, Part B). Backup is the vault's, so no app has a row; each promise names the
 /// tests that prove it, and the rule fails when a named test is gone, renamed or `#[ignore]`d.
 /// `(promise, [(file, test)])`.
-pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 6] = [
+pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 7] = [
     (
         "every paired backup device receives every pass",
         &[
@@ -3157,6 +3157,23 @@ pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 6] = [
             (
                 "crates/screens/src/backup/tests.rs",
                 "a_refused_grant_says_so_and_offers_settings",
+            ),
+        ],
+    ),
+    (
+        "a refusal names its reason, each with its own remedy, and stops only the gateway that gave it",
+        &[
+            (
+                "crates/core/tests/backup_replicas.rs",
+                "a_refusal_is_read_as_the_reason_the_gateway_gave",
+            ),
+            (
+                "crates/core/tests/backup_replicas.rs",
+                "a_full_gateway_is_named_while_the_other_is_fed",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "a_refusal_is_worded_for_its_own_remedy",
             ),
         ],
     ),

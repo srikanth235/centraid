@@ -55,13 +55,16 @@ message BackupWaitingRow {
     // The machine that answered at a gateway's address is not the gateway this
     // phone pinned.
     REASON_UNTRUSTED = 8;
-    // The gateway answered and refused a write for its own reason, a full disk
-    // or a quota.
+    // The gateway answered and refused a write because its disk is full.
     REASON_REFUSED = 9;
     // The gateway no longer knows this phone's token: pair it again.
     REASON_PAIR_AGAIN = 10;
     // This phone has too little free space to copy its vault.
     REASON_NO_ROOM = 11;
+    // The gateway refused a part as over its size limit.
+    REASON_TOO_LARGE = 12;
+    // The gateway refused a write for a reason that is neither full nor too large.
+    REASON_REFUSED_OTHER = 13;
   }
 }
 

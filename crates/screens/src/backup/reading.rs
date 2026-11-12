@@ -41,6 +41,8 @@ pub struct Destination {
     pub records_behind: bool,
     /// Why it is behind, by the core's `WaitReason` number; zero when it answered.
     pub reach: i32,
+    /// The size limit it refused a part for, in bytes, when `reach` is "too large"; else 0.
+    pub refused_limit_bytes: u64,
     /// Its head went backwards: it holds an older backup than this phone sent (B4).
     pub rolled_back: bool,
     /// When this phone paired with it, phone clock; `None` when the core did not say.
@@ -58,6 +60,10 @@ pub enum Footing {
     Behind,
     /// It refused for lack of room.
     Full,
+    /// It refused a part as over its size limit.
+    TooLarge,
+    /// It refused a write for another reason (a code this build does not know).
+    Refusing,
     /// It holds an older backup than this phone sent.
     RolledBack,
 }
@@ -69,6 +75,10 @@ impl Destination {
             Footing::RolledBack
         } else if self.reach == wire::WaitReason::Refused as i32 {
             Footing::Full
+        } else if self.reach == wire::WaitReason::TooLarge as i32 {
+            Footing::TooLarge
+        } else if self.reach == wire::WaitReason::RefusedOther as i32 {
+            Footing::Refusing
         } else if self.behind_files > 0 || self.records_behind || self.reach != 0 {
             Footing::Behind
         } else {
@@ -148,6 +158,7 @@ impl Reading {
                     behind_bytes: destination.behind_bytes,
                     records_behind: destination.records_behind,
                     reach: destination.reach,
+                    refused_limit_bytes: destination.refused_limit_bytes,
                     rolled_back: destination.rolled_back,
                     paired_at_ms: Some(destination.paired_at_ms).filter(|at| *at > 0),
                     waiting_apps: destination

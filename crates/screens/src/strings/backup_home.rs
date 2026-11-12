@@ -63,6 +63,10 @@ catalog! {
     plain device_older = ("{name} has an older backup", "{name} has an older backup");
     plain device_backed_up_to = ("Backed up to {others} {when}", "Backed up to {others} {when}");
     plain device_silent_since = ("{name} hasn't answered since {day}. Check it's awake and on the same network as this phone.", "{name} hasn't answered since {day}. Check it's awake and on the same network as this phone.");
+    plain device_too_large = ("{name} refused a file", "{name} refused a file");
+    plain device_refusing = ("{name} is refusing the backup", "{name} is refusing the backup");
+    plain device_too_large_reason = ("{name} refused a file as over its {limit} limit. Update Centraid on this phone and on {name}, then back up again.", "{name} refused a file as over its {limit} limit. Update Centraid on this phone and on {name}, then back up again.");
+    plain device_refusing_reason = ("{name} refused part of the backup. Check on it and update Centraid on it, then back up again.", "{name} refused part of the backup. Check on it and update Centraid on it, then back up again.");
     plain device_full_reason = ("{name} has no room left. Free some space on it, then back up again.", "{name} has no room left. Free some space on it, then back up again.");
     plain device_older_reason = ("It holds an older backup than this phone sent. Back up now to bring it up to date.", "It holds an older backup than this phone sent. Back up now to bring it up to date.");
     plain device_catching_up = ("{name} is catching up. Back up now to send what it is missing.", "{name} is catching up. Back up now to send what it is missing.");
@@ -72,6 +76,8 @@ catalog! {
     plain device_waiting = ("{count} waiting for {name}", "{count} waiting for {name}");
     plain row_catching_up = ("Catching up", "Catching up");
     plain row_full = ("Full", "Full");
+    plain row_too_large = ("Refused a file as too large", "Refused a file as too large");
+    plain row_refusing = ("Refusing the backup", "Refusing the backup");
     plain row_older = ("Older backup than this phone sent", "Older backup than this phone sent");
 
     // THE ONE-TIME PROMPT after the first confirmed backup (#1188, NB5): "recovery key", never

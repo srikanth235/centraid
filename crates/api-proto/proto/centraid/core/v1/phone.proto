@@ -386,6 +386,10 @@ message RestoreResponse {
   // it. Empty is the ordinary answer. When no claim landed at all the restore
   // is refused instead, with the first claim's refusal. A second restore
   // naming these in `RestoreRequest.indices` asks for them alone (R-1047-R6).
+  //
+  // ONE EXCEPTION IS NOT AN ABSENCE (#1188, item 7): an entry with `claimed` set is a vault whose
+  // claim LANDED and whose keeping on this phone then failed. The old phone is frozen, nothing is
+  // forgotten here (the checked file stays), and restoring again, naming it, finishes it.
   repeated UnclaimedVault unclaimed = 4;
   // AN OLDER BACKUP IN PLACE OF A NEWEST THAT WILL NOT OPEN (#1188, B5, NB4). When any vault's
   // newest backup failed a check and an older one passes, the restore claims nothing and
@@ -482,6 +486,11 @@ message BackupStatusResponse {
   // told it): how many originals, and their bytes. Not in `total_bytes`.
   uint64 left_out_items = 15;
   uint64 left_out_bytes = 16;
+  // HOW OLD THE BACKLOG IS: when the oldest item still waiting entered the vault (ms since the
+  // epoch, this phone's clock; the row's creation time, which is when it began to need a
+  // backup). Videos left out are not waiting. Absent: nothing waits, or no waiting item says
+  // when it was made. The screen subtracts it from now to warn on an old backlog.
+  optional int64 oldest_waiting_ms = 17;
 }
 
 // ONE APP'S PART OF THE BACKUP (#1144). Counts come from the app's own
@@ -544,8 +553,9 @@ enum WaitReason {
   // gateway was replaced or something else answers at its address.
   WAIT_REASON_UNTRUSTED = 8;
   // The last pass stopped because the gateway answered and refused a write
-  // for its own reason: a full disk, a quota (`DRAIN_STOP_REFUSED`; #1080, the
-  // sweep's F1). Not time: the machine has to make room.
+  // for want of room: its disk is full (`DRAIN_STOP_REFUSED`; #1080, the sweep's F1).
+  // Not time: the machine has to make room. A part over its size limit is TOO_LARGE and any
+  // other refusal is REFUSED_OTHER.
   WAIT_REASON_REFUSED = 9;
   // The gateway no longer knows this phone's token — its store was lost, or
   // its operator revoked the token — so nothing reaches it until the member
@@ -554,6 +564,13 @@ enum WaitReason {
   // This phone has too little free space to copy its vault for a snapshot
   // (#1188, design 6). Not time and not the gateway: the member frees space.
   WAIT_REASON_NO_ROOM = 11;
+  // The gateway refused a part as over its size limit (`TOO_LARGE`); the limit is
+  // `Destination.refused_limit_bytes`. Not time and not room: this build and that gateway
+  // disagree about how big a part may be. (REFUSED, above, is a full disk.)
+  WAIT_REASON_TOO_LARGE = 12;
+  // The gateway refused a write for a reason that is neither: a code this build does not know.
+  // Only that gateway's pass stops; the others are fed.
+  WAIT_REASON_REFUSED_OTHER = 13;
 }
 
 // ----------------------------------------------------------- destinations --
@@ -622,6 +639,9 @@ message Destination {
   // WHAT IT STILL OWES, BY APP (#1188, NB1): the originals this gateway has not acknowledged whole,
   // per app, for the Backup screen's "waiting for <device>" rows. Set only by `backup_status`.
   repeated DeviceWaiting waiting_apps = 16;
+  // The size limit a TOO_LARGE refusal crossed, in bytes (the protocol's largest object); 0
+  // when `reach` is anything else. Set only by `backup_status`.
+  uint64 refused_limit_bytes = 17;
 }
 
 // One app's originals a gateway still owes (`Destination.waiting_apps`).

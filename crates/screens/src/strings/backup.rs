@@ -97,7 +97,9 @@ catalog! {
     plain backup_wait_icloud = ("{count} waiting in iCloud", "{count} waiting in iCloud");
     plain backup_wait_pair_again = ("{count} waiting. Pair your backup device again.", "{count} waiting. Pair your backup device again.");
     plain backup_wait_no_room = ("{count} waiting. This phone is too full to back up. Free some space.", "{count} waiting. This phone is too full to back up. Free some space.");
-    plain backup_wait_refused = ("{count} waiting. Your backup device is full or refusing.", "{count} waiting. Your backup device is full or refusing.");
+    plain backup_wait_refused = ("{count} waiting. Your backup device is full.", "{count} waiting. Your backup device is full.");
+    plain backup_wait_refused_other = ("{count} waiting. Your backup device is refusing the backup.", "{count} waiting. Your backup device is refusing the backup.");
+    plain backup_wait_too_large = ("{count} waiting. Your backup device refused a file as too large.", "{count} waiting. Your backup device refused a file as too large.");
     plain backup_wait_untrusted = ("{count} waiting. Wrong device answered.", "{count} waiting. Wrong device answered.");
     plain backup_wait_wifi = ("{count} waiting for Wi-Fi", "{count} waiting for Wi-Fi");
     plain backup_wait_window = ("{count} waiting for background time", "{count} waiting for background time");

@@ -441,7 +441,7 @@ fn a_gateway_that_refused_for_room_and_one_that_forgot_this_phone_have_rows_of_t
             .map(|row| row.sentence.as_str())
             .collect::<Vec<_>>(),
         vec![
-            "25 waiting. Your backup device is full or refusing.",
+            "25 waiting. Your backup device is full.",
             "15 waiting. Pair your backup device again."
         ]
     );
@@ -2373,6 +2373,43 @@ mod one_device_behind {
             "{}",
             data.destinations[0].held
         );
+    }
+
+    /// **EACH REFUSAL IS WORDED FOR ITS OWN REMEDY** (#1188, item 21): a full disk says to free
+    /// space on the device, a file over its limit names the limit and says to update, and a code
+    /// this build does not know says the device is refusing. None says "full" for the others.
+    #[test]
+    fn a_refusal_is_worded_for_its_own_remedy() {
+        let too_large = Page::open(office(|d| {
+            d.behind_files = 3;
+            d.reach = wire::WaitReason::TooLarge as i32;
+            d.refused_limit_bytes = 80 * 1024 * 1024;
+        }))
+        .data();
+        assert_eq!(
+            too_large.line.expect("a line").status,
+            "Office NAS refused a file"
+        );
+        assert_eq!(
+            too_large.reason,
+            "Office NAS refused a file as over its 83.8 MB limit. Update Centraid on this phone and on Office NAS, then back up again."
+        );
+        assert_eq!(
+            too_large.destinations[1].held.split(" \u{b7} ").next(),
+            Some("Refused a file as too large")
+        );
+
+        let other = Page::open(office(|d| {
+            d.behind_files = 3;
+            d.reach = wire::WaitReason::RefusedOther as i32;
+        }))
+        .data();
+        assert_eq!(
+            other.line.expect("a line").status,
+            "Office NAS is refusing the backup"
+        );
+        assert!(!other.reason.contains("no room"), "{}", other.reason);
+        assert!(!other.reason.contains("full"), "{}", other.reason);
     }
 
     #[test]

@@ -396,6 +396,7 @@ pub fn wire_destination(destination: &Destination) -> wire::Destination {
         rolled_back: false,
         paired_at_ms: i64::try_from(destination.paired_at_ms).unwrap_or(0),
         waiting_apps: Vec::new(),
+        refused_limit_bytes: 0,
     }
 }
 
@@ -681,6 +682,8 @@ pub(crate) struct Standing {
     /// For each file counted, in the same order, the gateways still behind on it (empty when it
     /// is backed up everywhere or left out).
     pub lagging: Vec<Vec<String>>,
+    /// When the oldest file still waiting entered the vault (ms), if any says.
+    pub oldest_waiting_ms: Option<i64>,
 }
 
 /// Where one file the vault knows stands.
@@ -804,6 +807,9 @@ pub(crate) fn standing(
             out.pending_bytes = out.pending_bytes.saturating_add(file.len);
         }
         out.outcomes.push(Outcome::Waiting);
+        if let Some(made) = centraid_vault::clock::parse_iso_ms(&file.created_at) {
+            out.oldest_waiting_ms = Some(out.oldest_waiting_ms.map_or(made, |old| old.min(made)));
+        }
         out.lagging.push(
             lagging
                 .iter()
@@ -952,8 +958,12 @@ pub fn backup_status(
         row.rolled_back = ledger
             .rolled_back(&destination.gateway_id)
             .map_err(plane_error)?;
-        row.reach = drain::gateway_reach(&ledger, &destination.gateway_id)?
-            .unwrap_or(wire::WaitReason::Unspecified) as i32;
+        let reach = drain::gateway_reach(&ledger, &destination.gateway_id)?
+            .unwrap_or(wire::WaitReason::Unspecified);
+        row.reach = reach as i32;
+        if reach == wire::WaitReason::TooLarge {
+            row.refused_limit_bytes = drain::refused_limit_bytes();
+        }
         wired.push(row);
     }
     Ok(wire::BackupStatusResponse {
@@ -978,6 +988,7 @@ pub fn backup_status(
         left_out_items: held.left_out_items,
         left_out_bytes: held.left_out_bytes,
         apps: held.apps,
+        oldest_waiting_ms: standing.oldest_waiting_ms,
     })
 }
 

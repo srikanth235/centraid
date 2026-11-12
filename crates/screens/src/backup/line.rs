@@ -31,7 +31,7 @@ pub const CLOCK_TOLERANCE_MS: i64 = 5 * MINUTE_MS;
 pub const BACKLOG_STOOD_MS: i64 = DAY_MS;
 
 /// Every reason that can hold items, in the order the line lists them.
-const REASONS: [wire::WaitReason; 11] = [
+const REASONS: [wire::WaitReason; 13] = [
     wire::WaitReason::Wifi,
     wire::WaitReason::Charger,
     wire::WaitReason::Gateway,
@@ -41,6 +41,8 @@ const REASONS: [wire::WaitReason; 11] = [
     wire::WaitReason::Ask,
     wire::WaitReason::Untrusted,
     wire::WaitReason::Refused,
+    wire::WaitReason::TooLarge,
+    wire::WaitReason::RefusedOther,
     wire::WaitReason::PairAgain,
     wire::WaitReason::NoRoom,
 ];
@@ -191,6 +193,8 @@ fn name_the_one_behind(
     let title = match worst.footing() {
         Footing::RolledBack => words_home::device_older(locale),
         Footing::Full => words_home::device_full(locale),
+        Footing::TooLarge => words_home::device_too_large(locale),
+        Footing::Refusing => words_home::device_refusing(locale),
         _ => words_home::device_behind(locale),
     };
     // The headline and the status both name it; what the others hold is `last_good`.
@@ -235,6 +239,17 @@ pub fn behind_reason(locale: Locale, zone: &str, reading: &Reading, now_ms: i64)
     Some(match worst.footing() {
         Footing::RolledBack => words_home::device_older_reason(locale),
         Footing::Full => fill(&words_home::device_full_reason(locale), &[("name", &name)]),
+        Footing::TooLarge => fill(
+            &words_home::device_too_large_reason(locale),
+            &[
+                ("name", &name),
+                ("limit", &super::claim::bytes(worst.refused_limit_bytes)),
+            ],
+        ),
+        Footing::Refusing => fill(
+            &words_home::device_refusing_reason(locale),
+            &[("name", &name)],
+        ),
         _ if worst.reach == wire::WaitReason::PairAgain as i32 => {
             words::backup_line_pair_again(locale)
         }
@@ -391,6 +406,8 @@ fn waiting_words(locale: Locale, reason: wire::WaitReason) -> String {
         R::Ask => words::backup_wait_ask(locale),
         R::Untrusted => words::backup_wait_untrusted(locale),
         R::Refused => words::backup_wait_refused(locale),
+        R::TooLarge => words::backup_wait_too_large(locale),
+        R::RefusedOther => words::backup_wait_refused_other(locale),
         R::PairAgain => words::backup_wait_pair_again(locale),
         R::NoRoom => words::backup_wait_no_room(locale),
     }
@@ -412,6 +429,8 @@ fn row_reason(reason: wire::WaitReason) -> wire::backup_waiting_row::Reason {
         R::Ask => W::Ask,
         R::Untrusted => W::Untrusted,
         R::Refused => W::Refused,
+        R::TooLarge => W::TooLarge,
+        R::RefusedOther => W::RefusedOther,
         R::PairAgain => W::PairAgain,
         R::NoRoom => W::NoRoom,
     }

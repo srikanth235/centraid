@@ -23,6 +23,16 @@
 //! never repeated here — `PUT`s, deletes and the head's compare-and-set are
 //! idempotent by the rules, and the caller decides about the rest.
 //!
+//! # NO WAIT IS UNBOUNDED
+//!
+//! A gateway that went to sleep, or a network that changed, leaves the connection open and
+//! silent. Connect and handshake have their own limits; after that a request is given
+//! [`HEADER_TIMEOUT`] without progress to answer its headers (a body frame handed to the socket is
+//! progress) and a body read [`IDLE_TIMEOUT`] between chunks, both [`Limits`]. A call also looks at
+//! its [`Stop`] every [`Limits::poll`] while it waits, so a Cancel ends a transfer in flight.
+//! A call that gives up drops the connection; the next one dials fresh, and a request that may
+//! have reached the gateway is not repeated here.
+//!
 //! # BUNDLES AND FETCHES STREAM
 //!
 //! [`Client::bundle_parts`] sends parts from memory or straight from spool

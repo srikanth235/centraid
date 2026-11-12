@@ -259,6 +259,11 @@ impl Spawned {
         self.shared.store().commit_order()
     }
 
+    /// Make every upload be refused `TOO_LARGE`, or accepted again.
+    pub fn refuse_as_too_large(&self, refusing: bool) {
+        self.shared.store().pretend_too_large(refusing);
+    }
+
     /// Make `exists` answer that everything is held, whatever the disk holds, or answer honestly.
     pub fn lie_about_exists(&self, lying: bool) {
         self.shared.store().pretend_to_hold_everything(lying);

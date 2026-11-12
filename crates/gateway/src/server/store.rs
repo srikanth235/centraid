@@ -46,6 +46,9 @@ pub struct ObjectStore {
     /// a test sets it ([`ObjectStore::pretend_full`]): a real full disk is not
     /// something a test can make on any machine it runs on.
     full: Arc<AtomicBool>,
+    /// Every upload is refused as over the limit, whatever its size: a test sets it
+    /// ([`ObjectStore::pretend_too_large`]) to prove a phone hears `TOO_LARGE` as its own answer.
+    too_large: Arc<AtomicBool>,
     /// Whether `exists` answers that everything is held, whatever is on disk. Only a test sets
     /// it ([`ObjectStore::pretend_to_hold_everything`]): a gateway that lies about what it holds
     /// is what a phone's read-back is for (#1188, B4, B13).
@@ -113,6 +116,7 @@ impl ObjectStore {
             objects,
             incoming,
             full: Arc::new(AtomicBool::new(false)),
+            too_large: Arc::new(AtomicBool::new(false)),
             lying: Arc::new(AtomicBool::new(false)),
             exists_asked: Arc::default(),
             commits: Arc::default(),
@@ -124,6 +128,12 @@ impl ObjectStore {
     /// reachable from the product — only the test harness calls it.
     pub fn pretend_full(&self, full: bool) {
         self.full.store(full, Ordering::SeqCst);
+    }
+
+    /// Refuse every upload `TOO_LARGE` until told otherwise. Not reachable from the product —
+    /// only the test harness calls it.
+    pub fn pretend_too_large(&self, too_large: bool) {
+        self.too_large.store(too_large, Ordering::SeqCst);
     }
 
     /// Make `exists` answer that every name is held, whatever the disk holds: a gateway that lies.
@@ -197,6 +207,9 @@ impl ObjectStore {
     pub async fn stage(&self, limit: u64) -> Result<Staged, StageError> {
         if self.full.load(Ordering::SeqCst) {
             return Err(StageError::DiskFull);
+        }
+        if self.too_large.load(Ordering::SeqCst) {
+            return Err(StageError::TooLarge { limit });
         }
         let path = self
             .incoming

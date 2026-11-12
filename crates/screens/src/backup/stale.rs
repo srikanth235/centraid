@@ -164,6 +164,7 @@ mod tests {
             behind_bytes: 0,
             records_behind: false,
             reach: 0,
+            refused_limit_bytes: 0,
             rolled_back: false,
             paired_at_ms: None,
             waiting_apps: Vec::new(),

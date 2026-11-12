@@ -278,3 +278,52 @@ fn the_gateways_are_fed_in_turn_round_by_round() {
     );
     assert_eq!(one.len(), two.len(), "both hold the same parts");
 }
+
+/// **A REFUSAL KEEPS ITS REASON** (#1188, item 21). A gateway whose disk is full, one that
+/// refuses a part as too large and one that is fine are paired; each is read as what it said,
+/// with the limit the too-large one crossed, and the fine one is fed all the same.
+#[test]
+fn a_refusal_is_read_as_the_reason_the_gateway_gave() {
+    let (full, large, fine) = (gateway(), gateway(), gateway());
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    let (a, b, c) = (
+        pair_id(&phone, &full),
+        pair_id(&phone, &large),
+        pair_id(&phone, &fine),
+    );
+    originals(&phone, "a photograph for refusals", 3, 60_000);
+
+    full.spawned.fill_disk(true);
+    large.spawned.refuse_as_too_large(true);
+    drain(&phone, at_home());
+    let behind = status(&phone);
+    assert_eq!(row(&behind, &a).reach, wire::WaitReason::Refused as i32);
+    assert_eq!(row(&behind, &a).refused_limit_bytes, 0);
+    assert_eq!(row(&behind, &b).reach, wire::WaitReason::TooLarge as i32);
+    assert_eq!(
+        row(&behind, &b).refused_limit_bytes,
+        centraid_gateway::rules::limits::MAX_OBJECT_BYTES
+    );
+    assert_eq!(row(&behind, &c).reach, wire::WaitReason::Unspecified as i32);
+    assert_eq!(row(&behind, &c).behind_files, 0, "the healthy one is fed");
+}
+
+/// **THE OLDEST THING WAITING IS REPORTED** (#1188): a screen warns on an old backlog by
+/// subtracting it from now. Nothing waiting reads as absent.
+#[test]
+fn the_oldest_waiting_item_is_reported() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    pair(&phone, &gateway);
+    assert_eq!(status(&phone).oldest_waiting_ms, None);
+    originals(&phone, "a photograph that waits", 2, 60_000);
+    let waiting = status(&phone);
+    assert!(
+        waiting.oldest_waiting_ms.is_some_and(|at| at > 0),
+        "{waiting:?}"
+    );
+    drain(&phone, at_home());
+    assert_eq!(status(&phone).oldest_waiting_ms, None);
+}

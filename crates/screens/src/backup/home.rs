@@ -569,6 +569,8 @@ impl Backup {
         match destination.footing() {
             Footing::Current => backup_home::row_up_to_date(locale),
             Footing::Full => backup_home::row_full(locale),
+            Footing::TooLarge => backup_home::row_too_large(locale),
+            Footing::Refusing => backup_home::row_refusing(locale),
             Footing::RolledBack => backup_home::row_older(locale),
             Footing::Behind => match destination.behind_files {
                 0 => backup_home::row_catching_up(locale),

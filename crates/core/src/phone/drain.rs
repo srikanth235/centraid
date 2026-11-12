@@ -325,7 +325,8 @@ impl Conditions {
 /// not tried is not blamed on its gateway; `GATEWAY` when none answered;
 /// `UNTRUSTED` when the machine that answered is not the pinned gateway,
 /// whether at the start of the pass or part-way through it; `REFUSED` when it
-/// answered and refused a write for its own reason (a full disk, a quota);
+/// answered and refused a write for its own reason (a full disk, a part over its limit, or a
+/// code this build does not know);
 /// `PAIR_AGAIN` when it no longer knows this phone's token.
 ///
 /// # Errors
@@ -336,6 +337,8 @@ pub fn last_reach(ledger: &Ledger) -> Result<Option<wire::WaitReason>> {
             Some(REACH_SILENT) => Some(wire::WaitReason::Gateway),
             Some(REACH_UNTRUSTED) => Some(wire::WaitReason::Untrusted),
             Some(REACH_REFUSED) => Some(wire::WaitReason::Refused),
+            Some(REACH_TOO_LARGE) => Some(wire::WaitReason::TooLarge),
+            Some(REACH_REFUSED_OTHER) => Some(wire::WaitReason::RefusedOther),
             Some(REACH_PAIR_AGAIN) => Some(wire::WaitReason::PairAgain),
             _ => None,
         },
@@ -346,9 +349,30 @@ pub fn last_reach(ledger: &Ledger) -> Result<Option<wire::WaitReason>> {
 const REACH_ANSWERED: &str = "1";
 const REACH_SILENT: &str = "0";
 const REACH_UNTRUSTED: &str = "untrusted";
-/// The gateway answered and refused a write: a full disk, a quota (the
-/// sweep's F1).
+/// The gateway answered and refused a write for want of room: its disk is full (the sweep's
+/// F1). The spelling is the one earlier builds wrote, so a ledger that holds it reads the same.
 const REACH_REFUSED: &str = "refused";
+/// The gateway refused a part as over its limit ([`MAX_OBJECT_BYTES`]).
+const REACH_TOO_LARGE: &str = "refused_large";
+/// The gateway refused a write with a code that is neither of those (one this build does not
+/// know, or a refusal that is not about room).
+const REACH_REFUSED_OTHER: &str = "refused_other";
+
+/// What the gateway said when it refused, as the ledger keeps it.
+fn heard_of(refusal: &Refusal) -> &'static str {
+    match refusal {
+        Refusal::DiskFull => REACH_REFUSED,
+        Refusal::TooLarge => REACH_TOO_LARGE,
+        _ => REACH_REFUSED_OTHER,
+    }
+}
+
+/// The largest object the protocol allows, which is what a `TOO_LARGE` refusal crossed: the
+/// limit the Backup screen names.
+#[must_use]
+pub const fn refused_limit_bytes() -> u64 {
+    centraid_gateway::rules::limits::MAX_OBJECT_BYTES
+}
 /// The gateway answered `UNAUTHORIZED` to this phone's token (the sweep's F2).
 const REACH_PAIR_AGAIN: &str = "pair_again";
 
@@ -359,17 +383,19 @@ const REACH_PAIR_AGAIN: &str = "pair_again";
 enum Refused {
     /// `UNAUTHORIZED`: the gateway does not know this phone's token.
     Token,
-    /// `DISK_FULL`, `QUOTA`, `TOO_LARGE`: the gateway's own limit.
-    Room,
+    /// Any other refusal is that gateway's own answer: the value the ledger keeps for it
+    /// (`DISK_FULL`, `TOO_LARGE`, or one this build does not know). It stops that gateway's
+    /// pass and no other's.
+    Limit(&'static str),
 }
 
-/// The class a refusal's code belongs to, or `None` for one a pass does not
-/// give a status of its own.
-fn refused_by(reason: &str) -> Option<Refused> {
+/// The class a refusal's code belongs to.
+fn refused_by(reason: &str) -> Refused {
     match reason {
-        "UNAUTHORIZED" => Some(Refused::Token),
-        "DISK_FULL" | "QUOTA" | "TOO_LARGE" => Some(Refused::Room),
-        _ => None,
+        "UNAUTHORIZED" => Refused::Token,
+        "DISK_FULL" => Refused::Limit(REACH_REFUSED),
+        "TOO_LARGE" => Refused::Limit(REACH_TOO_LARGE),
+        _ => Refused::Limit(REACH_REFUSED_OTHER),
     }
 }
 
@@ -443,7 +469,7 @@ impl Pass {
         self.heard = match stop {
             Stop::Unreachable(_) => Some(REACH_SILENT),
             Stop::Untrusted(_) => Some(REACH_UNTRUSTED),
-            Stop::Refused(_) => Some(REACH_REFUSED),
+            Stop::Refused(refusal) => Some(heard_of(refusal)),
             _ => None,
         };
         Ok(true)
@@ -528,7 +554,7 @@ fn summarise_reach(ledger: &Ledger) -> Result<()> {
     let mut worst = REACH_ANSWERED;
     let rank = |value: &str| match value {
         REACH_PAIR_AGAIN => 4,
-        REACH_REFUSED => 3,
+        REACH_REFUSED | REACH_TOO_LARGE | REACH_REFUSED_OTHER => 3,
         REACH_UNTRUSTED => 2,
         REACH_SILENT => 1,
         _ => 0,
@@ -543,6 +569,8 @@ fn summarise_reach(ledger: &Ledger) -> Result<()> {
             worst = match value {
                 REACH_PAIR_AGAIN => REACH_PAIR_AGAIN,
                 REACH_REFUSED => REACH_REFUSED,
+                REACH_TOO_LARGE => REACH_TOO_LARGE,
+                REACH_REFUSED_OTHER => REACH_REFUSED_OTHER,
                 REACH_UNTRUSTED => REACH_UNTRUSTED,
                 _ => REACH_SILENT,
             };
@@ -566,6 +594,8 @@ pub fn gateway_reach(ledger: &Ledger, gateway_id: &str) -> Result<Option<wire::W
             Some(REACH_SILENT) => Some(wire::WaitReason::Gateway),
             Some(REACH_UNTRUSTED) => Some(wire::WaitReason::Untrusted),
             Some(REACH_REFUSED) => Some(wire::WaitReason::Refused),
+            Some(REACH_TOO_LARGE) => Some(wire::WaitReason::TooLarge),
+            Some(REACH_REFUSED_OTHER) => Some(wire::WaitReason::RefusedOther),
             Some(REACH_PAIR_AGAIN) => Some(wire::WaitReason::PairAgain),
             _ => None,
         },
@@ -588,7 +618,7 @@ fn stop_of(stop: &Stop) -> Result<Option<wire::DrainStop>> {
         // A TOKEN THE GATEWAY NO LONGER KNOWS is the pass's error, as it was
         // before any part moved (`pass_over`'s first question): the gateway is
         // marked for pairing again. Every other refusal is the
-        // gateway's own limit — a full disk, a quota — and is its own stop,
+        // gateway's own answer — a full disk, a part over its limit — and is its own stop,
         // not an absence (#1080, the sweep's F1): the status says so.
         Stop::Refused(Refusal::Unauthorized) => Err(CoreError::GatewayRefused {
             reason: Refusal::Unauthorized.code().to_owned(),
@@ -755,26 +785,26 @@ fn absorb(ledger: &Ledger, pass: &mut Pass, gateway: &Reached, error: CoreError)
             })
         }
         CoreError::GatewayRefused { reason } => match refused_by(&reason) {
-            // THE GATEWAY ANSWERED, AND ITS ANSWER IS ITS OWN LIMIT — a full disk, a quota —
-            // on a call that was not a part's `PUT`: the same stop the mover gives a refused
-            // part (#1080, the sweep's F1), so the status says that machine has to make
-            // room, not that time will pass. Another gateway is still fed.
-            Some(Refused::Room) => {
+            // THE GATEWAY ANSWERED, AND ITS ANSWER IS ITS OWN — a full disk, a part over its
+            // limit, a code this build does not know — on a call that was not a part's `PUT`:
+            // the same stop the mover gives a refused part (#1080, the sweep's F1), so the status
+            // says that machine has to be looked at, not that time will pass. It stops this
+            // gateway's pass and no other's.
+            Refused::Limit(heard) => {
                 tracing::warn!(code = %reason, "the gateway refused; it leaves the pass");
-                set_reach(ledger, id, REACH_REFUSED)?;
+                set_reach(ledger, id, heard)?;
                 pass.stopped = wire::DrainStop::Refused;
                 Ok(())
             }
             // A TOKEN THE GATEWAY DOES NOT KNOW (#1080, the sweep's F2): marked, so the
             // status says to pair again.
-            Some(Refused::Token) => {
+            Refused::Token => {
                 tracing::warn!("the gateway does not know this phone's token; pair again");
                 mark_token_refused(ledger, id)?;
                 pass.refused_token
                     .get_or_insert(CoreError::GatewayRefused { reason });
                 Ok(())
             }
-            None => Err(CoreError::GatewayRefused { reason }),
         },
         other => Err(other),
     }
@@ -2471,6 +2501,26 @@ pub fn reconcile(
 
 #[cfg(test)]
 mod tests {
+    /// **A REFUSAL IS CLASSED BY ITS CODE, AND AN UNKNOWN ONE STOPS ONE GATEWAY** (#1188, item
+    /// 21): the code a gateway never emits (`QUOTA`) is just an unknown code, not a room.
+    #[test]
+    fn a_refusal_is_classed_by_its_code_and_an_unknown_one_is_its_own_kind() {
+        assert_eq!(refused_by("UNAUTHORIZED"), Refused::Token);
+        assert_eq!(refused_by("DISK_FULL"), Refused::Limit(REACH_REFUSED));
+        assert_eq!(refused_by("TOO_LARGE"), Refused::Limit(REACH_TOO_LARGE));
+        assert_eq!(refused_by("QUOTA"), Refused::Limit(REACH_REFUSED_OTHER));
+        assert_eq!(
+            refused_by("SOMETHING_NEW"),
+            Refused::Limit(REACH_REFUSED_OTHER)
+        );
+        assert_eq!(heard_of(&Refusal::DiskFull), REACH_REFUSED);
+        assert_eq!(heard_of(&Refusal::TooLarge), REACH_TOO_LARGE);
+        assert_eq!(
+            heard_of(&Refusal::Other("X".to_owned())),
+            REACH_REFUSED_OTHER
+        );
+    }
+
     use super::*;
 
     fn plant(dir: &Path) {

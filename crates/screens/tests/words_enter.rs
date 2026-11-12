@@ -107,6 +107,7 @@ fn restore_answer(vaults: &[(&str, u32, i64, &str)], unclaimed: &[u32]) -> wire:
                     path: (*path).to_owned(),
                     rows: *rows,
                     safety_number: (*safety).to_owned(),
+                    ..wire::RestoredVault::default()
                 })
                 .collect(),
             gap_scanned: 0,
