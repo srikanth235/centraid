@@ -964,7 +964,7 @@ mod tests {
 
     #[test]
     fn a_write_on_one_row_picks_it_and_a_create_sets_its_fields() {
-        // the regrouped tools' compiler: the build reads the model record's block, which is `s2` until the stock base is pinned
+        // the regrouped tools' compiler: the build reads the model record's block (`sig`); held here so the test says what it reads
         let mut record = centraid_assist::record::record();
         record.current.tools_mode = "sig".to_owned();
         centraid_assist::record::held_for(record, || {

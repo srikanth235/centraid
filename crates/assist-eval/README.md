@@ -24,7 +24,7 @@ It prints the summary and writes `runs/val-base.json` (the report), `runs/val-ba
 | --- | --- |
 | `--model GGUF` / `ASSIST_EVAL_MODEL` | the base model; greedy, trace v4, think limit 200, 512 tokens, context 8192, the phone's grammar: `phone_options()` |
 | `--adapter GGUF` | a LoRA adapter loaded beside the base (`LlamaLoader::load_with_adapter`) and run On for every generation of the run; its sha256 goes in the label and in `config.adapter_sha256`. An adapter that will not load is an error, never the base alone. Needs `--features engine` |
-| `--tools s2\|sig\|compact\|full` | the tools block the system prompt shows, and the shape of call the step reads. **Default `sig`**, the eight tools; `s2` is the prompt the shipping model was trained on (`contracts/assist/export/prompt.s2.txt`). Written into the report's label and `config` |
+| `--tools s2\|sig\|compact\|full` | the tools block the system prompt shows, and the shape of call the step reads. **Default: the model record's mode** (`native_turn::phone_options().tools`; `sig` today, the eight tools); `s2` is the prompt of a model trained before the regroup (`contracts/assist/export/prompt.s2.txt`). Written into the report's label and `config` |
 | `--grammar off\|handles\|full` | how much of the think the decoder holds to. **Default: the phone's** (`full`; `handles` under `--tools s2`, which the step decides). Written into the report's label and `config` |
 | `--stub` | no weights: a model that declines everything. The floor, and a way to check the rig |
 | `--set FILE` | the JSONL set: a data version's split, decompressed. **Required**, no default |

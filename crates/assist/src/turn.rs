@@ -370,9 +370,9 @@ impl Plane<'_> {
         self.model
             .generate(request, on_token)
             .map_err(|error| match error {
-                ModelError::Load(detail) | ModelError::Generate(detail) => {
-                    Refusal::ModelFailed(detail)
-                }
+                ModelError::Load(detail)
+                | ModelError::AdapterLoad(detail)
+                | ModelError::Generate(detail) => Refusal::ModelFailed(detail),
                 ModelError::NoVision => Refusal::VisionAbsent,
                 other @ ModelError::ContextExceeded { .. } => {
                     Refusal::ModelFailed(other.to_string())

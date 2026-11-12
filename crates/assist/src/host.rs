@@ -27,10 +27,10 @@ pub trait ModelLoader: Send + Sync {
     /// Load the model at `path` with the adapter file at `adapter`, when there is one (#1188 G4).
     /// The default ignores the adapter, so an engine that has none is unchanged. An engine that
     /// reads adapters overrides this; a file that is not a valid adapter comes back as
-    /// [`ModelError::Load`] and the host then loads the base alone.
+    /// [`ModelError::AdapterLoad`] and the host then loads the base alone.
     ///
     /// # Errors
-    /// [`ModelError::Load`] when the base or the adapter would not load.
+    /// [`ModelError::Load`] when the base would not load, [`ModelError::AdapterLoad`] when the adapter would not.
     fn load_with_adapter(
         &self,
         path: &Path,
@@ -449,7 +449,7 @@ mod tests {
             if let Some(adapter) = adapter {
                 self.seen.lock().unwrap().push(Some(adapter.to_path_buf()));
                 if self.bad {
-                    return Err(ModelError::Load("not an adapter".to_owned()));
+                    return Err(ModelError::AdapterLoad("not an adapter".to_owned()));
                 }
                 return Ok(Arc::new(ScriptedModel::new(Vec::<String>::new())));
             }

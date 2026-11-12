@@ -131,7 +131,7 @@ impl ModelLoader for LlamaLoader {
     }
 
     /// The base, then the adapter if there is one. An adapter that is not one (or is not for this
-    /// model) is a `ModelError::Load` naming why, and nothing stays loaded.
+    /// model) is a `ModelError::AdapterLoad` naming why, and nothing stays loaded.
     fn load_with_adapter(
         &self,
         path: &Path,
@@ -205,9 +205,10 @@ fn attach(weights: &Weights, file: &Path) -> Result<Attached, ModelError> {
     let architecture = weights
         .meta_val_str("general.architecture")
         .map_err(|error| ModelError::Load(format!("the model names no architecture: {error}")))?;
-    adapter::check(file, &architecture).map_err(|error| ModelError::Load(error.to_string()))?;
+    adapter::check(file, &architecture)
+        .map_err(|error| ModelError::AdapterLoad(error.to_string()))?;
     let handle = weights.lora_adapter_init(file).map_err(|error| {
-        ModelError::Load(format!(
+        ModelError::AdapterLoad(format!(
             "llama.cpp refused the adapter (its tensors do not fit this model): {error}"
         ))
     })?;

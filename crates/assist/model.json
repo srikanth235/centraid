@@ -1,12 +1,10 @@
 {
   "current": {
-    "url": "https://huggingface.co/ggml-org/Qwen3.5-0.8B-GGUF/resolve/8fea620810c4afa23dd6443f999a48574c1611a3/Qwen3.5-0.8B-Q4_0.gguf",
-    "file_name": "Qwen3.5-0.8B-Q4_0.gguf",
-    "sha256": "57d1997790d1744fba5b40a7317df71ea5e2acee28c47e78f0cce39c0703f8cf",
     "bytes": 563036064,
-    "tools_mode": "s2",
-    "tools_hash": "ba356be186a4c12956bee31f4d0f6ea8c41c4e7a09f216fc19118f756500f729",
-    "prompt_hash": "01a3470c43892cb6cdd073f3c0ea1bc45c39df4f514f148cfba37d870b09d94a",
+    "file_name": "Qwen3.5-0.8B-Q4_0.gguf",
+    "prompt_hash": "ca0109ece366ccec53e3147dc96e443a7056c751b8c58775624a028162cbb96a",
+    "score": null,
+    "sha256": "57d1997790d1744fba5b40a7317df71ea5e2acee28c47e78f0cce39c0703f8cf",
     "special_tokens": [
       "</think>",
       "</tool_call>",
@@ -14,6 +12,13 @@
       "<think>",
       "<tool_call>",
       "<tool_response>",
+      "<tts_pad>",
+      "<tts_text_bos>",
+      "<tts_text_bos_single>",
+      "<tts_text_eod>",
+      "<|audio_end|>",
+      "<|audio_pad|>",
+      "<|audio_start|>",
       "<|box_end|>",
       "<|box_start|>",
       "<|endoftext|>",
@@ -35,8 +40,10 @@
       "<|vision_pad|>",
       "<|vision_start|>"
     ],
-    "special_tokens_source": "declared",
-    "score": null
+    "special_tokens_source": "file",
+    "tools_hash": "c4a759dfe93337fc3f925ed7a7768030cf3658076a4224639b0860bccbd6fc4b",
+    "tools_mode": "sig",
+    "url": "https://huggingface.co/ggml-org/Qwen3.5-0.8B-GGUF/resolve/8fea620810c4afa23dd6443f999a48574c1611a3/Qwen3.5-0.8B-Q4_0.gguf"
   },
   "previous": null
 }

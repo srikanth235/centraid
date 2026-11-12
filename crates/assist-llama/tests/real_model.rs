@@ -28,7 +28,7 @@ use std::time::Duration;
 
 use centraid_assist::host::ModelLoader;
 use centraid_assist::model::{AdapterUse, Cancel, Control, Finish, GenerateRequest, Model};
-use centraid_assist::native::step::{StepOptions, decode_step};
+use centraid_assist::native::step::decode_step;
 use centraid_assist::native::think::TraceMode;
 use centraid_assist::native::transcript::render_prompt_for_generation;
 use centraid_assist::prompt::{Budget, END_OF_TURN};
@@ -69,16 +69,18 @@ fn request<'a>(
     }
 }
 
-/// The prompt of a native turn's first step: the system turn (today, the kind card, the eight
-/// tools) and one question, ending where the model begins.
+/// The prompt of a native turn's first step: the system turn (today, the kind card, the tools of
+/// the model record's mode, the one the phone sends) and one question, ending where the model
+/// begins.
 fn native_prompt(question: &str) -> String {
-    use centraid_assist::native::prompt::{kind_card, py_json, tools_sig};
+    use centraid_assist::native::prompt::{kind_card_for, py_json, tools_for};
     use centraid_assist::native::transcript::{Json, parse_messages};
+    let mode = centraid_assist::native_turn::phone_options().tools;
     let system = format!(
         "today: Thursday 2026-10-08\nme: Me\n\nkinds:\n{}",
-        kind_card("USD").join("\n")
+        kind_card_for(mode, "USD").join("\n")
     );
-    let tools: Vec<String> = tools_sig().iter().map(py_json).collect();
+    let tools: Vec<String> = tools_for(mode).iter().map(py_json).collect();
     let records = format!(
         r#"[{{"role":"system","content":{},"tools":[{}]}},{{"role":"user","content":{}}}]"#,
         Json::str(&system).dumps(),
@@ -102,7 +104,8 @@ fn a_native_step_is_one_whole_message_ending_in_one_call_and_is_repeatable() {
                 &prompt,
                 None,
                 TraceMode::V4,
-                StepOptions::default(),
+                // the options the phone decodes under: the record's tools, the think held to the grammar
+                centraid_assist::native_turn::phone_options(),
                 &cancel,
             )
             .expect("a step")
@@ -554,8 +557,8 @@ fn a_file_that_is_not_an_adapter_for_this_model_is_refused_in_words() {
     let Some(base) = model_path() else { return };
     let loader = LlamaLoader::new(Config::default());
     let refused = |file: &std::path::Path| match loader.load_with_adapter(&base, Some(file)) {
-        Err(ModelError::Load(why)) => why,
-        Err(other) => panic!("not a load error: {other}"),
+        Err(ModelError::AdapterLoad(why)) => why,
+        Err(other) => panic!("not an adapter load error: {other}"),
         Ok(_) => panic!("{} was accepted", file.display()),
     };
     assert!(refused(&base).contains("not an adapter"));

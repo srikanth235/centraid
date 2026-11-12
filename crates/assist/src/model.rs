@@ -138,6 +138,10 @@ pub enum ModelError {
     /// reads.
     #[error("the model would not load: {0}")]
     Load(String),
+    /// The adapter file would not load beside the base: not an adapter, cut off, or made for
+    /// another architecture or model. The base is fine; the host loads it alone.
+    #[error("the adapter would not load: {0}")]
+    AdapterLoad(String),
     /// The engine failed mid-generation.
     #[error("the model failed: {0}")]
     Generate(String),

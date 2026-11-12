@@ -37,10 +37,10 @@ pub struct Request {
     /// The most tokens of the whole message.
     #[serde(default)]
     pub max_new: Option<u32>,
-    /// `off` (the phone's), `handles` or `full`: how much of the think the grammar holds to (`native/grammar.rs`).
+    /// `off` (the default here), `handles` or `full` (the phone holds `full`): how much of the think the grammar holds to (`native/grammar.rs`).
     #[serde(default)]
     pub grammar: Option<String>,
-    /// The tools block the prompt was rendered with, `s2` (the default: S2's, the phone's) or `sig`.
+    /// The tools block the prompt was rendered with, `sig` (the default) or `s2`, `compact`, `full`.
     #[serde(default)]
     pub tools: Option<String>,
 }

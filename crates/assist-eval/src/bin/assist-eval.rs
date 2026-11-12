@@ -156,7 +156,12 @@ fn engine(
     LlamaLoader::new(config)
         .load_with_adapter(path, adapter)
         // a scoring run never falls back to the base alone: an adapter that will not load is an error
-        .map_err(|error| anyhow::anyhow!("loading {}: {error}", path.display()))
+        .map_err(|error| match (&error, adapter) {
+            (centraid_assist::model::ModelError::AdapterLoad(why), Some(file)) => {
+                anyhow::anyhow!("the adapter {} would not load: {why}", file.display())
+            }
+            _ => anyhow::anyhow!("loading {}: {error}", path.display()),
+        })
 }
 
 fn run() -> Result<()> {

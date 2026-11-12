@@ -1,5 +1,5 @@
 //! ROLLOUTS WITH NO MODEL: a scripted model plays several samples of a small session through the real runtime; the
-//! report, the RFT records and the DPO pairs are checked on what it said. No weights, no network, no clocks.
+//! report and the RFT records are checked on what it said. No weights, no network, no clocks.
 
 use centraid_assist::native::prompt::ToolsMode;
 use centraid_assist_eval::gold::Session;

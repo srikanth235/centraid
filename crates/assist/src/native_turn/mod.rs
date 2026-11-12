@@ -132,8 +132,8 @@ impl NativeChat {
     /// The door's words, when the vault would not load into a world.
     pub fn open(door: Box<dyn Door>, tz: &str) -> Result<Self, String> {
         let now = civil_at(door.now_ms(), tz);
-        // the phone ships S2, which learned the tools before the regroup (#1166): its prompt, and
-        // its way of calling. The retrained model sets this (and `StepOptions::tools`) to `Sig`.
+        // the tools block the model record names (`phone_tools`): the prompt it shows and the way
+        // of calling it reads, the same as `phone_options().tools`
         let flags = Flags {
             writes: Writes::Park,
             tools: phone_tools(),
@@ -269,7 +269,7 @@ pub fn dismissed_line(was_waiting: bool) -> String {
 /// The tools the shipped model was trained on, from the model record.
 fn phone_tools() -> crate::native::prompt::ToolsMode {
     crate::native::prompt::ToolsMode::parse(&crate::record::record().current.tools_mode)
-        .unwrap_or(crate::native::prompt::ToolsMode::S2)
+        .unwrap_or_default()
 }
 
 /// THE PHONE'S DECODE OPTIONS (#1188): the think is held to the strongest grammar the model's tools

@@ -98,7 +98,7 @@ pub struct Dropped {
 /// and the compiler that reads their think both take it from here, so what the model is trained on is what the phone shows.
 #[must_use]
 pub fn tools_mode() -> ToolsMode {
-    ToolsMode::parse(&centraid_assist::record::record().current.tools_mode).unwrap_or(ToolsMode::S2)
+    ToolsMode::parse(&centraid_assist::record::record().current.tools_mode).unwrap_or_default()
 }
 
 /// The flags a session runs with: the phone's defaults and the model record's tools block.
