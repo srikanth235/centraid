@@ -581,6 +581,8 @@ fn main() -> Result<()> {
                 centraid_datagen::source::DatagenSource::open_version(&input, &names)?,
             ));
             let sessions = source.sessions()?;
+            // before the tokenizer and the renderer are loaded: val, test and noise are never training data
+            records::refuse_held_out(&sessions)?;
             let rollouts = centraid_assist_eval::rollout::read_rollouts(&rollouts)?;
             let needs = match &needs {
                 Some(path) => Needs::read(path, min_samples)?,

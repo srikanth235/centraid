@@ -83,7 +83,7 @@ target/release/assist-eval --model OUT/native-s2-Q4_0.gguf --out runs/val-s2-q4 
 cd .. && python3 artefacts.py publish-gguf OUT/native-s2-Q4_0.gguf --repo OWNER/NAME --tag S2-q4 --dry-run
 ```
 
-The converter is told `--no-mtp` (the base model's multi-token-prediction block is not in a checkpoint, but its config still declares it) and the quantizer `--output-tensor-type q8_0` (the tied embedding is Q8_0 in the file the phone loads). `assist-eval` decodes greedy through `decode_step` as `native_turn` does (think limit 200, 512 tokens, trace v4, a context of 8192) and adds tool accuracy, accuracy per argument and fail rate by constraint count; see `crates/assist-eval/README.md`. The Python rig that scored a GGUF through the `assist-step` process (`eval/run.py --model gguf`) is retired.
+The converter is told `--no-mtp` (the base model's multi-token-prediction block is not in a checkpoint, but its config still declares it) and the quantizer `--output-tensor-type q8_0` (the tied embedding is Q8_0 in the file the phone loads). `assist-eval` decodes greedy through `decode_step` under the phone's own options, `native_turn::phone_options()` (think limit 200, 512 tokens, trace v4, the `full` grammar, a context of 8192), and refuses to score a set whose reference calls do not replay to 100%; `assist-eval compare A B` pairs two reports by session (won, lost, z) and adds tool accuracy, accuracy per argument and fail rate by constraint count; see `crates/assist-eval/README.md`. The Python rig that scored a GGUF through the `assist-step` process (`eval/run.py --model gguf`) is retired.
 
 ## Rollouts: the model's own sessions as training data
 

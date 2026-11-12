@@ -115,6 +115,50 @@ pub struct Overall {
     pub think_cut_steps: usize,
     pub engine_errors: usize,
     pub not_run_turns: usize,
+    /// How the failed turns failed, counted apart so a loop or a crash is not read as a wrong answer.
+    pub endings: Endings,
+    /// Declined or asked where no accepted gold is either, over the turns that run whose gold is neither.
+    pub over_refusal: Rate,
+    /// Steps whose message held no call the runtime could read, or whose call it refused with an error, over all
+    /// the model's steps.
+    pub malformed_calls: Rate,
+    /// Of those, the steps that held no readable call at all.
+    pub unparsed_calls: Rate,
+    /// Tokens generated over the turns that ran (a count; 0 when the engine reports none).
+    pub tokens_total: u64,
+    pub tokens_per_turn: f64,
+}
+
+/// Failed turns by how they ended. `ordinary` is a turn that ended (rows, value, act, ask, decline) and was wrong.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct Endings {
+    pub ordinary_fail: usize,
+    /// Ended by the runtime's loop breaker.
+    pub loop_: usize,
+    /// Ended by the step cap, or never ended within it.
+    pub step_cap: usize,
+    /// Ended on a runtime error observation.
+    pub error: usize,
+    /// The engine failed in this turn (the rest of its session is `not_run_turns`).
+    pub engine_error: usize,
+}
+
+/// How a run was made, so that two reports can be told apart and refused when they cannot be compared. Anything
+/// the run did not say is `None`; two unknowns are never taken to be equal.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, serde::Deserialize)]
+pub struct RunConfig {
+    /// The tools block (`s2`, `sig`, `compact`, `full`).
+    #[serde(default)]
+    pub tools: Option<String>,
+    /// The decode grammar (`off`, `handles`, `full`).
+    #[serde(default)]
+    pub grammar: Option<String>,
+    /// The base GGUF's sha256.
+    #[serde(default)]
+    pub model_sha256: Option<String>,
+    /// The adapter file's sha256, when one was loaded beside the base.
+    #[serde(default)]
+    pub adapter_sha256: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -134,6 +178,10 @@ pub struct Report {
     /// What was scored: the model file and the set.
     pub model: String,
     pub set: String,
+    /// How the run decoded: tools block, grammar, model and adapter hashes.
+    pub config: RunConfig,
+    /// Every scored session and whether it passed, by id: what `assist-eval compare` pairs on.
+    pub verdicts: BTreeMap<String, bool>,
     pub overall: Overall,
     /// Sessions of the set that were not asked, and why: a subset result must not read as the whole set.
     pub excluded: Vec<Exclusion>,
@@ -317,6 +365,8 @@ pub fn build(
     Report {
         model: model.to_owned(),
         set: set.to_owned(),
+        config: RunConfig::default(),
+        verdicts: sessions.iter().map(|s| (s.id.clone(), s.pass())).collect(),
         excluded: excluded.to_vec(),
         overall: Overall {
             sessions: sessions.len(),
@@ -332,6 +382,24 @@ pub fn build(
             think_cut_steps: turns.iter().map(|t| t.think_cut).sum(),
             engine_errors: sessions.iter().filter(|s| s.error.is_some()).count(),
             not_run_turns: turns.iter().filter(|t| !t.run).count(),
+            endings: endings(&turns),
+            over_refusal: Rate::of(
+                turns.iter().filter(|t| t.run && t.over_refusal).count(),
+                turns.iter().filter(|t| t.run && !t.wants_refusal).count(),
+            ),
+            malformed_calls: Rate::of(
+                turns.iter().map(|t| t.unparsed_steps + t.error_steps).sum(),
+                turns.iter().map(|t| t.said.len()).sum(),
+            ),
+            unparsed_calls: Rate::of(
+                turns.iter().map(|t| t.unparsed_steps).sum(),
+                turns.iter().map(|t| t.said.len()).sum(),
+            ),
+            tokens_total: turns.iter().map(|t| u64::from(t.tokens)).sum(),
+            tokens_per_turn: ratio_f(
+                turns.iter().map(|t| u64::from(t.tokens)).sum(),
+                turns.iter().filter(|t| t.run).count(),
+            ),
         },
         all: slice(&rows),
         by_gold_type: by_gold_type
@@ -344,6 +412,38 @@ pub fn build(
             .collect(),
         by_app,
         failed,
+    }
+}
+
+fn ratio_f(total: u64, n: usize) -> f64 {
+    if n == 0 { 0.0 } else { total as f64 / n as f64 }
+}
+
+fn endings(turns: &[&TurnResult]) -> Endings {
+    let mut out = Endings::default();
+    for turn in turns.iter().filter(|t| !t.pass) {
+        if !turn.run {
+            // a turn the engine failed in carries its message; the turns after it say only "not run"
+            out.engine_error +=
+                usize::from(turn.problems.iter().any(|p| p.starts_with("engine failed")));
+            continue;
+        }
+        match turn.ending.as_str() {
+            "loop" => out.loop_ += 1,
+            "cap" => out.step_cap += 1,
+            "error" => out.error += 1,
+            _ => out.ordinary_fail += 1,
+        }
+    }
+    out
+}
+
+impl Report {
+    /// The report with how the run decoded recorded in it.
+    #[must_use]
+    pub fn with_config(mut self, config: RunConfig) -> Self {
+        self.config = config;
+        self
     }
 }
 
@@ -403,6 +503,27 @@ pub fn text(report: &Report) -> String {
     );
     out += &format!("Arguments:        {}\n", args_line(a));
     out += &format!("Wrong writes:     {}\n", o.wrong_write.pct());
+    out += &format!(
+        "Over-refusal:     {}  (declined or asked where gold is neither)\n",
+        o.over_refusal.pct()
+    );
+    out += &format!(
+        "Malformed calls:  {}  (steps unreadable or refused by the runtime; unreadable alone {})\n",
+        o.malformed_calls.pct(),
+        o.unparsed_calls.pct()
+    );
+    out += &format!(
+        "Failed turns:     {} ended wrong, {} loop, {} step cap, {} error, {} engine error\n",
+        o.endings.ordinary_fail,
+        o.endings.loop_,
+        o.endings.step_cap,
+        o.endings.error,
+        o.endings.engine_error
+    );
+    out += &format!(
+        "Tokens per turn:  {:.1}  ({} generated)\n",
+        o.tokens_per_turn, o.tokens_total
+    );
     out += "\nFail rate by constraints (all turns | clean turns)\n";
     for label in ["0", "1", "2", "3", "4+", "0-1"] {
         let b = a.by_constraints[label];

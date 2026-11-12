@@ -6,11 +6,11 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 
 use centraid_assist::native::identity::MODEL;
 use centraid_assist::native::prompt::ToolsMode;
-use centraid_assist_eval::run::{Runner, StepOut, Stepper};
+use centraid_assist_eval::replay;
 use centraid_assist_eval::source::EvalSource;
 use centraid_datagen::Catalog;
 use centraid_datagen::mix::{self, Shares};
@@ -217,92 +217,14 @@ fn a_record_is_the_eval_session_with_a_render_beside_it_and_loads_in_the_eval_un
     }
 }
 
-/// Says each turn's reference calls in turn, reading the turn from the placeholder in the prompt.
-struct Replay {
-    calls: BTreeMap<String, Vec<String>>,
-    said: Mutex<BTreeMap<String, usize>>,
-}
-
-impl Stepper for Replay {
-    fn step(
-        &self,
-        prompt: &str,
-        _dates: Option<&str>,
-        _tools: ToolsMode,
-    ) -> Result<StepOut, String> {
-        let start = prompt.rfind("⟨m3:").ok_or("no placeholder in the prompt")?;
-        let end = start + prompt[start..].find('⟩').ok_or("unclosed placeholder")? + '⟩'.len_utf8();
-        let user = &prompt[start..end];
-        let mut said = self.said.lock().expect("lock");
-        let n = said.entry(user.to_owned()).or_default();
-        let text = self
-            .calls
-            .get(user)
-            .and_then(|c| c.get(*n))
-            .ok_or("more steps than reference calls")?;
-        *n += 1;
-        Ok(StepOut {
-            text: text.clone(),
-            think_cut: false,
-        })
-    }
-}
-
+/// The path a scoring run takes before any model is asked: the reference calls replayed through the runner and judge.
 #[test]
 fn the_reference_calls_of_the_records_replay_to_their_gold_in_the_eval() {
     let (dir, _) = version_dir();
-    let all: Vec<Value> = ["train", "val", "test"]
-        .iter()
-        .flat_map(|split| records(dir.path(), split))
-        .collect();
-    let mut calls = BTreeMap::new();
-    for record in &all {
-        for turn in record["turns"].as_array().expect("turns") {
-            let texts = turn["ref"]
-                .as_array()
-                .expect("ref")
-                .iter()
-                .map(|call| {
-                    let mut text = format!(
-                        "<tool_call>\n<function={}>\n",
-                        call["tool"].as_str().unwrap_or_default()
-                    );
-                    for (k, v) in call["args"].as_object().into_iter().flatten() {
-                        text += &format!(
-                            "<parameter={k}>\n{}\n</parameter>\n",
-                            v.as_str().unwrap_or_default()
-                        );
-                    }
-                    text + "</function>\n</tool_call>"
-                })
-                .collect();
-            calls.insert(turn["user"].as_str().expect("user").to_owned(), texts);
-        }
-    }
-    let replay = Replay {
-        calls,
-        said: Mutex::new(BTreeMap::new()),
-    };
     let source = DatagenSource::open_version(dir.path(), &["train", "val", "test"]).expect("open");
-    let mut runner = Runner::new(&source, &replay).expect("runner");
-    let mut failed = Vec::new();
-    let mut turns = 0;
-    for session in source.sessions().expect("sessions") {
-        let result = runner.run_session(&session).expect("session runs");
-        for turn in &result.turns {
-            turns += 1;
-            if !turn.pass {
-                failed.push(format!("{} {}: {:?}", result.id, turn.user, turn.problems));
-            }
-        }
-    }
-    assert!(turns > 50);
-    assert!(
-        failed.is_empty(),
-        "{} of {turns} turns failed, first: {:?}",
-        failed.len(),
-        failed.iter().take(3).collect::<Vec<_>>()
-    );
+    let sessions = source.sessions().expect("sessions");
+    let report = replay::require(&source, &sessions, ToolsMode::Sig).expect("the version replays");
+    assert!(report.turns > 50);
 }
 
 #[test]

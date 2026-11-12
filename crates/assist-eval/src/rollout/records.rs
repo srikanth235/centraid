@@ -270,6 +270,27 @@ fn by_session(rollouts: &[Rollout]) -> BTreeMap<&str, Vec<&Rollout>> {
     out
 }
 
+/// Training records are cut from train sessions only. A val, test or noise session in the set is refused, whatever
+/// the command (`assist-eval rollout-records`, `datagen rollout-records`), before anything is written.
+///
+/// # Errors
+/// [`crate::EvalError::Data`] naming the splits and the first sessions.
+pub fn refuse_held_out(sessions: &[Session]) -> Result<(), crate::EvalError> {
+    let held: Vec<&Session> = sessions.iter().filter(|s| s.is_held_out()).collect();
+    if held.is_empty() {
+        return Ok(());
+    }
+    let splits: BTreeSet<&str> = held.iter().filter_map(|s| s.split.as_deref()).collect();
+    let first: Vec<&str> = held.iter().take(3).map(|s| s.id.as_str()).collect();
+    Err(crate::EvalError::Data(format!(
+        "refusing to cut training records from held-out data: {} session(s) of the {} split (first: {}). \
+         Records are cut from the train split only",
+        held.len(),
+        splits.into_iter().collect::<Vec<_>>().join("/"),
+        first.join(", ")
+    )))
+}
+
 /// RFT records: each rollout's passing prefix (every turn before its first failure, or all of them), deduplicated
 /// among a session's samples by the messages, weighted by [`Weighing`]. A rollout the engine failed in keeps the
 /// turns that ran and passed.
@@ -526,6 +547,7 @@ pub fn cut(
     renderer: Option<&dyn RenderRecord>,
     out: &std::path::Path,
 ) -> Result<RecordStats, crate::EvalError> {
+    refuse_held_out(sessions)?;
     let mut stats = RecordStats::default();
     let mut rft = rft_records(sessions, rollouts, how.needs, how.weighing, &mut stats);
     let mut pairs = dpo_pairs(sessions, rollouts, how.pairs_per_turn, &mut stats);

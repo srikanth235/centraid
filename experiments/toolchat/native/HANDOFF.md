@@ -35,7 +35,7 @@ The Python data tooling is gone: `authored/` (worlds, the ~450 session recipes, 
 - 82 % is a val number: every fix, ruling and soup choice was derived on val. Expect test lower until it is scored.
 - **The branch is on main** (`f5487678`, #1080) **plus #1078's on-device chat** (the `ios-app-simulator-aaef2f` branch), merged 2026-10-07. Main wins every overlap; the record is on #1044.
   - `crates/nativetools` is ported to main's APIs. Harness worlds seal Locker cells under a fixed `HARNESS_LOCKER_KEY` (`crates/nativetools/src/vaultio.rs`) and name the generation through `Vault::locker_generation`, because the phone derives `K` from the 24 words.
-  - Decoding is free and the grammar path is gone (D-1044-18, 2026-10-07): no `hard`/`soft` modes, no Lark exports, no llguidance, no llama.cpp arm. `free` was the only arm of the Python rig, and `NATIVE_DECODING`, `NATIVE_LARK`, `NATIVE_SOFT_THRESHOLD` and `NATIVE_HANDLES` are refused. Free decoding was shown token-identical before and after the cut on the base model (CPU), and val v7.4 refreezes byte-identical on the cut runtime.
+  - Decoding is free and the grammar path is gone (D-1044-18, 2026-10-07): no `hard`/`soft` modes, no Lark exports, no llguidance, no llama.cpp arm. `free` was the only arm of the Python rig (the phone and `assist-eval` now decode under the `full` grammar: `native_turn::phone_options()`, #1188), and `NATIVE_DECODING`, `NATIVE_LARK`, `NATIVE_SOFT_THRESHOLD` and `NATIVE_HANDLES` are refused. Free decoding was shown token-identical before and after the cut on the base model (CPU), and val v7.4 refreezes byte-identical on the cut runtime.
   - Everything S2 does not depend on is gone from the branch (2026-10-07, D-1044-17): the canonical-English harness (`crates/evalsuite`, `crates/evalworld`, `crates/candidates`, `experiments/canon-model`, the `joined-*.jsonl` corpora and its manifest, registry and command declarations), the earlier toolchat rounds `v2` to `v8` and their scripts, and the `afm-spike`, `frontier-probe`, `qwen-mobile` and `qwen-sanity` experiments. They remain in history (`69d89575f` and earlier); #1044 lists them.
   - Val v7.4 refreezes byte-identical on the merged runtime.
   - #1078's product assistant (`crates/assist`, `crates/assist-llama`, `crates/core/src/assist`) is a separate, read-only tool registry of 18 `<app>.<verb>` reads over llama.cpp. Wiring this task's model and its 8 tools into it is integration work that has not started.
@@ -75,7 +75,7 @@ Per #1171, in order: M6 (the three SFT arms on Kaggle, scored with `assist-eval`
 
 ## Known gaps
 
-- `assist-eval` was never run against a real model; the Kaggle kits (`crates/assist-eval/kaggle/`, `train/kaggle/`) were never run.
+- `assist-eval` was never run against a real model; the Kaggle kits (`crates/assist-eval/kaggle/`, which only scores, and `train/kaggle/`) were never run.
 - The GPU path of the trainer (`train/train.py` on CUDA, the DPO memory probe) has run on CPU tests only. Run the trainer tests from inside `train/` (`python -m unittest test_datagen`), or all of them with `python3 run_tests.py`.
 
 ## Rules the owner set (keep them)

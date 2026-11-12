@@ -1,8 +1,8 @@
 //! THE DECODE STEP (SPEC §6.6, §9; #1088, D-1044-18, #1166): one assistant message, written by any [`Model`].
 //!
-//! The model writes text and the runtime reads it. The think is free by default (`StepOptions::grammar` is `Off`: S2 and the
-//! phone); a model trained on the regrouped tools decodes it under a grammar built fresh from the catalog and the prompt
-//! (`native/grammar.rs`), sent as the think generation's `grammar` and to no other. The call and the rest of the message
+//! The model writes text and the runtime reads it. The think is free under `StepOptions::default()` (grammar `Off`); the phone does not
+//! decode with the default but with `native_turn::phone_options()` (grammar `Full`), where the think is decoded under a grammar
+//! built fresh from the catalog and the prompt (`native/grammar.rs`), sent as the think generation's `grammar` and to no other. The call and the rest of the message
 //! are never masked. The spans the think copies are checked against the user's message after decoding
 //! ([`StepInfo::unspanned`]). Three things generation does not do
 //! by itself are done here, as steps over TEXT, which is the only thing an engine behind the [`Model`] trait takes:
@@ -58,7 +58,7 @@ pub struct StepOptions {
     /// (`compile_think_for`). The default is S2, the model the phone ships; a model trained on the
     /// regrouped tools sets `Sig` (#1166).
     pub tools: ToolsMode,
-    /// How much of the think the decoder holds to (`native/grammar.rs`). `Off` is the phone's and S2's: the think is free.
+    /// How much of the think the decoder holds to (`native/grammar.rs`). `Off` leaves the think free (the default here; the phone holds `Full`, see `native_turn::phone_options`).
     /// `Full` is the grammar of the tools; under `ToolsMode::S2` it admits `search`
     /// and `open` and puts a create's kind in `set`.
     pub grammar: GrammarMode,

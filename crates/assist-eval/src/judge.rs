@@ -404,8 +404,12 @@ pub fn judge_accept(
             }
         }
         AcceptKind::Diff => {
-            // judged by the vault diff: a write that landed counts even if the model then looped or hit the step cap
-            if matches!(got, Ending::Ask | Ending::Decline) {
+            // judged by the vault diff, but only for a turn that ENDED: a write that landed and then looped, hit
+            // the step cap or errored fails (owner's ruling, #1188)
+            if matches!(
+                got,
+                Ending::Ask | Ending::Decline | Ending::Loop | Ending::Cap | Ending::Error
+            ) {
                 problems.push(format!("ended in {}, want a write", got.word()));
             }
             for key in &accept.already {
@@ -619,6 +623,52 @@ mod tests {
                 .iter()
                 .any(|p| p.starts_with("unwanted updated of task vet"))
         );
+    }
+
+    /// A write that landed and then ran on (looped, hit the step cap, errored) is not a pass (owner's ruling, #1188):
+    /// the member's turn did not end, so it is neither a score nor a training example.
+    #[test]
+    fn a_write_that_landed_and_then_looped_capped_or_errored_fails() {
+        let t = turn(
+            json!([{"type": "diff", "diff": {"rows": [{"key": "dentist", "change": "updated", "fields": {"date": "2026-03-18"}}], "links": []}}]),
+        );
+        let diff = json!({"rows": [{"id": "id-dentist", "kind": "task", "change": "updated", "fields": {"date": ["2026-03-11", "2026-03-18"]}}]});
+        let write = json!({"ends_turn": false, "effect": {"tool": "act", "diff": diff}});
+        let clean =
+            turn_effect(&[json!({"ends_turn": true, "effect": {"tool": "act", "diff": diff}})]);
+        assert!(judge_turn(&t, clean, &ids()).expect("judge").pass);
+        for (ending, last) in [
+            (
+                "loop",
+                json!({"ends_turn": true, "effect": {"tool": "find", "loop": true}}),
+            ),
+            (
+                "cap",
+                json!({"ends_turn": true, "effect": {"tool": "find", "cap": true}}),
+            ),
+            (
+                "error",
+                json!({"ends_turn": true, "effect": {"tool": "act", "error": "boom"}}),
+            ),
+            // the driver's own step cap: no response ended the turn
+            (
+                "cap",
+                json!({"ends_turn": false, "effect": {"tool": "find"}}),
+            ),
+        ] {
+            let effect = turn_effect(&[write.clone(), last]);
+            assert_eq!(effect.ending.word(), ending);
+            let verdict = judge_turn(&t, effect, &ids()).expect("judge");
+            assert!(
+                !verdict.pass,
+                "{ending}: the write landed but the turn did not end"
+            );
+            assert!(
+                verdict.problems.iter().any(|p| p.contains(ending)),
+                "{ending}: {:?}",
+                verdict.problems
+            );
+        }
     }
 
     #[test]

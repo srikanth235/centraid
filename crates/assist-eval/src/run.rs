@@ -27,8 +27,8 @@ use crate::EvalError;
 use crate::args::{
     ArgClass, ArgVerdict, bucket, cell_of, judge_args, tool_name_ok, turn_constraints,
 };
-use crate::effect::{effect_rows, turn_effect};
-use crate::gold::{Accept, Session, Turn};
+use crate::effect::{Ending, effect_rows, turn_effect};
+use crate::gold::{Accept, AcceptKind, Session, Turn};
 use crate::judge::{Ids, judge_turn};
 use crate::source::EvalSource;
 
@@ -39,6 +39,9 @@ pub struct StepOut {
     pub text: String,
     /// The think hit its limit and `</think>` was written for the model.
     pub think_cut: bool,
+    /// Tokens the engine generated for the message (0 when it does not report them: the stub, a script). A count,
+    /// never a time.
+    pub tokens: u32,
 }
 
 /// The model, as the loop needs it: a rendered prompt in, one message out. `tools` is the tools block the prompt
@@ -48,6 +51,10 @@ pub trait Stepper {
     /// # Errors
     /// The engine's words when it fails; the session stops there.
     fn step(&self, prompt: &str, dates: Option<&str>, tools: ToolsMode) -> Result<StepOut, String>;
+
+    /// A session is about to run. A model needs nothing here; the reference replay (`replay::ReferenceReplay`) reads
+    /// the session's own calls.
+    fn begin_session(&self, _id: &str) {}
 }
 
 /// The phone's step over any [`Model`]: `decode_step` with `TraceMode::V4` and the phone's [`StepOptions`], exactly
@@ -62,7 +69,7 @@ impl<'a> ModelStepper<'a> {
     pub fn new(model: &'a dyn Model) -> Self {
         Self {
             model,
-            options: StepOptions::default(),
+            options: centraid_assist::native_turn::phone_options(),
         }
     }
 }
@@ -83,6 +90,7 @@ impl Stepper for ModelStepper<'_> {
         .map(|out| StepOut {
             text: out.text,
             think_cut: out.info.think_cut,
+            tokens: out.info.new_tokens.unwrap_or(0),
         })
         .map_err(|error| error.to_string())
     }
@@ -101,6 +109,7 @@ impl Stepper for DeclineStepper {
         Ok(StepOut {
             text: "<think>\nintent: decline\n</think>\n\n<tool_call>\n<function=decline>\n<parameter=reason>\nout_of_scope\n</parameter>\n</function>\n</tool_call>".to_owned(),
             think_cut: false,
+            tokens: 0,
         })
     }
 }
@@ -127,6 +136,22 @@ pub struct TurnResult {
     pub tags: Vec<String>,
     pub steps: usize,
     pub think_cut: usize,
+    /// Tokens the model generated this turn, over all its steps (a count; 0 when the engine did not report any).
+    #[serde(default)]
+    pub tokens: u32,
+    /// Steps whose message held no call the runtime could read (`call_unreadable`).
+    #[serde(default)]
+    pub unparsed_steps: usize,
+    /// Steps whose call was read and refused by the runtime with an error observation (a call that does not fit its
+    /// tool: a bad field, a missing row).
+    #[serde(default)]
+    pub error_steps: usize,
+    /// An accepted gold of the turn is an ask or a decline (the denominator of the over-refusal rate).
+    #[serde(default)]
+    pub wants_refusal: bool,
+    /// The turn ended in a decline or an ask where no accepted gold is either.
+    #[serde(default)]
+    pub over_refusal: bool,
     /// The calls the runtime read out of the model's messages.
     pub calls: Vec<Value>,
     /// The messages the model wrote this turn, one per step, each cut after its first call as the runtime read it. A
@@ -276,6 +301,7 @@ impl<'a> Runner<'a> {
     /// it ends the session with [`SessionResult::error`].
     pub fn run_session(&mut self, session: &Session) -> Result<SessionResult, EvalError> {
         let started = Instant::now();
+        self.stepper.begin_session(&session.id);
         let (base, keys, kinds) = {
             let world = self.world(&session.world)?;
             (world.vault.clone(), world.ids.clone(), world.kinds.clone())
@@ -321,6 +347,7 @@ impl<'a> Runner<'a> {
             let mut calls: Vec<Value> = Vec::new();
             let mut said: Vec<String> = Vec::new();
             let mut think_cut = 0;
+            let (mut tokens, mut unparsed_steps, mut error_steps) = (0_u32, 0_usize, 0_usize);
             // A RETRACTION ENDS THE TURN IN THE RUNTIME, before any call: no message is asked of the model
             let ended = user.get("ended").filter(|v| v.is_object());
             if let Some(ended) = ended {
@@ -336,8 +363,14 @@ impl<'a> Runner<'a> {
                     }
                 };
                 think_cut += usize::from(out.think_cut);
+                tokens = tokens.saturating_add(out.tokens);
                 let sent = first_call(&out.text);
                 let response = live.call_text(sent);
+                if response["call"].is_object() {
+                    error_steps += usize::from(response["effect"].get("error").is_some());
+                } else {
+                    unparsed_steps += 1;
+                }
                 for (id, n) in effect_rows(&response["effect"]) {
                     shown.insert(id, n);
                 }
@@ -404,7 +437,6 @@ impl<'a> Runner<'a> {
                 wrong_write: verdict.wrong_write,
                 gold_type: verdict.gold_type.word().to_owned(),
                 ending: verdict.effect.ending.word().to_owned(),
-                // a write that landed and then looped still chose the right act
                 tool_ok: verdict.pass || verdict.tool_ok,
                 tool_name_ok: name_ok,
                 constraints,
@@ -413,6 +445,18 @@ impl<'a> Runner<'a> {
                 tags: turn.tags.clone(),
                 steps: verdict.effect.steps,
                 think_cut,
+                tokens,
+                unparsed_steps,
+                error_steps,
+                wants_refusal: turn
+                    .gold
+                    .iter()
+                    .any(|a| matches!(a.kind, AcceptKind::Ask | AcceptKind::Decline)),
+                over_refusal: matches!(verdict.effect.ending, Ending::Ask | Ending::Decline)
+                    && turn
+                        .gold
+                        .iter()
+                        .all(|a| !matches!(a.kind, AcceptKind::Ask | AcceptKind::Decline)),
                 calls,
                 said,
                 cell: cell_of(turn),
@@ -469,6 +513,11 @@ fn not_run(turn: &Turn, constraints: usize, apps: Vec<String>) -> TurnResult {
         tags: turn.tags.clone(),
         steps: 0,
         think_cut: 0,
+        tokens: 0,
+        unparsed_steps: 0,
+        error_steps: 0,
+        wants_refusal: false,
+        over_refusal: false,
         calls: Vec::new(),
         said: Vec::new(),
         cell: cell_of(turn),
@@ -480,4 +529,34 @@ fn not_run(turn: &Turn, constraints: usize, apps: Vec<String>) -> TurnResult {
 #[must_use]
 pub fn constraint_label(turn: &TurnResult) -> &'static str {
     bucket(turn.constraints)
+}
+
+#[cfg(test)]
+mod tests {
+    use centraid_assist::model::{Control, GenerateRequest, Generation, ModelError};
+    use centraid_assist::native::grammar::GrammarMode;
+
+    use super::*;
+
+    struct NoModel;
+    impl Model for NoModel {
+        fn generate(
+            &self,
+            _request: &GenerateRequest<'_>,
+            _on_token: &mut dyn FnMut(&str) -> Control,
+        ) -> Result<Generation, ModelError> {
+            Err(ModelError::Load("no model".to_owned()))
+        }
+    }
+
+    /// The eval decodes as the phone does unless told otherwise: one definition, not a copy.
+    #[test]
+    fn the_stepper_starts_from_the_phones_options() {
+        let stepper = ModelStepper::new(&NoModel);
+        assert_eq!(
+            stepper.options,
+            centraid_assist::native_turn::phone_options()
+        );
+        assert_eq!(stepper.options.grammar, GrammarMode::Full);
+    }
 }

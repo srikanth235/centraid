@@ -20,10 +20,25 @@ pub struct Session {
     /// A logged runtime issue that makes the correct effect unreachable today (`runtime_issues.md`).
     #[serde(default)]
     pub blocked: Option<Value>,
+    /// The split the session belongs to (`train`, `val`, `test`, `noise`), when its source says: a data version's
+    /// split file, a set named for its split, or the record itself. `None` when nothing does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub split: Option<String>,
     pub turns: Vec<Turn>,
 }
 
+/// The splits no training record may be cut from (the held-out data and its noisy copy).
+pub const HELD_OUT: [&str; 3] = ["val", "test", "noise"];
+
 impl Session {
+    /// Whether the session is from a split that is held out (`val`, `test`, `noise`).
+    #[must_use]
+    pub fn is_held_out(&self) -> bool {
+        self.split
+            .as_deref()
+            .is_some_and(|split| HELD_OUT.iter().any(|h| h.eq_ignore_ascii_case(split)))
+    }
+
     #[must_use]
     pub fn is_blocked(&self) -> bool {
         match &self.blocked {

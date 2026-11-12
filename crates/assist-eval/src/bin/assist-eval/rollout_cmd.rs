@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! assist-eval rollout         (--model GGUF | --stub) --set SET.jsonl [--worlds DIR]… --out PREFIX [--k 4] [--temperature 0.6]
-//!                             [--top-p 0.95] [--seed N] [--grammar off|handles|full] [--tools sig|s2|…] [--limit N] [--only ID,ID]
+//!                             [--top-p 0.95] [--seed N] [--grammar off|handles|full (default: the phone's)] [--tools sig|s2|…] [--limit N] [--only ID,ID]
 //!                             [--shard K/N] [--resume] [--threads N] [--gpu-layers N] [--label TEXT]
 //! assist-eval rollout-report  --rollouts PREFIX.rollouts.jsonl… --out PREFIX [--label TEXT]
 //! assist-eval rollout-compare BEFORE.rollout.json AFTER.rollout.json [--out FILE.json]
@@ -14,9 +14,9 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use super::tools_of;
 use anyhow::{Context, Result, bail};
 use centraid_assist::native::grammar::GrammarMode;
-use centraid_assist::native::prompt::ToolsMode;
 use centraid_assist_eval::EvalError;
 use centraid_assist_eval::rollout::records::{self, Cutting, Needs, Weighing};
 use centraid_assist_eval::rollout::report::{self, RolloutReport};
@@ -127,17 +127,7 @@ fn flags(argv: &[String]) -> Result<Flags> {
     Ok(out)
 }
 
-fn tools_of(word: &str) -> Result<ToolsMode> {
-    Ok(match word {
-        "s2" => ToolsMode::S2,
-        "sig" => ToolsMode::Sig,
-        "compact" => ToolsMode::Compact,
-        "full" => ToolsMode::Full,
-        other => bail!("--tools takes s2, sig, compact or full, not {other}"),
-    })
-}
-
-fn grammar_of(word: &str) -> Result<GrammarMode> {
+pub(super) fn grammar_of(word: &str) -> Result<GrammarMode> {
     Ok(match word {
         "off" => GrammarMode::Off,
         "handles" => GrammarMode::Handles,
@@ -213,8 +203,14 @@ pub fn run(command: &str, argv: &[String]) -> Result<()> {
 fn sample(f: &Flags) -> Result<()> {
     let native = PathBuf::from("experiments/toolchat/native");
     let source = source(f, &native)?;
-    let tools = tools_of(f.tools.as_deref().unwrap_or("sig"))?;
-    let grammar = grammar_of(f.grammar.as_deref().unwrap_or("full"))?;
+    let tools = match f.tools.as_deref() {
+        Some(word) => tools_of(word)?,
+        None => centraid_assist::native_turn::phone_options().tools,
+    };
+    let grammar = match f.grammar.as_deref() {
+        Some(word) => grammar_of(word)?,
+        None => centraid_assist::native_turn::phone_options().grammar,
+    };
     let sampling = Sampling {
         k: f.k.unwrap_or(4),
         temperature: f.temperature.unwrap_or(0.6),

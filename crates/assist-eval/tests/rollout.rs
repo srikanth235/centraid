@@ -296,3 +296,45 @@ fn a_renderer_fills_the_render_of_every_record() {
         json!([1.0])
     );
 }
+
+/// Records are cut from the train split only: val, test and noise are refused, before anything is written.
+#[test]
+fn records_are_never_cut_from_a_held_out_split() {
+    let rollouts = sampled();
+    let needs = Needs::default();
+    for (split, refused) in [
+        (Some("val"), true),
+        (Some("test"), true),
+        (Some("noise"), true),
+        (Some("train"), false),
+        (None, false),
+    ] {
+        let mut held = session();
+        held.split = split.map(str::to_owned);
+        let dir = tempfile::tempdir().expect("tempdir");
+        let out = dir.path().join("records");
+        let result = records::cut(
+            &[held],
+            &rollouts,
+            &records::Cutting {
+                needs: &needs,
+                weighing: Weighing::default(),
+                pairs_per_turn: 2,
+            },
+            None,
+            &out,
+        );
+        match (refused, result) {
+            (true, Err(error)) => {
+                let text = error.to_string();
+                assert!(
+                    text.contains("held-out") && text.contains(split.unwrap()),
+                    "{text}"
+                );
+                assert!(!out.exists(), "nothing is written for {split:?}");
+            }
+            (false, Ok(_)) => assert!(out.join("rft.jsonl").exists()),
+            (refused, other) => panic!("{split:?}: refused={refused}, got {other:?}"),
+        }
+    }
+}

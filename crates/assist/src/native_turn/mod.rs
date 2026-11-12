@@ -277,7 +277,8 @@ fn phone_tools() -> crate::native::prompt::ToolsMode {
 /// prompt shows, so only a valid call to one of the tools can be written. A model trained on the
 /// tools before the regroup (S2) is held to the same grammar with its own words (`search`, `open`,
 /// a create's kind in `set`; `grammar_for_step`).
-fn phone_options() -> StepOptions {
+#[must_use]
+pub fn phone_options() -> StepOptions {
     StepOptions {
         tools: phone_tools(),
         grammar: crate::native::grammar::GrammarMode::Full,
