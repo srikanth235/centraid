@@ -173,14 +173,14 @@ fn a_one_off_repeats_never_and_a_date_only_reminder_is_on_the_day() {
     let i = open(&mut d, &id);
     let v = d.view(i);
     assert_eq!(field(v, "repeats").value, "Never");
-    assert_eq!(field(v, "reminder").value, "On the day");
+    assert_eq!(field(v, "reminder").value, "On the day, 09:00");
     assert!(detail_data(v).fields.iter().all(|f| f.key != "anchor"));
 }
 
 #[test]
-fn the_reminder_row_says_no_alert_will_sound_for_a_date_with_no_time() {
+fn the_reminder_row_says_it_sounds_at_nine_for_a_date_with_no_time() {
     let mut d = driver();
-    let silent = "No alert will sound because no time is set";
+    let silent = "A reminder for a day with no time sounds at 09:00 that day.";
     let dated = add(
         &d,
         act::reminders::AddTask {

@@ -3,9 +3,8 @@
 //! the core's), a vault or a screen, so the whole rule is tested with built
 //! messages and a pinned now.
 //!
-//! A moment is a moment: a task whose due is a date has no `remind_at_local`
-//! and an all-day event has no start, so neither is ever given an invented
-//! time. A repeating task contributes its one next reminder (the core already
+//! A day has no moment: a task whose due is a date, and an all-day event, sound at 09:00 that
+//! day (`remind_at_local` already says so for the task) and are never given that time. A repeating task contributes its one next reminder (the core already
 //! computed it from the effective due), a repeating event each occurrence of
 //! the window.
 
@@ -302,11 +301,23 @@ fn events(inputs: &Inputs, zone: &FireZone, window: &Window) -> Vec<wire::Pendin
     let locale = inputs.locale;
     let mut out = Vec::new();
     for event in inputs.events {
-        // A DAY HAS NO MOMENT: an all-day event is never alerted, as a date-only task is not.
-        if event.all_day || event.status.as_deref() == Some("cancelled") {
+        if event.status.as_deref() == Some("cancelled") {
             continue;
         }
-        let Some(start_ms) = parse_civil_ms(&event.local_start, zone) else {
+        // A DAY HAS NO MOMENT (#1188, NA6): an all-day event's alert sounds at 09:00 that day,
+        // wherever the member is, and its lead times mean nothing (the first stands for "on the
+        // day"). The event itself keeps no time.
+        let day_alert = event.all_day;
+        let start_text = if day_alert {
+            format!(
+                "{}T{}",
+                event.local_start.get(..10).unwrap_or_default(),
+                centraid_vault::alerts::DAY_ALERT_TIME
+            )
+        } else {
+            event.local_start.clone()
+        };
+        let Some(start_ms) = parse_civil_ms(&start_text, zone) else {
             continue;
         };
         let place = event
@@ -320,15 +331,29 @@ fn events(inputs: &Inputs, zone: &FireZone, window: &Window) -> Vec<wire::Pendin
                 calendar.name.clone().filter(|name| !name.trim().is_empty())
             })
             .unwrap_or_default();
-        for reminder in &event.reminders {
+        let reminders = if day_alert {
+            &event.reminders[..event.reminders.len().min(1)]
+        } else {
+            &event.reminders[..]
+        };
+        for reminder in reminders {
             let minutes = reminder.minutes_before;
-            let fire_ms = start_ms - minutes * MINUTE_MS;
+            let fire_ms = if day_alert {
+                start_ms
+            } else {
+                start_ms - minutes * MINUTE_MS
+            };
             if !window.holds(fire_ms) {
                 continue;
             }
             if let Some(now) = window.ongoing_at {
                 // AN EVENT THAT IS OVER IS RESOLVED: its reminder is not wanted on the screen.
-                let end = parse_civil_ms(&event.local_end, zone).unwrap_or(start_ms);
+                let end_text = if event.local_end.len() == 10 {
+                    format!("{}T00:00", event.local_end)
+                } else {
+                    event.local_end.clone()
+                };
+                let end = parse_civil_ms(&end_text, zone).unwrap_or(start_ms);
                 if end <= now {
                     continue;
                 }
@@ -348,7 +373,15 @@ fn events(inputs: &Inputs, zone: &FireZone, window: &Window) -> Vec<wire::Pendin
                     event.summary.as_deref().unwrap_or_default(),
                 ),
                 body(
-                    &when(locale, &day, &civil::clock(&event.local_start)),
+                    &when(
+                        locale,
+                        &day,
+                        &if day_alert {
+                            String::new()
+                        } else {
+                            civil::clock(&event.local_start)
+                        },
+                    ),
                     &place,
                 ),
                 "",

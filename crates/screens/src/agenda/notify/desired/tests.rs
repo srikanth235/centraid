@@ -143,16 +143,10 @@ fn what_is_done_cancelled_dateless_or_past_is_left_out() {
     let past = task("p", "2026-11-10", "07:00", "2026-11-10T07:00");
     let mut off = event("e1", "2026-11-11T12:00", &[10]);
     off.status = Some("cancelled".to_owned());
-    let mut all_day = event("e2", "2026-11-11T00:00", &[10]);
-    all_day.all_day = true;
     let gone = event("e3", "2026-11-10T08:05", &[10]);
     let none = event("e4", "2026-11-11T12:00", &[]);
     assert_eq!(
-        run(
-            NY,
-            &[done, cancelled, date_only, past],
-            &[off, all_day, gone, none]
-        ),
+        run(NY, &[done, cancelled, date_only, past], &[off, gone, none]),
         Vec::new()
     );
 }
@@ -372,4 +366,26 @@ fn a_notice_in_the_past_is_not_held() {
         extra_wanted: &[],
     });
     assert!(set.is_empty());
+}
+
+/// NA6: A DAY HAS NO MOMENT. An all-day event sounds at 09:00 that day in the member's zone, once,
+/// whatever its lead times; the body names the day and no clock.
+#[test]
+fn an_all_day_event_sounds_at_nine_on_its_day_once() {
+    let mut holiday = event("h", "2026-11-12T00:00", &[10, 60]);
+    holiday.all_day = true;
+    holiday.local_end = "2026-11-13".to_owned();
+    let set = run(NY, &[], &[holiday]);
+    assert_eq!(set.len(), 1, "the first lead stands for the day");
+    assert_eq!(set[0].fire_local, "2026-11-12T09:00");
+    assert!(!set[0].body.contains(':'), "{}", set[0].body);
+    let elsewhere = {
+        let mut e = event("h", "2026-11-12T00:00", &[10]);
+        e.all_day = true;
+        run("Asia/Tokyo", &[], &[e])
+    };
+    assert_eq!(
+        elsewhere[0].fire_local, "2026-11-12T09:00",
+        "09:00 wherever the member is"
+    );
 }

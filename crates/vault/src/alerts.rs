@@ -43,6 +43,9 @@ pub const KEEP_PAST_MS: i64 = 2 * DAY_MS;
 /// How much earlier than its own now a reader asks for floating rows: a phone in another zone than
 /// the vault's. The widest offset between two zones is 26 hours; a day and a half covers it.
 pub const FLOATING_SLACK_MS: i64 = 36 * 60 * MINUTE_MS;
+/// When the alert of a day with no time sounds, on that day, wherever the member is (#1188, NA6).
+/// The item never gains this time: it is only when the alert is held.
+pub const DAY_ALERT_TIME: &str = "09:00";
 /// How far ahead a repeating item looks for its next firing.
 const HORIZON_MS: i64 = 3 * 366 * DAY_MS;
 /// The most occurrences one look expands.
@@ -290,15 +293,26 @@ fn event_alerts(connection: &Connection, id: &str, now: i64) -> Result<Vec<Alert
     let Some((starts, timing, zone, rule, status, reminders)) = fields else {
         return Ok(Vec::new());
     };
+    // A DAY HAS NO MOMENT: an all-day event's alert sounds at 09:00 that day, wherever the member
+    // is, and its lead times mean nothing (the first stands for "on the day").
+    let all_day = timing == "all-day";
     let space = match timing.as_str() {
         "zoned" => Timing::Fixed,
-        "floating" => Timing::Floating,
+        "floating" | "all-day" => Timing::Floating,
         _ => return Ok(Vec::new()),
+    };
+    let starts = if all_day {
+        format!("{}T{DAY_ALERT_TIME}", starts.get(..10).unwrap_or(&starts))
+    } else {
+        starts
     };
     if status == "cancelled" {
         return Ok(Vec::new());
     }
-    let offsets = reminders.as_deref().map(offsets_of).unwrap_or_default();
+    let mut offsets = reminders.as_deref().map(offsets_of).unwrap_or_default();
+    if all_day {
+        offsets.truncate(1);
+    }
     if offsets.is_empty() {
         return Ok(Vec::new());
     }
@@ -315,13 +329,13 @@ fn event_alerts(connection: &Connection, id: &str, now: i64) -> Result<Vec<Alert
             zone.as_deref(),
             space,
             reference,
-            &offsets,
+            if all_day { &[0] } else { &offsets },
         )?),
         None => None,
     };
     let mut out = Vec::new();
     for offset in offsets {
-        let lead = offset * MINUTE_MS;
+        let lead = if all_day { 0 } else { offset * MINUTE_MS };
         let start = match &series {
             // A series' next start at or after the moment this lead time would fire.
             Some(starts) => starts
@@ -410,7 +424,17 @@ fn exceptions_of(
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let mut matcher = Vec::new();
     let mut moved = Vec::new();
+    // An all-day series' days are dates; its expansion is read at the day's alert time.
+    let at_day_time = |text: String| {
+        if text.len() == 10 {
+            format!("{text}T{DAY_ALERT_TIME}:00")
+        } else {
+            text
+        }
+    };
     for (original, scope, cancelled, starts) in rows {
+        let original = at_day_time(original);
+        let starts = starts.map(at_day_time);
         let scope = if scope == "future" {
             ExceptionScope::Future
         } else {
@@ -459,13 +483,18 @@ fn task_alerts(connection: &Connection, id: &str, now: i64) -> Result<Vec<Alert>
             },
         )
         .optional()?;
-    // A DATE HAS NO MOMENT: a date-only due holds no row until the day's own convention does.
     let Some((Some(due), rule, anchor, zone, Some(lead))) = fields else {
         return Ok(Vec::new());
     };
-    if due.len() == 10 {
-        return Ok(Vec::new());
-    }
+    // A DAY HAS NO MOMENT: a date-only due sounds at 09:00 that day, wherever the member is, and
+    // its lead time means nothing. The due itself is never given the time.
+    let date_only = due.len() == 10;
+    let offset = lead;
+    let (due, lead) = if date_only {
+        (format!("{due}T{DAY_ALERT_TIME}"), 0)
+    } else {
+        (due, lead)
+    };
     let space = if has_zone_designator(&due) {
         Timing::Fixed
     } else {
@@ -499,7 +528,7 @@ fn task_alerts(connection: &Connection, id: &str, now: i64) -> Result<Vec<Alert>
     }
     Ok(vec![Alert {
         entity_id: id.to_owned(),
-        offset_min: lead,
+        offset_min: offset,
         timing: space,
         fire_key: space.key_of(at - lead_ms),
         repeats,

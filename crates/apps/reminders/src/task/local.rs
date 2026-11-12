@@ -180,13 +180,14 @@ pub fn place_due(
 /// The wall clock a reminder fires at: the due INSTANT less the lead time,
 /// read in `zone`.
 ///
-/// **A date-only due has no moment to count back from**, so it answers
-/// `None` rather than inventing a time of day for it (an open question to the
-/// owner, in the crate README).
+/// **A date-only due has no moment to count back from**, so its alert sounds at the day's own
+/// convention, 09:00 that day wherever the member is (`alerts::DAY_ALERT_TIME`), and its lead
+/// time means nothing (#1188, NA6). The due is never given that time: it is only when the alert
+/// sounds.
 #[must_use]
 pub fn remind_at(due: &str, lead_minutes: i64, zone: &FireZone) -> Option<String> {
     if due.len() == 10 {
-        return None;
+        return Some(format!("{due}T{}", centraid_vault::alerts::DAY_ALERT_TIME));
     }
     let millis = parse_civil_ms(due, zone)? - lead_minutes.checked_mul(60_000)?;
     let wall = zone.zoned_parts(millis);
@@ -272,7 +273,11 @@ mod tests {
             remind_at("2099-06-10T13:00:00.000Z", 30, &new_york).as_deref(),
             Some("2099-06-10T08:30")
         );
-        assert_eq!(remind_at("2099-06-10", 30, &new_york), None);
+        assert_eq!(
+            remind_at("2099-06-10", 30, &new_york).as_deref(),
+            Some("2099-06-10T09:00"),
+            "a day with no time sounds at 09:00 that day"
+        );
     }
 
     /// A DUE THE MEMBER TYPED HAS NO ZONE, AND IT IS THEIR WALL CLOCK (#1135).

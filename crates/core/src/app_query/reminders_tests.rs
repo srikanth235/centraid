@@ -447,7 +447,10 @@ fn local_times_follow_daylight_saving_and_the_reminder_is_read() {
     let dated_only = &dated.tasks[1];
     assert_eq!(dated_only.due_local, "2099-07-20");
     assert_eq!(dated_only.due_time, "");
-    assert_eq!(dated_only.remind_at_local, "", "a date has no moment");
+    assert_eq!(
+        dated_only.remind_at_local, "2099-07-20T09:00",
+        "a day with no time sounds at 09:00 that day"
+    );
 
     let reminders = scratch.board(wire::AgendaTaskView::Reminders);
     assert_eq!(titles(&reminders.groups[0]).len(), 3);

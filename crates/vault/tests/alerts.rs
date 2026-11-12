@@ -151,14 +151,39 @@ fn a_wall_clock_task_floats() {
     assert_eq!(rows[0].fire_key, "2026-03-01T09:00");
 }
 
+/// A DAY HAS NO MOMENT (#1188, NA6): a date-only task and an all-day event sound at 09:00 that day,
+/// a floating key, and neither item gains a time.
 #[test]
-fn a_date_only_task_holds_no_row() {
+fn a_day_with_no_time_holds_a_floating_nine_oclock_row_and_the_item_gains_no_time() {
     let w = World::new();
-    w.ok(
+    let id = w.ok(
         "task.add",
-        json!({ "title": "Tax", "due": "2026-03-01", "remind_before_min": 0 }),
+        json!({ "title": "Tax", "due": "2026-03-01", "remind_before_min": 30 }),
+    )["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let rows = w.rows();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].timing, Timing::Floating);
+    assert_eq!(
+        rows[0].fire_key, "2026-03-01T09:00",
+        "the lead means nothing"
     );
-    assert!(w.rows().is_empty());
+    let due: String = w
+        .scratch
+        .vault
+        .read(|c| Ok(c.query_row("SELECT due FROM task WHERE id = ?1", [&id], |r| r.get(0))?))
+        .expect("due");
+    assert_eq!(due, "2026-03-01", "the vault never gains a time");
+    w.ok(
+        "event.propose",
+        json!({ "title": "Holiday", "timing": "all-day", "starts": "2026-03-02",
+                "ends": "2026-03-03", "reminders": [10, 60] }),
+    );
+    let rows = w.rows();
+    assert_eq!(rows.len(), 2, "one row for the event, whatever its leads");
+    assert_eq!(rows[1].fire_key, "2026-03-02T09:00");
 }
 
 #[test]
@@ -339,4 +364,24 @@ fn a_fired_task_reminders_row_stays_until_the_task_is_resolved() {
     assert_eq!(w.rows().len(), 1, "still open after a month");
     w.ok("task.complete", json!({ "id": id }));
     assert!(w.rows().is_empty());
+}
+
+#[test]
+fn a_repeating_all_day_event_sounds_each_day_at_nine_and_a_skipped_day_is_passed_over() {
+    let w = World::new();
+    let id = w.ok(
+        "event.propose",
+        json!({ "title": "Bins", "timing": "all-day", "starts": "2025-12-30", "ends": "2025-12-31",
+                "rule": "FREQ=DAILY", "reminders": [0] }),
+    )["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    // The clock is 2026-01-01T00:00Z; today's 09:00 is still ahead.
+    assert_eq!(w.rows()[0].fire_key, "2026-01-01T09:00");
+    w.ok(
+        "event.edit_occurrence",
+        json!({ "id": id, "original_start": "2026-01-01", "scope": "occurrence", "action": "skip" }),
+    );
+    assert_eq!(w.rows()[0].fire_key, "2026-01-02T09:00");
 }

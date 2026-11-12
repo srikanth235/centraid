@@ -7,6 +7,8 @@ catalog! {
     plain mark_done = ("Mark as done", "Mark as done");
     plain moved_tomorrow = ("Moved to tomorrow", "Moved to tomorrow");
     plain snooze_hour = ("Snooze 1 hour", "Snooze 1 hour");
-    plain no_alert_without_time = ("No alert will sound because no time is set", "No alert will sound because no time is set");
+    plain date_only_task_alert = ("A reminder for a day with no time sounds at 09:00 that day.", "A reminder for a day with no time sounds at 09:00 that day.");
+    plain all_day_event_alert = ("An alert for an all-day event sounds at 09:00 that day.", "An alert for an all-day event sounds at 09:00 that day.");
+    plain all_day_event_alert_row = ("On the day, {time}", "On the day, {time}");
     plain snoozed_hour = ("Snoozed for 1 hour", "Snoozed for 1 hour");
 }

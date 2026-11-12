@@ -44,7 +44,7 @@ use crate::reminders::routes;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
     Locale, agenda_editor as editor_words, agenda_event as link_words,
-    agenda_notify as notify_words, agenda_repeat as repeat_words, agenda_tasks as card_words,
+    agenda_notify as notify_words, agenda_repeat as repeat_words, agenda_tasks as card_words, fill,
     links as link_label, task as words,
 };
 
@@ -1326,6 +1326,15 @@ fn reminder_value(
 ) -> String {
     if task.remind_before_min.is_none() {
         words::remind_none(locale)
+    } else if !task.remind_at_local.is_empty() && task.due_time.is_empty() {
+        // A DAY HAS NO MOMENT (#1188, NA6): the alert sounds at the day's own time; the due keeps none.
+        fill(
+            &words::reminder_on_the_day_at(locale),
+            &[(
+                "time",
+                &civil::clock_for(locale, &task.remind_at_local, cycle),
+            )],
+        )
     } else if !task.remind_at_local.is_empty() {
         format!(
             "{} {}",
@@ -1445,7 +1454,7 @@ fn fields(
         note: if !dated {
             words::reminder_needs_due(locale)
         } else if task.due_time.is_empty() {
-            notify_words::no_alert_without_time(locale)
+            notify_words::date_only_task_alert(locale)
         } else if task.remind_before_min.is_some() {
             // WHAT THE PHONE SAYS ABOUT ALERTS (#1188, NA1): said once the reminder would sound.
             alert_line.unwrap_or_else(|| words::reminder_note_a(locale))

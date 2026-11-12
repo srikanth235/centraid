@@ -125,6 +125,7 @@ catalog! {
     plain reminder_needs_due = ("A reminder needs a due date.", "A reminder needs a due date.");
     plain reminder_note_a = ("Delivered on your phone.", "Delivered on your phone.");
     plain reminder_on_the_day = ("On the day", "On the day");
+    plain reminder_on_the_day_at = ("On the day, {time}", "On the day, {time}");
     plain remind_at_time = ("At the time", "At the time");
     plain remind_day = ("1 day before", "1 day before");
     plain remind_hour = ("1 hour before", "1 hour before");

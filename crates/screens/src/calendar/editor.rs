@@ -941,23 +941,47 @@ impl Editor {
                 }
             })
             .collect();
-        let reminders: Vec<wire::AgendaChoice> = self
-            .reminder_keys()
+        // A DAY HAS NO MOMENT (#1188, NA6): an all-day event is alerted once, on the day at 09:00,
+        // so its Alert row offers that and nothing else.
+        let day_alert = fill(
+            &notify_words::all_day_event_alert_row(locale),
+            &[(
+                "time",
+                &civil::time_for(locale, centraid_vault::alerts::DAY_ALERT_TIME, cycle),
+            )],
+        );
+        let reminders: Vec<wire::AgendaChoice> = if draft.all_day {
+            [
+                (REMINDER_NONE, words::reminder_none(locale)),
+                ("0", day_alert),
+            ]
             .into_iter()
-            .map(|key| {
-                let label = key.parse::<i64>().map_or_else(
-                    |_| words::reminder_none(locale),
-                    |minutes| reminder_label(locale, minutes),
-                );
-                wire::AgendaChoice {
-                    selected: key == draft.reminder_key,
-                    accessibility_label: label.clone(),
-                    key,
-                    label,
-                    hue_key: String::new(),
-                }
+            .map(|(key, label)| wire::AgendaChoice {
+                selected: (key == REMINDER_NONE) == (draft.reminder_key == REMINDER_NONE),
+                accessibility_label: label.clone(),
+                key: key.to_owned(),
+                label,
+                hue_key: String::new(),
             })
-            .collect();
+            .collect()
+        } else {
+            self.reminder_keys()
+                .into_iter()
+                .map(|key| {
+                    let label = key.parse::<i64>().map_or_else(
+                        |_| words::reminder_none(locale),
+                        |minutes| reminder_label(locale, minutes),
+                    );
+                    wire::AgendaChoice {
+                        selected: key == draft.reminder_key,
+                        accessibility_label: label.clone(),
+                        key,
+                        label,
+                        hue_key: String::new(),
+                    }
+                })
+                .collect()
+        };
         let timed = !draft.all_day;
         let repeat_label = repeats.iter().find(|choice| choice.selected).map_or_else(
             || words::repeat_never(locale),
@@ -1058,7 +1082,7 @@ impl Editor {
             reminders,
             // AN ALERT NEEDS A MOMENT: an all-day event never sounds one, and the row says so.
             reminder_note: if draft.all_day {
-                notify_words::no_alert_without_time(locale)
+                notify_words::all_day_event_alert(locale)
             } else if draft.reminder_key == REMINDER_NONE {
                 String::new()
             } else {
@@ -1098,7 +1122,7 @@ impl Editor {
             },
             place_query: self.place_query.clone(),
             show_clear_location: !draft.place_id.is_empty() || !self.typed_place.trim().is_empty(),
-            show_second_reminder: draft.reminder_key != REMINDER_NONE,
+            show_second_reminder: draft.reminder_key != REMINDER_NONE && !draft.all_day,
             second_reminder_label: self
                 .second_reminder_choices(locale, draft)
                 .iter()
