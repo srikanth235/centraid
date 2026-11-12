@@ -48,6 +48,7 @@ impl Screen for Job {
             kind: Some(wire::view_state::Kind::Counter(wire::CounterView {
                 title: self.heard.clone(),
                 content: None,
+                ..Default::default()
             })),
             ..Default::default()
         }

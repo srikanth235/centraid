@@ -150,12 +150,13 @@ fn a_person_with_no_channels_says_so_and_one_who_is_not_there_is_gone() {
     assert_eq!(data.cadence_line, "No cadence · no touch logged yet");
 
     let gone = open_person(&mut d, "p-nobody", "Nobody");
-    match &person_state(d.view(gone)).content {
-        Some(wire::people_person_state::Content::Gone(empty)) => {
-            assert_eq!(empty.action_label, "Back");
-        }
-        other => panic!("expected gone, found {other:?}"),
-    }
+    // A person no longer there is a final failure in its own words, never an empty page.
+    let state = person_state(d.view(gone));
+    assert!(state.content.is_none());
+    assert_eq!(
+        people_support::gone_of(&state.page).sentence,
+        "This person is not in People."
+    );
     // Gone is not an error, and there is no editor to open on nothing.
     assert!(person_state(d.view(gone)).edit.is_none());
 }
@@ -499,11 +500,9 @@ fn nobody_else_to_merge_in_is_said_in_one_sentence() {
     let Some(wire::people_person_sheet::Kind::Merge(merge)) = &sheet_of_view(d.view(i)).kind else {
         panic!("the merge sheet");
     };
-    let Some(wire::people_merge_sheet::Content::Choices(choices)) = &merge.content else {
-        panic!("choices");
-    };
+    assert!(merge.content.is_none());
     assert_eq!(
-        choices.empty.as_ref().unwrap().headline,
+        people_support::empty_of(&merge.page).headline,
         "Nobody to merge in."
     );
 }
@@ -616,7 +615,7 @@ fn a_relationship_is_on_both_sheets_each_read_from_its_own_side() {
 }
 
 #[test]
-fn a_birthday_reminder_stays_on_and_has_no_off_control() {
+fn a_birthday_says_no_reminder_and_has_no_switch() {
     let mut d = clean();
     let id = id_of(&arrange(
         &d,
@@ -636,7 +635,9 @@ fn a_birthday_reminder_stays_on_and_has_no_off_control() {
             .clone()
     };
     let before = birthday(&d, i);
-    assert!(before.reminder_on && !before.toggleable, "{before:?}");
+    assert!(!before.toggleable, "{before:?}");
+    // A birthday is shown on its day and notifies nobody: its row carries no reminder wording.
+    assert_eq!(before.reminder_label, "");
     send_person(
         &mut d,
         i,
@@ -645,8 +646,8 @@ fn a_birthday_reminder_stays_on_and_has_no_off_control() {
         }),
     );
     let after = birthday(&d, i);
-    assert!(after.reminder_on && !after.toggleable, "{after:?}");
-    assert_eq!(after.reminder_label, "Reminder on");
+    assert!(!after.toggleable, "{after:?}");
+    assert_eq!(after.reminder_label, "");
 }
 
 fn hero_keys(d: &Driver, i: u64) -> Vec<String> {

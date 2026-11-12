@@ -7,9 +7,6 @@ catalog! {
         "Ask the owner of this vault for access."
     );
     plain pixel_box = ("{width} × {height}", "{width} × {height}");
-    plain size_kb = ("{n} KB", "{n} KB");
-    plain size_mb = ("{n} MB", "{n} MB");
-    plain size_gb = ("{n} GB", "{n} GB");
 
     plain edit_straighten = ("Straighten {degrees}", "Straighten {degrees}");
     plain edit_flip = ("Flip", "Flip");
@@ -26,7 +23,23 @@ catalog! {
     );
     plain edit_fallback_name = ("photo", "photo");
     plain not_in_vault = ("This photo is not in a vault yet.", "This photo is not in a vault yet.");
+    plain link_added = ("Linked", "Linked");
+    plain link_removed = ("Link removed", "Link removed");
+    plain links_empty = ("Nothing linked yet", "Nothing linked yet");
+    plain links_unread = (
+        "Couldn’t read what this photo is linked to.",
+        "Couldn’t read what this photo is linked to."
+    );
+    plain person_added = ("Person added", "Person added");
+    plain person_removed = ("Person removed", "Person removed");
+    plain caption_changed = ("Caption changed", "Caption changed");
+    plain label_added = ("Label added", "Label added");
+    plain label_removed = ("Label removed", "Label removed");
+    plain place_changed = ("Place changed", "Place changed");
     plain utc = ("UTC", "UTC");
+    plain earlier_caption = ("Caption: {caption}", "Caption: {caption}");
+    plain earlier_no_caption = ("No caption", "No caption");
+    plain earlier_no_place = ("No place", "No place");
     plain captured_fact = ("{when} · {zone}", "{when} · {zone}");
     plain stamp_line = ("{clock} · {place}", "{clock} · {place}");
     counted trash_days_left = ("1 day left in the trash", "{n} days left in the trash");

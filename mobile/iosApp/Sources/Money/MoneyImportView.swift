@@ -22,18 +22,18 @@ struct MoneyImportView: View {
     }
 
     var body: some View {
-        let content = state.readContent
         let sheetBinding = moneySheetBinding(state.sheet == .account) { send(event { $0.sheetClosed = .init() }) }
         PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
             EmptyView()
         } content: {
-            ReadStateView(
-                content: content,
-                onRetry: { send(event { $0.refreshed = .init() }) }
-            ) { plan in
-                if plan.hasEmpty {
-                    EmptyStateView(plan.empty, onAction: { open(plan.accountsRoute) })
-                } else {
+            PageReadStateView(
+                page: state.page,
+                onRetry: { send(event { $0.refreshed = .init() }) },
+                onEmptyAction: {
+                    if case let .data(plan)? = state.content { open(plan.accountsRoute) }
+                }
+            ) {
+                if case let .data(plan)? = state.content {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) { page(plan, state: state) }
                             .padding(.bottom, 16)
@@ -42,7 +42,7 @@ struct MoneyImportView: View {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 VStack(spacing: 0) {
-                    if let plan = content.loaded, !plan.doneLabel.isEmpty {
+                    if let plan = state.loaded, !plan.doneLabel.isEmpty {
                         MoneyInkButton(label: plan.doneLabel, identifier: "money-import-done") {
                             send(event { $0.done = .init() })
                         }
@@ -57,8 +57,8 @@ struct MoneyImportView: View {
         }
         .sheet(isPresented: sheetBinding) {
             MoneyChoiceSheet(
-                title: content.loaded?.accountSheetTitle ?? "",
-                choices: content.loaded?.accountOptions ?? [],
+                title: state.loaded?.accountSheetTitle ?? "",
+                choices: state.loaded?.accountOptions ?? [],
                 identifierPrefix: "money-import-account-option"
             ) { key in send(event { $0.accountPicked = .with { $0.accountID = key } }) }
         }

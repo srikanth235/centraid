@@ -57,8 +57,10 @@ import dev.centraid.android.kit.ContentImage
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.LocalBandClearance
 import dev.centraid.android.kit.OutlineButton
+import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RowSkeleton
-import dev.centraid.android.kit.ScreenFailure
+import dev.centraid.android.kit.motion
+import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
@@ -85,34 +87,36 @@ internal fun PhotosCollectionsScreen(
 ) {
     val chrome = state.chrome ?: PhotosHomeChrome()
     val data = collections.data_
-    val loading = collections.loading
-    val failure = collections.failure
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = MARGIN)
-            // THE LIST RUNS UNDER THE BAND'S GLASS; its last card scrolls clear of it.
-            .padding(bottom = LocalBandClearance.current + BandPolicy.FOOT_MARGIN.dp),
+    ReadStateView(
+        page = collections.page!!,
+        onRetry = { onEvent(PhotosHomeEvent(refreshed = centraid.core.v1.PhotosRefreshed())) },
+        skeleton = { RowSkeleton() },
     ) {
-        // SHOW ALL / COLLAPSE ALL is one link here — v0's Collections menu without
-        // the menu: a bulk fold is a command over this list, not a header verb.
-        if (data != null && data.sections.isNotEmpty()) {
-            val everyFolded = data.sections.all { it.folded }
-            Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
-                Spacer(Modifier.weight(1f))
-                KitLink(
-                    label = if (everyFolded) chrome.show_all_label else chrome.collapse_all_label,
-                    onClick = { onEvent(PhotosHomeEvent(fold_all = centraid.core.v1.PhotosFoldAll())) },
-                )
-            }
-        }
-        when {
-            loading != null -> RowSkeleton()
-            failure != null -> ScreenFailure(failure.sentence, failure.remedy)
-            data != null -> data.sections.forEach { section ->
-                Section(section.title, section.toggle_label, section.folded, { onEvent(PhotosHomeEvent(section_toggled = section.key)) }) {
-                    SectionBody(section, onEvent, onOpen)
+        if (data != null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = MARGIN)
+                    // THE LIST RUNS UNDER THE BAND'S GLASS; its last card scrolls clear of it.
+                    .padding(bottom = LocalBandClearance.current + BandPolicy.FOOT_MARGIN.dp),
+            ) {
+                // SHOW ALL / COLLAPSE ALL is one link here — v0's Collections menu without
+                // the menu: a bulk fold is a command over this list, not a header verb.
+                if (data.sections.isNotEmpty()) {
+                    val everyFolded = data.sections.all { it.folded }
+                    Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                        Spacer(Modifier.weight(1f))
+                        KitLink(
+                            label = if (everyFolded) chrome.show_all_label else chrome.collapse_all_label,
+                            onClick = { onEvent(PhotosHomeEvent(fold_all = centraid.core.v1.PhotosFoldAll())) },
+                        )
+                    }
+                }
+                data.sections.forEach { section ->
+                    Section(section.title, section.toggle_label, section.folded, { onEvent(PhotosHomeEvent(section_toggled = section.key)) }) {
+                        SectionBody(section, onEvent, onOpen)
+                    }
                 }
             }
         }
@@ -184,8 +188,10 @@ private fun SectionBody(
 
 /** The phone's page margin, emitted beside the tokens. */
 private val MARGIN = 18.dp
-/** Home's tile radius: one card corner in the product, not one per screen. */
-private val CARD_RADIUS = 12.dp
+/** Home's tile radius, the `lg` token: one card corner in the product, not one per screen. */
+@Composable
+private fun cardRadius(): Dp = (LocalCentraidTokens.current.radii["lg"] ?: 0).dp
+
 private val CARD_GAP = 12.dp
 private val ALBUM_SIDE = 150.dp
 private val FOLD_CONTROL = 30.dp
@@ -196,7 +202,7 @@ private val FOLD_CONTROL = 30.dp
 private fun Section(title: String, toggleLabel: String, isFolded: Boolean, onFold: () -> Unit, content: @Composable () -> Unit) {
     val turn by animateFloatAsState(
         targetValue = if (isFolded) -90f else 0f,
-        animationSpec = tween(CentraidGeometry.DURATION_ONE),
+        animationSpec = motion(tween(CentraidGeometry.DURATION_ONE)),
         label = "fold",
     )
     Column(Modifier.fillMaxWidth().padding(top = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -253,7 +259,7 @@ private fun CoverGround(path: String?, iconKey: String, side: Dp) {
     Box(
         Modifier
             .size(side)
-            .clip(RoundedCornerShape(CARD_RADIUS))
+            .clip(RoundedCornerShape(cardRadius()))
             .background(Brush.verticalGradient(listOf(centraidColor("bgElev"), centraidColor("lineStrong")))),
         contentAlignment = Alignment.Center,
     ) {
@@ -300,7 +306,7 @@ private fun EmptySectionCard(iconKey: String, title: String, caption: String, ve
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(CARD_RADIUS))
+            .clip(RoundedCornerShape(cardRadius()))
             .background(centraidColor("bgElev"))
             .padding(18.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -319,7 +325,7 @@ private fun UtilitiesGroup(cards: List<PhotosCollectionCard>, onOpen: (Route) ->
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(CARD_RADIUS))
+            .clip(RoundedCornerShape(cardRadius()))
             .background(centraidColor("bgElev")),
     ) {
         cards.forEachIndexed { index, card ->
@@ -357,7 +363,7 @@ private fun DeletedGroup(cards: List<PhotosCollectionCard>, onRestore: (String) 
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(CARD_RADIUS))
+            .clip(RoundedCornerShape(cardRadius()))
             .background(centraidColor("bgElev")),
     ) {
         cards.forEachIndexed { index, card ->

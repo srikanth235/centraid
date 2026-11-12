@@ -9,34 +9,12 @@ use crate::kit::civil::{self, HourCycle};
 use crate::strings::{Locale, fill, health as words};
 
 pub const BP: u32 = 10_000;
-const KG_TO_LB: f64 = 2.204_622_621_8;
-const M_PER_MI: f64 = 1_609.344;
-const M_TO_FT: f64 = 3.280_839_895;
 const WEEK_BACK: i64 = 6;
 /// The mark a kind with none of its own takes.
 pub const WORKOUT_ICON: &str = "Gym";
 
-/// Kotlin's `roundToLong`: ties toward positive infinity.
-pub(crate) fn round(value: f64) -> i64 {
-    #[allow(clippy::cast_possible_truncation)]
-    {
-        (value + 0.5).floor() as i64
-    }
-}
-
-/// `8412` as `8,412`.
-#[must_use]
-pub fn grouped(value: i64) -> String {
-    let digits = value.unsigned_abs().to_string();
-    let mut out = String::new();
-    for (index, digit) in digits.chars().enumerate() {
-        if index > 0 && (digits.len() - index).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(digit);
-    }
-    if value < 0 { format!("−{out}") } else { out }
-}
+use crate::kit::quantity::Quantity;
+pub(crate) use crate::kit::quantity::{grouped, round};
 
 /// A metric's name.
 #[must_use]
@@ -51,129 +29,23 @@ pub fn label(locale: Locale, metric: Metric) -> String {
     }
 }
 
-/// A figure and its unit word, apart: `"8,412" ""`, `"7 h 12 min" ""`,
-/// `"412" "kcal"`, `"157.4" "lb"`.
+/// A metric's value as a [`Quantity`] (the core's figure, in the unit the metric is held in), to
+/// be worded with `.figure(locale, units)` or `.words(locale, units)`: `8,412`, `7 h 12 min`,
+/// `412 kcal`, `157.4 lb`.
 #[must_use]
-pub fn figure(locale: Locale, metric: Metric, value: f64, units: Units) -> (String, String) {
+pub fn measure(metric: Metric, value: f64) -> Quantity {
     match metric {
-        Metric::Steps => (grouped(round(value)), String::new()),
-        Metric::Sleep => (duration(locale, value), String::new()),
-        Metric::Energy => (grouped(round(value)), words::unit_kcal(locale)),
-        Metric::Exercise => (grouped(round(value)), words::unit_min(locale)),
-        Metric::RestingHr => (grouped(round(value)), words::unit_bpm(locale)),
-        Metric::Weight => match units {
-            Units::Metric => (tenths(value), words::unit_kg(locale)),
-            Units::Imperial => (tenths(value * KG_TO_LB), words::unit_lb(locale)),
-        },
+        Metric::Steps => Quantity::steps(value),
+        // Held in minutes asleep.
+        Metric::Sleep => Quantity::duration_s(value * 60.0),
+        Metric::Energy => Quantity::energy_kcal(value),
+        Metric::Exercise => Quantity::minutes(value),
+        Metric::RestingHr => Quantity::beats(value),
+        Metric::Weight => Quantity::mass_kg(value),
     }
 }
 
-/// A figure with its unit, as one phrase: `8,412`, `412 kcal`.
-#[must_use]
-pub fn phrase(locale: Locale, metric: Metric, value: f64, units: Units) -> String {
-    let (number, unit) = figure(locale, metric, value, units);
-    if unit.is_empty() {
-        number
-    } else {
-        format!("{number} {unit}")
-    }
-}
-
-/// Minutes asleep as `7 h 12 min`, or `48 min`.
-#[must_use]
-pub fn duration(locale: Locale, minutes: f64) -> String {
-    let total = round(minutes).max(0);
-    let (hours, rest) = (total / 60, total % 60);
-    if hours == 0 {
-        fill(
-            &words::duration_minutes(locale),
-            &[("m", &rest.to_string())],
-        )
-    } else {
-        fill(
-            &words::duration_hours(locale),
-            &[("h", &hours.to_string()), ("m", &rest.to_string())],
-        )
-    }
-}
-
-/// A workout's span as `31 min` or `1 h 06 min`.
-#[must_use]
-pub fn span(locale: Locale, seconds: i64) -> String {
-    let minutes = (seconds + 30) / 60;
-    let (hours, rest) = (minutes / 60, minutes % 60);
-    if hours == 0 {
-        fill(&words::span_minutes(locale), &[("m", &rest.to_string())])
-    } else {
-        fill(
-            &words::span_hours(locale),
-            &[("h", &hours.to_string()), ("m", &format!("{rest:02}"))],
-        )
-    }
-}
-
-/// A stopwatch: `31:04`, `1:06:12`.
-#[must_use]
-pub fn stopwatch(seconds: i64) -> String {
-    let s = seconds.max(0);
-    let (hours, minutes, rest) = (s / 3_600, (s / 60) % 60, s % 60);
-    if hours == 0 {
-        format!("{minutes}:{rest:02}")
-    } else {
-        format!("{hours}:{minutes:02}:{rest:02}")
-    }
-}
-
-/// A distance in metres as `5.2` and `km` (or `mi`).
-#[must_use]
-pub fn distance(locale: Locale, metres: f64, units: Units) -> (String, String) {
-    match units {
-        Units::Metric => (tenths(metres / 1_000.0), words::unit_km(locale)),
-        Units::Imperial => (tenths(metres / M_PER_MI), words::unit_mi(locale)),
-    }
-}
-
-/// A climb in metres as `42` and `m` (or `ft`).
-#[must_use]
-pub fn climb(locale: Locale, metres: f64, units: Units) -> (String, String) {
-    match units {
-        Units::Metric => (grouped(round(metres)), words::unit_m(locale)),
-        Units::Imperial => (grouped(round(metres * M_TO_FT)), words::unit_ft(locale)),
-    }
-}
-
-/// Time per kilometre (or mile) as `6:00` and `/km`, or `None` with no distance
-/// to divide by.
-#[must_use]
-pub fn pace(locale: Locale, seconds: i64, metres: f64, units: Units) -> Option<(String, String)> {
-    if metres <= 0.0 || seconds <= 0 {
-        return None;
-    }
-    #[allow(clippy::cast_precision_loss)]
-    let seconds = seconds as f64;
-    Some(match units {
-        Units::Metric => (
-            stopwatch(round(seconds * 1_000.0 / metres)),
-            words::unit_per_km(locale),
-        ),
-        Units::Imperial => (
-            stopwatch(round(seconds * M_PER_MI / metres)),
-            words::unit_per_mi(locale),
-        ),
-    })
-}
-
-/// One decimal, its zero kept: `71.4`, `5.0`, `1,204.3`.
-#[must_use]
-pub fn tenths(value: f64) -> String {
-    let scaled = round(value.abs() * 10.0);
-    let text = format!("{}.{}", grouped(scaled / 10), scaled % 10);
-    if value < 0.0 && scaled != 0 {
-        format!("−{text}")
-    } else {
-        text
-    }
-}
+pub(crate) use crate::kit::quantity::stopwatch;
 
 /// THE CORE'S DIFFERENCE OF TWO FIGURES, IN WORDS, and its sign (−1, 0, 1):
 /// `change` in the metric's unit, `pct` as a percentage (`health.proto`; the core
@@ -206,7 +78,7 @@ pub fn delta(
                 (n, format!("{n} {}", words::unit_bpm(locale)))
             }
             _ => {
-                let (number, unit) = figure(locale, Metric::Weight, signed.abs(), units);
+                let (number, unit) = Quantity::mass_kg(signed.abs()).figure(locale, units);
                 let empty = number.trim_start_matches(['0', '.']).is_empty();
                 (i64::from(!empty), format!("{number} {unit}"))
             }
@@ -374,11 +246,10 @@ pub fn line(
     let day = local.get(..10).unwrap_or_default();
     let clock = civil::clock_for(locale, local, cycle);
     let meta = [
-        row.distance_m.filter(|metres| *metres > 0.0).map(|metres| {
-            let (n, u) = distance(locale, metres, units);
-            format!("{n} {u}")
-        }),
-        (row.length_sec > 0).then(|| span(locale, row.length_sec)),
+        row.distance_m
+            .filter(|metres| *metres > 0.0)
+            .map(|metres| Quantity::distance_m(metres).words(locale, units)),
+        (row.length_sec > 0).then(|| Quantity::span_s(row.length_sec).words(locale, units)),
     ]
     .into_iter()
     .flatten()
@@ -427,57 +298,27 @@ mod tests {
     }
 
     #[test]
-    fn a_figure_is_its_number_and_its_unit_in_the_phones_system() {
+    fn a_metric_is_worded_as_its_quantity_in_the_phones_system() {
+        let say = |metric, value, units| measure(metric, value).figure(EN, units);
         let m = Units::Metric;
         assert_eq!(
-            figure(EN, Metric::Steps, 8_412.4, m),
+            say(Metric::Steps, 8_412.4, m),
             ("8,412".into(), String::new())
         );
-        assert_eq!(figure(EN, Metric::Sleep, 432.0, m).0, "7 h 12 min");
+        assert_eq!(say(Metric::Sleep, 432.0, m).0, "7 h 12 min");
+        assert_eq!(say(Metric::Sleep, 48.0, m).0, "48 min");
+        assert_eq!(say(Metric::Energy, 412.0, m), ("412".into(), "kcal".into()));
+        assert_eq!(say(Metric::Weight, 71.4, m), ("71.4".into(), "kg".into()));
         assert_eq!(
-            figure(EN, Metric::Energy, 412.0, m),
-            ("412".into(), "kcal".into())
-        );
-        assert_eq!(
-            figure(EN, Metric::Weight, 71.4, m),
-            ("71.4".into(), "kg".into())
-        );
-        assert_eq!(
-            figure(EN, Metric::Weight, 71.4, Units::Imperial),
+            say(Metric::Weight, 71.4, Units::Imperial),
             ("157.4".into(), "lb".into())
         );
-        assert_eq!(duration(EN, 48.0), "48 min");
     }
 
     #[test]
-    fn a_span_is_minutes_or_hours_and_a_stopwatch_is_clock_time() {
-        assert_eq!(span(EN, 1_864), "31 min");
-        assert_eq!(span(EN, 3_600), "1 h 00 min");
-        assert_eq!(span(EN, 3_960), "1 h 06 min");
+    fn a_stopwatch_is_clock_time() {
         assert_eq!(stopwatch(1_864), "31:04");
         assert_eq!(stopwatch(3_972), "1:06:12");
-    }
-
-    #[test]
-    fn distance_climb_and_pace_follow_the_units() {
-        assert_eq!(
-            distance(EN, 5_200.0, Units::Metric),
-            ("5.2".into(), "km".into())
-        );
-        assert_eq!(
-            distance(EN, 5_200.0, Units::Imperial),
-            ("3.2".into(), "mi".into())
-        );
-        assert_eq!(climb(EN, 42.0, Units::Metric), ("42".into(), "m".into()));
-        assert_eq!(
-            climb(EN, 42.0, Units::Imperial),
-            ("138".into(), "ft".into())
-        );
-        assert_eq!(
-            pace(EN, 1_864, 5_200.0, Units::Metric),
-            Some(("5:58".into(), "/km".into()))
-        );
-        assert_eq!(pace(EN, 1_864, 0.0, Units::Metric), None);
     }
 
     #[test]

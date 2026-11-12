@@ -42,13 +42,14 @@ catalog! {
     plain choice_workouts = ("Workouts", "Workouts");
     plain choice_workouts_detail = ("Each one: kind, time, distance", "Each one: kind, time, distance");
     plain close = ("Close", "Close");
-    plain connect_action = ("Connect {store}", "Connect {store}");
+    plain connect_action = ("Connect to {store}", "Connect to {store}");
     plain connect_body = (
         "Health reads the daily totals {store} keeps, from your watch, phone and apps, into your vault. Nothing is written back.",
         "Health reads the daily totals {store} keeps, from your watch, phone and apps, into your vault. Nothing is written back."
     );
     plain connect_depth_note = ("Health starts with a year of days and 90 days of workouts.", "Health starts with a year of days and 90 days of workouts.");
     plain connect_empty = ("Bring in your steps, sleep and workouts from {store}.", "Bring in your steps, sleep and workouts from {store}.");
+    plain connect_background_why = ("Health is read while Centraid is closed so new figures arrive.", "Health is read while Centraid is closed so new figures arrive.");
     plain connect_failed = ("{store} didn’t answer. Try again.", "{store} didn’t answer. Try again.");
     plain connect_headline = ("Your daily totals, kept with you", "Your daily totals, kept with you");
     plain connect_install = ("Get Health Connect from Google Play, then connect again.", "Get Health Connect from Google Play, then connect again.");
@@ -73,6 +74,13 @@ catalog! {
     plain fact_lowest_month = ("Lowest month", "Lowest month");
     plain fact_lowest_week = ("Lowest week", "Lowest week");
     plain fact_total = ("Total", "Total");
+    plain export_lede = (
+        "Daily totals or workouts in one .csv file, for any spreadsheet.",
+        "Daily totals or workouts in one .csv file, for any spreadsheet."
+    );
+    plain export_totals = ("All daily totals", "All daily totals");
+    plain export_title = ("Export Health", "Export Health");
+    plain export_workouts = ("All workouts", "All workouts");
     plain figure_distance = ("Distance", "Distance");
     plain figure_elevation = ("Elevation gain", "Elevation gain");
     plain figure_energy = ("Active energy", "Active energy");
@@ -114,8 +122,8 @@ catalog! {
     plain metric_steps = ("Steps", "Steps");
     plain metric_weight = ("Weight", "Weight");
     plain more_choose = ("Choose what to read", "Choose what to read");
+    plain more_export_meta = ("Daily totals and workouts as a spreadsheet", "Daily totals and workouts as a spreadsheet");
     plain more_reads = ("What Health may read", "What Health may read");
-    plain more_stop = ("Stop reading {store}", "Stop reading {store}");
     plain more_title = ("More", "More");
     plain part_afternoon = ("Afternoon {kind}", "Afternoon {kind}");
     plain part_evening = ("Evening {kind}", "Evening {kind}");
@@ -137,6 +145,8 @@ catalog! {
     plain reads_fact_writes_value = ("nothing to {store}", "nothing to {store}");
     plain reads_nothing = ("Nothing read", "Nothing read");
     plain reads_nothing_value = ("{type}: see Settings › Health › Data Access", "{type}: see Settings › Health › Data Access");
+    plain reads_background = ("When Centraid is closed", "When Centraid is closed");
+    plain reads_background_value = ("Not allowed: Health is read only while Centraid is open. Change it in Health Connect.", "Not allowed: Health is read only while Centraid is open. Change it in Health Connect.");
     plain reads_refused = ("Not allowed", "Not allowed");
     plain reads_refused_value = ("{type}: change it in Health Connect", "{type}: change it in Health Connect");
     plain reads_title = ("What Health may read", "What Health may read");
@@ -147,13 +157,8 @@ catalog! {
     plain span_minutes = ("{m} min", "{m} min");
     plain spark_days = ("Last 7 days", "Last 7 days");
     plain spark_nights = ("Last 7 nights", "Last 7 nights");
-    plain stop_body = (
-        "Health stops reading {store} on this phone. The days and workouts already here stay.",
-        "Health stops reading {store} on this phone. The days and workouts already here stay."
-    );
     plain stop_cancel = ("Cancel", "Cancel");
-    plain stop_confirm = ("Stop reading", "Stop reading");
-    plain stop_title = ("Stop reading {store}?", "Stop reading {store}?");
+    plain stop_kept = ("days and workouts", "days and workouts");
     plain store_any = ("this phone’s health app", "this phone’s health app");
     plain store_apple_health = ("Apple Health", "Apple Health");
     plain store_health_connect = ("Health Connect", "Health Connect");
@@ -200,6 +205,13 @@ catalog! {
     plain when_today = ("Today", "Today");
     plain workout_foot = ("Read from {store}.", "Read from {store}.");
     plain workout_foot_by = ("Recorded by {recorder}, read from {store}.", "Recorded by {recorder}, read from {store}.");
+    plain workout_link_added = ("Linked", "Linked");
+    plain workout_link_removed = ("Link removed", "Link removed");
+    plain workout_links_empty = ("Nothing linked yet", "Nothing linked yet");
+    plain workout_links_unread = (
+        "Couldn’t read what this workout is linked to.",
+        "Couldn’t read what this workout is linked to."
+    );
     plain workout_gone = ("This workout is no longer here.", "This workout is no longer here.");
     plain workout_samples = ("Route and splits stay in {store}.", "Route and splits stay in {store}.");
     plain workout_when = ("{day}, {start} to {end}", "{day}, {start} to {end}");

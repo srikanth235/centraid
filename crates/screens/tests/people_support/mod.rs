@@ -236,3 +236,19 @@ pub fn send_editor(d: &mut Driver, i: u64, event: wire::people_editor_event::Kin
 pub fn open_person(d: &mut Driver, id: &str, name: &str) -> u64 {
     d.push(people::TAB, routes::person(id, name, false))
 }
+
+/// The page's own empty state, or a panic naming the page.
+pub fn empty_of(page: &Option<wire::PageState>) -> &wire::EmptyState {
+    match page.as_ref().and_then(|page| page.state.as_ref()) {
+        Some(wire::page_state::State::Empty(empty)) => empty,
+        _ => panic!("not an empty page: {page:?}"),
+    }
+}
+
+/// The page's final failure (a person or document that is gone), or a panic naming the page.
+pub fn gone_of(page: &Option<wire::PageState>) -> &wire::Failure {
+    match page.as_ref().and_then(|page| page.state.as_ref()) {
+        Some(wire::page_state::State::Failed(failure)) if failure.permanent => failure,
+        _ => panic!("not a final failure: {page:?}"),
+    }
+}

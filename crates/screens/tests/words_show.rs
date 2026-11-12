@@ -40,7 +40,7 @@ fn opening_runs_the_owner_check_at_once_nothing_is_drawn_nothing_read_nothing_se
         panic!("the owner check is up: {asked:?}")
     };
     assert!(check.ask);
-    assert_eq!(check.reason, "Show your recovery key");
+    assert_eq!(check.reason, "Confirm it's you to show your recovery key.");
     let state = phone.show();
     assert_eq!(state.phase, Phase::Ask as i32);
     assert!(state.check_now && !state.secure);
@@ -189,4 +189,32 @@ fn the_vault_in_front_on_its_own_words_shows_its_words_by_its_name() {
     member.keeper.set_foreground("v-main", "My vault");
     answer_check(&mut member, Checked::Succeeded);
     assert_eq!(member.show().words[0].word, "abandon");
+}
+
+#[test]
+fn a_phone_with_no_passcode_does_not_show_the_recovery_key() {
+    let mut phone = show_phone();
+    answer_check(&mut phone, Checked::Unavailable);
+    let state = phone.show();
+    assert_eq!(state.phase, Phase::Ask as i32);
+    assert!(state.words.is_empty() && !state.finished);
+    assert_eq!(
+        state.notice,
+        "Set a passcode on this phone to see your recovery key."
+    );
+}
+
+#[test]
+fn leaving_with_the_prompt_up_takes_the_prompt_down() {
+    let mut phone = show_phone();
+    phone
+        .driver
+        .send(phone.id, wire::screen_event::Kind::Left(wire::Left {}));
+    phone.serve();
+    assert!(
+        phone
+            .pending()
+            .iter()
+            .any(|k| matches!(k, wire::effect::Kind::OwnerCheck(c) if c.cancel))
+    );
 }

@@ -7,7 +7,7 @@
 //! it written down next to the test that pins it (a `BYWEEKNO` that names no
 //! day). The two departures it used to keep, clamping an implied 31st and
 //! skipping a spring-forward gap, were FLIPPED to RFC 5545 by the owner's
-//! decision on #1173 (a two-way sync with EventKit and CalendarContract has to
+//! decision on #1173 (a calendar followed from EventKit and CalendarContract has to
 //! expand exactly the phone's occurrences). **No test reads the wall clock**: every
 //! series has an explicit anchor and an explicit range, and the DST tests name
 //! the instants.
@@ -898,7 +898,7 @@ fn a_window_far_past_the_anchor_equals_a_walk_from_the_anchor() {
 /// that lack it, exactly as a day named with BYMONTHDAY does (RFC 5545 section
 /// 3.3.10; owner decision on #1173). It used to CLAMP to the month's last day
 /// (a rent anchored on the 31st fell on the 28th in February), which no phone
-/// calendar does, so a two-way sync would have disagreed with EventKit and
+/// calendar does, so a followed calendar would have disagreed with EventKit and
 /// CalendarContract. "The last day" is `BYMONTHDAY=-1`, which the editor's
 /// "last" default writes for a start on the 29th to 31st. COUNT counts the
 /// occurrences that exist.
@@ -1246,7 +1246,7 @@ fn a_09_00_weekly_event_stays_09_00_local_across_new_yorks_spring_forward() {
 
 /// THE POLICY, stated once, and it is RFC 5545 section 3.3.5's (owner decision
 /// on #1173, FLIPPED from "skip the gap": EventKit and CalendarContract both
-/// move a gap time forward, and a two-way sync must expand the phone's own
+/// move a gap time forward, and a followed calendar must expand the phone's own
 /// occurrences). A wall time that does not exist (02:30 on the spring-forward
 /// day) is read with the offset from before the gap and lands on 03:30 EDT,
 /// and it COUNTS. A wall time that happens twice (01:30 on the fall-back day)

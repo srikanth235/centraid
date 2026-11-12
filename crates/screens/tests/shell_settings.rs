@@ -23,7 +23,7 @@ fn state(d: &Driver, i: u64) -> wire::SettingsState {
 
 fn data(d: &Driver, i: u64) -> wire::SettingsData {
     match state(d, i).content {
-        Some(wire::settings_state::Content::Data(data)) => data,
+        Some(wire::settings_state::Content::Data(data)) => *data,
         other => panic!("not data: {other:?}"),
     }
 }
@@ -61,6 +61,14 @@ fn keychain_get(kind: &wire::effect::Kind) -> bool {
     matches!(kind, wire::effect::Kind::Keychain(op) if op.key == "appearance" && op.op == wire::keychain_op::Op::Get as i32)
 }
 
+fn keychain_set(kind: &wire::effect::Kind) -> bool {
+    matches!(kind, wire::effect::Kind::Keychain(op) if op.key == "appearance" && op.op == wire::keychain_op::Op::Set as i32)
+}
+
+fn done() -> wire::effect_result::Outcome {
+    wire::effect_result::Outcome::Done(wire::EffectDone {})
+}
+
 fn stored(value: &str) -> wire::effect_result::Outcome {
     wire::effect_result::Outcome::Keychain(wire::KeychainValue {
         found: !value.is_empty(),
@@ -83,9 +91,10 @@ fn selected(data: &wire::SettingsData) -> Vec<String> {
 fn settings_is_loading_until_the_keychain_has_said_what_was_chosen() {
     let (mut d, _home, i) = started();
     assert!(matches!(
-        state(&d, i).content,
-        Some(wire::settings_state::Content::Loading(_))
+        state(&d, i).page.and_then(|page| page.state),
+        Some(wire::page_state::State::Loading(_))
     ));
+    assert!(state(&d, i).content.is_none());
     assert_eq!(state(&d, i).title, "Settings");
     assert_eq!(state(&d, i).back_label, "Home");
     answer(&mut d, i, keychain_get, stored("dark"));
@@ -139,14 +148,13 @@ fn picking_is_kept_by_home_in_its_one_key_and_home_draws_that_scheme() {
             )),
         }),
     );
-    assert_eq!(selected(&data(&d, i)), ["dark"]);
-    // HOME writes its own key with the value (the one owner of the store).
+    // SETTINGS writes Home's key with the value, and shows the choice once it stuck.
     let written = d
         .effects
         .iter()
         .find_map(|request| match request.effect.as_ref()?.kind.as_ref()? {
             wire::effect::Kind::Keychain(op)
-                if op.op == wire::keychain_op::Op::Set as i32 && request.instance == home =>
+                if op.op == wire::keychain_op::Op::Set as i32 && request.instance == i =>
             {
                 Some(op.value.clone())
             }
@@ -154,7 +162,14 @@ fn picking_is_kept_by_home_in_its_one_key_and_home_draws_that_scheme() {
         })
         .expect("the choice is written");
     assert_eq!(written, b"dark");
-    // And it draws the scheme at once.
+    assert_eq!(
+        selected(&data(&d, i)),
+        ["system"],
+        "not shown before it stuck"
+    );
+    answer(&mut d, i, keychain_set, done());
+    assert_eq!(selected(&data(&d, i)), ["dark"]);
+    // And Home draws the scheme at once.
     match &d.view(home).kind {
         Some(wire::view_state::Kind::Home(home)) => {
             assert_eq!(home.scheme, wire::HomeScheme::Dark as i32);
@@ -199,6 +214,7 @@ fn choosing_system_stores_nothing_and_choosing_what_is_chosen_does_nothing() {
         })
         .expect("the choice is written");
     assert!(op.value.is_empty(), "following the phone stores nothing");
+    answer(&mut d, i, keychain_set, done());
     assert_eq!(selected(&data(&d, i)), ["system"]);
 }
 
@@ -216,6 +232,13 @@ fn the_rows_say_where_things_stand_and_open_the_pages_that_own_them() {
     assert!(row(0).route.is_none());
     // Backup and the recovery key open the pages that own them.
     assert_eq!(row(1).route.as_ref().unwrap().screen, "backup.home");
+    // Reconnect phone data opens the page that lists what another phone followed (#1185).
+    let reconnect = data.sections[1]
+        .rows
+        .iter()
+        .find(|row| row.id == "reconnect")
+        .expect("a Reconnect row");
+    assert_eq!(reconnect.route.as_ref().unwrap().screen, "follow.reconnect");
     assert_eq!(row(2).title, "Show recovery key");
     assert_eq!(row(2).route.as_ref().unwrap().screen, "words.show");
     // Until the platform says, the key's sentence is the cautious one.
@@ -423,4 +446,306 @@ fn a_platform_sync_capability_does_not_claim_an_unknown_key_is_saved() {
         key,
         "Can't tell whether your recovery key is saved elsewhere. Save a copy."
     );
+}
+
+fn units_environment(d: &mut Driver, locale: &str) {
+    d.call(wire::screen_request::Kind::Environment(wire::Environment {
+        locale: locale.to_owned(),
+        zone: "UTC".to_owned(),
+        platform: "ios".to_owned(),
+        ..Default::default()
+    }));
+}
+
+fn units_choices(data: &wire::SettingsData) -> Vec<(String, bool)> {
+    data.units
+        .as_ref()
+        .expect("the units row")
+        .choices
+        .iter()
+        .map(|choice| (choice.id.clone(), choice.selected))
+        .collect()
+}
+
+fn units_write(kind: &wire::effect::Kind) -> bool {
+    matches!(kind, wire::effect::Kind::Secrets(batch) if batch.ops.iter().any(|op| op.key == "units"))
+}
+
+fn units_answer(ok: bool) -> wire::effect_result::Outcome {
+    wire::effect_result::Outcome::Secrets(wire::SecretBatched {
+        answers: vec![wire::SecretAnswer {
+            ok,
+            ..Default::default()
+        }],
+    })
+}
+
+#[test]
+fn the_units_row_shows_phones_setting_until_the_member_chooses() {
+    for locale in ["en-US", "de-DE"] {
+        let (mut d, _home, i) = started();
+        units_environment(&mut d, locale);
+        answer(&mut d, i, keychain_get, stored(""));
+        let data = data(&d, i);
+        let units = data.units.as_ref().expect("the units row");
+        assert_eq!(units.title, "Units");
+        assert_eq!(
+            units
+                .choices
+                .iter()
+                .map(|choice| choice.label.as_str())
+                .collect::<Vec<_>>(),
+            ["Phone's setting", "Metric", "Imperial"]
+        );
+        assert!(units.note.contains("follows your region"));
+        assert_eq!(
+            units_choices(&data)
+                .into_iter()
+                .filter(|(_, picked)| *picked)
+                .map(|(id, _)| id)
+                .collect::<Vec<_>>(),
+            ["phone"],
+            "{locale}"
+        );
+    }
+}
+
+#[test]
+fn choosing_units_writes_the_device_store_and_the_row_reads_it_back() {
+    use wire::settings_event::{Kind as S, UnitsPicked};
+    let (mut d, _home, i) = started();
+    units_environment(&mut d, "de-DE");
+    answer(&mut d, i, keychain_get, stored(""));
+    let before = d.effects.len();
+    sheet_event(
+        &mut d,
+        i,
+        S::UnitsPicked(UnitsPicked {
+            id: "imperial".into(),
+        }),
+    );
+    assert!(
+        d.effects[before..].iter().any(|request| matches!(
+            request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+            Some(wire::effect::Kind::Secrets(batch)) if batch.ops.iter().any(|op| op.key == "units" && op.value == b"imperial")
+        )),
+        "the choice is one write to the device store"
+    );
+    answer(&mut d, i, units_write, units_answer(true));
+    assert_eq!(
+        units_choices(&data(&d, i)),
+        [
+            ("phone".to_owned(), false),
+            ("metric".to_owned(), false),
+            ("imperial".to_owned(), true)
+        ]
+    );
+
+    // Phone's setting clears the stored choice: the write is an empty value, and the row is back.
+    let before = d.effects.len();
+    sheet_event(
+        &mut d,
+        i,
+        S::UnitsPicked(UnitsPicked { id: "phone".into() }),
+    );
+    assert!(
+        d.effects[before..].iter().any(|request| matches!(
+            request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+            Some(wire::effect::Kind::Secrets(batch)) if batch.ops.iter().any(|op| op.key == "units" && op.value.is_empty())
+        )),
+        "Phone's setting clears the stored choice"
+    );
+    answer(&mut d, i, units_write, units_answer(true));
+    assert_eq!(
+        units_choices(&data(&d, i)),
+        [
+            ("phone".to_owned(), true),
+            ("metric".to_owned(), false),
+            ("imperial".to_owned(), false)
+        ]
+    );
+}
+
+#[test]
+fn a_refused_units_write_keeps_the_old_choice() {
+    use wire::settings_event::{Kind as S, UnitsPicked};
+    let (mut d, _home, i) = started();
+    units_environment(&mut d, "en-US");
+    answer(&mut d, i, keychain_get, stored(""));
+    sheet_event(
+        &mut d,
+        i,
+        S::UnitsPicked(UnitsPicked {
+            id: "metric".into(),
+        }),
+    );
+    answer(&mut d, i, units_write, units_answer(false));
+    assert_eq!(
+        units_choices(&data(&d, i)),
+        [
+            ("phone".to_owned(), true),
+            ("metric".to_owned(), false),
+            ("imperial".to_owned(), false)
+        ],
+        "Phone's setting stays"
+    );
+    let line = state(&d, i).status.expect("a refused write says so");
+    assert_eq!(line.sentence, "Couldn't save your units. Try again.");
+    assert!(line.refused && line.action_label.is_empty());
+
+    // The next pick clears the line.
+    sheet_event(
+        &mut d,
+        i,
+        S::UnitsPicked(UnitsPicked {
+            id: "imperial".into(),
+        }),
+    );
+    assert!(state(&d, i).status.is_none());
+}
+
+fn rule_write(kind: &wire::effect::Kind) -> bool {
+    matches!(kind, wire::effect::Kind::Secrets(batch) if batch.ops.iter().any(|op| op.key == "transfer-rule"))
+}
+
+fn picked_rule(d: &mut Driver, i: u64) -> String {
+    use wire::settings_event::{Kind as S, RowPressed, TransferRulesClosed};
+    sheet_event(
+        d,
+        i,
+        S::RowPressed(RowPressed {
+            id: "download-settings".into(),
+        }),
+    );
+    let sheet = state(d, i).transfer_sheet.expect("the sheet is open");
+    sheet_event(d, i, S::TransferRulesClosed(TransferRulesClosed {}));
+    sheet
+        .choices
+        .iter()
+        .find(|c| c.picked)
+        .expect("one picked")
+        .stored
+        .clone()
+}
+
+/// NO REFUSED SAVE IN SETTINGS IS SILENT: for every row that writes, a refused write shows that
+/// row's sentence on the status line, and the old value stays selected. The `match` has no
+/// wildcard, so a new writing row in `Row` fails to compile here until it is given its case.
+#[test]
+fn every_writing_row_says_so_when_its_save_is_refused() {
+    use centraid_screens::shell::settings::Row;
+    use wire::settings_event::{
+        AppearancePicked, Kind as S, RowPressed, TransferRuleChosen, UnitsPicked,
+    };
+    for row in Row::ALL {
+        let (mut d, _home, i) = started();
+        units_environment(&mut d, "en-US");
+        answer(&mut d, i, keychain_get, stored(""));
+        let appearance = selected(&data(&d, i));
+        let units = units_choices(&data(&d, i));
+        let rule = picked_rule(&mut d, i);
+        let sentence = match row {
+            Row::Rule => {
+                sheet_event(
+                    &mut d,
+                    i,
+                    S::RowPressed(RowPressed {
+                        id: "download-settings".into(),
+                    }),
+                );
+                let other = state(&d, i)
+                    .transfer_sheet
+                    .expect("the sheet is open")
+                    .choices
+                    .into_iter()
+                    .find(|c| !c.picked)
+                    .expect("another rule");
+                sheet_event(
+                    &mut d,
+                    i,
+                    S::TransferRuleChosen(TransferRuleChosen {
+                        stored: other.stored,
+                    }),
+                );
+                answer(&mut d, i, rule_write, units_answer(false));
+                "Couldn't save your download settings. Try again."
+            }
+            Row::Units => {
+                sheet_event(
+                    &mut d,
+                    i,
+                    S::UnitsPicked(UnitsPicked {
+                        id: "metric".into(),
+                    }),
+                );
+                answer(&mut d, i, units_write, units_answer(false));
+                "Couldn't save your units. Try again."
+            }
+            Row::Appearance => {
+                sheet_event(
+                    &mut d,
+                    i,
+                    S::AppearancePicked(AppearancePicked { id: "dark".into() }),
+                );
+                answer(
+                    &mut d,
+                    i,
+                    keychain_set,
+                    wire::effect_result::Outcome::Failed(wire::EffectFailed::default()),
+                );
+                "Couldn't save your appearance. Try again."
+            }
+        };
+        let line = state(&d, i)
+            .status
+            .unwrap_or_else(|| panic!("{row:?}: a refused save is silent"));
+        assert_eq!(line.sentence, sentence, "{row:?}");
+        assert!(line.refused && line.action_label.is_empty(), "{row:?}");
+        assert_eq!(selected(&data(&d, i)), appearance, "{row:?}: appearance");
+        assert_eq!(units_choices(&data(&d, i)), units, "{row:?}: units");
+        assert_eq!(picked_rule(&mut d, i), rule, "{row:?}: rule");
+    }
+}
+
+/// A failure that is not the appearance write's own never shows the appearance refusal: the answer
+/// is matched by its effect number.
+#[test]
+fn only_the_appearance_writes_own_failure_refuses_the_appearance() {
+    use wire::settings_event::{AppearancePicked, Kind as S};
+    let (mut d, _home, i) = started();
+    answer(&mut d, i, keychain_get, stored(""));
+    sheet_event(
+        &mut d,
+        i,
+        S::AppearancePicked(AppearancePicked { id: "dark".into() }),
+    );
+    let write = d
+        .effects
+        .iter()
+        .find(|request| {
+            request.instance == i
+                && request
+                    .effect
+                    .as_ref()
+                    .and_then(|e| e.kind.as_ref())
+                    .is_some_and(keychain_set)
+        })
+        .expect("the write was asked")
+        .effect_id;
+    let failed = |id: u64| wire::EffectResult {
+        effect_id: id,
+        outcome: Some(wire::effect_result::Outcome::Failed(
+            wire::EffectFailed::default(),
+        )),
+    };
+    // Some other effect's failure (a number that is not the write's).
+    d.send(i, E::EffectResult(failed(write + 1000)));
+    assert!(state(&d, i).status.is_none(), "not the write's answer");
+    assert_eq!(selected(&data(&d, i)), ["system"]);
+    // The write's own failure refuses.
+    d.send(i, E::EffectResult(failed(write)));
+    let line = state(&d, i).status.expect("the refusal");
+    assert_eq!(line.sentence, "Couldn't save your appearance. Try again.");
+    assert!(line.refused);
+    assert_eq!(selected(&data(&d, i)), ["system"]);
 }

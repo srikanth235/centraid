@@ -30,6 +30,7 @@ catalog! {
     plain free_up_not_checked = ("Centraid could not check which originals are backed up, so none is offered.", "Centraid could not check which originals are backed up, so none is offered.");
     plain free_up_action = ("Free up {size}", "Free up {size}");
     plain free_up_freed = ("Freed {size}. Photos download again from your backup device when you open them.", "Freed {size}. Photos download again from your backup device when you open them.");
+    plain free_up_failed = ("Couldn't free up space. Try again.", "Couldn't free up space. Try again.");
     plain free_up_nothing_removed = ("Nothing removed.", "Nothing removed.");
     plain free_up_not_recorded = ("Photos removed from this phone. They show as downloadable once Centraid catches up.", "Photos removed from this phone. They show as downloadable once Centraid catches up.");
     plain free_up_no_originals = ("No originals on this phone", "No originals on this phone");

@@ -4,16 +4,17 @@ import SwiftUI
 
 /// ONE DOCUMENT'S PAGE (#1046, #1135): its surface — the reader (text), the
 /// stage (image, video, PDF), facts only, or gone — then its path, facts, a row
-/// to its version history and the verbs Rust offers.
+/// to its Earlier versions and the verbs Rust offers.
 ///
 /// **THE VIEW DECIDES NOTHING.** Which verbs exist and whether each is
 /// enabled are `DocsDocumentData.actions`; the editor, a crumb's folder and the
-/// version history are routes the data carries, which a tap pushes.
+/// Earlier versions are routes the data carries, which a tap pushes.
 struct DocsDocumentView: View {
     let state: Centraid_Core_V1_DocsDocumentState
     let send: (Centraid_Core_V1_DocsDocumentEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
     let onBack: () -> Void
+    let onPhoneSays: (Centraid_Core_V1_PhoneSaysTaken) -> Void
 
     @Environment(\.colorScheme) private var scheme
 
@@ -23,21 +24,12 @@ struct DocsDocumentView: View {
         return event
     }
 
-    private func content(_ state: Centraid_Core_V1_DocsDocumentState) -> ScreenContent<Centraid_Core_V1_DocsDocumentData> {
-        switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
-        }
-    }
-
     var body: some View {
         let state = state
-        let content = content(state)
+        // The head's title and More come from the data when the page is ready; the page itself is
+        // drawn by `PageReadStateView`.
         let document: Centraid_Core_V1_DocsDocumentData? = {
-            if case let .data(document) = content { return document }
+            if case let .data(data)? = state.content { return data }
             return nil
         }()
         let title = (document?.hasRow ?? false) && !(document?.row.title.isEmpty ?? true)
@@ -65,54 +57,74 @@ struct DocsDocumentView: View {
                         onClose: { send(Self.event { $0.renameClosed = .init() }) }
                     )
                 }
-                ReadStateView(
-                    content: content,
+                PageReadStateView(
+                    page: state.page,
                     loadingLabel: state.chrome.loading,
                     onRetry: { send(Self.event { $0.refreshed = .init() }) }
-                ) { document in
-                    if case let .gone(empty)? = document.surface {
-                        EmptyStateView(empty)
-                    } else {
-                        ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 0) {
-                                if !document.trashedNote.isEmpty {
-                                    Text(document.trashedNote)
-                                        .centraidType("small")
-                                        .foregroundStyle(Theme.color("net", scheme))
-                                        .padding(.horizontal, CentraidGeometry.pageMargin)
-                                        .padding(.vertical, 8)
-                                }
-                                if !document.subtitle.isEmpty {
-                                    Text(document.subtitle)
-                                        .centraidType("annotLabel")
-                                        .foregroundStyle(Theme.color("textFaint", scheme))
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.top, 2)
-                                        .accessibilityIdentifier("docs-document-subtitle")
-                                }
-                                surface(document)
-                                infoCard(document)
-                                if document.hasAbout {
-                                    LinkSectionView(section: document.about, send: { link in
-                                        send(Self.event { $0.about = link })
-                                    }, open: open)
-                                }
-                                if !document.facts.isEmpty {
-                                    SectionHeader(title: state.chrome.factsHeading)
-                                    // Ids prefixed per list, so a second list added here never collides
-                                    // with these in the `LazyVStack`.
-                                    ForEach(Array(document.facts.enumerated()).map { ("fact-\($0.offset)", $0.element) }, id: \.0) { _, fact in
-                                        FieldRow(key: fact.label, value: fact.detail)
-                                    }
+                ) {
+                    let document = state.data
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            if !document.trashedNote.isEmpty {
+                                Text(document.trashedNote)
+                                    .centraidType("small")
+                                    .foregroundStyle(Theme.color("net", scheme))
+                                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                                    .padding(.vertical, 8)
+                            }
+                            if !document.subtitle.isEmpty {
+                                Text(document.subtitle)
+                                    .centraidType("annotLabel")
+                                    .foregroundStyle(Theme.color("textFaint", scheme))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.top, 2)
+                                    .accessibilityIdentifier("docs-document-subtitle")
+                            }
+                            // WHAT THE FOLDER SAYS, under the name (#1183).
+                            if document.hasTitlePhoneSays {
+                                PhoneSaysLines(lines: [document.titlePhoneSays], onTake: onPhoneSays)
+                            }
+                            surface(document)
+                            infoCard(document)
+                            if document.hasAbout {
+                                LinkSectionView(section: document.about, send: { link in
+                                    send(Self.event { $0.about = link })
+                                }, open: open)
+                            }
+                            // ATTACHMENTS (#1185): the kit's section, after About; Rust makes every word and row.
+                            if document.hasAttachments {
+                                AgendaAttachmentsView(
+                                    section: document.attachments,
+                                    idPrefix: "docs-document-attachment",
+                                    headIdentifier: "docs-document-attachments",
+                                    open: open,
+                                    send: { attachment in send(Self.event { $0.attachment = attachment }) }
+                                )
+                            }
+                            // LINKED TO (#1185): the kit's section, after the attachments; Rust makes every word and row.
+                            if document.hasLinks {
+                                LinkSectionView(section: document.links, send: { link in
+                                    send(Self.event { $0.link = link })
+                                }, open: open)
+                            }
+                            if !document.facts.isEmpty {
+                                SectionHeader(title: state.chrome.factsHeading)
+                                // Ids prefixed per list, so a second list added here never collides
+                                // with these in the `LazyVStack`.
+                                ForEach(Array(document.facts.enumerated()).map { ("fact-\($0.offset)", $0.element) }, id: \.0) { _, fact in
+                                    FieldRow(key: fact.label, value: fact.detail)
                                 }
                             }
-                            .padding(.bottom, 16)
+                            // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the actions.
+                            EarlierEntryRow(entry: document.hasEarlier ? document.earlier : nil, open: open)
+                            OriginLineView(line: document.hasOrigin ? document.origin : nil)
                         }
-                        .refreshable { send(Self.event { $0.refreshed = .init() }) }
-                        // THE QUICK LOOK BAR floats over the page: glass on iOS 26, paper before.
-                        .safeAreaInset(edge: .bottom, spacing: 0) {
-                            if !document.bar.isEmpty { quickLookBar(document.bar) }
-                        }
+                        .padding(.bottom, 16)
+                    }
+                    .refreshable { send(Self.event { $0.refreshed = .init() }) }
+                    // THE QUICK LOOK BAR floats over the page: glass on iOS 26, paper before.
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        if !document.bar.isEmpty { quickLookBar(document.bar) }
                     }
                 }
             }
@@ -128,6 +140,7 @@ struct DocsDocumentView: View {
             DocsSheetView(sheet: state.sheet, actions: sheetActions())
         }
         .linkPickerSheet(state.aboutPicker) { link in send(Self.event { $0.about = link }) }
+        .linkPickerSheet(state.linkPicker) { link in send(Self.event { $0.link = link }) }
         .background {
             Color.clear.sheet(isPresented: Binding(
                 get: { state.hasConfirm },
@@ -190,13 +203,13 @@ struct DocsDocumentView: View {
                 .foregroundStyle(Theme.color("textSoft", scheme))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(CentraidGeometry.pageMargin)
-        case .gone, nil:
+        case nil:
             EmptyView()
         }
     }
 
-    /// THE INFO CARD: what it is and when it changed, its labels in their colours, and the way to
-    /// its versions. A white card on the page, 16 points round.
+    /// THE INFO CARD: what it is and when it changed, its labels in their colours.
+    /// A white card on the page, 16 points round.
     private func infoCard(_ document: Centraid_Core_V1_DocsDocumentData) -> some View {
         VStack(spacing: 0) {
             HStack {
@@ -228,10 +241,6 @@ struct DocsDocumentView: View {
                 .frame(minHeight: 44)
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("docs-document-labels")
-            }
-            if document.hasVersions {
-                KitHairline()
-                versionsRow(document.versions)
             }
         }
         .background(RoundedRectangle(cornerRadius: CentraidScale.cardRadius).fill(Color(CentraidAsset.surfaceCard)))
@@ -276,32 +285,6 @@ struct DocsDocumentView: View {
         if action.destructive { return Theme.color("net", scheme) }
         if action.key == "unstar" || action.key == "share" { return AppAccent("docs").text }
         return Theme.color("text", scheme)
-    }
-
-    /// THE VERSION HISTORY'S ROW: its words, how many, and the page it opens.
-    private func versionsRow(_ versions: Centraid_Core_V1_DocsVersionsLink) -> some View {
-        Button {
-            open(versions.route)
-        } label: {
-            HStack(spacing: 12) {
-                Text(versions.label)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color("text", scheme))
-                Spacer(minLength: 8)
-                Text(versions.countLabel)
-                    .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color("textFaint", scheme))
-                CentraidIconView(iconKey: "ChevronRight", tint: Theme.color("textFaint", scheme), size: 14)
-                    .accessibilityHidden(true)
-            }
-            .padding(.horizontal, 14)
-            .frame(maxWidth: .infinity, minHeight: 44)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(KitRowPress())
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityIdentifier("docs-versions")
     }
 
     // MARK: Events
@@ -446,83 +429,6 @@ struct DocsPDFStage: UIViewRepresentable {
     }
 }
 
-// MARK: - Version history
-
-/// A DOCUMENT'S VERSIONS (`docs.versions`): newest first, the current one
-/// marked, an earlier one of a live document restorable. Every word, and
-/// whether a row offers Restore at all, is Rust's.
-struct DocsVersionsView: View {
-    let state: Centraid_Core_V1_DocsVersionsState
-    let send: (Centraid_Core_V1_DocsVersionsEvent) -> Void
-    let onBack: () -> Void
-
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.appAccent) private var accent
-
-    static func event(_ build: (inout Centraid_Core_V1_DocsVersionsEvent) -> Void) -> Centraid_Core_V1_DocsVersionsEvent {
-        var event = Centraid_Core_V1_DocsVersionsEvent()
-        build(&event)
-        return event
-    }
-
-    private func content(_ state: Centraid_Core_V1_DocsVersionsState) -> ScreenContent<Centraid_Core_V1_DocsVersionsData> {
-        switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
-        }
-    }
-
-    var body: some View {
-        // THE BOARD (DocVersions): the title large in the page, the versions in one white card.
-        PushedPage(title: state.chrome.heading, parentTitle: state.chrome.back, onBack: onBack) {
-            EmptyView()
-        } content: {
-            VStack(spacing: 0) {
-                DocsWriteLine(status: state.status)
-                ReadStateView(
-                    content: content(state),
-                    loadingLabel: state.chrome.loading,
-                    onRetry: { send(Self.event { $0.refreshed = .init() }) }
-                ) { data in
-                    if data.hasEmpty {
-                        EmptyStateView(data.empty)
-                    } else {
-                        ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 0) {
-                                ForEach(Array(data.versions.enumerated()), id: \.element.key) { index, version in
-                                    if index > 0 { KitHairline().padding(.leading, 16) }
-                                    HStack(spacing: 8) {
-                                        // NOTHING IS DIMMED: the current version carries the word "Current" in its meta.
-                                        CentraidRow(title: version.label, meta: version.meta)
-                                        if !version.restoreLabel.isEmpty {
-                                            KitLink(
-                                                label: version.restoreLabel,
-                                                dense: true,
-                                                tint: accent.text,
-                                                identifier: "docs-version-restore-\(version.key)"
-                                            ) {
-                                                send(Self.event { $0.restored = .with { $0.key = version.key } })
-                                            }
-                                        }
-                                    }
-                                    .padding(.trailing, 8)
-                                }
-                            }
-                            .background(Surface.card, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
-                            .padding(.horizontal, CentraidGeometry.pageMargin)
-                            .padding(.bottom, 16)
-                        }
-                        .refreshable { send(Self.event { $0.refreshed = .init() }) }
-                    }
-                }
-            }
-        }
-    }
-}
-
 // MARK: - Editor
 
 /// THE TEXT EDITOR: an `EditorRoom` — autosave, close = done, the status line
@@ -546,15 +452,6 @@ struct DocsEditorView: View {
         return event
     }
 
-    private func content(_ state: Centraid_Core_V1_DocsEditorState) -> ScreenContent<Centraid_Core_V1_DocsEditorDraft> {
-        switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .draft(draft)?: return .data(draft)
-        case nil: return .loading(true)
-        }
-    }
-
     var body: some View {
         let state = state
         let chrome = state.chrome
@@ -567,11 +464,12 @@ struct DocsEditorView: View {
         ) {
             EmptyView()
         } content: {
-            ReadStateView(
-                content: content(state),
-                skeleton: { RowSkeleton(rows: 4, meta: false, label: chrome.loading) },
-                onRetry: { send(Self.event { $0.refreshed = .init() }) }
-            ) { draft in
+            PageReadStateView(
+                page: state.page,
+                onRetry: { send(Self.event { $0.refreshed = .init() }) },
+                skeleton: { RowSkeleton(rows: 4, meta: false, label: chrome.loading) }
+            ) {
+                let draft = state.draft
                 VStack(alignment: .leading, spacing: 8) {
                     let notes = [state.versionLabel, state.statusLabel, state.remoteNote].filter { !$0.isEmpty }
                     ForEach(Array(notes.enumerated()), id: \.offset) { _, note in

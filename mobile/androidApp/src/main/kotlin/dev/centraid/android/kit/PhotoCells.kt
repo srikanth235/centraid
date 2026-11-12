@@ -76,6 +76,9 @@ public fun PhotoCellsGrid(
     /** Rows a surface puts ABOVE its cells inside the same scroller, so the
      *  head scrolls with the grid rather than sitting in a second one. */
     header: (LazyGridScope.() -> Unit)? = null,
+    /** Rows a surface puts BELOW its cells inside the same scroller (search's photographs found
+     *  only by what they said before). */
+    footer: (LazyGridScope.() -> Unit)? = null,
 ) {
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = minimumCell.dp),
@@ -98,6 +101,7 @@ public fun PhotoCellsGrid(
                 onFetch = onFetch,
             )
         }
+        footer?.invoke(this)
     }
 }
 
@@ -351,7 +355,7 @@ public fun mediaClock(seconds: Int): String = MediaClock.clock(seconds.toLong())
  * THE GRID IS THE LOADING STATE (v0's `PhotosGridSkeleton.tsx`, §14).
  *
  * Skeleton tiles at the rung's own geometry, packed by Rust at the width the
- * shell reported ([rows] is `PhotosLibraryLoading.skeleton`), so the photographs
+ * shell reported ([rows] is `PhotosLibrary.skeleton`), so the photographs
  * land where their placeholders stood. The aspect sequence is FIXED — random
  * aspects would flicker — and nothing moves: product-intuition/references/design-behaviour.md § Status line: `Loading` is static
  * skeletons, and a shimmer is attention-seeking about work the product can

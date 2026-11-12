@@ -21,8 +21,10 @@
 //!
 //! ## When a pass runs
 //!
-//! [`FollowGate`]: triggers within two seconds are one pass, one pass runs at a time, a trigger
-//! during a pass queues exactly one more. **A pass never runs for a vault that follows no folder**
+//! The follow coordinator ([`crate::follow`]) decides: the app coming forward, a folder picked
+//! or pulled, and a background window are triggers it folds into one pass at a time with one
+//! queued behind it, then wakes this service to run it (`Signalled`) and hears when it ended.
+//! **A pass never runs for a vault that follows no folder**
 //! (the vault holds no `files` origin): a foreground pass never imports into a vault that never
 //! picked one. A read that has not answered in two minutes is abandoned, so one stuck read cannot
 //! hold the follow for good. A complete read that lost most of what the vault follows here is
@@ -35,10 +37,12 @@
 //!
 //! The Docs drive owns the picker effects (`FollowFolder`, `StopFollowing`) and posts what they
 //! came to here ([`wire::imports_files_event`]); the drive reads the folders the vault follows
-//! itself (`shell.files-followed`). The app coming forward is heard as `Lifecycle`.
+//! itself (`shell.files-followed`). The Reconnect page ([`crate::follow::reconnect`]) posts the
+//! same pick with the earlier origin of the folder (`replaces`): the new origin fills the Docs
+//! folder that one filled, and that one is retired.
 
 use std::collections::{BTreeSet, VecDeque};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
 use serde_json::{Value, json};
@@ -46,15 +50,14 @@ use wire::app_query_response::Answer;
 use wire::imports_files_event::Kind as F;
 use wire::screen_event::Kind as E;
 
-use super::gate::{FollowGate, Step};
 use super::{effect, squash};
 use crate::catalog::{act, load};
+use crate::follow::Store;
 use crate::kit::act as kit_act;
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::imports as words;
 
-const SETTLE_TIMER: &str = "files-settle";
 const READ_TIMER: &str = "files-read";
 /// A read that has not answered in two minutes is abandoned.
 pub const READ_TIMEOUT: Duration = Duration::from_secs(120);
@@ -65,9 +68,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         return None;
     };
     Some(Box::new(Files {
-        epoch: Instant::now(),
-        gate: FollowGate::default(),
         held: Vec::new(),
+        retired: Vec::new(),
         refusal: String::new(),
         pass: None,
     }))
@@ -129,12 +131,18 @@ pub struct Outcome {
     pub updated: u32,
     pub trashed: u32,
     pub refused: u32,
+    /// Rows the vault doubted: a complete read that lost most of what the folder followed.
+    pub doubted: u32,
+    /// A listing or a file that would not read: the read did not cover the whole folder.
+    pub incomplete: bool,
 }
 
 /// A folder the vault follows, as `files-followed` answered it.
 struct Held {
     phone_origin: String,
     label: String,
+    /// The Docs folder the origin fills.
+    fills: Option<String>,
     stats: Vec<(String, String)>,
 }
 
@@ -162,14 +170,20 @@ struct Pass {
 }
 
 struct Files {
-    epoch: Instant,
-    gate: FollowGate<()>,
     held: Vec<Held>,
+    /// The folders Stop retired, kept with the Docs folder they filled: only a pick reads them.
+    retired: Vec<Held>,
     refusal: String,
     pass: Option<Pass>,
 }
 
-fn read_held(ctx: &Ctx) -> Reading<Vec<Held>> {
+/// What the vault holds of folders: the ones it follows, and the ones Stop retired.
+struct Holdings {
+    followed: Vec<Held>,
+    retired: Vec<Held>,
+}
+
+fn read_held(ctx: &Ctx) -> Reading<Holdings> {
     match read::read(
         ctx,
         load::shell::FilesFollowed::default(),
@@ -178,62 +192,54 @@ fn read_held(ctx: &Ctx) -> Reading<Vec<Held>> {
             _ => None,
         },
     ) {
-        Reading::Data(held) => Reading::Data(
-            held.folders
-                .into_iter()
-                .map(|folder| Held {
-                    phone_origin: folder.origin_ref,
-                    label: folder.label,
-                    stats: folder
-                        .files
-                        .into_iter()
-                        .map(|file| (file.path, file.stat))
-                        .collect(),
-                })
-                .collect(),
-        ),
+        Reading::Data(held) => {
+            let held_of = |folder: wire::ImportsHeldFolder| Held {
+                phone_origin: folder.origin_ref,
+                label: folder.label,
+                fills: Some(folder.docs_folder).filter(|folder| !folder.is_empty()),
+                stats: folder
+                    .files
+                    .into_iter()
+                    .map(|file| (file.path, file.stat))
+                    .collect(),
+            };
+            Reading::Data(Holdings {
+                followed: held.folders.into_iter().map(held_of).collect(),
+                retired: held.retired.into_iter().map(held_of).collect(),
+            })
+        }
         Reading::Denied(denial) => Reading::Denied(denial),
         Reading::Failed => Reading::Failed,
     }
 }
 
 impl Files {
-    fn now(&self) -> Duration {
-        self.epoch.elapsed()
-    }
-
     fn reload(&mut self, ctx: &Ctx) -> bool {
         match read_held(ctx) {
             Reading::Data(held) => {
-                self.held = held;
+                self.held = held.followed;
+                self.retired = held.retired;
                 true
             }
             _ => false,
         }
     }
 
-    /// The folder store may have changed, or the app came forward: follow soon. Nothing for a
-    /// vault that follows no folder.
+    /// The folder store may have changed: the coordinator coalesces it with every other trigger
+    /// and asks for a pass ([`crate::follow`]). Nothing for a vault that follows no folder.
     fn request(&mut self, ctx: &Ctx) {
         if self.held.is_empty() {
             return;
         }
-        let now = self.now();
-        if let Step::Arm(after) = self.gate.request(&(), now) {
-            ctx.start_timer(SETTLE_TIMER, after);
-        }
+        ctx.follows().changed(ctx, Store::Files);
     }
 
-    fn settled(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        let now = self.now();
-        if self.gate.fire(&(), now) == Step::Start {
-            return self.begin(ctx);
-        }
-        Vec::new()
-    }
-
-    /// One pass: read what the vault holds, then ask the shell for the folders' listing.
+    /// One pass, when the coordinator asks: read what the vault holds, then ask the shell for the
+    /// folders' listing. A pass already out is the one it asked for.
     fn begin(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
+        if self.pass.is_some() {
+            return Vec::new();
+        }
         // A vault that would not say is a pass that did nothing: the next trigger tries again.
         if !self.reload(ctx) || self.held.is_empty() {
             return self.finish(ctx);
@@ -254,14 +260,16 @@ impl Files {
         }))]
     }
 
-    /// The pass is over, however it ended: the queued one, if a trigger came during it, goes now.
+    /// The pass is over, however it ended: the coordinator is told, and runs the one it queued if
+    /// a trigger came during this one.
     fn finish(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         ctx.cancel_timer(READ_TIMER);
-        self.pass = None;
-        self.reload(ctx);
-        if self.gate.finish(&()) == Step::Start {
-            return self.begin(ctx);
+        if let Some(pass) = self.pass.take() {
+            ctx.follows()
+                .judged(Store::Files, pass.outcome.doubted, pass.outcome.incomplete);
         }
+        self.reload(ctx);
+        ctx.follows().files_ended(ctx);
         Vec::new()
     }
 
@@ -379,6 +387,7 @@ impl Files {
             return;
         };
         let sent = plan.records.len();
+        pass.outcome.incomplete |= !plan.whole;
         let request = act::shell::FollowFiles {
             origin: json!({
                 "ref": plan.origin,
@@ -390,12 +399,14 @@ impl Files {
             complete: Some(plan.whole),
         };
         let key = kit_act::key(&["follow-files", &plan.origin], kit_act::fresh());
+        // undo-exempt: a folder follow pass runs unseen and has no status line; its Undo is Stop reading (`stop-following`) from the Followed folders sheet.
         let told = kit_act::act(ctx, request, &key);
         if told.committed {
             let output: Value = serde_json::from_slice(&told.output).unwrap_or(Value::Null);
             pass.outcome.added += count(&output, "added") + count(&output, "matched");
             pass.outcome.updated += count(&output, "updated");
             pass.outcome.trashed += count(&output, "trashed");
+            pass.outcome.doubted += count(&output, "doubted");
             pass.outcome.refused += plan.refused;
         } else {
             // The vault refusing a folder counts its records as refused; the next folder still goes.
@@ -405,7 +416,13 @@ impl Files {
 
     /// The member picked a folder: its Docs folder (made here, named as the phone names the folder)
     /// and its origin, so the next pass reads it. A folder already followed keeps its Docs folder.
-    fn follow(&mut self, ctx: &Ctx, origin: &str, name: &str) {
+    ///
+    /// `replaces` names the earlier origin of the same folder (a reconnect): the Docs folder THAT
+    /// origin filled is the new one's too, found by the origin and never by the folder's name, so
+    /// the documents already there are matched by the next pass and not made twice; the earlier
+    /// origin is retired once the new one stands. An earlier origin that filled nothing, or whose
+    /// folder is gone, leaves the new origin a Docs folder of its own.
+    fn follow(&mut self, ctx: &Ctx, origin: &str, name: &str, replaces: Option<&str>) {
         self.refusal.clear();
         if !self.reload(ctx) {
             self.refusal = words::follow_failed(ctx.locale());
@@ -415,45 +432,89 @@ impl Files {
             label if label.is_empty() => origin.to_owned(),
             label => label,
         };
-        let fills = if self.held.iter().any(|held| held.phone_origin == origin) {
-            None
-        } else {
-            let made = kit_act::act(
+        let earlier = replaces
+            .filter(|earlier| *earlier != origin)
+            .and_then(|earlier| self.held.iter().find(|held| held.phone_origin == earlier))
+            // A Docs folder the member deleted is not filled again.
+            .map(|held| {
+                let live = held
+                    .fills
+                    .as_deref()
+                    .filter(|fills| docs_folder_is_live(ctx, fills));
+                (held.phone_origin.clone(), live.map(str::to_owned))
+            });
+        let known = self.held.iter().any(|held| held.phone_origin == origin);
+        let tell = |fills: Option<&str>| {
+            // undo-exempt: telling the vault which folder this phone follows is part of the follow; its Undo is Stop reading, which asks first.
+            kit_act::act(
                 ctx,
-                act::docs::CreateFolder {
-                    title: label.clone(),
-                    ..act::docs::CreateFolder::default()
+                act::shell::FollowFiles {
+                    origin: json!({ "ref": origin, "label": label, "fills": fills }).to_string(),
+                    records: "[]".to_owned(),
+                    complete: Some(false),
                 },
-                &kit_act::key(&["follow-folder-made", origin], kit_act::fresh()),
-            );
-            match made.output_text("id") {
-                Some(id) if made.committed => Some(id),
-                _ => {
-                    self.refusal = words::follow_failed(ctx.locale());
-                    return;
-                }
+                &kit_act::key(&["follow-folder", origin], kit_act::fresh()),
+            )
+        };
+        // THE SAME FOLDER PICKED AGAIN AFTER STOP: the vault kept its origin and the Docs folder it
+        // filled, so following it again names no folder and finds that one, and its documents by
+        // their sources. A Docs folder the member deleted meanwhile is not filled again: a new one
+        // is made below, and the vault starts the folder over in it.
+        let retired_home = self
+            .retired
+            .iter()
+            .find(|retired| retired.phone_origin == origin)
+            .and_then(|retired| retired.fills.as_deref())
+            .filter(|fills| docs_folder_is_live(ctx, fills))
+            .is_some();
+        let mut told = None;
+        if !known && let Some(fills) = earlier.as_ref().and_then(|(_, fills)| fills.as_deref()) {
+            // A folder the vault refuses is made anew.
+            told = Some(tell(Some(fills))).filter(|told| told.committed);
+        } else if !known && earlier.is_none() && retired_home {
+            told = Some(tell(None)).filter(|told| told.committed);
+        }
+        let told = match told {
+            Some(told) => told,
+            None => {
+                let fills = if known {
+                    None
+                } else {
+                    // undo-exempt: the Docs folder a follow fills is made with the follow; Stop reading is the follow's Undo, and the folder goes to the trash like any.
+                    let made = kit_act::act(
+                        ctx,
+                        act::docs::CreateFolder {
+                            title: label.clone(),
+                            ..act::docs::CreateFolder::default()
+                        },
+                        &kit_act::key(&["follow-folder-made", origin], kit_act::fresh()),
+                    );
+                    match made.output_text("id") {
+                        Some(id) if made.committed => Some(id),
+                        _ => {
+                            self.refusal = words::follow_failed(ctx.locale());
+                            return;
+                        }
+                    }
+                };
+                tell(fills.as_deref())
             }
         };
-        let told = kit_act::act(
-            ctx,
-            act::shell::FollowFiles {
-                origin: json!({ "ref": origin, "label": label, "fills": fills }).to_string(),
-                records: "[]".to_owned(),
-                complete: Some(false),
-            },
-            &kit_act::key(&["follow-folder", origin], kit_act::fresh()),
-        );
         if !told.committed {
             self.refusal = words::follow_failed(ctx.locale());
             return;
+        }
+        if let Some((earlier, _)) = earlier {
+            self.stop(ctx, &earlier);
         }
         self.reload(ctx);
         self.request(ctx);
     }
 
-    /// The member stopped following: the sources are forgotten and the origin retired. Every
+    /// The member stopped following: the origin is retired, kept with its Docs folder and its sources. Every
     /// document stays.
     fn stop(&mut self, ctx: &Ctx, origin: &str) {
+        // undo-exempt: Stop reading asks first and is itself the Undo of a follow.
         let stopped = kit_act::act(
             ctx,
             act::shell::StopFollowingFiles {
@@ -466,6 +527,24 @@ impl Files {
         }
         self.reload(ctx);
     }
+}
+
+/// Whether `id` is a Docs folder that is not in the trash.
+fn docs_folder_is_live(ctx: &Ctx, id: &str) -> bool {
+    matches!(
+        read::read(
+            ctx,
+            load::docs::Drive {
+                limit: 1,
+                ..load::docs::Drive::default()
+            },
+            |answer| match answer {
+                Answer::DocsDrive(drive) => Some(drive.folders),
+                _ => None,
+            },
+        ),
+        Reading::Data(folders) if folders.iter().any(|folder| folder.folder_id == id)
+    )
 }
 
 fn name_of(path: &str) -> String {
@@ -512,23 +591,30 @@ impl Screen for Files {
                 self.reload(ctx);
                 Vec::new()
             }
-            // THE APP CAME FORWARD: the folders may have changed while it was away.
-            Some(E::Lifecycle(wire::AppLifecycle { foreground: true })) => {
-                self.request(ctx);
+            // The coordinator asks for a pass (the app came forward, a trigger settled, a
+            // background window): it wakes this service by name.
+            Some(E::Signalled(_)) => {
+                if ctx.follows().take_run_files() {
+                    return self.begin(ctx);
+                }
                 Vec::new()
             }
             Some(E::ImportsFiles(files)) => {
                 match files.kind {
                     Some(F::Requested(_)) => self.request(ctx),
                     Some(F::FolderFollowed(followed)) => {
-                        self.follow(ctx, &followed.origin, &followed.name);
+                        self.follow(
+                            ctx,
+                            &followed.origin,
+                            &followed.name,
+                            followed.replaces.as_deref(),
+                        );
                     }
                     Some(F::FolderStopped(stopped)) => self.stop(ctx, &stopped.origin),
                     None => {}
                 }
                 Vec::new()
             }
-            Some(E::TimerFired(fired)) if fired.timer == SETTLE_TIMER => self.settled(ctx),
             Some(E::TimerFired(fired)) if fired.timer == READ_TIMER => {
                 if self.pass.is_some() {
                     self.finish(ctx)

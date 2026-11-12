@@ -50,12 +50,12 @@ import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.StateColor
+import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.kitCard
 import dev.centraid.android.kit.kitTextStyle
 import dev.centraid.android.kit.rememberLargestText
-import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.theme.centraidDark
 
 /**
@@ -72,11 +72,17 @@ internal fun SettingsScreen(
 ) {
     // THE PAGE HANDED ITS JOB TO HOME (the vault switcher is Home's sheet): it steps aside.
     LaunchedEffect(state.finished) { if (state.finished) onBack() }
-    PushedPage(title = state.title, parentTitle = state.back_label, onBack = onBack) {
+    PushedPage(
+        title = state.title,
+        parentTitle = state.back_label,
+        onBack = onBack,
+        // A REFUSED WRITE (units) is Rust's one sentence in the kit's status line.
+        statusLine = { StatusLine(state.status) },
+    ) {
         ReadStateView(
-            content = screenContentOf(state.loading, null, state.data_),
+            page = state.page!!,
             onRetry = null,
-        ) { data -> SettingsBody(data, onEvent, onOpen) }
+        ) { state.data_?.let { data -> SettingsBody(data, onEvent, onOpen) } }
     }
     // DOWNLOAD SETTINGS is a sheet of its own (Rust's `transfer_sheet`): the member's one transfer
     // rule, the same three choices Home's gear draws.
@@ -115,6 +121,26 @@ private fun SettingsBody(data: SettingsData, onEvent: (SettingsEvent) -> Unit, o
                         KitType.Meta,
                         Surface.meta,
                         Modifier.padding(horizontal = 4.dp, vertical = 8.dp).testTag("settings-appearance-note"),
+                    )
+                }
+            }
+        }
+        val units = data.units
+        if (units != null) {
+            item(key = "units") {
+                Column {
+                    GroupHead(units.title)
+                    KitSegmented(
+                        units.choices.map { KitSegment(it.id, it.label, it.selected) },
+                        testTag = "settings-units",
+                    ) { id ->
+                        onEvent(SettingsEvent(units_picked = SettingsEvent.UnitsPicked(id = id)))
+                    }
+                    KitText(
+                        units.note,
+                        KitType.Meta,
+                        Surface.meta,
+                        Modifier.padding(horizontal = 4.dp, vertical = 8.dp).testTag("settings-units-note"),
                     )
                 }
             }

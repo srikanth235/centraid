@@ -26,7 +26,7 @@ pub const GROUPS: [(&str, &str, &str); 6] = [
     (
         "kernel",
         "the kernel",
-        "What every kind shares: the entity, the typed edge between two of them, the vault's own row, the keys of acts already run, revisions and the one search index.",
+        "What every kind shares: the entity, the typed edge between two of them, the vault's own row, the keys of acts already run, every record's earlier values (revisions) and the one search index.",
     ),
     (
         "words",
@@ -59,7 +59,7 @@ pub const GROUPS: [(&str, &str, &str); 6] = [
 ///
 /// The FTS5 shadow tables of `search` are not here (they are an implementation
 /// of it); every other table must be.
-pub const TABLES: [(&str, &str, &str); 42] = [
+pub const TABLES: [(&str, &str, &str); 44] = [
     (
         "kernel",
         "entity",
@@ -88,7 +88,7 @@ pub const TABLES: [(&str, &str, &str); 42] = [
     (
         "kernel",
         "revision",
-        "The words or bytes an edit replaced, numbered from one per entity.",
+        "Every record's earlier values: the state an entity had before a commit changed it, numbered from one per entity, with a note's words and a document's bytes in cells of their own. Written at the commit door for every kind; a creation writes none, a purge takes them with the record, and a Locker item's sealed cells are kept only as the ciphertext they are, masked on read.",
     ),
     (
         "kernel",
@@ -99,6 +99,16 @@ pub const TABLES: [(&str, &str, &str); 42] = [
         "kernel",
         "search_vocab",
         "The index's own vocabulary, which serves fuzzy correction of a typed word.",
+    ),
+    (
+        "kernel",
+        "search_past",
+        "What a live item said in an earlier version: one contentless row per kept version with typed text, keyed by the entity's `n` and the version's number, so a search finds the item by words it has since replaced. A trashed or purged entity has none, and a Locker item never does.",
+    ),
+    (
+        "kernel",
+        "search_past_vocab",
+        "The earlier versions' own vocabulary.",
     ),
     (
         "kernel",
@@ -233,12 +243,12 @@ pub const TABLES: [(&str, &str, &str); 42] = [
     (
         "follow",
         "origin",
-        "A system the member follows: a phone's contacts, calendar, files or health store, or a bank statement.",
+        "Where rows came from: a system the member follows (a phone's contacts, calendar, files or health store, a bank statement) or a file or device an item arrived from once (camera roll, picker, vCard, Markdown, CSV, scan, upload, Reminders). A typed row has none. Stopping a followed store retires its origin instead of deleting it, so following it again finds the home it filled and its sources.",
     ),
     (
         "follow",
         "source",
-        "One record of an origin, with what it last stated, so the next pass merges per field against it.",
+        "One record of an origin, with what it last stated, so the next pass merges per field against it; for a one-shot arrival it only says which origin the item came from.",
     ),
     (
         "locker",
@@ -275,6 +285,10 @@ fn is_shadow(name: &str) -> bool {
         "search_data",
         "search_docsize",
         "search_idx",
+        "search_past_config",
+        "search_past_data",
+        "search_past_docsize",
+        "search_past_idx",
     ]
     .contains(&name)
 }

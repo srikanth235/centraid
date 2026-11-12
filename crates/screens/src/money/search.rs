@@ -8,9 +8,10 @@ use centraid_api_proto::core_v1 as wire;
 use wire::money_search_event::Kind as S;
 use wire::screen_event::Kind as E;
 
-use super::fold::{self, Phase};
+use super::fold;
 use super::rows;
 use crate::catalog::load;
+use crate::kit::read::Page;
 use crate::kit::{read, search};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, money as words};
@@ -26,15 +27,19 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     Some(Box::new(Search {
         parent: args.parent.clone(),
         term: String::new(),
-        phase: Phase::Loading,
+        page: Page::loading(),
+        asked_term: String::new(),
     }))
 }
 
 struct Search {
     parent: String,
     term: String,
-    /// `Loading` is the resting page: no term, nothing read.
-    phase: Phase<wire::MoneySearch>,
+    /// The read of the term asked; the resting page (no term) reads nothing.
+    page: Page<wire::MoneySearch>,
+    /// The term `page` answers: another term is another question, so the last term's rows are
+    /// never shown for it.
+    asked_term: String,
 }
 
 impl Search {
@@ -44,10 +49,15 @@ impl Search {
 
     fn reload(&mut self, ctx: &Ctx) {
         if self.asked().is_empty() {
-            self.phase = Phase::Loading;
+            self.page = Page::loading();
+            self.asked_term.clear();
             return;
         }
-        self.phase = Phase::of(read::read(
+        if self.asked_term != self.asked() {
+            self.page = Page::loading();
+            self.asked_term = self.asked().to_owned();
+        }
+        let reading = read::read(
             ctx,
             load::money::Search {
                 month: String::new(),
@@ -58,7 +68,8 @@ impl Search {
                 wire::app_query_response::Answer::MoneySearch(x) => Some(x),
                 _ => None,
             },
-        ));
+        );
+        fold::reread(&mut self.page, ctx.locale(), reading, |_| false);
     }
 
     fn data(&self, locale: Locale, answer: &wire::MoneySearch) -> wire::MoneySearchData {
@@ -66,7 +77,21 @@ impl Search {
         let lines: Vec<wire::MoneyRow> = answer
             .rows
             .iter()
-            .map(|row| rows::row(locale, row, "", true, true, &parent))
+            .map(|row| {
+                let mut line = rows::row(locale, row, "", true, true, &parent);
+                // Words only an earlier version of the line held (#1185): the row says so, and
+                // opens its Earlier versions.
+                if row.in_earlier_version {
+                    line.meta = search::earlier_meta(locale, &line.meta);
+                    line.accessibility_label = format!(
+                        "{}, {}",
+                        line.accessibility_label,
+                        search::in_earlier_version(locale)
+                    );
+                    line.route = Some(search::earlier_route(locale, super::EARLIER, &row.txn_id));
+                }
+                line
+            })
             .collect();
         let total = answer.total_matches as usize;
         wire::MoneySearchData {
@@ -83,11 +108,6 @@ impl Search {
             } else {
                 fold::count(total, &words::match_one(locale), &words::match_many(locale))
             },
-            empty: lines.is_empty().then(|| wire::EmptyState {
-                headline: fill(&words::nothing_matches(locale), &[("term", self.asked())]),
-                body: words::search_not_searched(locale),
-                ..Default::default()
-            }),
             corrected: answer.corrected.clone().unwrap_or_default(),
             ask: Some(search::offer(locale, self.asked(), "money")),
             rows: lines,
@@ -122,21 +142,40 @@ impl Screen for Search {
         use wire::money_search_state::Content;
         let locale = ctx.locale();
         let resting = self.asked().is_empty();
-        let content = match &self.phase {
-            _ if resting => None,
-            Phase::Loading => Some(Content::Loading(wire::Loading { first_load: true })),
-            Phase::Failed => Some(Content::Failure(read::failure(locale))),
-            Phase::Denied => Some(Content::Denied(fold::denied(locale))),
-            Phase::Ready(answer) => Some(Content::Data(Box::new(self.data(locale, answer)))),
+        let content = if resting {
+            None
+        } else {
+            self.page
+                .data()
+                .map(|answer| Content::Data(Box::new(self.data(locale, answer))))
+        };
+        // The resting page and a term that matched nothing are the page's empty state; the answer
+        // stays for the second, because its Ask offer is drawn under the empty sentence.
+        let nothing = self
+            .page
+            .data()
+            .is_some_and(|answer| answer.rows.is_empty());
+        let page = if resting {
+            Page::<()>::Empty.wire(
+                locale,
+                |_| fold::denied(locale),
+                || wire::EmptyState {
+                    headline: words::search_resting(locale),
+                    ..Default::default()
+                },
+            )
+        } else {
+            fold::wire_page_keeping(&self.page, locale, nothing, || wire::EmptyState {
+                headline: fill(&words::nothing_matches(locale), &[("term", self.asked())]),
+                body: words::search_not_searched(locale),
+                ..Default::default()
+            })
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::MoneySearch(
                 wire::MoneySearchState {
                     content,
-                    resting: resting.then(|| wire::EmptyState {
-                        headline: words::search_resting(locale),
-                        ..Default::default()
-                    }),
+                    page: Some(page),
                     chrome: Some(fold::chrome(
                         locale,
                         words::search_title(locale),

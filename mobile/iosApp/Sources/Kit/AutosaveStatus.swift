@@ -15,6 +15,7 @@ struct AutosaveStatus: View {
     var inline = false
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.statusActed) private var statusActed
 
     init(_ autosave: Centraid_Core_V1_Autosave, inline: Bool = false) {
         self.autosave = autosave
@@ -27,18 +28,33 @@ struct AutosaveStatus: View {
         autosave.label
     }
 
-    /// A refusal inks `net` (`Autosave.refused`, the law's say; the conflict
-    /// phase nothing reaches says nothing more).
+    /// A refusal inks `net` (`Autosave.refused`, the law's say, a conflict included).
     private var tone: String { autosave.refused ? "net" : "textFaint" }
 
     var body: some View {
         let label = Self.label(autosave)
-        Text(label.isEmpty ? " " : label)
-            .centraidType("annotLabel")
-            .foregroundStyle(Theme.color(tone, scheme))
-            .frame(maxWidth: inline ? nil : .infinity, alignment: inline ? .trailing : .leading)
-            .fixedSize(horizontal: inline, vertical: false)
-            .accessibilityIdentifier("kit-autosave-status")
-            .accessibilityHidden(label.isEmpty)
+        HStack(spacing: 8) {
+            Text(label.isEmpty ? " " : label)
+                .centraidType("annotLabel")
+                .foregroundStyle(Theme.color(tone, scheme))
+                .frame(maxWidth: inline ? nil : .infinity, alignment: inline ? .trailing : .leading)
+                .fixedSize(horizontal: inline, vertical: false)
+                .accessibilityIdentifier("kit-autosave-status")
+                .accessibilityHidden(label.isEmpty)
+            // A SAVE THE VAULT REFUSED BECAUSE THE RECORD CHANGED ELSEWHERE (#1185): the words stay,
+            // and Reload is the one verb. It is the kit's `statusActed`, which Rust answers.
+            if !autosave.reloadLabel.isEmpty {
+                Button(action: { statusActed() }) {
+                    Text(autosave.reloadLabel)
+                        .centraidType("annotLabel")
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Theme.color("text", scheme))
+                        .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("kit-autosave-reload")
+            }
+        }
     }
 }

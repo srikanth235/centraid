@@ -38,6 +38,7 @@ use super::door::{self, Judged, Verdict};
 use super::enrollment::{Env, Job, Out, Progress, Refusal, Rekeyed, Restored, Runner};
 use super::keeper::{Absent, Keeper, KeeperSlot};
 use super::secrets::{VaultSecrets, WORDS};
+use crate::kit::owner::{Answer, Leaving, NoPasscode, OwnerGate};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, custody as words, fill};
 
@@ -75,6 +76,8 @@ enum Notice {
     Refusal(Refusal),
     RekeyNone,
     PhotoUnread,
+    /// The owner check's own sentence (`Enter::owner_line`).
+    Owner,
 }
 
 /// `words.enter`'s machine. **Redacted**: `cells` are the member's words.
@@ -104,6 +107,24 @@ pub struct Enter {
     /// A held-seed restore: the name of each vault on its own words it will
     /// also ask for (R-1047-E18).
     held_keys: Vec<String>,
+    /// The owner check a restore asks first; a brand-new phone may have no
+    /// passcode, so it warns and goes ahead.
+    gate: OwnerGate,
+    /// What the check was raised for.
+    going: Option<Go>,
+    /// The sentence the check left for the notice line.
+    owner_line: String,
+}
+
+/// The restore that waits on the owner check.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Go {
+    /// A re-key found nothing to key: restore with the typed words.
+    Offered,
+    /// A held-seed restore.
+    Held,
+    /// The words on screen, restored.
+    Typed,
 }
 
 impl fmt::Debug for Enter {
@@ -145,6 +166,9 @@ impl Enter {
             notice: Notice::None,
             offer_restore: false,
             held_keys: Vec::new(),
+            gate: OwnerGate::default(),
+            going: None,
+            owner_line: String::new(),
         }
     }
 
@@ -299,24 +323,67 @@ impl Enter {
         if self.restores() && self.endpoint.trim().is_empty() {
             return Vec::new();
         }
-        let typed = self.cells.clone();
-        if self.offer_restore {
-            self.purpose = Purpose::Restore;
-            self.work();
-            return self.begin(Job::restore(typed, &self.endpoint), ctx);
-        }
-        if self.purpose == Purpose::RestoreHeld {
-            self.work();
-            return self.begin(Job::held(&self.endpoint), ctx);
-        }
-        if !self.valid() {
+        if self.gate.asking() {
             return Vec::new();
         }
-        self.work();
-        if self.purpose == Purpose::Rekey {
-            self.begin(Job::rekey(typed), ctx)
+        let go = if self.offer_restore {
+            Go::Offered
+        } else if self.purpose == Purpose::RestoreHeld {
+            Go::Held
+        } else if !self.valid() {
+            return Vec::new();
+        } else if self.purpose == Purpose::Rekey {
+            // A re-key restores nothing: no owner check.
+            self.work();
+            return self.begin(Job::rekey(self.cells.clone()), ctx);
         } else {
-            self.begin(Job::restore(typed, &self.endpoint), ctx)
+            Go::Typed
+        };
+        // A RESTORE ASKS THE OWNER CHECK BEFORE IT STARTS (not on open).
+        self.going = Some(go);
+        self.notice = Notice::None;
+        self.gate.begin(ctx.locale(), Leaving::Restore)
+    }
+
+    /// The restore the check was raised for, now that the phone said so.
+    fn start(&mut self, go: Go, ctx: &Ctx) -> Vec<wire::Effect> {
+        let typed = self.cells.clone();
+        match go {
+            Go::Offered => {
+                self.purpose = Purpose::Restore;
+                self.work();
+                self.begin(Job::restore(typed, &self.endpoint), ctx)
+            }
+            Go::Held => {
+                self.work();
+                self.begin(Job::held(&self.endpoint), ctx)
+            }
+            Go::Typed => {
+                self.work();
+                self.begin(Job::restore(typed, &self.endpoint), ctx)
+            }
+        }
+    }
+
+    /// The owner check's answer.
+    fn checked(&mut self, checked: &wire::OwnerChecked, ctx: &Ctx) -> Vec<wire::Effect> {
+        let Some(go) = self.going.take() else {
+            return Vec::new();
+        };
+        match self.gate.answer(ctx.locale(), NoPasscode::Warn, checked) {
+            Some(Answer::Passed) => self.start(go, ctx),
+            Some(Answer::PassedUnprotected(warning)) => {
+                let effects = self.start(go, ctx);
+                self.owner_line = warning;
+                self.notice = Notice::Owner;
+                effects
+            }
+            Some(Answer::Refused(sentence)) => {
+                self.owner_line = sentence;
+                self.notice = Notice::Owner;
+                Vec::new()
+            }
+            Some(Answer::Cancelled) | None => Vec::new(),
         }
     }
 
@@ -487,6 +554,7 @@ impl Enter {
             Notice::Refusal(Refusal::StoreRefused) => words::keep_failed(locale),
             Notice::RekeyNone => words::rekey_none(locale),
             Notice::PhotoUnread => words::pair_photo_unread(locale),
+            Notice::Owner => self.owner_line.clone(),
         }
     }
 
@@ -707,7 +775,28 @@ impl Screen for Enter {
                 self.loading = true;
                 self.begin(Job::reload(), ctx)
             }
-            Some(E::EffectResult(result)) => self.answered(&result, ctx),
+            Some(E::EffectResult(result)) => {
+                use wire::effect_result::Outcome as O;
+                if self.gate.asking() {
+                    let checked = match &result.outcome {
+                        Some(O::OwnerChecked(checked)) => Some(*checked),
+                        // The prompt itself errored: the same as not recognised.
+                        Some(O::Failed(_)) => Some(wire::OwnerChecked {
+                            outcome: wire::owner_checked::Outcome::Failed as i32,
+                            ..Default::default()
+                        }),
+                        _ => None,
+                    };
+                    if let Some(checked) = checked {
+                        return self.checked(&checked, ctx);
+                    }
+                }
+                self.answered(&result, ctx)
+            }
+            Some(E::Left(_)) => {
+                self.going = None;
+                self.gate.cancel()
+            }
             Some(E::OffThreadDone(done)) => self.off_thread(&done, ctx),
             Some(E::WordsEnter(event)) => self.event(event, ctx),
             _ => Vec::new(),

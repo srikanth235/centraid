@@ -119,19 +119,23 @@ fn pinned_lead_in_their_own_section_and_rows_carry_finished_words() {
     assert_eq!(row.notebook_id, book);
     assert_eq!(row.route, Some(routes::editor(&plain)));
     assert_eq!(data.count_label, "2 notes");
-    assert!(data.empty.is_none());
+    assert!(home_state(d.view(i)).page.as_ref().unwrap().state.is_none());
 }
 
 #[test]
 fn day_one_is_one_sentence_and_one_action_and_a_filter_that_empties_it_is_not_day_one() {
     let mut d = clean();
     let i = home(&mut d, wire::NotesPlace::Notes);
-    let empty = library_data(d.view(i)).empty.clone().expect("day one");
+    let empty = empty_of(d.view(i)).clone();
+    assert!(
+        home_state(d.view(i)).content.is_none(),
+        "empty is not ready data"
+    );
     assert_eq!(empty.headline, "No notes yet");
     assert_eq!(empty.body, "Write the first one.");
     assert_eq!(empty.action_label, "New note");
     send_home(&mut d, i, pick("show", "pinned"));
-    let empty = library_data(d.view(i)).empty.clone().expect("filtered");
+    let empty = empty_of(d.view(i)).clone();
     assert_eq!(empty.body, "No notes match this view.");
     assert_eq!(empty.action_label, "");
 }
@@ -377,7 +381,7 @@ fn an_empty_notebook_says_so_and_offers_a_new_note() {
         notes::TAB,
         routes::home(wire::NotesPlace::Notes, &book, "Empty", false),
     );
-    let empty = library_data(d.view(i)).empty.clone().unwrap();
+    let empty = empty_of(d.view(i)).clone();
     assert_eq!(empty.headline, "Nothing here");
     assert_eq!(empty.body, "Nothing is filed in this notebook yet.");
     assert_eq!(empty.action_label, "New note");
@@ -435,7 +439,7 @@ fn a_row_menu_pins_at_once_files_and_trashes_only_after_a_confirm() {
         state.menu.as_ref().unwrap().file_label,
         "File into notebook"
     );
-    assert_eq!(state.menu.as_ref().unwrap().trash_label, "Trash");
+    assert_eq!(state.menu.as_ref().unwrap().trash_label, "Move to trash");
 
     // PIN: the sheet closes, the vault has the flag, the row is pinned.
     send_home(
@@ -526,7 +530,7 @@ fn a_row_menu_pins_at_once_files_and_trashes_only_after_a_confirm() {
         confirm.body,
         "It stays restorable for 30 days, with its links, tags and files."
     );
-    assert_eq!(confirm.confirm_label, "Trash");
+    assert_eq!(confirm.confirm_label, "Move to trash");
     assert!(confirm.destructive);
     assert_eq!(titles(d.view(i)), ["A"], "nothing moved yet");
     send_home(&mut d, i, H::Dismissed(ev::Dismissed {}));
@@ -572,16 +576,10 @@ fn search_is_a_field_marks_matches_and_close_restores_the_library() {
     let search = home_state(d.view(i)).search.clone().unwrap();
     assert!(search.open);
     assert_eq!(
-        search
-            .results
-            .as_ref()
-            .unwrap()
-            .empty
-            .as_ref()
-            .unwrap()
-            .body,
+        search.results.as_ref().unwrap().hint,
         "Type to search titles and bodies."
     );
+    assert!(home_state(d.view(i)).page.as_ref().unwrap().state.is_none());
     // No menu over search: no filter narrows its results. A stale pick is nothing.
     assert!(home_state(d.view(i)).filter_menu.is_none());
     send_home(&mut d, i, pick("show", "pinned"));
@@ -603,8 +601,8 @@ fn search_is_a_field_marks_matches_and_close_restores_the_library() {
             .iter()
             .any(|r| r.highlighted && r.text.to_lowercase().contains("milk"))
     );
-    assert!(results.empty.is_none());
     // Ask is the foot of a current answer.
+    assert!(results.hint.is_empty());
     assert_eq!(
         search.ask,
         Some(wire::SearchAsk {
@@ -623,16 +621,10 @@ fn search_is_a_field_marks_matches_and_close_restores_the_library() {
         }),
     );
     let search = home_state(d.view(i)).search.clone().unwrap();
-    assert_eq!(
-        search
-            .results
-            .as_ref()
-            .unwrap()
-            .empty
-            .as_ref()
-            .unwrap()
-            .headline,
-        "No matches"
+    assert_eq!(empty_of(d.view(i)).headline, "No matches");
+    assert!(
+        search.results.is_none(),
+        "nothing matched is the page's empty state"
     );
     assert_eq!(search.ask.unwrap().label, "Ask about “zzqxv”");
     // A new blank term clears the answer and the ask.
@@ -705,7 +697,8 @@ fn a_notebook_found_by_name_is_a_container_on_the_field_and_opens_the_notes_plac
         Some(routes::home(wire::NotesPlace::Notes, &book, "Cabin", false))
     );
     // A notebook that matched is an answer: no nothing-found over it.
-    assert!(search.results.unwrap().empty.is_none());
+    assert!(home_state(d.view(i)).page.as_ref().unwrap().state.is_none());
+    assert!(search.results.is_some());
     // A new term clears it.
     send_home(
         &mut d,
@@ -791,6 +784,8 @@ fn more_is_a_sheet_of_import_export_and_trash_and_the_same_tab_is_nothing() {
         ]
     );
     assert_eq!(state.more_rows[2].route, Some(routes::trash()));
+    assert_eq!(state.more_rows[2].meta, "30 days, then erased");
+    assert!(state.more_rows[..2].iter().all(|row| row.meta.is_empty()));
     send_home(&mut d, i, H::SheetClosed(ev::SheetClosed {}));
     assert_eq!(
         home_state(d.view(i)).sheet,

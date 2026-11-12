@@ -90,8 +90,9 @@ fn the_day_one_tap_reads_the_address_book_and_a_snapshot_becomes_people() {
         contact("", "lookup:nameless", "", ""),
     ]));
     assert_eq!(status(&d, i), "2 people imported");
-    // This device follows from now on: the flag is kept off the vault, and the store watched.
-    assert_eq!(kinds(&d), ["keychain:2", "watch:true"]);
+    // This device follows from now on: the flag is kept off the vault. The store is watched and
+    // read by the follow coordinator, not by this screen.
+    assert_eq!(kinds(&d), ["keychain:2"]);
 
     let names: Vec<String> = roster_of(&d)
         .people
@@ -119,6 +120,22 @@ fn the_day_one_tap_reads_the_address_book_and_a_snapshot_becomes_people() {
 }
 
 #[test]
+fn a_phone_that_blocks_contacts_says_so_and_points_nowhere() {
+    let mut d = clean();
+    let i = begin(&mut d);
+    not_following(&mut d);
+    send_home(&mut d, i, H::ImportContacts(ev::ImportContactsTapped {}));
+    d.answer_effect(O::Failed(wire::EffectFailed {
+        reason: "contacts access not given".into(),
+        restricted: true,
+        ..Default::default()
+    }));
+    let said = status(&d, i);
+    assert_eq!(said, "This phone does not allow contacts access.");
+    assert!(!said.contains("Settings"));
+}
+
+#[test]
 fn an_import_the_os_refuses_says_where_to_turn_it_on_and_an_empty_phone_says_add_an_account() {
     let mut d = clean();
     let i = begin(&mut d);
@@ -129,6 +146,7 @@ fn an_import_the_os_refuses_says_where_to_turn_it_on_and_an_empty_phone_says_add
         reason: "contacts access not given".into(),
         denied: true,
         cancelled: false,
+        ..Default::default()
     }));
     assert_eq!(
         status(&d, i),
@@ -152,46 +170,20 @@ fn an_import_the_os_refuses_says_where_to_turn_it_on_and_an_empty_phone_says_add
 }
 
 #[test]
-fn a_device_that_imported_follows_a_burst_of_changes_as_one_silent_pass() {
+fn a_device_that_imported_asks_the_phone_nothing_from_the_home() {
     let mut d = clean();
     let i = begin(&mut d);
-    // The keychain says this device imported: watch the store, and follow once at once.
+    // The keychain says this device imported: the home only knows it, to draw the row. Watching
+    // the store and reading it are the follow coordinator's (`follow_coordinator.rs`: a burst of
+    // changes is one pass, a pass never asks the OS), whichever screen is showing.
     d.answer_effect(O::Keychain(wire::KeychainValue {
         found: true,
         value: b"1".to_vec(),
     }));
-    assert_eq!(kinds(&d), ["watch:true"]);
-    let watch = d.effects.remove(0);
-
-    // A burst of store changes arms ONE two-second timer; the pass waits it out.
-    for _ in 0..3 {
-        d.send(
-            i,
-            wire::screen_event::Kind::EffectResult(wire::EffectResult {
-                effect_id: watch.effect_id,
-                outcome: Some(O::PhoneChanged(wire::PhoneChanged {
-                    source: wire::ImportSource::Contacts as i32,
-                })),
-            }),
-        );
-    }
-    assert!(d.effects.is_empty(), "nothing is read before the settle");
-    d.pump(Duration::from_millis(2600));
-    // A following pass never asks the OS for permission.
-    assert_eq!(kinds(&d), ["read:ask=false"]);
-    d.answer_effect(snapshot(vec![contact("Ana", "lookup:ana", "", "")]));
-    assert!(d.effects.is_empty());
-    // And it says nothing: a following pass is silent.
-    assert_eq!(status(&d, i), "");
-    d.pump(Duration::from_millis(300));
-    assert_eq!(
-        roster_of(&d)
-            .people
-            .iter()
-            .map(|p| p.name.as_str())
-            .collect::<Vec<_>>(),
-        ["Ana"]
-    );
+    assert!(d.effects.is_empty(), "{:?}", kinds(&d));
+    d.pump(Duration::from_millis(2_600));
+    assert!(d.effects.is_empty(), "{:?}", kinds(&d));
+    assert_eq!(status(&d, i), "", "and says nothing");
 }
 
 fn row(d: &Driver, i: u64) -> wire::PeopleContactsRow {
@@ -226,9 +218,9 @@ fn the_phone_contacts_row_says_on_off_paused_and_no_access_and_its_action_fits()
     assert!(on.detail.starts_with("2 followed"), "{}", on.detail);
     d.effects.clear();
 
-    // Pause: the follow stops, the store is no longer watched, and the keychain says paused.
+    // Pause: the keychain says paused, and the coordinator's next pass finds it so and reads nothing.
     send_home(&mut d, i, H::ContactsAction(ev::ContactsActionTapped {}));
-    assert_eq!(kinds(&d), ["keychain:2", "watch:false"]);
+    assert_eq!(kinds(&d), ["keychain:2"]);
     let paused = row(&d, i);
     assert_eq!(
         (paused.state, paused.action_label.as_str()),
@@ -236,9 +228,9 @@ fn the_phone_contacts_row_says_on_off_paused_and_no_access_and_its_action_fits()
     );
     d.effects.clear();
 
-    // Resume: watched again and a pass at once.
+    // Resume: the keychain says so, and the coordinator is asked for a pass.
     send_home(&mut d, i, H::ContactsAction(ev::ContactsActionTapped {}));
-    assert_eq!(kinds(&d), ["keychain:2", "watch:true"]);
+    assert_eq!(kinds(&d), ["keychain:2"]);
     assert_eq!(row(&d, i).state, State::Following as i32);
 }
 
@@ -253,6 +245,7 @@ fn a_phone_that_refused_the_address_book_says_so_and_the_action_opens_settings()
         reason: "contacts access not given".into(),
         denied: true,
         cancelled: false,
+        ..Default::default()
     }));
     let denied = row(&d, i);
     assert_eq!(
@@ -272,4 +265,136 @@ fn a_phone_that_refused_the_address_book_says_so_and_the_action_opens_settings()
             .and_then(|e| e.kind.as_ref()),
         Some(F::VaultCommand(_))
     ));
+}
+
+fn stop_row(d: &Driver, i: u64) -> Option<wire::PeopleMoreRow> {
+    home_state(d.view(i))
+        .more_rows
+        .iter()
+        .find(|row| row.key == "stop")
+        .cloned()
+}
+
+#[test]
+fn stop_reading_is_offered_only_while_following_asks_in_the_shared_words_and_the_people_stay() {
+    use wire::people_contacts_row::State;
+    let mut d = clean();
+    let i = begin(&mut d);
+    not_following(&mut d);
+    assert!(stop_row(&d, i).is_none(), "nothing is followed yet");
+
+    send_home(&mut d, i, H::ImportContacts(ev::ImportContactsTapped {}));
+    d.answer_effect(snapshot(vec![contact(
+        "Ada Lovelace",
+        "lookup:ada",
+        "555 0100",
+        "",
+    )]));
+    d.effects.clear();
+    // The same words as Health's: "Stop reading {store}", on a row with no route of its own.
+    let stop = stop_row(&d, i).expect("following: the row is there");
+    assert_eq!(
+        (stop.label.as_str(), stop.icon_key.as_str()),
+        ("Stop reading Phone contacts", "Stop")
+    );
+    assert!(stop.route.is_none());
+    assert!(home_state(d.view(i)).stop.is_none());
+
+    // Tapping it asks first, in the shared sheet's words; dismissing keeps following.
+    send_home(
+        &mut d,
+        i,
+        H::MoreRow(ev::MoreRowPicked {
+            key: "stop".to_owned(),
+        }),
+    );
+    let confirm = home_state(d.view(i)).stop.clone().expect("asked first");
+    assert_eq!(confirm.title, "Stop reading Phone contacts?");
+    assert_eq!(
+        confirm.body,
+        "People stops reading Phone contacts on this phone. The people already here stay."
+    );
+    assert_eq!(confirm.confirm_label, "Stop reading");
+    assert!(confirm.destructive);
+    send_home(&mut d, i, H::StopDismissed(ev::StopDismissed {}));
+    assert!(home_state(d.view(i)).stop.is_none());
+    assert_eq!(row_state(&d, i), State::Following as i32);
+    assert!(d.effects.is_empty());
+
+    // Confirming retires the store: this device no longer follows, and the people stay.
+    send_home(
+        &mut d,
+        i,
+        H::MoreRow(ev::MoreRowPicked {
+            key: "stop".to_owned(),
+        }),
+    );
+    send_home(&mut d, i, H::StopConfirmed(ev::StopConfirmed {}));
+    assert_eq!(kinds(&d), ["keychain:3"], "the habit is forgotten");
+    assert!(home_state(d.view(i)).stop.is_none());
+    assert_eq!(status(&d, i), "People stopped reading your phone contacts.");
+    assert_eq!(row_state(&d, i), State::Off as i32);
+    assert_eq!(row(&d, i).action_label, "Turn on");
+    assert!(stop_row(&d, i).is_none());
+    let names: Vec<String> = roster_of(&d)
+        .people
+        .iter()
+        .map(|p| p.name.clone())
+        .collect();
+    assert_eq!(names, ["Ada Lovelace"]);
+    // A confirm that was never asked stops nothing.
+    d.effects.clear();
+    send_home(&mut d, i, H::StopConfirmed(ev::StopConfirmed {}));
+    assert!(d.effects.is_empty());
+}
+
+fn row_state(d: &Driver, i: u64) -> i32 {
+    row(d, i).state
+}
+
+#[test]
+fn a_cold_start_reads_the_stored_follow_so_the_stop_row_is_there_and_stop_works_from_it() {
+    use centraid_screens::catalog::act;
+    use centraid_screens::field::Keyed;
+    let mut d = clean();
+    let i = begin(&mut d);
+    not_following(&mut d);
+    assert!(stop_row(&d, i).is_none(), "nothing is stored yet");
+    // The vault follows an account of the phone's contacts (a pass in an earlier launch stored
+    // it); THIS runtime has run no pass and holds nothing in memory about one.
+    let followed = d.act(
+        wire::ActRequest::from(act::people::FollowContacts {
+            origin: serde_json::json!({ "ref": "acct-1", "label": "iCloud", "device_id": "phone" })
+                .to_string(),
+            records: "[]".to_owned(),
+            complete: Some(false),
+            since: None,
+            ..Default::default()
+        })
+        .keyed("arrange:cold-start".to_owned()),
+    );
+    assert_eq!(
+        followed.status,
+        wire::ActStatus::Executed as i32,
+        "{}",
+        followed.reason
+    );
+    d.send(i, wire::screen_event::Kind::Appeared(wire::Appeared {}));
+    d.effects.clear();
+
+    // THE ROW SAYS WHAT IS STORED.
+    let stop = stop_row(&d, i).expect("the vault follows: the row is there");
+    assert_eq!(stop.label, "Stop reading Phone contacts");
+    // And Stop works from that state: it retires the stored account.
+    send_home(
+        &mut d,
+        i,
+        H::MoreRow(ev::MoreRowPicked {
+            key: "stop".to_owned(),
+        }),
+    );
+    assert!(home_state(d.view(i)).stop.is_some());
+    send_home(&mut d, i, H::StopConfirmed(ev::StopConfirmed {}));
+    assert_eq!(status(&d, i), "People stopped reading your phone contacts.");
+    assert!(stop_row(&d, i).is_none(), "the stored origin is gone");
 }

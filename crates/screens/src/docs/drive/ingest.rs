@@ -26,6 +26,8 @@ use wire::docs_ingest_view::Phase;
 use crate::catalog::act;
 use crate::docs::routes;
 use crate::kit::act as kit_act;
+use crate::kit::permission::{self, Resource};
+use crate::kit::undo::Undo;
 use crate::screen::Ctx;
 use crate::strings::{Locale, docs as words, fill};
 
@@ -112,9 +114,15 @@ impl Ingest {
             ..Self::default()
         };
         match kind {
+            // A NEW TEXT DOCUMENT IS NOT MADE HERE: its editor opens on an empty draft and the
+            // first autosave creates it (as a new note), so backing out leaves nothing behind.
             Kind::Text => {
-                self.title = words::ingest_text_title(ctx.locale());
-                self.file_it(ctx)
+                let title = words::ingest_text_title(ctx.locale());
+                let route = routes::new_editor(folder_id, &title);
+                *self = Self::default();
+                vec![effect(wire::effect::Kind::OpenRoute(wire::OpenRoute {
+                    route: Some(route),
+                }))]
             }
             Kind::Upload | Kind::Scan => self.pick(),
         }
@@ -181,7 +189,7 @@ impl Ingest {
             return Vec::new();
         }
         self.staged_bytes = 0;
-        if self.kind == Kind::Text || self.file.is_some() {
+        if self.file.is_some() {
             self.file_it(ctx)
         } else {
             self.pick()
@@ -206,25 +214,8 @@ impl Ingest {
         self.phase = Phase::Filing;
         let folder_id = Some(self.folder_id.clone()).filter(|id| !id.is_empty());
         let (request, subject): (wire::ActRequest, String) = match (&self.file, self.kind) {
-            (_, Kind::Text) => (
-                act::docs::CreateText {
-                    title: self.title.clone(),
-                    folder_id,
-                    ..Default::default()
-                }
-                .into(),
-                self.title.clone(),
-            ),
             (Some(file), _) => (
-                act::docs::Upload {
-                    blob: file.blob.clone(),
-                    media_type: file.media_type.clone(),
-                    title: self.title.clone(),
-                    folder_id,
-                    size: i64::try_from(file.size).ok(),
-                    ..Default::default()
-                }
-                .into(),
+                upload_request(ctx.locale(), self.kind, file, &self.title, folder_id).into(),
                 file.blob.clone(),
             ),
             (None, _) => {
@@ -233,7 +224,13 @@ impl Ingest {
             }
         };
         let key = kit_act::key(&[&request.action, &subject], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
+        // THE MEMBER LANDS ON THE NEW DOCUMENT, so its line ("<title> added · Undo") is drawn
+        // there: Undo moves the document to trash. The door is this write's alone, and the line
+        // waits for the page the route below opens.
+        let title = self.title.clone();
+        let settled = Undo::default().act_handing_onward(ctx, request, &key, |locale| {
+            fill(&words::ingest_added(locale), &[("title", &title)])
+        });
         if !settled.committed {
             let sentence = if settled.refusal.trim().is_empty() {
                 words::ingest_no_file(ctx.locale())
@@ -248,16 +245,12 @@ impl Ingest {
         let Some(id) = settled.output_text("id") else {
             return Vec::new();
         };
-        let route = if self.kind == Kind::Text {
-            routes::editor(&id, &self.title)
+        let parent = if self.parent.is_empty() {
+            words::app_title(ctx.locale())
         } else {
-            let parent = if self.parent.is_empty() {
-                words::app_title(ctx.locale())
-            } else {
-                self.parent.clone()
-            };
-            routes::document(&id, &self.title, &parent)
+            self.parent.clone()
         };
+        let route = routes::document(&id, &self.title, &parent);
         vec![effect(wire::effect::Kind::OpenRoute(wire::OpenRoute {
             route: Some(route),
         }))]
@@ -304,6 +297,35 @@ impl Ingest {
     }
 }
 
+/// The document a picked file or a scan becomes. It arrived as a scan (every scan under one
+/// origin, "Scanned document") or as an upload (under its file name).
+fn upload_request(
+    locale: Locale,
+    kind: Kind,
+    file: &Staged,
+    title: &str,
+    folder_id: Option<String>,
+) -> act::docs::Upload {
+    let (system, label) = if kind == Kind::Scan {
+        (
+            act::docs::UploadArrivedSystem::Scan,
+            words::ingest_scan_title(locale),
+        )
+    } else {
+        (act::docs::UploadArrivedSystem::Upload, title.to_owned())
+    };
+    act::docs::Upload {
+        blob: file.blob.clone(),
+        media_type: file.media_type.clone(),
+        title: title.to_owned(),
+        folder_id,
+        size: i64::try_from(file.size).ok(),
+        arrived_system: Some(system),
+        arrived_label: Some(label),
+        ..Default::default()
+    }
+}
+
 /// The file's name as its title; a scan with none is "Scanned document".
 fn title_of(locale: Locale, kind: Kind, name: &str) -> String {
     let name = name.trim();
@@ -320,16 +342,22 @@ fn title_of(locale: Locale, kind: Kind, name: &str) -> String {
 /// on; a phone with no picker says so; anything else is the file that would not
 /// read.
 fn refusal_of(locale: Locale, kind: Kind, failed: &wire::EffectFailed) -> String {
-    match (failed.denied, kind) {
-        (true, Kind::Scan) => words::camera_denied(locale),
-        (true, _) => words::files_denied(locale),
-        _ if failed.reason == UNAVAILABLE => words::ingest_no_picker(locale),
-        _ => words::ingest_no_file(locale),
+    let resource = if kind == Kind::Scan {
+        Resource::Camera
+    } else {
+        Resource::Files
+    };
+    if let Some(sentence) = permission::refusal(locale, resource, failed) {
+        sentence
+    } else if failed.reason == UNAVAILABLE {
+        words::ingest_no_picker(locale)
+    } else {
+        words::ingest_no_file(locale)
     }
 }
 
 /// The reason a shell gives when this phone has no picker or scanner to offer.
-pub const UNAVAILABLE: &str = "unavailable";
+pub use crate::effect_reason::UNAVAILABLE;
 
 /// A media type for a file the platform named none for, off its name — the core
 /// has no sniffer, and bytes promoted as `application/octet-stream` are ones no
@@ -375,6 +403,32 @@ mod tests {
         assert_eq!(media_type_of("Lease.PDF", ""), "application/pdf");
         assert_eq!(media_type_of("notes", ""), OCTET_STREAM);
         assert_eq!(media_type_of("x.pdf", " image/png "), "image/png");
+    }
+
+    #[test]
+    fn a_scan_and_an_upload_record_how_they_arrived() {
+        let file = Staged {
+            blob: "a".repeat(64),
+            size: 3,
+            media_type: "application/pdf".to_owned(),
+        };
+        let say = |kind: Kind, title: &str| -> (String, String) {
+            let request: wire::ActRequest =
+                upload_request(Locale::En, kind, &file, title, None).into();
+            let text = |key: &str| match &request.input[key].kind {
+                Some(wire::value::Kind::Text(text)) => text.clone(),
+                other => panic!("{key}: {other:?}"),
+            };
+            (text("arrived_system"), text("arrived_label"))
+        };
+        assert_eq!(
+            say(Kind::Upload, "Lease.pdf"),
+            ("upload".to_owned(), "Lease.pdf".to_owned())
+        );
+        assert_eq!(
+            say(Kind::Scan, "Scan 2026-11-11"),
+            ("scan".to_owned(), "Scanned document".to_owned())
+        );
     }
 
     #[test]

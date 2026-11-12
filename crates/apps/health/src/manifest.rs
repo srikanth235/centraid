@@ -7,7 +7,7 @@
 
 use std::sync::OnceLock;
 
-use centraid_apps_kit::actions::{ActionRow, act};
+use centraid_apps_kit::actions::{ActionRow, act, confirmed};
 use centraid_apps_kit::manifest::{Manifest, parse_manifest};
 
 /// The manifest, as committed.
@@ -17,17 +17,30 @@ pub const MANIFEST_JSON: &str = include_str!("../manifest.json");
 pub const APP_ID: &str = "health";
 
 /// The action each vault command is declared as.
-pub const ACTIONS: [ActionRow; 10] = [
+pub const ACTIONS: [ActionRow; 17] = [
+    // THE GENERAL LINK (#1185): any item to any other, and the link taken off.
+    act("link", "edge.add"),
+    act("unlink", "edge.remove"),
     act("record-days", "measurement.record"),
     act("follow-workouts", "follow.health"),
     act("delete-workout", "entity.trash"),
-    act("stop-following", "follow.stop"),
+    confirmed("stop-following", "follow.stop"),
     act("log-workout", "workout.log"),
     act("edit-workout", "workout.edit"),
     act("restore-workout", "entity.restore"),
+    // THE TWO DESTROYS (#1185), as in every app: one trashed workout, and the whole trash.
+    confirmed("purge-workout", "entity.purge"),
+    confirmed("empty-trash", "entity.empty_trash"),
     act("edit-figure", "measurement.log"),
     act("log-figure", "measurement.log"),
     act("clear-figure", "measurement.clear"),
+    // AN ATTACHMENT is an `attached` edge from the item to a document or a photo: the shared
+    // verbs, one pair in every app (the Attach promise, #1185).
+    act("attach", "edge.add"),
+    act("detach", "edge.remove"),
+    // THE HEALTH DATA AS A FILE (#1185): the More sheet's Export and a workout's Share. It writes
+    // nothing (`writes_nothing`).
+    act("export-csv", "health.export_csv"),
 ];
 
 /// The parsed manifest.
@@ -61,15 +74,16 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_six_queries_and_its_actions() {
+    fn it_declares_seven_queries_and_its_actions() {
         let manifest = manifest();
-        assert_eq!(manifest.queries.len(), 6);
+        assert_eq!(manifest.queries.len(), 8);
         for name in [
             "today",
             "series",
             "trends",
             "workouts",
             "workout",
+            "trash",
             "follow-view",
         ] {
             assert!(manifest.query(name).is_some(), "no query {name}");
@@ -78,12 +92,19 @@ mod tests {
         for row in ACTIONS {
             let (action, _) = (row.action, row.command);
             let declared = manifest.action(action).expect("declared");
-            assert_eq!(declared.confirmation, Confirmation::None, "{action}");
+            // The irreversible acts confirm (#1185), as every other app's destroys do.
+            let expected = if matches!(action, "purge-workout" | "empty-trash" | "stop-following") {
+                Confirmation::Required
+            } else {
+                Confirmation::None
+            };
+            assert_eq!(declared.confirmation, expected, "{action}");
         }
     }
 
     /// The input without the words only the conversation surface reads: the names chat says a
-    /// property under (`aliases`) and the ids it leaves for the core (`x-minted`, `x-target`).
+    /// property under (`aliases`) and the ids it leaves for the core (`x-minted`, `x-target`),
+    /// and the one kind `empty-trash` narrows the shared verb's free `kind` to (`enum`).
     fn chat_words_removed(schema: &serde_json::Value) -> serde_json::Value {
         match schema {
             serde_json::Value::Object(map) => serde_json::Value::Object(
@@ -107,6 +128,16 @@ mod tests {
             let registered = registry
                 .get(command)
                 .unwrap_or_else(|| panic!("{command} is not a vault command"));
+            // `empty-trash` is the app's narrowing of the bulk verb: it names the one kind it
+            // empties and leaves out `limit` and `defer_collect`, which are the launch pass's.
+            if action == "empty-trash" {
+                continue;
+            }
+            // `attach` and `detach` narrow the shared edge verbs to the one relation, as in every
+            // app (the Attach promise): `from`, `rel` (`attached`) and `to`.
+            if matches!(action, "attach" | "detach") {
+                continue;
+            }
             assert_eq!(
                 &chat_words_removed(&manifest().action(action).expect("declared").input),
                 registered.schema(),

@@ -6,7 +6,9 @@
 //! The store is read by the shell (HealthKit, Health Connect), which performs a
 //! [`wire::HealthRead`] effect and answers a [`wire::HealthSnapshot`]. Everything
 //! else is decided here: what is sent, how a workout is identified and kinded,
-//! when a read may judge a workout gone, and when a pass runs.
+//! and when a read may judge a workout gone. WHEN a pass runs is the follow coordinator's
+//! ([`crate::follow`]): the app coming forward, Health's home appearing, a pull to refresh and
+//! the background windows.
 //!
 //! ## A workout's identity
 //!
@@ -24,6 +26,18 @@
 //! (`since`), and a pass never deletes one. There is no fingerprint here, no link
 //! and nothing to detach: this states what the store holds and the vault merges
 //! it.
+//!
+//! ## A pass reads only what changed (#1183)
+//!
+//! The store's read position is a cursor in the vault, on the store's origin beside the install
+//! that wrote it, and moves in the same commit as the records it covers. The shell is handed it
+//! ([`wire::HealthRead::cursor`], opaque here: a JSON map of anchors on iOS, a changes token on
+//! Android) and answers a DELTA when it can use it: only the days the changes touched, the workouts
+//! added or changed, and the ids of workouts deleted. A cursor that is missing, another install's
+//! or expired is a complete read (`delta` false), never an error, and a delta judges nothing gone but
+//! the ids it names. Each batch carries its own slice of the records; the pass's last command carries
+//! the cursor, so a batch the vault refuses leaves cursor and records where they were, and a pass
+//! with nothing to write moves it alone (`advance-origin-cursor`).
 //!
 //! ## The phone's habit
 //!
@@ -43,13 +57,15 @@ use wire::screen_event::Kind as E;
 
 use super::{Metric, Store, kinds};
 use crate::catalog::{act, load};
+use crate::follow::Store as Followed;
 use crate::kit::act as kit_act;
 use crate::kit::civil;
+use crate::kit::permission::{self, Resource};
 use crate::kit::read::{self, Reading};
 use crate::screen::Ctx;
 use crate::strings::{fill, health as words};
 
-/// The keychain key that holds this device's Health habit: `1|steps,workouts`
+/// The keychain key that holds this device's Health habit: `1|steps,workouts|<install id>`
 /// when connected, `0|...` after Stop (the choices are kept, so Connect opens on
 /// them).
 pub const DEVICE_KEY: &str = "health_device";
@@ -182,6 +198,60 @@ pub fn number(value: f64) -> Value {
     serde_json::from_str(&text).unwrap_or(Value::Null)
 }
 
+/// What the store states, inside the window and fit to send: known metrics, finite non-negative
+/// values, a (day, metric) stated twice keeping its last statement.
+fn stated(read: &[DayTotal], in_window: &impl Fn(&str) -> bool) -> Vec<((String, String), f64)> {
+    let mut stated: Vec<((String, String), f64)> = Vec::new();
+    for total in read {
+        if !in_window(&total.day)
+            || Metric::of_key(&total.metric).is_none()
+            || !total.value.is_finite()
+            || total.value < 0.0
+        {
+            continue;
+        }
+        let key = (total.day.clone(), total.metric.clone());
+        match stated.iter_mut().find(|(known, _)| *known == key) {
+            Some((_, value)) => *value = total.value,
+            None => stated.push((key, total.value)),
+        }
+    }
+    stated
+}
+
+/// THE PURE HALF OF A DELTA'S DAYS (#1183): only the days the changes touched are stated, so the
+/// vault's other days say nothing and nothing is zeroed by absence. What the shell states for a day
+/// is the day as it stands: a sum left with no samples is stated as 0, which corrects a day the vault
+/// holds and is not written for a day it holds nothing for.
+#[must_use]
+pub fn delta_changes(
+    read: &[DayTotal],
+    held: &[DayTotal],
+    from: &str,
+    today: &str,
+) -> Vec<DayTotal> {
+    let in_window = |day: &str| civil::epoch_day_of(day).is_some() && day >= from && day <= today;
+    let vault: BTreeMap<(&str, &str), f64> = held
+        .iter()
+        .map(|total| ((total.day.as_str(), total.metric.as_str()), total.value))
+        .collect();
+    let mut out: Vec<DayTotal> = stated(read, &in_window)
+        .into_iter()
+        .filter(
+            |((day, metric), value)| match vault.get(&(day.as_str(), metric.as_str())) {
+                Some(was) => was.to_bits() != value.to_bits(),
+                None => *value != 0.0,
+            },
+        )
+        .map(|((day, metric), value)| DayTotal { day, metric, value })
+        .collect();
+    out.sort_by(|a, b| {
+        (&a.day, Metric::of_key(&a.metric).map(|m| m as usize))
+            .cmp(&(&b.day, Metric::of_key(&b.metric).map(|m| m as usize)))
+    });
+    out
+}
+
 /// THE PURE HALF OF A DAYS PASS: the store's totals against the vault's, in; the
 /// changed set, out. Days bypass `phone_link` (R-1129-3): the store gives a day no
 /// identity, so the window re-read is what corrects a late watch upload, and a day
@@ -202,21 +272,7 @@ pub fn number(value: f64) -> Value {
 #[must_use]
 pub fn changes(read: &[DayTotal], held: &[DayTotal], from: &str, today: &str) -> Vec<DayTotal> {
     let in_window = |day: &str| civil::epoch_day_of(day).is_some() && day >= from && day <= today;
-    let mut stated: Vec<((String, String), f64)> = Vec::new();
-    for total in read {
-        if !in_window(&total.day)
-            || Metric::of_key(&total.metric).is_none()
-            || !total.value.is_finite()
-            || total.value < 0.0
-        {
-            continue;
-        }
-        let key = (total.day.clone(), total.metric.clone());
-        match stated.iter_mut().find(|(known, _)| *known == key) {
-            Some((_, value)) => *value = total.value,
-            None => stated.push((key, total.value)),
-        }
-    }
+    let stated = stated(read, &in_window);
     let vault: BTreeMap<(&str, &str), f64> = held
         .iter()
         .map(|total| ((total.day.as_str(), total.metric.as_str()), total.value))
@@ -368,8 +424,12 @@ pub fn follow_input(
     };
     let allowed = chosen.iter().any(|key| key == Metric::WORKOUTS)
         && !snapshot.refused.iter().any(|key| key == Metric::WORKOUTS);
-    let complete =
-        snapshot.store_present && snapshot.workouts_complete && allowed && !records.is_empty();
+    // A delta states what changed: it never judges the rest gone, only the ids it names.
+    let complete = !snapshot.delta
+        && snapshot.store_present
+        && snapshot.workouts_complete
+        && allowed
+        && !records.is_empty();
     Some((origin, records, complete))
 }
 
@@ -383,6 +443,8 @@ pub struct Outcome {
     pub forgotten: u64,
     pub refused: usize,
     pub read: bool,
+    /// Workouts the vault doubted: a complete read that lost most of what the store followed.
+    pub doubted: u64,
 }
 
 fn count(output: &Value, name: &str) -> u64 {
@@ -393,9 +455,22 @@ fn key(name: &str, part: &str) -> String {
     kit_act::key(&[name, part], kit_act::fresh())
 }
 
-/// ONE PASS over `snapshot` for `window`: the days that changed, then the
-/// workouts. A store no longer on the phone sends no days (there is nothing to
-/// read them from) and no workouts.
+/// Where a pass's read got to, as the vault is told: the store's origin, the install that read it and
+/// the cursor of the read (#1183).
+struct Cursor<'a> {
+    origin: &'static str,
+    device: &'a str,
+    value: &'a str,
+}
+
+/// ONE PASS over `snapshot` for `window`: the days that changed, then the workouts. A store no longer
+/// on the phone sends no days (there is nothing to read them from) and no workouts.
+///
+/// A complete read states the window and the vault finds what is gone from it; a delta
+/// (`snapshot.delta`) states only what changed and names the workouts deleted. The store's cursor
+/// (`snapshot.next_cursor`) rides with the LAST command that writes, in that command's commit; a
+/// command the vault refused leaves the cursor where it was for every command after it, so the next
+/// read covers what was refused. A pass with nothing to write moves the cursor alone.
 pub fn run(
     ctx: &Ctx,
     snapshot: &wire::HealthSnapshot,
@@ -404,6 +479,26 @@ pub fn run(
     device: &str,
 ) -> Outcome {
     let mut outcome = Outcome::default();
+    let store = Store::of_snapshot(snapshot);
+    let cursor = store
+        .origin()
+        .filter(|_| {
+            snapshot.store_present && !device.is_empty() && !snapshot.next_cursor.is_empty()
+        })
+        .map(|origin| Cursor {
+            origin,
+            device,
+            value: &snapshot.next_cursor,
+        });
+    let follow = follow_input(ctx.locale(), snapshot, window, chosen, device);
+    let gone = gone_ids(snapshot);
+    // A complete read always follows (it judges what is gone); a delta only when it has workouts to
+    // say. Whether a command carries the cursor is decided before it is sent.
+    let follows = follow
+        .as_ref()
+        .is_some_and(|(_, records, _)| !snapshot.delta || !records.is_empty() || !gone.is_empty());
+    let mut clean = true;
+    let mut wrote = false;
     if snapshot.store_present {
         let read: Vec<DayTotal> = snapshot
             .days
@@ -414,37 +509,68 @@ pub fn run(
                 value: day.value,
             })
             .collect();
-        for batch in changes(&read, &window.held, &window.totals_from, &window.today).chunks(BATCH)
-        {
+        let sent = if snapshot.delta {
+            delta_changes(&read, &window.held, &window.totals_from, &window.today)
+        } else {
+            changes(&read, &window.held, &window.totals_from, &window.today)
+        };
+        let batches: Vec<&[DayTotal]> = sent.chunks(BATCH).collect();
+        wrote = !batches.is_empty();
+        for (at, batch) in batches.iter().enumerate() {
             let days: Vec<Value> = batch
                 .iter()
                 .map(
                     |total| json!({"day": total.day, "metric": total.metric, "value": total.value}),
                 )
                 .collect();
+            let carries = (at + 1 == batches.len() && !follows && clean)
+                .then_some(cursor.as_ref())
+                .flatten();
             let request = act::health::RecordDays {
                 days: Value::Array(days).to_string(),
                 person_id: None,
+                cursor: carries.map(|cursor| cursor.value.to_owned()),
+                cursor_device: carries.map(|cursor| cursor.device.to_owned()),
+                cursor_ref: carries.map(|cursor| cursor.origin.to_owned()),
             };
+            // undo-exempt: a follow pass runs unseen and has no status line; its Undo is Stop
+            // reading in the More sheet (`stop-following`).
             if kit_act::act(ctx, request, &key("record-days", &window.today)).committed {
                 outcome.days += batch.len();
             } else {
                 outcome.refused += batch.len();
+                clean = false;
             }
         }
     }
-    let Some((origin, records, complete)) =
-        follow_input(ctx.locale(), snapshot, window, chosen, device)
-    else {
+    let Some((mut origin, records, complete)) = follow else {
         outcome.refused += 1;
         return outcome;
     };
+    if !follows {
+        // A delta with no workout to say: the days were all, or there was nothing at all, in which
+        // case the cursor moves alone. Nothing was judged gone, so nothing is doubted.
+        if let Some(cursor) = cursor.as_ref().filter(|_| clean && !wrote) {
+            advance(ctx, cursor, &window.today);
+        }
+        outcome.read = clean;
+        if clean {
+            ctx.follows().judged(Followed::Health, 0, false);
+        }
+        return outcome;
+    }
+    if let Some(cursor) = cursor.as_ref().filter(|_| clean) {
+        origin["cursor"] = cursor.value.into();
+    }
     let request = act::health::FollowWorkouts {
         origin: origin.to_string(),
         records: Value::Array(records).to_string(),
         complete: Some(complete),
         since: Some(instant_of(window.workouts_since_ms)),
+        gone: (!gone.is_empty()).then(|| Value::from(gone).to_string()),
     };
+    // undo-exempt: a follow pass runs unseen and has no status line; its Undo is Stop reading in
+    // the More sheet (`stop-following`).
     let settled = kit_act::act(ctx, request, &key("follow-workouts", &window.today));
     if !settled.committed {
         outcome.refused += 1;
@@ -455,8 +581,43 @@ pub fn run(
     outcome.added = count(&output, "added") + count(&output, "matched");
     outcome.updated = count(&output, "updated");
     outcome.forgotten = count(&output, "forgotten");
+    outcome.doubted = count(&output, "doubted");
+    ctx.follows().judged(
+        Followed::Health,
+        u32::try_from(outcome.doubted).unwrap_or(u32::MAX),
+        snapshot.store_present && !snapshot.delta && !snapshot.workouts_complete,
+    );
     outcome.refused += usize::try_from(count(&output, "refused")).unwrap_or(0);
     outcome
+}
+
+/// The store's ids of the workouts a delta says were deleted, as the vault's sources name them
+/// (`local:<id>`, as [`record`] names a workout), each once. A complete read names none: what it no
+/// longer holds is what it finds gone.
+fn gone_ids(snapshot: &wire::HealthSnapshot) -> Vec<String> {
+    let mut ids: Vec<String> = Vec::new();
+    if snapshot.delta {
+        for id in &snapshot.deleted_workout_ids {
+            let id = format!("local:{}", id.trim());
+            if id.len() > "local:".len() && !ids.contains(&id) {
+                ids.push(id);
+            }
+        }
+    }
+    ids
+}
+
+/// Move the store's cursor alone: the pass read, and has nothing to write.
+fn advance(ctx: &Ctx, cursor: &Cursor<'_>, today: &str) {
+    let request = act::shell::AdvanceOriginCursor {
+        system: act::shell::AdvanceOriginCursorSystem::Health,
+        r#ref: cursor.origin.to_owned(),
+        device_id: cursor.device.to_owned(),
+        cursor: cursor.value.to_owned(),
+    };
+    // undo-exempt: a follow pass runs unseen and has no status line; its Undo is Stop reading in
+    // the More sheet (`stop-following`), and a cursor is no record of the member's.
+    let _ = kit_act::act(ctx, request, &key("advance-origin-cursor", today));
 }
 
 /// CONNECT: the store's origin is written at once (a follow of no workouts) —
@@ -476,7 +637,10 @@ pub fn connect(
         records: "[]".to_owned(),
         complete: None,
         since: None,
+        gone: None,
     };
+    // undo-exempt: Connect shows its own progress and result, not a status line; its Undo is Stop
+    // reading in the More sheet (`stop-following`).
     if !kit_act::act(ctx, request, &key("follow-workouts", "origin")).committed {
         return None;
     }
@@ -496,6 +660,8 @@ pub fn stop(ctx: &Ctx) -> bool {
             system: act::health::StopFollowingSystem::Health,
             r#ref: origin.to_owned(),
         };
+        // undo-exempt: this is the Undo of a follow, and the Stop reading confirm asks first; the
+        // status line only says whether the store was left.
         clean = kit_act::act(ctx, request, &key("stop-following", origin)).committed && clean;
     }
     clean
@@ -513,12 +679,17 @@ pub struct Device {
     pub loaded: bool,
     pub connected: bool,
     pub chosen: Vec<String>,
+    /// This install's id, as the store's snapshot named it at Connect: what the store's cursor in
+    /// the vault is read for (#1183). Empty in a habit kept before it was written, and then every
+    /// pass is a complete read until Connect.
+    pub install: String,
 }
 
 impl Device {
     fn decode(value: &[u8]) -> Self {
         let text = String::from_utf8_lossy(value);
-        let (flag, keys) = text.split_once('|').unwrap_or(("0", ""));
+        let (flag, rest) = text.split_once('|').unwrap_or(("0", ""));
+        let (keys, install) = rest.split_once('|').unwrap_or((rest, ""));
         Self {
             loaded: true,
             connected: flag == "1",
@@ -527,20 +698,18 @@ impl Device {
                 .filter(|key| !key.is_empty())
                 .map(str::to_owned)
                 .collect(),
+            install: install.to_owned(),
         }
     }
 
-    fn encode(connected: bool, chosen: &[String]) -> Vec<u8> {
-        format!("{}|{}", u8::from(connected), chosen.join(",")).into_bytes()
+    fn encode(connected: bool, chosen: &[String], install: &str) -> Vec<u8> {
+        let habit = format!("{}|{}", u8::from(connected), chosen.join(","));
+        if install.is_empty() {
+            habit.into_bytes()
+        } else {
+            format!("{habit}|{install}").into_bytes()
+        }
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum Purpose {
-    /// The member's Connect tap: the OS may ask for permission.
-    Connect(Vec<String>),
-    /// A following pass: silent, and never asks.
-    Pass,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -548,20 +717,20 @@ enum Waiting {
     Nothing,
     /// The keychain's answer to "did this device connect?".
     Device,
-    Read(Purpose),
+    /// The member's Connect tap, with the types chosen: the OS may ask for permission.
+    Connect(Vec<String>),
 }
 
-/// THE CONNECT AND THE FOLLOW, as one component a screen hosts. The host sends it
-/// the events it does not know ([`Self::on_event`]) and returns the effects it
-/// hands back.
+/// THE CONNECT, as one component a screen hosts. The host sends it the events it does not know
+/// ([`Self::on_event`]) and returns the effects it hands back.
+///
+/// It does not follow: a connected device is followed by the coordinator ([`crate::follow`]),
+/// which Health's home asks for a pass when it appears and when the member pulls to refresh
+/// ([`crate::follow::Follows::changed`]), and which says which chosen types the OS refused.
 pub struct HealthFollow {
     waiting: Waiting,
     device: Device,
     window: Option<Window>,
-    /// A pass runs as soon as the device says it connected.
-    auto: bool,
-    /// The chosen types the OS refused, as the last read said.
-    refused: Vec<String>,
     /// Which store the last read named, when it named one.
     store: Option<Store>,
     outcome: Option<Outcome>,
@@ -571,26 +740,19 @@ pub struct HealthFollow {
     connected_now: bool,
 }
 
+impl Default for HealthFollow {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HealthFollow {
-    /// A flow that follows on its own once the device has said it connected.
     #[must_use]
-    pub fn following() -> Self {
-        Self::new(true)
-    }
-
-    /// A flow that only connects, when asked.
-    #[must_use]
-    pub fn connecting() -> Self {
-        Self::new(false)
-    }
-
-    fn new(auto: bool) -> Self {
+    pub fn new() -> Self {
         Self {
             waiting: Waiting::Nothing,
             device: Device::default(),
             window: None,
-            auto,
-            refused: Vec::new(),
             store: None,
             outcome: None,
             failure: None,
@@ -622,13 +784,7 @@ impl HealthFollow {
         &self.device
     }
 
-    /// The chosen types the OS refused, as the last read said.
-    #[must_use]
-    pub fn refused(&self) -> &[String] {
-        &self.refused
-    }
-
-    /// How the last pass ended.
+    /// How the last read ended.
     #[must_use]
     pub fn outcome(&self) -> Option<&Outcome> {
         self.outcome.as_ref()
@@ -654,17 +810,7 @@ impl HealthFollow {
     /// Whether Connect's read is out (the OS is asking, or the first read runs).
     #[must_use]
     pub fn working(&self) -> bool {
-        matches!(self.waiting, Waiting::Read(Purpose::Connect(_)))
-    }
-
-    /// Follow now, when this device connected and nothing is out. A pass never
-    /// asks the OS for permission.
-    pub fn request(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        if self.waiting != Waiting::Nothing || !self.device.connected {
-            return Vec::new();
-        }
-        let chosen = self.device.chosen.clone();
-        self.start_read(ctx, Purpose::Pass, &chosen, false)
+        matches!(self.waiting, Waiting::Connect(_))
     }
 
     /// The member tapped Connect with `chosen` types on.
@@ -674,7 +820,7 @@ impl HealthFollow {
         }
         self.failure = None;
         let keys = chosen.clone();
-        let effects = self.start_read(ctx, Purpose::Connect(chosen), &keys, true);
+        let effects = self.start_read(ctx, chosen, &keys);
         if effects.is_empty() {
             self.failure = Some(self.connect_failed(ctx));
         }
@@ -689,35 +835,28 @@ impl HealthFollow {
             return None;
         }
         self.device.connected = false;
-        self.refused.clear();
+        ctx.follows().refused(Followed::Health, &[]);
+        ctx.follows().background_refused(Followed::Health, false);
         Some(vec![keychain(
             wire::keychain_op::Op::Set,
-            Device::encode(false, &self.device.chosen),
+            Device::encode(false, &self.device.chosen, &self.device.install),
         )])
     }
 
-    fn start_read(
-        &mut self,
-        ctx: &Ctx,
-        purpose: Purpose,
-        chosen: &[String],
-        ask: bool,
-    ) -> Vec<wire::Effect> {
+    fn start_read(&mut self, ctx: &Ctx, chosen: Vec<String>, keys: &[String]) -> Vec<wire::Effect> {
         let Some(window) = window(ctx) else {
             return Vec::new();
         };
-        let read = wire::HealthRead {
-            chosen: chosen.to_vec(),
-            ask_permission: ask,
-            totals_from: window.totals_from.clone(),
-            today: window.today.clone(),
-            workouts_since_ms: window.workouts_since_ms,
-        };
+        let mut effect = read_effect(&window, keys, true, "");
+        // D16: Health Connect's one sheet also asks to read in the background, here and only here.
+        if Store::of(ctx) == Store::HealthConnect
+            && let Some(wire::effect::Kind::HealthRead(read)) = effect.kind.as_mut()
+        {
+            read.ask_background = true;
+        }
         self.window = Some(window);
-        self.waiting = Waiting::Read(purpose);
-        vec![wire::Effect {
-            kind: Some(wire::effect::Kind::HealthRead(read)),
-        }]
+        self.waiting = Waiting::Connect(chosen);
+        vec![effect]
     }
 
     /// Offer the host's event. `Some(effects)` when it was this flow's (the answer
@@ -730,33 +869,25 @@ impl HealthFollow {
         match (self.waiting.clone(), &result.outcome) {
             (Waiting::Device, Some(O::Keychain(value))) => {
                 self.waiting = Waiting::Nothing;
-                self.device = if value.found {
-                    Device::decode(&value.value)
-                } else {
-                    Device {
-                        loaded: true,
-                        ..Device::default()
-                    }
-                };
-                Some(if self.auto {
-                    self.request(ctx)
-                } else {
-                    Vec::new()
-                })
+                self.device = device_of(value);
+                Some(Vec::new())
             }
             (Waiting::Device, Some(O::Failed(_))) => {
                 self.waiting = Waiting::Nothing;
                 self.device.loaded = true;
                 Some(Vec::new())
             }
-            (Waiting::Read(purpose), Some(O::Health(snapshot))) => {
-                Some(self.read_ended(ctx, &purpose, snapshot))
+            (Waiting::Connect(chosen), Some(O::Health(snapshot))) => {
+                Some(self.read_ended(ctx, &chosen, snapshot))
             }
-            (Waiting::Read(purpose), Some(O::Failed(_))) => {
+            (Waiting::Connect(_), Some(O::Failed(failed))) => {
                 self.waiting = Waiting::Nothing;
-                if matches!(purpose, Purpose::Connect(_)) {
-                    self.failure = Some(self.connect_failed(ctx));
-                }
+                // A GRANT THAT IS NOT THERE says so in the one permission voice; any other failure is
+                // the store that did not answer.
+                self.failure = Some(
+                    permission::refusal(ctx.locale(), Resource::Health, failed)
+                        .unwrap_or_else(|| self.connect_failed(ctx)),
+                );
                 Some(Vec::new())
             }
             _ => None,
@@ -774,7 +905,7 @@ impl HealthFollow {
     fn read_ended(
         &mut self,
         ctx: &Ctx,
-        purpose: &Purpose,
+        chosen: &[String],
         snapshot: &wire::HealthSnapshot,
     ) -> Vec<wire::Effect> {
         self.waiting = Waiting::Nothing;
@@ -783,45 +914,107 @@ impl HealthFollow {
             return Vec::new();
         };
         let locale = ctx.locale();
-        match purpose {
-            Purpose::Pass => {
-                self.refused.clone_from(&snapshot.refused);
-                let chosen = self.device.chosen.clone();
-                self.outcome = Some(run(ctx, snapshot, &window, &chosen, &snapshot.device_id));
-                Vec::new()
+        if !snapshot.store_present {
+            self.failure = Some(if snapshot.installable {
+                words::connect_install(locale)
+            } else {
+                words::connect_unavailable(locale)
+            });
+            return Vec::new();
+        }
+        match connect(ctx, snapshot, &window, chosen, &snapshot.device_id) {
+            Some(outcome) => {
+                ctx.follows().refused(Followed::Health, &snapshot.refused);
+                ctx.follows()
+                    .background_refused(Followed::Health, snapshot.background_refused);
+                self.outcome = Some(outcome);
+                self.device = Device {
+                    loaded: true,
+                    connected: true,
+                    chosen: chosen.to_vec(),
+                    install: snapshot.device_id.clone(),
+                };
+                self.connected_now = true;
+                vec![keychain(
+                    wire::keychain_op::Op::Set,
+                    Device::encode(true, chosen, &snapshot.device_id),
+                )]
             }
-            Purpose::Connect(chosen) => {
-                if !snapshot.store_present {
-                    self.failure = Some(if snapshot.installable {
-                        words::connect_install(locale)
-                    } else {
-                        words::connect_unavailable(locale)
-                    });
-                    return Vec::new();
-                }
-                match connect(ctx, snapshot, &window, chosen, &snapshot.device_id) {
-                    Some(outcome) => {
-                        self.refused.clone_from(&snapshot.refused);
-                        self.outcome = Some(outcome);
-                        self.device = Device {
-                            loaded: true,
-                            connected: true,
-                            chosen: chosen.clone(),
-                        };
-                        self.connected_now = true;
-                        vec![keychain(
-                            wire::keychain_op::Op::Set,
-                            Device::encode(true, chosen),
-                        )]
-                    }
-                    None => {
-                        self.failure = Some(self.connect_failed(ctx));
-                        Vec::new()
-                    }
-                }
+            None => {
+                self.failure = Some(self.connect_failed(ctx));
+                Vec::new()
             }
         }
     }
+}
+
+/// What this phone remembers, from the keychain's answer.
+#[must_use]
+pub(crate) fn device_of(value: &wire::KeychainValue) -> Device {
+    if value.found {
+        Device::decode(&value.value)
+    } else {
+        Device {
+            loaded: true,
+            ..Device::default()
+        }
+    }
+}
+
+/// The read of the health store for `window`: the member's Connect asks for permission, a
+/// pass does not. `cursor` is where the last read got to ([`held_cursor`]); empty is a complete read.
+#[must_use]
+pub(crate) fn read_effect(
+    window: &Window,
+    chosen: &[String],
+    ask: bool,
+    cursor: &str,
+) -> wire::Effect {
+    wire::Effect {
+        kind: Some(wire::effect::Kind::HealthRead(wire::HealthRead {
+            chosen: chosen.to_vec(),
+            ask_permission: ask,
+            totals_from: window.totals_from.clone(),
+            today: window.today.clone(),
+            workouts_since_ms: window.workouts_since_ms,
+            ask_background: false,
+            cursor: cursor.to_owned(),
+        })),
+    }
+}
+
+/// WHERE THE LAST READ OF THE STORE GOT TO, from the vault: empty (a complete read) when there is no
+/// cursor, when another install wrote it, when this install is not known yet and when the read did
+/// not land (#1183). A complete read costs the window once; it never costs a record.
+#[must_use]
+pub(crate) fn held_cursor(ctx: &Ctx, install: &str) -> String {
+    let Some(reference) = Store::of(ctx).origin() else {
+        return String::new();
+    };
+    if install.is_empty() {
+        return String::new();
+    }
+    match read::read(
+        ctx,
+        load::shell::OriginCursor {
+            system: load::shell::OriginCursorSystem::Health,
+            r#ref: reference.to_owned(),
+            device_id: install.to_owned(),
+        },
+        |answer| match answer {
+            Answer::OriginCursor(held) => Some(held.cursor),
+            _ => None,
+        },
+    ) {
+        Reading::Data(cursor) => cursor,
+        _ => String::new(),
+    }
+}
+
+/// Read the habit this device keeps for Health.
+#[must_use]
+pub(crate) fn habit_read() -> wire::Effect {
+    keychain(wire::keychain_op::Op::Get, Vec::new())
 }
 
 fn keychain(op: wire::keychain_op::Op, value: Vec<u8>) -> wire::Effect {
@@ -948,6 +1141,43 @@ mod tests {
             changed(&read, &held),
             [total("2026-10-19", "active_energy_kcal", 310.0)]
         );
+    }
+
+    #[test]
+    fn a_deltas_days_are_only_those_it_states_and_a_zero_corrects_a_day_the_vault_holds() {
+        let held = [
+            total("2026-10-17", "steps", 900.0),
+            total("2026-10-18", "steps", 8_000.0),
+            total("2026-10-19", "weight_kg", 71.4),
+        ];
+        let read = [
+            // Changed.
+            total("2026-10-18", "steps", 8_100.0),
+            // Left with no samples: a correction of what the vault holds.
+            total("2026-10-17", "steps", 0.0),
+            // Nothing held and nothing to say: not written.
+            total("2026-10-16", "steps", 0.0),
+            // As held: not sent again.
+            total("2026-10-19", "weight_kg", 71.4),
+            // Outside the window: never.
+            total("2026-10-01", "steps", 5.0),
+        ];
+        assert_eq!(
+            delta_changes(&read, &held, "2026-10-13", TODAY),
+            [
+                total("2026-10-17", "steps", 0.0),
+                total("2026-10-18", "steps", 8_100.0)
+            ],
+            "the vault's other days say nothing: nothing is zeroed by absence"
+        );
+    }
+
+    #[test]
+    fn the_habit_without_an_install_is_an_older_one_and_reads_complete() {
+        let device = Device::decode(b"1|steps,workouts");
+        assert!(device.connected);
+        assert_eq!(device.chosen, ["steps", "workouts"]);
+        assert_eq!(device.install, "");
     }
 
     #[test]
@@ -1114,16 +1344,17 @@ mod tests {
     #[test]
     fn the_phones_habit_round_trips() {
         let chosen = vec!["steps".to_owned(), "workouts".to_owned()];
-        let device = Device::decode(&Device::encode(true, &chosen));
+        let device = Device::decode(&Device::encode(true, &chosen, "phone-a"));
         assert_eq!(
             device,
             Device {
                 loaded: true,
                 connected: true,
-                chosen: chosen.clone()
+                chosen: chosen.clone(),
+                install: "phone-a".to_owned(),
             }
         );
-        let stopped = Device::decode(&Device::encode(false, &chosen));
+        let stopped = Device::decode(&Device::encode(false, &chosen, "phone-a"));
         assert!(!stopped.connected);
         assert_eq!(stopped.chosen, chosen);
         assert_eq!(Device::decode(b"").chosen, Vec::<String>::new());

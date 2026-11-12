@@ -32,7 +32,7 @@ pub fn manifest() -> &'static Manifest {
 }
 
 /// Which vault command each shell action runs.
-pub const ACTIONS: [ActionRow; 5] = [
+pub const ACTIONS: [ActionRow; 11] = [
     // ---- chat (lane I) ----
     act("rename-chat", "entity.retitle"),
     // a chat has no trash (R-CHAT-8): its delete is the shared permanent one
@@ -41,6 +41,17 @@ pub const ACTIONS: [ActionRow; 5] = [
     // ---- imports (lane I) ----
     act("follow-files", "follow.files"),
     act("stop-following-files", "follow.stop"),
+    // ---- following (#1183) ----
+    act("take-stated", "follow.take_stated"),
+    // Where a read of a phone store got to, moved with no record riding along (#1183).
+    act("advance-origin-cursor", "follow.advance_cursor"),
+    // ---- history (#1185): the earlier-versions screen ----
+    act("restore-version", "history.restore_version"),
+    act("undo-change", "history.undo"),
+    // The words a refused stale save held, kept beside the record as it is (an editor's Reload).
+    act("keep-version", "history.keep_version"),
+    // The Undo of any act that made something: it goes to the trash, restorable (#1185).
+    act("undo-create", "entity.trash"),
 ];
 
 #[cfg(test)]

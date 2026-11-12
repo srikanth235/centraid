@@ -29,15 +29,6 @@ struct LockerItemView: View {
 
     @Environment(\.colorScheme) private var scheme
 
-    private var content: ScreenContent<Centraid_Core_V1_LockerItemData> {
-        switch state.content {
-        case .loading?, nil: return .loading(true)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        }
-    }
-
     var body: some View {
         LockerCovered(wall: state.hasWall ? state.wall : nil, backLabel: state.chrome.backLabel, send: sendWall, onWords: onWords, onBack: onBack) {
             // THE ITEM'S NAME NEVER SITS IN THE NAVIGATION BAR while the Locker
@@ -46,7 +37,7 @@ struct LockerItemView: View {
             PushedPage(title: state.secure ? "" : state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
                 HStack(spacing: 8) {
                     // THE "…" MENU holds the item's verbs (add a field, star, archive, trash).
-                    if case let .data(item)? = state.content, !item.hasGone, !item.actions.isEmpty {
+                    if case let .data(item)? = state.content, !item.actions.isEmpty {
                         Menu {
                             ForEach(item.actions, id: \.key) { action in
                                 Button(role: action.destructive ? .destructive : nil) {
@@ -70,13 +61,11 @@ struct LockerItemView: View {
                 }
             } content: {
                 LockerShield(secure: state.secure) {
-                    ReadStateView(
-                        content: content,
+                    PageReadStateView(
+                        page: state.page,
                         onRetry: { send(LockerItemEvents.make { $0.refreshed = .init() }) }
-                    ) { item in
-                        if item.hasGone {
-                            EmptyStateView(item.gone)
-                        } else {
+                    ) {
+                        if case let .data(item)? = state.content {
                             ScrollView {
                                 LazyVStack(alignment: .leading, spacing: 0) { page(item) }
                                     .padding(.bottom, 16)
@@ -251,6 +240,10 @@ struct LockerItemView: View {
             .padding(.horizontal, CentraidGeometry.pageMargin)
             .padding(.vertical, 8)
         }
+        // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row; it is inside the item's
+        // data, so it is absent while Locker is locked.
+        EarlierEntryRow(entry: item.hasEarlier ? item.earlier : nil, open: open)
+        OriginLineView(line: item.hasOrigin ? item.origin : nil)
     }
 }
 

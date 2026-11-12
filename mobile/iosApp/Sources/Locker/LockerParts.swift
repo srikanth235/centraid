@@ -289,25 +289,12 @@ struct LockerCountdownRing: View {
                 .trim(from: 0, to: fraction)
                 .stroke(Theme.color(countdown.secondsLeft <= 5 ? "net" : "textSoft", scheme), style: StrokeStyle(lineWidth: 2, lineCap: .round))
                 .rotationEffect(.degrees(-90))
-                .animation(.linear(duration: 1), value: fraction)
+                .kitAnimation(.linear(duration: 1), value: fraction)
         }
         .frame(width: 14, height: 14)
         .accessibilityHidden(true)
         .accessibilityIdentifier("locker-code-countdown")
     }
-}
-
-/// The content of a Locker view state's `oneof content`, as the kit's read states take it.
-func lockerContent<Value>(
-    loading: Bool,
-    failure: Centraid_Core_V1_Failure?,
-    denied: Centraid_Core_V1_Denied?,
-    data: Value?
-) -> ScreenContent<Value> {
-    if let data { return .data(data) }
-    if let failure { return .failed(failure) }
-    if let denied { return .gated(denied) }
-    return .loading(true)
 }
 
 /// A WHITE CARD OF ROWS under an optional group head: Starred, Recently used, a category's list.

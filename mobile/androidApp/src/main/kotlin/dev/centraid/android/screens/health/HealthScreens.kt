@@ -1,6 +1,8 @@
 package dev.centraid.android.screens.health
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -19,7 +21,7 @@ import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace
 import dev.centraid.android.kit.ConfirmSheet
-import dev.centraid.android.kit.EmptyStateView
+import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.KitCardGrid
 import dev.centraid.android.kit.KitGeometry
@@ -33,7 +35,6 @@ import dev.centraid.android.kit.SearchField
 import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.ShowMoreFooter
-import dev.centraid.android.kit.screenContentOf
 
 // ---------------------------------------------------------------------------
 // health.home: Summary · Trends · Workouts, More as a sheet (#1129, #1135, #1173)
@@ -59,7 +60,7 @@ internal fun HealthHomeScreen(
         meta = state.data_?.day_label.orEmpty(),
         // A DOOR, NOT A FIELD (R-CHROME-2, #1173): Health's search is a page of its own, reached
         // from the band's search key.
-        search = chrome?.search_placeholder?.takeIf { it.isNotEmpty() && state.denied == null }?.let { placeholder ->
+        search = chrome?.search_placeholder?.takeIf { it.isNotEmpty() && state.page?.refused == null }?.let { placeholder ->
             RoomSearch(
                 field = SearchField(),
                 placeholder = placeholder,
@@ -78,7 +79,7 @@ internal fun HealthHomeScreen(
                 onClear = { onEvent(HealthHomeEvent(filter_menu_cleared = FilterMenuCleared())) },
             )
         },
-        status = state.status?.sentence.orEmpty(),
+        statusLine = { StatusLine(state.status) },
         band = {
             AppBand(
                 app = "health",
@@ -88,26 +89,26 @@ internal fun HealthHomeScreen(
             )
         },
     ) {
-        ReadStateView(
-            content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
-            onRetry = { onEvent(HealthHomeEvent(refreshed = HealthHomeEvent.Refreshed())) },
-            retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
-        ) { data ->
-            val empty = data.empty
-            if (empty != null) {
-                EmptyStateView(empty, onAction = { data.connect?.let(onOpen) })
-            } else {
+        Column(Modifier.fillMaxSize()) {
+            // THE RANGE CHIPS stay above the page whether it is ready or empty (Trends), so an
+            // empty period can be left.
+            if (state.segments.isNotEmpty()) {
+                KitSegmented(
+                    options = state.segments.map { it.key to it.label },
+                    selected = state.segments.firstOrNull { it.active }?.key.orEmpty(),
+                    onSelect = { key -> onEvent(HealthHomeEvent(range = HealthHomeEvent.RangePicked(key = key))) },
+                    modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
+                )
+            }
+            ReadStateView(
+                page = state.page!!,
+                onRetry = { onEvent(HealthHomeEvent(refreshed = HealthHomeEvent.Refreshed())) },
+                // NOT CONNECTED (the page's empty state): its one action pushes Connect.
+                onEmptyAction = { state.connect?.let(onOpen) },
+                retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
+                modifier = Modifier.weight(1f),
+            ) {
                 LazyColumn {
-                    if (state.segments.isNotEmpty()) {
-                        item(key = "segments") {
-                            KitSegmented(
-                                options = state.segments.map { it.key to it.label },
-                                selected = state.segments.firstOrNull { it.active }?.key.orEmpty(),
-                                onSelect = { key -> onEvent(HealthHomeEvent(range = HealthHomeEvent.RangePicked(key = key))) },
-                                modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
-                            )
-                        }
-                    }
                     when (state.destination) {
                         HealthDestination.HEALTH_DESTINATION_TRENDS -> trends(state, onOpen)
                         HealthDestination.HEALTH_DESTINATION_WORKOUTS -> workouts(state, onOpen, onEvent)
@@ -122,7 +123,7 @@ internal fun HealthHomeScreen(
         HealthHomeState.Sheet.SHEET_MORE -> OptionSheet(
             title = chrome?.more_title.orEmpty(),
             options = state.more_rows.map {
-                SheetOption(key = it.key, label = it.label, iconKey = it.icon_key, destructive = it.tone == StatusChip.Tone.TONE_NET)
+                SheetOption(key = it.key, label = it.label, iconKey = it.icon_key, detail = it.meta, destructive = it.tone == StatusChip.Tone.TONE_NET)
             },
             // The sheet goes either way; a row with a route also opens its page.
             onPick = { key ->
@@ -184,11 +185,6 @@ private fun LazyListScope.today(state: HealthHomeState, onOpen: (Route) -> Unit)
 
 private fun LazyListScope.trends(state: HealthHomeState, onOpen: (Route) -> Unit) {
     val trends = state.data_?.trends ?: return
-    val empty = trends.empty
-    if (empty != null) {
-        item(key = "empty") { EmptyStateView(empty, onAction = null) }
-        return
-    }
     item(key = "compare") { HealthNote(trends.compare_line) }
     items(trends.rows, key = { "t-${it.metric}" }) { row ->
         Box(Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)) { HealthTrendRowView(row) { row.route?.let(onOpen) } }
@@ -197,11 +193,6 @@ private fun LazyListScope.trends(state: HealthHomeState, onOpen: (Route) -> Unit
 
 private fun LazyListScope.workouts(state: HealthHomeState, onOpen: (Route) -> Unit, onEvent: (HealthHomeEvent) -> Unit) {
     val workouts = state.data_?.workouts ?: return
-    val empty = workouts.empty
-    if (empty != null) {
-        item(key = "empty") { EmptyStateView(empty, onAction = null) }
-        return
-    }
     workouts.sections.forEachIndexed { index, section ->
         item(key = "s-$index") { HealthSection(section.heading) }
         items(section.rows, key = { "w-${it.activity_id}" }) { line -> HealthWorkoutRow(line) { line.route?.let(onOpen) } }

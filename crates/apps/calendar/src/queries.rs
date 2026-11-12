@@ -179,6 +179,8 @@ pub struct EventRow {
     pub recurrence_overlap: Option<bool>,
     /// `search` only: the index's own excerpt.
     pub snippet: Option<String>,
+    /// `search` only: the words matched only in an earlier version of the event (#1185).
+    pub in_earlier_version: bool,
 }
 
 impl EventRow {
@@ -555,7 +557,7 @@ pub(crate) fn read_calendars(door: &dyn PageDoor) -> KitResult<Vec<CalendarRow>>
             "entity",
             PageOrder::asc("title", "id"),
         )
-        .filter("kind = ?", vec![text("calendar")]),
+        .filter("kind = ? AND deleted_at IS NULL", vec![text("calendar")]),
         EVENT_JOIN_BOUND,
     )?;
     let ids = ids_of(&named, "id");
@@ -714,9 +716,9 @@ pub(crate) fn events_among(door: &dyn PageDoor, ids: &[String]) -> KitResult<Vec
 /// A door refusal becomes the payload's denial; a reached bound is an `Err`.
 pub fn load_search(
     door: &dyn PageDoor,
-    hits: &[(String, String)],
+    hits: &[(String, String, bool)],
 ) -> KitResult<(SearchData, Option<Denial>)> {
-    let ids: Vec<String> = hits.iter().map(|(id, _)| id.clone()).collect();
+    let ids: Vec<String> = hits.iter().map(|(id, _, _)| id.clone()).collect();
     if ids.is_empty() {
         return Ok((SearchData::default(), None));
     }
@@ -732,11 +734,12 @@ pub fn load_search(
     };
     let events = hits
         .iter()
-        .filter_map(|(id, snippet)| {
+        .filter_map(|(id, snippet, earlier)| {
             let mut event = found.remove(id)?;
             (event.status.as_deref() != Some("cancelled")).then(|| {
                 event.instance_key = event.event_id.clone();
                 event.snippet = Some(snippet.clone());
+                event.in_earlier_version = *earlier;
                 event
             })
         })
@@ -787,10 +790,16 @@ pub fn load_search_term(
         Err(other) => return Ok((SearchData::default(), Some(denial_of(other.to_string())))),
     };
     // VAULT ORDER IS RANK ORDER, best match first.
-    let hits: Vec<(String, String)> = page
+    let hits: Vec<(String, String, bool)> = page
         .rows
         .iter()
-        .map(|target| (target.id.clone(), target.snippet.clone()))
+        .map(|target| {
+            (
+                target.id.clone(),
+                target.snippet.clone(),
+                target.in_earlier_version,
+            )
+        })
         .collect();
     load_search(door, &hits)
 }

@@ -34,15 +34,26 @@ use wire::screen_event::Kind as E;
 use self::held::Held;
 use super::follow::CalendarFollow;
 use super::routes;
+use crate::catalog::act;
+use crate::follow::Store;
+use crate::kit::act as kit_act;
 use crate::kit::civil;
+use crate::kit::read::Page;
 use crate::kit::schedule::ops::Ops;
-use crate::kit::schedule::phase::Phase;
 use crate::kit::schedule::style::{Draft, Subject};
 use crate::screen::{Ctx, Screen};
-use crate::strings::{agenda as words, agenda_reminders as reminders};
+use crate::strings::{
+    agenda as words, agenda_calendar as calendar_words, agenda_home, agenda_reminders as reminders,
+    shared,
+};
 
 pub(super) struct Home {
-    phase: Phase,
+    /// The read of the place on screen: a place with nothing to show is [`Page::Empty`] (in its own
+    /// sentence), never ready data.
+    page: Page<()>,
+    /// What `page` was asked for (place, day, term): data read for another question is not shown
+    /// under a failed read of this one.
+    asked: String,
     destination: Dest,
     /// The day the surface is anchored on; EMPTY until an answer names today.
     anchor: String,
@@ -57,13 +68,24 @@ pub(super) struct Home {
     /// The Calendar view last used: where the band's Calendar tab returns to.
     last_calendar: Dest,
     sheet: Sheet,
+    /// Whether the More sheet is the band's menu (Trash) and not the Calendars sheet.
+    menu: bool,
     /// The style sheet's draft: the new calendar or the calendar being edited.
     style: Option<Draft>,
     /// The status line of a write here (a calendar made, an event moved) and its Undo.
     ops: Ops,
     held: Held,
-    /// The phone's calendar, imported and followed for as long as Calendar is up.
+    /// The phone's calendar, imported here; the coordinator follows it (`crate::follow`).
     calendar: CalendarFollow,
+    /// The stop-reading confirm is up (#1185).
+    asking_stop: bool,
+    /// The calendars the vault follows from the phone (their origin refs), as it stores them:
+    /// what the menu's stop and turn-on row say, right after a cold start too. `None` until the
+    /// read has landed.
+    stored: Option<Vec<String>>,
+    /// The calendars of the vault that are read from the phone (what the followed origins fill): a
+    /// member cannot delete one while it is.
+    followed_calendars: Option<Vec<String>>,
 }
 
 /// The registry factory for Calendar's home.
@@ -87,7 +109,8 @@ impl Home {
         let named = Dest::try_from(args.destination).unwrap_or(Dest::Unspecified);
         let destination = if allows(named) { named } else { Dest::Day };
         Self {
-            phase: Phase::Loading,
+            page: Page::loading(),
+            asked: String::new(),
             destination,
             anchor: String::new(),
             today: String::new(),
@@ -101,10 +124,14 @@ impl Home {
                 Dest::Day
             },
             sheet: Sheet::None,
+            menu: false,
             style: None,
             ops: Ops::default(),
             held: Held::default(),
             calendar: CalendarFollow::new(),
+            asking_stop: false,
+            stored: None,
+            followed_calendars: None,
         }
     }
 
@@ -115,14 +142,44 @@ impl Home {
     }
 
     fn denied(&self) -> bool {
-        matches!(self.phase, Phase::Denied(_))
+        matches!(self.page, Page::Refused(_))
     }
 
     /// A pull, or a row moved: the held answers are stale whatever search is
     /// doing, so the next read asks again.
+    /// Read what the vault stores of the phone's calendars (the stop slot's truth).
+    fn read_stored(&mut self, ctx: &Ctx) {
+        self.stored = crate::follow::stored_origins(ctx, "calendar");
+        self.followed_calendars = crate::follow::stored_fills(ctx, "calendar");
+    }
+
+    /// Whether the calendar is read from the phone, so a member cannot delete it (unknown counts as
+    /// not deletable: nothing is offered on a read that did not land).
+    fn read_from_phone(&self, id: &str) -> bool {
+        self.followed_calendars
+            .as_ref()
+            .is_none_or(|fills| fills.iter().any(|fill| fill == id))
+    }
+
+    /// Whether the menu offers "Stop reading": the vault follows calendars from the phone.
+    fn can_stop(&self) -> bool {
+        self.stored
+            .as_ref()
+            .is_some_and(|stored| !stored.is_empty())
+    }
+
+    /// Whether the menu offers "Turn on" in its place: the vault follows none (known, not guessed).
+    fn can_turn_on(&self) -> bool {
+        self.stored.as_ref().is_some_and(Vec::is_empty)
+    }
+
     fn refresh(&mut self, ctx: &Ctx) {
-        self.invalidate();
-        self.read(ctx);
+        self.read_stored(ctx);
+        let before = std::mem::take(&mut self.held);
+        // A refresh that failed keeps what was shown, under its note.
+        if !self.read(ctx) {
+            self.held.keep_unread(before);
+        }
     }
 
     /// A place, by the band or by the shell. Picking one LEAVES SEARCH, even the
@@ -158,7 +215,10 @@ impl Home {
 
     fn on_event(&mut self, event: H, ctx: &Ctx) {
         match event {
-            H::Refreshed(_) => self.refresh(ctx),
+            H::Refreshed(_) => {
+                self.refresh(ctx);
+                ctx.follows().changed(ctx, Store::Calendar);
+            }
             // Taken before this match: it returns the shell's effects.
             H::ImportRequested(_) => {}
             H::Destination(moved) => {
@@ -169,7 +229,14 @@ impl Home {
                 // The Calendar tab lands on the view the member last used.
                 chrome::BAND_CALENDAR => self.move_to(self.last_calendar, ctx),
                 chrome::BAND_INVITES => self.move_to(Dest::Waiting, ctx),
-                chrome::BAND_MORE => self.sheet = Sheet::More,
+                chrome::BAND_MORE => {
+                    self.sheet = Sheet::More;
+                    self.menu = false;
+                }
+                chrome::BAND_MENU => {
+                    self.sheet = Sheet::More;
+                    self.menu = true;
+                }
                 _ => {}
             },
             H::DayStepped(step) => {
@@ -209,6 +276,9 @@ impl Home {
             }
             H::CalendarToggled(toggled) => self.toggle_calendar(&toggled.calendar_id),
             H::MoreRow(picked) => self.more_row(&picked.key, ctx),
+            H::StopDismissed(_) => self.asking_stop = false,
+            // Taken in `update`: it returns the shell's effects.
+            H::StopConfirmed(_) => {}
             H::SheetOpened(opened) => {
                 let sheet = Sheet::try_from(opened.sheet).unwrap_or(Sheet::Unspecified);
                 if sheet != Sheet::Unspecified {
@@ -223,6 +293,7 @@ impl Home {
                     Sheet::None
                 };
                 self.style = None;
+                self.menu = false;
             }
             // THE TICK ON A REMINDER'S DAY (round 12): Reminders' own `complete-task` or
             // `reopen-task`, sent by the kit's check. A later occurrence of a repeating reminder
@@ -249,6 +320,7 @@ impl Home {
                 }
             }
             H::StyleSubmitted(_) => self.submit_style(ctx),
+            H::StyleTrashed(_) => self.trash_calendar(ctx),
             H::CalendarEdit(asked) => self.edit_calendar(&asked.calendar_id, ctx),
             // A STRIP DAY, A MONTH CELL OR A YEAR'S MONTH: the anchor moves to the
             // day and the view to the cell's `opens`. A day that is not one is
@@ -316,9 +388,48 @@ impl Home {
         }
     }
 
+    /// STOP READING, once the member said so: the status line says what happened, and Calendar
+    /// goes on showing the events it already holds (they are ordinary ones now).
+    fn stop(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
+        let locale = ctx.locale();
+        if !std::mem::take(&mut self.asking_stop) {
+            return Vec::new();
+        }
+        let effects = match self
+            .calendar
+            .stop(ctx, &self.stored.clone().unwrap_or_default())
+        {
+            Some(effects) => {
+                self.ops.say(calendar_words::calendars_stopped(locale));
+                effects
+            }
+            None => {
+                self.ops.line.refuse(shared::write_refused(locale));
+                Vec::new()
+            }
+        };
+        self.refresh(ctx);
+        effects
+    }
+
     /// A Calendars sheet row, by its key. A key the sheet does not hold now (a calendar
     /// gone since it was drawn) does nothing.
     fn more_row(&mut self, key: &str, ctx: &Ctx) {
+        // THE ONE MENU ROW WITH NO ROUTE: it asks before it stops.
+        if self.menu && key == chrome::MORE_STOP {
+            if self.can_stop() {
+                self.asking_stop = true;
+                self.sheet = Sheet::None;
+                self.menu = false;
+            }
+            return;
+        }
+        // THE MENU'S ROW is a route the shell pushes: the sheet is done.
+        if self.menu && key == chrome::MORE_TRASH {
+            self.sheet = Sheet::None;
+            self.menu = false;
+            return;
+        }
         let rows = self.more_rows(ctx);
         let Some(row) = rows.iter().find(|row| row.key == key) else {
             return;
@@ -336,6 +447,7 @@ impl Home {
     /// A sheet up, with the draft it names: a new calendar starts blank. A calendar edit has its
     /// own entry ([`Self::edit_calendar`]).
     fn open_sheet(&mut self, sheet: Sheet) {
+        self.menu = false;
         match sheet {
             Sheet::NewCalendar => {
                 self.style = Some(Draft::making(Subject::Calendar));
@@ -357,8 +469,10 @@ impl Home {
 
     /// A calendar's edit control: its name, colour and icon, from the row on screen.
     fn edit_calendar(&mut self, id: &str, ctx: &Ctx) {
-        let Some(calendar) = self.data(ctx).and_then(|data| {
-            data.calendars
+        let Some(calendar) = self.data(ctx).and_then(|folded| {
+            folded
+                .data
+                .calendars
                 .into_iter()
                 .find(|calendar| calendar.calendar_id == id)
         }) else {
@@ -394,8 +508,56 @@ impl Home {
         self.refresh(ctx);
     }
 
+    /// MOVE TO TRASH on the Edit Calendar sheet: the calendar and its events go to the trash
+    /// (the vault's holder rule), nothing is asked, and "<name> moved to trash" carries an Undo that
+    /// brings it back with exactly those events.
+    fn trash_calendar(&mut self, ctx: &Ctx) {
+        if self.sheet != Sheet::EditCalendar {
+            return;
+        }
+        let Some(draft) = self.style.take() else {
+            return;
+        };
+        let Some(id) = draft
+            .editing_id()
+            .filter(|id| *id != centraid_vault::model::DEFAULT_CALENDAR_ID)
+            .filter(|id| !self.read_from_phone(id))
+            .map(str::to_owned)
+        else {
+            self.style = Some(draft);
+            return;
+        };
+        let name = draft.name().to_owned();
+        let key = kit_act::key(&["delete-calendar", &id], kit_act::fresh());
+        let settled = self.ops.line.act_reverting(
+            ctx,
+            act::calendar::DeleteCalendar {
+                calendar_id: id.clone(),
+            },
+            act::calendar::RestoreCalendar { calendar_id: id },
+            &key,
+            |locale| crate::kit::trash::moved_to_trash(locale, &name),
+        );
+        if settled.committed {
+            // HOW MUCH WENT: the calendar and its events ("Work and 42 events moved to trash").
+            let went = trashed_with(&settled.output);
+            if went > 0 {
+                let locale = ctx.locale();
+                self.ops.line.reword(crate::kit::trash::moved_to_trash_with(
+                    locale,
+                    &name,
+                    &agenda_home::event_count(locale, went),
+                ));
+            }
+            self.sheet = Sheet::None;
+        } else {
+            self.style = Some(draft);
+        }
+        self.refresh(ctx);
+    }
+
     /// The data the held answers draw, or `None` when they are not for this state.
-    fn data(&self, ctx: &Ctx) -> Option<wire::AgendaHomeData> {
+    fn data(&self, ctx: &Ctx) -> Option<fold::Folded> {
         let term = self.active_term();
         fold::events(&fold::Fold {
             locale: ctx.locale(),
@@ -414,9 +576,12 @@ impl Home {
         if self.denied() {
             return Vec::new();
         }
+        if self.menu {
+            return chrome::menu_rows(ctx.locale(), self.can_stop(), self.can_turn_on());
+        }
         let calendars = self
             .data(ctx)
-            .map(|data| data.calendars)
+            .map(|folded| folded.data.calendars)
             .unwrap_or_default();
         chrome::more_rows(ctx.locale(), &calendars, true)
     }
@@ -427,22 +592,33 @@ impl Screen for Home {
         match event.kind {
             Some(E::Appeared(_)) => {
                 self.refresh(ctx);
+                ctx.follows().changed(ctx, Store::Calendar);
                 // THE CALENDAR'S FLAG IS A KEYCHAIN READ and an answer carries no key, so the
                 // choice is read after it has landed, never beside it.
                 return self.calendar.attach();
             }
-            Some(E::EnvironmentChanged(_)) => self.refresh(ctx),
-            // The vault moved: the view reloads, and an event of a writable phone calendar may
-            // now be owed to the phone (two-way sync).
-            Some(E::DataChanged(changed)) => {
+            Some(E::EnvironmentChanged(_) | E::DataChanged(_)) => {
                 self.refresh(ctx);
-                return self
-                    .calendar
-                    .on_event(&E::DataChanged(changed), ctx)
-                    .unwrap_or_default();
+                // A PAGE ABOVE CLOSED (the event editor, a cancelled event): its line is drawn here.
+                self.ops.line.take_handed(ctx);
+            }
+            // THE KIT'S ONE STATUS VERB, beside the home's own (`H::StatusActed`).
+            Some(E::StatusActed(_)) => {
+                self.ops.undo(ctx);
+                self.refresh(ctx);
             }
             Some(E::AgendaHome(home)) => match home.kind {
                 Some(H::ImportRequested(_)) => return self.calendar.import(ctx),
+                // THE TURN-ON ROW (the stop row's slot after a stop): the sheet is done and the
+                // phone is asked for the permission now, as the empty state's Import does.
+                Some(H::MoreRow(picked))
+                    if self.menu && picked.key == chrome::MORE_TURN_ON && self.can_turn_on() =>
+                {
+                    self.sheet = Sheet::None;
+                    self.menu = false;
+                    return self.calendar.import(ctx);
+                }
+                Some(H::StopConfirmed(_)) => return self.stop(ctx),
                 // A LONG PRESS ON AN EMPTY SLOT writes nothing: it opens the add
                 // sheet at the snapped time.
                 Some(H::SlotPressed(pressed)) => {
@@ -460,10 +636,13 @@ impl Screen for Home {
                 None => {}
             },
             Some(E::EffectResult(result)) => {
-                return self
+                let effects = self
                     .calendar
                     .on_event(&E::EffectResult(result), ctx)
                     .unwrap_or_default();
+                // An import that followed calendars changed what the vault stores.
+                self.read_stored(ctx);
+                return effects;
             }
             Some(other) => {
                 if let Some(effects) = self.calendar.on_event(&other, ctx) {
@@ -478,9 +657,21 @@ impl Screen for Home {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
         let denied = self.denied();
-        let mut data = match self.phase {
-            Phase::Ready => self.data(ctx),
-            _ => None,
+        let ready = matches!(self.page, Page::Ready { .. });
+        let folded = if ready { self.data(ctx) } else { None };
+        // A place with nothing to show is the page's own empty state; its data is not drawn.
+        let empty_state = folded.as_ref().and_then(|folded| folded.empty.clone());
+        // The calendars list is the More sheet's even when the place itself has nothing to show.
+        let full = folded.map(|folded| folded.data);
+        let mut data = full.clone().filter(|_| empty_state.is_none());
+        // A ready page with nothing to draw is a failure (an incomplete answer), never a blank.
+        let incomplete = ready && empty_state.is_none() && data.is_none();
+        let page = if incomplete {
+            Page::Failed
+        } else if empty_state.is_some() {
+            Page::Empty
+        } else {
+            self.page.clone()
         };
         let searching = self.active_term().is_some();
         let today_now = data
@@ -496,25 +687,27 @@ impl Screen for Home {
             !denied && !searching,
             data.as_mut(),
         );
-        let content = match &self.phase {
-            Phase::Loading => Some(wire::agenda_home_state::Content::Loading(wire::Loading {
-                first_load: true,
-            })),
-            Phase::Denied(denial) => Some(wire::agenda_home_state::Content::Denied(wire::Denied {
+        let content = data
+            .clone()
+            .map(|data| wire::agenda_home_state::Content::Data(Box::new(data)));
+        let mut wired = page.wire(
+            locale,
+            |denial| wire::Denied {
                 title: words::denied_title(locale),
                 body: words::denied_body(locale),
                 receipt: denial.code.clone().unwrap_or_default(),
-            })),
-            Phase::Failed => Some(wire::agenda_home_state::Content::Failure(
-                crate::kit::read::failure(locale),
-            )),
-            Phase::Ready => match data.clone() {
-                Some(data) => Some(wire::agenda_home_state::Content::Data(Box::new(data))),
-                None => Some(wire::agenda_home_state::Content::Failure(
-                    crate::kit::read::incomplete(locale),
-                )),
             },
-        };
+            || empty_state.clone().unwrap_or_default(),
+        );
+        // A refresh that failed over a window that cannot be drawn is the read's own failure; only an
+        // answer that arrived short is "incomplete".
+        let refresh_failed = matches!(self.page, Page::Ready { note: Some(_), .. });
+        if incomplete && !refresh_failed {
+            wired.state = Some(wire::page_state::State::Failed(
+                crate::kit::read::incomplete(locale),
+            ));
+        }
+        let on_page = matches!(wired.state, None | Some(wire::page_state::State::Empty(_)));
         let term = self.active_term();
         let held_search = term.is_some() && self.held.search.is_some();
         let corrected = if held_search {
@@ -528,7 +721,8 @@ impl Screen for Home {
         } else {
             String::new()
         };
-        let sheet_up = matches!(self.sheet, Sheet::More | Sheet::Reads);
+        let menu_up = self.menu && self.sheet == Sheet::More;
+        let sheet_up = matches!(self.sheet, Sheet::More | Sheet::Reads) && !menu_up;
         let today = data
             .as_ref()
             .map(|data| data.today.clone())
@@ -546,7 +740,7 @@ impl Screen for Home {
                     band: if denied {
                         Vec::new()
                     } else {
-                        chrome::band(locale, self.destination, sheet_up)
+                        chrome::band(locale, self.destination, sheet_up, menu_up)
                     },
                     calendar_header: Some(calendar_header),
                     filter_menu: None,
@@ -563,21 +757,31 @@ impl Screen for Home {
                         &today,
                         !denied && term.is_none(),
                     )),
-                    chrome: Some(chrome::words_of(locale)),
+                    chrome: Some(wire::AgendaChrome {
+                        // The menu sheet is titled for the app, the Calendars sheet for its list.
+                        more_title: if menu_up {
+                            words::app_title(locale)
+                        } else {
+                            chrome::words_of(locale).more_title
+                        },
+                        ..chrome::words_of(locale)
+                    }),
                     app_key: "calendar".to_owned(),
                     more_rows: if denied {
                         Vec::new()
+                    } else if menu_up {
+                        chrome::menu_rows(locale, self.can_stop(), self.can_turn_on())
                     } else {
                         chrome::more_rows(
                             locale,
-                            data.as_ref()
-                                .map_or(&[][..], |data| data.calendars.as_slice()),
-                            data.is_some(),
+                            full.as_ref()
+                                .map_or(&[][..], |full| full.calendars.as_slice()),
+                            full.is_some(),
                         )
                     },
                     search_corrected: corrected,
                     // THE ASK ROW: for the answer to the term on screen, matched or not.
-                    search_ask_row: (held_search && data.is_some()).then(|| {
+                    search_ask_row: (held_search && on_page).then(|| {
                         crate::kit::search::offer(
                             locale,
                             term.as_deref().unwrap_or_default(),
@@ -588,23 +792,73 @@ impl Screen for Home {
                         .calendar
                         .status()
                         .cloned()
-                        .or_else(|| self.ops.status.clone()),
+                        .or_else(|| self.ops.status())
+                        .or_else(|| {
+                            ctx.follows()
+                                .report(Store::Calendar)
+                                .status(ctx, Store::Calendar)
+                        }),
+                    // THE STOP CONFIRM (#1185): the kit's sheet, in the shared words.
+                    stop: (self.asking_stop && !denied).then(|| {
+                        crate::kit::follow::stop_confirm(
+                            locale,
+                            &words::app_title(locale),
+                            &chrome::stop_store(locale),
+                            &calendar_words::calendars_kept(locale),
+                        )
+                    }),
                     quick_add: Some(wire::TodoQuickAdd::default()),
                     file_choices: Vec::new(),
                     style: self
                         .style
                         .as_ref()
                         .filter(|_| matches!(self.sheet, Sheet::NewCalendar | Sheet::EditCalendar))
-                        .map(|draft| Box::new(draft.sheet(locale))),
+                        .map(|draft| {
+                            let mut sheet = draft.sheet(locale);
+                            // MOVE TO TRASH on a calendar the vault may remove: its own edit sheet,
+                            // never the one every vault is founded with, and never one read from
+                            // the phone: there one plain line says to stop reading first.
+                            if self.sheet == Sheet::EditCalendar
+                                && let Some(id) = draft.editing_id()
+                                && id != centraid_vault::model::DEFAULT_CALENDAR_ID
+                            {
+                                if self.followed_calendars.is_none() {
+                                    // The read has not landed: nothing is offered.
+                                } else if self.read_from_phone(id) {
+                                    sheet.delete_note = crate::kit::follow::delete_note(
+                                        locale,
+                                        &chrome::stop_store(locale),
+                                    );
+                                } else {
+                                    sheet.delete_label = shared::trash_move(locale);
+                                }
+                            }
+                            Box::new(sheet)
+                        }),
                     import_reminders: None,
                     // Calendar's Plus adds an event only.
                     add_label: words::new_event(locale),
                     add_opens_quick_add: false,
                     new_event,
                     content,
+                    import_label: empty_state
+                        .as_ref()
+                        .filter(|empty| empty.import_source == wire::ImportSource::Calendar as i32)
+                        .map(|_| words::import_calendar(locale))
+                        .unwrap_or_default(),
+                    page: Some(wired),
                 },
             ))),
             ..wire::ViewState::default()
         }
     }
+}
+
+/// How many entities went to the trash with the one the write named: the command answers every
+/// one it trashed (the holder first or last, whichever), so the members are all but one.
+fn trashed_with(output: &[u8]) -> u64 {
+    serde_json::from_slice::<serde_json::Value>(output)
+        .ok()
+        .and_then(|value| value.get("trashed")?.as_array().map(Vec::len))
+        .map_or(0, |all| u64::try_from(all.saturating_sub(1)).unwrap_or(0))
 }

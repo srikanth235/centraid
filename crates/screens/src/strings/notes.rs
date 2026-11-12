@@ -13,13 +13,12 @@ catalog! {
     plain checklist_unchecked = ("Not checked", "Not checked");
     plain close = ("Close", "Close");
     plain create = ("Create", "Create");
-    plain current_version = ("Current version", "Current version");
     plain delete_note_body = (
         "It stays restorable for 30 days, with its links, tags and files.",
         "It stays restorable for 30 days, with its links, tags and files."
     );
     plain delete_note_title = ("Move this note to trash?", "Move this note to trash?");
-    plain delete_note_verb = ("Trash", "Trash");
+    plain delete_note_verb = ("Move to trash", "Move to trash");
     plain delete_notebook_body = (
         "Its notes go to the trash with it, restorable for 30 days.",
         "Its notes go to the trash with it, restorable for 30 days."
@@ -56,12 +55,6 @@ catalog! {
     plain filter_about_people = ("About people", "About people");
     plain filter_pinned = ("Pinned", "Pinned");
     plain filter_title = ("Show", "Show");
-    plain history_empty_body = (
-        "Versions appear here as the note changes.",
-        "Versions appear here as the note changes."
-    );
-    plain history_empty_headline = ("No earlier versions", "No earlier versions");
-    plain history_title = ("Version history", "Version history");
     plain home = ("Home", "Home");
     plain item_checked = ("Item checked", "Item checked");
     plain item_unchecked = ("Item unchecked", "Item unchecked");
@@ -91,6 +84,14 @@ catalog! {
     plain link_kind_photograph = ("Photo", "Photo");
     plain link_kind_task = ("Task", "Task");
     plain keyboard_hide = ("Hide keyboard", "Hide keyboard");
+    plain attachments_label = ("Attachments", "Attachments");
+    plain link_added = ("Linked", "Linked");
+    plain link_removed = ("Link removed", "Link removed");
+    plain links_empty = ("Nothing linked yet", "Nothing linked yet");
+    plain links_unread = (
+        "Couldn’t read what this note is linked to.",
+        "Couldn’t read what this note is linked to."
+    );
     plain link_label = ("Add link", "Add link");
     plain link_create = ("Create note", "Create note");
     plain link_restore = ("Restore", "Restore");
@@ -104,7 +105,6 @@ catalog! {
     plain link_trashed_spoken = ("Note in trash {title}", "Note in trash {title}");
     plain link_web_spoken = ("Link {label}", "Link {label}");
     plain loading = ("Loading notes", "Loading notes");
-    plain loading_history = ("Loading versions", "Loading versions");
     plain loading_journal = ("Loading the journal", "Loading the journal");
     plain loading_links = ("Looking for things to link", "Looking for things to link");
     plain loading_notebooks = ("Loading notebooks", "Loading notebooks");
@@ -133,7 +133,6 @@ catalog! {
     plain tag_placeholder = ("Add a tag", "Add a tag");
     plain rename = ("Rename", "Rename");
     plain rename_notebook = ("Rename notebook", "Rename notebook");
-    plain restore = ("Restore", "Restore");
     plain retry = ("Try again", "Try again");
     plain row_menu = ("Note actions", "Note actions");
     plain notebook_menu = ("Notebook actions", "Notebook actions");
@@ -156,15 +155,11 @@ catalog! {
     plain title = ("Notes", "Notes");
     plain title_placeholder = ("Title", "Title");
     plain trash_label = ("Trash", "Trash");
-    plain more_export = ("Export", "Export");
     plain more_import = ("Import", "Import");
     plain transfer_choose_files_action = ("Choose files", "Choose files");
     plain transfer_choose_folder_action = ("Choose folder", "Choose folder");
     plain transfer_choose_again_action = ("Choose again", "Choose again");
     plain transfer_export_all = ("All notes", "All notes");
-    plain transfer_export_done = ("Exported {n} notes", "Exported {n} notes");
-    plain transfer_export_failed = ("Could not export", "Could not export");
-    plain transfer_export_headline = ("Choose what to export", "Choose what to export");
     plain transfer_export_lede = (
         "Markdown files in one archive. Links stay as [[links]].",
         "Markdown files in one archive. Links stay as [[links]]."
@@ -189,6 +184,16 @@ catalog! {
     plain transfer_row_tags = ("Tags", "Tags");
     plain transfer_row_unlinked = ("Links to nothing yet", "Links to nothing yet");
     plain unfiled_row = ("Unfiled", "Unfiled");
+    plain entry_added = ("Entry added", "Entry added");
+    plain note_created = ("Note created", "Note created");
+    plain note_moved = ("Note moved", "Note moved");
+    plain note_pinned = ("Note pinned", "Note pinned");
+    plain note_unpinned = ("Note unpinned", "Note unpinned");
+    plain notebook_created = ("Notebook created", "Notebook created");
+    plain notebook_deleted = ("Notebook deleted", "Notebook deleted");
+    plain notebook_renamed = ("Notebook renamed", "Notebook renamed");
+    plain tag_added = ("Tag added", "Tag added");
+    plain tag_removed = ("Tag removed", "Tag removed");
     plain undo = ("Undo", "Undo");
     plain unpin = ("Unpin", "Unpin");
     plain untitled = ("Untitled note", "Untitled note");

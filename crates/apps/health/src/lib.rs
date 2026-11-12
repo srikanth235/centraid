@@ -18,8 +18,12 @@
 //! answers `health.proto` carries. The writes are the vault's `health.*` commands, which the
 //! shell's follower engine sends; Chat reads Health like any app (#1135).
 
+pub mod attachments;
 pub mod civil;
 pub mod door;
 pub mod figures;
 pub mod manifest;
 pub mod queries;
+pub mod trash;
+
+pub use attachments::load_attachments;

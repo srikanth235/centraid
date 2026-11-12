@@ -11,7 +11,7 @@ use centraid_api_proto::core_v1 as wire;
 use centraid_screens::catalog::act;
 use centraid_screens::field::Field;
 use wire::agenda_event_event::Kind as K;
-use wire::agenda_event_state::{Content, Sheet};
+use wire::agenda_event_state::Sheet;
 
 fn rsvp(partstat: &str) -> K {
     K::Rsvp(wire::agenda_event_event::RsvpPicked {
@@ -147,7 +147,22 @@ fn the_detail_says_every_fact_in_words_the_screen_chose() {
         .iter()
         .map(|a| (a.key.as_str(), a.label.as_str()))
         .collect();
-    assert_eq!(actions, [("edit", "Edit"), ("cancel", "Cancel…")]);
+    assert_eq!(
+        actions,
+        [
+            ("edit", "Edit"),
+            ("cancel", "Cancel…"),
+            ("trash", "Move to trash")
+        ]
+    );
+    // SHARE SITS IN THE "…" MENU, not the bar of three.
+    let menu: Vec<(&str, &str)> = data
+        .menu
+        .iter()
+        .map(|a| (a.key.as_str(), a.label.as_str()))
+        .collect();
+    assert_eq!(menu, [("share", "Share")]);
+    assert_eq!(data.menu_label, "More");
     assert!(!data.is_past, "2099 is ahead");
     assert_eq!(
         data.accessibility_label,
@@ -207,10 +222,11 @@ fn all_day_and_multi_day_occurrences_say_days_never_a_clock_time_and_a_series_sa
     let data = world.event_data(page);
     assert_eq!(data.facts[0].label, "Repeats");
     assert!(!data.facts[0].detail.is_empty());
-    assert_eq!(data.actions.last().expect("cancel").label, "Cancel…");
+    assert_eq!(data.actions[data.actions.len() - 2].label, "Cancel…");
+    assert_eq!(data.actions.last().expect("trash").label, "Move to trash");
     assert_eq!(
         data.rsvp.as_ref().expect("a guest").note,
-        "Your answer is for every occurrence."
+        "Your answer is for every event in the series."
     );
     assert!(
         data.accessibility_label.ends_with(", repeats"),
@@ -225,11 +241,9 @@ fn an_occurrence_the_answer_does_not_have_is_gone_not_an_error() {
     let mut world = World::new();
     let page = world.open_event("no-such-event", "no-such-event", None, "2099-06-15");
     let state = world.event_state(page);
-    let Some(Content::Gone(gone)) = &state.content else {
-        panic!("{:?}", state.content)
-    };
-    assert_eq!(gone.title, "This event was removed.");
-    assert_eq!(gone.action_label, "Back to Calendar");
+    assert!(state.content.is_none());
+    let gone = gone_of(&state.page);
+    assert_eq!(gone.sentence, "This event was removed.");
 
     // Skipped since it was picked: the series has no such day any more.
     let series = world.weekdays("Stand-up");
@@ -242,10 +256,8 @@ fn an_occurrence_the_answer_does_not_have_is_gone_not_an_error() {
     });
     let key = format!("{series}:2099-06-16T10:00:00");
     let skipped = world.open_event(&series, &key, Some("2099-06-16T10:00:00"), "2099-06-16");
-    assert!(matches!(
-        world.event_state(skipped).content,
-        Some(Content::Gone(_))
-    ));
+    assert!(world.event_state(skipped).content.is_none());
+    gone_of(&world.event_state(skipped).page);
 }
 
 #[test]
@@ -289,7 +301,12 @@ fn rsvp_writes_as_the_owner_and_the_chip_follows_the_vault() {
             .reply_label,
         "Going"
     );
-    assert!(world.event_state(page).status.is_none());
+    // The reply says what happened, with Undo (#1185).
+    let status = world.event_state(page).status.as_ref().expect("a line");
+    assert_eq!(
+        (status.sentence.as_str(), status.action_label.as_str()),
+        ("Reply changed", "Undo")
+    );
     // The vault holds it.
     let row = world.event_row(&id).expect("the event");
     assert_eq!(
@@ -443,7 +460,7 @@ fn cancelling_a_series_asks_which_occurrences_none_pre_chosen_and_each_scope_wri
     assert_eq!(
         labels,
         [
-            "This occurrence",
+            "Only this one",
             "This and the ones after",
             "The whole series"
         ]
@@ -565,12 +582,11 @@ fn a_cancel_the_vault_refuses_says_why_and_keeps_the_event_open() {
     world.send_event(page, action("cancel"));
     world.send_event(page, confirmed());
     let state = world.event_state(page);
-    if let Some(status) = &state.status {
-        assert!(status.refused);
-        assert!(!state.dismissed);
-    } else {
-        // The vault treats a repeat as done: the screen is done as well.
-        assert!(state.dismissed);
+    match &state.status {
+        Some(status) if status.refused => assert!(!state.dismissed),
+        // The vault treats a repeat as done: the screen is done as well, and its "Event
+        // cancelled" line goes to the page beneath.
+        _ => assert!(state.dismissed),
     }
 }
 
@@ -624,11 +640,14 @@ fn a_first_read_that_fails_is_a_failure_and_a_re_read_that_fails_keeps_the_event
     world.zone("Not/A_Zone");
     let failed = world.open_event(&id, &id, None, "2099-06-15");
     let state = world.event_state(failed);
-    let Some(Content::Failure(failure)) = &state.content else {
-        panic!("{:?}", state.content)
+    let Some(wire::page_state::State::Failed(failure)) =
+        state.page.as_ref().and_then(|page| page.state.as_ref())
+    else {
+        panic!("{:?}", state.page)
     };
     assert_eq!(failure.sentence, "Couldn't read this. Try again.");
     assert_eq!(failure.remedy, "Try again");
+    assert!(!failure.permanent, "a failed read can be tried again");
     // The zone comes right and the member retries.
     world.zone(ZONE);
     world.send_event(failed, K::Refreshed(wire::agenda_event_event::Refreshed {}));
@@ -769,6 +788,7 @@ fn followed_guests_are_a_read_only_list_with_the_reply_in_words() {
         .to_string(),
         complete: Some(true),
         since: None,
+        ..Default::default()
     });
     let found = world.window("2099-06-19T00:00:00Z", "2099-06-20T00:00:00Z");
     let id = found.first().expect("the followed event").event_id.clone();
@@ -831,7 +851,7 @@ fn an_event_with_a_location_offers_it_to_the_maps_app_and_one_without_does_not()
         .iter()
         .map(|a| a.key.as_str())
         .collect();
-    assert_eq!(keys, ["open_map", "edit", "cancel"]);
+    assert_eq!(keys, ["open_map", "edit", "cancel", "trash"]);
     let map = world.event_data(page).actions[0].clone();
     assert_eq!(map.label, "Open in Maps");
     assert!(map.route.is_none() && map.enabled && !map.destructive);
@@ -855,7 +875,7 @@ fn an_event_with_a_location_offers_it_to_the_maps_app_and_one_without_does_not()
         .iter()
         .map(|a| a.key.as_str())
         .collect();
-    assert_eq!(keys, ["edit", "cancel"]);
+    assert_eq!(keys, ["edit", "cancel", "trash"]);
     // Asked anyway, a page with no location opens nothing.
     let update = world.driver.send(
         page,
@@ -864,4 +884,12 @@ fn an_event_with_a_location_offers_it_to_the_maps_app_and_one_without_does_not()
         }),
     );
     assert!(calendar_support::asked(&update).is_empty());
+}
+
+/// The page's final failure (an occurrence that is gone), or a panic naming the page.
+fn gone_of(page: &Option<wire::PageState>) -> &wire::Failure {
+    match page.as_ref().and_then(|page| page.state.as_ref()) {
+        Some(wire::page_state::State::Failed(failure)) if failure.permanent => failure,
+        _ => panic!("not a final failure: {page:?}"),
+    }
 }

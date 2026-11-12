@@ -30,9 +30,6 @@
 //! did not name, so nothing outside the app can push Agenda anywhere else.
 //! Nothing is written by any of them until the member taps Add.
 
-use std::collections::VecDeque;
-use std::time::Duration;
-
 use centraid_api_proto::core_v1 as wire;
 use wire::app_query_response::Answer;
 use wire::screen_event::Kind as E;
@@ -42,26 +39,17 @@ use crate::calendar::routes as calendar_routes;
 use crate::catalog::load::calendar as query_cal;
 use crate::catalog::load::reminders as query_rem;
 use crate::kit::civil;
+use crate::kit::glance::{self, Ledger};
 use crate::kit::read::{Reading, read};
 use crate::reminders::routes as reminder_routes;
 use crate::screen::{Ctx, Screen};
 
 /// The route name of the service.
 pub const NAME: &str = "calendar.glance";
-
-/// The timer that rebuilds the document when it goes stale.
-const ROLLOVER: &str = "glance.rollover";
 /// How many rows each due-ordered read asks for: the reminders draw six, and up
 /// next draws what is timed today and tomorrow of twelve.
 const DUE_ROWS: u32 = 6;
 const AHEAD_ROWS: u32 = 12;
-/// The rollover's floor and ceiling.
-const MIN_ROLLOVER: Duration = Duration::from_secs(60);
-const MAX_ROLLOVER: Duration = Duration::from_secs(24 * 60 * 60);
-
-/// The pseudo-table the core announces when the backup ledger moved: it holds
-/// nothing Agenda draws.
-const LEDGER_TABLE: &str = "backup";
 
 /// The route that opens the service.
 #[must_use]
@@ -79,62 +67,26 @@ pub fn build(_route: &wire::Route) -> Option<Box<dyn Screen>> {
     Some(Box::new(Service::default()))
 }
 
-/// What an outstanding effect will be answered as; a shell answers in order.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Asked {
-    Glance,
-    Route,
-}
-
 #[derive(Default)]
 struct Service {
-    /// The bytes last emitted and not refused.
-    last: Option<Vec<u8>>,
-    outstanding: VecDeque<Asked>,
-    /// The vault in front when the document was last built.
-    front: Option<String>,
+    /// What every glance service keeps: the last bytes, the outstanding effects, the front vault.
+    ledger: Ledger,
     /// The keys the last document offered, and what each opens.
     opens: snapshot::Opens,
 }
 
 impl Screen for Service {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
+        if self.ledger.wants_read(&event, ctx) {
+            return self.refresh(ctx);
+        }
         match event.kind {
-            Some(
-                E::Appeared(_) | E::EnvironmentChanged(_) | E::Lifecycle(_) | E::TimerFired(_),
-            ) => self.refresh(ctx),
-            Some(E::DataChanged(changed)) => {
-                if changed.tables.iter().all(|table| table == LEDGER_TABLE) {
-                    Vec::new()
-                } else {
-                    self.refresh(ctx)
-                }
-            }
-            // A VAULT SWITCH reopens every tab's root, and the services are
-            // told of each opening: the front vault is the thing to look at.
-            Some(E::ScreenOpened(_)) => {
-                if self.front == front_of(ctx) {
-                    Vec::new()
-                } else {
-                    self.refresh(ctx)
-                }
-            }
             Some(E::ShellFact(fact)) => match fact.fact {
                 Some(wire::shell_fact::Fact::AgendaIntent(intent)) => self.intent(intent),
-                Some(wire::shell_fact::Fact::Held(_)) => self.refresh(ctx),
                 _ => Vec::new(),
             },
             Some(E::EffectResult(result)) => {
-                if self.outstanding.pop_front() == Some(Asked::Glance)
-                    && matches!(
-                        result.outcome,
-                        Some(wire::effect_result::Outcome::Failed(_))
-                    )
-                {
-                    // A REFUSED WRITE IS NOT THE LAST DOCUMENT: the next change
-                    // sends it again.
-                    self.last = None;
-                }
+                self.ledger.answered(&result);
                 Vec::new()
             }
             _ => Vec::new(),
@@ -146,44 +98,21 @@ impl Screen for Service {
     }
 }
 
-fn front_of(ctx: &Ctx) -> Option<String> {
-    ctx.vaults().and_then(|vaults| vaults.foreground_id())
-}
-
 impl Service {
     fn refresh(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        self.front = front_of(ctx);
+        self.ledger.reading(ctx);
         let (document, opens) = document(ctx);
         self.opens = opens;
-        self.arm(ctx, &document);
-        if self.last.as_deref() == Some(document.as_slice()) {
+        glance::arm(ctx, span_of(&document));
+        if !self.ledger.changed(&document) {
             return Vec::new();
         }
-        self.last = Some(document.clone());
-        self.outstanding.push_back(Asked::Glance);
         vec![wire::Effect {
             kind: Some(wire::effect::Kind::AgendaGlance(wire::AgendaGlance {
                 document,
                 version: snapshot::VERSION,
             })),
         }]
-    }
-
-    /// Set the rollover for the span the core's clock puts before the document
-    /// goes stale; a document that goes stale never (the unavailable one) has
-    /// none.
-    fn arm(&self, ctx: &Ctx, document: &[u8]) {
-        let span = snapshot::refresh_after_of(document).and_then(|after| {
-            let now = snapshot::now_local_of(document)?;
-            snapshot::seconds_between(&now, &after)
-        });
-        match span {
-            Some(seconds) => ctx.start_timer(
-                ROLLOVER,
-                Duration::from_secs(seconds).clamp(MIN_ROLLOVER, MAX_ROLLOVER),
-            ),
-            None => ctx.cancel_timer(ROLLOVER),
-        }
     }
 
     fn intent(&mut self, intent: wire::AgendaIntent) -> Vec<wire::Effect> {
@@ -194,7 +123,7 @@ impl Service {
             Some(wire::agenda_intent::Kind::Open(open)) => self.route_for(&open.key),
             None => return Vec::new(),
         };
-        self.outstanding.push_back(Asked::Route);
+        self.ledger.asked_route();
         vec![wire::Effect {
             kind: Some(wire::effect::Kind::OpenRoute(wire::OpenRoute {
                 route: Some(route),
@@ -222,6 +151,14 @@ impl Service {
             None => calendar_routes::home(wire::AgendaDestination::Unspecified),
         }
     }
+}
+
+/// The seconds the core's clock puts before the document goes stale; a document that goes stale
+/// never (the unavailable one) has none.
+fn span_of(document: &[u8]) -> Option<u64> {
+    let after = snapshot::refresh_after_of(document)?;
+    let now = snapshot::now_local_of(document)?;
+    snapshot::seconds_between(&now, &after)
 }
 
 fn pick_context(answer: Answer) -> Option<wire::AgendaDayContext> {

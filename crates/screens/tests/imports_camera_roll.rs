@@ -6,8 +6,9 @@ mod imports_support;
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_screens::catalog::load;
+use centraid_screens::field::Keyed;
 use centraid_screens::imports::camera_roll::{
-    add_request, can_enumerate, cursor_key, may_fetch, permission_sentence,
+    ORIGIN_LABEL, add_request, can_enumerate, may_fetch, permission_sentence,
 };
 use centraid_screens::kit::read;
 use centraid_screens::passes::TransferRule as Rule;
@@ -107,11 +108,11 @@ fn a_grant_is_worded_in_four_sentences_and_none_blames_the_member() {
     );
     assert_eq!(
         permission_sentence(l, Permission::NotAsked),
-        "Centraid needs access to your photos to import them."
+        "Centraid needs access to your photos."
     );
     assert_eq!(
         permission_sentence(l, Permission::Denied),
-        "Photo access is off. Turn it on in Settings to import your camera roll."
+        "Photo access is off. Turn it on in Settings."
     );
     assert_eq!(
         permission_sentence(l, Permission::Restricted),
@@ -287,6 +288,34 @@ fn a_roll_root_opened_for_a_vault_walks_the_roll_without_being_asked() {
     assert_eq!(library.prompts, 0, "a walk on open never asks the member");
 }
 
+/// The one thing the screen reads, the vault's cursor, is on its page (#1185): loading until the
+/// first walk asks for it, ready once the vault has answered.
+#[test]
+fn the_cursor_read_is_the_screens_page_loading_until_a_walk_asks_and_ready_after() {
+    let mut library = Library::new();
+    library.permission = Permission::Granted;
+    let mut shell = started(&mut library);
+    let is_loading = |shell: &Shell| {
+        matches!(
+            state(shell).page.and_then(|page| page.state),
+            Some(wire::page_state::State::Loading(_))
+        )
+    };
+    // Started, and nothing walked: no read has asked yet.
+    let before = state(&shell).page.expect("the page is on the state");
+    assert!(
+        before.state.is_some(),
+        "a screen that has not read is loading"
+    );
+    walk(&mut shell, &mut library);
+    let after = state(&shell).page.expect("the page is on the state");
+    assert!(
+        after.state.is_none(),
+        "the vault answered: ready, no state drawn"
+    );
+    assert!(!is_loading(&shell));
+}
+
 /// A LAUNCH WALKS BEFORE ANY VAULT IS IN FRONT: the pass service sends the session's first walk
 /// while the shelf is still opening its vaults, so the walk names no vault.
 #[test]
@@ -308,10 +337,64 @@ fn a_walk_that_names_no_vault_still_reads_the_roll() {
     );
 }
 
+/// What the vault's camera-roll origin holds for `device`: empty when there is none or another
+/// install wrote it.
+fn held_cursor(shell: &Shell, device: &str) -> String {
+    shell.d.with_ctx(|ctx| {
+        match read::read(
+            ctx,
+            load::shell::OriginCursor {
+                system: load::shell::OriginCursorSystem::CameraRoll,
+                r#ref: ORIGIN_LABEL.to_owned(),
+                device_id: device.to_owned(),
+            },
+            |answer| match answer {
+                wire::app_query_response::Answer::OriginCursor(held) => Some(held.cursor),
+                _ => None,
+            },
+        ) {
+            read::Reading::Data(cursor) => cursor,
+            _ => panic!("the cursor read did not land"),
+        }
+    })
+}
+
+/// Another install (or an earlier pass of this one) left the cursor at `cursor`.
+fn leave_cursor(shell: &Shell, device: &str, cursor: &str) {
+    let done = shell.d.act(
+        centraid_screens::catalog::act::shell::AdvanceOriginCursor {
+            system: centraid_screens::catalog::act::shell::AdvanceOriginCursorSystem::CameraRoll,
+            r#ref: ORIGIN_LABEL.to_owned(),
+            device_id: device.to_owned(),
+            cursor: cursor.to_owned(),
+        }
+        .request()
+        .keyed(format!("test:cursor:{device}:{cursor}")),
+    );
+    assert_eq!(done.status, wire::ActStatus::Executed as i32, "{done:?}");
+}
+
 #[test]
-fn the_cursor_is_per_vault() {
-    assert!(cursor_key("vault-a").contains("vault-a"));
-    assert_ne!(cursor_key("vault-a"), cursor_key("vault-b"));
+fn the_cursor_is_held_by_the_vault_for_the_install_that_wrote_it_and_trusted_by_no_other() {
+    let mut library = Library::new().with(photo("A"), &[("A", STILL)]);
+    let mut shell = started(&mut library);
+    assert_eq!(
+        held_cursor(&shell, "device-1"),
+        "",
+        "no cursor before a walk"
+    );
+    walk(&mut shell, &mut library);
+    assert_eq!(held_cursor(&shell, "device-1"), "A");
+    assert_eq!(
+        held_cursor(&shell, "device-2"),
+        "",
+        "another install's word is not this one's"
+    );
+    // The label the vault keeps the origin under is the one the arrival names.
+    assert_eq!(
+        ORIGIN_LABEL,
+        centraid_vault::commands::origin_cursor::CAMERA_ROLL_REF
+    );
 }
 
 // ---- the write ----
@@ -405,6 +488,40 @@ fn an_edit_names_its_source_and_says_nothing_of_when_it_was_taken() {
     assert!(!input.contains_key("taken_at") && !input.contains_key("offset_min"));
 }
 
+fn text_of(input: &std::collections::HashMap<String, wire::Value>, key: &str) -> Option<String> {
+    match &input.get(key)?.kind {
+        Some(wire::value::Kind::Text(text)) => Some(text.clone()),
+        _ => None,
+    }
+}
+
+#[test]
+fn a_camera_roll_photograph_records_where_it_came_from_and_an_edit_does_not() {
+    let asset = photo("R");
+    let input =
+        input_of(add_request(&asset, &"ee".repeat(32), 1, "image/jpeg", false, None).into());
+    assert_eq!(
+        text_of(&input, "arrived_system").as_deref(),
+        Some("camera_roll")
+    );
+    assert_eq!(
+        text_of(&input, "arrived_label").as_deref(),
+        Some("Camera roll")
+    );
+    let edit = input_of(
+        add_request(
+            &asset,
+            &"ff".repeat(32),
+            1,
+            "image/jpeg",
+            false,
+            Some("asset-1"),
+        )
+        .into(),
+    );
+    assert!(!edit.contains_key("arrived_system") && !edit.contains_key("arrived_label"));
+}
+
 // ---- the walk ----
 
 #[test]
@@ -427,13 +544,7 @@ fn a_photograph_streams_from_the_library_commits_then_stages_its_two_derivatives
     );
     assert_eq!(library.asked, vec![("A".to_owned(), true)]);
     // ADVANCED PER ASSET: a pass the OS kills resumes where it was.
-    assert_eq!(
-        library
-            .keychain
-            .get(&cursor_key("vault-1"))
-            .map(String::as_str),
-        Some("A")
-    );
+    assert_eq!(held_cursor(&shell, "device-1"), "A");
 }
 
 #[test]
@@ -475,13 +586,7 @@ fn an_original_only_in_icloud_waits_for_wifi_with_the_cursor_before_it_and_is_fe
         library.asked,
         vec![("A".to_owned(), false), ("B".to_owned(), false)]
     );
-    assert_eq!(
-        library
-            .keychain
-            .get(&cursor_key("vault-1"))
-            .map(String::as_str),
-        Some("A")
-    );
+    assert_eq!(held_cursor(&shell, "device-1"), "A");
 
     library.link = wifi();
     walk(&mut shell, &mut library);
@@ -501,9 +606,11 @@ fn a_rewalk_renders_nothing_an_original_the_core_already_holds_kept_its_derivati
     walk(&mut shell, &mut library);
     assert_eq!(library.rendered.len(), 2);
 
-    // A fresh keychain: the roll is walked again from the start.
-    library.keychain.clear();
+    // Another install read the vault last: its cursor is not this one's, so the roll is walked again
+    // from the start.
+    library.device = "device-2".to_owned();
     walk(&mut shell, &mut library);
+    assert_eq!(library.pages.last().map(|page| page.0.as_str()), Some(""));
     assert_eq!(library.rendered.len(), 2, "a re-walk renders nothing");
     assert_eq!(state(&shell).imported_total, 1, "and imports nothing new");
     assert_eq!(photographs(&shell), seeded + 1);
@@ -590,17 +697,45 @@ fn triggers_during_a_walk_queue_exactly_one_more_after_it() {
 }
 
 #[test]
-fn a_walk_resumes_from_the_cursor_the_keychain_holds() {
+fn a_walk_resumes_from_the_cursor_the_vault_holds() {
     let mut library = Library::new()
         .with(photo("A"), &[("A", STILL)])
         .with(photo("B"), &[("B", MOVIE)]);
-    library
-        .keychain
-        .insert(cursor_key("vault-1"), "A".to_owned());
     let mut shell = started(&mut library);
+    leave_cursor(&shell, "device-1", "A");
     walk(&mut shell, &mut library);
     assert_eq!(library.asked, vec![("B".to_owned(), true)]);
     assert_eq!(library.pages[0].0, "A");
+    assert_eq!(held_cursor(&shell, "device-1"), "B");
+}
+
+#[test]
+fn a_cursor_another_install_wrote_forces_a_complete_read() {
+    let mut library = Library::new()
+        .with(photo("A"), &[("A", STILL)])
+        .with(photo("B"), &[("B", MOVIE)]);
+    let mut shell = started(&mut library);
+    leave_cursor(&shell, "device-2", "A");
+    walk(&mut shell, &mut library);
+    // Not resumed from "A": both assets were offered, from the start.
+    assert_eq!(library.pages[0].0, "");
+    assert_eq!(
+        library.asked,
+        vec![("A".to_owned(), true), ("B".to_owned(), true)]
+    );
+    // And the walk took the origin over: the cursor is this install's now.
+    assert_eq!(held_cursor(&shell, "device-1"), "B");
+    assert_eq!(held_cursor(&shell, "device-2"), "");
+}
+
+#[test]
+fn the_cursor_moves_in_the_commit_of_the_assets_last_part_and_alone_when_nothing_is_brought() {
+    // A Live Photo: the still, then the paired movie. One cursor, and it moves with the movie.
+    let mut library = Library::new().with(live("L"), &[("L", STILL), ("L#pairedVideo", MOVIE)]);
+    let mut shell = started(&mut library);
+    walk(&mut shell, &mut library);
+    assert_eq!(held_cursor(&shell, "device-1"), "L");
+    assert_eq!(state(&shell).imported_total, 1);
 }
 
 // ---- the bytes the core asked for again ----

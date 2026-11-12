@@ -34,6 +34,36 @@ impl World {
 
     /// [`Self::new`] with more screens registered.
     pub fn with(registry: Registry) -> Self {
+        Self::build(registry, None)
+    }
+
+    /// [`Self::with`], and the follow coordinator (`centraid_screens::follow`) running beside it
+    /// as a service, so the phone's calendar is followed the way the app follows it.
+    pub fn following(registry: Registry) -> Self {
+        Self::build_with(registry, None, true)
+    }
+
+    /// [`Self::new`] over a vault seeded as of `now_ms` rather than the machine's clock, so a
+    /// result cannot turn on the day of the week the suite runs.
+    pub fn seeded_at(now_ms: i64) -> Self {
+        Self::build(Registry::default(), Some(now_ms))
+    }
+
+    /// [`Self::with`] over a vault seeded as of `now_ms`.
+    pub fn seeded_with(registry: Registry, now_ms: i64) -> Self {
+        Self::build(registry, Some(now_ms))
+    }
+
+    fn build(registry: Registry, seeded_at_ms: Option<i64>) -> Self {
+        Self::build_with(registry, seeded_at_ms, false)
+    }
+
+    fn build_with(registry: Registry, seeded_at_ms: Option<i64>, following: bool) -> Self {
+        let registry = if following {
+            registry.merge(centraid_screens::follow::registry())
+        } else {
+            registry
+        };
         let registry = registry
             .with(proof::NAME, proof::build)
             .with(
@@ -45,7 +75,15 @@ impl World {
                 centraid_screens::calendar::editor::build,
             );
         let runtime = Runtime::new(registry, vec![(agenda::TAB.to_owned(), proof::route())]);
-        let mut driver = Driver::with_runtime(runtime);
+        let runtime = if following {
+            runtime.with_services(centraid_screens::follow::services())
+        } else {
+            runtime
+        };
+        let mut driver = match seeded_at_ms {
+            Some(now_ms) => Driver::with_runtime_at(runtime, now_ms),
+            None => Driver::with_runtime(runtime),
+        };
         driver.start();
         driver.call(wire::screen_request::Kind::Environment(wire::Environment {
             locale: "en".to_owned(),

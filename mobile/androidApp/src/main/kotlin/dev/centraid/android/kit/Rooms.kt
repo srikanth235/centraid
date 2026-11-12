@@ -710,20 +710,28 @@ public fun Modifier.kitStatusPill(): Modifier {
 }
 
 /**
+ * THE KIT'S ONE `StatusActed` SEND (`ScreenEvent.status_acted`), stated once per page by
+ * `RustRoot.Page` and read by every status line that has no event of its own. Outside a Rust page
+ * it does nothing.
+ */
+public val LocalStatusActed: ProvidableCompositionLocal<() -> Unit> = compositionLocalOf { {} }
+
+/**
  * THE KIT `StatusLine` MESSAGE: one clause and at most one verb ("Undo"). A
  * refusal is `net` ink and the core's sentence; [onAct] is the screen's own
- * `StatusActed` event, and [actTag] the id its verb carries (Agenda's is
- * `agenda-status-action`, the string iOS sets). Drawn only when there is a
- * sentence.
+ * `StatusActed` event when it passes one, else the kit's ([LocalStatusActed]), and
+ * [actTag] the id its verb carries (Agenda's is `agenda-status-action`, the string iOS
+ * sets). Drawn only when there is a sentence.
  */
 @Composable
 public fun StatusLine(
     line: StatusLineMessage?,
     modifier: Modifier = Modifier,
     actTag: String = "room-status-act",
-    onAct: () -> Unit,
+    onAct: (() -> Unit)? = null,
 ) {
     if (line == null || line.sentence.isEmpty()) return
+    val kitActed = LocalStatusActed.current
     Row(
         modifier
             .fillMaxWidth()
@@ -745,7 +753,7 @@ public fun StatusLine(
                 color = appAccent().text,
                 modifier = Modifier
                     .heightIn(min = KitGeometry.ROW_MIN)
-                    .clickable(onClick = onAct)
+                    .clickable(onClick = onAct ?: kitActed)
                     .padding(horizontal = 12.dp, vertical = 10.dp)
                     .testTag(actTag)
                     .semantics { role = Role.Button },

@@ -27,9 +27,9 @@
 // that dates anything carries `today`, so "edited today" and "purges in 3
 // days" are string comparisons in a view.
 //
-// SIZES ARE PHRASES. `size` is `format_byte_size`'s words ("2.4 MB") — the one
-// formatter Home's Docs tile already reads through `with_document_size` — and
-// EMPTY when the document's bytes have no row, never "0 bytes".
+// SIZES ARE COUNTS. `byte_size` is the bytes' length and ABSENT when the
+// document's bytes have no row, never 0; the screens word it through
+// `kit::quantity`, the one measure formatter.
 //
 // WHAT "TRASH" MEANS ON THIS PHONE. Trashing stamps `purge_at` thirty days out.
 // `entity.purge` destroys one trashed document at once — the path Photos'
@@ -228,8 +228,9 @@ message DocsDocumentRow {
   // The kind's word, as the Kind column prints it.
   string kind_name = 6;
   DocsSurface surface = 7;
-  // The bytes, in words. EMPTY when there is no byte row.
-  string size = 8;
+  // 8 was `size`, the bytes in words: the length is `byte_size` now (#1185).
+  reserved 8;
+  reserved "size";
   // EMPTY at the top level.
   string folder_id = 9;
   bool starred = 10;
@@ -263,6 +264,11 @@ message DocsDocumentRow {
   // bytes of an image or a PDF: an absolute path inside the app's store. EMPTY
   // for every other kind, a trashed row, or bytes that are not here.
   string thumbnail_path = 23;
+  // The words matched only in an EARLIER VERSION of the item, not in what it says now (#1185):
+  // the row is the live item, once, and it opens that item's Earlier versions. Search rows only.
+  bool in_earlier_version = 24;
+  // The bytes' length. ABSENT when there is no byte row.
+  optional int64 byte_size = 25;
 }
 
 // One version, newest first. A→B→A is THREE versions: each is an occurrence,
@@ -270,13 +276,17 @@ message DocsDocumentRow {
 message DocsVersion {
   string content_id = 1;
   string media_type = 2;
-  string size = 3;
+  // 3 was `size`, the bytes in words: the length is `byte_size` now (#1185).
+  reserved 3;
+  reserved "size";
   // Exactly one version is current: the first.
   bool current = 4;
   // "Version N", counted from the oldest, which is 1.
   uint32 number = 5;
   string asserted_at = 6;
   string asserted_local = 7;
+  // The bytes' length. ABSENT when there is no byte row.
+  optional int64 byte_size = 8;
 }
 
 // ---------------------------------------------------------------------------
@@ -363,4 +373,8 @@ message DocsDocument {
   // sheet. EMPTY otherwise, and always for a text document, whose words are
   // `body`.
   string bytes_path = 9;
+  // The document's revision: the newest version its history holds (0 when none). An edit or a
+  // rename names it as `expected_rev`; the vault refuses one made from a revision that is no
+  // longer the document's (#1185).
+  int64 rev = 10;
 }

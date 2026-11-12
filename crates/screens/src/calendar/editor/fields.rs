@@ -262,7 +262,7 @@ impl Editor {
             return Some(known.id);
         }
         let key = kit_act::key(&["add-place", &name], kit_act::fresh());
-        let settled = kit_act::act(
+        let settled = self.undo.act_also(
             ctx,
             act::calendar::AddPlace {
                 title: name,
@@ -271,7 +271,6 @@ impl Editor {
             &key,
         );
         if !settled.committed {
-            self.settle(&settled);
             return None;
         }
         settled.output_text("id")

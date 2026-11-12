@@ -30,7 +30,7 @@
     <div class="hero-kv">
       <div><b data-count="kinds">26</b>kinds</div>
       <div><b data-count="relations">9</b>edge relations</div>
-      <div><b data-count="tables">42</b>tables</div>
+      <div><b data-count="tables">44</b>tables</div>
       <div><b>1</b>file, on the phone</div>
       <div><b>0</b>silos</div>
     </div>
@@ -99,7 +99,7 @@
     </div>
     <h2 style="margin-top:48px;font-size:1.6rem">Nine relations join them</h2>
     <p class="lede">An <span class="k">edge</span> is a typed, directed join of two entities. <span class="k">edge_shape</span> names which kinds each relation may join and a trigger refuses any other pair; an edge's ends never change. What only one relation has (<span class="k">position</span>, <span class="k">state</span>, <span class="k">anchor</span>, <span class="k">label_id</span>) is a typed column on the edge.</p>
-    <div class="zone"><ul class="rels"><li data-rel="contains"><span class="cn">contains</span><span>album → photo, list → person — ordered membership; a note, document, task or event has its holder as a column instead</span></li><li data-rel="tagged"><span class="cn">tagged</span><span>anything → tag or flag — a word put on a thing: also a star, a pin, an archive</span></li><li data-rel="about"><span class="cn">about</span><span>note, task or event → anything — a note about Maya, a journal entry, a task about Mum, an anniversary; also document → person, and Locker item → account, place or person</span></li><li data-rel="links"><span class="cn">links</span><span>note → anything — a <code>[[wikilink]]</code> with its anchor in the text</span></li><li data-rel="attached"><span class="cn">attached</span><span>anything → document or photo — a file brought to a thing</span></li><li data-rel="attendee"><span class="cn">attendee</span><span>event → person — a guest, with their answer on the edge</span></li><li data-rel="with"><span class="cn">with</span><span>activity, transaction or Locker item → person — who a call or a visit was with, who a payment was with</span></li><li data-rel="related"><span class="cn">related</span><span>person → person — labelled by a relation concept</span></li><li data-rel="depicts"><span class="cn">depicts</span><span>photo → person — who is in a photograph, tagged by hand (no face detection)</span></li></ul></div>
+    <div class="zone"><ul class="rels"><li data-rel="contains"><span class="cn">contains</span><span>album → photo, list → person — ordered membership; a note, document, task or event has its holder as a column instead</span></li><li data-rel="tagged"><span class="cn">tagged</span><span>anything → tag or flag — a word put on a thing: also a star, a pin, an archive</span></li><li data-rel="about"><span class="cn">about</span><span>note, task or event → anything — a note about Maya, a journal entry, a task about Mum, an anniversary; also document → person, and Locker item → account, place or person</span></li><li data-rel="links"><span class="cn">links</span><span>item → item — a link set by hand between any two items (a person, place, event, task, note, document, photo, account, transaction or workout), or a note’s <code>[[wikilink]]</code> with its anchor in the text; a Locker item may start a link and is never the end of one</span></li><li data-rel="attached"><span class="cn">attached</span><span>anything → document or photo — a file brought to a thing</span></li><li data-rel="attendee"><span class="cn">attendee</span><span>event → person — a guest, with their answer on the edge</span></li><li data-rel="with"><span class="cn">with</span><span>activity, transaction or Locker item → person — who a call or a visit was with, who a payment was with</span></li><li data-rel="related"><span class="cn">related</span><span>person → person — labelled by a relation concept</span></li><li data-rel="depicts"><span class="cn">depicts</span><span>photo → person — who is in a photograph, tagged by hand (no face detection)</span></li></ul></div>
     <p class="note" style="margin-top:14px">A star, a pin or an archive is a <span class="k">tagged</span> edge to a flag. A journal entry is a note with an <span class="k">about</span> edge to you; a note about anything else shows with its subject. A thumbnail, a caption or extracted text is a <span class="k">derivative</span> of a blob. A followed contact, event, file, workout or statement line is a <span class="k">source</span> under an <span class="k">origin</span>. Last contacted, a balance and a total are computed at read, never stored.</p>
   </div>
 </section>
@@ -112,7 +112,7 @@
     <p class="lede">This section is not written. It is rendered from the schema a new vault gets (<span class="k">contracts/migrations/001_baseline.sql</span>) by <span class="k">cargo run -p centraid-vault --bin export-ontology-page</span>, and a test (<span class="k">crates/vault/tests/ontology_page.rs</span>) re-renders it and fails when the page and the file differ, when a table has no sentence saying what it is for, and when §02 names a kind or a relation the code does not. The page cannot age behind the schema.</p>
     <div class="erd" id="erd">
 <!-- schema:begin (generated by `cargo run -p centraid-vault --bin export-ontology-page`; do not edit) -->
-<div class="schemahdr" data-group="kernel"><span class="sid">kernel</span><h3>the kernel</h3><p class="sdesc">What every kind shares: the entity, the typed edge between two of them, the vault's own row, the keys of acts already run, revisions and the one search index.</p></div>
+<div class="schemahdr" data-group="kernel"><span class="sid">kernel</span><h3>the kernel</h3><p class="sdesc">What every kind shares: the entity, the typed edge between two of them, the vault's own row, the keys of acts already run, every record's earlier values (revisions) and the one search index.</p></div>
 <div class="tbl rv in" data-group="kernel" data-table="entity"><header><h4>entity</h4><p class="tp">Everything with a title and a trash: one row per thing, whatever its kind. `n` is the rowid the search index keys on.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">n</span><span class="ct">integer</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
@@ -159,14 +159,18 @@
 <div class="colrow"><span class="cn">asked</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
-<div class="tbl rv in" data-group="kernel" data-table="revision"><header><h4>revision</h4><p class="tp">The words or bytes an edit replaced, numbered from one per entity.</p></header>
+<div class="tbl rv in" data-group="kernel" data-table="revision"><header><h4>revision</h4><p class="tp">Every record's earlier values: the state an entity had before a commit changed it, numbered from one per entity, with a note's words and a document's bytes in cells of their own. Written at the commit door for every kind; a creation writes none, a purge takes them with the record, and a Locker item's sealed cells are kept only as the ciphertext they are, masked on read.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">entity_id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ entity.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">seq</span><span class="ct">integer</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">cause</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default ''</span></div>
+<div class="colrow"><span class="cn">state</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default '{}'</span></div>
 <div class="colrow"><span class="cn">body</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">blob</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ blob.hash</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">media_type</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">autosave</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 0</span></div>
+<div class="colrow"><span class="cn">touched_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
 <div class="tbl rv in" data-group="kernel" data-table="search"><header><h4>search</h4><p class="tp">The one contentless full-text index, keyed by `entity.n` and kept by the writer.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
@@ -176,6 +180,19 @@
 <div class="colrow"><span class="cn">rank</span><span class="ct"></span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
 <div class="tbl rv in" data-group="kernel" data-table="search_vocab"><header><h4>search_vocab</h4><p class="tp">The index's own vocabulary, which serves fuzzy correction of a typed word.</p></header>
+<div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
+<div class="colrow"><span class="cn">term</span><span class="ct"></span><span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">doc</span><span class="ct"></span><span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">cnt</span><span class="ct"></span><span></span><span class="cref"></span><span class="cnote"></span></div>
+</div></div>
+<div class="tbl rv in" data-group="kernel" data-table="search_past"><header><h4>search_past</h4><p class="tp">What a live item said in an earlier version: one contentless row per kept version with typed text, keyed by the entity's `n` and the version's number, so a search finds the item by words it has since replaced. A trashed or purged entity has none, and a Locker item never does.</p></header>
+<div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
+<div class="colrow"><span class="cn">title</span><span class="ct"></span><span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">body</span><span class="ct"></span><span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">search_past</span><span class="ct"></span><span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">rank</span><span class="ct"></span><span></span><span class="cref"></span><span class="cnote"></span></div>
+</div></div>
+<div class="tbl rv in" data-group="kernel" data-table="search_past_vocab"><header><h4>search_past_vocab</h4><p class="tp">The earlier versions' own vocabulary.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">term</span><span class="ct"></span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">doc</span><span class="ct"></span><span></span><span class="cref"></span><span class="cnote"></span></div>
@@ -223,7 +240,6 @@
 <div class="colrow"><span class="cn">birthday</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">avatar</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ blob.hash</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">cadence_days</span><span class="ct">integer</span><span></span><span class="cref"></span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">birthday_reminder</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 1</span></div>
 </div></div>
 <div class="tbl rv in" data-group="kinds" data-table="contact_point"><header><h4>contact_point</h4><p class="tp">A phone number, email address or handle of a person, with its normalised form for matching.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
@@ -460,7 +476,7 @@
 <div class="colrow"><span class="cn">created_at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
 <div class="schemahdr" data-group="follow"><span class="sid">follow</span><h3>following</h3><p class="sdesc">An origin is a system the member follows; a source is one record of it, with what it last stated.</p></div>
-<div class="tbl rv in" data-group="follow" data-table="origin"><header><h4>origin</h4><p class="tp">A system the member follows: a phone's contacts, calendar, files or health store, or a bank statement.</p></header>
+<div class="tbl rv in" data-group="follow" data-table="origin"><header><h4>origin</h4><p class="tp">Where rows came from: a system the member follows (a phone's contacts, calendar, files or health store, a bank statement) or a file or device an item arrived from once (camera roll, picker, vCard, Markdown, CSV, scan, upload, Reminders). A typed row has none. Stopping a followed store retires its origin instead of deleting it, so following it again finds the home it filled and its sources.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">system</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
@@ -470,8 +486,9 @@
 <div class="colrow"><span class="cn">fills</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ entity.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">config</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">created_at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">retired_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
-<div class="tbl rv in" data-group="follow" data-table="source"><header><h4>source</h4><p class="tp">One record of an origin, with what it last stated, so the next pass merges per field against it.</p></header>
+<div class="tbl rv in" data-group="follow" data-table="source"><header><h4>source</h4><p class="tp">One record of an origin, with what it last stated, so the next pass merges per field against it; for a one-shot arrival it only says which origin the item came from.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">origin_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ origin.id</span><span class="cnote"></span></div>
@@ -562,7 +579,7 @@
 <div class="colrow"><span class="cn">failed_unlocks</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 0</span></div>
 <div class="colrow"><span class="cn">failed_unlock_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
-<p class="note" data-tables="42" data-columns="318">42 tables and 318 columns, read off a vault this build founded.</p>
+<p class="note" data-tables="44" data-columns="329">44 tables and 329 columns, read off a vault this build founded.</p>
 <!-- schema:end -->
     </div>
     <div class="physcard rv">
@@ -600,7 +617,7 @@
       <article class="rule rv"><h3>A hash is a foreign key into <span class="k">blob</span></h3><p>Every column holding one is declared, so the byte plane finds every reference from <span class="k">foreign_key_list</span> alone.</p></article>
       <article class="rule rv"><h3>Delete rules are chosen, not defaulted</h3><p>Kind rows, child rows, edges, revisions and a category's budgets and rules cascade; only <span class="k">source.entity_id</span> and <span class="k">message_attachment.entity_id</span> null; every other pointer has no action.</p></article>
       <article class="rule rv"><h3>An edge joins only what <span class="k">edge_shape</span> allows</h3><p>Checked exhaustively over relation × kind × kind, and the relation list equals the <span class="k">CHECK</span>.</p></article>
-      <article class="rule rv"><h3>The incremental index equals a rebuild</h3><p>After every search-relevant command, the one <span class="k">search</span> table is what a rebuild would write. A seeded red proves the comparison can see an untouched edit.</p></article>
+      <article class="rule rv"><h3>The incremental index equals a rebuild</h3><p>After every search-relevant command, the <span class="k">search</span> table and <span class="k">search_past</span> (what items said in earlier versions) are what a rebuild would write. A seeded red proves the comparison can see an untouched edit.</p></article>
       <article class="rule rv"><h3>Concept and container lists equal the code's</h3><p>The <span class="k">CHECK</span> lists are <span class="k">Kind::CONCEPTS</span> and <span class="k">Kind::CONTAINERS</span>, and seed keys are folded.</p></article>
       <article class="rule rv"><h3>No table outside the spec is founded</h3><p>The set of tables of a new vault is a list a test holds, and so is the set of tables on this page.</p></article>
     </div>

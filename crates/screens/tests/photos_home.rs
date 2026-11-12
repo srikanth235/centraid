@@ -12,6 +12,7 @@ use centraid_screens::catalog::act;
 use centraid_screens::field::{Field, Keyed};
 use centraid_screens::kit::act as kit_act;
 use centraid_screens::kit::menu;
+use centraid_screens::kit::quantity::UnitsPref;
 use centraid_screens::photos;
 use centraid_screens::photos::home::chrome::Roll;
 use centraid_screens::photos::home::layout::{self, Boxed};
@@ -84,22 +85,44 @@ impl Rig {
     }
 
     fn library(&self) -> &wire::PhotosLibraryData {
-        match self.state().library.as_ref().expect("the library").content {
-            Some(wire::photos_library::Content::Data(ref data)) => data,
-            ref other => panic!("expected the library's data, found {other:?}"),
+        let library = self.state().library.as_ref().expect("the library");
+        match &library.content {
+            Some(wire::photos_library::Content::Data(data)) => data,
+            None => panic!("expected the library's data, found {:?}", library.page),
+        }
+    }
+
+    /// The library's page must be Empty (never ready data), and this is its sentence.
+    fn library_empty(&self) -> &wire::EmptyState {
+        let library = self.state().library.as_ref().expect("the library");
+        assert!(
+            library.content.is_none(),
+            "an empty library carries no data"
+        );
+        match library.page.as_ref().and_then(|page| page.state.as_ref()) {
+            Some(wire::page_state::State::Empty(empty)) => empty,
+            other => panic!("expected the empty state, found {other:?}"),
+        }
+    }
+
+    /// The search page's empty sentence: nothing matched.
+    fn search_empty(&self) -> &wire::EmptyState {
+        let search = self.search();
+        assert!(
+            search.content.is_none(),
+            "an empty search carries no content"
+        );
+        match search.page.as_ref().and_then(|page| page.state.as_ref()) {
+            Some(wire::page_state::State::Empty(empty)) => empty,
+            other => panic!("expected the empty state, found {other:?}"),
         }
     }
 
     fn collections(&self) -> &wire::PhotosCollectionsData {
-        match self
-            .state()
-            .collections
-            .as_ref()
-            .expect("collections")
-            .content
-        {
-            Some(wire::photos_collections::Content::Data(ref data)) => data,
-            ref other => panic!("expected collections' data, found {other:?}"),
+        let collections = self.state().collections.as_ref().expect("collections");
+        match &collections.content {
+            Some(wire::photos_collections::Content::Data(data)) => data,
+            None => panic!("expected collections' data, found {:?}", collections.page),
         }
     }
 
@@ -115,6 +138,16 @@ impl Rig {
     }
 
     fn tile_ids(&self) -> Vec<String> {
+        // An empty library is the page's Empty state, which carries no tiles.
+        let library = self.state().library.as_ref().expect("the library");
+        if library.content.is_none()
+            && matches!(
+                library.page.as_ref().and_then(|page| page.state.as_ref()),
+                Some(wire::page_state::State::Empty(_))
+            )
+        {
+            return Vec::new();
+        }
         self.library()
             .tiles
             .iter()
@@ -680,7 +713,7 @@ fn import_now_over_an_emptied_library_asks_the_camera_roll_for_a_pass_and_the_sh
     let update = r.send(H::ImportNow(wire::PhotosImportNow {}));
     assert!(update.effects.is_empty(), "{:?}", update.effects);
     // The empty library says so, in its own words.
-    let empty = r.library().empty.as_ref().expect("an empty state");
+    let empty = r.library_empty();
     assert_eq!(empty.headline, "No photos on this phone yet.");
 }
 
@@ -1074,7 +1107,7 @@ fn the_favorites_filter_narrows_the_read_not_the_drawing() {
         r.arrange(act::photos::UnflagPhoto { photo_id: id });
     }
     r.d.pump(std::time::Duration::from_millis(300));
-    let empty = r.library().empty.as_ref().expect("empty favorites");
+    let empty = r.library_empty();
     assert_eq!(empty.headline, "No favorites yet");
 }
 
@@ -1226,25 +1259,21 @@ fn trash_asks_first_ends_the_mode_and_takes_the_photographs_out_of_the_grid() {
     let mut r = rig();
     let a = r.photo("trash a", Some("2026-06-03T10:00:00Z"), None);
     r.send(H::Refreshed(wire::PhotosRefreshed {}));
-    // A trash confirm over nothing is not asked.
+    // Nothing picked writes nothing.
     r.send(verb(V::Trash));
-    assert!(r.state().selection.as_ref().unwrap().confirm.is_none());
+    assert!(r.tile_ids().contains(&a));
     r.send(toggle(&a));
     r.send(verb(V::Trash));
-    let confirm = r
-        .state()
-        .selection
-        .as_ref()
-        .unwrap()
-        .confirm
-        .clone()
-        .expect("a confirm");
-    assert_eq!(confirm.title, "Move 1 photo to the trash?");
-    assert!(r.tile_ids().contains(&a));
-    r.send(selection(wire::photos_selection_event::Kind::Confirmed(
-        wire::photos_selection_event::Confirmed {},
-    )));
+    let bar = r.state().selection.as_ref().unwrap();
+    assert!(bar.confirm.is_none(), "Move to trash asks nothing");
     assert!(!r.tile_ids().contains(&a));
+    let status = r.state().status.clone().expect("a status line");
+    assert_eq!(status.sentence, "1 photo moved to trash");
+    assert_eq!(status.action_label, "Undo");
+    r.send(selection(wire::photos_selection_event::Kind::StatusActed(
+        wire::photos_selection_event::StatusActed {},
+    )));
+    assert!(r.tile_ids().contains(&a), "Undo restores it");
     let bar = r.state().selection.as_ref().unwrap();
     assert!(!bar.selecting && bar.count == 0);
 }
@@ -1332,6 +1361,20 @@ fn send_a_copy_asks_which_location_travels_then_hands_the_pick_to_the_shell() {
     let update = r.send(H::CopyPlaceChosen(wire::PhotosCopyPlaceChosen {
         keep_location: false,
     }));
+    // The tap raises the owner check and nothing leaves yet.
+    assert_eq!(update.effects.len(), 1);
+    assert!(matches!(
+        &update.effects[0].effect.as_ref().unwrap().kind,
+        Some(wire::effect::Kind::OwnerCheck(c)) if c.ask
+    ));
+    let update =
+        r.d.answer_effect(wire::effect_result::Outcome::OwnerChecked(
+            wire::OwnerChecked {
+                available: true,
+                biometry: wire::Biometry::Face as i32,
+                outcome: wire::owner_checked::Outcome::Succeeded as i32,
+            },
+        ));
     let Some(wire::effect::Kind::ExportOriginals(export)) =
         &update.effects[0].effect.as_ref().unwrap().kind
     else {
@@ -1494,29 +1537,29 @@ fn a_phone_whose_platform_cannot_delete_is_offered_no_row_and_counts_nothing() {
 #[test]
 fn nothing_is_offered_until_a_gateway_holds_an_original_whole() {
     use centraid_screens::photos::keep_originals::FreeUpRow;
-    let none = FreeUpRow::from_facts(Locale::En, &facts(0));
+    let none = FreeUpRow::from_facts(Locale::En, UnitsPref::Metric, &facts(0));
     assert!(!none.enabled && none.action_label.is_empty());
     assert!(none.reason.starts_with("None can be freed yet."));
     let mut unchecked = facts(0);
     unchecked.checked = false;
-    let row = FreeUpRow::from_facts(Locale::En, &unchecked);
+    let row = FreeUpRow::from_facts(Locale::En, UnitsPref::Metric, &unchecked);
     assert!(!row.enabled);
     assert!(row.reason.starts_with("Centraid could not check"));
     // NOT COUNTED IS NEVER ZERO.
     let mut uncounted = facts(2);
     uncounted.counted = false;
-    let row = FreeUpRow::from_facts(Locale::En, &uncounted);
+    let row = FreeUpRow::from_facts(Locale::En, UnitsPref::Metric, &uncounted);
     assert_eq!(row.meta, "Not counted yet.");
     assert!(!row.enabled);
     // A phone that cannot delete draws no row at all.
     let mut cannot = facts(2);
     cannot.offered = false;
-    assert!(!FreeUpRow::from_facts(Locale::En, &cannot).offered);
+    assert!(!FreeUpRow::from_facts(Locale::En, UnitsPref::Metric, &cannot).offered);
     // Albums the member keeps are said beside the reason.
     let mut kept = facts(1);
     kept.kept_count = 3;
     assert_eq!(
-        FreeUpRow::from_facts(Locale::En, &kept).reason,
+        FreeUpRow::from_facts(Locale::En, UnitsPref::Metric, &kept).reason,
         "1 photo is backed up. 3 of them are in albums you keep on this phone."
     );
 }
@@ -1527,11 +1570,11 @@ fn what_the_last_free_up_came_to_is_one_sentence_on_the_row() {
     let mut after = facts(0);
     after.outcome = wire::free_up_facts::Outcome::Freed as i32;
     after.freed_bytes = 2_000_000_000;
-    let row = FreeUpRow::from_facts(Locale::En, &after);
+    let row = FreeUpRow::from_facts(Locale::En, UnitsPref::Metric, &after);
     assert!(!row.freeing);
     assert_eq!(
         row.notice,
-        "Freed 2 GB. Photos download again from your backup device when you open them."
+        "Freed 2.0 GB. Photos download again from your backup device when you open them."
     );
     for (outcome, text) in [
         (
@@ -1545,17 +1588,19 @@ fn what_the_last_free_up_came_to_is_one_sentence_on_the_row() {
     ] {
         let mut f = facts(1);
         f.outcome = outcome as i32;
-        assert_eq!(FreeUpRow::from_facts(Locale::En, &f).notice, text);
+        assert_eq!(
+            FreeUpRow::from_facts(Locale::En, UnitsPref::Metric, &f).notice,
+            text
+        );
     }
     let mut platform = facts(1);
     platform.outcome = wire::free_up_facts::Outcome::PlatformError as i32;
-    platform.platform_error = "Photos access is limited.".to_owned();
     assert_eq!(
-        FreeUpRow::from_facts(Locale::En, &platform).notice,
-        "Photos access is limited."
+        FreeUpRow::from_facts(Locale::En, UnitsPref::Metric, &platform).notice,
+        "Couldn't free up space. Try again."
     );
     // A row with something to free holds still while the system asks.
-    let row = FreeUpRow::from_facts(Locale::En, &facts(2));
+    let row = FreeUpRow::from_facts(Locale::En, UnitsPref::Metric, &facts(2));
     let held = row.tapped().expect("a tap holds");
     assert!(held.freeing && held.tapped().is_none());
 }
@@ -1623,7 +1668,7 @@ fn collections_are_pinned_albums_and_utilities_with_the_rows_the_system_sorts() 
     };
     // PLACES AFTER THE SECOND STANDING SHELF, where the system puts Map.
     assert_eq!(titles("pinned"), ["Favorites", "Videos", "Places"]);
-    assert_eq!(titles("utilities"), ["Archive", "Trash"]);
+    assert_eq!(titles("utilities"), ["Archive", "Trash", "Export"]);
     let album = r
         .section("albums")
         .cards
@@ -1866,6 +1911,7 @@ fn a_caption_is_found_and_the_hits_open_the_lightbox_in_their_own_order() {
     r.arrange(act::photos::RetitlePhoto {
         photo_id: a.clone(),
         title: "Zqharbour at dusk".to_owned(),
+        expected_rev: None,
     });
     r.send(H::SearchOpened(wire::PhotosSearchOpened {}));
     search_for(&mut r, "Zqharbour");
@@ -1877,7 +1923,7 @@ fn a_caption_is_found_and_the_hits_open_the_lightbox_in_their_own_order() {
             .collect::<Vec<_>>(),
         [a.as_str()]
     );
-    assert!(hits.empty.is_none());
+    assert!(r.search().page.as_ref().unwrap().state.is_none(), "ready");
     let Some(wire::route::Args::PhotosLightbox(args)) = &hits.open.as_ref().unwrap().args else {
         panic!("a lightbox route");
     };
@@ -1890,13 +1936,62 @@ fn a_caption_is_found_and_the_hits_open_the_lightbox_in_their_own_order() {
 }
 
 #[test]
+fn a_photograph_found_only_by_an_earlier_caption_is_a_row_under_the_grid_that_opens_earlier_versions()
+ {
+    let mut r = rig();
+    let old = r.photo("search old", Some("2026-02-03T10:00:00Z"), None);
+    r.arrange(act::photos::RetitlePhoto {
+        photo_id: old.clone(),
+        title: "Zqquokka at dusk".to_owned(),
+        expected_rev: None,
+    });
+    r.arrange(act::photos::RetitlePhoto {
+        photo_id: old.clone(),
+        title: "Zqtwilight at dusk".to_owned(),
+        expected_rev: None,
+    });
+    let now = r.photo("search now", Some("2026-02-04T10:00:00Z"), None);
+    r.arrange(act::photos::RetitlePhoto {
+        photo_id: now.clone(),
+        title: "Zqquokka today".to_owned(),
+        expected_rev: None,
+    });
+    r.send(H::SearchOpened(wire::PhotosSearchOpened {}));
+    search_for(&mut r, "Zqquokka");
+    let hits = r.hits();
+    assert_eq!(
+        hits.tiles
+            .iter()
+            .map(|t| t.photo_id.as_str())
+            .collect::<Vec<_>>(),
+        [now.as_str()],
+        "the grid keeps to what the photographs say now"
+    );
+    assert_eq!(hits.earlier.len(), 1);
+    let row = &hits.earlier[0];
+    assert_eq!(row.tile.as_ref().unwrap().photo_id, old);
+    assert_eq!(row.title, "Zqtwilight at dusk");
+    assert_eq!(row.line, "In an earlier version");
+    assert!(row.accessibility_label.ends_with("In an earlier version"));
+    let route = row.route.as_ref().expect("a route");
+    assert_eq!(route.screen, photos::EARLIER);
+    let Some(wire::route::Args::Earlier(args)) = &route.args else {
+        panic!("an earlier-versions route");
+    };
+    assert_eq!(args.entity_id, old);
+    // A photograph that says the words now is the ordinary tile and has no row.
+    search_for(&mut r, "Zqtwilight");
+    let hits = r.hits();
+    assert_eq!(hits.tiles.len(), 1);
+    assert!(hits.earlier.is_empty());
+}
+
+#[test]
 fn nothing_matched_is_data_with_no_cells_never_a_refusal_and_says_everywhere_it_looked() {
     let mut r = rig();
     r.send(H::SearchOpened(wire::PhotosSearchOpened {}));
     search_for(&mut r, "zzqxnothing");
-    let hits = r.hits();
-    assert!(hits.tiles.is_empty() && hits.doors.is_empty());
-    let empty = hits.empty.as_ref().expect("the no-match state");
+    let empty = r.search_empty();
     assert_eq!(empty.headline, "No results");
     assert_eq!(
         empty.body,
@@ -1927,6 +2022,7 @@ fn a_typo_is_corrected_and_the_line_says_what_was_searched_instead() {
     r.arrange(act::photos::RetitlePhoto {
         photo_id: a.clone(),
         title: "Zqsunscreen on the shelf".to_owned(),
+        expected_rev: None,
     });
     r.send(H::SearchOpened(wire::PhotosSearchOpened {}));
     search_for(&mut r, "Zqsunscren");
@@ -1977,10 +2073,8 @@ fn a_route_with_words_opens_search_on_them() {
     let r = rig_at(Dest::Library, Some("zzqxroute"));
     assert_eq!(r.state().destination, Dest::Search as i32);
     assert_eq!(r.search().query, "zzqxroute");
-    assert!(matches!(
-        r.search().content,
-        Some(wire::photos_search_view::Content::Hits(_))
-    ));
+    // Nothing matches that word: the search page is Empty, with its sentence.
+    assert_eq!(r.search_empty().headline, "No results");
 }
 
 #[test]
@@ -1999,4 +2093,44 @@ fn closing_search_returns_to_collections_when_it_started_there() {
     r.send(H::SearchOpened(wire::PhotosSearchOpened {}));
     r.send(H::SearchClosed(wire::PhotosSearchClosed {}));
     assert_eq!(r.state().destination, Dest::Collections as i32);
+}
+
+#[test]
+fn a_send_waits_on_the_owner_check_and_says_why_when_it_does_not_go() {
+    use wire::owner_checked::Outcome as C;
+    let check = |outcome: C| {
+        wire::effect_result::Outcome::OwnerChecked(wire::OwnerChecked {
+            available: outcome != C::Unavailable,
+            biometry: wire::Biometry::Face as i32,
+            outcome: outcome as i32,
+        })
+    };
+    let mut r = rig();
+    let a = r.photo("owner a", Some("2026-06-21T10:00:00Z"), None);
+    r.send(H::Refreshed(wire::PhotosRefreshed {}));
+    r.send(toggle(&a));
+    let ask = |r: &mut Rig| {
+        r.send(H::CopyAsked(wire::PhotosCopyAsked {}));
+        r.send(H::CopyPlaceChosen(wire::PhotosCopyPlaceChosen {
+            keep_location: false,
+        }))
+    };
+    ask(&mut r);
+    assert!(r.d.answer_effect(check(C::Cancelled)).effects.is_empty());
+    assert!(r.state().status.is_none());
+    ask(&mut r);
+    assert!(r.d.answer_effect(check(C::Failed)).effects.is_empty());
+    assert!(r.state().status.as_ref().is_some_and(|s| s.refused));
+    ask(&mut r);
+    let update = r.d.answer_effect(check(C::Unavailable));
+    assert!(matches!(
+        &update.effects[0].effect.as_ref().unwrap().kind,
+        Some(wire::effect::Kind::ExportOriginals(_))
+    ));
+    assert!(
+        r.state()
+            .status
+            .as_ref()
+            .is_some_and(|s| !s.refused && s.sentence.contains("no passcode"))
+    );
 }

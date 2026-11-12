@@ -4,6 +4,7 @@
 use centraid_api_proto::core_v1 as wire;
 
 use crate::kit::menu;
+use crate::kit::search as kit_search;
 use crate::people::{fold, routes, sections};
 use crate::strings::{Locale, fill, people as words};
 
@@ -167,18 +168,29 @@ pub fn row(locale: Locale, person: &wire::PeopleRosterRow, today: &str) -> wire:
         (false, true) => words::row_a11y_due(locale),
         (false, false) => words::row_a11y(locale),
     };
+    let touch = fold::last_touch(
+        locale,
+        person.last_contacted_at.is_some(),
+        &person.last_contacted_local_day,
+        today,
+        person.days_since_contact,
+    );
+    // Words only an earlier version of the person held (#1185): the row says so, and opens
+    // their Earlier versions.
+    let (meta, route) = if person.in_earlier_version {
+        (
+            kit_search::earlier_meta(locale, &touch),
+            kit_search::earlier_route(locale, super::super::EARLIER, &person.party_id),
+        )
+    } else {
+        (touch, routes::person(&person.party_id, &person.name, false))
+    };
     wire::PeopleRow {
         party_id: person.party_id.clone(),
         name: person.name.clone(),
         avatar: Some(fold::avatar(&person.party_id, &person.name)),
         role: person.role.clone(),
-        meta: fold::last_touch(
-            locale,
-            person.last_contacted_at.is_some(),
-            &person.last_contacted_local_day,
-            today,
-            person.days_since_contact,
-        ),
+        meta,
         chips,
         starred: person.starred,
         star_label: fill(
@@ -189,8 +201,16 @@ pub fn row(locale: Locale, person: &wire::PeopleRosterRow, today: &str) -> wire:
             },
             &[("name", &person.name)],
         ),
-        accessibility_label: fill(&accessibility, &[("name", &person.name)]),
-        route: Some(routes::person(&person.party_id, &person.name, false)),
+        accessibility_label: if person.in_earlier_version {
+            format!(
+                "{}, {}",
+                fill(&accessibility, &[("name", &person.name)]),
+                kit_search::in_earlier_version(locale)
+            )
+        } else {
+            fill(&accessibility, &[("name", &person.name)])
+        },
+        route: Some(route),
     }
 }
 
@@ -267,29 +287,11 @@ pub fn roster(
     current: wire::PeopleChipKey,
     order: wire::PeopleOrder,
 ) -> wire::PeopleRosterData {
-    use wire::PeopleChipKey as K;
     let rows: Vec<wire::PeopleRow> = answer
         .people
         .iter()
         .map(|person| row(locale, person, &answer.today))
         .collect();
-    let empty = if !rows.is_empty() {
-        None
-    } else if answer.count_all == 0 {
-        Some(day_one(locale))
-    } else if current == K::Starred {
-        Some(wire::EmptyState {
-            headline: words::empty_starred(locale),
-            ..wire::EmptyState::default()
-        })
-    } else if current == K::Due {
-        Some(wire::EmptyState {
-            headline: words::empty_due(locale),
-            ..wire::EmptyState::default()
-        })
-    } else {
-        Some(chip_empty(locale))
-    };
     let (rows, sections, index) = if order == wire::PeopleOrder::Name {
         let (sections, index) = sections::sectioned(locale, rows);
         (Vec::new(), sections, index)
@@ -302,7 +304,6 @@ pub fn roster(
         index,
         my_card: my_card(locale, answer, current),
         reconnect: reconnect(locale, answer, current),
-        empty,
         status_line: fill(
             &if answer.truncated {
                 words::status_roster_shown(locale)
@@ -487,7 +488,31 @@ pub fn touch(locale: Locale, answer: &wire::PeopleTouch) -> wire::PeopleTouchDat
                 ("due", &answer.count_reconnect.to_string()),
             ],
         ),
-        empty: (answer.count_all == 0).then(|| day_one(locale)),
+    }
+}
+
+/// The page's own sentence for a roster with no one to list: day one (nobody in People at all,
+/// with the phone's contacts on offer), or the chip's own sentence.
+pub fn roster_empty(
+    locale: Locale,
+    answer: &wire::PeopleRoster,
+    current: wire::PeopleChipKey,
+) -> wire::EmptyState {
+    use wire::PeopleChipKey as K;
+    if answer.count_all == 0 {
+        day_one(locale)
+    } else if current == K::Starred {
+        wire::EmptyState {
+            headline: words::empty_starred(locale),
+            ..wire::EmptyState::default()
+        }
+    } else if current == K::Due {
+        wire::EmptyState {
+            headline: words::empty_due(locale),
+            ..wire::EmptyState::default()
+        }
+    } else {
+        chip_empty(locale)
     }
 }
 
@@ -495,11 +520,15 @@ pub fn touch(locale: Locale, answer: &wire::PeopleTouch) -> wire::PeopleTouchDat
 pub fn search(locale: Locale, answer: &wire::PeopleSearch) -> wire::PeopleSearchResults {
     wire::PeopleSearchResults {
         rows: answer.people.iter().map(|p| row(locale, p, "")).collect(),
-        empty: answer.people.is_empty().then(|| wire::EmptyState {
-            headline: words::empty_no_match(locale),
-            body: words::empty_no_match_body(locale),
-            ..wire::EmptyState::default()
-        }),
+    }
+}
+
+/// The page's own sentence for a term that matched no one.
+pub fn search_empty(locale: Locale) -> wire::EmptyState {
+    wire::EmptyState {
+        headline: words::empty_no_match(locale),
+        body: words::empty_no_match_body(locale),
+        ..wire::EmptyState::default()
     }
 }
 
@@ -509,6 +538,31 @@ mod tests {
     use wire::PeopleChipKey as K;
 
     const EN: Locale = Locale::En;
+
+    #[test]
+    fn a_person_found_only_in_an_earlier_version_says_so_and_opens_earlier_versions() {
+        let mut found = person("p1", "Ada", 0, 3, false);
+        found.in_earlier_version = true;
+        let row = row(EN, &found, "");
+        assert!(
+            row.meta.starts_with("In an earlier version"),
+            "{}",
+            row.meta
+        );
+        assert!(row.accessibility_label.ends_with("In an earlier version"));
+        let route = row.route.as_ref().expect("a route");
+        assert_eq!(route.screen, crate::people::EARLIER);
+        assert!(matches!(
+            &route.args,
+            Some(wire::route::Args::Earlier(args)) if args.entity_id == "p1"
+        ));
+        let now = super::row(EN, &person("p2", "Bob", 0, 3, false), "");
+        assert!(!now.meta.contains("earlier version"));
+        assert_eq!(
+            now.route.as_ref().map(|route| route.screen.as_str()),
+            Some(crate::people::PERSON)
+        );
+    }
 
     fn person(id: &str, name: &str, cadence: i64, since: i64, due: bool) -> wire::PeopleRosterRow {
         wire::PeopleRosterRow {
@@ -559,7 +613,6 @@ mod tests {
             ["A", "E", "#"]
         );
         assert_eq!(by_name.index.len(), 27);
-        assert!(by_name.empty.is_none());
         let recent = roster(EN, &answer(people, 0), K::All, wire::PeopleOrder::Recent);
         assert!(recent.sections.is_empty() && recent.index.is_empty());
         assert_eq!(
@@ -575,9 +628,14 @@ mod tests {
 
     #[test]
     fn no_one_is_the_day_one_sentence_and_no_index() {
-        let data = roster(EN, &answer(Vec::new(), 0), K::All, wire::PeopleOrder::Name);
+        let nobody = answer(Vec::new(), 0);
+        let data = roster(EN, &nobody, K::All, wire::PeopleOrder::Name);
         assert!(data.sections.is_empty() && data.index.is_empty());
-        assert!(data.empty.is_some());
+        assert_eq!(
+            roster_empty(EN, &nobody, K::All).import_source,
+            wire::ImportSource::Contacts as i32,
+            "day one offers the phone's contacts"
+        );
     }
 
     #[test]

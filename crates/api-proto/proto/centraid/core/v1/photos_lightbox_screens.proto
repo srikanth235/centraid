@@ -9,6 +9,7 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
+import "centraid/core/v1/agenda_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/photos_screens.proto";
 import "centraid/core/v1/route.proto";
@@ -31,10 +32,11 @@ message CameraRead {
 
 message PhotosLightboxState {
   string photo_id = 1;
+  // 2 to 4 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 2, 3, 4;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 2;
-    Failure failure = 3;
-    Denied denied = 4;
     PhotosLightboxPhoto photo = 5;
   }
   // CHROME IS A STATE, NOT AN ANIMATION: a member who put the bars away and
@@ -70,6 +72,10 @@ message PhotosLightboxState {
   PhotosLightboxWords words = 23;
   // THE PEOPLE PICKER (#1173): who is in the photograph, picked by name. Open while the sheet is up.
   LinkPicker people_picker = 24;
+  // The picker over the "Linked to" section, while it is up (#1185). The kit's generic picker,
+  // over every kind (the people picker above is people only).
+  optional LinkPicker link_picker = 26;
+  PageState page = 25;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -138,6 +144,20 @@ message PhotosLightboxPhoto {
   string spoken = 25;
   // "People in this photo" (#1173): who the member says is in it, by hand. Nothing recognises a face.
   LinkSection people = 26;
+  // "Earlier versions   2 ›" at the foot of the details (#1185); absent when there are none.
+  optional EarlierEntry earlier = 27;
+  // Where it came from, under the Earlier versions entry (#1185). Absent for a typed item.
+  optional OriginLine origin = 28;
+  // "Linked to" (#1185): every item the photograph is linked to, from either end, with the add
+  // row. The kit's shared section, after "People in this photo". Absent while what it is linked to
+  // was not read, and on a photograph in the trash. Its events go back as
+  // `PhotosLightboxEvent.link`.
+  optional LinkSection links = 29;
+  // The attachments (#1185): the photos and files on this photograph, with Add photo and Add file.
+  // The kit's shared section (`AgendaAttachmentsSection`), after "People in this photo" and before
+  // "Linked to", on a photograph that is not in the trash. Its events go back as
+  // `PhotosLightboxEvent.attachment`.
+  AgendaAttachmentsSection attachments = 30;
 }
 
 message PhotosLightboxFact {
@@ -282,6 +302,12 @@ message PhotosLightboxEvent {
     ConfirmDismissed confirm_dismissed = 16;
     // The people section's and picker's events (#1173).
     LinkEvent people = 17;
+    // The "Linked to" section and its picker (#1185): the kit's `LinkEvent`.
+    LinkEvent link = 19;
+    // The attachments section's events (#1185): the kit's `AgendaAttachmentEvent`.
+    AgendaAttachmentEvent attachment = 20;
+    // The status line's Undo after Move to trash: restores the photograph.
+    StatusActed status_acted = 18;
   }
 
   message Refreshed {}
@@ -332,6 +358,8 @@ message PhotosLightboxEvent {
   message Confirmed {}
 
   message ConfirmDismissed {}
+
+  message StatusActed {}
 }
 
 // ---------------------------------------------------------------------------
@@ -404,10 +432,11 @@ message PhotosEditorState {
   string photo_id = 1;
   // "Crop and rotate".
   string title = 2;
+  // 3 to 5 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 3, 4, 5;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 3;
-    Failure failure = 4;
-    Denied denied = 5;
     PhotosEditorData data = 6;
   }
   Phase phase = 7;
@@ -434,6 +463,7 @@ message PhotosEditorState {
   PhotosEditorWords words = 19;
   // The slider's reach each way, in whole degrees (15): it runs from minus this to plus this.
   uint32 straighten_limit = 20;
+  PageState page = 21;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;

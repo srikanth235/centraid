@@ -5,21 +5,15 @@ use wire::chat_state::Phase;
 
 use super::model::{Chat, Msg, Pending, Proposal, Row, Stage, VisionPhase};
 use super::when;
+use crate::kit::quantity::{Quantity, UnitsPref};
 use crate::screen::Ctx;
 use crate::strings::{Locale, chat as words, fill};
 
 fn size_text(bytes: u64) -> String {
-    const MEGABYTE: u64 = 1_000_000;
-    const GIGABYTE: u64 = 1_000_000_000;
     if bytes == 0 {
         return String::new();
     }
-    if bytes >= GIGABYTE {
-        let tenths = (bytes * 10 + GIGABYTE / 2) / GIGABYTE;
-        format!("{}.{} GB", tenths / 10, tenths % 10)
-    } else {
-        format!("{} MB", ((bytes + MEGABYTE / 2) / MEGABYTE).max(1))
-    }
+    Quantity::bytes(i64::try_from(bytes).unwrap_or(i64::MAX)).words(Locale::En, UnitsPref::Metric)
 }
 
 fn percent(locale: Locale, progress: Option<f32>) -> String {

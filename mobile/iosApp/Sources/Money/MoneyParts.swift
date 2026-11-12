@@ -30,122 +30,76 @@ enum MoneyWords {
     }
 }
 
-// MARK: - The read law, per state
+// MARK: - The data a read landed
 
 extension Centraid_Core_V1_MoneyHomeState {
-    var readContent: ScreenContent<Centraid_Core_V1_MoneyHomeData> {
-        switch content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
-        case let .denied(denied)?: return .denied(denied)
-        case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
-        }
+    /// The data, once the read has landed (the page's own state draws loading, failure, the gate and empty).
+    var loaded: Centraid_Core_V1_MoneyHomeData? {
+        if case let .data(data)? = content { return data }
+        return nil
     }
 }
 
 extension Centraid_Core_V1_MoneyTransactionState {
-    var readContent: ScreenContent<Centraid_Core_V1_MoneyTransactionData> {
-        switch content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
-        case let .denied(denied)?: return .denied(denied)
-        case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
-        }
+    /// The data, once the read has landed (the page's own state draws loading, failure, the gate and empty).
+    var loaded: Centraid_Core_V1_MoneyTransactionData? {
+        if case let .data(data)? = content { return data }
+        return nil
     }
 }
 
 extension Centraid_Core_V1_MoneyTargetState {
-    var readContent: ScreenContent<Centraid_Core_V1_MoneyTargetData> {
-        switch content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
-        case let .denied(denied)?: return .denied(denied)
-        case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
-        }
+    /// The data, once the read has landed (the page's own state draws loading, failure, the gate and empty).
+    var loaded: Centraid_Core_V1_MoneyTargetData? {
+        if case let .data(data)? = content { return data }
+        return nil
     }
 }
 
 extension Centraid_Core_V1_MoneyRecurringState {
-    var readContent: ScreenContent<Centraid_Core_V1_MoneyRecurringData> {
-        switch content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
-        case let .denied(denied)?: return .denied(denied)
-        case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
-        }
+    /// The data, once the read has landed (the page's own state draws loading, failure, the gate and empty).
+    var loaded: Centraid_Core_V1_MoneyRecurringData? {
+        if case let .data(data)? = content { return data }
+        return nil
     }
 }
 
 extension Centraid_Core_V1_MoneyImportState {
-    var readContent: ScreenContent<Centraid_Core_V1_MoneyImportData> {
-        switch content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
-        case let .denied(denied)?: return .denied(denied)
-        case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
-        }
+    /// The data, once the read has landed (the page's own state draws loading, failure, the gate and empty).
+    var loaded: Centraid_Core_V1_MoneyImportData? {
+        if case let .data(data)? = content { return data }
+        return nil
     }
 }
 
 extension Centraid_Core_V1_MoneyAccountsState {
-    var readContent: ScreenContent<Centraid_Core_V1_MoneyAccountsData> {
-        switch content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
-        case let .denied(denied)?: return .denied(denied)
-        case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
-        }
+    /// The data, once the read has landed (the page's own state draws loading, failure, the gate and empty).
+    var loaded: Centraid_Core_V1_MoneyAccountsData? {
+        if case let .data(data)? = content { return data }
+        return nil
     }
 }
 
 extension Centraid_Core_V1_MoneyRulesState {
-    var readContent: ScreenContent<Centraid_Core_V1_MoneyRulesData> {
-        switch content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
-        case let .denied(denied)?: return .denied(denied)
-        case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
-        }
+    /// The data, once the read has landed (the page's own state draws loading, failure, the gate and empty).
+    var loaded: Centraid_Core_V1_MoneyRulesData? {
+        if case let .data(data)? = content { return data }
+        return nil
     }
 }
 
 extension Centraid_Core_V1_MoneyCategoriesState {
-    var readContent: ScreenContent<Centraid_Core_V1_MoneyCategoriesData> {
-        switch content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
-        case let .denied(denied)?: return .denied(denied)
-        case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
-        }
+    /// The data, once the read has landed (the page's own state draws loading, failure, the gate and empty).
+    var loaded: Centraid_Core_V1_MoneyCategoriesData? {
+        if case let .data(data)? = content { return data }
+        return nil
     }
 }
 
 extension Centraid_Core_V1_MoneySearchState {
-    /// `resting` is a fifth arm the search page draws before the read: it is not
-    /// a read, so it maps to loading here and the page checks it first.
-    var readContent: ScreenContent<Centraid_Core_V1_MoneySearchData> {
-        switch content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
-        case let .denied(denied)?: return .denied(denied)
-        case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
-        }
-    }
-}
-
-extension ScreenContent {
-    /// The data, when the read has landed.
-    var loaded: Value? {
-        if case let .data(value) = self { return value }
+    /// The data, once the read has landed (the page's own state draws loading, failure, the gate and empty).
+    var loaded: Centraid_Core_V1_MoneySearchData? {
+        if case let .data(data)? = content { return data }
         return nil
     }
 }
@@ -544,12 +498,14 @@ struct MoneyFormSheet<Content: View>: View {
 struct MoneyStatusFoot: View {
     let status: Centraid_Core_V1_StatusLine
     var identifier: String = "money-status"
+    /// The line's action (Undo after Move to trash): the page's own event, else the kit's.
+    var onAct: (() -> Void)? = nil
 
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         if !status.sentence.isEmpty {
-            StatusLineView(status: status, identifier: identifier) {}
+            StatusLineView(status: status, identifier: identifier, onAct: onAct)
                 .padding(.vertical, 4)
                 .background(Theme.color("bg", scheme))
         }

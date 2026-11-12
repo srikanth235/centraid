@@ -400,6 +400,7 @@ fn a_tapped_card_opens_its_row_and_a_card_whose_row_is_gone_says_so() {
             )]
             .into(),
             invoke_key: format!("test:gone:{n}"),
+            autosave: false,
         });
         assert_eq!(
             done.status,
@@ -520,7 +521,7 @@ fn photos_picker_with_the_attach_purpose_hands_its_pick_to_the_chat() {
     let cells = match &chat.driver.view(picker).kind {
         Some(wire::view_state::Kind::PhotosPicker(state)) => match &state.content {
             Some(wire::photos_picker_state::Content::Data(data)) => data.cells.clone(),
-            other => panic!("{other:?}"),
+            None => panic!("{:?}", state.page),
         },
         other => panic!("{other:?}"),
     };

@@ -14,6 +14,7 @@ struct TodoDetailView: View {
     let send: (Centraid_Core_V1_TodoDetailEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
     let onClose: () -> Void
+    let onPhoneSays: (Centraid_Core_V1_PhoneSaysTaken) -> Void
 
     /// THE ONLY PLACE A KEYSTROKE EXISTS BEFORE THE MACHINE HEARS IT —
     /// seeded once from the draft, never re-seeded (`NotesEditorView`'s rule).
@@ -44,14 +45,13 @@ struct TodoDetailView: View {
                 }
             }
         } content: {
-            if case let .gone(gone)? = state.content {
-                EmptyStateView(gone, onAction: onClose)
-            } else {
-                ReadStateView(
-                    content: readContent(state),
-                    loadingLabel: state.chrome.loading,
-                    onRetry: { send(event { $0.refreshed = .init() }) }
-                ) { detail in
+            // THE TASK'S READ (#1185): a task that is gone is the page's failure, in its own words.
+            PageReadStateView(
+                page: state.page,
+                loadingLabel: state.chrome.loading,
+                onRetry: { send(event { $0.refreshed = .init() }) }
+            ) {
+                if case let .data(detail)? = state.content {
                     editor(detail, state: state)
                 }
             }
@@ -95,6 +95,7 @@ struct TodoDetailView: View {
                 onDismiss: { send(event { $0.dismissed = .init() }) }
             )
         }
+        .linkPickerSheet(state.linkPicker) { link in send(event { $0.link = link }) }
         // THE TASK LEFT — deleted, or gone from the vault: the view pops.
         .onChange(of: state.finished) { _, finished in
             if finished { onClose() }
@@ -104,16 +105,6 @@ struct TodoDetailView: View {
     private func hasCustomRepeat(_ state: Centraid_Core_V1_TodoDetailState) -> Bool {
         if case let .data(detail)? = state.content { return detail.hasCustomRepeat }
         return false
-    }
-
-    private func readContent(_ state: Centraid_Core_V1_TodoDetailState) -> ScreenContent<Centraid_Core_V1_TodoDetailData> {
-        switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        case .gone?, nil: return .loading(true)
-        }
     }
 
     @ViewBuilder
@@ -156,6 +147,8 @@ struct TodoDetailView: View {
                         guard seeded, typed != detail.draft.notes else { return }
                         send(event { $0.notes = .with { $0.notes = typed } })
                     }
+                // WHAT THE PHONE'S REMINDERS SAY DIFFERENTLY (#1185), each with its "Use phone's".
+                PhoneSaysLines(lines: state.phoneSays, onTake: onPhoneSays)
                 KitHairline()
                 // THE GROUPED CARDS (#1173): a field with a `group` opens a new card under that heading.
                 ForEach(Self.cards(detail.fields), id: \.id) { card in
@@ -187,7 +180,20 @@ struct TodoDetailView: View {
                         send: { attachment in send(event { $0.attachment = attachment }) }
                     )
                 }
+                // LINKED TO (#1185): the kit's section, after the attachments; Rust makes every word and row.
+                if detail.hasLinks {
+                    LinkSectionView(section: detail.links, send: { link in
+                        send(event { $0.link = link })
+                    }, open: open)
+                }
+                // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the foot actions.
+                EarlierEntryRow(entry: state.hasEarlier ? state.earlier : nil, open: open)
+                OriginLineView(line: state.hasOrigin ? state.origin : nil)
                 HStack(spacing: 12) {
+                    if !detail.shareLabel.isEmpty {
+                        KitOutlineButton(label: detail.shareLabel) { send(event { $0.shareRequested = .init() }) }
+                            .accessibilityIdentifier("tasks-share")
+                    }
                     if !detail.deleteLabel.isEmpty {
                         KitOutlineButton(label: detail.deleteLabel, tone: "net") { send(event { $0.delete = .init() }) }
                             .accessibilityIdentifier("tasks-delete")

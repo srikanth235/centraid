@@ -35,7 +35,7 @@ use super::reading::{self, Destination, Standing};
 use super::rule::{self, TransferRule};
 use super::{apps, line, routes};
 use crate::custody::secrets::{self, SeedWrite, VaultSecrets};
-use crate::kit::read::{Reading, failure};
+use crate::kit::read::{Note, Page, Reading};
 use crate::pairing::discovery::Rediscovery;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, backup as words, backup_home, fill};
@@ -92,6 +92,8 @@ struct Backup {
     standing: Option<Standing>,
     /// The first read did not come back.
     failed: bool,
+    /// A re-read failed over what is shown: the page says so in one sentence (#1185).
+    refresh_failed: bool,
     /// What this phone keeps: the first answer has come (or the shell could not
     /// give it), so the controls are drawn from it and not from defaults.
     settled: bool,
@@ -123,6 +125,7 @@ impl Backup {
             secrets,
             standing: None,
             failed: false,
+            refresh_failed: false,
             settled: false,
             rule: TransferRule::default(),
             include_videos: true,
@@ -146,10 +149,14 @@ impl Backup {
             Reading::Data(standing) => {
                 self.standing = Some(standing);
                 self.failed = false;
+                self.refresh_failed = false;
             }
-            // A REFRESH THAT FAILS KEEPS WHAT WAS READ; a first read that fails
+            // A REFRESH THAT FAILS KEEPS WHAT WAS READ, under one sentence; a first read that fails
             // is a failure, never an empty reading.
-            _ => self.failed = self.standing.is_none(),
+            _ => {
+                self.failed = self.standing.is_none();
+                self.refresh_failed = self.standing.is_some();
+            }
         }
     }
 
@@ -886,16 +893,30 @@ impl Screen for Backup {
     }
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
-        let body = if self.failed {
-            wire::backup_home_state::Body::Failure(failure(ctx.locale()))
-        } else if self.standing.is_none() || !self.settled {
-            wire::backup_home_state::Body::Loading(wire::Loading { first_load: true })
+        let locale = ctx.locale();
+        let ready = !self.failed && self.standing.is_some() && self.settled;
+        let body = ready.then(|| wire::backup_home_state::Body::Data(Box::new(self.data(ctx))));
+        // THE READ (#1185): the core's ledger has no gate, so it is loading, failed, or ready (with
+        // the one sentence when a refresh failed over what is shown).
+        let page = if self.failed {
+            Page::<()>::Failed
+        } else if ready {
+            Page::Ready {
+                data: (),
+                note: self.refresh_failed.then(|| Note::refresh_failed(locale)),
+            }
         } else {
-            wire::backup_home_state::Body::Data(Box::new(self.data(ctx)))
-        };
+            Page::loading()
+        }
+        .wire(
+            locale,
+            |_| wire::Denied::default(),
+            wire::EmptyState::default,
+        );
         wire::ViewState {
             kind: Some(wire::view_state::Kind::BackupHome(wire::BackupHomeState {
-                body: Some(body),
+                body,
+                page: Some(page),
             })),
             ..Default::default()
         }

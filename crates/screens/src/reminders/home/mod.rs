@@ -23,17 +23,19 @@ use wire::agenda_home_state::Sheet;
 use wire::screen_event::Kind as E;
 
 use self::held::Held;
+use crate::catalog::act;
+use crate::kit::act as kit_act;
+use crate::kit::read::Page;
 use crate::kit::schedule::natural::{Chipper, Fields};
 use crate::kit::schedule::ops::Ops;
-use crate::kit::schedule::phase::Phase;
 use crate::kit::schedule::rows;
 use crate::kit::schedule::style::{Draft, Subject};
 use crate::reminders::ops::NewTask;
-use crate::reminders::quick::Quick;
+use crate::reminders::quick::{Picked, Quick};
 use crate::reminders::view::Prefs;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
-    agenda as words, agenda_home as sentences, agenda_reminders as reminders, fill, task,
+    agenda as words, agenda_home as sentences, agenda_reminders as reminders, fill, shared, task,
 };
 
 /// The quick-add bar: a bare title that lands in the Inbox.
@@ -50,12 +52,23 @@ struct QuickAdd {
 }
 
 pub(super) struct Home {
-    phase: Phase,
+    /// The read of the place on screen (the lists, or what a term found). A search that matched
+    /// nothing is [`Page::Empty`]; the lists themselves always have the smart lists and the Inbox
+    /// to show, so the home's own "nothing waiting" sentence stays inside its data.
+    page: Page<()>,
+    /// What `page` was asked for: data read for another place or term is not shown under a failed
+    /// read of this one.
+    asked: String,
     /// The day the core last named as today.
     today: String,
     search_open: bool,
     search_term: String,
     sheet: Sheet,
+    /// The stop confirm is up.
+    asking_stop: bool,
+    /// The lists the vault follows from the phone's Reminders (their origin refs), as it stores
+    /// them; `None` until that read has landed (and where the platform has no such store).
+    followed: Option<Vec<String>>,
     /// The Import reminders sheet's option "Include completed reminders"; off each time it opens.
     import_completed: bool,
     filing_task_id: String,
@@ -86,11 +99,14 @@ impl Home {
         let seed = args.quick_add_title.trim().to_owned();
         let bar = !seed.is_empty() || args.open_quick_add;
         Self {
-            phase: Phase::Loading,
+            page: Page::loading(),
+            asked: String::new(),
             today: String::new(),
             search_open: false,
             search_term: String::new(),
             sheet: Sheet::None,
+            asking_stop: false,
+            followed: None,
             import_completed: false,
             filing_task_id: String::new(),
             style: None,
@@ -115,7 +131,7 @@ impl Home {
     }
 
     fn denied(&self) -> bool {
-        matches!(self.phase, Phase::Denied(_))
+        matches!(self.page, Page::Refused(_))
     }
 
     /// A pull, or a row moved: the held answers are stale whatever search is
@@ -123,6 +139,10 @@ impl Home {
     fn refresh(&mut self, ctx: &Ctx) {
         self.invalidate();
         self.read(ctx);
+        // THE STOP SLOT reads what the vault stores, so a cold start says the right thing.
+        if ctx.reminders_source() {
+            self.followed = crate::imports::reminders::followed_lists(ctx);
+        }
     }
 
     fn close_search(&mut self) {
@@ -217,7 +237,9 @@ impl Home {
             // THE KEYBOARD LEFT IT: an empty bar goes away; typed words keep it
             // open, so nothing the member wrote is thrown away.
             H::QuickAddClosed(_) => {
-                if self.quick.title.trim().is_empty() {
+                // A picker taking the keyboard, or a link or photo staged, is not the member
+                // leaving: the staging would be lost with the bar.
+                if self.quick.title.trim().is_empty() && !self.quick.staged.holds_more() {
                     self.shut_quick_add();
                 }
             }
@@ -253,20 +275,24 @@ impl Home {
             }
             // THE SWIPE'S DELETE: to the trash, with Undo.
             H::TaskDeleted(deleted) => {
-                if self.held.find(&deleted.task_id).is_some() {
-                    self.ops.delete(ctx, &deleted.task_id);
+                if let Some(task) = self.held.find(&deleted.task_id) {
+                    self.ops.delete(ctx, &deleted.task_id, &task.title);
                     self.refresh(ctx);
                 }
             }
             // THE KEYBOARD TOOLBAR (#1173): drawn over the bar only.
-            H::QuickTool(picked) if self.toolbar_up() => self.quick.staged.pick_tool(&picked.key),
+            // LINK AND PHOTO: the kit's picker and the phone's, staged until Return adds the task.
+            H::QuickLink(link) if self.toolbar_up() => self.quick.staged.link_event(ctx, &link),
+            H::QuickStagedRemoved(removed) if self.toolbar_up() => {
+                self.quick.staged.remove_staged(&removed.key);
+            }
             H::QuickDue(picked) if self.toolbar_up() => self.quick.staged.pick_due(&picked.key),
             H::QuickTag(added) if self.toolbar_up() => self.quick.staged.add_tag(&added.text),
             H::NextPage(_) => {
                 if self.limit < rows::MAX_WINDOW {
                     self.limit = (self.limit + rows::PAGE).min(rows::MAX_WINDOW);
                     self.held.todo = false;
-                    self.read(ctx);
+                    self.read_wider(ctx);
                 }
             }
             // Calendar's gestures: a days-and-hours home Reminders does not have.
@@ -282,9 +308,14 @@ impl Home {
         };
         if row.key == chrome::MORE_READS {
             self.sheet = Sheet::Reads;
-        } else if row.key == chrome::MORE_IMPORT_REMINDERS {
+        } else if row.key == chrome::MORE_TURN_ON {
+            // The sheet's verb asks the phone for the permission, so the ask comes at that moment.
             self.import_completed = false;
             self.sheet = Sheet::ImportReminders;
+        } else if row.key == chrome::MORE_STOP {
+            // The one row with no route: it asks before it stops.
+            self.asking_stop = true;
+            self.sheet = Sheet::None;
         } else if chrome::TASK_PLACES.contains(&row.key.as_str()) {
             // A PLACE IS A PAGE: the sheet closes, and the shell pushes the row's route.
             self.sheet = Sheet::None;
@@ -359,9 +390,12 @@ impl Home {
                 ..Fields::default()
             }
         };
+        let links = self.quick.staged.links();
         let new = NewTask {
             tags: self.quick.staged.tags(),
             flagged: self.quick.staged.flagged(),
+            links: &links,
+            photos: self.quick.staged.photos(),
             ..NewTask::dated(&fields)
         };
         if self.ops.add_full(ctx, &new, &inbox).is_some() {
@@ -432,7 +466,39 @@ impl Home {
         if self.denied() {
             return Vec::new();
         }
-        chrome::more_rows(ctx.locale(), ctx.reminders_source())
+        chrome::more_rows(ctx.locale(), ctx.reminders_source(), self.following())
+    }
+
+    /// Whether the vault follows the phone's Reminders, as it stores it; `None` while unknown.
+    fn following(&self) -> Option<bool> {
+        self.followed.as_ref().map(|lists| !lists.is_empty())
+    }
+
+    /// STOP READING, once the member said so: every list the passes followed is retired
+    /// (`stop-following`, the same door chat uses), the habit is forgotten and the status line says
+    /// what happened. **Every task stays**, an ordinary one from now on.
+    fn stop(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
+        let locale = ctx.locale();
+        if !std::mem::take(&mut self.asking_stop) {
+            return Vec::new();
+        }
+        let mut clean = true;
+        for origin in self.followed.clone().unwrap_or_default() {
+            let request = act::reminders::StopFollowing {
+                r#ref: origin.clone(),
+            };
+            let key = kit_act::key(&["stop-following", &origin], kit_act::fresh());
+            // undo-exempt: Stop reading asks first and is itself the Undo of a follow; the row
+            // offers "Turn on" again, so no line of its own takes it back.
+            clean = kit_act::act(ctx, request, &key).committed && clean;
+        }
+        if !clean {
+            self.ops.line.refuse(shared::write_refused(locale));
+            return Vec::new();
+        }
+        self.ops.say(reminders::reminders_stopped(locale));
+        self.refresh(ctx);
+        vec![crate::imports::reminders::habit_clear()]
     }
 
     /// Whether the Filter and sort menu is on the page: with its list showing.
@@ -452,7 +518,15 @@ impl Screen for Home {
                 self.refresh(ctx);
                 return self.prefs.ask().into_iter().collect();
             }
-            Some(E::EnvironmentChanged(_) | E::DataChanged(_)) => self.refresh(ctx),
+            Some(E::EnvironmentChanged(_) | E::DataChanged(_)) => {
+                self.refresh(ctx);
+                // THE EDITOR ABOVE CLOSED: its line and Undo are drawn here.
+                self.ops.line.take_handed(ctx);
+            }
+            Some(E::StatusActed(_)) => {
+                self.ops.undo(ctx);
+                self.refresh(ctx);
+            }
             Some(E::AgendaHome(home)) => match home.kind {
                 Some(H::FilterMenuPicked(picked)) if self.menu_offered() => {
                     let mut options = self.prefs.options;
@@ -467,12 +541,24 @@ impl Screen for Home {
                     }
                 }
                 Some(H::FilterMenuPicked(_) | H::FilterMenuCleared(_)) => {}
+                // A KEY OF THE TOOLBAR may need the phone (the Photo key's picker).
+                Some(H::QuickTool(picked)) if self.toolbar_up() => {
+                    return self.quick.staged.press(&picked.key);
+                }
+                Some(H::StopConfirmed(_)) => return self.stop(ctx),
+                Some(H::StopDismissed(_)) => self.asking_stop = false,
                 Some(kind) => self.on_event(kind, ctx),
                 None => {}
             },
             Some(E::EffectResult(result)) => {
                 // THE CHOICE'S OWN ANSWER.
-                self.prefs.answers(&result);
+                if !self.prefs.answers(&result)
+                    && let Some(outcome) = &result.outcome
+                    && let Picked::Refused(sentence) =
+                        self.quick.staged.answer(ctx.locale(), outcome)
+                {
+                    self.ops.line.refuse(sentence);
+                }
             }
             _ => {}
         }
@@ -482,30 +568,33 @@ impl Screen for Home {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
         let denied = self.denied();
-        let data = match self.phase {
-            Phase::Ready => self.data(ctx),
-            _ => None,
+        let ready = matches!(self.page, Page::Ready { .. });
+        let data = if ready { self.data(ctx) } else { None };
+        // A ready page with nothing to draw is a failure, never a blank.
+        let page = if ready && data.is_none() {
+            Page::Failed
+        } else {
+            self.page.clone()
         };
+        let on_page = matches!(page, Page::Ready { .. } | Page::Empty);
         let searching = self.active_term().is_some();
-        let content = match &self.phase {
-            Phase::Loading => Some(wire::agenda_home_state::Content::Loading(wire::Loading {
-                first_load: true,
-            })),
-            Phase::Denied(denial) => Some(wire::agenda_home_state::Content::Denied(wire::Denied {
+        let content = data
+            .clone()
+            .map(|data| wire::agenda_home_state::Content::Data(Box::new(data)));
+        // A search that matched nothing is the page's empty state, with its own sentence.
+        let page = page.wire(
+            locale,
+            |denial| wire::Denied {
                 title: words::denied_title(locale),
                 body: words::denied_body(locale),
                 receipt: denial.code.clone().unwrap_or_default(),
-            })),
-            Phase::Failed => Some(wire::agenda_home_state::Content::Failure(
-                crate::kit::read::failure(locale),
-            )),
-            Phase::Ready => match data.clone() {
-                Some(data) => Some(wire::agenda_home_state::Content::Data(Box::new(data))),
-                None => Some(wire::agenda_home_state::Content::Failure(
-                    crate::kit::read::incomplete(locale),
-                )),
             },
-        };
+            || wire::EmptyState {
+                headline: words::empty_no_match(locale),
+                body: words::empty_no_match_body(locale),
+                ..wire::EmptyState::default()
+            },
+        );
         let term = self.active_term();
         let held_search = term.is_some() && self.held.search.is_some();
         let corrected = if held_search {
@@ -549,18 +638,18 @@ impl Screen for Home {
                     more_rows: if denied {
                         Vec::new()
                     } else {
-                        chrome::more_rows(locale, ctx.reminders_source())
+                        chrome::more_rows(locale, ctx.reminders_source(), self.following())
                     },
                     search_corrected: corrected,
                     // THE ASK ROW: for the answer to the term on screen, matched or not.
-                    search_ask_row: (held_search && data.is_some()).then(|| {
+                    search_ask_row: (held_search && on_page).then(|| {
                         crate::kit::search::offer(
                             locale,
                             term.as_deref().unwrap_or_default(),
                             "reminders",
                         )
                     }),
-                    status: self.ops.status.clone(),
+                    status: self.ops.status(),
                     quick_add: Some({
                         let mut bar = wire::TodoQuickAdd {
                             title: self.quick.title.clone(),
@@ -605,7 +694,18 @@ impl Screen for Home {
                     add_label: task::add_task(locale),
                     add_opens_quick_add: true,
                     new_event: None,
+                    // THE STOP CONFIRM (#1185): the kit's sheet, in the shared words.
+                    stop: (self.asking_stop && !denied && ctx.reminders_source()).then(|| {
+                        crate::kit::follow::stop_confirm(
+                            locale,
+                            &reminders::reminders_title(locale),
+                            &reminders::phone_reminders(locale),
+                            &reminders::reminders_kept(locale),
+                        )
+                    }),
                     content,
+                    page: Some(page),
+                    import_label: String::new(),
                 },
             ))),
             ..wire::ViewState::default()

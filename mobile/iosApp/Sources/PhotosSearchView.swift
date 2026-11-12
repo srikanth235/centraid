@@ -23,20 +23,16 @@ struct PhotosSearchBody: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                switch search.content {
-                case let .resting(resting)?:
-                    RestingView(resting: resting, send: send, open: open)
-                case .loading?:
-                    RowSkeleton()
-                case let .failure(failure)?:
-                    ScreenFailureView(sentence: failure.sentence, remedy: failure.remedy)
-                case let .hits(hits)?:
-                    if hits.hasEmpty {
-                        // NOTHING MATCHED IS NOT NOTHING TYPED. Rust quotes the query
-                        // back and says everywhere search looked.
-                        EmptyStateView(hits.empty)
-                            .accessibilityIdentifier("photos-search-no-match")
-                    } else {
+                PageReadStateView(
+                    page: search.page,
+                    onRetry: { send(PhotosHomeEvents.make { $0.refreshed = .init() }) }
+                ) {
+                    switch search.content {
+                    case let .resting(resting)?:
+                        RestingView(resting: resting, send: send, open: open)
+                    case let .hits(hits)?:
+                        // NOTHING MATCHED is the page's Empty state (Rust quotes the query back
+                        // and says everywhere search looked); hits are only ever something.
                         // THE DOORS FIRST (v0 §9: "each one tap from the surface that
                         // owns it"), then why the grid matched, then the grid.
                         ForEach(Array(hits.doors.enumerated()), id: \.offset) { _, door in
@@ -57,9 +53,19 @@ struct PhotosSearchBody: View {
                             onTap: { photoID in open(PhotosHomeEvents.lightbox(hits.open, photoID)) },
                             onFetch: { photoID, _ in send(PhotosHomeEvents.make { $0.originalRequested = photoID }) }
                         )
+                        // PHOTOGRAPHS FOUND ONLY BY WHAT THEY SAID BEFORE (#1185): a tile has no
+                        // line to say so, so each is a row under the grid, and a tap opens that
+                        // photograph's Earlier versions.
+                        if !hits.earlier.isEmpty {
+                            VStack(alignment: .leading, spacing: 0) {
+                                ForEach(hits.earlier, id: \.tile.photoID) { row in
+                                    EarlierPhotoRow(row: row, open: open)
+                                }
+                            }
+                        }
+                    case nil:
+                        EmptyView()
                     }
-                case nil:
-                    EmptyView()
                 }
                 // THE ASK ROW closes the answer, matched or not (#1135).
                 if search.hasAsk { SearchAskRow(ask: search.ask, inset: false) }
@@ -107,6 +113,51 @@ private struct DoorRow: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(door.accessibilityLabel)
+        .accessibilityAddTraits(.isButton)
+    }
+}
+
+/// One photograph the words matched only in an earlier version of it: its thumbnail, its title and
+/// the line "In an earlier version". A tap opens that photograph's Earlier versions.
+private struct EarlierPhotoRow: View {
+    let row: Centraid_Core_V1_PhotosEarlierRow
+    let open: (Centraid_Core_V1_Route) -> Void
+    @Environment(\.colorScheme) private var scheme
+
+    private var path: String? {
+        row.tile.hasThumbnailPath && !row.tile.thumbnailPath.isEmpty ? row.tile.thumbnailPath : nil
+    }
+
+    var body: some View {
+        Button {
+            open(row.route)
+        } label: {
+            HStack(spacing: 12) {
+                Theme.color("skel", scheme)
+                    .frame(width: 52, height: 52)
+                    .overlay {
+                        if let path { ContentImage(path: path) }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(row.title)
+                        .centraidType("body")
+                        .foregroundStyle(Theme.color("text", scheme))
+                        .lineLimit(1)
+                    Text(row.line)
+                        .centraidType("small")
+                        .foregroundStyle(Theme.color("textSoft", scheme))
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                CentraidIconView(iconKey: "ChevronRight", tint: Theme.color("textFaint", scheme))
+            }
+            .frame(minHeight: CentraidGeometry.targetMinCoarse)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(row.accessibilityLabel)
         .accessibilityAddTraits(.isButton)
     }
 }

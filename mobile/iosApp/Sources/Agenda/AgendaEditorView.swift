@@ -61,16 +61,14 @@ struct AgendaEditorView: View {
                 .accessibilityIdentifier("agenda-editor-save")
             }
         } content: {
-            if case let .gone(gone)? = state.content {
-                EmptyStateView(headline: gone.title, body: gone.body, actionLabel: gone.actionLabel, onAction: onDone)
-                    .accessibilityIdentifier("agenda-editor-gone")
-            } else {
-                ReadStateView(
-                    content: readContent(state),
-                    loadingLabel: chrome.loading,
-                    onRetry: { send(event { $0.refreshed = .init() }) }
-                ) { editor in
-                    form(editor, state: state)
+            // THE READ IS THE KIT'S PAGE STATE (#1185): a task or event that is gone is its final failure.
+            PageReadStateView(
+                page: state.page,
+                loadingLabel: chrome.loading,
+                onRetry: { send(event { $0.refreshed = .init() }) }
+            ) {
+                if let editorData {
+                    form(editorData, state: state)
                 }
             }
         }
@@ -94,16 +92,6 @@ struct AgendaEditorView: View {
         // SAVED, SKIPPED, OR LEFT WITH NOTHING TO LOSE: the editor is done.
         .onChange(of: state.dismissed) { _, dismissed in
             if dismissed { onDone() }
-        }
-    }
-
-    private func readContent(_ state: Centraid_Core_V1_AgendaEditorState) -> ScreenContent<Centraid_Core_V1_AgendaEditorData> {
-        switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        case .gone?, nil: return .loading(true)
         }
     }
 
@@ -226,6 +214,10 @@ struct AgendaEditorView: View {
                             identifier: "agenda-editor-reminder"
                         ) {
                             send(event { $0.sheetOpened = .with { $0.sheet = .reminder } })
+                        }
+                        // AN ALERT NEEDS A TIME: Rust says when the event has none.
+                        if !editor.reminderNote.isEmpty {
+                            note(editor.reminderNote)
                         }
                         // THE SECOND ALERT waits for the first: Rust says when it is drawn.
                         if editor.showSecondReminder {

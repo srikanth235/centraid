@@ -27,6 +27,7 @@ use centraid_core::screens::{ScreenCtx, ScreenHost};
 use centraid_core::{CoreError, Result};
 use prost::Message;
 
+use crate::kit::undo::Handed;
 use crate::registry::Registry;
 use crate::screen::{Ctx, Environment, Screen, TimerOp};
 use crate::strings::Locale;
@@ -56,6 +57,17 @@ struct Tab {
 pub type BandFn = fn(Locale, &[String], &str) -> wire::ShellBand;
 
 struct State {
+    /// The Undo line a page left as it closed, and which page left it (`Undo::hand_down`). It
+    /// lives until the pop that closes that page, or the next navigation of any other kind.
+    handed: Option<(u64, Handed)>,
+    /// The line being handed to one screen during the event the runtime sends it after a pop.
+    handing: Option<(u64, Handed)>,
+    /// A line a page left for the page the shell opens next (`Undo::hand_onward`), and which page
+    /// left it: it lives until the next push takes it. A pop that does not close that page, a tab
+    /// change or any other navigation drops it.
+    onward: Option<(u64, Handed)>,
+    /// What the screens and the follow coordinator tell one another (`crate::follow`).
+    follows: crate::follow::Follows,
     band: Option<BandFn>,
     next_instance: u64,
     next_effect: u64,
@@ -68,6 +80,8 @@ struct State {
     jobs: BTreeMap<u64, (u64, String)>,
     next_job: u64,
     env: Environment,
+    /// Where the member's units choice is read from before every update (`kit::quantity::stored`).
+    units: Option<crate::custody::secrets::VaultSecrets>,
     started: bool,
     /// The vault the open tabs were made for. A shelf whose foreground is
     /// another is a switch the tabs have not followed yet (see
@@ -113,6 +127,10 @@ impl Runtime {
             roots,
             services: Vec::new(),
             state: Mutex::new(State {
+                handed: None,
+                handing: None,
+                onward: None,
+                follows: crate::follow::Follows::default(),
                 band: None,
                 next_instance: 1,
                 next_effect: 1,
@@ -124,6 +142,7 @@ impl Runtime {
                 jobs: BTreeMap::new(),
                 next_job: 1,
                 env: Environment::default(),
+                units: None,
                 started: false,
                 foreground: None,
                 switch: None,
@@ -143,6 +162,14 @@ impl Runtime {
     #[must_use]
     pub fn with_services(mut self, services: Vec<wire::Route>) -> Self {
         self.services = services;
+        self
+    }
+
+    /// Read the member's units choice (`kit::quantity::stored`) from `secrets`, the phone's
+    /// store, before every update, so any screen's `Ctx::units` sees the live choice.
+    #[must_use]
+    pub fn with_units(self, secrets: &crate::custody::secrets::VaultSecrets) -> Self {
+        self.lock().units = Some(secrets.clone());
         self
     }
 
@@ -294,6 +321,9 @@ impl Runtime {
             .map(|candidate| candidate.stack.clone())
             .unwrap_or_default();
         state.selected = tab.to_owned();
+        // A TAB CHANGE IS NOT A POP: a line a closed page left for the one beneath is dropped.
+        state.handed = None;
+        state.onward = None;
         for id in hidden {
             Self::dispatch(
                 state,
@@ -315,13 +345,29 @@ impl Runtime {
         event: wire::ScreenEvent,
         out: &mut wire::ScreenUpdate,
     ) {
-        let env = state.env.clone();
+        let mut env = state.env.clone();
+        env.units = state.units.as_ref().and_then(crate::kit::quantity::stored);
+        let follows = state.follows.clone();
         let Some(instance) = state.instances.get_mut(&id) else {
             return;
         };
-        let ctx = Ctx::new(core, &env);
+        let handed = state
+            .handing
+            .as_ref()
+            .filter(|(to, _)| *to == id)
+            .map(|(_, handed)| handed.clone());
+        let ctx = Ctx::new(core, &env)
+            .with_follows(follows.clone())
+            .with_handed(handed);
         let effects = instance.screen.update(event, &ctx);
         let done = ctx.finish();
+        if let Some(handed) = done.handed {
+            if handed.onward() {
+                state.onward = Some((id, handed));
+            } else {
+                state.handed = Some((id, handed));
+            }
+        }
         instance.tables.extend(done.tables);
         if let Some(vault_id) = done.switch {
             state.switch = Some(vault_id);
@@ -329,9 +375,32 @@ impl Runtime {
         let Some(instance) = state.instances.get_mut(&id) else {
             return;
         };
+        // THE EFFECTS ARE NUMBERED, AND THE SCREEN TOLD, BEFORE ANYTHING IT POSTED IS DELIVERED:
+        // a post can come straight back to this screen, and its answer to that must not be taken
+        // for the numbering of this update's effects. An effect the runtime keeps for itself has
+        // no number.
+        let kept_by_runtime = |effect: &wire::Effect| match &effect.kind {
+            Some(wire::effect::Kind::VaultCommand(command)) => {
+                !matches!(command.kind, Some(wire::vault_command::Kind::Open(_)))
+                    && core.vaults().is_some()
+            }
+            Some(wire::effect::Kind::SelectTab(_)) => true,
+            _ => false,
+        };
+        let numbers: Vec<Option<u64>> = effects
+            .iter()
+            .map(|effect| {
+                (!kept_by_runtime(effect)).then(|| {
+                    let number = state.next_effect;
+                    state.next_effect += 1;
+                    number
+                })
+            })
+            .collect();
+        instance.screen.effects_numbered(&numbers);
 
         if !instance.service {
-            let view_ctx = Ctx::new(core, &env);
+            let view_ctx = Ctx::new(core, &env).with_follows(follows);
             let mut view = instance.screen.view(&view_ctx);
             view.instance = id;
             view.revision = 0;
@@ -371,13 +440,34 @@ impl Runtime {
                 Self::dispatch(state, core, target, post.clone(), out);
             }
         }
+        if done.redraw_all {
+            let targets: Vec<u64> = state
+                .instances
+                .keys()
+                .copied()
+                .filter(|other| *other != id)
+                .collect();
+            for target in targets {
+                Self::dispatch(
+                    state,
+                    core,
+                    target,
+                    wire::ScreenEvent {
+                        kind: Some(wire::screen_event::Kind::EnvironmentChanged(
+                            wire::EnvironmentChanged {},
+                        )),
+                    },
+                    out,
+                );
+            }
+        }
         for (tag, work) in done.jobs {
             let job = state.next_job;
             state.next_job += 1;
             state.jobs.insert(job, (id, tag));
             core.off_thread(job, work);
         }
-        for effect in effects {
+        for (effect, number) in effects.into_iter().zip(numbers) {
             // WHEN THE CORE IS THE DOOR TO A SHELF, THE SHELF IS RUST'S: a
             // screen's request of it (Home's switch, make, restore, forget and
             // rename) is the shelf service's to perform and never reaches a
@@ -406,8 +496,9 @@ impl Runtime {
                 }
                 continue;
             }
-            let effect_id = state.next_effect;
-            state.next_effect += 1;
+            let Some(effect_id) = number else {
+                continue;
+            };
             out.effects.push(wire::EffectRequest {
                 effect_id,
                 instance: id,
@@ -456,11 +547,27 @@ impl Runtime {
                 .position(|candidate| candidate.id == tab)
                 .ok_or_else(|| Self::bad(format!("there is no tab `{tab}`")))
         };
-        match nav
+        let kind = nav
             .kind
             .as_ref()
-            .ok_or_else(|| Self::bad("an empty navigation event"))?
-        {
+            .ok_or_else(|| Self::bad("an empty navigation event"))?;
+        // THE LINE A CLOSING PAGE LEFT lives for the pop that closes it and for nothing else: any
+        // other navigation drops it, so it never reaches an unrelated screen.
+        if !matches!(kind, N::Popped(_) | N::PopToRoot(_)) {
+            state.handed = None;
+        }
+        // A LINE FOR THE PAGE OPENED NEXT waits for the push that opens it (after the pop that
+        // closes the page that left it, when there is one): the push takes it, a pop that does
+        // not close that page and any other navigation drop it.
+        let onward = match kind {
+            N::Push(_) => state.onward.take().map(|(_, handed)| handed),
+            N::Popped(_) | N::PopToRoot(_) => None,
+            _ => {
+                state.onward = None;
+                None
+            }
+        };
+        match kind {
             N::Push(push) => {
                 let index = tab_index(state, &push.tab)?;
                 let route = push
@@ -470,6 +577,9 @@ impl Runtime {
                 let id = self.open(state, core, route, false, out)?;
                 state.tabs[index].stack.push(id);
                 Self::select(state, core, &push.tab, out);
+                if let Some(handed) = onward {
+                    Self::hand_to(state, core, id, handed, out);
+                }
             }
             N::Popped(popped) => {
                 let index = tab_index(state, &popped.tab)?;
@@ -483,10 +593,9 @@ impl Runtime {
                     return Ok(());
                 };
                 let gone = stack.split_off(at);
-                for id in gone {
-                    Self::leave(state, core, id, out);
-                    Self::close(state, id, out);
-                }
+                Self::close_all(state, core, &gone, out);
+                Self::keep_onward_for(state, &gone);
+                Self::hand_to_top(state, core, index, &gone, out);
             }
             N::SelectTab(select) => {
                 tab_index(state, &select.tab)?;
@@ -495,15 +604,86 @@ impl Runtime {
             N::PopToRoot(pop) => {
                 let index = tab_index(state, &pop.tab)?;
                 let gone = state.tabs[index].stack.split_off(1);
-                for id in gone {
-                    Self::leave(state, core, id, out);
-                    Self::close(state, id, out);
-                }
+                Self::close_all(state, core, &gone, out);
+                Self::keep_onward_for(state, &gone);
+                Self::hand_to_top(state, core, index, &gone, out);
             }
         }
         state.nav_revision += 1;
         out.navigation = Some(Self::navigation(state));
         Ok(())
+    }
+
+    /// Tell each popped screen it is leaving, then drop it.
+    fn close_all(
+        state: &mut State,
+        core: &dyn ScreenCtx,
+        gone: &[u64],
+        out: &mut wire::ScreenUpdate,
+    ) {
+        for id in gone {
+            Self::leave(state, core, *id, out);
+            Self::close(state, *id, out);
+        }
+    }
+
+    /// A POP IS OVER: the line a popped page left (`Undo::hand_down`, in its save or its goodbye)
+    /// goes to the screen now on top of the tab, once, with a `DataChanged` that names no table
+    /// (the page reloads, and takes the line). A line left by any other page, or one the new top
+    /// does not take, is gone after this call.
+    fn hand_to_top(
+        state: &mut State,
+        core: &dyn ScreenCtx,
+        tab: usize,
+        gone: &[u64],
+        out: &mut wire::ScreenUpdate,
+    ) {
+        let Some((from, handed)) = state.handed.take() else {
+            return;
+        };
+        let Some(top) = state.tabs[tab].stack.last().copied() else {
+            return;
+        };
+        if !gone.contains(&from) {
+            return;
+        }
+        Self::hand_to(state, core, top, handed, out);
+    }
+
+    /// A pop closed `gone`: a line left for the page opened next survives only when it was one
+    /// of these pages that left it.
+    fn keep_onward_for(state: &mut State, gone: &[u64]) {
+        if state
+            .onward
+            .as_ref()
+            .is_some_and(|(from, _)| !gone.contains(from))
+        {
+            state.onward = None;
+        }
+    }
+
+    /// Give `handed` to screen `id`, once: a `DataChanged` that names no table (the page reloads
+    /// and takes the line).
+    fn hand_to(
+        state: &mut State,
+        core: &dyn ScreenCtx,
+        id: u64,
+        handed: Handed,
+        out: &mut wire::ScreenUpdate,
+    ) {
+        state.handing = Some((id, handed));
+        Self::dispatch(
+            state,
+            core,
+            id,
+            wire::ScreenEvent {
+                kind: Some(wire::screen_event::Kind::DataChanged(wire::DataChanged {
+                    tables: Vec::new(),
+                })),
+            },
+            out,
+        );
+        state.handing = None;
     }
 
     /// Send `event` to every screen `wants` picks.
@@ -573,6 +753,8 @@ impl Runtime {
             return;
         }
         state.foreground = now;
+        state.handed = None;
+        state.onward = None;
         let mut reopened = Vec::new();
         for tab in 0..state.tabs.len() {
             for id in std::mem::take(&mut state.tabs[tab].stack) {
@@ -716,6 +898,7 @@ impl ScreenHost for Runtime {
                     platform: environment.platform.clone(),
                     library_deletes: environment.library_deletes,
                     hour_cycle_12: environment.hour_cycle_12,
+                    units: None,
                 };
                 // The band's words follow the locale.
                 if state.band.is_some() {

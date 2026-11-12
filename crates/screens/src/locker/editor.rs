@@ -35,12 +35,14 @@ use wire::screen_event::Kind as E;
 use super::generator::{self, Entropy, system_entropy};
 use super::handoff;
 use super::item::PLACEHOLDER;
-use super::shared::{self, Phase};
+use super::shared;
 use super::types::{self, SEED};
 use super::wall::{Change, Wall};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Page, Reading};
+use crate::kit::stale;
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, locker as words};
 
@@ -96,11 +98,17 @@ struct Editor {
     item_id: String,
     adding: bool,
     /// The item as the vault holds it, on EDIT.
-    stored: Phase<wire::LockerItem>,
+    stored: Page<wire::LockerItem>,
+    /// The item has no row any more: the page's final failure, in its own words.
+    gone: bool,
     form: Option<Form>,
+    /// The item's revision when the form was read: what an edit names as the one it replaces
+    /// (#1185). `None` for a new item.
+    rev: Option<i64>,
     confirm_discard: bool,
     finished: bool,
-    status: Option<wire::StatusLine>,
+    /// The status line: a refusal, over the form as it still is (a save ends the sitting).
+    undo: Undo,
 }
 
 impl Editor {
@@ -112,11 +120,13 @@ impl Editor {
             route,
             wall: Wall::default(),
             entropy,
-            stored: Phase::Loading,
+            stored: Page::loading(),
+            gone: false,
             form: None,
+            rev: None,
             confirm_discard: false,
             finished: false,
-            status: None,
+            undo: Undo::default(),
         }
     }
 
@@ -229,6 +239,10 @@ impl Editor {
             }
             return;
         }
+        // The revision first, once per form: a change between the two reads refuses the save.
+        if self.form.is_none() {
+            self.rev = stale::read_rev(ctx, &self.item_id);
+        }
         // A FORM ALREADY ON SCREEN IS THE MEMBER'S, and a re-read never replaces
         // what they typed.
         let reading = read::read(
@@ -241,16 +255,21 @@ impl Editor {
                 _ => None,
             },
         );
+        self.gone = matches!(reading, Reading::Data(None));
         match reading {
             Reading::Data(Some(item)) => {
                 if self.form.is_none() {
                     self.form = Some(Self::form_of(&item));
                 }
-                self.stored = Phase::Ready(item);
+                shared::reread(&mut self.stored, ctx.locale(), Reading::Data(item));
             }
             // The item is gone: nothing to edit.
-            Reading::Data(None) | Reading::Failed => self.stored = Phase::Failed,
-            Reading::Denied(denial) => self.stored = Phase::Denied(denial),
+            Reading::Data(None) | Reading::Failed => {
+                shared::reread(&mut self.stored, ctx.locale(), Reading::Failed);
+            }
+            Reading::Denied(denial) => {
+                shared::reread(&mut self.stored, ctx.locale(), Reading::Denied(denial));
+            }
         }
     }
 
@@ -264,7 +283,7 @@ impl Editor {
             // shell pops it.
             Change::Closed => {
                 self.form = None;
-                self.stored = Phase::Loading;
+                self.stored = Page::loading();
                 self.finished = true;
             }
             Change::None => {}
@@ -277,7 +296,7 @@ impl Editor {
     fn edited(&mut self, change: impl FnOnce(&mut Form)) {
         if let Some(form) = &mut self.form {
             change(form);
-            self.status = None;
+            self.undo.clear();
         }
     }
 
@@ -415,12 +434,13 @@ impl Editor {
             request.phone = some("phone").filter(|v| !v.is_empty());
             request.url = some("url").filter(|v| !v.is_empty());
             request.username = some("username").filter(|v| !v.is_empty());
-            kit_act::act(ctx, request, &key)
+            self.undo.act(ctx, request, &key, words::item_added)
         } else {
             let request = act::locker::EditItem {
                 item_id: self.item_id.clone(),
                 title: Some(title),
                 compromised,
+                expected_rev: self.rev,
                 address: some("address"),
                 brand: some("brand"),
                 card_number: some("card_number"),
@@ -439,10 +459,12 @@ impl Editor {
                 username: some("username"),
                 ..act::locker::EditItem::default()
             };
-            kit_act::act(ctx, request, &key)
+            self.undo.act(ctx, request, &key, words::item_saved)
         };
         if !settled.committed {
-            self.status = shared::refused(settled.refusal);
+            if let Some(stale) = settled.stale() {
+                self.stale(ctx, &form, stale);
+            }
             return;
         }
         // THE ITEM IS SAVED; ITS TAGS FOLLOW, one write at a time, the editor
@@ -450,7 +472,40 @@ impl Editor {
         if !self.save_tags(ctx, &form) {
             return;
         }
+        // THE EDITOR CLOSES: the line and its Undo are drawn by the page beneath (#1185).
+        self.undo.hand_down(ctx);
         self.close();
+    }
+
+    /// The vault refused the save: the item changed, or went to the trash, since the form was read
+    /// (#1185). What was typed in the open fields is kept as an earlier version of the item, the
+    /// item is read again, and the line says what happened. A SECRET TYPED IS NEVER KEPT: the vault
+    /// holds no key and keeps no plaintext, so the member types it again; the line names no field.
+    fn stale(&mut self, ctx: &Ctx, form: &Form, stale: stale::Stale) {
+        let mut fields = Vec::new();
+        if let Some(base) = self.baseline() {
+            for (key, value) in &form.values {
+                if types::is_secret(key) || value.as_str() == base.value(key) {
+                    continue;
+                }
+                let name = if key == "title" {
+                    "entity.title".to_owned()
+                } else {
+                    format!("locker_item.{key}")
+                };
+                fields.push((name, value.trim().into()));
+            }
+        }
+        let said = stale::on_button(
+            ctx,
+            &crate::strings::chat_confirm::noun_item(ctx.locale()),
+            &self.item_id,
+            stale,
+            fields,
+        );
+        self.form = None;
+        self.open(ctx);
+        self.undo.refuse(said);
     }
 
     /// The vault's `tag.add` and `tag.remove` that make the item's tags the
@@ -469,7 +524,7 @@ impl Editor {
         let id = self.item_id.clone();
         for tag in had.iter().filter(|tag| !kept.contains(&tag.to_lowercase())) {
             let key = kit_act::key(&["remove-tag", &id, tag], kit_act::fresh());
-            let settled = kit_act::act(
+            let settled = self.undo.act_joining(
                 ctx,
                 act::locker::RemoveTag {
                     locker_item_id: id.clone(),
@@ -478,7 +533,6 @@ impl Editor {
                 &key,
             );
             if !settled.committed {
-                self.status = shared::refused(settled.refusal);
                 return false;
             }
         }
@@ -487,7 +541,7 @@ impl Editor {
             .filter(|tag| !before.contains(&tag.to_lowercase()))
         {
             let key = kit_act::key(&["add-tag", &id, tag], kit_act::fresh());
-            let settled = kit_act::act(
+            let settled = self.undo.act_joining(
                 ctx,
                 act::locker::AddTag {
                     locker_item_id: id.clone(),
@@ -496,7 +550,6 @@ impl Editor {
                 &key,
             );
             if !settled.committed {
-                self.status = shared::refused(settled.refusal);
                 return false;
             }
         }
@@ -662,6 +715,7 @@ impl Screen for Editor {
             }
             Some(E::Left(_)) => {
                 self.form = None;
+                self.undo.clear();
                 let step = self.wall.left();
                 self.walled(ctx, step)
             }
@@ -676,20 +730,34 @@ impl Screen for Editor {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
         let open = self.wall.is_open();
-        let content = open.then(|| match (&self.form, &self.stored) {
-            (Some(form), _) => {
+        let content = (open && !self.gone)
+            .then_some(self.form.as_ref())
+            .flatten()
+            .map(|form| {
                 wire::locker_editor_state::Content::Data(Box::new(self.data(locale, form)))
+            });
+        // THE READ (#1185): the form already on screen is the member's, so a re-read that failed
+        // leaves it under the one sentence; an item with no row any more is the final failure.
+        let denied = |denial: &wire::AppQueryDenial| shared::denied(locale, denial);
+        let page = if !open {
+            Page::<()>::loading().wire(locale, denied, wire::EmptyState::default)
+        } else if self.gone {
+            wire::PageState {
+                state: Some(wire::page_state::State::Failed(read::gone(
+                    words::item_gone(locale),
+                    words::item_gone_body(locale),
+                ))),
+                note: None,
             }
-            (None, Phase::Failed) => {
-                wire::locker_editor_state::Content::Failure(read::failure(locale))
+        } else if self.form.is_some() {
+            Page::Ready {
+                data: (),
+                note: self.stored.note().cloned(),
             }
-            (None, Phase::Denied(denial)) => {
-                wire::locker_editor_state::Content::Denied(shared::denied(locale, denial))
-            }
-            (None, _) => {
-                wire::locker_editor_state::Content::Loading(wire::Loading { first_load: true })
-            }
-        });
+            .wire(locale, denied, wire::EmptyState::default)
+        } else {
+            self.stored.wire(locale, denied, wire::EmptyState::default)
+        };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::LockerEditor(
                 wire::LockerEditorState {
@@ -702,6 +770,7 @@ impl Screen for Editor {
                     },
                     item_id: self.item_id.clone(),
                     content,
+                    page: Some(page),
                     confirm: self.confirm_discard.then(|| wire::Confirm {
                         title: words::discard_title(locale),
                         body: words::discard_body(locale),
@@ -720,7 +789,7 @@ impl Screen for Editor {
                         retry: words::retry(locale),
                     }),
                     finished: self.finished,
-                    status: self.status.clone(),
+                    status: self.undo.status(),
                 },
             )),
             ..wire::ViewState::default()

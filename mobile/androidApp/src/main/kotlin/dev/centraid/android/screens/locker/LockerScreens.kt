@@ -127,7 +127,6 @@ import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.StatusChipView
 import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.kitSwitchColors
-import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
@@ -296,11 +295,11 @@ internal fun LockerHomeScreen(
                 RoomAction("Plus", label, "locker-add") { chrome.add_route?.let(onOpen) }
             },
             // THE LOCK KEY (#1173): cover every item now, Rust's own event.
-            lead = chrome?.lock_label?.takeIf { it.isNotEmpty() && state.denied == null }?.let { label ->
+            lead = chrome?.lock_label?.takeIf { it.isNotEmpty() && state.page?.refused == null }?.let { label ->
                 RoomAction("Lock", label, "locker-lock") { onEvent(LockerHomeEvent(lock_requested = LockerHomeEvent.LockRequested())) }
             },
             // SEARCH IS THE ROOM'S BAR (R-CHROME-2), never a tab.
-            search = if (state.denied == null) {
+            search = if (state.page?.refused == null) {
                 RoomSearch(
                     field = SearchField(open_ = field?.open_ == true, term = field?.term.orEmpty(), answered_term = field?.answered_term.orEmpty(), corrected = field?.corrected.orEmpty()),
                     placeholder = chrome?.search_placeholder.orEmpty(),
@@ -324,7 +323,7 @@ internal fun LockerHomeScreen(
             },
             status = if (generating) "" else data?.status_line.orEmpty(),
             statusLine = state.status?.let { line ->
-                { StatusLine(line) {} }
+                { StatusLine(line) }
             },
             band = if (state.band.isEmpty()) {
                 null
@@ -342,15 +341,26 @@ internal fun LockerHomeScreen(
                 }
             },
         ) {
+            Column(Modifier.fillMaxSize()) {
+            // A CATEGORY'S HEADER (its chevron back to the landing) and the Back key stay outside the
+            // page's state, so an empty category still has its way out.
+            val categoryOpen = data != null && data.list_title.isNotEmpty() &&
+                state.destination != LockerDestination.LOCKER_DESTINATION_REVIEW &&
+                state.destination != LockerDestination.LOCKER_DESTINATION_SEARCH &&
+                !generating
+            BackHandler(enabled = categoryOpen) {
+                onEvent(LockerHomeEvent(category_closed = LockerHomeEvent.CategoryClosed()))
+            }
+            if (categoryOpen && data != null) LockerCategoryHeader(data, onEvent)
             ReadStateView(
-                content = screenContentOf(state.loading, state.failure, data, state.denied),
+                page = state.page!!,
                 onRetry = { onEvent(LockerHomeEvent(refreshed = LockerHomeEvent.Refreshed())) },
+                onEmptyAction = chrome?.add_route?.let { route -> { onOpen(route) } },
                 retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
                 skeleton = { RowSkeleton() },
-            ) { home ->
-                BackHandler(enabled = home.list_title.isNotEmpty()) {
-                    onEvent(LockerHomeEvent(category_closed = LockerHomeEvent.CategoryClosed()))
-                }
+                modifier = Modifier.weight(1f),
+            ) {
+                val home = data ?: return@ReadStateView
                 if (generating) {
                     val generator = home.generator
                     if (generator != null) LockerGeneratorBody(generator, onEvent, onOpen)
@@ -359,10 +369,11 @@ internal fun LockerHomeScreen(
                         when (state.destination) {
                             LockerDestination.LOCKER_DESTINATION_REVIEW -> reviewTab(home, onOpen)
                             LockerDestination.LOCKER_DESTINATION_SEARCH -> searchTab(state, home, onOpen)
-                            else -> itemsTab(home, chrome?.add_route, onOpen, onEvent)
+                            else -> itemsTab(home, onOpen, onEvent)
                         }
                     }
                 }
+            }
             }
         }
         val close = { onEvent(LockerHomeEvent(sheet_closed = LockerHomeEvent.SheetClosed())) }
@@ -387,24 +398,15 @@ internal fun LockerHomeScreen(
 
 private fun LazyListScope.itemsTab(
     home: LockerHomeData,
-    add: Route?,
     onOpen: (Route) -> Unit,
     onEvent: (LockerHomeEvent) -> Unit,
 ) {
     if (home.list_title.isNotEmpty()) {
-        listOfCategory(home, add, onOpen, onEvent)
+        listOfCategory(home, onOpen)
         return
     }
     // THE LANDING: the six category cards, then Starred and Recently used.
-    val empty = home.items_empty
     if (home.status_line.isNotEmpty()) item(key = "landing-note") { LockerNote(home.status_line) }
-    if (empty != null) {
-        item(key = "empty") {
-            Box(Modifier.heightIn(min = 320.dp)) {
-                EmptyStateView(empty, onAction = add?.let { route -> { onOpen(route) } })
-            }
-        }
-    }
     if (home.categories.isNotEmpty()) {
         item(key = "categories") {
             KitCardGrid(
@@ -431,37 +433,30 @@ private fun LazyListScope.itemsTab(
 }
 
 /** ONE CATEGORY'S LIST: the chevron back (also the system back) returns to the landing. */
+/** A CATEGORY'S HEADER: the chevron back to the landing and its name, above the page's state. */
+@Composable
+private fun LockerCategoryHeader(home: LockerHomeData, onEvent: (LockerHomeEvent) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .heightIn(min = KitGeometry.ROW_MIN)
+                .clickable { onEvent(LockerHomeEvent(category_closed = LockerHomeEvent.CategoryClosed())) }
+                .padding(horizontal = 10.dp)
+                .testTag("locker-category-back")
+                .clearAndSetSemantics { contentDescription = KitWords.backTo(home.list_back_label) },
+            contentAlignment = Alignment.Center,
+        ) { CentraidIcon(iconKey = "ChevronLeft", tint = Surface.ink, size = 18.dp) }
+        KitText(home.list_title, KitType.Section, Surface.ink)
+    }
+}
+
 private fun LazyListScope.listOfCategory(
     home: LockerHomeData,
-    add: Route?,
     onOpen: (Route) -> Unit,
-    onEvent: (LockerHomeEvent) -> Unit,
 ) {
-    item(key = "list-head") {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                Modifier
-                    .heightIn(min = KitGeometry.ROW_MIN)
-                    .clickable { onEvent(LockerHomeEvent(category_closed = LockerHomeEvent.CategoryClosed())) }
-                    .padding(horizontal = 10.dp)
-                    .testTag("locker-category-back")
-                    .clearAndSetSemantics { contentDescription = KitWords.backTo(home.list_back_label) },
-                contentAlignment = Alignment.Center,
-            ) { CentraidIcon(iconKey = "ChevronLeft", tint = Surface.ink, size = 18.dp) }
-            KitText(home.list_title, KitType.Section, Surface.ink)
-        }
-    }
-    val empty = home.items_empty
-    if (home.rows.isEmpty() && empty != null) {
-        item(key = "empty") {
-            Box(Modifier.heightIn(min = 320.dp)) {
-                EmptyStateView(empty, onAction = add?.let { route -> { onOpen(route) } })
-            }
-        }
-    }
     items(home.rows, key = { "i-" + it.item_id }) { row -> LockerRowView(row) { row.route?.let(onOpen) } }
     if (home.window.isNotEmpty()) item(key = "window") { LockerNote(home.window) }
 }
@@ -530,10 +525,6 @@ private fun LazyListScope.searchTab(state: LockerHomeState, home: LockerHomeData
         // WHAT IS NEVER SEARCHED, said before a term.
         item(key = "note") { LockerNote(state.chrome?.search_note.orEmpty()) }
         return
-    }
-    val empty = home.search_empty
-    if (home.hits.isEmpty() && empty != null) {
-        item(key = "empty") { Box(Modifier.heightIn(min = 240.dp)) { EmptyStateView(empty, onAction = null) } }
     }
     items(home.hits, key = { "h-" + it.item_id }) { row -> LockerRowView(row) { row.route?.let(onOpen) } }
 }
@@ -776,24 +767,20 @@ internal fun LockerItemScreen(
             parentTitle = chrome?.back_label.orEmpty(),
             onBack = onBack,
             // THE "…" MENU holds the item's verbs (add a field, star, archive, trash).
-            more = data?.takeIf { it.gone == null && it.actions.isNotEmpty() }?.let {
+            more = data?.takeIf { it.actions.isNotEmpty() }?.let {
                 RoomAction("MoreHoriz", chrome?.menu_label.orEmpty(), "locker-item-menu") { menuOpen = true }
             },
-            trailing = chrome?.edit_label?.takeIf { it.isNotEmpty() && data?.gone == null }?.let { label ->
+            trailing = chrome?.edit_label?.takeIf { it.isNotEmpty() && data != null }?.let { label ->
                 RoomAction("Pencil", label, "locker-item-edit") { chrome.edit_route?.let(onOpen) }
             },
             statusLine = { StatusLine(state.status) { onEvent(LockerItemEvent(status_acted = LockerItemEvent.StatusActed())) } },
         ) {
             ReadStateView(
-                content = screenContentOf(state.loading, state.failure, data, state.denied),
+                page = state.page!!,
                 onRetry = { onEvent(LockerItemEvent(refreshed = LockerItemEvent.Refreshed())) },
                 retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
-            ) { item ->
-                val gone = item.gone
-                if (gone != null) {
-                    EmptyStateView(gone, onAction = null)
-                    return@ReadStateView
-                }
+            ) {
+                val item = data ?: return@ReadStateView
                 LazyColumn(Modifier.fillMaxSize().testTag("locker-item")) {
                     item(key = "head") {
                         // THE CENTRED HERO (the Locker item board): the title's first letter on ink, the title with
@@ -893,6 +880,10 @@ internal fun LockerItemScreen(
                             }
                         }
                     }
+                    // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row; it is inside
+                    // the item's data, so it is absent while Locker is locked.
+                    item.earlier?.let { entry -> item(key = "earlier") { dev.centraid.android.kit.EarlierEntryCard(entry, onOpen) } }
+                    item(key = "origin") { dev.centraid.android.kit.OriginLineView(item.origin) }
                 }
             }
         }
@@ -1163,9 +1154,11 @@ internal fun LockerEditorScreen(
             status = state.status?.sentence.orEmpty().ifEmpty { data?.blocked.orEmpty() },
         ) {
             ReadStateView(
-                content = screenContentOf(state.loading, state.failure, data, state.denied),
-                onRetry = null,
-            ) { editor ->
+                page = state.page!!,
+                onRetry = { onEvent(LockerEditorEvent(refreshed = LockerEditorEvent.Refreshed())) },
+                retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
+            ) {
+                val editor = data ?: return@ReadStateView
                 LazyColumn(Modifier.fillMaxSize().testTag("locker-editor")) {
                     item(key = "lede") { LockerNote(chrome?.lede.orEmpty()) }
                     if (editor.types.isNotEmpty()) {

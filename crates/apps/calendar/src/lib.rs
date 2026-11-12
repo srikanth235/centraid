@@ -51,6 +51,7 @@ pub mod expansion;
 pub mod local;
 pub mod manifest;
 pub mod queries;
+pub mod trash;
 pub mod window;
 
 pub use attachments::{ATTACHMENTS_PAGE_MAX, AttachmentRow, AttachmentsData, load_attachments};
@@ -69,6 +70,7 @@ pub use queries::{
     SEARCH_LIMIT, SearchData, UpcomingData, load_day_context, load_parties, load_search,
     load_search_term, load_upcoming,
 };
+pub use trash::{TRASH_ROWS, TrashData, TrashRow, load_trash};
 pub use window::{Occurrence, occurrences};
 
 /// A read refusal, as the payload carries it: the kit's one type, shared by

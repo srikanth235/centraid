@@ -38,7 +38,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.Autosave
+import centraid.core.v1.PhoneSaysTaken
 import centraid.core.v1.Route
+import dev.centraid.android.kit.EarlierEntryCard
 import centraid.core.v1.TodoDetailData
 import centraid.core.v1.TodoDetailEvent
 import centraid.core.v1.TodoDetailState
@@ -49,19 +51,18 @@ import dev.centraid.android.kit.ChoiceFieldRow
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EditorRoom
-import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OutlineButton
+import dev.centraid.android.kit.PhoneSaysLine
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.StatusLine
-import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.screens.CivilDateDialog
 import dev.centraid.android.screens.CivilTimeDialog
 import dev.centraid.android.theme.centraidColor
@@ -79,25 +80,25 @@ internal fun TodoDetailScreen(
     onEvent: (TodoDetailEvent) -> Unit,
     onOpen: (Route) -> Unit,
     onClose: () -> Unit,
+    onPhoneSays: (PhoneSaysTaken) -> Unit,
 ) {
-    val gone = state.gone
     EditorRoom(
         title = state.chrome?.title.orEmpty(),
         status = state.autosave,
         onClose = onClose,
         onDeparted = {},
     ) {
-        if (gone != null) {
-            EmptyStateView(gone, onAction = onClose)
-            return@EditorRoom
-        }
         Column(Modifier.weight(1f).fillMaxWidth()) {
+            // THE TASK'S READ (#1185): a task that is gone is the page's failure, in its own words.
             ReadStateView(
-                content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
+                page = state.page!!,
                 onRetry = { onEvent(TodoDetailEvent(refreshed = TodoDetailEvent.Refreshed())) },
                 skeleton = { RowSkeleton(rows = 6, label = state.chrome?.loading?.ifEmpty { null } ?: KitWords.OPENING) },
                 modifier = Modifier.weight(1f),
-            ) { data -> TodoDetailBody(state, data, onEvent, onOpen) }
+            ) {
+                val data = state.data_ ?: return@ReadStateView
+                TodoDetailBody(state, data, onEvent, onOpen, onPhoneSays)
+            }
             StatusLine(state.status) { onEvent(TodoDetailEvent(status_acted = TodoDetailEvent.StatusActed())) }
         }
     }
@@ -113,6 +114,9 @@ internal fun TodoDetailScreen(
             onEvent = { onEvent(TodoDetailEvent(custom_repeat = it)) },
             onDismiss = { onEvent(TodoDetailEvent(field_closed = TodoDetailEvent.FieldClosed())) },
         )
+    }
+    state.link_picker?.takeIf { it.open_ }?.let { picker ->
+        dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(TodoDetailEvent(link = link)) }
     }
     val confirm = state.confirm
     if (confirm != null) {
@@ -131,6 +135,7 @@ private fun TodoDetailBody(
     data: TodoDetailData,
     onEvent: (TodoDetailEvent) -> Unit,
     onOpen: (Route) -> Unit,
+    onPhoneSays: (PhoneSaysTaken) -> Unit,
 ) {
     // THE VAULT'S WORDS LAND ONLY WHILE CLEAN: typing never fights a reload.
     val clean = state.autosave?.phase == Autosave.Phase.PHASE_CLEAN
@@ -168,6 +173,8 @@ private fun TodoDetailBody(
             onEdit = { onEvent(TodoDetailEvent(notes = TodoDetailEvent.NotesChanged(notes = it))) },
             testTag = "tasks-detail-notes",
         )
+        // WHAT THE PHONE'S REMINDERS SAY DIFFERENTLY (#1185), each with its "Use phone's".
+        state.phone_says.forEach { PhoneSaysLine(it, onPhoneSays) }
         // THE TASK'S ADDRESS (#1173 wave 2): as stored, with the verb that hands it to the phone.
         data.link?.let { link ->
             Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp).testTag("agenda-detail-link")) {
@@ -223,6 +230,10 @@ private fun TodoDetailBody(
                 onOpen = onOpen,
             )
         }
+        // LINKED TO (#1185): the kit's section, after the attachments; Rust makes every word and row.
+        data.links?.let { section ->
+            dev.centraid.android.kit.LinkSectionView(section, { link -> onEvent(TodoDetailEvent(link = link)) }, onOpen)
+        }
         if (data.subtasks_label.isNotEmpty() || data.subtasks.isNotEmpty()) {
             SectionHeader(SectionHead(title = data.subtasks_label))
         }
@@ -239,10 +250,18 @@ private fun TodoDetailBody(
             }
         }
         if (data.subtask_note.isNotEmpty()) FieldNote(data.subtask_note)
+        // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the foot actions.
+        EarlierEntryCard(state.earlier, onOpen)
+        dev.centraid.android.kit.OriginLineView(state.origin)
         Row(Modifier.padding(KitGeometry.GUTTER)) {
             if (data.can_release && data.release_label.isNotEmpty()) {
                 OutlineButton(data.release_label, testTag = "tasks-release", modifier = Modifier.padding(end = 8.dp)) {
                     onEvent(TodoDetailEvent(release = TodoDetailEvent.ReleaseRequested()))
+                }
+            }
+            if (data.share_label.isNotEmpty()) {
+                OutlineButton(data.share_label, testTag = "tasks-share", modifier = Modifier.padding(end = 8.dp)) {
+                    onEvent(TodoDetailEvent(share_requested = TodoDetailEvent.ShareRequested()))
                 }
             }
             if (data.delete_label.isNotEmpty()) {

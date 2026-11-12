@@ -3,7 +3,8 @@
 Money is a personal-finance app: accounts, transactions that enter by **importing a bank statement**, categories by rule, spending by month ([#1099](https://github.com/srikanth235/centraid/issues/1099)). Its doctrine:
 
 - one account is one currency; nothing sums across currencies;
-- an imported transaction is never edited (a category and a void are the member's decisions);
+- an imported transaction is never edited (a category, a name and the trash are the member's decisions, not edits to what the bank said);
+- a transaction in the trash is in no balance, total, recurring charge or search result, comes back exactly on a restore, and is never brought back by a statement imported again (a void is what a member could do before the trash: a vault may still hold one, and it stays void and counts nowhere; the member now moves a line to the trash instead);
 - re-importing the same file writes nothing;
 - the fuzzy duplicate pass only **proposes**;
 - the statement's bytes are read once and never stored;
@@ -23,10 +24,11 @@ The crate has two halves: the import (`import`, `rules`) and the reads and folds
 | `import::plan` | `plan`: rules, then exact de-duplication (one-to-one), in-file repeats, then the fuzzy **proposal**; a verdict per row and the file's totals |
 | `rules` | The rule semantics the vault's `apply_rule_to_history` agrees with (seam S2), the merchant key and the counting learner |
 | `queries` | Every read as a `PageQuery` with a stated ceiling: a month window by `posted_at` range, the Activity keyset page, accounts, targets, rules, checkpoints, categories, transfer links, the existing-rows window for a plan, and a search over the full-text index. Single tables only; Money's decoration is read by id. A read that stops at a ceiling says so (`Bounded::truncated`) |
+| `trash` | `load_trash`: the transactions in the trash, most recently trashed first, named as the member sees each line, with the two stamps the vault wrote (`deleted_at`, `purge_at`), bounded by `TRASH_ROWS` with truncation reported (#1185). Trashing is `entity.deleted_at` and nothing of the line (the line's triggers are never fired); `queries` leaves a trashed line out of every window, ledger and transfer link, and keeps it in the import plan's view of the account, so a re-import finds it `already_in` |
 | `engine` | The folds, pure and per currency: spending (refund credit, uncategorised, transfers and future rows left out and counted), in/out/net, cash flow and savings rate, balances against checkpoints, net worth, the target reducer with carry (envelope mode dormant) and transfer proposals (moved from Tally, R-1099-38) |
 | `recurring` | Detection of weekly, biweekly, monthly, quarterly and yearly charges, projected through `centraid_vault::time` (no second expander, no stored series), the due/late/paid statuses, "seen N times" and the month-end forecast |
 | `phone` | The typed answer to each screen: Spending, Activity, Cash flow, a transaction, Accounts, Rules, Categories, the target sheet, Recurring, Home's tile, search and the import plan. No clock and no zone: `today` and the month come in as text |
-| `manifest`, `commands` | `manifest.json` (id `money`, `Coin`, `indigo`) parsed by the kit; the 22-row action table, one vault command each (`account.*`, `txn.*`, `budget.*`, `checkpoint.*`, `rule.*`, `category.*`, `follow.statement`), `invoke_key` required, a denial a value |
+| `manifest`, `commands` | `manifest.json` (id `money`, `Coin`, `indigo`) parsed by the kit; the 28-row action table, one vault command each (`account.*`, `txn.*`, `budget.*`, `checkpoint.*`, `rule.*`, `category.*`, `follow.statement`), `invoke_key` required, a denial a value |
 | `year3` | A deterministic generator: 4 accounts, 18,000 rows, as Chase-shaped CSV text; `tests/year3.rs` follows it through `follow.statement` |
 
 ## What this crate may not contain, and what stops it

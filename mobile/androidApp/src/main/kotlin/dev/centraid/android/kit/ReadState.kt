@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.font.FontWeight
 import dev.centraid.design.CentraidCatalog
+import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidDark
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -35,7 +36,9 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -43,68 +46,132 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.Denied
 import centraid.core.v1.EmptyState
-import centraid.core.v1.Loading
-import centraid.core.v1.Failure as ReadFailure
+import centraid.core.v1.PageNote
+import centraid.core.v1.PageState
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.design.CentraidGeometry
 import dev.centraid.design.CentraidTokens
 import dev.centraid.android.theme.centraidType
 
 /**
- * THE READ LAW'S FOUR ARMS, AS A VIEW SEES THEM (K5, #1029).
+ * THE PAGE'S READ, DRAWN ONCE (#1185): the same switch over the kit's [PageState], which the
+ * screen's Rust builds from `Page::wire`. A first load draws [skeleton]; a gate draws
+ * [DeniedGate] (no retry, it never retries itself); a failed read draws [FailureView] with
+ * Retry; an empty one draws [EmptyStateView]; none of those set means ready, and [data] is drawn
+ * under the [PageNoteBanner] when the state carries a note.
  *
- * `screen.proto` law 1: loading, failure and data are three arms, never two —
- * and the kit adds the fourth, [Denied], which has no band and no retry. A
- * screen builds one of these from its own `content` oneof with [screenContentOf]
- * and hands it to [ReadStateView], which is the only place a list screen
- * switches on content.
- */
-public sealed interface ScreenContent<out V> {
-    public data class Loading(val firstLoad: Boolean) : ScreenContent<Nothing>
-    public data class Failure(val sentence: String, val remedy: String) : ScreenContent<Nothing>
-    public data class Gate(val denied: Denied) : ScreenContent<Nothing>
-    public data class Data<V>(val value: V) : ScreenContent<V>
-}
-
-/**
- * One screen's `content` oneof, as [ScreenContent]. At most one argument is set
- * (Wire enforces the oneof); none set is the seeded first load.
- */
-public fun <V : Any> screenContentOf(
-    loading: Loading?,
-    failure: ReadFailure?,
-    data: V?,
-    denied: Denied? = null,
-): ScreenContent<V> = when {
-    denied != null -> ScreenContent.Gate(denied)
-    failure != null -> ScreenContent.Failure(failure.sentence, failure.remedy)
-    data != null -> ScreenContent.Data(data)
-    else -> ScreenContent.Loading(loading?.first_load ?: true)
-}
-
-/**
- * THE ONE SWITCH ON CONTENT. Loading draws [skeleton] (row geometry, never a
- * spinner), failure draws [FailureView] with a member-sent retry, denied draws
- * [DeniedGate], and data draws [data].
+ * [onRetry] is the screen's own re-read event and also answers a note's action; [onEmptyAction]
+ * answers the empty state's one action. The shell decides nothing: every word is the state's.
  *
- * [onRetry] is the screen's `Refreshed` event. Null only for a screen whose
- * machine has no member-initiated re-read; a refusal NEVER retries itself.
+ * [stage] is the full-bleed variant for a page that is a dark stage (the slideshow): the gate, the
+ * failure, the empty state and the note are drawn in the dark scheme and centred over the
+ * caller's own ground, and the note floats over the top of [data] instead of pushing it down.
+ * The SwiftUI twin is `PageReadStateView(stage: true)`.
  */
 @Composable
-public fun <V> ReadStateView(
-    content: ScreenContent<V>,
+public fun ReadStateView(
+    page: PageState,
     onRetry: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    onEmptyAction: (() -> Unit)? = null,
+    onNoteAction: (() -> Unit)? = onRetry,
     retryLabel: String = KitWords.RETRY,
+    stage: Boolean = false,
+    emptyExtra: (@Composable () -> Unit)? = null,
     skeleton: @Composable () -> Unit = { RowSkeleton() },
-    data: @Composable (V) -> Unit,
+    data: @Composable () -> Unit,
 ) {
-    Box(modifier.fillMaxSize()) {
-        when (content) {
-            is ScreenContent.Loading -> skeleton()
-            is ScreenContent.Failure -> FailureView(content.sentence, content.remedy, onRetry, retryLabel = retryLabel)
-            is ScreenContent.Gate -> DeniedGate(content.denied)
-            is ScreenContent.Data -> data(content.value)
+    val failed = page.failed
+    val refused = page.refused
+    val empty = page.empty
+    // A note whose kind is unset is not a note: it is never drawn.
+    val note = page.note?.takeIf { it.kind != PageNote.Kind.KIND_UNSPECIFIED }
+    Box(modifier.fillMaxSize(), contentAlignment = if (stage) Alignment.Center else Alignment.TopStart) {
+        when {
+            page.loading != null -> skeleton()
+            refused != null -> StageScheme(stage) { DeniedGate(refused) }
+            failed != null -> StageScheme(stage) {
+                // A gone item offers no Retry: reading it again cannot bring it back.
+                FailureView(failed.sentence, failed.remedy, onRetry.takeUnless { failed.permanent }, retryLabel = retryLabel)
+            }
+            empty != null -> StageScheme(stage) {
+                Column {
+                    EmptyStateView(empty, onEmptyAction)
+                    // What a screen draws UNDER its empty state (People's phone-contacts import,
+                    // search's Ask row). The SwiftUI twin is `PageReadStateView(emptyExtra:)`.
+                    emptyExtra?.invoke()
+                }
+            }
+            stage -> {
+                data()
+                if (note != null) {
+                    Box(Modifier.fillMaxWidth().align(Alignment.TopCenter)) {
+                        StageScheme(true) { PageNoteBanner(note, onNoteAction) }
+                    }
+                }
+            }
+            else -> Column(Modifier.fillMaxSize()) {
+                if (note != null) {
+                    PageNoteBanner(note, onNoteAction)
+                }
+                Box(Modifier.weight(1f)) { data() }
+            }
+        }
+    }
+}
+
+/** [content] in the dark scheme when [stage]: a state drawn on the full-bleed dark stage reads dark. */
+@Composable
+private fun StageScheme(stage: Boolean, content: @Composable () -> Unit) {
+    if (stage) {
+        CompositionLocalProvider(LocalCentraidTokens provides CentraidTokens.dark) { content() }
+    } else {
+        content()
+    }
+}
+
+/**
+ * ONE SENTENCE OVER DATA, and at most one action. It is a polite live region and speaks its
+ * sentence (the action reads "{sentence}" then its label as a button). It is drawn in place with
+ * no entry animation, so reduced motion needs nothing: there is no motion to remove.
+ */
+@Composable
+public fun PageNoteBanner(
+    note: PageNote,
+    onAction: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(KitGeometry.RADIUS)
+    Row(
+        modifier
+            .fillMaxWidth()
+            .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
+            .clip(shape)
+            .background(Surface.fill, shape)
+            .border(KitGeometry.HAIRLINE, Surface.border, shape)
+            .heightIn(min = KitGeometry.ROW_MIN)
+            .padding(horizontal = 14.dp, vertical = 6.dp)
+            .testTag(if (note.kind == PageNote.Kind.KIND_NOT_CHECKED) "kit-note-unchecked" else "kit-note-partial")
+            .semantics {
+                contentDescription = note.sentence
+                liveRegion = LiveRegionMode.Polite
+            },
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        KitText(note.sentence, KitType.Meta, Surface.ink, Modifier.weight(1f).clearAndSetSemantics { })
+        if (note.action_label.isNotEmpty() && onAction != null) {
+            Text(
+                note.action_label,
+                style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
+                color = Surface.ink,
+                modifier = Modifier
+                    .heightIn(min = KitGeometry.ROW_MIN)
+                    .clickable(onClick = onAction)
+                    .padding(horizontal = 6.dp, vertical = 12.dp)
+                    .testTag("kit-note-action")
+                    .semantics { role = Role.Button },
+            )
         }
     }
 }

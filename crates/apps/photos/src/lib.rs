@@ -40,6 +40,7 @@
 //! Photos send" is how the two answers drift, so the action table
 //! ([`commands::ACTIONS`]) is compared with it by a test.
 
+pub mod attachments;
 pub mod cells;
 pub mod commands;
 pub mod detail;
@@ -50,6 +51,7 @@ pub mod queries;
 pub mod search;
 pub mod shelf;
 
+pub use attachments::load_attachments;
 pub use commands::{ACTIONS, Commands, Invocation, Outcome};
 pub use manifest::{APP_ID, manifest};
 pub use places::{PlacePhrase, PlacePhraseSource, PlaceRow, place_phrase};

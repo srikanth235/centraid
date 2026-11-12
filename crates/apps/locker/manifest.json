@@ -120,6 +120,11 @@
         "verbs": "act"
       },
       {
+        "schema": "entity",
+        "table": "empty_trash",
+        "verbs": "act"
+      },
+      {
         "schema": "flag",
         "table": "set",
         "verbs": "act"
@@ -273,6 +278,16 @@
           },
           "alias": {
             "type": "string"
+          },
+          "arrived_system": {
+            "type": "string",
+            "enum": ["csv"],
+            "description": "How the item came in when the member did not type it. Omit it for a typed item."
+          },
+          "arrived_label": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "The file or device it came from: a name, never content. Required with arrived_system."
           }
         },
         "required": ["type", "title"],
@@ -381,6 +396,10 @@
           },
           "alias": {
             "type": "string"
+          },
+          "expected_rev": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": ["item_id"],
@@ -504,6 +523,50 @@
           }
         },
         "required": ["id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "empty-trash",
+      "verb": "purge",
+      "kind": "locker_item",
+      "inverse": null,
+      "sealed": [],
+      "bulk": true,
+      "command": "entity.empty_trash",
+      "phrasings": [
+        "empty the Locker trash",
+        "clear out the trashed items for good",
+        "permanently delete everything in the Locker trash"
+      ],
+      "description": "Empty the item trash through entity.empty_trash with kind locker_item. Irreversible and takes no id: every item in the trash is destroyed now, as purge destroys one.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["locker_item"]
+          },
+          "due_only": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
         "additionalProperties": false
       },
       "output": {
@@ -793,7 +856,7 @@
       "name": "duplicate-item",
       "verb": "duplicate",
       "kind": "locker_item",
-      "inverse": null,
+      "inverse": "undo-create",
       "sealed": [],
       "command": "locker.duplicate_item",
       "phrasings": [
@@ -833,7 +896,7 @@
       "name": "set-field",
       "verb": "edit",
       "kind": "locker_field",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": ["value"],
       "command": "locker.set_field",
       "phrasings": [
@@ -841,7 +904,7 @@
         "set the PIN field on my card",
         "add a recovery email field"
       ],
-      "description": "Create or rewrite ONE owner-defined field on an item through locker.set_field. A field is (section, label, kind, value); a sealed field's value is sealed by the phone core against the field's own id before the vault sees it, so it is ciphertext at rest. Sending «sealed» back leaves the stored secret alone. One field per call so a secret is always a top-level input the sealing can reach.",
+      "description": "Create or rewrite ONE owner-defined field on an item through locker.set_field. A field is (section, label, kind, value); the value of a sealed field, or of a one-time-code field (kind otp, whose value is a setup key or an otpauth:// link), is sealed by the phone core against the field's own id before the vault sees it, so it is ciphertext at rest and an otp field needs a value. Sending «sealed» back leaves the stored secret alone. One field per call so a secret is always a top-level input the sealing can reach.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -895,7 +958,7 @@
       "name": "remove-field",
       "verb": "delete",
       "kind": "locker_field",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "locker.remove_field",
       "phrasings": [
@@ -939,7 +1002,7 @@
       "name": "set-addresses",
       "verb": "edit",
       "kind": "locker_item",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "locker.set_addresses",
       "phrasings": [
@@ -993,7 +1056,7 @@
       "name": "set-passkey",
       "verb": "edit",
       "kind": "locker_passkey",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": ["private_key"],
       "command": "locker.set_passkey",
       "phrasings": [
@@ -1052,7 +1115,7 @@
       "name": "clear-passkey",
       "verb": "delete",
       "kind": "locker_passkey",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "locker.clear_passkey",
       "phrasings": [
@@ -1092,7 +1155,7 @@
       "name": "set-memo",
       "verb": "edit",
       "kind": "locker_item",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "locker.set_memo",
       "phrasings": [
@@ -1190,7 +1253,7 @@
         "reveal the wifi password"
       ],
       "description": "Stamp the item as used, through locker.mark_used, before the phone core reveals ONE sealed field of it. It never carries the secret: the phone core opens the field behind the unlock and hands the plaintext only to the card or screen that asked, never to the model. Running it again only moves the stamp, so it is its own inverse.",
-      "confirmation": "none",
+      "confirmation": "required",
       "input": {
         "type": "object",
         "properties": {
@@ -1229,7 +1292,7 @@
         "this passport is about Maya",
         "link the bank login to my home"
       ],
-      "description": "Link an item to an account, a place or a person through edge.add (rel about, or with for a person it is shared with), from the item. A link is plain: it carries no sealed value, and it is seen only inside Locker.",
+      "description": "Link an item to an account, a place or a person through edge.add (rel about, or with for a person it is shared with), from the item. With rel links it joins the item to any other item (a note, a task, an event, a photo, a document, a transaction, a workout), from the item only: nothing can link to a Locker item. A link is plain: it carries no sealed value, and it is seen only inside Locker.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -1240,7 +1303,7 @@
           },
           "rel": {
             "type": "string",
-            "enum": ["about", "with"]
+            "enum": ["about", "with", "links"]
           },
           "to": {
             "type": "string",
@@ -1288,7 +1351,7 @@
           },
           "rel": {
             "type": "string",
-            "enum": ["about", "with"]
+            "enum": ["about", "with", "links"]
           },
           "to": {
             "type": "string",

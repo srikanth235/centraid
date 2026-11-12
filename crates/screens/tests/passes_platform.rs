@@ -192,15 +192,19 @@ fn a_handler_completes_the_task_on_the_expiration_path_as_well() {
 }
 
 #[test]
-fn the_ios_windows_are_named_as_rust_schedules_them_and_wait_for_the_charger() {
+fn the_ios_windows_are_named_as_rust_schedules_them_and_take_the_charger_from_the_window() {
     let passes = code(&read("iosApp/Sources/BackgroundPasses.swift"));
     // THE NAME RUST SCHEDULES IS THE NAME THE WINDOW REPORTS BACK UNDER.
     assert!(passes.contains(&format!("\"{}\"", windows::PERIODIC)));
     assert!(passes.contains(&format!("\"{}\"", windows::NIGHT)));
-    // THE LONG WINDOW: prepare and settle wait for the charger and need a network.
-    assert!(passes.contains("requiresExternalPower = true"));
-    assert!(passes.contains("requiresNetworkConnectivity = true"));
+    // THE CHARGER IS THE WINDOW'S OWN WORD, never the shell's: the night window asks for
+    // it and the one-off nudge does not (`windows::nudge`), so neither answer is written
+    // down in Swift. Every window needs a network.
+    assert!(passes.contains("requiresExternalPower = requiresCharging"));
+    assert!(passes.contains("requiresCharging: window.requiresCharging"));
+    assert!(!passes.contains("requiresExternalPower = true"));
     assert!(!passes.contains("requiresExternalPower = false"));
+    assert!(passes.contains("requiresNetworkConnectivity = true"));
 }
 
 #[test]

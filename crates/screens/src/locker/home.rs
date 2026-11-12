@@ -13,15 +13,16 @@ use wire::locker_home_event::Kind as H;
 use wire::screen_event::Kind as E;
 
 use super::generator::{Generator, system_entropy};
-use super::shared::{self, Phase};
+use super::shared;
 use super::wall::{CLIPBOARD_LIFE, Change, Wall};
 use super::{handoff, routes};
 use crate::catalog::load;
 use crate::kit::menu;
-use crate::kit::read;
+use crate::kit::read::{self, Page};
 use crate::kit::secret::Secrets;
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, fill, locker as words};
+use crate::strings::{Locale, fill, locker as words, shared as kit_words};
 
 /// The filter section's key (`locker-filter-show-starred` on a screen); its
 /// options are keyed `all`, `starred`, `archived` and each type's key.
@@ -113,11 +114,13 @@ struct Home {
     browsing: Option<String>,
     search_open: bool,
     term: String,
-    items: Phase<wire::LockerItems>,
-    review: Phase<wire::LockerReview>,
-    hits: Phase<wire::LockerSearch>,
+    items: Page<wire::LockerItems>,
+    review: Page<wire::LockerReview>,
+    hits: Page<wire::LockerSearch>,
     generator: Generator,
     status: Option<wire::StatusLine>,
+    /// A saved item's line and its Undo, left by the editor that closed above this page (#1185).
+    undo: Undo,
     /// THE PLACE A LOCKED BAND WAS TAPPED ON: the unlock it started lands there.
     pending: Option<String>,
 }
@@ -133,11 +136,12 @@ impl Home {
             browsing: None,
             search_open: false,
             term: String::new(),
-            items: Phase::Loading,
-            review: Phase::Loading,
-            hits: Phase::Loading,
+            items: Page::loading(),
+            review: Page::loading(),
+            hits: Page::loading(),
             generator: Generator::new(entropy),
             status: None,
+            undo: Undo::default(),
             pending: None,
         }
     }
@@ -152,26 +156,30 @@ impl Home {
         use wire::LockerDestination as D;
         match self.destination {
             D::Review => {
-                self.review = Phase::of(read::read(
-                    ctx,
-                    load::locker::Review::default(),
-                    |a| match a {
+                shared::reread(
+                    &mut self.review,
+                    ctx.locale(),
+                    read::read(ctx, load::locker::Review::default(), |a| match a {
                         Answer::LockerReview(review) => Some(review),
                         _ => None,
-                    },
-                ));
+                    }),
+                );
             }
             D::Search if !self.term.trim().is_empty() => {
-                self.hits = Phase::of(read::read(
-                    ctx,
-                    load::locker::Search {
-                        term: self.term.clone(),
-                    },
-                    |a| match a {
-                        Answer::LockerSearch(search) => Some(search),
-                        _ => None,
-                    },
-                ));
+                shared::reread(
+                    &mut self.hits,
+                    ctx.locale(),
+                    read::read(
+                        ctx,
+                        load::locker::Search {
+                            term: self.term.clone(),
+                        },
+                        |a| match a {
+                            Answer::LockerSearch(search) => Some(search),
+                            _ => None,
+                        },
+                    ),
+                );
             }
             // Items — and Generate and an empty search, which read the shelf so
             // a change event on them re-reads something true.
@@ -179,43 +187,48 @@ impl Home {
                 self.read_items(ctx);
                 // The Review card counts what Review would list.
                 if self.destination == D::Items {
-                    self.review = Phase::of(read::read(
-                        ctx,
-                        load::locker::Review::default(),
-                        |a| match a {
+                    shared::reread(
+                        &mut self.review,
+                        ctx.locale(),
+                        read::read(ctx, load::locker::Review::default(), |a| match a {
                             Answer::LockerReview(review) => Some(review),
                             _ => None,
-                        },
-                    ));
+                        }),
+                    );
                 }
             }
         }
     }
 
     fn read_items(&mut self, ctx: &Ctx) {
-        self.items = Phase::of(read::read(
-            ctx,
-            load::locker::Items {
-                archived: Some(self.filter == ARCHIVED),
-                limit: 0,
-            },
-            |a| match a {
-                Answer::LockerItems(items) => Some(items),
-                _ => None,
-            },
-        ));
+        shared::reread(
+            &mut self.items,
+            ctx.locale(),
+            read::read(
+                ctx,
+                load::locker::Items {
+                    archived: Some(self.filter == ARCHIVED),
+                    limit: 0,
+                },
+                |a| match a {
+                    Answer::LockerItems(items) => Some(items),
+                    _ => None,
+                },
+            ),
+        );
     }
 
     /// A RELOCK KEEPS WHERE THE MEMBER WAS — the tab and the filter — and
     /// nothing of what they saw; search is closed, because a term is content.
     fn wipe(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        self.items = Phase::Loading;
-        self.review = Phase::Loading;
-        self.hits = Phase::Loading;
+        self.items = Page::loading();
+        self.review = Page::loading();
+        self.hits = Page::loading();
         self.search_open = false;
         self.term.clear();
         self.sheet = wire::locker_home_state::Sheet::None;
         self.status = None;
+        self.undo.clear();
         self.generator.forget();
         handoff::clear();
         let mut effects = self.secrets.hide_all(ctx);
@@ -279,7 +292,7 @@ impl Home {
         // asked for, never filtered out of the live one); every other filter
         // re-folds the shelf already held.
         if shelf_changed {
-            self.items = Phase::Loading;
+            self.items = Page::loading();
             self.read_items(ctx);
         }
     }
@@ -356,15 +369,17 @@ impl Home {
                 self.search_open = true;
                 self.destination = D::Search;
                 self.term = typed.term;
+                // A new term is a new question: the hits of the last one are never shown for it.
+                self.hits = Page::loading();
                 if self.term.trim().is_empty() {
-                    self.hits = Phase::Loading;
+                    self.hits = Page::loading();
                 } else {
                     self.reload(ctx);
                 }
             }
             // CLOSING CLEARS (R-1046-6): the term and its hits.
             Some(H::SearchClosed(_)) => {
-                self.hits = Phase::Loading;
+                self.hits = Page::loading();
                 self.search_open = false;
                 self.term.clear();
                 self.goto(ctx, D::Items);
@@ -386,6 +401,7 @@ impl Home {
                 let output = self.generator.output().to_owned();
                 if !output.is_empty() {
                     effects.extend(self.secrets.copy(ctx, &output, CLIPBOARD_LIFE));
+                    self.undo.clear();
                     self.status = shared::status(words::generated_copied(ctx.locale()));
                 }
             }
@@ -397,7 +413,12 @@ impl Home {
 
     // --- views ---------------------------------------------------------------
 
-    fn items_data(&self, locale: Locale, answer: &wire::LockerItems) -> wire::LockerHomeData {
+    /// The Items tab's data, and what it says when it has nothing to draw (see [`Self::nothing`]).
+    fn items_data(
+        &self,
+        locale: Locale,
+        answer: &wire::LockerItems,
+    ) -> (wire::LockerHomeData, Option<wire::EmptyState>) {
         let filter = self.filter.as_str();
         let shown: Vec<&wire::LockerItemRow> = match filter {
             ALL | ARCHIVED => answer.items.iter().collect(),
@@ -496,45 +517,50 @@ impl Home {
         let parent = words::app_name(locale);
         if self.browsing.is_none() {
             // THE LANDING: category cards, then Starred and Recently used.
-            return wire::LockerHomeData {
-                status_line: self.wall.unlocked_line(locale),
-                filter_menu,
-                categories: if day_one {
-                    Vec::new()
-                } else {
-                    self.categories(locale, answer)
+            let said = if day_one { empty } else { None };
+            return (
+                wire::LockerHomeData {
+                    status_line: self.wall.unlocked_line(locale),
+                    filter_menu,
+                    categories: if day_one {
+                        Vec::new()
+                    } else {
+                        self.categories(locale, answer)
+                    },
+                    starred_title: words::filter_starred(locale),
+                    starred: answer
+                        .items
+                        .iter()
+                        .filter(|row| row.starred)
+                        .take(LANDING_ROWS)
+                        .map(|row| shared::row(locale, row, &parent))
+                        .collect(),
+                    recent_title: words::recent_head(locale),
+                    recent: recent_of(answer)
+                        .into_iter()
+                        .map(|row| shared::row(locale, row, &parent))
+                        .collect(),
+                    ..wire::LockerHomeData::default()
                 },
-                starred_title: words::filter_starred(locale),
-                starred: answer
-                    .items
-                    .iter()
-                    .filter(|row| row.starred)
-                    .take(LANDING_ROWS)
-                    .map(|row| shared::row(locale, row, &parent))
-                    .collect(),
-                recent_title: words::recent_head(locale),
-                recent: recent_of(answer)
+                said,
+            );
+        }
+        let list_title = list_title(locale, filter);
+        (
+            wire::LockerHomeData {
+                status_line: words::items_status(locale),
+                filter_menu,
+                rows: shown
                     .into_iter()
                     .map(|row| shared::row(locale, row, &parent))
                     .collect(),
-                items_empty: if day_one { empty } else { None },
+                window,
+                list_title,
+                list_back_label: parent,
                 ..wire::LockerHomeData::default()
-            };
-        }
-        let list_title = list_title(locale, filter);
-        wire::LockerHomeData {
-            status_line: words::items_status(locale),
-            filter_menu,
-            rows: shown
-                .into_iter()
-                .map(|row| shared::row(locale, row, &parent))
-                .collect(),
-            window,
-            items_empty: empty,
-            list_title,
-            list_back_label: parent,
-            ..wire::LockerHomeData::default()
-        }
+            },
+            empty,
+        )
     }
 
     /// The six cards, in the board's order, each with its own count.
@@ -549,7 +575,7 @@ impl Home {
         let live = answer.items.iter().filter(|row| !row.archived);
         let codes = u32::try_from(live.filter(|row| row.has_code).count()).unwrap_or(u32::MAX);
         let review = match &self.review {
-            Phase::Ready(review) => review_count(review),
+            Page::Ready { data: review, .. } => review_count(review),
             _ => 0,
         };
         let card = |key: &str, label: String, count: u32, icon: &str, color: &str| {
@@ -697,62 +723,117 @@ impl Home {
         }
     }
 
-    fn search_data(&self, locale: Locale) -> wire::LockerHomeData {
+    /// The search surface's data, and what it says when the term matched nothing.
+    fn search_data(&self, locale: Locale) -> (wire::LockerHomeData, Option<wire::EmptyState>) {
         let base = wire::LockerHomeData {
             status_line: words::items_status(locale),
             ..wire::LockerHomeData::default()
         };
         let Some(answer) = self.hits.data().filter(|_| !self.term.trim().is_empty()) else {
-            return base;
+            return (base, None);
         };
-        wire::LockerHomeData {
-            hits: answer
-                .items
-                .iter()
-                .map(|row| shared::row(locale, row, &words::app_name(locale)))
-                .collect(),
-            search_empty: answer.items.is_empty().then(|| wire::EmptyState {
+        (
+            wire::LockerHomeData {
+                hits: answer
+                    .items
+                    .iter()
+                    .map(|row| shared::row(locale, row, &words::app_name(locale)))
+                    .collect(),
+                ..base
+            },
+            answer.items.is_empty().then(|| wire::EmptyState {
                 headline: fill(&words::search_empty(locale), &[("term", &answer.term)]),
                 body: words::search_note(locale),
                 ..wire::EmptyState::default()
             }),
-            ..base
-        }
+        )
     }
 
+    /// The data the open place draws, once its read has answered.
     fn content(&self, locale: Locale) -> Option<wire::locker_home_state::Content> {
         use wire::LockerDestination as D;
         use wire::locker_home_state::Content as C;
         if !self.wall.is_open() {
             return None;
         }
-        Some(match self.destination {
-            D::Generate => C::Data(Box::new(wire::LockerHomeData {
+        match self.destination {
+            D::Generate => Some(C::Data(Box::new(wire::LockerHomeData {
                 status_line: words::items_status(locale),
                 generator: Some(self.generator.view(locale)),
                 ..wire::LockerHomeData::default()
-            })),
-            D::Review => match &self.review {
-                Phase::Loading => C::Loading(wire::Loading { first_load: true }),
-                Phase::Failed => C::Failure(read::failure(locale)),
-                Phase::Denied(denial) => C::Denied(shared::denied(locale, denial)),
-                Phase::Ready(answer) => C::Data(Box::new(Self::review_data(locale, answer))),
-            },
-            D::Search => C::Data(Box::new(self.search_data(locale))),
-            _ => match &self.items {
-                Phase::Loading => C::Loading(wire::Loading { first_load: true }),
-                Phase::Failed => C::Failure(read::failure(locale)),
-                Phase::Denied(denial) => C::Denied(shared::denied(locale, denial)),
-                Phase::Ready(answer) => C::Data(Box::new(self.items_data(locale, answer))),
-            },
-        })
+            }))),
+            D::Review => self
+                .review
+                .data()
+                .map(|answer| C::Data(Box::new(Self::review_data(locale, answer)))),
+            D::Search if self.term.trim().is_empty() || self.hits.data().is_some() => {
+                Some(C::Data(Box::new(self.search_data(locale).0)))
+            }
+            D::Search => None,
+            _ => self
+                .items
+                .data()
+                .map(|answer| C::Data(Box::new(self.items_data(locale, answer).0))),
+        }
+    }
+
+    /// WHAT THE PLACE SAYS WHEN IT HAS NOTHING TO DRAW: no item at all (day one, whose landing has
+    /// no card to draw), none under the filter or category in view, or a search that matched
+    /// nothing. It is the page's own empty state; the answer stays, because the filter in the
+    /// header and the category's back chevron are built from it. Review draws real content at
+    /// zero (what it cannot check), so its all-clear stays inside its data.
+    fn nothing(&self, locale: Locale) -> Option<wire::EmptyState> {
+        use wire::LockerDestination as D;
+        if !self.wall.is_open() {
+            return None;
+        }
+        match self.destination {
+            D::Generate | D::Review => None,
+            D::Search => {
+                if self.term.trim().is_empty() {
+                    return None;
+                }
+                self.search_data(locale).1
+            }
+            _ => self
+                .items
+                .data()
+                .and_then(|answer| self.items_data(locale, answer).1),
+        }
+    }
+
+    /// THE READ OF THE PLACE ON SCREEN, as the kit's page state: the tab's own read (Generate and an
+    /// empty search read nothing, so they are ready). Its empties are inside its data, beside
+    /// the filter, the search field and the sections that stay.
+    fn page(&self, locale: Locale) -> wire::PageState {
+        use wire::LockerDestination as D;
+        let denied = |denial: &wire::AppQueryDenial| shared::denied(locale, denial);
+        let empty = wire::EmptyState::default;
+        if !self.wall.is_open() {
+            return Page::<()>::loading().wire(locale, denied, empty);
+        }
+        let nothing = self.nothing(locale);
+        let holds_nothing = nothing.is_some();
+        let said = || nothing.clone().unwrap_or_default();
+        match self.destination {
+            D::Review => self.review.wire(locale, denied, empty),
+            D::Search if !self.term.trim().is_empty() => {
+                self.hits.wire_keeping(locale, denied, holds_nothing, said)
+            }
+            D::Generate | D::Search => Page::Ready {
+                data: (),
+                note: None,
+            }
+            .wire(locale, denied, empty),
+            _ => self.items.wire_keeping(locale, denied, holds_nothing, said),
+        }
     }
 
     fn band(&self, locale: Locale) -> Vec<wire::LockerBandTab> {
         use wire::LockerDestination as D;
         let denied = matches!(
             (self.destination, &self.items, &self.review),
-            (D::Items, Phase::Denied(_), _) | (D::Review, _, Phase::Denied(_))
+            (D::Items, Page::Refused(_), _) | (D::Review, _, Page::Refused(_))
         );
         if denied {
             return Vec::new();
@@ -821,8 +902,8 @@ impl Home {
                 ),
                 more(
                     "trash",
-                    words::more_trash(locale),
-                    words::more_trash_meta(locale),
+                    kit_words::trash_entry(locale),
+                    kit_words::trash_entry_meta(locale),
                     "Trash",
                     Some(routes::trash()),
                 ),
@@ -882,12 +963,14 @@ impl Screen for Home {
                 let step = self.wall.appeared(ctx, true);
                 let effects = self.walled(ctx, step);
                 // A home that finds the session already open still reads.
-                if self.wall.is_open() && matches!(self.items, Phase::Loading) {
+                if self.wall.is_open() && matches!(self.items, Page::Loading) {
                     self.reload(ctx);
                 }
                 effects
             }
             Some(E::DataChanged(_) | E::EnvironmentChanged(_)) => {
+                // THE EDITOR ABOVE CLOSED: its "Item saved" and Undo are drawn here.
+                self.undo.take_handed(ctx);
                 if self.wall.is_open() {
                     self.reload(ctx);
                     Vec::new()
@@ -940,7 +1023,14 @@ impl Screen for Home {
                 self.walled(ctx, step)
             }
             Some(E::TimerFired(fired)) => self.secrets.fired(&fired.timer),
+            Some(E::StatusActed(_)) => {
+                if self.undo.acted(ctx) && self.wall.is_open() {
+                    self.reload(ctx);
+                }
+                Vec::new()
+            }
             Some(E::Left(_)) => {
+                self.undo.clear();
                 self.secrets.conceal();
                 self.generator.forget();
                 // THE FACE ID SHEET MUST NOT OUTLIVE LOCKER: a pending unlock is dropped.
@@ -975,6 +1065,7 @@ impl Screen for Home {
                 secure: open,
                 destination: self.destination as i32,
                 content,
+                page: Some(self.page(locale)),
                 sheet: self.sheet as i32,
                 band: self.band(locale),
                 band_locked: !open,
@@ -997,7 +1088,7 @@ impl Screen for Home {
                         .map(|answer| answer.corrected.clone())
                         .unwrap_or_default(),
                 }),
-                status: self.status.clone(),
+                status: self.undo.status().or_else(|| self.status.clone()),
             })),
             ..wire::ViewState::default()
         }

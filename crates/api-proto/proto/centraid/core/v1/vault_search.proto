@@ -82,4 +82,9 @@ message VaultSearchHit {
   // the asset's id here; every other hit leaves it empty. A photo whose asset
   // is gone or in the trash is not a hit at all.
   string open_id = 8;
+  // The words matched only in an EARLIER VERSION of the item, not in what it says now (#1185).
+  // The hit is the live item, once. A shell says so in a short line ("In an earlier version")
+  // and the row opens that item's Earlier versions. False for a hit on what it says now,
+  // and for a kind with no Earlier versions page.
+  bool in_earlier_version = 9;
 }

@@ -7,8 +7,8 @@
 //! bring, says nothing, and no line shows when nothing came in.
 //!
 //! The importers are the apps' own: People's [`ContactsFollow`] and Agenda's [`CalendarFollow`]
-//! (so a calendar imported here is followed from now on, exactly as one imported from Agenda's
-//! home), and [`super::reminders`]. This screen only sequences them and says the result.
+//! (so a calendar imported here is followed from now on, exactly as one imported from Calendar's
+//! home: the follow coordinator takes it from the import), and [`super::reminders`]. This screen only sequences them and says the result.
 //!
 //! The shell tells it when the vault is made (`Made`), answers the photo prompt
 //! (`LibraryPermission{ask}`) and the importers' reads as it always does, and stops drawing its
@@ -20,10 +20,33 @@ use wire::screen_event::Kind as E;
 
 use super::{effect, reminders};
 use crate::calendar::follow::{self as calendar, CalendarFollow};
+use crate::kit::permission::{self, Resource};
 use crate::people::contacts::{self, ContactsFollow};
 use crate::screen::{Ctx, Screen};
 use crate::shell::row_routes as rows;
 use crate::strings::{Locale, fill, imports as words};
+
+/// THIS DEVICE FOLLOWS ITS REMINDERS from now on, once the vault took a list: the habit is written
+/// and the coordinator told.
+fn followed(ctx: &Ctx, outcome: &reminders::Outcome) -> Vec<wire::Effect> {
+    if !outcome.told {
+        return Vec::new();
+    }
+    ctx.follows().changed(ctx, crate::follow::Store::Reminders);
+    // Reminders' More sheet says "Stop reading" now: its home reads what the vault stores again.
+    ctx.post(
+        crate::reminders::HOME,
+        wire::ScreenEvent {
+            kind: Some(wire::screen_event::Kind::DataChanged(wire::DataChanged {
+                tables: Vec::new(),
+            })),
+        },
+    );
+    vec![reminders::habit_set()]
+}
+
+/// The reason a shell gives when the phone has no Reminders store to read: the fact, never words.
+pub use crate::effect_reason::UNAVAILABLE;
 
 #[must_use]
 pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
@@ -271,13 +294,23 @@ impl Screen for Made {
                 }
             }
             (E::EffectResult(result), Step::Reminders) if self.standalone => {
+                let mut effects = Vec::new();
                 let sentence = match &result.outcome {
-                    Some(O::RemindersSnapshot(snapshot)) => reminders::status_line(
-                        ctx.locale(),
-                        reminders::run(ctx, &snapshot.reminders, self.include_completed),
-                    ),
-                    Some(O::Failed(failed)) if failed.denied => {
-                        words::reminders_denied(ctx.locale())
+                    Some(O::RemindersSnapshot(snapshot)) => {
+                        let outcome =
+                            reminders::run(ctx, &snapshot.reminders, self.include_completed);
+                        effects = followed(ctx, &outcome);
+                        reminders::status_line(ctx.locale(), outcome)
+                    }
+                    Some(O::Failed(failed)) if permission::State::of(failed).is_some() => {
+                        permission::says(
+                            ctx.locale(),
+                            Resource::Reminders,
+                            permission::State::of(failed).unwrap_or(permission::State::Refused),
+                        )
+                    }
+                    Some(O::Failed(failed)) if failed.reason == UNAVAILABLE => {
+                        words::reminders_unavailable(ctx.locale())
                     }
                     Some(O::Failed(_)) => {
                         crate::strings::task::import_reminders_failed(ctx.locale())
@@ -289,29 +322,25 @@ impl Screen for Made {
                     sentence,
                 }];
                 self.step = Step::Done;
-                Vec::new()
+                effects
             }
             (E::EffectResult(result), Step::Reminders) => match &result.outcome {
                 Some(O::RemindersSnapshot(snapshot)) => {
                     let outcome = reminders::run(ctx, &snapshot.reminders, self.include_completed);
+                    let mut effects = followed(ctx, &outcome);
                     if outcome.added > 0 {
                         self.came.push(Came {
                             app: "reminders",
                             sentence: reminders::sentence(ctx.locale(), outcome),
                         });
                     }
-                    self.next(ctx)
+                    effects.extend(self.next(ctx));
+                    effects
                 }
                 // Refused or unavailable: it says nothing.
                 Some(O::Failed(_)) => self.next(ctx),
                 _ => Vec::new(),
             },
-            // The importers' own timers and watches, once they are following.
-            (E::TimerFired(_), Step::Contacts | Step::Calendar) => {
-                let mut effects = self.contacts.on_event(&kind, ctx).unwrap_or_default();
-                effects.extend(self.calendar.on_event(&kind, ctx).unwrap_or_default());
-                effects
-            }
             _ => Vec::new(),
         }
     }

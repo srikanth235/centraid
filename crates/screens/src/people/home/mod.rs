@@ -12,12 +12,12 @@
 //!   closing search reads nothing and clears the term.
 //! - **The room's grammar** (R-CHROME-1…4): Add person is the header's one
 //!   action beside the filter button, search the bar under it, and More holds
-//!   Import, Export and Trash.
+//!   Lists, Import, Export and Trash.
 //! - **The star** is a write from the row: it commits at once, the load after it
 //!   shows the vault's star, and a refusal's sentence is the status line.
-//! - **Contacts** import and follow here ([`ContactsFollow`]): the day-one empty
-//!   state offers the phone's contacts, and a pass follows the address book for
-//!   as long as this screen lives.
+//! - **Contacts** import here ([`ContactsFollow`]): the day-one empty state offers the phone's
+//!   contacts. Following the address book is the coordinator's ([`crate::follow`]), whichever
+//!   screen is showing; this screen asks it for a pass when it appears and shows what it said.
 
 use centraid_api_proto::core_v1 as wire;
 use wire::app_query_response::Answer;
@@ -25,16 +25,22 @@ use wire::people_home_event::Kind as H;
 use wire::screen_event::Kind as E;
 
 use super::contacts::ContactsFollow;
-use super::{Phase, denied, routes};
+use super::{denied, routes};
 use crate::catalog::{act, load};
+use crate::follow::Store;
 use crate::kit::act as kit_act;
+use crate::kit::export;
 use crate::kit::menu;
-use crate::kit::read;
+use crate::kit::read::{self, Page};
 use crate::kit::search;
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, fill, people as words};
+use crate::strings::{Locale, fill, people as words, shared};
 
 mod rows;
+
+/// The More row that stops reading the phone's contacts.
+const MORE_STOP: &str = "stop";
 
 /// At most what `people.search` asks of the index.
 const SEARCH_LIMIT: u32 = 50;
@@ -57,7 +63,10 @@ struct Search {
     open: bool,
     term: String,
     /// The answer for the trimmed `term`, once there is one to ask.
-    held: Option<Phase<wire::PeopleSearch>>,
+    held: Option<Page<wire::PeopleSearch>>,
+    /// The last answer that arrived, kept while the page is ready or empty: a term that matched
+    /// no one still has its corrected term and its Ask row.
+    found: Option<wire::PeopleSearch>,
 }
 
 impl Search {
@@ -71,13 +80,23 @@ struct Home {
     destination: wire::PeopleDestination,
     chip: wire::PeopleChipKey,
     order: wire::PeopleOrder,
-    roster: Phase<wire::PeopleRoster>,
-    touch: Phase<wire::PeopleTouch>,
+    roster: Page<wire::PeopleRoster>,
+    touch: Page<wire::PeopleTouch>,
+    /// The last roster that arrived, kept while the page is ready or empty: the header's filter
+    /// menu still offers its chips when the chip chosen leaves no one.
+    held_roster: Option<wire::PeopleRoster>,
     search: Search,
     sheet: wire::people_home_state::Sheet,
-    /// What a write did, or a refusal's sentence; the page stays.
-    status: Option<wire::StatusLine>,
+    /// What a write did (with Undo when the core can take it back), or a refusal's sentence; the
+    /// page stays. The kit's one door.
+    undo: Undo,
     contacts: ContactsFollow,
+    /// The member tapped "Stop reading Phone contacts" and has not answered the confirm.
+    asking_stop: bool,
+    /// The accounts the vault follows from the phone's Contacts (their origin refs), as it stores
+    /// them: what the More sheet's stop row says, right after a cold start too. `None` until the
+    /// read has landed.
+    stored: Option<Vec<String>>,
     /// The contacts flow has asked the shell whether this device follows.
     attached: bool,
 }
@@ -88,31 +107,54 @@ impl Home {
             destination,
             chip: wire::PeopleChipKey::All,
             order: wire::PeopleOrder::Name,
-            roster: Phase::Loading,
-            touch: Phase::Loading,
+            roster: Page::loading(),
+            touch: Page::loading(),
+            held_roster: None,
             search: Search::default(),
             sheet: wire::people_home_state::Sheet::Unspecified,
-            status: None,
+            undo: Undo::default(),
             contacts: ContactsFollow::new(),
+            asking_stop: false,
+            stored: None,
             attached: false,
         }
     }
 
+    /// Read what the vault stores of the phone's contacts (the stop row's truth).
+    fn read_stored(&mut self, ctx: &Ctx) {
+        self.stored = crate::follow::stored_origins(ctx, "contacts");
+    }
+
+    /// Whether the More sheet offers "Stop reading": the vault follows accounts from the phone.
+    fn can_stop(&self) -> bool {
+        self.stored
+            .as_ref()
+            .is_some_and(|stored| !stored.is_empty())
+    }
+
     fn reload(&mut self, ctx: &Ctx) {
+        self.read_stored(ctx);
+        let locale = ctx.locale();
         if self.search.active() {
-            self.search.held = Some(self.read_search(ctx));
+            // A refresh of the same term keeps the rows shown under a note.
+            let before = self.search.held.take().unwrap_or_else(Page::loading);
+            self.answer_search(ctx, before);
             return;
         }
         match self.destination {
             wire::PeopleDestination::Touch => {
-                self.touch = Phase::of(read::read(
-                    ctx,
-                    load::people::Dashboard::default(),
-                    |answer| match answer {
-                        Answer::PeopleTouch(touch) => Some(touch),
-                        _ => None,
-                    },
-                ));
+                let reading =
+                    read::read(
+                        ctx,
+                        load::people::Dashboard::default(),
+                        |answer| match answer {
+                            Answer::PeopleTouch(touch) => Some(touch),
+                            _ => None,
+                        },
+                    );
+                let held = std::mem::replace(&mut self.touch, Page::loading());
+                // Nobody in People at all is day one: the page's own empty state.
+                self.touch = held.after(reading, locale, |touch| touch.count_all == 0);
             }
             _ => {
                 let filter = match self.chip {
@@ -130,31 +172,42 @@ impl Home {
                     limit: 0,
                     sort: Some(sort.to_owned()),
                 };
-                self.roster = Phase::of(read::read(ctx, request, |answer| match answer {
+                let reading = read::read(ctx, request, |answer| match answer {
                     Answer::PeopleRoster(roster) => Some(roster),
                     _ => None,
-                }));
+                });
+                if let read::Reading::Data(roster) = &reading {
+                    self.held_roster = Some(roster.clone());
+                }
+                let held = std::mem::replace(&mut self.roster, Page::loading());
+                self.roster = held.after(reading, locale, |roster| roster.people.is_empty());
             }
         }
     }
 
-    fn read_search(&self, ctx: &Ctx) -> Phase<wire::PeopleSearch> {
+    /// Read the term shown and fold the answer into `before`, the page it replaces.
+    fn answer_search(&mut self, ctx: &Ctx, before: Page<wire::PeopleSearch>) {
         let mut request: wire::LoadRequest = load::people::Search {
             term: self.search.term.trim().to_owned(),
         }
         .into();
         request.limit = SEARCH_LIMIT;
-        Phase::of(read::read(ctx, request, |answer| match answer {
+        let reading = read::read(ctx, request, |answer| match answer {
             Answer::PeopleSearch(found) => Some(found),
             _ => None,
-        }))
+        });
+        if let read::Reading::Data(found) = &reading {
+            self.search.found = Some(found.clone());
+        }
+        self.search.held =
+            Some(before.after(reading, ctx.locale(), |found| found.people.is_empty()));
     }
 
     /// The vault will not let People read: the gate has no band and no More.
     fn denied(&self) -> bool {
         match self.destination {
-            wire::PeopleDestination::Touch => matches!(self.touch, Phase::Denied(_)),
-            _ => matches!(self.roster, Phase::Denied(_)),
+            wire::PeopleDestination::Touch => matches!(self.touch, Page::Refused(_)),
+            _ => matches!(self.roster, Page::Refused(_)),
         }
     }
 
@@ -163,7 +216,7 @@ impl Home {
         self.destination = destination;
         self.sheet = wire::people_home_state::Sheet::Unspecified;
         self.search = Search::default();
-        self.status = None;
+        self.undo.clear();
         self.reload(ctx);
     }
 
@@ -177,10 +230,15 @@ impl Home {
         if chip == self.chip && on_people && !force {
             return;
         }
+        // Another chip is another question: its failure never shows this one's rows.
+        if chip != self.chip {
+            self.roster = Page::loading();
+            self.held_roster = None;
+        }
         self.chip = chip;
         self.destination = wire::PeopleDestination::People;
         self.search = Search::default();
-        self.status = None;
+        self.undo.clear();
         self.reload(ctx);
     }
 
@@ -198,7 +256,12 @@ impl Home {
     fn search_term(&mut self, ctx: &Ctx, term: String) {
         self.search.open = true;
         self.search.term = term;
-        self.search.held = self.search.active().then(|| self.read_search(ctx));
+        // Another term is another question: it starts from nothing.
+        self.search.held = None;
+        self.search.found = None;
+        if self.search.active() {
+            self.answer_search(ctx, Page::loading());
+        }
     }
 
     /// CLOSE CLEARS the term and its answer; the destination comes back.
@@ -210,17 +273,15 @@ impl Home {
     /// A person on screen, in search or the roster, by id.
     fn find(&self, party_id: &str) -> Option<(String, bool)> {
         let searched = if self.search.active() {
-            match &self.search.held {
-                Some(Phase::Ready(found)) => Some(&found.people),
-                _ => None,
-            }
+            self.search
+                .held
+                .as_ref()
+                .and_then(|page| page.data())
+                .map(|found| &found.people)
         } else {
             None
         };
-        let listed = match &self.roster {
-            Phase::Ready(roster) => Some(&roster.people),
-            _ => None,
-        };
+        let listed = self.roster.data().map(|roster| &roster.people);
         searched
             .into_iter()
             .chain(listed)
@@ -245,21 +306,41 @@ impl Home {
             .into()
         };
         let key = kit_act::key(&[&request.action.clone(), party_id], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        let locale = ctx.locale();
-        self.status = Some(if settled.committed {
-            plain(fill(
+        self.undo.act(ctx, request, &key, |locale| {
+            fill(
                 &if starred {
                     words::outcome_unstarred(locale)
                 } else {
                     words::outcome_starred(locale)
                 },
                 &[("name", &name)],
-            ))
-        } else {
-            refused(settled.refusal)
+            )
         });
         self.reload(ctx);
+    }
+
+    /// STOP READING, once the member said so: the status line says what happened, and People goes
+    /// on showing the people it already holds.
+    fn stop(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
+        let locale = ctx.locale();
+        if !std::mem::take(&mut self.asking_stop) {
+            return Vec::new();
+        }
+        let effects = match self
+            .contacts
+            .stop(ctx, &self.stored.clone().unwrap_or_default())
+        {
+            Some(effects) => {
+                self.undo.say(words::contacts_stopped(locale));
+                effects
+            }
+            None => {
+                self.undo.refuse(shared::write_refused(locale));
+                Vec::new()
+            }
+        };
+        self.reload(ctx);
+        effects
     }
 
     fn event(&mut self, event: wire::PeopleHomeEvent, ctx: &Ctx) -> Vec<wire::Effect> {
@@ -267,7 +348,10 @@ impl Home {
             return Vec::new();
         };
         match kind {
-            H::Refreshed(_) => self.reload(ctx),
+            H::Refreshed(_) => {
+                self.reload(ctx);
+                ctx.follows().changed(ctx, Store::Contacts);
+            }
             // The same destination is nothing; More is a sheet; another is a swap.
             H::Band(picked) => match picked.key.as_str() {
                 "more" => self.sheet = wire::people_home_state::Sheet::More,
@@ -303,14 +387,23 @@ impl Home {
             H::SearchTerm(typed) => self.search_term(ctx, typed.term),
             H::SearchClosed(_) => self.search_closed(ctx),
             H::SheetClosed(_) => self.sheet = wire::people_home_state::Sheet::Unspecified,
+            // THE ONE MORE ROW WITH NO ROUTE: it asks before it stops.
+            H::MoreRow(picked) => {
+                if picked.key == MORE_STOP && self.can_stop() {
+                    self.asking_stop = true;
+                    self.sheet = wire::people_home_state::Sheet::Unspecified;
+                }
+            }
+            H::StopDismissed(_) => self.asking_stop = false,
+            H::StopConfirmed(_) => return self.stop(ctx),
             H::Star(toggled) => self.star(ctx, &toggled.party_id),
             H::ImportContacts(_) => {
-                self.status = None;
+                self.undo.clear();
                 return self.contacts.import(ctx);
             }
             H::ContactsAction(_) => {
-                self.status = None;
-                if self.contacts.needs_settings() {
+                self.undo.clear();
+                if self.contacts.needs_settings(ctx) {
                     // THE PHONE SAID NO: only its own Settings can say yes.
                     return vec![wire::Effect {
                         kind: Some(wire::effect::Kind::VaultCommand(wire::VaultCommand {
@@ -375,7 +468,7 @@ impl Home {
     fn menu_offered(&self) -> bool {
         self.destination == wire::PeopleDestination::People
             && !self.search.open
-            && matches!(self.roster, Phase::Ready(_))
+            && matches!(self.roster, Page::Ready { .. } | Page::Empty)
     }
 
     /// THE HEADER'S FILTER MENU: the roster's filters with their counts and its
@@ -385,9 +478,23 @@ impl Home {
         if !self.menu_offered() {
             return None;
         }
-        match &self.roster {
-            Phase::Ready(roster) => Some(rows::filter_menu(locale, roster, self.chip, self.order)),
-            _ => None,
+        self.held_roster
+            .as_ref()
+            .map(|roster| rows::filter_menu(locale, roster, self.chip, self.order))
+    }
+
+    /// The page's own sentence for having nothing to show: a term that matched no one, day one on
+    /// Touch, or the roster's (day one, or the chip's own).
+    fn empty_state(&self, locale: Locale, searching: bool) -> wire::EmptyState {
+        if searching {
+            rows::search_empty(locale)
+        } else if self.destination == wire::PeopleDestination::Touch {
+            rows::day_one(locale)
+        } else {
+            self.held_roster.as_ref().map_or_else(
+                || rows::day_one(locale),
+                |roster| rows::roster_empty(locale, roster, self.chip),
+            )
         }
     }
 
@@ -400,8 +507,13 @@ impl Home {
         if !self.search.active() {
             return state;
         }
-        if let Some(Phase::Ready(found)) = &self.search.held {
-            state.results = Some(rows::search(locale, found));
+        // The answer landed (rows, or no one matched): its corrected term and its Ask row.
+        if matches!(self.search.held, Some(Page::Ready { .. } | Page::Empty))
+            && let Some(found) = &self.search.found
+        {
+            if !found.people.is_empty() {
+                state.results = Some(rows::search(locale, found));
+            }
             if !found.corrected.is_empty() {
                 state.corrected = search::corrected(locale, &found.corrected);
             }
@@ -410,26 +522,15 @@ impl Home {
         state
     }
 
-    fn status(&self) -> Option<wire::StatusLine> {
-        self.status
-            .clone()
+    fn status(&self, ctx: &Ctx) -> Option<wire::StatusLine> {
+        self.undo
+            .status()
             .or_else(|| self.contacts.status().cloned())
-    }
-}
-
-fn plain(sentence: String) -> wire::StatusLine {
-    wire::StatusLine {
-        sentence,
-        action_label: String::new(),
-        refused: false,
-    }
-}
-
-fn refused(sentence: String) -> wire::StatusLine {
-    wire::StatusLine {
-        sentence,
-        action_label: String::new(),
-        refused: true,
+            .or_else(|| {
+                ctx.follows()
+                    .report(Store::Contacts)
+                    .status(ctx, Store::Contacts)
+            })
     }
 }
 
@@ -438,13 +539,16 @@ impl Screen for Home {
         let Some(kind) = event.kind else {
             return Vec::new();
         };
-        // The contacts flow's own events first: its timers and the answers to its effects.
+        // The contacts flow's own events first: the answers to the effects it asked.
         if let Some(effects) = self.contacts.on_event(&kind, ctx) {
+            // An import that followed accounts changed what the vault stores.
+            self.read_stored(ctx);
             return effects;
         }
         match kind {
             E::Appeared(_) => {
                 self.reload(ctx);
+                ctx.follows().changed(ctx, Store::Contacts);
                 if !self.attached {
                     self.attached = true;
                     return self.contacts.attach();
@@ -452,6 +556,12 @@ impl Screen for Home {
             }
             E::DataChanged(_) | E::EnvironmentChanged(_) => self.reload(ctx),
             E::PeopleHome(home) => return self.event(home, ctx),
+            E::StatusActed(_) => {
+                if self.undo.acted(ctx) {
+                    self.reload(ctx);
+                }
+            }
+            E::Left(_) => self.undo.clear(),
             _ => {}
         }
         Vec::new()
@@ -460,69 +570,97 @@ impl Screen for Home {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::people_home_state::Content as C;
         let locale = ctx.locale();
-        let failure = || C::Failure(read::failure(locale));
-        // A search that did not land replaces the destination: it is not an empty one.
-        let searched = if self.search.active() {
-            match &self.search.held {
-                Some(Phase::Failed) => Some(failure()),
-                Some(Phase::Denied(denial)) => Some(C::Denied(denied(locale, denial))),
-                _ => None,
+        // The page the surface shows: the answer to the term while one is asked, else the
+        // destination's own read.
+        let searching = self.search.active() && self.search.held.is_some();
+        let empty = self.empty_state(locale, searching);
+        let gate = |denial: &wire::AppQueryDenial| denied(locale, denial);
+        let wired = match (&self.search.held, searching) {
+            (Some(held), true) => held.wire(locale, gate, || empty.clone()),
+            _ if self.destination == wire::PeopleDestination::Touch => {
+                self.touch.wire(locale, gate, || empty.clone())
             }
-        } else {
-            None
+            _ => self.roster.wire(locale, gate, || empty.clone()),
         };
-        let content = searched.unwrap_or_else(|| match self.destination {
-            wire::PeopleDestination::Touch => match &self.touch {
-                Phase::Loading => C::Loading(wire::Loading { first_load: true }),
-                Phase::Failed => failure(),
-                Phase::Denied(denial) => C::Denied(denied(locale, denial)),
-                Phase::Ready(answer) => C::Touch(Box::new(rows::touch(locale, answer))),
-            },
-            _ => match &self.roster {
-                Phase::Loading => C::Loading(wire::Loading { first_load: true }),
-                Phase::Failed => failure(),
-                Phase::Denied(denial) => C::Denied(denied(locale, denial)),
-                Phase::Ready(answer) => C::Roster(Box::new(rows::roster(
+        let content = if searching {
+            None
+        } else if self.destination == wire::PeopleDestination::Touch {
+            self.touch
+                .data()
+                .map(|answer| C::Touch(Box::new(rows::touch(locale, answer))))
+        } else {
+            self.roster.data().map(|answer| {
+                C::Roster(Box::new(rows::roster(
                     locale, answer, self.chip, self.order,
-                ))),
-            },
-        });
+                )))
+            })
+        };
         let denied_now = self.denied();
         let state = wire::PeopleHomeState {
             destination: self.destination as i32,
             title: words::app_title(locale),
             band: self.band(locale),
             chrome: Some(Self::chrome(locale)),
-            content: Some(content),
+            content,
+            page: Some(wired),
             search: Some(self.search_state(locale)),
             more_rows: if denied_now {
                 Vec::new()
             } else {
                 let back = words::app_title(locale);
+                let export = export::entry(locale, super::EXPORT);
                 vec![
+                    wire::PeopleMoreRow {
+                        key: "lists".to_owned(),
+                        label: crate::strings::people_lists::more_row(locale),
+                        icon_key: "List".to_owned(),
+                        route: Some(routes::lists(&back)),
+                        meta: String::new(),
+                    },
                     wire::PeopleMoreRow {
                         key: "import".to_owned(),
                         label: words::more_import(locale),
                         icon_key: "Download".to_owned(),
-                        route: Some(routes::transfer(false, &back)),
+                        route: Some(routes::import(&back)),
+                        meta: String::new(),
                     },
                     wire::PeopleMoreRow {
-                        key: "export".to_owned(),
-                        label: words::more_export(locale),
-                        icon_key: "Upload".to_owned(),
-                        route: Some(routes::transfer(true, &back)),
+                        key: export.key.to_owned(),
+                        label: export.label,
+                        icon_key: export.icon_key.to_owned(),
+                        route: Some(export.route),
+                        meta: String::new(),
                     },
                     wire::PeopleMoreRow {
                         key: "trash".to_owned(),
                         label: words::trash_label(locale),
                         icon_key: "Trash".to_owned(),
                         route: Some(routes::trash()),
+                        meta: shared::trash_entry_meta(locale),
                     },
                 ]
+                .into_iter()
+                // THE STOP ROW, last (as Health's): the same words for every followed store.
+                .chain(self.can_stop().then(|| wire::PeopleMoreRow {
+                    key: MORE_STOP.to_owned(),
+                    label: crate::kit::follow::stop_row(locale, &words::contacts_title(locale)),
+                    icon_key: "Stop".to_owned(),
+                    route: None,
+                    meta: String::new(),
+                }))
+                .collect()
             },
             sheet: self.sheet as i32,
-            status: self.status(),
-            contacts: (!denied_now).then(|| self.contacts.row(locale)),
+            status: self.status(ctx),
+            contacts: (!denied_now).then(|| self.contacts.row(ctx)),
+            stop: (self.asking_stop && !denied_now).then(|| {
+                crate::kit::follow::stop_confirm(
+                    locale,
+                    &words::app_title(locale),
+                    &words::contacts_title(locale),
+                    &words::contacts_kept(locale),
+                )
+            }),
             add_person: Some(routes::new_person()),
             filter_menu: self.filter_menu(locale),
         };
@@ -539,7 +677,11 @@ mod tests {
 
     fn ready(search_open: bool, destination: wire::PeopleDestination) -> Home {
         let mut home = Home::new(destination);
-        home.roster = Phase::Ready(wire::PeopleRoster::default());
+        home.roster = Page::Ready {
+            data: wire::PeopleRoster::default(),
+            note: None,
+        };
+        home.held_roster = Some(wire::PeopleRoster::default());
         home.search.open = search_open;
         home
     }
@@ -558,13 +700,13 @@ mod tests {
                 .is_none()
         );
         // Not while loading, failed or denied: no counts to show, nothing to pick.
-        for phase in [
-            Phase::Loading,
-            Phase::Failed,
-            Phase::Denied(wire::AppQueryDenial::default()),
+        for page in [
+            Page::loading(),
+            Page::Failed,
+            Page::Refused(wire::AppQueryDenial::default()),
         ] {
             let mut home = Home::new(people);
-            home.roster = phase;
+            home.roster = page;
             assert!(home.filter_menu(locale).is_none());
             assert!(!home.menu_offered());
         }

@@ -603,6 +603,8 @@ pub struct ActivityRow {
     pub category_id: Option<String>,
     pub category_label: Option<String>,
     pub flags: Vec<Flag>,
+    /// On a search row: the words matched only in an earlier version of the line (#1185).
+    pub in_earlier_version: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -645,6 +647,7 @@ fn activity_row(row: &TxnRow, data: &MoneyData, today: &str) -> ActivityRow {
         category_id: row.category_concept_id.clone(),
         category_label: row.category_concept_id.as_deref().map(|id| data.label(id)),
         flags: flags_of(row, data, today),
+        in_earlier_version: false,
     }
 }
 
@@ -1379,7 +1382,11 @@ pub fn search(
             rows: found
                 .rows
                 .iter()
-                .map(|r| activity_row(r, &data, today))
+                .map(|r| {
+                    let mut row = activity_row(r, &data, today);
+                    row.in_earlier_version = found.earlier.contains(&r.txn_id);
+                    row
+                })
                 .collect(),
         },
         None,

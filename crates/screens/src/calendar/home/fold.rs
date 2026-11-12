@@ -45,6 +45,7 @@ use crate::kit::civil::{self, HourCycle};
 use crate::kit::schedule::rows;
 use crate::kit::schedule::rule_words;
 use crate::kit::schedule::style;
+use crate::kit::search as kit_search;
 use crate::strings::{Locale, agenda as words, agenda_home as sentences};
 
 const CANCELLED: &str = "cancelled";
@@ -83,10 +84,28 @@ impl Slot<'_> {
     }
 }
 
+/// What a place has to say of having nothing to show.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Emptiness {
+    None,
+    /// Schedule's whole window holds nothing, with no search and no calendar hidden.
+    DayOne,
+    NothingOnDay,
+    NothingWaiting,
+    NoMatch,
+}
+
+/// A place's folded answer: the data it draws, and (instead of the data) the page's own empty
+/// state when there is nothing to draw (#1185).
+pub struct Folded {
+    pub data: wire::AgendaHomeData,
+    pub empty: Option<wire::EmptyState>,
+}
+
 /// The data for any place but To-do (or To-do under a search), or `None` when
 /// the answers it folds are not held.
 #[must_use]
-pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
+pub fn events(fold: &Fold) -> Option<Folded> {
     let locale = fold.locale;
     let held = fold.held;
     let upcoming = held.upcoming.as_ref()?;
@@ -327,36 +346,34 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
     // off draws no row and no group, and there the sentence is right.
     let empty = if drawn_grid && fold.destination != Dest::Day {
         // A GRID IS DRAWN EMPTY: its cells say what they hold.
-        wire::AgendaEmpty::None
+        Emptiness::None
     } else if !sections_out.is_empty() || overdue.is_some() {
-        wire::AgendaEmpty::None
+        Emptiness::None
     } else if fold.term.is_some() {
-        wire::AgendaEmpty::NoMatch
+        Emptiness::NoMatch
     } else if waiting_only {
-        wire::AgendaEmpty::NothingWaiting
+        Emptiness::NothingWaiting
     } else if fold.destination == Dest::Schedule
         && fold.hidden.is_empty()
         && upcoming.events.is_empty()
     {
-        wire::AgendaEmpty::DayOne
+        Emptiness::DayOne
     } else {
-        wire::AgendaEmpty::NothingOnDay
+        Emptiness::NothingOnDay
     };
     let (empty_title, empty_body, empty_action) = match empty {
-        wire::AgendaEmpty::DayOne => (
+        Emptiness::DayOne => (
             words::empty_day_one_title(locale),
             words::empty_day_one_body(locale),
             words::new_event(locale),
         ),
-        wire::AgendaEmpty::NoMatch => (
+        Emptiness::NoMatch => (
             words::empty_no_match(locale),
             words::empty_no_match_body(locale),
             String::new(),
         ),
-        wire::AgendaEmpty::NothingWaiting => {
-            (words::empty_waiting(locale), String::new(), String::new())
-        }
-        wire::AgendaEmpty::NothingOnDay => (
+        Emptiness::NothingWaiting => (words::empty_waiting(locale), String::new(), String::new()),
+        Emptiness::NothingOnDay => (
             if span == 1 {
                 words::empty_day(locale)
             } else {
@@ -365,18 +382,14 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
             String::new(),
             String::new(),
         ),
-        _ => (String::new(), String::new(), String::new()),
+        Emptiness::None => (String::new(), String::new(), String::new()),
     };
 
     let offer_import = fold.term.is_none() && fold.hidden.is_empty() && upcoming.events.is_empty();
 
-    Some(wire::AgendaHomeData {
+    let data = wire::AgendaHomeData {
         today: today.to_owned(),
         days: sections_out,
-        empty: empty as i32,
-        empty_title,
-        empty_body,
-        empty_action,
         // NO EVENT OF THE MEMBER'S YET, AND THE PHONE ALREADY HOLDS A CALENDAR:
         // the import is offered, where the shell can read one. Not "day one"
         // alone: a first vault's starter tasks and an imported contact's
@@ -433,7 +446,23 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
         time_grid: grids.time_grid,
         month: grids.month,
         year: grids.year,
-    })
+    };
+    // A drawn grid is the place whatever it holds (its cells say what they hold): only a list with
+    // nothing to list is the page's empty state.
+    let empty = (empty != Emptiness::None && !drawn_grid).then(|| wire::EmptyState {
+        headline: empty_title,
+        body: empty_body,
+        action_label: empty_action,
+        // THE PHONE ALREADY HOLDS A CALENDAR: the import is the empty state's door, where the
+        // shell can read one (a search that found nothing offers none).
+        import_source: if offer_import {
+            wire::ImportSource::Calendar as i32
+        } else {
+            wire::ImportSource::Unspecified as i32
+        },
+        ..wire::EmptyState::default()
+    });
+    Some(Folded { data, empty })
 }
 
 /// A search hit moved onto the occurrence the core names (`next_instance_key`,
@@ -635,10 +664,17 @@ fn event_row(
     } else {
         (wire::AgendaRowStatus::None, String::new())
     };
+    // A search hit found only by an earlier version says so and opens Earlier versions (#1185).
+    let earlier_label = if event.in_earlier_version {
+        kit_search::in_earlier_version(locale)
+    } else {
+        String::new()
+    };
     let accessibility_label = [title.clone(), spoken]
         .into_iter()
         .chain(meta.iter().cloned())
         .chain(std::iter::once(status_label.clone()))
+        .chain(std::iter::once(earlier_label.clone()))
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
         .join(", ");
@@ -653,12 +689,17 @@ fn event_row(
         status_label,
         accessibility_label,
         is_past: day < today || ended(event, today, now),
-        route: Some(routes::event(
-            &event.event_id,
-            &event.instance_key,
-            event.original_start_local.as_deref(),
-            day,
-        )),
+        route: Some(if event.in_earlier_version {
+            kit_search::earlier_route(locale, super::super::EARLIER, &event.event_id)
+        } else {
+            routes::event(
+                &event.event_id,
+                &event.instance_key,
+                event.original_start_local.as_deref(),
+                day,
+            )
+        }),
+        earlier_label,
     }
 }
 
@@ -783,6 +824,50 @@ mod tests {
     const TODAY: &str = "2026-06-15";
     const NOW: &str = "2026-06-15T09:42";
 
+    #[test]
+    fn an_event_found_only_in_an_earlier_version_says_so_and_opens_earlier_versions() {
+        let hues = Hues::of(&[]);
+        let mut found = timed(
+            "e1",
+            "Offsite",
+            "2026-06-16T10:00",
+            Some("2026-06-16T11:00"),
+        );
+        found.in_earlier_version = true;
+        let row = event_row(
+            Locale::En,
+            HourCycle::H24,
+            "2026-06-16",
+            &found,
+            TODAY,
+            NOW,
+            &hues,
+        );
+        assert_eq!(row.earlier_label, "In an earlier version");
+        assert!(row.accessibility_label.ends_with("In an earlier version"));
+        let route = row.route.as_ref().expect("a route");
+        assert_eq!(route.screen, crate::calendar::EARLIER);
+        assert!(matches!(
+            &route.args,
+            Some(wire::route::Args::Earlier(args)) if args.entity_id == "e1"
+        ));
+        found.in_earlier_version = false;
+        let now = event_row(
+            Locale::En,
+            HourCycle::H24,
+            "2026-06-16",
+            &found,
+            TODAY,
+            NOW,
+            &hues,
+        );
+        assert!(now.earlier_label.is_empty());
+        assert_eq!(
+            now.route.as_ref().map(|route| route.screen.as_str()),
+            Some(crate::calendar::EVENT)
+        );
+    }
+
     fn timed(id: &str, summary: &str, start: &str, end: Option<&str>) -> wire::AgendaEvent {
         let first = start[..10].to_owned();
         let last = match end {
@@ -854,6 +939,10 @@ mod tests {
     }
 
     fn fold_of(held: &Held, destination: Dest, hidden: &[String]) -> wire::AgendaHomeData {
+        folded_of(held, destination, hidden).data
+    }
+
+    fn folded_of(held: &Held, destination: Dest, hidden: &[String]) -> Folded {
         events(&Fold {
             locale: Locale::En,
             cycle: HourCycle::default(),
@@ -1070,7 +1159,8 @@ mod tests {
             week_start: WeekStart::Monday,
             month_style: wire::AgendaMonthStyle::Grid,
         })
-        .unwrap();
+        .unwrap()
+        .data;
         let row = rows_of(&data)[0].clone();
         assert_eq!(data.days[0].day, "2026-06-16");
         assert_eq!(row.instance_key, "series:2026-06-16T08:15");

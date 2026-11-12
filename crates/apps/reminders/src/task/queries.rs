@@ -150,6 +150,8 @@ pub struct TaskRow {
     pub done_children: Option<usize>,
     /// `search` only: the index's own excerpt.
     pub snippet: Option<String>,
+    /// `search` only: the words matched only in an earlier version of the task (#1185).
+    pub in_earlier_version: bool,
 }
 
 impl FamilyRow for TaskRow {
@@ -1275,11 +1277,11 @@ fn reminder_rows(
 /// A door refusal becomes the payload's denial; a reached bound is an `Err`.
 pub fn load_search(
     door: &dyn PageDoor,
-    hits: &[(String, String)],
+    hits: &[(String, String, bool)],
     now: &str,
     zone: &FireZone,
 ) -> KitResult<(SearchData, Option<Denial>)> {
-    let ids: Vec<String> = hits.iter().map(|(id, _)| id.clone()).collect();
+    let ids: Vec<String> = hits.iter().map(|(id, _, _)| id.clone()).collect();
     if ids.is_empty() {
         return Ok((SearchData::default(), None));
     }
@@ -1301,10 +1303,11 @@ pub fn load_search(
     };
     let tasks = hits
         .iter()
-        .filter_map(|(id, snippet)| {
+        .filter_map(|(id, snippet, earlier)| {
             let task = found.remove(id)?;
             let mut decorated = decorate(&task, &decorations, now, zone);
             decorated.snippet = Some(snippet.clone());
+            decorated.in_earlier_version = *earlier;
             Some(decorated)
         })
         .collect();
@@ -1322,6 +1325,9 @@ pub fn load_search(
 pub struct TaskDetailData {
     pub task: Option<TaskRow>,
     pub parent: Option<TaskRow>,
+    /// The task's revision (its history's newest version, 0 when none), read before the task:
+    /// what an edit names as `expected_rev` (#1185).
+    pub rev: i64,
 }
 
 /// What one task's read gathers: the task, its family, its parent and what hangs
@@ -1351,6 +1357,14 @@ pub fn load_task(
         return Ok((TaskDetailData::default(), None));
     }
     let ids = [task_id.to_owned()];
+    // The revision first: a change between the two reads refuses the edit, never lets it through.
+    let rev = match centraid_apps_kit::revision::head(door, task_id) {
+        Ok(rev) => rev,
+        Err(KitError::Door(message)) => {
+            return Ok((TaskDetailData::default(), Some(denial_of(message))));
+        }
+        Err(other) => return Err(other),
+    };
     let read = || -> KitResult<Option<Whole>> {
         let Some(task) = live_tasks(door, "reminders.task.by-id", "id", &ids)?
             .into_iter()
@@ -1403,6 +1417,7 @@ pub fn load_task(
         TaskDetailData {
             task: Some(task),
             parent: parent.map(|parent| decorate(&parent, &decorations, now, zone)),
+            rev,
         },
         None,
     ))
@@ -1452,10 +1467,16 @@ pub fn load_search_term(
         Err(other) => return Ok((SearchData::default(), Some(denial_of(other.to_string())))),
     };
     // VAULT ORDER IS RANK ORDER, best match first.
-    let hits: Vec<(String, String)> = page
+    let hits: Vec<(String, String, bool)> = page
         .rows
         .iter()
-        .map(|target| (target.id.clone(), target.snippet.clone()))
+        .map(|target| {
+            (
+                target.id.clone(),
+                target.snippet.clone(),
+                target.in_earlier_version,
+            )
+        })
         .collect();
     load_search(door, &hits, now, zone)
 }

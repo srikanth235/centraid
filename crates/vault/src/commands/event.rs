@@ -43,7 +43,7 @@ use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Value as Json, json};
 
 use crate::commands::edge::{self, Extras};
-use crate::commands::entity::lookup_live;
+use crate::commands::entity::{STALE_GUARD, lookup_live, with_rev};
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk};
 use crate::error::{Result, VaultError};
 use crate::model::{DEFAULT_CALENDAR_ID, Kind, Rel};
@@ -372,6 +372,71 @@ pub(crate) fn shape(fields: &mut serde_json::Map<String, Json>) -> std::result::
     Ok(())
 }
 
+/// What a refused save of an event keeps, in the form the vault holds it (`history.keep_version`):
+/// the overlay's times (`event.starts`, `event.ends`, `event.timing`, `event.zone`) and alerts
+/// (`event.reminders`) are stated as a source states them, so a wall clock and its zone become the
+/// instant the row would hold and the alerts the one text of the column. A refused change to one day
+/// is `occurrence`, an object stated as `event.edit_occurrence` states it (`original_start`, `scope`
+/// and what the day changes), which becomes the row that command would have written. `Err` is a
+/// sentence.
+pub(crate) fn shape_overlay(
+    connection: &rusqlite::Connection,
+    id: &str,
+    overlay: &mut serde_json::Map<String, Json>,
+) -> std::result::Result<(), String> {
+    const OWN: [&str; 5] = ["starts", "ends", "timing", "zone", "reminders"];
+    let mut stated = serde_json::Map::new();
+    for name in OWN {
+        if let Some(value) = overlay.remove(&format!("event.{name}")) {
+            stated.insert(name.to_owned(), value);
+        }
+    }
+    shape(&mut stated)?;
+    for (name, value) in stated {
+        overlay.insert(format!("event.{name}"), value);
+    }
+    if let Some(day) = overlay.get(crate::history::DAY).and_then(Json::as_object) {
+        let row = day_row(connection, id, day)?;
+        overlay.insert(crate::history::DAY.to_owned(), row);
+    }
+    Ok(())
+}
+
+/// The `occurrence` row `event.edit_occurrence` (`override`) writes for what `day` states: only
+/// what was stated is the day's own, the rest is the series'.
+fn day_row(
+    connection: &rusqlite::Connection,
+    id: &str,
+    day: &serde_json::Map<String, Json>,
+) -> std::result::Result<Json, String> {
+    let (Some(key), Some(scope)) = (
+        day.get("original_start").and_then(Json::as_str),
+        day.get("scope").and_then(Json::as_str),
+    ) else {
+        return Err(
+            "`occurrence` names the day and whether it is the day or the days from it".into(),
+        );
+    };
+    if !["occurrence", "future"].contains(&scope) {
+        return Err("`occurrence` is one day or the days from it".to_owned());
+    }
+    let series =
+        row_of(connection, id).map_err(|_| format!("there is nothing with the id `{id}`"))?;
+    if series.rule.is_none() {
+        return Err("That event does not repeat.".to_owned());
+    }
+    let times = day_times(day, &series.times)?;
+    let said = |name: &str| day.get(name).and_then(Json::as_str);
+    Ok(json!({
+        "original_start": key, "scope": scope, "cancelled": 0,
+        "starts": times.starts, "ends": times.ends,
+        "timing": times.own.as_ref().map(|(timing, _)| timing.as_str()),
+        "zone": times.own.as_ref().and_then(|(_, zone)| zone.as_deref()),
+        "title": said("title"), "description": said("description"),
+        "url": said("url"), "place_id": said("place_id"),
+    }))
+}
+
 /// The alerts a source states (minutes before it starts), in the one text the `reminders` column
 /// holds: a JSON array in the order stated, a minute once. No alert is `null`.
 fn alerts_text(alerts: &Json) -> std::result::Result<Json, String> {
@@ -443,6 +508,42 @@ pub(crate) fn attendees_canon(statement: &Json) -> Json {
     Json::Array(guests)
 }
 
+/// The guests of a canonical list by the key that names each across statements: their email, or
+/// their name when they have none.
+pub(crate) fn attendees_items(guests: &Json) -> std::collections::BTreeMap<String, Json> {
+    let mut out = std::collections::BTreeMap::new();
+    for guest in guests.as_array().into_iter().flatten() {
+        let key = guest
+            .get("email")
+            .and_then(Json::as_str)
+            .map(str::to_owned)
+            .or_else(|| {
+                guest
+                    .get("name")
+                    .and_then(Json::as_str)
+                    .map(|name| format!("name:{}", name.to_lowercase()))
+            });
+        if let Some(key) = key {
+            out.entry(key).or_insert_with(|| guest.clone());
+        }
+    }
+    out
+}
+
+/// The live person an email is, by an exact match with one of their email points.
+fn person_of_email(connection: &Connection, email: &str) -> Result<Option<String>> {
+    let key = crate::commands::contact_point::reach_key("email", email);
+    Ok(connection
+        .query_row(
+            "SELECT p.person_id FROM contact_point p JOIN entity e ON e.id = p.person_id
+              WHERE p.kind = 'email' AND p.normalized = ?1 AND e.deleted_at IS NULL
+              ORDER BY p.person_id LIMIT 1",
+            [&key],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+
 /// The people the guests of a statement are, by an exact email match with a live person's email,
 /// with the answer each gave.
 fn matched_guests(
@@ -458,27 +559,191 @@ fn matched_guests(
         ) else {
             continue;
         };
-        let key = crate::commands::contact_point::reach_key("email", email);
-        let person: Option<String> = connection
-            .query_row(
-                "SELECT p.person_id FROM contact_point p JOIN entity e ON e.id = p.person_id
-                  WHERE p.kind = 'email' AND p.normalized = ?1 AND e.deleted_at IS NULL
-                  ORDER BY p.person_id LIMIT 1",
-                [&key],
-                |row| row.get(0),
-            )
-            .optional()?;
-        if let Some(person) = person {
+        if let Some(person) = person_of_email(connection, email)? {
             people.insert(person, state.to_owned());
         }
     }
     Ok(people)
 }
 
-/// The follower's `attendees` merge: a guest the phone states whose email is a person's becomes
-/// that person's `attendee` edge, with the answer the phone states; one the phone no longer
-/// states is taken off. A guest nobody's email matches mints no person and stays in the
-/// statement ([`attendees_read`]). Guests are never pushed back.
+/// The people the guests of a statement were matched to when the statement was merged
+/// ([`attendees_stamp`]), with the answer each gave. A guest with no note matched nobody then.
+fn merged_guests(statement: Option<&Json>) -> std::collections::BTreeMap<String, String> {
+    let mut people = std::collections::BTreeMap::new();
+    for guest in statement.and_then(Json::as_array).into_iter().flatten() {
+        let Some(person) = guest.get("person").and_then(Json::as_str) else {
+            continue;
+        };
+        let state = guest_canon(guest)
+            .get("state")
+            .and_then(Json::as_str)
+            .unwrap_or("needs-action")
+            .to_owned();
+        people.insert(person.to_owned(), state);
+    }
+    people
+}
+
+/// Note on each stated guest the person it was matched to when the statement was merged (a
+/// `person` key; [`guest_canon`] leaves it out, so it never counts as a difference). A pass that
+/// did not merge the guests keeps the notes already there. This is what lets a later merge tell a
+/// guest the member took off (matched then, no edge now) from one who matches a person only now
+/// (matched then: nobody), and so attach her.
+pub(crate) fn attendees_stamp(
+    connection: &Connection,
+    before: Option<&Json>,
+    now: &Json,
+    merged: bool,
+) -> Result<Json> {
+    let Some(list) = now.as_array() else {
+        return Ok(now.clone());
+    };
+    let noted = |email: &str| {
+        before
+            .and_then(Json::as_array)
+            .into_iter()
+            .flatten()
+            .find(|guest| guest_canon(guest).get("email").and_then(Json::as_str) == Some(email))
+            .and_then(|guest| guest.get("person").cloned())
+    };
+    let mut out = Vec::with_capacity(list.len());
+    for guest in list {
+        let mut guest = guest.clone();
+        let email = guest_canon(&guest)
+            .get("email")
+            .and_then(Json::as_str)
+            .map(str::to_owned);
+        if let Some(object) = guest.as_object_mut() {
+            object.remove("person");
+            let person = match email.as_deref() {
+                Some(email) if merged => person_of_email(connection, email)?.map(Json::String),
+                Some(email) => noted(email),
+                None => None,
+            };
+            if let Some(person) = person {
+                object.insert("person".to_owned(), person);
+            }
+        }
+        out.push(guest);
+    }
+    Ok(Json::Array(out))
+}
+
+/// The answer each person the event has an `attendee` edge to holds now (a blank answer is
+/// `needs-action`, as a statement spells it).
+fn held_guests(
+    connection: &Connection,
+    id: &str,
+) -> Result<std::collections::BTreeMap<String, String>> {
+    connection
+        .prepare_cached(
+            "SELECT to_id, state FROM edge WHERE from_id = ?1 AND rel = 'attendee' ORDER BY to_id",
+        )?
+        .query_map([id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+        })?
+        .map(|row| {
+            row.map(|(person, state)| {
+                (
+                    person,
+                    state
+                        .filter(|state| ANSWERS.contains(&state.as_str()))
+                        .unwrap_or_else(|| "needs-action".to_owned()),
+                )
+            })
+        })
+        .collect::<rusqlite::Result<_>>()
+        .map_err(Into::into)
+}
+
+/// The guests the event holds, in the form a phone states them: the guests the source last stated
+/// stand as stated unless they are a person's, and a person's carry the answer the vault holds (a
+/// guest whose edge the member took away is not there); a person the member added as a guest
+/// follows, by name and first email.
+pub(crate) fn attendees_read(connection: &Connection, id: &str) -> Result<Json> {
+    let stated: Option<String> = connection
+        .query_row(
+            "SELECT stated FROM source WHERE entity_id = ?1 AND origin_id IN
+               (SELECT id FROM origin WHERE retired_at IS NULL)",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let stated = stated
+        .and_then(|text| serde_json::from_str::<Json>(&text).ok())
+        .and_then(|stated| stated.get("attendees").cloned());
+    let mut held = held_guests(connection, id)?;
+    let mut covered = std::collections::BTreeSet::new();
+    let mut out = Vec::new();
+    for guest in stated
+        .as_ref()
+        .and_then(Json::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let noted = guest
+            .get("person")
+            .and_then(Json::as_str)
+            .map(str::to_owned);
+        let mut guest = guest_canon(guest);
+        // The person the guest was merged as, else (never merged as anyone) the person the
+        // member made of her since, if they hold her as a guest.
+        let (person, merged) = match noted {
+            Some(person) => (Some(person), true),
+            None => {
+                let today = match guest.get("email").and_then(Json::as_str) {
+                    Some(email) => person_of_email(connection, email)?,
+                    None => None,
+                };
+                (today.filter(|person| held.contains_key(person)), false)
+            }
+        };
+        let Some(person) = person else {
+            out.push(guest);
+            continue;
+        };
+        // A person's guest carries the answer held, and a guest merged as a person is not there
+        // when the edge is gone. The people the member added are the edges left once the stated
+        // guests are accounted for.
+        if let Some(state) = held.get(&person) {
+            guest["state"] = Json::String(state.clone());
+            out.push(guest);
+        } else if !merged {
+            out.push(guest);
+        }
+        covered.insert(person);
+    }
+    held.retain(|person, _| !covered.contains(person));
+    for (person, state) in held {
+        let (name, email): (String, Option<String>) = connection.query_row(
+            "SELECT e.title, (SELECT value FROM contact_point
+                               WHERE person_id = e.id AND kind = 'email'
+                               ORDER BY position, id LIMIT 1)
+               FROM entity e WHERE e.id = ?1",
+            [&person],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        let mut guest = json!({ "name": name, "state": state });
+        if let Some(email) = email {
+            guest["email"] = Json::String(email.to_lowercase());
+        }
+        out.push(guest_canon(&guest));
+    }
+    Ok(attendees_canon(&Json::Array(out)))
+}
+
+/// The follower's `attendees` merge, **per guest**: a guest the phone states whose email is a
+/// person's becomes that person's `attendee` edge, with the answer the phone states; one the
+/// phone no longer states is taken off. A guest the member has not changed (the edge holds the
+/// answer the phone last stated, or there is no edge and the phone had no answer) takes the
+/// phone's word; one the member changed (answered differently, took off, or added) stands. A
+/// guest nobody's email matches mints no person and stays in the statement
+/// ([`attendees_read`]). Guests are read from the phone and never written to it.
+///
+/// What the phone "had" said is the guests the last merge matched to people, as noted in the
+/// statement ([`attendees_stamp`]), not who the guests match today: a guest whose email became a
+/// person's after that merge was never attached or taken off, so she is attached now. A statement
+/// from before the notes were kept notes nobody, so each of its guests is attached once.
 pub(crate) fn attendees_merge(
     ctx: &CommandCtx<'_, '_>,
     id: &str,
@@ -487,35 +752,119 @@ pub(crate) fn attendees_merge(
 ) -> Result<bool> {
     let connection = ctx.connection();
     let wanted = matched_guests(connection, Some(now))?;
-    let had = matched_guests(connection, before)?;
+    let had = merged_guests(before);
+    let held = held_guests(connection, id)?;
+    let people: std::collections::BTreeSet<&String> = wanted.keys().chain(had.keys()).collect();
     let mut changed = false;
-    for person in had.keys().filter(|person| !wanted.contains_key(*person)) {
-        changed |= connection.execute(
-            "DELETE FROM edge WHERE from_id = ?1 AND rel = 'attendee' AND to_id = ?2",
-            [id, person],
-        )? > 0;
+    for person in people {
+        let (mine, said, wants) = (held.get(person), had.get(person), wanted.get(person));
+        // The member changed this guest, or there is nothing to change: it stands.
+        if mine != said || mine == wants {
+            continue;
+        }
+        match wants {
+            None => {
+                changed |= connection.execute(
+                    "DELETE FROM edge WHERE from_id = ?1 AND rel = 'attendee' AND to_id = ?2",
+                    [id, person],
+                )? > 0;
+            }
+            Some(state) => {
+                edge::put(
+                    ctx,
+                    id,
+                    Rel::Attendee,
+                    person,
+                    None,
+                    &Extras {
+                        state: Some(state),
+                        ..Extras::default()
+                    },
+                )?;
+                changed = true;
+            }
+        }
     }
-    for (person, state) in &wanted {
-        let held: Option<Option<String>> = connection
+    Ok(changed)
+}
+
+/// Make the guests what the phone last stated (one guest, named by its [`attendees_items`] key,
+/// or all): a person's answer is put back, a guest the member added is taken off, and one they took
+/// off is invited again with the stated answer. A guest nobody's email matches is only in the
+/// statement and has nothing to put back. Returns whether an edge changed.
+pub(crate) fn attendees_take(
+    ctx: &CommandCtx<'_, '_>,
+    id: &str,
+    item: Option<&str>,
+    stated: &Json,
+) -> Result<bool> {
+    let connection = ctx.connection();
+    let wanted = matched_guests(connection, Some(stated))?;
+    let held = held_guests(connection, id)?;
+    // The key each person goes by: the stated guest's email, else how the read names a guest the
+    // member added.
+    let mut keys = std::collections::BTreeMap::new();
+    for guest in stated.as_array().into_iter().flatten() {
+        let guest = guest_canon(guest);
+        if let Some(email) = guest.get("email").and_then(Json::as_str)
+            && let Some(person) = person_of_email(connection, email)?
+        {
+            keys.entry(person).or_insert_with(|| email.to_owned());
+        }
+    }
+    for person in held.keys() {
+        if keys.contains_key(person) {
+            continue;
+        }
+        let name: String =
+            connection.query_row("SELECT title FROM entity WHERE id = ?1", [person], |row| {
+                row.get(0)
+            })?;
+        let email: Option<String> = connection
             .query_row(
-                "SELECT state FROM edge WHERE from_id = ?1 AND rel = 'attendee' AND to_id = ?2",
-                [id, person],
+                "SELECT value FROM contact_point WHERE person_id = ?1 AND kind = 'email'
+                  ORDER BY position, id LIMIT 1",
+                [person],
                 |row| row.get(0),
             )
             .optional()?;
-        if held.as_ref().and_then(Option::as_deref) != Some(state.as_str()) {
-            edge::put(
-                ctx,
-                id,
-                Rel::Attendee,
-                person,
-                None,
-                &Extras {
-                    state: Some(state),
-                    ..Extras::default()
-                },
-            )?;
-            changed = true;
+        let key = email.map_or_else(
+            || format!("name:{}", name.to_lowercase()),
+            |email| email.to_lowercase(),
+        );
+        keys.insert(person.clone(), key);
+    }
+    let people: std::collections::BTreeSet<&String> = wanted.keys().chain(held.keys()).collect();
+    let mut changed = false;
+    for person in people {
+        if item.is_some_and(|item| keys.get(person).map(String::as_str) != Some(item)) {
+            continue;
+        }
+        let (mine, wants) = (held.get(person), wanted.get(person));
+        if mine == wants {
+            continue;
+        }
+        match wants {
+            None => {
+                changed |= connection.execute(
+                    "DELETE FROM edge WHERE from_id = ?1 AND rel = 'attendee' AND to_id = ?2",
+                    [id, person],
+                )? > 0;
+            }
+            Some(state) => {
+                edge::put(
+                    ctx,
+                    id,
+                    Rel::Attendee,
+                    person,
+                    None,
+                    &Extras {
+                        state: Some(state),
+                        ..Extras::default()
+                    },
+                )?;
+                changed = true;
+            }
         }
     }
     Ok(changed)
@@ -996,7 +1345,7 @@ fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let row = row_of(ctx.connection(), id)?;
     let after = times(ctx, Some(&row.times)).map_err(|sentence| invalid("starts", sentence))?;
     write_event(ctx, id, &after)?;
-    Ok(json!({ "id": id }))
+    with_rev(ctx, id, json!({ "id": id }))
 }
 
 fn cancel(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
@@ -1028,8 +1377,14 @@ fn respond(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     Ok(json!({ "id": id, "state": state }))
 }
 
-/// What happened to one day of a series, or to the series as a whole.
+/// What happened to one day of a series, or to the series as a whole; with the event's revision
+/// when the change named the one it replaces.
 fn edit_occurrence(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let id = ctx.required_str("id")?;
+    with_rev(ctx, id, change_occurrence(ctx)?)
+}
+
+fn change_occurrence(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let id = ctx.required_str("id")?;
     let (scope, action) = (ctx.required_str("scope")?, ctx.required_str("action")?);
     let answer = json!({ "id": id, "scope": scope });
@@ -1332,7 +1687,8 @@ fn held(connection: &Connection, id: &str) -> Result<std::collections::BTreeMap<
 pub(crate) fn overrides_read(connection: &Connection, id: &str) -> Result<Json> {
     let said: Option<Json> = connection
         .query_row(
-            "SELECT stated FROM source WHERE entity_id = ?1",
+            "SELECT stated FROM source WHERE entity_id = ?1 AND origin_id IN
+               (SELECT id FROM origin WHERE retired_at IS NULL)",
             [id],
             |row| row.get::<_, String>(0),
         )
@@ -1359,21 +1715,75 @@ pub(crate) fn overrides_read(connection: &Connection, id: &str) -> Result<Json> 
     })
 }
 
-/// What the vault holds of a series' changed and skipped days, in the form [`overrides_read`] gives
-/// an edited series: `{ "held": [[day, cancelled, starts, title, timing, url, place], ...] }`, or
-/// `null` for a series whose days are all as its rule has them. It is what a series the vault
-/// founded pushes for its days, there being no statement to compare with.
-pub(crate) fn overrides_held(connection: &Connection, id: &str) -> Result<Json> {
-    let rows = held(connection, id)?;
-    Ok(if rows.is_empty() {
-        Json::Null
-    } else {
-        json!({ "held": rows.iter().map(|(key, day)| json!([key, day.cancelled, day.starts, day.title, day.timing, day.url, day.place])).collect::<Vec<_>>() })
-    })
-}
-
 pub(crate) fn overrides_canon(statement: &Json) -> Json {
     statement.clone()
+}
+
+/// Make one day of a series what the rule and a statement imply (`None`: no row of its own).
+fn write_day(ctx: &CommandCtx<'_, '_>, id: &str, key: &str, wanted: Option<&Day>) -> Result<()> {
+    let connection = ctx.connection();
+    match wanted {
+        None => {
+            connection.execute(
+                "DELETE FROM occurrence WHERE series_id = ?1 AND original_start = ?2
+                                          AND scope = 'occurrence'",
+                [id, key],
+            )?;
+        }
+        Some(day) => {
+            let place = day
+                .place
+                .as_deref()
+                .map(|name| crate::commands::place::find_or_found_named(ctx, name))
+                .transpose()?;
+            connection.execute(
+                "INSERT INTO occurrence (series_id, original_start, scope, cancelled, starts,
+                                         ends, timing, zone, title, description, url, place_id)
+                 VALUES (?1, ?2, 'occurrence', ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                 ON CONFLICT (series_id, original_start, scope)
+                 DO UPDATE SET cancelled = ?3, starts = ?4, ends = ?5, timing = ?6, zone = ?7,
+                               title = ?8, description = ?9, url = ?10, place_id = ?11",
+                rusqlite::params![
+                    id,
+                    key,
+                    day.cancelled,
+                    day.starts,
+                    day.ends,
+                    day.timing,
+                    day.zone,
+                    day.title,
+                    day.description,
+                    day.url,
+                    place
+                ],
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// Put a series' days back to what its source's statement implies, every day of the window the
+/// statement covers: the member's skips and changes there are undone. Returns whether a day changed.
+pub(crate) fn overrides_take(
+    ctx: &CommandCtx<'_, '_>,
+    id: &str,
+    _item: Option<&str>,
+    stated: &Json,
+) -> Result<bool> {
+    let connection = ctx.connection();
+    let Some(said) = observed(stated) else {
+        return Ok(false);
+    };
+    let (after, rows) = (derive(connection, id, &said)?, held(connection, id)?);
+    let mut changed = false;
+    for key in &after.window {
+        let wanted = after.rows.get(key);
+        if wanted != rows.get(key) {
+            write_day(ctx, id, key, wanted)?;
+            changed = true;
+        }
+    }
+    Ok(changed)
 }
 
 /// A three-way merge of a series' days: for each day of the window the rule
@@ -1411,43 +1821,7 @@ pub(crate) fn overrides_merge(
         if !ours {
             continue;
         }
-        match wanted {
-            None => {
-                connection.execute(
-                    "DELETE FROM occurrence WHERE series_id = ?1 AND original_start = ?2
-                                              AND scope = 'occurrence'",
-                    [id, key],
-                )?;
-            }
-            Some(day) => {
-                let place = day
-                    .place
-                    .as_deref()
-                    .map(|name| crate::commands::place::find_or_found_named(ctx, name))
-                    .transpose()?;
-                connection.execute(
-                    "INSERT INTO occurrence (series_id, original_start, scope, cancelled, starts,
-                                             ends, timing, zone, title, description, url, place_id)
-                     VALUES (?1, ?2, 'occurrence', ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
-                     ON CONFLICT (series_id, original_start, scope)
-                     DO UPDATE SET cancelled = ?3, starts = ?4, ends = ?5, timing = ?6, zone = ?7,
-                                   title = ?8, description = ?9, url = ?10, place_id = ?11",
-                    rusqlite::params![
-                        id,
-                        key,
-                        day.cancelled,
-                        day.starts,
-                        day.ends,
-                        day.timing,
-                        day.zone,
-                        day.title,
-                        day.description,
-                        day.url,
-                        place
-                    ],
-                )?;
-            }
-        }
+        write_day(ctx, id, key, wanted)?;
         changed = true;
     }
     Ok(changed)
@@ -1501,7 +1875,8 @@ const EDIT_SCHEMA: &str = r#"{
     "reminders": { "type": ["array", "null"], "items": { "type": "integer", "minimum": 0 } },
     "attendees": { "type": "array", "items": { "type": "string", "minLength": 1 } },
     "status": { "type": "string", "enum": ["confirmed", "tentative", "cancelled"] },
-    "busy": { "type": "boolean" }
+    "busy": { "type": "boolean" },
+    "expected_rev": { "type": "integer", "minimum": 0 }
   }
 }"#;
 
@@ -1521,7 +1896,8 @@ const OCCURRENCE_SCHEMA: &str = r#"{
       "description": "How this one day reads, when not as its series does." },
     "zone": { "type": ["string", "null"] },
     "url": { "type": ["string", "null"], "description": "This day's own link; the series' when none." },
-    "place_id": { "type": ["string", "null"], "description": "This day's own place; the series' when none." }
+    "place_id": { "type": ["string", "null"], "description": "This day's own place; the series' when none." },
+    "expected_rev": { "type": "integer", "minimum": 0 }
   }
 }"#;
 
@@ -1537,10 +1913,14 @@ pub fn definitions() -> Vec<CommandDefinition> {
             check: pre_free_slot,
         },
     ];
-    const EDIT: &[CommandCondition] = &[CommandCondition {
-        predicate: "event_is_live_and_its_change_resolves",
-        check: pre_edit,
-    }];
+    const EDIT: &[CommandCondition] = &[
+        STALE_GUARD[0],
+        STALE_GUARD[1],
+        CommandCondition {
+            predicate: "event_is_live_and_its_change_resolves",
+            check: pre_edit,
+        },
+    ];
     const CANCEL: &[CommandCondition] = &[CommandCondition {
         predicate: "event_is_live",
         check: pre_cancel,
@@ -1549,10 +1929,14 @@ pub fn definitions() -> Vec<CommandDefinition> {
         predicate: "guest_is_invited_and_event_is_not_cancelled",
         check: pre_respond,
     }];
-    const OCCURRENCE: &[CommandCondition] = &[CommandCondition {
-        predicate: "day_is_one_the_series_lands_on",
-        check: pre_occurrence,
-    }];
+    const OCCURRENCE: &[CommandCondition] = &[
+        STALE_GUARD[0],
+        STALE_GUARD[1],
+        CommandCondition {
+            predicate: "day_is_one_the_series_lands_on",
+            check: pre_occurrence,
+        },
+    ];
     // An edit, a cancellation and a change to one day each restate a commitment
     // other people may hold: they are medium risk.
     let medium = |definition: CommandDefinition| CommandDefinition {

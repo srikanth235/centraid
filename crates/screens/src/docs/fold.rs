@@ -1,8 +1,8 @@
 //! THE CORE'S DOCS ANSWERS, AS THE SCREENS DRAW THEM: every word, icon key and
 //! accessibility label a row, a fact and a version carries. Pure: dates are the
 //! core's `*_local` readings against the answer's own `today`, and no size, kind
-//! or media type is classified here (the core answers `size`, `kind_name` and
-//! `surface`).
+//! or media type is classified here (the core answers `byte_size`, `kind_name` and
+//! `surface`; a size is worded through `kit::quantity`).
 //!
 //! What depends on the SCREEN's state (the band, the filter menu, which empty state)
 //! is the screen's; what depends only on the answer is here.
@@ -11,6 +11,8 @@ use centraid_api_proto::core_v1 as wire;
 
 use super::{folders, routes};
 use crate::kit::civil::{self, HourCycle};
+use crate::kit::quantity::{Quantity, UnitsPref};
+use crate::kit::search as kit_search;
 use crate::strings::{Locale, docs as words, shared};
 
 /// The `design/icons.toml` key of a trash glyph.
@@ -28,6 +30,14 @@ pub const KEY_RESTORE: &str = "restore";
 pub const KEY_PURGE: &str = "purge";
 pub const KEY_MORE: &str = "more";
 pub const KEY_SHARE: &str = "share";
+
+/// A document's size in words (`2.4 MB`), or empty when its bytes have no row.
+#[must_use]
+pub fn size(locale: Locale, units: UnitsPref, bytes: Option<i64>) -> String {
+    bytes.map_or_else(String::new, |count| {
+        Quantity::bytes(count).words(locale, units)
+    })
+}
 
 /// "1 document" / "24 documents".
 #[must_use]
@@ -69,6 +79,7 @@ pub fn stamp(locale: Locale, cycle: HourCycle, local: &str) -> Option<String> {
 #[must_use]
 pub fn row(
     locale: Locale,
+    units: UnitsPref,
     row: &wire::DocsDocumentRow,
     today: &str,
     parent: &str,
@@ -88,11 +99,22 @@ pub fn row(
         };
         dated(locale, &words::changed(locale), at, today)
     };
-    let meta = [row.kind_name.clone(), row.size.clone(), when]
-        .into_iter()
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join(" · ");
+    let meta = [
+        row.kind_name.clone(),
+        size(locale, units, row.byte_size),
+        when,
+    ]
+    .into_iter()
+    .filter(|part| !part.is_empty())
+    .collect::<Vec<_>>()
+    .join(" · ");
+    // Words only an earlier version of the document held (#1185): the row says so, and opens
+    // its Earlier versions.
+    let meta = if row.in_earlier_version {
+        kit_search::earlier_meta(locale, &meta)
+    } else {
+        meta
+    };
     let accessibility_label = [
         Some(title.clone()),
         Some(meta.replace(" · ", ", ")).filter(|meta| !meta.is_empty()),
@@ -105,7 +127,11 @@ pub fn row(
     wire::DocsRowView {
         document_id: row.document_id.clone(),
         content_id: row.content_id.clone(),
-        route: Some(routes::document(&row.document_id, &title, parent)),
+        route: Some(if row.in_earlier_version {
+            kit_search::earlier_route(locale, super::EARLIER, &row.document_id)
+        } else {
+            routes::document(&row.document_id, &title, parent)
+        }),
         title,
         kind_icon_key: icon_of(row.kind()).to_owned(),
         kind_label: row.kind_name.clone(),
@@ -254,6 +280,7 @@ pub fn action(key: &str, label: String, icon: &str) -> wire::DocsAction {
         enabled: true,
         detail: String::new(),
         route: None,
+        meta: String::new(),
     }
 }
 
@@ -382,23 +409,19 @@ pub fn labels_sheet(
 #[must_use]
 pub fn document(
     locale: Locale,
+    units: UnitsPref,
     cycle: HourCycle,
     answer: &wire::DocsDocument,
     drive: Option<&wire::DocsDrive>,
 ) -> wire::DocsDocumentData {
     use wire::docs_document_data::Surface;
+    // A document that is gone never reaches here: the page is empty (its sentence is the screen's).
     let Some(found) = answer.document.as_ref() else {
-        return wire::DocsDocumentData {
-            surface: Some(Surface::Gone(wire::EmptyState {
-                headline: words::gone(locale),
-                ..wire::EmptyState::default()
-            })),
-            ..wire::DocsDocumentData::default()
-        };
+        return wire::DocsDocumentData::default();
     };
     // The document's own page is the parent of what it opens (its crumbs and
     // versions): they name it, so its title is the back word.
-    let view = row(locale, found, &answer.today, "");
+    let view = row(locale, units, found, &answer.today, "");
     let surface = match found.surface() {
         wire::DocsSurface::Reading => Surface::Reading(reader(locale, found, answer)),
         wire::DocsSurface::Stage => Surface::Stage(stage(locale, found, answer, &view.title)),
@@ -411,17 +434,26 @@ pub fn document(
         .unwrap_or_default();
     wire::DocsDocumentData {
         about: None,
+        // The "Linked to" section is the screen's own read, laid on by the document page.
+        links: None,
+        // The attachments are the page's own read, laid on by the document page.
+        attachments: None,
+        title_phone_says: None,
         surface: Some(surface),
-        facts: facts(locale, cycle, found, answer, &view),
+        facts: facts(locale, units, cycle, found, answer, &view),
         path: folders::path_crumbs(locale, &answer.path, &view.title),
-        versions: versions_link(locale, answer, found, &view.title),
+        earlier: None,
+        origin: None,
         actions: head_actions(locale, found),
         bar: bar_actions(locale, found),
-        kind_size: [view.kind_label.clone(), found.size.clone()]
-            .into_iter()
-            .filter(|part| !part.is_empty())
-            .collect::<Vec<_>>()
-            .join(" · "),
+        kind_size: [
+            view.kind_label.clone(),
+            size(locale, units, found.byte_size),
+        ]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" · "),
         changed: dated(
             locale,
             &words::changed(locale),
@@ -456,19 +488,6 @@ fn subtitle(locale: Locale, answer: &wire::DocsDocument) -> String {
         ),
         None => root,
     }
-}
-
-fn versions_link(
-    locale: Locale,
-    answer: &wire::DocsDocument,
-    row: &wire::DocsDocumentRow,
-    title: &str,
-) -> Option<wire::DocsVersionsLink> {
-    (answer.versions.len() > 1).then(|| wire::DocsVersionsLink {
-        label: words::versions_heading(locale),
-        count_label: words::version_count(locale, answer.versions.len() as u64),
-        route: Some(routes::versions(&row.document_id, title)),
-    })
 }
 
 fn reader(
@@ -540,6 +559,7 @@ fn stage(
 
 fn facts(
     locale: Locale,
+    units: UnitsPref,
     cycle: HourCycle,
     row: &wire::DocsDocumentRow,
     answer: &wire::DocsDocument,
@@ -547,8 +567,11 @@ fn facts(
 ) -> Vec<wire::DocsFact> {
     let fact = |label: String, detail: String| wire::DocsFact { label, detail };
     let mut facts = vec![fact(words::fact_kind(locale), view.kind_label.clone())];
-    if !row.size.is_empty() {
-        facts.push(fact(words::fact_size(locale), row.size.clone()));
+    if row.byte_size.is_some() {
+        facts.push(fact(
+            words::fact_size(locale),
+            size(locale, units, row.byte_size),
+        ));
     }
     if !row.media_type.is_empty() {
         facts.push(fact(words::fact_media_type(locale), row.media_type.clone()));
@@ -585,39 +608,6 @@ fn facts(
         ));
     }
     facts
-}
-
-/// One version of the history page.
-#[must_use]
-pub fn version(
-    locale: Locale,
-    cycle: HourCycle,
-    version: &wire::DocsVersion,
-    trashed: bool,
-) -> wire::DocsVersionRow {
-    let meta = [
-        version.current.then(|| words::current(locale)),
-        Some(version.size.clone()).filter(|size| !size.is_empty()),
-        stamp(locale, cycle, &version.asserted_local),
-    ]
-    .into_iter()
-    .flatten()
-    .collect::<Vec<_>>()
-    .join(" · ");
-    wire::DocsVersionRow {
-        // THE VERSION'S KEY is its number: two versions can hold the same bytes.
-        key: version.number.to_string(),
-        label: format!("{} {}", words::version(locale), version.number),
-        meta,
-        current: version.current,
-        // An earlier version of a LIVE document can be made current again; a
-        // trashed one is restored first (the vault refuses otherwise).
-        restore_label: if !version.current && !trashed {
-            words::action_restore(locale)
-        } else {
-            String::new()
-        },
-    }
 }
 
 /// The grace window's end is when the next launch may empty the trash, never a

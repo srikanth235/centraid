@@ -120,6 +120,16 @@
         "verbs": "act"
       },
       {
+        "schema": "entity",
+        "table": "purge",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "empty_trash",
+        "verbs": "act"
+      },
+      {
         "schema": "note",
         "table": "restore_version",
         "verbs": "act"
@@ -257,6 +267,10 @@
           "format": {
             "type": "string",
             "enum": ["markdown", "plain"]
+          },
+          "expected_rev": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": ["id"],
@@ -543,10 +557,94 @@
       }
     },
     {
+      "name": "purge-note",
+      "verb": "purge",
+      "kind": "note",
+      "inverse": null,
+      "sealed": [],
+      "command": "entity.purge",
+      "phrasings": [
+        "erase the plumber note forever",
+        "permanently delete the trashed trip itinerary",
+        "purge that trashed note"
+      ],
+      "description": "Delete one ALREADY-TRASHED note forever through entity.purge. Irreversible: the note, its versions and its links go now, and its attachments' bytes go once nothing else holds them.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "empty-trash",
+      "verb": "purge",
+      "kind": "note",
+      "inverse": null,
+      "sealed": [],
+      "bulk": true,
+      "command": "entity.empty_trash",
+      "phrasings": [
+        "empty the notes trash",
+        "clear out the trashed notes for good",
+        "permanently delete everything in the Notes trash"
+      ],
+      "description": "Empty the note trash through entity.empty_trash with kind note. Irreversible and takes no id: every note in the trash is destroyed now, as purge destroys one.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["note"]
+          },
+          "due_only": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
       "name": "restore-note-version",
       "verb": "restore",
       "kind": "note",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "note.restore_version",
       "phrasings": [
@@ -678,7 +776,7 @@
       "name": "link",
       "verb": "link",
       "kind": "note",
-      "inverse": null,
+      "inverse": "unlink",
       "sealed": [],
       "command": "edge.add",
       "phrasings": [
@@ -686,7 +784,7 @@
         "connect the book ideas note to the reading list task",
         "link the plumber note to Friday's event"
       ],
-      "description": "Link a note to anything it names through edge.add (rel links), with an optional anchor naming the text range the link points at.",
+      "description": "Link a note to any other item it names through edge.add (rel links; never a Locker item), with an optional anchor naming the text range the link points at.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -726,10 +824,58 @@
       }
     },
     {
+      "name": "unlink",
+      "verb": "unlink",
+      "kind": "note",
+      "inverse": "link",
+      "sealed": [],
+      "command": "edge.remove",
+      "phrasings": [
+        "unlink my trip note from Sam",
+        "disconnect the book ideas note from the reading list task",
+        "take the link off the plumber note"
+      ],
+      "description": "Take the link between a note and another item off through edge.remove (rel links, from either end); both items stay.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["links"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
       "name": "send-to-tasks",
       "verb": "create",
       "kind": "task",
-      "inverse": null,
+      "inverse": "undo-create",
       "sealed": [],
       "command": "task.add",
       "phrasings": [
@@ -976,7 +1122,7 @@
         "import a folder of notes"
       ],
       "description": "Read Markdown and text files as notes through note.import: [[links]] become links, #tags become tags, a folder becomes a notebook. With dry_run it only says what would happen.",
-      "confirmation": "none",
+      "confirmation": "required",
       "input": {
         "type": "object",
         "properties": {
@@ -984,7 +1130,17 @@
             "type": "string",
             "description": "A JSON array of {path, text}: each file's path relative to the picked folder, and its text."
           },
-          "dry_run": { "type": "boolean" }
+          "dry_run": { "type": "boolean" },
+          "arrived_system": {
+            "type": "string",
+            "enum": ["markdown"],
+            "description": "How the item came in when the member did not type it. Omit it for a typed item."
+          },
+          "arrived_label": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "The file or device it came from: a name, never content. Required with arrived_system."
+          }
         },
         "required": ["files"],
         "additionalProperties": false
@@ -1004,6 +1160,7 @@
       "bulk": true,
       "kind": "note",
       "inverse": null,
+      "writes_nothing": true,
       "sealed": [],
       "command": "note.export",
       "phrasings": [
@@ -1312,6 +1469,55 @@
           },
           "window": {
             "type": "integer"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "attachments",
+      "kind": "note",
+      "figures": ["attachments"],
+      "description": "What is attached to one note, a page at a time: each attachment's id, kind (document or photo), title, media type, byte size and where its bytes are served, in the order of the attached file's id. Pass the page's `next` cursor as `after` for the next page. An id that is no live note answers an empty page, and an attached file in the trash is left out until it is restored.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "after": {
+            "type": "object",
+            "properties": {
+              "sortKey": {
+                "type": "string"
+              },
+              "pk": {
+                "type": "string"
+              }
+            },
+            "required": ["sortKey", "pk"],
+            "additionalProperties": false
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "attachments": {
+            "type": "array"
+          },
+          "next": {
+            "type": ["object", "null"]
           },
           "vaultDenied": {
             "type": "object"

@@ -21,6 +21,7 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
+import "centraid/core/v1/agenda_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/route.proto";
 
@@ -36,7 +37,7 @@ message HealthBandTab {
   bool current = 4;
 }
 
-// A row of More (an OptionSheet): `reads`, `choose`, `stop`.
+// A row of More (an OptionSheet): `reads`, `choose`, `stop`, `trash`.
 message HealthMoreRow {
   string key = 1;
   string label = 2;
@@ -46,6 +47,8 @@ message HealthMoreRow {
   // Where a tap goes, for the row that opens a page (`choose`); the others are
   // events.
   optional Route route = 5;
+  // The row's second line (#1185): Trash says "30 days, then erased". Empty for the others.
+  string meta = 6;
 }
 
 message HealthFact {
@@ -140,10 +143,11 @@ message HealthWorkoutSection {
 message HealthHomeState {
   // WHICH TAB, as a parameter (the navigation model's first doctrine).
   HealthDestination destination = 1;
+  // 2 to 4 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 2, 3, 4;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 2;
-    Failure failure = 3;
-    Denied denied = 4;
     HealthHomeData data = 5;
   }
   Sheet sheet = 6;
@@ -172,6 +176,11 @@ message HealthHomeState {
   // then each kind with a workout). Unset on every other tab, while nothing is
   // connected and while the read is denied.
   optional FilterMenu filter_menu = 17;
+  // The read: loading, failed, refused, EMPTY (nothing connected, a Trends period or a Workouts
+  // list with nothing in it, each in its own sentence) or ready (with a note when a refresh failed).
+  PageState page = 18;
+  // Where the empty state's Connect goes (nothing connected).
+  optional Route connect = 19;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -213,10 +222,10 @@ message HealthHomeData {
   // The header's subtitle on the Summary: "Wed 4 November · read from Apple
   // Health"; EMPTY on the other tabs.
   string day_label = 2;
-  // No store connected: one sentence and Connect, on every tab.
-  optional EmptyState empty = 3;
-  // Where the empty state's Connect goes.
-  Route connect = 4;
+  // 3 and 4 were `empty` and `connect`: nothing connected is the page's own Empty state, and
+  // Connect's route is `HealthHomeState.connect` (#1185).
+  reserved 3, 4;
+  reserved "empty", "connect";
   HealthTodayData today_data = 5;
   HealthTrendsData trends = 6;
   HealthWorkoutsData workouts = 7;
@@ -259,8 +268,9 @@ message HealthTrendsData {
   // "Last 30 days, against the 30 days before".
   string compare_line = 1;
   repeated HealthTrendRow rows = 2;
-  // Nothing in either period yet.
-  optional EmptyState empty = 3;
+  // 3 was `empty`: nothing in either period is the page's own Empty state (#1185).
+  reserved 3;
+  reserved "empty";
 }
 
 message HealthTrendRow {
@@ -289,8 +299,10 @@ message HealthWorkoutsData {
   repeated HealthWorkoutSection sections = 1;
   // There is another page.
   bool more = 2;
-  // No workout at all, or none of the kind chosen.
-  optional EmptyState empty = 3;
+  // 3 was `empty`: no workout at all, or none of the kind chosen, is the page's own Empty state
+  // (#1185).
+  reserved 3;
+  reserved "empty";
 }
 
 message HealthHomeEvent {
@@ -342,15 +354,18 @@ message HealthMetricState {
   // The metric's key: `steps`, `sleep_min`, ...
   string metric = 1;
   HealthMetricRange range = 2;
+  // 3 to 5 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 3, 4, 5;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 3;
-    Failure failure = 4;
-    Denied denied = 5;
     HealthMetricData data = 6;
   }
   HealthPageChrome chrome = 7;
   // Week, Month, Year.
   repeated HealthChip segments = 8;
+  // The read: loading, failed, refused, EMPTY (no row in the period) or ready.
+  PageState page = 9;
 }
 
 message HealthMetricData {
@@ -374,8 +389,9 @@ message HealthMetricData {
   // What the metric is and where its figures come from, one paragraph.
   string foot = 11;
   string chart_label = 12;
-  // No row in the period at all.
-  optional EmptyState empty = 13;
+  // 13 was `empty`: no row in the period at all is the page's own Empty state (#1185).
+  reserved 13;
+  reserved "empty";
   // The usual range across the chart, in basis points of its height; absent
   // for the ranges that have none.
   bool has_typical_range = 14;
@@ -423,13 +439,25 @@ message HealthMetricEvent {
 
 message HealthWorkoutState {
   string activity_id = 1;
+  // 2 to 4 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 2, 3, 4;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 2;
-    Failure failure = 3;
-    Denied denied = 4;
     HealthWorkoutData data = 5;
   }
   HealthPageChrome chrome = 6;
+  // A refusal to take the store's value back (#1183), over the workout as it still is.
+  optional StatusLine status = 7;
+  // "Earlier versions   2 ›" at the foot of the page (#1185); absent when there are none.
+  optional EarlierEntry earlier = 8;
+  // Where it came from, under the Earlier versions entry (#1185). Absent for a typed item.
+  optional OriginLine origin = 9;
+  // The read: loading, failed, refused or ready. A workout no longer in the vault is a final
+  // failure in its own words, never an empty page (#1185).
+  PageState page = 10;
+  // The picker over the "Linked to" section, while it is up (#1185). The kit's generic picker.
+  optional LinkPicker link_picker = 11;
 }
 
 message HealthWorkoutData {
@@ -445,18 +473,52 @@ message HealthWorkoutData {
   // Who recorded it and where it was read from. Splits stay on the phone
   // (R-1129-9).
   string foot = 5;
-  // The workout is no longer in the vault.
-  optional EmptyState gone = 6;
+  // 6 was `gone`: a workout no longer in the vault is a final failure on `page` (#1185).
+  reserved 6;
+  reserved "gone";
   // The kind's mark, for the chip over the title (#1173): the same one its row draws.
   string kind_icon_key = 7;
+  // WHAT THE STORE SAYS (#1183), under the figures, one per figure the member changed or cleared
+  // ("Apple Health says 5.0 km", "Apple Health still has 148 bpm"). Absent when they agree.
+  repeated PhoneSays figures_phone_says = 8;
+  // "Move to trash" (#1185), the destructive control under the figures; empty while the workout is
+  // gone. It asks nothing: the status line says what happened with Undo.
+  string trash_label = 9;
+  // "Share" (#1185): hands the workout to the OS as a spreadsheet file; empty while the workout
+  // is gone.
+  string share_label = 10;
+  // "Linked to" (#1185): every item the workout is linked to, from either end, with the add row.
+  // The kit's shared section, after the foot. Absent while what it is linked to was not read (the
+  // status line says so). Its events go back as `HealthWorkoutEvent.link`.
+  optional LinkSection links = 11;
+  // The attachments (#1185): the photos and files on this workout, with Add photo and Add file. The
+  // kit's shared section (`AgendaAttachmentsSection`), after the foot and before "Linked to". Its
+  // events go back as `HealthWorkoutEvent.attachment`.
+  AgendaAttachmentsSection attachments = 12;
 }
 
 message HealthWorkoutEvent {
   oneof kind {
     Refreshed refreshed = 1;
+    // "Move to trash" was tapped (#1185).
+    TrashTapped trash = 2;
+    // "Undo" on the status line after Move to trash or its Undo (#1185).
+    StatusActed status_acted = 3;
+    // "Share" was tapped (#1185): Rust asks the owner check, then hands the file to the OS.
+    ShareRequested share_requested = 4;
+    // The "Linked to" section and its picker (#1185): the kit's `LinkEvent`.
+    LinkEvent link = 5;
+    // The attachments section's events (#1185): the kit's `AgendaAttachmentEvent`.
+    AgendaAttachmentEvent attachment = 6;
   }
 
   message Refreshed {}
+
+  message TrashTapped {}
+
+  message StatusActed {}
+
+  message ShareRequested {}
 }
 
 // ---------------------------------------------------------------------------
@@ -478,7 +540,7 @@ message HealthConnectState {
   repeated HealthChoice choices = 5;
   // What happens next, in one line.
   string note = 6;
-  // "Connect Apple Health", the one Ink button; disabled while nothing is
+  // "Connect to Apple Health", the one Ink button; disabled while nothing is
   // chosen or while the OS is asking.
   string connect_label = 7;
   bool can_connect = 8;

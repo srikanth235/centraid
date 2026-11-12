@@ -40,22 +40,33 @@ struct PhotosEditorView: View {
 
     private var plan: Centraid_Core_V1_PhotosEditPlan { state.plan }
     private var isEditing: Bool { state.phase == .editing }
+    /// The first read has not landed: no way out is offered over the stage's own word.
+    private var reading: Bool {
+        if case .loading? = state.page.state { return true }
+        return false
+    }
     private var rotation: Int { Int(plan.quarters % 4) * 90 + Int(plan.straighten) }
 
     var body: some View {
         ZStack {
             Surface.page.ignoresSafeArea()
-            switch state.content {
-            case .loading?, nil:
+            PageReadStateView(
+                page: state.page,
+                onRetry: { send(.refreshed(.init())) },
                 // A STAGE'S OWN WORD, not a spinner: this ground is the stage.
-                Text(state.words.loading)
-                    .centraidType("small")
-                    .foregroundStyle(Surface.meta)
-            case let .denied(denied)?:
-                DeniedGate(denied)
-            case let .failure(failure)?:
-                VStack(spacing: 12) {
-                    ScreenFailureView(sentence: failure.sentence, remedy: failure.remedy)
+                skeleton: {
+                    Text(state.words.loading)
+                        .centraidType("small")
+                        .foregroundStyle(Surface.meta)
+                },
+                data: {
+                    if state.content != nil { editor(state.data) }
+                }
+            )
+            // THE WAY OUT when there is nothing to edit: a failed or refused read has no top bar.
+            if state.content == nil, !reading {
+                VStack {
+                    Spacer()
                     Button {
                         send(.cancel(.init()))
                     } label: {
@@ -66,10 +77,9 @@ struct PhotosEditorView: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("editor-failure-cancel")
                 }
                 .padding(CentraidGeometry.pageMargin)
-            case let .data(data)?:
-                editor(data)
             }
         }
         // A STAGE HAS NO HEADER, and the system back is not a way out of an edit:
@@ -371,8 +381,8 @@ struct PhotosEditorView: View {
                 .kitType(.meta)
                 .foregroundStyle(Surface.meta)
             // WHERE IT CAME FROM, the board's last line.
-            if case let .data(data)? = state.content, !data.meta.isEmpty {
-                Text(data.meta)
+            if state.content != nil, !state.data.meta.isEmpty {
+                Text(state.data.meta)
                     .kitType(.meta)
                     .foregroundStyle(Surface.meta)
             }

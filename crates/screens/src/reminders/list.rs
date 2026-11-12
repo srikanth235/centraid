@@ -13,7 +13,7 @@ use wire::todo_list_event::Kind as L;
 
 use crate::catalog::load;
 use crate::kit::civil::HourCycle;
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Page, Reading};
 use crate::kit::schedule::ops::Ops;
 use crate::kit::schedule::rows::{self, Context};
 use crate::kit::schedule::rule_words::long_day;
@@ -21,33 +21,6 @@ use crate::reminders::buckets;
 use crate::reminders::view::Prefs;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, agenda_reminders as reminders, agenda_todo, fill, task as words};
-
-/// What a to-do page holds of one read: nothing yet, a refusal, a gate or the
-/// answer. A failed read is never an empty list.
-#[derive(Clone, Debug)]
-pub(super) enum Phase<T> {
-    Loading,
-    Failed,
-    Denied(wire::AppQueryDenial),
-    Ready(T),
-}
-
-impl<T> Phase<T> {
-    pub(super) fn of(reading: Reading<T>) -> Self {
-        match reading {
-            Reading::Data(data) => Self::Ready(data),
-            Reading::Denied(denial) => Self::Denied(denial),
-            Reading::Failed => Self::Failed,
-        }
-    }
-
-    pub(super) fn data(&self) -> Option<&T> {
-        match self {
-            Self::Ready(data) => Some(data),
-            _ => None,
-        }
-    }
-}
 
 /// The gate drawn when the vault will not let Reminders read the tasks.
 pub(super) fn denied(locale: Locale, denial: &wire::AppQueryDenial) -> wire::Denied {
@@ -149,7 +122,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     Some(Box::new(List {
         view,
         limit: rows::PAGE,
-        phase: Phase::Loading,
+        page: Page::loading(),
+        today: String::new(),
         ops: Ops::default(),
         prefs: Prefs::default(),
     }))
@@ -159,7 +133,10 @@ struct List {
     view: wire::TodoView,
     /// The board window: it widens by a page at "Show more", up to the manifest's bound.
     limit: u32,
-    phase: Phase<wire::AgendaTaskBoard>,
+    /// The read. A view with nothing in it is [`Page::Empty`], never ready data with no rows.
+    page: Page<wire::AgendaTaskBoard>,
+    /// The day the core last named, kept so an empty page still adds against it.
+    today: String,
     ops: Ops,
     /// The Reminders "Filter and sort" choice, read from the keychain on `Appeared`.
     prefs: Prefs,
@@ -182,16 +159,36 @@ impl List {
     }
 
     fn reload(&mut self, ctx: &Ctx) {
+        self.read(ctx, false);
+    }
+
+    /// Read the board; `wider` says the window grew, so a read that did not come keeps the rows
+    /// already shown under the "more did not load" note.
+    fn read(&mut self, ctx: &Ctx, wider: bool) {
         let reading = match board(ctx, self.board_view(), None, self.limit) {
             // A board for another place is not this page's answer.
             Reading::Data(board) if board.view != self.wire_view() => Reading::Failed,
             other => other,
         };
-        self.phase = Phase::of(reading);
-        if let Phase::Ready(board) = &self.phase {
+        if let Reading::Data(board) = &reading {
+            self.today.clone_from(&board.today);
             self.ops
                 .answered(ctx.locale(), &open_tasks(board), &board.today);
         }
+        // A refresh never blanks the rows shown: a failed one keeps them under a note.
+        let held = std::mem::replace(&mut self.page, Page::loading());
+        let nothing = |board: &wire::AgendaTaskBoard| {
+            self.data(ctx.locale(), ctx.hour_cycle(), board)
+                .groups
+                .is_empty()
+        };
+        self.page = match (held, reading) {
+            (Page::Ready { data, .. }, Reading::Failed) if wider => Page::Ready {
+                data,
+                note: Some(read::Note::more_failed(ctx.locale())),
+            },
+            (held, reading) => held.after(reading, ctx.locale(), nothing),
+        };
     }
 
     fn wire_view(&self) -> i32 {
@@ -280,10 +277,6 @@ impl List {
         wire::TodoListData {
             subtitle,
             today: board.today.clone(),
-            empty: groups.is_empty().then(|| wire::EmptyState {
-                headline: self.empty(locale),
-                ..wire::EmptyState::default()
-            }),
             count_label: if self.view == wire::TodoView::Today {
                 String::new()
             } else {
@@ -300,7 +293,7 @@ impl List {
             Some(L::Refreshed(_)) => self.reload(ctx),
             Some(L::RowChecked(checked)) => {
                 let Some(task) = self
-                    .phase
+                    .page
                     .data()
                     .and_then(|board| find(board, &checked.task_id))
                 else {
@@ -315,7 +308,7 @@ impl List {
             }
             Some(L::RowFlagged(flagged)) => {
                 if self
-                    .phase
+                    .page
                     .data()
                     .and_then(|board| find(board, &flagged.task_id))
                     .is_some()
@@ -325,20 +318,19 @@ impl List {
                 }
             }
             Some(L::RowDeleted(deleted)) => {
-                if self
-                    .phase
+                if let Some(task) = self
+                    .page
                     .data()
                     .and_then(|board| find(board, &deleted.task_id))
-                    .is_some()
                 {
-                    self.ops.delete(ctx, &deleted.task_id);
+                    self.ops.delete(ctx, &deleted.task_id, &task.title);
                     self.reload(ctx);
                 }
             }
             Some(L::NextPage(_)) => {
                 if self.limit < rows::MAX_WINDOW {
                     self.limit = (self.limit + rows::PAGE).min(rows::MAX_WINDOW);
-                    self.reload(ctx);
+                    self.read(ctx, true);
                 }
             }
             Some(L::GroupVerb(_)) | None => {}
@@ -353,9 +345,20 @@ impl Screen for List {
                 self.reload(ctx);
                 return self.prefs.reset_and_ask();
             }
-            Some(E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
+            Some(E::DataChanged(_) | E::EnvironmentChanged(_)) => {
+                self.reload(ctx);
+                // THE EDITOR ABOVE CLOSED: its line and Undo are drawn here.
+                self.ops.line.take_handed(ctx);
+            }
+            Some(E::StatusActed(_)) => {
+                self.ops.undo(ctx);
+                self.reload(ctx);
+            }
             Some(E::EffectResult(result)) => {
-                self.prefs.answers(&result);
+                // The choice shapes the rows, so what is on the page (empty or not) follows it.
+                if self.prefs.answers(&result) {
+                    self.reload(ctx);
+                }
             }
             Some(E::TodoList(list)) => {
                 if let Some(L::GroupVerb(verb)) = &list.kind {
@@ -370,34 +373,35 @@ impl Screen for List {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
-        let ready = self.phase.data().is_some();
-        let content = match &self.phase {
-            Phase::Loading => {
-                wire::todo_list_state::Content::Loading(wire::Loading { first_load: true })
-            }
-            Phase::Failed => wire::todo_list_state::Content::Failure(read::failure(locale)),
-            Phase::Denied(denial) => wire::todo_list_state::Content::Denied(denied(locale, denial)),
-            Phase::Ready(board) => {
-                wire::todo_list_state::Content::Data(self.data(locale, ctx.hour_cycle(), board))
-            }
-        };
+        let page = self.page.clone();
+        let content = page.data().map(|board| {
+            wire::todo_list_state::Content::Data(self.data(locale, ctx.hour_cycle(), board))
+        });
+        // The plus adds against the core's day, on a list with rows and on one with none.
+        let adds = matches!(page, Page::Ready { .. } | Page::Empty);
+        let wired = page.wire(
+            locale,
+            |denial| denied(locale, denial),
+            || wire::EmptyState {
+                headline: self.empty(locale),
+                ..wire::EmptyState::default()
+            },
+        );
         wire::ViewState {
             kind: Some(wire::view_state::Kind::TodoList(wire::TodoListState {
                 view: self.view as i32,
                 title: self.title(locale),
-                content: Some(content),
+                content,
+                page: Some(wired),
                 chrome: Some(rows::chrome(locale)),
-                status: self.ops.status.clone(),
+                status: self.ops.status(),
                 color_key: self.color_key().to_owned(),
-                add_label: if ready {
+                add_label: if adds {
                     words::add_task(locale)
                 } else {
                     String::new()
                 },
-                add_route: self
-                    .phase
-                    .data()
-                    .map(|board| crate::reminders::routes::editor(&board.today)),
+                add_route: adds.then(|| crate::reminders::routes::editor(&self.today)),
             })),
             ..wire::ViewState::default()
         }

@@ -8,12 +8,34 @@ enum DocsShare {
     @MainActor
     static func present(_ share: Centraid_Core_V1_ShareFile) -> Bool {
         let source = URL(fileURLWithPath: share.path)
-        let name = share.name.replacingOccurrences(of: "/", with: "-")
+        return open(name: share.name, fallback: "Document", chooserTitle: share.chooserTitle) { copy in
+            try FileManager.default.copyItem(at: source, to: copy)
+        }
+    }
+
+    /// SHARE ONE SMALL ITEM MADE IN MEMORY (`ShareBytes`: a note as Markdown, a person as a vCard):
+    /// write the bytes to a temporary file called what the member calls it and hand that to the
+    /// same share sheet. The Compose twin is `performShareBytes`.
+    @MainActor
+    static func presentBytes(_ share: Centraid_Core_V1_ShareBytes) -> Bool {
+        open(name: share.name, fallback: "Shared", chooserTitle: share.chooserTitle) { copy in
+            try share.content.write(to: copy)
+        }
+    }
+
+    @MainActor
+    private static func open(
+        name raw: String,
+        fallback: String,
+        chooserTitle: String,
+        make: (URL) throws -> Void
+    ) -> Bool {
+        let name = raw.replacingOccurrences(of: "/", with: "-")
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let copy = folder.appendingPathComponent(name.isEmpty ? "Document" : name)
+        let copy = folder.appendingPathComponent(name.isEmpty ? fallback : name)
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            try FileManager.default.copyItem(at: source, to: copy)
+            try make(copy)
         } catch {
             return false
         }
@@ -22,7 +44,7 @@ enum DocsShare {
         else { return false }
         while let next = top.presentedViewController { top = next }
         let sheet = UIActivityViewController(activityItems: [copy], applicationActivities: nil)
-        if !share.chooserTitle.isEmpty { sheet.setValue(share.chooserTitle, forKey: "subject") }
+        if !chooserTitle.isEmpty { sheet.setValue(chooserTitle, forKey: "subject") }
         sheet.completionWithItemsHandler = { _, _, _, _ in try? FileManager.default.removeItem(at: folder) }
         sheet.popoverPresentationController?.sourceView = top.view
         top.present(sheet, animated: true)

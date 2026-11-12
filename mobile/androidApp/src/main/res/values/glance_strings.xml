@@ -13,9 +13,14 @@
     <string name="glance_intent_next_unavailable">Open Centraid to see your day.</string>
     <string name="glance_shortcut_add_long">Add a reminder</string>
     <string name="glance_shortcut_add_short">New reminder</string>
+    <string name="glance_shortcut_next_long">What\'s next</string>
+    <string name="glance_shortcut_next_short">What\'s next</string>
     <string name="glance_widget_reminders_description">Today\'s and overdue reminders.</string>
     <string name="glance_widget_reminders_name">Reminders</string>
     <string name="glance_widget_up_next_description">What\'s next today, from your Calendar.</string>
     <string name="glance_widget_up_next_name">Up next</string>
     <string name="glance_widget_unavailable">Open Centraid to see your day</string>
+    <string name="glance_widget_health_description">Today\'s steps, sleep and activity.</string>
+    <string name="glance_widget_health_name">Health</string>
+    <string name="glance_widget_health_unavailable">Open Centraid to see Health</string>
 </resources>

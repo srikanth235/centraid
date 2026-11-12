@@ -22,6 +22,7 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
+import "centraid/core/v1/agenda_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/route.proto";
 
@@ -74,10 +75,12 @@ message PeopleHomeState {
   // The band: People · Touch, then More. EMPTY while denied.
   repeated PeopleBandTab band = 3;
   PeopleHomeChrome chrome = 4;
+  // 5 to 7 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 5, 6, 7;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready: the destination's rows. Over a ready search the rows are
+  // `search.results`.
   oneof content {
-    Loading loading = 5;
-    Failure failure = 6;
-    Denied denied = 7;
     PeopleRosterData roster = 8;
     PeopleTouchData touch = 9;
   }
@@ -88,7 +91,7 @@ message PeopleHomeState {
   // Search is the field under the title; while a term is answered its rows
   // replace the surface.
   PeopleSearchState search = 12;
-  // SHEET_MORE's rows: Import, Export and Trash, never search, sort or a filter (R-CHROME-4).
+  // SHEET_MORE's rows: Lists, Import, Export and Trash, never search, sort or a filter (R-CHROME-4).
   repeated PeopleMoreRow more_rows = 13;
   Sheet sheet = 14;
   // What a write did, a refusal's sentence, or how an import went; the screen
@@ -103,6 +106,14 @@ message PeopleHomeState {
   // THE "PHONE CONTACTS" ROW OF MORE (#1173, item 20): what People may read of the address
   // book, drawn above the rows. Unset while denied.
   optional PeopleContactsRow contacts = 19;
+  // THE STOP CONFIRM (#1185), set while the member is asked to stop reading the phone's contacts: the same
+  // sheet and the same words as every followed store (Health's `Stop reading`). Present only after the
+  // More row `stop` was tapped; `StopConfirmed` stops, `StopDismissed` (or a tap outside) keeps following.
+  optional Confirm stop = 20;
+  // The read of the surface in view (the answer to the term while one is asked, else the
+  // destination's): loading, failed, refused, EMPTY (day one, a chip with no one, a term that
+  // matched no one) or ready.
+  PageState page = 21;
 
   enum Sheet {
     // No sheet is open.
@@ -169,8 +180,11 @@ message PeopleMoreRow {
   string key = 1;
   string label = 2;
   string icon_key = 3;
-  // Where a tap goes.
+  // Where a tap goes. ABSENT on a row that opens a confirm instead (`stop`, "Stop reading Phone
+  // contacts"): the tap is `MoreRowPicked`.
   Route route = 4;
+  // The row's second line (#1185): Trash says "30 days, then erased". Empty for the others.
+  string meta = 5;
 }
 
 // ONE PERSON AS A LIST DRAWS THEM: the roster and search.
@@ -200,9 +214,9 @@ message PeopleRosterData {
   // The flat list, in the requested order. EMPTY while `sections` holds the rows: under the
   // Name order the roster is A to Z (#1173).
   repeated PeopleRow rows = 1;
-  // Set exactly when `rows` is empty: day one (with "Add person" and the
-  // phone's contacts), or the chip's own sentence.
-  optional EmptyState empty = 2;
+  // 2 was `empty`: day one or a chip with no one is the page's own Empty state (#1185).
+  reserved 2;
+  reserved "empty";
   // "12 people · 3 to reconnect · 2 starred" ("shown" when truncated).
   string status_line = 3;
   bool truncated = 4;
@@ -329,8 +343,9 @@ message PeopleTouchData {
   string recent_empty = 10;
   // "12 people · 3 overdue".
   string status_line = 11;
-  // DAY ONE: nobody in People at all. Drawn instead of the rails.
-  optional EmptyState empty = 12;
+  // 12 was `empty`: day one is the page's own Empty state (#1185).
+  reserved 12;
+  reserved "empty";
 }
 
 // The search field and its answer.
@@ -346,7 +361,9 @@ message PeopleSearchState {
 
 message PeopleSearchResults {
   repeated PeopleRow rows = 1;
-  optional EmptyState empty = 2;
+  // 2 was `empty`: a term that matched no one is the page's own Empty state (#1185).
+  reserved 2;
+  reserved "empty";
 }
 
 message PeopleHomeEvent {
@@ -368,6 +385,10 @@ message PeopleHomeEvent {
     FilterMenuCleared filter_menu_cleared = 14;
     // The Phone contacts row's one action: pause, resume, turn on, or open Settings.
     ContactsActionTapped contacts_action = 15;
+    // A More row with no route of its own (`stop`): Rust decides what it opens.
+    MoreRowPicked more_row = 16;
+    StopConfirmed stop_confirmed = 17;
+    StopDismissed stop_dismissed = 18;
   }
 
   // 3 was `chip`, 4 `order` and 8 `sheet_opened`: a pick in the filter menu is
@@ -391,6 +412,15 @@ message PeopleHomeEvent {
   message SearchClosed {}
 
   message SheetClosed {}
+
+  // A More row by `PeopleMoreRow.key` that carries no route.
+  message MoreRowPicked {
+    string key = 1;
+  }
+
+  message StopConfirmed {}
+
+  message StopDismissed {}
 
   message StarToggled {
     string party_id = 1;
@@ -424,13 +454,13 @@ message PeoplePersonState {
   // The name the route carried, for the app bar before the read lands.
   string name_hint = 2;
   PeoplePersonChrome chrome = 3;
+  // 4 to 6 and 8 were `loading`, `failure`, `denied` and `gone`: the read is `page`, and a person
+  // who is no longer there is a final failure on it (#1185).
+  reserved 4, 5, 6, 8;
+  reserved "loading", "failure", "denied", "gone";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 4;
-    Failure failure = 5;
-    Denied denied = 6;
     PeoplePersonData data = 7;
-    // No live person has this id: trashed, merged away, or never here.
-    EmptyState gone = 8;
   }
   // The write sheet or choices sheet on screen; absent is none.
   optional PeoplePersonSheet sheet = 9;
@@ -441,6 +471,15 @@ message PeoplePersonState {
   bool done = 12;
   // The editor on this person.
   Route edit = 13;
+  // "Earlier versions   2 ›" at the foot of the page (#1185); absent when there are none.
+  optional EarlierEntry earlier = 14;
+  // Where it came from, under the Earlier versions entry (#1185). Absent for a typed item.
+  optional OriginLine origin = 15;
+  // The picker over the "Linked to" section, while it is up (#1185). The kit's generic picker.
+  optional LinkPicker link_picker = 16;
+  // The read: loading, failed, refused or ready (with a note when a refresh failed or the phone could
+  // not be checked). A person no longer there is a final failure, never an empty page.
+  PageState page = 17;
 }
 
 message PeoplePersonChrome {
@@ -456,6 +495,8 @@ message PeoplePersonChrome {
   string back = 10;
   // "More": the label of the glass key that holds Star, Merge and Move to trash.
   string more = 11;
+  // "Share": the More key's row that hands the person to the OS as a vCard (#1185).
+  string share = 12;
 }
 
 // A label and a value on the sheet: "Nickname", "How you met".
@@ -560,6 +601,28 @@ message PeoplePersonData {
   bool is_me = 28;
   // "My card", on the owner's own card.
   string my_card_label = 29;
+  // WHAT THE PHONE SAYS (#1183), only where the member's value differs from the phone's, each
+  // under the field or list it belongs to. The name, under the name.
+  optional PhoneSays name_phone_says = 30;
+  // Under the role line.
+  optional PhoneSays role_phone_says = 31;
+  // Directly under the block that shows the nickname. Android draws the facts as a block of their
+  // own under the hero; iOS draws them as the last rows of the dates card, so the line comes under
+  // that card, after the birthday's.
+  optional PhoneSays nickname_phone_says = 32;
+  // Under the dates, where the birthday is.
+  optional PhoneSays birthday_phone_says = 33;
+  // Under the channels: a number or address the member changed ("Phone says ...") and one they
+  // removed ("Phone still has ..."), in a stable order. One the member added has no line.
+  repeated PhoneSays channels_phone_says = 34;
+  // "Linked to" (#1185): every item the person is linked to, from either end, with the add row.
+  // The kit's shared section, after "In your vault". Absent while what it is linked to was not
+  // read (the status line says so). Its events go back as `PeoplePersonEvent.link`.
+  optional LinkSection links = 35;
+  // The attachments (#1185): the photos and files on this person, with Add photo and Add file. The
+  // kit's shared section (`AgendaAttachmentsSection`), before "Linked to". Its events go back as
+  // `PeoplePersonEvent.attachment`.
+  AgendaAttachmentsSection attachments = 36;
 }
 
 message PeopleHeroAction {
@@ -668,16 +731,22 @@ message PeopleMergeSheet {
   // "Merging cannot be undone."
   string body = 2;
   string cancel_label = 3;
+  // 4 and 5 were `loading` and `failure`: the read is `page` (#1185).
+  reserved 4, 5;
+  reserved "loading", "failure";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 4;
-    Failure failure = 5;
     PeopleMergeChoices choices = 6;
   }
+  // The read of who can be folded in: failed, EMPTY (no one else) or ready.
+  PageState page = 7;
 }
 
 message PeopleMergeChoices {
   repeated PeopleMergeChoice choices = 1;
-  optional EmptyState empty = 2;
+  // 2 was `empty`: no one to fold in is the page's own Empty state (#1185).
+  reserved 2;
+  reserved "empty";
 }
 
 message PeoplePersonSheet {
@@ -712,7 +781,15 @@ message PeoplePersonEvent {
     ChannelTapped channel = 16;
     // A hero action by `PeopleHeroAction.key`.
     HeroTapped hero = 17;
+    // The More key's Share row (#1185): Rust asks the owner check, then hands the vCard to the OS.
+    ShareRequested share_requested = 18;
+    // The "Linked to" section and its picker (#1185): the kit's `LinkEvent`.
+    LinkEvent link = 19;
+    // The attachments section's events (#1185): the kit's `AgendaAttachmentEvent`.
+    AgendaAttachmentEvent attachment = 20;
   }
+
+  message ShareRequested {}
 
   message HeroTapped {
     string key = 1;
@@ -820,18 +897,20 @@ message PeopleEditorChrome {
 
 message PeopleEditorState {
   PeopleEditorChrome chrome = 1;
+  // 2 to 4 and 6 were `loading`, `failure`, `denied` and `gone`: the read is `page`, and a person
+  // who is no longer there is a final failure on it (#1185).
+  reserved 2, 3, 4, 6;
+  reserved "loading", "failure", "denied", "gone";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 2;
-    Failure failure = 3;
-    Denied denied = 4;
     PeopleProfileDraft draft = 5;
-    // The person is not there to edit.
-    EmptyState gone = 6;
   }
   Autosave autosave = 7;
   repeated PeopleCadenceChoice cadences = 8;
   // A refused cadence, or another sentence the editor owes; empty when none.
   StatusLine status = 9;
+  // The read: loading, failed, refused, or ready (with a note when a re-read failed over the words).
+  PageState page = 10;
 }
 
 message PeopleEditorEvent {
@@ -865,4 +944,100 @@ message PeopleEditorEvent {
   message CadencePicked {
     int64 days = 1;
   }
+}
+
+// ---------------------------------------------------------------------------
+// People's lists (`people.lists`, #1185)
+// ---------------------------------------------------------------------------
+
+// THE MEMBER'S LISTS: a page of rows, a "New list" in the header, and one sheet that makes a list or
+// renames the one tapped. Deleting is "Move to trash" on that sheet: no confirm, the status line says
+// "{name} moved to trash" and carries Undo, and the list is a row of People's trash until then.
+message PeopleListsState {
+  // "Lists".
+  string title = 1;
+  // The page it was pushed from ("People").
+  string back_label = 2;
+  // 3 to 5 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 3, 4, 5;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready.
+  oneof content {
+    PeopleListsData data = 6;
+  }
+  // A write's sentence or a refusal's; with Undo after a move to the trash.
+  StatusLine status = 7;
+  // The name sheet, while it is open.
+  optional PeopleListSheet sheet = 8;
+  // The read: loading, failed, refused, EMPTY (no list yet) or ready.
+  PageState page = 9;
+  // "New list": the header's one action (`NewTapped`), drawn while the page is ready or empty.
+  string add_label = 10;
+}
+
+message PeopleListsData {
+  // By name.
+  repeated PeopleListRow rows = 1;
+  // 2 and 3 were `add_label` (now on the state) and `empty` (the page's own Empty state) (#1185).
+  reserved 2, 3;
+  reserved "add_label", "empty";
+}
+
+message PeopleListRow {
+  string list_id = 1;
+  string name = 2;
+  // "3 people" / "1 person"; EMPTY when the count was not read whole (more people than a window).
+  string meta = 3;
+  // "Family, 3 people".
+  string accessibility_label = 4;
+}
+
+// The sheet that makes a list ("New list") or renames one ("Rename list").
+message PeopleListSheet {
+  string title = 1;
+  // The draft's name, as typed.
+  string name = 2;
+  // "List name".
+  string name_placeholder = 3;
+  // "Create" or "Save"; armed by a name (`can_submit`).
+  string submit_label = 4;
+  bool can_submit = 5;
+  string cancel_label = 6;
+  // "Move to trash" (destructive, no confirm): present only when renaming an existing list.
+  optional string trash_label = 7;
+}
+
+message PeopleListsEvent {
+  oneof kind {
+    // The failure's "Try again".
+    Refreshed refreshed = 1;
+    // The header's "New list": the sheet opens empty.
+    NewTapped new_tapped = 2;
+    // A row: the sheet opens on that list.
+    RowTapped row_tapped = 3;
+    NameChanged name_changed = 4;
+    // "Create" or "Save".
+    Submitted submitted = 5;
+    SheetClosed sheet_closed = 6;
+    // The sheet's "Move to trash".
+    TrashTapped trash_tapped = 7;
+  }
+
+  message Refreshed {}
+
+  message NewTapped {}
+
+  message RowTapped {
+    string list_id = 1;
+  }
+
+  message NameChanged {
+    string text = 1;
+  }
+
+  message Submitted {}
+
+  message SheetClosed {}
+
+  message TrashTapped {}
 }

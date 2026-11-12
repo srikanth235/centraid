@@ -116,7 +116,7 @@ fn a_cancelled_owner_check_writes_nothing_and_a_dismissed_save_sheet_says_so() {
     d.answer_effect(checked(wire::owner_checked::Outcome::Cancelled));
     let state = export_state(&d, id);
     assert_eq!(state.phase, wire::locker_export_state::Phase::Idle as i32);
-    assert!(!state.status.unwrap().sentence.is_empty());
+    assert!(state.status.is_none(), "a dismissed prompt says nothing");
     export_event(
         &mut d,
         id,
@@ -132,6 +132,7 @@ fn a_cancelled_owner_check_writes_nothing_and_a_dismissed_save_sheet_says_so() {
         reason: "dismissed".to_owned(),
         denied: false,
         cancelled: true,
+        ..Default::default()
     }));
     let state = export_state(&d, id);
     assert!(
@@ -253,8 +254,8 @@ fn the_trash_lists_what_went_and_is_behind_the_lock() {
         other => panic!("{other:?}"),
     };
     assert!(matches!(
-        view.content,
-        Some(wire::trash_view::Content::Denied(ref denied)) if denied.title == "Locker is locked."
+        view.page.as_ref().and_then(|page| page.state.as_ref()),
+        Some(wire::page_state::State::Refused(denied)) if denied.title == "Locker is locked."
     ));
 }
 
@@ -273,4 +274,54 @@ fn the_wall_page_asks_at_once_and_finishes_when_the_locker_opens() {
     d.answer_effect(passed(wire::Biometry::Face));
     let opened = state(&d);
     assert!(opened.finished && opened.open && opened.wall.is_none());
+}
+
+/// Walk the export to its owner check and answer it with `outcome`; the effects
+/// after the check was asked come back.
+fn export_checked(
+    outcome: wire::owner_checked::Outcome,
+) -> (Vec<wire::effect::Kind>, wire::LockerExportState) {
+    let mut d = ready();
+    let id = d.push(locker::TAB, routes::export("Locker"));
+    export_event(
+        &mut d,
+        id,
+        X::Commit(wire::locker_export_event::CommitTapped {}),
+    );
+    export_event(
+        &mut d,
+        id,
+        X::Confirmed(wire::locker_export_event::Confirmed {}),
+    );
+    let pending = d.effects.len();
+    d.answer_effect(checked(outcome));
+    // `answer_effect` takes the oldest, so what it asked for follows.
+    (effects_of(&d, pending - 1), export_state(&d, id))
+}
+
+#[test]
+fn a_dismissed_export_check_writes_nothing_and_says_nothing() {
+    let (effects, state) = export_checked(wire::owner_checked::Outcome::Cancelled);
+    assert!(effects.is_empty());
+    assert_eq!(state.phase, wire::locker_export_state::Phase::Idle as i32);
+    assert!(state.status.is_none());
+}
+
+#[test]
+fn a_failed_export_check_says_so_and_nothing_leaves() {
+    let (effects, state) = export_checked(wire::owner_checked::Outcome::Failed);
+    assert!(effects.is_empty());
+    assert_eq!(state.phase, wire::locker_export_state::Phase::Idle as i32);
+    assert!(state.status.is_some_and(|s| !s.sentence.is_empty()));
+}
+
+#[test]
+fn locker_refuses_to_export_from_a_phone_with_no_passcode() {
+    let (effects, state) = export_checked(wire::owner_checked::Outcome::Unavailable);
+    assert!(effects.is_empty());
+    assert!(
+        state
+            .status
+            .is_some_and(|s| s.sentence.contains("passcode"))
+    );
 }

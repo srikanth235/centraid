@@ -44,6 +44,7 @@ impl Screen for Probe {
             kind: Some(wire::view_state::Kind::Counter(wire::CounterView {
                 title: if backing_up { "backing up" } else { "idle" }.to_owned(),
                 content: None,
+                ..Default::default()
             })),
             ..Default::default()
         }
@@ -111,13 +112,23 @@ impl Rig {
         );
     }
 
+    /// A rig with the follow coordinator and the folder follower beside the pass service: a
+    /// granted window follows the phone's stores before the OS is told it is done.
+    fn following() -> Self {
+        Self::build(FakeShell::default(), true)
+    }
+
     fn with_shell(shell: FakeShell) -> Self {
+        Self::build(shell, false)
+    }
+
+    fn build(shell: FakeShell, following: bool) -> Self {
         let secrets = VaultSecrets::new();
         let probe_secrets = secrets.clone();
         let quiet_secrets = secrets.clone();
         let roll = RollLog::default();
         let fake_roll = roll.clone();
-        let registry = passes::registry(&secrets)
+        let mut registry = passes::registry(&secrets)
             .with(centraid_screens::imports::CAMERA_ROLL, move |_| {
                 Some(Box::new(FakeRoll(fake_roll.clone())))
             })
@@ -138,6 +149,14 @@ impl Rig {
             screen: QUIET.to_owned(),
             args: None,
         };
+        if following {
+            registry = registry
+                .with(
+                    centraid_screens::imports::FILES,
+                    centraid_screens::imports::files::build,
+                )
+                .merge(centraid_screens::follow::registry());
+        }
         let runtime = Runtime::new(registry, vec![("t".to_owned(), root)]).with_services({
             let mut services = passes::services();
             services.push(wire::Route {
@@ -145,6 +164,10 @@ impl Rig {
                 screen: centraid_screens::imports::CAMERA_ROLL.to_owned(),
                 args: None,
             });
+            if following {
+                services.push(centraid_screens::imports::routes::files(""));
+                services.extend(centraid_screens::follow::services());
+            }
             services
         });
         Self {
@@ -879,13 +902,27 @@ fn passes_probe_route() -> wire::Route {
     }
 }
 
+/// THE DEBOUNCE IS DECIDED BY A CLOCK THE TEST MOVES, never by how fast the machine runs: the window
+/// is an hour long on a clock that stands still, so "inside the window" holds however slowly the
+/// writes run, and "the window ended" is the test moving the clock and firing the timer the service
+/// asked for. The real timer (an hour away) never fires on its own.
 #[test]
 fn a_commit_is_a_pass_and_a_burst_of_them_is_one_more_at_the_end_of_the_debounce() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    const WINDOW_MS: u64 = 3_600_000;
     let mut rig = Rig::new();
+    rig.first_pass(empty());
+    // Past every instant the conductor has read on its real clock so far.
+    let now = Arc::new(AtomicU64::new(1_000_000_000));
+    let clock = Arc::clone(&now);
     rig.secrets
         .conductor()
-        .set_debounce(Duration::from_millis(250));
-    rig.first_pass(empty());
+        .set_clock(move || clock.load(Ordering::SeqCst));
+    rig.secrets
+        .conductor()
+        .set_debounce(Duration::from_millis(WINDOW_MS));
     let write = |rig: &mut Rig, n: u32| {
         let response = rig.driver.act(
             act::reminders::AddTask {
@@ -910,7 +947,14 @@ fn a_commit_is_a_pass_and_a_burst_of_them_is_one_more_at_the_end_of_the_debounce
     rig.driver.pump(Duration::from_millis(50));
     assert!(!rig.has_call());
     // ...AND ONE PASS RUNS WHEN THE WINDOW ENDS.
-    rig.driver.pump(Duration::from_millis(500));
+    now.fetch_add(WINDOW_MS, Ordering::SeqCst);
+    rig.driver.send(
+        SERVICE,
+        E::TimerFired(wire::TimerFired {
+            timer: "commit".to_owned(),
+        }),
+    );
+    rig.driver.pump(Duration::from_millis(100));
     assert!(rig.has_call());
     rig.answer_drain(empty());
     assert!(!rig.has_call());
@@ -1219,4 +1263,214 @@ fn a_vault_the_shelf_holds_a_core_for_is_passed_on_that_core_and_a_resting_one_i
         "a resting vault is not woken"
     );
     assert!(rig.secrets.conductor().facts().in_flight.is_empty());
+}
+
+/// The shell answers the coordinator's effects: a keychain habit, a read. Counts the contacts
+/// reads and whether any asked the OS for a permission.
+fn follow_stores(rig: &mut Rig, contacts_connected: bool) -> (u32, u32) {
+    let (mut reads, mut asked) = (0, 0);
+    loop {
+        let Some(at) = rig.driver.effects.iter().position(|request| {
+            matches!(
+                request
+                    .effect
+                    .as_ref()
+                    .and_then(|effect| effect.kind.as_ref()),
+                Some(
+                    wire::effect::Kind::Keychain(_)
+                        | wire::effect::Kind::ContactsRead(_)
+                        | wire::effect::Kind::CalendarRead(_)
+                        | wire::effect::Kind::HealthRead(_)
+                        | wire::effect::Kind::FoldersRead(_)
+                )
+            )
+        }) else {
+            return (reads, asked);
+        };
+        let request = rig.driver.effects.remove(at);
+        let outcome = match request.effect.and_then(|effect| effect.kind) {
+            Some(wire::effect::Kind::Keychain(op)) => {
+                let connected = contacts_connected
+                    && op.key == centraid_screens::people::contacts::IMPORTED_KEY;
+                wire::effect_result::Outcome::Keychain(wire::KeychainValue {
+                    found: connected,
+                    value: if connected { b"1".to_vec() } else { Vec::new() },
+                })
+            }
+            Some(wire::effect::Kind::ContactsRead(read)) => {
+                reads += 1;
+                asked += u32::from(read.ask_permission);
+                wire::effect_result::Outcome::Contacts(wire::ContactsSnapshot {
+                    complete: true,
+                    device_id: "this-install".to_owned(),
+                    ..Default::default()
+                })
+            }
+            other => panic!("nothing else was connected: {other:?}"),
+        };
+        rig.driver.send(
+            request.instance,
+            E::EffectResult(wire::EffectResult {
+                effect_id: request.effect_id,
+                outcome: Some(outcome),
+            }),
+        );
+    }
+}
+
+fn window_dones(rig: &Rig) -> Vec<(String, bool)> {
+    rig.driver
+        .effects
+        .iter()
+        .filter_map(|request| request.effect.as_ref().and_then(window_done))
+        .collect()
+}
+
+#[test]
+fn a_granted_window_follows_each_connected_store_after_the_backup_and_before_the_os_is_told() {
+    let mut rig = Rig::following();
+    rig.first_pass(empty());
+    // The first launch's own follows (a foreground is a trigger) are not this window's.
+    rig.driver.effects.retain(|request| {
+        !matches!(
+            request
+                .effect
+                .as_ref()
+                .and_then(|effect| effect.kind.as_ref()),
+            Some(wire::effect::Kind::Keychain(_))
+        )
+    });
+    rig.fact(wire::shell_fact::Fact::Window(wire::WindowGranted {
+        window: windows::NIGHT.to_owned(),
+        deadline_ms: 540_000,
+    }));
+    let (drain, _) = rig.drain();
+    assert_eq!(drain.deadline_ms, 540_000);
+    // NOTHING FOLLOWS WHILE THE BACKUP RUNS: its priorities come first.
+    assert!(!rig.has(|effect| matches!(effect.kind, Some(wire::effect::Kind::Keychain(_)))));
+    rig.answer_drain(empty());
+    // The backup ended; the stores follow before the OS hears the window is done.
+    assert!(window_dones(&rig).is_empty(), "the OS is not told yet");
+    let (reads, asked) = follow_stores(&mut rig, true);
+    assert_eq!((reads, asked), (1, 0), "one read, and no permission");
+    assert_eq!(window_dones(&rig), [(windows::NIGHT.to_owned(), true)]);
+}
+
+#[test]
+fn the_grace_after_leaving_the_screen_follows_nothing() {
+    let mut rig = Rig::following();
+    rig.first_pass(empty());
+    rig.driver.effects.retain(|request| {
+        !matches!(
+            request
+                .effect
+                .as_ref()
+                .and_then(|effect| effect.kind.as_ref()),
+            Some(wire::effect::Kind::Keychain(_))
+        )
+    });
+    rig.driver
+        .call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
+            foreground: false,
+        }));
+    let (_, _) = rig.drain();
+    rig.answer_drain(empty());
+    assert_eq!(
+        window_dones(&rig),
+        [(BACKGROUND_WINDOW.to_owned(), true)],
+        "the grace is the upload's alone"
+    );
+}
+
+/// A granted window whose backup ended and whose first store's read never answers: the coordinator
+/// holds the OS's answer. The instance of the coordinator, to hand it its backstop.
+fn window_held_by_a_read_that_never_answers(rig: &mut Rig) -> u64 {
+    rig.first_pass(empty());
+    rig.driver.effects.retain(|request| {
+        !matches!(
+            request
+                .effect
+                .as_ref()
+                .and_then(|effect| effect.kind.as_ref()),
+            Some(wire::effect::Kind::Keychain(_))
+        )
+    });
+    rig.fact(wire::shell_fact::Fact::Window(wire::WindowGranted {
+        window: windows::NIGHT.to_owned(),
+        deadline_ms: 25_000,
+    }));
+    let _ = rig.drain();
+    rig.answer_drain(empty());
+    let at = rig
+        .driver
+        .effects
+        .iter()
+        .position(|request| {
+            matches!(
+                request
+                    .effect
+                    .as_ref()
+                    .and_then(|effect| effect.kind.as_ref()),
+                Some(wire::effect::Kind::Keychain(_))
+            )
+        })
+        .expect("the coordinator asked for the habit");
+    let habit = rig.driver.effects.remove(at);
+    rig.driver.send(
+        habit.instance,
+        E::EffectResult(wire::EffectResult {
+            effect_id: habit.effect_id,
+            outcome: Some(wire::effect_result::Outcome::Keychain(
+                wire::KeychainValue {
+                    found: true,
+                    value: b"1".to_vec(),
+                },
+            )),
+        }),
+    );
+    assert!(
+        rig.has(|effect| matches!(effect.kind, Some(wire::effect::Kind::ContactsRead(_)))),
+        "the read is out and nobody answers it"
+    );
+    assert!(window_dones(rig).is_empty(), "the OS is held while it is");
+    habit.instance
+}
+
+fn window_backstop(rig: &mut Rig, coordinator: u64) {
+    rig.driver.send(
+        coordinator,
+        E::TimerFired(wire::TimerFired {
+            timer: centraid_screens::follow::coordinator::WINDOW_TIMER.to_owned(),
+        }),
+    );
+}
+
+#[test]
+fn a_window_held_for_follows_is_released_once_when_the_backstop_fires() {
+    let mut rig = Rig::following();
+    let coordinator = window_held_by_a_read_that_never_answers(&mut rig);
+    window_backstop(&mut rig, coordinator);
+    assert_eq!(
+        window_dones(&rig),
+        [(windows::NIGHT.to_owned(), true)],
+        "the OS is told, once"
+    );
+    // The stores go on following afterwards (the read answers late); the window is not told again.
+    follow_stores(&mut rig, true);
+    assert_eq!(window_dones(&rig).len(), 1, "and not a second time");
+}
+
+#[test]
+fn a_window_the_os_took_back_while_held_is_never_told_it_is_done() {
+    let mut rig = Rig::following();
+    let coordinator = window_held_by_a_read_that_never_answers(&mut rig);
+    rig.fact(wire::shell_fact::Fact::Expired(wire::WindowExpired {
+        window: windows::NIGHT.to_owned(),
+    }));
+    window_backstop(&mut rig, coordinator);
+    follow_stores(&mut rig, true);
+    assert!(
+        window_dones(&rig).is_empty(),
+        "an expired window has no one waiting for the answer"
+    );
 }

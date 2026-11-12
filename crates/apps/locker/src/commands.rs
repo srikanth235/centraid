@@ -24,8 +24,8 @@
 //!
 //! [`Confirm`] here is the **manifest's** `confirmation`, which the dispatching
 //! surface reads. The command definition's own `confirm` parks a **non-owner**
-//! invocation regardless of risk. Locker's two manifest-confirmed actions are
-//! `purge-item` and `export`; the `locker.*` catalogue's two command-level
+//! invocation regardless of risk. Locker's manifest-confirmed actions are
+//! `purge-item`, `empty-trash`, `export` and `reveal` (the owner check is its ask); the `locker.*` catalogue's two command-level
 //! gates are on `locker.purge_item` and `locker.export`. Same count, different
 //! gates, and collapsing them loses the non-owner park (census §A0).
 
@@ -36,12 +36,13 @@ use centraid_apps_kit::actions::{act, confirmed};
 /// seventeenth of v0's (#1047): the memo command existed and no action exposed
 /// it (the handoff's README §8 paper cut). The seven lifecycle actions and the
 /// two tag actions are the vault's shared verbs (#1135).
-pub const ACTIONS: [ActionRow; 22] = [
+pub const ACTIONS: [ActionRow; 23] = [
     act("add-item", "locker.add_item"),
     act("edit-item", "locker.edit_item"),
     act("trash-item", "entity.trash"),
     act("restore-item", "entity.restore"),
     confirmed("purge-item", "entity.purge"),
+    confirmed("empty-trash", "entity.empty_trash"),
     act("star-item", "flag.set"),
     act("unstar-item", "flag.clear"),
     act("archive-item", "flag.set"),
@@ -56,7 +57,9 @@ pub const ACTIONS: [ActionRow; 22] = [
     act("clear-passkey", "locker.clear_passkey"),
     act("set-memo", "locker.set_memo"),
     confirmed("export", "locker.export"),
-    act("reveal", "locker.mark_used"),
+    // A reveal is the member opening a secret behind the owner check, which is the ask: it is
+    // `confirmed` for the register, and there is nothing to take back (a stamp of use).
+    confirmed("reveal", "locker.mark_used"),
     // A link set by hand (#1173): one edge, shaped by the vault.
     act("add-link", "edge.add"),
     act("remove-link", "edge.remove"),
@@ -77,7 +80,7 @@ mod tests {
     /// share.
     #[test]
     fn the_table_is_one_command_per_action_and_locker_wraps_no_shared_verb() {
-        assert_eq!(ACTIONS.len(), 22);
+        assert_eq!(ACTIONS.len(), 23);
         let own: Vec<&str> = ACTIONS
             .iter()
             .map(|row| row.command)

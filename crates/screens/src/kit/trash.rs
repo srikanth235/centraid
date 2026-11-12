@@ -3,11 +3,11 @@
 //! other app's `<app>.trash` are this machine over their own spec.
 //!
 //! A list of deleted rows the spec's `load` reads, restore as a write with no
-//! confirm, and purge / empty behind a destructive confirm with full sentences
-//! (product-intuition/references/design-behaviour.md § Controls). A spec with no `purge` has NO destroy path (Docs today): the
-//! screen offers restore only — no "Delete forever" and no "Empty trash" — and
-//! says nothing it cannot do. A refused write keeps the list and says the
-//! core's sentence; the vault's own change event reloads the list after a
+//! confirm ("{title} restored" with Undo), and purge / empty behind a
+//! destructive confirm with full sentences (product-intuition/references/
+//! design-behaviour.md § Controls). Every spec can restore, delete forever and
+//! empty: the wording is the kit's, the app passes its noun. A refused write
+//! keeps the list and says the core's sentence; the vault's own change event reloads the list after a
 //! write commits, and the screen never deletes a row on a guess.
 //!
 //! The list is the one window the app's query answers (a manifest query is
@@ -19,153 +19,137 @@ use wire::trash_event::Kind as T;
 
 use super::act as kit_act;
 use super::civil;
-use super::read::{self, Reading};
+use super::read::{Page, Reading};
+use super::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, shared};
 
 /// One trashed row as the app's query answered it: the days are the civil days
 /// the core read in the member's zone, empty when it stated none (never a
 /// slice of a UTC instant).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct TrashItem {
     pub id: String,
     pub title: String,
     pub deleted_day: String,
     pub purge_day: String,
+    /// What this row is called when it is not what the app's spec says (a calendar on a shelf of
+    /// events); `None` is the spec's own noun.
+    pub noun: Option<Words>,
+    /// What went to the trash with this row, already worded ("42 events"); empty for none. The
+    /// row's meta line leads with it.
+    pub with: String,
 }
 
 /// A sentence in a locale.
 pub type Words = fn(Locale) -> String;
 
-/// THE TRASH SCREEN'S WORDS, per app. Every default is the kit's shared copy;
-/// an app overrides only the sentence that would be false for it (Docs'
-/// "Empty trash" removes nothing, so its confirm cannot say "for good").
-#[derive(Clone, Copy)]
-pub struct TrashCopy {
-    pub purge_title: Option<Words>,
-    pub purge_body: Option<Words>,
-    pub purge_action: Option<Words>,
-    pub empty_title: Option<Words>,
-    pub empty_body: Option<Words>,
-    pub empty_action: Option<Words>,
-    pub empty_headline: Option<Words>,
-    pub empty_state_body: Option<Words>,
-    pub untitled: Option<Words>,
-    /// A `{day}` template for the erase day, or `None` to say nothing about it.
-    pub purges_on: Option<Words>,
+/// `Delete this note forever?`: the kit's title with the app's noun.
+#[must_use]
+pub fn purge_title(locale: Locale, noun: Words) -> String {
+    shared::trash_purge_title(locale).replace("{noun}", &noun(locale))
 }
 
-impl TrashCopy {
-    /// The kit's own words throughout.
-    pub const KIT: Self = Self {
-        purge_title: None,
-        purge_body: None,
-        purge_action: None,
-        empty_title: None,
-        empty_body: None,
-        empty_action: None,
-        empty_headline: None,
-        empty_state_body: None,
-        untitled: None,
-        purges_on: None,
-    };
+/// `It leaves this vault for good. This cannot be undone.`: an app may replace
+/// the first sentence with what goes with the record, and the last sentence is
+/// always the kit's.
+#[must_use]
+pub fn purge_body(locale: Locale, lead: Option<Words>) -> String {
+    format!(
+        "{} {}",
+        lead.map_or_else(|| shared::trash_purge_lead(locale), |lead| lead(locale)),
+        shared::trash_cannot_undo(locale)
+    )
+}
 
-    fn pick(over: Option<Words>, kit: Words, locale: Locale) -> String {
-        over.map_or_else(|| kit(locale), |words| words(locale))
+/// `Standup moved to trash`: the status line every app says after it moves a
+/// record to trash (with Undo). A record with no title is "Untitled".
+#[must_use]
+pub fn moved_to_trash(locale: Locale, title: &str) -> String {
+    shared::trash_moved(locale).replace("{title}", &titled(locale, title))
+}
+
+/// `Work and 42 events moved to trash`: the line after a holder goes to the trash with what it
+/// holds. `things` is the quantity, already worded ("42 events"); an empty one is the plain line.
+#[must_use]
+pub fn moved_to_trash_with(locale: Locale, title: &str, things: &str) -> String {
+    if things.is_empty() {
+        return moved_to_trash(locale, title);
     }
+    shared::trash_moved_with(locale)
+        .replace("{title}", &titled(locale, title))
+        .replace("{things}", things)
+}
 
-    #[must_use]
-    pub fn purge_title(&self, locale: Locale) -> String {
-        Self::pick(self.purge_title, shared::trash_purge_title, locale)
-    }
+/// `Standup restored`.
+#[must_use]
+pub fn restored(locale: Locale, title: &str) -> String {
+    shared::trash_restored(locale).replace("{title}", &titled(locale, title))
+}
 
-    #[must_use]
-    pub fn purge_body(&self, locale: Locale) -> String {
-        Self::pick(self.purge_body, shared::trash_purge_body, locale)
-    }
-
-    #[must_use]
-    pub fn purge_action(&self, locale: Locale) -> String {
-        Self::pick(self.purge_action, shared::trash_purge, locale)
-    }
-
-    #[must_use]
-    pub fn empty_title(&self, locale: Locale) -> String {
-        Self::pick(self.empty_title, shared::trash_empty_title, locale)
-    }
-
-    #[must_use]
-    pub fn empty_body(&self, locale: Locale) -> String {
-        Self::pick(self.empty_body, shared::trash_empty_body, locale)
-    }
-
-    #[must_use]
-    pub fn empty_action(&self, locale: Locale) -> String {
-        Self::pick(self.empty_action, shared::trash_empty_action, locale)
-    }
-
-    #[must_use]
-    pub fn empty_headline(&self, locale: Locale) -> String {
-        Self::pick(self.empty_headline, shared::trash_empty_headline, locale)
-    }
-
-    #[must_use]
-    pub fn empty_state_body(&self, locale: Locale) -> String {
-        Self::pick(
-            self.empty_state_body,
-            shared::trash_empty_state_body,
-            locale,
-        )
-    }
-
-    #[must_use]
-    pub fn untitled(&self, locale: Locale) -> String {
-        Self::pick(self.untitled, shared::trash_untitled, locale)
-    }
-
-    /// `Deleted Wed 11 March`, from the civil day the core read the deletion on
-    /// in the member's zone. Empty when the core stated no day.
-    #[must_use]
-    pub fn deleted_meta(&self, locale: Locale, local_day: &str) -> String {
-        match local_day.get(..10) {
-            Some(day) => format!(
-                "{} {}",
-                shared::trash_deleted(locale),
-                civil::day_month(locale, day)
-            ),
-            None => String::new(),
-        }
-    }
-
-    /// The app's erase clause for `local_day` (`Erased Mon 12 October`), when
-    /// the app says one and the core stated the day.
-    #[must_use]
-    pub fn purge_meta(&self, locale: Locale, local_day: &str) -> Option<String> {
-        let template = self.purges_on?(locale);
-        let day = local_day.get(..10)?;
-        Some(template.replace("{day}", &civil::day_month(locale, day)))
+fn titled(locale: Locale, title: &str) -> String {
+    let title = title.trim();
+    if title.is_empty() {
+        shared::trash_untitled(locale)
+    } else {
+        title.to_owned()
     }
 }
 
-/// ONE APP'S TRASH, as the parameter the one trash screen takes.
+/// `Deleted Wed 11 March`, from the civil day the core read the deletion on in
+/// the member's zone. Empty when the core stated no day.
+#[must_use]
+pub fn deleted_meta(locale: Locale, local_day: &str) -> String {
+    day_meta(locale, shared::trash_deleted(locale), local_day)
+}
+
+/// `Erased Mon 12 October`; empty when the core stated no day.
+#[must_use]
+pub fn erased_meta(locale: Locale, local_day: &str) -> String {
+    day_meta(locale, shared::trash_erased(locale), local_day)
+}
+
+fn day_meta(locale: Locale, verb: String, local_day: &str) -> String {
+    match local_day.get(..10) {
+        Some(day) => format!("{verb} {}", civil::day_month(locale, day)),
+        None => String::new(),
+    }
+}
+
+/// The restore and the move back to the trash of one row.
+pub type RowWrites = (wire::ActRequest, wire::ActRequest);
+
+/// ONE APP'S TRASH, as the parameter the one trash screen takes. Every field is
+/// required: every app can move a record to trash, restore it, delete it forever
+/// and empty the trash, and says so in the same words (#1185).
 pub struct TrashSpec {
     /// `reminders`: the app, and the prefix of the screen name `reminders.trash`.
     pub app: &'static str,
     /// The kit's glyph for a row.
     pub icon_key: &'static str,
-    pub copy: TrashCopy,
+    /// What the app's records are called in "Delete this {noun} forever?".
+    pub noun: Words,
+    /// The first sentence of the purge confirm, where the app has something to
+    /// say about what goes with the record; `None` is the kit's own.
+    pub purge_lead: Option<Words>,
     /// The back control's words: the app the trash was pushed from ("Agenda").
     pub back_label: Words,
     /// The gate drawn when the vault will not let the app read.
     pub denied: fn(Locale, &wire::AppQueryDenial) -> wire::Denied,
     /// The app's own read of its deleted rows, newest deletion first.
     pub load: fn(&Ctx) -> Reading<Vec<TrashItem>>,
+    /// Put a row back in the trash (the Undo of a restore).
+    pub trash: fn(&str) -> wire::ActRequest,
     /// Bring a row back.
     pub restore: fn(&str) -> wire::ActRequest,
-    /// Destroy a row now; `None` is an app with no destroy path.
-    pub purge: Option<fn(&str) -> wire::ActRequest>,
-    /// Destroy every row now; `None` is an app that cannot empty its trash.
-    pub empty: Option<fn() -> wire::ActRequest>,
+    /// The restore (`.0`) and the move back to the trash (`.1`) of ONE row, where the row is a
+    /// different kind than the app's records (a People list among the people): `None` for a row
+    /// that takes the app's own.
+    pub of_row: Option<fn(&TrashItem) -> Option<RowWrites>>,
+    /// Destroy a row now.
+    pub purge: fn(&str) -> wire::ActRequest,
+    /// Destroy every row now.
+    pub empty: fn() -> wire::ActRequest,
 }
 
 /// The registry factory for `spec`'s screen.
@@ -173,17 +157,10 @@ pub struct TrashSpec {
 pub fn build(spec: &'static TrashSpec) -> Option<Box<dyn Screen>> {
     Some(Box::new(Trash {
         spec,
-        phase: Phase::Loading,
-        status: None,
+        page: Page::loading(),
+        undo: Undo::default(),
         asking: Asking::Nothing,
     }))
-}
-
-enum Phase {
-    Loading,
-    Failed,
-    Denied(wire::AppQueryDenial),
-    Ready(Vec<TrashItem>),
 }
 
 enum Asking {
@@ -194,51 +171,101 @@ enum Asking {
 
 struct Trash {
     spec: &'static TrashSpec,
-    phase: Phase,
-    /// A refusal's sentence, until the next attempt.
-    status: Option<wire::StatusLine>,
+    page: Page<Vec<TrashItem>>,
+    /// The status line and what its Undo reverses (the kit's one door): a refusal's sentence, or
+    /// "{title} restored" with Undo, until the next attempt.
+    undo: Undo,
     asking: Asking,
 }
 
 impl Trash {
     fn reload(&mut self, ctx: &Ctx) {
-        self.phase = match (self.spec.load)(ctx) {
-            Reading::Data(items) => Phase::Ready(items),
-            Reading::Denied(denial) => Phase::Denied(denial),
-            Reading::Failed => Phase::Failed,
-        };
+        let kept = std::mem::replace(&mut self.page, Page::loading());
+        self.page = kept
+            .refreshing()
+            .after((self.spec.load)(ctx), ctx.locale(), Vec::is_empty);
     }
 
     fn shown(&self, id: &str) -> bool {
-        matches!(&self.phase, Phase::Ready(items) if items.iter().any(|item| item.id == id))
+        self.page
+            .data()
+            .is_some_and(|items| items.iter().any(|item| item.id == id))
     }
 
-    /// One write under a key of its own; a refusal is the status line, and
-    /// either way the list is read again.
-    fn write(&mut self, ctx: &Ctx, request: wire::ActRequest, subject: &str) {
+    /// The writes for `id`'s row: the restore, and the move back to the trash. A row of another
+    /// kind than the app's records takes its own (`TrashSpec::of_row`).
+    fn writes_for(&self, id: &str) -> (wire::ActRequest, wire::ActRequest) {
+        let own = self
+            .page
+            .data()
+            .and_then(|items| items.iter().find(|item| item.id == id))
+            .and_then(|item| self.spec.of_row.and_then(|of_row| of_row(item)));
+        own.unwrap_or_else(|| ((self.spec.restore)(id), (self.spec.trash)(id)))
+    }
+
+    /// What a row is called on screen: its title, or the kit's "Untitled".
+    fn name_of(&self, locale: Locale, id: &str) -> String {
+        self.page
+            .data()
+            .and_then(|items| items.iter().find(|item| item.id == id))
+            .map(|item| item.title.trim())
+            .filter(|title| !title.is_empty())
+            .map_or_else(|| shared::trash_untitled(locale), str::to_owned)
+    }
+
+    /// What a row is called in "Delete this {noun} forever?": its own word when it has one, else
+    /// the app's.
+    fn noun_of(&self, id: &str) -> Words {
+        self.own_noun(id).unwrap_or(self.spec.noun)
+    }
+
+    /// The noun a row carries itself, when it is not what the app's spec says.
+    fn own_noun(&self, id: &str) -> Option<Words> {
+        self.page
+            .data()
+            .and_then(|items| items.iter().find(|item| item.id == id))
+            .and_then(|item| item.noun)
+    }
+
+    /// One write that was asked first (a purge, an empty), under a key of its own: a refusal is the
+    /// status line, success clears it, and either way the list is read again. Answers whether it
+    /// committed.
+    fn write(&mut self, ctx: &Ctx, request: wire::ActRequest, subject: &str) -> bool {
         let key = kit_act::key(&[&request.action, subject], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        self.status = (!settled.committed).then(|| wire::StatusLine {
-            sentence: settled.refusal,
-            action_label: String::new(),
-            refused: true,
-        });
+        let settled = self.undo.act_quietly(ctx, request, &key);
         self.reload(ctx);
+        settled.committed
     }
 
     fn confirmed(&mut self, ctx: &Ctx) {
         match std::mem::replace(&mut self.asking, Asking::Nothing) {
             Asking::Purge(id) => {
-                if let Some(purge) = self.spec.purge.filter(|_| self.shown(&id)) {
-                    self.write(ctx, purge(&id), &id);
+                if self.shown(&id) {
+                    self.write(ctx, (self.spec.purge)(&id), &id);
                 }
             }
             Asking::Empty => {
-                if let Some(empty) = self.spec.empty {
-                    self.write(ctx, empty(), self.spec.app);
-                }
+                self.write(ctx, (self.spec.empty)(), self.spec.app);
             }
             Asking::Nothing => {}
+        }
+    }
+
+    /// A restore says what it did, with Undo: the row goes back in the trash (the spec's own move,
+    /// or the row's, as `of_row` has it).
+    fn restore(&mut self, ctx: &Ctx, id: &str) {
+        let name = self.name_of(ctx.locale(), id);
+        let (restore, trash) = self.writes_for(id);
+        let key = kit_act::key(&[&restore.action, id], kit_act::fresh());
+        self.undo
+            .act_reverting(ctx, restore, trash, &key, |locale| restored(locale, &name));
+        self.reload(ctx);
+    }
+
+    /// The status line's Undo: the row goes back in the trash.
+    fn undone(&mut self, ctx: &Ctx) {
+        if self.undo.acted(ctx) {
+            self.reload(ctx);
         }
     }
 
@@ -246,17 +273,13 @@ impl Trash {
         match event.kind {
             Some(T::Refreshed(_)) => self.reload(ctx),
             // RESTORE ASKS NOTHING: it undoes, and undoing is not a decision.
-            Some(T::Restore(tapped)) if self.shown(&tapped.id) => {
-                self.write(ctx, (self.spec.restore)(&tapped.id), &tapped.id);
-            }
-            // DESTROYING IS ASKED FIRST, in full sentences, and only where the
-            // app can destroy at all.
-            Some(T::Purge(tapped)) if self.spec.purge.is_some() && self.shown(&tapped.id) => {
+            Some(T::Restore(tapped)) if self.shown(&tapped.id) => self.restore(ctx, &tapped.id),
+            Some(T::StatusActed(_)) => self.undone(ctx),
+            // DESTROYING IS ASKED FIRST, in full sentences.
+            Some(T::Purge(tapped)) if self.shown(&tapped.id) => {
                 self.asking = Asking::Purge(tapped.id);
             }
-            Some(T::Empty(_)) if self.spec.empty.is_some() && self.has_rows() => {
-                self.asking = Asking::Empty;
-            }
+            Some(T::Empty(_)) if self.has_rows() => self.asking = Asking::Empty,
             Some(T::Confirmed(_)) => self.confirmed(ctx),
             Some(T::Dismissed(_)) => self.asking = Asking::Nothing,
             _ => {}
@@ -264,53 +287,53 @@ impl Trash {
     }
 
     fn has_rows(&self) -> bool {
-        matches!(&self.phase, Phase::Ready(items) if !items.is_empty())
+        self.page.data().is_some_and(|items| !items.is_empty())
     }
 
     fn confirm(&self, locale: Locale) -> Option<wire::Confirm> {
-        let copy = &self.spec.copy;
         match self.asking {
             Asking::Nothing => None,
-            Asking::Purge(_) => Some(wire::Confirm {
-                title: copy.purge_title(locale),
-                body: copy.purge_body(locale),
-                confirm_label: copy.purge_action(locale),
+            Asking::Purge(ref id) => Some(wire::Confirm {
+                title: purge_title(locale, self.noun_of(id)),
+                // The app's lead is about the app's own records: a row with a noun of its own (a
+                // list among people) takes the kit's.
+                body: purge_body(
+                    locale,
+                    self.spec.purge_lead.filter(|_| self.own_noun(id).is_none()),
+                ),
+                confirm_label: shared::trash_purge(locale),
                 destructive: true,
             }),
             Asking::Empty => Some(wire::Confirm {
-                title: copy.empty_title(locale),
-                body: copy.empty_body(locale),
-                confirm_label: copy.empty_action(locale),
+                title: shared::trash_empty_title(locale),
+                body: shared::trash_empty_body(locale),
+                confirm_label: shared::trash_empty_action(locale),
                 destructive: true,
             }),
         }
     }
 
     fn row(&self, locale: Locale, item: &TrashItem) -> wire::TrashRow {
-        let copy = &self.spec.copy;
         let meta = [
-            Some(copy.deleted_meta(locale, &item.deleted_day)).filter(|meta| !meta.is_empty()),
-            copy.purge_meta(locale, &item.purge_day),
+            item.with.clone(),
+            deleted_meta(locale, &item.deleted_day),
+            erased_meta(locale, &item.purge_day),
         ]
         .into_iter()
-        .flatten()
+        .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
         .join(" · ");
         wire::TrashRow {
             id: item.id.clone(),
             title: if item.title.trim().is_empty() {
-                copy.untitled(locale)
+                shared::trash_untitled(locale)
             } else {
                 item.title.clone()
             },
             meta,
             icon_key: self.spec.icon_key.to_owned(),
             restore_label: shared::trash_restore(locale),
-            purge_label: if self.spec.purge.is_some() {
-                copy.purge_action(locale)
-            } else {
-                String::new()
-            },
+            purge_label: shared::trash_purge(locale),
         }
     }
 }
@@ -319,6 +342,9 @@ impl Screen for Trash {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
+            Some(E::StatusActed(_)) => self.undone(ctx),
+            // A page that is left does not keep its line.
+            Some(E::Left(_)) => self.undo.clear(),
             Some(E::Trash(trash)) => self.event(trash, ctx),
             _ => {}
         }
@@ -327,42 +353,33 @@ impl Screen for Trash {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
-        let content = match &self.phase {
-            Phase::Loading => {
-                wire::trash_view::Content::Loading(wire::Loading { first_load: true })
-            }
-            Phase::Failed => wire::trash_view::Content::Failure(read::failure(locale)),
-            Phase::Denied(denial) => {
-                wire::trash_view::Content::Denied((self.spec.denied)(locale, denial))
-            }
-            Phase::Ready(items) => wire::trash_view::Content::Data(wire::TrashData {
+        // THE READ (#1185): a trash with nothing in it is the page's own empty state.
+        let content = self.page.data().map(|items| {
+            wire::trash_view::Content::Data(wire::TrashData {
                 rows: items.iter().map(|item| self.row(locale, item)).collect(),
-                empty: Some(wire::EmptyState {
-                    headline: self.spec.copy.empty_headline(locale),
-                    body: self.spec.copy.empty_state_body(locale),
-                    icon_key: "Trash".to_owned(),
-                    ..wire::EmptyState::default()
-                }),
-                empty_label: if self.spec.empty.is_some() && !items.is_empty() {
-                    self.spec.copy.empty_action(locale)
-                } else {
-                    String::new()
-                },
-                count_label: if items.is_empty() {
-                    String::new()
-                } else {
-                    shared::trash_count(locale, items.len() as u64)
-                },
-            }),
-        };
+                empty_label: shared::trash_empty_action(locale),
+                count_label: shared::trash_count(locale, items.len() as u64),
+            })
+        });
+        let page = self.page.wire(
+            locale,
+            |denial| (self.spec.denied)(locale, denial),
+            || wire::EmptyState {
+                headline: shared::trash_empty_headline(locale),
+                body: shared::trash_empty_state_body(locale),
+                icon_key: "Trash".to_owned(),
+                ..wire::EmptyState::default()
+            },
+        );
         wire::ViewState {
             kind: Some(wire::view_state::Kind::Trash(wire::TrashView {
                 app_id: self.spec.app.to_owned(),
                 title: shared::trash_title(locale),
                 back_label: (self.spec.back_label)(locale),
-                content: Some(content),
+                content,
+                page: Some(page),
                 confirm: self.confirm(locale),
-                status: self.status.clone(),
+                status: self.undo.status(),
             })),
             ..wire::ViewState::default()
         }

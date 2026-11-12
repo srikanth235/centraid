@@ -5,7 +5,7 @@ import SwiftUI
 /// **THE VIEW DECIDES NOTHING.** `HealthHomeState` carries the band, the segments, the filter menu,
 /// every word, figure and unit, and every length as basis points; this file lays them out and
 /// forwards events (Rust makes them: `crates/screens`, module `health`). `AppPlace` owns the
-/// header and the band; `ReadStateView` owns loading, failure and the denied gate (no band while
+/// header and the band; `PageReadStateView` owns loading, failure, empty and the denied gate (no band while
 /// denied). A row that opens a page carries its `Route` and a tap hands it to `open`. Health has
 /// no create verb; its search is a page the band's key opens. Its rows enter by reading the phone's store, which Rust asks
 /// the shell to do (`HealthRead`, `ScreenStore`).
@@ -25,15 +25,17 @@ struct HealthHomeView: View {
 
     var body: some View {
         let state = state
-        let content = state.readContent
         let chrome = state.chrome
+        // A refused read draws the gate with no band and no search: reading the state to choose
+        // the header's pieces is a layout call, the shared view still draws the gate.
+        let isRefused: Bool = { if case .refused? = state.page.state { return true } else { return false } }()
         AppPlace(
             app: "health",
             title: chrome.title,
             trailing: nil,
             // A DOOR, NOT A FIELD (R-CHROME-2, #1173): Health's search is a page of its own,
             // reached from the band's search key; the field is never open here.
-            search: content.isDenied || chrome.searchPlaceholder.isEmpty ? nil : SearchSlot(
+            search: isRefused || chrome.searchPlaceholder.isEmpty ? nil : SearchSlot(
                 field: KitSearchField(),
                 placeholder: chrome.searchPlaceholder,
                 onOpen: { open(chrome.searchRoute) },
@@ -42,7 +44,7 @@ struct HealthHomeView: View {
             ),
             filter: filter,
             subtitle: subtitle,
-            showsBand: !content.isDenied && !state.band.isEmpty
+            showsBand: !isRefused && !state.band.isEmpty
         ) {
             AppBand(
                 app: "health",
@@ -63,16 +65,23 @@ struct HealthHomeView: View {
             )
         } content: {
             VStack(spacing: 0) {
-                ReadStateView(
-                    content: content,
-                    onRetry: { send(event { $0.refreshed = .init() }) }
-                ) { home in
+                // THE RANGE CHIPS stay above the page whether it is ready or empty (Trends), so
+                // an empty period can be left.
+                if !state.segments.isEmpty {
+                    segments(state.segments)
+                        .padding(.horizontal, CentraidGeometry.pageMargin)
+                        .padding(.top, 8)
+                        .padding(.bottom, 8)
+                }
+                PageReadStateView(
+                    page: state.page,
+                    onRetry: { send(event { $0.refreshed = .init() }) },
+                    // NOT CONNECTED (the page's empty state): its one action pushes Connect.
+                    onEmptyAction: { open(state.connect) }
+                ) {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 16) {
-                            if !state.segments.isEmpty {
-                                segments(state.segments)
-                            }
-                            page(home, state: state)
+                            page(state.data, state: state)
                         }
                         .padding(.horizontal, CentraidGeometry.pageMargin)
                         .padding(.top, 8)
@@ -81,7 +90,7 @@ struct HealthHomeView: View {
                     .refreshable { send(event { $0.refreshed = .init() }) }
                     .accessibilityIdentifier("health-home-list")
                 }
-                StatusLineView(status: state.status, identifier: "health-status-action") {}
+                StatusLineView(status: state.status, identifier: "health-status-action")
             }
         }
         .sheet(isPresented: healthSheetBinding(sheetIsOpen(state)) { send(event { $0.sheetClosed = .init() }) }) {
@@ -131,17 +140,10 @@ struct HealthHomeView: View {
 
     @ViewBuilder
     private func page(_ home: Centraid_Core_V1_HealthHomeData, state: Centraid_Core_V1_HealthHomeState) -> some View {
-        if home.hasEmpty {
-            // NOT CONNECTED: one sentence and Connect, on every tab.
-            EmptyStateView(home.empty, actionIdentifier: "health-connect-open") {
-                open(home.connect)
-            }
-        } else {
-            switch state.destination {
-            case .trends: trends(home.trends)
-            case .workouts: workouts(home.workouts, chrome: state.chrome)
-            default: today(home.todayData)
-            }
+        switch state.destination {
+        case .trends: trends(home.trends)
+        case .workouts: workouts(home.workouts, chrome: state.chrome)
+        default: today(home.todayData)
         }
     }
 
@@ -204,13 +206,9 @@ struct HealthHomeView: View {
 
     @ViewBuilder
     private func trends(_ trends: Centraid_Core_V1_HealthTrendsData) -> some View {
-        if trends.hasEmpty {
-            EmptyStateView(trends.empty)
-        } else {
-            HealthNote(text: trends.compareLine)
-            ForEach(Array(trends.rows.enumerated()), id: \.offset) { _, row in
-                trendRow(row)
-            }
+        HealthNote(text: trends.compareLine)
+        ForEach(Array(trends.rows.enumerated()), id: \.offset) { _, row in
+            trendRow(row)
         }
     }
 
@@ -225,8 +223,8 @@ struct HealthHomeView: View {
                             .foregroundStyle(accent.text)
                         HStack(alignment: .firstTextBaseline, spacing: 4) {
                             Text(row.value)
-                                .font(.system(size: 22, weight: .bold))
                                 .monospacedDigit()
+                                .kitScaledFont(22, weight: .bold)
                                 .foregroundStyle(Surface.ink)
                             Text(row.unit)
                                 .kitType(.meta)
@@ -253,25 +251,21 @@ struct HealthHomeView: View {
 
     @ViewBuilder
     private func workouts(_ workouts: Centraid_Core_V1_HealthWorkoutsData, chrome: Centraid_Core_V1_HealthHomeChrome) -> some View {
-        if workouts.hasEmpty {
-            EmptyStateView(workouts.empty)
-        } else {
-            ForEach(Array(workouts.sections.enumerated()), id: \.offset) { _, section in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(section.heading)
-                        .kitType(.group)
-                        .foregroundStyle(Surface.meta)
-                        .accessibilityAddTraits(.isHeader)
-                    HealthCard(padding: 0) {
-                        ForEach(Array(section.rows.enumerated()), id: \.offset) { index, row in
-                            if index > 0 { KitHairline() }
-                            HealthWorkoutRow(row: row) { open(row.route) }
-                        }
+        ForEach(Array(workouts.sections.enumerated()), id: \.offset) { _, section in
+            VStack(alignment: .leading, spacing: 4) {
+                Text(section.heading)
+                    .kitType(.group)
+                    .foregroundStyle(Surface.meta)
+                    .accessibilityAddTraits(.isHeader)
+                HealthCard(padding: 0) {
+                    ForEach(Array(section.rows.enumerated()), id: \.offset) { index, row in
+                        if index > 0 { KitHairline() }
+                        HealthWorkoutRow(row: row) { open(row.route) }
                     }
                 }
             }
-            ShowMoreFooter(visible: workouts.more, label: chrome.showMore) { send(event { $0.showMore = .init() }) }
         }
+        ShowMoreFooter(visible: workouts.more, label: chrome.showMore) { send(event { $0.showMore = .init() }) }
     }
 
     // MARK: - Sheets
@@ -295,6 +289,7 @@ struct HealthHomeView: View {
                     SheetRow(
                         iconKey: row.iconKey,
                         label: row.label,
+                        detail: row.meta,
                         destructive: row.tone == .net,
                         identifier: "health-more-\(key)"
                     ) {

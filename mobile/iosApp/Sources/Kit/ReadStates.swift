@@ -1,69 +1,189 @@
 import SwiftUI
 
-// THE FOUR READ SHAPES, DRAWN ONCE (K5; product-intuition/references/design-behaviour.md § Rooms).
+// THE READ SHAPES, DRAWN ONCE (#1185; product-intuition/references/design-behaviour.md § Rooms).
 //
-// The room owns the empty, loading and error states; the app supplies the
+// The room owns the empty, loading, failure and gate states; the app supplies the
 // words. A screen that draws its own spinner, its own failure lines or its own
-// "nothing here" is a finding, so every list screen switches on its content
-// through `ReadStateView` and nowhere else.
+// "nothing here" is a finding, so every screen that reads draws it through
+// `PageReadStateView` and nowhere else.
 
-/// The one switch over a screen's `ScreenContent`.
+/// THE PAGE'S READ, DRAWN ONCE (#1185): the same switch over the kit's `PageState`, which the
+/// screen's Rust builds from `Page::wire`. A first load draws the skeleton; a gate draws
+/// `DeniedGate` (it never retries itself); a failed read draws `FailureView` with Retry; an empty
+/// one draws `EmptyStateView`; none of those set is ready, and `data` is drawn under the
+/// `PageNoteBanner` when the state carries a note.
 ///
-/// Loading draws the skeleton the caller names (rows at row geometry by
-/// default, never a spinner); a failure draws its sentence, its remedy and a
-/// member-initiated Retry — the machines never retry on their own; a denial
-/// draws the gate with its receipt; data draws the caller's content.
-struct ReadStateView<Value, Skeleton: View, Content: View>: View {
-    let content: ScreenContent<Value>
-    let skeleton: () -> Skeleton
+/// `onRetry` is the screen's own re-read event and answers a note's action unless `onNoteAction`
+/// says otherwise; `onEmptyAction` answers the empty state's one action. Every word is the
+/// state's: the view decides nothing.
+///
+/// `stage` is the full-bleed variant for a page that is a dark stage (the slideshow): the
+/// gate, the failure, the empty state and the note are drawn in the dark scheme and centred
+/// over the caller's own ground, and the note floats over the top of `data` instead of
+/// pushing it down. The Compose twin is `ReadStateView(stage = true)`.
+struct PageReadStateView<Skeleton: View, Content: View>: View {
+    let page: Centraid_Core_V1_PageState
     let onRetry: (() -> Void)?
-    let retryLabel: String
-    let data: (Value) -> Content
+    var onEmptyAction: (() -> Void)? = nil
+    var onNoteAction: (() -> Void)? = nil
+    var retryLabel: String = KitWords.RETRY
+    /// True where the data is rows of a lazy stack the caller owns: the note and the data are
+    /// then siblings in it (no wrapping stack), so the rows stay lazy and pinned headers pin.
+    var flat: Bool = false
+    /// True where the page is a full-bleed dark stage; see the type's note.
+    var stage: Bool = false
+    /// What a screen draws UNDER its empty state (People's phone-contacts import, search's Ask row);
+    /// nothing elsewhere. The Compose twin is `ReadStateView(emptyExtra =)`.
+    var emptyExtra: (() -> AnyView)? = nil
+    let skeleton: () -> Skeleton
+    let data: () -> Content
 
     init(
-        content: ScreenContent<Value>,
-        @ViewBuilder skeleton: @escaping () -> Skeleton,
+        page: Centraid_Core_V1_PageState,
         onRetry: (() -> Void)?,
+        onEmptyAction: (() -> Void)? = nil,
+        onNoteAction: (() -> Void)? = nil,
         retryLabel: String = KitWords.RETRY,
-        @ViewBuilder data: @escaping (Value) -> Content
+        flat: Bool = false,
+        stage: Bool = false,
+        emptyExtra: (() -> AnyView)? = nil,
+        @ViewBuilder skeleton: @escaping () -> Skeleton,
+        @ViewBuilder data: @escaping () -> Content
     ) {
-        self.content = content
-        self.skeleton = skeleton
+        self.page = page
         self.onRetry = onRetry
+        self.onEmptyAction = onEmptyAction
+        self.onNoteAction = onNoteAction
         self.retryLabel = retryLabel
+        self.flat = flat
+        self.stage = stage
+        self.emptyExtra = emptyExtra
+        self.skeleton = skeleton
         self.data = data
     }
 
     var body: some View {
-        switch content {
+        switch page.state {
         case .loading:
             skeleton()
-        case let .failure(sentence, remedy):
-            FailureView(sentence: sentence, remedy: remedy, retryLabel: retryLabel, onRetry: onRetry)
-        case let .denied(denied):
-            DeniedGate(denied)
-        case let .data(value):
-            data(value)
+        case let .refused(denied):
+            staged(DeniedGate(denied))
+        case let .failed(failure):
+            // A gone item offers no Retry: reading it again cannot bring it back.
+            staged(FailureView(sentence: failure.sentence, remedy: failure.remedy, retryLabel: retryLabel, onRetry: failure.permanent ? nil : onRetry))
+        case let .empty(empty):
+            staged(VStack(spacing: 0) {
+                EmptyStateView(empty, onAction: onEmptyAction)
+                if let emptyExtra { emptyExtra() }
+            })
+        case nil:
+            if stage {
+                ZStack {
+                    data()
+                    if hasDrawableNote {
+                        PageNoteBanner(note: page.note, onAction: onNoteAction ?? onRetry)
+                            .environment(\.colorScheme, .dark)
+                            .frame(maxHeight: .infinity, alignment: .top)
+                    }
+                }
+            } else if flat {
+                if hasDrawableNote {
+                    PageNoteBanner(note: page.note, onAction: onNoteAction ?? onRetry)
+                }
+                data()
+            } else {
+                VStack(spacing: 0) {
+                    if hasDrawableNote {
+                        PageNoteBanner(note: page.note, onAction: onNoteAction ?? onRetry)
+                    }
+                    data()
+                }
+            }
+        }
+    }
+
+    /// A note whose kind is unset is not a note: it is never drawn.
+    private var hasDrawableNote: Bool { page.hasNote && page.note.kind != .unspecified }
+
+    /// A state drawn on the stage reads in the dark scheme, centred, inside the page margin.
+    @ViewBuilder
+    private func staged<V: View>(_ view: V) -> some View {
+        if stage {
+            view
+                .environment(\.colorScheme, .dark)
+                .padding(CentraidGeometry.pageMargin)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            view
         }
     }
 }
 
-extension ReadStateView where Skeleton == RowSkeleton {
+extension PageReadStateView where Skeleton == RowSkeleton {
     /// The common case: a list, so its skeleton is rows.
     init(
-        content: ScreenContent<Value>,
+        page: Centraid_Core_V1_PageState,
         loadingLabel: String = KitWords.OPENING,
         onRetry: (() -> Void)?,
+        onEmptyAction: (() -> Void)? = nil,
+        onNoteAction: (() -> Void)? = nil,
         retryLabel: String = KitWords.RETRY,
-        @ViewBuilder data: @escaping (Value) -> Content
+        emptyExtra: (() -> AnyView)? = nil,
+        @ViewBuilder data: @escaping () -> Content
     ) {
         self.init(
-            content: content,
-            skeleton: { RowSkeleton(label: loadingLabel) },
+            page: page,
             onRetry: onRetry,
+            onEmptyAction: onEmptyAction,
+            onNoteAction: onNoteAction,
             retryLabel: retryLabel,
+            emptyExtra: emptyExtra,
+            skeleton: { RowSkeleton(label: loadingLabel) },
             data: data
         )
+    }
+}
+
+/// ONE SENTENCE OVER DATA, and at most one action. The sentence reads as itself to a screen reader
+/// and the action is a button beside it. It is drawn in place with no entry
+/// animation, so reduced motion has no motion to remove.
+struct PageNoteBanner: View {
+    let note: Centraid_Core_V1_PageNote
+    var onAction: (() -> Void)? = nil
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(note.sentence)
+                .kitType(.meta)
+                .foregroundStyle(Surface.ink)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if !note.actionLabel.isEmpty, let onAction {
+                Button(action: onAction) {
+                    Text(note.actionLabel)
+                        .kitType(.row)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Surface.ink)
+                        .padding(.horizontal, 6)
+                        .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("kit-note-action")
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+        .background(Surface.fill, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(Surface.border, lineWidth: CentraidGeometry.hairline)
+        )
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.vertical, 8)
+        // A CONTAINER: the sentence reads as itself and the action stays a button.
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(note.kind == .notChecked ? "kit-note-unchecked" : "kit-note-partial")
     }
 }
 

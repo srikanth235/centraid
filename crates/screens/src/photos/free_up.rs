@@ -37,7 +37,6 @@ const LIST: &str = "photos.free-up.list";
 pub struct Last {
     pub outcome: Outcome,
     pub freed_bytes: u64,
-    pub platform_error: String,
 }
 
 impl Last {
@@ -149,19 +148,14 @@ pub fn gone(
     use wire::effect_result::Outcome as O;
     let deleted = match answer {
         O::LibraryDeleted(deleted) => deleted,
-        O::Failed(failed) if failed.cancelled => {
+        // A dismissed confirmation and a refusal both removed nothing. THE PLATFORM'S OWN WORDS STAY
+        // IN THE SHELL'S LOG: what it said is for a developer, the sentence is Rust's.
+        O::Failed(failed)
+            if failed.cancelled || crate::kit::permission::State::of(failed).is_some() =>
+        {
             return (Vec::new(), Last::of(Outcome::NothingRemoved));
         }
-        O::Failed(failed) => {
-            return (
-                Vec::new(),
-                Last {
-                    outcome: Outcome::PlatformError,
-                    freed_bytes: 0,
-                    platform_error: failed.reason.clone(),
-                },
-            );
-        }
+        O::Failed(_) => return (Vec::new(), Last::of(Outcome::PlatformError)),
         _ => return (Vec::new(), Last::of(Outcome::NothingRemoved)),
     };
     let freed: Vec<wire::Releasable> = items
@@ -176,14 +170,9 @@ pub fn gone(
         Last {
             outcome: Outcome::Freed,
             freed_bytes: freed.iter().map(|item| item.size).sum(),
-            platform_error: String::new(),
         }
-    } else if !deleted.error.is_empty() {
-        Last {
-            outcome: Outcome::PlatformError,
-            freed_bytes: 0,
-            platform_error: deleted.error.clone(),
-        }
+    } else if deleted.failed {
+        Last::of(Outcome::PlatformError)
     } else {
         Last::of(Outcome::NothingRemoved)
     };
@@ -257,7 +246,6 @@ fn facts(handle: &Handle, last: &Last) -> wire::FreeUpFacts {
             .map_or(0, |items| items.iter().map(|item| item.size).sum()),
         outcome: last.outcome as i32,
         freed_bytes: last.freed_bytes,
-        platform_error: last.platform_error.clone(),
     }
 }
 
@@ -329,7 +317,7 @@ mod tests {
             &O::LibraryDeleted(wire::LibraryDeleted {
                 deleted_hashes: vec!["02".repeat(32), "ff".repeat(32)],
                 declined: false,
-                error: String::new(),
+                failed: false,
             }),
         );
         assert_eq!(freed, vec![item(2, "b", 4)]);
@@ -339,7 +327,7 @@ mod tests {
             &O::LibraryDeleted(wire::LibraryDeleted {
                 deleted_hashes: Vec::new(),
                 declined: true,
-                error: String::new(),
+                failed: false,
             }),
         );
         assert!(freed.is_empty());
@@ -349,17 +337,17 @@ mod tests {
             &O::LibraryDeleted(wire::LibraryDeleted {
                 deleted_hashes: Vec::new(),
                 declined: false,
-                error: "Photos access is limited.".to_owned(),
+                failed: true,
             }),
         );
         assert_eq!(last.outcome, Outcome::PlatformError);
-        assert_eq!(last.platform_error, "Photos access is limited.");
         let (_, last) = gone(
             &items,
             &O::Failed(wire::EffectFailed {
                 reason: String::new(),
                 denied: false,
                 cancelled: true,
+                ..Default::default()
             }),
         );
         assert_eq!(last.outcome, Outcome::NothingRemoved);

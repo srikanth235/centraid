@@ -28,15 +28,15 @@ struct BackupHomeView: View {
     }
 
     var body: some View {
-        switch state.body {
-        case .data(let data)?:
-            page(data)
-        case .failure(let failure)?:
-            FailureView(sentence: failure.sentence, remedy: failure.remedy) {
-                send(event { $0.retry = .init() })
+        // THE READ IS THE KIT'S PAGE STATE (#1185): loading, failure with Retry, and the page under the
+        // one sentence a refresh that failed leaves.
+        PageReadStateView(
+            page: state.page,
+            onRetry: { send(event { $0.retry = .init() }) }
+        ) {
+            if case let .data(data)? = state.body {
+                page(data)
             }
-        default:
-            RowSkeleton()
         }
     }
 
@@ -73,7 +73,7 @@ struct BackupHomeView: View {
             .defaultScrollAnchor(.top)
             .onAppear { proxy.scrollTo(Self.top, anchor: .top) }
             .onChange(of: shell.backupScrollTop) { _, _ in
-                withAnimation { proxy.scrollTo(Self.top, anchor: .top) }
+                kitWithAnimation { proxy.scrollTo(Self.top, anchor: .top) }
             }
         }
         .background(Surface.page.ignoresSafeArea())
@@ -293,7 +293,7 @@ struct BackupHomeView: View {
     @ViewBuilder
     private func travel(_ model: Centraid_Core_V1_BackupHomeData) -> some View {
         // "Back up over": the picked rule's short word, opening the three sentences it can be.
-        Button { withAnimation { ruleOpen.toggle() } } label: {
+        Button { kitWithAnimation { ruleOpen.toggle() } } label: {
             HStack(spacing: 8) {
                 Text(model.overLabel).kitType(.row).foregroundStyle(Surface.ink)
                 Spacer(minLength: 8)

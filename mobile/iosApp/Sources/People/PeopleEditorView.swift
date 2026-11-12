@@ -22,16 +22,6 @@ struct PeopleEditorView: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.appAccent) private var accent
 
-    private var content: ScreenContent<Centraid_Core_V1_PeopleProfileDraft> {
-        switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .draft(draft)?: return .data(draft)
-        case .gone?, nil: return .loading(true)
-        }
-    }
-
     var body: some View {
         let chrome = state.chrome
         EditorRoom(
@@ -43,63 +33,62 @@ struct PeopleEditorView: View {
         ) {
             EmptyView()
         } content: {
-            if case let .gone(gone)? = state.content {
-                EmptyStateView(gone)
-            } else {
-                ReadStateView(
-                    content: content,
-                    skeleton: { RowSkeleton(rows: 4, meta: false, label: chrome.loading) },
-                    onRetry: { send(PeopleEvents.editor { $0.refreshed = .init() }) }
-                ) { draft in
-                    ScrollView {
+            PageReadStateView(
+                page: state.page,
+                onRetry: { send(PeopleEvents.editor { $0.refreshed = .init() }) },
+                skeleton: { RowSkeleton(rows: 4, meta: false, label: chrome.loading) }
+            ) {
+                let draft = state.draft
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        // THE FOUR FIELDS ARE ONE WHITE CARD on the page (#1173).
                         VStack(alignment: .leading, spacing: 0) {
-                            // THE FOUR FIELDS ARE ONE WHITE CARD on the page (#1173).
-                            VStack(alignment: .leading, spacing: 0) {
-                            EditableFieldRow(key: chrome.nameField, text: $name, identifier: "people-editor-name") { typed in
-                                guard typed != draft.displayName else { return }
-                                send(PeopleEvents.editor { $0.name = .with { $0.text = typed } })
-                            }
-                            EditableFieldRow(
-                                key: chrome.roleField,
-                                text: $role,
-                                placeholder: chrome.rolePlaceholder,
-                                identifier: "people-editor-role"
-                            ) { typed in
-                                guard typed != draft.role else { return }
-                                send(PeopleEvents.editor { $0.role = .with { $0.text = typed } })
-                            }
-                            EditableFieldRow(key: chrome.nicknameField, text: $nickname, identifier: "people-editor-nickname") { typed in
-                                guard typed != draft.nickname else { return }
-                                send(PeopleEvents.editor { $0.nickname = .with { $0.text = typed } })
-                            }
-                            EditableFieldRow(key: chrome.metField, text: $met, identifier: "people-editor-met") { typed in
-                                guard typed != draft.met else { return }
-                                send(PeopleEvents.editor { $0.met = .with { $0.text = typed } })
-                            }
-                            }
-                            .background(
-                                Surface.card,
-                                in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous)
-                            )
-                            .padding(.horizontal, CentraidGeometry.pageMargin)
-                            .padding(.top, 8)
-                            cadences(chrome)
+                        EditableFieldRow(key: chrome.nameField, text: $name, identifier: "people-editor-name") { typed in
+                            guard typed != draft.displayName else { return }
+                            send(PeopleEvents.editor { $0.name = .with { $0.text = typed } })
                         }
+                        EditableFieldRow(
+                            key: chrome.roleField,
+                            text: $role,
+                            placeholder: chrome.rolePlaceholder,
+                            identifier: "people-editor-role"
+                        ) { typed in
+                            guard typed != draft.role else { return }
+                            send(PeopleEvents.editor { $0.role = .with { $0.text = typed } })
+                        }
+                        EditableFieldRow(key: chrome.nicknameField, text: $nickname, identifier: "people-editor-nickname") { typed in
+                            guard typed != draft.nickname else { return }
+                            send(PeopleEvents.editor { $0.nickname = .with { $0.text = typed } })
+                        }
+                        EditableFieldRow(key: chrome.metField, text: $met, identifier: "people-editor-met") { typed in
+                            guard typed != draft.met else { return }
+                            send(PeopleEvents.editor { $0.met = .with { $0.text = typed } })
+                        }
+                        }
+                        .background(
+                            Surface.card,
+                            in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous)
+                        )
+                        .padding(.horizontal, CentraidGeometry.pageMargin)
+                        .padding(.top, 8)
+                        cadences(chrome)
                     }
-                    .background(Surface.page.ignoresSafeArea())
-                    .onAppear {
-                        // ONCE — re-seeding would overwrite typing with the
-                        // state Rust still holds.
-                        if !seeded {
-                            name = draft.displayName
-                            role = draft.role
-                            nickname = draft.nickname
-                            met = draft.met
-                            seeded = true
-                        }
+                }
+                .background(Surface.page.ignoresSafeArea())
+                .onAppear {
+                    // ONCE — re-seeding would overwrite typing with the
+                    // state Rust still holds.
+                    if !seeded {
+                        name = draft.displayName
+                        role = draft.role
+                        nickname = draft.nickname
+                        met = draft.met
+                        seeded = true
                     }
                 }
             }
+        
+
         }
     }
 

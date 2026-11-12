@@ -82,6 +82,9 @@ pub struct RuleReport {
     /// because every one of those files is in an allowed crate, and a reader
     /// cannot tell that from a rule that is silently not running.
     pub note: String,
+    /// Lines `cargo xtask rules` prints under a passing rule: known debt a
+    /// register lists (`promises`), which is not a finding.
+    pub details: Vec<String>,
 }
 
 pub enum RuleState {
@@ -98,6 +101,7 @@ impl RuleReport {
             state: RuleState::Applied(scanned),
             findings,
             note: String::new(),
+            details: Vec::new(),
         }
     }
 
@@ -112,6 +116,7 @@ impl RuleReport {
             state: RuleState::Pending(reason.to_owned()),
             findings: Vec::new(),
             note: String::new(),
+            details: Vec::new(),
         }
     }
 
@@ -147,6 +152,10 @@ pub fn all(root: &Path) -> Vec<RuleReport> {
     ]
     .into_iter()
     .chain(crate::native_rules::all(root))
+    .chain([
+        crate::promises::promises(root),
+        crate::page_state::page_state(root),
+    ])
     .collect()
 }
 
@@ -156,6 +165,9 @@ pub fn print_report(root: &Path) -> bool {
     let mut ok = true;
     for report in &reports {
         println!("  {}", report.line());
+        for detail in &report.details {
+            println!("        {detail}");
+        }
         for finding in &report.findings {
             println!("        {finding}");
             ok = false;
@@ -169,6 +181,9 @@ pub fn findings_block(reports: &[RuleReport]) -> String {
     let mut out = String::new();
     for report in reports {
         let _ = writeln!(out, "{}", report.line());
+        for detail in &report.details {
+            let _ = writeln!(out, "    {detail}");
+        }
         for finding in &report.findings {
             let _ = writeln!(out, "    {finding}");
         }

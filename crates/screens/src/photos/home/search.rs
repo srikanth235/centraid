@@ -18,7 +18,7 @@ use wire::app_query_response::Answer;
 use super::super::cells::{self, Link};
 use super::super::routes;
 use crate::catalog::load;
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Page, Reading};
 use crate::kit::search as ask;
 use crate::screen::Ctx;
 use crate::strings::{Locale, fill, photos as words, photos_home as sentences};
@@ -30,16 +30,36 @@ const LIMIT: u32 = 500;
 pub enum Content {
     #[default]
     Resting,
-    Failed,
     Hits,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Search {
     pub term: String,
     pub content: Content,
+    /// The read. The resting vocabulary draws before any read, so it starts ready; a failed
+    /// read of the term already shown keeps it under a note, and of a new term is the failure.
+    page: Page<()>,
+    /// The term (trimmed, empty for the resting page) the data on screen answers.
+    shown: Option<String>,
     answer: Option<wire::PhotosSearch>,
     resting: Option<wire::PhotosSearch>,
+}
+
+impl Default for Search {
+    fn default() -> Self {
+        Self {
+            term: String::new(),
+            content: Content::Resting,
+            page: Page::Ready {
+                data: (),
+                note: None,
+            },
+            shown: None,
+            answer: None,
+            resting: None,
+        }
+    }
 }
 
 impl Search {
@@ -75,8 +95,14 @@ impl Search {
                 _ => None,
             },
         );
+        let key = self.term.trim().to_owned();
         match reading {
             Reading::Data(found) => {
+                self.page = Page::Ready {
+                    data: (),
+                    note: None,
+                };
+                self.shown = Some(key);
                 if blank {
                     self.resting = Some(found);
                     self.answer = None;
@@ -86,9 +112,17 @@ impl Search {
                     self.content = Content::Hits;
                 }
             }
+            Reading::Failed if self.shown.as_deref() == Some(key.as_str()) => {
+                let held = std::mem::replace(&mut self.page, Page::loading());
+                self.page = held.after(Reading::Failed, ctx.locale(), |()| false);
+            }
             Reading::Denied(_) | Reading::Failed => {
+                self.page = match reading {
+                    Reading::Denied(denial) => Page::Refused(denial),
+                    _ => Page::Failed,
+                };
                 self.answer = None;
-                self.content = Content::Failed;
+                self.shown = None;
             }
         }
     }
@@ -106,16 +140,43 @@ impl Search {
             query: self.term.clone(),
             ..wire::PhotosSearchView::default()
         };
-        view.content = Some(match (&self.content, &self.answer) {
-            (Content::Failed, _) => {
-                wire::photos_search_view::Content::Failure(read::failure(locale))
+        // A search that matched nothing is the page's own Empty state (ready means there is
+        // something to show), with the ask offer still under it.
+        let nothing = self
+            .answer
+            .as_ref()
+            .filter(|found| {
+                found.cells.is_empty()
+                    && found.top_hits.is_empty()
+                    && found.earlier_cells.is_empty()
+            })
+            .filter(|_| self.page.data().is_some() && !term.is_empty());
+        let page = if nothing.is_some() {
+            Page::Empty
+        } else {
+            self.page.clone()
+        };
+        view.page = Some(page.wire(
+            locale,
+            |denial| super::super::denied(locale, denial),
+            || no_match(locale, term),
+        ));
+        if let Some(found) = nothing {
+            if !found.corrected.is_empty() {
+                view.corrected = ask::corrected(locale, &found.corrected);
             }
+            view.ask = Some(ask::offer(locale, term, "photos"));
+        }
+        if page.data().is_none() {
+            return view;
+        }
+        view.content = Some(match (&self.content, &self.answer) {
             (_, Some(found)) if !term.is_empty() => {
                 if !found.corrected.is_empty() {
                     view.corrected = ask::corrected(locale, &found.corrected);
                 }
                 view.ask = Some(ask::offer(locale, term, "photos"));
-                wire::photos_search_view::Content::Hits(Box::new(hits(locale, link, term, found)))
+                wire::photos_search_view::Content::Hits(Box::new(hits(locale, link, found)))
             }
             _ => wire::photos_search_view::Content::Resting(self.resting_view(locale)),
         });
@@ -144,12 +205,20 @@ impl Search {
     }
 }
 
-fn hits(
-    locale: Locale,
-    link: Link,
-    term: &str,
-    found: &wire::PhotosSearch,
-) -> wire::PhotosSearchHits {
+/// NOTHING MATCHED IS NOT NOTHING TYPED: the query quoted back and everywhere search looked.
+fn no_match(locale: Locale, term: &str) -> wire::EmptyState {
+    let sentence = fill(
+        &words::photos_search_no_match_query(locale),
+        &[("query", term)],
+    );
+    wire::EmptyState {
+        headline: words::photos_search_no_results(locale),
+        body: format!("{sentence} {}", words::photos_search_no_match_scope(locale)),
+        ..wire::EmptyState::default()
+    }
+}
+
+fn hits(locale: Locale, link: Link, found: &wire::PhotosSearch) -> wire::PhotosSearchHits {
     let tiles = cells::tiles(&found.cells, link, locale);
     let ids: Vec<String> = tiles.iter().map(|tile| tile.photo_id.clone()).collect();
     let doors: Vec<wire::PhotosSearchDoor> =
@@ -170,23 +239,16 @@ fn hits(
         .map(|hit| hit.label.clone())
         .collect();
     matched.extend(found.labels.iter().map(|label| label.label.clone()));
-    let empty = (found.cells.is_empty() && found.top_hits.is_empty()).then(|| {
-        let sentence = fill(
-            &words::photos_search_no_match_query(locale),
-            &[("query", term)],
-        );
-        wire::EmptyState {
-            headline: words::photos_search_no_results(locale),
-            body: format!("{sentence} {}", words::photos_search_no_match_scope(locale)),
-            ..wire::EmptyState::default()
-        }
-    });
     wire::PhotosSearchHits {
         doors,
         count_label: cells::count_phrase(locale, found.total_hits, found.truncated),
         open: Some(routes::lightbox("", &ids, "")),
         tiles,
-        empty,
+        earlier: found
+            .earlier_cells
+            .iter()
+            .map(|cell| earlier_row(locale, link, cell))
+            .collect(),
         labels_title: sentences::library_search_labels(locale),
         labels,
         matched_label: if matched.is_empty() {
@@ -197,6 +259,28 @@ fn hits(
                 &[("matches", &matched.join(", "))],
             )
         },
+    }
+}
+
+/// A photograph the words matched only in an earlier version of it (#1185): a row that says so
+/// and opens that photograph's Earlier versions, where the words can be read.
+fn earlier_row(locale: Locale, link: Link, cell: &wire::PhotosCell) -> wire::PhotosEarlierRow {
+    let title = if cell.title.trim().is_empty() {
+        cells::noun(locale, cell)
+    } else {
+        cell.title.clone()
+    };
+    let line = ask::in_earlier_version(locale);
+    wire::PhotosEarlierRow {
+        tile: Some(cells::tile(cell, link, locale)),
+        accessibility_label: format!("{title}, {line}"),
+        title,
+        line,
+        route: Some(ask::earlier_route(
+            locale,
+            crate::photos::EARLIER,
+            &cell.photo_id,
+        )),
     }
 }
 

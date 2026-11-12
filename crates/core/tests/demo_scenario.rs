@@ -231,9 +231,10 @@ fn the_scenario_seeds_whole_and_every_revamped_screen_has_its_data() {
         1
     );
     assert_eq!(scenario.entities("folder"), 3);
+    // Two edits, and the document's tag and star: each is a version of its own.
     assert_eq!(
         scenario.revisions_of_title("document", "Tahoe packing list"),
-        2
+        4
     );
 
     // NOTES: a pinned one, a checklist, one with three versions, and one linking to a live, a

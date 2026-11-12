@@ -85,6 +85,11 @@
         "verbs": "act"
       },
       {
+        "schema": "entity",
+        "table": "empty_trash",
+        "verbs": "act"
+      },
+      {
         "schema": "container",
         "table": "create",
         "verbs": "act"
@@ -110,6 +115,11 @@
         "verbs": "act"
       },
       {
+        "schema": "photo",
+        "table": "export_zip",
+        "verbs": "act"
+      },
+      {
         "schema": "tag",
         "table": "add",
         "verbs": "act"
@@ -118,6 +128,11 @@
         "schema": "tag",
         "table": "remove",
         "verbs": "act"
+      },
+      {
+        "schema": "vault",
+        "table": "document",
+        "verbs": "read"
       }
     ]
   },
@@ -215,6 +230,27 @@
           "thumbhash": {
             "type": ["string", "null"],
             "maxLength": 512
+          },
+          "arrived_system": {
+            "type": "string",
+            "enum": ["camera_roll", "picker"],
+            "description": "How the item came in when the member did not type it. Omit it for a typed item."
+          },
+          "arrived_label": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "The file or device it came from: a name, never content. Required with arrived_system."
+          },
+          "roll_cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096,
+            "description": "The camera roll's cursor once this photograph is in: it moves in this commit."
+          },
+          "roll_device": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The install that read the roll; required with roll_cursor."
           }
         },
         "required": ["blob", "media_type"],
@@ -239,7 +275,7 @@
       "name": "edit-photo",
       "verb": "edit",
       "kind": "photo",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "photo.edit",
       "phrasings": [
@@ -310,6 +346,10 @@
           "title": {
             "type": "string",
             "aliases": ["name"]
+          },
+          "expected_rev": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": ["id", "title"],
@@ -627,6 +667,50 @@
       }
     },
     {
+      "name": "empty-trash",
+      "verb": "purge",
+      "kind": "photo",
+      "inverse": null,
+      "sealed": [],
+      "bulk": true,
+      "command": "entity.empty_trash",
+      "phrasings": [
+        "empty the photo trash",
+        "clear out the trashed photos for good",
+        "permanently delete everything in the Photos trash"
+      ],
+      "description": "Empty the photo trash through entity.empty_trash with kind photo. Irreversible and takes no id: every photograph in the trash is destroyed now, as purge destroys one, and its bytes go once nothing else holds them. A trashed album is not touched.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["photo"]
+          },
+          "due_only": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
       "name": "create-album",
       "verb": "create",
       "kind": "album",
@@ -701,6 +785,10 @@
             "type": "string",
             "minLength": 1,
             "aliases": ["name"]
+          },
+          "expected_rev": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": ["id", "title"],
@@ -725,7 +813,7 @@
       "name": "set-album-cover",
       "verb": "edit",
       "kind": "album",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "album.set_cover",
       "phrasings": [
@@ -952,7 +1040,7 @@
       "name": "set-place",
       "verb": "edit",
       "kind": "place",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "photo.set_place",
       "phrasings": [
@@ -996,7 +1084,7 @@
       "name": "name-place",
       "verb": "edit",
       "kind": "place",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "entity.retitle",
       "phrasings": [
@@ -1017,6 +1105,10 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 120
+          },
+          "expected_rev": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": ["id", "title"],
@@ -1139,7 +1231,7 @@
         "tag Ravi in this picture",
         "tag Maya in the beach photo"
       ],
-      "description": "Say who is in a photograph through edge.add (rel depicts, from the photograph to a person), by hand: nothing recognises a face. Adding it twice changes nothing.",
+      "description": "Say who is in a photograph through edge.add (rel depicts, from the photograph to a person), by hand: nothing recognises a face. Adding it twice changes nothing. With rel links it joins the photograph to any other item but a Locker item instead (a link, not a face).",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -1150,7 +1242,7 @@
           },
           "rel": {
             "type": "string",
-            "enum": ["depicts"]
+            "enum": ["depicts", "links"]
           },
           "to": {
             "type": "string",
@@ -1187,7 +1279,7 @@
         "take Ravi off this picture",
         "untag Maya from the beach photo"
       ],
-      "description": "Take a person off a photograph through edge.remove (rel depicts).",
+      "description": "Take a person off a photograph through edge.remove (rel depicts), or any other item it is linked to (rel links).",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -1198,7 +1290,7 @@
           },
           "rel": {
             "type": "string",
-            "enum": ["depicts"]
+            "enum": ["depicts", "links"]
           },
           "to": {
             "type": "string",
@@ -1220,6 +1312,134 @@
           "reason": {
             "type": "string"
           }
+        }
+      }
+    },
+    {
+      "name": "attach",
+      "verb": "attach",
+      "kind": "photo",
+      "inverse": "detach",
+      "sealed": [],
+      "command": "edge.add",
+      "phrasings": [
+        "attach the receipt to this photo",
+        "add the PDF to the wedding photo",
+        "attach the scan to my passport photo"
+      ],
+      "description": "Attach a document or photo to a photo through edge.add (rel attached); the bytes are the document's or photo's own, found by hash.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["attached"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "detach",
+      "verb": "detach",
+      "kind": "photo",
+      "inverse": "attach",
+      "sealed": [],
+      "command": "edge.remove",
+      "phrasings": [
+        "take the receipt off this photo",
+        "remove the PDF from the wedding photo",
+        "detach the scan from my passport photo"
+      ],
+      "description": "Detach a document or photo from a photo through edge.remove; the document or photo is kept.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["attached"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "export-zip",
+      "verb": "log",
+      "bulk": true,
+      "kind": "photo",
+      "inverse": null,
+      "writes_nothing": true,
+      "sealed": [],
+      "command": "photo.export_zip",
+      "phrasings": [
+        "export all my photos as one archive",
+        "save my photos and videos as a zip file",
+        "back up one album as a zip"
+      ],
+      "description": "Write every photograph and video that is not in the trash (all of them, or one album's) as one zip archive of the original files, named by when each was taken, through photo.export_zip. Answers the staged file's path, name and counts. Writes nothing to the vault.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "album_id": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
         }
       }
     }
@@ -1452,6 +1672,55 @@
           },
           "unplaced": {
             "type": "integer"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "attachments",
+      "kind": "photo",
+      "figures": ["attachments"],
+      "description": "What is attached to one photo, a page at a time: each attachment's id, kind (document or photo), title, media type, byte size and where its bytes are served, in the order of the attached file's id. Pass the page's `next` cursor as `after` for the next page. An id that is no live photo answers an empty page, and an attached file in the trash is left out until it is restored.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "after": {
+            "type": "object",
+            "properties": {
+              "sortKey": {
+                "type": "string"
+              },
+              "pk": {
+                "type": "string"
+              }
+            },
+            "required": ["sortKey", "pk"],
+            "additionalProperties": false
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "attachments": {
+            "type": "array"
+          },
+          "next": {
+            "type": ["object", "null"]
           },
           "vaultDenied": {
             "type": "object"

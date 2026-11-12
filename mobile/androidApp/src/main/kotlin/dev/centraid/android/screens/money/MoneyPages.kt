@@ -19,6 +19,7 @@ import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.KitText
 import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.StateColor
+import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
 import androidx.compose.foundation.lazy.LazyColumn
@@ -59,7 +60,6 @@ import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
-import dev.centraid.android.kit.screenContentOf
 import centraid.core.v1.Route
 
 // ---------------------------------------------------------------------------
@@ -83,17 +83,15 @@ internal fun MoneyImportScreen(
         title = chrome?.title.orEmpty(),
         parentTitle = chrome?.back_label.orEmpty(),
         onBack = onBack,
-        status = state.status?.sentence.orEmpty(),
+        statusLine = { StatusLine(state.status) },
     ) {
         ReadStateView(
-            content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
+            page = state.page!!,
+            onEmptyAction = { state.data_?.accounts_route?.let(onOpen) },
             onRetry = { onEvent(MoneyImportEvent(refreshed = MoneyImportEvent.Refreshed())) },
             retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
-        ) { plan ->
-            val empty = plan.empty
-            if (empty != null) {
-                EmptyStateView(empty, onAction = { plan.accounts_route?.let(onOpen) })
-            } else {
+        ) {
+            val plan = state.data_ ?: return@ReadStateView
                 LazyColumn {
                     item(key = "lede") { MoneyNote(plan.lede) }
                     item(key = "file") {
@@ -291,7 +289,7 @@ internal fun MoneyImportScreen(
                         }
                     }
                 }
-            }
+            
         }
     }
     if (state.sheet == MoneyImportState.Sheet.SHEET_ACCOUNT) {
@@ -322,17 +320,15 @@ internal fun MoneyAccountsScreen(state: MoneyAccountsState, onEvent: (MoneyAccou
         trailing = data?.add_label?.takeIf { it.isNotEmpty() }?.let { label ->
             RoomAction("Plus", label, "money-account-add") { onEvent(MoneyAccountsEvent(add = MoneyAccountsEvent.AddTapped())) }
         },
-        status = state.status?.sentence.orEmpty(),
+        statusLine = { StatusLine(state.status) },
     ) {
         ReadStateView(
-            content = screenContentOf(state.loading, state.failure, data, state.denied),
+            page = state.page!!,
+            onEmptyAction = { onEvent(MoneyAccountsEvent(add = MoneyAccountsEvent.AddTapped())) },
             onRetry = { onEvent(MoneyAccountsEvent(refreshed = MoneyAccountsEvent.Refreshed())) },
             retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
-        ) { accounts ->
-            val empty = accounts.empty
-            if (empty != null) {
-                EmptyStateView(empty, onAction = { onEvent(MoneyAccountsEvent(add = MoneyAccountsEvent.AddTapped())) })
-            } else {
+        ) {
+            val accounts = state.data_ ?: return@ReadStateView
                 LazyColumn {
                     if (accounts.net_worth.isNotEmpty()) {
                         item(key = "worth") {
@@ -394,7 +390,7 @@ internal fun MoneyAccountsScreen(state: MoneyAccountsState, onEvent: (MoneyAccou
                         MoneyNote("${accounts.definitions[index].label}. ${accounts.definitions[index].detail}")
                     }
                 }
-            }
+            
         }
     }
     val editor = state.editor
@@ -489,17 +485,15 @@ internal fun MoneyRulesScreen(state: MoneyRulesState, onEvent: (MoneyRulesEvent)
         trailing = data?.add_label?.takeIf { it.isNotEmpty() }?.let { label ->
             RoomAction("Plus", label, "money-rule-add") { onEvent(MoneyRulesEvent(add = MoneyRulesEvent.AddTapped())) }
         },
-        status = state.status?.sentence.orEmpty(),
+        statusLine = { StatusLine(state.status) },
     ) {
         ReadStateView(
-            content = screenContentOf(state.loading, state.failure, data, state.denied),
+            page = state.page!!,
+            onEmptyAction = { onEvent(MoneyRulesEvent(add = MoneyRulesEvent.AddTapped())) },
             onRetry = { onEvent(MoneyRulesEvent(refreshed = MoneyRulesEvent.Refreshed())) },
             retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
-        ) { rules ->
-            val empty = rules.empty
-            if (empty != null) {
-                EmptyStateView(empty, onAction = { onEvent(MoneyRulesEvent(add = MoneyRulesEvent.AddTapped())) })
-            } else {
+        ) {
+            val rules = state.data_ ?: return@ReadStateView
                 LazyColumn {
                     item(key = "limit") { MoneyNote(rules.limit_line) }
                     item(key = "rules") {
@@ -524,7 +518,7 @@ internal fun MoneyRulesScreen(state: MoneyRulesState, onEvent: (MoneyRulesEvent)
                         }
                     }
                 }
-            }
+            
         }
     }
     val editor = state.editor
@@ -661,17 +655,15 @@ internal fun MoneyCategoriesScreen(state: MoneyCategoriesState, onEvent: (MoneyC
         trailing = data?.add_label?.takeIf { it.isNotEmpty() }?.let { label ->
             RoomAction("Plus", label, "money-category-add") { onEvent(MoneyCategoriesEvent(add = MoneyCategoriesEvent.AddTapped())) }
         },
-        status = state.status?.sentence.orEmpty(),
+        statusLine = { StatusLine(state.status) },
     ) {
         ReadStateView(
-            content = screenContentOf(state.loading, state.failure, data, state.denied),
+            page = state.page!!,
+            onEmptyAction = { onEvent(MoneyCategoriesEvent(add = MoneyCategoriesEvent.AddTapped())) },
             onRetry = { onEvent(MoneyCategoriesEvent(refreshed = MoneyCategoriesEvent.Refreshed())) },
             retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
-        ) { categories ->
-            val empty = categories.empty
-            if (empty != null) {
-                EmptyStateView(empty, onAction = null)
-            } else {
+        ) {
+            val categories = state.data_ ?: return@ReadStateView
                 LazyColumn {
                     categories.groups.forEach { group ->
                         item(key = "g-${group.group_id}") {
@@ -694,7 +686,7 @@ internal fun MoneyCategoriesScreen(state: MoneyCategoriesState, onEvent: (MoneyC
                         }
                     }
                 }
-            }
+            
         }
     }
     val categories = state.data_
@@ -730,7 +722,7 @@ internal fun MoneyCategoriesScreen(state: MoneyCategoriesState, onEvent: (MoneyC
         MoneyCategoriesState.Sheet.SHEET_ROW -> if (categories != null) {
             OptionSheet(
                 title = categories.row_title,
-                options = categories.row_actions.filter { it.enabled }.map { SheetOption(key = it.key, label = it.label, iconKey = it.icon_key) },
+                options = categories.row_actions.filter { it.enabled }.map { SheetOption(key = it.key, label = it.label, iconKey = it.icon_key, destructive = it.destructive) },
                 onPick = { key -> onEvent(MoneyCategoriesEvent(row_action = MoneyCategoriesEvent.RowAction(key = key))) },
                 onDismiss = close,
             )

@@ -88,12 +88,13 @@ class LibraryDeletionTest {
     }
 
     @Test
-    fun aYesIsDeletedANoIsDeclinedAndAnythingElseFails() {
+    fun aYesIsDeletedANoOrARefusalIsDeclinedAndAnythingElseFails() {
         assertEquals(LibraryDeleted(deleted_hashes = listOf("a", "c")), LibraryDeletion.answer(true) { listOf("a", "c") })
         // A no never looks at the store.
         assertEquals(LibraryDeleted(declined = true), LibraryDeletion.answer(false) { error("a no reads nothing") })
-        assertEquals(LibraryDeleted(error = "not allowed"), LibraryDeletion.failed(SecurityException("not allowed")))
-        // No words from the platform: the exception's name, never an empty error.
-        assertEquals(LibraryDeleted(error = "IllegalStateException"), LibraryDeletion.failed(IllegalStateException()))
+        // The store refusing is a no, like the dialog's: nothing was removed.
+        assertEquals(LibraryDeleted(declined = true), LibraryDeletion.failed(SecurityException("not allowed")))
+        // Anything else is a failure with no words: the platform's text stays in the log.
+        assertEquals(LibraryDeleted(failed = true), LibraryDeletion.failed(IllegalStateException("boom")))
     }
 }

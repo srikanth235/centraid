@@ -33,14 +33,12 @@ struct DocsDriveView: View {
         return event
     }
 
-    private func content(_ state: Centraid_Core_V1_DocsDriveState) -> ScreenContent<Centraid_Core_V1_DocsDriveData> {
-        switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
-        }
+    /// The vault will not let Docs read: the header offers no Plus and no controls, and the
+    /// band is not drawn. (Only the header's items are chosen from the page; the page itself is
+    /// drawn by `PageReadStateView`.)
+    private func isDenied(_ state: Centraid_Core_V1_DocsDriveState) -> Bool {
+        if case .refused? = state.page.state { return true }
+        return false
     }
 
     /// Rust's search flag and term, as the kit's field state.
@@ -68,7 +66,7 @@ struct DocsDriveView: View {
 
     var body: some View {
         let state = state
-        let content = content(state)
+        let denied = isDenied(state)
         Group {
             if isFolderPage {
                 PushedPage(title: state.folderName, parentTitle: state.chrome.back, onBack: onBack) {
@@ -76,16 +74,16 @@ struct DocsDriveView: View {
                     // trailing slot itself: the filter menu, then the Plus.
                     HStack(spacing: 0) {
                         if let slot = filter(state) { FilterMenuButton(app: "docs", slot: slot) }
-                        RoomTrailing(action: addAction(state, content), app: "docs")
+                        RoomTrailing(action: addAction(state, denied), app: "docs")
                     }
                 } content: {
                     // With no band to hang the search key on, the key alone stands at its foot.
                     VStack(spacing: 0) {
-                        page(state, content)
+                        page(state, denied)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     .safeAreaInset(edge: .bottom, spacing: 0) {
-                        if !content.isDenied || state.search.open {
+                        if !denied || state.search.open {
                             SearchFoot(search: searchSlot(state), identifier: "docs-search")
                         }
                     }
@@ -94,10 +92,10 @@ struct DocsDriveView: View {
                 AppPlace(
                     app: "docs",
                     title: state.chrome.title,
-                    trailing: addAction(state, content),
+                    trailing: addAction(state, denied),
                     search: searchSlot(state),
                     filter: filter(state),
-                    showsBand: !content.isDenied
+                    showsBand: !denied
                 ) {
                     AppBand(
                         app: "docs",
@@ -117,7 +115,7 @@ struct DocsDriveView: View {
                         onHome: onHome
                     )
                 } content: {
-                    page(state, content)
+                    page(state, denied)
                 }
             }
         }
@@ -133,9 +131,9 @@ struct DocsDriveView: View {
     /// add label; it opens the Add sheet.
     private func addAction(
         _ state: Centraid_Core_V1_DocsDriveState,
-        _ content: ScreenContent<Centraid_Core_V1_DocsDriveData>
+        _ denied: Bool
     ) -> RoomAction? {
-        guard !content.isDenied, !state.chrome.add.isEmpty else { return nil }
+        guard !denied, !state.chrome.add.isEmpty else { return nil }
         return RoomAction(iconKey: "Plus", label: state.chrome.add, identifier: "docs-add") {
             send(Self.event { $0.sheetOpened = .with { $0.kind = .add } })
         }
@@ -164,10 +162,10 @@ struct DocsDriveView: View {
 
     private func page(
         _ state: Centraid_Core_V1_DocsDriveState,
-        _ content: ScreenContent<Centraid_Core_V1_DocsDriveData>
+        _ denied: Bool
     ) -> some View {
         VStack(spacing: 0) {
-            if !content.isDenied { controls(state) }
+            if !denied { controls(state) }
             DocsWriteLine(status: state.status)
             ingestLine(state.ingest)
             if state.hasRename {
@@ -180,11 +178,16 @@ struct DocsDriveView: View {
                 )
                 .id(state.rename.documentID)
             }
-            ReadStateView(
-                content: content,
+            // THE WAY BACK UP (a folder page's path) stays over an empty folder too.
+            if !state.crumbs.isEmpty, isFolderPage { crumbs(state.crumbs) }
+            PageReadStateView(
+                page: state.page,
                 loadingLabel: state.chrome.loading,
-                onRetry: { send(Self.event { $0.refreshed = .init() }) }
-            ) { drive in
+                onRetry: { send(Self.event { $0.refreshed = .init() }) },
+                // The empty page's one action is Rust's: add a document, clear the filters or make a folder.
+                onEmptyAction: emptyAction(state.emptyAction)
+            ) {
+                let drive = state.data
                 ScrollView {
                   VStack(alignment: .leading, spacing: 0) {
                     // THE FOLDERS WHOSE NAME MATCHED come first (#1097): each pushes its route.
@@ -197,20 +200,12 @@ struct DocsDriveView: View {
                         }
                     }
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        if !drive.crumbs.isEmpty, isFolderPage { crumbs(drive.crumbs) }
-                        if state.layout != .grid || drive.hasEmpty {
+                        if state.layout != .grid {
                             ForEach(drive.folders, id: \.folderID) { node in
                                 folderRow(node)
                             }
                         }
-                        if drive.hasEmpty {
-                            if drive.mode == .search {
-                                // A SEARCH THAT FOUND NOTHING: the kit's one no-match state.
-                                EmptyStateView(drive.empty)
-                            } else {
-                                EmptyStateView(drive.empty, onAction: emptyAction(drive.emptyAction))
-                            }
-                        } else if state.layout == .grid {
+                        if state.layout == .grid {
                             grid(drive.folders, drive.rows, state)
                         } else {
                             ForEach(drive.rows, id: \.documentID) { row in
@@ -226,14 +221,15 @@ struct DocsDriveView: View {
                         note(drive.shelfNote)
                         note(drive.truncatedNote)
                     }
-                    // THE ASK ROW closes a search's answer, matched or not (#1135).
-                    if state.search.hasAskRow { SearchAskRow(ask: state.search.askRow) }
                   }
                   .padding(.bottom, 16)
                 }
                 .refreshable { send(Self.event { $0.refreshed = .init() }) }
                 .scrollDismissesKeyboard(.interactively)
             }
+            // THE ASK ROW closes a search's answer, matched or not (#1135): under the page, so an
+            // answer that matched nothing keeps it too.
+            if state.search.hasAskRow { SearchAskRow(ask: state.search.askRow) }
         }
         .sheet(isPresented: Binding(
             get: { state.hasConfirm },
@@ -243,6 +239,17 @@ struct DocsDriveView: View {
                 state.confirm,
                 onConfirm: { send(Self.event { $0.confirmed = .init() }) },
                 onDismiss: { send(Self.event { $0.dismissed = .init() }) }
+            )
+        }
+        // THE STOP CONFIRM (#1185): the kit's sheet in Rust's own sentences, named for the folder.
+        .sheet(isPresented: Binding(
+            get: { state.hasStop },
+            set: { open in if !open, state.hasStop { send(Self.event { $0.stopDismissed = .init() }) } }
+        )) {
+            ConfirmSheet(
+                state.stop,
+                onConfirm: { send(Self.event { $0.stopConfirmed = .init() }) },
+                onDismiss: { send(Self.event { $0.stopDismissed = .init() }) }
             )
         }
     }

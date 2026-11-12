@@ -18,16 +18,6 @@ struct CoreTrashView: View {
         send(event)
     }
 
-    private var content: ScreenContent<Centraid_Core_V1_TrashData> {
-        switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
-        }
-    }
-
     /// The scope line under the title: the machine's, once the rows are read.
     private var countLabel: String {
         if case let .data(data)? = state.content { return data.countLabel }
@@ -44,13 +34,11 @@ struct CoreTrashView: View {
             EmptyView()
         } content: {
             VStack(spacing: 0) {
-                ReadStateView(
-                    content: content,
+                PageReadStateView(
+                    page: state.page,
                     onRetry: { event { $0.kind = .refreshed(.init()) } }
-                ) { data in
-                    if data.rows.isEmpty {
-                        EmptyStateView(data.empty)
-                    } else {
+                ) {
+                    if case let .data(data)? = state.content {
                         ScrollView {
                             VStack(alignment: .leading, spacing: 12) {
                                 // THE ROWS ARE ONE CARD (#1173); the last hairline falls outside the clip.
@@ -85,7 +73,9 @@ struct CoreTrashView: View {
                         .refreshable { event { $0.kind = .refreshed(.init()) } }
                     }
                 }
-                StatusLineView(status: state.status, identifier: "trash-status-action") {}
+                StatusLineView(status: state.status, identifier: "trash-status-action") {
+                    event { $0.kind = .statusActed(.init()) }
+                }
             }
         }
         .sheet(isPresented: Binding(

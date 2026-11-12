@@ -13,10 +13,10 @@ use wire::screen_event::Kind as E;
 
 use super::figures;
 use super::home::per_unit;
-use super::{Metric, Phase, Store, Units, denied};
+use super::{Metric, Store, Units, denied};
 use crate::catalog::load;
 use crate::kit::civil;
-use crate::kit::read;
+use crate::kit::read::{self, Page, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, health as words};
 
@@ -61,7 +61,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
             _ => wire::HealthMetricRange::Week,
         },
         parent: args.parent.clone(),
-        phase: Phase::Loading,
+        page: Page::loading(),
+        held: None,
     }))
 }
 
@@ -69,7 +70,10 @@ struct MetricPage {
     metric: Metric,
     range: wire::HealthMetricRange,
     parent: String,
-    phase: Phase<wire::HealthSeries>,
+    /// The read: the series, empty when no row falls in the period.
+    page: Page<wire::HealthSeries>,
+    /// The last series that arrived, so an empty period still names itself (its caption).
+    held: Option<wire::HealthSeries>,
 }
 
 impl MetricPage {
@@ -88,14 +92,22 @@ impl MetricPage {
             wire::HealthMetricRange::Year => load::health::SeriesRange::Year,
             _ => load::health::SeriesRange::Week,
         };
-        self.phase = Phase::of(read::read(
+        let reading = read::read(
             ctx,
             load::health::Series { metric, range },
             |answer| match answer {
                 Answer::HealthSeries(series) => Some(series),
                 _ => None,
             },
-        ));
+        );
+        self.held = match &reading {
+            Reading::Data(series) => Some(series.clone()),
+            _ => None,
+        };
+        let held = std::mem::replace(&mut self.page, Page::loading());
+        self.page = held.after(reading, ctx.locale(), |series| {
+            series.buckets.iter().all(|bucket| bucket.value.is_none())
+        });
     }
 
     fn pick(&mut self, ctx: &Ctx, key: &str) {
@@ -108,29 +120,33 @@ impl MetricPage {
         };
         if range != self.range {
             self.range = range;
-            self.phase = Phase::Loading;
+            // Another period is another question: its failure never shows this one's bars.
+            self.page = Page::loading();
             self.reload(ctx);
         }
     }
 
+    /// No row falls in the period: the page's own sentence, and the period it names.
+    fn empty_state(&self, locale: Locale) -> wire::EmptyState {
+        wire::EmptyState {
+            headline: words::metric_empty(locale),
+            body: self
+                .held
+                .as_ref()
+                .map(|series| caption(locale, self.range, &series.buckets))
+                .unwrap_or_default(),
+            ..Default::default()
+        }
+    }
+
     fn data(&self, ctx: &Ctx, series: &wire::HealthSeries) -> wire::HealthMetricData {
-        let (locale, units) = (ctx.locale(), Units::of(ctx));
+        let (locale, units) = (ctx.locale(), ctx.units());
         let metric = self.metric;
         let bars_of = Bars::of(self.range);
         let caption = caption(locale, self.range, &series.buckets);
-        if series.buckets.iter().all(|bucket| bucket.value.is_none()) {
-            return wire::HealthMetricData {
-                caption,
-                empty: Some(wire::EmptyState {
-                    headline: words::metric_empty(locale),
-                    ..Default::default()
-                }),
-                ..Default::default()
-            };
-        }
         let (number, unit) = series
             .average
-            .map(|average| figures::figure(locale, metric, average, units))
+            .map(|average| figures::measure(metric, average).figure(locale, units))
             .unwrap_or_default();
         let versus = match (series.average, series.typical) {
             (Some(_), Some(_)) => {
@@ -187,7 +203,7 @@ impl MetricPage {
             .map(|(index, bucket)| {
                 let value = bucket.value;
                 let figure = value
-                    .map(|value| figures::phrase(locale, metric, value, units))
+                    .map(|value| figures::measure(metric, value).words(locale, units))
                     .unwrap_or_default();
                 let words_ = [bucket_words(locale, bars_of, bucket), figure.clone()];
                 wire::HealthChartBar {
@@ -240,7 +256,6 @@ impl MetricPage {
             ticks: ticks(locale, self.range, &series.buckets),
             facts: facts(locale, metric, series, bars_of, units),
             foot: foot(locale, metric, &Store::of(ctx).name(locale)),
-            empty: None,
             has_typical_range: series.typical_low.is_some() && series.typical_high.is_some(),
             typical_low_bp: series.typical_low.map_or(0, |low| figures::bp(low, top)),
             typical_high_bp: series.typical_high.map_or(0, |high| figures::bp(high, top)),
@@ -281,12 +296,15 @@ fn facts(
         if let Some(value) = best.value {
             facts.push(wire::HealthFact {
                 label,
-                detail: format!("{at} · {}", figures::phrase(locale, metric, value, units)),
+                detail: format!(
+                    "{at} · {}",
+                    figures::measure(metric, value).words(locale, units)
+                ),
             });
         }
     }
     if let Some(total) = series.total {
-        let phrase = figures::phrase(locale, metric, total, units);
+        let phrase = figures::measure(metric, total).words(locale, units);
         facts.push(wire::HealthFact {
             label: words::fact_total(locale),
             detail: if metric == Metric::Steps {
@@ -463,12 +481,12 @@ impl Screen for MetricPage {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::health_metric_state::Content;
         let locale = ctx.locale();
-        let content = match &self.phase {
-            Phase::Loading => Content::Loading(wire::Loading { first_load: true }),
-            Phase::Failed => Content::Failure(read::failure(locale)),
-            Phase::Denied(denial) => Content::Denied(denied(locale, denial)),
-            Phase::Ready(series) => Content::Data(Box::new(self.data(ctx, series))),
-        };
+        let content = self
+            .page
+            .data()
+            .map(|series| Content::Data(Box::new(self.data(ctx, series))));
+        // The period chips stay while the period is ready or empty, so an empty one can be left.
+        let choosing = matches!(self.page, Page::Ready { .. } | Page::Empty);
         let segment = |key: &str, range: wire::HealthMetricRange, label: String| wire::HealthChip {
             key: key.to_owned(),
             label,
@@ -479,7 +497,12 @@ impl Screen for MetricPage {
                 wire::HealthMetricState {
                     metric: self.metric.key().to_owned(),
                     range: self.range as i32,
-                    content: Some(content),
+                    content,
+                    page: Some(self.page.wire(
+                        locale,
+                        |denial| denied(locale, denial),
+                        || self.empty_state(locale),
+                    )),
                     chrome: Some(wire::HealthPageChrome {
                         title: figures::label(locale, self.metric),
                         back_label: if self.parent.is_empty() {
@@ -489,28 +512,32 @@ impl Screen for MetricPage {
                         },
                         retry: words::retry(locale),
                     }),
-                    segments: vec![
-                        segment(
-                            RANGE_WEEK,
-                            wire::HealthMetricRange::Week,
-                            words::range_week(locale),
-                        ),
-                        segment(
-                            RANGE_MONTH,
-                            wire::HealthMetricRange::Month,
-                            words::range_month(locale),
-                        ),
-                        segment(
-                            RANGE_SIX_MONTHS,
-                            wire::HealthMetricRange::SixMonths,
-                            words::range_six_months(locale),
-                        ),
-                        segment(
-                            RANGE_YEAR,
-                            wire::HealthMetricRange::Year,
-                            words::range_year(locale),
-                        ),
-                    ],
+                    segments: if choosing {
+                        vec![
+                            segment(
+                                RANGE_WEEK,
+                                wire::HealthMetricRange::Week,
+                                words::range_week(locale),
+                            ),
+                            segment(
+                                RANGE_MONTH,
+                                wire::HealthMetricRange::Month,
+                                words::range_month(locale),
+                            ),
+                            segment(
+                                RANGE_SIX_MONTHS,
+                                wire::HealthMetricRange::SixMonths,
+                                words::range_six_months(locale),
+                            ),
+                            segment(
+                                RANGE_YEAR,
+                                wire::HealthMetricRange::Year,
+                                words::range_year(locale),
+                            ),
+                        ]
+                    } else {
+                        Vec::new()
+                    },
                 },
             )),
             ..wire::ViewState::default()

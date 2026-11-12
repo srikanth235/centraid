@@ -7,12 +7,8 @@
   },
   "scanFloorRows": 1000,
   "pages": {
-    "allowed": 7,
+    "allowed": 6,
     "entries": [
-      {
-        "home": "calendar.upcoming.calendars",
-        "reason": "kind = 'calendar': one row per calendar the member keeps (a handful), sorted for the page"
-      },
       {
         "home": "docs.folders",
         "reason": "kind = 'folder': the member's folders (hundreds at most), sorted by id for a 500-row page"

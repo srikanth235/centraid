@@ -73,7 +73,6 @@ import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.kitSwitchColors
-import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.screens.CivilDateDialog
 import dev.centraid.android.screens.CivilTimeDialog
 import dev.centraid.android.theme.centraidColor
@@ -113,19 +112,17 @@ internal fun AgendaEditorScreen(
             null
         },
     ) {
-        val gone = state.gone
-        if (gone != null) {
-            GoneCard(gone, leave)
-            return@EditorRoom
-        }
-        StatusLine(state.status?.sentence.orEmpty())
+        StatusLine(state.status)
+        // THE READ IS THE KIT'S PAGE STATE (#1185): a task or event that is gone is its final failure.
         ReadStateView(
-            content = screenContentOf(state.loading, state.failure, data, state.denied),
+            page = state.page!!,
             onRetry = { onEvent(AgendaEditorEvent(refreshed = AgendaEditorEvent.Refreshed())) },
             retryLabel = chrome?.retry?.ifEmpty { null } ?: KitWords.RETRY,
             skeleton = { RowSkeleton(rows = 6, label = chrome?.loading?.ifEmpty { null } ?: KitWords.OPENING) },
             modifier = Modifier.weight(1f),
-        ) { editor -> EditorBody(state, editor, onEvent) }
+        ) {
+            if (data != null) EditorBody(state, data, onEvent)
+        }
     }
     EditorSheets(state, onEvent)
     val confirm = state.confirm
@@ -277,6 +274,8 @@ private fun EditorBody(state: AgendaEditorState, data: AgendaEditorData, onEvent
                     tiles.tileOf("reminder"),
                     "agenda-editor-reminder",
                 ) { openSheet(AgendaEditorState.Sheet.SHEET_REMINDER) }
+                // AN ALERT NEEDS A TIME: Rust says when the event has none.
+                if (data.reminder_note.isNotEmpty()) Note(data.reminder_note)
                 // THE SECOND ALERT is drawn only once the first is set.
                 if (data.show_second_reminder) {
                     AgendaTileChoiceRow(chrome.field_second_alert, data.second_reminder_label, tiles.tileOf("second_reminder"), "agenda-editor-second-reminder") {

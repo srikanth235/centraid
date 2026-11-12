@@ -64,6 +64,9 @@ pub struct Person {
     pub vault: VaultLinks,
     /// This is the owner's own card (My card), which the circle leaves out.
     pub is_me: bool,
+    /// The person's revision (their history's newest version, 0 when none), read before the
+    /// person: what an edit names as `expected_rev` (#1185).
+    pub rev: i64,
 }
 
 /// What `person` answers.
@@ -146,6 +149,7 @@ pub fn load_person(
         return Ok((PersonData::default(), None));
     }
     let empty = PersonData::default;
+    let rev = asked!(centraid_apps_kit::revision::head(door, id), empty());
     let Some(person) = asked!(
         people_among_with(door, &[id.to_owned()], true, true),
         empty()
@@ -189,6 +193,7 @@ pub fn load_person(
                 relations,
                 vault,
                 is_me,
+                rev,
             }),
         },
         None,

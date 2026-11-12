@@ -58,9 +58,8 @@ fn flagging_a_row_puts_it_in_the_flagged_list_and_undo_takes_it_out() {
     send_list(&mut d, all, le::Kind::StatusActed(le::StatusActed {}));
     assert!(!task_of(&d, &keep).flagged);
     send_list(&mut d, flagged, le::Kind::Refreshed(le::Refreshed {}));
-    assert!(list_data(d.view(flagged)).groups.is_empty());
     assert_eq!(
-        list_data(d.view(flagged)).empty.as_ref().unwrap().headline,
+        page_empty(&list(d.view(flagged)).page).headline,
         "Nothing is flagged."
     );
 }
@@ -95,9 +94,10 @@ fn the_swipes_delete_trashes_the_task_and_undo_restores_it() {
     );
     assert_eq!(
         list(d.view(i)).status.as_ref().unwrap().sentence,
-        "Task deleted"
+        "Clear out the garage moved to trash"
     );
-    assert!(rows(&list_data(d.view(i)).groups).is_empty());
+    // Nothing left to show is the page's empty state, which holds no rows.
+    page_empty(&list(d.view(i)).page);
     send_list(&mut d, i, le::Kind::StatusActed(le::StatusActed {}));
     assert_eq!(rows(&list_data(d.view(i)).groups).len(), 1);
 }
@@ -345,6 +345,36 @@ fn dragging_a_row_renumbers_the_list_and_the_list_draws_in_that_order() {
         ["Charlie", "Alpha", "Bravo"]
     );
     assert_eq!(task_of(&d, &ids[2]).sort_order, 1);
+    // ONE UNDO puts every task the drop moved back where it was (#1185).
+    let line = project_state(d.view(i))
+        .status
+        .clone()
+        .expect("a status line");
+    assert_eq!(
+        (line.sentence.as_str(), line.action_label.as_str()),
+        ("Reordered", "Undo")
+    );
+    d.send(
+        i,
+        wire::screen_event::Kind::StatusActed(wire::StatusActed {}),
+    );
+    assert_eq!(
+        project_state(d.view(i)).status.as_ref().unwrap().sentence,
+        "Undone"
+    );
+    assert_eq!(
+        titles(&project_data(d.view(i)).groups),
+        ["Alpha", "Bravo", "Charlie"]
+    );
+    // The same drop again, to carry on.
+    send_project(
+        &mut d,
+        i,
+        pe::Kind::RowMoved(pe::RowMoved {
+            task_id: ids[2].clone(),
+            before_id: ids[0].clone(),
+        }),
+    );
     // Alpha to the end: only Bravo and Alpha change place.
     send_project(
         &mut d,
@@ -372,6 +402,59 @@ fn dragging_a_row_renumbers_the_list_and_the_list_draws_in_that_order() {
         titles(&project_data(d.view(i)).groups),
         ["Charlie", "Bravo", "Alpha", "Delta"]
     );
+}
+
+#[test]
+fn undoing_a_drop_is_refused_when_a_task_it_moved_changed_again() {
+    let mut d = driver();
+    let list_id = project(&d, "Stale order");
+    let ids: Vec<String> = ["Alpha", "Bravo", "Charlie"]
+        .iter()
+        .map(|title| {
+            add(
+                &d,
+                act::reminders::AddTask {
+                    title: (*title).into(),
+                    project_id: Field::Is(list_id.clone()),
+                    ..Default::default()
+                },
+            )
+        })
+        .collect();
+    let i = d.push(agenda::TAB, routes::project(&list_id, "Stale order"));
+    send_project(
+        &mut d,
+        i,
+        pe::Kind::RowMoved(pe::RowMoved {
+            task_id: ids[2].clone(),
+            before_id: ids[0].clone(),
+        }),
+    );
+    assert_eq!(
+        titles(&project_data(d.view(i)).groups),
+        ["Charlie", "Alpha", "Bravo"]
+    );
+    // Alpha, one of the tasks the drop moved, is moved again by something else.
+    let _ = arrange(
+        &d,
+        act::reminders::OrganizeTask {
+            task_id: ids[0].clone(),
+            position: Some(9.0),
+            ..Default::default()
+        },
+    );
+    d.send(
+        i,
+        wire::screen_event::Kind::StatusActed(wire::StatusActed {}),
+    );
+    let line = project_state(d.view(i))
+        .status
+        .clone()
+        .expect("a status line");
+    assert!(line.refused, "{line:?}");
+    assert!(line.action_label.is_empty(), "{line:?}");
+    // The later change is never lost to the old Undo.
+    assert_eq!(task_of(&d, &ids[0]).sort_order, 9);
 }
 
 #[test]
@@ -423,6 +506,27 @@ fn completed_work_is_counted_shown_and_cleared() {
     assert_eq!(done.count, 0);
     assert_eq!(titles(&project_data(d.view(i)).groups), ["Still open"]);
     assert_eq!(task_of(&d, &open).status, "open");
+
+    // ONE UNDO puts back everything the Clear took (#1185).
+    assert_eq!(
+        project_state(d.view(i))
+            .status
+            .as_ref()
+            .unwrap()
+            .action_label,
+        "Undo"
+    );
+    d.send(
+        i,
+        wire::screen_event::Kind::StatusActed(wire::StatusActed {}),
+    );
+    assert_eq!(
+        project_state(d.view(i)).status.as_ref().unwrap().sentence,
+        "Undone"
+    );
+    assert_eq!(project_data(d.view(i)).completed.clone().unwrap().count, 2);
+    assert_eq!(task_of(&d, &a).status, "done");
+    assert_eq!(task_of(&d, &b).status, "done");
 }
 
 #[test]
@@ -442,7 +546,7 @@ fn an_imported_red_list_is_drawn_raspberry_and_a_list_never_has_a_state_colour()
     );
     let id = id_of(&red);
     let i = d.push(agenda::TAB, routes::project(&id, "Imported red"));
-    assert_eq!(project_data(d.view(i)).list_color_key, "raspberry");
+    assert_eq!(project_head(d.view(i)).list_color_key, "raspberry");
 }
 
 #[test]

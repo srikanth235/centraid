@@ -7,11 +7,12 @@ use centraid_api_proto::core_v1 as wire;
 use wire::money_target_event::Kind as T;
 use wire::screen_event::Kind as E;
 
-use super::fold::{self, Phase};
+use super::fold;
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::money as money_kit;
-use crate::kit::read;
+use crate::kit::read::{self, Page};
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, money as words};
 
@@ -27,11 +28,11 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         month: args.month.clone(),
         category_id: args.category_id.clone(),
         currency: args.currency.clone(),
-        phase: Phase::Loading,
+        page: Page::loading(),
         amount_text: String::new(),
         carry: false,
         seeded: false,
-        status: None,
+        undo: Undo::default(),
         finished: false,
     }))
 }
@@ -40,18 +41,19 @@ struct Target {
     month: String,
     category_id: String,
     currency: String,
-    phase: Phase<wire::MoneyTargetSheet>,
+    page: Page<wire::MoneyTargetSheet>,
     amount_text: String,
     carry: bool,
     /// The form was seeded from the stored plan; later answers never overwrite typing.
     seeded: bool,
-    status: Option<wire::StatusLine>,
+    /// The status line (a refusal) and the kit's one door.
+    undo: Undo,
     finished: bool,
 }
 
 impl Target {
     fn exponent(&self) -> u32 {
-        self.phase
+        self.page
             .data()
             .map_or(0, |a| a.spent.as_ref().map_or(0, |s| s.exponent))
     }
@@ -62,31 +64,41 @@ impl Target {
 
     fn reload(&mut self, ctx: &Ctx) {
         let typing = if self.seeded { self.typed() } else { None };
-        self.phase = Phase::of(read::read(
-            ctx,
-            load::money::TargetSheet {
-                category_id: self.category_id.clone(),
-                currency: self.currency.clone(),
-                month: self.month.clone(),
-                typing_amount_minor: typing,
-                typing_carry: Some(i64::from(self.seeded && self.carry)),
-            },
-            |a| match a {
-                wire::app_query_response::Answer::MoneyTargetSheet(x) => Some(x),
-                _ => None,
-            },
-        ));
+        fold::reread(
+            &mut self.page,
+            ctx.locale(),
+            read::read(
+                ctx,
+                load::money::TargetSheet {
+                    category_id: self.category_id.clone(),
+                    currency: self.currency.clone(),
+                    month: self.month.clone(),
+                    typing_amount_minor: typing,
+                    typing_carry: Some(i64::from(self.seeded && self.carry)),
+                },
+                |a| match a {
+                    wire::app_query_response::Answer::MoneyTargetSheet(x) => Some(x),
+                    _ => None,
+                },
+            ),
+            |_| false,
+        );
         // THE FIRST ANSWER SEEDS THE FORM from the stored plan.
         if !self.seeded
-            && let Phase::Ready(answer) = &self.phase
+            && let Some((text, carry)) = self.page.data().map(|answer| {
+                (
+                    answer
+                        .amount
+                        .as_ref()
+                        .map(|a| money_kit::amount_text(a.minor, a.exponent))
+                        .unwrap_or_default(),
+                    answer.carry,
+                )
+            })
         {
             self.seeded = true;
-            self.amount_text = answer
-                .amount
-                .as_ref()
-                .map(|a| money_kit::amount_text(a.minor, a.exponent))
-                .unwrap_or_default();
-            self.carry = answer.carry;
+            self.amount_text = text;
+            self.carry = carry;
         }
     }
 
@@ -103,7 +115,8 @@ impl Target {
             &["money", "target", &self.month, &self.category_id],
             kit_act::fresh(),
         );
-        let settled = kit_act::act(
+        // The sheet closes on success, so the line and its Undo go to the page beneath (#1185).
+        let settled = self.undo.act_handing_down(
             ctx,
             act::money::SetTarget {
                 amount_minor: amount,
@@ -113,12 +126,14 @@ impl Target {
                 currency: Some(self.currency.clone()),
             },
             &key,
+            if remove {
+                words::target_removed
+            } else {
+                words::target_saved
+            },
         );
         if settled.committed {
             self.finished = true;
-            self.status = None;
-        } else {
-            self.status = Some(fold::refusal(ctx.locale(), &settled.refusal));
         }
     }
 
@@ -200,7 +215,7 @@ impl Target {
                 self.reload(ctx);
             }
             Some(T::UseAverage(_)) => {
-                if let Some(average) = self.phase.data().and_then(|a| a.six_month_average.clone()) {
+                if let Some(average) = self.page.data().and_then(|a| a.six_month_average.clone()) {
                     self.amount_text = money_kit::amount_text(average.minor, average.exponent);
                     self.reload(ctx);
                 }
@@ -228,23 +243,23 @@ impl Screen for Target {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::money_target_state::Content;
         let locale = ctx.locale();
-        let content = match &self.phase {
-            Phase::Loading => Content::Loading(wire::Loading { first_load: true }),
-            Phase::Failed => Content::Failure(read::failure(locale)),
-            Phase::Denied => Content::Denied(fold::denied(locale)),
-            Phase::Ready(answer) => Content::Data(Box::new(self.data(locale, answer))),
-        };
+        let content = self
+            .page
+            .data()
+            .map(|answer| Content::Data(Box::new(self.data(locale, answer))));
+        let page = fold::wire_page(&self.page, locale, wire::EmptyState::default);
         wire::ViewState {
             kind: Some(wire::view_state::Kind::MoneyTarget(
                 wire::MoneyTargetState {
                     month: self.month.clone(),
                     category_id: self.category_id.clone(),
                     currency: self.currency.clone(),
-                    content: Some(content),
+                    content,
+                    page: Some(page),
                     amount_text: self.amount_text.clone(),
                     carry: self.carry,
                     chrome: Some(fold::chrome(locale, words::target_sheet_title(locale), "")),
-                    status: self.status.clone(),
+                    status: self.undo.status(),
                     finished: self.finished,
                 },
             )),

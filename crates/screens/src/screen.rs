@@ -16,6 +16,9 @@ use centraid_core::screens::VaultRequest;
 use centraid_core::{Handle, Result};
 use prost::Message;
 
+use crate::follow::Follows;
+use crate::kit::act::Settled;
+use crate::kit::undo::Handed;
 use crate::strings::Locale;
 
 /// One screen. `Send` because the runtime lives behind a mutex shared by the
@@ -24,6 +27,15 @@ pub trait Screen: Send {
     /// Apply one event. Reads and writes go through `ctx`; a failed read is
     /// state in the view (the read law), never a panic and never an empty list.
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect>;
+
+    /// The runtime numbered the effects the last [`Screen::update`] asked for: one entry per
+    /// effect, in the order returned, `None` for one the runtime kept for itself (a tab
+    /// selection, a shelf command) that no shell performs. The answer to an effect names its
+    /// number, so a screen that can be asked twice about one thing (a read it gave up on and
+    /// asked again) tells the late answer of the first from the answer of the second.
+    fn effects_numbered(&mut self, ids: &[Option<u64>]) {
+        let _ = ids;
+    }
 
     /// The finished state. `instance` and `revision` are stamped by the runtime.
     fn view(&self, ctx: &Ctx) -> wire::ViewState;
@@ -49,6 +61,9 @@ pub struct Environment {
     pub library_deletes: bool,
     /// The phone keeps 12-hour time (`Environment.hour_cycle_12`); false is 24-hour.
     pub hour_cycle_12: bool,
+    /// The units the member chose (`kit::quantity::stored`), or `None` to follow the region. The
+    /// runtime fills it from the phone's store before every call; [`Ctx::units`] is the reader.
+    pub units: Option<crate::kit::quantity::UnitsPref>,
 }
 
 impl Default for Environment {
@@ -60,6 +75,7 @@ impl Default for Environment {
             platform: String::new(),
             library_deletes: false,
             hour_cycle_12: false,
+            units: None,
         }
     }
 }
@@ -81,6 +97,11 @@ pub(crate) struct Done {
     pub switch: Option<String>,
     /// Events for other open screens, by registered name (`Ctx::post`).
     pub posts: Vec<(String, wire::ScreenEvent)>,
+    /// Every other open screen must draw again, see [`Ctx::redraw_all`].
+    pub redraw_all: bool,
+    /// The status line this update's page leaves for the page beneath it, see
+    /// [`crate::kit::undo::Undo::hand_down`].
+    pub handed: Option<Handed>,
 }
 
 /// A screen's door to the core, the catalog and the clock.
@@ -88,6 +109,9 @@ pub struct Ctx<'a> {
     core: &'a dyn ScreenCtx,
     env: &'a Environment,
     done: RefCell<Done>,
+    follows: Follows,
+    /// The line a page that just closed handed down to this screen, until it takes it.
+    handed_in: RefCell<Option<Handed>>,
 }
 
 impl<'a> Ctx<'a> {
@@ -96,7 +120,49 @@ impl<'a> Ctx<'a> {
             core,
             env,
             done: RefCell::new(Done::default()),
+            follows: Follows::default(),
+            handed_in: RefCell::new(None),
         }
+    }
+
+    /// This context for the screen a closing page handed its Undo line to (the runtime sets it
+    /// for the one event it sends that screen after the pop).
+    #[must_use]
+    pub(crate) fn with_handed(self, handed: Option<Handed>) -> Self {
+        *self.handed_in.borrow_mut() = handed;
+        self
+    }
+
+    /// A page that closes leaves its Undo line for the page beneath (`Undo::hand_down`).
+    pub(crate) fn hand_down(&self, handed: Handed) {
+        self.done.borrow_mut().handed = Some(handed);
+    }
+
+    /// The line this update hands down goes onward, to the page pushed after the pop
+    /// ([`crate::kit::undo::Undo::hand_onward`]).
+    pub(crate) fn mark_handed_onward(&self) {
+        if let Some(handed) = self.done.borrow_mut().handed.as_mut() {
+            handed.mark_onward();
+        }
+    }
+
+    /// The line handed down to this screen: given once, then gone (`Undo::take_handed`).
+    pub(crate) fn take_handed(&self) -> Option<Handed> {
+        self.handed_in.borrow_mut().take()
+    }
+
+    /// This context over the runtime's one follow board, so a screen's ask reaches the
+    /// coordinator that answers every screen.
+    #[must_use]
+    pub(crate) fn with_follows(mut self, follows: Follows) -> Self {
+        self.follows = follows;
+        self
+    }
+
+    /// The board the follow coordinator shares with the screens (`crate::follow`).
+    #[must_use]
+    pub fn follows(&self) -> &Follows {
+        &self.follows
     }
 
     /// The one read. The tables it read are remembered: when one changes, the
@@ -123,6 +189,41 @@ impl<'a> Ctx<'a> {
     /// `Ok` response with `status: refused`, to be shown as the screen decides.
     pub fn act(&self, request: &wire::ActRequest) -> Result<wire::ActResponse> {
         self.core.act(request)
+    }
+
+    /// One of the shell's own commands, which no app's manifest declares
+    /// (`vault.export_all`), answered as `act` is: the verdict, the sentence of a refusal and
+    /// the output.
+    pub fn command(&self, name: &str, input: &serde_json::Value, invoke_key: &str) -> Settled {
+        match self.core.command(name, input, invoke_key) {
+            Ok(outcome) if outcome.status == centraid_vault::CommandStatus::Executed => Settled {
+                committed: true,
+                refusal: String::new(),
+                output: serde_json::to_vec(&outcome.output).unwrap_or_default(),
+                inverse: None,
+                tables: outcome.tables,
+                check: String::new(),
+            },
+            Ok(outcome) => Settled {
+                committed: false,
+                refusal: outcome
+                    .reason
+                    .filter(|reason| !reason.trim().is_empty())
+                    .unwrap_or_else(|| crate::strings::shared::write_refused(self.locale())),
+                output: Vec::new(),
+                inverse: None,
+                tables: Vec::new(),
+                check: outcome.predicate.unwrap_or_default(),
+            },
+            Err(_) => Settled {
+                committed: false,
+                refusal: crate::strings::shared::write_refused(self.locale()),
+                output: Vec::new(),
+                inverse: None,
+                tables: Vec::new(),
+                check: String::new(),
+            },
+        }
     }
 
     /// The keep list and the census of originals (`originals.proto`).
@@ -246,6 +347,12 @@ impl<'a> Ctx<'a> {
             .push((screen.to_owned(), event));
     }
 
+    /// A SETTING EVERY SCREEN READS CHANGED (the units): every other open screen hears
+    /// `EnvironmentChanged` after this update, in the same re-render, and draws again.
+    pub fn redraw_all(&self) {
+        self.done.borrow_mut().redraw_all = true;
+    }
+
     /// The locale every string is made in.
     #[must_use]
     pub fn locale(&self) -> Locale {
@@ -264,6 +371,13 @@ impl<'a> Ctx<'a> {
     #[must_use]
     pub fn region(&self) -> &str {
         &self.env.region
+    }
+
+    /// THE MEMBER'S UNITS, metric or imperial: what they chose in Settings, else what the region
+    /// measures in. Every measured amount is worded with this (`kit::quantity`).
+    #[must_use]
+    pub fn units(&self) -> crate::kit::quantity::UnitsPref {
+        crate::kit::quantity::effective(self.env.units, &self.env.region)
     }
 
     /// The OS the shell runs on (`ios`, `android`), or empty.

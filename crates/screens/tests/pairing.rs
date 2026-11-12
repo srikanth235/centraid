@@ -610,6 +610,7 @@ impl Screen for Follower {
             kind: Some(wire::view_state::Kind::Counter(wire::CounterView {
                 title: format!("asked {} heard {}", self.asked, self.heard),
                 content: None,
+                ..Default::default()
             })),
             ..Default::default()
         }

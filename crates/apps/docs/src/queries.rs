@@ -219,6 +219,8 @@ pub struct DocumentRow {
     pub tags: Vec<LabelEntry>,
     /// The hit snippet, on a `search` row only.
     pub snippet: Option<String>,
+    /// On a `search` row: the words matched only in an earlier version (#1185).
+    pub in_earlier_version: bool,
 }
 
 /// What `drive` answers.
@@ -442,6 +444,7 @@ fn fold(
                 trashed: text_of(entity, "deleted_at").is_some(),
                 tags: tags.remove(&id).unwrap_or_default(),
                 snippet: snippets.get(&id).cloned(),
+                in_earlier_version: false,
                 title: text_of(entity, "title"),
                 created_at: text_of(entity, "created_at"),
                 updated_at: text_of(entity, "updated_at"),
@@ -684,6 +687,12 @@ pub fn load_search_term(
         .iter()
         .map(|target| (target.id.clone(), target.snippet.clone()))
         .collect();
+    let earlier: std::collections::BTreeSet<String> = page
+        .rows
+        .iter()
+        .filter(|target| target.in_earlier_version)
+        .map(|target| target.id.clone())
+        .collect();
     guarded(|| {
         let mut entities: BTreeMap<String, Row> = read_of(
             door,
@@ -705,6 +714,7 @@ pub fn load_search_term(
                 // v0 ships "" rather than null for a hit with no snippet.
                 .map(|mut row| {
                     row.snippet = Some(row.snippet.unwrap_or_default());
+                    row.in_earlier_version = earlier.contains(&row.document_id);
                     row
                 })
                 .collect(),
@@ -726,6 +736,9 @@ pub struct DocumentData {
     /// The words extracted from the head's bytes: `None` is "no text row", and
     /// `Some("")` is an empty text document.
     pub body: Option<String>,
+    /// The document's revision (its history's newest version, 0 when none), read before the
+    /// document: what an edit or a rename names as `expected_rev` (#1185).
+    pub rev: i64,
 }
 
 /// A folder as the tree sees it: its id and its parent's. [`folder_path`] is
@@ -780,6 +793,8 @@ pub fn load_document(
     }
     guarded(|| {
         let ids = [document_id.to_owned()];
+        // The revision first: a change between the two reads refuses the save, never lets it through.
+        let rev = centraid_apps_kit::revision::head(door, document_id)?;
         let entities = read_of(
             door,
             "docs.document.entity",
@@ -811,6 +826,7 @@ pub fn load_document(
             path: folder_path(&folders, row.folder_id.as_deref()),
             row: Some(row),
             body,
+            rev,
         })
     })
 }
@@ -889,21 +905,42 @@ pub fn load_history(
                 replaced_at.get(&(seq - 1)).cloned()
             }
         };
-        let newest = revisions
-            .iter()
-            .filter_map(|row| row.get("seq").and_then(|cell| cell.integer()))
-            .max()
-            .unwrap_or(0);
+        // A revision is also kept when only the title or the folder moved (the
+        // one history at the commit door, #1185); this list is of BYTES, so a
+        // revision whose bytes match the version newer than it adds nothing.
+        // The newest of a run of equal bytes stays, and a run is dated by its
+        // oldest member: `became_current` reads the revision before it.
         let current_blob = text_of(head, "blob").unwrap_or_default();
+        let mut newer = current_blob.clone();
+        let kept: Vec<&Row> = revisions
+            .iter()
+            .filter(|row| {
+                let blob = text_of(row, "blob").unwrap_or_default();
+                let changed = blob != newer;
+                newer = blob;
+                changed
+            })
+            .collect();
+        // The head is numbered after the newest version of other bytes.
+        let newest = kept
+            .first()
+            .and_then(|row| row.get("seq").and_then(|cell| cell.integer()))
+            .unwrap_or(0);
+        // The head's bytes became current when the newest kept version was
+        // replaced.
+        let head_since = kept
+            .first()
+            .and_then(|row| text_of(row, "at"))
+            .unwrap_or_else(|| created_at.clone());
         let mut versions = vec![VersionRow {
             number: usize::try_from(newest + 1).unwrap_or(1),
             byte_size: sizes.get(&current_blob).copied(),
             content_id: current_blob,
             media_type: text_of(head, "media_type"),
             current: true,
-            asserted_at: became_current(newest + 1),
+            asserted_at: Some(head_since),
         }];
-        for row in &revisions {
+        for row in kept {
             let Some(seq) = row.get("seq").and_then(|cell| cell.integer()) else {
                 continue;
             };
@@ -914,11 +951,28 @@ pub fn load_history(
                 content_id: blob,
                 media_type: text_of(row, "media_type"),
                 current: false,
-                asserted_at: became_current(seq),
+                asserted_at: oldest_of_run(&revisions, seq).and_then(&became_current),
             });
         }
         Ok(HistoryData { versions })
     })
+}
+
+/// The seq of the oldest revision in the run of equal bytes that `seq` starts
+/// (revisions are newest first).
+fn oldest_of_run(revisions: &[Row], seq: i64) -> Option<i64> {
+    let bytes = |row: &Row| text_of(row, "blob");
+    let at = revisions
+        .iter()
+        .position(|row| row.get("seq").and_then(|cell| cell.integer()) == Some(seq))?;
+    let mut oldest = at;
+    while let Some(older) = revisions.get(oldest + 1) {
+        if bytes(older) != bytes(&revisions[at]) {
+            break;
+        }
+        oldest += 1;
+    }
+    revisions[oldest].get("seq").and_then(|cell| cell.integer())
 }
 
 /// The statements this module owns, named so a plan snapshot can be compared

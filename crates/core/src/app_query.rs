@@ -70,6 +70,12 @@ use crate::error::{CoreError, Result};
 pub(crate) mod chat;
 // The shell's import reads (lane I): the folders a vault follows.
 pub(crate) mod imports;
+// What the phone says that differs from a followed row (#1183).
+pub(crate) mod follow;
+// A record's earlier values (#1185).
+pub(crate) mod history;
+// The general link's two reads (#1185).
+pub(crate) mod links;
 // The named as search results (#1097, R-1097-19..24): notebooks, albums,
 // projects, Docs folders and chat threads, for Home and the
 // owning apps.
@@ -79,10 +85,12 @@ mod named;
 pub(crate) mod docs;
 // Health's arm (#1129): six answers, every figure the app crate's (R-1129-12).
 pub(crate) mod health;
+pub(crate) mod health_trash;
 // Locker's arm (#1047): metadata only; a secret is the session's.
 pub(crate) mod locker;
 // Money's arm (#1099): ten answers, the import plan and Home's tile.
 pub(crate) mod money;
+pub(crate) mod money_trash;
 pub(crate) mod notes;
 pub(crate) mod people;
 // Photos' own search (#1097, R-1097-25..27): the text and album legs, the live rule
@@ -94,6 +102,7 @@ pub(crate) mod reminders;
 pub(crate) mod attachments;
 // The reminders a Calendar day shows (rounds 10 and 12).
 pub(crate) mod calendar_dated;
+pub(crate) mod calendar_trash;
 // Home's arm (R-CHROME-6): every app's search domain, Locker's included.
 pub(crate) mod vault;
 
@@ -155,6 +164,7 @@ pub(crate) fn answer_recording(
         Q::AgendaTaskSmartCounts(asked) => reminders::smart_counts(vault, &door, &now, asked)?,
         Q::AgendaTaskDueRows(asked) => reminders::due_rows(vault, &door, &now, asked)?,
         Q::CalendarDatedReminders(asked) => calendar_dated::dated(vault, &door, &now, asked)?,
+        Q::CalendarTrash(asked) => calendar_trash::trash(vault, &door, asked)?,
         Q::LockerItems(asked) => locker::items(vault, &door, &now, asked)?,
         Q::LockerItem(asked) => locker::item(vault, &door, &now, asked)?,
         Q::LockerSearch(asked) => locker::search(vault, &door, asked)?,
@@ -179,6 +189,7 @@ pub(crate) fn answer_recording(
         Q::MoneyRecurring(asked) => money::recurring(vault, &door, &now, asked)?,
         Q::MoneySearch(asked) => money::search(vault, &door, &now, asked)?,
         Q::MoneyHomeTile(asked) => Answer::MoneyHomeTile(money::home_tile(vault, asked)?),
+        Q::MoneyTrash(asked) => money_trash::trash(vault, &door, asked)?,
         // Health (#1129): no zone and no clock; the request states its day.
         Q::HealthToday(asked) => health::today(vault, &door, &now, asked)?,
         Q::HealthSeries(asked) => health::series(vault, &door, &now, asked)?,
@@ -186,6 +197,7 @@ pub(crate) fn answer_recording(
         Q::HealthWorkouts(asked) => health::workouts(vault, &door, asked)?,
         Q::HealthWorkout(asked) => health::workout(vault, &door, asked)?,
         Q::HealthFollowView(asked) => health::follow_view(vault, &door, &now, asked)?,
+        Q::HealthTrash(asked) => health_trash::trash(vault, &door, asked)?,
     };
     *tables = door.take_tables();
     Ok(wire::AppQueryResponse {
@@ -878,6 +890,7 @@ fn event_to_wire(event: agenda::EventRow, zone: &FireZone) -> wire::AgendaEvent 
         original_start_local: event.original_start_local,
         recurrence_overlap: event.recurrence_overlap,
         snippet: event.snippet,
+        in_earlier_version: event.in_earlier_version,
         busy: event.busy,
         travel_min: event.travel_min,
         // `search` only, and filled there (`search_to_wire`).

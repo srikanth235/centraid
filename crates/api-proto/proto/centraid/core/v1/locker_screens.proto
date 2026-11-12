@@ -189,10 +189,11 @@ message LockerHomeState {
   optional LockerWall wall = 1;
   bool secure = 2;
   LockerDestination destination = 3;
+  // 4, 5 and 6 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 4, 5, 6;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 4;
-    Failure failure = 5;
-    Denied denied = 6;
     LockerHomeData data = 7;
   }
   Sheet sheet = 8;
@@ -218,6 +219,8 @@ message LockerHomeState {
     // "What Locker keeps".
     SHEET_FACTS = 3;
   }
+  // THE READ: loading, failed, refused, or ready, with a note when a re-read failed.
+  PageState page = 15;
 }
 
 message LockerSearchField {
@@ -267,7 +270,9 @@ message LockerHomeData {
   reserved "filters";
   repeated LockerRow rows = 3;
   string window = 4;
-  optional EmptyState items_empty = 5;
+  // 5 was `items_empty`: no item at all, or none under the filter or category in view, is the page's own empty state (#1185).
+  reserved 5;
+  reserved "items_empty";
 
   // REVIEW.
   repeated LockerReviewSection review = 6;
@@ -278,7 +283,9 @@ message LockerHomeData {
 
   // SEARCH.
   repeated LockerRow hits = 11;
-  optional EmptyState search_empty = 12;
+  // 12 was `search_empty`: a search that matched nothing is the page's own empty state (#1185).
+  reserved 12;
+  reserved "search_empty";
 
   // GENERATE: reads nothing, writes nothing.
   optional LockerGenerator generator = 13;
@@ -445,10 +452,11 @@ message LockerItemState {
   optional LockerWall wall = 1;
   bool secure = 2;
   string item_id = 3;
+  // 4, 5 and 6 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 4, 5, 6;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 4;
-    Failure failure = 5;
-    Denied denied = 6;
     LockerItemData data = 7;
   }
   optional Confirm confirm = 8;
@@ -465,6 +473,8 @@ message LockerItemState {
   bool finished = 14;
   // THE LINK PICKER (#1173): an account, a place or a person to link the item to. Open while up.
   LinkPicker link_picker = 15;
+  // THE READ: loading, failed, refused, or ready, with a note when a re-read failed.
+  PageState page = 16;
 }
 
 message LockerItemChrome {
@@ -502,8 +512,9 @@ message LockerItemData {
   // The "…" menu in the header: add a field, star, archive, trash (restore and
   // erase on a trashed item).
   repeated LockerAction actions = 14;
-  // No item has this id any more.
-  optional EmptyState gone = 15;
+  // 15 was `gone`: an item that is no longer there is the page's final failure (#1185).
+  reserved 15;
+  reserved "gone";
   // "This item is in the trash · it is erased on Mon 12 October".
   string trashed_note = 16;
   // "Change password on website": opens the item's own address; absent when
@@ -520,6 +531,11 @@ message LockerItemData {
   // "Linked to" (#1173): the account, place and people the item is linked to, behind the wall like
   // everything here. A link carries no sealed value.
   LinkSection links = 21;
+  // "Earlier versions   2 ›" at the foot of the item (#1185); absent when there are none. Only
+  // the plain fields keep earlier values: a sealed one never does.
+  optional EarlierEntry earlier = 22;
+  // Where it came from, under the Earlier versions entry (#1185). Absent for a typed item.
+  optional OriginLine origin = 23;
 }
 
 // ONE CUSTOM FIELD, ADDED OR EDITED. A SEALED field's value is typed into a
@@ -643,10 +659,11 @@ message LockerEditorState {
   bool secure = 2;
   LockerEditorMode mode = 3;
   string item_id = 4;
+  // 5, 6 and 7 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 5, 6, 7;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 5;
-    Failure failure = 6;
-    Denied denied = 7;
     LockerEditorData data = 8;
   }
   // The discard confirm, when leaving with changes.
@@ -656,6 +673,8 @@ message LockerEditorState {
   bool finished = 11;
   // A refusal's sentence, over the form.
   optional StatusLine status = 12;
+  // THE READ: loading, failed, refused, or ready, with a note when a re-read failed.
+  PageState page = 13;
 }
 
 message LockerEditorChrome {
@@ -764,10 +783,11 @@ message LockerEditorEvent {
 message LockerExportState {
   optional LockerWall wall = 1;
   bool secure = 2;
+  // 3, 4 and 5 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 3, 4, 5;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 3;
-    Failure failure = 4;
-    Denied denied = 5;
     LockerExportData data = 6;
   }
   LockerExportChrome chrome = 7;
@@ -787,6 +807,8 @@ message LockerExportState {
     // The OS save sheet is up over the file.
     PHASE_SAVING = 4;
   }
+  // THE READ: loading, failed, refused, or ready, with a note when a re-read failed.
+  PageState page = 12;
 }
 
 message LockerExportChrome {
@@ -840,10 +862,11 @@ message LockerExportEvent {
 message LockerImportState {
   optional LockerWall wall = 1;
   bool secure = 2;
+  // 3, 4 and 5 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 3, 4, 5;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 3;
-    Failure failure = 4;
-    Denied denied = 5;
     LockerImportData data = 6;
   }
   LockerImportChrome chrome = 7;
@@ -858,6 +881,8 @@ message LockerImportState {
     PHASE_PUBLISHING = 4;
     PHASE_PUBLISHED = 5;
   }
+  // THE READ: loading, failed, refused, or ready, with a note when a re-read failed.
+  PageState page = 10;
 }
 
 message LockerImportChrome {

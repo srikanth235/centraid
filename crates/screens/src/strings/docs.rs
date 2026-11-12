@@ -10,6 +10,21 @@ catalog! {
     plain action_edit = ("Edit", "Edit");
     plain action_labels = ("Labels", "Labels");
     plain action_move = ("Move", "Move");
+    plain about_added = ("Person added", "Person added");
+    plain about_removed = ("Person removed", "Person removed");
+    plain link_added = ("Linked", "Linked");
+    plain link_removed = ("Link removed", "Link removed");
+    plain links_empty = ("Nothing linked yet", "Nothing linked yet");
+    plain links_unread = (
+        "Couldn’t read what this document is linked to.",
+        "Couldn’t read what this document is linked to."
+    );
+    plain folder_created_said = ("Folder created", "Folder created");
+    plain label_added_said = ("Label added", "Label added");
+    plain label_removed_said = ("Label removed", "Label removed");
+    plain moved_said = ("Document moved", "Document moved");
+    plain starred_said = ("Document starred", "Document starred");
+    plain unstarred_said = ("Star removed", "Star removed");
     plain action_rename = ("Rename", "Rename");
     plain action_restore = ("Restore", "Restore");
     plain action_share = ("Share", "Share");
@@ -33,13 +48,10 @@ catalog! {
     plain band_home = ("Home", "Home");
     plain band_more = ("More", "More");
     plain band_starred = ("Starred", "Starred");
-    plain camera_denied = ("Camera access is off. Turn it on in Settings.", "Camera access is off. Turn it on in Settings.");
-    plain camera_restricted = ("Camera access is blocked on this phone.", "Camera access is blocked on this phone.");
     plain changed = ("Changed", "Changed");
     plain clear_filters = ("Clear filters", "Clear filters");
     plain close = ("Close", "Close");
     plain create = ("Create", "Create");
-    plain current = ("Current", "Current");
     plain deleted = ("Deleted", "Deleted");
     plain denied_body = ("Ask the owner of this vault for access.", "Ask the owner of this vault for access.");
     plain denied_title = ("Docs cannot read your documents", "Docs cannot read your documents");
@@ -60,6 +72,16 @@ catalog! {
     plain empty_search_body = ("Try fewer words.", "Try fewer words.");
     plain empty_starred = ("Nothing starred yet.", "Nothing starred yet.");
     plain empty_starred_body = ("Star a document to keep it here.", "Star a document to keep it here.");
+    plain export_all = ("All documents", "All documents");
+    plain export_lede = (
+        "Your original files in one .zip archive, in your folders.",
+        "Your original files in one .zip archive, in your folders."
+    );
+    plain export_nothing = (
+        "There are no documents on this phone to export.",
+        "There are no documents on this phone to export."
+    );
+    plain export_title = ("Export documents", "Export documents");
     plain facts_only = ("Docs can't show this file, so here are its details.", "Docs can't show this file, so here are its details.");
     plain fact_added = ("Added", "Added");
     plain fact_changed = ("Changed", "Changed");
@@ -69,15 +91,13 @@ catalog! {
     plain fact_media_type = ("Media type", "Media type");
     plain fact_size = ("Size", "Size");
     plain fact_versions = ("Versions", "Versions");
-    plain files_denied = ("File access is off. Turn it on in Settings.", "File access is off. Turn it on in Settings.");
-    plain files_restricted = ("File access is blocked on this phone.", "File access is blocked on this phone.");
     plain filter_label = ("Label", "Label");
     plain filter_modified = ("Modified", "Modified");
     plain filter_type = ("Type", "Type");
     plain folder_empty_count = ("Empty", "Empty");
     plain folder_placeholder = ("Folder name", "Folder name");
     plain followed_footer = ("Files added, changed or removed in these folders reach Docs. Stopping keeps every document.", "Files added, changed or removed in these folders reach Docs. Stopping keeps every document.");
-    plain followed_stop = ("Stop following {name}", "Stop following {name}");
+    plain followed_kept = ("documents", "documents");
     plain followed_title = ("Followed folders", "Followed folders");
     plain follow_failed = ("That folder couldn't be followed. Try again.", "That folder couldn't be followed. Try again.");
     plain follow_no_vault = ("Make a vault first, then follow a folder.", "Make a vault first, then follow a folder.");
@@ -104,6 +124,7 @@ catalog! {
     plain modified_this_year = ("This year", "This year");
     plain modified_today = ("Today", "Today");
     plain more = ("More actions", "More actions");
+    plain more_export_meta = ("Your originals as one archive", "Your originals as one archive");
     plain more_followed = ("Followed folders", "Followed folders");
     plain more_recent = ("Recently added", "Recently added");
     plain more_title = ("More in Docs", "More in Docs");
@@ -116,7 +137,7 @@ catalog! {
     plain not_starred = ("Not starred", "Not starred");
     plain no_text = ("This document has no text to show.", "This document has no text to show.");
     plain recent_rule = ("Most recently added documents.", "Most recently added documents.");
-    plain remote_changed = ("Changed elsewhere; saving reloads it.", "Changed elsewhere; saving reloads it.");
+    plain remote_changed = ("Changed elsewhere; your next save will ask to reload.", "Changed elsewhere; your next save will ask to reload.");
     plain rename_placeholder = ("Document name", "Document name");
     plain retry = ("Try again", "Try again");
     plain saved = ("Saved", "Saved");
@@ -139,7 +160,6 @@ catalog! {
     plain trash_confirm = ("Move to trash", "Move to trash");
     plain trash_confirm_body = ("It can be restored from trash for 30 days.", "It can be restored from trash for 30 days.");
     plain trash_confirm_title = ("Move to trash?", "Move to trash?");
-    plain trash_empty_state_body = ("Trashed documents can be restored for 30 days.", "Trashed documents can be restored for 30 days.");
     plain truncated = ("Older documents aren't listed; search finds them.", "Older documents aren't listed; search finds them.");
     plain type_any = ("Any type", "Any type");
     plain type_audio = ("Audio", "Audio");
@@ -152,7 +172,6 @@ catalog! {
     plain type_word = ("Documents", "Documents");
     plain untitled = ("Untitled", "Untitled");
     plain version = ("Version", "Version");
-    plain versions_heading = ("Versions", "Versions");
     plain view_grid = ("Grid", "Grid");
     plain view_list = ("List", "List");
     plain view_title = ("View", "View");
@@ -160,6 +179,7 @@ catalog! {
     plain where_top = ("At the top level", "At the top level");
     counted recents_subtitle = ("Changed lately · {n} document in Docs", "Changed lately · {n} documents in Docs");
     counted document_count = ("{n} document", "{n} documents");
-    counted version_count = ("{n} version", "{n} versions");
     counted followed_detail = ("{n} document stays in Docs", "{n} documents stay in Docs");
+    // What the "folder says" line calls the name, to a screen reader (#1183).
+    plain says_noun_name = ("name", "name");
 }

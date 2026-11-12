@@ -125,6 +125,7 @@ final class ShellModel: ObservableObject {
     private let links = LinkReporter()
     private var enteredBackground: NotificationObservation?
     private var memoryWarning: NotificationObservation?
+    private var environmentChanges: [NotificationObservation] = []
 
     init() {
         // **NOTHING UNDER THIS DIRECTORY GOES INTO iCLOUD BACKUP** (#1029, F5).
@@ -163,6 +164,24 @@ final class ShellModel: ObservableObject {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.screens?.memoryWarning() }
         })
+        // THE ZONE OR THE CLOCK CHANGED UNDER A RUNNING APP (#1185): Rust re-arms the
+        // reminders from the environment it is told, so tell it again. `TimeZone.current`
+        // caches the zone it first read, so the cache is dropped before the report.
+        environmentChanges = [
+            NSNotification.Name.NSSystemTimeZoneDidChange,
+            UIApplication.significantTimeChangeNotification,
+        ].map { name in
+            NotificationObservation(NotificationCenter.default.addObserver(
+                forName: name,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    NSTimeZone.resetSystemTimeZone()
+                    self?.screens?.reportEnvironment()
+                }
+            })
+        }
     }
 
     /// WHERE THIS DEVICE'S VAULTS LIVE. Documents and not Caches: a vault is the
@@ -404,8 +423,9 @@ final class ShellModel: ObservableObject {
     // MARK: Lifecycle
 
     /// THE APP CAME FORWARD OR LEFT: Rust hears it (the Locker relocks on leaving,
-    /// the pass service decides what coming back is worth, the follower reads its
-    /// folders again), and the photo library is watched while the app is in view.
+    /// the pass service decides what coming back is worth, the follow coordinator
+    /// follows every phone store the member connected), and the photo library is
+    /// watched while the app is in view.
     func lifecycle(foreground: Bool) {
         guard let screens else { return }
         if foreground {

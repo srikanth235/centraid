@@ -62,8 +62,7 @@ pub const BIRTHDAY_LABEL: &str = "Birthday";
 
 const STARRED: &str = "flag:starred";
 const ENTITY_COLUMNS: &str = "id, title, created_at, updated_at, deleted_at, purge_at";
-const PERSON_COLUMNS: &str =
-    "id, form, nickname, role, met, birthday, birthday_reminder, cadence_days";
+const PERSON_COLUMNS: &str = "id, form, nickname, role, met, birthday, cadence_days";
 
 fn text(word: &str) -> PageBindValue {
     PageBindValue::Text(word.to_owned())
@@ -108,8 +107,6 @@ pub struct PersonRow {
     pub nickname: String,
     pub met: String,
     pub birthday: Option<String>,
-    /// A birthday always has its reminder; legacy switch values are ignored.
-    pub birthday_reminder: bool,
     /// 0 is no cadence.
     pub cadence_days: i64,
     pub created_at: String,
@@ -208,8 +205,6 @@ fn members(door: &dyn PageDoor, entities: &[Row], with_owner: bool) -> KitResult
                 nickname: text_of(kind, "nickname").unwrap_or_default(),
                 met: text_of(kind, "met").unwrap_or_default(),
                 birthday: text_of(kind, "birthday"),
-                // Birthdays always remind, including profiles whose legacy switch was off.
-                birthday_reminder: true,
                 cadence_days: kind
                     .get("cadence_days")
                     .and_then(Cell::integer)
@@ -297,18 +292,55 @@ pub fn read_circle(door: &dyn PageDoor, window: usize) -> KitResult<Circle> {
     })
 }
 
-/// The trash shelf's window: people, most recently trashed first.
-pub fn read_trashed(door: &dyn PageDoor) -> KitResult<Circle> {
+/// A list in the trash: its name and the two instants the vault stamped.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrashedList {
+    pub id: String,
+    pub name: String,
+    pub deleted_at: Option<String>,
+    pub purge_at: Option<String>,
+}
+
+/// The trash shelf's window: what People can bring back.
+pub struct Shelf {
+    /// People in the trash, most recently trashed first.
+    pub members: Vec<PersonRow>,
+    /// Lists in the trash, most recently trashed first.
+    pub lists: Vec<TrashedList>,
+    /// The window was full: more is in the trash than it read.
+    pub filled: bool,
+}
+
+/// The trash shelf's window: people and lists, most recently trashed first. One read answers both
+/// (a list has no `person` row, so the people join leaves it out).
+pub fn read_trashed(door: &dyn PageDoor) -> KitResult<Shelf> {
     let query = PageQuery::new(
         "people.trash",
-        ENTITY_COLUMNS,
+        "id, title, kind, created_at, updated_at, deleted_at, purge_at",
         "entity",
         PageOrder::desc("deleted_at", "id"),
     )
-    .filter("kind = ? AND deleted_at IS NOT NULL", vec![text("person")]);
+    .filter(
+        "kind IN (?, ?) AND deleted_at IS NOT NULL",
+        vec![text("person"), text("list")],
+    );
     let read = read_window(door, &query, TRASH_ROWS)?;
-    Ok(Circle {
+    let lists = read
+        .rows
+        .iter()
+        .filter(|row| text_of(row, "kind").as_deref() == Some("list"))
+        .filter_map(|row| {
+            Some(TrashedList {
+                id: text_of(row, "id")?,
+                name: text_of(row, "title").unwrap_or_default(),
+                deleted_at: text_of(row, "deleted_at"),
+                purge_at: text_of(row, "purge_at"),
+            })
+        })
+        .collect();
+    Ok(Shelf {
         members: members(door, &read.rows, false)?,
+        lists,
         filled: read.filled,
     })
 }
@@ -884,8 +916,9 @@ pub struct VaultLinks {
 
 /// The things in the vault about one person, read through the graph
 /// ([`centraid_apps_kit::graph`]) from the joins that END at them (`edge_to`, one `to_id`): an
-/// event's `attendee` or `about` edge, a task's `about`, a note's `links`, a document's `about`,
-/// a transaction's `with`, a photograph's `depicts`. A yearly all-day event is one of their
+/// event's `attendee` or `about` edge, a task's `about`, a document's `about`, a transaction's
+/// `with`, a photograph's `depicts`. **A plain `links` edge is not here**: a link the member made
+/// by hand shows once, in the person page's "Linked to" section (#1185), never twice. A yearly all-day event is one of their
 /// dates, a cancelled event is not on the calendar, a void line is not a payment, and a row in
 /// the trash is no row. A note's `about` edge is People's own note.
 ///
@@ -900,7 +933,7 @@ pub(crate) fn vault_links(door: &dyn PageDoor, id: &str) -> KitResult<VaultLinks
         WIDE,
         id,
         "person",
-        &["about", "attendee", "links", "with", "depicts"],
+        &["about", "attendee", "with", "depicts"],
     )?;
     let mut sources: Vec<(String, String)> = incoming
         .iter()
@@ -1011,7 +1044,6 @@ pub(crate) fn vault_links(door: &dyn PageDoor, id: &str) -> KitResult<VaultLinks
                 )
             }
             "task" if rels(&["about"]) => (VaultKind::Task, None, None, None),
-            "note" if rels(&["links"]) => (VaultKind::Note, None, None, None),
             "document" if rels(&["about"]) => (VaultKind::Document, None, None, None),
             "txn" if rels(&["with"]) && !void.contains(&item_id) => {
                 (VaultKind::Txn, None, None, None)
@@ -1138,7 +1170,8 @@ fn attached_documents(
 }
 
 /// The important dates of these people: the birthday column, and the yearly
-/// all-day events `about` them. **A birthday always has its reminder**; any other date has one when its event does.
+/// all-day events `about` them. **A birthday is on the Upcoming rail** (`reminder_on`) and notifies
+/// nobody: it is shown on its day; any other date has a reminder when its event does.
 pub(crate) fn dates(door: &dyn PageDoor, people: &[&PersonRow]) -> KitResult<Vec<DateRow>> {
     let mut found: Vec<DateRow> = people
         .iter()
@@ -1149,7 +1182,7 @@ pub(crate) fn dates(door: &dyn PageDoor, people: &[&PersonRow]) -> KitResult<Vec
                 date_id: format!("birthday:{}", person.id),
                 label: BIRTHDAY_LABEL.to_owned(),
                 month_day: birthday.get(birthday.len().checked_sub(5)?..)?.to_owned(),
-                reminder_on: person.birthday_reminder,
+                reminder_on: true,
             })
         })
         .collect();

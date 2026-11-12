@@ -139,10 +139,13 @@ message PhotosHomeChrome {
 // ---------------------------------------------------------------------------
 
 message PhotosLibrary {
+  // The read: loading, failed, refused, or ready (with a note when a refresh or a next page
+  // failed over the photographs shown).
+  // 1 and 2 were `loading` and `failure`: the read is `page` (#1185).
+  reserved 1, 2;
+  reserved "loading", "failure";
+  // Set when the page is ready.
   oneof content {
-    // The grid is the loading state: the skeleton's rows, packed at the rung.
-    PhotosLibraryLoading loading = 1;
-    Failure failure = 2;
     PhotosLibraryData data = 3;
   }
   PhotosGrain grain = 4;
@@ -152,10 +155,9 @@ message PhotosLibrary {
   // WHERE THE MEMBER IS, capture-local `YYYY-MM-DD`, so a grain switch lands on
   // the same stretch of time; empty is the top.
   string place_day = 7;
-}
-
-message PhotosLibraryLoading {
-  repeated PhotosPackedRow skeleton = 1;
+  PageState page = 8;
+  // The grid is the loading state: the skeleton's rows, packed at the rung. Only while loading.
+  repeated PhotosPackedRow skeleton = 9;
 }
 
 message PhotosLibraryData {
@@ -175,10 +177,10 @@ message PhotosLibraryData {
   bool complete = 5;
   // The photograph count phrase ("1,204 photos"), from the shelf's exact total.
   string count_label = 6;
-  // Set while the library is empty: the sentence for an empty library or for an
-  // empty Favorites.
-  optional EmptyState empty = 7;
+  // 7 was `empty`: an empty library is the page's own Empty state, never ready data.
   // "Photos with no capture date appear only in All." Drawn under Years/Months.
+  reserved 7;
+  reserved "empty";
   string undated_note = 8;
   // 9 was `loading_more`: nothing read it (#1152).
   reserved 9;
@@ -250,9 +252,11 @@ message PhotosPeriod {
 // ---------------------------------------------------------------------------
 
 message PhotosCollections {
+  // 1 and 2 were `loading` and `failure`: the read is `page` (#1185).
+  reserved 1, 2;
+  reserved "loading", "failure";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 1;
-    Failure failure = 2;
     PhotosCollectionsData data = 3;
   }
   // The sections the member folded.
@@ -270,6 +274,7 @@ message PhotosCollections {
   string create_label = 10;
   // The delete confirm's way out: "Keep it".
   string keep_label = 11;
+  PageState page = 12;
 }
 
 message PhotosCollectionsData {
@@ -326,15 +331,18 @@ message PhotosCollectionCard {
 
 message PhotosSearchView {
   string query = 1;
+  // 3 and 4 were `loading` and `failure`: the read is `page` (#1185).
+  reserved 3, 4;
+  reserved "loading", "failure";
+  // What a ready page holds: the resting vocabulary, or the hits for the query.
   oneof content {
     PhotosSearchResting resting = 2;
-    Loading loading = 3;
-    Failure failure = 4;
     PhotosSearchHits hits = 5;
   }
   // "Including results for “x”": set only for a current corrected answer.
   string corrected = 6;
   optional SearchAsk ask = 7;
+  PageState page = 8;
 }
 
 message PhotosSearchResting {
@@ -359,8 +367,10 @@ message PhotosSearchHits {
   repeated PhotoTile tiles = 2;
   Route open = 3;
   string count_label = 4;
-  optional EmptyState empty = 5;
+  // 5 was `empty`: a search that matched nothing is the page's own Empty state.
   // Labels the words name: a tap searches for that label.
+  reserved 5;
+  reserved "empty";
   repeated PhotosSearchWord labels = 6;
   string labels_title = 7;
   // 8 was `truncated_label`: nothing read it (#1152).
@@ -368,6 +378,23 @@ message PhotosSearchHits {
   reserved "truncated_label";
   // `Matched Lisbon, beach`: why these were found, in the vault's own words.
   string matched_label = 9;
+  // PHOTOGRAPHS FOUND ONLY BY WHAT THEY SAID BEFORE (#1185), a group under the grid: a tile has
+  // no line to say so, so each is a row (thumbnail, title, "In an earlier version") that opens
+  // that photograph's Earlier versions. Empty when nothing was found only in the past.
+  repeated PhotosEarlierRow earlier = 10;
+}
+
+// One photograph the words matched only in an earlier version of it.
+message PhotosEarlierRow {
+  // The thumbnail, drawn small; its `photo_id` identifies the row.
+  PhotoTile tile = 1;
+  // The photograph's own title, or what it is (Photograph, Video) when it has none.
+  string title = 2;
+  // "In an earlier version".
+  string line = 3;
+  string accessibility_label = 4;
+  // That photograph's Earlier versions, backing out to Search.
+  Route route = 5;
 }
 
 message PhotosSearchDoor {

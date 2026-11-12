@@ -395,13 +395,42 @@ fn reveal(
         if asked.column != "value_sealed" {
             return Ok(refused(wire::LockerRevealRefusal::NotSealed));
         }
+        // A ONE-TIME-CODE FIELD'S SEED IS NOT SHOWN either, for the item's seed's reason.
+        if vault
+            .locker_otp_field_cell(&asked.item_id, &asked.field_id)?
+            .is_some()
+        {
+            return Ok(refused(wire::LockerRevealRefusal::SeedNotShown));
+        }
         (
-            vault.locker_sealed_field_cell(&asked.item_id, &asked.field_id)?,
+            // AN EARLIER VERSION'S VALUE (Earlier versions, #1185) is the ciphertext the live
+            // cell held, kept by the history bound to the same id and key generation: it opens
+            // with the same key behind the same unlock and stamps the item the same way. A
+            // field's kind never changes, so the live row's refusal of a seed covers a version.
+            if asked.earlier_seq > 0 {
+                vault.locker_sealed_earlier_cell(
+                    &asked.item_id,
+                    asked.earlier_seq,
+                    &asked.column,
+                    &asked.field_id,
+                )?
+            } else {
+                vault.locker_sealed_field_cell(&asked.item_id, &asked.field_id)?
+            },
             asked.field_id.as_str(),
         )
     } else {
         (
-            vault.locker_sealed_item_cell(&asked.item_id, &asked.column)?,
+            if asked.earlier_seq > 0 {
+                vault.locker_sealed_earlier_cell(
+                    &asked.item_id,
+                    asked.earlier_seq,
+                    &asked.column,
+                    "",
+                )?
+            } else {
+                vault.locker_sealed_item_cell(&asked.item_id, &asked.column)?
+            },
             asked.item_id.as_str(),
         )
     };
@@ -483,22 +512,27 @@ fn totp(
     let Some((live_id, live_key)) = open_key(cell, now_ms) else {
         return Ok(refused(wire::LockerRevealRefusal::Locked));
     };
-    let Some(sealed) = vault.locker_sealed_item_cell(item_id, "otp_seed")? else {
+    // A CUSTOM FIELD'S SEED is sealed against the field's own id and stamped through the same
+    // command, naming the field; the login's own is bound to the item.
+    let field_id = asked.field_id.as_str();
+    let (sealed, bound_to) = if field_id.is_empty() {
+        (vault.locker_sealed_item_cell(item_id, "otp_seed")?, item_id)
+    } else {
+        (vault.locker_otp_field_cell(item_id, field_id)?, field_id)
+    };
+    let Some(sealed) = sealed else {
         return Ok(refused(wire::LockerRevealRefusal::NotSealed));
     };
     let Some(ciphertext) = sealed.ciphertext else {
         return Ok(refused(wire::LockerRevealRefusal::Empty));
     };
-    run(
-        vault,
-        registry,
-        owner,
-        "locker.totp_code",
-        serde_json::json!({ "item_id": item_id }),
-        changes,
-    )?;
+    let mut stamp = serde_json::json!({ "item_id": item_id });
+    if !field_id.is_empty() {
+        stamp["field_id"] = serde_json::Value::String(field_id.to_owned());
+    }
+    run(vault, registry, owner, "locker.totp_code", stamp, changes)?;
     let generation = sealed.key_id.unwrap_or(live_id);
-    let Ok(seed) = decrypt_under_locker_key(&live_key, &generation, item_id, &ciphertext) else {
+    let Ok(seed) = decrypt_under_locker_key(&live_key, &generation, bound_to, &ciphertext) else {
         return Ok(refused(wire::LockerRevealRefusal::DidNotOpen));
     };
     let Some(code) = centraid_apps_locker::totp::code_at(&seed, now_ms, hmac_sha1) else {
@@ -527,7 +561,7 @@ pub fn locked_for(vault: &Vault, cell: &Cell, name: &str, input: &serde_json::Va
             .is_some_and(|text| !text.is_empty() && text != SEALED_PLACEHOLDER)
     };
     let carries = if name == "locker.set_field" {
-        input["kind"].as_str() == Some("sealed") && typed(&input["value"])
+        matches!(input["kind"].as_str(), Some("sealed" | "otp")) && typed(&input["value"])
     } else {
         SEALED_ITEM_CELLS
             .iter()
@@ -662,12 +696,23 @@ fn seal_field(
     mut input: serde_json::Value,
     plaintext: impl Fn(&serde_json::Value) -> Option<String>,
 ) -> Result<Option<Vec<u8>>> {
-    if input["kind"].as_str() != Some("sealed") {
+    let kind = input["kind"].as_str().unwrap_or_default().to_owned();
+    if !matches!(kind.as_str(), "sealed" | "otp") {
         return Ok(None);
     }
-    let Some(value) = plaintext(&input["value"]) else {
+    let Some(mut value) = plaintext(&input["value"]) else {
         return Ok(None);
     };
+    // A one-time-code field's seed is read once, here, as the login's own is: a bare key in any
+    // spelling or an `otpauth://totp/` link, sealed as upper-case base32, or refused in a sentence
+    // before anything is sealed.
+    if kind == "otp" {
+        value = centraid_apps_locker::totp::seed_of(&value).map_err(|refusal| {
+            CoreError::InvalidRequest {
+                detail: refusal.sentence().to_owned(),
+            }
+        })?;
+    }
     let Some((key_id, key)) = open_key(cell, vault.clock().now_ms()) else {
         return Err(CoreError::InvalidRequest {
             detail: "Locker is locked; a secret is sealed only while it is open".to_owned(),

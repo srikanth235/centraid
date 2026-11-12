@@ -4,8 +4,8 @@
 //! The core says which surface opens it — the reader over the decoded text, the
 //! media stage over the bytes (or why they are not on this device), or the facts
 //! for a kind the phone cannot render — and this draws that with the facts under
-//! it. Its version history is a page of its own
-//! (`docs.versions`), reached by a row. The head's writes are the drive row's
+//! it. Its earlier versions are the kit's one screen
+//! (`docs.earlier`), reached by the row at its foot. The head's writes are the drive row's
 //! (star, rename inline, move, labels, trash behind a confirm), plus restore and
 //! Delete forever on a trashed document.
 //!
@@ -20,15 +20,21 @@ use wire::docs_document_event::Kind as D;
 use wire::docs_document_state::Asking;
 use wire::screen_event::Kind as E;
 
+use super::denied;
 use super::fold::{self, KEY_LABELS, KEY_MORE, KEY_MOVE, KEY_PURGE, KEY_RENAME, KEY_RESTORE};
 use super::fold::{KEY_SHARE, KEY_STAR, KEY_TRASH, KEY_UNSTAR};
 use super::folders::{self, TOP_LEVEL};
 use super::rename::Rename;
-use super::{Phase, denied, refusal};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
+use crate::kit::attachments::Attachments;
+use crate::kit::earlier;
+use crate::kit::follow::{self, Source};
 use crate::kit::links::{self, Kind, Links, Outcome};
-use crate::kit::read::{self, Reading};
+use crate::kit::owner::{Answer as Owner, Leaving, NoPasscode, OwnerGate};
+use crate::kit::read::{self, Note, Page, Reading};
+use crate::kit::trash;
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, docs as words, links as link_words, shared};
 
@@ -65,13 +71,22 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         document_id: args.document_id.clone(),
         title_hint: args.title.clone(),
         parent: args.parent.clone(),
-        phase: Phase::Loading,
-        status: None,
+        page: Page::loading(),
+        gone: false,
+        undo: Undo::default(),
+        gate: OwnerGate::default(),
         asking: Asking::None,
         sheet: Sheet::None,
         rename: None,
         dismissed: false,
         links: Links::new(&[Kind::Person]),
+        // A document may link to another document; the picker leaves this one out.
+        every: Links::new(&Kind::ALL).for_entity(&args.document_id),
+        linked: None,
+        linked_unread: false,
+        attachments: Attachments::of("docs", &args.document_id),
+        differences: follow::Phone::default(),
+        earlier: earlier::Foot::default(),
     }))
 }
 
@@ -81,8 +96,14 @@ struct Document {
     title_hint: String,
     /// The page it was pushed from, by its title: what the back control says.
     parent: String,
-    phase: Phase<Answered>,
-    status: Option<wire::StatusLine>,
+    /// The read. A document that is gone is [`Page::Failed`] with `gone` set, never ready data and
+    /// never empty: the page says so in its own words and offers no Retry.
+    page: Page<Answered>,
+    gone: bool,
+    /// The status line and what its Undo reverses (the kit's one door).
+    undo: Undo,
+    /// The owner check a share asks first; a phone with no passcode warns and goes ahead.
+    gate: OwnerGate,
     asking: Asking,
     sheet: Sheet,
     rename: Option<Rename>,
@@ -90,9 +111,41 @@ struct Document {
     dismissed: bool,
     /// The About section's picker (#1173).
     links: Links,
+    /// THE "Linked to" SECTION'S PICKER (#1185): what the document can link to, any item but a
+    /// Locker one (About, above, is people only and says who the document is about).
+    every: Links,
+    /// What the document is linked to, either end (`links::read_linked`). `None` until read, and
+    /// while a read did not land.
+    linked: Option<Vec<wire::LinkedItem>>,
+    /// The read of `linked` was refused or failed: the status line says so, no empty section.
+    linked_unread: bool,
+    /// The photos and files on the document (#1185): the kit's section, read with the page.
+    attachments: Attachments,
+    /// Where the followed folder's name for the document differs from the member's (#1183), read
+    /// with the page.
+    differences: follow::Phone,
+    /// The entry to the document's earlier versions (#1185), read with the page.
+    earlier: earlier::Foot,
 }
 
 impl Document {
+    /// The page as the wire carries it. A document that is gone says so in its own words and
+    /// offers no Retry (reading it again cannot bring it back).
+    fn wired(&self, page: &Page<Answered>, locale: Locale) -> wire::PageState {
+        let mut wired = page.wire(
+            locale,
+            |denial| denied(locale, denial),
+            wire::EmptyState::default,
+        );
+        if self.gone && matches!(wired.state, Some(wire::page_state::State::Failed(_))) {
+            wired.state = Some(wire::page_state::State::Failed(read::gone(
+                words::gone(locale),
+                String::new(),
+            )));
+        }
+        wired
+    }
+
     fn reload(&mut self, ctx: &Ctx) {
         let document = read::read(
             ctx,
@@ -119,8 +172,18 @@ impl Document {
             },
         );
         let about = links::read_people(ctx, &self.document_id);
-        self.phase = match document {
-            Reading::Data(document) => Phase::Ready(Answered {
+        self.differences = match &document {
+            Reading::Data(_) => follow::read(ctx, &self.document_id),
+            _ => follow::Phone::default(),
+        };
+        self.earlier = match &document {
+            Reading::Data(found) if found.document.is_some() => {
+                earlier::foot(ctx, super::EARLIER, &self.document_id, "")
+            }
+            _ => earlier::Foot::default(),
+        };
+        let reading = match document {
+            Reading::Data(document) => Reading::Data(Answered {
                 document,
                 drive: match drive {
                     Reading::Data(drive) => Some(drive),
@@ -131,14 +194,90 @@ impl Document {
                     _ => None,
                 },
             }),
-            Reading::Denied(denial) => Phase::Denied(denial),
-            Reading::Failed => Phase::Failed,
+            Reading::Denied(denial) => Reading::Denied(denial),
+            Reading::Failed => Reading::Failed,
         };
+        // A refresh never blanks the page shown: a failed one keeps it under a note.
+        let held = std::mem::replace(&mut self.page, Page::loading());
+        self.page = held.after(reading, ctx.locale(), |answered| {
+            answered.document.document.is_none()
+        });
+        // A read that succeeded and found no document: it is gone, which is a failure, not an
+        // empty place.
+        self.gone = matches!(self.page, Page::Empty);
+        if self.gone {
+            self.page = Page::Failed;
+        }
+        self.read_linked(ctx);
+        if self.row().is_some_and(|row| !row.trashed) {
+            self.attachments.reload(ctx);
+        }
+    }
+
+    /// What the document is linked to, in both directions. A refused or failed read is said on
+    /// the status line and never drawn as an empty section; a document that is gone or in the
+    /// trash has none (the About section is the same).
+    fn read_linked(&mut self, ctx: &Ctx) {
+        if self.row().is_none_or(|row| row.trashed) {
+            self.linked = None;
+            self.linked_unread = false;
+            self.every.close();
+            return;
+        }
+        match links::read_linked(ctx, &self.document_id) {
+            Reading::Data(items) => {
+                self.linked = Some(items);
+                self.linked_unread = false;
+            }
+            Reading::Denied(_) | Reading::Failed => {
+                self.linked = None;
+                self.linked_unread = true;
+                self.every.close();
+            }
+        }
+        self.every.reload(ctx);
+    }
+
+    fn linked_ids(&self) -> Vec<String> {
+        self.linked.as_deref().map(links::ids).unwrap_or_default()
+    }
+
+    /// One tap in the "Linked to" section or its picker, written through the kit's door (Undo
+    /// when the core can take it back). `add-about` and `remove-about` carry rel `links` for
+    /// every kind but a person said to be what the document is about.
+    fn link_event(&mut self, event: &wire::LinkEvent, ctx: &Ctx) {
+        let linked = self.linked_ids();
+        let id = self.document_id.clone();
+        match self.every.update(event, &linked, ctx) {
+            Outcome::Add { id: to, .. } => {
+                self.write(
+                    ctx,
+                    act::docs::AddAbout {
+                        from: id,
+                        rel: act::docs::AddAboutRel::Links,
+                        to,
+                    },
+                    words::link_added,
+                );
+            }
+            Outcome::Remove { id: to } => {
+                self.write(
+                    ctx,
+                    act::docs::RemoveAbout {
+                        from: id,
+                        rel: act::docs::RemoveAboutRel::Links,
+                        to,
+                    },
+                    words::link_removed,
+                );
+            }
+            Outcome::Moved => {}
+        }
     }
 
     /// The ids of the people the document is about now.
     fn about_ids(&self) -> Vec<String> {
-        self.phase
+        self.page
             .data()
             .and_then(|answered| answered.about.as_ref())
             .map(|people| people.iter().map(|p| p.party_id.clone()).collect())
@@ -155,8 +294,10 @@ impl Document {
                     ctx,
                     act::docs::AddAbout {
                         from: id,
+                        rel: act::docs::AddAboutRel::About,
                         to: person,
                     },
+                    words::about_added,
                 );
             }
             Outcome::Remove { id: person } => {
@@ -164,8 +305,10 @@ impl Document {
                     ctx,
                     act::docs::RemoveAbout {
                         from: id,
+                        rel: act::docs::RemoveAboutRel::About,
                         to: person,
                     },
+                    words::about_removed,
                 );
             }
             Outcome::Moved => {}
@@ -173,36 +316,85 @@ impl Document {
     }
 
     fn row(&self) -> Option<&wire::DocsDocumentRow> {
-        self.phase.data()?.document.document.as_ref()
+        self.page.data()?.document.document.as_ref()
     }
 
-    fn write(&mut self, ctx: &Ctx, request: impl Into<wire::ActRequest>) -> bool {
+    /// A write the status line says, with Undo when the core can take it back.
+    fn write(
+        &mut self,
+        ctx: &Ctx,
+        request: impl Into<wire::ActRequest>,
+        said: impl FnOnce(Locale) -> String,
+    ) -> bool {
         let request: wire::ActRequest = request.into();
-        self.status = None;
         let key = kit_act::key(&[&request.action, &self.document_id], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        if !settled.committed {
-            self.status = Some(refusal(settled.refusal));
-        }
+        let settled = self.undo.act(ctx, request, &key, said);
         self.reload(ctx);
         settled.committed
     }
 
-    /// Hand the document's file to the platform's share sheet: the bytes are a
-    /// file in the store, so nothing is read here. A document whose bytes are
-    /// not on this phone says so on the status line.
-    fn share(&mut self, ctx: &Ctx, row: &wire::DocsDocumentRow) -> Vec<wire::Effect> {
+    /// The action under the "folder says" line: take the folder's name, then read again so the
+    /// line goes. A refusal is the status line, over the page as it still is.
+    fn take_folder(&mut self, ctx: &Ctx, taken: &wire::PhoneSaysTaken) {
+        if self.row().is_none() {
+            return;
+        }
+        let Some(settled) = follow::take(ctx, &self.document_id, taken) else {
+            return;
+        };
+        // Taking the folder's value has no inverse: it says nothing and offers nothing.
+        self.undo.clear();
+        if !settled.committed {
+            self.undo.refuse(settled.refusal);
+        }
+        self.reload(ctx);
+    }
+
+    /// Share the document's file: the owner check first, since the bytes leave
+    /// the phone in the clear. A document whose bytes are not on this phone
+    /// says so on the status line and asks nothing.
+    fn share(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         let locale = ctx.locale();
-        let path = self
-            .phase
-            .data()
-            .map(|answered| answered.document.bytes_path.clone())
-            .unwrap_or_default();
-        if path.is_empty() {
-            self.status = Some(refusal(words::share_missing(locale)));
+        if self.shared_path().is_empty() {
+            self.undo.refuse(words::share_missing(locale));
             return Vec::new();
         }
-        self.status = None;
+        self.undo.clear();
+        self.gate.begin(locale, Leaving::Share)
+    }
+
+    fn shared_path(&self) -> String {
+        self.page
+            .data()
+            .map(|answered| answered.document.bytes_path.clone())
+            .unwrap_or_default()
+    }
+
+    /// The owner check's answer: hand the document's file to the platform's
+    /// share sheet (the bytes are a file in the store, so nothing is read here).
+    fn checked(&mut self, locale: Locale, checked: &wire::OwnerChecked) -> Vec<wire::Effect> {
+        match self.gate.answer(locale, NoPasscode::Warn, checked) {
+            Some(Owner::Passed) => self.send(locale),
+            Some(Owner::PassedUnprotected(warning)) => {
+                let effects = self.send(locale);
+                if !effects.is_empty() {
+                    self.undo.say(warning);
+                }
+                effects
+            }
+            Some(Owner::Refused(sentence)) => {
+                self.undo.refuse(sentence);
+                Vec::new()
+            }
+            Some(Owner::Cancelled) | None => Vec::new(),
+        }
+    }
+
+    fn send(&mut self, locale: Locale) -> Vec<wire::Effect> {
+        let path = self.shared_path();
+        let Some(row) = self.row().cloned().filter(|_| !path.is_empty()) else {
+            return Vec::new();
+        };
         vec![wire::Effect {
             kind: Some(wire::effect::Kind::ShareFile(wire::ShareFile {
                 path,
@@ -228,15 +420,25 @@ impl Document {
         }
         let id = row.document_id.clone();
         match key {
-            KEY_SHARE => return self.share(ctx, &row),
+            KEY_SHARE => return self.share(ctx),
             KEY_STAR => {
-                self.write(ctx, act::docs::Star { document_id: id });
+                self.write(
+                    ctx,
+                    act::docs::Star { document_id: id },
+                    words::starred_said,
+                );
             }
             KEY_UNSTAR => {
-                self.write(ctx, act::docs::Unstar { document_id: id });
+                self.write(
+                    ctx,
+                    act::docs::Unstar { document_id: id },
+                    words::unstarred_said,
+                );
             }
             KEY_RESTORE => {
-                self.write(ctx, act::docs::Restore { document_id: id });
+                self.write(ctx, act::docs::Restore { document_id: id }, |locale| {
+                    trash::restored(locale, &row.title)
+                });
             }
             KEY_RENAME => {
                 if self.rename.is_some() {
@@ -245,7 +447,7 @@ impl Document {
                         return Vec::new();
                     }
                 }
-                self.rename = Some(Rename::open(&id, &row.title));
+                self.rename = Some(Rename::open(ctx, &id, &row.title));
             }
             KEY_MOVE => self.sheet = Sheet::Move,
             KEY_LABELS => self.sheet = Sheet::Labels(String::new()),
@@ -275,6 +477,7 @@ impl Document {
                 document_id: row.document_id,
                 folder_id: Some(folder_id.to_owned()).filter(|id| !id.is_empty()),
             },
+            words::moved_said,
         );
     }
 
@@ -296,6 +499,7 @@ impl Document {
                 label,
                 color: None,
             },
+            words::label_added_said,
         );
     }
 
@@ -318,6 +522,7 @@ impl Document {
                 document_id: row.document_id,
                 label,
             },
+            words::label_removed_said,
         );
     }
 
@@ -326,11 +531,20 @@ impl Document {
         let id = self.document_id.clone();
         match asking {
             Asking::Trash => {
-                self.write(ctx, act::docs::Trash { document_id: id });
+                let title = self.row().map(|row| row.title.clone()).unwrap_or_default();
+                self.write(ctx, act::docs::Trash { document_id: id }, |locale| {
+                    trash::moved_to_trash(locale, &title)
+                });
             }
             Asking::Purge => {
                 // DELETED FOREVER: nothing is left to show, so the page leaves.
-                if self.write(ctx, act::docs::Purge { document_id: id }) {
+                let key = kit_act::key(&["purge", &id], kit_act::fresh());
+                let purged = self
+                    .undo
+                    .act_quietly(ctx, act::docs::Purge { document_id: id }, &key)
+                    .committed;
+                self.reload(ctx);
+                if purged {
                     self.dismissed = true;
                     self.rename = None;
                 }
@@ -386,6 +600,8 @@ impl Document {
             Some(D::Confirmed(_)) => self.confirmed(ctx),
             Some(D::Dismissed(_)) => self.asking = Asking::None,
             Some(D::About(link)) => self.about_event(&link, ctx),
+            Some(D::Link(link)) => self.link_event(&link, ctx),
+            Some(D::Attachment(attachment)) => return self.attachments.event(ctx, attachment),
             None => {}
         }
         Vec::new()
@@ -401,8 +617,8 @@ impl Document {
             }),
             // The trash shelf's own sentences (the kit's), for one document.
             Asking::Purge => Some(wire::Confirm {
-                title: shared::trash_purge_title(locale),
-                body: shared::trash_purge_body(locale),
+                title: crate::kit::trash::purge_title(locale, shared::trash_noun_document),
+                body: crate::kit::trash::purge_body(locale, None),
                 confirm_label: shared::trash_purge(locale),
                 destructive: true,
             }),
@@ -495,6 +711,9 @@ impl Screen for Document {
         match event.kind {
             Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => {
                 self.reload(ctx);
+                // THE INGEST OPENED THIS DOCUMENT: its line ("<title> added · Undo") is drawn
+                // here, and Undo moves the document to trash.
+                self.undo.take_handed(ctx);
             }
             Some(E::TimerFired(fired)) => {
                 if let Some(rename) = self.rename.as_mut() {
@@ -502,12 +721,50 @@ impl Screen for Document {
                 }
             }
             // CLOSE = DONE: whatever is typed is saved.
+            Some(E::StatusActed(_)) => {
+                // A rename the vault refused as stale: Reload keeps the title typed and reads it again.
+                if self.rename.as_ref().is_some_and(Rename::conflicted) {
+                    if self
+                        .rename
+                        .as_mut()
+                        .is_some_and(|rename| !rename.reload(ctx))
+                    {
+                        self.rename = None;
+                    }
+                    self.reload(ctx);
+                } else if self.undo.acted(ctx) {
+                    self.reload(ctx);
+                }
+            }
             Some(E::Left(_)) => {
+                self.undo.clear();
                 if let Some(rename) = self.rename.as_mut() {
                     let _ = rename.close(ctx);
                 }
+                return self.gate.cancel();
+            }
+            Some(E::EffectResult(result)) => {
+                match &result.outcome {
+                    Some(wire::effect_result::Outcome::OwnerChecked(checked)) => {
+                        return self.checked(ctx.locale(), checked);
+                    }
+                    // The prompt itself errored: the same as not recognised.
+                    Some(wire::effect_result::Outcome::Failed(_)) if self.gate.asking() => {
+                        let failed = wire::OwnerChecked {
+                            outcome: wire::owner_checked::Outcome::Failed as i32,
+                            ..Default::default()
+                        };
+                        return self.checked(ctx.locale(), &failed);
+                    }
+                    _ => {}
+                }
+                // The shell's answer to a pick: the attachments' (an add under way).
+                if let Some(outcome) = &result.outcome {
+                    return self.attachments.result(ctx, outcome).unwrap_or_default();
+                }
             }
             Some(E::DocsDocument(event)) => return self.event(event, ctx),
+            Some(E::PhoneSaysTaken(taken)) => self.take_folder(ctx, &taken),
             _ => {}
         }
         Vec::new()
@@ -516,13 +773,18 @@ impl Screen for Document {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::docs_document_state::Content;
         let locale = ctx.locale();
-        let (content, sheet) = match &self.phase {
-            Phase::Loading => (Content::Loading(wire::Loading { first_load: true }), None),
-            Phase::Failed => (Content::Failure(read::failure(locale)), None),
-            Phase::Denied(denial) => (Content::Denied(denied(locale, denial)), None),
-            Phase::Ready(answered) => {
+        // What the phone says beside the data (the folder's name for the document) that was not
+        // checked is a note over it; a failed refresh already is one, and the stronger wins.
+        let page =
+            self.page
+                .clone()
+                .noted(Note::unchecked(&self.differences, locale, Source::Folder));
+        let (content, sheet) = match page.data() {
+            None => (None, None),
+            Some(answered) => {
                 let mut data = fold::document(
                     locale,
+                    ctx.units(),
                     ctx.hour_cycle(),
                     &answered.document,
                     answered.drive.as_ref(),
@@ -538,6 +800,47 @@ impl Screen for Document {
                         String::new(),
                     ));
                 }
+                // THE ATTACHMENTS (#1185): the photos and files on a live document, after About.
+                if data.row.as_ref().is_some_and(|row| !row.trashed) {
+                    data.attachments = Some(self.attachments.view(locale, ctx.units()));
+                }
+                // THE "Linked to" SECTION (#1185): everything the document is linked to, on a live
+                // document, after About.
+                data.links = self.linked.as_ref().map(|linked| {
+                    self.every.section(
+                        locale,
+                        link_words::section_linked(locale),
+                        links::rows(locale, linked),
+                        words::links_empty(locale),
+                    )
+                });
+                // THE FOLDER'S NAME, under the title, where the member renamed it (#1183). `blob`
+                // and `media_type` are the file's own bytes and kind, which the page never offers
+                // to edit, so only the title has a line.
+                data.title_phone_says = follow::of(&self.differences, "title")
+                    .and_then(|title| follow::text(&title.stated))
+                    .map(|name| {
+                        follow::says(
+                            locale,
+                            Source::Folder,
+                            &name,
+                            &words::says_noun_name(locale),
+                            "title",
+                            None,
+                        )
+                    });
+                // THE FOOT'S "Earlier versions" ROW (#1185): the kit's entry, its route naming the
+                // page the member comes from by the title drawn.
+                let drawn = data.row.as_ref().map(|row| row.title.clone());
+                data.origin = self.earlier.origin.clone();
+                data.earlier = self.earlier.entry.as_ref().map(|entry| wire::EarlierEntry {
+                    route: Some(earlier::route(
+                        super::EARLIER,
+                        &self.document_id,
+                        drawn.as_deref().unwrap_or_default(),
+                    )),
+                    ..entry.clone()
+                });
                 // The title being typed is the title drawn.
                 if let (Some(rename), Some(row)) = (self.rename.as_ref(), data.row.as_mut())
                     && rename.document_id() == row.document_id
@@ -545,7 +848,7 @@ impl Screen for Document {
                     row.title = rename.title().to_owned();
                 }
                 (
-                    Content::Data(Box::new(data)),
+                    Some(Content::Data(Box::new(data))),
                     Some(self.sheet_view(locale, answered)),
                 )
             }
@@ -555,17 +858,124 @@ impl Screen for Document {
                 wire::DocsDocumentState {
                     document_id: self.document_id.clone(),
                     title_hint: self.title_hint.clone(),
-                    content: Some(content),
-                    status: self.status.clone(),
+                    content,
+                    page: Some(self.wired(&page, locale)),
+                    status: self
+                        .undo
+                        .status()
+                        .or_else(|| self.earlier.status(locale))
+                        .or_else(|| {
+                            self.linked_unread.then(|| wire::StatusLine {
+                                sentence: words::links_unread(locale),
+                                action_label: String::new(),
+                                refused: false,
+                            })
+                        }),
                     confirm: self.confirm(locale),
                     rename: self.rename.as_ref().map(|rename| rename.view(locale)),
                     sheet,
                     chrome: Some(self.chrome(locale)),
                     dismissed: self.dismissed,
                     about_picker: Some(self.links.picker(locale, &self.about_ids())),
+                    link_picker: (self.linked.is_some() && self.every.is_open())
+                        .then(|| self.every.picker(locale, &self.linked_ids())),
                 },
             )),
             ..wire::ViewState::default()
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wire::owner_checked::Outcome as O;
+
+    fn holding() -> Document {
+        Document {
+            document_id: "d1".to_owned(),
+            title_hint: String::new(),
+            parent: String::new(),
+            gone: false,
+            page: Page::Ready {
+                data: Answered {
+                    document: wire::DocsDocument {
+                        document: Some(wire::DocsDocumentRow {
+                            title: "Lease.pdf".to_owned(),
+                            ..Default::default()
+                        }),
+                        bytes_path: "/store/lease".to_owned(),
+                        ..Default::default()
+                    },
+                    drive: None,
+                    about: None,
+                },
+                note: None,
+            },
+            undo: Undo::default(),
+            gate: OwnerGate::default(),
+            asking: Asking::None,
+            sheet: Sheet::None,
+            rename: None,
+            dismissed: false,
+            links: Links::new(&[Kind::Person]),
+            every: Links::new(&Kind::ALL).for_entity("d1"),
+            linked: None,
+            linked_unread: false,
+            attachments: Attachments::of("docs", "d1"),
+            differences: follow::Phone::default(),
+            earlier: earlier::Foot::default(),
+        }
+    }
+
+    fn asked(outcome: O) -> (Vec<wire::Effect>, Document) {
+        let mut doc = holding();
+        let up = doc.gate.begin(Locale::En, Leaving::Share);
+        assert!(matches!(
+            up[0].kind,
+            Some(wire::effect::Kind::OwnerCheck(ref c)) if c.ask
+        ));
+        let effects = doc.checked(
+            Locale::En,
+            &wire::OwnerChecked {
+                outcome: outcome as i32,
+                ..Default::default()
+            },
+        );
+        (effects, doc)
+    }
+
+    fn is_share(effects: &[wire::Effect]) -> bool {
+        matches!(
+            effects,
+            [wire::Effect {
+                kind: Some(wire::effect::Kind::ShareFile(_))
+            }]
+        )
+    }
+
+    #[test]
+    fn a_passed_check_shares_and_a_phone_with_no_passcode_shares_with_a_warning() {
+        let (effects, doc) = asked(O::Succeeded);
+        assert!(is_share(&effects) && doc.undo.status().is_none());
+        let (effects, doc) = asked(O::Unavailable);
+        assert!(is_share(&effects));
+        assert!(
+            doc.undo
+                .status()
+                .is_some_and(|s| !s.refused && !s.sentence.is_empty())
+        );
+    }
+
+    #[test]
+    fn a_dismissed_or_failed_check_shares_nothing() {
+        let (effects, doc) = asked(O::Cancelled);
+        assert!(effects.is_empty() && doc.undo.status().is_none());
+        let (effects, doc) = asked(O::Failed);
+        assert!(effects.is_empty() && doc.undo.status().is_some_and(|s| s.refused));
+    }
+}
+
+#[cfg(test)]
+#[path = "document_link_tests.rs"]
+mod link_tests;

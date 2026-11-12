@@ -39,8 +39,11 @@ import centraid.core.v1.HealthMetricEvent
 import centraid.core.v1.HealthMetricState
 import centraid.core.v1.HealthWorkoutEvent
 import centraid.core.v1.HealthWorkoutState
+import centraid.core.v1.Route
+import dev.centraid.android.kit.EarlierEntryCard
+import centraid.core.v1.PhoneSaysTaken
 import dev.centraid.android.kit.CentraidIcon
-import dev.centraid.android.kit.EmptyStateView
+import dev.centraid.android.kit.ChoiceStack
 import dev.centraid.android.kit.InkButton
 import dev.centraid.android.kit.KitCardGrid
 import dev.centraid.android.kit.KitGeometry
@@ -48,17 +51,19 @@ import dev.centraid.android.kit.KitSegmented
 import dev.centraid.android.kit.KitText
 import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.KitWords
+import dev.centraid.android.kit.OutlineButton
+import dev.centraid.android.kit.PhoneSaysLine
 import dev.centraid.android.kit.LocalAppAccentId
 import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.StateColor
+import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.kitBorderedCard
 import dev.centraid.android.kit.kitCard
 import dev.centraid.android.kit.kitTextStyle
 import dev.centraid.android.theme.LocalCentraidTokens
-import dev.centraid.android.kit.screenContentOf
 
 // ---------------------------------------------------------------------------
 // health.metric: one metric over a week, a month or a year (#1129, #1135)
@@ -79,14 +84,12 @@ internal fun HealthMetricScreen(state: HealthMetricState, onEvent: (HealthMetric
                     )
                 }
                 ReadStateView(
-                    content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
+                    page = state.page!!,
                     onRetry = { onEvent(HealthMetricEvent(refreshed = HealthMetricEvent.Refreshed())) },
                     retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
-                ) { data ->
-                    val empty = data.empty
-                    if (empty != null) {
-                        EmptyStateView(empty, onAction = null)
-                    } else {
+                    modifier = Modifier.weight(1f),
+                ) {
+                    state.data_?.let { data ->
                         LazyColumn(Modifier.testTag("health-metric-page")) {
                             item(key = "head") {
                                 Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)) {
@@ -140,19 +143,32 @@ internal fun HealthMetricScreen(state: HealthMetricState, onEvent: (HealthMetric
 // ---------------------------------------------------------------------------
 
 @Composable
-internal fun HealthWorkoutScreen(state: HealthWorkoutState, onEvent: (HealthWorkoutEvent) -> Unit, onBack: () -> Unit) {
+internal fun HealthWorkoutScreen(
+    state: HealthWorkoutState,
+    onEvent: (HealthWorkoutEvent) -> Unit,
+    onOpen: (Route) -> Unit,
+    onBack: () -> Unit,
+    onPhoneSays: (PhoneSaysTaken) -> Unit,
+) {
     val chrome = state.chrome
     CompositionLocalProvider(LocalAppAccentId provides "health") {
-        PushedPage(title = chrome?.title.orEmpty(), parentTitle = chrome?.back_label.orEmpty(), onBack = onBack) {
+        PushedPage(
+            title = chrome?.title.orEmpty(),
+            parentTitle = chrome?.back_label.orEmpty(),
+            onBack = onBack,
+            statusLine = {
+                // "{title} moved to trash" with Undo; the gone page shows under it (#1185).
+                StatusLine(state.status, actTag = "health-status-action") {
+                    onEvent(HealthWorkoutEvent(status_acted = HealthWorkoutEvent.StatusActed()))
+                }
+            },
+        ) {
             ReadStateView(
-                content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
+                page = state.page!!,
                 onRetry = { onEvent(HealthWorkoutEvent(refreshed = HealthWorkoutEvent.Refreshed())) },
                 retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
-            ) { data ->
-                val gone = data.gone
-                if (gone != null) {
-                    EmptyStateView(gone, onAction = null)
-                } else {
+            ) {
+                state.data_?.let { data ->
                     LazyColumn(Modifier.testTag("health-workout-page")) {
                         item(key = "head") {
                             Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER + 4.dp, vertical = 4.dp)) {
@@ -187,10 +203,59 @@ internal fun HealthWorkoutScreen(state: HealthWorkoutState, onEvent: (HealthWork
                                 gap = 8.dp,
                             ) { figure -> HealthFigureCard(figure) }
                         }
+                        if (data.figures_phone_says.isNotEmpty()) {
+                            item(key = "figures-phone-says") {
+                                Column(Modifier.padding(horizontal = KitGeometry.GUTTER)) {
+                                    data.figures_phone_says.forEach { PhoneSaysLine(it, onPhoneSays) }
+                                }
+                            }
+                        }
                         item(key = "foot") { HealthNote(data.foot) }
+                        // ATTACHMENTS (#1185): the kit's section, after the foot; Rust makes every word and row.
+                        data.attachments?.let { section ->
+                            item(key = "attachments") {
+                                dev.centraid.android.screens.agenda.AgendaAttachmentsView(
+                                    section = section,
+                                    prefix = "health-workout",
+                                    onEvent = { onEvent(HealthWorkoutEvent(attachment = it)) },
+                                    onOpen = onOpen,
+                                )
+                            }
+                        }
+                        // LINKED TO (#1185): the kit's section, after the attachments; Rust makes every word and row.
+                        data.links?.let { section ->
+                            item(key = "links") {
+                                dev.centraid.android.kit.LinkSectionView(section, { link -> onEvent(HealthWorkoutEvent(link = link)) }, onOpen)
+                            }
+                        }
+                        // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above Move to trash.
+                        state.earlier?.let { entry -> item(key = "earlier") { EarlierEntryCard(entry, onOpen) } }
+                        item(key = "origin") { dev.centraid.android.kit.OriginLineView(state.origin) }
+                        // MOVE TO TRASH, outlined and destructive under the figures (#1185): it asks
+                        // nothing, the status line carries Undo. Empty while the workout is gone.
+                        if (data.trash_label.isNotEmpty()) {
+                            item(key = "trash") {
+                                ChoiceStack(Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 16.dp)) {
+                                    if (data.share_label.isNotEmpty()) {
+                                        OutlineButton(
+                                            data.share_label,
+                                            testTag = "health-action-share",
+                                        ) { onEvent(HealthWorkoutEvent(share_requested = HealthWorkoutEvent.ShareRequested())) }
+                                    }
+                                    OutlineButton(
+                                        data.trash_label,
+                                        testTag = "health-action-trash",
+                                        ink = "net",
+                                    ) { onEvent(HealthWorkoutEvent(trash = HealthWorkoutEvent.TrashTapped())) }
+                                }
+                            }
+                        }
                     }
                 }
             }
+        }
+        state.link_picker?.takeIf { it.open_ }?.let { picker ->
+            dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(HealthWorkoutEvent(link = link)) }
         }
     }
 }

@@ -60,12 +60,9 @@
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <!-- Calendar, for Agenda's calendar follow: asked for when the member taps
          "Import calendar" on Agenda's day one, never at launch
-         (`screens/agenda/CalendarImporter.kt`). Read access brings the phone's
-         events in; write access (the same permission group, so one prompt) lets
-         the core send the member's own changes back to the calendars they
-         follow (`screens/agenda/CalendarWriter.kt`). -->
+         (`screens/agenda/CalendarImporter.kt`). Read only: the phone's events are
+         copied into the member's vault and nothing is written back. -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
-    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
     <!-- Health, READ ONLY (#1129, R-1129-7): Health Connect's daily totals
          and workouts, asked for when the member taps Connect on Health's
          Connect page and for exactly the types chosen there, never at launch
@@ -73,7 +70,9 @@
          declared: nothing is written back (`HealthConnectReadOnlySpec`). The
          last three are a workout's figures; READ_HEALTH_DATA_HISTORY lets the
          first read reach the year it keeps, not only the 30 days before the
-         grant. -->
+         grant. READ_HEALTH_DATA_IN_BACKGROUND (D16) lets the background
+         window read Health while Centraid is closed; it is asked in the same
+         sheet, at the Connect tap and nowhere else. -->
     <uses-permission android:name="android.permission.health.READ_STEPS" />
     <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
     <uses-permission android:name="android.permission.health.READ_EXERCISE" />
@@ -84,6 +83,7 @@
     <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
     <uses-permission android:name="android.permission.health.READ_ELEVATION_GAINED" />
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- FINDING A GATEWAY THAT MOVED (#1080 Q-1080-D3, #1152; `session/NsdBrowse.kt`).
@@ -149,8 +149,8 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- "ADD A REMINDER" AND A WIDGET'S TAPS (#1173): the launcher's long-press shortcut
-                 sends `dev.centraid.action.ADD_REMINDER` and a widget's rows, body and button send
+            <!-- "ADD A REMINDER" AND A WIDGET'S TAPS (#1173): the launcher's long-press shortcuts
+                 send `dev.centraid.action.ADD_REMINDER` ("What's next" sends AGENDA_OPEN with no key) and a widget's rows, body and button send
                  `dev.centraid.action.AGENDA_OPEN` with one opaque key, both aimed at this activity,
                  which hands them to the core (`glance/AgendaIntents.kt`). There is no filter for
                  them, but the activity is exported, so ANY app may send either: nothing here is
@@ -191,6 +191,22 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/glance_reminders_info" />
+        </receiver>
+        <!-- HEALTH'S HOME-SCREEN WIDGET (#1185): the same kind of provider, drawing
+             `filesDir/health-glance.json` (Rust's `health.glance` service) and never opening the
+             vault. `home_screen` only, never `keyguard`; a tap sends
+             `dev.centraid.action.HEALTH_OPEN` with one opaque key to this app's activity
+             (`glance/HealthIntents.kt`). -->
+        <receiver
+            android:name="dev.centraid.android.glance.HealthWidget"
+            android:exported="true"
+            android:label="@string/glance_widget_health_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/glance_health_info" />
         </receiver>
 
         <!-- "WHAT HEALTH MAY READ" FOR HEALTH CONNECT (#1129). Health Connect

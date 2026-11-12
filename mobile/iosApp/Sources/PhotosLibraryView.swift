@@ -83,8 +83,7 @@ struct PhotosLibraryBody: View {
     }
 
     private var data: Centraid_Core_V1_PhotosLibraryData? {
-        if case let .data(data)? = library.content { return data }
-        return nil
+        library.content != nil ? library.data : nil
     }
 
     var body: some View {
@@ -143,49 +142,47 @@ struct PhotosLibraryBody: View {
 
     @ViewBuilder
     private func content(tiles: [Centraid_Core_V1_PhotoTile]) -> some View {
-        switch library.content {
-        case let .loading(loading)?:
+        // FLAT: the rows are the lazy stack's own children, so they stay lazy and the pinned
+        // headers pin; the note, when there is one, is just another row at the top.
+        PageReadStateView(
+            page: library.page,
+            onRetry: { send(PhotosHomeEvents.make { $0.refreshed = .init() }) },
+            flat: true,
             // THE GRID IS THE LOADING STATE (v0 §14): skeleton tiles at the rung's
             // real geometry, so nothing reflows when the bytes land. Never a spinner.
-            PhotoGridSkeleton(rows: loading.skeleton, label: state.chrome.title)
-        case let .failure(failure)?:
-            ScreenFailureView(sentence: failure.sentence, remedy: failure.remedy)
-                .padding(.horizontal, CentraidGeometry.pageMargin)
-        case let .data(data)?:
-            if tiles.isEmpty {
-                // THE FILTER EMPTIED THE GRID, NOT THE LIBRARY — its own sentence,
-                // never the empty-library copy.
-                if data.hasEmpty {
-                    EmptyStateView(data.empty)
-                        .padding(.horizontal, CentraidGeometry.pageMargin)
+            skeleton: { PhotoGridSkeleton(rows: library.skeleton, label: state.chrome.title) },
+            data: {
+                if let data {
+                    // AN EMPTY LIBRARY, or a filter that emptied the grid, is the page's own
+                    // Empty state (its sentence, never the other's): the data is only ever
+                    // photographs.
+                    if library.grain == .years || library.grain == .months {
+                        LibraryGrainCards(
+                            items: data.grainItems,
+                            years: library.grain == .years,
+                            complete: data.complete,
+                            undatedNote: data.undatedNote,
+                            open: { day in send(PhotosHomeEvents.make { $0.periodOpened = day }) }
+                        )
+                        LibraryMoreSentinel(data: data, count: tiles.count, send: send)
+                    } else {
+                        LibraryTimelineRows(
+                            tiles: tiles,
+                            rows: data.rows,
+                            rung: Int(library.rung),
+                            selecting: selection.selecting,
+                            selected: Set(selection.selectedIds),
+                            send: send,
+                            // A TILE OPENS THE PHOTOGRAPH, and the loaded library's own
+                            // order rides along as the neighbours — so a swipe in the
+                            // lightbox costs no read.
+                            onOpen: { photoID in open(PhotosHomeEvents.lightbox(data.open, photoID)) }
+                        )
+                        LibraryMoreSentinel(data: data, count: tiles.count, send: send)
+                    }
                 }
-            } else if library.grain == .years || library.grain == .months {
-                LibraryGrainCards(
-                    items: data.grainItems,
-                    years: library.grain == .years,
-                    complete: data.complete,
-                    undatedNote: data.undatedNote,
-                    open: { day in send(PhotosHomeEvents.make { $0.periodOpened = day }) }
-                )
-                LibraryMoreSentinel(data: data, count: tiles.count, send: send)
-            } else {
-                LibraryTimelineRows(
-                    tiles: tiles,
-                    rows: data.rows,
-                    rung: Int(library.rung),
-                    selecting: selection.selecting,
-                    selected: Set(selection.selectedIds),
-                    send: send,
-                    // A TILE OPENS THE PHOTOGRAPH, and the loaded library's own
-                    // order rides along as the neighbours — so a swipe in the
-                    // lightbox costs no read.
-                    onOpen: { photoID in open(PhotosHomeEvents.lightbox(data.open, photoID)) }
-                )
-                LibraryMoreSentinel(data: data, count: tiles.count, send: send)
             }
-        case nil:
-            EmptyView()
-        }
+        )
     }
 
     /// The day at the top of the list: a row's, or a grain card's first period.

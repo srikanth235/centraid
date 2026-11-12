@@ -322,6 +322,7 @@ fn the_trash_shelf_and_the_search_answer_in_the_roster_s_shape() {
         .map(|id| SearchHit {
             party_id: id.clone(),
             snippet: Some(format!("about {id}")),
+            in_earlier_version: false,
         })
         .collect();
     let (found, _) = w.read(|door| load_search(door, &hits).expect("reads"));
@@ -331,6 +332,68 @@ fn the_trash_shelf_and_the_search_answer_in_the_roster_s_shape() {
         found.people[0].snippet.as_deref(),
         Some(format!("about {ada}").as_str())
     );
+}
+
+#[test]
+fn a_list_in_the_trash_is_a_row_of_the_shelf_and_the_trash_empties_people_and_lists_together() {
+    let w = World::new();
+    let list = w.ok(
+        "container.create",
+        json!({ "kind": "list", "title": "Family" }),
+    )["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let ada = w.person("Ada", json!({ "list_id": list }));
+    let bob = w.person("Bob", json!({}));
+    w.ok("entity.trash", json!({ "id": list }));
+    w.clock.advance_days(1);
+    w.ok("entity.trash", json!({ "id": bob }));
+    let (shelf, denial) = w.read(|door| load_trash(door).expect("reads"));
+    assert!(denial.is_none() && !shelf.truncated);
+    // Most recently trashed first, whichever kind; only the list says it is one.
+    assert_eq!(
+        shelf
+            .people
+            .iter()
+            .map(|row| (row.name.as_str(), row.list))
+            .collect::<Vec<_>>(),
+        [("Bob", false), ("Family", true)]
+    );
+    // The people in a trashed list are not touched; the list is not on the live roster.
+    let (roster, _) = w.read(|door| load_people(door, PeopleInput::default()).expect("reads"));
+    assert_eq!(roster.lists.len(), 0);
+    assert_eq!(
+        roster
+            .people
+            .iter()
+            .map(|p| p.party_id.as_str())
+            .collect::<Vec<_>>(),
+        [ada.as_str()]
+    );
+    // A restore brings it back, with Ada in it again.
+    w.ok("entity.restore", json!({ "id": list }));
+    let (roster, _) = w.read(|door| load_people(door, PeopleInput::default()).expect("reads"));
+    assert_eq!(roster.lists.len(), 1);
+    assert_eq!(roster.people[0].list_id.as_deref(), Some(list.as_str()));
+    // `with_kind` empties the lists of the trash beside the people.
+    w.ok("entity.trash", json!({ "id": list }));
+    w.ok(
+        "entity.empty_trash",
+        json!({ "kind": "person", "with_kind": "list" }),
+    );
+    let (shelf, _) = w.read(|door| load_trash(door).expect("reads"));
+    assert!(shelf.people.is_empty(), "{:?}", shelf.people);
+    // A second kind with no first is refused.
+    let refused = w
+        .vault
+        .execute(
+            &w.registry,
+            &Principal::owner("phone"),
+            &Command::new("entity.empty_trash", json!({ "with_kind": "list" })),
+        )
+        .expect("answers");
+    assert_eq!(refused.status, CommandStatus::Failed);
 }
 
 #[test]
@@ -357,8 +420,7 @@ fn an_empty_vault_answers_every_read_empty() {
 }
 
 #[test]
-fn in_your_vault_is_what_else_is_about_the_person_events_tasks_notes_in_that_order_capped_by_kind()
-{
+fn in_your_vault_is_what_else_is_about_the_person_events_and_tasks_in_that_order_capped_by_kind() {
     use centraid_apps_people::queries::VAULT_PER_KIND;
     let w = World::new();
     let ada = w.person("Ada", json!({}));
@@ -414,8 +476,9 @@ fn in_your_vault_is_what_else_is_about_the_person_events_tasks_notes_in_that_ord
     w.ok("entity.trash", json!({ "id": trashed }));
     event("Bob's party", json!({ "attendees": [bob] }));
 
-    // A task about them, a note that links to them; a note written about them is theirs in
-    // People (`notes`), not a link from another app.
+    // A task about them, a note that links to them (a link shows once, in the page's "Linked to",
+    // not here); a note written about them is theirs in People (`notes`), not a link from
+    // another app.
     w.clock.advance_days(1);
     let task = w.ok(
         "person.add_task",
@@ -453,9 +516,8 @@ fn in_your_vault_is_what_else_is_about_the_person_events_tasks_notes_in_that_ord
             ("event", "Ada's talk"),
             ("event", "Lunch with Ada"),
             ("task", "Send Ada the book"),
-            ("note", "Chess night"),
         ],
-        "events, tasks, notes; newest first within a kind"
+        "events and tasks, newest first within a kind; a hand-made link is not here"
     );
     let by_id = |id: &str| seen.items.iter().find(|item| item.id == id).unwrap();
     assert_eq!(
@@ -469,9 +531,10 @@ fn in_your_vault_is_what_else_is_about_the_person_events_tasks_notes_in_that_ord
         None,
         "a repeating event has no one start"
     );
-    assert_eq!(
-        (by_id(&task).starts.clone(), by_id(&note).starts.clone()),
-        (None, None)
+    assert_eq!(by_id(&task).starts, None);
+    assert!(
+        seen.items.iter().all(|item| item.id != note),
+        "a note that links to the person is in their Linked to, not in the vault"
     );
     // Bob has his own: only his party.
     assert_eq!(
@@ -504,14 +567,14 @@ fn in_your_vault_is_what_else_is_about_the_person_events_tasks_notes_in_that_ord
         "newest first, {VAULT_PER_KIND} of them"
     );
     assert_eq!(capped.more, 3, "6 tasks - 3 shown");
-    assert_eq!(capped.items.len(), 3 + 3 + 1, "3 events, 3 tasks, 1 note");
+    assert_eq!(capped.items.len(), 3 + 3, "3 events, 3 tasks");
     assert_eq!(
         capped
             .items
             .iter()
             .map(|i| i.kind.key())
             .collect::<Vec<_>>(),
-        ["event", "event", "event", "task", "task", "task", "note"],
+        ["event", "event", "event", "task", "task", "task"],
         "the kinds stay in order after the cap"
     );
 }

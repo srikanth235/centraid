@@ -1,26 +1,58 @@
-//! THE QUICK ADD'S KEYBOARD TOOLBAR (#1173): Date, Tag and Flag over the
-//! keyboard, on To-do's home and on a project page.
+//! THE QUICK ADD'S KEYBOARD TOOLBAR (#1173): Date, Tag, Flag, Link and Photo over
+//! the keyboard, on To-do's home and on a project page.
 //!
 //! Each tool STAGES what the next add carries; Return adds the task with it,
 //! clears the title and the staging, and leaves the field focused so the next
 //! one can be typed at once. Date and Tag open a tray (the due choices, a tag
-//! field); Flag is a switch with no tray. Link and Photo, which the board draws,
-//! have nothing to attach to yet, so they are not here.
+//! field); Flag is a switch with no tray. Link opens the kit's picker and Photo
+//! the phone's, and what they hand back waits as a removable row in the staged
+//! tray (`ListQuickStaged`): a link is made, and a photo filed, only when Return
+//! adds the task, so a member who never adds leaves nothing in the vault.
 
 use centraid_api_proto::core_v1 as wire;
+use wire::effect_result::Outcome as O;
 
+use crate::kit::attachments::refusal_of;
+use crate::kit::links::{Kind, Links, Outcome};
+use crate::kit::permission::Resource;
 use crate::reminders::detail::{self, NEXT_WEEK, NONE, TODAY, TOMORROW, WEEKEND};
-use crate::strings::{Locale, agenda_tasks as words, task};
+use crate::screen::Ctx;
+use crate::strings::{Locale, agenda_tasks as words, fill, links as link_words, task};
 
 /// `TodoQuickTool.key`s.
 pub const DATE: &str = "date";
 pub const TAG: &str = "tag";
 pub const FLAG: &str = "flag";
+pub const LINK: &str = "link";
+pub const PHOTO: &str = "photo";
+
+/// What a staged row's `key` starts with, for each kind of row.
+const LINK_ROW: &str = "link:";
+const PHOTO_ROW: &str = "photo:";
 
 const DUE_KEYS: [&str; 4] = [TODAY, TOMORROW, WEEKEND, NEXT_WEEK];
 
+/// A link the next add will make: the item it names, as the picker showed it.
+#[derive(Clone, Debug)]
+struct StagedLink {
+    kind: Kind,
+    id: String,
+    title: String,
+}
+
+/// What the answer to a `PickFile` came to, for the page to act on.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Picked {
+    /// Not an answer this toolbar was waiting for.
+    NotMine,
+    /// A photo is staged, or the picker was closed, or the bytes are still coming.
+    Settled,
+    /// The phone would not pick: the sentence says why, in the page's own status line.
+    Refused(String),
+}
+
 /// What the next add carries, and the tray that is open.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct Quick {
     /// A `detail` due key (`today`, `tomorrow`, …), or empty for no date.
     due: String,
@@ -29,6 +61,29 @@ pub struct Quick {
     flagged: bool,
     /// The tool whose tray is open: [`DATE`], [`TAG`] or empty.
     open: String,
+    /// The picker the Link key opens, over every kind but Locker.
+    links: Links,
+    /// The items the next add links the new task to, in the order they were picked.
+    linked: Vec<StagedLink>,
+    /// The photos the next add files and attaches, as the phone staged them.
+    photos: Vec<wire::FilePicked>,
+    /// The phone's picker is up: a second press of Photo waits for it.
+    picking: bool,
+}
+
+impl Default for Quick {
+    fn default() -> Self {
+        Self {
+            due: String::new(),
+            tags: Vec::new(),
+            flagged: false,
+            open: String::new(),
+            links: Links::new(&Kind::ALL),
+            linked: Vec::new(),
+            photos: Vec::new(),
+            picking: false,
+        }
+    }
 }
 
 impl Quick {
@@ -49,6 +104,155 @@ impl Quick {
             }
             _ => {}
         }
+    }
+
+    /// A key of the toolbar, with what the phone must do for it: Link opens the kit's picker (the
+    /// kinds first), Photo asks the phone for one image and answers by [`Self::answer`]; every other
+    /// key is [`Self::pick_tool`].
+    pub fn press(&mut self, key: &str) -> Vec<wire::Effect> {
+        match key {
+            LINK => {
+                self.open.clear();
+                self.links.open_chooser();
+                Vec::new()
+            }
+            PHOTO => {
+                self.open.clear();
+                if self.picking {
+                    return Vec::new();
+                }
+                self.picking = true;
+                vec![wire::Effect {
+                    kind: Some(wire::effect::Kind::PickFile(wire::PickFile {
+                        kind: wire::pick_file::Kind::Photo as i32,
+                    })),
+                }]
+            }
+            other => {
+                self.pick_tool(other);
+                Vec::new()
+            }
+        }
+    }
+
+    /// One tap in the link picker. The tap that picks an item stages it (the picker names it); a tap
+    /// on one already staged takes it back off. Nothing is written yet.
+    pub fn link_event(&mut self, ctx: &Ctx, event: &wire::LinkEvent) {
+        let picked_title = match &event.kind {
+            Some(wire::link_event::Kind::Pick(picked)) => self.links.candidate_title(&picked.id),
+            _ => None,
+        };
+        let staged = self.linked_ids();
+        match self.links.update(event, &staged, ctx) {
+            Outcome::Moved => {}
+            Outcome::Add { kind, id } => {
+                if let Some(title) = picked_title
+                    && !staged.contains(&id)
+                {
+                    self.linked.push(StagedLink { kind, id, title });
+                }
+            }
+            Outcome::Remove { id } => self.linked.retain(|link| link.id != id),
+        }
+    }
+
+    /// A staged row's ×: the link or the photo is not carried by the next add.
+    pub fn remove_staged(&mut self, key: &str) {
+        if let Some(id) = key.strip_prefix(LINK_ROW) {
+            self.linked.retain(|link| link.id != id);
+        } else if let Some(blob) = key.strip_prefix(PHOTO_ROW) {
+            self.photos.retain(|photo| photo.blob != blob);
+        }
+    }
+
+    /// The phone's answer to the Photo key. A pick is staged; a closed picker says nothing; a refusal
+    /// (no grant, no picker, a file that would not go) is the page's status line, by the same words
+    /// as an attach anywhere (`kit::attachments`).
+    pub fn answer(&mut self, locale: Locale, outcome: &O) -> Picked {
+        if !self.picking {
+            return Picked::NotMine;
+        }
+        match outcome {
+            O::FileProgress(_) => {}
+            O::FilePicked(picked) => {
+                self.picking = false;
+                if !self.photos.iter().any(|have| have.blob == picked.blob) {
+                    self.photos.push(picked.clone());
+                }
+            }
+            O::Done(_) => self.picking = false,
+            O::Failed(failed) => {
+                self.picking = false;
+                if !failed.cancelled {
+                    return Picked::Refused(refusal_of(locale, Resource::Photos, failed));
+                }
+            }
+            _ => return Picked::NotMine,
+        }
+        Picked::Settled
+    }
+
+    /// The ids the next add links the new task to.
+    fn linked_ids(&self) -> Vec<String> {
+        self.linked.iter().map(|link| link.id.clone()).collect()
+    }
+
+    /// What the next add links to: the item's id and its title as the member picked it.
+    #[must_use]
+    pub fn links(&self) -> Vec<(String, String)> {
+        self.linked
+            .iter()
+            .map(|link| (link.id.clone(), link.title.clone()))
+            .collect()
+    }
+
+    /// The photos the next add files and attaches.
+    #[must_use]
+    pub fn photos(&self) -> &[wire::FilePicked] {
+        &self.photos
+    }
+
+    /// A picker is up, or a link or photo is staged: the keyboard leaving is not the member closing
+    /// the bar, and shutting it would throw the staging away.
+    #[must_use]
+    pub fn holds_more(&self) -> bool {
+        self.links.is_open() || self.picking || !self.linked.is_empty() || !self.photos.is_empty()
+    }
+
+    /// The picker sheet over the quick add, closed when no link is being chosen.
+    #[must_use]
+    pub fn link_picker(&self, locale: Locale) -> wire::LinkPicker {
+        self.links.picker(locale, &self.linked_ids())
+    }
+
+    /// The staged tray, one row to a staged link and photo, each removable.
+    fn staged_rows(&self, locale: Locale) -> Vec<wire::TodoStagedRow> {
+        let links = self.linked.iter().map(|link| wire::TodoStagedRow {
+            key: format!("{LINK_ROW}{}", link.id),
+            kind_label: fill(
+                &words::quick_staged_link(locale),
+                &[("kind", link.kind.name(locale).as_str())],
+            ),
+            title: link.title.clone(),
+            icon_key: "Link".to_owned(),
+            remove_label: fill(
+                &link_words::remove(locale),
+                &[("name", link.title.as_str())],
+            ),
+        });
+        let photos = self.photos.iter().map(|photo| {
+            let title = Some(photo.name.trim().to_owned())
+                .filter(|name| !name.is_empty())
+                .unwrap_or_else(|| words::quick_photo(locale));
+            wire::TodoStagedRow {
+                key: format!("{PHOTO_ROW}{}", photo.blob),
+                kind_label: words::quick_photo(locale),
+                remove_label: fill(&link_words::remove(locale), &[("name", title.as_str())]),
+                title,
+                icon_key: "Image".to_owned(),
+            }
+        });
+        links.chain(photos).collect()
     }
 
     /// A due choice: a day key stages it, `none` clears it; the tray closes.
@@ -97,7 +301,11 @@ impl Quick {
 
     #[must_use]
     pub fn staged(&self) -> bool {
-        !self.due.is_empty() || !self.tags.is_empty() || self.flagged
+        !self.due.is_empty()
+            || !self.tags.is_empty()
+            || self.flagged
+            || !self.linked.is_empty()
+            || !self.photos.is_empty()
     }
 
     /// "Tomorrow · #errand · Flagged"; empty when nothing is staged.
@@ -124,6 +332,18 @@ impl Quick {
             ),
             (TAG, words::quick_tag(locale), "Tag", !self.tags.is_empty()),
             (FLAG, words::quick_flag(locale), "Flag", self.flagged),
+            (
+                LINK,
+                words::quick_link(locale),
+                "Link",
+                !self.linked.is_empty(),
+            ),
+            (
+                PHOTO,
+                words::quick_photo(locale),
+                "Image",
+                !self.photos.is_empty(),
+            ),
         ]
         .into_iter()
         .map(|(key, label, icon, on)| wire::TodoQuickTool {
@@ -161,6 +381,9 @@ impl Quick {
             Vec::new()
         };
         quick.tag_placeholder = task::tags_add(locale);
+        quick.staged_rows = self.staged_rows(locale);
+        quick.staged_group_label = words::quick_staged_group(locale);
+        quick.link_picker = Some(self.link_picker(locale)).filter(|picker| picker.open);
     }
 }
 

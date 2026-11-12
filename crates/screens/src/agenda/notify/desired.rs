@@ -25,6 +25,13 @@ pub const WINDOW_DAYS: i64 = 14;
 /// The most notifications held at once. iOS keeps at most 64 pending; the rest
 /// is headroom for the receipt of a button just pressed.
 pub const CAP: usize = 48;
+/// What iOS keeps pending, all apps' notifications together.
+pub const OS_PENDING_LIMIT: usize = 64;
+/// What rides in the set beyond [`CAP`]: the receipt of the button just pressed. Everything pending
+/// on iOS is this set (one scheduling place, `Notifications.swift`), so the budget is
+/// `CAP + RECEIPTS`.
+pub const RECEIPTS: usize = 1;
+const _: () = assert!(CAP + RECEIPTS <= OS_PENDING_LIMIT);
 /// The thread a reminder's notifications are grouped under (Reminders, round 10 of #1173).
 pub const THREAD: &str = "reminders";
 /// The thread an event's alerts are grouped under (Calendar).

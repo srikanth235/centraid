@@ -32,13 +32,12 @@ const EDITED_IN_PLACE: &str = "MediaStore reports an item edited in place under 
 const CERT_PIN: &str = "iOS pins the gateway certificate for its OS-owned uploads when `backup.destinations` is announced; Android's `custody.filing` files the key in Rust";
 
 /// One reason, several rows.
+const LINK_READS: &str = "the general link's reads (`shell.links`, `shell.link-candidates`): the core answers them and the kit's link section words the rows, so a shell draws the finished `LinkRow`";
+/// One reason, several rows.
 const REMINDERS: &str = "iOS reads the phone's Reminders (EventKit); Android has no such store";
 
 /// One reason, several rows.
 const OS_UPLOADS: &str = "the OS-owned background uploads are iOS's `URLSession`; Android's mover runs inside its WorkManager pass";
-
-/// One reason, several rows.
-const CALENDAR_OWED: &str = "`shell.calendar-owed` is read by Rust only: core/app_query/imports.rs builds the answer and agenda/calendar_push.rs reads it, then hands the shells `CalendarWriteFields`";
 
 /// One reason, several rows.
 const AGENDA_DRAFT: &str = "the editor holds its draft as this wire message and reads it back (agenda/editor.rs); the shells draw the choices' `selected` flags instead";
@@ -56,7 +55,19 @@ const VAULT_TELLS_HOME: &str = "the vault service tells Home by name (`Ctx::post
 const PASS_TELLS_ROLL: &str = "the pass service tells the camera roll by name (passes/service.rs to imports/camera_roll.rs); no shell sends it";
 
 /// One reason, several rows.
+const ORIGIN_OF_NAMED: &str = "`shell.origin-of` is read by Rust only (core/app_query/follow.rs builds it, kit/origin.rs reads it); `system` and `label` are common names the shells spell for unrelated symbols";
+
+/// One reason, several rows.
 const FILES_FOLLOWED: &str = "`shell.files-followed` is read by Rust only: core/app_query/imports.rs builds the answer, imports/files.rs and docs/drive/mod.rs read it";
+
+/// One reason, several rows.
+const EARLIER_VERSIONS: &str = "`shell.earlier-versions` is read by Rust only: core/app_query/history.rs builds the answer and kit/earlier.rs reads it; the app's spec words each version and a shell is sent only the finished `EarlierRow`";
+
+/// One reason, several rows.
+const EARLIER_RECORD: &str = "`shell.earlier-record` is read by Rust only: core/app_query/history.rs builds the answer and kit/earlier_preview.rs reads it; the app's spec words the version and a shell is sent only the finished `EarlierPreviewData`";
+
+/// One reason, several rows.
+const PHONE_DIFFERENCES: &str = "`shell.phone-differences` is read by Rust only: core/app_query/follow.rs builds the answer and kit/follow.rs reads it; the detail screens word it and send a shell only the finished `PhoneSays` line";
 
 /// One reason, several rows.
 const ROLL_TELLS_PHOTOS: &str = "the camera roll tells Photos' home by name (imports/camera_roll.rs to photos/home/chrome.rs); no shell sends it";
@@ -102,6 +113,20 @@ pub const REGISTER: &[Entry] = &[
     (
         "DocsStage.position_value",
         platform(Shell::Android, DOCS_TRANSPORT),
+    ),
+    (
+        "HealthRead.ask_background",
+        platform(
+            Shell::Android,
+            "Health Connect has a separate background-read permission (D16); HealthKit needs no extra ask",
+        ),
+    ),
+    (
+        "HealthSnapshot.background_refused",
+        platform(
+            Shell::Android,
+            "only Health Connect's background-read permission can be refused; HealthKit has none",
+        ),
     ),
     (
         "HealthSnapshot.installable",
@@ -171,6 +196,13 @@ pub const REGISTER: &[Entry] = &[
         platform(Shell::Ios, REMINDERS),
     ),
     ("Announce.topic", platform(Shell::Ios, CERT_PIN)),
+    (
+        "EffectFailed.limited",
+        platform(
+            Shell::Ios,
+            "iOS 17's write-only access to Calendar and Reminders is a grant that cannot read; Android's runtime permissions are all or nothing for those stores, so Android never reports a limited grant there (kit::permission words it)",
+        ),
+    ),
     ("Announced.topic", platform(Shell::Ios, CERT_PIN)),
     (
         "EffectResult.reminders_snapshot",
@@ -279,9 +311,6 @@ pub const REGISTER: &[Entry] = &[
     ("AgendaDraft.repeat_rule", rust_only(AGENDA_DRAFT)),
     ("AgendaDraft.second_reminder_key", rust_only(AGENDA_DRAFT)),
     ("AgendaDraft.travel_min", rust_only(AGENDA_DRAFT)),
-    ("ImportsOwedPush.fields_json", rust_only(CALENDAR_OWED)),
-    ("ImportsOwedPush.origin_ref", rust_only(CALENDAR_OWED)),
-    ("ImportsOwedPush.stated_json", rust_only(CALENDAR_OWED)),
     (
         "Autosave.remote_changed",
         rust_only(
@@ -327,7 +356,6 @@ pub const REGISTER: &[Entry] = &[
     ),
     ("FreeUpFacts.on_phone_bytes", rust_only(FREE_UP)),
     ("FreeUpFacts.on_phone_count", rust_only(FREE_UP)),
-    ("FreeUpFacts.platform_error", rust_only(FREE_UP)),
     ("FreeUpFacts.releasable_bytes", rust_only(FREE_UP)),
     ("FreeUpFacts.releasable_count", rust_only(FREE_UP)),
     (
@@ -384,8 +412,53 @@ pub const REGISTER: &[Entry] = &[
             "the Docs drive tells the folder follower by name (docs/drive/mod.rs to imports/files.rs); no shell sends it",
         ),
     ),
+    (
+        "ImportsFilesEvent.FolderFollowed.replaces",
+        rust_only(
+            "the reconnect page tells the folder follower by name (follow/reconnect.rs to imports/files.rs); no shell sends it",
+        ),
+    ),
+    ("FollowDifference.held_json", rust_only(PHONE_DIFFERENCES)),
+    ("FollowDifference.stated_json", rust_only(PHONE_DIFFERENCES)),
+    (
+        "FollowItemDifference.held_json",
+        rust_only(PHONE_DIFFERENCES),
+    ),
+    (
+        "FollowItemDifference.stated_json",
+        rust_only(PHONE_DIFFERENCES),
+    ),
+    (
+        "OriginOf.system",
+        rust_only_named(ORIGIN_OF_NAMED, Missing::Android),
+    ),
+    ("EarlierVersions.versions", rust_only(EARLIER_VERSIONS)),
+    ("LinkedItem.is_owner", rust_only(LINK_READS)),
+    ("LinkedItem.in_text", rust_only(LINK_READS)),
+    ("LinkCandidate.is_owner", rust_only(LINK_READS)),
+    ("EarlierVersion.replaced_local", rust_only(EARLIER_VERSIONS)),
+    ("EarlierVersion.since_local", rust_only(EARLIER_VERSIONS)),
+    ("EarlierVersion.store_system", rust_only(EARLIER_VERSIONS)),
+    (
+        "EarlierVersion.since_store_system",
+        rust_only(EARLIER_VERSIONS),
+    ),
+    ("EarlierVersion.field_changes", rust_only(EARLIER_VERSIONS)),
+    ("EarlierRecord.replaced_local", rust_only(EARLIER_RECORD)),
+    ("EarlierRecord.since_local", rust_only(EARLIER_RECORD)),
+    ("EarlierRecord.store_system", rust_only(EARLIER_RECORD)),
+    (
+        "EarlierRecord.since_store_system",
+        rust_only(EARLIER_RECORD),
+    ),
+    ("EarlierRecord.field_changes", rust_only(EARLIER_RECORD)),
+    ("EarlierField.value_json", rust_only(EARLIER_RECORD)),
+    ("EarlierChange.before_json", rust_only(EARLIER_VERSIONS)),
+    ("EarlierChange.after_json", rust_only(EARLIER_VERSIONS)),
+    ("ImportsFilesHeld.retired", rust_only(FILES_FOLLOWED)),
     ("ImportsHeldFile.stat", rust_only(FILES_FOLLOWED)),
     ("ImportsHeldFolder.documents", rust_only(FILES_FOLLOWED)),
+    ("ImportsHeldFolder.docs_folder", rust_only(FILES_FOLLOWED)),
     ("ImportsHeldFolder.origin_id", rust_only(FILES_FOLLOWED)),
     ("ImportsHeldFolder.origin_ref", rust_only(FILES_FOLLOWED)),
     (

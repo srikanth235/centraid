@@ -28,8 +28,10 @@ import dev.centraid.android.screens.performExportOriginals
 import dev.centraid.android.screens.words.CodeScanDoor
 import dev.centraid.android.session.AppSession
 import dev.centraid.android.session.UiHost
+import java.io.File
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import okio.ByteString.Companion.toByteString
 
@@ -89,7 +91,7 @@ internal fun HostScreenEffects(
 
         override suspend fun perform(request: EffectRequest, answer: (EffectResult) -> Unit): EffectResult? =
             withContext(Dispatchers.Main) {
-                val effect = request.effect ?: return@withContext failed("no effect")
+                val effect = request.effect ?: return@withContext failed(EffectReason.UNSUPPORTED)
                 when {
                     effect.haptic != null -> {
                         view.performHapticFeedback(hapticOf(effect.haptic!!.kind))
@@ -108,14 +110,14 @@ internal fun HostScreenEffects(
                     effect.health_read != null -> health.snapshot(effect.health_read!!) { healthLauncher.launch(it) }
                     effect.scan_code != null ->
                         scanDoor.scan(effect.scan_code!!.photo_label)?.let { EffectResult(code_scanned = CodeScanned(text = it)) }
-                            ?: EffectResult(failed = EffectFailed(reason = "scan closed", cancelled = true))
+                            ?: EffectResult(failed = EffectFailed(reason = EffectReason.CANCELLED, cancelled = true))
                     effect.model_download != null -> ChatEffects.download(session.screens, request, effect.model_download!!)
                     effect.pick_library_photo != null -> ChatEffects.pickLibraryPhoto(context, photoDoor) {
                         photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                     }
                     effect.export_originals != null ->
                         effectAttempt { performExportOriginals(context, session.core, effect.export_originals!!) }
-                            .getOrElse { failed("the originals could not be handed off") }
+                            .getOrElse { failed(EffectReason.FAILED) }
                     effect.pick_bytes != null && effect.pick_bytes!!.folder ->
                         pickFolder(context, pickingFolder.ask { folderPicker.launch(null) }, effect.pick_bytes!!.accept)
                     effect.pick_bytes != null && effect.pick_bytes!!.multiple ->
@@ -124,6 +126,16 @@ internal fun HostScreenEffects(
                     effect.save_file != null -> {
                         val file = effect.save_file!!
                         saveFile(context, file, saving.ask { saver.launch(file.name) })
+                    }
+                    // A STREAMED EXPORT (`SaveFilePath`): the same save sheet, the staged file copied by
+                    // streaming, and the staged file deleted whatever the answer was.
+                    effect.save_file_path != null -> {
+                        val file = effect.save_file_path!!
+                        try {
+                            saveFilePath(file, saving.ask { saver.launch(file.name) }, context)
+                        } finally {
+                            withContext(NonCancellable + Dispatchers.IO) { File(file.path).delete() }
+                        }
                     }
                     // FREE UP SPACE: the system's own confirmation, then the hashes whose asset went.
                     effect.library_delete != null -> {
@@ -145,13 +157,16 @@ internal fun HostScreenEffects(
                     }
                     effect.share_file != null ->
                         effectAttempt { dev.centraid.android.screens.docs.performShareFile(context, effect.share_file!!) }
-                            .getOrElse { failed("the file could not be shared") }
+                            .getOrElse { failed(EffectReason.FAILED) }
+                    effect.share_bytes != null ->
+                        effectAttempt { dev.centraid.android.screens.docs.performShareBytes(context, effect.share_bytes!!) }
+                            .getOrElse { failed(EffectReason.FAILED) }
                     effect.stop_following != null -> {
                         docs.stop(effect.stop_following!!.origin, answer)
                         null
                     }
                     // Platform work this build does not perform: said by value, so nothing waits.
-                    else -> failed("not performed by this shell")
+                    else -> failed(EffectReason.UNSUPPORTED)
                 }
             }
         }
@@ -191,18 +206,35 @@ private suspend fun pickBytes(context: Context, uri: android.net.Uri?): EffectRe
             }.orEmpty()
             val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: error("unreadable")
             EffectResult(bytes_picked = BytesPicked(name = name, media_type = resolver.getType(uri).orEmpty(), content = bytes.toByteString()))
-        }.getOrElse { failed("the file could not be read") }
+        }.getOrElse { failed(EffectReason.UNREADABLE) }
     }
 }
 
 /** `SaveFile`: Rust's bytes to the document the member named and nowhere else; a dismissal is a cancel. */
 private suspend fun saveFile(context: Context, file: centraid.core.v1.SaveFile, uri: android.net.Uri?): EffectResult {
-    uri ?: return EffectResult(failed = EffectFailed(reason = "the save was cancelled", cancelled = true))
+    uri ?: return EffectResult(failed = EffectFailed(reason = EffectReason.CANCELLED, cancelled = true))
     return withContext(Dispatchers.IO) {
         runCatching {
             context.contentResolver.openOutputStream(uri)?.use { it.write(file.content.toByteArray()) } ?: error("unwritable")
             EffectResult(done = EffectDone())
-        }.getOrElse { failed("the file could not be written") }
+        }.getOrElse { failed(EffectReason.UNWRITABLE) }
+    }
+}
+
+/**
+ * `SaveFilePath`: the staged file (a streamed export, too large to hold in memory) copied to the
+ * document the member named, in 64 KiB pieces from an input stream to the resolver's output
+ * stream; a dismissal is a cancel. The caller deletes the staged file.
+ */
+private suspend fun saveFilePath(file: centraid.core.v1.SaveFilePath, uri: android.net.Uri?, context: Context): EffectResult {
+    uri ?: return EffectResult(failed = EffectFailed(reason = EffectReason.CANCELLED, cancelled = true))
+    return withContext(Dispatchers.IO) {
+        runCatching {
+            File(file.path).inputStream().use { input ->
+                context.contentResolver.openOutputStream(uri)?.use { output -> input.copyTo(output, 64 * 1024) } ?: error("unwritable")
+            }
+            EffectResult(done = EffectDone())
+        }.getOrElse { failed(EffectReason.UNWRITABLE) }
     }
 }
 

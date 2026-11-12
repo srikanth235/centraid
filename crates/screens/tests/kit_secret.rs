@@ -59,6 +59,7 @@ impl Screen for Probe {
             kind: Some(wire::view_state::Kind::Counter(wire::CounterView {
                 title: shown,
                 content: None,
+                ..Default::default()
             })),
             ..wire::ViewState::default()
         }

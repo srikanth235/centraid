@@ -41,7 +41,7 @@
 //!   anchored on Feb 29 skips the common years, with `COUNT` counting real
 //!   occurrences only (RFC 5545 section 3.3.10; owner decision on #1173,
 //!   reversing the engine's earlier clamp to the month's last day, so a
-//!   two-way sync with EventKit and CalendarContract expands exactly the
+//!   calendar followed from EventKit and CalendarContract expands exactly the
 //!   phone's occurrences). A member who wants "the last day" writes
 //!   `BYMONTHDAY=-1` (the Custom repeat sheet's "Last day"), and the sheet's
 //!   "last" weekday position (`BYDAY=-1FR`) is its default for a start on
@@ -330,7 +330,7 @@ pub fn canonicalize(value: &str) -> String {
     body.chars().filter(|c| !c.is_whitespace()).collect()
 }
 
-/// Prefixed RRULE line for Google/ICS writeback, without double-prefixing.
+/// A rule as an `RRULE:` line, without double-prefixing.
 #[must_use]
 pub fn rrule_line(value: &str) -> String {
     let bare = canonicalize(value);

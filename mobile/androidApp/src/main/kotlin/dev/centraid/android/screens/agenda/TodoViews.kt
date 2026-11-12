@@ -47,6 +47,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import centraid.core.v1.LinkEvent
 import centraid.core.v1.Route
 import centraid.core.v1.TodoCheck
 import centraid.core.v1.TodoChrome
@@ -380,6 +381,8 @@ internal fun TodoQuickAddBar(
     onTool: (String) -> Unit = {},
     onDue: (String) -> Unit = {},
     onTag: (String) -> Unit = {},
+    onLink: (LinkEvent) -> Unit = {},
+    onStagedRemove: (String) -> Unit = {},
 ) {
     if (quickAdd == null || !quickAdd.shown || !quickAdd.drawn) return
     val focus = remember { FocusRequester() }
@@ -456,6 +459,12 @@ internal fun TodoQuickAddBar(
                 color = centraidColor("textSoft"),
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp).testTag("agenda-quick-staged"),
             )
+        }
+        // THE STAGED TRAY: the links and photos the next add carries, each removable.
+        QuickStagedRows(quickAdd, onStagedRemove)
+        // THE LINK KEY'S PICKER: the kit's sheet, open while the machine says so.
+        quickAdd.link_picker?.takeIf { it.open_ }?.let { picker ->
+            dev.centraid.android.kit.LinkPickerSheet(picker, onLink)
         }
         // THE KEYBOARD TOOLBAR, while the field (or its tag field) has the keyboard.
         if (held.value) {

@@ -251,7 +251,7 @@ fn emit_item(out: &mut String, item: &Value, side: Side) -> Result<()> {
     }
     if side == Side::Act {
         out.push_str(
-            "                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }\n",
+            "                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new(), autosave: false }\n",
         );
     } else {
         let limit = params

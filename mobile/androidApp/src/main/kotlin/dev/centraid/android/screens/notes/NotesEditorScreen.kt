@@ -3,7 +3,6 @@ package dev.centraid.android.screens.notes
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Arrangement
@@ -15,7 +14,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
 import dev.centraid.android.kit.AboutChips
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.KitText
@@ -23,8 +21,6 @@ import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.LocalAppAccentId
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
-import dev.centraid.android.kit.kitCard
-import dev.centraid.android.kit.kitTextStyle
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.text.BasicTextField
@@ -54,8 +50,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.NotesEditorEvent
 import centraid.core.v1.NotesEditorState
-import centraid.core.v1.NotesHistoryEvent
-import centraid.core.v1.NotesHistoryState
 import centraid.core.v1.NotesLinkChipKind
 import centraid.core.v1.NotesLinkResolution
 import centraid.core.v1.NotesLinkSheet
@@ -67,21 +61,16 @@ import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.CentraidSearchField
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EditorRoom
-import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.IconKey
-import dev.centraid.android.kit.FailureView
 import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.OutlineButton
-import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.RowSkeleton
-import dev.centraid.android.kit.ScreenContent
 import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.StatusLine
-import dev.centraid.android.kit.screenContentOf
 
 /**
  * `notes.editor` (#1135), in the kit's `EditorRoom`.
@@ -149,11 +138,12 @@ public fun NotesEditorScreen(
             StatusLine(chrome?.status.orEmpty())
         }
         ReadStateView(
-            content = screenContentOf(state.loading, state.failure, draft),
+            page = state.page!!,
             onRetry = { onEvent(NotesEditorEvent(refreshed = NotesEditorEvent.Refreshed())) },
             retryLabel = chrome?.retry.orEmpty(),
             skeleton = { RowSkeleton(rows = 4, meta = false) },
-        ) { note ->
+        ) {
+            val note = draft ?: return@ReadStateView
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                 // ABOUT, above the words (#1173): who or what the note is about; a tap opens it.
                 AboutChips(state.about, Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 2.dp), onOpen)
@@ -226,8 +216,23 @@ public fun NotesEditorScreen(
         val options = buildList {
             add(SheetOption(key = MENU_PIN, label = chrome.pin_label))
             add(SheetOption(key = MENU_LINK, label = chrome.link_label))
-            if (chrome.history_enabled && state.history != null) add(SheetOption(key = MENU_HISTORY, label = chrome.history_label))
+            // ATTACHMENTS (#1185): the photos and files on the note; a sheet over the editor.
+            state.attachments_entry?.let { entry ->
+                add(SheetOption(key = MENU_ATTACHMENTS, label = entry.label, detail = entry.count_label))
+            }
+            // LINKED TO (#1185): everything the note is linked to; a sheet over the editor.
+            state.links_entry?.let { entry ->
+                add(SheetOption(key = MENU_LINKS, label = entry.label, detail = entry.count_label))
+            }
+            state.earlier?.takeIf { dev.centraid.android.kit.earlierEntryDrawn(it) }?.let { entry ->
+                add(SheetOption(key = MENU_EARLIER, label = entry.label, detail = entry.count_label))
+            }
+            // WHERE IT CAME FROM (#1185): a quiet line in the menu; picking it only closes the menu.
+            state.origin?.takeIf { dev.centraid.android.kit.originLineDrawn(it) }?.let { line ->
+                add(SheetOption(key = MENU_ORIGIN, label = line.text))
+            }
             if (state.send_to_agenda != null) add(SheetOption(key = MENU_SEND, label = chrome.send_to_agenda_label))
+            add(SheetOption(key = MENU_SHARE, label = chrome.share_label))
         }.filter { it.label.isNotEmpty() }
         OptionSheet(
             title = chrome.menu_label,
@@ -237,14 +242,56 @@ public fun NotesEditorScreen(
                 when (key) {
                     MENU_PIN -> onEvent(NotesEditorEvent(pin = NotesEditorEvent.PinToggled()))
                     MENU_LINK -> onEvent(NotesEditorEvent(link_requested = NotesEditorEvent.LinkRequested()))
-                    MENU_HISTORY -> state.history?.let(onOpen)
+                    MENU_ATTACHMENTS -> onEvent(NotesEditorEvent(attachments_opened = NotesEditorEvent.AttachmentsOpened()))
+                    MENU_LINKS -> onEvent(NotesEditorEvent(links_opened = NotesEditorEvent.LinksOpened()))
+                    MENU_EARLIER -> state.earlier?.route?.let(onOpen)
                     MENU_SEND -> state.send_to_agenda?.let(onOpen)
+                    MENU_SHARE -> onEvent(NotesEditorEvent(share_requested = NotesEditorEvent.ShareRequested()))
                 }
             },
             onDismiss = { menuOpen = false },
         )
     }
     state.link?.let { sheet -> LinkSheet(sheet, send) }
+    // THE "Linked to" SHEET (#1185): the kit's section and picker; Rust makes every word and row.
+    state.links?.let { section ->
+        val closed = { onEvent(NotesEditorEvent(links_closed = NotesEditorEvent.LinksClosed())) }
+        SheetRoom(title = section.title, onDismiss = closed) {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                dev.centraid.android.kit.LinkSectionView(
+                    section,
+                    { link -> onEvent(NotesEditorEvent(link = link)) },
+                    // The sheet gives way to the page it opens.
+                    { route ->
+                        closed()
+                        onOpen(route)
+                    },
+                )
+            }
+        }
+    }
+    state.link_picker?.takeIf { it.open_ }?.let { picker ->
+        dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(NotesEditorEvent(link = link)) }
+    }
+    // THE "Attachments" SHEET (#1185): the kit's section; Rust makes every word and row.
+    state.attachments?.let { section ->
+        val closed = { onEvent(NotesEditorEvent(attachments_closed = NotesEditorEvent.AttachmentsClosed())) }
+        SheetRoom(title = state.attachments_entry?.label.orEmpty(), onDismiss = closed) {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                dev.centraid.android.screens.agenda.AgendaAttachmentsView(
+                    section = section,
+                    prefix = "notes-editor",
+                    onEvent = { onEvent(NotesEditorEvent(attachment = it)) },
+                    // The sheet gives way to the page it opens.
+                    onOpen = { route ->
+                        closed()
+                        onOpen(route)
+                    },
+                    padded = false,
+                )
+            }
+        }
+    }
 }
 
 /**
@@ -319,96 +366,39 @@ private fun LinkSheet(sheet: NotesLinkSheet, onEvent: (NotesEditorEvent) -> Unit
             onClose = dismiss,
             testTag = "notes-link-search",
         )
-        when (val content = screenContentOf(sheet.loading, sheet.failure, sheet.data_, sheet.denied)) {
-            is ScreenContent.Loading -> RowSkeleton(rows = 4, label = sheet.loading_label)
-            is ScreenContent.Failure -> FailureView(content.sentence, content.remedy, onRetry = null)
-            is ScreenContent.Gate -> Quiet(content.denied.title)
-            is ScreenContent.Data -> {
-                val data = content.value
-                val empty = data.empty
-                if (data.domains.isEmpty() && empty != null) {
-                    Quiet(listOf(empty.headline, empty.body).filter { it.isNotEmpty() }.joinToString(" "))
-                }
-                LazyColumn(Modifier.testTag("notes-link-targets")) {
-                    data.domains.forEachIndexed { index, domain ->
-                        domain.head?.let { head ->
-                            item(key = "h-$index") { SectionHeader(SectionHead(title = head.title, count = head.count)) }
-                        }
-                        items(domain.rows, key = { "$index-" + it.entity + it.id }) { target ->
-                            CentraidRow(
-                                title = target.title,
-                                meta = target.subtitle,
-                                a11y = target.accessibility_label,
-                                testTag = "notes-link-${target.id}",
-                                onTap = { onEvent(NotesEditorEvent(link_picked = NotesEditorEvent.LinkPicked(target.id))) },
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** `notes.history` (#1135): a `PushedPage` back to the note, each version a row with Restore; the current one has none. */
-@Composable
-public fun NotesHistoryScreen(
-    state: NotesHistoryState,
-    onEvent: (NotesHistoryEvent) -> Unit,
-    onBack: () -> Unit,
-) {
-    CompositionLocalProvider(LocalAppAccentId provides "notes") {
-    PushedPage(
-        title = state.title,
-        parentTitle = state.back,
-        onBack = onBack,
-        status = state.status?.sentence.orEmpty(),
-    ) {
+        // The powerbox's read is the page: Retry reads the targets again.
         ReadStateView(
-            content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
-            onRetry = { onEvent(NotesHistoryEvent(refreshed = NotesHistoryEvent.Refreshed())) },
-            retryLabel = state.retry,
-            skeleton = { RowSkeleton(label = state.loading_label) },
-        ) { data ->
-            val empty = data.empty
-            if (data.rows.size <= 1 && empty != null) {
-                EmptyStateView(empty, onAction = null)
-            } else {
-                // NOTHING IS DIMMED: the current version says "Current" and has no Restore.
-                Column(
-                    Modifier.padding(horizontal = KitGeometry.GUTTER).kitCard().testTag("notes-history"),
-                ) {
-                    data.rows.forEach { row ->
-                        Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("notes-version-${row.content_id}"),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                KitText(row.label, KitType.Row, Surface.ink, maxLines = 1)
-                                KitText(row.preview, KitType.Meta, Surface.body, maxLines = 1)
-                            }
-                            if (row.restore_label.isNotEmpty() && !row.current) {
-                                Text(
-                                    row.restore_label,
-                                    style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
-                                    color = appAccent().text,
-                                    modifier = Modifier
-                                        .padding(start = 8.dp)
-                                        .clickable { onEvent(NotesHistoryEvent(restore = NotesHistoryEvent.RestoreTapped(row.content_id))) }
-                                        .padding(vertical = 12.dp)
-                                        .testTag("notes-restore-${row.content_id}"),
-                                )
-                            }
-                        }
+            page = sheet.page!!,
+            onRetry = { onEvent(NotesEditorEvent(refreshed = NotesEditorEvent.Refreshed())) },
+            retryLabel = sheet.retry,
+            skeleton = { RowSkeleton(rows = 4, label = sheet.loading_label) },
+        ) {
+            val data = sheet.data_ ?: return@ReadStateView
+            LazyColumn(Modifier.testTag("notes-link-targets")) {
+                data.domains.forEachIndexed { index, domain ->
+                    domain.head?.let { head ->
+                        item(key = "h-$index") { SectionHeader(SectionHead(title = head.title, count = head.count)) }
+                    }
+                    items(domain.rows, key = { "$index-" + it.entity + it.id }) { target ->
+                        CentraidRow(
+                            title = target.title,
+                            meta = target.subtitle,
+                            a11y = target.accessibility_label,
+                            testTag = "notes-link-${target.id}",
+                            onTap = { onEvent(NotesEditorEvent(link_picked = NotesEditorEvent.LinkPicked(target.id))) },
+                        )
                     }
                 }
             }
         }
-    }
     }
 }
 
 private const val MENU_PIN = "pin"
 private const val MENU_LINK = "link"
-private const val MENU_HISTORY = "history"
+private const val MENU_LINKS = "linked-to"
+private const val MENU_ATTACHMENTS = "attachments"
+private const val MENU_EARLIER = "earlier-entry"
+private const val MENU_ORIGIN = "origin-line"
 private const val MENU_SEND = "send-to-agenda"
+private const val MENU_SHARE = "share"

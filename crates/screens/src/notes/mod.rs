@@ -1,5 +1,5 @@
 //! NOTES' SCREENS (#1135): the library, notebooks and journal under one band, the
-//! editor with its link powerbox, a note's version history and the kit's trash.
+//! editor with its link powerbox, a note's earlier versions and the kit's trash.
 //! Every decision a person sees is made here; SwiftUI and Compose draw
 //! [`wire::ViewState`].
 //!
@@ -7,7 +7,7 @@
 //! |---|---|---|
 //! | Notes · Notebooks · Journal, with Search and More | [`HOME`] | [`home`] |
 //! | One note, autosaving, with the powerbox | [`EDITOR`] | [`editor`] |
-//! | One note's versions | [`HISTORY`] | [`history`] |
+//! | One note's earlier versions | [`EARLIER`] | [`earlier`] |
 //! | The trash | [`TRASH`] | [`trash`] |
 //!
 //! The band's three places are ONE screen with the place a value, so a tap on
@@ -19,11 +19,11 @@
 use centraid_api_proto::core_v1 as wire;
 
 use crate::Registry;
-use crate::kit::read::Reading;
 
+pub mod earlier;
 pub mod editor;
+pub mod export;
 pub mod fold;
-pub mod history;
 pub mod home;
 pub(crate) mod rich;
 pub mod transfer;
@@ -31,7 +31,7 @@ pub mod trash;
 
 pub const HOME: &str = "notes.home";
 pub const EDITOR: &str = "notes.editor";
-pub const HISTORY: &str = "notes.history";
+pub const EARLIER: &str = "notes.earlier";
 pub const TRASH: &str = "notes.trash";
 pub const IMPORT: &str = "notes.import";
 pub const EXPORT: &str = "notes.export";
@@ -45,10 +45,10 @@ pub fn registry() -> Registry {
     Registry::default()
         .with(HOME, home::build)
         .with(EDITOR, editor::build)
-        .with(HISTORY, history::build)
+        .with(EARLIER, earlier::build)
         .with(TRASH, trash::build)
         .with(IMPORT, transfer::build_import)
-        .with(EXPORT, transfer::build_export)
+        .with(EXPORT, export::build)
 }
 
 /// A runtime with Notes' screens and one tab, `notes`, rooted at its home. The
@@ -63,33 +63,6 @@ pub fn runtime() -> crate::Runtime {
             routes::home(wire::NotesPlace::Notes, "", "", false),
         )],
     )
-}
-
-/// What a read came to while a screen waits on it: nothing yet, a refusal, a
-/// gate or the answer. A failed read is never an empty list.
-#[derive(Clone, Debug)]
-pub(crate) enum Phase<T> {
-    Loading,
-    Failed,
-    Denied(wire::AppQueryDenial),
-    Ready(T),
-}
-
-impl<T> Phase<T> {
-    pub(crate) fn of(reading: Reading<T>) -> Self {
-        match reading {
-            Reading::Data(data) => Self::Ready(data),
-            Reading::Denied(denial) => Self::Denied(denial),
-            Reading::Failed => Self::Failed,
-        }
-    }
-
-    pub(crate) fn data(&self) -> Option<&T> {
-        match self {
-            Self::Ready(data) => Some(data),
-            _ => None,
-        }
-    }
 }
 
 /// The gate drawn when the vault will not let Notes read: the core's own code
@@ -109,7 +82,7 @@ pub(crate) fn denied(
 
 /// The routes Notes' own screens hand to a shell inside a view state.
 pub mod routes {
-    use super::{EDITOR, EXPORT, HISTORY, HOME, IMPORT, TRASH, wire};
+    use super::{EDITOR, HOME, IMPORT, TRASH, wire};
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
         wire::Route {
@@ -220,24 +193,12 @@ pub mod routes {
         )
     }
 
-    /// One note's versions; `note_title` rides along for the back control.
+    /// The kit's transfer screen on Notes' Markdown; `back` names the page it was pushed from.
+    /// The export's entry is the kit's (`kit::export::entry`).
     #[must_use]
-    pub fn history(note_id: &str, note_title: &str) -> wire::Route {
+    pub fn import(back: &str) -> wire::Route {
         route(
-            HISTORY,
-            wire::route::Args::NotesHistory(wire::NotesHistoryRoute {
-                note_id: note_id.to_owned(),
-                note_title: note_title.to_owned(),
-            }),
-        )
-    }
-
-    /// The kit's transfer screen on Notes' Markdown, either way; `back` names the page it was
-    /// pushed from.
-    #[must_use]
-    pub fn transfer(export: bool, back: &str) -> wire::Route {
-        route(
-            if export { EXPORT } else { IMPORT },
+            IMPORT,
             wire::route::Args::Transfer(wire::TransferRoute {
                 back_label: back.to_owned(),
             }),

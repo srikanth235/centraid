@@ -17,9 +17,10 @@
 //! Connect (R-ONBOARD-4). Every read asks `health.today` first, which says whether
 //! a store is connected and which types have any data.
 //!
-//! THIS SCREEN HOSTS THE FOLLOW ([`HealthFollow`]): it lives as long as Health
-//! does, so a pass runs when it appears and when the member pulls to refresh, on
-//! a phone that connected. A pass never asks the OS for permission.
+//! THE FOLLOW IS THE COORDINATOR'S ([`crate::follow`]): this screen asks it for a pass when it
+//! appears and when the member pulls to refresh, on a phone that connected, and draws what the
+//! pass said. It hosts the device's habit ([`HealthFollow`]) for Stop. A pass never asks the OS
+//! for permission.
 
 use centraid_api_proto::core_v1 as wire;
 use wire::app_query_response::Answer;
@@ -29,11 +30,13 @@ use wire::screen_event::Kind as E;
 
 use super::figures;
 use super::follow::HealthFollow;
-use super::{Metric, PINNED, Phase, Store, Units, WIDE_CARDS, denied, highlights, routes};
+use super::{Metric, PINNED, Store, Units, WIDE_CARDS, denied, highlights, routes};
 use crate::catalog::load;
+use crate::follow::Store as Followed;
 use crate::kit::civil;
+use crate::kit::export;
 use crate::kit::menu;
-use crate::kit::read;
+use crate::kit::read::{self, Page, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, health as words, shared};
 
@@ -50,6 +53,10 @@ const BAND_MORE: &str = "more";
 const MORE_READS: &str = "reads";
 const MORE_CHOOSE: &str = "choose";
 const MORE_STOP: &str = "stop";
+const MORE_TURN_ON: &str = "turn-on";
+/// The row to the trash (#1185): a route the shell pushes.
+const MORE_EXPORT: &str = "export";
+const MORE_TRASH: &str = "trash";
 
 /// The kind section's key and its All option's key (`health-filter-kind-all` on a
 /// screen); every other option is keyed by the kind's concept.
@@ -76,8 +83,10 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         kind_concept_id: String::new(),
         workouts_shown: PAGE,
         sheet: Sheet::None,
-        phase: Phase::Loading,
-        follow: HealthFollow::following(),
+        page: Page::loading(),
+        held: None,
+        asked: String::new(),
+        follow: HealthFollow::new(),
         status: None,
         known_connected: false,
         recheck: false,
@@ -98,7 +107,13 @@ struct Home {
     kind_concept_id: String,
     workouts_shown: u32,
     sheet: Sheet,
-    phase: Phase<Loaded>,
+    /// The read: the tab's answer, empty when it holds nothing to show.
+    page: Page<Loaded>,
+    /// The last answer that arrived, kept while the page is ready or empty: the filter menu and
+    /// the reads sheet draw from it even when the tab itself is empty.
+    held: Option<Loaded>,
+    /// The question the page answers (tab, range, kind), so a different one starts from nothing.
+    asked: String,
     follow: HealthFollow,
     status: Option<wire::StatusLine>,
     /// The vault followed a store the last time this read.
@@ -109,16 +124,62 @@ struct Home {
 }
 
 impl Home {
-    /// `health.today` always (connected, the types with data), then the tab's own
-    /// query.
+    /// `health.today` always (connected, the types with data), then the tab's own query. A read
+    /// for another tab, range or kind starts from nothing, so its failure never shows the old
+    /// rows; a re-read of the same question keeps what is shown under a note.
     fn reload(&mut self, ctx: &Ctx) {
-        let reading = read::read(ctx, load::health::Today {}, |answer| match answer {
-            Answer::HealthToday(today) => Some(today),
-            _ => None,
-        });
-        let Some(today) = self.take(reading) else {
-            return;
+        let asked = self.asked_key();
+        if self.asked != asked {
+            self.page = Page::loading();
+            self.held = None;
+            self.asked = asked;
+        }
+        let reading = match self.gather(ctx) {
+            Reading::Data(loaded) => {
+                let connected = loaded.today.connected;
+                let habit = self.follow.device();
+                if connected && !self.known_connected && habit.loaded && !habit.connected {
+                    self.recheck = true;
+                }
+                self.known_connected = connected;
+                self.held = Some(loaded.clone());
+                Reading::Data(loaded)
+            }
+            other => other,
         };
+        let held = std::mem::replace(&mut self.page, Page::loading());
+        self.page = held.after(reading, ctx.locale(), |loaded| self.is_empty(ctx, loaded));
+    }
+
+    /// What the tab asks: the tab, the trends range and the workouts kind. A different question
+    /// is a different read.
+    fn asked_key(&self) -> String {
+        format!(
+            "{}:{}:{}",
+            self.destination as i32, self.trend_range as i32, self.kind_concept_id
+        )
+    }
+
+    /// The tab's reads together, or the reading that says why there are none.
+    fn gather(&self, ctx: &Ctx) -> Reading<Loaded> {
+        // The data of a read, else the reading that says why there is none.
+        macro_rules! got {
+            ($reading:expr) => {
+                match $reading {
+                    Reading::Data(data) => data,
+                    Reading::Denied(denial) => return Reading::Denied(denial),
+                    Reading::Failed => return Reading::Failed,
+                }
+            };
+        }
+        let today = got!(read::read(
+            ctx,
+            load::health::Today {},
+            |answer| match answer {
+                Answer::HealthToday(today) => Some(today),
+                _ => None,
+            },
+        ));
         let mut loaded = Loaded {
             today,
             trends: None,
@@ -127,7 +188,7 @@ impl Home {
         if loaded.today.connected {
             match self.destination {
                 wire::HealthDestination::Trends => {
-                    let reading = read::read(
+                    loaded.trends = Some(got!(read::read(
                         ctx,
                         load::health::Trends {
                             range: match self.trend_range {
@@ -140,14 +201,10 @@ impl Home {
                             Answer::HealthTrends(trends) => Some(trends),
                             _ => None,
                         },
-                    );
-                    let Some(trends) = self.take(reading) else {
-                        return;
-                    };
-                    loaded.trends = Some(trends);
+                    )));
                 }
                 wire::HealthDestination::Workouts => {
-                    let reading = read::read(
+                    loaded.workouts = Some(got!(read::read(
                         ctx,
                         load::health::Workouts {
                             limit: self.workouts_shown.clamp(1, MAX_ROWS),
@@ -159,36 +216,55 @@ impl Home {
                             Answer::HealthWorkouts(workouts) => Some(workouts),
                             _ => None,
                         },
-                    );
-                    let Some(workouts) = self.take(reading) else {
-                        return;
-                    };
-                    loaded.workouts = Some(workouts);
+                    )));
                 }
                 _ => {}
             }
         }
-        let connected = loaded.today.connected;
-        let habit = self.follow.device();
-        if connected && !self.known_connected && habit.loaded && !habit.connected {
-            self.recheck = true;
-        }
-        self.known_connected = connected;
-        self.phase = Phase::Ready(loaded);
+        Reading::Data(loaded)
     }
 
-    /// The data of a read, else the phase that says why there is none.
-    fn take<T>(&mut self, reading: read::Reading<T>) -> Option<T> {
-        match reading {
-            read::Reading::Data(data) => Some(data),
-            read::Reading::Denied(denial) => {
-                self.phase = Phase::Denied(denial);
-                None
+    /// Nothing to show: nothing connected, a Trends period with no row, or a Workouts list with no
+    /// workout (of the kind chosen). The Today tab is never empty once something is connected.
+    fn is_empty(&self, ctx: &Ctx, loaded: &Loaded) -> bool {
+        if !loaded.today.connected {
+            return true;
+        }
+        match self.destination {
+            wire::HealthDestination::Trends => loaded
+                .trends
+                .as_ref()
+                .is_some_and(|trends| self.trends_data(ctx, trends).rows.is_empty()),
+            wire::HealthDestination::Workouts => loaded
+                .workouts
+                .as_ref()
+                .is_some_and(|workouts| workouts.workouts.is_empty()),
+            _ => false,
+        }
+    }
+
+    /// The page's own sentence for having nothing to show.
+    fn empty_state(&self, ctx: &Ctx) -> wire::EmptyState {
+        let locale = ctx.locale();
+        if !self.known_connected {
+            let store = Store::of(ctx).name(locale);
+            return wire::EmptyState {
+                headline: fill(&words::connect_empty(locale), &[("store", &store)]),
+                action_label: fill(&words::connect_action(locale), &[("store", &store)]),
+                ..Default::default()
+            };
+        }
+        let headline = match self.destination {
+            wire::HealthDestination::Trends => words::trends_empty(locale),
+            wire::HealthDestination::Workouts if self.kind_concept_id.is_empty() => {
+                words::workouts_empty(locale)
             }
-            read::Reading::Failed => {
-                self.phase = Phase::Failed;
-                None
-            }
+            wire::HealthDestination::Workouts => words::workouts_kind_empty(locale),
+            _ => String::new(),
+        };
+        wire::EmptyState {
+            headline,
+            ..Default::default()
         }
     }
 
@@ -279,7 +355,7 @@ impl Home {
     // --- Today -------------------------------------------------------------
 
     fn today_data(&self, ctx: &Ctx, loaded: &Loaded) -> wire::HealthTodayData {
-        let (locale, units) = (ctx.locale(), Units::of(ctx));
+        let (locale, units) = (ctx.locale(), ctx.units());
         let day = &loaded.today.today;
         let parent = self.title(locale);
         let lines: Vec<wire::HealthMetricLine> = PINNED
@@ -333,7 +409,7 @@ impl Home {
     // --- Trends ------------------------------------------------------------
 
     fn trends_data(&self, ctx: &Ctx, answer: &wire::HealthTrends) -> wire::HealthTrendsData {
-        let (locale, units) = (ctx.locale(), Units::of(ctx));
+        let (locale, units) = (ctx.locale(), ctx.units());
         let parent = self.title(locale);
         let compare = match self.trend_range {
             TrendRange::Days90 => words::trends_compare_90(locale),
@@ -346,7 +422,7 @@ impl Home {
             .filter_map(|trend| {
                 let metric = Metric::of_wire(trend.metric)?;
                 let average = trend.average?;
-                let (number, unit) = figures::figure(locale, metric, average, units);
+                let (number, unit) = figures::measure(metric, average).figure(locale, units);
                 let (delta, _) =
                     figures::delta(locale, metric, trend.change, trend.change_pct, units);
                 let values: Vec<f64> = trend.buckets.iter().filter_map(|b| b.value).collect();
@@ -381,10 +457,6 @@ impl Home {
             .collect();
         wire::HealthTrendsData {
             compare_line: compare,
-            empty: rows.is_empty().then(|| wire::EmptyState {
-                headline: words::trends_empty(locale),
-                ..Default::default()
-            }),
             rows,
         }
     }
@@ -397,7 +469,7 @@ impl Home {
         answer: &wire::HealthWorkouts,
         today: &str,
     ) -> wire::HealthWorkoutsData {
-        let (locale, units) = (ctx.locale(), Units::of(ctx));
+        let (locale, units) = (ctx.locale(), ctx.units());
         let parent = self.title(locale);
         let week = civil::week_first(today, civil::week_start_of(ctx.region()))
             .unwrap_or_else(|| today.to_owned());
@@ -425,19 +497,6 @@ impl Home {
         wire::HealthWorkoutsData {
             sections,
             more: answer.next.is_some() && shown < MAX_ROWS,
-            empty: if !answer.workouts.is_empty() {
-                None
-            } else if self.kind_concept_id.is_empty() {
-                Some(wire::EmptyState {
-                    headline: words::workouts_empty(locale),
-                    ..Default::default()
-                })
-            } else {
-                Some(wire::EmptyState {
-                    headline: words::workouts_kind_empty(locale),
-                    ..Default::default()
-                })
-            },
         }
     }
 
@@ -463,20 +522,8 @@ impl Home {
                 String::new()
             },
             today: day.clone(),
-            connect: Some(routes::connect(&words::app_title(locale))),
             ..Default::default()
         };
-        if !loaded.today.connected {
-            let store = Store::of(ctx).name(locale);
-            return wire::HealthHomeData {
-                empty: Some(wire::EmptyState {
-                    headline: fill(&words::connect_empty(locale), &[("store", &store)]),
-                    action_label: fill(&words::connect_action(locale), &[("store", &store)]),
-                    ..Default::default()
-                }),
-                ..base
-            };
-        }
         match self.destination {
             wire::HealthDestination::Trends => wire::HealthHomeData {
                 trends: loaded.trends.as_ref().map(|t| self.trends_data(ctx, t)),
@@ -547,6 +594,7 @@ impl Home {
     fn more_rows(&self, ctx: &Ctx, connected: bool) -> Vec<wire::HealthMoreRow> {
         let locale = ctx.locale();
         let neutral = wire::status_chip::Tone::Neutral as i32;
+        let export = export::entry(locale, super::EXPORT);
         let mut rows = vec![
             wire::HealthMoreRow {
                 key: MORE_READS.to_owned(),
@@ -554,25 +602,58 @@ impl Home {
                 icon_key: "Shield".to_owned(),
                 tone: neutral,
                 route: None,
+                meta: String::new(),
             },
+            // EXPORT (#1185): the kit's row, the same in every app.
             wire::HealthMoreRow {
-                key: MORE_CHOOSE.to_owned(),
-                label: words::more_choose(locale),
-                icon_key: "Sliders".to_owned(),
+                key: MORE_EXPORT.to_owned(),
+                label: export.label,
+                icon_key: export.icon_key.to_owned(),
                 tone: neutral,
-                route: Some(routes::connect(&words::app_title(locale))),
+                route: Some(export.route),
+                meta: words::more_export_meta(locale),
+            },
+            // THE TRASH (`MoreHealth.dc.html`), with the rule every trash states.
+            wire::HealthMoreRow {
+                key: MORE_TRASH.to_owned(),
+                label: shared::trash_entry(locale),
+                icon_key: "Trash".to_owned(),
+                tone: neutral,
+                route: Some(routes::trash()),
+                meta: shared::trash_entry_meta(locale),
             },
         ];
         if connected {
+            // WHAT HEALTH MAY READ is changed from here once connected (it is the Connect page).
+            rows.insert(
+                1,
+                wire::HealthMoreRow {
+                    key: MORE_CHOOSE.to_owned(),
+                    label: words::more_choose(locale),
+                    icon_key: "Sliders".to_owned(),
+                    tone: neutral,
+                    route: Some(routes::connect(&words::app_title(locale))),
+                    meta: String::new(),
+                },
+            );
             rows.push(wire::HealthMoreRow {
                 key: MORE_STOP.to_owned(),
-                label: fill(
-                    &words::more_stop(locale),
-                    &[("store", &Store::of(ctx).name(locale))],
-                ),
+                label: crate::kit::follow::stop_row(locale, &Store::of(ctx).name(locale)),
                 icon_key: "Stop".to_owned(),
                 tone: wire::status_chip::Tone::Net as i32,
                 route: None,
+                meta: String::new(),
+            });
+        } else {
+            // THE TURN-ON ROW takes the stop row's slot while Health reads nothing, so the slot
+            // is never empty: it opens Connect, where the phone is asked for the permission.
+            rows.push(wire::HealthMoreRow {
+                key: MORE_TURN_ON.to_owned(),
+                label: crate::kit::follow::turn_on_row(locale, &Store::of(ctx).name(locale)),
+                icon_key: "Power".to_owned(),
+                tone: wire::status_chip::Tone::Neutral as i32,
+                route: Some(routes::connect(&words::app_title(locale))),
+                meta: String::new(),
             });
         }
         rows
@@ -602,12 +683,22 @@ impl Home {
             return facts;
         };
         let device = self.follow.device();
-        let refused: Vec<Metric> = self
-            .follow
-            .refused()
+        let refused: Vec<Metric> = ctx
+            .follows()
+            .report(Followed::Health)
+            .refused
             .iter()
             .filter_map(|key| Metric::of_key(key))
             .collect();
+        // Background reading is Android's (#1185): HealthKit's is not wired, so no iOS page says it.
+        if store == Store::HealthConnect
+            && ctx.follows().report(Followed::Health).background_refused
+        {
+            facts.push(wire::HealthFact {
+                label: words::reads_background(locale),
+                detail: words::reads_background_value(locale),
+            });
+        }
         for metric in &refused {
             facts.push(wire::HealthFact {
                 label: words::reads_refused(locale),
@@ -700,7 +791,7 @@ fn metric_line(
 ) -> wire::HealthMetricLine {
     let value = answer.and_then(|answer| answer.value);
     let (number, unit) = value
-        .map(|value| figures::figure(locale, metric, value, units))
+        .map(|value| figures::measure(metric, value).figure(locale, units))
         .unwrap_or_default();
     let when = match (value, answer.and_then(|answer| answer.day.as_deref())) {
         (None, _) => words::when_nothing(locale),
@@ -769,7 +860,7 @@ fn typical_words(
     let typical = answer.and_then(|answer| answer.typical);
     let low = answer.and_then(|answer| answer.low);
     let high = answer.and_then(|answer| answer.high);
-    let number = |value: f64| figures::figure(locale, metric, value, units).0;
+    let number = |value: f64| figures::measure(metric, value).figure(locale, units).0;
     match (typical, low, high, value) {
         (None, ..) => (String::new(), false),
         (Some(_), Some(low), Some(high), Some(value)) if wide => {
@@ -802,7 +893,10 @@ fn typical_words(
         (Some(typical), ..) => (
             fill(
                 &words::typical(locale),
-                &[("value", &figures::phrase(locale, metric, typical, units))],
+                &[(
+                    "value",
+                    &figures::measure(metric, typical).words(locale, units),
+                )],
             ),
             false,
         ),
@@ -832,12 +926,13 @@ impl Screen for Home {
             Some(E::Appeared(_)) => {
                 self.reload(ctx);
                 effects.extend(self.follow.attach());
+                ctx.follows().changed(ctx, Followed::Health);
             }
             Some(E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
             Some(E::HealthHome(event)) => match event.kind {
                 Some(H::Refreshed(_)) => {
                     self.reload(ctx);
-                    effects.extend(self.follow.request(ctx));
+                    ctx.follows().changed(ctx, Followed::Health);
                 }
                 Some(H::Band(band)) => self.band(ctx, &band.key),
                 Some(H::Range(range)) => self.range(ctx, &range.key),
@@ -876,21 +971,30 @@ impl Screen for Home {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::health_home_state::Content;
         let locale = ctx.locale();
-        let drawing = !matches!(self.phase, Phase::Denied(_));
-        let loaded = self.phase.data();
+        let drawing = !matches!(self.page, Page::Refused(_));
+        // The last answer stands for the tab while it is ready or empty: an empty Trends period
+        // or Workouts kind still has its range chips, filter menu and reads sheet.
+        let loaded = match self.page {
+            Page::Ready { .. } | Page::Empty => self.held.as_ref(),
+            _ => None,
+        };
         let connected = loaded.is_some_and(|loaded| loaded.today.connected);
         let store = Store::of(ctx).name(locale);
-        let content = match &self.phase {
-            Phase::Loading => Content::Loading(wire::Loading { first_load: true }),
-            Phase::Failed => Content::Failure(read::failure(locale)),
-            Phase::Denied(denial) => Content::Denied(denied(locale, denial)),
-            Phase::Ready(loaded) => Content::Data(Box::new(self.data(ctx, loaded))),
-        };
+        let content = self
+            .page
+            .data()
+            .map(|loaded| Content::Data(Box::new(self.data(ctx, loaded))));
         wire::ViewState {
             kind: Some(wire::view_state::Kind::HealthHome(Box::new(
                 wire::HealthHomeState {
                     destination: self.destination as i32,
-                    content: Some(content),
+                    content,
+                    page: Some(self.page.wire(
+                        locale,
+                        |denial| denied(locale, denial),
+                        || self.empty_state(ctx),
+                    )),
+                    connect: Some(routes::connect(&words::app_title(locale))),
                     sheet: self.sheet as i32,
                     band: if drawing {
                         self.band_tabs(locale)
@@ -931,13 +1035,19 @@ impl Screen for Home {
                     },
                     more_rows: self.more_rows(ctx, connected),
                     reads_facts: self.reads_facts(ctx, loaded),
-                    stop: (self.sheet == Sheet::Stop).then(|| wire::Confirm {
-                        title: fill(&words::stop_title(locale), &[("store", &store)]),
-                        body: fill(&words::stop_body(locale), &[("store", &store)]),
-                        confirm_label: words::stop_confirm(locale),
-                        destructive: true,
+                    stop: (self.sheet == Sheet::Stop).then(|| {
+                        crate::kit::follow::stop_confirm(
+                            locale,
+                            &words::app_title(locale),
+                            &store,
+                            &words::stop_kept(locale),
+                        )
                     }),
-                    status: self.status.clone(),
+                    status: self.status.clone().or_else(|| {
+                        ctx.follows()
+                            .report(Followed::Health)
+                            .status(ctx, Followed::Health)
+                    }),
                 },
             ))),
             ..wire::ViewState::default()

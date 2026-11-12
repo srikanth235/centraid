@@ -18,8 +18,10 @@ struct PeopleHomeView: View {
 
     @Environment(\.colorScheme) private var scheme
 
+    /// A refused read draws the gate with no add and no band: reading the state to choose the
+    /// header's pieces is a layout call, the shared view still draws the gate.
     private var denied: Bool {
-        if case .denied? = state.content { return true }
+        if case .refused? = state.page.state { return true }
         return false
     }
 
@@ -54,14 +56,15 @@ struct PeopleHomeView: View {
                 if state.hasStatus, !state.status.sentence.isEmpty {
                     PeopleStatusLine(text: state.status.sentence)
                 }
-                if state.search.open, state.search.hasResults {
-                    searchResults
-                } else {
-                    ReadStateView(
-                        content: readContent,
-                        loadingLabel: chrome.loading,
-                        onRetry: { send(PeopleEvents.home { $0.refreshed = .init() }) }
-                    ) { _ in
+                PageReadStateView(
+                    page: state.page,
+                    loadingLabel: chrome.loading,
+                    onRetry: { send(PeopleEvents.home { $0.refreshed = .init() }) },
+                    emptyExtra: emptyUnder
+                ) {
+                    if state.search.open, state.search.hasResults {
+                        searchResults
+                    } else {
                         surface
                     }
                 }
@@ -75,6 +78,20 @@ struct PeopleHomeView: View {
             }
         )) {
             PeopleHomeSheet(state: state, send: send, open: open)
+        }
+        // THE STOP CONFIRM (#1185): the kit's sheet in Rust's own sentences, the same as Health's.
+        .sheet(isPresented: Binding(
+            get: { state.hasStop },
+            set: { shown in
+                guard !shown, state.hasStop else { return }
+                send(PeopleEvents.home { $0.stopDismissed = .init() })
+            }
+        )) {
+            ConfirmSheet(
+                state.stop,
+                onConfirm: { send(PeopleEvents.home { $0.stopConfirmed = .init() }) },
+                onDismiss: { send(PeopleEvents.home { $0.stopDismissed = .init() }) }
+            )
         }
     }
 
@@ -118,12 +135,22 @@ struct PeopleHomeView: View {
 
     // MARK: content
 
-    private var readContent: ScreenContent<Bool> {
-        switch state.content {
-        case .loading?, nil: return .loading(true)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        default: return .data(true)
+    /// UNDER THE EMPTY STATE: a term that matched no one still offers Ask, and day one offers the
+    /// phone's contacts as its import (sent to Rust as `ImportContactsTapped`; "Add person" stays in
+    /// the header).
+    private var emptyUnder: (() -> AnyView)? {
+        let asks = state.search.open && state.search.hasAsk && !state.search.hasResults
+        // Day one is the empty state that names the phone's contacts (reading it picks the extra).
+        var offersImport = false
+        if case let .empty(empty)? = state.page.state { offersImport = empty.importSource == .contacts }
+        guard asks || offersImport else { return nil }
+        return {
+            AnyView(VStack(spacing: 0) {
+                if asks { SearchAskRow(ask: state.search.ask) }
+                if offersImport {
+                    PeopleImportButton(label: state.chrome.importContacts, send: send)
+                }
+            })
         }
     }
 
@@ -131,32 +158,24 @@ struct PeopleHomeView: View {
     private var surface: some View {
         switch state.content {
         case let .roster(roster)?:
-            PeopleRosterList(roster: roster, importLabel: state.chrome.importContacts, send: send, open: open)
+            PeopleRosterList(roster: roster, send: send, open: open)
         case let .touch(touch)?:
-            PeopleTouchList(touch: touch, importLabel: state.chrome.importContacts, send: send, open: open)
+            PeopleTouchList(touch: touch, send: send, open: open)
         default: EmptyView()
         }
     }
 
     private var searchResults: some View {
         let results = state.search.results
-        return Group {
-            if results.hasEmpty {
-                EmptyStateView(results.empty)
-                if state.search.hasAsk { SearchAskRow(ask: state.search.ask) }
-                Spacer(minLength: 0)
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(results.rows, id: \.partyID) { row in
-                            PeopleRosterRowView(row: row, send: send, open: open)
-                        }
-                        if state.search.hasAsk { SearchAskRow(ask: state.search.ask) }
-                    }
+        return ScrollView {
+            LazyVStack(spacing: 0) {
+                ForEach(results.rows, id: \.partyID) { row in
+                    PeopleRosterRowView(row: row, send: send, open: open)
                 }
-                .accessibilityIdentifier("people-search-results")
+                if state.search.hasAsk { SearchAskRow(ask: state.search.ask) }
             }
         }
+        .accessibilityIdentifier("people-search-results")
     }
 }
 
@@ -179,6 +198,106 @@ enum PeopleEvents {
         build(&event)
         return event
     }
+
+    static func lists(_ build: (inout Centraid_Core_V1_PeopleListsEvent) -> Void) -> Centraid_Core_V1_PeopleListsEvent {
+        var event = Centraid_Core_V1_PeopleListsEvent()
+        build(&event)
+        return event
+    }
+}
+
+// MARK: - Lists
+
+/// `people.lists` (#1185): the member's lists by name with how many people each holds, "New list"
+/// in the header, and one name sheet that makes a list or renames the one tapped (its "Move to
+/// trash" is on that sheet). The view decides nothing: every word, count and flag is Rust's, and
+/// the status line's Undo is the kit's `statusActed`, sent from `StatusLineView`.
+struct PeopleListsView: View {
+    let state: Centraid_Core_V1_PeopleListsState
+    let send: (Centraid_Core_V1_PeopleListsEvent) -> Void
+    let onBack: () -> Void
+
+    var body: some View {
+        let addLabel = state.addLabel
+        PushedPage(title: state.title, parentTitle: state.backLabel, onBack: onBack) {
+            RoomTrailing(action: addLabel.isEmpty ? nil : RoomAction(
+                iconKey: "Plus",
+                label: addLabel,
+                identifier: "people-list-add",
+                action: { send(PeopleEvents.lists { $0.newTapped = .init() }) }
+            ), app: "people")
+        } content: {
+            VStack(spacing: 0) {
+                PageReadStateView(
+                    page: state.page,
+                    onRetry: { send(PeopleEvents.lists { $0.refreshed = .init() }) }
+                ) {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(state.data.rows, id: \.listID) { row in
+                                let listID = row.listID
+                                CentraidRow(
+                                    title: row.name,
+                                    meta: row.meta,
+                                    accessibility: row.accessibilityLabel,
+                                    identifier: "people-list-row-\(listID)"
+                                ) { send(PeopleEvents.lists { $0.rowTapped = .with { $0.listID = listID } }) }
+                            }
+                        }
+                        .padding(.bottom, 16)
+                    }
+                }
+                StatusLineView(status: state.status, identifier: "people-lists-status-action")
+            }
+        }
+        .sheet(isPresented: Binding(
+            get: { state.hasSheet },
+            set: { shown in
+                guard !shown, state.hasSheet else { return }
+                send(PeopleEvents.lists { $0.sheetClosed = .init() })
+            }
+        )) {
+            PeopleListSheetView(sheet: state.sheet, send: send)
+        }
+    }
+}
+
+/// The name sheet: a new list, or the one tapped. A name arms the verb; Move to trash asks nothing.
+private struct PeopleListSheetView: View {
+    let sheet: Centraid_Core_V1_PeopleListSheet
+    let send: (Centraid_Core_V1_PeopleListsEvent) -> Void
+
+    @State private var name = ""
+
+    var body: some View {
+        SheetRoom(
+            title: sheet.title,
+            primary: SheetPrimary(label: sheet.submitLabel, enabled: sheet.canSubmit, identifier: "people-list-submit") {
+                send(PeopleEvents.lists { $0.submitted = .init() })
+            },
+            outlines: outlines
+        ) {
+            EditableFieldRow(key: "", text: $name, placeholder: sheet.namePlaceholder, identifier: "people-list-name") { typed in
+                guard typed != sheet.name else { return }
+                send(PeopleEvents.lists { $0.nameChanged = .with { $0.text = typed } })
+            }
+            .padding(.horizontal, -CentraidGeometry.pageMargin)
+        }
+        .onAppear { name = sheet.name }
+    }
+
+    private var outlines: [SheetOutline] {
+        var outlines: [SheetOutline] = []
+        if sheet.hasTrashLabel, !sheet.trashLabel.isEmpty {
+            outlines.append(SheetOutline(label: sheet.trashLabel, tone: "net", identifier: "people-list-trash") {
+                send(PeopleEvents.lists { $0.trashTapped = .init() })
+            })
+        }
+        outlines.append(SheetOutline(label: sheet.cancelLabel, link: true, ink: true, identifier: "people-list-cancel") {
+            send(PeopleEvents.lists { $0.sheetClosed = .init() })
+        })
+        return outlines
+    }
 }
 
 // MARK: - Roster
@@ -189,7 +308,6 @@ enum PeopleEvents {
 /// to; this only draws them and scrolls.
 private struct PeopleRosterList: View {
     let roster: Centraid_Core_V1_PeopleRosterData
-    let importLabel: String
     let send: (Centraid_Core_V1_PeopleHomeEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
 
@@ -199,23 +317,12 @@ private struct PeopleRosterList: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if roster.hasEmpty {
-                // WHERE THE PHONE HOLDS CONTACTS, ITS IMPORT IS DAY ONE'S ACTION, sent to Rust as
-                // `ImportContactsTapped`; "Add person" stays in the header.
-                let offersImport = roster.empty.importSource == .contacts
-                EmptyStateView(roster.empty)
-                if offersImport {
-                    PeopleImportButton(label: importLabel, send: send)
-                }
-                Spacer(minLength: 0)
-            } else {
-                ScrollViewReader { proxy in
-                    ZStack(alignment: .trailing) {
-                        list
-                        if !roster.index.isEmpty, !largestText {
-                            PeopleIndexRail(letters: roster.index) { key in
-                                proxy.scrollTo(Self.anchor(key), anchor: .top)
-                            }
+            ScrollViewReader { proxy in
+                ZStack(alignment: .trailing) {
+                    list
+                    if !roster.index.isEmpty, !largestText {
+                        PeopleIndexRail(letters: roster.index) { key in
+                            proxy.scrollTo(Self.anchor(key), anchor: .top)
                         }
                     }
                 }
@@ -490,90 +597,81 @@ private struct PeopleRosterRowView: View {
 
 private struct PeopleTouchList: View {
     let touch: Centraid_Core_V1_PeopleTouchData
-    let importLabel: String
     let send: (Centraid_Core_V1_PeopleHomeEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
 
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        if touch.hasEmpty {
-            let offersImport = touch.empty.importSource == .contacts
-            EmptyStateView(touch.empty)
-            if offersImport {
-                PeopleImportButton(label: importLabel, send: send)
-            }
-            Spacer(minLength: 0)
-        } else {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    tiles
-                    SectionHeader(title: touch.reconnectHead.title, count: touch.reconnectHead.count)
-                    if touch.reconnect.isEmpty {
-                        PeopleStatusLine(text: touch.reconnectEmpty)
-                    }
-                    ForEach(touch.reconnect, id: \.partyID) { card in
-                        HStack(spacing: 0) {
-                            PeopleAvatarView(avatar: card.avatar)
-                                .padding(.leading, CentraidGeometry.pageMargin)
-                            CentraidRow(
-                                title: card.name,
-                                meta: [card.role, card.detail].filter { !$0.isEmpty }.joined(separator: " · "),
-                                accessibility: card.accessibilityLabel,
-                                identifier: "people-reconnect-\(card.partyID)",
-                                onTap: { open(card.route) }
-                            )
-                            if !card.actionLabel.isEmpty {
-                                KitOutlineButton(label: card.actionLabel) { open(card.logRoute) }
-                                    .padding(.trailing, CentraidGeometry.pageMargin)
-                                    .accessibilityIdentifier("people-log-touch-\(card.partyID)")
-                            }
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                tiles
+                SectionHeader(title: touch.reconnectHead.title, count: touch.reconnectHead.count)
+                if touch.reconnect.isEmpty {
+                    PeopleStatusLine(text: touch.reconnectEmpty)
+                }
+                ForEach(touch.reconnect, id: \.partyID) { card in
+                    HStack(spacing: 0) {
+                        PeopleAvatarView(avatar: card.avatar)
+                            .padding(.leading, CentraidGeometry.pageMargin)
+                        CentraidRow(
+                            title: card.name,
+                            meta: [card.role, card.detail].filter { !$0.isEmpty }.joined(separator: " · "),
+                            accessibility: card.accessibilityLabel,
+                            identifier: "people-reconnect-\(card.partyID)",
+                            onTap: { open(card.route) }
+                        )
+                        if !card.actionLabel.isEmpty {
+                            KitOutlineButton(label: card.actionLabel) { open(card.logRoute) }
+                                .padding(.trailing, CentraidGeometry.pageMargin)
+                                .accessibilityIdentifier("people-log-touch-\(card.partyID)")
                         }
-                    }
-                    SectionHeader(title: touch.upcomingHead.title, count: touch.upcomingHead.count)
-                    if touch.upcoming.isEmpty {
-                        PeopleStatusLine(text: touch.upcomingEmpty)
-                    }
-                    ForEach(touch.upcoming, id: \.dateID) { row in
-                        HStack(spacing: 0) {
-                            PeopleAvatarView(avatar: row.avatar)
-                                .padding(.leading, CentraidGeometry.pageMargin)
-                            CentraidRow(
-                                title: row.name,
-                                meta: [row.label, row.dayLabel].filter { !$0.isEmpty }.joined(separator: " · "),
-                                trailing: row.whenLabel,
-                                accessibility: row.accessibilityLabel,
-                                identifier: "people-upcoming-\(row.dateID)",
-                                onTap: { open(row.route) }
-                            )
-                        }
-                    }
-                    SectionHeader(title: touch.recentHead.title)
-                    if touch.recent.isEmpty {
-                        PeopleStatusLine(text: touch.recentEmpty)
-                    }
-                    ForEach(touch.recent, id: \.interactionID) { row in
-                        HStack(spacing: 0) {
-                            PeopleAvatarView(avatar: row.avatar)
-                                .padding(.leading, CentraidGeometry.pageMargin)
-                            CentraidRow(
-                                title: row.name,
-                                meta: [row.kindLabel, row.text].filter { !$0.isEmpty }.joined(separator: " · "),
-                                trailing: row.whenLabel,
-                                accessibility: row.accessibilityLabel,
-                                identifier: "people-recent-\(row.interactionID)",
-                                onTap: { open(row.route) }
-                            )
-                        }
-                    }
-                    if !touch.statusLine.isEmpty {
-                        PeopleStatusLine(text: touch.statusLine)
                     }
                 }
+                SectionHeader(title: touch.upcomingHead.title, count: touch.upcomingHead.count)
+                if touch.upcoming.isEmpty {
+                    PeopleStatusLine(text: touch.upcomingEmpty)
+                }
+                ForEach(touch.upcoming, id: \.dateID) { row in
+                    HStack(spacing: 0) {
+                        PeopleAvatarView(avatar: row.avatar)
+                            .padding(.leading, CentraidGeometry.pageMargin)
+                        CentraidRow(
+                            title: row.name,
+                            meta: [row.label, row.dayLabel].filter { !$0.isEmpty }.joined(separator: " · "),
+                            trailing: row.whenLabel,
+                            accessibility: row.accessibilityLabel,
+                            identifier: "people-upcoming-\(row.dateID)",
+                            onTap: { open(row.route) }
+                        )
+                    }
+                }
+                SectionHeader(title: touch.recentHead.title)
+                if touch.recent.isEmpty {
+                    PeopleStatusLine(text: touch.recentEmpty)
+                }
+                ForEach(touch.recent, id: \.interactionID) { row in
+                    HStack(spacing: 0) {
+                        PeopleAvatarView(avatar: row.avatar)
+                            .padding(.leading, CentraidGeometry.pageMargin)
+                        CentraidRow(
+                            title: row.name,
+                            meta: [row.kindLabel, row.text].filter { !$0.isEmpty }.joined(separator: " · "),
+                            trailing: row.whenLabel,
+                            accessibility: row.accessibilityLabel,
+                            identifier: "people-recent-\(row.interactionID)",
+                            onTap: { open(row.route) }
+                        )
+                    }
+                }
+                if !touch.statusLine.isEmpty {
+                    PeopleStatusLine(text: touch.statusLine)
+                }
             }
-            .refreshable { send(PeopleEvents.home { $0.refreshed = .init() }) }
-            .accessibilityIdentifier("people-touch")
         }
+        .refreshable { send(PeopleEvents.home { $0.refreshed = .init() }) }
+        .accessibilityIdentifier("people-touch")
+    
     }
 
     /// THE TILES: a figure over its label; a tappable one lands on People
@@ -633,9 +731,14 @@ private struct PeopleHomeSheet: View {
                 }
             }
             ForEach(state.moreRows, id: \.key) { row in
-                SheetRow(iconKey: row.iconKey, label: row.label, identifier: "people-more-\(row.key)") {
-                    send(PeopleEvents.home { $0.sheetClosed = .init() })
-                    open(row.route)
+                SheetRow(iconKey: row.iconKey, label: row.label, detail: row.meta, identifier: "people-more-\(row.key)") {
+                    if row.hasRoute {
+                        send(PeopleEvents.home { $0.sheetClosed = .init() })
+                        open(row.route)
+                    } else {
+                        // A row with no route of its own (stop): Rust decides what it opens.
+                        send(PeopleEvents.home { $0.moreRow = .with { $0.key = row.key } })
+                    }
                 }
             }
         }

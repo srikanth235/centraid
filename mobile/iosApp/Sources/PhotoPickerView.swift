@@ -47,16 +47,10 @@ struct PhotoPickerView: View {
                         .accessibilityIdentifier("photos.picker.writeFailure")
                 }
 
-                switch state.content {
-                case .loading?, nil:
-                    RowSkeleton()
-                case let .failure(failure)?:
-                    // A FAILED READ IS NOT AN EMPTY LIBRARY.
-                    ScreenFailureView(sentence: failure.sentence, remedy: failure.remedy)
-                case let .data(data)?:
-                    if data.hasEmpty {
-                        ScreenEmptyView(sentence: data.empty.headline, remedy: data.empty.body)
-                    } else {
+                // A FAILED READ IS NOT AN EMPTY LIBRARY: the page says which of the five it is.
+                PageReadStateView(page: state.page, onRetry: { event { $0.refreshed = .init() } }) {
+                    if state.content != nil {
+                        let data = state.data
                         // TAKEN, NOT HIDDEN: a member hunting for the photograph
                         // they added last week finds it, and finds out why it
                         // will not tick.

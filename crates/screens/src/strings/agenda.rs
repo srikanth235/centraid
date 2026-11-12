@@ -4,6 +4,7 @@ catalog! {
     plain a11y_cancel = ("Cancel this event", "Cancel this event");
     plain a11y_edit = ("Edit this event", "Edit this event");
     plain action_edit = ("Edit", "Edit");
+    plain menu_more = ("More", "More");
     plain action_open_map = ("Open in Maps", "Open in Maps");
     plain a11y_open_map = ("Open this location in Maps", "Open this location in Maps");
     plain all_day = ("All day", "All day");
@@ -17,7 +18,7 @@ catalog! {
     plain calendar_shown = ("Shown", "Shown");
     plain calendar_unnamed = ("Calendar", "Calendar");
     plain cancel_event = ("Cancel event", "Cancel event");
-    plain cancel_scope_body = ("Pick which occurrences to cancel.", "Pick which occurrences to cancel.");
+    plain cancel_scope_body = ("Pick which events to cancel.", "Pick which events to cancel.");
     plain cancel_scope_title = ("Cancel a repeating event", "Cancel a repeating event");
     plain cancel_action = ("Cancel…", "Cancel…");
     plain close = ("Close", "Close");
@@ -29,8 +30,14 @@ catalog! {
     plain confirm_discard_title = ("Discard your changes?", "Discard your changes?");
     plain confirm_skip = ("Skip it", "Skip it");
     plain confirm_skip_body = ("The rest of the series stays on your calendar.", "The rest of the series stays on your calendar.");
-    plain confirm_skip_title = ("Skip this occurrence?", "Skip this occurrence?");
+    plain confirm_skip_title = ("Skip this one?", "Skip this one?");
     plain continues = ("Continues", "Continues");
+    plain export_all = ("All calendars", "All calendars");
+    plain export_lede = (
+        "Events in one .ics file, for any calendar app.",
+        "Events in one .ics file, for any calendar app."
+    );
+    plain export_title = ("Export calendar", "Export calendar");
     plain denied_body = ("Ask the owner of this vault for access.", "Ask the owner of this vault for access.");
     plain denied_title = ("Calendar cannot read this vault", "Calendar cannot read this vault");
     plain done = ("Done", "Done");
@@ -60,7 +67,6 @@ catalog! {
     plain foot_new = ("A new event starts tentative.", "A new event starts tentative.");
     plain from = ("From", "From");
     plain from_today = ("From today", "From today");
-    plain gone_action = ("Back to Calendar", "Back to Calendar");
     plain gone_body = ("It was cancelled, moved or deleted.", "It was cancelled, moved or deleted.");
     plain gone_title = ("This event was removed.", "This event was removed.");
     plain guests_none = ("Nobody else", "Nobody else");
@@ -142,17 +148,17 @@ catalog! {
     plain rsvp_maybe = ("Maybe", "Maybe");
     plain rsvp_no = ("Not going", "Not going");
     plain rsvp_question = ("Are you going?", "Are you going?");
-    plain rsvp_series_note = ("Your answer is for every occurrence.", "Your answer is for every occurrence.");
+    plain rsvp_series_note = ("Your answer is for every event in the series.", "Your answer is for every event in the series.");
     plain rsvp_yes = ("Going", "Going");
     plain save = ("Save", "Save");
     plain scope_future = ("This and the ones after", "This and the ones after");
-    plain scope_move_note = ("To move every occurrence, edit the first one.", "To move every occurrence, edit the first one.");
-    plain scope_occurrence = ("This occurrence", "This occurrence");
-    plain scope_question = ("Which occurrences does this change?", "Which occurrences does this change?");
+    plain scope_move_note = ("To move every event in the series, edit the first one.", "To move every event in the series, edit the first one.");
+    plain scope_occurrence = ("Only this one", "Only this one");
+    plain scope_question = ("Which events does this change?", "Which events does this change?");
     plain scope_rule_note = ("A new repeat rule reaches the whole series.", "A new repeat rule reaches the whole series.");
     plain scope_series = ("The whole series", "The whole series");
     plain scope_series_note = ("Guests, reminders, the link and the calendar belong to the whole series.", "Guests, reminders, the link and the calendar belong to the whole series.");
-    plain scope_skip = ("Skip this occurrence", "Skip this occurrence");
+    plain scope_skip = ("Skip this one", "Skip this one");
     plain scope_title = ("This event repeats", "This event repeats");
     plain search_label = ("Search events", "Search events");
     plain search_placeholder = ("Search events", "Search events");

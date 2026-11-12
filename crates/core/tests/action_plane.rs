@@ -88,6 +88,7 @@ fn act_on(
             action: action.to_owned(),
             input: params(pairs),
             invoke_key: key.to_owned(),
+            autosave: false,
         }))),
     })?;
     match answer.kind {
@@ -567,7 +568,15 @@ fn an_executed_act_carries_the_action_that_takes_it_back() {
     // AND THE UNDO HAS ITS OWN: restoring is deleting's inverse.
     assert_eq!(undone.inverse.expect("restorable").action, "restore-task");
 
-    // A purge, an edit with no prior state, and a read have none.
+    // An edit is taken back by the record's earlier version; a purge and a read have no Undo.
+    act_with(
+        &sample,
+        "reminders",
+        "restore-task",
+        "u1-restore",
+        &[("id", text(&id))],
+    )
+    .expect("a restore");
     let edited = act_with(
         &sample,
         "reminders",
@@ -576,7 +585,10 @@ fn an_executed_act_carries_the_action_that_takes_it_back() {
         &[("id", text(&id)), ("title", text("Renamed"))],
     )
     .expect("an edit");
-    assert!(edited.inverse.is_none());
+    assert_eq!(
+        edited.inverse.expect("an edit is undoable").action,
+        "undo-change"
+    );
 }
 
 #[test]

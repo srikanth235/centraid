@@ -1,4 +1,4 @@
-//! THE TWENTY-NINE ACTIONS, as command invocations.
+//! THE THIRTY-TWO ACTIONS, as command invocations.
 //!
 //! Every People action is a thin invocation of ONE typed vault command: the
 //! projection lives in the command, not the app, so this module is a table, not
@@ -13,7 +13,7 @@
 //! `task.complete` and `task.reopen` (a follow-up or a gift idea is a task, and
 //! completing one is the operation Tasks and automations share, so a repeating
 //! task gets its next occurrence) and `event.edit` (a date's reminder is its
-//! event's). A birthday is the person's own column, so its reminder is `set-birthday-reminder`.
+//! event's). A birthday has no reminder: it is shown on its day and notifies nobody.
 //!
 //! **An action says the state it wants.** The v0 actions `toggle-gift` and
 //! `toggle-reminder` flipped a state the caller had not read; a gift is a task,
@@ -26,7 +26,7 @@
 //!
 //! **`confirmation` is the manifest's and `confirm` is the command's** (census
 //! §A0, two gates). People's manifest-confirmed actions are `trash-person`,
-//! `purge-person`, `delete-contact-channel` and `merge-people`; no command this
+//! `purge-person`, `empty-trash`, `delete-contact-channel` and `merge-people`; no command this
 //! build carries sets the command-level gate. Collapsing them would put a
 //! dialog in front of nothing and drop the non-owner park in exchange.
 
@@ -111,14 +111,18 @@ pub struct CommandsUnavailable {
 pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
-/// THE TABLE. Twenty-nine actions, in the manifest's own order.
-pub const ACTIONS: [ActionRow; 29] = [
+/// THE TABLE. Thirty-two actions, in the manifest's own order.
+pub const ACTIONS: [ActionRow; 36] = [
+    // THE GENERAL LINK (#1185): any item to any other, and the link taken off.
+    act("link", "edge.add"),
+    act("unlink", "edge.remove"),
     act("add-person", "person.add"),
     act("edit-person", "person.edit"),
     act("set-cadence", "person.edit"),
     confirmed("trash-person", "entity.trash"),
     act("restore-person", "entity.restore"),
     confirmed("purge-person", "entity.purge"),
+    confirmed("empty-trash", "entity.empty_trash"),
     act("log-interaction", "person.log_interaction"),
     act("star-person", "flag.set"),
     act("unstar-person", "flag.clear"),
@@ -129,20 +133,33 @@ pub const ACTIONS: [ActionRow; 29] = [
     act("reopen-task", "task.reopen"),
     act("add-important-date", "person.add_date"),
     act("set-reminder", "event.edit"),
-    act("set-birthday-reminder", "person.set_birthday_reminder"),
     act("add-relationship", "person.add_relationship"),
+    confirmed("remove-relationship", "edge.remove"),
     act("add-gift", "person.add_gift"),
     act("create-list", "container.create"),
     act("rename-list", "entity.retitle"),
-    act("delete-list", "entity.trash"),
+    confirmed("delete-list", "entity.trash"),
+    // THE SCREEN'S UNDO of a list's delete (a chat card, like the delete: the kit derives a
+    // direct action from an inverse, which needs the kind declared).
+    confirmed("restore-list", "entity.restore"),
     act("add-journal-entry", "person.add_journal_entry"),
     act("save-contact-channel", "person.save_contact_point"),
     confirmed("delete-contact-channel", "person.remove_contact_point"),
     confirmed("merge-people", "person.merge"),
     act("follow-contacts", "follow.contacts"),
-    // Item 20 (#1173): the More page's Import and Export of vCards.
-    act("import-vcf", "person.import_vcf"),
+    // The Undo of the pass above (owner ruling: connecting is undone by disconnecting). No People
+    // screen offers it; chat does, and asks first because following again needs the phone's read.
+    confirmed("stop-following", "follow.stop"),
+    // Item 20 (#1173): the More page's Import and Export of vCards. An import is not taken back by
+    // an action (it adds people the member can trash and fills blanks), so it asks first: the
+    // Import screen is choose, preview, then the member's tap, and only the tap writes. An export
+    // writes nothing (`writes_nothing`).
+    confirmed("import-vcf", "person.import_vcf"),
     act("export-vcf", "person.export_vcf"),
+    // AN ATTACHMENT is an `attached` edge from the item to a document or a photo: the shared
+    // verbs, one pair in every app (the Attach promise, #1185).
+    act("attach", "edge.add"),
+    act("detach", "edge.remove"),
 ];
 
 /// One action's row, by the name the manifest gives it.
@@ -202,7 +219,7 @@ mod tests {
 
     #[test]
     fn every_action_invokes_one_command_and_the_person_verbs_are_the_persons_own() {
-        assert_eq!(ACTIONS.len(), 29);
+        assert_eq!(ACTIONS.len(), 36);
         assert_eq!(
             commands("person."),
             [
@@ -221,7 +238,6 @@ mod tests {
                 "person.move",
                 "person.remove_contact_point",
                 "person.save_contact_point",
-                "person.set_birthday_reminder",
             ],
             "what only a person has; everything else is a shared verb"
         );
@@ -242,7 +258,7 @@ mod tests {
     }
 
     #[test]
-    fn the_four_confirmed_actions_are_the_destructive_ones() {
+    fn the_confirmed_actions_are_the_destructive_ones_and_the_ones_that_cannot_be_taken_back() {
         let required: Vec<&str> = ACTIONS
             .iter()
             .filter(|row| row.confirm == Confirm::Required)
@@ -253,8 +269,14 @@ mod tests {
             [
                 "trash-person",
                 "purge-person",
+                "empty-trash",
+                "remove-relationship",
+                "delete-list",
+                "restore-list",
                 "delete-contact-channel",
-                "merge-people"
+                "merge-people",
+                "stop-following",
+                "import-vcf"
             ]
         );
     }

@@ -1,9 +1,6 @@
 package dev.centraid.android.screens.docs
 
 import dev.centraid.android.kit.SearchAskRow
-import dev.centraid.android.kit.Surface
-import dev.centraid.design.CentraidScale
-import dev.centraid.android.kit.appAccent
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
@@ -69,10 +66,9 @@ import centraid.core.v1.DocsRename
 import centraid.core.v1.DocsRowView
 import centraid.core.v1.DocsSheet
 import centraid.core.v1.DocsStage
-import centraid.core.v1.DocsVersionsEvent
-import centraid.core.v1.DocsVersionsState
 import centraid.core.v1.FilterMenuCleared
 import centraid.core.v1.FilterMenuPicked
+import centraid.core.v1.PhoneSaysTaken
 import centraid.core.v1.Route
 import dev.centraid.android.kit.SearchField
 import dev.centraid.android.kit.SectionHead
@@ -85,13 +81,14 @@ import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EditorRoom
-import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.OutlineButton
+import dev.centraid.android.kit.PhoneSaysLine
+import centraid.core.v1.StatusLine as StatusLineMessage
 import dev.centraid.android.kit.ProgressStatusLine
 import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.ReadStateView
@@ -107,7 +104,6 @@ import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.StatusLine
-import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.screens.photos.LightboxTransport
 import dev.centraid.android.screens.photos.PlayerSurface
 import dev.centraid.android.screens.decodeUpright
@@ -160,7 +156,8 @@ internal fun DocsSheetView(sheet: DocsSheet?, actions: DocsSheetActions) {
                 SheetRow(
                     label = action.label,
                     iconKey = action.icon_key.ifEmpty { null },
-                    detail = action.detail,
+                    // Trash's rule (meta) is the second line; the count (detail) stays under it.
+                    detail = listOf(action.meta, action.detail).filter { it.isNotEmpty() }.joinToString("\n"),
                     destructive = action.destructive,
                     testTag = "docs-action-${action.key}",
                     onTap = { if (action.enabled) actions.onAction(action) },
@@ -250,7 +247,17 @@ internal fun RenameLine(rename: DocsRename?, placeholder: String, doneLabel: Str
         }
         OutlineButton(label = doneLabel.ifEmpty { KitWords.DONE }, testTag = "docs-rename-done", onPress = onDone)
     }
-    StatusLine(rename.status_label)
+    // A RENAME THE VAULT REFUSED BECAUSE THE DOCUMENT CHANGED ELSEWHERE (#1185): Reload is the one verb,
+    // the kit's `StatusActed`.
+    val reload = rename.autosave?.reload_label.orEmpty()
+    if (reload.isNotEmpty()) {
+        StatusLine(
+            line = StatusLineMessage(sentence = rename.status_label, action_label = reload, refused = true),
+            actTag = "docs-rename-reload",
+        )
+    } else {
+        StatusLine(rename.status_label)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -316,7 +323,7 @@ internal fun DocsDriveScreen(
             Column(Modifier.fillMaxSize()) {
                 Box(Modifier.weight(1f)) { DriveBody(state, onEvent, onOpen) }
                 SearchAskRow(state.search?.ask_row, onOpen)
-                if (state.denied == null || search.field.open_) SearchFoot(search, testTag = "docs-search")
+                if (state.page?.refused == null || search.field.open_) SearchFoot(search, testTag = "docs-search")
             }
         }
         PushedPage(
@@ -387,6 +394,16 @@ internal fun DocsDriveScreen(
             onDismiss = { onEvent(DocsDriveEvent(dismissed = DocsDriveEvent.Dismissed())) },
         )
     }
+    // THE STOP CONFIRM (#1185): the kit's sheet in Rust's own sentences, named for the folder.
+    val stop = state.stop
+    if (stop != null) {
+        ConfirmSheet(
+            confirm = stop,
+            onConfirm = { onEvent(DocsDriveEvent(stop_confirmed = DocsDriveEvent.StopConfirmed())) },
+            onDismiss = { onEvent(DocsDriveEvent(stop_dismissed = DocsDriveEvent.StopDismissed())) },
+            confirmTag = "docs-stop-confirm",
+        )
+    }
 }
 
 @Composable
@@ -400,29 +417,14 @@ private fun DriveBody(state: DocsDriveState, onEvent: (DocsDriveEvent) -> Unit, 
             onEdit = { onEvent(DocsDriveEvent(rename_edited = DocsDriveEvent.RenameEdited(title = it))) },
             onDone = { onEvent(DocsDriveEvent(rename_closed = DocsDriveEvent.RenameClosed())) },
         )
+        // THE WAY BACK UP (a folder page's path) stays over an empty folder too.
+        Crumbs(state.crumbs, onOpen)
         ReadStateView(
-            content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
+            page = state.page!!,
             onRetry = { onEvent(DocsDriveEvent(refreshed = DocsDriveEvent.Refreshed())) },
-            retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
-            skeleton = { RowSkeleton(label = chrome?.loading.orEmpty().ifEmpty { KitWords.OPENING }) },
-        ) { data -> DriveData(state, data, onEvent, onOpen) }
-    }
-}
-
-@Composable
-private fun DriveData(
-    state: DocsDriveState,
-    data: DocsDriveData,
-    onEvent: (DocsDriveEvent) -> Unit,
-    onOpen: (Route) -> Unit,
-) {
-    val empty = data.empty
-    // THE FOLDERS WHOSE NAME MATCHED (#1097) come before the documents; a tap pushes each one's route.
-    val containers = data.containers
-    if (data.rows.isEmpty() && data.folders.isEmpty() && containers.isEmpty() && empty != null) {
-        EmptyStateView(
-            empty,
-            onAction = when (data.empty_action) {
+            modifier = Modifier.weight(1f),
+            // The empty page's one action is Rust's: add a document, clear the filters or make a folder.
+            onEmptyAction = when (state.empty_action) {
                 DocsDriveData.EmptyAction.EMPTY_ACTION_ADD -> {
                     { onEvent(DocsDriveEvent(sheet_opened = DocsDriveEvent.SheetOpened(kind = DocsSheet.Kind.KIND_ADD))) }
                 }
@@ -434,16 +436,31 @@ private fun DriveData(
                 }
                 else -> null
             },
-        )
-        return
+            retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
+            skeleton = { RowSkeleton(label = chrome?.loading.orEmpty().ifEmpty { KitWords.OPENING }) },
+        ) {
+            val data = state.data_ ?: return@ReadStateView
+            DriveData(state, data, onEvent, onOpen)
+        }
     }
+}
+
+@Composable
+private fun DriveData(
+    state: DocsDriveState,
+    data: DocsDriveData,
+    onEvent: (DocsDriveEvent) -> Unit,
+    onOpen: (Route) -> Unit,
+) {
+    // THE FOLDERS WHOSE NAME MATCHED (#1097) come before the documents; a tap pushes each one's route.
+    val containers = data.containers
     val openMenu = { row: DocsRowView ->
         onEvent(DocsDriveEvent(row_menu = DocsDriveEvent.RowMenuOpened(document_id = row.document_id)))
     }
     val chrome = state.chrome
     if (state.layout == DocsDriveState.Layout.LAYOUT_GRID) {
         LazyVerticalGrid(columns = GridCells.Fixed(3), modifier = Modifier.fillMaxSize()) {
-            item(span = { GridItemSpan(maxLineSpan) }, key = "head") { DriveHead(data, onOpen) }
+            item(span = { GridItemSpan(maxLineSpan) }, key = "head") { DriveHead(data) }
             if (data.label_chips.isNotEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }, key = "chips") {
                     DocsLabelChips(data.label_chips) { label ->
@@ -464,7 +481,7 @@ private fun DriveData(
         }
     } else {
         LazyColumn(Modifier.fillMaxSize()) {
-            item(key = "head") { DriveHead(data, onOpen) }
+            item(key = "head") { DriveHead(data) }
             if (data.label_chips.isNotEmpty()) {
                 item(key = "chips") {
                     DocsLabelChips(data.label_chips) { label ->
@@ -485,8 +502,7 @@ private fun DriveData(
 }
 
 @Composable
-private fun DriveHead(data: DocsDriveData, onOpen: (Route) -> Unit) {
-    Crumbs(data.crumbs, onOpen)
+private fun DriveHead(data: DocsDriveData) {
     StatusLine(data.shelf_note)
 }
 
@@ -591,7 +607,7 @@ private fun Tile(
 }
 
 // ---------------------------------------------------------------------------
-// docs.document — reader, stage or facts; path, versions, actions
+// docs.document — reader, stage or facts; path, facts, earlier versions, actions
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -600,6 +616,7 @@ internal fun DocsDocumentScreen(
     onEvent: (DocsDocumentEvent) -> Unit,
     onOpen: (Route) -> Unit,
     onBack: () -> Unit,
+    onPhoneSays: (PhoneSaysTaken) -> Unit,
 ) {
     val chrome = state.chrome
     val data = state.data_
@@ -619,16 +636,12 @@ internal fun DocsDocumentScreen(
         status = state.status?.sentence.orEmpty(),
     ) {
         ReadStateView(
-            content = screenContentOf(state.loading, state.failure, data, state.denied),
+            page = state.page!!,
             onRetry = { onEvent(DocsDocumentEvent(refreshed = DocsDocumentEvent.Refreshed())) },
             retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
             skeleton = { RowSkeleton(label = chrome?.loading.orEmpty().ifEmpty { KitWords.OPENING }) },
-        ) { document ->
-            val gone = document.gone
-            if (gone != null) {
-                EmptyStateView(gone, onAction = null)
-                return@ReadStateView
-            }
+        ) {
+            val document = data ?: return@ReadStateView
             Column(Modifier.fillMaxSize()) {
             LazyColumn(Modifier.weight(1f)) {
                 item(key = "path") {
@@ -641,6 +654,7 @@ internal fun DocsDocumentScreen(
                         onEdit = { onEvent(DocsDocumentEvent(rename_edited = DocsDocumentEvent.RenameEdited(title = it))) },
                         onDone = { onEvent(DocsDocumentEvent(rename_closed = DocsDocumentEvent.RenameClosed())) },
                     )
+                    PhoneSaysLine(document.title_phone_says, onPhoneSays, Modifier.padding(horizontal = KitGeometry.GUTTER))
                 }
                 item(key = "surface") {
                     val reading = document.reading
@@ -673,10 +687,30 @@ internal fun DocsDocumentScreen(
                         dev.centraid.android.kit.LinkSectionView(about, { link -> onEvent(DocsDocumentEvent(about = link)) }, onOpen)
                     }
                 }
+                // ATTACHMENTS (#1185): the kit's section, after About; Rust makes every word and row.
+                document.attachments?.let { section ->
+                    item(key = "attachments") {
+                        dev.centraid.android.screens.agenda.AgendaAttachmentsView(
+                            section = section,
+                            prefix = "docs-document",
+                            onEvent = { onEvent(DocsDocumentEvent(attachment = it)) },
+                            onOpen = onOpen,
+                        )
+                    }
+                }
+                // LINKED TO (#1185): the kit's section, after the attachments; Rust makes every word and row.
+                document.links?.let { section ->
+                    item(key = "links") {
+                        dev.centraid.android.kit.LinkSectionView(section, { link -> onEvent(DocsDocumentEvent(link = link)) }, onOpen)
+                    }
+                }
                 if (document.facts.isNotEmpty()) {
                     item(key = "facts-head") { Heading(chrome?.facts_heading.orEmpty()) }
                     items(document.facts, key = { "fact-" + it.label }) { fact -> FieldRow(key = fact.label, value = fact.detail) }
                 }
+                // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the actions.
+                item(key = "earlier") { dev.centraid.android.kit.EarlierEntryCard(document.earlier, onOpen) }
+                item(key = "origin") { dev.centraid.android.kit.OriginLineView(document.origin) }
             }
             // THE QUICK LOOK BAR under the page.
             if (document.bar.isNotEmpty()) {
@@ -690,6 +724,9 @@ internal fun DocsDocumentScreen(
     }
     state.about_picker?.takeIf { it.open_ }?.let { picker ->
         dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(DocsDocumentEvent(about = link)) }
+    }
+    state.link_picker?.takeIf { it.open_ }?.let { picker ->
+        dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(DocsDocumentEvent(link = link)) }
     }
     DocsSheetView(
         state.sheet,
@@ -717,8 +754,8 @@ internal fun DocsDocumentScreen(
 }
 
 /**
- * THE INFO CARD: what it is and when it changed, its labels in their colours, and the way to its
- * versions (a page of its own). A white card, 16 points round.
+ * THE INFO CARD: what it is and when it changed, its labels in their colours.
+ * A white card, 16 points round.
  */
 @Composable
 private fun DocsInfoCard(document: DocsDocumentData, onOpen: (Route) -> Unit) {
@@ -750,92 +787,11 @@ private fun DocsInfoCard(document: DocsDocumentData, onOpen: (Route) -> Unit) {
                 }
             }
         }
-        document.versions?.let { versions ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 44.dp)
-                    .clickable { versions.route?.let(onOpen) }
-                    .padding(horizontal = 14.dp)
-                    .testTag("docs-versions"),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(versions.label, style = centraidType("small"), color = centraidColor("text"), modifier = Modifier.weight(1f))
-                Text(versions.count_label, style = centraidType("small"), color = centraidColor("textSoft"))
-            }
-        }
     }
 }
 
 /** The head's `edit` action key. */
 private const val EDIT: String = "edit"
-
-// ---------------------------------------------------------------------------
-// docs.versions — a document's history; an earlier version of a live one is restorable
-// ---------------------------------------------------------------------------
-
-@Composable
-internal fun DocsVersionsScreen(state: DocsVersionsState, onEvent: (DocsVersionsEvent) -> Unit, onBack: () -> Unit) {
-    val chrome = state.chrome
-    PushedPage(
-        title = chrome?.heading.orEmpty(),
-        parentTitle = chrome?.back.orEmpty(),
-        onBack = onBack,
-        status = state.status?.sentence.orEmpty(),
-    ) {
-        ReadStateView(
-            content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
-            onRetry = { onEvent(DocsVersionsEvent(refreshed = DocsVersionsEvent.Refreshed())) },
-            retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
-            skeleton = { RowSkeleton(label = chrome?.loading.orEmpty().ifEmpty { KitWords.OPENING }) },
-        ) { data ->
-            val empty = data.empty
-            if (empty != null) {
-                EmptyStateView(empty, onAction = null)
-                return@ReadStateView
-            }
-            // THE BOARD (DocVersions): the versions in one white card, Restore in the app's colour.
-            LazyColumn(Modifier.fillMaxSize()) {
-                item {
-                    Column(
-                        Modifier
-                            .padding(horizontal = KitGeometry.GUTTER)
-                            .clip(RoundedCornerShape(CentraidScale.cardRadius.dp))
-                            .background(Surface.card),
-                    ) {
-                        data.versions.forEach { version ->
-                            CentraidRow(
-                                title = version.label,
-                                meta = version.meta,
-                                // NOTHING IS DIMMED: the current version carries the word "Current" in its meta.
-                                testTag = "docs-version-${version.key}",
-                                accessory = if (version.restore_label.isNotEmpty()) {
-                                    {
-                                        Text(
-                                            version.restore_label,
-                                            style = centraidType("annotLabelOn"),
-                                            color = appAccent().text,
-                                            modifier = Modifier
-                                                .heightIn(min = KitGeometry.ROW_MIN)
-                                                .clickable {
-                                                    onEvent(DocsVersionsEvent(restored = DocsVersionsEvent.Restored(key = version.key)))
-                                                }
-                                                .padding(horizontal = 8.dp, vertical = 12.dp)
-                                                .testTag("docs-version-restore-${version.key}")
-                                                .semantics { role = Role.Button },
-                                        )
-                                    }
-                                } else {
-                                    null
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
 @Composable
 private fun Heading(title: String) {
@@ -993,11 +949,12 @@ internal fun DocsEditorScreen(state: DocsEditorState, onEvent: (DocsEditorEvent)
     ) {
         StatusLine(listOf(state.version_label, state.remote_note).filter { it.isNotEmpty() }.joinToString(" · "))
         ReadStateView(
-            content = screenContentOf(state.loading, state.failure, draft),
+            page = state.page!!,
             onRetry = { onEvent(DocsEditorEvent(refreshed = DocsEditorEvent.Refreshed())) },
             retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
             skeleton = { RowSkeleton(label = chrome?.loading.orEmpty().ifEmpty { KitWords.OPENING }) },
-        ) { words ->
+        ) {
+            val words = draft ?: return@ReadStateView
             Column(Modifier.fillMaxSize()) {
                 EditableFieldRow(
                     key = "",

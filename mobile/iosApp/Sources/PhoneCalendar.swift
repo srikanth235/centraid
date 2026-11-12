@@ -29,10 +29,16 @@ enum PhoneCalendar {
         return await Task.detached(priority: .utility) { .calendar(snapshot(EKEventStore(), read)) }.value
     }
 
+    /// A REFUSAL BY VALUE: the grant's state, never its words (Rust says them). A policy that blocks
+    /// Calendar is `restricted`; iOS 17's write-only access is `limited` (it cannot read); a no is `denied`.
     private static func denied() -> Centraid_Core_V1_EffectFailed {
         var failed = Centraid_Core_V1_EffectFailed()
-        failed.reason = "calendar access not given"
-        failed.denied = true
+        failed.reason = EffectReason.denied
+        switch EKEventStore.authorizationStatus(for: .event) {
+        case .restricted: failed.restricted = true
+        case .writeOnly: failed.limited = true
+        default: failed.denied = true
+        }
         return failed
     }
 
@@ -48,11 +54,12 @@ enum PhoneCalendar {
     /// **Complete only with full access** (R-1127-10), which is the only access this reads under.
     private static func snapshot(_ store: EKEventStore, _ read: Centraid_Core_V1_CalendarRead) -> Centraid_Core_V1_CalendarSnapshot {
         let now = Date()
-        // ONLY CALENDARS THE MEMBER WRITES TO: a subscribed holiday calendar
-        // is nobody's own events, and the Birthdays calendar would copy what
-        // Contacts -> People already brought in. Each is listed, empty or not.
+        // EVERY EVENT CALENDAR, whatever the member's access: a read-only shared or subscribed one is
+        // followed too (#1183). Nothing is written back to the phone. Only the system Birthdays
+        // calendar (`type == .birthday`) is left out: its dates already arrive through Contacts into
+        // People. Each is listed, empty or not.
         let own = store.calendars(for: .event)
-            .filter(\.allowsContentModifications)
+            .filter { $0.type != .birthday }
             .sorted { $0.calendarIdentifier < $1.calendarIdentifier }
         var out = Centraid_Core_V1_CalendarSnapshot()
         out.nowMs = Int64(now.timeIntervalSince1970 * 1000)
@@ -65,11 +72,6 @@ enum PhoneCalendar {
             entry.sourceTitle = calendar.source?.title ?? ""
             entry.title = calendar.title
             entry.color = hex(calendar.cgColor)
-            // THE SHELL'S FINAL WORD on whether the app may write here: a calendar that
-            // takes content and is the member's own kind (never a subscription or Birthdays).
-            let writable = calendar.allowsContentModifications && [.local, .calDAV, .exchange].contains(calendar.type)
-            entry.writable = writable
-            entry.allowsModifications = writable
             return entry
         }
         out.events = events(store, own, now, read)

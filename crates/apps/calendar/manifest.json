@@ -66,6 +66,11 @@
       },
       {
         "schema": "vault",
+        "table": "origin",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
         "table": "task",
         "verbs": "read"
       },
@@ -96,6 +101,16 @@
       },
       {
         "schema": "entity",
+        "table": "purge",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "empty_trash",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
         "table": "retitle",
         "verbs": "act"
       },
@@ -121,6 +136,11 @@
       },
       {
         "schema": "event",
+        "table": "export_ics",
+        "verbs": "act"
+      },
+      {
+        "schema": "event",
         "table": "propose",
         "verbs": "act"
       },
@@ -136,7 +156,7 @@
       },
       {
         "schema": "follow",
-        "table": "pushed",
+        "table": "stop",
         "verbs": "act"
       },
       {
@@ -148,6 +168,102 @@
   },
   "actionSideEffect": "vault-write",
   "actions": [
+    {
+      "name": "link",
+      "verb": "link",
+      "kind": "event",
+      "inverse": "unlink",
+      "sealed": [],
+      "command": "edge.add",
+      "phrasings": [
+        "link the dentist event to Sam",
+        "connect the trip event to my packing note",
+        "link Friday's event to the plumber task"
+      ],
+      "description": "Link a event to any other item (a person, place, event, task, note, document, photo, account, transaction or workout) through edge.add (rel links, from the event); never to a Locker item. A link has no direction: it shows on both pages, and linking twice changes nothing.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["links"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "unlink",
+      "verb": "unlink",
+      "kind": "event",
+      "inverse": "link",
+      "sealed": [],
+      "command": "edge.remove",
+      "phrasings": [
+        "unlink the dentist event from Sam",
+        "disconnect the trip event from my packing note",
+        "take the link off Friday's event"
+      ],
+      "description": "Take the link between a event and another item off through edge.remove (rel links, from either end); both items stay.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["links"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
     {
       "name": "propose",
       "verb": "create",
@@ -400,6 +516,10 @@
             "type": ["integer", "null"],
             "minimum": 0,
             "description": "Minutes of travel to allow before it starts; null clears it."
+          },
+          "expected_rev": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": ["id"],
@@ -424,7 +544,7 @@
       "name": "edit-occurrence",
       "verb": "reschedule",
       "kind": "event",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "event.edit_occurrence",
       "phrasings": [
@@ -476,6 +596,10 @@
           "zone": {
             "type": ["string", "null"],
             "description": "An IANA zone; with it a wall clock is that zone's."
+          },
+          "expected_rev": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": ["id", "original_start", "scope", "action"],
@@ -617,6 +741,174 @@
       }
     },
     {
+      "name": "purge-event",
+      "verb": "purge",
+      "kind": "event",
+      "inverse": null,
+      "sealed": [],
+      "command": "entity.purge",
+      "phrasings": [
+        "erase the dentist event forever",
+        "permanently delete the trashed team offsite",
+        "purge that trashed event"
+      ],
+      "description": "Delete one ALREADY-TRASHED event forever through entity.purge. Irreversible: the event, every occurrence of a repeating one, its guests and its reminders go now.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "empty-trash",
+      "verb": "purge",
+      "kind": "event",
+      "inverse": null,
+      "sealed": [],
+      "bulk": true,
+      "command": "entity.empty_trash",
+      "phrasings": [
+        "empty the calendar trash",
+        "clear out the trashed events for good",
+        "permanently delete everything in the Calendar trash"
+      ],
+      "description": "Empty the event trash through entity.empty_trash with kind event (and, with with_kind calendar, the calendars in it). Irreversible and takes no id: every event and calendar in the trash is destroyed now, as purge destroys one.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["event"]
+          },
+          "with_kind": {
+            "type": "string",
+            "enum": ["calendar"]
+          },
+          "due_only": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "delete-calendar",
+      "verb": "delete",
+      "kind": "calendar",
+      "inverse": null,
+      "sealed": [],
+      "command": "entity.trash",
+      "phrasings": [
+        "delete the Work calendar",
+        "remove the Birthdays calendar",
+        "trash the Family calendar"
+      ],
+      "description": "Move a calendar and its events to the trash through entity.trash; the vault refuses the calendar every vault is founded with. A restore brings the calendar back with exactly the events that went with it.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "restore-calendar",
+      "verb": "restore",
+      "kind": "calendar",
+      "inverse": null,
+      "sealed": [],
+      "command": "entity.restore",
+      "phrasings": [
+        "bring the Work calendar back",
+        "restore the Family calendar",
+        "undelete the Birthdays calendar"
+      ],
+      "description": "Restore a trashed calendar through entity.restore, with the events that went to the trash with it. The screen's Undo of a calendar's delete sends it.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
       "name": "attach",
       "verb": "attach",
       "kind": "event",
@@ -716,7 +1008,7 @@
       "name": "follow-calendar",
       "verb": "import",
       "kind": "event",
-      "inverse": null,
+      "inverse": "stop-following",
       "sealed": [],
       "bulk": true,
       "command": "follow.calendar",
@@ -733,6 +1025,13 @@
           "complete": {
             "type": "boolean"
           },
+          "gone": {
+            "description": "The source ids the store says were deleted since the cursor (a delta's, in place of a complete read): the row is kept and its source forgotten. Only for a system whose gone rows are kept.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "origin": {
             "additionalProperties": false,
             "properties": {
@@ -743,6 +1042,12 @@
               },
               "config": {
                 "type": ["object", "null"]
+              },
+              "cursor": {
+                "description": "Where this read of the store got to: it moves in this commit, as the install named by device_id read it (a phone store's, never an account's).",
+                "maxLength": 4096,
+                "minLength": 1,
+                "type": "string"
               },
               "device_id": {
                 "type": ["string", "null"]
@@ -807,6 +1112,50 @@
       }
     },
     {
+      "name": "stop-following",
+      "verb": "detach",
+      "kind": "event",
+      "inverse": null,
+      "sealed": [],
+      "command": "follow.stop",
+      "phrasings": [
+        "stop reading the phone's calendars",
+        "disconnect the calendar on this phone",
+        "stop following the phone calendar"
+      ],
+      "description": "Stop following one of the phone's calendars through follow.stop: its origin is retired and its events forget their source. Every event stays, an ordinary one from now on. It is the Undo of follow-calendar, and it asks first because following again needs the phone's own read.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "required": ["system", "ref"],
+        "additionalProperties": false,
+        "properties": {
+          "system": {
+            "type": "string",
+            "enum": ["calendar"]
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
       "name": "create-calendar",
       "verb": "create:kind",
       "kind": "list",
@@ -817,7 +1166,7 @@
         "create a calendar named Work",
         "start a new calendar for the kids' school"
       ],
-      "description": "Create a calendar of the vault's own through container.create, with one of the eight list colours and an icon. A calendar is renamed through entity.retitle.",
+      "description": "Create a calendar of the vault's own through container.create, with one of the eight list colours and an icon. A calendar is renamed through entity.retitle. Taking the creation back moves the calendar to the trash, where it comes back from.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -875,7 +1224,7 @@
           }
         }
       },
-      "inverse": null
+      "inverse": "undo-create"
     },
     {
       "name": "rename-calendar",
@@ -984,7 +1333,7 @@
       "name": "add-place",
       "verb": "create",
       "kind": "event",
-      "inverse": null,
+      "inverse": "undo-create",
       "sealed": [],
       "command": "place.add",
       "phrasings": [
@@ -1031,73 +1380,39 @@
       }
     },
     {
-      "name": "record-calendar-push",
-      "verb": "import:items",
+      "name": "export-ics",
+      "verb": "log",
+      "bulk": true,
       "kind": "event",
       "inverse": null,
+      "writes_nothing": true,
       "sealed": [],
-      "bulk": true,
-      "command": "follow.pushed",
+      "command": "event.export_ics",
       "phrasings": [
-        "record what was written back to my phone's calendar",
-        "mark these events as pushed to the phone",
-        "note which events the phone's calendar now holds"
+        "export my calendar as ics",
+        "save a calendar as a calendar file",
+        "send someone this event as an ics file"
       ],
-      "description": "Record the shell's answers to a write-back to the phone's calendars through follow.pushed: a created event is linked to the id the phone gave it, an updated one is stated as pushed, a deleted one is tombstoned (or unlinked when the phone's copy had changed), and a failed item changes nothing, so it is owed again.",
+      "description": "Answer every calendar's events, one calendar's, or one event, as a calendar file (.ics) through event.export_ics. Writes nothing.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "items": {
-            "type": "array",
-            "maxItems": 200,
-            "items": {
-              "type": "object",
-              "properties": {
-                "event_id": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "op": {
-                  "type": "string",
-                  "enum": ["create", "update", "delete"]
-                },
-                "ok": {
-                  "type": "boolean"
-                },
-                "external_id": {
-                  "type": ["string", "null"]
-                },
-                "device_id": {
-                  "type": ["string", "null"]
-                },
-                "fields": {
-                  "type": ["object", "null"]
-                },
-                "phone_kept": {
-                  "type": "boolean"
-                }
-              },
-              "required": ["event_id", "op", "ok"],
-              "additionalProperties": false
-            }
-          }
+          "calendar_id": {
+            "type": "string",
+            "minLength": 1,
+            "aliases": ["calendar"]
+          },
+          "event_id": { "type": "string", "minLength": 1, "aliases": ["event"] }
         },
-        "required": ["items"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": {
-            "type": "string"
-          },
-          "output": {
-            "type": "object"
-          },
-          "reason": {
-            "type": "string"
-          }
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
         }
       }
     }
@@ -1329,6 +1644,28 @@
           },
           "today_day": {
             "type": "string"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "trash",
+      "kind": "event",
+      "figures": ["events", "purge_dates"],
+      "description": "Events in reversible trash, most recently trashed first, with the day each was trashed and the day it will be erased. A repeating event is one entry, whole.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array"
           },
           "vaultDenied": {
             "type": "object"

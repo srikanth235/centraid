@@ -297,6 +297,32 @@ message HealthWorkoutRequest {
   string tz = 2;
 }
 
+// `health.trash` (#1185): the workouts in the trash, most recently trashed first.
+message HealthTrashRequest {
+  // The zone the rows' wall clocks and days are read in, as `HealthWorkoutsRequest.tz`.
+  string tz = 1;
+}
+
+message HealthTrash {
+  repeated HealthTrashRow workouts = 1;
+  // The shelf is longer than its 500-row window.
+  bool truncated = 2;
+}
+
+// One trashed workout: what names it ("Morning run" is the kind and the start's part of the day),
+// when it was trashed and the two civil days (`YYYY-MM-DD`) in the request's zone. The wall clock and
+// the days are EMPTY when the instant is absent or no zone resolved.
+message HealthTrashRow {
+  string activity_id = 1;
+  string kind_key = 2;
+  string started_at = 3;
+  string local_start = 4;
+  optional string purge_at = 5;
+  string deleted_at = 6;
+  string deleted_local_day = 7;
+  string purge_local_day = 8;
+}
+
 message HealthWorkout {
   // Absent when no such workout is in the vault.
   optional HealthWorkoutRow workout = 1;

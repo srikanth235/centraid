@@ -47,8 +47,8 @@ public fun ShellBanner(
     // ENTRY AND SETTLE AT 280MS (design/tokens.toml (motion)).
     AnimatedVisibility(
         visible = sentence.isNotEmpty(),
-        enter = slideInVertically(tween(ENTER_MS)) { it } + fadeIn(tween(ENTER_MS)),
-        exit = fadeOut(tween(CHANGE_MS)),
+        enter = motionEnter(slideInVertically(tween(ENTER_MS)) { it } + fadeIn(tween(ENTER_MS))),
+        exit = motionExit(fadeOut(tween(CHANGE_MS))),
     ) {
         Column(Modifier.fillMaxWidth().background(centraidColor("bg")).testTag("$tag-banner")) {
             Box(Modifier.fillMaxWidth().height(KitGeometry.HAIRLINE).background(centraidColor("line")))

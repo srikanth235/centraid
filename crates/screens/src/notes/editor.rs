@@ -56,14 +56,20 @@ use wire::notes_editor_event::Kind as N;
 use wire::screen_event::Kind as E;
 
 use super::rich::{self, LinkTarget};
-use super::{Phase, denied, fold, routes};
+use super::{denied, fold, routes};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
-use crate::kit::autosave::{Autosave, Draft};
+use crate::kit::attachments::Attachments;
+use crate::kit::autosave::{Autosave, Draft, Resolved};
 use crate::kit::civil;
-use crate::kit::read::{self, Reading};
+use crate::kit::earlier;
+use crate::kit::export::ExportFile;
+use crate::kit::links::{self, Kind, Links, Outcome};
+use crate::kit::read::{self, Note, Page, Reading};
+use crate::kit::share::{self, Share};
+use crate::kit::undo::Undo as Door;
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, fill, notes as words};
+use crate::strings::{Locale, fill, links as link_words, notes as words, shared};
 use std::collections::{BTreeSet, HashMap};
 
 const BRACKETS: &str = "[[";
@@ -106,6 +112,9 @@ struct NoteDraft {
     id: Option<String>,
     title: String,
     body: String,
+    /// The note's revision when it was read, advanced by each save's answer: what a save names as
+    /// the one it replaces (#1185). 0 for a note not yet created.
+    rev: i64,
 }
 
 impl Draft for NoteDraft {
@@ -136,7 +145,8 @@ impl Draft for NoteDraft {
     ///   No first line: a changed title is sent EMPTY, so a name the member
     ///   removed does not stay in the vault and come back on the next read.
     /// * The pin is not an input: it is the shared flag verbs.
-    /// * There is no vault-side version check: the last save on this phone wins.
+    /// * A save names the revision it was made from (`expected_rev`), so a note that changed
+    ///   somewhere else since is refused and never overwritten (#1185).
     fn request(&self, baseline: &Self) -> Option<wire::ActRequest> {
         let title = if self.title.trim().is_empty() {
             fold::first_line(&self.body)
@@ -166,18 +176,47 @@ impl Draft for NoteDraft {
                 title: title_changed.then_some(title),
                 body: body_changed.then(|| self.body.clone()),
                 format: None,
+                expected_rev: Some(self.rev),
             }
             .into(),
         )
     }
 
     fn committed(&mut self, output: &[u8]) {
-        if self.id.is_some() {
-            return;
+        let value = serde_json::from_slice::<serde_json::Value>(output).ok();
+        if self.id.is_none() {
+            self.id = value
+                .as_ref()
+                .and_then(|value| value.get("id")?.as_str().map(str::to_owned));
+        } else if let Some(rev) = value.as_ref().and_then(|value| value.get("rev")?.as_i64()) {
+            self.rev = rev;
         }
-        self.id = serde_json::from_slice::<serde_json::Value>(output)
-            .ok()
-            .and_then(|value| value.get("id")?.as_str().map(str::to_owned));
+    }
+
+    fn subject_id(&self) -> Option<&str> {
+        self.id.as_deref()
+    }
+
+    fn base_rev(&self) -> Option<i64> {
+        self.id.as_ref().map(|_| self.rev)
+    }
+
+    fn noun(locale: Locale) -> String {
+        crate::strings::chat_confirm::noun_note(locale)
+    }
+
+    /// The words the note does not hold: the title as a save would have given it and the body.
+    fn kept_fields(&self, baseline: &Self) -> Vec<(String, serde_json::Value)> {
+        let mut fields = Vec::new();
+        if self.body != baseline.body {
+            fields.push(("note.body".to_owned(), self.body.clone().into()));
+        }
+        if self.title != baseline.title
+            || (self.title.trim().is_empty() && self.body != baseline.body)
+        {
+            fields.push(("entity.title".to_owned(), effective_title(self).into()));
+        }
+        fields
     }
 }
 
@@ -215,7 +254,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         note_id: Some(args.note_id.clone()).filter(|id| !id.is_empty()),
         auto: Autosave::new(),
         blocked: None,
-        read_failure: None,
+        read_failure: false,
         denied: None,
         pinned: false,
         tags: Vec::new(),
@@ -225,11 +264,22 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         said: false,
         undo: None,
         offer: None,
+        door: Door::default(),
         selection: None,
         selection_seq: 0,
         resolutions: HashMap::new(),
         own: BTreeSet::new(),
         link: None,
+        earlier: earlier::Foot::default(),
+        share: Share::default(),
+        // A note may link to another note; the picker leaves this one out (`for_entity`).
+        links: Links::new(&Kind::ALL),
+        linked: None,
+        linked_unread: false,
+        links_open: false,
+        attachments: None,
+        attachments_for: String::new(),
+        attachments_open: false,
         started: false,
     }))
 }
@@ -241,7 +291,11 @@ struct LinkSheet {
     anchor: usize,
     replaces: bool,
     term: String,
-    phase: Phase<Vec<wire::NotesLinkTarget>>,
+    /// The read. Nothing the term finds is [`Page::Empty`].
+    page: Page<Vec<wire::NotesLinkTarget>>,
+    /// The trimmed term `page` answers: a read of a new term that fails is the failure, not the
+    /// last term's rows under a note.
+    asked: String,
 }
 
 struct Editor {
@@ -250,8 +304,8 @@ struct Editor {
     auto: Autosave<NoteDraft>,
     /// The read that replaced the editor: the note is gone, trashed or unreadable.
     blocked: Option<wire::Failure>,
-    /// A failed reread is said over the existing draft, never in its place.
-    read_failure: Option<String>,
+    /// A failed reread is said over the existing draft (the page's note), never in its place.
+    read_failure: bool,
     denied: Option<wire::AppQueryDenial>,
     pinned: bool,
     /// The tags the vault holds for the note: `(concept id, label)`.
@@ -269,6 +323,9 @@ struct Editor {
     undo: Option<Undo>,
     /// The Create or Restore a dead link's sentence carries; shown while its sentence is.
     offer: Option<Offer>,
+    /// The kit's status line for the writes that go through its door (a pin, a tag, a made or
+    /// restored note), with the Undo the core offered; shown when no editing sentence is.
+    door: Door,
     /// Where the caret goes after a core edit, until the shell's next edit.
     selection: Option<u32>,
     selection_seq: u64,
@@ -294,6 +351,27 @@ struct Editor {
     /// tables the act did not write, none carried across `EnvironmentChanged`).
     own: BTreeSet<String>,
     link: Option<LinkSheet>,
+    /// The entry to the note's earlier versions (#1185), read with the note.
+    earlier: earlier::Foot,
+    /// The note handed to the OS share sheet as a Markdown file (#1185).
+    share: Share,
+    /// THE "Linked to" SECTION'S PICKER (#1185): what the note can link to, any item but a Locker
+    /// one.
+    links: Links,
+    /// What the note is linked to, either end, the `[[title]]` wikilinks included
+    /// (`links::read_linked`). `None` until read, and while a read did not land.
+    linked: Option<Vec<wire::LinkedItem>>,
+    /// The read of `linked` was refused or failed: the status line says so, no empty section.
+    linked_unread: bool,
+    /// The menu's "Linked to" sheet is up.
+    links_open: bool,
+    /// The photos and files on the note (#1185): the kit's section, built once the note's id is
+    /// known and read with it. `None` before the note exists.
+    attachments: Option<Attachments>,
+    /// The note's id `attachments` was built for.
+    attachments_for: String,
+    /// The menu's "Attachments" sheet is up.
+    attachments_open: bool,
     /// `Appeared` has been seen.
     started: bool,
 }
@@ -315,12 +393,20 @@ impl Editor {
             },
         );
         match reading {
+            // WORDS NOT YET SAVED ARE THE ONLY COPY: a note that went to the trash (or is gone)
+            // does not replace the editor under them. The save will be refused as stale and
+            // Reload keeps the words as an earlier version (#1185).
+            Reading::Data(note)
+                if (!note.found || note.deleted_at.is_some()) && self.auto.unsaved() =>
+            {
+                self.auto.vault_moved();
+            }
             Reading::Data(note) if !note.found => self.refuse(words::note_missing(locale)),
             Reading::Data(note) if note.deleted_at.is_some() => {
                 self.refuse(words::note_trashed(locale));
             }
             Reading::Data(note) => {
-                self.read_failure = None;
+                self.read_failure = false;
                 self.blocked = None;
                 self.denied = None;
                 self.pinned = note.pinned;
@@ -331,12 +417,16 @@ impl Editor {
                     .collect();
                 self.meta = Self::meta_of(ctx, &note);
                 self.about = fold::about_chips(ctx.locale(), &note.about);
+                self.earlier = earlier::foot(ctx, super::EARLIER, &id, "");
+                self.read_linked(ctx, &id);
+                self.read_attachments(ctx, &id);
                 let incoming = keep_derived(
                     self.auto.draft(),
                     NoteDraft {
                         id: Some(id),
                         title: note.title,
                         body: note.body,
+                        rev: note.rev,
                     },
                 );
                 if self.auto.loaded(incoming) {
@@ -346,16 +436,108 @@ impl Editor {
             }
             Reading::Denied(denial) => {
                 self.auto = Autosave::new();
+                self.blocked = None;
                 self.denied = Some(denial);
             }
             Reading::Failed if self.auto.draft().is_some() => {
-                self.read_failure = Some(read::failure(locale).sentence);
+                self.read_failure = true;
             }
             Reading::Failed => {
                 self.auto = Autosave::new();
+                self.denied = None;
                 self.blocked = Some(read::failure(locale));
             }
         }
+    }
+
+    /// THE NOTE'S READ: a gate (never retried by itself), a note that cannot be shown (gone, in
+    /// the trash or unreadable), the words with a note over them when a re-read failed, or the
+    /// first load.
+    fn page(&self, locale: Locale) -> Page<()> {
+        if let Some(denial) = &self.denied {
+            Page::Refused(denial.clone())
+        } else if self.blocked.is_some() {
+            Page::Failed
+        } else if self.auto.draft().is_some() {
+            Page::Ready {
+                data: (),
+                note: self.read_failure.then(|| Note::refresh_failed(locale)),
+            }
+        } else {
+            Page::loading()
+        }
+    }
+
+    /// What the note is linked to, in both directions. A refused or failed read is said on the
+    /// status line and never drawn as an empty section.
+    fn read_linked(&mut self, ctx: &Ctx, id: &str) {
+        self.links = self.links.clone().for_entity(id);
+        match links::read_linked(ctx, id) {
+            Reading::Data(items) => {
+                self.linked = Some(items);
+                self.linked_unread = false;
+            }
+            Reading::Denied(_) | Reading::Failed => {
+                self.linked = None;
+                self.linked_unread = true;
+                self.links_open = false;
+                self.links.close();
+            }
+        }
+        self.links.reload(ctx);
+    }
+
+    fn linked_ids(&self) -> Vec<String> {
+        self.linked.as_deref().map(links::ids).unwrap_or_default()
+    }
+
+    /// The photos and files on the note, read with it. The section is built for the note's id the
+    /// first time it is known (a new note has none until it is saved).
+    fn read_attachments(&mut self, ctx: &Ctx, id: &str) {
+        if self.attachments_for != id {
+            self.attachments = Some(Attachments::of("notes", id));
+            self.attachments_for = id.to_owned();
+        }
+        if let Some(attachments) = &mut self.attachments {
+            attachments.reload(ctx);
+        }
+    }
+
+    /// One tap in the "Linked to" sheet or its picker. A link is written through the kit's door
+    /// (Undo when the core can take it back), with no anchor: it is the member's, not the body's.
+    fn link_event(&mut self, ctx: &Ctx, event: &wire::LinkEvent) {
+        let Some(id) = self.note_id.clone() else {
+            return;
+        };
+        let linked = self.linked_ids();
+        let (request, said): (wire::ActRequest, fn(Locale) -> String) =
+            match self.links.update(event, &linked, ctx) {
+                Outcome::Moved => return,
+                Outcome::Add { id: to, .. } => (
+                    act::notes::Link {
+                        from: id.clone(),
+                        to,
+                        anchor: None,
+                    }
+                    .into(),
+                    words::link_added,
+                ),
+                Outcome::Remove { id: to } => (
+                    act::notes::Unlink {
+                        from: id.clone(),
+                        to,
+                    }
+                    .into(),
+                    words::link_removed,
+                ),
+            };
+        let key = kit_act::key(&[&request.action.clone(), &id], kit_act::fresh());
+        self.forget_sentence();
+        self.status = None;
+        self.said = false;
+        let settled = self.door.act(ctx, request, &key, said);
+        self.wrote(&settled);
+        self.reload(ctx);
     }
 
     /// THE LINE OVER THE TITLE: the notebook the note is filed in, then when it
@@ -422,6 +604,7 @@ impl Editor {
     fn forget_sentence(&mut self) {
         self.undo = None;
         self.offer = None;
+        self.door.clear();
         if self.said {
             self.status = None;
             self.said = false;
@@ -685,11 +868,17 @@ impl Editor {
             ),
         };
         let key = kit_act::key(&[&request.action.clone(), &title], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        self.wrote(&settled);
         self.forget_sentence();
+        let made = known.is_none();
+        let settled = self.door.act(ctx, request, &key, |locale| {
+            if made {
+                words::note_created(locale)
+            } else {
+                crate::kit::trash::restored(locale, &title)
+            }
+        });
+        self.wrote(&settled);
         if !settled.committed {
-            self.say(settled.refusal);
             return Vec::new();
         }
         // The act is this editor's own commit, which keeps the cache: this title means the note
@@ -721,18 +910,23 @@ impl Editor {
 
     /// A FAILED READ REPLACES THE EDITOR: there is nothing to edit.
     fn refuse(&mut self, sentence: String) {
+        self.linked = None;
+        self.links_open = false;
+        self.links.close();
+        self.attachments = None;
+        self.attachments_for.clear();
+        self.attachments_open = false;
         self.auto = Autosave::new();
-        self.blocked = Some(wire::Failure {
-            sentence,
-            remedy: String::new(),
-        });
+        self.denied = None;
+        // The note is gone or in the trash: trying again cannot help, so no Retry.
+        self.blocked = Some(read::gone(sentence, String::new()));
     }
 
     /// The note was created by a save: it has an id now, and a pin chosen
     /// before it existed lands.
     fn after_save(&mut self, ctx: &Ctx) {
         if self.auto.saved() {
-            self.read_failure = None;
+            self.read_failure = false;
         }
         if self.note_id.is_some() {
             return;
@@ -764,12 +958,20 @@ impl Editor {
             .into()
         };
         let key = kit_act::key(&[&request.action.clone(), id], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        self.wrote(&settled);
-        self.status = (!settled.committed).then_some(settled.refusal);
-        self.undo = None;
-        self.offer = None;
+        self.forget_sentence();
+        self.status = None;
         self.said = false;
+        let settled = self.door.act(
+            ctx,
+            request,
+            &key,
+            if pinned {
+                words::note_pinned
+            } else {
+                words::note_unpinned
+            },
+        );
+        self.wrote(&settled);
     }
 
     fn pin(&mut self, ctx: &Ctx) {
@@ -783,7 +985,7 @@ impl Editor {
         if let Some(id) = self.note_id.clone() {
             let pinned = self.pinned;
             self.write_pin(ctx, &id, pinned);
-            if self.status.is_some() {
+            if self.door.status().is_some_and(|line| line.refused) {
                 self.pinned = !pinned;
             }
         }
@@ -814,12 +1016,20 @@ impl Editor {
             .into()
         };
         let key = kit_act::key(&[&request.action.clone(), &id, label], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        self.wrote(&settled);
-        self.status = (!settled.committed).then_some(settled.refusal);
-        self.undo = None;
-        self.offer = None;
+        self.forget_sentence();
+        self.status = None;
         self.said = false;
+        let settled = self.door.act(
+            ctx,
+            request,
+            &key,
+            if adding {
+                words::tag_added
+            } else {
+                words::tag_removed
+            },
+        );
+        self.wrote(&settled);
         self.reload(ctx);
     }
 
@@ -851,7 +1061,8 @@ impl Editor {
             anchor,
             replaces,
             term: String::new(),
-            phase: Phase::Loading,
+            page: Page::loading(),
+            asked: String::new(),
         });
         self.read_links(ctx);
     }
@@ -860,16 +1071,23 @@ impl Editor {
         let Some(sheet) = &mut self.link else {
             return;
         };
-        sheet.phase = Phase::of(read::read(
+        let term = sheet.term.trim().to_owned();
+        let reading = read::read(
             ctx,
-            load::notes::LinkTargets {
-                term: sheet.term.trim().to_owned(),
-            },
+            load::notes::LinkTargets { term: term.clone() },
             |answer| match answer {
                 Answer::NotesLinkTargets(found) => Some(found.targets),
                 _ => None,
             },
-        ));
+        );
+        let kept = std::mem::replace(&mut sheet.page, Page::loading());
+        let held = if sheet.asked == term {
+            kept.refreshing()
+        } else {
+            Page::loading()
+        };
+        sheet.asked = term;
+        sheet.page = held.after(reading, ctx.locale(), Vec::is_empty);
     }
 
     fn pick_link(&mut self, ctx: &Ctx, id: &str) {
@@ -878,7 +1096,7 @@ impl Editor {
         };
         let locale = ctx.locale();
         let Some(target) = sheet
-            .phase
+            .page
             .data()
             .and_then(|targets| targets.iter().find(|target| target.id == id))
         else {
@@ -898,11 +1116,40 @@ impl Editor {
         self.resolve(ctx);
     }
 
+    fn note_exists(&self) -> bool {
+        self.auto.draft().is_some_and(|draft| draft.id.is_some())
+    }
+
+    /// The note as the member sees it, as a Markdown file: its title as the heading, then its
+    /// body. The file is named by the title (the first line of the body when there is none).
+    fn markdown(&self) -> Option<ExportFile> {
+        let draft = self.auto.draft().filter(|draft| draft.id.is_some())?;
+        let title = if draft.title.trim().is_empty() {
+            fold::first_line(&draft.body)
+        } else {
+            draft.title.trim().to_owned()
+        };
+        let text = if title.is_empty() {
+            draft.body.clone()
+        } else {
+            format!("# {title}\n\n{}", draft.body)
+        };
+        Some(ExportFile {
+            name: share::file_name(&title, "md", "Note"),
+            media_type: "text/markdown".to_owned(),
+            content: text.into_bytes(),
+        })
+    }
+
     fn event(&mut self, event: wire::NotesEditorEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             Some(N::Title(edited)) => self.auto.edit(ctx, |draft| draft.title = edited.title),
             Some(N::Body(edited)) => self.body_edited(ctx, edited.body),
             Some(N::Pin(_)) => self.pin(ctx),
+            Some(N::ShareRequested(_)) if self.note_exists() => {
+                return self.share.tap(ctx.locale());
+            }
+            Some(N::ShareRequested(_)) => {}
             Some(N::ChecklistRequested(_)) => self.checklist(ctx),
             // THE POWERBOX. The link button opens it at the END of the note,
             // whatever a field's caret says (no shell reports one); a pick
@@ -924,20 +1171,27 @@ impl Editor {
             }
             Some(N::LinkPicked(picked)) => self.pick_link(ctx, &picked.id),
             Some(N::LinkDismissed(_)) => self.link = None,
+            Some(N::LinksOpened(_)) => self.links_open = self.linked.is_some(),
+            Some(N::LinksClosed(_)) => {
+                self.links_open = false;
+                self.links.close();
+            }
+            Some(N::Link(link)) => self.link_event(ctx, &link),
+            Some(N::AttachmentsOpened(_)) => self.attachments_open = self.attachments.is_some(),
+            Some(N::AttachmentsClosed(_)) => self.attachments_open = false,
+            Some(N::Attachment(attachment)) => {
+                if let Some(attachments) = &mut self.attachments {
+                    return attachments.event(ctx, attachment);
+                }
+            }
+            // Retry: the note is read again, and so is the powerbox when it is up.
             Some(N::Refreshed(_)) => {
                 self.own.clear();
                 self.reload_all(ctx);
+                self.read_links(ctx);
             }
             Some(N::ChecklistToggled(tapped)) => self.toggle(ctx, tapped.at),
-            Some(N::StatusActed(_)) => {
-                return match self.offer.take() {
-                    Some(offer) => self.accept(ctx, offer),
-                    None => {
-                        self.undo(ctx);
-                        Vec::new()
-                    }
-                };
-            }
+            Some(N::StatusActed(_)) => return self.status_acted(ctx),
             Some(N::LinkOpened(opened)) => return self.open_chip(ctx, opened.at),
             Some(N::ReturnPressed(pressed)) => self.return_pressed(ctx, pressed.caret),
             Some(N::Save(_)) => self.save_now(ctx),
@@ -946,6 +1200,50 @@ impl Editor {
             None => {}
         }
         Vec::new()
+    }
+
+    /// THE STATUS LINE'S VERB (the kit's `StatusActed`, or the editor's own): a dead link's Create
+    /// or Restore, the checklist toggle's Undo, or the Undo of a write that went through the door.
+    fn status_acted(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
+        if self.auto.conflict().is_some() {
+            self.reload_after_conflict(ctx);
+            return Vec::new();
+        }
+        match self.offer.take() {
+            Some(offer) => self.accept(ctx, offer),
+            None if self.undo.is_some() => {
+                self.undo(ctx);
+                Vec::new()
+            }
+            None => {
+                if self.door.acted(ctx) {
+                    self.reload(ctx);
+                }
+                Vec::new()
+            }
+        }
+    }
+
+    /// RELOAD after a save the vault refused as stale (#1185): the member's words are kept as an
+    /// earlier version of the note, then the vault's row is read and shown. A note that went to
+    /// the trash is shown as trashed, with where the words went; one that only changed says so on
+    /// the status line.
+    fn reload_after_conflict(&mut self, ctx: &Ctx) {
+        let locale = ctx.locale();
+        let resolved = self.auto.resolve(ctx);
+        self.own.extend(self.auto.take_written());
+        let Resolved::Reloaded { kept, .. } = resolved else {
+            return;
+        };
+        self.forget_sentence();
+        self.reload(ctx);
+        if !kept {
+            return;
+        }
+        match self.blocked.as_mut() {
+            Some(blocked) => blocked.remedy = shared::stale_trashed_kept_note(locale),
+            None => self.say(shared::stale_kept_note(locale)),
+        }
     }
 
     /// The vault changed under this screen. Our own commit (every table has a
@@ -1081,28 +1379,19 @@ impl Editor {
     }
 
     fn sheet_view(&self, locale: Locale, sheet: &LinkSheet) -> wire::NotesLinkSheet {
-        let content = match &sheet.phase {
-            Phase::Loading => {
-                wire::notes_link_sheet::Content::Loading(wire::Loading { first_load: true })
-            }
-            Phase::Failed => wire::notes_link_sheet::Content::Failure(read::failure(locale)),
-            Phase::Denied(denial) => {
-                wire::notes_link_sheet::Content::Denied(denied(locale, denial))
-            }
-            Phase::Ready(targets) => {
-                let domains = fold::link_domains(locale, targets);
-                let empty = domains.is_empty().then(|| wire::EmptyState {
-                    headline: words::link_empty_headline(locale),
-                    body: if sheet.term.trim().is_empty() {
-                        words::link_empty_body(locale)
-                    } else {
-                        words::link_no_match_body(locale)
-                    },
-                    ..wire::EmptyState::default()
-                });
-                wire::notes_link_sheet::Content::Data(wire::NotesLinkData { domains, empty })
-            }
-        };
+        let page = sheet.page.wire(
+            locale,
+            |denial| denied(locale, denial),
+            || wire::EmptyState {
+                headline: words::link_empty_headline(locale),
+                body: if sheet.term.trim().is_empty() {
+                    words::link_empty_body(locale)
+                } else {
+                    words::link_no_match_body(locale)
+                },
+                ..wire::EmptyState::default()
+            },
+        );
         wire::NotesLinkSheet {
             term: sheet.term.clone(),
             title: words::link_title(locale),
@@ -1111,7 +1400,12 @@ impl Editor {
             retry: words::retry(locale),
             loading_label: words::loading_links(locale),
             foot: words::powerbox_foot(locale),
-            content: Some(content),
+            content: sheet.page.data().map(|targets| {
+                wire::notes_link_sheet::Content::Data(wire::NotesLinkData {
+                    domains: fold::link_domains(locale, targets),
+                })
+            }),
+            page: Some(page),
         }
     }
 }
@@ -1192,6 +1486,7 @@ impl Screen for Editor {
                             id: None,
                             title: String::new(),
                             body: String::new(),
+                            rev: 0,
                         });
                     } else {
                         self.reload(ctx);
@@ -1202,6 +1497,7 @@ impl Screen for Editor {
             // words and notes that the vault moved. The core sends a change for
             // every local commit, this editor's own saves included.
             Some(E::DataChanged(changed)) => self.data_changed(ctx, &changed.tables),
+            Some(E::StatusActed(_)) => return self.status_acted(ctx),
             Some(E::EnvironmentChanged(_)) => {
                 self.own.clear();
                 self.reload_all(ctx);
@@ -1213,7 +1509,26 @@ impl Screen for Editor {
                 self.after_save(ctx);
             }
             // CLOSE = DONE: leaving saves what is unsaved.
-            Some(E::Left(_)) => self.save_now(ctx),
+            Some(E::Left(_)) => {
+                self.save_now(ctx);
+                return self.share.left();
+            }
+            // The owner check's answer, or the share sheet's: the note as Markdown goes out only
+            // after the check passed.
+            Some(E::EffectResult(result)) => {
+                let file = self.markdown();
+                let shared = self
+                    .share
+                    .result(ctx, &result, |_| file.ok_or_else(String::new));
+                if !shared.is_empty() || self.share.status().is_some() {
+                    return shared;
+                }
+                // The shell's answer to a pick: the attachments' (an add under way).
+                if let (Some(attachments), Some(outcome)) = (&mut self.attachments, &result.outcome)
+                {
+                    return attachments.result(ctx, outcome).unwrap_or_default();
+                }
+            }
             Some(E::NotesEditor(event)) => return self.event(event, ctx),
             _ => {}
         }
@@ -1222,7 +1537,9 @@ impl Screen for Editor {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
-        let autosave = self.auto.view(locale);
+        let mut autosave = self.auto.view(locale);
+        // Notes draws Reload on its own status line, beside the sentence.
+        autosave.reload_label.clear();
         let draft = self.auto.draft();
         let exists = draft.is_some_and(|draft| draft.id.is_some());
         let title = draft.map_or(String::new(), |draft| {
@@ -1232,23 +1549,20 @@ impl Screen for Editor {
                 draft.title.clone()
             }
         });
-        let content = match (draft, &self.blocked, &self.denied) {
-            (_, Some(failure), _) => wire::notes_editor_state::Content::Failure(failure.clone()),
-            (_, None, Some(denial)) => wire::notes_editor_state::Content::Failure(wire::Failure {
-                sentence: denied(locale, denial).body,
-                remedy: String::new(),
-            }),
-            (Some(draft), None, None) => {
-                wire::notes_editor_state::Content::Draft(wire::NotesEditorDraft {
-                    title: draft.title.clone(),
-                    body: draft.body.clone(),
-                    pinned: self.pinned,
-                })
-            }
-            (None, None, None) => {
-                wire::notes_editor_state::Content::Loading(wire::Loading { first_load: true })
-            }
-        };
+        let page = self.page(locale);
+        let ready = matches!(page, Page::Ready { .. });
+        let mut wired = page.wire(
+            locale,
+            |denial| denied(locale, denial),
+            wire::EmptyState::default,
+        );
+        // A note that is gone or in the trash says so in its own words (and where the member's
+        // text went), not the generic failure.
+        if let (Some(blocked), Some(wire::page_state::State::Failed(_))) =
+            (&self.blocked, &wired.state)
+        {
+            wired.state = Some(wire::page_state::State::Failed(blocked.clone()));
+        }
         let phase =
             wire::autosave::Phase::try_from(autosave.phase).unwrap_or(wire::autosave::Phase::Clean);
         let save_status = match phase {
@@ -1256,7 +1570,7 @@ impl Screen for Editor {
             // A save and the clean re-read after it are both "Saved".
             wire::autosave::Phase::Saved => words::saved(locale),
             wire::autosave::Phase::Clean if autosave.edit_seq > 0 => words::saved(locale),
-            wire::autosave::Phase::Refused => autosave
+            wire::autosave::Phase::Refused | wire::autosave::Phase::Conflict => autosave
                 .failure
                 .as_ref()
                 .map(|failure| failure.sentence.clone())
@@ -1266,7 +1580,14 @@ impl Screen for Editor {
         let reminders_words = title.clone();
         let mut state = wire::NotesEditorState {
             note_id: self.note_id.clone().unwrap_or_default(),
-            content: Some(content),
+            page: Some(wired),
+            content: draft.filter(|_| ready).map(|draft| {
+                wire::notes_editor_state::Content::Draft(wire::NotesEditorDraft {
+                    title: draft.title.clone(),
+                    body: draft.body.clone(),
+                    pinned: self.pinned,
+                })
+            }),
             chrome: Some(wire::NotesEditorChrome {
                 // "Cancel" only before the first keystroke of this visit; after
                 // it, close = done, and an autosave does not undo that.
@@ -1282,22 +1603,25 @@ impl Screen for Editor {
                 } else {
                     words::pin(locale)
                 },
-                history_label: words::history_title(locale),
                 send_to_agenda_label: words::send_to_reminders(locale),
                 link_label: words::link_label(locale),
                 status: if autosave.refused {
                     save_status
                 } else {
-                    self.read_failure
+                    self.status
                         .clone()
-                        .or_else(|| self.status.clone())
+                        .or_else(|| self.share.status().map(|line| line.sentence))
+                        .or_else(|| self.door.status().map(|line| line.sentence))
+                        .or_else(|| self.earlier.status(locale).map(|unread| unread.sentence))
+                        .or_else(|| self.linked_unread.then(|| words::links_unread(locale)))
                         .unwrap_or(save_status)
                 },
                 // Undo, or a dead link's Create or Restore, is offered while its sentence is the
                 // one shown.
-                status_action: if (self.undo.is_some() || self.offer.is_some())
+                status_action: if phase == wire::autosave::Phase::Conflict {
+                    shared::stale_reload_label(locale)
+                } else if (self.undo.is_some() || self.offer.is_some())
                     && !autosave.refused
-                    && self.read_failure.is_none()
                     && self.status.is_some()
                 {
                     match &self.offer {
@@ -1305,6 +1629,11 @@ impl Screen for Editor {
                         Some(Offer::Restore { .. }) => words::link_restore(locale),
                         None => words::undo(locale),
                     }
+                } else if self.status.is_none() && !autosave.refused {
+                    self.door
+                        .status()
+                        .map(|line| line.action_label)
+                        .unwrap_or_default()
                 } else {
                     String::new()
                 },
@@ -1314,7 +1643,12 @@ impl Screen for Editor {
                     words::new_note(locale)
                 },
                 menu_label: words::row_menu(locale),
-                history_enabled: exists && draft.is_some(),
+                // Share waits for the first save: a note that does not exist is not shared.
+                share_label: if exists {
+                    share::label(locale)
+                } else {
+                    String::new()
+                },
                 retry: words::retry(locale),
                 // Tags belong to a note, so the field waits for the first save.
                 tag_placeholder: if exists {
@@ -1330,7 +1664,6 @@ impl Screen for Editor {
                 .link
                 .as_ref()
                 .map(|sheet| self.sheet_view(locale, sheet)),
-            history: None,
             send_to_agenda: None,
             meta: if exists {
                 self.meta.clone()
@@ -1356,12 +1689,61 @@ impl Screen for Editor {
                 caret,
                 seq: self.selection_seq,
             }),
+            ..wire::NotesEditorState::default()
         };
-        if let (Some(draft), None, None) = (draft, &self.blocked, &self.denied) {
+        if let (Some(draft), true) = (draft, ready) {
             state.rich = Some(self.rich_view(locale, &rich::parse(&draft.body)));
         }
-        if let Some(id) = draft.and_then(|draft| draft.id.as_deref()) {
-            state.history = Some(routes::history(id, &title));
+        // WHERE IT CAME FROM (#1185): the menu's quiet "From ..." line, read with the entry.
+        state.origin = self.earlier.origin.clone();
+        // THE MENU'S "Earlier versions" ROW: the kit's entry, its route naming the note as the
+        // page the member comes from.
+        if let (Some(id), Some(entry)) = (
+            draft.and_then(|draft| draft.id.as_deref()),
+            &self.earlier.entry,
+        ) {
+            state.earlier = Some(wire::EarlierEntry {
+                route: Some(earlier::route(super::EARLIER, id, &title)),
+                ..entry.clone()
+            });
+        }
+        // THE MENU'S "Linked to" ROW and, once opened, its sheet and picker (#1185).
+        if let (true, Some(linked)) = (exists && self.blocked.is_none(), self.linked.as_ref()) {
+            state.links_entry = Some(wire::NotesLinksEntry {
+                label: link_words::section_linked(locale),
+                count_label: if linked.is_empty() {
+                    String::new()
+                } else {
+                    linked.len().to_string()
+                },
+            });
+            if self.links_open {
+                state.links = Some(Box::new(self.links.section(
+                    locale,
+                    link_words::section_linked(locale),
+                    links::rows(locale, linked),
+                    words::links_empty(locale),
+                )));
+                if self.links.is_open() {
+                    state.link_picker =
+                        Some(Box::new(self.links.picker(locale, &links::ids(linked))));
+                }
+            }
+        }
+        // THE MENU'S "Attachments" ROW and, once opened, its sheet (#1185).
+        if let (true, Some(attachments)) = (exists && self.blocked.is_none(), &self.attachments) {
+            let section = attachments.view(locale, ctx.units());
+            state.attachments_entry = Some(wire::NotesAttachmentsEntry {
+                label: words::attachments_label(locale),
+                count_label: if section.items.is_empty() {
+                    String::new()
+                } else {
+                    section.items.len().to_string()
+                },
+            });
+            if self.attachments_open {
+                state.attachments = Some(Box::new(section));
+            }
         }
         // SEND TO REMINDERS: Reminders' quick add, the words waiting in it (the Inbox
         // is where they land). Nothing is written until the member adds them.
@@ -1384,11 +1766,15 @@ mod tests {
         core: &'a centraid_core::Handle,
         fail_reads: std::cell::Cell<bool>,
         fail_writes: std::cell::Cell<bool>,
+        /// Only the shell's `links` read fails.
+        fail_links: std::cell::Cell<bool>,
         /// `link-targets` and `trash` reads made through this ctx.
         links: std::cell::Cell<usize>,
         trashes: std::cell::Cell<usize>,
         /// The tables the acts made through this ctx wrote, in order.
         written: std::cell::RefCell<Vec<String>>,
+        /// The `app.action` of each act made through this ctx, in order.
+        acted: std::cell::RefCell<Vec<String>>,
     }
 
     impl<'a> Flaky<'a> {
@@ -1397,9 +1783,11 @@ mod tests {
                 core,
                 fail_reads: false.into(),
                 fail_writes: false.into(),
+                fail_links: false.into(),
                 links: 0.into(),
                 trashes: 0.into(),
                 written: Vec::new().into(),
+                acted: Vec::new().into(),
             }
         }
     }
@@ -1411,7 +1799,9 @@ mod tests {
                 "trash" => self.trashes.set(self.trashes.get() + 1),
                 _ => {}
             }
-            if self.fail_reads.get() {
+            if self.fail_reads.get()
+                || (self.fail_links.get() && request.app == "shell" && request.query == "links")
+            {
                 Err(centraid_core::CoreError::Unavailable {
                     reason: "test read failure".into(),
                 })
@@ -1421,6 +1811,9 @@ mod tests {
         }
 
         fn act(&self, request: &wire::ActRequest) -> centraid_core::Result<wire::ActResponse> {
+            self.acted
+                .borrow_mut()
+                .push(format!("{}.{}", request.app, request.action));
             if self.fail_writes.get() {
                 Err(centraid_core::CoreError::Unavailable {
                     reason: "test write failure".into(),
@@ -1475,9 +1868,16 @@ mod tests {
         assert!(
             matches!(state.content, Some(wire::notes_editor_state::Content::Draft(ref draft)) if draft.body == "only copy")
         );
-        assert_eq!(
+        // The failed re-read is the page's note over the words, never the status line.
+        let page = state.page.expect("page");
+        assert!(page.state.is_none(), "the words stay ready");
+        let note = page.note.expect("a note over the words");
+        assert_eq!(note.sentence, shared::read_refresh_failed(Locale::En));
+        assert_eq!(note.action_label, shared::kit_retry(Locale::En));
+        assert_ne!(
             state.chrome.expect("chrome").status,
-            "Couldn't read this. Try again."
+            note.sentence,
+            "a read is not a write result"
         );
         core.fail_writes.set(true);
         send(
@@ -1539,6 +1939,7 @@ mod tests {
             id: id.map(str::to_owned),
             title: title.into(),
             body: body.into(),
+            rev: 0,
         }
     }
 
@@ -1554,17 +1955,50 @@ mod tests {
         // The title alone.
         let request = draft(Some("n1"), "New", "words").request(&base).unwrap();
         assert_eq!(request.action, "edit-note");
-        assert_eq!(sent(&request), ["id", "title"]);
+        assert_eq!(sent(&request), ["expected_rev", "id", "title"]);
         // The body alone.
         let request = draft(Some("n1"), "Old", "more words")
             .request(&base)
             .unwrap();
-        assert_eq!(sent(&request), ["body", "id"]);
+        assert_eq!(sent(&request), ["body", "expected_rev", "id"]);
         // Nothing changed: nothing to send.
         assert!(base.request(&base).is_none());
         // A body cleared to nothing is the member's words.
         let request = draft(Some("n1"), "Old", "").request(&base).unwrap();
-        assert_eq!(sent(&request), ["body", "id"]);
+        assert_eq!(sent(&request), ["body", "expected_rev", "id"]);
+    }
+
+    #[test]
+    fn a_save_names_the_revision_it_was_made_from_and_takes_the_one_it_answers() {
+        let mut base = draft(Some("n1"), "Old", "words");
+        base.rev = 3;
+        let mut mine = draft(Some("n1"), "Old", "more words");
+        mine.rev = 3;
+        let request = mine.request(&base).unwrap();
+        assert_eq!(
+            request.input["expected_rev"].kind,
+            Some(wire::value::Kind::Integer(3))
+        );
+        assert_eq!(mine.base_rev(), Some(3));
+        mine.committed(br#"{"id":"n1","rev":4}"#);
+        assert_eq!(mine.base_rev(), Some(4));
+        // A note not yet created has no revision to name.
+        assert_eq!(draft(None, "", "x").base_rev(), None);
+    }
+
+    #[test]
+    fn the_words_kept_for_a_reload_are_the_ones_the_vault_does_not_hold() {
+        let base = draft(Some("n1"), "Old", "words");
+        let kept = draft(Some("n1"), "Old", "mine").kept_fields(&base);
+        assert_eq!(kept, [("note.body".to_owned(), "mine".into())]);
+        let kept = draft(Some("n1"), "", "\nFirst line\nrest").kept_fields(&base);
+        assert_eq!(
+            kept.iter()
+                .map(|(name, _)| name.as_str())
+                .collect::<Vec<_>>(),
+            ["note.body", "entity.title"]
+        );
+        assert!(base.kept_fields(&base).is_empty());
     }
 
     #[test]
@@ -1573,7 +2007,7 @@ mod tests {
         let request = draft(Some("n1"), "", "\n  Shopping list \nmilk")
             .request(&base)
             .unwrap();
-        assert_eq!(sent(&request), ["body", "id", "title"]);
+        assert_eq!(sent(&request), ["body", "expected_rev", "id", "title"]);
         assert_eq!(
             request.input["title"].kind,
             Some(wire::value::Kind::Text("Shopping list".to_owned()))
@@ -1603,11 +2037,13 @@ mod tests {
             id: Some("n".into()),
             title: String::new(),
             body: "Milk".into(),
+            rev: 0,
         };
         let incoming = NoteDraft {
             id: Some("n".into()),
             title: "Milk".into(),
             body: "Milk".into(),
+            rev: 0,
         };
         assert_eq!(keep_derived(Some(&current), incoming.clone()).title, "");
         assert_eq!(keep_derived(None, incoming).title, "Milk");
@@ -1693,7 +2129,7 @@ mod tests {
     fn body_of(state: &wire::NotesEditorState) -> String {
         match &state.content {
             Some(wire::notes_editor_state::Content::Draft(draft)) => draft.body.clone(),
-            other => panic!("no draft: {other:?}"),
+            None => panic!("no draft: {:?}", state.page),
         }
     }
 
@@ -2016,6 +2452,181 @@ mod tests {
         })
     }
 
+    fn link_event(screen: &mut Box<dyn Screen>, ctx: &Ctx, kind: wire::link_event::Kind) {
+        ev(screen, ctx, N::Link(wire::LinkEvent { kind: Some(kind) }));
+    }
+
+    fn linked_rows(screen: &dyn Screen, ctx: &Ctx) -> Vec<(String, String)> {
+        state(screen, ctx)
+            .links
+            .expect("the Linked to sheet")
+            .rows
+            .into_iter()
+            .map(|row| (row.title, row.meta))
+            .collect()
+    }
+
+    #[test]
+    fn the_menu_offers_linked_to_and_the_sheet_lists_wikilinks_among_the_rest() {
+        use wire::link_event::Kind as L;
+        let driver = Driver::with_runtime(super::super::runtime());
+        let other = make(&driver, "Packing list", "socks");
+        let third = make(&driver, "Itinerary", "day one");
+        let id = make(&driver, "Host", "see [[Packing list]]");
+        let core = Flaky::new(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        // The wikilink is a link already: the menu's row counts it, the sheet stays shut.
+        let view = state(&*screen, &ctx);
+        let entry = view.links_entry.expect("the menu row");
+        assert_eq!(entry.label, "Linked to");
+        assert_eq!(entry.count_label, "1");
+        assert!(view.links.is_none() && view.link_picker.is_none());
+        ev(
+            &mut screen,
+            &ctx,
+            N::LinksOpened(wire::notes_editor_event::LinksOpened {}),
+        );
+        assert_eq!(
+            linked_rows(&*screen, &ctx),
+            [("Packing list".to_owned(), "In the text".to_owned())]
+        );
+        let section = state(&*screen, &ctx).links.expect("section");
+        assert_eq!(section.title, "Linked to");
+        assert!(
+            section.rows.iter().all(|row| row.remove_label.is_empty()),
+            "a link written in the text offers no Remove"
+        );
+        assert_eq!(section.adds.len(), 1, "one Add link row for many kinds");
+        // Add link, then the kind, then the item: it lands through `notes.link`.
+        link_event(
+            &mut screen,
+            &ctx,
+            L::Add(wire::link_event::AddTapped { key: "link".into() }),
+        );
+        let picker = state(&*screen, &ctx).link_picker.expect("the kind chooser");
+        assert!(picker.open);
+        assert!(picker.candidates.iter().any(|row| row.id == "note"));
+        link_event(
+            &mut screen,
+            &ctx,
+            L::Pick(wire::link_event::Picked { id: "note".into() }),
+        );
+        let picker = state(&*screen, &ctx).link_picker.expect("notes");
+        assert!(picker.candidates.iter().any(|row| row.id == third));
+        assert!(
+            picker.candidates.iter().all(|row| row.id != id),
+            "a note is never offered itself"
+        );
+        link_event(
+            &mut screen,
+            &ctx,
+            L::Pick(wire::link_event::Picked { id: third.clone() }),
+        );
+        assert_eq!(core.acted.borrow().as_slice(), ["notes.link"]);
+        let view = state(&*screen, &ctx);
+        assert!(view.link_picker.is_none_or(|picker| !picker.open));
+        assert_eq!(view.links_entry.expect("row").count_label, "2");
+        let chrome = view.chrome.expect("chrome");
+        assert_eq!(chrome.status, "Linked");
+        assert_eq!(chrome.status_action, "Undo");
+        assert_eq!(linked_rows(&*screen, &ctx).len(), 2);
+        // A hand link carries no anchor: the other note's page lists it as well.
+        let there = Flaky::new(&driver.handle);
+        let (other_screen, other_ctx) = opened(&there, &third);
+        let view = state(&*other_screen, &other_ctx);
+        assert_eq!(view.links_entry.expect("row").count_label, "1");
+        let _ = other;
+    }
+
+    #[test]
+    fn a_tap_on_remove_unlinks_and_undo_links_again() {
+        use wire::link_event::Kind as L;
+        let driver = Driver::with_runtime(super::super::runtime());
+        let other = make(&driver, "Packing list", "socks");
+        let id = make(&driver, "Host", "words");
+        let core = Flaky::new(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        assert!(
+            state(&*screen, &ctx)
+                .links_entry
+                .is_some_and(|entry| entry.count_label.is_empty())
+        );
+        ev(
+            &mut screen,
+            &ctx,
+            N::LinksOpened(wire::notes_editor_event::LinksOpened {}),
+        );
+        let section = state(&*screen, &ctx).links.expect("section");
+        assert!(section.rows.is_empty());
+        assert_eq!(section.empty, "Nothing linked yet");
+        for kind in [
+            L::Add(wire::link_event::AddTapped { key: "link".into() }),
+            L::Pick(wire::link_event::Picked { id: "note".into() }),
+            L::Pick(wire::link_event::Picked { id: other.clone() }),
+        ] {
+            link_event(&mut screen, &ctx, kind);
+        }
+        assert_eq!(linked_rows(&*screen, &ctx).len(), 1);
+        link_event(
+            &mut screen,
+            &ctx,
+            L::Remove(wire::link_event::RemoveTapped { id: other.clone() }),
+        );
+        assert_eq!(
+            core.acted.borrow().as_slice(),
+            ["notes.link", "notes.unlink"]
+        );
+        assert!(linked_rows(&*screen, &ctx).is_empty());
+        let chrome = state(&*screen, &ctx).chrome.expect("chrome");
+        assert_eq!(chrome.status, "Link removed");
+        assert_eq!(chrome.status_action, "Undo");
+        // Undo puts the link back.
+        ev(
+            &mut screen,
+            &ctx,
+            N::StatusActed(wire::notes_editor_event::StatusActed {}),
+        );
+        assert_eq!(linked_rows(&*screen, &ctx).len(), 1);
+        // Closing the sheet takes it and its picker away.
+        ev(
+            &mut screen,
+            &ctx,
+            N::LinksClosed(wire::notes_editor_event::LinksClosed {}),
+        );
+        assert!(state(&*screen, &ctx).links.is_none());
+    }
+
+    #[test]
+    fn links_that_could_not_be_read_are_said_not_drawn_as_none() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        let id = make(&driver, "Host", "words");
+        let core = Flaky::new(&driver.handle);
+        core.fail_links.set(true);
+        let (mut screen, ctx) = opened(&core, &id);
+        let view = state(&*screen, &ctx);
+        assert!(view.links_entry.is_none(), "no row for what was not read");
+        assert_eq!(
+            view.chrome.expect("chrome").status,
+            "Couldn’t read what this note is linked to."
+        );
+        // The row is gone, so the event opens nothing.
+        ev(
+            &mut screen,
+            &ctx,
+            N::LinksOpened(wire::notes_editor_event::LinksOpened {}),
+        );
+        assert!(state(&*screen, &ctx).links.is_none());
+        assert!(core.acted.borrow().is_empty());
+        // Read again, the row and the sheet come back.
+        core.fail_links.set(false);
+        ev(
+            &mut screen,
+            &ctx,
+            N::Refreshed(wire::notes_editor_event::Refreshed {}),
+        );
+        assert!(state(&*screen, &ctx).links_entry.is_some());
+    }
+
     #[test]
     fn a_link_to_a_missing_note_offers_to_make_it_and_opens_it() {
         let driver = Driver::with_runtime(super::super::runtime());
@@ -2036,7 +2647,9 @@ mod tests {
         let made = opens_editor(&effects).expect("the new note opens");
         let view = state(&*screen, &ctx);
         let chrome = view.chrome.clone().expect("chrome");
-        assert_eq!(chrome.status_action, "");
+        // What happened is said, and the core's inverse (delete the note) is the Undo.
+        assert_eq!(chrome.status, "Note created");
+        assert_eq!(chrome.status_action, "Undo");
         let chips = chips(&view);
         assert_eq!(
             chips[0].resolution,

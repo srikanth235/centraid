@@ -27,7 +27,9 @@ use rusqlite::OptionalExtension;
 use serde_json::{Value as Json, json};
 
 use crate::commands::money::{is_day, is_live};
-use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
+use crate::commands::{
+    CommandCondition, CommandCtx, CommandDefinition, Idempotency, origin_cursor,
+};
 use crate::error::Result;
 use crate::model::Kind;
 
@@ -75,6 +77,13 @@ fn days_of(ctx: &CommandCtx<'_, '_>) -> Vec<Day> {
 
 fn pre_record(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let connection = ctx.connection();
+    let named = |name: &str| ctx.optional_str(name).is_some();
+    let (cursor, store, device) = (named("cursor"), named("cursor_ref"), named("cursor_device"));
+    if (cursor || store || device) && !(cursor && store && device) {
+        return Ok(Some(
+            "A cursor comes with the store it is for and the install that read it.".to_owned(),
+        ));
+    }
     if !is_live(connection, &subject(ctx)?, Kind::Person)? {
         return Ok(Some(
             "There is no such person to record days for.".to_owned(),
@@ -95,6 +104,17 @@ fn pre_record(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 }
 
 fn record(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    // THE STORE'S CURSOR RIDES WITH THE DAYS IT COVERS (#1183): one commit, so a refused batch
+    // leaves the cursor where it was and a read that stopped part-way resumes from it.
+    if let Some(cursor) = ctx.optional_str("cursor") {
+        origin_cursor::advance(
+            ctx,
+            "health",
+            ctx.required_str("cursor_ref")?,
+            ctx.required_str("cursor_device")?,
+            cursor,
+        )?;
+    }
     let person = subject(ctx)?;
     let connection = ctx.connection();
     let mut held = connection.prepare_cached(
@@ -127,7 +147,8 @@ fn record(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
 fn followed_by(connection: &rusqlite::Connection) -> Result<Option<String>> {
     Ok(connection
         .query_row(
-            "SELECT label FROM origin WHERE system = 'health' ORDER BY created_at LIMIT 1",
+            "SELECT label FROM origin WHERE system = 'health' AND retired_at IS NULL
+              ORDER BY created_at LIMIT 1",
             [],
             |row| row.get(0),
         )
@@ -175,13 +196,25 @@ fn log(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         .and_then(Json::as_f64)
         .unwrap_or_default();
     let connection = ctx.connection();
+    let replaced: Option<f64> = connection
+        .query_row(
+            "SELECT value FROM measurement WHERE person_id = ?1 AND day = ?2 AND metric = ?3",
+            rusqlite::params![person, day, metric],
+            |row| row.get(0),
+        )
+        .optional()?;
     connection.execute(
         "INSERT INTO measurement (person_id, day, metric, value) VALUES (?1, ?2, ?3, ?4)
          ON CONFLICT (person_id, day, metric) DO UPDATE SET value = excluded.value",
         rusqlite::params![person, day, metric, value],
     )?;
     ctx.touch(&person)?;
-    Ok(json!({ "id": format!("{day}:{metric}"), "day": day, "metric": metric, "value": value }))
+    // `replaced` is the figure this one took the place of, `null` when the day held none: a
+    // measurement is outside the history, so the answer is how an Undo puts it back.
+    Ok(json!({
+        "id": format!("{day}:{metric}"), "day": day, "metric": metric, "value": value,
+        "replaced": replaced
+    }))
 }
 
 fn pre_clear(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -206,12 +239,23 @@ fn pre_clear(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 fn clear(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let (day, metric) = named(ctx).unwrap_or_default();
     let person = subject(ctx)?;
+    let replaced: Option<f64> = ctx
+        .connection()
+        .query_row(
+            "SELECT value FROM measurement WHERE person_id = ?1 AND day = ?2 AND metric = ?3",
+            rusqlite::params![person, day, metric],
+            |row| row.get(0),
+        )
+        .optional()?;
     ctx.connection().execute(
         "DELETE FROM measurement WHERE person_id = ?1 AND day = ?2 AND metric = ?3",
         rusqlite::params![person, day, metric],
     )?;
     ctx.touch(&person)?;
-    Ok(json!({ "id": format!("{day}:{metric}"), "day": day, "metric": metric }))
+    // The figure that went, so taking the clearing back logs it again.
+    Ok(json!({
+        "id": format!("{day}:{metric}"), "day": day, "metric": metric, "replaced": replaced
+    }))
 }
 
 #[must_use]
@@ -280,6 +324,12 @@ pub fn definitions() -> Vec<CommandDefinition> {
           "additionalProperties": false,
           "properties": {
             "person_id": { "type": "string", "minLength": 1 },
+            "cursor": { "type": "string", "minLength": 1, "maxLength": 4096,
+              "description": "The store's cursor once these days are in: it moves in this commit." },
+            "cursor_ref": { "type": "string", "minLength": 1,
+              "description": "The store's origin the cursor is for; required with cursor." },
+            "cursor_device": { "type": "string", "minLength": 1,
+              "description": "The install that read the store; required with cursor." },
             "days": {
               "type": "array",
               "maxItems": 4000,

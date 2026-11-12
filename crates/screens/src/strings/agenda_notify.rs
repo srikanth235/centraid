@@ -7,5 +7,6 @@ catalog! {
     plain mark_done = ("Mark as done", "Mark as done");
     plain moved_tomorrow = ("Moved to tomorrow", "Moved to tomorrow");
     plain snooze_hour = ("Snooze 1 hour", "Snooze 1 hour");
+    plain no_alert_without_time = ("No alert will sound because no time is set", "No alert will sound because no time is set");
     plain snoozed_hour = ("Snoozed for 1 hour", "Snoozed for 1 hour");
 }

@@ -9,7 +9,6 @@
 //! | title, notes | title, description |
 //! | due date, due time, zone | `due` (a day, or `YYYY-MM-DDTHH:MM` floating) and `zone` |
 //! | priority 0 / 1..4 / 5 / 6..9 | none / `!!!` (3) / `!!` (2) / `!` (1), see [`priority_of`] |
-//! | flagged | the Flag (`flag.set starred`) |
 //! | recurrence rule | `rule` when the vault can expand it; else the task imports without one and the outcome counts it |
 //! | alarms | `remind_before_min` from the FIRST alarm only (a relative one is its offset, an absolute one is due minus its date) |
 //! | its list (calendar) | a list (project) of that name, made when missing, in the nearest of the eight list colours |
@@ -22,6 +21,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_vault::time::rrule;
+use serde_json::{Value, json};
 
 use crate::catalog::{act, load};
 use crate::field::Field;
@@ -30,6 +30,67 @@ use crate::kit::read::{self, Reading};
 use crate::screen::Ctx;
 use crate::strings::{Locale, fill, imports as import_words, task as words};
 use wire::app_query_response::Answer;
+
+/// The keychain key and value that say THIS device follows its Reminders: a habit of the device,
+/// as the contacts' and calendar's are, so a restored vault follows nothing until a Connect.
+const HABIT_KEY: &str = "agenda_reminders_followed";
+const HABIT_VALUE: &[u8] = b"1";
+
+/// Read the habit this device keeps for Reminders.
+#[must_use]
+pub(crate) fn habit_read() -> wire::Effect {
+    habit(wire::keychain_op::Op::Get, Vec::new())
+}
+
+/// This device follows its Reminders from now on.
+#[must_use]
+pub(crate) fn habit_set() -> wire::Effect {
+    habit(wire::keychain_op::Op::Set, HABIT_VALUE.to_vec())
+}
+
+fn habit(op: wire::keychain_op::Op, value: Vec<u8>) -> wire::Effect {
+    wire::Effect {
+        kind: Some(wire::effect::Kind::Keychain(wire::KeychainOp {
+            op: op as i32,
+            key: HABIT_KEY.to_owned(),
+            value,
+        })),
+    }
+}
+
+/// The vault's name for the phone's Reminders as a followed system (`origin.system`).
+pub(crate) const SYSTEM: &str = "phone_reminders";
+
+/// THE LISTS THE VAULT FOLLOWS from the phone's Reminders, by their origin refs, as it stores them
+/// (the shared read, [`crate::follow::stored_origins`]). `None` when the read did not land.
+#[must_use]
+pub(crate) fn followed_lists(ctx: &Ctx) -> Option<Vec<String>> {
+    crate::follow::stored_origins(ctx, SYSTEM)
+}
+
+/// This device no longer follows its Reminders.
+#[must_use]
+pub(crate) fn habit_clear() -> wire::Effect {
+    habit(wire::keychain_op::Op::Delete, Vec::new())
+}
+
+/// Whether the keychain's answer says this device follows its Reminders.
+#[must_use]
+pub(crate) fn followed_in(value: &wire::KeychainValue) -> bool {
+    value.found && value.value == HABIT_VALUE
+}
+
+/// The read a pass performs: never a permission, and every reminder, completed ones too, so a
+/// reminder the phone completed is not mistaken for one it deleted.
+#[must_use]
+pub(crate) fn read_effect() -> wire::Effect {
+    wire::Effect {
+        kind: Some(wire::effect::Kind::RemindersRead(wire::RemindersRead {
+            ask_permission: false,
+            include_completed: true,
+        })),
+    }
+}
 
 /// What one import did.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -40,6 +101,12 @@ pub struct Outcome {
     pub rules_dropped: u32,
     /// Lists made because a reminder's list had no namesake.
     pub lists_created: u32,
+    /// How many reminders the read held.
+    pub read: u32,
+    /// The vault took at least one list: this device follows from now on.
+    pub told: bool,
+    /// Tasks the vault doubts (a read that lost most of what it follows).
+    pub doubted: u32,
 }
 
 /// EventKit's raw priority (0 none, 1..4 high, 5 medium, 6..9 low) as the app's levels: `!!!` (3),
@@ -67,9 +134,12 @@ pub fn tasks(
         .filter(|reminder| include_completed || !reminder.completed)
         .filter_map(|reminder| {
             let title = reminder.title.trim();
-            if title.is_empty()
-                || !seen.insert(format!("{}|{}", title.to_lowercase(), reminder.due))
-            {
+            let key = if reminder.phone_id.trim().is_empty() {
+                format!("{}|{}", title.to_lowercase(), reminder.due)
+            } else {
+                format!("id:{}", reminder.phone_id.trim())
+            };
+            if title.is_empty() || !seen.insert(key) {
                 return None;
             }
             Some(wire::PhoneReminder {
@@ -138,41 +208,76 @@ fn rule_of(reminder: &wire::PhoneReminder, has_due: bool) -> (Option<String>, bo
     }
 }
 
-/// `add-task` for one reminder, in `project`, and whether its rule was dropped.
+/// The origin's name for a reminder whose phone list is not named: the phone's Reminders app.
+const ORIGIN_FALLBACK: &str = "Reminders";
+
+/// One reminder as a `follow-reminders` record's fields (the mapping table of the module doc),
+/// and whether its rule was dropped. `status` and `done_at` are always stated together.
 #[must_use]
-pub fn request(
-    reminder: &wire::PhoneReminder,
-    project: Option<&str>,
-) -> (act::reminders::AddTask, bool) {
+pub fn fields(reminder: &wire::PhoneReminder) -> (serde_json::Map<String, Value>, bool) {
     let (due, zone) = due_of(reminder);
     let (rule, dropped) = rule_of(reminder, due.is_some());
-    let done = reminder.completed.then(|| reminder.completed_at.clone());
-    let task = act::reminders::AddTask {
-        title: reminder.title.clone(),
-        description: if reminder.notes.is_empty() {
-            Field::Keep
+    let text = |value: &str| {
+        if value.is_empty() {
+            Value::Null
         } else {
-            Field::Is(reminder.notes.clone())
-        },
-        due: due.clone().map_or(Field::Keep, Field::Is),
-        zone: zone.map_or(Field::Keep, Field::Is),
-        priority: Some(priority_of(reminder.priority)).filter(|level| *level > 0),
-        // A repeating task repeats from its due, and a completed one has no successor.
-        rule: rule.map_or(Field::Keep, Field::Is),
-        remind_before_min: match (reminder.alarm_minutes_before, &due) {
-            (Some(minutes), Some(_)) => Field::Is(i64::from(minutes)),
-            _ => Field::Keep,
-        },
-        url: if reminder.url.is_empty() {
-            Field::Keep
-        } else {
-            Field::Is(reminder.url.clone())
-        },
-        project_id: project.map_or(Field::Keep, |id| Field::Is(id.to_owned())),
-        done_at: done.map_or(Field::Keep, Field::Is),
-        ..act::reminders::AddTask::default()
+            json!(value)
+        }
     };
-    (task, dropped)
+    let mut map = serde_json::Map::new();
+    map.insert("title".into(), json!(reminder.title));
+    map.insert("description".into(), text(&reminder.notes));
+    map.insert(
+        "due".into(),
+        due.as_deref().map_or(Value::Null, |due| json!(due)),
+    );
+    map.insert(
+        "zone".into(),
+        zone.as_deref().map_or(Value::Null, |zone| json!(zone)),
+    );
+    map.insert("priority".into(), json!(priority_of(reminder.priority)));
+    map.insert(
+        "rule".into(),
+        rule.as_deref().map_or(Value::Null, |rule| json!(rule)),
+    );
+    map.insert(
+        "remind_before_min".into(),
+        match (reminder.alarm_minutes_before, &due) {
+            (Some(minutes), Some(_)) => json!(minutes),
+            _ => Value::Null,
+        },
+    );
+    map.insert("url".into(), text(&reminder.url));
+    let done = reminder.completed && !reminder.completed_at.trim().is_empty();
+    map.insert("status".into(), json!(if done { "done" } else { "open" }));
+    map.insert(
+        "done_at".into(),
+        if done {
+            json!(reminder.completed_at)
+        } else {
+            Value::Null
+        },
+    );
+    (map, dropped)
+}
+
+/// The id a reminder is followed by: the phone's durable id, else its title and due day (a shell
+/// that names none still follows, and cannot tell two alike apart).
+fn external_id(reminder: &wire::PhoneReminder) -> String {
+    if reminder.phone_id.trim().is_empty() {
+        format!("title:{}|{}", reminder.title.to_lowercase(), reminder.due)
+    } else {
+        reminder.phone_id.trim().to_owned()
+    }
+}
+
+/// The origin a reminder's list is: the phone's list id, else its name.
+fn list_ref(reminder: &wire::PhoneReminder) -> String {
+    if reminder.list_id.trim().is_empty() {
+        format!("list:{}", reminder.list_title.to_lowercase())
+    } else {
+        reminder.list_id.trim().to_owned()
+    }
 }
 
 /// The lists the member already has, by lower-cased name.
@@ -223,6 +328,7 @@ fn list_for(
     // Nearest of the eight list colours by hue: a red list is raspberry, a green one petrol.
     let color = list_color(title, &reminder.list_color).map_or(Field::Keep, Field::Is);
     let key = kit_act::key(&["import-reminder-list", title], kit_act::fresh());
+    // undo-exempt: the list a follow pass makes for its reminders; Stop reading is the follow's Undo, and the list goes to the trash like any.
     let made = kit_act::act(
         ctx,
         act::reminders::CreateProject {
@@ -238,37 +344,67 @@ fn list_for(
     Some(id)
 }
 
-/// Write the read's tasks, one `add-task` each; a refused one is counted and the rest kept.
+/// Follow the read: one `follow-reminders` per phone list, whose tasks land in the list of that
+/// name (made when missing). `complete` says the read held every reminder, completed ones too,
+/// so one gone from it is gone from the phone. Both the member's import and the coordinator's
+/// pass go through it.
 pub fn run(ctx: &Ctx, reminders: &[wire::PhoneReminder], include_completed: bool) -> Outcome {
     let mut outcome = Outcome::default();
     let made = tasks(reminders, include_completed);
     let mut held = lists_held(ctx);
+    let mut by_list: Vec<(String, Vec<&wire::PhoneReminder>)> = Vec::new();
     for reminder in &made {
-        if reminder.completed && reminder.completed_at.trim().is_empty() {
-            outcome.refused += 1;
-            continue;
-        }
-        let project = list_for(ctx, reminder, &mut held, &mut outcome);
-        let (add, dropped) = request(reminder, project.as_deref());
-        let key = kit_act::key(
-            &["import-reminder", &reminder.title, &reminder.due],
-            kit_act::fresh(),
-        );
-        let settled = kit_act::act(ctx, add, &key);
-        if !settled.committed {
-            outcome.refused += 1;
-            continue;
-        }
-        outcome.added += 1;
-        outcome.rules_dropped += u32::from(dropped);
-        let Some(id) = settled.output_text("id") else {
-            continue;
-        };
-        if reminder.flagged {
-            let key = kit_act::key(&["import-reminder-flag", &id], kit_act::fresh());
-            kit_act::act(ctx, act::reminders::StarTask { task_id: id }, &key);
+        let key = list_ref(reminder);
+        match by_list.iter_mut().find(|(known, _)| *known == key) {
+            Some((_, group)) => group.push(reminder),
+            None => by_list.push((key, vec![reminder])),
         }
     }
+    outcome.read = u32::try_from(made.len()).unwrap_or(u32::MAX);
+    for (reference, group) in by_list {
+        let first = group[0];
+        let project = list_for(ctx, first, &mut held, &mut outcome);
+        let mut records = Vec::new();
+        for reminder in &group {
+            let (map, dropped) = fields(reminder);
+            outcome.rules_dropped += u32::from(dropped);
+            records.push(json!({ "external_id": external_id(reminder), "fields": map }));
+        }
+        let label = Some(first.list_title.trim())
+            .filter(|title| !title.is_empty())
+            .unwrap_or(ORIGIN_FALLBACK);
+        let request = act::reminders::FollowReminders {
+            origin: json!({ "ref": reference, "label": label, "fills": project }).to_string(),
+            records: Value::Array(records).to_string(),
+            complete: Some(include_completed),
+            since: None,
+            gone: None,
+        };
+        let key = kit_act::key(&["follow-reminders", &reference], kit_act::fresh());
+        // undo-exempt: a Reminders follow pass has no status line of its own (the import line says what it did); its Undo is Stop reading (`stop-following`), which asks first.
+        let settled = kit_act::act(ctx, request, &key);
+        if !settled.committed {
+            outcome.refused += u32::try_from(group.len()).unwrap_or(u32::MAX);
+            continue;
+        }
+        outcome.told = true;
+        let output: Value = serde_json::from_slice(&settled.output).unwrap_or(Value::Null);
+        let count = |name: &str| {
+            output
+                .get(name)
+                .and_then(Value::as_u64)
+                .and_then(|n| u32::try_from(n).ok())
+                .unwrap_or(0)
+        };
+        outcome.added += count("added") + count("matched");
+        outcome.refused += count("refused");
+        outcome.doubted += count("doubted");
+    }
+    ctx.follows().judged(
+        crate::follow::Store::Reminders,
+        outcome.doubted,
+        !include_completed,
+    );
     outcome
 }
 

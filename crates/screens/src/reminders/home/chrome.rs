@@ -5,8 +5,11 @@ use centraid_api_proto::core_v1 as wire;
 use wire::AgendaDestination as Dest;
 
 use super::super::routes;
+use crate::kit::export;
 use crate::kit::schedule::rows;
-use crate::strings::{Locale, agenda as words, agenda_reminders as reminders, imports, task};
+use crate::strings::{
+    Locale, agenda as words, agenda_reminders as reminders, imports, shared, task,
+};
 
 /// `AgendaBandTab.key`s: what `BandPicked` carries.
 pub const BAND_REMINDERS: &str = "reminders";
@@ -18,9 +21,12 @@ pub const MORE_ANYTIME: &str = "anytime";
 pub const MORE_LOGBOOK: &str = "logbook";
 pub const MORE_REMINDERS: &str = "reminders";
 pub const MORE_TRASH: &str = "trash";
-/// The row that opens the Import reminders option sheet: offered only where the platform has a
-/// reminders source ([`crate::Ctx::reminders_source`]).
-pub const MORE_IMPORT_REMINDERS: &str = "import-reminders";
+/// The stop row's slot while Reminders does not read the phone: its tap opens the option sheet,
+/// whose verb asks the phone for the permission and imports. Offered only where the platform has
+/// a reminders source ([`crate::Ctx::reminders_source`]).
+pub const MORE_TURN_ON: &str = "turn-on";
+/// The stop row's slot while it does: its tap asks first.
+pub const MORE_STOP: &str = "stop";
 
 /// The places a More row opens as a page.
 pub const TASK_PLACES: [&str; 4] = [MORE_ANYTIME, MORE_LOGBOOK, MORE_REMINDERS, MORE_TRASH];
@@ -61,7 +67,11 @@ pub fn header(locale: Locale, shown: bool) -> wire::AgendaCalendarHeader {
 
 /// REMINDERS' SHEET: the places that are not on the home (Anytime, Logbook, Reminders and the trash),
 /// the phone's Reminders import where the platform has one, and what Reminders may read.
-pub fn more_rows(locale: Locale, can_import_reminders: bool) -> Vec<wire::AgendaMoreRow> {
+pub fn more_rows(
+    locale: Locale,
+    has_source: bool,
+    following: Option<bool>,
+) -> Vec<wire::AgendaMoreRow> {
     let mut out: Vec<wire::AgendaMoreRow> = Vec::new();
     let place = |key: &str, label: String, meta: String, icon: &str, route: wire::Route| {
         wire::AgendaMoreRow {
@@ -98,21 +108,48 @@ pub fn more_rows(locale: Locale, can_import_reminders: bool) -> Vec<wire::Agenda
         ),
         place(
             MORE_TRASH,
-            task::trash(locale),
-            task::more_trash_meta(locale),
+            shared::trash_entry(locale),
+            shared::trash_entry_meta(locale),
             "Trash",
             routes::trash(),
         ),
     ];
     out.extend(places);
-    // THE REMINDERS IMPORT, beside the Tasks places: an action row that opens its option sheet.
-    // Only where the platform has a Reminders store (iOS).
-    if can_import_reminders {
+    // EXPORT (#1185): the kit's one entry, the same row in every app.
+    let export = export::entry(locale, super::super::EXPORT);
+    out.push(wire::AgendaMoreRow {
+        key: export.key.to_owned(),
+        spoken: export.label.clone(),
+        label: export.label,
+        icon_key: export.icon_key.to_owned(),
+        route: Some(export.route),
+        ..wire::AgendaMoreRow::default()
+    });
+    // THE STOP SLOT (as Calendar's, Health's and People's): "Stop reading Phone reminders" while
+    // Reminders reads the phone, "Turn on Phone reminders" otherwise, so the slot is never empty.
+    // Only where the platform has a Reminders store (iOS); Android shows neither.
+    // `following` is what the vault stores; while that read has not landed the slot says nothing
+    // rather than a wrong thing.
+    if let (true, Some(following)) = (has_source, following) {
+        let store = reminders::phone_reminders(locale);
+        let (key, label, icon) = if following {
+            (
+                MORE_STOP,
+                crate::kit::follow::stop_row(locale, &store),
+                "Stop",
+            )
+        } else {
+            (
+                MORE_TURN_ON,
+                crate::kit::follow::turn_on_row(locale, &store),
+                "Power",
+            )
+        };
         out.push(wire::AgendaMoreRow {
-            key: MORE_IMPORT_REMINDERS.to_owned(),
-            label: imports::reminders_import(locale),
-            spoken: imports::reminders_import(locale),
-            icon_key: "Download".to_owned(),
+            key: key.to_owned(),
+            spoken: label.clone(),
+            label,
+            icon_key: icon.to_owned(),
             ..wire::AgendaMoreRow::default()
         });
     }

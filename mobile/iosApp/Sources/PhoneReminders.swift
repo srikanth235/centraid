@@ -35,10 +35,15 @@ enum PhoneReminders {
 
     /// EVERY FIELD A REMINDER CARRIES, read as the OS holds it. Rust maps priority, folds a
     /// duplicate and words nothing; `priority` is EventKit's raw 0..9. EventKit has no public
-    /// flag, so `flagged` stays false. A subtask's parent is not exposed either: `parent_id`
+    /// flag, so none is read. A subtask's parent is not exposed either: `parent_id`
     /// stays empty.
     private static func phone(_ reminder: EKReminder) -> Centraid_Core_V1_PhoneReminder {
         var phone = Centraid_Core_V1_PhoneReminder()
+        // THE DURABLE IDS THAT LET THE VAULT FOLLOW THE STORE (#1185): the external identifier
+        // survives a sync, the item identifier is the fallback; the list is its calendar's id.
+        let external = reminder.calendarItemExternalIdentifier ?? ""
+        phone.phoneID = external.isEmpty ? reminder.calendarItemIdentifier : external
+        phone.listID = reminder.calendar?.calendarIdentifier ?? ""
         phone.title = reminder.title ?? ""
         phone.notes = reminder.notes ?? ""
         let due = reminder.dueDateComponents
@@ -85,10 +90,16 @@ enum PhoneReminders {
         return String(format: "%04d-%02d-%02d", year, month, day)
     }
 
+    /// A REFUSAL BY VALUE: the grant's state, never its words (Rust says them). A policy that blocks
+    /// Reminders is `restricted`; write-only access is `limited` (it cannot read); a no is `denied`.
     private static func denied() -> Centraid_Core_V1_EffectFailed {
         var failed = Centraid_Core_V1_EffectFailed()
-        failed.reason = "reminders access not given"
-        failed.denied = true
+        failed.reason = EffectReason.denied
+        switch EKEventStore.authorizationStatus(for: .reminder) {
+        case .restricted: failed.restricted = true
+        case .writeOnly: failed.limited = true
+        default: failed.denied = true
+        }
         return failed
     }
 }

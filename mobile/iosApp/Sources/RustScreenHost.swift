@@ -106,6 +106,7 @@ struct RustScreenView: View {
             }
         }
         .environment(\.placeHome, { shell.popToRoot() })
+        .environment(\.statusActed, { store.send(instance, .statusActed(.init())) })
     }
 
     /// THE APP THIS PAGE BELONGS TO, so every row, tile, sheet and button inside it (and the sheets
@@ -117,10 +118,10 @@ struct RustScreenView: View {
         case .lockerHome?, .lockerItem?, .lockerEditor?, .lockerExport?, .lockerImport?, .lockerLock?: "locker"
         case .moneyHome?, .moneyTransaction?, .moneyTarget?, .moneyRecurring?, .moneyAccounts?, .moneyRules?,
              .moneyCategories?, .moneyImport?, .moneySearch?: "money"
-        case .docsDrive?, .docsDocument?, .docsVersions?, .docsEditor?: "docs"
+        case .docsDrive?, .docsDocument?, .docsEditor?: "docs"
         case .healthHome?, .healthMetric?, .healthWorkout?, .healthConnect?: "health"
-        case .notesHome?, .notesEditor?, .notesHistory?: "notes"
-        case .peopleHome?, .peoplePerson?, .peopleEditor?: "people"
+        case .notesHome?, .notesEditor?: "notes"
+        case .peopleHome?, .peoplePerson?, .peopleEditor?, .peopleLists?: "people"
         default: ""
         }
     }
@@ -182,7 +183,8 @@ struct RustScreenView: View {
                 state: state,
                 send: { store.send(instance, .agendaEvent($0)) },
                 open: open,
-                onBack: pop
+                onBack: pop,
+                onPhoneSays: { store.send(instance, .phoneSaysTaken($0)) }
             )
             .environment(\.appAccent, AppAccent("calendar"))
         case .agendaEditor(let state)?:
@@ -213,7 +215,8 @@ struct RustScreenView: View {
                 state: state,
                 send: { store.send(instance, .todoDetail($0)) },
                 open: open,
-                onClose: pop
+                onClose: pop,
+                onPhoneSays: { store.send(instance, .phoneSaysTaken($0)) }
             )
             .environment(\.appAccent, AppAccent("reminders"))
         case .todoCatchUp(let state)?:
@@ -382,13 +385,8 @@ struct RustScreenView: View {
                 state: state,
                 send: { store.send(instance, .docsDocument($0)) },
                 open: open,
-                onBack: pop
-            )
-        case .docsVersions(let state)?:
-            DocsVersionsView(
-                state: state,
-                send: { store.send(instance, .docsVersions($0)) },
-                onBack: pop
+                onBack: pop,
+                onPhoneSays: { store.send(instance, .phoneSaysTaken($0)) }
             )
         case .docsEditor(let state)?:
             DocsEditorView(
@@ -413,7 +411,9 @@ struct RustScreenView: View {
             HealthWorkoutView(
                 state: state,
                 send: { store.send(instance, .healthWorkout($0)) },
-                onBack: pop
+                open: open,
+                onBack: pop,
+                onPhoneSays: { store.send(instance, .phoneSaysTaken($0)) }
             )
         case .healthConnect(let state)?:
             HealthConnectView(
@@ -435,12 +435,6 @@ struct RustScreenView: View {
                 open: open,
                 onClose: pop
             )
-        case .notesHistory(let state)?:
-            NotesHistoryView(
-                state: state,
-                send: { store.send(instance, .notesHistory($0)) },
-                onBack: pop
-            )
         case .peopleHome(let state)?:
             PeopleHomeView(
                 state: state,
@@ -453,7 +447,8 @@ struct RustScreenView: View {
                 state: state,
                 send: { store.send(instance, .peoplePerson($0)) },
                 open: open,
-                onBack: pop
+                onBack: pop,
+                onPhoneSays: { store.send(instance, .phoneSaysTaken($0)) }
             )
             .appAccent("people")
         case .peopleEditor(let state)?:
@@ -461,6 +456,13 @@ struct RustScreenView: View {
                 state: state,
                 send: { store.send(instance, .peopleEditor($0)) },
                 onClose: pop
+            )
+            .appAccent("people")
+        case .peopleLists(let state)?:
+            PeopleListsView(
+                state: state,
+                send: { store.send(instance, .peopleLists($0)) },
+                onBack: pop
             )
             .appAccent("people")
         case .transfer(let state)?:
@@ -473,6 +475,19 @@ struct RustScreenView: View {
             CoreTrashView(
                 state: state,
                 send: { store.send(instance, .trash($0)) },
+                onBack: pop
+            )
+        case .earlier(let state)?:
+            CoreEarlierView(
+                state: state,
+                send: { store.send(instance, .earlier($0)) },
+                open: open,
+                onBack: pop
+            )
+        case .earlierPreview(let state)?:
+            CoreEarlierPreviewView(
+                state: state,
+                send: { store.send(instance, .earlierPreview($0)) },
                 onBack: pop
             )
         // PAIRING A GATEWAY (#1135).

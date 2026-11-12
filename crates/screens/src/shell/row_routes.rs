@@ -78,6 +78,11 @@ pub fn route(row: &RowRef, parent: &str, among: &[RowRef]) -> Option<wire::Route
             id,
             title,
         )),
+        ("photos", "place") => Some(photos::routes::shelf(
+            wire::PhotosShelfKind::Place,
+            id,
+            title,
+        )),
         ("photos", "photo") => {
             let mut neighbours: Vec<String> = among
                 .iter()
@@ -93,6 +98,8 @@ pub fn route(row: &RowRef, parent: &str, among: &[RowRef]) -> Option<wire::Route
         ("docs", "document") => Some(docs::routes::document(id, title, parent)),
         ("people", "person") => Some(people::routes::person(id, title, false)),
         ("money", "transaction") => Some(money::routes::transaction(id, parent)),
+        // Money has one page for its accounts, a list; an account's own row is opened there.
+        ("money", "account") => Some(money::routes::accounts(parent)),
         ("health", "workout") => Some(health::routes::workout(id, parent)),
         ("health", "metric") => Some(health::routes::metric(id, parent)),
         ("locker", "locker_item") => Some(locker_item(row, parent)),
@@ -103,6 +110,32 @@ pub fn route(row: &RowRef, parent: &str, among: &[RowRef]) -> Option<wire::Route
         ("locker", _) => None,
         (app, _) => app_home(app),
     }
+}
+
+/// The page a row found only in an earlier version opens (#1185): that item's Earlier
+/// versions, backing out to Search. `None` for a kind with no such page, which is then
+/// opened as any row is.
+#[must_use]
+pub fn earlier(
+    locale: crate::strings::Locale,
+    app: &str,
+    entity: &str,
+    id: &str,
+) -> Option<wire::Route> {
+    let app = centraid_vault::roster::legacy(app, entity);
+    let screen = match (app, entity) {
+        ("notes", "note") => notes::EARLIER,
+        ("calendar", "event") => crate::calendar::EARLIER,
+        ("reminders", "task") => crate::reminders::EARLIER,
+        ("people", "person") => people::EARLIER,
+        ("docs", "document") => docs::EARLIER,
+        ("money", "transaction") => money::EARLIER,
+        ("photos", "photo") => photos::EARLIER,
+        // A workout is an activity in the vault; its Earlier versions are Health's.
+        ("health", "workout") => health::EARLIER,
+        _ => return None,
+    };
+    Some(crate::kit::search::earlier_route(locale, screen, id))
 }
 
 /// A Locker item, or the member action a chat card asks of it
@@ -182,6 +215,8 @@ mod tests {
         assert_eq!(open("photos", "photo"), photos::LIGHTBOX);
         assert_eq!(open("money", "transaction"), money::TRANSACTION);
         assert_eq!(open("health", "workout"), health::WORKOUT);
+        assert_eq!(open("money", "account"), money::ACCOUNTS);
+        assert_eq!(open("photos", "place"), photos::SHELF);
         // A kind with no page of its own opens the app.
         assert_eq!(open("calendar", "nonsense"), crate::calendar::HOME);
         assert_eq!(open("chat", "thread"), crate::chat::THREAD);

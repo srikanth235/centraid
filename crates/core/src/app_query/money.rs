@@ -128,6 +128,7 @@ fn activity_row(row: phone::ActivityRow) -> wire::MoneyActivityRow {
         category_id: row.category_id,
         category_label: row.category_label,
         flags: row.flags.into_iter().map(flag).collect(),
+        in_earlier_version: row.in_earlier_version,
     }
 }
 

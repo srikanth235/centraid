@@ -1215,7 +1215,8 @@ pub fn emit(root: &Path) -> Result<Emitted> {
     );
 
     // Agenda's static words for the platform, from its own catalogue.
-    let glance = crate::design_glance::resolve(&read(crate::design_glance::GLANCE_SOURCE)?)?;
+    let mut glance = crate::design_glance::resolve(&read(crate::design_glance::GLANCE_SOURCE)?)?;
+    crate::design_glance::add_health(&mut glance, &read(crate::design_glance::HEALTH_SOURCE)?)?;
     put(
         format!("{SWIFT_DIR}/GlanceWords.swift"),
         crate::design_glance::swift_words(&glance),

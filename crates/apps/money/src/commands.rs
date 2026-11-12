@@ -1,4 +1,4 @@
-//! THE TWENTY-TWO ACTIONS, as command invocations.
+//! THE TWENTY-EIGHT ACTIONS, as command invocations.
 //!
 //! Every Money action is a thin invocation of ONE typed vault command
 //! (`crates/vault/src/commands/{money,rule}.rs`, `follow.rs`, or a shared verb):
@@ -88,21 +88,27 @@ pub struct CommandsUnavailable {
 pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
-/// THE TABLE. Twenty-five actions, in the manifest's own order. A close, an archive
+/// THE TABLE. Twenty-eight actions, in the manifest's own order. A close, an archive
 /// and a name for a line are the shared verbs (`flag.set`, `flag.clear`,
 /// `entity.retitle`): Money wraps none of them, so two actions may name one command.
 /// Confirmation is asked for what cannot be taken back or touches many rows.
-pub const ACTIONS: [ActionRow; 25] = [
+pub const ACTIONS: [ActionRow; 31] = [
     act("add-account", "account.add"),
     act("edit-account", "account.edit"),
     act("close-account", "flag.set"),
     act("reopen-account", "flag.clear"),
     confirmed("set-opening-balance", "account.set_opening"),
-    act("import-transactions", "follow.statement"),
-    act("record-checkpoint", "checkpoint.record"),
+    // The Import screen previews the lines and the statement balance and writes only on the tap.
+    confirmed("import-transactions", "follow.statement"),
+    confirmed("record-checkpoint", "checkpoint.record"),
     act("save-import-profile", "account.remember_layout"),
     act("categorize", "txn.categorize"),
-    confirmed("void-transaction", "txn.void"),
+    // A transaction goes to the trash and comes back through the shared verbs; it is the member's way
+    // to remove a line (#1185), and replaces the final void. Both destroys confirm.
+    act("trash-transaction", "entity.trash"),
+    act("restore-transaction", "entity.restore"),
+    confirmed("purge-transaction", "entity.purge"),
+    confirmed("empty-trash", "entity.empty_trash"),
     act("set-display-name", "entity.retitle"),
     act("link-transfer", "txn.link_transfer"),
     act("unlink-transfer", "txn.unlink_transfer"),
@@ -119,6 +125,13 @@ pub const ACTIONS: [ActionRow; 25] = [
     // A link set by hand (#1173): one edge, shaped by the vault.
     act("add-with", "edge.add"),
     act("remove-with", "edge.remove"),
+    // AN ATTACHMENT is an `attached` edge from the item to a document or a photo: the shared
+    // verbs, one pair in every app (the Attach promise, #1185).
+    act("attach", "edge.add"),
+    act("detach", "edge.remove"),
+    // THE TRANSACTIONS AS A FILE (#1185): the More sheet's Export and a transaction's Share. It
+    // writes nothing (`writes_nothing`).
+    act("export-csv", "txn.export_csv"),
 ];
 
 /// The `act` scopes Money declares, derived from the action table: one per
@@ -261,7 +274,7 @@ mod tests {
             reason: Some("no".into()),
             code: Some("vault_denied".into()),
         });
-        let outcome = run(&door, "void-transaction", input(&[]), "k").expect("not an Err");
+        let outcome = run(&door, "purge-transaction", input(&[]), "k").expect("not an Err");
         assert!(matches!(outcome, Outcome::Denied { .. }));
         assert!(outcome.output().is_none() && !outcome.pending());
     }

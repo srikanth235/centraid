@@ -9,6 +9,8 @@
 //! | One metric over a week, a month, 6 months or a year | [`METRIC`] | [`metric`] |
 //! | One workout | [`WORKOUT`] | [`workout`] |
 //! | What Health may read, and Connect | [`CONNECT`] | [`connect`] |
+//! | Earlier versions of a workout | [`EARLIER`] | [`earlier`] |
+//! | Export daily totals or workouts | [`EXPORT`] | [`export`] |
 //!
 //! ## Reads and writes
 //!
@@ -31,17 +33,20 @@
 use centraid_api_proto::core_v1 as wire;
 
 use crate::Registry;
-use crate::kit::read::Reading;
 use crate::screen::Ctx;
 use crate::strings::{Locale, health as words};
 
 pub mod connect;
+pub mod earlier;
+pub mod export;
 pub mod figures;
 pub mod follow;
+pub mod glance;
 pub mod highlights;
 pub mod home;
 pub mod kinds;
 pub mod metric;
+pub mod trash;
 pub mod workout;
 
 pub const HOME: &str = "health.home";
@@ -49,6 +54,12 @@ pub const METRIC: &str = "health.metric";
 pub const WORKOUT: &str = "health.workout";
 pub const CONNECT: &str = "health.connect";
 pub const SEARCH: &str = "health.search";
+/// The workouts in the trash (#1185).
+pub const TRASH: &str = "health.trash";
+/// The earlier versions of a workout (#1185).
+pub const EARLIER: &str = "health.earlier";
+/// Health's export of daily totals and workouts as a spreadsheet file (#1185).
+pub const EXPORT: &str = "health.export";
 
 /// The tab Health's pages are pushed under.
 pub const TAB: &str = "health";
@@ -61,7 +72,11 @@ pub fn registry() -> Registry {
         .with(METRIC, metric::build)
         .with(WORKOUT, workout::build)
         .with(CONNECT, connect::build)
+        .with(TRASH, trash::build)
+        .with(EARLIER, earlier::build)
+        .with(EXPORT, export::build)
         .with(SEARCH, crate::shell::search::build_health)
+        .merge(glance::registry())
 }
 
 /// A runtime with Health's screens and one tab, `health`, rooted at Today. The
@@ -73,33 +88,6 @@ pub fn runtime() -> crate::Runtime {
         registry(),
         vec![(TAB.to_owned(), routes::home(wire::HealthDestination::Today))],
     )
-}
-
-/// What a page holds of its reads: nothing yet, a refusal, a gate or the answer.
-/// A failed read is never an empty list.
-#[derive(Clone, Debug)]
-pub(crate) enum Phase<T> {
-    Loading,
-    Failed,
-    Denied(wire::AppQueryDenial),
-    Ready(T),
-}
-
-impl<T> Phase<T> {
-    pub(crate) fn of(reading: Reading<T>) -> Self {
-        match reading {
-            Reading::Data(data) => Self::Ready(data),
-            Reading::Denied(denial) => Self::Denied(denial),
-            Reading::Failed => Self::Failed,
-        }
-    }
-
-    pub(crate) fn data(&self) -> Option<&T> {
-        match self {
-            Self::Ready(data) => Some(data),
-            _ => None,
-        }
-    }
 }
 
 /// The gate drawn when the vault will not let Health read.
@@ -114,26 +102,8 @@ pub(crate) fn denied(locale: Locale, denial: &wire::AppQueryDenial) -> wire::Den
     }
 }
 
-/// The measurement system the phone's locale uses: only the regions that
-/// measure in miles and pounds read as imperial (display only: storage is the
-/// metric's own unit).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Units {
-    Metric,
-    Imperial,
-}
-
-impl Units {
-    /// The units of the device `ctx` describes.
-    #[must_use]
-    pub fn of(ctx: &Ctx) -> Self {
-        if matches!(ctx.region(), "US" | "LR" | "MM") {
-            Self::Imperial
-        } else {
-            Self::Metric
-        }
-    }
-}
+/// The member's units (#1185): `kit::quantity`'s one switch.
+pub use crate::kit::quantity::UnitsPref as Units;
 
 /// The health store this phone has: Apple Health on iOS, Health Connect on
 /// Android. One origin each (R-1129-2).
@@ -284,7 +254,7 @@ pub const WIDE_CARDS: usize = 2;
 
 /// The routes Health's own screens hand to a shell inside a view state.
 pub mod routes {
-    use super::{CONNECT, HOME, METRIC, WORKOUT, wire};
+    use super::{CONNECT, HOME, METRIC, TRASH, WORKOUT, wire};
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
         wire::Route {
@@ -348,5 +318,11 @@ pub mod routes {
                 parent: parent.to_owned(),
             }),
         )
+    }
+
+    /// The trash: the kit's one trash screen over Health's spec (#1185).
+    #[must_use]
+    pub fn trash() -> wire::Route {
+        route(TRASH, wire::route::Args::Trash(wire::TrashRoute {}))
     }
 }

@@ -117,8 +117,10 @@ mod tests {
     #[test]
     fn every_manifest_action_resolves_to_a_command_and_every_app_is_counted() {
         let mut actions = 0;
+        let mut counts = Vec::new();
         for app in APPS {
             let manifest = app.manifest();
+            counts.push((app.id, manifest.actions.len()));
             assert_eq!(manifest.id, app.id);
             for action in &manifest.actions {
                 assert!(
@@ -131,8 +133,23 @@ mod tests {
             }
         }
         assert_eq!(
-            actions, 183,
-            "the nine manifests declare 183 actions: the 179 of the eight, plus the four the split of Agenda shares (attach and detach for a task and for an event, a calendar's rename and style)"
+            counts,
+            [
+                ("calendar", 22),
+                ("docs", 24),
+                ("health", 17),
+                ("locker", 23),
+                ("money", 31),
+                ("notes", 22),
+                ("people", 36),
+                ("photos", 27),
+                ("reminders", 25),
+            ],
+            "each app's declared actions"
+        );
+        assert_eq!(
+            actions, 227,
+            "the nine manifests declare 227 actions: the 178 of the eight, the four the split of Agenda shares (attach and detach for a task and for an event, a calendar's rename and style), and the thirteen that give every trash a way to be emptied and Notes, Calendar, Health and Money a way to delete forever (Money's four take the place of its void), and the one that takes back a People relationship, and the one that stops following the phone's contacts, and the one that stops following the phone's calendars, and the ten that give Docs, Health, Money, People and Photos the attach and detach every app has, and the nine that give Calendar, Health, People and Reminders the general link and unlink and Notes its unlink, and the two that follow and stop following the phone's Reminders, and the two that export Money's transactions and Health's measurements and workouts as a spreadsheet file, and the two that export Docs' originals and the Photos library as one archive, and the one that restores a People list (the screen's Undo of its delete), and the two that move a calendar to the trash with its events and bring it back, less People's birthday-reminder switch that was always on and had no screen (#1185)"
         );
     }
 

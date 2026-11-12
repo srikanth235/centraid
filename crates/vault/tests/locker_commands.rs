@@ -1629,10 +1629,10 @@ fn a_passkey_renamed_with_the_placeholder_keeps_its_key_and_generation() {
     );
 }
 
-/// A NOTE'S `[[title]]` NAMES A LOCKER ITEM (#1135): its title is a plain field, and the link is an
-/// edge.
+/// A NOTE'S `[[title]]` NEVER RESOLVES TO A LOCKER ITEM (#1185, D11): a Locker item cannot be the
+/// target of a link, so the words stay words.
 #[test]
-fn a_wikilink_resolves_a_locker_item() {
+fn a_wikilink_never_resolves_a_locker_item() {
     let world = World::new("locker-wikilink", "key-1");
     world.login("item-1", "key-1");
     let note = world.ok(
@@ -1647,6 +1647,6 @@ fn a_wikilink_resolves_a_locker_item() {
             "SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'links' AND to_id = 'item-1'",
             &[&note],
         ),
-        1
+        0
     );
 }

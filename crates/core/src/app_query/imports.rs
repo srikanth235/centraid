@@ -15,8 +15,6 @@ use centraid_apps_kit::reads::PageDoor;
 use centraid_apps_kit::row::{Row, text_of};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 use centraid_apps_kit::{KitError, KitResult};
-use centraid_vault::Vault;
-use centraid_vault::commands::calendar_push;
 
 use super::{Answer, VaultDoor, settle};
 use crate::error::Result;
@@ -52,10 +50,64 @@ fn files_only(name: &str, select: &str, from: &str) -> PageQuery {
         .filter("system = ?", vec![PageBindValue::Text("files".to_owned())])
 }
 
+/// The origins of the folders the vault follows: a retired origin (one Stop was pressed on) is
+/// followed by nobody, whatever it kept.
+fn followed_origins(name: &str, select: &str) -> PageQuery {
+    PageQuery::new(name, select, "origin", PageOrder::asc("id", "id")).filter(
+        "system = ? AND retired_at IS NULL",
+        vec![PageBindValue::Text("files".to_owned())],
+    )
+}
+
+/// The origins Stop retired: kept with the Docs folder they filled, so picking the same folder again
+/// finds it. Nothing but the pick reads them.
+fn retired_origins(name: &str, select: &str) -> PageQuery {
+    PageQuery::new(name, select, "origin", PageOrder::asc("id", "id")).filter(
+        "system = ? AND retired_at IS NOT NULL",
+        vec![PageBindValue::Text("files".to_owned())],
+    )
+}
+
 /// The `stat` a source last stated, out of its `stated` JSON.
 fn stat_of(stated: &str) -> Option<String> {
     let value: serde_json::Value = serde_json::from_str(stated).ok()?;
     value.get("stat")?.as_str().map(str::to_owned)
+}
+
+/// `shell.followed-stores`: every phone store the vault follows, one row per origin.
+pub(crate) fn followed_stores(door: &VaultDoor<'_>) -> Result<Answer> {
+    let loaded = (|| -> KitResult<(wire::FollowedStores, Option<centraid_apps_kit::Denial>)> {
+        let query = PageQuery::new(
+            "followed.stores",
+            "id, system, ref, label, device_id, fills",
+            "origin",
+            PageOrder::asc("id", "id"),
+        )
+        .filter(
+            // A RETIRED ORIGIN IS FOLLOWED BY NOBODY: after Stop a store reads as "Turn on" again.
+            "system IN (?, ?, ?, ?, ?) AND retired_at IS NULL",
+            ["contacts", "calendar", "files", "health", "phone_reminders"]
+                .map(|system| PageBindValue::Text(system.to_owned()))
+                .to_vec(),
+        );
+        let mut stores: Vec<wire::FollowedStore> = all(door, &query)?
+            .iter()
+            .map(|row| wire::FollowedStore {
+                origin_id: text_of(row, "id").unwrap_or_default(),
+                system: text_of(row, "system").unwrap_or_default(),
+                origin_ref: text_of(row, "ref").unwrap_or_default(),
+                label: text_of(row, "label").unwrap_or_default(),
+                device_id: text_of(row, "device_id").unwrap_or_default(),
+                fills: text_of(row, "fills").unwrap_or_default(),
+            })
+            .collect();
+        stores.sort_by(|a, b| {
+            (a.system.as_str(), a.label.to_lowercase())
+                .cmp(&(b.system.as_str(), b.label.to_lowercase()))
+        });
+        Ok((wire::FollowedStores { stores }, None))
+    })();
+    settle(door, loaded, Answer::FollowedStores)
 }
 
 /// `shell.files-followed`.
@@ -63,7 +115,11 @@ pub(crate) fn files_followed(door: &VaultDoor<'_>) -> Result<Answer> {
     let loaded = (|| -> KitResult<(wire::ImportsFilesHeld, Option<centraid_apps_kit::Denial>)> {
         let origins = all(
             door,
-            &files_only("files.origins", "id, ref, label", "origin"),
+            &followed_origins("files.origins", "id, ref, label, fills"),
+        )?;
+        let retired = all(
+            door,
+            &retired_origins("files.retired", "id, ref, label, fills"),
         )?;
         let sources = all(
             door,
@@ -84,6 +140,7 @@ pub(crate) fn files_followed(door: &VaultDoor<'_>) -> Result<Answer> {
                     label: text_of(row, "label").unwrap_or_default(),
                     documents: 0,
                     files: Vec::new(),
+                    docs_folder: text_of(row, "fills").unwrap_or_default(),
                 },
             );
         }
@@ -103,49 +160,18 @@ pub(crate) fn files_followed(door: &VaultDoor<'_>) -> Result<Answer> {
         }
         let mut folders: Vec<_> = folders.into_values().collect();
         folders.sort_by(|a, b| a.label.to_lowercase().cmp(&b.label.to_lowercase()));
-        Ok((wire::ImportsFilesHeld { folders }, None))
+        // A folder Stop retired is not followed; the pick that follows it again reads what it filled.
+        let retired = retired
+            .iter()
+            .map(|row| wire::ImportsHeldFolder {
+                origin_id: text_of(row, "id").unwrap_or_default(),
+                origin_ref: text_of(row, "ref").unwrap_or_default(),
+                label: text_of(row, "label").unwrap_or_default(),
+                docs_folder: text_of(row, "fills").unwrap_or_default(),
+                ..Default::default()
+            })
+            .collect();
+        Ok((wire::ImportsFilesHeld { folders, retired }, None))
     })();
     settle(door, loaded, Answer::ImportsFilesHeld)
-}
-
-/// `shell.calendar-owed`: the pushes the shell's writable phone calendars are owed, one page.
-///
-/// The vault derives them at read time ([`calendar_push::owed_pushes`]), so a push that failed or
-/// was never answered is simply owed again; nothing is stored. `limit` 0 is the vault's own page.
-pub(crate) fn calendar_owed(
-    vault: &Vault,
-    door: &VaultDoor<'_>,
-    origins: &[String],
-    after_event: &str,
-    limit: u32,
-) -> Result<Answer> {
-    let limit = usize::try_from(limit).unwrap_or(usize::MAX).max(1);
-    let after = (!after_event.is_empty()).then_some(after_event);
-    // The shell knows its calendars by origin ref (`calendar:<key>`); the vault's origin ids are
-    // minted, so the refs are looked up inside the one read.
-    let page = vault.read(|connection| {
-        let ids = calendar_push::origin_ids(connection, origins)?;
-        calendar_push::owed_pushes(connection, &ids, after, limit)
-    })?;
-    let loaded: KitResult<(wire::ImportsCalendarOwed, Option<centraid_apps_kit::Denial>)> = Ok((
-        wire::ImportsCalendarOwed {
-            items: page
-                .items
-                .into_iter()
-                .map(|owed| wire::ImportsOwedPush {
-                    op: owed.op.as_str().to_owned(),
-                    event_id: owed.event_id,
-                    origin_ref: owed.origin_ref,
-                    external_id: owed.external_id.unwrap_or_default(),
-                    device_id: owed.device_id.unwrap_or_default(),
-                    changed: owed.changed,
-                    stated_json: owed.stated.to_string(),
-                    fields_json: owed.fields.to_string(),
-                })
-                .collect(),
-            next: page.next.unwrap_or_default(),
-        },
-        None,
-    ));
-    settle(door, loaded, Answer::ImportsCalendarOwed)
 }

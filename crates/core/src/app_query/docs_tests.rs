@@ -507,12 +507,17 @@ fn the_version_history_is_newest_first_and_numbered_from_the_oldest() {
             serde_json::json!({ "id": lease, "body_text": body }),
         );
     }
+    // A rename keeps a revision of its own (#1185) but adds no version of bytes.
+    scratch.run(
+        "document.edit",
+        serde_json::json!({ "id": lease, "title": "Lease (signed)" }),
+    );
     let opened = scratch.document(&lease);
     let row = opened.document.expect("the document exists");
     assert_eq!(row.surface, wire::DocsSurface::Reading as i32);
     assert_eq!(row.kind, wire::DocsKind::Document as i32);
     assert_eq!(row.kind_name, "Document");
-    assert_eq!(row.size, "5 bytes", "the head's bytes, in words");
+    assert_eq!(row.byte_size, Some(5), "the head's bytes");
     assert_eq!(opened.body.as_deref(), Some("third"));
     let numbers: Vec<u32> = opened
         .versions
@@ -523,7 +528,7 @@ fn the_version_history_is_newest_first_and_numbered_from_the_oldest() {
     assert!(opened.versions[0].current);
     assert!(opened.versions[1..].iter().all(|version| !version.current));
     assert_eq!(opened.versions[0].content_id, row.content_id);
-    assert_eq!(opened.versions[2].size, "5 bytes");
+    assert_eq!(opened.versions[2].byte_size, Some(5));
     assert!(opened.bytes_held, "the words are a file in the store too");
 }
 

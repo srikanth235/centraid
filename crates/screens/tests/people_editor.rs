@@ -216,3 +216,148 @@ fn words_typed_after_the_first_save_are_an_edit_of_the_person_it_made() {
     // It still says it is a new person's editor, and the name stands.
     assert_eq!(draft(d.view(i)).display_name, "Ana");
 }
+
+fn edited_elsewhere(d: &Driver, id: &str) {
+    arrange(
+        d,
+        act::people::EditPerson {
+            person_id: id.to_owned(),
+            role: Some("Elsewhere".into()),
+            ..Default::default()
+        },
+    );
+}
+
+#[test]
+fn a_save_over_a_person_who_changed_elsewhere_is_refused_and_reload_keeps_the_words() {
+    let mut d = clean();
+    let id = dana(&d);
+    let i = d.push(people::TAB, routes::editor(&id));
+    send_editor(
+        &mut d,
+        i,
+        N::Met(ev::MetChanged {
+            text: "At the studio".into(),
+        }),
+    );
+    edited_elsewhere(&d, &id);
+    timer(&mut d, i, "autosave");
+    // The vault's person is the other surface's; the words stay, under the sentence.
+    assert_eq!(sheet_of(&d, &id).sheet.as_ref().unwrap().met, "");
+    assert_eq!(sheet_of(&d, &id).sheet.as_ref().unwrap().rev, 1);
+    let state = editor_state(d.view(i));
+    let autosave = state.autosave.clone().unwrap();
+    assert_eq!(autosave.phase, wire::autosave::Phase::Conflict as i32);
+    assert_eq!(draft(d.view(i)).met, "At the studio");
+    assert_eq!(autosave.label, "This person changed somewhere else.");
+    assert_eq!(autosave.reload_label, "Reload");
+    // Reload: the words are kept as an earlier version and the vault's person is shown.
+    d.send(
+        i,
+        wire::screen_event::Kind::StatusActed(wire::StatusActed {}),
+    );
+    assert_eq!(draft(d.view(i)).met, "");
+    assert_eq!(draft(d.view(i)).role, "Elsewhere");
+    let status = editor_state(d.view(i)).status.clone().expect("a line");
+    assert_eq!(status.sentence, "Your text is in Earlier versions.");
+    assert_eq!(sheet_of(&d, &id).sheet.as_ref().unwrap().rev, 2);
+    // And the next save is fresh.
+    send_editor(
+        &mut d,
+        i,
+        N::Met(ev::MetChanged {
+            text: "At a wedding".into(),
+        }),
+    );
+    timer(&mut d, i, "autosave");
+    assert_eq!(sheet_of(&d, &id).sheet.unwrap().met, "At a wedding");
+}
+
+#[test]
+fn a_person_trashed_elsewhere_refuses_the_save_as_trashed_and_keeps_the_words() {
+    let mut d = clean();
+    let id = dana(&d);
+    let i = d.push(people::TAB, routes::editor(&id));
+    send_editor(
+        &mut d,
+        i,
+        N::Role(ev::RoleChanged {
+            text: "Illustrator".into(),
+        }),
+    );
+    arrange(
+        &d,
+        act::people::TrashPerson {
+            person_id: id.clone(),
+        },
+    );
+    d.pump(std::time::Duration::from_millis(1400));
+    let state = editor_state(d.view(i));
+    assert_eq!(
+        state.autosave.clone().unwrap().phase,
+        wire::autosave::Phase::Conflict as i32
+    );
+    assert_eq!(
+        state.autosave.clone().unwrap().label,
+        "This person was moved to the trash."
+    );
+    assert_eq!(draft(d.view(i)).role, "Illustrator");
+    d.send(
+        i,
+        wire::screen_event::Kind::StatusActed(wire::StatusActed {}),
+    );
+    assert!(editor_state(d.view(i)).content.is_none());
+    assert_eq!(
+        people_support::gone_of(&editor_state(d.view(i)).page).sentence,
+        "This person is not in People."
+    );
+    assert_eq!(
+        editor_state(d.view(i)).status.clone().unwrap().sentence,
+        "Restore it to find your text in Earlier versions."
+    );
+}
+
+#[test]
+fn a_cadence_tap_after_typing_saves_the_words_first_and_is_not_a_conflict() {
+    let mut d = clean();
+    let id = dana(&d);
+    let i = d.push(people::TAB, routes::editor(&id));
+    send_editor(
+        &mut d,
+        i,
+        N::Role(ev::RoleChanged {
+            text: "Illustrator".into(),
+        }),
+    );
+    send_editor(&mut d, i, N::Cadence(ev::CadencePicked { days: 30 }));
+    let row = row_of(&d, &id);
+    assert_eq!((row.role.as_str(), row.cadence_days), ("Illustrator", 30));
+    let autosave = editor_state(d.view(i)).autosave.clone().unwrap();
+    assert_ne!(autosave.phase, wire::autosave::Phase::Conflict as i32);
+    // Both writes were the editor's own: the next save is fresh.
+    send_editor(
+        &mut d,
+        i,
+        N::Role(ev::RoleChanged {
+            text: "Painter".into(),
+        }),
+    );
+    timer(&mut d, i, "autosave");
+    assert_eq!(row_of(&d, &id).role, "Painter");
+}
+
+#[test]
+fn a_cadence_tap_over_a_person_who_changed_elsewhere_is_refused_with_the_sentence() {
+    let mut d = clean();
+    let id = dana(&d);
+    let i = d.push(people::TAB, routes::editor(&id));
+    edited_elsewhere(&d, &id);
+    send_editor(&mut d, i, N::Cadence(ev::CadencePicked { days: 30 }));
+    assert_eq!(row_of(&d, &id).cadence_days, 14);
+    assert_eq!(
+        editor_state(d.view(i)).status.clone().unwrap().sentence,
+        "This person changed somewhere else."
+    );
+    // The page was read again at once: the vault's role is on it.
+    assert_eq!(draft(d.view(i)).role, "Elsewhere");
+}

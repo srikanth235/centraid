@@ -30,14 +30,22 @@ use wire::app_query_response::Answer;
 use wire::people_person_event::Kind as P;
 use wire::screen_event::Kind as E;
 
-use super::{Phase, denied, fold, routes};
+use super::{denied, fold, routes};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
-use crate::kit::read;
+use crate::kit::attachments::Attachments;
+use crate::kit::earlier;
+use crate::kit::export::{self, ExportFile};
+use crate::kit::follow;
+use crate::kit::links::{self, Kind, Links, Outcome};
+use crate::kit::read::{self, Page};
+use crate::kit::share::{self, Share};
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, fill, people as words};
+use crate::strings::{Locale, fill, links as link_label, people as words};
 
 mod data;
+mod phone;
 mod sheets;
 
 pub(crate) use data::gone;
@@ -57,13 +65,39 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     Some(Box::new(Person {
         party_id: args.party_id.clone(),
         name_hint: args.name.clone(),
-        phase: Phase::Loading,
+        page: Page::loading(),
+        gone: false,
         opening_log: args.log_touch,
         sheet: None,
         asking: Asking::Nothing,
-        status: None,
+        undo: Undo::default(),
         done: false,
+        differences: follow::Phone::default(),
+        earlier: earlier::Foot::default(),
+        share: Share::default(),
+        // A person may link to another person; the picker leaves this one out (`for_entity`).
+        links: Links::new(&Kind::ALL).for_entity(&args.party_id),
+        linked: None,
+        linked_unread: false,
+        attachments: Attachments::of("people", &args.party_id),
     }))
+}
+
+/// One person as a vCard file, through the same command the export screen calls.
+fn vcard(ctx: &Ctx, person_id: &str) -> Result<ExportFile, String> {
+    // undo-exempt: an export writes nothing (`writes_nothing` in the manifest), so there is nothing to take back.
+    let settled = kit_act::act(
+        ctx,
+        act::people::ExportVcf {
+            list_id: None,
+            person_id: Some(person_id.to_owned()),
+        },
+        &kit_act::key(&["person.export_vcf", person_id], kit_act::fresh()),
+    );
+    if settled.committed && crate::kit::transfer::count(&settled.output, "count") == 0 {
+        return Err(String::new());
+    }
+    export::file_of(&settled, "text/vcard", "Contact.vcf")
 }
 
 /// What a confirm on screen will do once the member says so.
@@ -77,14 +111,33 @@ enum Asking {
 struct Person {
     party_id: String,
     name_hint: String,
-    /// `None` inside `Ready`: no live person has this id.
-    phase: Phase<Option<(wire::PeopleSheet, String)>>,
+    /// The read. `None` inside `Ready` never reaches the page: no live person with this id is
+    /// `gone`, a failed page with its own words and no Retry, never an empty one.
+    page: Page<Option<(wire::PeopleSheet, String)>>,
+    gone: bool,
     /// The route asked for the Log a touch sheet at once; it opens with the data.
     opening_log: bool,
     sheet: Option<Sheet>,
     asking: Asking,
-    status: Option<wire::StatusLine>,
+    /// The status line and what its Undo reverses (the kit's one door).
+    undo: Undo,
     done: bool,
+    /// Where the phone's words differ from the person's, read with the page (#1183).
+    differences: follow::Phone,
+    /// The entry to the person's earlier versions, read with the page (#1185).
+    earlier: earlier::Foot,
+    /// The person handed to the OS share sheet as a vCard (#1185).
+    share: Share,
+    /// THE "Linked to" SECTION'S PICKER (#1185): what the person can link to, any item but a
+    /// Locker one.
+    links: Links,
+    /// What the person is linked to, either end (`links::read_linked`). `None` until read, and
+    /// while a read did not land.
+    linked: Option<Vec<wire::LinkedItem>>,
+    /// The read of `linked` was refused or failed: the status line says so, no empty section.
+    linked_unread: bool,
+    /// The photos and files on the person (#1185): the kit's section, read with the page.
+    attachments: Attachments,
 }
 
 impl Person {
@@ -99,31 +152,105 @@ impl Person {
                 _ => None,
             },
         );
-        self.phase = Phase::of(match reading {
+        let reading = match reading {
             read::Reading::Data(person) => {
                 read::Reading::Data(person.sheet.map(|sheet| (sheet, person.today)))
             }
             read::Reading::Denied(denial) => read::Reading::Denied(denial),
             read::Reading::Failed => read::Reading::Failed,
-        });
-        match &self.phase {
-            // GONE: nothing to write to, and no sheet over nothing.
-            Phase::Ready(None) => {
-                self.sheet = None;
-                self.asking = Asking::Nothing;
-            }
-            Phase::Denied(_) => self.sheet = None,
-            Phase::Ready(Some(_)) if self.opening_log => {
-                self.opening_log = false;
-                self.sheet = Some(Sheet::log_touch(ctx.locale()));
-            }
-            _ => {}
+        };
+        // A refresh never blanks the page shown: a failed one keeps it under a note.
+        let held = std::mem::replace(&mut self.page, Page::loading());
+        self.page = held.after(reading, ctx.locale(), Option::is_none);
+        // A read that succeeded and found no person: gone, which is a failure, not an empty page.
+        self.gone = matches!(self.page, Page::Empty);
+        if self.gone {
+            self.page = Page::Failed;
         }
+        self.differences = match self.loaded() {
+            Some(_) => follow::read(ctx, &self.party_id),
+            None => follow::Phone::default(),
+        };
+        self.earlier = match self.loaded() {
+            Some(_) => earlier::foot(ctx, super::EARLIER, &self.party_id, &self.name()),
+            None => earlier::Foot::default(),
+        };
+        self.read_linked(ctx);
+        if self.loaded().is_some() {
+            self.attachments.reload(ctx);
+        }
+        if self.gone {
+            // GONE: nothing to write to, and no sheet over nothing.
+            self.sheet = None;
+            self.asking = Asking::Nothing;
+        } else if matches!(self.page, Page::Refused(_)) {
+            self.sheet = None;
+        } else if self.loaded().is_some() && self.opening_log {
+            self.opening_log = false;
+            self.sheet = Some(Sheet::log_touch(ctx.locale()));
+        }
+    }
+
+    /// What the person is linked to, in both directions. A refused or failed read is said on the
+    /// status line and never drawn as an empty section; a person who is gone has none.
+    fn read_linked(&mut self, ctx: &Ctx) {
+        if self.loaded().is_none() {
+            self.linked = None;
+            self.linked_unread = false;
+            self.links.close();
+            return;
+        }
+        match links::read_linked(ctx, &self.party_id) {
+            read::Reading::Data(items) => {
+                self.linked = Some(items);
+                self.linked_unread = false;
+            }
+            read::Reading::Denied(_) | read::Reading::Failed => {
+                self.linked = None;
+                self.linked_unread = true;
+                self.links.close();
+            }
+        }
+        self.links.reload(ctx);
+    }
+
+    fn linked_ids(&self) -> Vec<String> {
+        self.linked.as_deref().map(links::ids).unwrap_or_default()
+    }
+
+    /// One tap in the "Linked to" section or its picker, written through the kit's door (Undo
+    /// when the core can take it back); the page is read again.
+    fn link_person(&mut self, ctx: &Ctx, event: &wire::LinkEvent) {
+        let linked = self.linked_ids();
+        let id = self.party_id.clone();
+        let (request, said): (wire::ActRequest, fn(Locale) -> String) =
+            match self.links.update(event, &linked, ctx) {
+                Outcome::Moved => return,
+                Outcome::Add { id: to, .. } => (
+                    act::people::Link {
+                        from: id.clone(),
+                        to,
+                    }
+                    .into(),
+                    link_label::person_link_added,
+                ),
+                Outcome::Remove { id: to } => (
+                    act::people::Unlink {
+                        from: id.clone(),
+                        to,
+                    }
+                    .into(),
+                    link_label::person_link_removed,
+                ),
+            };
+        let key = kit_act::key(&[&request.action.clone(), &id], kit_act::fresh());
+        self.undo.act(ctx, request, &key, said);
+        self.reload(ctx);
     }
 
     /// The sheet's data, once it has arrived.
     fn loaded(&self) -> Option<&(wire::PeopleSheet, String)> {
-        self.phase.data().and_then(Option::as_ref)
+        self.page.data().and_then(Option::as_ref)
     }
 
     fn name(&self) -> String {
@@ -155,7 +282,7 @@ impl Person {
             return;
         }
         let locale = ctx.locale();
-        self.status = None;
+        self.undo.clear();
         self.sheet = Some(match which {
             W::LogTouch => Sheet::log_touch(locale),
             W::Note => Sheet::note(),
@@ -264,13 +391,14 @@ impl Person {
             Form::Merge(_) => return,
         };
         let key = kit_act::key(&[&request.action.clone(), &self.party_id], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
+        let settled = self.undo.act(ctx, request, &key, |_| outcome);
         if settled.committed {
             // A WRITE SHEET CLOSES ON ITS COMMIT; the load shows what was written.
             self.sheet = None;
-            self.status = Some(plain(outcome));
         } else if let Some(sheet) = &mut self.sheet {
+            // The sheet says why; the page keeps no line of its own.
             sheet.failure = Some(settled.refusal);
+            self.undo.clear();
         }
         self.reload(ctx);
     }
@@ -287,12 +415,7 @@ impl Person {
         outcome: String,
     ) -> bool {
         let key = kit_act::key(&[&request.action.clone(), subject], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        self.status = Some(if settled.committed {
-            plain(outcome)
-        } else {
-            refused(settled.refusal)
-        });
+        let settled = self.undo.act(ctx, request, &key, |_| outcome);
         if settled.committed {
             self.reload(ctx);
         }
@@ -335,22 +458,11 @@ impl Person {
         let locale = ctx.locale();
         let turns_on = !date.reminder_on;
         let label = date.label.clone();
-        // A birthday is the person's own column, so its switch is the person's; any other date's
-        // reminder is its event's.
-        let request: wire::ActRequest =
-            if let Some(person_id) = date_id.strip_prefix(BIRTHDAY_PREFIX) {
-                act::people::SetBirthdayReminder {
-                    person_id: person_id.to_owned(),
-                    on: turns_on,
-                }
-                .into()
-            } else {
-                act::people::SetReminder {
-                    important_date_id: date_id.to_owned(),
-                    reminders: turns_on.then(|| "[0]".to_owned()),
-                }
-                .into()
-            };
+        let request: wire::ActRequest = act::people::SetReminder {
+            important_date_id: date_id.to_owned(),
+            reminders: turns_on.then(|| "[0]".to_owned()),
+        }
+        .into();
         let outcome = fill(
             &if turns_on {
                 words::outcome_reminder_on(locale)
@@ -403,6 +515,8 @@ impl Person {
                 let outcome = fill(&words::outcome_trashed(locale), &[("name", &name)]);
                 let party = self.party_id.clone();
                 if self.write(ctx, request.into(), &party, outcome) {
+                    // THE PAGE CLOSES: "moved to trash" and its Undo go to the page beneath.
+                    self.undo.hand_down(ctx);
                     self.done = true;
                 }
             }
@@ -524,6 +638,24 @@ impl Person {
             .unwrap_or_default()
     }
 
+    /// The action under a "phone says" line: take the phone's value, then read again so the line
+    /// goes. A refusal is the status line, over the page as it still is.
+    fn take_phone(&mut self, ctx: &Ctx, taken: &wire::PhoneSaysTaken) {
+        if self.loaded().is_none() {
+            return;
+        }
+        let Some(settled) = follow::take(ctx, &self.party_id, taken) else {
+            return;
+        };
+        // Taking the phone's value has no inverse: it says nothing and offers nothing.
+        if settled.committed {
+            self.undo.clear();
+        } else {
+            self.undo.refuse(settled.refusal);
+        }
+        self.reload(ctx);
+    }
+
     fn event(&mut self, event: wire::PeoplePersonEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         let Some(kind) = event.kind else {
             return Vec::new();
@@ -531,6 +663,11 @@ impl Person {
         match kind {
             P::Refreshed(_) => self.reload(ctx),
             P::Star(_) => self.star(ctx),
+            P::ShareRequested(_) => {
+                if self.loaded().is_some() && !self.is_me() {
+                    return self.share.tap(ctx.locale());
+                }
+            }
             P::SheetOpened(opened) => self.sheet_opened(
                 ctx,
                 wire::people_person_event::sheet_opened::Which::try_from(opened.which)
@@ -574,6 +711,8 @@ impl Person {
             P::Dismissed(_) => self.asking = Asking::Nothing,
             P::Channel(tapped) => return self.channel_tapped(&tapped.channel_id),
             P::Hero(tapped) => return self.hero_tapped(ctx, &tapped.key),
+            P::Link(link) => self.link_person(ctx, &link),
+            P::Attachment(attachment) => return self.attachments.event(ctx, attachment),
         }
         Vec::new()
     }
@@ -587,6 +726,7 @@ impl Person {
             loading: words::loading(locale),
             back: words::app_title(locale),
             more: words::more_title(locale),
+            share: share::label(locale),
         }
     }
 }
@@ -657,22 +797,6 @@ fn percent_encode(value: &str) -> String {
     out
 }
 
-fn plain(sentence: String) -> wire::StatusLine {
-    wire::StatusLine {
-        sentence,
-        action_label: String::new(),
-        refused: false,
-    }
-}
-
-fn refused(sentence: String) -> wire::StatusLine {
-    wire::StatusLine {
-        sentence,
-        action_label: String::new(),
-        refused: true,
-    }
-}
-
 impl Screen for Person {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
@@ -683,6 +807,29 @@ impl Screen for Person {
                 }
             }
             Some(E::PeoplePerson(person)) => return self.event(person, ctx),
+            Some(E::PhoneSaysTaken(taken)) => self.take_phone(ctx, &taken),
+            // The owner check's answer, or the share sheet's: the vCard is made only after the
+            // check passed.
+            Some(E::EffectResult(result)) => {
+                let id = self.party_id.clone();
+                let shared = self.share.result(ctx, &result, |ctx| vcard(ctx, &id));
+                if !shared.is_empty() || self.share.status().is_some() {
+                    return shared;
+                }
+                // The shell's answer to a pick: the attachments' (an add under way).
+                if let Some(outcome) = &result.outcome {
+                    return self.attachments.result(ctx, outcome).unwrap_or_default();
+                }
+            }
+            Some(E::StatusActed(_)) => {
+                if self.undo.acted(ctx) {
+                    self.reload(ctx);
+                }
+            }
+            Some(E::Left(_)) => {
+                self.undo.clear();
+                return self.share.left();
+            }
             _ => {}
         }
         Vec::new()
@@ -691,28 +838,71 @@ impl Screen for Person {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::people_person_state::Content as C;
         let locale = ctx.locale();
-        let content = match &self.phase {
-            Phase::Loading => C::Loading(wire::Loading { first_load: true }),
-            Phase::Failed => C::Failure(read::failure(locale)),
-            Phase::Denied(denial) => C::Denied(denied(locale, denial)),
-            Phase::Ready(None) => C::Gone(data::gone(locale)),
-            Phase::Ready(Some((sheet, today))) => C::Data(Box::new(data::person(
-                locale,
-                ctx.hour_cycle(),
-                sheet,
-                today,
-            ))),
-        };
+        // What the phone says that was not checked is a note over the data; a failed refresh
+        // already is one, and the stronger wins.
+        let drawn = self.page.clone().noted(read::Note::unchecked(
+            &self.differences,
+            locale,
+            follow::Source::Phone,
+        ));
+        let mut wired = drawn.wire(
+            locale,
+            |denial| denied(locale, denial),
+            wire::EmptyState::default,
+        );
+        // A person who is no longer there says so in its own words and offers no Retry.
+        if self.gone && matches!(wired.state, Some(wire::page_state::State::Failed(_))) {
+            let gone = data::gone(locale);
+            wired.state = Some(wire::page_state::State::Failed(read::gone(
+                gone.headline,
+                gone.body,
+            )));
+        }
+        let content = self.loaded().map(|(sheet, today)| {
+            let mut page = data::person(locale, ctx.hour_cycle(), sheet, today);
+            let lines = phone::lines(locale, &self.differences);
+            page.name_phone_says = lines.name;
+            page.role_phone_says = lines.role;
+            page.nickname_phone_says = lines.nickname;
+            page.birthday_phone_says = lines.birthday;
+            page.channels_phone_says = lines.channels;
+            page.attachments = Some(self.attachments.view(locale, ctx.units()));
+            page.links = self.linked.as_ref().map(|linked| {
+                self.links.section(
+                    locale,
+                    link_label::section_linked(locale),
+                    links::rows(locale, linked),
+                    link_label::person_links_empty(locale),
+                )
+            });
+            C::Data(Box::new(page))
+        });
         let state = wire::PeoplePersonState {
             party_id: self.party_id.clone(),
             name_hint: self.name_hint.clone(),
             chrome: Some(Self::chrome(locale)),
-            content: Some(content),
+            content,
+            page: Some(wired),
             sheet: self.sheet.as_ref().map(|sheet| sheet.view(locale)),
             confirm: self.confirm(locale),
-            status: self.status.clone(),
+            status: self
+                .undo
+                .status()
+                .or_else(|| self.share.status())
+                .or_else(|| self.earlier.status(locale))
+                .or_else(|| {
+                    self.linked_unread.then(|| wire::StatusLine {
+                        sentence: link_label::person_links_unread(locale),
+                        action_label: String::new(),
+                        refused: false,
+                    })
+                }),
             done: self.done,
             edit: self.loaded().map(|_| routes::editor(&self.party_id)),
+            earlier: self.earlier.entry.clone(),
+            origin: self.earlier.origin.clone(),
+            link_picker: (self.linked.is_some() && self.links.is_open())
+                .then(|| self.links.picker(locale, &self.linked_ids())),
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::PeoplePerson(Box::new(state))),
@@ -720,3 +910,6 @@ impl Screen for Person {
         }
     }
 }
+
+#[cfg(test)]
+mod link_tests;

@@ -24,6 +24,8 @@ catalog! {
     plain reminders_title = ("Reminders", "Reminders");
     plain shortcut_add_long = ("Add a reminder", "Add a reminder");
     plain shortcut_add_short = ("New reminder", "New reminder");
+    plain shortcut_next_long = ("What's next", "What's next");
+    plain shortcut_next_short = ("What's next", "What's next");
     plain siri_next = ("Next is {title} at {time}.", "Next is {title} at {time}.");
     plain siri_next_all_day = ("Next is {title}, all day.", "Next is {title}, all day.");
     plain siri_next_tomorrow = ("Next is {title} tomorrow at {time}.", "Next is {title} tomorrow at {time}.");

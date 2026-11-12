@@ -10,7 +10,7 @@ The phone is the vault ([#1029](https://github.com/srikanth235/centraid/issues/1
 | --- | --- |
 | `load_items` | one shelf (live or archived), newest first, with stars, tags, the vault's own counts and whether the window filled. A Locker item is an entity ([#1135](https://github.com/srikanth235/centraid/issues/1135)): a row is folded from the item's `entity` row (title, stamps, trash), its `locker_item` kind row and the vault's `tagged` edges (the star and the archive are flags, the tags are vault tags), in three reads named `locker.phone.*`, which is what the page door serves a Locker item to |
 | `load_item` | one item — trashed too — with its sidecars and, for each sealed cell its type carries, **whether it holds a value** |
-| `load_search` | the vault's one full-text index asked for `locker_item` ([#1135](https://github.com/srikanth235/centraid/issues/1135)): title, username, address, note, full name, email, phone, card brand, aliases, the memo and the tags, by word, over every item not in the trash, **whether or not Locker is locked**; a sealed cell, a sealed field's value and a passkey's key are in no index, so none can match or be offered as a correction. Rows come back in rank order; the typo correction is the shared pass over the one word list (`corrected_search` in `crates/core`) |
+| `load_search` | the vault's one full-text index asked for `locker_item` ([#1135](https://github.com/srikanth235/centraid/issues/1135)): title, username, address, note, full name, email, phone, card brand, aliases, the memo and the tags, by word, over every item not in the trash, **whether or not Locker is locked**; a sealed cell, a sealed field's value, a one-time-code field's seed and a passkey's key are in no index, so none can match or be offered as a correction. Rows come back in rank order; the typo correction is the shared pass over the one word list (`corrected_search` in `crates/core`) |
 | `load_review` | what metadata can show: compromised, `http://` addresses, expired and expiring cards against the device's day |
 | `load_export` / `load_import_targets` | what an export writes (live and archived, without their secrets, which the core opens) and what an import plans against (each item's plain columns and which sealed cells hold a value) |
 
@@ -39,6 +39,10 @@ The secret is not this crate's. `K` is derived from the member's 24 words (`seed
 ## The manifest
 
 `manifest.json`'s descriptions say what the phone does (#1047 T2). `manifest::tests` asserts the properties that matter: no permit-era `auth_session` on `items`, `seats.disabledOn` empty, the two confirmed actions (`purge-item`, `export`), and one command per action — Locker's own for what involves a secret, and the vault's shared `entity.trash`, `entity.restore`, `entity.purge`, `flag.set`, `flag.clear`, `tag.add` and `tag.remove` for the lifecycle, the star, the archive and the tags, which several actions may share. `set-memo` (#1047) exposes `locker.set_memo`, the memo command no action reached (the handoff's README §8 paper cut).
+
+## A custom one-time-code field is a sealed secret
+
+A custom field of kind `otp` keeps its kind so the item page shows a rolling code, and its seed is sealed exactly like the login's `otp_seed`: `lk1:` ciphertext in `value_sealed`, bound to the field's id, sealed by the core only while Locker is open (a setup key or an `otpauth://` link, read once through `totp::seed_of`). The schema forbids `value_text` for it and requires a sealed value, so no plain copy, revision or index row can hold it. `phone::field_of` serves only its presence; `locker.totp_code` names the field and the core makes the code (`LockerTotpAsk.field_id`); a reveal of it is refused `SEED_NOT_SHOWN`; export opens it like any sealed value after the owner check; import seals it on the way in (and drops an `otp` entry with no seed); locked, none of it opens.
 
 ## An edit replaces; it does not patch
 

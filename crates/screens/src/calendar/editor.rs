@@ -58,17 +58,20 @@ use super::event::{
     calendar_hue, is_series_occurrence, person_hue, reminder_label, scope_word, scopes,
 };
 use crate::catalog::{act, load};
-use crate::kit::act::{self as kit_act, Settled};
+use crate::kit::act as kit_act;
 use crate::kit::civil::{self, HourCycle};
-use crate::kit::read::{self as kit_read, Reading};
+use crate::kit::read::{self as kit_read, Note, Page, Reading};
 use crate::kit::schedule::draft::{
     self, Draft, REMINDER_NONE, REPEAT_BIWEEKLY, REPEAT_CUSTOM, REPEAT_DAILY, REPEAT_MONTHLY,
     REPEAT_NONE, REPEAT_WEEKLY, REPEAT_YEARLY, RULES,
 };
 use crate::kit::schedule::rule_words::{self, long_day};
+use crate::kit::stale;
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
-    Locale, agenda as words, agenda_editor as editor_words, agenda_repeat as repeat_words, fill,
+    Locale, agenda as words, agenda_editor as editor_words, agenda_notify as notify_words,
+    agenda_repeat as repeat_words, fill,
 };
 
 /// The editor reads calendars and the clock, never events: a window the vault
@@ -89,7 +92,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     Some(Box::new(Editor {
         mode: if create { Mode::Create } else { Mode::Edit },
         route: args,
-        phase: Phase::Loading,
+        page: Page::loading(),
         loaded: None,
         baseline: None,
         draft: None,
@@ -101,16 +104,11 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         asking: Asking::None,
         scope: None,
         save_tried: false,
-        status: None,
+        rev: None,
+        saving_day: None,
+        undo: Undo::default(),
         dismissed: false,
     }))
-}
-
-enum Phase {
-    Loading,
-    Failed,
-    Denied(wire::AppQueryDenial),
-    Ready,
 }
 
 /// What the three reads answered.
@@ -125,9 +123,13 @@ struct Loaded {
 }
 
 struct Editor {
+    /// The event's revision when the draft was read: what an edit names as the one it replaces
+    /// (#1185). `None` for a new event and when it could not be read.
+    rev: Option<i64>,
     route: wire::AgendaEditorRoute,
     mode: Mode,
-    phase: Phase,
+    /// The read of the three answers; ready with no draft is an event that is no longer there.
+    page: Page<()>,
     loaded: Option<Loaded>,
     /// The values as loaded: what "changed" is measured against.
     baseline: Option<Draft>,
@@ -144,11 +146,14 @@ struct Editor {
     asking: Asking,
     /// The save scope picked.
     scope: Option<wire::AgendaScope>,
+    /// The save in flight changes one day or the days from it, not the event itself.
+    saving_day: Option<(String, act::calendar::EditOccurrenceScope)>,
     /// Save was pressed, which is when a blocked draft says why even before
     /// anything was typed.
     save_tried: bool,
     /// The vault's refusal of the last Save, over the draft that stays.
-    status: Option<wire::StatusLine>,
+    /// The status line: a refusal, over the draft as it still is (a save ends the sitting).
+    undo: Undo,
     dismissed: bool,
 }
 
@@ -177,6 +182,10 @@ impl Editor {
                 _ => None,
             },
         );
+        // The revision first, once per draft: a change between the two reads refuses the save.
+        if self.mode == Mode::Edit && self.draft.is_none() {
+            self.rev = stale::read_rev(ctx, &self.route.event_id);
+        }
         // AN EDIT READS ITS EVENT BY ID: a search hit on a repeating event is the
         // series row, which no window lists. Absent there is gone.
         let detail = (self.mode == Mode::Edit).then(|| self.read_event(ctx));
@@ -189,7 +198,7 @@ impl Editor {
         .flatten()
         .next();
         if let Some(denial) = denial {
-            self.phase = Phase::Denied(denial);
+            self.page = Page::Refused(denial);
             return;
         }
         let answered = match (upcoming, parties, detail) {
@@ -202,9 +211,13 @@ impl Editor {
             _ => None,
         };
         let Some((upcoming, parties, detail)) = answered else {
-            // A re-read that failed keeps the draft; only a first read has nothing else to show.
+            // A re-read that failed keeps the draft under a note; only a first read has nothing
+            // else to show.
             if self.draft.is_none() {
-                self.phase = Phase::Failed;
+                self.page = Page::Failed;
+            } else {
+                let kept = std::mem::replace(&mut self.page, Page::loading());
+                self.page = kept.noted(Some(Note::refresh_failed(ctx.locale())));
             }
             return;
         };
@@ -215,7 +228,10 @@ impl Editor {
             detail,
             places,
         });
-        self.phase = Phase::Ready;
+        self.page = Page::Ready {
+            data: (),
+            note: None,
+        };
         if self.draft.is_none() {
             self.baseline = match self.mode {
                 Mode::Edit => self.event().map(draft::draft_of),
@@ -288,7 +304,7 @@ impl Editor {
         let Some(current) = &self.draft else { return };
         if let Some(next) = change(current) {
             self.draft = Some(next);
-            self.status = None;
+            self.undo.clear();
         }
     }
 
@@ -370,10 +386,14 @@ impl Editor {
             .map(|a| a.party_id.clone())
             .collect();
         let occurrence = event.original_start_local.clone().unwrap_or_default();
+        self.saving_day = None;
         if !self.is_series_edit() {
-            let request = write::edit_event(&event_id, &draft, &base, &owner_ids);
+            let request = act::calendar::EditEvent {
+                expected_rev: self.rev,
+                ..write::edit_event(&event_id, &draft, &base, &owner_ids)
+            };
             let key = kit_act::key(&["edit-event", &event_id], kit_act::fresh());
-            return self.committed(ctx, request, &key);
+            return self.committed(ctx, request, &key, editor_words::event_saved);
         }
         if self.sheet != Sheet::Scope {
             // WHICH OCCURRENCES: asked, never assumed.
@@ -387,9 +407,12 @@ impl Editor {
         self.close_sheet();
         match scope {
             wire::AgendaScope::Series => {
-                let request = write::edit_event(&event_id, &draft, &base, &owner_ids);
+                let request = act::calendar::EditEvent {
+                    expected_rev: self.rev,
+                    ..write::edit_event(&event_id, &draft, &base, &owner_ids)
+                };
                 let key = kit_act::key(&["edit-event", &event_id], kit_act::fresh());
-                self.committed(ctx, request, &key)
+                self.committed(ctx, request, &key, editor_words::event_saved)
             }
             wire::AgendaScope::Occurrence | wire::AgendaScope::Future => {
                 let word = scope_word(scope);
@@ -398,13 +421,16 @@ impl Editor {
                 } else {
                     act::calendar::EditOccurrenceScope::Occurrence
                 };
-                let request =
-                    write::override_occurrence(&event_id, &occurrence, wire_scope, &draft, &base);
+                self.saving_day = Some((occurrence.clone(), wire_scope));
+                let request = act::calendar::EditOccurrence {
+                    expected_rev: self.rev,
+                    ..write::override_occurrence(&event_id, &occurrence, wire_scope, &draft, &base)
+                };
                 let key = kit_act::key(
                     &["edit-occurrence", &event_id, &occurrence, word, "override"],
                     kit_act::fresh(),
                 );
-                self.committed(ctx, request, &key)
+                self.committed(ctx, request, &key, editor_words::event_saved)
             }
             wire::AgendaScope::Unspecified => Vec::new(),
         }
@@ -413,7 +439,7 @@ impl Editor {
     fn save_event(&mut self, ctx: &Ctx, draft: &Draft) -> Vec<wire::Effect> {
         let request = write::propose(draft);
         let key = kit_act::key(&["propose", "new"], kit_act::fresh());
-        self.committed(ctx, request, &key)
+        self.committed(ctx, request, &key, editor_words::event_saved)
     }
 
     /// Submit a write that ends the sitting when it commits.
@@ -422,23 +448,57 @@ impl Editor {
         ctx: &Ctx,
         request: impl Into<wire::ActRequest>,
         key: &str,
+        said: impl FnOnce(Locale) -> String,
     ) -> Vec<wire::Effect> {
-        self.status = None;
-        let settled = kit_act::act(ctx, request, key);
-        self.settle(&settled)
-    }
-
-    fn settle(&mut self, settled: &Settled) -> Vec<wire::Effect> {
+        // THE PAGE CLOSES, so the line (and its Undo) goes to the page beneath (#1185).
+        let settled = self.undo.act_handing_down(ctx, request, key, said);
         if settled.committed {
             self.dismissed = true;
-            return Vec::new();
+        } else if let Some(stale) = settled.stale() {
+            self.stale(ctx, stale);
         }
-        self.status = Some(wire::StatusLine {
-            sentence: settled.refusal.clone(),
-            action_label: String::new(),
-            refused: true,
-        });
         Vec::new()
+    }
+
+    /// The vault refused the save: the event changed, or went to the trash, since the draft was
+    /// read (#1185). The words typed are kept as an earlier version of the event, the event is read
+    /// again, and the line says what happened and where the words went.
+    fn stale(&mut self, ctx: &Ctx, stale: stale::Stale) {
+        let owner_ids: Vec<String> = self.event().map_or_else(Vec::new, |event| {
+            event
+                .attendees
+                .iter()
+                .filter(|a| a.is_you)
+                .map(|a| a.party_id.clone())
+                .collect()
+        });
+        let fields = match (&self.draft, &self.baseline) {
+            // A day (or the days from it) has its own times and words in a row of its own: that
+            // override is what is kept, not the event's.
+            (Some(draft), Some(base)) if self.saving_day.is_some() => self
+                .saving_day
+                .take()
+                .map_or_else(Vec::new, |(day, scope)| {
+                    write::kept_day(&day, scope, draft, base)
+                }),
+            (Some(draft), Some(base)) => write::kept_event(draft, base, &owner_ids),
+            _ => Vec::new(),
+        };
+        let locale = ctx.locale();
+        let said = stale::on_button(
+            ctx,
+            &crate::strings::chat_confirm::noun_event(locale),
+            &self.route.event_id,
+            stale,
+            fields,
+        );
+        self.saving_day = None;
+        self.draft = None;
+        self.baseline = None;
+        self.typed_place.clear();
+        self.close_sheet();
+        self.reload(ctx);
+        self.undo.refuse(said);
     }
 
     fn skip(&mut self, ctx: &Ctx) {
@@ -465,7 +525,7 @@ impl Editor {
             ],
             kit_act::fresh(),
         );
-        self.committed(ctx, request, &key);
+        self.committed(ctx, request, &key, editor_words::occurrence_skipped);
     }
 
     // -- events -----------------------------------------------------------
@@ -753,41 +813,46 @@ impl Screen for Editor {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
-        let content = match &self.phase {
-            Phase::Loading => {
-                wire::agenda_editor_state::Content::Loading(wire::Loading { first_load: true })
-            }
-            Phase::Failed => {
-                wire::agenda_editor_state::Content::Failure(kit_read::incomplete(locale))
-            }
-            Phase::Denied(denial) => wire::agenda_editor_state::Content::Denied(wire::Denied {
+        // Ready with no draft is an event that is no longer there: a failed page with its own
+        // words and no Retry, never a blank.
+        let gone = matches!(self.page, Page::Ready { .. }) && self.draft.is_none();
+        let page: Page<()> = if gone {
+            Page::Failed
+        } else {
+            self.page.clone()
+        };
+        let mut wired = page.wire(
+            locale,
+            |denial| wire::Denied {
                 title: words::denied_title(locale),
                 body: words::denied_body(locale),
                 receipt: denial.code.clone().unwrap_or_default(),
-            }),
-            Phase::Ready => match &self.draft {
-                Some(draft) => wire::agenda_editor_state::Content::Data(Box::new(self.data(
-                    locale,
-                    ctx.hour_cycle(),
-                    ctx.zone(),
-                    draft,
-                ))),
-                None => wire::agenda_editor_state::Content::Gone(wire::AgendaGone {
-                    title: words::gone_title(locale),
-                    body: words::gone_body(locale),
-                    action_label: words::gone_action(locale),
-                }),
             },
+            wire::EmptyState::default,
+        );
+        if matches!(wired.state, Some(wire::page_state::State::Failed(_))) {
+            wired.state = Some(wire::page_state::State::Failed(if gone {
+                kit_read::gone(words::gone_title(locale), words::gone_body(locale))
+            } else {
+                kit_read::incomplete(locale)
+            }));
+        }
+        let content = match (&self.page, &self.draft) {
+            (Page::Ready { .. }, Some(draft)) => Some(wire::agenda_editor_state::Content::Data(
+                Box::new(self.data(locale, ctx.hour_cycle(), ctx.zone(), draft)),
+            )),
+            _ => None,
         };
         let state = wire::AgendaEditorState {
             mode: self.mode as i32,
-            content: Some(content),
+            content,
+            page: Some(wired),
             sheet: self.sheet as i32,
             confirm: self.confirm(locale),
             chrome: Some(chrome(locale)),
             dismissed: self.dismissed,
             kind: wire::AgendaEditorKind::Event as i32,
-            status: self.status.clone(),
+            status: self.undo.status(),
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::AgendaEditor(state)),
@@ -983,6 +1048,12 @@ impl Editor {
                 |choice| choice.label.clone(),
             ),
             reminders,
+            // AN ALERT NEEDS A MOMENT: an all-day event never sounds one, and the row says so.
+            reminder_note: if draft.all_day {
+                notify_words::no_alert_without_time(locale)
+            } else {
+                String::new()
+            },
             scope_armed: saved_scopes.iter().any(|c| c.selected && c.enabled),
             scopes: saved_scopes,
             dirty: self.dirty(),

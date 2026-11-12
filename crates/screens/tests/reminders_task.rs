@@ -178,6 +178,39 @@ fn a_one_off_repeats_never_and_a_date_only_reminder_is_on_the_day() {
 }
 
 #[test]
+fn the_reminder_row_says_no_alert_will_sound_for_a_date_with_no_time() {
+    let mut d = driver();
+    let silent = "No alert will sound because no time is set";
+    let dated = add(
+        &d,
+        act::reminders::AddTask {
+            title: "Bins".into(),
+            due: due(&day(&d, 2)),
+            remind_before_min: Field::Is(0),
+            ..Default::default()
+        },
+    );
+    let i = open(&mut d, &dated);
+    let reminder = field(d.view(i), "reminder");
+    assert_eq!(reminder.note, silent);
+    assert!(reminder.enabled, "the choice is told, not hidden");
+
+    // A DUE WITH A TIME is a moment: the row is the normal one.
+    let timed = add(
+        &d,
+        act::reminders::AddTask {
+            title: "Call".into(),
+            due: Field::Is(format!("{}T09:00", day(&d, 2))),
+            remind_before_min: Field::Is(0),
+            ..Default::default()
+        },
+    );
+    let i = open(&mut d, &timed);
+    let reminder = field(d.view(i), "reminder");
+    assert_eq!(reminder.note, "Delivered on your phone.");
+}
+
+#[test]
 fn an_undated_task_opens_pickers_on_today_and_a_reminder_needs_a_due() {
     let mut d = driver();
     let id = task(&d, "Someday");
@@ -211,26 +244,31 @@ fn priority_chips_run_none_soon_next_now() {
     assert_eq!(keys, expect);
 }
 
+/// The sentence a page failed with, when it failed.
+fn failed_with(state: &wire::TodoDetailState) -> Option<&str> {
+    match state.page.as_ref().and_then(|page| page.state.as_ref()) {
+        Some(wire::page_state::State::Failed(failure)) => Some(failure.sentence.as_str()),
+        _ => None,
+    }
+}
+
 #[test]
-fn a_task_no_live_row_has_is_drawn_as_gone_not_as_a_failed_read() {
+fn a_task_no_live_row_has_is_failed_in_its_own_words_and_never_a_blank_page() {
     let mut d = driver();
     let i = open(&mut d, "no-such-task");
     let state = detail(d.view(i));
-    match &state.content {
-        Some(wire::todo_detail_state::Content::Gone(gone)) => {
-            assert_eq!(gone.headline, "This task is gone.")
-        }
-        other => panic!("expected gone, got {other:?}"),
-    }
+    assert_eq!(failed_with(state), Some("This task is gone."));
+    assert!(state.content.is_none());
     // A trashed task is gone too.
     let id = task(&d, "Doomed");
     let page = open(&mut d, &id);
+    assert_eq!(failed_with(detail(d.view(page))), None);
     arrange(&d, act::reminders::DeleteTask { task_id: id });
     d.pump(Duration::from_millis(400));
-    assert!(matches!(
-        detail(d.view(page)).content,
-        Some(wire::todo_detail_state::Content::Gone(_))
-    ));
+    assert_eq!(
+        failed_with(detail(d.view(page))),
+        Some("This task is gone.")
+    );
 }
 
 #[test]
@@ -420,11 +458,16 @@ fn a_save_the_core_refuses_keeps_the_words_and_says_its_sentence() {
         },
     );
     d.pump(DEBOUNCED);
+    // The vault refused the save as the task being in the trash: a conflict, the words stay.
     let a = autosave(d.view(i));
-    assert_eq!(Phase::try_from(a.phase).unwrap(), Phase::Refused);
+    assert_eq!(Phase::try_from(a.phase).unwrap(), Phase::Conflict);
     assert!(a.refused);
-    assert!(!a.label.is_empty() && a.label != "Saved", "{}", a.label);
+    assert_eq!(a.label, "This reminder was moved to the trash.");
     assert_eq!(a.label, a.failure.as_ref().unwrap().sentence);
+    assert_eq!(
+        detail_data(d.view(i)).draft.as_ref().unwrap().title,
+        "Rent, June"
+    );
 }
 
 #[test]
@@ -455,11 +498,13 @@ fn a_vault_change_never_overwrites_typing_and_the_fields_refresh_around_the_word
         "the fields are the vault's"
     );
     assert!(autosave(v).remote_changed);
-    // Saved, the page reads what the vault moved to, and the flag is spent.
+    // The save names the revision the page was read at, and the vault has moved on: refused, the
+    // words stay and Reload offered; the other surface's priority stands.
     d.pump(DEBOUNCED);
     let v = d.view(i);
-    assert!(!autosave(v).remote_changed);
-    assert_eq!(task_of(&d, &id).title, "Rent!");
+    assert_eq!(Phase::try_from(autosave(v).phase).unwrap(), Phase::Conflict);
+    assert_eq!(task_of(&d, &id).title, "Rent");
+    assert_eq!(detail_data(v).draft.as_ref().unwrap().title, "Rent!");
 }
 
 #[test]
@@ -848,14 +893,21 @@ fn a_refused_field_write_says_the_cores_sentence_on_the_status_line() {
 }
 
 #[test]
-fn a_field_write_clears_the_old_status_line() {
+fn a_field_write_replaces_the_old_status_line_with_its_own() {
     let mut d = driver();
     let id = rent(&d);
     let i = open(&mut d, &id);
     send_detail(&mut d, i, de::Kind::Check(de::CheckTapped {}));
     assert!(detail(d.view(i)).status.is_some());
     choose(&mut d, i, "priority", "2");
-    assert!(detail(d.view(i)).status.is_none());
+    let status = detail(d.view(i))
+        .status
+        .clone()
+        .expect("the new write is said");
+    assert_eq!(
+        (status.sentence.as_str(), status.action_label.as_str()),
+        ("Task updated", "Undo")
+    );
 }
 
 #[test]
@@ -1018,7 +1070,7 @@ fn delete_asks_in_full_sentences_then_trashes_and_ends_the_screen() {
     send_detail(&mut d, i, de::Kind::Delete(de::DeleteRequested {}));
     let state = detail(d.view(i));
     let confirm = state.confirm.as_ref().expect("a confirm");
-    assert_eq!(confirm.title, "Delete this task?");
+    assert_eq!(confirm.title, "Move this task to trash?");
     assert!(confirm.destructive);
     // Dismissed, nothing is written.
     send_detail(&mut d, i, de::Kind::Dismissed(de::Dismissed {}));
@@ -1028,7 +1080,10 @@ fn delete_asks_in_full_sentences_then_trashes_and_ends_the_screen() {
     send_detail(&mut d, i, de::Kind::Confirmed(de::Confirmed {}));
     let state = detail(d.view(i));
     assert!(state.finished);
-    assert_eq!(state.status.as_ref().unwrap().sentence, "Task deleted");
+    assert_eq!(
+        state.status.as_ref().unwrap().sentence,
+        "Rent moved to trash"
+    );
     assert!(state.confirm.is_none());
     // It is in the trash.
     let trash_page = d.push(agenda::TAB, routes::trash());
@@ -1100,5 +1155,83 @@ fn a_repeated_task_page_row_is_priority_and_check_words_from_the_row_law() {
     assert_eq!(
         detail_data(d.view(i)).check_label,
         rows::check_label(Locale::En, "Rent", true)
+    );
+}
+
+#[test]
+fn a_save_over_a_task_that_changed_elsewhere_is_refused_and_reload_keeps_the_words() {
+    let mut d = driver();
+    let id = rent(&d);
+    let i = open(&mut d, &id);
+    typed_title(&mut d, i, "Rent, June");
+    arrange(
+        &d,
+        act::reminders::EditTask {
+            task_id: id.clone(),
+            title: Some("Rent, elsewhere".into()),
+            ..Default::default()
+        },
+    );
+    d.pump(DEBOUNCED);
+    assert_eq!(task_of(&d, &id).title, "Rent, elsewhere");
+    assert_eq!(phase(d.view(i)), Phase::Conflict);
+    assert_eq!(
+        detail_data(d.view(i)).draft.as_ref().unwrap().title,
+        "Rent, June"
+    );
+    assert_eq!(
+        autosave(d.view(i)).label,
+        "This reminder changed somewhere else."
+    );
+    assert_eq!(autosave(d.view(i)).reload_label, "Reload");
+    send_detail(&mut d, i, de::Kind::StatusActed(de::StatusActed {}));
+    assert_eq!(
+        detail_data(d.view(i)).draft.as_ref().unwrap().title,
+        "Rent, elsewhere"
+    );
+    let status = detail(d.view(i)).status.clone().expect("a line");
+    assert_eq!(status.sentence, "Your text is in Earlier versions.");
+    // The next save is fresh.
+    typed_title(&mut d, i, "Rent, July");
+    d.pump(DEBOUNCED);
+    assert_eq!(task_of(&d, &id).title, "Rent, July");
+}
+
+#[test]
+fn a_tap_on_a_field_after_typing_saves_the_words_first_and_is_not_a_conflict() {
+    let mut d = driver();
+    let id = rent(&d);
+    let i = open(&mut d, &id);
+    typed_title(&mut d, i, "Rent, June");
+    choose(&mut d, i, "priority", "3");
+    let task = task_of(&d, &id);
+    assert_eq!(task.title, "Rent, June");
+    assert_ne!(phase(d.view(i)), Phase::Conflict);
+    typed_title(&mut d, i, "Rent, July");
+    d.pump(DEBOUNCED);
+    assert_eq!(task_of(&d, &id).title, "Rent, July");
+}
+
+#[test]
+fn a_tap_on_a_task_that_changed_elsewhere_says_so_and_reads_it_again() {
+    let mut d = driver();
+    let id = rent(&d);
+    let i = open(&mut d, &id);
+    arrange(
+        &d,
+        act::reminders::EditTask {
+            task_id: id.clone(),
+            title: Some("Rent, elsewhere".into()),
+            ..Default::default()
+        },
+    );
+    choose(&mut d, i, "priority", "3");
+    assert_eq!(
+        detail(d.view(i)).status.clone().unwrap().sentence,
+        "This reminder changed somewhere else."
+    );
+    assert_eq!(
+        detail_data(d.view(i)).draft.as_ref().unwrap().title,
+        "Rent, elsewhere"
     );
 }

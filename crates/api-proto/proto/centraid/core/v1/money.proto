@@ -111,6 +111,9 @@ message MoneyActivityRow {
   optional string category_id = 8;
   optional string category_label = 9;
   repeated MoneyFlag flags = 10;
+  // The words matched only in an EARLIER VERSION of the item, not in what it says now (#1185):
+  // the row is the live item, once, and it opens that item's Earlier versions. Search rows only.
+  bool in_earlier_version = 11;
 }
 
 // A count and the sum of what it counts, in one currency.
@@ -540,6 +543,30 @@ message MoneySearchRequest {
   string term = 3;
   // REQUIRED: 0 is `ERROR_CODE_INVALID_REQUEST`, never a default.
   uint32 limit = 4;
+}
+
+// `money.trash` (#1185): the transactions in the trash, most recently trashed first. A line is named
+// as the member sees it: their name for it, else the bank's words.
+message MoneyTrashRequest {
+  // The zone the rows' days are read in: as `PeopleTrashRequest.tz`.
+  string tz = 1;
+}
+
+message MoneyTrash {
+  repeated MoneyTrashRow transactions = 1;
+  // The shelf is longer than its 500-row window.
+  bool truncated = 2;
+}
+
+// One trashed transaction: its name, when it was trashed and the two civil days (`YYYY-MM-DD`) in the
+// request's zone. EMPTY when the instant is absent or no zone resolved.
+message MoneyTrashRow {
+  string txn_id = 1;
+  string title = 2;
+  optional string purge_at = 3;
+  string deleted_at = 4;
+  string deleted_local_day = 5;
+  string purge_local_day = 6;
 }
 
 message MoneySearch {

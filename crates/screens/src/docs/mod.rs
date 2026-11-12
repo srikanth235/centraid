@@ -1,4 +1,4 @@
-//! DOCS' SCREENS (#1135): the drive, one document, its versions, its text
+//! DOCS' SCREENS (#1135): the drive, one document, its earlier versions, its text
 //! editor and its trash. Every decision a person sees is made here; SwiftUI and
 //! Compose draw [`wire::ViewState`].
 //!
@@ -6,9 +6,10 @@
 //! |---|---|---|
 //! | Recents · Browse · Starred · Recently added, a folder's page, Search | [`DRIVE`] | [`drive`] |
 //! | One document | [`DOCUMENT`] | [`document`] |
-//! | A document's version history | [`VERSIONS`] | [`versions`] |
+//! | A document's earlier versions | [`EARLIER`] | [`earlier`] |
 //! | A text document's editor | [`EDITOR`] | [`editor`] |
 //! | The trash | [`TRASH`] | [`trash`] |
+//! | The originals as one archive | [`EXPORT`] | [`export`] |
 //!
 //! A row that opens a page carries the [`wire::Route`] to push (built by
 //! [`routes`]), so a shell never names a screen.
@@ -31,23 +32,25 @@
 use centraid_api_proto::core_v1 as wire;
 
 use crate::Registry;
-use crate::kit::read::Reading;
 use crate::strings::{Locale, docs as words};
 
 pub mod document;
 pub mod drive;
+pub mod earlier;
 pub mod editor;
+pub mod export;
 pub mod fold;
 pub mod folders;
 pub mod rename;
 pub mod trash;
-pub mod versions;
 
 pub const DRIVE: &str = "docs.drive";
 pub const DOCUMENT: &str = "docs.document";
-pub const VERSIONS: &str = "docs.versions";
+pub const EARLIER: &str = "docs.earlier";
 pub const EDITOR: &str = "docs.editor";
 pub const TRASH: &str = "docs.trash";
+/// Docs' export of its originals as one streamed archive (#1185).
+pub const EXPORT: &str = "docs.export";
 
 /// Every Docs screen, registered under its route name.
 #[must_use]
@@ -55,9 +58,10 @@ pub fn registry() -> Registry {
     Registry::default()
         .with(DRIVE, drive::build)
         .with(DOCUMENT, document::build)
-        .with(VERSIONS, versions::build)
+        .with(EARLIER, earlier::build)
         .with(EDITOR, editor::build)
         .with(TRASH, trash::build)
+        .with(EXPORT, export::build)
 }
 
 /// A runtime with Docs' screens and one tab, `docs`, rooted at the drive. The
@@ -77,33 +81,6 @@ pub fn runtime() -> crate::Runtime {
 /// The tab Docs' drive is the root of.
 pub const TAB: &str = "docs";
 
-/// What a page holds of its reads: nothing yet, a refusal, a gate or the
-/// answer. A failed read is never an empty list.
-#[derive(Clone, Debug)]
-pub(crate) enum Phase<T> {
-    Loading,
-    Failed,
-    Denied(wire::AppQueryDenial),
-    Ready(T),
-}
-
-impl<T> Phase<T> {
-    pub(crate) fn of(reading: Reading<T>) -> Self {
-        match reading {
-            Reading::Data(data) => Self::Ready(data),
-            Reading::Denied(denial) => Self::Denied(denial),
-            Reading::Failed => Self::Failed,
-        }
-    }
-
-    pub(crate) fn data(&self) -> Option<&T> {
-        match self {
-            Self::Ready(data) => Some(data),
-            _ => None,
-        }
-    }
-}
-
 /// The gate drawn when the vault will not let Docs read.
 pub(crate) fn denied(locale: Locale, denial: &wire::AppQueryDenial) -> wire::Denied {
     wire::Denied {
@@ -113,18 +90,9 @@ pub(crate) fn denied(locale: Locale, denial: &wire::AppQueryDenial) -> wire::Den
     }
 }
 
-/// A refused write's sentence, as the status line over the rows.
-pub(crate) fn refusal(sentence: String) -> wire::StatusLine {
-    wire::StatusLine {
-        sentence,
-        action_label: String::new(),
-        refused: true,
-    }
-}
-
 /// The routes Docs' own screens hand to a shell inside a view state.
 pub mod routes {
-    use super::{DOCUMENT, DRIVE, EDITOR, TRASH, VERSIONS, wire};
+    use super::{DOCUMENT, DRIVE, EDITOR, TRASH, wire};
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
         wire::Route {
@@ -181,18 +149,21 @@ pub mod routes {
             wire::route::Args::DocsEditor(wire::DocsEditorRoute {
                 document_id: document_id.to_owned(),
                 title: title.to_owned(),
+                folder_id: String::new(),
             }),
         )
     }
 
-    /// A document's version history.
+    /// A NEW text document's editor: an empty draft that nothing makes until its first autosave,
+    /// which creates the document in `folder_id` ("" is the root) with the title it holds.
     #[must_use]
-    pub fn versions(document_id: &str, title: &str) -> wire::Route {
+    pub fn new_editor(folder_id: &str, title: &str) -> wire::Route {
         route(
-            VERSIONS,
-            wire::route::Args::DocsVersions(wire::DocsVersionsRoute {
-                document_id: document_id.to_owned(),
+            EDITOR,
+            wire::route::Args::DocsEditor(wire::DocsEditorRoute {
+                document_id: String::new(),
                 title: title.to_owned(),
+                folder_id: folder_id.to_owned(),
             }),
         )
     }

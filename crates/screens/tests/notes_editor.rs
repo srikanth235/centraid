@@ -24,7 +24,7 @@ fn open(d: &mut Driver, id: &str) -> u64 {
 fn draft(v: &wire::ViewState) -> &wire::NotesEditorDraft {
     match &editor_state(v).content {
         Some(wire::notes_editor_state::Content::Draft(draft)) => draft,
-        other => panic!("not a draft: {other:?}"),
+        None => panic!("not a draft: {:?}", editor_state(v).page),
     }
 }
 
@@ -52,13 +52,13 @@ fn link(v: &wire::ViewState) -> &wire::NotesLinkSheet {
 }
 
 fn link_ids(v: &wire::ViewState) -> Vec<String> {
-    match link(v).content.as_ref().unwrap() {
-        wire::notes_link_sheet::Content::Data(data) => data
+    match &link(v).content {
+        Some(wire::notes_link_sheet::Content::Data(data)) => data
             .domains
             .iter()
             .flat_map(|domain| domain.rows.iter().map(|row| row.id.clone()))
             .collect(),
-        other => panic!("no link data: {other:?}"),
+        None => panic!("no link data: {:?}", link(v).page),
     }
 }
 
@@ -76,8 +76,10 @@ fn a_new_note_reads_nothing_creates_on_first_save_then_edits() {
         state.chrome.as_ref().unwrap().body_placeholder,
         "Write something"
     );
-    assert!(!state.chrome.as_ref().unwrap().history_enabled);
-    assert!(state.history.is_none());
+    assert!(
+        state.earlier.is_none(),
+        "nothing earlier before the note exists"
+    );
     assert_eq!(draft(d.view(i)).title, "");
 
     type_title(&mut d, i, "Groceries");
@@ -99,10 +101,9 @@ fn a_new_note_reads_nothing_creates_on_first_save_then_edits() {
     assert_eq!(state.autosave.as_ref().unwrap().label, "Saved");
     assert_eq!(state.chrome.as_ref().unwrap().status, "Saved");
     assert_eq!(state.chrome.as_ref().unwrap().title, "Note");
-    assert!(state.chrome.as_ref().unwrap().history_enabled);
-    assert_eq!(
-        state.history,
-        Some(routes::history(&state.note_id, "Groceries"))
+    assert!(
+        state.earlier.is_none(),
+        "a note saved once holds nothing earlier"
     );
     let id = state.note_id.clone();
     let stored = note_of(&d, &id);
@@ -180,13 +181,6 @@ fn an_existing_note_opens_on_its_words_and_saves_the_title_alone() {
         editor_state(d.view(i)).chrome.as_ref().unwrap().close,
         "Cancel"
     );
-    assert!(
-        editor_state(d.view(i))
-            .chrome
-            .as_ref()
-            .unwrap()
-            .history_enabled
-    );
     type_title(&mut d, i, "Plans v2");
     settle(&mut d);
     let stored = note_of(&d, &id);
@@ -203,7 +197,7 @@ fn an_existing_note_opens_on_its_words_and_saves_the_title_alone() {
 }
 
 #[test]
-fn a_change_from_the_vault_never_takes_the_words_being_typed() {
+fn a_change_from_the_vault_never_takes_the_words_being_typed_and_the_save_is_refused() {
     let mut d = driver();
     let id = note(&d, "Plans", "first draft");
     let i = open(&mut d, &id);
@@ -227,10 +221,195 @@ fn a_change_from_the_vault_never_takes_the_words_being_typed() {
             .remote_changed
     );
     settle(&mut d);
-    // Saved, then the vault is read again: both edits stand.
+    // THE SAVE CHECKED WHAT IT WAS REPLACING: the note is the other surface's, the words stay.
     let stored = note_of(&d, &id);
-    assert_eq!(stored.body, "my typing");
+    assert_eq!(stored.body, "first draft");
+    assert_eq!(stored.title, "Elsewhere");
+    assert_eq!(
+        stored.rev, 1,
+        "the other surface's edit is the note's first version"
+    );
+    assert_eq!(draft(d.view(i)).body, "my typing");
+    let state = editor_state(d.view(i));
+    let autosave = state.autosave.as_ref().unwrap();
+    assert_eq!(
+        autosave.phase,
+        wire::autosave::Phase::Conflict as i32,
+        "a stale save is a conflict, not a refusal to try again"
+    );
+    assert!(autosave.refused);
+    let chrome = state.chrome.as_ref().unwrap();
+    assert_eq!(chrome.status, "This note changed somewhere else.");
+    assert_eq!(chrome.status_action, "Reload");
+}
+
+#[test]
+fn leaving_over_a_conflict_does_not_try_the_save_again() {
+    use centraid_screens::kit::autosave::{Autosave, Draft};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static REQUESTS: AtomicUsize = AtomicUsize::new(0);
+
+    #[derive(Clone, PartialEq)]
+    struct Words {
+        id: String,
+        body: String,
+        rev: i64,
+    }
+    impl Draft for Words {
+        const ACTION: &'static str = "note.edit";
+        fn subject(&self) -> &str {
+            &self.id
+        }
+        fn refusal(&self, _: centraid_screens::strings::Locale) -> Option<String> {
+            None
+        }
+        fn request(&self, baseline: &Self) -> Option<wire::ActRequest> {
+            (self.body != baseline.body).then(|| {
+                REQUESTS.fetch_add(1, Ordering::SeqCst);
+                act::notes::EditNote {
+                    note_id: self.id.clone(),
+                    body: Some(self.body.clone()),
+                    expected_rev: Some(self.rev),
+                    ..Default::default()
+                }
+                .into()
+            })
+        }
+        fn noun(_: centraid_screens::strings::Locale) -> String {
+            "note".into()
+        }
+        fn base_rev(&self) -> Option<i64> {
+            Some(self.rev)
+        }
+    }
+
+    let d = driver();
+    let id = note(&d, "Plans", "first draft");
+    arrange(
+        &d,
+        act::notes::EditNote {
+            note_id: id.clone(),
+            body: Some("elsewhere".into()),
+            ..Default::default()
+        },
+    );
+    let mut auto = Autosave::new();
+    // The draft was read at revision 0; the note has moved since.
+    auto.loaded(Words {
+        id,
+        body: "first draft".into(),
+        rev: 0,
+    });
+    d.with_ctx(|ctx| {
+        auto.edit(ctx, |words| words.body = "mine".into());
+        assert!(!auto.fired(ctx, "elsewhere"), "only its own timer saves");
+        let _ = auto.flush(ctx);
+        assert_eq!(REQUESTS.load(Ordering::SeqCst), 1);
+        assert!(auto.conflict().is_some());
+        // Closing over the conflict saves nothing more, and typing on does not either.
+        let _ = auto.flush(ctx);
+        auto.edit(ctx, |words| words.body = "mine, longer".into());
+        let _ = auto.flush(ctx);
+        assert_eq!(REQUESTS.load(Ordering::SeqCst), 1);
+        assert!(auto.conflict().is_some());
+        assert_eq!(
+            auto.draft().map(|words| words.body.as_str()),
+            Some("mine, longer")
+        );
+    });
+}
+
+#[test]
+fn reload_keeps_the_words_as_an_earlier_version_and_shows_the_vaults_note() {
+    let mut d = driver();
+    let id = note(&d, "Plans", "first draft");
+    let i = open(&mut d, &id);
+    type_body(&mut d, i, "my typing");
+    arrange(
+        &d,
+        act::notes::EditNote {
+            note_id: id.clone(),
+            title: Some("Elsewhere".into()),
+            ..Default::default()
+        },
+    );
+    settle(&mut d);
+    assert_eq!(
+        editor_state(d.view(i))
+            .chrome
+            .as_ref()
+            .unwrap()
+            .status_action,
+        "Reload"
+    );
+    send_editor(&mut d, i, N::StatusActed(ev::StatusActed {}));
+    // The vault's row is shown, the member's words are not lost, and the line says where they are.
     assert_eq!(draft(d.view(i)).title, "Elsewhere");
+    assert_eq!(draft(d.view(i)).body, "first draft");
+    let state = editor_state(d.view(i));
+    let chrome = state.chrome.as_ref().unwrap();
+    assert_eq!(chrome.status, "Your text is in Earlier versions.");
+    assert_eq!(chrome.status_action, "");
+    assert_ne!(
+        state.autosave.as_ref().unwrap().phase,
+        wire::autosave::Phase::Conflict as i32
+    );
+    // Two earlier versions now: the other surface's edit replaced the first, and the member's words.
+    let entry = state.earlier.clone().expect("the entry");
+    assert_eq!(entry.count_label, "2");
+    assert_eq!(note_of(&d, &id).body, "first draft");
+    // And the member can go on from the vault's note: the next save is fresh.
+    type_body(&mut d, i, "now from the new one");
+    settle(&mut d);
+    assert_eq!(note_of(&d, &id).body, "now from the new one");
+}
+
+#[test]
+fn a_note_moved_to_the_trash_elsewhere_refuses_the_save_and_reload_keeps_the_words() {
+    let mut d = driver();
+    let id = note(&d, "Plans", "first draft");
+    let i = open(&mut d, &id);
+    type_body(&mut d, i, "my typing");
+    arrange(
+        &d,
+        act::notes::DeleteNote {
+            note_id: id.clone(),
+        },
+    );
+    settle(&mut d);
+    let state = editor_state(d.view(i));
+    let autosave = state.autosave.as_ref().unwrap();
+    assert_eq!(autosave.phase, wire::autosave::Phase::Conflict as i32);
+    assert_eq!(
+        state.chrome.as_ref().unwrap().status,
+        "This note was moved to the trash."
+    );
+    assert_eq!(draft(d.view(i)).body, "my typing");
+    send_editor(&mut d, i, N::StatusActed(ev::StatusActed {}));
+    // The trashed state is shown, and says where the words went.
+    match page_of(editor_state(d.view(i)).page.as_ref()) {
+        Some(wire::page_state::State::Failed(failure)) => {
+            assert_eq!(failure.sentence, "This note is in the trash.");
+            assert!(failure.permanent, "a gone note offers no Retry");
+            assert_eq!(
+                failure.remedy,
+                "Restore it to find your text in Earlier versions."
+            );
+        }
+        other => panic!("not the trashed state: {other:?}"),
+    }
+    // Restored, the words are there as the note's earlier version.
+    arrange(
+        &d,
+        act::notes::RestoreNote {
+            note_id: id.clone(),
+        },
+    );
+    let j = open(&mut d, &id);
+    let entry = editor_state(d.view(j)).earlier.clone().expect("the entry");
+    assert_eq!(entry.count_label, "1");
+    assert_eq!(note_of(&d, &id).body, "first draft");
 }
 
 #[test]
@@ -325,9 +504,10 @@ fn the_body_is_always_here_so_a_cleared_body_is_saved_as_empty() {
 fn a_note_that_is_not_here_or_is_in_the_trash_is_a_sentence_not_an_empty_editor() {
     let mut d = driver();
     let gone = open(&mut d, "no-such-note");
-    match &editor_state(d.view(gone)).content {
-        Some(wire::notes_editor_state::Content::Failure(failure)) => {
+    match page_of(editor_state(d.view(gone)).page.as_ref()) {
+        Some(wire::page_state::State::Failed(failure)) => {
             assert_eq!(failure.sentence, "This note isn't on this phone.");
+            assert!(failure.permanent, "a gone note offers no Retry");
         }
         other => panic!("not a failure: {other:?}"),
     }
@@ -339,9 +519,10 @@ fn a_note_that_is_not_here_or_is_in_the_trash_is_a_sentence_not_an_empty_editor(
         },
     );
     let trashed = open(&mut d, &id);
-    match &editor_state(d.view(trashed)).content {
-        Some(wire::notes_editor_state::Content::Failure(failure)) => {
+    match page_of(editor_state(d.view(trashed)).page.as_ref()) {
+        Some(wire::page_state::State::Failed(failure)) => {
             assert_eq!(failure.sentence, "This note is in the trash.");
+            assert!(failure.permanent, "a gone note offers no Retry");
         }
         other => panic!("not a failure: {other:?}"),
     }
@@ -401,8 +582,8 @@ fn the_powerbox_reads_link_targets_grouped_by_domain() {
         }),
     );
     assert!(link_ids(d.view(i)).contains(&target));
-    match link(d.view(i)).content.as_ref().unwrap() {
-        wire::notes_link_sheet::Content::Data(data) => {
+    match &link(d.view(i)).content {
+        Some(wire::notes_link_sheet::Content::Data(data)) => {
             let notes_group = data
                 .domains
                 .iter()
@@ -419,7 +600,7 @@ fn the_powerbox_reads_link_targets_grouped_by_domain() {
             assert_eq!(row.subtitle, "Note");
             assert_eq!(row.app_id, "notes");
         }
-        other => panic!("{other:?}"),
+        None => panic!("{:?}", link(d.view(i)).page),
     }
     // Nothing matches: one sentence.
     send_editor(
@@ -429,12 +610,10 @@ fn the_powerbox_reads_link_targets_grouped_by_domain() {
             term: "zzqxvv".into(),
         }),
     );
-    match link(d.view(i)).content.as_ref().unwrap() {
-        wire::notes_link_sheet::Content::Data(data) => {
-            assert_eq!(
-                data.empty.as_ref().unwrap().body,
-                "Nothing matches that search."
-            );
+    match page_of(link(d.view(i)).page.as_ref()) {
+        Some(wire::page_state::State::Empty(empty)) => {
+            assert_eq!(empty.body, "Nothing matches that search.");
+            assert!(link(d.view(i)).content.is_none());
         }
         other => panic!("{other:?}"),
     }
@@ -551,4 +730,55 @@ fn a_tag_is_its_own_write_added_and_removed_at_once_and_waits_for_the_first_save
     );
     assert!(editor_state(d.view(i)).tags.is_empty());
     assert!(note_of(&d, &id).tags.is_empty());
+}
+
+/// How many earlier versions the open note holds, as the editor's entry counts them.
+fn versions_held(d: &mut Driver, i: u64) -> u32 {
+    refresh_editor(d, i);
+    editor_state(d.view(i))
+        .earlier
+        .as_ref()
+        .map_or(0, |entry| entry.count_label.parse().expect("a count"))
+}
+
+fn refresh_editor(d: &mut Driver, i: u64) {
+    send_editor(d, i, N::Refreshed(ev::Refreshed {}));
+}
+
+#[test]
+fn autosaves_of_one_sitting_are_one_earlier_version_and_a_menu_act_ends_the_sitting() {
+    let mut d = driver();
+    let id = note(&d, "Plan", "start");
+    let i = open(&mut d, &id);
+    type_body(&mut d, i, "start one");
+    settle(&mut d);
+    type_body(&mut d, i, "start one two");
+    settle(&mut d);
+    type_body(&mut d, i, "start one two three");
+    settle(&mut d);
+    assert_eq!(
+        versions_held(&mut d, i),
+        1,
+        "three autosaves of a sitting are one version"
+    );
+    // A rename from a menu offers an Undo, so it is a version of its own and ends the sitting.
+    arrange(
+        &d,
+        act::notes::EditNote {
+            note_id: id.clone(),
+            title: Some("Plan B".to_owned()),
+            ..Default::default()
+        },
+    );
+    assert_eq!(versions_held(&mut d, i), 2);
+    type_body(&mut d, i, "start one two three four");
+    settle(&mut d);
+    assert_eq!(
+        versions_held(&mut d, i),
+        3,
+        "typing after it is a new sitting"
+    );
+    type_body(&mut d, i, "start one two three four five");
+    settle(&mut d);
+    assert_eq!(versions_held(&mut d, i), 3);
 }

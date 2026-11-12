@@ -20,6 +20,8 @@
 
 use std::collections::BTreeSet;
 
+use crate::portable::zip::ZipWriter;
+
 /// One file as the shell read it: a path relative to the picked folder (or just a name)
 /// and its text.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -248,24 +250,109 @@ fn normalise_links(body: &str) -> String {
 // The export archive
 // ---------------------------------------------------------------------------
 
-/// A name safe as a file name on every platform: no separators or reserved characters.
-#[must_use]
-pub fn file_stem(title: &str) -> String {
-    let cleaned: String = title
+/// The most bytes a stem keeps: file systems cap a name at 255 bytes, and a member's own
+/// extension and a duplicate's ` 2` have to fit after it.
+const STEM_BYTES: usize = 200;
+
+/// The most characters a stem keeps.
+const STEM_CHARS: usize = 120;
+
+/// Names a file may not have on Windows, whatever its extension (`CON.txt` is as reserved as `CON`).
+const RESERVED: [&str; 22] = [
+    "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
+    "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+];
+
+/// A control character, or an invisible one that reorders or hides text (the bidirectional marks,
+/// the zero-width spaces, the byte-order mark).
+fn is_unprintable(c: char) -> bool {
+    c.is_control()
+        || matches!(
+            c,
+            '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2064}'
+                | '\u{2066}'..='\u{2069}' | '\u{FEFF}'
+        )
+}
+
+/// `text` cut to at most `chars` characters and `bytes` bytes, never inside a character.
+fn cut(text: &str, chars: usize, bytes: usize) -> &str {
+    let mut end = 0;
+    for (count, (at, c)) in text.char_indices().enumerate() {
+        if count == chars || at + c.len_utf8() > bytes {
+            break;
+        }
+        end = at + c.len_utf8();
+    }
+    &text[..end]
+}
+
+/// A name with every character a platform refuses made safe, uncut: separators, reserved
+/// characters and control characters are `-`, the ends lose spaces and dots (Windows drops
+/// them), and a reserved device name (`CON`, `NUL`, `COM1`, ...) gets a `_` after its base.
+fn cleaned(title: &str) -> String {
+    let swapped: String = title
         .chars()
         .map(|c| {
-            if c.is_control() || matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') {
+            if is_unprintable(c)
+                || matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
+            {
                 '-'
             } else {
                 c
             }
         })
         .collect();
-    let cleaned = cleaned.trim().trim_matches('.').to_owned();
-    if cleaned.is_empty() {
+    let trimmed = swapped.trim().trim_matches('.').trim();
+    let (base, rest) = trimmed.split_once('.').unwrap_or((trimmed, ""));
+    if RESERVED
+        .iter()
+        .any(|name| base.trim_end().eq_ignore_ascii_case(name))
+    {
+        let rest = if rest.is_empty() {
+            String::new()
+        } else {
+            format!(".{rest}")
+        };
+        return format!("{base}_{rest}");
+    }
+    trimmed.to_owned()
+}
+
+/// A name safe as a file name on every platform: no separators or reserved characters, no control
+/// characters, no reserved device name, no leading or trailing dot or space, and short enough for
+/// any file system. `Untitled` when nothing is left.
+#[must_use]
+pub fn file_stem(title: &str) -> String {
+    let whole = cleaned(title);
+    let kept = cut(&whole, STEM_CHARS, STEM_BYTES).trim_end_matches(['.', ' ']);
+    if kept.is_empty() {
         "Untitled".to_owned()
     } else {
-        cleaned.chars().take(120).collect()
+        kept.to_owned()
+    }
+}
+
+/// A document's file name: [`file_stem`]'s rules, with its extension kept when the name has to be
+/// cut (`<long name>.pdf` stays a PDF).
+#[must_use]
+pub fn file_name(title: &str) -> String {
+    let whole = cleaned(title);
+    let (stem, extension) = match whole.rsplit_once('.') {
+        Some((stem, extension))
+            if !stem.trim().is_empty()
+                && (1..=12).contains(&extension.chars().count())
+                && extension.chars().all(char::is_alphanumeric) =>
+        {
+            (stem, format!(".{extension}"))
+        }
+        _ => (whole.as_str(), String::new()),
+    };
+    let room = STEM_BYTES.saturating_sub(extension.len());
+    let stem = cut(stem, STEM_CHARS, room).trim_end_matches(['.', ' ']);
+    if stem.is_empty() {
+        format!("Untitled{extension}")
+    } else {
+        format!("{stem}{extension}")
     }
 }
 
@@ -275,48 +362,24 @@ pub struct Entry {
     pub bytes: Vec<u8>,
 }
 
-/// A ZIP archive of `entries`, stored (not compressed): every reader opens it, and the
-/// writer is 40 lines. Names are UTF-8 (general purpose flag bit 11).
+/// A ZIP archive of `entries`, stored (not compressed): every reader opens it. A small archive
+/// built in memory through the shared streaming writer ([`crate::portable::zip`]), which a large
+/// export uses to write a file instead. Names are UTF-8 (general purpose flag bit 11).
 #[must_use]
 pub fn zip(entries: &[Entry]) -> Vec<u8> {
-    let mut out: Vec<u8> = Vec::new();
-    let mut central: Vec<u8> = Vec::new();
+    let mut writer = ZipWriter::new(std::io::Cursor::new(Vec::new()));
     for entry in entries {
-        let mut crc = flate2::Crc::new();
-        crc.update(&entry.bytes);
-        let (crc, size, name) = (crc.sum(), entry.bytes.len() as u32, entry.path.as_bytes());
-        let offset = out.len() as u32;
-        // Local header.
-        out.extend_from_slice(&0x0403_4b50_u32.to_le_bytes());
-        out.extend_from_slice(&[20, 0, 0, 8, 0, 0, 0, 0, 0x21, 0]);
-        out.extend_from_slice(&crc.to_le_bytes());
-        out.extend_from_slice(&size.to_le_bytes());
-        out.extend_from_slice(&size.to_le_bytes());
-        out.extend_from_slice(&(name.len() as u16).to_le_bytes());
-        out.extend_from_slice(&0_u16.to_le_bytes());
-        out.extend_from_slice(name);
-        out.extend_from_slice(&entry.bytes);
-        // Central directory header.
-        central.extend_from_slice(&0x0201_4b50_u32.to_le_bytes());
-        central.extend_from_slice(&[20, 0, 20, 0, 0, 8, 0, 0, 0, 0, 0x21, 0]);
-        central.extend_from_slice(&crc.to_le_bytes());
-        central.extend_from_slice(&size.to_le_bytes());
-        central.extend_from_slice(&size.to_le_bytes());
-        central.extend_from_slice(&(name.len() as u16).to_le_bytes());
-        central.extend_from_slice(&[0; 12]);
-        central.extend_from_slice(&offset.to_le_bytes());
-        central.extend_from_slice(name);
+        // A `Vec` sink and an in-memory reader of the declared length cannot fail.
+        let _ = writer.add(
+            &entry.path,
+            entry.bytes.len() as u64,
+            entry.bytes.as_slice(),
+        );
     }
-    let start = out.len() as u32;
-    out.extend_from_slice(&central);
-    out.extend_from_slice(&0x0605_4b50_u32.to_le_bytes());
-    out.extend_from_slice(&[0, 0, 0, 0]);
-    out.extend_from_slice(&(entries.len() as u16).to_le_bytes());
-    out.extend_from_slice(&(entries.len() as u16).to_le_bytes());
-    out.extend_from_slice(&(central.len() as u32).to_le_bytes());
-    out.extend_from_slice(&start.to_le_bytes());
-    out.extend_from_slice(&0_u16.to_le_bytes());
-    out
+    writer
+        .finish()
+        .map(std::io::Cursor::into_inner)
+        .unwrap_or_default()
 }
 
 /// The text of one exported note: its title as a heading when its words do not start with
@@ -408,5 +471,48 @@ mod tests {
         assert!(bytes.windows(5).any(|w| w == b"hello"));
         assert_eq!(file_stem("a/b: c?"), "a-b- c-");
         assert_eq!(file_stem("  "), "Untitled");
+    }
+
+    #[test]
+    fn a_stem_has_no_separator_control_character_or_reserved_name() {
+        assert_eq!(file_stem("a/b\\c"), "a-b-c");
+        assert_eq!(file_stem("tab\there\u{7}\u{202E}x"), "tab-here--x");
+        assert_eq!(file_stem("../../etc/passwd"), "-..-etc-passwd");
+        assert_eq!(file_stem(".."), "Untitled");
+        assert_eq!(file_stem("report. "), "report");
+        for reserved in ["CON", "nul", "Aux", "com1", "LPT9"] {
+            assert_eq!(file_stem(reserved), format!("{reserved}_"));
+        }
+        assert_eq!(file_stem("CON.txt"), "CON_.txt");
+        assert_eq!(file_stem("Console"), "Console");
+        assert_eq!(file_stem("COM10"), "COM10");
+        // Cut by characters and by bytes, never inside a character, never ending in a dot.
+        assert_eq!(file_stem(&"a".repeat(300)).chars().count(), STEM_CHARS);
+        let wide = file_stem(&"日".repeat(300));
+        assert!(wide.len() <= STEM_BYTES && wide.chars().all(|c| c == '日'));
+        assert_eq!(
+            file_stem(&format!("{}. x", "a".repeat(119))),
+            "a".repeat(119)
+        );
+    }
+
+    #[test]
+    fn a_document_name_keeps_its_extension_when_it_is_cut() {
+        assert_eq!(file_name("Receipt.pdf"), "Receipt.pdf");
+        assert_eq!(file_name("a/b.pdf"), "a-b.pdf");
+        assert_eq!(file_name("NUL.pdf"), "NUL_.pdf");
+        assert_eq!(file_name(".pdf"), "pdf");
+        let long = file_name(&format!("{}.pdf", "x".repeat(400)));
+        assert!(
+            long.ends_with(".pdf") && long.chars().count() <= STEM_CHARS + 4,
+            "{long}"
+        );
+        let wide = file_name(&format!("{}.jpeg", "日".repeat(300)));
+        assert!(
+            wide.ends_with(".jpeg") && wide.len() <= STEM_BYTES,
+            "{}",
+            wide.len()
+        );
+        assert_eq!(file_name("  "), "Untitled");
     }
 }

@@ -90,6 +90,8 @@ catalog! {
         "They were moved to the trash or merged into someone else."
     );
     plain gone_title = ("This person is not in People.", "This person is not in People.");
+    plain contacts_kept = ("people", "people");
+    plain contacts_stopped = ("People stopped reading your phone contacts.", "People stopped reading your phone contacts.");
     plain contacts_pause = ("Pause", "Pause");
     plain contacts_resume = ("Resume", "Resume");
     plain contacts_settings = ("Settings", "Settings");
@@ -103,14 +105,10 @@ catalog! {
     counted contacts_followed = ("{n} followed", "{n} followed");
     counted contacts_updated_hours = ("Updated {n} hour ago", "Updated {n} hours ago");
     counted contacts_updated_minutes = ("Updated {n} min ago", "Updated {n} min ago");
-    plain more_export = ("Export", "Export");
     plain more_import = ("Import", "Import");
     plain transfer_choose_again_action = ("Choose again", "Choose again");
     plain transfer_choose_file_action = ("Choose files", "Choose files");
     plain transfer_export_all = ("Everyone", "Everyone");
-    plain transfer_export_done = ("Exported {n} people", "Exported {n} people");
-    plain transfer_export_failed = ("Could not export", "Could not export");
-    plain transfer_export_headline = ("Choose who to export", "Choose who to export");
     plain transfer_export_lede = (
         "vCards in one .vcf file, for any address book.",
         "vCards in one .vcf file, for any address book."
@@ -136,10 +134,6 @@ catalog! {
     plain import_contacts_add_account = (
         "No contacts found. Add your Google or other account in your phone's Settings, then come back.",
         "No contacts found. Add your Google or other account in your phone's Settings, then come back."
-    );
-    plain import_contacts_denied = (
-        "Contacts access is off. Turn it on in Settings.",
-        "Contacts access is off. Turn it on in Settings."
     );
     counted import_contacts_done = ("{n} person imported", "{n} people imported");
     plain import_contacts_failed = ("Contacts did not import.", "Contacts did not import.");
@@ -172,6 +166,7 @@ catalog! {
     plain note_label = ("Note", "Note");
     plain note_placeholder = ("Optional", "Optional");
     plain note_sheet_placeholder = ("What to remember", "What to remember");
+    plain outcome_cadence_changed = ("Cadence changed", "Cadence changed");
     plain outcome_channel_removed = ("{kind} removed", "{kind} removed");
     plain outcome_channel_saved = ("{kind} saved", "{kind} saved");
     plain outcome_dated = ("Date added · {name}", "Date added · {name}");
@@ -239,11 +234,10 @@ catalog! {
     plain tile_starred = ("Starred", "Starred");
     plain tile_upcoming = ("Upcoming", "Upcoming");
     plain touch_a11y = ("{kind}, {when}", "{kind}, {when}");
-    plain trash_erases = ("Erased {day}", "Erased {day}");
     plain trash_label = ("Trash", "Trash");
-    plain trash_purge_body = (
-        "Their profile, dates, notes and touches leave this vault for good. A task about them stays yours. This cannot be undone.",
-        "Their profile, dates, notes and touches leave this vault for good. A task about them stays yours. This cannot be undone."
+    plain trash_purge_lead = (
+        "Their profile, dates, notes and touches leave this vault for good. A task about them stays yours.",
+        "Their profile, dates, notes and touches leave this vault for good. A task about them stays yours."
     );
     plain unstar = ("Remove star from {name}", "Remove star from {name}");
     plain unstar_verb = ("Remove star", "Remove star");
@@ -282,4 +276,14 @@ catalog! {
     plain vault_on = ("On {item}", "On {item}");
     plain vault_kind_task = ("Task", "Task");
     plain vault_more = ("and {n} more", "and {n} more");
+    // What a "phone says" line calls the thing, to a screen reader (#1183).
+    plain says_labelled = ("{value} ({label})", "{value} ({label})");
+    plain says_noun_address = ("address", "address");
+    plain says_noun_birthday = ("birthday", "birthday");
+    plain says_noun_email = ("email", "email");
+    plain says_noun_handle = ("handle", "handle");
+    plain says_noun_name = ("name", "name");
+    plain says_noun_nickname = ("nickname", "nickname");
+    plain says_noun_number = ("number", "number");
+    plain says_noun_role = ("role", "role");
 }

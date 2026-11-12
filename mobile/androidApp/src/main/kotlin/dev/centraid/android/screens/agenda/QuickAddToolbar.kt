@@ -42,6 +42,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.TodoQuickAdd
 import centraid.core.v1.TodoQuickTool
+import centraid.core.v1.TodoStagedRow
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.KitChip
 import dev.centraid.android.kit.KitGeometry
@@ -51,7 +52,7 @@ import dev.centraid.android.theme.centraidType
 
 /**
  * THE KEYBOARD TOOLBAR (#1173) over To-do's quick add: a floating tonal bar of the machine's tools
- * (Date, Tag, Flag), each staging what the next add carries. The state says which is lit (`on`),
+ * (Date, Tag, Flag, Link, Photo), each staging what the next add carries. The state says which is lit (`on`),
  * which one is open (`open_tool`) and every word; a tool sends [onTool], a due choice [onDue], a
  * typed tag [onTag] (the keyboard's Done), and nothing here decides what any of them does. The
  * caller draws it only while the quick-add field holds the keyboard, above the IME.
@@ -163,5 +164,53 @@ private fun QuickTagField(placeholder: String, onTag: (String) -> Unit) {
                 .testTag("agenda-quick-tag-field")
                 .semantics { contentDescription = placeholder },
         )
+    }
+}
+
+/**
+ * THE STAGED TRAY (`ListQuickStaged`): one row to a link or photo the next add will carry, each with
+ * its own ×. What a row says, and what its × is called, is the machine's; the × sends [onRemove] the
+ * row's key. Drawn whenever something is staged, even while the keyboard is away (the link picker or
+ * the phone's has it), so the staging is never out of sight.
+ */
+@Composable
+internal fun QuickStagedRows(quickAdd: TodoQuickAdd, onRemove: (String) -> Unit, modifier: Modifier = Modifier) {
+    if (quickAdd.staged_rows.isEmpty()) return
+    Column(
+        modifier
+            .fillMaxWidth()
+            .testTag("agenda-quick-staged-rows")
+            .semantics { contentDescription = quickAdd.staged_group_label },
+    ) {
+        quickAdd.staged_rows.forEach { row -> QuickStagedRow(row, onRemove) }
+    }
+}
+
+@Composable
+private fun QuickStagedRow(row: TodoStagedRow, onRemove: (String) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = KitGeometry.ROW_MIN).padding(start = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CentraidIcon(iconKey = row.icon_key, tint = centraidColor("textSoft"), size = 16.dp, modifier = Modifier.clearAndSetSemantics { })
+        Column(Modifier.weight(1f).semantics(mergeDescendants = true) { }) {
+            Text(row.title, style = centraidType("small"), color = centraidColor("text"), maxLines = 1)
+            Text(row.kind_label, style = centraidType("annotLabel"), color = centraidColor("textSoft"))
+        }
+        Box(
+            Modifier
+                .size(KitGeometry.ROW_MIN)
+                .clip(CircleShape)
+                .clickable { onRemove(row.key) }
+                .testTag("agenda-quick-staged-remove-${row.key}")
+                .clearAndSetSemantics {
+                    contentDescription = row.remove_label
+                    role = Role.Button
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            CentraidIcon(iconKey = "X", tint = centraidColor("textSoft"), size = 18.dp)
+        }
     }
 }

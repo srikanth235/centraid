@@ -31,7 +31,7 @@
 //! (only when free: busy is what every event is), time zone (only when the event's own zone is
 //! not the phone's), travel time (only when set) and calendar. The guests the phone's own
 //! calendar states for a followed event are a read-only list with the reply in words. The
-//! attachments section is [`crate::kit::schedule::attachments`]'s: photos and files, added, opened and removed
+//! attachments section is [`crate::kit::attachments`]'s: photos and files, added, opened and removed
 //! from here.
 
 use centraid_api_proto::core_v1 as wire;
@@ -42,23 +42,37 @@ use wire::app_query_response::Answer;
 use crate::kit::schedule::rule_words::{self, long_day};
 use wire::screen_event::Kind as E;
 
+use crate::calendar::event_phone;
 use crate::calendar::hues::Hues;
 use crate::calendar::routes;
 use crate::catalog::{act, load};
-use crate::kit::act::{self as kit_act, Settled};
+use crate::kit::act as kit_act;
+use crate::kit::attachments::Attachments;
 use crate::kit::civil::{self, HourCycle};
-use crate::kit::read::{self as kit_read, Reading};
-use crate::kit::schedule::attachments::{Attachments, Of};
+use crate::kit::earlier;
+use crate::kit::follow;
+use crate::kit::links::{self, Kind, Links, Outcome};
+use crate::kit::quantity::UnitsPref;
+use crate::kit::read::{self as kit_read, Page, Reading};
 use crate::kit::schedule::rows::hue_role;
+use crate::kit::share::{self, Share};
+use crate::kit::trash;
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
     Locale, agenda as words, agenda_editor as editor_words, agenda_event as event_words, fill,
+    links as link_label, shared,
 };
 
 pub const ACTION_EDIT: &str = "edit";
 pub const ACTION_CANCEL: &str = "cancel";
+/// Move the whole event to the trash (#1185): it asks nothing, because Undo and the trash restore it.
+pub const ACTION_TRASH: &str = "trash";
 /// Open the event's location in the phone's maps app (an `OpenMap` effect).
 pub const ACTION_OPEN_MAP: &str = "open_map";
+/// Hand the event to the OS share sheet as a calendar file (#1185): the shells draw every action
+/// row and send its key, so the row needs no shell code of its own.
+pub const ACTION_SHARE: &str = "share";
 
 pub const ACCEPTED: &str = "accepted";
 pub const TENTATIVE: &str = "tentative";
@@ -78,39 +92,59 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     if args.instance_key.is_empty() {
         args.instance_key.clone_from(&args.event_id);
     }
-    let attachments = Attachments::of(Of::Event, &args.event_id);
+    let attachments = Attachments::of("calendar", &args.event_id);
+    let links = Links::new(&Kind::ALL).for_entity(&args.event_id);
     Some(Box::new(EventPage {
         route: args,
-        content: Content::Loading,
+        page: Page::loading(),
+        gone: false,
         sheet: Sheet::None,
         confirm: false,
         scope: None,
-        status: None,
+        undo: Undo::default(),
         dismissed: false,
         attachments,
+        differences: follow::Phone::default(),
+        earlier: earlier::Foot::default(),
+        share: Share::default(),
+        // An event may link to another event; the picker leaves this one out (`for_entity`).
+        links,
+        linked: None,
+        linked_unread: false,
     }))
-}
-
-enum Content {
-    Loading,
-    Failed,
-    Denied(wire::AppQueryDenial),
-    Data(Box<wire::AgendaEventDetail>),
 }
 
 struct EventPage {
     route: wire::AgendaEventRoute,
-    content: Content,
+    /// The read. An answer with no such occurrence is `gone` (cancelled, moved or deleted since it
+    /// was picked): a failed page with its own words and no Retry, never an empty one.
+    page: Page<Box<wire::AgendaEventDetail>>,
+    gone: bool,
     /// The scope sheet, while a series' cancel is asked.
     sheet: Sheet,
     /// The one-off's confirm, while it is asked.
     confirm: bool,
     /// The scope the sheet has picked.
     scope: Option<wire::AgendaScope>,
-    status: Option<wire::StatusLine>,
+    /// The status line and what its Undo reverses (the kit's one door).
+    undo: Undo,
     dismissed: bool,
     /// The photos and files on the event (#1173).
     attachments: Attachments,
+    /// Where the phone's calendar says otherwise than the event does (#1183), read with the page.
+    differences: follow::Phone,
+    /// The entry to the event's earlier versions, read with the page (#1185).
+    earlier: earlier::Foot,
+    /// The event handed to the OS share sheet as a calendar file (#1185).
+    share: Share,
+    /// THE "Linked to" SECTION'S PICKER (#1185): what the event can link to, any item but a
+    /// Locker one.
+    links: Links,
+    /// What the event is linked to, either end (`links::read_linked`). `None` until read, and
+    /// while a read did not land.
+    linked: Option<Vec<wire::LinkedItem>>,
+    /// The read of `linked` was refused or failed: the status line says so, no empty section.
+    linked_unread: bool,
 }
 
 impl EventPage {
@@ -130,35 +164,110 @@ impl EventPage {
             Answer::AgendaEvent(detail) => Some(detail),
             _ => None,
         });
-        match reading {
-            Reading::Data(detail) => self.content = Content::Data(detail),
-            Reading::Denied(denial) => self.content = Content::Denied(denial),
-            Reading::Failed => {
-                if !matches!(self.content, Content::Data(_)) {
-                    self.content = Content::Failed;
-                }
-            }
+        self.differences = match &reading {
+            Reading::Data(_) => follow::read(ctx, &self.route.event_id),
+            _ => follow::Phone::default(),
+        };
+        self.earlier = match &reading {
+            Reading::Data(detail) => match detail
+                .event
+                .as_ref()
+                .filter(|event| event.event_id == self.route.event_id)
+            {
+                Some(event) => earlier::foot(
+                    ctx,
+                    super::EARLIER,
+                    &self.route.event_id,
+                    &event
+                        .summary
+                        .as_deref()
+                        .filter(|summary| !summary.trim().is_empty())
+                        .map_or_else(|| words::untitled(ctx.locale()), str::to_owned),
+                ),
+                None => earlier::Foot::default(),
+            },
+            _ => earlier::Foot::default(),
+        };
+        // A failed re-read keeps the event on screen under a note; a first read that failed has
+        // nothing else to show.
+        let route_id = self.route.event_id.clone();
+        let held = std::mem::replace(&mut self.page, Page::loading());
+        self.page = held.after(reading, ctx.locale(), |detail| {
+            detail
+                .event
+                .as_ref()
+                .is_none_or(|event| event.event_id != route_id)
+        });
+        // A read that succeeded and found no such occurrence: gone, which is a failure, not an
+        // empty place.
+        self.gone = matches!(self.page, Page::Empty);
+        if self.gone {
+            self.page = Page::Failed;
         }
         self.attachments.reload(ctx);
+        self.read_linked(ctx);
+    }
+
+    /// What the event is linked to, in both directions. A refused or failed read is said on the
+    /// status line and never drawn as an empty section.
+    fn read_linked(&mut self, ctx: &Ctx) {
+        match links::read_linked(ctx, &self.route.event_id) {
+            Reading::Data(items) => {
+                self.linked = Some(items);
+                self.linked_unread = false;
+            }
+            Reading::Denied(_) | Reading::Failed => {
+                self.linked = None;
+                self.linked_unread = true;
+                self.links.close();
+            }
+        }
+        self.links.reload(ctx);
+    }
+
+    fn linked_ids(&self) -> Vec<String> {
+        self.linked.as_deref().map(links::ids).unwrap_or_default()
+    }
+
+    /// One tap in the "Linked to" section or its picker, written through the kit's door (Undo
+    /// when the core can take it back); the page is read again.
+    fn link_event(&mut self, ctx: &Ctx, event: &wire::LinkEvent) {
+        let linked = self.linked_ids();
+        let id = self.route.event_id.clone();
+        let (request, said): (wire::ActRequest, fn(Locale) -> String) =
+            match self.links.update(event, &linked, ctx) {
+                Outcome::Moved => return,
+                Outcome::Add { id: to, .. } => (
+                    act::calendar::Link {
+                        from: id.clone(),
+                        to,
+                    }
+                    .into(),
+                    event_words::link_added,
+                ),
+                Outcome::Remove { id: to } => (
+                    act::calendar::Unlink {
+                        from: id.clone(),
+                        to,
+                    }
+                    .into(),
+                    event_words::link_removed,
+                ),
+            };
+        let name = request.action.clone();
+        let key = kit_act::key(&[&name, &id], kit_act::fresh());
+        self.undo.act(ctx, request, &key, said);
+        self.reload(ctx);
     }
 
     /// The answered event, when it is the series this screen is on.
     fn event(&self) -> Option<&wire::AgendaEvent> {
-        match &self.content {
-            Content::Data(detail) => detail
+        self.page.data().and_then(|detail| {
+            detail
                 .event
                 .as_ref()
-                .filter(|event| event.event_id == self.route.event_id),
-            _ => None,
-        }
-    }
-
-    fn refused(&mut self, settled: &Settled) {
-        self.status = Some(wire::StatusLine {
-            sentence: settled.refusal.clone(),
-            action_label: String::new(),
-            refused: true,
-        });
+                .filter(|event| event.event_id == self.route.event_id)
+        })
     }
 
     fn rsvp(&mut self, ctx: &Ctx, partstat: &str) {
@@ -181,10 +290,23 @@ impl EventPage {
             person_id,
             state,
         };
-        self.status = None;
-        let settled = kit_act::act(ctx, request, &key);
+        self.undo.act(ctx, request, &key, event_words::rsvp_changed);
+        self.reload(ctx);
+    }
+
+    /// The action under a "phone says" line: take the calendar's value, then read again so the
+    /// line goes. A refusal is the status line, over the event as it still is.
+    fn take_phone(&mut self, ctx: &Ctx, taken: &wire::PhoneSaysTaken) {
+        if self.event().is_none() {
+            return;
+        }
+        let Some(settled) = follow::take(ctx, &self.route.event_id, taken) else {
+            return;
+        };
+        // Taking the phone's value has no inverse: it says nothing and offers nothing.
+        self.undo.clear();
         if !settled.committed {
-            self.refused(&settled);
+            self.undo.refuse(settled.refusal);
         }
         self.reload(ctx);
     }
@@ -258,6 +380,29 @@ impl EventPage {
         }
     }
 
+    /// MOVE TO TRASH (#1185): the WHOLE event, a series with every occurrence. It asks nothing: the
+    /// status line says what happened with Undo, and the trash restores it for 30 days. The page
+    /// stays, reads the event as gone, and keeps the line.
+    fn trash_event(&mut self, ctx: &Ctx) {
+        let Some(event) = self.event() else { return };
+        let (event_id, title) = (
+            event.event_id.clone(),
+            event.summary.clone().unwrap_or_default(),
+        );
+        self.trash_event_named(ctx, event_id, title);
+    }
+
+    fn trash_event_named(&mut self, ctx: &Ctx, event_id: String, title: String) {
+        let key = kit_act::key(&["trash-event", &event_id], kit_act::fresh());
+        self.undo.act(
+            ctx,
+            act::calendar::TrashEvent { event_id },
+            &key,
+            |locale| trash::moved_to_trash(locale, &title),
+        );
+        self.reload(ctx);
+    }
+
     fn cancel_event(&mut self, ctx: &Ctx, event_id: &str) {
         let request = act::calendar::CancelEvent {
             event_id: event_id.to_owned(),
@@ -269,12 +414,12 @@ impl EventPage {
     /// A cancellation: the event is off the calendar and the screen is done, or
     /// the vault's sentence stands over the event as it still is.
     fn committed_cancel(&mut self, ctx: &Ctx, request: impl Into<wire::ActRequest>, key: &str) {
-        self.status = None;
-        let settled = kit_act::act(ctx, request, key);
+        let settled = self
+            .undo
+            .act_handing_down(ctx, request, key, event_words::event_cancelled);
         if settled.committed {
             self.dismissed = true;
         } else {
-            self.refused(&settled);
             self.reload(ctx);
         }
     }
@@ -300,17 +445,47 @@ impl Screen for EventPage {
             return Vec::new();
         }
         match event.kind {
-            Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
+            Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => {
+                self.reload(ctx);
+                // THE EDITOR ABOVE CLOSED: its "Event saved" and Undo are drawn here.
+                self.undo.take_handed(ctx);
+            }
             // THE SHELL'S ANSWER TO A PICK: the attachments' (an add under way).
             Some(E::EffectResult(result)) => {
+                let id = self.route.event_id.clone();
+                let shared = self.share.result(ctx, &result, |ctx| {
+                    super::export::file(ctx, None, Some(&id))
+                });
+                if !shared.is_empty() || self.share.status().is_some() {
+                    return shared;
+                }
                 if let Some(outcome) = &result.outcome {
                     return self.attachments.result(ctx, outcome).unwrap_or_default();
                 }
             }
+            Some(E::StatusActed(_)) => {
+                if self.undo.acted(ctx) {
+                    self.reload(ctx);
+                }
+            }
+            Some(E::Left(_)) => {
+                self.undo.clear();
+                return self.share.left();
+            }
+            Some(E::PhoneSaysTaken(taken)) => self.take_phone(ctx, &taken),
             Some(E::AgendaEvent(event)) => match event.kind {
                 Some(K::Refreshed(_)) => self.reload(ctx),
                 Some(K::Rsvp(picked)) => self.rsvp(ctx, &picked.partstat),
                 Some(K::Action(picked)) if picked.key == ACTION_CANCEL => self.ask_cancel(),
+                Some(K::Action(picked)) if picked.key == ACTION_TRASH => self.trash_event(ctx),
+                Some(K::Action(picked)) if picked.key == ACTION_SHARE => {
+                    return self.share.tap(ctx.locale());
+                }
+                Some(K::StatusActed(_)) => {
+                    if self.undo.acted(ctx) {
+                        self.reload(ctx);
+                    }
+                }
                 Some(K::Action(picked)) if picked.key == ACTION_OPEN_MAP => {
                     return self.open_map();
                 }
@@ -330,6 +505,7 @@ impl Screen for EventPage {
                 Some(K::Confirmed(_)) => self.confirmed(ctx),
                 Some(K::ConfirmDismissed(_)) => self.confirm = false,
                 Some(K::Attachment(attachment)) => return self.attachments.event(ctx, attachment),
+                Some(K::Link(link)) => self.link_event(ctx, &link),
             },
             _ => {}
         }
@@ -338,29 +514,42 @@ impl Screen for EventPage {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
-        let content =
-            match &self.content {
-                Content::Loading => {
-                    wire::agenda_event_state::Content::Loading(wire::Loading { first_load: true })
-                }
-                Content::Failed => {
-                    wire::agenda_event_state::Content::Failure(kit_read::failure(locale))
-                }
-                Content::Denied(denial) => {
-                    wire::agenda_event_state::Content::Denied(denied(locale, denial))
-                }
-                Content::Data(detail) => {
-                    match self.event() {
-                        None => wire::agenda_event_state::Content::Gone(gone(locale)),
-                        Some(event) => wire::agenda_event_state::Content::Data(Box::new(
-                            self.data(locale, ctx.hour_cycle(), ctx.zone(), event, detail),
-                        )),
-                    }
-                }
-            };
+        // What the phone says that was not checked is a note over the data; a failed refresh
+        // already is one, and the stronger wins.
+        let drawn = self.page.clone().noted(kit_read::Note::unchecked(
+            &self.differences,
+            locale,
+            follow::Source::Phone,
+        ));
+        let mut wired = drawn.wire(
+            locale,
+            |denial| denied(locale, denial),
+            wire::EmptyState::default,
+        );
+        // An occurrence that is no longer there says so in its own words and offers no Retry.
+        if self.gone && matches!(wired.state, Some(wire::page_state::State::Failed(_))) {
+            wired.state = Some(wire::page_state::State::Failed(kit_read::gone(
+                words::gone_title(locale),
+                words::gone_body(locale),
+            )));
+        }
+        let content = match (self.event(), self.page.data()) {
+            (Some(event), Some(detail)) => Some(wire::agenda_event_state::Content::Data(Box::new(
+                self.data(
+                    locale,
+                    ctx.units(),
+                    ctx.hour_cycle(),
+                    ctx.zone(),
+                    event,
+                    detail,
+                ),
+            ))),
+            _ => None,
+        };
         let series_sheet = self.sheet == Sheet::CancelScope;
         let state = wire::AgendaEventState {
-            content: Some(content),
+            content,
+            page: Some(wired),
             sheet: self.sheet as i32,
             confirm: self.confirm.then(|| wire::Confirm {
                 title: words::confirm_cancel_title(locale),
@@ -376,7 +565,22 @@ impl Screen for EventPage {
             chrome: Some(Self::chrome(locale)),
             dismissed: self.dismissed,
             cancel_armed: series_sheet && self.scope.is_some(),
-            status: self.status.clone(),
+            status: self
+                .undo
+                .status()
+                .or_else(|| self.share.status())
+                .or_else(|| self.earlier.status(locale))
+                .or_else(|| {
+                    self.linked_unread.then(|| wire::StatusLine {
+                        sentence: event_words::links_unread(locale),
+                        action_label: String::new(),
+                        refused: false,
+                    })
+                }),
+            earlier: self.earlier.entry.clone(),
+            origin: self.earlier.origin.clone(),
+            link_picker: (self.linked.is_some() && self.links.is_open())
+                .then(|| self.links.picker(locale, &self.linked_ids())),
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::AgendaEvent(state)),
@@ -389,6 +593,7 @@ impl EventPage {
     fn data(
         &self,
         locale: Locale,
+        units: UnitsPref,
         cycle: HourCycle,
         device_zone: &str,
         event: &wire::AgendaEvent,
@@ -562,14 +767,38 @@ impl EventPage {
             .iter()
             .map(|guest| followed_row(locale, guest))
             .collect();
+        let phone = event_phone::lines(
+            event_phone::Wording {
+                locale,
+                cycle,
+                device_zone,
+                event_zone: (event.recurrence_semantics.as_deref() == Some("zoned"))
+                    .then_some(event.start_tz.as_deref())
+                    .flatten(),
+            },
+            &self.differences,
+        );
         wire::AgendaEventData {
+            title_phone_says: phone.title,
+            when_phone_says: phone.when,
+            notes_phone_says: phone.notes,
+            facts_phone_says: phone.facts,
+            guests_phone_says: phone.guests,
             followed_heading: if followed.is_empty() {
                 String::new()
             } else {
                 event_words::followed_heading(locale, followed.len() as u64)
             },
             followed_guests: followed,
-            attachments: Some(self.attachments.view(locale)),
+            attachments: Some(self.attachments.view(locale, units)),
+            links: self.linked.as_ref().map(|linked| {
+                self.links.section(
+                    locale,
+                    link_label::section_linked(locale),
+                    links::rows(locale, linked),
+                    event_words::links_empty(locale),
+                )
+            }),
             title,
             date_label: date,
             when_label: when,
@@ -618,8 +847,26 @@ impl EventPage {
                         accessibility_label: words::a11y_cancel(locale),
                         route: None,
                     },
+                    wire::AgendaAction {
+                        key: ACTION_TRASH.to_owned(),
+                        label: shared::trash_move(locale),
+                        enabled: true,
+                        destructive: true,
+                        accessibility_label: shared::trash_move(locale),
+                        route: None,
+                    },
                 ])
                 .collect(),
+            // SHARE SITS IN THE "…" MENU, not the bar of three (#1185).
+            menu: vec![wire::AgendaAction {
+                key: ACTION_SHARE.to_owned(),
+                label: share::label(locale),
+                enabled: true,
+                destructive: false,
+                accessibility_label: share::label(locale),
+                route: None,
+            }],
+            menu_label: words::menu_more(locale),
             is_past: ended(event, &detail.today, &detail.now_local),
             accessibility_label: spoken_parts.join(", "),
             call_label: if call_uri.is_empty() {
@@ -704,19 +951,11 @@ fn followed_row(locale: Locale, guest: &wire::AgendaFollowedGuest) -> wire::Agen
 }
 
 /// The gate a refused read draws.
-fn denied(locale: Locale, denial: &wire::AppQueryDenial) -> wire::Denied {
+pub(crate) fn denied(locale: Locale, denial: &wire::AppQueryDenial) -> wire::Denied {
     wire::Denied {
         title: words::denied_title(locale),
         body: words::denied_body(locale),
         receipt: denial.code.clone().unwrap_or_default(),
-    }
-}
-
-fn gone(locale: Locale) -> wire::AgendaGone {
-    wire::AgendaGone {
-        title: words::gone_title(locale),
-        body: words::gone_body(locale),
-        action_label: words::gone_action(locale),
     }
 }
 
@@ -935,8 +1174,9 @@ mod tests {
         let Some(wire::view_state::Kind::AgendaEvent(state)) = view.kind else {
             panic!("not an event page")
         };
-        let Some(wire::agenda_event_state::Content::Denied(denied)) = state.content else {
-            panic!("{:?}", state.content)
+        let Some(wire::page_state::State::Refused(denied)) = state.page.and_then(|page| page.state)
+        else {
+            panic!("the gate")
         };
         assert_eq!(denied.title, "Calendar cannot read this vault");
         assert_eq!(denied.receipt, "consent.revoked");
@@ -948,8 +1188,9 @@ mod tests {
         let Some(wire::view_state::Kind::AgendaEditor(state)) = view.kind else {
             panic!("not an editor")
         };
-        let Some(wire::agenda_editor_state::Content::Denied(denied)) = state.content else {
-            panic!("{:?}", state.content)
+        let Some(wire::page_state::State::Refused(denied)) = state.page.and_then(|page| page.state)
+        else {
+            panic!("the gate")
         };
         assert_eq!(denied.body, "Ask the owner of this vault for access.");
         assert_eq!(denied.receipt, "consent.revoked");
@@ -976,5 +1217,267 @@ mod tests {
         );
         // No calendar at all is the neutral one.
         assert_eq!(calendar_hue(None, None), "cSlate");
+    }
+}
+
+#[cfg(test)]
+mod link_tests {
+    //! The "Linked to" section (#1185): the Driver supplies a real vault; only the `links` read and
+    //! the act log are replaced.
+
+    use std::time::Duration;
+
+    use super::*;
+    use crate::field::Field;
+    use crate::testing::Driver;
+    use wire::link_event::Kind as L;
+
+    struct Flaky<'a> {
+        core: &'a centraid_core::Handle,
+        fail_links: std::cell::Cell<bool>,
+        /// The `app.action` of each act made through this ctx, in order.
+        acted: std::cell::RefCell<Vec<String>>,
+        /// The `from`/`to`/`rel` of each link or unlink act, in order.
+        inputs: std::cell::RefCell<Vec<(String, String, String)>>,
+    }
+
+    impl centraid_core::screens::ScreenCtx for Flaky<'_> {
+        fn load(&self, request: &wire::LoadRequest) -> centraid_core::Result<wire::LoadResponse> {
+            if self.fail_links.get() && request.app == "shell" && request.query == "links" {
+                Err(centraid_core::CoreError::Unavailable {
+                    reason: "test read failure".into(),
+                })
+            } else {
+                self.core.load(request)
+            }
+        }
+
+        fn act(&self, request: &wire::ActRequest) -> centraid_core::Result<wire::ActResponse> {
+            self.acted
+                .borrow_mut()
+                .push(format!("{}.{}", request.app, request.action));
+            if request.action == "link" || request.action == "unlink" {
+                let text = |key: &str| match request.input.get(key).and_then(|v| v.kind.as_ref()) {
+                    Some(wire::value::Kind::Text(text)) => text.clone(),
+                    _ => String::new(),
+                };
+                self.inputs
+                    .borrow_mut()
+                    .push((text("from"), text("to"), text("rel")));
+            }
+            self.core.act(request)
+        }
+
+        fn push(&self, _update: wire::ScreenUpdate) {}
+        fn wake_after(&self, _after: Duration) {}
+    }
+
+    fn flaky(core: &centraid_core::Handle) -> Flaky<'_> {
+        Flaky {
+            core,
+            fail_links: false.into(),
+            acted: Vec::new().into(),
+            inputs: Vec::new().into(),
+        }
+    }
+
+    /// An event on its own day; the id it was given.
+    fn make(driver: &Driver, title: &str, hour: u32) -> String {
+        let mut request: wire::ActRequest = act::calendar::Propose {
+            title: title.into(),
+            starts: format!("2099-06-15T{hour:02}:00:00"),
+            ends: Field::Is(format!("2099-06-15T{hour:02}:30:00")),
+            zone: Field::Is("Europe/London".to_owned()),
+            ..act::calendar::Propose::default()
+        }
+        .into();
+        request.invoke_key = format!("test:{}", kit_act::fresh());
+        let created = driver.act(request);
+        let output: serde_json::Value = serde_json::from_slice(&created.output).expect("output");
+        output["id"].as_str().expect("id").to_owned()
+    }
+
+    fn opened<'a>(core: &'a Flaky, id: &str) -> (Box<dyn Screen>, Ctx<'a>) {
+        let env: &'static crate::screen::Environment =
+            Box::leak(Box::new(crate::screen::Environment::default()));
+        let ctx = Ctx::new(core, env);
+        let mut screen = build(&routes::event(id, id, None, "2099-06-15")).expect("event page");
+        screen.update(
+            wire::ScreenEvent {
+                kind: Some(E::Appeared(wire::Appeared {})),
+            },
+            &ctx,
+        );
+        (screen, ctx)
+    }
+
+    fn link(screen: &mut Box<dyn Screen>, ctx: &Ctx, kind: L) {
+        screen.update(
+            wire::ScreenEvent {
+                kind: Some(E::AgendaEvent(wire::AgendaEventEvent {
+                    kind: Some(K::Link(wire::LinkEvent { kind: Some(kind) })),
+                })),
+            },
+            ctx,
+        );
+    }
+
+    fn state(screen: &dyn Screen, ctx: &Ctx) -> wire::AgendaEventState {
+        let Some(wire::view_state::Kind::AgendaEvent(state)) = screen.view(ctx).kind else {
+            panic!("event state")
+        };
+        state
+    }
+
+    fn data(screen: &dyn Screen, ctx: &Ctx) -> wire::AgendaEventData {
+        let Some(wire::agenda_event_state::Content::Data(data)) = state(screen, ctx).content else {
+            panic!("event data")
+        };
+        *data
+    }
+
+    fn rows(screen: &dyn Screen, ctx: &Ctx) -> Vec<(String, String)> {
+        data(screen, ctx)
+            .links
+            .expect("the Linked to section")
+            .rows
+            .into_iter()
+            .map(|row| (row.title, row.meta))
+            .collect()
+    }
+
+    fn add(screen: &mut Box<dyn Screen>, ctx: &Ctx, kind: &str, id: &str) {
+        for step in [
+            L::Add(wire::link_event::AddTapped { key: "link".into() }),
+            L::Pick(wire::link_event::Picked { id: kind.into() }),
+            L::Pick(wire::link_event::Picked { id: id.into() }),
+        ] {
+            link(screen, ctx, step);
+        }
+    }
+
+    #[test]
+    fn the_page_lists_what_the_event_is_linked_to_and_a_pick_links_through_calendar_link() {
+        let driver = Driver::with_runtime(crate::agenda::runtime());
+        let other = make(&driver, "Lunch", 12);
+        let id = make(&driver, "Review", 9);
+        let core = flaky(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        assert!(rows(&*screen, &ctx).is_empty());
+        let section = data(&*screen, &ctx).links.expect("section");
+        assert_eq!(section.title, "Linked to");
+        assert_eq!(section.empty, "Nothing linked yet");
+        assert_eq!(section.adds.len(), 1, "one Add link row for many kinds");
+        link(
+            &mut screen,
+            &ctx,
+            L::Add(wire::link_event::AddTapped { key: "link".into() }),
+        );
+        let picker = state(&*screen, &ctx).link_picker.expect("kind chooser");
+        assert!(picker.open);
+        assert!(
+            picker.candidates.iter().any(|row| row.id == "event"),
+            "an event may link to another event"
+        );
+        link(
+            &mut screen,
+            &ctx,
+            L::Pick(wire::link_event::Picked { id: "event".into() }),
+        );
+        let picker = state(&*screen, &ctx).link_picker.expect("events");
+        assert!(picker.candidates.iter().any(|row| row.id == other));
+        assert!(
+            picker.candidates.iter().all(|row| row.id != id),
+            "an event is never offered itself"
+        );
+        link(
+            &mut screen,
+            &ctx,
+            L::Pick(wire::link_event::Picked { id: other.clone() }),
+        );
+        assert_eq!(core.acted.borrow().as_slice(), ["calendar.link"]);
+        assert_eq!(
+            core.inputs.borrow().as_slice(),
+            [(id.clone(), other.clone(), "links".to_owned())]
+        );
+        let view = state(&*screen, &ctx);
+        assert!(view.link_picker.is_none_or(|picker| !picker.open));
+        let status = view.status.expect("status");
+        assert_eq!(status.sentence, "Linked");
+        assert_eq!(status.action_label, "Undo");
+        assert_eq!(
+            rows(&*screen, &ctx),
+            [("Lunch".to_owned(), "Event".to_owned())]
+        );
+        // The link has no direction: the other event's page lists this one.
+        let there = flaky(&driver.handle);
+        let (other_screen, other_ctx) = opened(&there, &other);
+        assert_eq!(rows(&*other_screen, &other_ctx).len(), 1);
+    }
+
+    #[test]
+    fn a_tap_on_remove_unlinks_and_undo_links_again() {
+        let driver = Driver::with_runtime(crate::agenda::runtime());
+        let other = make(&driver, "Lunch", 12);
+        let id = make(&driver, "Review", 9);
+        let core = flaky(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        add(&mut screen, &ctx, "event", &other);
+        assert_eq!(rows(&*screen, &ctx).len(), 1);
+        link(
+            &mut screen,
+            &ctx,
+            L::Remove(wire::link_event::RemoveTapped { id: other.clone() }),
+        );
+        assert_eq!(
+            core.acted.borrow().as_slice(),
+            ["calendar.link", "calendar.unlink"]
+        );
+        assert_eq!(
+            core.inputs.borrow().last(),
+            Some(&(id.clone(), other.clone(), "links".to_owned()))
+        );
+        assert!(rows(&*screen, &ctx).is_empty());
+        let status = state(&*screen, &ctx).status.expect("status");
+        assert_eq!(status.sentence, "Link removed");
+        assert_eq!(status.action_label, "Undo");
+        screen.update(
+            wire::ScreenEvent {
+                kind: Some(E::StatusActed(wire::StatusActed {})),
+            },
+            &ctx,
+        );
+        assert_eq!(rows(&*screen, &ctx).len(), 1);
+    }
+
+    #[test]
+    fn links_that_could_not_be_read_are_said_not_drawn_as_none() {
+        let driver = Driver::with_runtime(crate::agenda::runtime());
+        let id = make(&driver, "Review", 9);
+        let core = flaky(&driver.handle);
+        core.fail_links.set(true);
+        let (mut screen, ctx) = opened(&core, &id);
+        let view = state(&*screen, &ctx);
+        let Some(wire::agenda_event_state::Content::Data(page)) = view.content else {
+            panic!("event data")
+        };
+        assert!(page.links.is_none(), "no section for what was not read");
+        assert_eq!(
+            view.status.expect("status").sentence,
+            "Couldn’t read what this event is linked to."
+        );
+        // Read again, the section comes back.
+        core.fail_links.set(false);
+        screen.update(
+            wire::ScreenEvent {
+                kind: Some(E::AgendaEvent(wire::AgendaEventEvent {
+                    kind: Some(K::Refreshed(wire::agenda_event_event::Refreshed {})),
+                })),
+            },
+            &ctx,
+        );
+        assert!(rows(&*screen, &ctx).is_empty());
+        assert!(state(&*screen, &ctx).status.is_none());
+        assert!(core.acted.borrow().is_empty());
     }
 }

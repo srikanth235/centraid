@@ -172,15 +172,25 @@ CREATE INDEX derivative_by_out ON derivative(out) WHERE out IS NOT NULL;
 
 CREATE TABLE origin (
   id         TEXT PRIMARY KEY,
-  system     TEXT NOT NULL CHECK (system IN ('contacts','calendar','files','health','statement')),
+  -- Where a row came from: the five stores the engine follows, and the eight one-shot arrivals
+  -- (camera_roll, picker, vcard, markdown, csv, scan, upload, phone_reminders) that name a file or a
+  -- device once (crates/vault/src/commands/arrival.rs). A typed row has neither.
+  system     TEXT NOT NULL CHECK (system IN ('contacts','calendar','files','health','statement',
+    'camera_roll','picker','vcard','markdown','csv','scan','upload','phone_reminders')),
   ref        TEXT NOT NULL CHECK (length(trim(ref)) > 0),
   label      TEXT NOT NULL CHECK (length(trim(label)) > 0),
   device_id  TEXT,
   fills      TEXT REFERENCES entity(id),
   config     TEXT CHECK (config IS NULL OR json_valid(config)),
   created_at TEXT NOT NULL,
+  -- Stop following RETIRES a store's origin instead of deleting it: it keeps its `fills` (the
+  -- calendar, folder or project it filled) and its sources, so following the same `ref` again
+  -- finds them and neither makes the home twice nor adds each record twice. A retired origin is
+  -- followed by nobody: every read of what a phone follows leaves it out.
+  retired_at TEXT,
   UNIQUE (system, ref),
   UNIQUE (id, system),
+  CHECK (retired_at IS NULL OR system IN ('contacts','calendar','files','health','phone_reminders')),
   -- A statement is an account's, not a phone's store (#1146).
   CHECK (system <> 'statement' OR device_id IS NULL)
 ) STRICT;
@@ -205,7 +215,9 @@ CREATE TABLE source (
   CHECK ((entity_id IS NULL) = (entity_kind IS NULL)),
   CHECK (system <> 'statement' OR device_id IS NULL),
   CHECK (entity_kind IS NULL OR system || '/' || entity_kind IN
-    ('contacts/person','calendar/event','files/document','health/activity','statement/txn'))
+    ('contacts/person','calendar/event','files/document','health/activity','statement/txn',
+     'camera_roll/photo','picker/photo','vcard/person','markdown/note','csv/locker_item',
+     'scan/document','upload/document','phone_reminders/task'))
 ) STRICT;
 CREATE UNIQUE INDEX source_key    ON source(origin_id, external_id, ifnull(device_id, ''));
 CREATE UNIQUE INDEX source_entity ON source(entity_id) WHERE entity_id IS NOT NULL;
@@ -217,20 +229,38 @@ CREATE TRIGGER source_tombstone_is_final BEFORE UPDATE OF entity_id ON source
 -- History, and the keys of acts already run.
 -- ---------------------------------------------------------------------------------------------
 
+-- Every record's history: one row per commit that changed an entity, holding the entity's state
+-- as it was BEFORE that commit (so a creation writes none, and the current state is the rows
+-- themselves). `state` is the canonical JSON of the entity's title, its kind row and the child
+-- rows that hang off it, minus the columns `history::OMITTED` says are not kept (sealed cells
+-- above all). The entity's content is the exception, kept in a cell of its own so a blob is a real
+-- foreign key the garbage collector sees: a note's words in `body`, a document's bytes in `blob`
+-- and `media_type`. `cause` is the command that made the change (a `follow.<system>` pass is a
+-- phone store's, anything else the member's). `history::settle` writes these at commit.
 CREATE TABLE revision (
   entity_id  TEXT NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
   seq        INTEGER NOT NULL CHECK (seq >= 1),
   at         TEXT NOT NULL,
+  cause      TEXT NOT NULL DEFAULT '',
+  state      TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(state)),
   body       TEXT,
   blob       TEXT REFERENCES blob(hash),
   media_type TEXT,
-  CHECK ((body IS NULL) <> (blob IS NULL)),
+  -- Whether a quiet save (an editor's autosave) made this version, and when its session last
+  -- folded another in (NULL: never; the session is only its first commit, at `at`). A quiet save
+  -- of the same command by the same actor within ten idle minutes, and within an hour of `at`,
+  -- writes no version: this one already holds the state before the session began.
+  autosave   INTEGER NOT NULL DEFAULT 0 CHECK (autosave IN (0, 1)),
+  touched_at TEXT,
+  CHECK (body IS NULL OR blob IS NULL),
   CHECK ((blob IS NULL) = (media_type IS NULL)),
   PRIMARY KEY (entity_id, seq)
 ) STRICT, WITHOUT ROWID;
 -- Dropping a blob's last holder looks for the revisions that name it; most revisions are text.
 CREATE INDEX revision_by_blob ON revision(blob) WHERE blob IS NOT NULL;
-CREATE TRIGGER revision_is_history BEFORE UPDATE ON revision
+-- Only `touched_at` moves, when a quiet save folds into the version's session; what it holds never.
+CREATE TRIGGER revision_is_history
+  BEFORE UPDATE OF entity_id, seq, at, cause, state, body, blob, media_type, autosave ON revision
   BEGIN SELECT RAISE(ABORT, 'a revision is history'); END;
 -- Nothing deletes a revision by hand: it goes only with its entity (the foreign key's cascade runs
 -- after the entity row is gone, so it finds no entity and is allowed).
@@ -263,6 +293,17 @@ CREATE VIRTUAL TABLE search USING fts5(
   title, body, content = '', contentless_delete = 1, prefix = '2 3',
   tokenize = "unicode61 remove_diacritics 2");
 CREATE VIRTUAL TABLE search_vocab USING fts5vocab(search, row);
+
+-- What a live item said in an EARLIER VERSION (#1185): one row per kept `revision` whose typed
+-- text is not empty, keyed `entity.n << 24 | revision.seq` so the row names its entity and its
+-- version and a purge or a trash finds every row of an entity by one rowid range. It is a table
+-- of its own so a search of what an item says now never reads these rows, and the ranking of the
+-- live index is not changed by them. A trashed entity has no row here, and a Locker item never
+-- has one (its history is sealed). A reader asks it only for an item that does not match now.
+CREATE VIRTUAL TABLE search_past USING fts5(
+  title, body, content = '', contentless_delete = 1, prefix = '2 3',
+  tokenize = "unicode61 remove_diacritics 2");
+CREATE VIRTUAL TABLE search_past_vocab USING fts5vocab(search_past, row);
 
 -- The words the index holds, in the order they first arrived: a list a correction reads whole
 -- and keeps in memory, where `search_vocab` can only be scanned a prefix at a time. The writer
@@ -303,9 +344,7 @@ CREATE TABLE person (
                  OR (length(birthday) = 10 AND date(birthday) = birthday)),
   avatar       TEXT REFERENCES blob(hash),
   cadence_days INTEGER CHECK (cadence_days IS NULL OR cadence_days > 0),
-  -- The member's switch for this person's birthday reminder: the birthday is this row's column,
-  -- not an event, so it has no `reminders` of its own.
-  birthday_reminder INTEGER NOT NULL DEFAULT 1 CHECK (birthday_reminder IN (0,1)),
+  -- A birthday is this row's column, not an event: it is shown on its day and does not notify.
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX person_by_avatar ON person(avatar) WHERE avatar IS NOT NULL;
@@ -721,8 +760,11 @@ CREATE TABLE locker_item_field (
   -- while the version is unchanged, and its own UPDATE moves it). Nothing compares it; it is not an
   -- entity version (#1146, R-1146-0-2).
   row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1), key_id TEXT,
-  CHECK (kind = 'sealed' OR value_sealed IS NULL),
-  CHECK (kind <> 'sealed' OR value_text IS NULL)
+  -- A one-time-code seed is a secret like a `sealed` value: `otp` keeps its kind so the page shows
+  -- a rolling code, but its value lives only as `lk1:` ciphertext, never in the plain column.
+  CHECK (kind IN ('sealed', 'otp') OR value_sealed IS NULL),
+  CHECK (kind NOT IN ('sealed', 'otp') OR value_text IS NULL),
+  CHECK (kind <> 'otp' OR value_sealed IS NOT NULL)
 ) STRICT;
 CREATE INDEX locker_item_field_item_idx ON locker_item_field(item_id, section, position);
 CREATE TRIGGER locker_item_field_touch_updated_at
@@ -788,7 +830,6 @@ INSERT INTO edge_shape (rel, from_kind, to_kind) VALUES
   ('about', 'note', '*'),
   ('about', 'task', '*'),
   ('about', 'event', '*'),
-  ('links', 'note', '*'),
   ('attached', '*', 'document'),
   ('attached', '*', 'photo'),
   ('attendee', 'event', 'person'),
@@ -800,7 +841,119 @@ INSERT INTO edge_shape (rel, from_kind, to_kind) VALUES
   ('about', 'locker_item', 'account'),
   ('about', 'locker_item', 'place'),
   ('about', 'locker_item', 'person'),
-  ('with', 'locker_item', 'person');
+  ('with', 'locker_item', 'person'),
+  -- The general link (#1185): any item to any item, set by hand. A Locker item may start one and
+  -- is never the end of one (owner ruling D11), so it is a from-kind and not a to-kind.
+  ('links', 'person', 'person'),
+  ('links', 'person', 'place'),
+  ('links', 'person', 'event'),
+  ('links', 'person', 'task'),
+  ('links', 'person', 'activity'),
+  ('links', 'person', 'note'),
+  ('links', 'person', 'document'),
+  ('links', 'person', 'photo'),
+  ('links', 'person', 'account'),
+  ('links', 'person', 'txn'),
+  ('links', 'place', 'person'),
+  ('links', 'place', 'place'),
+  ('links', 'place', 'event'),
+  ('links', 'place', 'task'),
+  ('links', 'place', 'activity'),
+  ('links', 'place', 'note'),
+  ('links', 'place', 'document'),
+  ('links', 'place', 'photo'),
+  ('links', 'place', 'account'),
+  ('links', 'place', 'txn'),
+  ('links', 'event', 'person'),
+  ('links', 'event', 'place'),
+  ('links', 'event', 'event'),
+  ('links', 'event', 'task'),
+  ('links', 'event', 'activity'),
+  ('links', 'event', 'note'),
+  ('links', 'event', 'document'),
+  ('links', 'event', 'photo'),
+  ('links', 'event', 'account'),
+  ('links', 'event', 'txn'),
+  ('links', 'task', 'person'),
+  ('links', 'task', 'place'),
+  ('links', 'task', 'event'),
+  ('links', 'task', 'task'),
+  ('links', 'task', 'activity'),
+  ('links', 'task', 'note'),
+  ('links', 'task', 'document'),
+  ('links', 'task', 'photo'),
+  ('links', 'task', 'account'),
+  ('links', 'task', 'txn'),
+  ('links', 'activity', 'person'),
+  ('links', 'activity', 'place'),
+  ('links', 'activity', 'event'),
+  ('links', 'activity', 'task'),
+  ('links', 'activity', 'activity'),
+  ('links', 'activity', 'note'),
+  ('links', 'activity', 'document'),
+  ('links', 'activity', 'photo'),
+  ('links', 'activity', 'account'),
+  ('links', 'activity', 'txn'),
+  ('links', 'note', 'person'),
+  ('links', 'note', 'place'),
+  ('links', 'note', 'event'),
+  ('links', 'note', 'task'),
+  ('links', 'note', 'activity'),
+  ('links', 'note', 'note'),
+  ('links', 'note', 'document'),
+  ('links', 'note', 'photo'),
+  ('links', 'note', 'account'),
+  ('links', 'note', 'txn'),
+  ('links', 'document', 'person'),
+  ('links', 'document', 'place'),
+  ('links', 'document', 'event'),
+  ('links', 'document', 'task'),
+  ('links', 'document', 'activity'),
+  ('links', 'document', 'note'),
+  ('links', 'document', 'document'),
+  ('links', 'document', 'photo'),
+  ('links', 'document', 'account'),
+  ('links', 'document', 'txn'),
+  ('links', 'photo', 'person'),
+  ('links', 'photo', 'place'),
+  ('links', 'photo', 'event'),
+  ('links', 'photo', 'task'),
+  ('links', 'photo', 'activity'),
+  ('links', 'photo', 'note'),
+  ('links', 'photo', 'document'),
+  ('links', 'photo', 'photo'),
+  ('links', 'photo', 'account'),
+  ('links', 'photo', 'txn'),
+  ('links', 'account', 'person'),
+  ('links', 'account', 'place'),
+  ('links', 'account', 'event'),
+  ('links', 'account', 'task'),
+  ('links', 'account', 'activity'),
+  ('links', 'account', 'note'),
+  ('links', 'account', 'document'),
+  ('links', 'account', 'photo'),
+  ('links', 'account', 'account'),
+  ('links', 'account', 'txn'),
+  ('links', 'txn', 'person'),
+  ('links', 'txn', 'place'),
+  ('links', 'txn', 'event'),
+  ('links', 'txn', 'task'),
+  ('links', 'txn', 'activity'),
+  ('links', 'txn', 'note'),
+  ('links', 'txn', 'document'),
+  ('links', 'txn', 'photo'),
+  ('links', 'txn', 'account'),
+  ('links', 'txn', 'txn'),
+  ('links', 'locker_item', 'person'),
+  ('links', 'locker_item', 'place'),
+  ('links', 'locker_item', 'event'),
+  ('links', 'locker_item', 'task'),
+  ('links', 'locker_item', 'activity'),
+  ('links', 'locker_item', 'note'),
+  ('links', 'locker_item', 'document'),
+  ('links', 'locker_item', 'photo'),
+  ('links', 'locker_item', 'account'),
+  ('links', 'locker_item', 'txn');
 
 INSERT INTO entity (id, kind, title, created_at, updated_at) VALUES
   ('flag:starred', 'flag', 'Starred', '2026-10-21T00:00:00.000Z', '2026-10-21T00:00:00.000Z'),

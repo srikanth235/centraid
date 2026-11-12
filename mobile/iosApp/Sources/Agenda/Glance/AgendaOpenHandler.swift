@@ -14,6 +14,7 @@ extension ShellModel {
     /// `reportWhenReady` queues the fact until the store has started, which a tap
     /// that launched the app needs.
     func handleOpenURL(_ url: URL) {
+        if handleHealthOpenURL(url) { return }
         guard let key = AgendaGlanceSnapshot.openKey(from: url) else { return }
         var open = Centraid_Core_V1_AgendaIntentOpen()
         open.key = key

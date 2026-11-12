@@ -143,10 +143,9 @@ impl Entry {
         SEALED_CELLS
             .iter()
             .any(|cell| !self.column(cell).is_empty())
-            || self
-                .fields
-                .iter()
-                .any(|field| field.kind == "sealed" && !field.value.is_empty())
+            || self.fields.iter().any(|field| {
+                matches!(field.kind.as_str(), "sealed" | "otp") && !field.value.is_empty()
+            })
     }
 }
 
@@ -281,6 +280,9 @@ fn push_row(out: &mut String, cells: impl IntoIterator<Item = String>) {
     out.push_str("\r\n");
 }
 
+// Deliberately NOT guarded against spreadsheet formulas: this CSV is for a password manager's
+// import, sits behind its own confirm and owner check, and a leading apostrophe would corrupt
+// real secrets.
 fn quoted(cell: &str) -> String {
     if cell.contains([',', '"', '\n', '\r']) {
         format!("\"{}\"", cell.replace('"', "\"\""))
@@ -478,16 +480,21 @@ fn read_json(text: &str) -> Result<ImportFile, ReadRefusal> {
                             .filter_map(|field| {
                                 let label = text_of(&field["label"]);
                                 let kind = text_of(&field["kind"]);
-                                (!label.is_empty()).then(|| EntryField {
-                                    section: text_of(&field["section"]),
-                                    label,
-                                    kind: if FIELD_KINDS.contains(&kind.as_str()) {
-                                        kind
-                                    } else {
-                                        "text".to_owned()
+                                let value = field["value"].as_str().unwrap_or_default().to_owned();
+                                // A one-time-code field with no seed has nothing to keep: the
+                                // vault holds an `otp` field only with a sealed seed.
+                                (!(label.is_empty() || kind == "otp" && value.is_empty())).then(
+                                    || EntryField {
+                                        section: text_of(&field["section"]),
+                                        label,
+                                        kind: if FIELD_KINDS.contains(&kind.as_str()) {
+                                            kind
+                                        } else {
+                                            "text".to_owned()
+                                        },
+                                        value,
                                     },
-                                    value: field["value"].as_str().unwrap_or_default().to_owned(),
-                                })
+                                )
                             })
                             .collect()
                     })

@@ -316,6 +316,21 @@ pub fn trashed_statement() -> PageQuery {
     )
 }
 
+/// `money.trash` — the lines in the trash with the name each has, most recently trashed first
+/// (`crate::trash`).
+pub fn trashed_titles_statement() -> PageQuery {
+    query(
+        "money.trash",
+        "id, title, deleted_at, purge_at",
+        "entity",
+        PageOrder::desc("deleted_at", "id"),
+    )
+    .filter(
+        "kind = ? AND deleted_at IS NOT NULL",
+        vec![PageBindValue::from("txn")],
+    )
+}
+
 /// `money.accounts` — Money's accounts.
 pub fn accounts_statement() -> PageQuery {
     query(
@@ -607,6 +622,17 @@ fn stated_text(stated: &serde_json::Value, path: &[&str]) -> Option<String> {
 /// type and file format, from the statement the line came in) and the member's
 /// name for it when it differs. Takes lines in the trash out.
 pub fn decorate(door: &dyn PageDoor, rows: &mut Vec<TxnRow>) -> KitResult<()> {
+    fill_words(door, rows, false).map(|_| ())
+}
+
+/// [`decorate`], answering which of the lines are in the trash. They are taken out of `rows`
+/// unless `keep_trashed`: an import plan keeps them, because a line the member trashed still
+/// holds its place in the account and a re-import must not bring it back.
+fn fill_words(
+    door: &dyn PageDoor,
+    rows: &mut Vec<TxnRow>,
+    keep_trashed: bool,
+) -> KitResult<BTreeSet<String>> {
     let mut entities: BTreeMap<String, Row> = BTreeMap::new();
     let mut statements: BTreeMap<String, Row> = BTreeMap::new();
     let ids: Vec<String> = rows.iter().map(|row| row.txn_id.clone()).collect();
@@ -622,11 +648,14 @@ pub fn decorate(door: &dyn PageDoor, rows: &mut Vec<TxnRow>) -> KitResult<()> {
             }
         }
     }
-    rows.retain(|row| {
-        entities
-            .get(&row.txn_id)
-            .is_none_or(|entity| matches!(entity.get("deleted_at"), None | Some(Cell::Null)))
-    });
+    let gone: BTreeSet<String> = entities
+        .iter()
+        .filter(|(_, entity)| !matches!(entity.get("deleted_at"), None | Some(Cell::Null)))
+        .map(|(id, _)| id.clone())
+        .collect();
+    if !keep_trashed {
+        rows.retain(|row| !gone.contains(&row.txn_id));
+    }
     for txn in rows.iter_mut() {
         let title = entities
             .get(&txn.txn_id)
@@ -648,7 +677,7 @@ pub fn decorate(door: &dyn PageDoor, rows: &mut Vec<TxnRow>) -> KitResult<()> {
         txn.bank_type = stated_text(&stated, &["line", "bank_type"]);
         txn.imported_from = stated_text(&stated, &["line", "imported_from"]);
     }
-    Ok(())
+    Ok(gone)
 }
 
 /// A month's rows, decorated; `truncated` when the month held more than
@@ -985,8 +1014,16 @@ pub fn load_categories(door: &dyn PageDoor) -> KitResult<Vec<CategoryRow>> {
 }
 
 /// Live transfers, at most [`LINK_ROWS`].
+///
+/// A transfer with a half in the trash is not live: the half that is left counts as the ordinary
+/// line it is, and the link is whole again when the other half is restored (nothing is stored).
 pub fn load_transfer_links(door: &dyn PageDoor) -> KitResult<Bounded<Vec<TransferLink>>> {
     let window = read_window(door, &transfer_links_statement(), LINK_ROWS)?;
+    let gone = if window.rows.is_empty() {
+        BTreeSet::new()
+    } else {
+        trashed(door)?
+    };
     Ok(Bounded {
         value: window
             .rows
@@ -995,6 +1032,7 @@ pub fn load_transfer_links(door: &dyn PageDoor) -> KitResult<Bounded<Vec<Transfe
                 from_txn: text_of(row, "id").unwrap_or_default(),
                 to_txn: text_of(row, "transfer_id").unwrap_or_default(),
             })
+            .filter(|link| !gone.contains(&link.from_txn) && !gone.contains(&link.to_txn))
             .collect(),
         truncated: window.filled,
     })
@@ -1016,11 +1054,13 @@ pub fn load_existing(
         LARGE,
     )?;
     let mut lines: Vec<TxnRow> = rows.iter().map(txn_of).collect();
-    decorate(door, &mut lines)?;
+    // A trashed line stays in the plan's view of the account: it still claims its `external_id`.
+    let trashed = fill_words(door, &mut lines, true)?;
     Ok(lines
         .into_iter()
         .map(|line| ExistingTxn {
             void: line.status == "void",
+            trashed: trashed.contains(&line.txn_id),
             txn_id: line.txn_id,
             external_id: line.external_id,
             posted_on: line.posted_on,
@@ -1101,6 +1141,8 @@ pub const TXN_KIND: &str = "txn";
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SearchData {
     pub rows: Vec<TxnRow>,
+    /// The lines among `rows` whose words matched only in an earlier version (#1185).
+    pub earlier: std::collections::BTreeSet<String>,
 }
 
 /// The lines among a set of ids.
@@ -1130,7 +1172,10 @@ pub fn load_search(door: &dyn PageDoor, ids: &[String]) -> KitResult<SearchData>
     }
     let mut rows: Vec<TxnRow> = ids.iter().filter_map(|id| found.remove(id)).collect();
     decorate(door, &mut rows)?;
-    Ok(SearchData { rows })
+    Ok(SearchData {
+        rows,
+        earlier: std::collections::BTreeSet::new(),
+    })
 }
 
 /// Search the ledger from a term: the full-text index over every transaction
@@ -1179,9 +1224,15 @@ pub fn load_search_term(
             ));
         }
     };
+    let earlier: std::collections::BTreeSet<String> = page
+        .rows
+        .iter()
+        .filter(|target| target.in_earlier_version)
+        .map(|target| target.id.clone())
+        .collect();
     let ids: Vec<String> = page.rows.into_iter().map(|target| target.id).collect();
     match load_search(door, &ids) {
-        Ok(data) => Ok((data, None)),
+        Ok(data) => Ok((SearchData { earlier, ..data }, None)),
         Err(KitError::Door(message)) => Ok((
             SearchData::default(),
             Some(Denial {

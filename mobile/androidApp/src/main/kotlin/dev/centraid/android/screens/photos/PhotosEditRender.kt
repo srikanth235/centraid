@@ -12,16 +12,17 @@ import centraid.core.v1.EffectResult
 import centraid.core.v1.PhotosEditCrop
 import centraid.core.v1.PhotosEditPlan
 import centraid.core.v1.RenderEdit
-import dev.centraid.core.CentraidCore
-import dev.centraid.android.session.Stage
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import dev.centraid.android.kit.EffectReason
 import dev.centraid.android.screens.copyLibraryOriginal
+import dev.centraid.android.session.Stage
+import dev.centraid.core.CentraidCore
 import java.io.File
 import java.util.UUID
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * THE PIXEL HALF OF THE EDITOR (#1135): decode, draw, encode. The platform's
@@ -55,7 +56,7 @@ internal object PhotosEditRender {
             // An original the photo library holds is copied out for the render.
             val copied = if (effect.source_path.isEmpty() && effect.os_ref.isNotEmpty()) copyLibraryOriginal(context, effect.os_ref) else null
             val source = if (copied != null) effect.copy(source_path = copied) else effect
-            val made = render(cacheDir, source) ?: return@withContext failed("the edit could not be drawn")
+            val made = render(cacheDir, source) ?: return@withContext failed(EffectReason.FAILED)
             try {
                 val size = made.file.length()
                 val staged = made.file.inputStream().use { source ->
@@ -110,11 +111,10 @@ internal object PhotosEditRender {
             } else {
                 Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true)
             }
-            val crop = clamp(plan.crop ?: FULL_CROP)
-            val cropped = if (crop.w >= 1.0 && crop.h >= 1.0) {
+            val (x, y, w, h) = framePixels(plan.crop, turned.width, turned.height)
+            val cropped = if (x == 0 && y == 0 && w == turned.width && h == turned.height) {
                 turned
             } else {
-                val (x, y, w, h) = cropPixels(crop, turned.width, turned.height)
                 Bitmap.createBitmap(turned, x, y, w, h)
             }
             val file = File(cacheDir, "edit-" + UUID.randomUUID() + ".jpg")
@@ -126,6 +126,14 @@ internal object PhotosEditRender {
             null
         }
     }
+
+    /**
+     * WHERE THE CROP LANDS in a rotated frame of [width] x [height]: Rust's `clamp_crop` then
+     * `crop_pixels`, as `[x, y, w, h]`. Pure, so `PhotosEditGeometryTest` holds it to
+     * `contracts/photos/editor-geometry.json`.
+     */
+    internal fun framePixels(crop: PhotosEditCrop?, width: Int, height: Int): List<Int> =
+        cropPixels(clamp(crop ?: FULL_CROP), width, height)
 
     /** Rust's clamp: a side below a tenth grows to it, and the rectangle stays inside the frame. */
     private fun clamp(rect: PhotosEditCrop): PhotosEditCrop {

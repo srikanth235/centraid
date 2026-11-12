@@ -21,9 +21,10 @@ fn state(d: &Driver, instance: u64) -> &wire::PhotosPlacesState {
 }
 
 fn data(d: &Driver, instance: u64) -> &wire::PhotosPlacesData {
-    match &state(d, instance).content {
+    let state = state(d, instance);
+    match &state.content {
         Some(wire::photos_places_state::Content::Data(data)) => data,
-        other => panic!("no data: {other:?}"),
+        None => panic!("no data: {:?}", state.page),
     }
 }
 
@@ -188,7 +189,54 @@ fn naming_a_place_is_the_vaults_rename_and_a_blank_name_is_not_sent() {
         .clone();
     assert_eq!(row.title, "The cabin");
     assert_eq!(row.current_name, "The cabin");
-    assert!(state(&d, places).status.is_none());
+    let status = state(&d, places).status.clone().expect("a line");
+    assert_eq!(
+        (status.sentence.as_str(), status.action_label.as_str()),
+        ("Place named", "Undo")
+    );
+}
+
+#[test]
+fn naming_a_place_that_changed_elsewhere_is_refused_and_the_typed_name_is_kept() {
+    let mut d = driver();
+    let places = d.push(photos::TAB, photos::routes::places());
+    let id = data(&d, places).places[0].place_id.clone();
+    send(
+        &mut d,
+        places,
+        ev::Kind::NameRequested(ev::NameRequested {
+            place_id: id.clone(),
+        }),
+    );
+    arrange(
+        &d,
+        centraid_screens::catalog::act::photos::NamePlace {
+            place_id: id.clone(),
+            title: "Theirs".to_owned(),
+            expected_rev: None,
+        },
+    );
+    send(
+        &mut d,
+        places,
+        ev::Kind::Renamed(ev::Renamed {
+            place_id: id.clone(),
+            name: "Mine".to_owned(),
+        }),
+    );
+    let row = data(&d, places)
+        .places
+        .iter()
+        .find(|r| r.place_id == id)
+        .expect("still listed")
+        .clone();
+    assert_eq!(row.title, "Theirs");
+    let status = state(&d, places).status.clone().expect("a line");
+    assert_eq!(
+        status.sentence,
+        "This place changed somewhere else. Your text is in Earlier versions."
+    );
+    assert!(status.refused);
 }
 
 #[test]

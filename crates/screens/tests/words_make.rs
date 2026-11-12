@@ -53,6 +53,15 @@ fn save_a_copy_hands_the_words_as_one_line_to_the_share_sheet() {
     let mut phone = shown();
     let line: Vec<String> = phone.make().words.iter().map(|w| w.word.clone()).collect();
     phone.send_make(K::SaveCopy(wire::WordsSaveCopy {}));
+    // The words leave the phone in the clear: the owner check comes first.
+    assert!(matches!(
+        phone.pending().as_slice(),
+        [wire::effect::Kind::OwnerCheck(c)] if c.ask
+    ));
+    phone
+        .driver
+        .answer_effect(owner_checked(wire::owner_checked::Outcome::Succeeded));
+    phone.serve();
     let shared = phone.pending();
     let [wire::effect::Kind::Share(share)] = shared.as_slice() else {
         panic!("save a copy shares: {shared:?}")
@@ -385,4 +394,48 @@ fn an_entry_kept_for_a_vault_that_was_never_made_is_dropped_when_the_member_walk
             .any(|key| key.starts_with(secrets::LOCAL_OWN_WORDS_PREFIX))
     );
     assert!(!phone.shell.device.contains_key(secrets::PENDING_FILINGS));
+}
+
+#[test]
+fn a_copy_that_is_not_confirmed_shares_nothing_and_no_passcode_warns() {
+    use wire::owner_checked::Outcome as C;
+    let mut phone = shown();
+    for outcome in [C::Cancelled, C::Failed] {
+        phone.send_make(K::SaveCopy(wire::WordsSaveCopy {}));
+        phone.driver.answer_effect(owner_checked(outcome));
+        phone.serve();
+        assert!(phone.pending().is_empty());
+    }
+    assert!(!phone.make().notice.is_empty(), "a refusal says so");
+    phone.send_make(K::SaveCopy(wire::WordsSaveCopy {}));
+    phone.driver.answer_effect(owner_checked(C::Unavailable));
+    phone.serve();
+    assert!(matches!(
+        phone.pending().as_slice(),
+        [wire::effect::Kind::Share(_)]
+    ));
+    assert!(phone.make().notice.contains("no passcode"));
+}
+
+#[test]
+fn a_phone_with_no_passcode_still_makes_the_key_and_saving_a_copy_goes_ahead_with_a_warning() {
+    use wire::owner_checked::Outcome as C;
+    // Making the key asks nothing of the phone: the words show whatever its lock is.
+    let mut phone = shown();
+    let state = phone.make();
+    assert_eq!(state.phase, Phase::Show as i32);
+    assert_eq!(state.words.len(), 24);
+    // Saving a copy on a phone with no passcode is not refused: it shares the words and warns.
+    phone.send_make(K::SaveCopy(wire::WordsSaveCopy {}));
+    phone.driver.answer_effect(owner_checked(C::Unavailable));
+    phone.serve();
+    let pending = phone.pending();
+    let [wire::effect::Kind::Share(share)] = pending.as_slice() else {
+        panic!("save a copy shares: {pending:?}");
+    };
+    assert_eq!(share.text.split(' ').count(), 24);
+    let state = phone.make();
+    assert_eq!(state.phase, Phase::Show as i32, "the words stay up");
+    assert_eq!(state.words.len(), 24);
+    assert!(state.notice.contains("no passcode"), "{}", state.notice);
 }

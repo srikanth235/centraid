@@ -102,7 +102,8 @@ fn the_patched_world_is_the_vaults_after_every_mapped_write() {
         );
     });
     let pairs: usize = VERBS.iter().map(|spec| spec.commands.len()).sum();
-    // every pair but `restore album`, which no selector can reach, and Health's, whose world is
+    // every pair but `restore album` and `restore transaction`, which no selector can reach (a
+    // trashed line is in no read the model has), and Health's, whose world is
     // `health_kind.rs`'s (`verb_coverage.rs`, `UNDRIVEN`)
     let health: usize = VERBS
         .iter()
@@ -110,7 +111,7 @@ fn the_patched_world_is_the_vaults_after_every_mapped_write() {
         .filter(|(kind, _)| matches!(kind, Kind::Workout | Kind::DailyFigure))
         .count();
     assert_eq!(
-        driven + 1 + health,
+        driven + 2 + health,
         pairs,
         "every pair of the table is driven"
     );

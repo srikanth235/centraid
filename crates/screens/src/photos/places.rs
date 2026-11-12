@@ -30,9 +30,11 @@ use super::cells::{self, Link};
 use super::routes;
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Page, Reading};
+use crate::kit::stale;
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, fill, photos as words};
+use crate::strings::{Locale, chat_confirm, fill, photos as words, photos_shelf as shelf_words};
 
 /// A pin's side in points: the floor for the least photographed place and the
 /// ceiling for the most, growing with the square root of the count.
@@ -46,28 +48,29 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     };
     Some(Box::new(Places {
         presentation: Presentation::Cards,
-        phase: Phase::Loading,
+        page: Page::loading(),
         places: Vec::new(),
         unplaced: 0,
         naming: None,
-        status: None,
+        naming_rev: None,
+        undo: Undo::default(),
     }))
-}
-
-enum Phase {
-    Loading,
-    Failed,
-    Ready,
 }
 
 struct Places {
     presentation: Presentation,
-    phase: Phase,
+    /// The read: `places` is its data. Nothing to show at all is drawn as [`Page::Empty`] by
+    /// [`Places::drawn`], never as ready data.
+    page: Page<()>,
     places: Vec<wire::PhotosPlaceCard>,
     unplaced: u32,
     /// The place the name sheet is open over.
     naming: Option<String>,
-    status: Option<wire::StatusLine>,
+    /// The place's revision when the name sheet opened: what a rename names as the one it
+    /// replaces (#1185).
+    naming_rev: Option<i64>,
+    /// The status line and what its Undo reverses (the kit's one door).
+    undo: Undo,
 }
 
 /// Where each pinned place stands on the plate: `x` and `y` in the unit square
@@ -172,12 +175,30 @@ impl Places {
             Reading::Data(places) => {
                 self.places = places.places;
                 self.unplaced = places.unplaced;
-                self.phase = Phase::Ready;
+                self.page = Page::Ready {
+                    data: (),
+                    note: None,
+                };
             }
-            Reading::Denied(_) | Reading::Failed => {
+            Reading::Denied(denial) => {
                 self.places.clear();
-                self.phase = Phase::Failed;
+                self.page = Page::Refused(denial);
             }
+            // The places on screen are still true: they stay under a note.
+            Reading::Failed => self.refresh_failed(ctx.locale()),
+        }
+    }
+
+    /// A refresh that did not come: photographs or places shown stay under a note; with nothing
+    /// shown (an empty page included) it is the failure itself.
+    fn refresh_failed(&mut self, locale: Locale) {
+        let mut held = std::mem::replace(&mut self.page, Page::loading());
+        if held.data().is_some() && self.holds_nothing() {
+            held = Page::Empty;
+        }
+        self.page = held.after(Reading::Failed, locale, |()| false);
+        if self.page.data().is_none() {
+            self.places.clear();
         }
     }
 
@@ -189,20 +210,31 @@ impl Places {
             return;
         }
         let key = kit_act::key(&["name-place", place_id, name], kit_act::fresh());
-        let settled = kit_act::act(
+        let settled = self.undo.act(
             ctx,
             act::photos::NamePlace {
                 place_id: place_id.to_owned(),
                 title: name.to_owned(),
+                expected_rev: self.naming_rev,
             },
             &key,
+            shelf_words::place_named,
         );
-        self.status = (!settled.committed).then(|| wire::StatusLine {
-            sentence: settled.refusal,
-            action_label: String::new(),
-            refused: true,
+        // The place changed, or went to the trash, since the sheet opened: the name typed is kept
+        // as an earlier version and the page reads the place as it is now (#1185).
+        let said = settled.stale().map(|stale| {
+            stale::on_button(
+                ctx,
+                &chat_confirm::noun_place(ctx.locale()),
+                place_id,
+                stale,
+                vec![("entity.title".to_owned(), name.into())],
+            )
         });
         self.reload(ctx);
+        if let Some(said) = said {
+            self.undo.refuse(said);
+        }
     }
 
     fn title_of(card: &wire::PhotosPlaceCard, locale: Locale) -> String {
@@ -265,6 +297,30 @@ impl Places {
         }
     }
 
+    /// Nothing to show: no place, and no photograph without one to open either (a screen that
+    /// still has that door is not empty).
+    fn holds_nothing(&self) -> bool {
+        self.places.is_empty() && self.unplaced == 0
+    }
+
+    /// The page as drawn: ready means there is something to show.
+    fn drawn(&self) -> Page<()> {
+        if self.page.data().is_some() && self.holds_nothing() {
+            Page::Empty
+        } else {
+            self.page.clone()
+        }
+    }
+
+    /// NOTHING HERE, AND WHY: places come from where a photograph was taken.
+    fn empty(locale: Locale) -> wire::EmptyState {
+        wire::EmptyState {
+            headline: words::photos_places_empty(locale),
+            body: words::photos_places_empty_caption(locale),
+            ..wire::EmptyState::default()
+        }
+    }
+
     fn data(&self, locale: Locale) -> wire::PhotosPlacesData {
         let pins = plot(&self.places);
         let rows: Vec<wire::PhotosPlaceRow> = self
@@ -278,11 +334,6 @@ impl Places {
         let photos = cells::count_phrase(locale, self.unplaced, false);
         let map = self.presentation == Presentation::Map;
         wire::PhotosPlacesData {
-            empty: rows.is_empty().then(|| wire::EmptyState {
-                headline: words::photos_places_empty(locale),
-                body: words::photos_places_empty_caption(locale),
-                ..wire::EmptyState::default()
-            }),
             map_empty: (map && !rows.is_empty() && unpinned == rows.len()).then(|| {
                 wire::EmptyState {
                     headline: words::photos_places_map_empty(locale),
@@ -356,13 +407,21 @@ impl Screen for Places {
                     };
                 }
                 Some(E::NameRequested(asked)) => {
-                    self.status = None;
+                    self.undo.clear();
+                    self.naming_rev = stale::read_rev(ctx, &asked.place_id);
                     self.naming = Some(asked.place_id);
                 }
                 Some(E::NameDismissed(_)) => self.naming = None,
+                Some(E::Refreshed(_)) => self.reload(ctx),
                 Some(E::Renamed(renamed)) => self.rename(&renamed.place_id, &renamed.name, ctx),
                 None => {}
             },
+            Some(S::StatusActed(_)) => {
+                if self.undo.acted(ctx) {
+                    self.reload(ctx);
+                }
+            }
+            Some(S::Left(_)) => self.undo.clear(),
             _ => {}
         }
         Vec::new()
@@ -370,13 +429,7 @@ impl Screen for Places {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
-        let content = match self.phase {
-            Phase::Loading => {
-                wire::photos_places_state::Content::Loading(wire::Loading { first_load: true })
-            }
-            Phase::Failed => wire::photos_places_state::Content::Failure(read::failure(locale)),
-            Phase::Ready => wire::photos_places_state::Content::Data(Box::new(self.data(locale))),
-        };
+        let page = self.drawn();
         wire::ViewState {
             kind: Some(wire::view_state::Kind::PhotosPlaces(Box::new(
                 wire::PhotosPlacesState {
@@ -384,12 +437,75 @@ impl Screen for Places {
                     presentation: self.presentation as i32,
                     cards_label: words::photos_places_cards(locale),
                     map_label: words::photos_places_map(locale),
-                    content: Some(content),
-                    status: self.status.clone(),
+                    page: Some(page.wire(
+                        locale,
+                        |denial| super::denied(locale, denial),
+                        || Self::empty(locale),
+                    )),
+                    content: page.data().map(|()| {
+                        wire::photos_places_state::Content::Data(Box::new(self.data(locale)))
+                    }),
+                    status: self.undo.status(),
                     name_sheet: self.sheet(locale),
                 },
             ))),
             ..wire::ViewState::default()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wire::page_state::State;
+
+    const EN: Locale = Locale::En;
+
+    fn ready(places: Vec<wire::PhotosPlaceCard>, unplaced: u32) -> Places {
+        Places {
+            presentation: Presentation::Cards,
+            page: Page::Ready {
+                data: (),
+                note: None,
+            },
+            places,
+            unplaced,
+            naming: None,
+            naming_rev: None,
+            undo: Undo::default(),
+        }
+    }
+
+    fn wired(places: &Places) -> wire::PageState {
+        places.drawn().wire(
+            EN,
+            |denial| super::super::denied(EN, denial),
+            || Places::empty(EN),
+        )
+    }
+
+    #[test]
+    fn no_places_and_no_photograph_without_one_is_the_empty_state_with_its_sentence() {
+        let places = ready(Vec::new(), 0);
+        match wired(&places).state {
+            Some(State::Empty(empty)) => {
+                assert_eq!(empty.headline, "No places yet.");
+                assert_eq!(empty.body, "Places come from where a photo was taken.");
+            }
+            other => panic!("expected the empty state, found {other:?}"),
+        }
+    }
+
+    #[test]
+    fn photographs_with_no_place_keep_their_door_so_the_page_is_not_empty() {
+        let places = ready(Vec::new(), 3);
+        assert!(wired(&places).state.is_none(), "ready draws the door");
+    }
+
+    #[test]
+    fn a_failed_read_over_nothing_is_failed_and_never_empty() {
+        let mut places = ready(Vec::new(), 0);
+        places.refresh_failed(EN);
+        assert!(matches!(wired(&places).state, Some(State::Failed(_))));
     }
 }

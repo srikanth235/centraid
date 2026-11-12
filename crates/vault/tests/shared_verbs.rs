@@ -375,9 +375,29 @@ fn a_category_a_place_and_a_task_release_what_points_at_them() {
 #[test]
 fn a_purge_refuses_with_a_sentence_when_something_would_lose_its_meaning() {
     let w = World::new();
-    w.event("e1", "calendar:default");
+    // The vault's own calendar is never trashed, so the refusal is reached on another one.
+    w.commit(|tx| {
+        tx.insert_entity("calendar:work", Kind::Calendar, "Work", AT)?;
+        tx.connection().execute(
+            "INSERT INTO container (id, kind) VALUES ('calendar:work', 'calendar')",
+            [],
+        )?;
+        Ok(())
+    });
+    w.event("e1", "calendar:work");
+    w.event("e2", "calendar:default");
     assert!(
-        w.refused("entity.purge", json!({"id": "calendar:default"}))
+        w.refused("entity.purge", json!({"id": "calendar:work"}))
+            .contains("not in the trash"),
+        "a calendar is trashed before it is purged"
+    );
+    // An event the member trashed on its own stays on the calendar when the calendar follows it
+    // (only what is live goes with a calendar), so the purge still refuses on its account.
+    w.ok("entity.trash", json!({"id": "e1"}));
+    w.scratch.clock.advance_days(1);
+    w.ok("entity.trash", json!({"id": "calendar:work"}));
+    assert!(
+        w.refused("entity.purge", json!({"id": "calendar:work"}))
             .contains("event is still on")
     );
     assert!(
@@ -406,7 +426,7 @@ fn a_purge_refuses_with_a_sentence_when_something_would_lose_its_meaning() {
             .contains("not in the trash")
     );
     // A tag is deleted, not trashed.
-    w.ok("tag.add", json!({"id": "e1", "label": "trip"}));
+    w.ok("tag.add", json!({"id": "e2", "label": "trip"}));
     assert!(
         w.refused("entity.trash", json!({"id": "tag:trip"}))
             .contains("deleted, not moved to the trash")
@@ -441,6 +461,43 @@ fn emptying_the_trash_takes_one_kind_or_all_and_only_what_is_due_when_asked() {
     );
     w.ok("entity.empty_trash", json!({}));
     assert!(!w.exists("gone"));
+}
+
+#[test]
+fn emptying_a_having_trash_takes_only_what_the_trash_lists_and_a_touch_stays_with_its_person() {
+    let w = World::new();
+    w.person("pat", "Pat");
+    let touch = w.ok(
+        "person.log_interaction",
+        json!({"id": "pat", "kind": "call"}),
+    )["interaction_id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    let workout = w.ok(
+        "workout.log",
+        json!({"type": "run", "starts": "2026-03-04", "moving_s": 1_800}),
+    )["workout_id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    w.ok("entity.trash", json!({"id": "pat"}));
+    w.ok("entity.trash", json!({"id": workout}));
+    assert!(w.trashed(&touch), "the touch went to the trash with Pat");
+    // the schema's enum refuses any other selector
+    w.refused(
+        "entity.empty_trash",
+        json!({"kind": "activity", "having": "tag"}),
+    );
+    let out = w.ok(
+        "entity.empty_trash",
+        json!({"kind": "activity", "having": "workout"}),
+    );
+    assert_eq!(out["purged"], 1);
+    assert!(!w.exists(&workout));
+    assert!(w.exists(&touch) && w.trashed(&touch), "the touch stays");
+    w.ok("entity.restore", json!({"id": "pat"}));
+    assert!(!w.trashed(&touch), "and comes back with its person");
 }
 
 // ---------------------------------------------------------------------------

@@ -10,6 +10,7 @@ package centraid.core.v1;
 
 import "centraid/core/v1/notify_screens.proto";
 import "centraid/core/v1/agenda_glance_screens.proto";
+import "centraid/core/v1/health_glance_screens.proto";
 import "centraid/core/v1/phone.proto";
 
 // ---------------------------------------------------------------------------
@@ -31,6 +32,9 @@ message ShellFact {
     // The platform asked Agenda for something outside the app (Siri, a shortcut,
     // a widget tap). The agenda glance service answers (`agenda_glance_screens.proto`).
     AgendaIntent agenda_intent = 130;
+    // A widget tap on Health (`health_glance_screens.proto`). The health glance
+    // service answers.
+    HealthIntent health_intent = 331;
   }
 }
 
@@ -111,8 +115,10 @@ message UploadSettled {
 // the app again.
 message UploadsDrained {}
 
-// The pass conductor's wake, posted by name to the pass service and the vault
-// service: something the conductor holds moved (an ask, a fact), look again.
+// A wake, posted by name from one screen or service to another: something it holds
+// moved (an ask, a fact), look again. The pass conductor wakes the pass service and
+// the vault service with it; the follow coordinator and the folder follower wake
+// each other, and the pass service, the same way.
 message Signalled {}
 
 // ---------------------------------------------------------------------------

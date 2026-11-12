@@ -6,31 +6,46 @@ use centraid_api_proto::core_v1 as wire;
 use wire::AgendaDestination as Dest;
 
 use super::grid;
+use crate::calendar::routes;
 use crate::kit::civil;
+use crate::kit::export;
 use crate::kit::schedule::rows;
 use crate::kit::schedule::rule_words::long_day;
 use crate::strings::{
     Locale, agenda as words, agenda_grid as sayings, agenda_home as sentences,
-    agenda_lists as lists, agenda_reminders as reminders, fill,
+    agenda_lists as lists, agenda_reminders as reminders, fill, shared,
 };
 
 /// `AgendaBandTab.key`s: what `BandPicked` carries.
 pub const BAND_CALENDAR: &str = "calendar";
 pub const BAND_INVITES: &str = "invites";
 pub const BAND_MORE: &str = "more";
+/// The band's last place (`Calendar.dc.html`): the sheet of Calendar's own places, Trash today.
+pub const BAND_MENU: &str = "menu";
 
 /// `AgendaMoreRow.key`s: what `MoreRowPicked` carries.
 pub const MORE_READS: &str = "reads";
 pub const MORE_CALENDAR: &str = "calendar-";
 /// The row that opens the new-calendar sheet (#1173).
 pub const MORE_NEW_CALENDAR: &str = "new-calendar";
+/// The menu sheet's row to the trash (#1185).
+pub const MORE_TRASH: &str = "trash";
+/// The menu sheet's row that stops reading the phone's calendars (#1185); it opens a confirm.
+pub const MORE_STOP: &str = "stop";
+/// The stop row's slot once Calendar does not read the phone: its tap asks for the permission.
+pub const MORE_TURN_ON: &str = "turn-on";
 
 /// The band (places only, R-CHROME-5): Calendar, Calendars (the sheet of calendars to show or hide,
 /// Apple's middle key) and Invites (Apple's Inbox; the old Waiting). Calendar holds Day, Week, Month,
 /// List and Year behind its view menu ([`calendar_views`]). SEARCH IS A MODE OVER THE PLACE, not a
 /// place: the destination's tab stays lit while the field is open.
 #[must_use]
-pub fn band(locale: Locale, destination: Dest, sheet_up: bool) -> Vec<wire::AgendaBandTab> {
+pub fn band(
+    locale: Locale,
+    destination: Dest,
+    calendars_up: bool,
+    menu_up: bool,
+) -> Vec<wire::AgendaBandTab> {
     let tab = |key: &str, label: String, icon: &str, current: bool| wire::AgendaBandTab {
         key: key.to_owned(),
         label,
@@ -42,13 +57,13 @@ pub fn band(locale: Locale, destination: Dest, sheet_up: bool) -> Vec<wire::Agen
             BAND_CALENDAR,
             reminders::band_calendar(locale),
             "Calendar",
-            grid::is_calendar_view(destination) && !sheet_up,
+            grid::is_calendar_view(destination) && !calendars_up && !menu_up,
         ),
         tab(
             BAND_MORE,
             reminders::band_calendars(locale),
             "List",
-            sheet_up,
+            calendars_up,
         ),
         tab(
             BAND_INVITES,
@@ -56,6 +71,7 @@ pub fn band(locale: Locale, destination: Dest, sheet_up: bool) -> Vec<wire::Agen
             "Inbox",
             destination == Dest::Waiting,
         ),
+        tab(BAND_MENU, words::band_more(locale), "MoreHoriz", menu_up),
     ]
 }
 
@@ -248,6 +264,66 @@ pub fn more_rows(
         ..wire::AgendaMoreRow::default()
     });
     out
+}
+
+/// CALENDAR'S MENU SHEET (`MoreCalendar.dc.html`): the places that are not a view of the calendar.
+/// Trash, with the rule that every trash states: 30 days, then erased.
+#[must_use]
+pub fn menu_rows(locale: Locale, can_stop: bool, can_turn_on: bool) -> Vec<wire::AgendaMoreRow> {
+    let label = shared::trash_entry(locale);
+    let meta = shared::trash_entry_meta(locale);
+    let export = export::entry(locale, super::super::EXPORT);
+    vec![
+        wire::AgendaMoreRow {
+            key: export.key.to_owned(),
+            spoken: export.label.clone(),
+            label: export.label,
+            icon_key: export.icon_key.to_owned(),
+            route: Some(export.route),
+            ..wire::AgendaMoreRow::default()
+        },
+        wire::AgendaMoreRow {
+            key: MORE_TRASH.to_owned(),
+            spoken: format!("{label}, {meta}"),
+            label,
+            meta,
+            icon_key: "Trash".to_owned(),
+            route: Some(routes::trash()),
+            ..wire::AgendaMoreRow::default()
+        },
+    ]
+    .into_iter()
+    // THE STOP ROW, last (as Health's and People's): the same words for every followed store, and
+    // no route of its own, so its tap asks first.
+    .chain(can_stop.then(|| {
+        let label = crate::kit::follow::stop_row(locale, &stop_store(locale));
+        wire::AgendaMoreRow {
+            key: MORE_STOP.to_owned(),
+            spoken: label.clone(),
+            label,
+            icon_key: "Stop".to_owned(),
+            ..wire::AgendaMoreRow::default()
+        }
+    }))
+    // THE TURN-ON ROW takes the stop row's slot while Calendar does not read the phone, so the
+    // slot is never empty: its tap asks the phone for the permission then.
+    .chain((can_turn_on && !can_stop).then(|| {
+        let label = crate::kit::follow::turn_on_row(locale, &stop_store(locale));
+        wire::AgendaMoreRow {
+            key: MORE_TURN_ON.to_owned(),
+            spoken: label.clone(),
+            label,
+            icon_key: "Power".to_owned(),
+            ..wire::AgendaMoreRow::default()
+        }
+    }))
+    .collect()
+}
+
+/// What the stop row and its confirm call the store: "Phone calendars", as the Reconnect list does.
+#[must_use]
+pub fn stop_store(locale: Locale) -> String {
+    crate::strings::follow::reconnect_calendars(locale)
 }
 
 /// The screen's fixed words, so a view carries no copy of its own.

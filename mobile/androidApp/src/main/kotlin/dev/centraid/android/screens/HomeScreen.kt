@@ -1,6 +1,7 @@
 package dev.centraid.android.screens
 
 import dev.centraid.android.kit.LocalShellLine
+import dev.centraid.android.kit.ReadStateView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -44,7 +45,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import centraid.core.v1.Failure
 import centraid.core.v1.HomeData
 import centraid.core.v1.HomeEvent
 import centraid.core.v1.HomeSpringboard
@@ -127,14 +127,15 @@ public fun HomeScreen(
         return
     }
     val bar = state.bar
-    val failure = state.failure
+    // A phone that holds no vault is the page's final failure (below).
+    val failed = state.page?.failed != null
     // BARE PAPER UNTIL THE LOCKUP LANDS. The shelf says it holds a vault a
     // moment before the session tells Home that vault, and Home drawn in that
     // moment said "No vault yet" for a frame between first launch and the
     // springboard — a flicker. A shelf that holds a vault always has one
     // in front, so the empty lockup is only ever that moment (and a phone that
     // holds none is a failure, below).
-    if (bar?.vault?.vault_id.isNullOrEmpty() && failure == null) {
+    if (bar?.vault?.vault_id.isNullOrEmpty() && !failed) {
         Box(Modifier.fillMaxSize().background(centraidColor("bg")))
         return
     }
@@ -180,16 +181,22 @@ public fun HomeScreen(
         // a part of it, and nothing subtracts its height from the page because
         // it is a flex peer.
         Box(Modifier.weight(1f)) {
-            when {
+            Column {
                 // A HOME THAT FAILED STILL NAMES ITS VAULT, scrolled or pinned.
-                failure != null -> Column {
-                    if (scrolling) lockup()
-                    FailureBody(failure)
+                if (failed && scrolling) lockup()
+                ReadStateView(
+                    page = state.page!!,
+                    // No vault is a final failure: the first-launch gate is the way on, not Retry.
+                    onRetry = null,
+                    skeleton = { SpringboardGrid(HomeData(), state.loading_label, onOpen, header = if (scrolling) lockup else null) },
+                ) {
+                    val ready = data ?: return@ReadStateView
+                    if (ready.springboard == HomeSpringboard.HOME_SPRINGBOARD_FIRST_RUN) {
+                        DayOne(ready, state.loading_label, onOpen, header = if (scrolling) lockup else null)
+                    } else {
+                        SpringboardGrid(ready, state.loading_label, onOpen, header = if (scrolling) lockup else null)
+                    }
                 }
-                data == null -> SpringboardGrid(HomeData(), state.loading_label, onOpen, header = if (scrolling) lockup else null)
-                data.springboard == HomeSpringboard.HOME_SPRINGBOARD_FIRST_RUN ->
-                    DayOne(data, state.loading_label, onOpen, header = if (scrolling) lockup else null)
-                else -> SpringboardGrid(data, state.loading_label, onOpen, header = if (scrolling) lockup else null)
             }
         }
         // THE IMPORT'S LINE, on the band (product-intuition/references/design-behaviour.md § Status line).
@@ -507,33 +514,6 @@ private fun StatusRibbon(
                 style = centraidType("control"),
                 color = centraidColor("link"),
                 textDecoration = TextDecoration.Underline,
-            )
-        }
-    }
-}
-
-/**
- * A Home that could not load at all.
- *
- * Distinct from every tile being unreadable: that Home loaded and could not read
- * its apps, and still shows them. This one has no grid, because inventing eight
- * empty apps out of one failure is the defect the read law forbids.
- */
-@Composable
-private fun FailureBody(failure: Failure) {
-    Column(
-        Modifier
-            .padding(PAGE_MARGIN)
-            .testTag("home-failure"),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Text(failure.sentence, style = centraidType("small"), color = centraidColor("text"))
-        // Present only when there is something a member can do.
-        if (failure.remedy.isNotEmpty()) {
-            Text(
-                failure.remedy,
-                style = centraidType("mono"),
-                color = centraidColor("textFaint"),
             )
         }
     }

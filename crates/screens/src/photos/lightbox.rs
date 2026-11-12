@@ -48,16 +48,25 @@ use wire::screen_event::Kind as E;
 
 use super::album_choice::{AlbumChoice, Outcome as AlbumOutcome};
 use super::cells::{self, Link};
-use super::selection::Written;
 use super::{editor, fetch, media, routes};
 use crate::catalog::{act, load};
 use crate::field::Field;
 use crate::kit::act as kit_act;
+use crate::kit::attachments::Attachments;
 use crate::kit::civil::HourCycle;
+use crate::kit::earlier;
 use crate::kit::links::{self, Kind, Links, Outcome};
-use crate::kit::read::{self, Reading};
+use crate::kit::owner::{Answer as Owner, Leaving, NoPasscode, OwnerGate};
+use crate::kit::quantity::{Quantity, UnitsPref};
+use crate::kit::read::{self, Page, Reading};
+use crate::kit::stale;
+use crate::kit::trash;
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, fill, photos as words, photos_lightbox as own, shared};
+use crate::strings::{
+    Locale, chat_confirm, fill, photos as words, photos_lightbox as own,
+    photos_shelf as shelf_words, shared,
+};
 
 /// How far either side of the photograph on screen the strip is read.
 pub const FILM_REACH: usize = 12;
@@ -71,24 +80,34 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         return None;
     };
     Some(Box::new(Lightbox {
+        gate: OwnerGate::default(),
+        sending: Precision::None,
         photo_id: args.photo_id.clone(),
         neighbours: args.neighbour_ids.clone(),
         album_id: args.album_id.clone(),
-        content: Content::Loading,
+        content: Page::loading(),
         located: Located::default(),
         camera: None,
         film: HashMap::new(),
         chrome_visible: true,
         sheet: Sheet::None,
         slideshow: false,
-        status: None,
-        albums: AlbumChoice::new(),
+        undo: Undo::default(),
+        albums: AlbumChoice::for_one_photo(),
         places: Vec::new(),
         confirm: false,
         fetching: false,
         dismissed: false,
         pending: VecDeque::new(),
         links: Links::new(&[Kind::Person]),
+        // A photograph may link to another photograph; the picker leaves this one out.
+        every: Links::new(&Kind::ALL).for_entity(&args.photo_id),
+        linked: None,
+        linked_unread: false,
+        attachments: Attachments::of("photos", &args.photo_id),
+        earlier: earlier::Foot::default(),
+        rev: None,
+        stale: None,
     }))
 }
 
@@ -128,13 +147,6 @@ struct Detail {
     people: Vec<wire::PeopleLinked>,
 }
 
-enum Content {
-    Loading,
-    Failed,
-    Denied(wire::AppQueryDenial),
-    Data(Box<Detail>),
-}
-
 /// Where the bytes are on this phone, as the content door located them.
 #[derive(Default)]
 struct Located {
@@ -153,10 +165,17 @@ enum Pending {
 }
 
 struct Lightbox {
+    /// The owner check a send asks first (a copy saved to this phone's own
+    /// library does not leave it); no passcode warns and goes ahead.
+    gate: OwnerGate,
+    /// The precision the send waits on while the check is up.
+    sending: Precision,
     photo_id: String,
     neighbours: Vec<String>,
     album_id: String,
-    content: Content,
+    /// The read of this photograph: its detail is the page's data. A failed re-read keeps the
+    /// photograph on screen under a note.
+    content: Page<Box<Detail>>,
     located: Located,
     /// The camera the original's header names, for one photograph.
     camera: Option<(String, String)>,
@@ -164,7 +183,8 @@ struct Lightbox {
     chrome_visible: bool,
     sheet: Sheet,
     slideshow: bool,
-    status: Option<wire::StatusLine>,
+    /// The status line and what its Undo reverses (the kit's one door).
+    undo: Undo,
     albums: AlbumChoice,
     places: Vec<wire::PhotosPlaceCard>,
     confirm: bool,
@@ -173,6 +193,24 @@ struct Lightbox {
     pending: VecDeque<Pending>,
     /// The people picker (#1173).
     links: Links,
+    /// THE "Linked to" SECTION'S PICKER (#1185): what the photograph can link to, any item but a
+    /// Locker one ("People in this photo", above, is people only and says who is in it).
+    every: Links,
+    /// What the photograph is linked to, either end (`links::read_linked`). `None` until read,
+    /// and while a read did not land.
+    linked: Option<Vec<wire::LinkedItem>>,
+    /// The read of `linked` was refused or failed: the status line says so, no empty section.
+    linked_unread: bool,
+    /// The photos and files on the photograph (#1185): the kit's section, read with it.
+    attachments: Attachments,
+    /// The entry to the photograph's earlier versions, read with it (#1185).
+    earlier: earlier::Foot,
+    /// The photograph's revision when the page was last read: what a caption names as the one it
+    /// replaces (#1185).
+    rev: Option<i64>,
+    /// Why the vault refused the last write, when the photograph had changed (or gone to the
+    /// trash) since it was read.
+    stale: Option<stale::Stale>,
 }
 
 fn effect(kind: wire::effect::Kind) -> wire::Effect {
@@ -196,54 +234,147 @@ impl Lightbox {
     /// Read this photograph. A failed re-read keeps the photograph on screen: only
     /// a first read that failed has nothing else to show.
     fn reload(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
+        // The revision first: a change between the two reads refuses the next save.
+        self.rev = stale::read_rev(ctx, &self.photo_id);
         match Self::load_cell(ctx, &self.photo_id) {
             Reading::Data(found) => match found.photo {
                 Some(detail) => {
                     let Some(cell) = detail.cell else {
-                        self.content = Content::Failed;
+                        self.content = Page::Failed;
                         return Vec::new();
                     };
                     let people = match links::read_people(ctx, &self.photo_id) {
                         Reading::Data(people) => people,
-                        _ => match &self.content {
-                            Content::Data(old) if old.cell.photo_id == cell.photo_id => {
-                                old.people.clone()
-                            }
+                        _ => match self.content.data() {
+                            Some(old) if old.cell.photo_id == cell.photo_id => old.people.clone(),
                             _ => Vec::new(),
                         },
                     };
-                    self.content = Content::Data(Box::new(Detail {
-                        cell,
-                        trashed: detail.trashed,
-                        tags: detail.tags,
-                        place: detail.place,
-                        people,
-                    }));
+                    self.content = Page::Ready {
+                        data: Box::new(Detail {
+                            cell,
+                            trashed: detail.trashed,
+                            tags: detail.tags,
+                            place: detail.place,
+                            people,
+                        }),
+                        note: None,
+                    };
                 }
                 // No such photograph: gone (deleted forever here or elsewhere).
                 None => {
-                    if matches!(self.content, Content::Data(_)) {
+                    if self.content.data().is_some() {
                         self.dismissed = true;
                     } else {
-                        self.content = Content::Failed;
+                        self.content = Page::Failed;
                     }
                 }
             },
-            Reading::Denied(denial) => self.content = Content::Denied(denial),
+            Reading::Denied(denial) => self.content = Page::Refused(denial),
             Reading::Failed => {
-                if !matches!(self.content, Content::Data(_)) {
-                    self.content = Content::Failed;
-                }
+                let held = std::mem::replace(&mut self.content, Page::loading());
+                self.content = held.after(Reading::Failed, ctx.locale(), |_| false);
             }
+        }
+        self.earlier = self.read_foot(ctx);
+        self.read_linked(ctx);
+        if self.detail().is_some_and(|detail| !detail.trashed) {
+            self.attachments.reload(ctx);
         }
         self.locate(ctx);
         self.fill_film(ctx);
         self.camera_effects()
     }
 
+    /// What the photograph is linked to, in both directions. A refused or failed read is said on
+    /// the status line and never drawn as an empty section; a photograph that was not read or is
+    /// in the trash has none ("People in this photo" is the same).
+    fn read_linked(&mut self, ctx: &Ctx) {
+        if self.detail().is_none_or(|detail| detail.trashed) {
+            self.linked = None;
+            self.linked_unread = false;
+            self.every.close();
+            return;
+        }
+        match links::read_linked(ctx, &self.photo_id) {
+            Reading::Data(items) => {
+                self.linked = Some(items);
+                self.linked_unread = false;
+            }
+            Reading::Denied(_) | Reading::Failed => {
+                self.linked = None;
+                self.linked_unread = true;
+                self.every.close();
+            }
+        }
+        self.every.reload(ctx);
+    }
+
+    fn linked_ids(&self) -> Vec<String> {
+        self.linked.as_deref().map(links::ids).unwrap_or_default()
+    }
+
+    /// One tap in the "Linked to" section or its picker. `add-person` and `remove-person` carry
+    /// rel `links` for every kind, a person included, as a link and not as who is in the photo.
+    fn link_event(&mut self, event: &wire::LinkEvent, ctx: &Ctx) {
+        let linked = self.linked_ids();
+        let id = self.photo_id.clone();
+        match self.every.update(event, &linked, ctx) {
+            Outcome::Add { id: to, .. } => {
+                self.write(
+                    ctx,
+                    "add-link",
+                    &[&id, &to],
+                    act::photos::AddPerson {
+                        from: id.clone(),
+                        rel: act::photos::AddPersonRel::Links,
+                        to: to.clone(),
+                    },
+                    Some(own::link_added(ctx.locale())),
+                );
+            }
+            Outcome::Remove { id: to } => {
+                self.write(
+                    ctx,
+                    "remove-link",
+                    &[&id, &to],
+                    act::photos::RemovePerson {
+                        from: id.clone(),
+                        rel: act::photos::RemovePersonRel::Links,
+                        to: to.clone(),
+                    },
+                    Some(own::link_removed(ctx.locale())),
+                );
+            }
+            Outcome::Moved => {}
+        }
+    }
+
+    /// The entry to this photograph's earlier versions: only a photograph that was read has one.
+    fn read_foot(&self, ctx: &Ctx) -> earlier::Foot {
+        let Some(detail) = self.content.data() else {
+            return earlier::Foot::default();
+        };
+        let cell = &detail.cell;
+        let locale = ctx.locale();
+        let offset = cell.offset_min.unwrap_or(0);
+        let back = [
+            cell.title.trim().to_owned(),
+            cell.taken_at
+                .as_deref()
+                .map(|at| media::stamp_date(locale, at, offset))
+                .unwrap_or_default(),
+            own::edit_fallback_name(locale),
+        ]
+        .into_iter()
+        .find(|name| !name.is_empty())
+        .unwrap_or_default();
+        earlier::foot(ctx, super::EARLIER, &self.photo_id, &back)
+    }
+
     /// The original's file and a Live Photo's movie, once this phone holds them.
     fn locate(&mut self, ctx: &Ctx) {
-        let Content::Data(detail) = &self.content else {
+        let Some(detail) = self.content.data() else {
             return;
         };
         let cell = &detail.cell;
@@ -348,11 +479,11 @@ impl Lightbox {
     /// they were tried on and do not travel.
     fn open(&mut self, ctx: &Ctx, photo_id: &str) -> Vec<wire::Effect> {
         self.photo_id = photo_id.to_owned();
-        self.content = Content::Loading;
+        self.content = Page::loading();
         self.located = Located::default();
         self.chrome_visible = true;
         self.sheet = Sheet::None;
-        self.status = None;
+        self.undo.clear();
         self.confirm = false;
         self.fetching = false;
         self.albums.close();
@@ -367,51 +498,48 @@ impl Lightbox {
     }
 
     fn refusal(&self, locale: Locale) -> Option<String> {
-        matches!(self.content, Content::Data(_))
-            .then_some(())
-            .map_or_else(|| Some(own::not_in_vault(locale)), |()| None)
+        self.content
+            .data()
+            .is_none()
+            .then(|| own::not_in_vault(locale))
     }
 
     fn refuse(&mut self, sentence: String) {
-        self.status = Some(wire::StatusLine {
-            sentence,
-            action_label: String::new(),
-            refused: true,
-        });
+        self.undo.refuse(sentence);
     }
 
+    /// A line with no Undo: the sentence of something that was not a write (a share, a copy).
     fn receipt(&mut self, sentence: String) {
-        self.status = Some(wire::StatusLine {
-            sentence,
-            action_label: String::new(),
-            refused: false,
-        });
+        self.undo.say(sentence);
     }
 
     /// One write, behind the same ladder as every other: withheld when there is
     /// no photograph, the vault's own sentence when refused, a re-read when it
-    /// committed. A new attempt clears the old sentence.
+    /// committed. A new attempt clears the old sentence. `said` is what happened, with the
+    /// core's Undo; `None` is a write that says nothing.
     fn write(
         &mut self,
         ctx: &Ctx,
         verb: &str,
         parts: &[&str],
         request: impl Into<wire::ActRequest>,
+        said: Option<String>,
     ) -> bool {
         if let Some(why) = self.refusal(ctx.locale()) {
             self.refuse(why);
             return false;
         }
-        self.status = None;
+        self.undo.clear();
         let key = kit_act::key(&[&[verb], parts].concat(), kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
+        let settled = match said {
+            Some(said) => self.undo.act(ctx, request, &key, |_| said),
+            None => self.undo.act_quietly(ctx, request, &key),
+        };
+        self.stale = settled.stale();
         if settled.committed {
             self.reload(ctx);
-            true
-        } else {
-            self.refuse(settled.refusal);
-            false
         }
+        settled.committed
     }
 
     fn people_ids(&self) -> Vec<String> {
@@ -432,8 +560,10 @@ impl Lightbox {
                     &[&id, &person],
                     act::photos::AddPerson {
                         from: id.clone(),
+                        rel: act::photos::AddPersonRel::Depicts,
                         to: person.clone(),
                     },
+                    Some(own::person_added(ctx.locale())),
                 );
             }
             Outcome::Remove { id: person } => {
@@ -443,8 +573,10 @@ impl Lightbox {
                     &[&id, &person],
                     act::photos::RemovePerson {
                         from: id.clone(),
+                        rel: act::photos::RemovePersonRel::Depicts,
                         to: person.clone(),
                     },
+                    Some(own::person_removed(ctx.locale())),
                 );
             }
             Outcome::Moved => {}
@@ -452,10 +584,7 @@ impl Lightbox {
     }
 
     fn detail(&self) -> Option<&Detail> {
-        match &self.content {
-            Content::Data(detail) => Some(detail),
-            _ => None,
-        }
+        self.content.data().map(|detail| &**detail)
     }
 
     fn tap(&mut self, kind: V, ctx: &Ctx) -> Vec<wire::Effect> {
@@ -466,7 +595,7 @@ impl Lightbox {
         let (favorite, archived) = (detail.cell.favorite, detail.cell.archived);
         match kind {
             V::Favorite => {
-                let landed = if favorite {
+                if favorite {
                     self.write(
                         ctx,
                         "unflag-photo",
@@ -474,7 +603,8 @@ impl Lightbox {
                         act::photos::UnflagPhoto {
                             photo_id: id.clone(),
                         },
-                    )
+                        Some(words::photos_receipt_unfavorited(ctx.locale())),
+                    );
                 } else {
                     self.write(
                         ctx,
@@ -483,18 +613,12 @@ impl Lightbox {
                         act::photos::FlagPhoto {
                             photo_id: id.clone(),
                         },
-                    )
-                };
-                if landed {
-                    self.receipt(if favorite {
-                        words::photos_receipt_unfavorited(ctx.locale())
-                    } else {
-                        words::photos_receipt_favorited(ctx.locale())
-                    });
+                        Some(words::photos_receipt_favorited(ctx.locale())),
+                    );
                 }
             }
             V::Archive => {
-                let landed = if archived {
+                if archived {
                     self.write(
                         ctx,
                         "unarchive-photo",
@@ -502,7 +626,8 @@ impl Lightbox {
                         act::photos::UnarchivePhoto {
                             photo_id: id.clone(),
                         },
-                    )
+                        Some(words::photos_receipt_unarchived(ctx.locale())),
+                    );
                 } else {
                     self.write(
                         ctx,
@@ -511,42 +636,38 @@ impl Lightbox {
                         act::photos::ArchivePhoto {
                             photo_id: id.clone(),
                         },
-                    )
-                };
-                if landed {
-                    self.receipt(if archived {
-                        words::photos_receipt_unarchived(ctx.locale())
-                    } else {
-                        words::photos_receipt_archived(ctx.locale())
-                    });
+                        Some(words::photos_receipt_archived(ctx.locale())),
+                    );
                 }
             }
-            // THE PHOTOGRAPH STAYS ON SCREEN, so the move is said, and the bar's
-            // labelled Restore is the way back: undo-able and never a blocking ask.
+            // THE PHOTOGRAPH STAYS ON SCREEN, so the move is said with Undo, which restores it,
+            // and it never asks (#1185).
             V::Trash => {
                 self.sheet = Sheet::None;
-                if self.write(
+                let title = self
+                    .detail()
+                    .map(|detail| detail.cell.title.clone())
+                    .unwrap_or_default();
+                self.write(
                     ctx,
                     "delete-photo",
                     &[&id],
                     act::photos::DeletePhoto {
                         photo_id: id.clone(),
                     },
-                ) {
-                    self.receipt(words::photos_receipt_trashed(ctx.locale()));
-                }
+                    Some(trash::moved_to_trash(ctx.locale(), &title)),
+                );
             }
             V::Restore => {
-                if self.write(
+                self.write(
                     ctx,
                     "restore-photo",
                     &[&id],
                     act::photos::RestorePhoto {
                         photo_id: id.clone(),
                     },
-                ) {
-                    self.receipt(words::photos_receipt_restored(ctx.locale()));
-                }
+                    Some(words::photos_receipt_restored(ctx.locale())),
+                );
             }
             V::DeleteForever => self.confirm = true,
             // (i) TOGGLES THE DETAILS: they open under the photograph and the same key closes them.
@@ -603,6 +724,7 @@ impl Lightbox {
                             album_id: album.clone(),
                             photo_id: Field::Is(id.clone()),
                         },
+                        Some(shelf_words::cover_changed(ctx.locale())),
                     );
                 }
             }
@@ -625,34 +747,11 @@ impl Lightbox {
             return;
         }
         let picked = [self.photo_id.clone()];
-        match self.albums.update(event, &picked, ctx) {
-            AlbumOutcome::Moved => {}
-            AlbumOutcome::Added {
-                album_id,
-                written: Written {
-                    refusal, committed, ..
-                },
-            } => {
-                self.status = refusal.map(|sentence| wire::StatusLine {
-                    sentence,
-                    action_label: String::new(),
-                    refused: true,
-                });
-                if self.status.is_none() && !committed.is_empty() {
-                    let title = self.albums.title_of(&album_id).unwrap_or_default();
-                    self.receipt(fill(
-                        &words::photos_receipt_album(ctx.locale()),
-                        &[("album", title)],
-                    ));
-                }
+        // The sheet writes through the door: "Added to <album>." with Undo, or the refusal.
+        match self.albums.update(event, &picked, &mut self.undo, ctx) {
+            AlbumOutcome::Moved | AlbumOutcome::Created { .. } => {}
+            AlbumOutcome::Added { .. } => {
                 self.reload(ctx);
-            }
-            AlbumOutcome::Created { refusal } => {
-                self.status = refusal.map(|sentence| wire::StatusLine {
-                    sentence,
-                    action_label: String::new(),
-                    refused: true,
-                });
             }
         }
     }
@@ -672,7 +771,7 @@ impl Lightbox {
         // until it finishes is one a member taps again.
         if fetch::start(ctx, &hash) {
             self.fetching = true;
-            self.status = None;
+            self.undo.clear();
         }
     }
 
@@ -694,16 +793,27 @@ impl Lightbox {
         }
     }
 
+    /// A copy for the platform. SENDING ASKS THE OWNER CHECK FIRST (the bytes
+    /// leave the phone); saving to this phone's own library does not.
     fn export(&mut self, save: bool, precision: Precision, ctx: &Ctx) -> Vec<wire::Effect> {
+        if save || self.detail().is_none() {
+            return self.hand_over(save, precision, ctx.locale());
+        }
+        self.undo.clear();
+        self.sending = precision;
+        self.gate.begin(ctx.locale(), Leaving::Share)
+    }
+
+    fn hand_over(&mut self, save: bool, precision: Precision, locale: Locale) -> Vec<wire::Effect> {
         let Some(detail) = self.detail() else {
             return Vec::new();
         };
         let id = detail.cell.photo_id.clone();
-        self.status = None;
+        self.undo.clear();
         self.pending.push_back(Pending::Export { save, precision });
         vec![effect(wire::effect::Kind::ExportOriginals(
             super::export_originals(
-                ctx.locale(),
+                locale,
                 vec![id],
                 if save {
                     wire::export_originals::Mode::Save
@@ -713,6 +823,23 @@ impl Lightbox {
                 precision == Precision::Exact,
             ),
         ))]
+    }
+
+    /// The owner check's answer for a send.
+    fn checked(&mut self, checked: &wire::OwnerChecked, locale: Locale) -> Vec<wire::Effect> {
+        match self.gate.answer(locale, NoPasscode::Warn, checked) {
+            Some(Owner::Passed) => self.hand_over(false, self.sending, locale),
+            Some(Owner::PassedUnprotected(warning)) => {
+                let effects = self.hand_over(false, self.sending, locale);
+                self.receipt(warning);
+                effects
+            }
+            Some(Owner::Refused(sentence)) => {
+                self.refuse(sentence);
+                Vec::new()
+            }
+            Some(Owner::Cancelled) | None => Vec::new(),
+        }
     }
 
     fn effect_result(&mut self, result: &wire::EffectResult, ctx: &Ctx) -> Vec<wire::Effect> {
@@ -778,6 +905,7 @@ impl Lightbox {
         &self,
         detail: &Detail,
         locale: Locale,
+        units: UnitsPref,
         cycle: HourCycle,
     ) -> wire::PhotosLightboxPhoto {
         let cell = &detail.cell;
@@ -862,7 +990,7 @@ impl Lightbox {
             facts.push(wire::PhotosLightboxFact {
                 label: words::photos_fact_file(locale),
                 icon_key: "FileText".to_owned(),
-                text: media::bytes_phrase(locale, size),
+                text: Quantity::bytes(size).words(locale, units),
             });
         }
         if let Some((_, camera)) = self.camera.as_ref().filter(|(id, _)| *id == cell.photo_id) {
@@ -908,6 +1036,8 @@ impl Lightbox {
                 String::new()
             },
             labels,
+            earlier: self.earlier.entry.clone(),
+            origin: self.earlier.origin.clone(),
             people: Some({
                 let mut section = self.links.section(
                     locale,
@@ -919,6 +1049,15 @@ impl Lightbox {
                     section.adds.clear();
                 }
                 section
+            }),
+            attachments: (!detail.trashed).then(|| self.attachments.view(locale, units)),
+            links: self.linked.as_ref().map(|linked| {
+                self.every.section(
+                    locale,
+                    crate::strings::links::section_linked(locale),
+                    links::rows(locale, linked),
+                    own::links_empty(locale),
+                )
             }),
             has_place: detail.place.is_some(),
             place_phrase: detail
@@ -1048,7 +1187,7 @@ fn verbs(
     if detail.trashed {
         let mut forever = verb(
             V::DeleteForever,
-            words::photos_delete_forever(locale),
+            shared::trash_purge(locale),
             "trash",
             refusal,
             false,
@@ -1058,7 +1197,7 @@ fn verbs(
             vec![
                 verb(
                     V::Restore,
-                    words::photos_restore(locale),
+                    shared::trash_restore(locale),
                     "restore",
                     refusal,
                     false,
@@ -1114,7 +1253,7 @@ fn verbs(
         ),
         verb(
             V::Trash,
-            words::photos_trash(locale),
+            shared::trash_move(locale),
             "trash",
             refusal,
             false,
@@ -1176,9 +1315,44 @@ impl Screen for Lightbox {
             }
             Some(E::DataChanged(_)) => {
                 self.albums.reload(ctx);
-                return self.reload(ctx);
+                // THE EDITOR ABOVE CLOSED: its line and Undo are drawn here.
+                let effects = self.reload(ctx);
+                self.undo.take_handed(ctx);
+                return effects;
             }
-            Some(E::EffectResult(result)) => return self.effect_result(&result, ctx),
+            Some(E::EffectResult(result)) => {
+                if self.gate.asking() {
+                    use wire::effect_result::Outcome as O;
+                    let checked = match &result.outcome {
+                        Some(O::OwnerChecked(checked)) => Some(*checked),
+                        // The prompt itself errored: the same as not recognised.
+                        Some(O::Failed(_)) => Some(wire::OwnerChecked {
+                            outcome: wire::owner_checked::Outcome::Failed as i32,
+                            ..Default::default()
+                        }),
+                        _ => None,
+                    };
+                    if let Some(checked) = checked {
+                        return self.checked(&checked, locale);
+                    }
+                }
+                // The shell's answer to a pick: the attachments' (an add under way).
+                if let Some(outcome) = &result.outcome
+                    && let Some(effects) = self.attachments.result(ctx, outcome)
+                {
+                    return effects;
+                }
+                return self.effect_result(&result, ctx);
+            }
+            Some(E::StatusActed(_)) => {
+                if self.undo.acted(ctx) {
+                    self.reload(ctx);
+                }
+            }
+            Some(E::Left(_)) => {
+                self.undo.clear();
+                return self.gate.cancel();
+            }
             Some(E::OffThreadDone(done)) => return self.fetched(&done, ctx),
             Some(E::TimerFired(fired)) if fired.timer == SLIDESHOW_TIMER => {
                 // IT WRAPS AT THE END OF THE SHELF: a slideshow is a loop until Leave.
@@ -1222,8 +1396,15 @@ impl Screen for Lightbox {
                             return self.tap(kind, ctx);
                         }
                     }
+                    K::StatusActed(_) => {
+                        if self.undo.acted(ctx) {
+                            self.reload(ctx);
+                        }
+                    }
                     K::AlbumChoice(album) => self.album_event(&album, ctx),
                     K::People(link) => self.people_event(&link, ctx),
+                    K::Link(link) => self.link_event(&link, ctx),
+                    K::Attachment(attachment) => return self.attachments.event(ctx, attachment),
                     K::Share(chosen) => {
                         self.sheet = Sheet::None;
                         let precision =
@@ -1248,15 +1429,31 @@ impl Screen for Lightbox {
                             && caption != detail.cell.title.trim()
                         {
                             let id = self.photo_id.clone();
-                            self.write(
+                            let written = self.write(
                                 ctx,
                                 "retitle-photo",
                                 &[&id, &caption],
                                 act::photos::RetitlePhoto {
                                     photo_id: id.clone(),
                                     title: caption.clone(),
+                                    expected_rev: self.rev,
                                 },
+                                Some(own::caption_changed(ctx.locale())),
                             );
+                            // The photograph changed, or went to the trash, since it was read:
+                            // the caption typed is kept as an earlier version and the page reads
+                            // the photograph as it is now (#1185).
+                            if !written && let Some(stale) = self.stale.take() {
+                                let said = stale::on_button(
+                                    ctx,
+                                    &chat_confirm::noun_photo(ctx.locale()),
+                                    &id,
+                                    stale,
+                                    vec![("entity.title".to_owned(), caption.into())],
+                                );
+                                self.reload(ctx);
+                                self.undo.refuse(said);
+                            }
                         }
                     }
                     K::TagAdded(added) => {
@@ -1272,6 +1469,7 @@ impl Screen for Lightbox {
                                     photo_id: id.clone(),
                                     label: label.clone(),
                                 },
+                                Some(own::label_added(ctx.locale())),
                             );
                         }
                     }
@@ -1292,6 +1490,7 @@ impl Screen for Lightbox {
                                     photo_id: id.clone(),
                                     label: label.clone(),
                                 },
+                                Some(own::label_removed(ctx.locale())),
                             );
                         }
                     }
@@ -1312,6 +1511,7 @@ impl Screen for Lightbox {
                                     Field::Is(place.clone())
                                 },
                             },
+                            Some(own::place_changed(ctx.locale())),
                         );
                     }
                     K::CopyLocation(_) => {
@@ -1347,6 +1547,7 @@ impl Screen for Lightbox {
                                 act::photos::PurgePhoto {
                                     photo_id: id.clone(),
                                 },
+                                None,
                             ) {
                                 // Nothing left to show: the photograph is gone.
                                 self.dismissed = true;
@@ -1363,19 +1564,10 @@ impl Screen for Lightbox {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
-        use wire::photos_lightbox_state::Content as C;
-        let content = match &self.content {
-            Content::Loading => C::Loading(wire::Loading { first_load: true }),
-            Content::Failed => C::Failure(read::failure(locale)),
-            Content::Denied(denial) => C::Denied(wire::Denied {
-                title: own::denied_title(locale),
-                body: own::denied_body(locale),
-                receipt: denial.code.clone().unwrap_or_default(),
-            }),
-            Content::Data(detail) => {
-                C::Photo(Box::new(self.photo(detail, locale, ctx.hour_cycle())))
-            }
-        };
+        let photo = self
+            .content
+            .data()
+            .map(|detail| self.photo(detail, locale, ctx.units(), ctx.hour_cycle()));
         let refusal = self.refusal(locale);
         let edit = self
             .detail()
@@ -1412,7 +1604,13 @@ impl Screen for Lightbox {
         });
         let state = wire::PhotosLightboxState {
             photo_id: self.photo_id.clone(),
-            content: Some(content),
+            page: Some(self.content.wire(
+                locale,
+                |denial| super::denied(locale, denial),
+                wire::EmptyState::default,
+            )),
+            content: photo
+                .map(|photo| wire::photos_lightbox_state::Content::Photo(Box::new(photo))),
             chrome_visible: self.chrome_visible || self.slideshow,
             sheet: self.sheet as i32,
             slideshow: self.slideshow,
@@ -1427,14 +1625,26 @@ impl Screen for Lightbox {
                 )
             }),
             slideshow_line: words::photos_slideshow_line(locale),
-            status: self.status.clone(),
+            status: self
+                .undo
+                .status()
+                .or_else(|| self.earlier.status(locale))
+                .or_else(|| {
+                    self.linked_unread.then(|| wire::StatusLine {
+                        sentence: own::links_unread(locale),
+                        action_label: String::new(),
+                        refused: false,
+                    })
+                }),
             album_choice: Some(self.albums.view(locale, Link::default())),
             people_picker: Some(self.links.picker(locale, &self.people_ids())),
+            link_picker: (self.linked.is_some() && self.every.is_open())
+                .then(|| self.every.picker(locale, &self.linked_ids())),
             place_choices: self.place_choices(locale),
             confirm: self.confirm.then(|| wire::Confirm {
                 title: words::photos_delete_forever_one(locale),
                 body: words::photos_delete_forever_body(locale),
-                confirm_label: words::photos_delete_forever(locale),
+                confirm_label: shared::trash_purge(locale),
                 destructive: true,
             }),
             dismissed: self.dismissed,

@@ -150,6 +150,9 @@ message PeopleRosterRow {
   // `today` and never a UTC slice. EMPTY when the instant is absent.
   string last_contacted_local_day = 14;
   string created_local_day = 15;
+  // The words matched only in an EARLIER VERSION of the item, not in what it says now (#1185):
+  // the row is the live item, once, and it opens that item's Earlier versions. Search rows only.
+  bool in_earlier_version = 16;
 }
 
 // ---------------------------------------------------------------------------
@@ -277,6 +280,9 @@ message PeopleSheet {
   uint32 vault_more = 12;
   // THIS IS THE OWNER'S OWN CARD (My card): no star, merge, trash or touch log.
   bool is_me = 13;
+  // The person's revision: the newest version their history holds (0 when none). An edit names
+  // it as `expected_rev`; the vault refuses one made from a revision that is no longer theirs (#1185).
+  int64 rev = 14;
 }
 
 // One thing in the vault that is about a person, from another app.
@@ -334,6 +340,9 @@ message PeopleTrashRow {
   string deleted_at = 5;
   string deleted_local_day = 6;
   string purge_local_day = 7;
+  // The row is a list, not a person (`party_id` names it all the same): a list in the trash keeps its
+  // members, and they are in it again once it is restored.
+  bool list = 8;
 }
 
 message PeopleTrash {

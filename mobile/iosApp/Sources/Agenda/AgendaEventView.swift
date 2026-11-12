@@ -14,6 +14,7 @@ struct AgendaEventView: View {
     let send: (Centraid_Core_V1_AgendaEventEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
     let onBack: () -> Void
+    let onPhoneSays: (Centraid_Core_V1_PhoneSaysTaken) -> Void
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.openURL) private var openURL
@@ -28,18 +29,39 @@ struct AgendaEventView: View {
         let chrome = state.chrome
         // THE EVENT'S OWN NAME IS THE TITLE, inline in the top row beside the chevron (round 9).
         PushedPage(title: { if case let .data(d)? = state.content { return d.title } else { return "" } }(), parentTitle: chrome.back, onBack: onBack) {
-            EmptyView()
+            // THE "…" KEY holds the verbs that do not fit the bar of three (Share).
+            if case let .data(d)? = state.content, !d.menu.isEmpty {
+                Menu {
+                    ForEach(d.menu, id: \.key) { action in
+                        Button(action.label) {
+                            send(event { $0.action = .with { $0.key = action.key } })
+                        }
+                        .disabled(!action.enabled)
+                        .accessibilityIdentifier("agenda-menu-\(action.key)")
+                    }
+                } label: {
+                    ToolbarIconFace(iconKey: "MoreHoriz")
+                }
+                .accessibilityLabel(d.menuLabel)
+                .accessibilityIdentifier("agenda-event-menu")
+            }
         } content: {
-            if case let .gone(gone)? = state.content {
-                EmptyStateView(headline: gone.title, body: gone.body, actionLabel: gone.actionLabel, onAction: onBack)
-                    .accessibilityIdentifier("agenda-event-gone")
-            } else {
-                ReadStateView(
-                    content: readContent(state),
+            // THE READ IS THE KIT'S PAGE STATE (#1185): an event that is gone is its final failure, and
+            // the status line under it carries "{title} moved to trash" with Undo.
+            VStack(spacing: 0) {
+                PageReadStateView(
+                    page: state.page,
                     loadingLabel: chrome.loading,
                     onRetry: { send(event { $0.refreshed = .init() }) }
-                ) { detail in
-                    detailView(detail, state: state)
+                ) {
+                    if case let .data(detail)? = state.content {
+                        detailView(detail, state: state)
+                    }
+                }
+                if case .failed? = state.page.state {
+                    StatusLineView(status: state.status, identifier: "agenda-status-action") {
+                        send(event { $0.statusActed = .init() })
+                    }
                 }
             }
         }
@@ -84,19 +106,10 @@ struct AgendaEventView: View {
                 onDismiss: { send(event { $0.confirmDismissed = .init() }) }
             )
         }
+        .linkPickerSheet(state.linkPicker) { link in send(event { $0.link = link }) }
         // A CANCELLATION COMMITTED: the screen is done.
         .onChange(of: state.dismissed) { _, dismissed in
             if dismissed { onBack() }
-        }
-    }
-
-    private func readContent(_ state: Centraid_Core_V1_AgendaEventState) -> ScreenContent<Centraid_Core_V1_AgendaEventData> {
-        switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        case .gone?, nil: return .loading(true)
         }
     }
 
@@ -109,7 +122,11 @@ struct AgendaEventView: View {
     private func detailView(_ detail: Centraid_Core_V1_AgendaEventData, state: Centraid_Core_V1_AgendaEventState) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                if detail.hasTitlePhoneSays {
+                    PhoneSaysLines(lines: [detail.titlePhoneSays], onTake: onPhoneSays)
+                }
                 header(detail)
+                PhoneSaysLines(lines: detail.whenPhoneSays, onTake: onPhoneSays)
                 // THE FACTS IN ONE ROUNDED CARD (#1173), label left and value right, as on the board.
                 if !detail.facts.isEmpty {
                     AgendaGroupCard {
@@ -119,6 +136,7 @@ struct AgendaEventView: View {
                     }
                     .accessibilityIdentifier("agenda-event-facts")
                 }
+                PhoneSaysLines(lines: detail.factsPhoneSays, onTake: onPhoneSays)
                 // THE JOINING LINK, OPENED BY THE OS under Rust's verb
                 // ("Join call"); empty with no link.
                 if !detail.callLabel.isEmpty, let url = URL(string: detail.callUri) {
@@ -137,6 +155,9 @@ struct AgendaEventView: View {
                         .padding(CentraidGeometry.pageMargin)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                if detail.hasNotesPhoneSays {
+                    PhoneSaysLines(lines: [detail.notesPhoneSays], onTake: onPhoneSays)
+                }
                 if detail.hasRsvp {
                     rsvpView(detail.rsvp)
                 }
@@ -149,6 +170,7 @@ struct AgendaEventView: View {
                     }
                     .padding(.top, 0)
                 }
+                PhoneSaysLines(lines: detail.guestsPhoneSays, onTake: onPhoneSays)
                 // GUESTS THE PHONE'S CALENDAR HOLDS, read only: a name (else the address), the address
                 // under a name, and the guest's answer.
                 if !detail.followedGuests.isEmpty {
@@ -167,6 +189,12 @@ struct AgendaEventView: View {
                         send: { attachment in send(event { $0.attachment = attachment }) }
                     )
                 }
+                // LINKED TO (#1185): the kit's section, after the attachments; Rust makes every word and row.
+                if detail.hasLinks {
+                    LinkSectionView(section: detail.links, send: { link in
+                        send(event { $0.link = link })
+                    }, open: open)
+                }
                 let sentence = writeSentence(state)
                 if !sentence.isEmpty, state.sheet != .cancelScope {
                     Text(sentence)
@@ -176,6 +204,9 @@ struct AgendaEventView: View {
                         .padding(.top, 12)
                         .accessibilityIdentifier("agenda-event-status")
                 }
+                // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the actions.
+                EarlierEntryRow(entry: state.hasEarlier ? state.earlier : nil, open: open)
+                OriginLineView(line: state.hasOrigin ? state.origin : nil)
                 // THE ACTIONS IN ONE ROW OF EQUAL KEYS (#1173): Open in Maps, Edit and Cancel share
                 // the width, Cancel in the red outline.
                 KitChoiceRow {

@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Note menu</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #FBFAF8; font-family: Geist, system-ui, sans-serif; color: #1C1B19;">
+  <div style="display: flex; align-items: center; justify-content: space-between; padding: 56px 20px 8px;">
+    <a href="NotesHome.dc.html" aria-label="Done, back to Notes" style="height: 44px; padding: 0 18px; border-radius: 22px; border: 1px solid #E4E0D8; background: rgba(255,255,255,0.85); display: flex; align-items: center; text-decoration: none; color: #8C6802; font-size: 16px; font-weight: 600;">Done</a>
+    <span style="font-size: 13px; color: #6F6B64;">Saved</span>
+    <button aria-label="Note actions" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid #E4E0D8; background: rgba(255,255,255,0.85); display: flex; align-items: center; justify-content: center;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="#1C1B19" aria-hidden="true"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg>
+    </button>
+  </div>
+
+  <div style="display: flex; align-items: flex-start; gap: 6px; margin: 6px 20px 0; font-size: 13px; color: #6F6B64;">
+    <h1 style="margin: 4px 0 0; flex: 1; min-width: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px;">Lisbon trip</h1>
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8C6802" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-label="Pinned" role="img"><path d="M9 4h6l-1 5 3 3H7l3-3zM12 12v8"></path></svg>
+    Travel · Edited Wed 4 November
+  </div>
+  
+
+
+  <div style="display: flex; flex-wrap: wrap; gap: 6px; margin: 0 20px 18px;">
+    <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: #4A4741; background: #F2EFEA; border-radius: 14px; padding: 5px 6px 5px 10px;">travel
+      <button aria-label="Remove tag travel" style="border: none; background: none; padding: 0 2px; display: flex;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#85807A" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+    </span>
+    <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: #4A4741; background: #F2EFEA; border-radius: 14px; padding: 5px 6px 5px 10px;">december
+      <button aria-label="Remove tag december" style="border: none; background: none; padding: 0 2px; display: flex;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#85807A" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+    </span>
+    <span style="font-size: 13px; color: #8E897F; border: 1px dashed #CFCAC1; border-radius: 14px; padding: 4px 10px;">Add a tag</span>
+  </div>
+
+  <div style="padding: 0 20px; font-size: 16px; line-height: 1.5; color: #1C1B19;">
+    <p style="margin: 0 0 12px;">Flights are booked: out on 12 December, back on the 18th. The flat is up the hill from the Alfama tram stop.</p>
+    <p style="margin: 0 0 14px;">Day by day is in <span style="display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 8px; background: #F6EFD8; color: #087990; font-weight: 600; font-size: 15px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#087990" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"></path><path d="M14 3v4h4"></path></svg>Lisbon itinerary</span></p>
+<p style="margin: 0 0 14px;">Still to write: <span style="display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 8px; background: #FBE7E4; color: #C8392F; font-weight: 600; font-size: 15px;">Packing list</span> and <span style="display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 8px; background: #F2EFEA; color: #8E897F; font-weight: 600; font-size: 15px;">Old plan</span>.</p>
+
+    <div style="display: flex; gap: 12px; align-items: flex-start; padding: 6px 0;">
+      <span style="width: 22px; height: 22px; border-radius: 11px; background: #8C6802; flex-shrink: 0; display: flex; align-items: center; justify-content: center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>
+      <span style="color: #85807A; text-decoration: line-through;">Book the flights</span>
+    </div>
+    <div style="display: flex; gap: 12px; align-items: flex-start; padding: 6px 0;">
+      <span style="width: 22px; height: 22px; border-radius: 11px; background: #8C6802; flex-shrink: 0; display: flex; align-items: center; justify-content: center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>
+      <span style="color: #85807A; text-decoration: line-through;">Book the flat in Alfama</span>
+    </div>
+    <div style="display: flex; gap: 12px; align-items: flex-start; padding: 6px 0;">
+      <span style="width: 22px; height: 22px; border-radius: 11px; border: 1.6px solid #8E897F; box-sizing: border-box; flex-shrink: 0;"></span>
+      <span>Travel insurance</span>
+    </div>
+    <div style="display: flex; gap: 12px; align-items: flex-start; padding: 6px 0;">
+      <span style="width: 22px; height: 22px; border-radius: 11px; border: 1.6px solid #8E897F; box-sizing: border-box; flex-shrink: 0;"></span>
+      <span>Ask <span style="display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 8px; background: #ECE8F3; color: #7638AD; font-weight: 600; font-size: 15px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7638AD" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0116 0"></path></svg>Ana Díaz</span> to water the plants</span>
+    </div>
+    <div style="display: flex; gap: 12px; align-items: flex-start; padding: 6px 0;">
+      <span style="width: 22px; height: 22px; border-radius: 11px; border: 1.6px solid #8E897F; box-sizing: border-box; flex-shrink: 0;"></span>
+      <span>Print the boarding passes<span style="display: inline-block; width: 2px; height: 20px; background: #8C6802; vertical-align: -4px; margin-left: 1px;"></span></span>
+    </div>
+  </div>
+
+  <div role="status" aria-live="polite" style="position: absolute; left: 16px; right: 16px; bottom: 92px; height: 44px; border-radius: 22px; background: #FFFFFF; border: 1px solid #E4E0D8; display: flex; align-items: center; gap: 10px; padding: 0 6px 0 16px; box-sizing: border-box;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6F6B64" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 8h.01M11 12h1v5h1"></path></svg><span style="flex-grow: 1; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">No note called Packing list</span><button style="height: 44px; padding: 0 12px; border: none; background: none; color: #087990; font-size: 15px; font-weight: 600;">Create note</button></div>
+<div style="position: absolute; left: 16px; right: 16px; bottom: 24px; height: 56px; border-radius: 28px; border: 1px solid rgba(255,255,255,0.7); background: rgba(255,255,255,0.72); box-shadow: 0 6px 20px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: space-around;">
+    <button aria-label="Checklist" style="width: 44px; height: 44px; border: none; background: none; display: flex; align-items: center; justify-content: center;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="7" r="2.5"></circle><circle cx="6" cy="17" r="2.5"></circle><path d="M5 17l1 1 1.6-2M11 7h10M11 17h10"></path></svg>
+    </button>
+    <button aria-label="Text style" style="width: 44px; height: 44px; border: none; background: none; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 600; color: #1C1B19;">Aa</button>
+    <button aria-label="Add link" style="width: 44px; height: 44px; border: none; background: none; display: flex; align-items: center; justify-content: center;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10 14a4 4 0 006 0l3-3a4 4 0 00-6-6l-1 1"></path><path d="M14 10a4 4 0 00-6 0l-3 3a4 4 0 006 6l1-1"></path></svg>
+    </button>
+    <button aria-label="Add a tag" style="width: 44px; height: 44px; border: none; background: none; display: flex; align-items: center; justify-content: center;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 4L7 20M17 4l-2 16M4 9h16M3 15h16"></path></svg>
+    </button>
+    <button aria-label="Hide keyboard" style="width: 44px; height: 44px; border: none; background: none; display: flex; align-items: center; justify-content: center;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="11" rx="2"></rect><path d="M7 8h.01M11 8h.01M15 8h.01M8 11.5h8M9 19l3 2 3-2"></path></svg>
+    </button>
+  </div>
+<div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(0,0,0,0.12);"></div><div role="dialog" aria-label="Note actions" style="position: absolute; left: 8px; right: 8px; bottom: 8px; background: #F4F2EE; border-radius: 34px; padding: 10px 0 24px; box-sizing: border-box;"><div aria-hidden="true" style="width: 36px; height: 5px; border-radius: 3px; background: #CFCAC1; margin: 0 auto 14px;"></div><div style="padding: 0 20px 8px; font-size: 20px; font-weight: 700;">Lisbon trip</div><div style="margin: 0 12px; background: #FFFFFF; border-radius: 16px;"><div style="display: flex; align-items: center; gap: 12px; padding: 0 14px; min-height: 48px; border-bottom: 1px solid #EEEBE5;"><span style="width: 30px; height: 30px; border-radius: 8px; background: #8C6802; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1 5 3 3H7l3-3zM12 12v8"></path></svg></span><span style="flex-grow: 1; font-size: 16px; color: #1C1B19;">Unpin</span></div><div style="display: flex; align-items: center; gap: 12px; padding: 0 14px; min-height: 48px; border-bottom: 1px solid #EEEBE5;"><span style="width: 30px; height: 30px; border-radius: 8px; background: #8C6802; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg></span><span style="flex-grow: 1; font-size: 16px; color: #1C1B19;">Attachments</span><span style="font-size: 15px; color: #6F6B64;">2</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8E897F" stroke-width="2.4" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></div><div style="display: flex; align-items: center; gap: 12px; padding: 0 14px; min-height: 48px; border-bottom: 1px solid #EEEBE5;"><span style="width: 30px; height: 30px; border-radius: 8px; background: #8C6802; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M10 14a4 4 0 006 0l3-3a4 4 0 00-6-6l-1 1"></path><path d="M14 10a4 4 0 00-6 0l-3 3a4 4 0 006 6l1-1"></path></svg></span><span style="flex-grow: 1; font-size: 16px; color: #1C1B19;">Linked to</span><span style="font-size: 15px; color: #6F6B64;">3</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8E897F" stroke-width="2.4" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></div><div style="display: flex; align-items: center; gap: 12px; padding: 0 14px; min-height: 48px;"><span style="width: 30px; height: 30px; border-radius: 8px; background: #8C6802; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 109-9 9 9 0 00-6.4 2.6L3 8M3 3v5h5M12 7v5l3 2"></path></svg></span><span style="flex-grow: 1; font-size: 16px; color: #1C1B19;">Earlier versions</span><span style="font-size: 15px; color: #6F6B64;">5</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8E897F" stroke-width="2.4" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></div></div><div style="margin: 8px 30px 0; font-size: 13px; color: #6F6B64;">From Vault folder</div><div style="margin: 12px 12px 0; background: #FFFFFF; border-radius: 16px;"><div style="display: flex; align-items: center; gap: 12px; padding: 0 14px; min-height: 48px; border-bottom: 1px solid #EEEBE5;"><span style="width: 30px; height: 30px; border-radius: 8px; background: #8C6802; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4M8 8l4-4 4 4M5 13v6h14v-6"></path></svg></span><span style="flex-grow: 1; font-size: 16px; color: #1C1B19;">Share</span></div><div style="display: flex; align-items: center; gap: 12px; padding: 0 14px; min-height: 48px;"><span style="width: 30px; height: 30px; border-radius: 8px; background: #C8392F; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"></path></svg></span><span style="flex-grow: 1; font-size: 16px; color: #C8392F;">Move to trash</span></div></div></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

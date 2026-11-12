@@ -121,21 +121,21 @@ fn an_edit_keeps_the_words_it_replaced_and_a_no_op_keeps_nothing() {
         json!({ "id": id, "title": "Plan B", "format": "plain" }),
     );
     w.ok("note.edit", json!({ "id": id, "body": "third" }));
-    let kept: Vec<String> = w
+    let kept: Vec<Option<String>> = w
         .scratch
         .vault
         .read(|c| {
             Ok(
                 c.prepare("SELECT body FROM revision WHERE entity_id = ?1 ORDER BY seq")?
-                    .query_map([&id], |r| r.get::<_, String>(0))?
+                    .query_map([&id], |r| r.get::<_, Option<String>>(0))?
                     .collect::<rusqlite::Result<Vec<_>>>()?,
             )
         })
         .expect("revisions");
     assert_eq!(
         kept,
-        ["first", "second"],
-        "the replaced words, oldest first; a repeat and a title edit keep none"
+        [Some("first".to_owned()), None, Some("second".to_owned())],
+        "the replaced words, oldest first; a repeat keeps none, a title edit keeps no copy of them"
     );
     assert_eq!(
         w.query::<String>("SELECT title FROM entity WHERE id = ?1", &[&id]),
@@ -289,4 +289,227 @@ fn a_memo_a_trashed_note_and_the_note_itself_are_not_wikilink_targets() {
     w.ok("entity.trash", json!({ "id": gone }));
     let id = w.note("Self", "[[Plan]] [[Gone]] [[Self]]");
     assert!(w.links(&id).is_empty());
+}
+
+#[test]
+fn a_title_only_edit_keeps_no_copy_of_the_body_and_its_version_restores_the_title_alone() {
+    let w = World::new();
+    let id = w.note("Plan", "the words");
+    w.ok("note.edit", json!({ "id": id, "title": "Plan B" }));
+    // No body bytes in that history row; the version is still there, for the title.
+    let (rows, with_body): (i64, i64) = (
+        w.query("SELECT COUNT(*) FROM revision WHERE entity_id = ?1", &[&id]),
+        w.query(
+            "SELECT COUNT(*) FROM revision WHERE entity_id = ?1 AND body IS NOT NULL",
+            &[&id],
+        ),
+    );
+    assert_eq!((rows, with_body), (1, 0));
+    assert_eq!(
+        w.query::<i64>(
+            "SELECT COUNT(*) FROM revision WHERE entity_id = ?1 AND state LIKE '%the words%'",
+            &[&id]
+        ),
+        0
+    );
+    // The page shows one correct row: the title, and not the words.
+    let page = w
+        .scratch
+        .vault
+        .read(|c| centraid_vault::history::earlier_versions(c, &id, None, 10))
+        .expect("page");
+    assert_eq!(page.versions.len(), 1);
+    let fields: Vec<&str> = page.versions[0]
+        .changes
+        .iter()
+        .map(|change| change.field.as_str())
+        .collect();
+    assert_eq!(fields, ["entity.title"]);
+    assert_eq!(page.versions[0].changes[0].before, json!("Plan"));
+    // Restoring it brings the old title back and writes the words nowhere: the note's words are
+    // as they were, and the restore's own version keeps no copy of them either.
+    w.ok("history.restore_version", json!({ "id": id, "seq": 1 }));
+    assert_eq!(
+        w.query::<String>("SELECT title FROM entity WHERE id = ?1", &[&id]),
+        "Plan"
+    );
+    assert_eq!(
+        w.query::<String>("SELECT body FROM note WHERE id = ?1", &[&id]),
+        "the words"
+    );
+    assert_eq!(
+        w.query::<i64>(
+            "SELECT COUNT(*) FROM revision WHERE entity_id = ?1 AND body IS NOT NULL",
+            &[&id]
+        ),
+        0
+    );
+    // A later change of the words does not rewrite what the title's version held.
+    w.ok("note.edit", json!({ "id": id, "body": "newer words" }));
+    let state = w
+        .scratch
+        .vault
+        .read(|c| centraid_vault::history::version_state(c, &id, 1))
+        .expect("state")
+        .expect("version");
+    assert_eq!(
+        state["note"]["body"], "the words",
+        "a version that kept no words reads with the ones the note held then"
+    );
+}
+
+fn revisions(w: &World, id: &str) -> i64 {
+    w.query::<i64>("SELECT COUNT(*) FROM revision WHERE entity_id = ?1", &[id])
+}
+
+#[test]
+fn a_save_that_names_a_stale_revision_is_refused_and_writes_nothing() {
+    let w = World::new();
+    let id = w.note("Plan", "first");
+    // Read at revision 0; something else edits it.
+    w.ok("note.edit", json!({ "id": id, "body": "elsewhere" }));
+    let before = revisions(&w, &id);
+    let outcome = w.run(
+        "note.edit",
+        json!({ "id": id, "body": "mine", "expected_rev": 0 }),
+    );
+    assert_eq!(outcome.status, CommandStatus::Failed);
+    assert_eq!(outcome.predicate.as_deref(), Some("stale_revision"));
+    assert_eq!(
+        w.query::<String>("SELECT body FROM note WHERE id = ?1", &[&id]),
+        "elsewhere"
+    );
+    assert_eq!(revisions(&w, &id), before);
+    assert!(outcome.tables.is_empty());
+}
+
+#[test]
+fn a_fresh_save_is_accepted_and_answers_the_revision_the_next_one_names() {
+    let w = World::new();
+    let id = w.note("Plan", "first");
+    let one = w.ok(
+        "note.edit",
+        json!({ "id": id, "body": "second", "expected_rev": 0 }),
+    );
+    assert_eq!(one["rev"], 1);
+    let two = w.ok(
+        "note.edit",
+        json!({ "id": id, "body": "third", "expected_rev": 1 }),
+    );
+    assert_eq!(two["rev"], 2);
+    assert_eq!(revisions(&w, &id), 2);
+}
+
+#[test]
+fn a_save_that_names_no_revision_is_accepted_as_before_and_answers_none() {
+    let w = World::new();
+    let id = w.note("Plan", "first");
+    w.ok("note.edit", json!({ "id": id, "body": "elsewhere" }));
+    let answer = w.ok("note.edit", json!({ "id": id, "body": "mine" }));
+    assert!(answer.get("rev").is_none());
+    assert_eq!(revisions(&w, &id), 2);
+}
+
+#[test]
+fn a_save_that_changes_nothing_does_not_move_the_revision() {
+    let w = World::new();
+    let id = w.note("Plan", "first");
+    let answer = w.ok(
+        "note.edit",
+        json!({ "id": id, "body": "first", "expected_rev": 0 }),
+    );
+    assert_eq!(answer["rev"], 0);
+    assert_eq!(revisions(&w, &id), 0);
+}
+
+#[test]
+fn a_save_into_the_trash_is_refused_as_trashed_whether_or_not_the_revision_matches() {
+    let w = World::new();
+    let id = w.note("Plan", "first");
+    w.ok("entity.trash", json!({ "id": id }));
+    for rev in [0, 7] {
+        let outcome = w.run(
+            "note.edit",
+            json!({ "id": id, "body": "mine", "expected_rev": rev }),
+        );
+        assert_eq!(outcome.status, CommandStatus::Failed);
+        assert_eq!(outcome.predicate.as_deref(), Some("stale_trashed"));
+    }
+    // With no revision named it is the ordinary refusal.
+    let plain = w.run("note.edit", json!({ "id": id, "body": "mine" }));
+    assert_ne!(plain.predicate.as_deref(), Some("stale_trashed"));
+    assert_eq!(
+        w.query::<String>("SELECT body FROM note WHERE id = ?1", &[&id]),
+        "first"
+    );
+}
+
+#[test]
+fn the_words_of_a_refused_save_are_kept_as_an_earlier_version_and_the_note_is_untouched() {
+    let w = World::new();
+    let id = w.note("Plan", "first");
+    w.ok("note.edit", json!({ "id": id, "body": "elsewhere" }));
+    assert_eq!(revisions(&w, &id), 1);
+    let kept = w.ok(
+        "history.keep_version",
+        json!({ "id": id, "fields": { "note.body": "my unsaved words", "entity.title": "Plan B" } }),
+    );
+    assert_eq!(kept["kept"], true);
+    assert_eq!(kept["seq"], 2);
+    assert_eq!(revisions(&w, &id), 2);
+    // The note is as the other edit left it.
+    assert_eq!(
+        w.query::<String>("SELECT body FROM note WHERE id = ?1", &[&id]),
+        "elsewhere"
+    );
+    assert_eq!(
+        w.query::<String>("SELECT title FROM entity WHERE id = ?1", &[&id]),
+        "Plan"
+    );
+    // The kept version holds the member's words and restores like any other.
+    assert_eq!(
+        w.query::<String>(
+            "SELECT body FROM revision WHERE entity_id = ?1 AND seq = 2",
+            &[&id]
+        ),
+        "my unsaved words"
+    );
+    w.ok("history.restore_version", json!({ "id": id, "seq": 2 }));
+    assert_eq!(
+        w.query::<String>("SELECT body FROM note WHERE id = ?1", &[&id]),
+        "my unsaved words"
+    );
+}
+
+#[test]
+fn words_the_note_already_holds_keep_nothing_and_a_trashed_note_still_keeps_them() {
+    let w = World::new();
+    let id = w.note("Plan", "first");
+    let same = w.ok(
+        "history.keep_version",
+        json!({ "id": id, "fields": { "note.body": "first" } }),
+    );
+    assert_eq!(same["kept"], false);
+    assert_eq!(revisions(&w, &id), 0);
+    w.ok("entity.trash", json!({ "id": id }));
+    let kept = w.ok(
+        "history.keep_version",
+        json!({ "id": id, "fields": { "note.body": "typed while it was trashed" } }),
+    );
+    assert_eq!(kept["kept"], true);
+    assert_eq!(revisions(&w, &id), 1);
+}
+
+#[test]
+fn a_field_the_history_does_not_keep_is_refused_and_writes_nothing() {
+    let w = World::new();
+    let id = w.note("Plan", "first");
+    for field in ["note.nope", "nothing", "document.blob", "entity.id"] {
+        let sentence = w.refused(
+            "history.keep_version",
+            json!({ "id": id, "fields": { field: "x" } }),
+        );
+        assert!(sentence.contains(field), "{sentence}");
+    }
+    assert_eq!(revisions(&w, &id), 0);
 }

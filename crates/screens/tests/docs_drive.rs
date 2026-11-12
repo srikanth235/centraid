@@ -68,8 +68,8 @@ fn the_band_moves_in_place_and_the_tab_you_are_on_is_nothing() {
     band(&mut d, i, "more");
     assert_eq!(
         sheet_keys(state(&d, i)),
-        ["recent", "trash_shelf"],
-        "More lists Recently added and Trash; Followed only once a folder is followed"
+        ["recent", "export", "trash_shelf"],
+        "More lists Recently added, Export and Trash; Followed only once a folder is followed"
     );
 }
 
@@ -191,14 +191,11 @@ fn filters_are_the_requests_and_the_menu_follows_them() {
     assert_eq!(menu::checked(section(&d, i, "sort")), ["name_asc"]);
     // A filter nothing matches is its own empty state with the one action.
     menu_pick(&mut d, i, "type", "video");
-    let data = drive_data(d.view(i));
+    let empty = drive_empty(d.view(i));
+    assert_eq!(empty.headline, "Nothing matches these filters.");
+    assert_eq!(empty.action_label, "Clear filters");
     assert_eq!(
-        data.empty.as_ref().unwrap().headline,
-        "Nothing matches these filters."
-    );
-    assert_eq!(data.empty.as_ref().unwrap().action_label, "Clear filters");
-    assert_eq!(
-        data.empty_action,
+        state(&d, i).empty_action,
         wire::docs_drive_data::EmptyAction::ClearFilters as i32
     );
     // That action is the menu's Clear.
@@ -348,13 +345,9 @@ fn a_search_that_finds_nothing_says_so_and_still_offers_ask() {
     let mut d = driver();
     let i = root(&d);
     search(&mut d, i, "zzzqqq");
-    let data = drive_data(d.view(i));
-    assert!(data.rows.is_empty());
-    assert_eq!(
-        data.empty.as_ref().unwrap().headline,
-        "Nothing matches that."
-    );
-    assert_eq!(data.empty.as_ref().unwrap().body, "Try fewer words.");
+    let empty = drive_empty(d.view(i));
+    assert_eq!(empty.headline, "Nothing matches that.");
+    assert_eq!(empty.body, "Try fewer words.");
     assert!(state(&d, i).search.as_ref().unwrap().ask_row.is_some());
 }
 
@@ -385,12 +378,11 @@ fn every_shelf_has_its_own_empty_sentence_and_at_most_one_action() {
     let tahoe = row(d.view(i), "Tahoe packing list").document_id.clone();
     arrange(&d, act::docs::Unstar { document_id: tahoe });
     band(&mut d, i, "starred");
-    let data = drive_data(d.view(i));
-    let empty = data.empty.as_ref().expect("an empty state");
+    let empty = drive_empty(d.view(i));
     assert_eq!(empty.headline, "Nothing starred yet.");
     assert_eq!(empty.body, "Star a document to keep it here.");
     assert_eq!(
-        data.empty_action,
+        state(&d, i).empty_action,
         wire::docs_drive_data::EmptyAction::None as i32
     );
 }
@@ -433,7 +425,12 @@ fn the_row_menu_stars_once_per_intent_and_a_refusal_keeps_the_rows() {
         state(&d, i).sheet.as_ref().unwrap().kind(),
         Sheet::None
     ));
-    assert!(state(&d, i).status.is_none());
+    // Nothing was written under it: the line is still the unstar's, with Undo (#1185).
+    let line = state(&d, i).status.as_ref().expect("the unstar's line");
+    assert_eq!(
+        (line.sentence.as_str(), line.action_label.as_str()),
+        ("Star removed", "Undo")
+    );
 }
 
 #[test]
@@ -516,7 +513,12 @@ fn labels_add_tags_a_label_it_has_is_nothing_and_remove_untags() {
             label: "tahoe".to_owned(),
         }),
     );
-    assert!(state(&d, i).status.is_none());
+    // No new write: the line is still the add's, with Undo (#1185).
+    let line = state(&d, i).status.as_ref().expect("the add's line");
+    assert_eq!(
+        (line.sentence.as_str(), line.action_label.as_str()),
+        ("Label added", "Undo")
+    );
     let tag = row(d.view(i), "Tahoe packing list")
         .labels
         .iter()
@@ -647,14 +649,15 @@ fn a_folder_page_shows_its_children_its_crumbs_and_makes_a_folder_inside_it() {
     assert_eq!(data.folders[0].name, "2026");
     assert_eq!(data.folders[0].count_label, "Empty");
     assert_eq!(
-        data.crumbs
+        state(&d, page)
+            .crumbs
             .iter()
             .map(|c| c.name.as_str())
             .collect::<Vec<_>>(),
         ["Taxes"]
     );
-    assert_eq!(
-        data.empty, None,
+    assert!(
+        state(&d, page).page.as_ref().unwrap().state.is_none(),
         "a folder with a child folder is not empty"
     );
     // A new folder lands inside the folder open.
@@ -690,15 +693,15 @@ fn a_folder_page_shows_its_children_its_crumbs_and_makes_a_folder_inside_it() {
         ),
     );
     assert_eq!(state(&d, deeper).chrome.as_ref().unwrap().back, "Taxes");
-    let crumbs: Vec<&str> = drive_data(d.view(deeper))
+    // An empty folder still shows the way back up.
+    let crumbs: Vec<&str> = state(&d, deeper)
         .crumbs
         .iter()
         .map(|c| c.name.as_str())
         .collect();
     assert_eq!(crumbs, ["Taxes", "2026"]);
-    assert!(drive_data(d.view(deeper)).empty.is_some());
     assert_eq!(
-        drive_data(d.view(deeper)).empty.as_ref().unwrap().headline,
+        drive_empty(d.view(deeper)).headline,
         "This folder is empty."
     );
 }
@@ -744,16 +747,19 @@ fn the_add_sheet_rows_follow_the_os_grants_as_state() {
     };
     let upload = list.actions.iter().find(|a| a.key == "upload").unwrap();
     assert!(!upload.enabled);
-    assert_eq!(upload.detail, "File access is blocked on this phone.");
+    assert_eq!(upload.detail, "This phone does not allow file access.");
 }
 
-#[test]
-fn a_folder_the_vault_follows_is_a_stop_row_and_stopping_asks_the_shell_to_forget_it() {
+/// The drive with two folders the vault follows (as `imports.files` records them), open on the
+/// Followed folders sheet.
+fn following_two() -> (Driver, u64) {
     let mut d = driver();
     let i = root(&d);
     band(&mut d, i, "more");
-    assert!(!sheet_keys(state(&d, i)).contains(&"followed".to_owned()));
-    // THE VAULT FOLLOWS TWO FOLDERS (as `imports.files` records them); the drive reads them.
+    assert!(
+        !sheet_keys(state(&d, i)).contains(&"followed".to_owned()),
+        "nothing followed: no Followed folders row, so no stop row"
+    );
     for (origin, label) in [("folder:abc", "Scans"), ("folder:def", "Receipts")] {
         arrange(
             &d,
@@ -768,20 +774,76 @@ fn a_folder_the_vault_follows_is_a_stop_row_and_stopping_asks_the_shell_to_forge
     drive_send(&mut d, i, D::Refreshed(de::Refreshed {}));
     assert!(sheet_keys(state(&d, i)).contains(&"followed".to_owned()));
     pick(&mut d, i, "followed");
+    (d, i)
+}
+
+fn followed_labels(d: &Driver, i: u64) -> Vec<String> {
+    let sheet = state(d, i).sheet.as_ref().unwrap();
+    let Some(wire::docs_sheet::Body::Actions(list)) = &sheet.body else {
+        panic!();
+    };
+    list.actions
+        .iter()
+        .map(|action| action.label.clone())
+        .collect()
+}
+
+#[test]
+fn a_followed_folder_is_a_stop_row_in_the_shared_words_and_tapping_it_asks_first() {
+    let (mut d, i) = following_two();
     let sheet = state(&d, i).sheet.as_ref().unwrap();
     assert_eq!(sheet.title, "Followed folders");
     let Some(wire::docs_sheet::Body::Actions(list)) = &sheet.body else {
         panic!();
     };
-    // In the name's order, as the vault lists them.
-    assert_eq!(list.actions[0].label, "Stop following Receipts");
-    assert_eq!(list.actions[1].label, "Stop following Scans");
+    // In the name's order, as the vault lists them, in the words every followed store shares.
+    assert_eq!(list.actions[0].label, "Stop reading Receipts");
+    assert_eq!(list.actions[1].label, "Stop reading Scans");
     assert_eq!(
         list.footer,
         "Files added, changed or removed in these folders reach Docs. Stopping keeps every document."
     );
+    assert!(state(&d, i).stop.is_none());
+
+    // Tapping a row stops nothing yet: the sheet goes and the kit's confirm asks, naming the folder.
     d.effects.clear();
     pick(&mut d, i, "stop:folder:abc");
+    assert!(waiting(&d).is_empty(), "asked first: {:?}", waiting(&d));
+    assert!(matches!(
+        state(&d, i).sheet.as_ref().unwrap().kind(),
+        Sheet::None
+    ));
+    let confirm = state(&d, i).stop.clone().expect("asked first");
+    assert_eq!(confirm.title, "Stop reading Scans?");
+    assert_eq!(
+        confirm.body,
+        "Docs stops reading Scans on this phone. The documents already here stay."
+    );
+    assert_eq!(confirm.confirm_label, "Stop reading");
+    assert!(confirm.destructive);
+    // The trash confirm is its own and is not up.
+    assert!(state(&d, i).confirm.is_none());
+}
+
+#[test]
+fn dismissing_the_stop_confirm_keeps_following_and_confirming_stops_the_folder() {
+    let (mut d, i) = following_two();
+    d.effects.clear();
+    pick(&mut d, i, "stop:folder:abc");
+    drive_send(&mut d, i, D::StopDismissed(de::StopDismissed {}));
+    assert!(state(&d, i).stop.is_none());
+    assert!(waiting(&d).is_empty(), "dismissing stops nothing");
+    // Both folders are still followed.
+    band(&mut d, i, "more");
+    pick(&mut d, i, "followed");
+    assert_eq!(
+        followed_labels(&d, i),
+        ["Stop reading Receipts", "Stop reading Scans"]
+    );
+
+    // Confirming runs the existing stop: the shell forgets its access, the vault the folder's links.
+    pick(&mut d, i, "stop:folder:abc");
+    drive_send(&mut d, i, D::StopConfirmed(de::StopConfirmed {}));
     let asked = waiting(&d);
     assert!(
         matches!(
@@ -790,10 +852,16 @@ fn a_folder_the_vault_follows_is_a_stop_row_and_stopping_asks_the_shell_to_forge
         ),
         "{asked:?}"
     );
-    assert!(matches!(
-        state(&d, i).sheet.as_ref().unwrap().kind(),
-        Sheet::None
-    ));
+    assert_eq!(asked.len(), 1);
+    assert!(state(&d, i).stop.is_none());
+    band(&mut d, i, "more");
+    pick(&mut d, i, "followed");
+    assert_eq!(followed_labels(&d, i), ["Stop reading Receipts"]);
+
+    // A confirm that was never asked stops nothing.
+    d.effects.clear();
+    drive_send(&mut d, i, D::StopConfirmed(de::StopConfirmed {}));
+    assert!(waiting(&d).is_empty());
 }
 
 #[test]
@@ -815,6 +883,7 @@ fn the_trash_row_of_more_is_a_route_with_the_count_beside_it() {
         .unwrap();
     assert_eq!(trash.label, "Trash");
     assert_eq!(trash.detail, "1 document");
+    assert_eq!(trash.meta, "30 days, then erased");
     assert_eq!(trash.route.as_ref().unwrap().screen, docs::TRASH);
 }
 
@@ -861,6 +930,7 @@ fn recents_lists_the_newest_changed_first() {
             document_id: old,
             body_text: Some("changed".to_owned()),
             title: None,
+            expected_rev: None,
         },
     );
     drive_send(&mut d, i, D::Refreshed(de::Refreshed {}));
@@ -1015,4 +1085,41 @@ fn a_document_without_its_bytes_here_has_no_thumbnail_and_a_badge_from_its_name(
     );
     let tahoe = row(d.view(i), "Tahoe packing list");
     assert!(!tahoe.badge.is_empty() && tahoe.badge.len() <= 4);
+}
+
+#[test]
+fn a_rename_over_a_document_that_changed_elsewhere_is_refused_and_reload_shows_its_title() {
+    let mut d = driver();
+    let i = root(&d);
+    let id = text(&d, "Draft", "x");
+    drive_send(&mut d, i, D::Refreshed(de::Refreshed {}));
+    row_menu(&mut d, i, &id);
+    pick(&mut d, i, "rename");
+    arrange(
+        &d,
+        act::docs::Rename {
+            document_id: id.clone(),
+            title: "Elsewhere".to_owned(),
+            expected_rev: None,
+        },
+    );
+    drive_send(
+        &mut d,
+        i,
+        D::RenameEdited(de::RenameEdited {
+            title: "Mine".to_owned(),
+        }),
+    );
+    d.pump(std::time::Duration::from_millis(1300));
+    assert_eq!(document(&d, &id).document.unwrap().title, "Elsewhere");
+    let rename = state(&d, i).rename.clone().expect("the rename stays open");
+    assert_eq!(rename.status_label, "This document changed somewhere else.");
+    assert_eq!(rename.autosave.unwrap().reload_label, "Reload");
+    d.send(
+        i,
+        wire::screen_event::Kind::StatusActed(wire::StatusActed {}),
+    );
+    let rename = state(&d, i).rename.clone().expect("still open");
+    assert_eq!(rename.title, "Elsewhere");
+    assert_eq!(rename.status_label, "Your text is in Earlier versions.");
 }

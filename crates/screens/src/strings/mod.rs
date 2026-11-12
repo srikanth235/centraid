@@ -141,7 +141,10 @@ pub mod chat;
 pub mod chat_confirm;
 pub mod custody;
 pub mod docs;
+pub mod follow;
 pub mod health;
+pub mod health_glance;
+pub mod history;
 pub mod home;
 pub mod imports;
 pub mod links;
@@ -151,10 +154,13 @@ pub mod notes;
 pub mod pairing;
 pub mod passes;
 pub mod people;
+pub mod people_lists;
+pub mod permission;
 pub mod photos;
 pub mod photos_home;
 pub mod photos_lightbox;
 pub mod photos_shelf;
+pub mod quantity;
 pub mod settings;
 pub mod shared;
 pub mod task;
@@ -184,8 +190,6 @@ catalog! {
         "Copied. The clipboard clears in 30 seconds.",
         "Copied. The clipboard clears in 30 seconds."
     );
-    plain counter_failed = ("Couldn't read your events.", "Couldn't read your events.");
-    plain counter_retry = ("Try again", "Try again");
 }
 
 #[cfg(test)]

@@ -59,9 +59,9 @@ import dev.centraid.android.kit.AppPlace
 import dev.centraid.android.kit.BandSearchField
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.ChoiceStack
+import dev.centraid.android.kit.EarlierEntryCard
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
-import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.InkButton
@@ -89,7 +89,6 @@ import dev.centraid.android.kit.ShowMoreFooter
 import dev.centraid.android.kit.StatusChipView
 import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.toneInk
-import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -115,7 +114,7 @@ internal fun MoneyHomeScreen(
             RoomAction("Plus", label, "money-add") { addStatement() }
         },
         // A DOOR, NOT A FIELD (R-CHROME-2): Money's search is a page of its own.
-        search = chrome?.search_placeholder?.takeIf { it.isNotEmpty() && state.denied == null }?.let { placeholder ->
+        search = chrome?.search_placeholder?.takeIf { it.isNotEmpty() && state.page?.refused == null }?.let { placeholder ->
             RoomSearch(
                 field = SearchField(),
                 placeholder = placeholder,
@@ -142,6 +141,7 @@ internal fun MoneyHomeScreen(
                 onTap = { onEvent(MoneyHomeEvent(month_tapped = MoneyHomeEvent.MonthTapped())) },
             )
         },
+        statusLine = { StatusLine(state.status) },
         band = {
             AppBand(
                 app = "money",
@@ -154,12 +154,14 @@ internal fun MoneyHomeScreen(
         },
     ) {
         ReadStateView(
-            content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
+            page = state.page!!,
             onRetry = { onEvent(MoneyHomeEvent(refreshed = MoneyHomeEvent.Refreshed())) },
+            onEmptyAction = addStatement,
             retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
-        ) { home ->
+        ) {
+            val home = state.data_ ?: return@ReadStateView
             if (state.destination == MoneyHomeState.Destination.DESTINATION_CASHFLOW) {
-                LazyColumn { cashflow(state, addStatement) }
+                LazyColumn { cashflow(state) }
             } else {
                 // ACTIVITY (home) AND SPENDING are pages of cards on the page colour.
                 LazyColumn(
@@ -167,9 +169,9 @@ internal fun MoneyHomeScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     if (state.destination == MoneyHomeState.Destination.DESTINATION_SPENDING) {
-                        spending(state, onEvent, onOpen, addStatement)
+                        spending(state, onEvent, onOpen)
                     } else {
-                        activity(state, onEvent, onOpen, addStatement)
+                        activity(state, onEvent, onOpen)
                     }
                 }
             }
@@ -206,14 +208,8 @@ private fun LazyListScope.spending(
     state: MoneyHomeState,
     onEvent: (MoneyHomeEvent) -> Unit,
     onOpen: (Route) -> Unit,
-    addStatement: () -> Unit,
 ) {
     val spending = state.data_?.spending ?: return
-    val empty = spending.empty
-    if (empty != null) {
-        item(key = "empty") { EmptyStateView(empty, onAction = addStatement) }
-        return
-    }
     items(spending.bars.size, key = { "bars-$it" }) { index ->
         val bars = spending.bars[index]
         val hero = spending.heroes.getOrNull(index) ?: spending.heroes.firstOrNull()
@@ -299,14 +295,8 @@ private fun LazyListScope.activity(
     state: MoneyHomeState,
     onEvent: (MoneyHomeEvent) -> Unit,
     onOpen: (Route) -> Unit,
-    addStatement: () -> Unit,
 ) {
     val activity = state.data_?.activity ?: return
-    val empty = activity.empty
-    if (empty != null) {
-        item(key = "empty") { EmptyStateView(empty, onAction = addStatement) }
-        return
-    }
     items(activity.heroes.size, key = { "hero-$it" }) { index ->
         MoneyOverviewCard(activity.heroes[index], activity.days_left_label, activity.in_out_net.getOrNull(index))
     }
@@ -344,13 +334,8 @@ private fun LazyListScope.activity(
     }
 }
 
-private fun LazyListScope.cashflow(state: MoneyHomeState, addStatement: () -> Unit) {
+private fun LazyListScope.cashflow(state: MoneyHomeState) {
     val flow = state.data_?.cashflow ?: return
-    val empty = flow.empty
-    if (empty != null) {
-        item(key = "empty") { EmptyStateView(empty, onAction = addStatement) }
-        return
-    }
     flow.series.forEach { series ->
         item(key = "series-${series.currency}") {
             Column {
@@ -382,21 +367,32 @@ private fun LazyListScope.cashflow(state: MoneyHomeState, addStatement: () -> Un
 // ---------------------------------------------------------------------------
 
 @Composable
-internal fun MoneyTransactionScreen(state: MoneyTransactionState, onEvent: (MoneyTransactionEvent) -> Unit, onBack: () -> Unit) {
+internal fun MoneyTransactionScreen(
+    state: MoneyTransactionState,
+    onEvent: (MoneyTransactionEvent) -> Unit,
+    onOpen: (Route) -> Unit,
+    onBack: () -> Unit,
+) {
     val chrome = state.chrome
     val data = state.data_
-    val status = state.status
     PushedPage(
         title = chrome?.title.orEmpty(),
         parentTitle = chrome?.back_label.orEmpty(),
         onBack = onBack,
-        status = status?.sentence.orEmpty(),
+        statusLine = {
+            // "{title} moved to trash" with Undo over the removed page (#1185), and a refusal's sentence.
+            StatusLine(state.status, actTag = "money-status-action") {
+                onEvent(MoneyTransactionEvent(status_acted = MoneyTransactionEvent.StatusActed()))
+            }
+        },
     ) {
+        // THE PAGE STAYS OPEN ON THE GONE FAILURE after Move to trash; the line above carries Undo.
         ReadStateView(
-            content = screenContentOf(state.loading, state.failure, data, state.denied),
+            page = state.page!!,
             onRetry = { onEvent(MoneyTransactionEvent(refreshed = MoneyTransactionEvent.Refreshed())) },
             retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
-        ) { tx ->
+        ) {
+            val tx = state.data_ ?: return@ReadStateView
             LazyColumn {
                 item(key = "head") {
                     Column(
@@ -429,17 +425,38 @@ internal fun MoneyTransactionScreen(state: MoneyTransactionState, onEvent: (Mone
                 tx.with_offer?.let { offer ->
                     item(key = "offer-with") { OfferCard(offer, "with", onEvent) }
                 }
-                items(tx.actions, key = { "act-${it.key}" }) { action ->
-                    CentraidRow(
-                        title = action.label,
-                        dimmed = !action.enabled,
-                        testTag = "money-action-${action.key}",
-                        onTap = if (action.enabled) {
-                            { onEvent(MoneyTransactionEvent(action = MoneyTransactionEvent.ActionPicked(key = action.key))) }
-                        } else {
-                            null
-                        },
-                    )
+                // ATTACHMENTS (#1185): the kit's section, after the offers; Rust makes every word and row.
+                tx.attachments?.let { section ->
+                    item(key = "attachments") {
+                        dev.centraid.android.screens.agenda.AgendaAttachmentsView(
+                            section = section,
+                            prefix = "money-transaction",
+                            onEvent = { onEvent(MoneyTransactionEvent(attachment = it)) },
+                            onOpen = onOpen,
+                        )
+                    }
+                }
+                // LINKED TO (#1185): the kit's section, after the attachments; Rust makes every word and row.
+                tx.links?.let { section ->
+                    item(key = "links") {
+                        dev.centraid.android.kit.LinkSectionView(section, { link -> onEvent(MoneyTransactionEvent(link = link)) }, onOpen)
+                    }
+                }
+                // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the actions.
+                state.earlier?.let { entry -> item(key = "earlier") { EarlierEntryCard(entry, onOpen) } }
+                item(key = "origin") { dev.centraid.android.kit.OriginLineView(state.origin) }
+                // THE ACTIONS ARE ALTERNATIVES: one stack; a destructive one is outlined in `net`.
+                item(key = "actions") {
+                    ChoiceStack(Modifier.padding(horizontal = KitGeometry.GUTTER).padding(top = 24.dp)) {
+                        tx.actions.forEach { action ->
+                            OutlineButton(
+                                label = action.label,
+                                testTag = "money-action-${action.key}",
+                                ink = if (action.destructive) "net" else "text",
+                                enabled = action.enabled,
+                            ) { onEvent(MoneyTransactionEvent(action = MoneyTransactionEvent.ActionPicked(key = action.key))) }
+                        }
+                    }
                 }
             }
         }
@@ -447,6 +464,9 @@ internal fun MoneyTransactionScreen(state: MoneyTransactionState, onEvent: (Mone
     val data2 = state.data_
     state.with_picker?.takeIf { it.open_ }?.let { picker ->
         dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(MoneyTransactionEvent(with_link = link)) }
+    }
+    state.link_picker?.takeIf { it.open_ }?.let { picker ->
+        dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(MoneyTransactionEvent(link = link)) }
     }
     when (state.sheet) {
         MoneyTransactionState.Sheet.SHEET_CATEGORY -> MoneyChoiceSheet(
@@ -473,13 +493,6 @@ internal fun MoneyTransactionScreen(state: MoneyTransactionState, onEvent: (Mone
             )
         }
         else -> Unit
-    }
-    state.confirm?.let { confirm ->
-        ConfirmSheet(
-            confirm = confirm,
-            onConfirm = { onEvent(MoneyTransactionEvent(confirm_accepted = MoneyTransactionEvent.ConfirmAccepted())) },
-            onDismiss = { onEvent(MoneyTransactionEvent(confirm_dismissed = MoneyTransactionEvent.ConfirmDismissed())) },
-        )
     }
 }
 
@@ -528,7 +541,7 @@ internal fun MoneyTargetScreen(state: MoneyTargetState, onEvent: (MoneyTargetEve
         title = chrome?.title.orEmpty(),
         onDismiss = onBack,
         foot = {
-            if (state.status != null) StatusLine(state.status?.sentence.orEmpty())
+            StatusLine(state.status)
             if (data != null) {
                 Column(
                     Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
@@ -556,10 +569,11 @@ internal fun MoneyTargetScreen(state: MoneyTargetState, onEvent: (MoneyTargetEve
         },
     ) {
         ReadStateView(
-            content = screenContentOf(state.loading, state.failure, data, state.denied),
+            page = state.page!!,
             onRetry = { onEvent(MoneyTargetEvent(refreshed = MoneyTargetEvent.Refreshed())) },
             retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
-        ) { target ->
+        ) {
+            val target = state.data_ ?: return@ReadStateView
             LazyColumn {
                 item(key = "head") {
                     Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER + 2.dp, vertical = 8.dp)) {
@@ -668,14 +682,11 @@ internal fun MoneyRecurringScreen(state: MoneyRecurringState, onEvent: (MoneyRec
     val chrome = state.chrome
     PushedPage(title = chrome?.title.orEmpty(), parentTitle = chrome?.back_label.orEmpty(), onBack = onBack) {
         ReadStateView(
-            content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
+            page = state.page!!,
             onRetry = { onEvent(MoneyRecurringEvent(refreshed = MoneyRecurringEvent.Refreshed())) },
             retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
-        ) { recurring ->
-            val empty = recurring.empty
-            if (empty != null) {
-                EmptyStateView(empty, onAction = null)
-            } else {
+        ) {
+            val recurring = state.data_ ?: return@ReadStateView
                 LazyColumn {
                     item(key = "rows") {
                         MoneyPageCard {
@@ -697,7 +708,7 @@ internal fun MoneyRecurringScreen(state: MoneyRecurringState, onEvent: (MoneyRec
                     }
                     item(key = "window") { MoneyNote(recurring.window_note) }
                 }
-            }
+            
         }
     }
 }
@@ -716,44 +727,33 @@ internal fun MoneySearchScreen(
     val chrome = state.chrome
     PushedPage(title = chrome?.title.orEmpty(), parentTitle = chrome?.back_label.orEmpty(), onBack = onBack) {
         androidx.compose.foundation.layout.Column {
-            val resting = state.resting
-            // THE BODY TAKES THE HEIGHT the field at the foot does not (R-CHROME-2).
-            androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.weight(1f)) {
-                if (resting != null) {
-                    EmptyStateView(resting, onAction = null)
-                } else {
-                    ReadStateView(
-                        content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
-                        onRetry = { onEvent(MoneySearchEvent(refreshed = MoneySearchEvent.Refreshed())) },
-                        retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
-                    ) { search ->
-                        val empty = search.empty
-                        if (search.rows.isEmpty() && empty != null) {
-                            androidx.compose.foundation.layout.Column {
-                                EmptyStateView(empty, onAction = null)
-                                SearchAskRow(search.ask, onOpen)
-                            }
-                        } else {
-                            LazyColumn(
-                                contentPadding = PaddingValues(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                item(key = "count") {
-                                    KitText(search.count_label, KitType.Meta, Surface.meta, Modifier.padding(horizontal = 4.dp).testTag("money-search-count"))
-                                }
-                                item(key = "rows") {
-                                    MoneyCardStack {
-                                        search.rows.forEachIndexed { index, row ->
-                                            if (index > 0) MoneyHairline(inset = 64.dp)
-                                            MoneyTxnRow(row) { row.route?.let(onOpen) }
-                                        }
-                                    }
-                                }
-                                // THE ASK ROW closes the answer (#1097).
-                                item(key = "ask") { SearchAskRow(search.ask, onOpen) }
+            // THE BODY TAKES THE HEIGHT the field at the foot does not (R-CHROME-2). The resting page and a
+            // term that matched nothing are the page's empty state; the second keeps the Ask row under it.
+            ReadStateView(
+                page = state.page!!,
+                onRetry = { onEvent(MoneySearchEvent(refreshed = MoneySearchEvent.Refreshed())) },
+                retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
+                modifier = Modifier.weight(1f),
+                emptyExtra = { state.data_?.ask?.let { ask -> SearchAskRow(ask, onOpen) } },
+            ) {
+                val search = state.data_ ?: return@ReadStateView
+                LazyColumn(
+                    contentPadding = PaddingValues(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    item(key = "count") {
+                        KitText(search.count_label, KitType.Meta, Surface.meta, Modifier.padding(horizontal = 4.dp).testTag("money-search-count"))
+                    }
+                    item(key = "rows") {
+                        MoneyCardStack {
+                            search.rows.forEachIndexed { index, row ->
+                                if (index > 0) MoneyHairline(inset = 64.dp)
+                                MoneyTxnRow(row) { row.route?.let(onOpen) }
                             }
                         }
                     }
+                    // THE ASK ROW closes the answer (#1097).
+                    item(key = "ask") { SearchAskRow(search.ask, onOpen) }
                 }
             }
             // THE FIELD IS AT THE FOOT, over the keyboard, like every app's search (R-CHROME-2); its

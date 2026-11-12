@@ -552,6 +552,13 @@ impl Conductor {
         self.lock().debounce = debounce;
     }
 
+    /// Read the debounce's time from `clock` (monotonic milliseconds) from now on. A test that
+    /// asserts on "inside the window" and "the window ended" moves its own clock rather than
+    /// depending on how fast the machine runs; it changes no rule.
+    pub fn set_clock(&self, clock: impl Fn() -> u64 + Send + Sync + 'static) {
+        self.lock().clock = Arc::new(clock);
+    }
+
     /// Where the held vaults come from (the Rust shelf).
     pub fn use_holdings(&self, holdings: Arc<dyn Holdings>) {
         self.lock().holdings = Some(holdings);

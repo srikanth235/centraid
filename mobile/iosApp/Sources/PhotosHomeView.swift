@@ -34,7 +34,7 @@ struct PhotosHomeView: View {
     private var collecting: Bool { state.destination == .collections }
     private var selecting: Bool { !collecting && !searching && selection.selecting }
     private var hasTiles: Bool {
-        if state.hasLibrary, case let .data(data)? = state.library.content { return !data.tiles.isEmpty }
+        if state.hasLibrary, state.library.content != nil { return !state.library.data.tiles.isEmpty }
         return false
     }
 
@@ -182,7 +182,9 @@ struct PhotosHomeView: View {
             // A WRITE THE VAULT REFUSED, or what a copy came to: its own line, never
             // in place of the library — the photographs are still what they were.
             if state.hasStatus, !collecting {
-                StatusLineView(status: state.status, identifier: "photos-status") {}
+                StatusLineView(status: state.status, identifier: "photos-status-action") {
+                    send(PhotosHomeEvents.selection { $0.statusActed = .init() })
+                }
             }
             if searching, state.hasSearch {
                 PhotosSearchBody(search: state.search, send: send, open: open)

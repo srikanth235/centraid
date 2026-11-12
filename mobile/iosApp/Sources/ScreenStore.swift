@@ -429,7 +429,7 @@ final class ScreenStore: ObservableObject {
                 UIApplication.shared.open(url, options: [:], completionHandler: nil)
                 answer(request, done)
             } else {
-                answer(request, .failed(Self.failure("not a URL")))
+                answer(request, .failed(Self.failure(EffectReason.unsupported)))
             }
         case .exportOriginals(let export)?:
             // THE ORIGINALS OF A PICK, to the share sheet or this phone's photos.
@@ -441,7 +441,7 @@ final class ScreenStore: ObservableObject {
                 UIApplication.shared.open(url, options: [:], completionHandler: nil)
                 answer(request, done)
             } else {
-                answer(request, .failed(Self.failure("not an address")))
+                answer(request, .failed(Self.failure(EffectReason.unsupported)))
             }
         case .cameraRoll(let roll)?:
             answer(request, Self.cameraRoll(roll))
@@ -450,6 +450,7 @@ final class ScreenStore: ObservableObject {
         case .libraryPermission(let permission)?:
             var read = Centraid_Core_V1_LibraryPermissionRead()
             read.permission = permission.ask ? await PhoneLibrary.requestPermission() : PhoneLibrary.permission()
+            read.deviceID = PhoneCalendar.deviceID
             answer(request, .libraryPermissionRead(read))
         case .rollPage(let page)?:
             let paged = await Task.detached(priority: .utility) {
@@ -488,10 +489,10 @@ final class ScreenStore: ObservableObject {
                 status.registered = registered
                 answer(request, .backgroundStatus(status))
             } else {
-                answer(request, .failed(Self.failure("this shell has not registered its background windows")))
+                answer(request, .failed(Self.failure(EffectReason.noWindow)))
             }
             #else
-            answer(request, .failed(Self.failure("no background windows on this platform")))
+            answer(request, .failed(Self.failure(EffectReason.unavailable)))
             #endif
         // THE PASS SCHEDULER (#1135, `passes`): Rust decides which windows exist, when a pass ran
         // and what the OS carries; this performs and answers.
@@ -499,7 +500,7 @@ final class ScreenStore: ObservableObject {
             #if os(iOS)
             answer(request, .windowsScheduled(BackgroundPasses.schedule(schedule.windows)))
             #else
-            answer(request, .failed(Self.failure("no background windows on this platform")))
+            answer(request, .failed(Self.failure(EffectReason.unavailable)))
             #endif
         // NOTIFICATIONS (#1173, `agenda.notify`): Rust sends the whole desired set; this makes the
         // OS hold it and answers the permission and the count.
@@ -508,7 +509,7 @@ final class ScreenStore: ObservableObject {
             answer(request, .notificationsScheduled(await Notifications.schedule(schedule)))
             notifyPerformed()
             #else
-            answer(request, .failed(Self.failure("no notifications on this platform")))
+            answer(request, .failed(Self.failure(EffectReason.unavailable)))
             #endif
         case .passWindowDone(let finished)?:
             #if os(iOS)
@@ -529,7 +530,7 @@ final class ScreenStore: ObservableObject {
             #if os(iOS)
             answer(request, Self.uploadsOp(uploads))
             #else
-            answer(request, .failed(Self.failure("the OS carries no uploads on this platform")))
+            answer(request, .failed(Self.failure(EffectReason.unavailable)))
             #endif
         case .ownerCheck(let check)?:
             answer(request, await OwnerCheckPerformer.run(check))
@@ -541,6 +542,9 @@ final class ScreenStore: ObservableObject {
             FilePerformer.pick(pick) { [weak self] outcome in self?.answer(request, outcome) }
         case .saveFile(let save)?:
             FilePerformer.save(save) { [weak self] outcome in self?.answer(request, outcome) }
+        // A STREAMED EXPORT: the file the core staged, offered to the same save sheet.
+        case .saveFilePath(let save)?:
+            FilePerformer.savePath(save) { [weak self] outcome in self?.answer(request, outcome) }
         // PAIRING (#1135): read one QR code, and browse the network for gateways.
         case .scanCode(let scan)?:
             PairScan.run(scan) { [weak self] outcome in self?.answer(request, outcome) }
@@ -551,9 +555,6 @@ final class ScreenStore: ObservableObject {
             }
         case .calendarRead(let read)?:
             answer(request, await PhoneCalendar.snapshot(read))
-        // TWO-WAY SYNC (#1173): what Rust asks written to the phone's calendars, one answer per item.
-        case .calendarWrite(let write)?:
-            answer(request, await PhoneCalendarWrite.perform(write))
         case .contactsRead(let read)?:
             answer(request, await PhoneContacts.snapshot(read))
             if read.askPermission, PhoneContacts.limited { onContactsLimited?() }
@@ -582,6 +583,14 @@ final class ScreenStore: ObservableObject {
             } catch {
                 answer(request, .failed(Self.failure(String(describing: error))))
             }
+        // HEALTH'S WIDGET SNAPSHOT (#1185): the same path, for the Health widget.
+        case .healthGlance(let glance)?:
+            do {
+                try HealthGlanceWriter.keep(glance)
+                answer(request, done)
+            } catch {
+                answer(request, .failed(Self.failure(String(describing: error))))
+            }
         case .vaultCommand(let command)?:
             // THE SHELF IS RUST'S: only the platform's own doors reach a shell (Settings, for a
             // notification grant or a low disk).
@@ -603,7 +612,13 @@ final class ScreenStore: ObservableObject {
             if DocsShare.present(share) {
                 answer(request, done)
             } else {
-                answer(request, .failed(Self.failure("the file could not be read")))
+                answer(request, .failed(Self.failure(EffectReason.unreadable)))
+            }
+        case .shareBytes(let share)?:
+            if DocsShare.presentBytes(share) {
+                answer(request, done)
+            } else {
+                answer(request, .failed(Self.failure(EffectReason.unwritable)))
             }
         case .followFolder?:
             DocsFollow.shared.request { outcome in
@@ -627,7 +642,7 @@ final class ScreenStore: ObservableObject {
         #endif
         default:
             // Platform work this build does not perform: say so, by value.
-            answer(request, .failed(Self.failure("not performed by this shell")))
+            answer(request, .failed(Self.failure(EffectReason.unsupported)))
         }
     }
 
@@ -653,7 +668,7 @@ final class ScreenStore: ObservableObject {
                 PHPhotoLibrary.shared().presentLimitedLibraryPicker(from: root)
             }
         default:
-            return .failed(failure("no camera roll action"))
+            return .failed(failure(EffectReason.unsupported))
         }
         #endif
         return .done(Centraid_Core_V1_EffectDone())
@@ -675,7 +690,9 @@ final class ScreenStore: ObservableObject {
     }
 
     /// START OR STOP WATCHING A PHONE STORE. While on, each change of the store
-    /// is answered under the one `effect_id` that asked, as `PhoneChanged`.
+    /// is answered under the one `effect_id` that asked, as `PhoneChanged`. The
+    /// follow coordinator asks once per session for contacts and calendar; the
+    /// app coming forward is not this watch's, Rust hears the lifecycle itself.
     private func watch(_ request: Centraid_Core_V1_EffectRequest, _ watch: Centraid_Core_V1_PhoneWatch) {
         if watch.on {
             watches[request.effectID] = (request.instance, watch.source)
@@ -732,7 +749,7 @@ final class ScreenStore: ObservableObject {
             BackgroundUploader.shared.cancelEverything()
             return .passNoted(Centraid_Core_V1_PassNoted())
         case nil:
-            return .failed(failure("no uploads operation"))
+            return .failed(failure(EffectReason.unsupported))
         }
     }
     #endif
@@ -764,12 +781,12 @@ final class ScreenStore: ObservableObject {
             add[kSecValueData as String] = operation.value
             add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
             let status = SecItemAdd(add as CFDictionary, nil)
-            return status == errSecSuccess ? .done(Centraid_Core_V1_EffectDone()) : .failed(failure("keychain \(status)"))
+            return status == errSecSuccess ? .done(Centraid_Core_V1_EffectDone()) : .failed(failure(EffectReason.failed))
         case .delete:
             SecItemDelete(query as CFDictionary)
             return .done(Centraid_Core_V1_EffectDone())
         default:
-            return .failed(failure("unknown keychain operation"))
+            return .failed(failure(EffectReason.unsupported))
         }
     }
 

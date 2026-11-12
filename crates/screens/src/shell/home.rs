@@ -66,15 +66,6 @@ impl Appearance {
             _ => Self::System,
         }
     }
-
-    /// What is written: nothing for "follow the phone".
-    fn stored(self) -> &'static str {
-        match self {
-            Self::System => "",
-            Self::Light => "light",
-            Self::Dark => "dark",
-        }
-    }
 }
 
 /// The step after a vault was picked in the sheet.
@@ -233,10 +224,10 @@ impl Home {
             H::Backup(_) => return self.backup_pressed(),
             H::Status(_) => return self.status_pressed(),
             H::EntryAsked(asked) => return entry_route(asked.entry()),
-            // SETTINGS CHOSE IT: kept in the Keychain, the one store, and drawn at once.
+            // SETTINGS CHOSE IT AND KEPT IT in the Keychain, the one store (a refused write is
+            // Settings' to say); Home draws it at once.
             H::AppearanceChosen(chosen) => {
                 self.appearance = Appearance::of(&chosen.stored);
-                return vec![keychain_set(self.appearance.stored())];
             }
             // Following the phone is the shell's to draw: Home no longer words a switch
             // that depends on where the phone is.
@@ -666,15 +657,35 @@ impl Screen for Home {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::home_state::Content;
         let locale = ctx.locale();
-        let content = if self.none {
-            Content::Failure(wire::Failure {
-                sentence: words::home_no_vault(locale),
-                remedy: String::new(),
-            })
+        // THE READ (#1185): a phone that holds no vault has nothing to read, which is a final failure in
+        // its own sentence (the first-launch gate is its way on, so no Retry); until the shelf has
+        // spoken Home is loading.
+        let content = (!self.none && self.read).then(|| Content::Data(Box::new(self.data(locale))));
+        let page = if self.none {
+            wire::PageState {
+                state: Some(wire::page_state::State::Failed(wire::Failure {
+                    sentence: words::home_no_vault(locale),
+                    remedy: String::new(),
+                    permanent: true,
+                })),
+                note: None,
+            }
         } else if self.read {
-            Content::Data(Box::new(self.data(locale)))
+            crate::kit::read::Page::<()>::Ready {
+                data: (),
+                note: None,
+            }
+            .wire(
+                locale,
+                |_| wire::Denied::default(),
+                wire::EmptyState::default,
+            )
         } else {
-            Content::Loading(wire::Loading { first_load: true })
+            crate::kit::read::Page::<()>::loading().wire(
+                locale,
+                |_| wire::Denied::default(),
+                wire::EmptyState::default,
+            )
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::Home(Box::new(wire::HomeState {
@@ -688,7 +699,8 @@ impl Screen for Home {
                         .join(". ");
                     status
                 }),
-                content: Some(content),
+                content,
+                page: Some(page),
                 sheet: self.sheet(locale),
                 scheme: match self.appearance {
                     Appearance::System => wire::HomeScheme::System,
@@ -748,14 +760,6 @@ fn keychain_get() -> wire::Effect {
         op: wire::keychain_op::Op::Get as i32,
         key: APPEARANCE_KEY.to_owned(),
         value: Vec::new(),
-    }))
-}
-
-fn keychain_set(value: &str) -> wire::Effect {
-    effect(wire::effect::Kind::Keychain(wire::KeychainOp {
-        op: wire::keychain_op::Op::Set as i32,
-        key: APPEARANCE_KEY.to_owned(),
-        value: value.as_bytes().to_vec(),
     }))
 }
 
@@ -913,9 +917,8 @@ mod tests {
 
     #[test]
     fn the_stored_appearance_round_trips_and_an_unknown_one_follows_the_phone() {
-        for a in [Appearance::Light, Appearance::Dark] {
-            assert_eq!(Appearance::of(a.stored()), a);
-        }
+        assert_eq!(Appearance::of("light"), Appearance::Light);
+        assert_eq!(Appearance::of("dark"), Appearance::Dark);
         assert_eq!(Appearance::of(""), Appearance::System);
         assert_eq!(Appearance::of("sepia"), Appearance::System);
     }

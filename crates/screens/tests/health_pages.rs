@@ -122,10 +122,19 @@ fn a_metric_with_no_row_in_the_period_says_so() {
     let i = push(&mut d, routes::metric("weight_kg", ""));
     let state = metric_state(d.view(i));
     assert_eq!(state.chrome.as_ref().unwrap().back_label, "Health");
-    assert_eq!(
-        metric_data(d.view(i)).empty.as_ref().unwrap().headline,
-        "Nothing in this period."
-    );
+    // No row in the period is the page's own empty state, never ready data.
+    assert!(state.content.is_none());
+    let Some(wire::page_state::State::Empty(empty)) =
+        state.page.as_ref().and_then(|page| page.state.as_ref())
+    else {
+        panic!(
+            "an empty period is the page's empty state: {:?}",
+            state.page
+        );
+    };
+    assert_eq!(empty.headline, "Nothing in this period.");
+    // The period chips stay, so an empty period can be left.
+    assert!(!state.segments.is_empty());
 }
 
 fn first_workout(d: &centraid_screens::testing::Driver) -> String {
@@ -190,13 +199,15 @@ fn a_workout_that_is_gone_says_so() {
     let mut d = driver();
     connect_store(&d);
     let i = push(&mut d, routes::workout("no-such-workout", ""));
-    let Some(WorkoutContent::Data(data)) = &workout_state(d.view(i)).content else {
-        panic!("expected data");
+    let state = workout_state(d.view(i));
+    assert!(state.content.is_none());
+    let Some(wire::page_state::State::Failed(failure)) =
+        state.page.as_ref().and_then(|page| page.state.as_ref())
+    else {
+        panic!("a workout that is gone is a failed page: {:?}", state.page);
     };
-    assert_eq!(
-        data.gone.as_ref().unwrap().headline,
-        "This workout is no longer here."
-    );
+    assert_eq!(failure.sentence, "This workout is no longer here.");
+    assert!(failure.permanent);
 }
 
 #[test]

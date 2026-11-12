@@ -32,14 +32,17 @@ import centraid.core.v1.PhoneChanged
 import dev.centraid.android.backup.BackupNow
 import dev.centraid.android.backup.LinkFacts
 import dev.centraid.android.backup.PassWork
-import dev.centraid.android.kit.effectAttempt
-import dev.centraid.android.kit.ClipboardDeadline
 import dev.centraid.android.glance.GlanceSnapshot
 import dev.centraid.android.glance.GlanceWidgets
+import dev.centraid.android.glance.HealthSnapshot
+import dev.centraid.android.glance.HealthWidget
+import dev.centraid.android.kit.AndroidHealth
+import dev.centraid.android.kit.ClipboardDeadline
+import dev.centraid.android.kit.EffectReason
 import dev.centraid.android.kit.SecretStores
+import dev.centraid.android.kit.effectAttempt
 import dev.centraid.android.notify.Notify
 import dev.centraid.android.screens.PhotoHandOff
-import dev.centraid.android.screens.agenda.performCalendarWrite
 import dev.centraid.android.screens.agenda.readCalendarSnapshot
 import dev.centraid.android.screens.docs.FolderReader
 import dev.centraid.android.screens.people.readContactsSnapshot
@@ -48,11 +51,11 @@ import dev.centraid.core.CentraidCore
 import dev.centraid.core.Screens
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okio.ByteString.Companion.encodeUtf8
@@ -135,19 +138,19 @@ internal class ShellEffects(
         val answer: (EffectResult) -> Unit = { result -> scope.launch { screens.answer(request, result) } }
         val result = try {
             effectAttempt { perform(request, answer) }
-                .getOrElse { failed("the effect could not be completed") }
+                .getOrElse { failed(EffectReason.FAILED) }
         } catch (cancelled: CancellationException) {
             // A replaced system prompt cancels its deferred answer, not the session.
             // Only that local dismissal is an effect answer; session cancellation escapes.
             currentCoroutineContext().ensureActive()
-            EffectResult(failed = EffectFailed(reason = "the prompt was cancelled", cancelled = true))
+            EffectResult(failed = EffectFailed(reason = EffectReason.CANCELLED, cancelled = true))
         }
         if (result != null) screens.answer(request, result)
     }
 
     /** The answer to [request], or null when it answers itself later through [answer]. */
     private suspend fun perform(request: EffectRequest, answer: (EffectResult) -> Unit): EffectResult? {
-        val effect = request.effect ?: return failed("no effect")
+        val effect = request.effect ?: return failed(EffectReason.UNSUPPORTED)
         val done = EffectResult(done = EffectDone())
         return when {
             // ---- the vault's secrets (lane H2) -------------------------------------------------
@@ -174,14 +177,14 @@ internal class ShellEffects(
             }
             effect.background_probe != null -> PassWork.registered?.let {
                 EffectResult(background_status = BackgroundStatus(registered = it))
-            } ?: failed("no window was asked for yet")
+            } ?: failed(EffectReason.NO_WINDOW)
             // Android moves a pass's parts inside the pass; only iOS's session carries them suspended.
-            effect.uploads != null -> failed("the OS carries no uploads on this platform")
+            effect.uploads != null -> failed(EffectReason.UNAVAILABLE)
             // ---- the phone imports (`crates/screens/src/imports`) ------------------------------
             effect.camera_roll != null -> cameraRoll(effect.camera_roll!!)
             effect.library_permission != null -> {
                 if (effect.library_permission!!.ask) ui?.askMedia()
-                EffectResult(library_permission_read = LibraryPermissionRead(permission = LibraryRoll.permission(context)))
+                EffectResult(library_permission_read = LibraryPermissionRead(permission = LibraryRoll.permission(context), device_id = InstallId.of(context)))
             }
             effect.roll_page != null -> withContext(Dispatchers.IO) {
                 EffectResult(roll_paged = LibraryRoll.page(context, effect.roll_page!!.cursor, effect.roll_page!!.limit))
@@ -201,38 +204,32 @@ internal class ShellEffects(
                 EffectResult(folder_file_staged = FolderReader.stage(context, core, stage.origin, stage.path, stage.media_type))
             }
             // Android has no system reminders: a made vault never asks (`Made{reminders: false}`).
-            effect.reminders_read != null -> failed("this platform has no reminders")
+            effect.reminders_read != null -> failed(EffectReason.UNAVAILABLE)
             // ---- the phone's stores ------------------------------------------------------------
             effect.calendar_read != null -> {
                 val read = effect.calendar_read!!
                 if (!allowed(Manifest.permission.READ_CALENDAR, read.ask_permission)) {
-                    EffectResult(failed = EffectFailed(reason = "calendar access is off", denied = true))
+                    EffectResult(failed = EffectFailed(reason = EffectReason.DENIED, denied = true))
                 } else {
-                    // THE WRITE GRANT SHARES READ'S GROUP: asked at the same tap, the system grants it without a second prompt.
-                    if (read.ask_permission) allowed(Manifest.permission.WRITE_CALENDAR, true)
                     effectAttempt {
                         withContext(Dispatchers.IO) { readCalendarSnapshot(context, read.days_back, read.days_on, InstallId.of(context)) }
-                    }.fold({ EffectResult(calendar = it) }, { failed("the calendar could not be read") })
+                    }.fold({ EffectResult(calendar = it) }, { failed(EffectReason.UNREADABLE) })
                 }
             }
-            // TWO-WAY CALENDAR SYNC: the core's writes to the phone's calendars; never a permission prompt.
-            effect.calendar_write != null -> effectAttempt {
-                withContext(Dispatchers.IO) { performCalendarWrite(context, effect.calendar_write!!) }
-            }.fold({ EffectResult(calendar_written = it) }, { failed("the calendar could not be written") })
             effect.contacts_read != null -> {
                 val read = effect.contacts_read!!
                 if (!allowed(Manifest.permission.READ_CONTACTS, read.ask_permission)) {
-                    EffectResult(failed = EffectFailed(reason = "contacts access is off", denied = true))
+                    EffectResult(failed = EffectFailed(reason = EffectReason.DENIED, denied = true))
                 } else {
                     effectAttempt {
                         withContext(Dispatchers.IO) { readContactsSnapshot(context, InstallId.of(context)) }
-                    }.fold({ EffectResult(contacts = it) }, { failed("the address book could not be read") })
+                    }.fold({ EffectResult(contacts = it) }, { failed(EffectReason.UNREADABLE) })
                 }
             }
             effect.phone_watch != null -> {
                 val watch = effect.phone_watch!!
                 when {
-                    !watchers.watches(watch.source) -> failed("this phone store is not watched by this shell")
+                    !watchers.watches(watch.source) -> failed(EffectReason.NOT_WATCHED)
                     watch.on -> {
                         // ANSWERED EACH TIME THE STORE CHANGES, under this one effect id.
                         watchers.watch(watch.source) { answer(EffectResult(phone_changed = PhoneChanged(source = watch.source))) }
@@ -265,10 +262,22 @@ internal class ShellEffects(
             effect.agenda_glance != null -> {
                 val glance = effect.agenda_glance!!
                 if (glance.version != GlanceSnapshot.VERSION) {
-                    failed("the widgets draw another snapshot version")
+                    failed(EffectReason.UNSUPPORTED)
                 } else {
                     effectAttempt { withContext(Dispatchers.IO) { GlanceWidgets.keep(context, glance.document.toByteArray()) } }
-                        .fold({ done }, { failed("the widgets' snapshot could not be kept") })
+                        .fold({ done }, { failed(EffectReason.UNWRITABLE) })
+                }
+            }
+            // ---- Health's widget (#1185) ---------------------------------------------------------
+            // The same path as Agenda's: the document Rust composed, kept under the file name Rust
+            // chose, then the Health widgets redrawn. Another version is refused.
+            effect.health_glance != null -> {
+                val glance = effect.health_glance!!
+                if (glance.version != HealthSnapshot.VERSION) {
+                    failed(EffectReason.UNSUPPORTED)
+                } else {
+                    effectAttempt { withContext(Dispatchers.IO) { HealthWidget.keep(context, glance.file, glance.document.toByteArray()) } }
+                        .fold({ done }, { failed(EffectReason.UNWRITABLE) })
                 }
             }
             // ---- generic platform work -----------------------------------------------------------
@@ -309,8 +318,13 @@ internal class ShellEffects(
             // The runtime moves its own selection; nothing is performed on the platform.
             effect.select_tab != null -> done
             effect.vault_command?.open_ != null -> settingsDoor(effect.vault_command!!.open_!!)
-            effect.vault_command != null -> failed("the shelf performs this command")
-            else -> ui?.perform(request, answer) ?: EffectResult(failed = EffectFailed(reason = "no screen is up", cancelled = true))
+            effect.vault_command != null -> failed(EffectReason.UNSUPPORTED)
+            // A BACKGROUND WINDOW HAS NO SCREEN (D16): a pass reads Health Connect itself, with the
+            // background permission the member allowed at Connect; without it the store answers
+            // `denied` and Health follows at the next foreground. A pass never shows the sheet.
+            effect.health_read != null && ui == null && !effect.health_read!!.ask_permission ->
+                AndroidHealth(context).snapshot(effect.health_read!!) { error("a pass never asks") }
+            else -> ui?.perform(request, answer) ?: EffectResult(failed = EffectFailed(reason = EffectReason.NO_WINDOW, cancelled = true))
         }
     }
 
@@ -327,7 +341,7 @@ internal class ShellEffects(
             ui?.askMedia()
             EffectResult(done = EffectDone())
         }
-        else -> failed("no camera roll action")
+        else -> failed(EffectReason.UNSUPPORTED)
     }
 
     /** The link as the platform gives it now; the member's rule is Rust's to read. */
@@ -350,7 +364,7 @@ internal class ShellEffects(
             SecretStores.write(context, op.key, "")
             EffectResult(done = EffectDone())
         }
-        else -> failed("unknown keychain operation")
+        else -> failed(EffectReason.UNSUPPORTED)
     }
 
     /** Granted now, or asked at the member's own tap when [ask] and an activity is up. */
@@ -373,7 +387,7 @@ internal class ShellEffects(
         context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         EffectResult(done = EffectDone())
     } catch (_: ActivityNotFoundException) {
-        failed("no app on this phone answers")
+        failed(EffectReason.UNAVAILABLE)
     }
 
     private fun clipboard(): ClipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager

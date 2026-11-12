@@ -12,8 +12,8 @@
 //! served to a read that is not Locker's, so nothing here filters it again and
 //! nothing here can leak it.
 
-use centraid_ontology::graph::COLUMN_LINKS;
-pub use centraid_ontology::graph::Via;
+use centraid_ontology::graph::{self, ColumnLink};
+pub use centraid_ontology::graph::{EdgeRow, End, GraphSource, Via};
 
 use crate::error::KitResult;
 use crate::reads::{FanOutBound, PageDoor, in_list, read_pages};
@@ -41,14 +41,7 @@ pub fn owner(door: &dyn PageDoor) -> KitResult<Option<String>> {
 }
 
 /// One join, read: the id at each end and how it is stored.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Joined {
-    pub from: String,
-    pub to: String,
-    /// The edge's `rel`, or the column's relation word.
-    pub relation: String,
-    pub via: Via,
-}
+pub use centraid_ontology::graph::Join as Joined;
 
 /// One `column IN ids` read: which table, what to select, how to order, and which column the
 /// ids name.
@@ -104,6 +97,77 @@ fn rel_clause(rels: &[&str]) -> (String, Vec<PageBindValue>) {
     )
 }
 
+/// The catalogue's reader over a door: [`GraphSource`] answers each read as a keyset walk of one
+/// table, to the end of the bound.
+pub struct DoorSource<'a> {
+    door: &'a dyn PageDoor,
+    bound: FanOutBound,
+}
+
+impl<'a> DoorSource<'a> {
+    /// A source over `door`, whose every read walks at most `bound`.
+    #[must_use]
+    pub fn new(door: &'a dyn PageDoor, bound: FanOutBound) -> Self {
+        Self { door, bound }
+    }
+}
+
+impl GraphSource for DoorSource<'_> {
+    type Error = crate::error::KitError;
+
+    fn edges(&self, end: End, ids: &[String], rels: &[&str]) -> KitResult<Vec<EdgeRow>> {
+        let (clause, bind) = rel_clause(rels);
+        let (name, order, column) = match end {
+            End::To => ("graph.in", ("to_id", "from_id"), "to_id"),
+            End::From => ("graph.out", ("from_id", "to_id"), "from_id"),
+        };
+        let rows = Lookup {
+            name,
+            table: "edge",
+            select: "from_id, to_id, rel, anchor",
+            order,
+            column,
+        }
+        .read(self.door, self.bound, ids, Some((clause, bind)))?;
+        Ok(rows
+            .iter()
+            .filter_map(|row| {
+                Some(EdgeRow {
+                    from: text_of(row, "from_id")?,
+                    to: text_of(row, "to_id")?,
+                    rel: text_of(row, "rel")?,
+                    anchor: text_of(row, "anchor"),
+                })
+            })
+            .collect())
+    }
+
+    fn column_rows(
+        &self,
+        link: &ColumnLink,
+        end: End,
+        ids: &[String],
+    ) -> KitResult<Vec<(String, String)>> {
+        let select = format!("id, {}", link.column);
+        let (name, column) = match end {
+            End::To => ("graph.column.in", link.column),
+            End::From => ("graph.column.out", "id"),
+        };
+        let rows = Lookup {
+            name,
+            table: link.table,
+            select: &select,
+            order: ("id", "id"),
+            column,
+        }
+        .read(self.door, self.bound, ids, None)?;
+        Ok(rows
+            .iter()
+            .filter_map(|row| Some((text_of(row, "id")?, text_of(row, link.column)?)))
+            .collect())
+    }
+}
+
 /// The joins that END at `id`, by `rels` (edge relations) and by every column of
 /// the catalogue that points at a kind named `to_kind`.
 ///
@@ -117,57 +181,7 @@ pub fn incoming(
     to_kind: &str,
     rels: &[&str],
 ) -> KitResult<Vec<Joined>> {
-    let ids = [id.to_owned()];
-    let mut out = Vec::new();
-    if !rels.is_empty() {
-        let (clause, bind) = rel_clause(rels);
-        for row in (Lookup {
-            name: "graph.in",
-            table: "edge",
-            select: "from_id, to_id, rel",
-            order: ("to_id", "from_id"),
-            column: "to_id",
-        })
-        .read(door, bound, &ids, Some((clause, bind)))?
-        {
-            if let (Some(from), Some(to), Some(relation)) = (
-                text_of(&row, "from_id"),
-                text_of(&row, "to_id"),
-                text_of(&row, "rel"),
-            ) {
-                out.push(Joined {
-                    from,
-                    to,
-                    relation,
-                    via: Via::Edge,
-                });
-            }
-        }
-    }
-    for link in COLUMN_LINKS.iter().filter(|link| link.to_kind == to_kind) {
-        let select = format!("id, {}", link.column);
-        for row in (Lookup {
-            name: "graph.column.in",
-            table: link.table,
-            select: &select,
-            order: ("id", "id"),
-            column: link.column,
-        })
-        .read(door, bound, &ids, None)?
-        {
-            if let Some(from) = text_of(&row, "id") {
-                out.push(Joined {
-                    from,
-                    to: id.to_owned(),
-                    relation: link.relation.to_owned(),
-                    via: Via::Column,
-                });
-            }
-        }
-    }
-    out.sort();
-    out.dedup();
-    Ok(out)
+    graph::incoming(&DoorSource::new(door, bound), id, to_kind, rels)
 }
 
 /// The joins that START at any of `ids`, which are all of kind `from_kind`: by
@@ -183,54 +197,5 @@ pub fn outgoing(
     from_kind: &str,
     rels: &[&str],
 ) -> KitResult<Vec<Joined>> {
-    let mut out = Vec::new();
-    if !rels.is_empty() && !ids.is_empty() {
-        let (clause, bind) = rel_clause(rels);
-        for row in (Lookup {
-            name: "graph.out",
-            table: "edge",
-            select: "from_id, to_id, rel",
-            order: ("from_id", "to_id"),
-            column: "from_id",
-        })
-        .read(door, bound, ids, Some((clause, bind)))?
-        {
-            if let (Some(from), Some(to), Some(relation)) = (
-                text_of(&row, "from_id"),
-                text_of(&row, "to_id"),
-                text_of(&row, "rel"),
-            ) {
-                out.push(Joined {
-                    from,
-                    to,
-                    relation,
-                    via: Via::Edge,
-                });
-            }
-        }
-    }
-    for link in COLUMN_LINKS.iter().filter(|link| link.table == from_kind) {
-        let select = format!("id, {}", link.column);
-        for row in (Lookup {
-            name: "graph.column.out",
-            table: link.table,
-            select: &select,
-            order: ("id", "id"),
-            column: "id",
-        })
-        .read(door, bound, ids, None)?
-        {
-            if let (Some(from), Some(to)) = (text_of(&row, "id"), text_of(&row, link.column)) {
-                out.push(Joined {
-                    from,
-                    to,
-                    relation: link.relation.to_owned(),
-                    via: Via::Column,
-                });
-            }
-        }
-    }
-    out.sort();
-    out.dedup();
-    Ok(out)
+    graph::outgoing(&DoorSource::new(door, bound), ids, from_kind, rels)
 }

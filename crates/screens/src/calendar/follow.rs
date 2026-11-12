@@ -27,47 +27,38 @@
 //! outside it is not in the phone's answer at all, so it reads as cancelled and
 //! becomes a skip. The phone's read cannot tell the two apart.
 //!
-//! ## Following ([`CalendarFollow`])
+//! ## Importing ([`CalendarFollow`]) and following
 //!
-//! A screen that lives as long as Calendar does (its home) hosts one
-//! [`CalendarFollow`]. The member's Import tap asks the OS for permission and
-//! imports; from then on this device FOLLOWS: a [`wire::PhoneWatch`] makes the
-//! shell report each change of the calendar store, bursts are coalesced (the
-//! first change arms a two-second timer, the ones before it fires join it, and
-//! changes during a pass queue exactly one more), and a pass reads the calendars
-//! only if the OS already allows it. **A pass never asks the OS for permission
-//! and never runs before this device imported.**
+//! The member's Import tap asks the OS for permission and imports ([`CalendarFollow`], hosted by
+//! Calendar's home and the made vault's importer); from then on this device FOLLOWS. Following
+//! is not a screen's: the follow coordinator ([`crate::follow`]) watches the calendar store,
+//! hears the app come to the front and the background windows, coalesces them, and runs the
+//! pass ([`run`]) when the habit below says this device imported. **A pass never asks the OS for
+//! permission and never runs before this device imported.**
 //!
-//! ## Writing back (two-way sync, #1173)
+//! ## One way
 //!
-//! The shell reports each calendar's `writable` / `allows_modifications` in the snapshot; the
-//! writable ones are remembered for the pass. After every pass, and after any commit
-//! ([`wire::DataChanged`]) while some calendar is writable, the core reads what those calendars
-//! are OWED ([`super::push`]: derived at read time, nothing queued) and asks the shell to
-//! write it with ONE [`wire::CalendarWrite`]; the shell answers [`wire::CalendarWritten`] and the
-//! core records it with `follow.pushed`. **One write in flight, one queued**, like the reads: a
-//! write and a read never overlap, a trigger during either waits for it. A write that fails or is
-//! not answered in [`READ_TIMEOUT`] changes nothing (C11): it is owed again at the next pass. A
-//! write is never asked for before this device imported, never after the OS refused the
-//! calendar, and never for a calendar the shell did not report writable (C8) or one that has no
-//! phone origin at all (C9). The status line speaks only for a failure and for a deleted event the
-//! phone kept (C7).
+//! The phone's calendars stay the source and are followed one way, into the vault (#1183):
+//! nothing is ever written back to them. An event the member edits here stays edited here, and
+//! the vault's `follow.take_stated` offers the phone's word back. Which calendars the phone
+//! hands over is its shell's call (every visible one, a read-only or subscribed one too, never
+//! Birthdays, whose dates arrive through Contacts); a snapshot carries no access level, so a
+//! calendar the member can only view is followed and its events are edited here like any other.
 //!
 //! "This device imported" is a per-device habit kept in the keychain
 //! ([`IMPORTED_KEY`]), not a fact read back from the vault: the OS permission a
 //! pass needs is per device too, and a vault restored onto a new phone must be
 //! imported from there once.
 
-use std::time::Duration;
-
 use centraid_api_proto::core_v1 as wire;
 use serde_json::{Value, json};
 use wire::screen_event::Kind as E;
 
-use super::push::{self as push, Prepared};
 use crate::catalog::act;
+use crate::follow::Store;
 use crate::kit::act as kit_act;
 use crate::kit::civil;
+use crate::kit::permission::{self, Resource};
 use crate::screen::Ctx;
 use crate::strings::{Locale, agenda as words, agenda_calendar as calendar_words, fill};
 
@@ -84,15 +75,6 @@ pub const DEFAULT_ORIGIN: &str = "local:this-phone";
 /// The keychain key that says this device imported its calendar.
 pub const IMPORTED_KEY: &str = "agenda_calendar_imported";
 const IMPORTED_VALUE: &[u8] = b"1";
-
-/// Triggers within this long of the first are one pass.
-pub const SETTLE: Duration = Duration::from_secs(2);
-/// A read that has not answered in two minutes is abandoned, so one stuck read
-/// cannot hold the follow for good.
-pub const READ_TIMEOUT: Duration = Duration::from_secs(120);
-const SETTLE_TIMER: &str = "calendar-settle";
-const READ_TIMER: &str = "calendar-read";
-const WRITE_TIMER: &str = "calendar-write";
 
 pub type PhoneEvent = wire::PhoneCalendarEvent;
 
@@ -646,6 +628,7 @@ pub fn follow_request(
         records: Value::Array(records).to_string(),
         complete: Some(complete),
         since: None,
+        gone: None,
     }
 }
 
@@ -693,60 +676,29 @@ fn count(output: &Value, name: &str) -> u32 {
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Purpose {
-    /// The member's tap: the OS may ask for permission, and a sentence says how it went.
-    Import,
-    /// A following pass: silent, and never asks.
-    Follow,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Waiting {
     Nothing,
     /// The keychain's answer to "did this device import?".
     Flag,
-    Read(Purpose),
-    /// A `CalendarWrite` is out.
-    Write,
+    /// The member's Import read, which may ask the OS for permission.
+    Read,
 }
 
-/// When a following pass runs. Pure: the timers are the runtime's.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Gate {
-    Idle,
-    /// A trigger armed the settle timer; later ones join it.
-    Armed,
-    /// A pass is out; `queued` is a trigger that arrived during it.
-    Running {
-        queued: bool,
-    },
-}
-
-/// THE IMPORT AND THE FOLLOW, as one component a long-lived screen hosts. The
-/// host sends it the events it does not know ([`Self::on_event`]), draws its
-/// [`Self::status`] on the status line, and returns the effects it hands back.
+/// THE IMPORT, as one component a screen hosts (Calendar's home, the made vault's importer). The
+/// host sends it the events it does not know ([`Self::on_event`]), draws its [`Self::status`]
+/// on the status line, and returns the effects it hands back.
+///
+/// It does not follow: a turned-on device is followed by the coordinator
+/// ([`crate::follow`]), which this tells ([`crate::follow::Follows::changed`]) whenever the
+/// habit it keeps changes.
 pub struct CalendarFollow {
     waiting: Waiting,
-    gate: Gate,
     /// This device imported its calendar: a pass may run.
     followed: bool,
-    watching: bool,
     /// An Import tapped while a read was out.
     import_queued: bool,
     status: Option<wire::StatusLine>,
     outcome: Option<Outcome>,
-    /// The origins (`calendar:<key>`) the shell last reported writable.
-    writable: Vec<String>,
-    /// This install's id, as the last snapshot said.
-    device_id: String,
-    /// Something may be owed: write when nothing else is running.
-    want_push: bool,
-    /// Where the round of writes goes on after the one in flight (empty: it is the last page).
-    cursor: String,
-    /// What the write in flight asked for.
-    writing: Vec<Prepared>,
-    /// The status line is a sync sentence (a later clean write clears it).
-    sync_status: bool,
 }
 
 impl Default for CalendarFollow {
@@ -755,67 +707,67 @@ impl Default for CalendarFollow {
     }
 }
 
+/// Whether the keychain's answer says this device follows its calendars.
+#[must_use]
+pub(crate) fn followed_in(value: &wire::KeychainValue) -> bool {
+    value.found && value.value == IMPORTED_VALUE
+}
+
+/// The read of the calendars a pass or an import performs.
+#[must_use]
+pub(crate) fn read_effect(ask_permission: bool) -> wire::Effect {
+    wire::Effect {
+        kind: Some(wire::effect::Kind::CalendarRead(wire::CalendarRead {
+            ask_permission,
+            days_back: DAYS_BACK,
+            days_on: DAYS_ON,
+        })),
+    }
+}
+
+/// Read the habit this device keeps for the calendar.
+#[must_use]
+pub(crate) fn habit_read() -> wire::Effect {
+    keychain(wire::keychain_op::Op::Get, Vec::new())
+}
+
 impl CalendarFollow {
     #[must_use]
     pub fn new() -> Self {
         Self {
             waiting: Waiting::Nothing,
-            gate: Gate::Idle,
             followed: false,
-            watching: false,
             import_queued: false,
             status: None,
             outcome: None,
-            writable: Vec::new(),
-            device_id: String::new(),
-            want_push: false,
-            cursor: String::new(),
-            writing: Vec::new(),
-            sync_status: false,
         }
     }
 
-    /// The host came up: learn whether this device follows. Asked once.
+    /// The host came up: learn whether this device follows.
     pub fn attach(&mut self) -> Vec<wire::Effect> {
         if self.followed || self.waiting != Waiting::Nothing {
             return Vec::new();
         }
         self.waiting = Waiting::Flag;
-        vec![keychain(wire::keychain_op::Op::Get, Vec::new())]
+        vec![habit_read()]
     }
 
     /// The member tapped Import. ONE IMPORT AT A TIME: a second tap while one
-    /// runs would write every event twice, so it is nothing. A tap during a
-    /// following pass (or before the device has said whether it follows) waits
-    /// for it.
+    /// runs would write every event twice, so it is nothing. A tap before the device has said
+    /// whether it follows waits for it.
     pub fn import(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        if self.waiting == Waiting::Read(Purpose::Import) {
+        if self.waiting == Waiting::Read {
             return Vec::new();
         }
         if self.waiting != Waiting::Nothing {
             self.import_queued = true;
             return Vec::new();
         }
-        self.start_read(ctx, Purpose::Import)
-    }
-
-    /// The phone may have changed (or the app came forward): follow soon.
-    pub fn request(&mut self, ctx: &Ctx) {
-        if !self.followed {
-            return;
-        }
-        match self.gate {
-            Gate::Idle => {
-                self.gate = Gate::Armed;
-                ctx.start_timer(SETTLE_TIMER, SETTLE);
-            }
-            Gate::Armed => {}
-            Gate::Running { .. } => self.gate = Gate::Running { queued: true },
-        }
+        self.start_read(ctx)
     }
 
     /// The status line this flow wants drawn: the running sentence, then the
-    /// outcome's. A following pass says nothing.
+    /// outcome's.
     #[must_use]
     pub fn status(&self) -> Option<&wire::StatusLine> {
         self.status.as_ref()
@@ -834,16 +786,34 @@ impl CalendarFollow {
         self.followed
     }
 
-    /// Offer the host's event. `Some(effects)` when it was this flow's (a
-    /// timer it started, or the answer to an effect it asked); `None` otherwise.
+    /// STOP READING: every calendar the passes followed is retired (`stop-following`, the same door
+    /// chat and Undo use) and this device no longer follows. **Every event stays**, an ordinary one
+    /// from now on. `None` when the vault refused part of it (the rest is done, and stopping again
+    /// finishes it); the effects forget the habit.
+    pub fn stop(&mut self, ctx: &Ctx, stored: &[String]) -> Option<Vec<wire::Effect>> {
+        let mut clean = true;
+        for origin in stored {
+            let request = act::calendar::StopFollowing {
+                r#ref: origin.clone(),
+            };
+            let key = kit_act::key(&["stop-following", origin], kit_act::fresh());
+            // undo-exempt: Stop reading asks first and is itself the Undo of a follow; the empty
+            // state offers Import again, so no line of its own takes it back.
+            clean = kit_act::act(ctx, request, &key).committed && clean;
+        }
+        if !clean {
+            return None;
+        }
+        self.followed = false;
+        self.status = None;
+        self.outcome = None;
+        Some(vec![keychain(wire::keychain_op::Op::Delete, Vec::new())])
+    }
+
+    /// Offer the host's event. `Some(effects)` when it was the answer to an effect this flow
+    /// asked; `None` otherwise.
     pub fn on_event(&mut self, event: &E, ctx: &Ctx) -> Option<Vec<wire::Effect>> {
         match event {
-            E::TimerFired(fired) if fired.timer == SETTLE_TIMER => Some(self.settled(ctx)),
-            E::TimerFired(fired) if fired.timer == READ_TIMER => Some(self.read_ended(ctx, None)),
-            // A write that was never answered is a failed one (C11).
-            E::TimerFired(fired) if fired.timer == WRITE_TIMER => Some(self.written(ctx, None)),
-            // The vault moved: something may be owed to the phone.
-            E::DataChanged(_) => Some(self.committed(ctx)),
             E::EffectResult(result) => self.on_result(result, ctx),
             _ => None,
         }
@@ -852,310 +822,113 @@ impl CalendarFollow {
     fn on_result(&mut self, result: &wire::EffectResult, ctx: &Ctx) -> Option<Vec<wire::Effect>> {
         use wire::effect_result::Outcome as O;
         match (&self.waiting, &result.outcome) {
-            (_, Some(O::PhoneChanged(changed)))
-                if changed.source == wire::ImportSource::Calendar as i32 =>
-            {
-                self.request(ctx);
-                Some(Vec::new())
-            }
             (Waiting::Flag, Some(O::Keychain(value))) => {
                 self.waiting = Waiting::Nothing;
-                self.followed = value.found && value.value == IMPORTED_VALUE;
-                Some(self.begin_following(ctx))
+                self.followed = followed_in(value);
+                Some(self.finish(ctx))
             }
             (Waiting::Flag, Some(O::Failed(_))) => {
                 self.waiting = Waiting::Nothing;
-                Some(Vec::new())
+                Some(self.finish(ctx))
             }
-            (Waiting::Read(_), Some(O::Calendar(snapshot))) => {
-                Some(self.read_ended(ctx, Some(snapshot)))
-            }
-            (Waiting::Read(_), Some(O::Failed(failed))) => {
-                let denied = failed.denied;
-                Some(self.read_failed(ctx, denied))
-            }
-            (Waiting::Write, Some(O::CalendarWritten(written))) => {
-                Some(self.written(ctx, Some(written)))
-            }
-            (Waiting::Write, Some(O::Failed(_))) => Some(self.written(ctx, None)),
+            (Waiting::Read, Some(O::Calendar(snapshot))) => Some(self.read_ended(ctx, snapshot)),
+            (Waiting::Read, Some(O::Failed(failed))) => Some(self.read_failed(ctx, failed)),
             _ => None,
         }
     }
 
-    /// Watch the store and follow once, now that this device follows.
-    fn begin_following(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        if !self.followed || self.watching {
-            return Vec::new();
-        }
-        self.watching = true;
-        self.request(ctx);
-        vec![watch(true)]
+    fn start_read(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
+        self.waiting = Waiting::Read;
+        self.outcome = None;
+        self.status = Some(plain(calendar_words::import_calendar_running(ctx.locale())));
+        vec![read_effect(true)]
     }
 
-    /// The settle timer fired: start the pass.
-    fn settled(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        if self.gate != Gate::Armed {
-            return Vec::new();
-        }
-        if !self.followed {
-            self.gate = Gate::Idle;
-            return Vec::new();
-        }
-        if self.waiting != Waiting::Nothing {
-            // An import is out: the pass waits the settle time again.
-            ctx.start_timer(SETTLE_TIMER, SETTLE);
-            return Vec::new();
-        }
-        self.gate = Gate::Running { queued: false };
-        self.start_read(ctx, Purpose::Follow)
-    }
-
-    fn start_read(&mut self, ctx: &Ctx, purpose: Purpose) -> Vec<wire::Effect> {
-        self.waiting = Waiting::Read(purpose);
-        match purpose {
-            Purpose::Import => {
-                self.outcome = None;
-                self.sync_status = false;
-                self.status = Some(plain(calendar_words::import_calendar_running(ctx.locale())));
-            }
-            // Only a read with no dialog can go unanswered.
-            Purpose::Follow => ctx.start_timer(READ_TIMER, READ_TIMEOUT),
-        }
-        vec![wire::Effect {
-            kind: Some(wire::effect::Kind::CalendarRead(wire::CalendarRead {
-                ask_permission: purpose == Purpose::Import,
-                days_back: DAYS_BACK,
-                days_on: DAYS_ON,
-            })),
-        }]
-    }
-
-    fn read_failed(&mut self, ctx: &Ctx, denied: bool) -> Vec<wire::Effect> {
-        let Waiting::Read(purpose) = self.waiting else {
-            return Vec::new();
-        };
-        if denied {
-            // The OS refused the calendar: nothing is written to it until a read is allowed again.
-            self.writable.clear();
-            self.want_push = false;
-        }
-        if purpose == Purpose::Import {
-            let locale = ctx.locale();
-            self.status = Some(plain(if denied {
-                calendar_words::import_calendar_denied(locale)
-            } else {
-                words::import_calendar_failed(locale)
-            }));
-        }
+    fn read_failed(&mut self, ctx: &Ctx, failed: &wire::EffectFailed) -> Vec<wire::Effect> {
+        let locale = ctx.locale();
+        // A GRANT THAT IS NOT THERE (off, blocked, or write-only) says so in the one permission voice.
+        self.status = Some(plain(
+            permission::refusal(locale, Resource::Calendar, failed)
+                .unwrap_or_else(|| words::import_calendar_failed(locale)),
+        ));
+        self.waiting = Waiting::Nothing;
         self.finish(ctx)
     }
 
-    /// A read came back (`Some`) or timed out (`None`).
-    fn read_ended(
-        &mut self,
-        ctx: &Ctx,
-        snapshot: Option<&wire::CalendarSnapshot>,
-    ) -> Vec<wire::Effect> {
-        let Waiting::Read(purpose) = self.waiting else {
-            return Vec::new();
-        };
-        let Some(snapshot) = snapshot else {
-            return self.read_failed(ctx, false);
-        };
-        let (outcome, told) = self.run(ctx, snapshot);
-        self.writable = writable_origins(ctx.locale(), snapshot);
-        self.device_id.clone_from(&snapshot.device_id);
-        self.want_push = true;
+    /// A read came back.
+    fn read_ended(&mut self, ctx: &Ctx, snapshot: &wire::CalendarSnapshot) -> Vec<wire::Effect> {
+        let (outcome, told) = run(ctx, snapshot);
+        self.status = Some(plain(sentence(ctx.locale(), &outcome)));
+        self.outcome = Some(outcome);
+        self.waiting = Waiting::Nothing;
         let mut effects = Vec::new();
-        if purpose == Purpose::Import {
-            self.status = Some(plain(sentence(ctx.locale(), &outcome)));
-            self.outcome = Some(outcome);
-            // THIS DEVICE FOLLOWS FROM NOW ON, once the vault took a calendar.
-            if told && !self.followed {
-                self.followed = true;
-                effects.push(keychain(
-                    wire::keychain_op::Op::Set,
-                    IMPORTED_VALUE.to_vec(),
-                ));
-            }
+        // THIS DEVICE FOLLOWS FROM NOW ON, once the vault took a calendar.
+        if told && !self.followed {
+            self.followed = true;
+            effects.push(keychain(
+                wire::keychain_op::Op::Set,
+                IMPORTED_VALUE.to_vec(),
+            ));
+        }
+        if self.followed {
+            ctx.follows().changed(ctx, Store::Calendar);
         }
         effects.extend(self.finish(ctx));
-        if self.followed && !self.watching {
-            effects.extend(self.begin_following(ctx));
-        }
         effects
     }
 
-    /// One `follow-calendar` per calendar. `told` is whether the vault took any.
-    fn run(&mut self, ctx: &Ctx, snapshot: &wire::CalendarSnapshot) -> (Outcome, bool) {
-        let batch = batch(ctx.locale(), snapshot);
-        let mut outcome = Outcome {
-            add_account: batch.complete && batch.records.is_empty() && batch.origins.is_empty(),
-            ..Outcome::default()
-        };
-        let mut told = false;
-        for origin in &batch.origins {
-            let records: Vec<&EventRecord> = batch
-                .records
-                .iter()
-                .filter(|record| record.origin == origin.id)
-                .collect();
-            let request = follow_request(origin, &records, batch.complete, &snapshot.device_id);
-            let key = kit_act::key(
-                &["follow-calendar", &origin.id, &snapshot.now_ms.to_string()],
-                kit_act::fresh(),
-            );
-            let settled = kit_act::act(ctx, request, &key);
-            if !settled.committed {
-                outcome.refused += u32::try_from(records.len()).unwrap_or(u32::MAX);
-                continue;
-            }
-            told = true;
-            let output: Value = serde_json::from_slice(&settled.output).unwrap_or(Value::Null);
-            outcome.added += count(&output, "added") + count(&output, "matched");
-            outcome.refused += count(&output, "refused");
-            outcome.updated += count(&output, "updated");
-            outcome.trashed += count(&output, "trashed");
-        }
-        (outcome, told)
-    }
-
-    /// A read is over, however it ended: the next thing waiting goes.
+    /// A read is over, however it ended: an Import tapped meanwhile goes.
     fn finish(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        ctx.cancel_timer(READ_TIMER);
-        self.waiting = Waiting::Nothing;
-        if self.import_queued {
+        if self.waiting == Waiting::Nothing && self.import_queued {
             self.import_queued = false;
-            return self.start_read(ctx, Purpose::Import);
-        }
-        let reads = match self.gate {
-            // Triggers arrived during the pass: one more, at once.
-            Gate::Running { queued: true } => {
-                self.gate = Gate::Running { queued: false };
-                self.start_read(ctx, Purpose::Follow)
-            }
-            Gate::Running { queued: false } => {
-                self.gate = Gate::Idle;
-                Vec::new()
-            }
-            _ => Vec::new(),
-        };
-        if reads.is_empty() {
-            self.begin_push(ctx)
-        } else {
-            reads
-        }
-    }
-
-    /// The vault committed something. When a calendar is writable something may be owed to it.
-    fn committed(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        if !self.followed || self.writable.is_empty() {
-            return Vec::new();
-        }
-        self.want_push = true;
-        self.begin_push(ctx)
-    }
-
-    /// WRITE WHAT THE PHONE IS OWED, when something may be and nothing else is running: ONE
-    /// `CalendarWrite` for a page of it. Never before this device imported, never without a
-    /// calendar the shell reported writable.
-    fn begin_push(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        if !self.want_push || !self.followed || self.writable.is_empty() {
-            return Vec::new();
-        }
-        if self.waiting != Waiting::Nothing {
-            // One in flight, one queued: `want_push` stays set and the next `finish` writes.
-            return Vec::new();
-        }
-        self.want_push = false;
-        let mut after = std::mem::take(&mut self.cursor);
-        for _ in 0..push::MAX_PAGES {
-            let Some(page) = push::read(ctx, &self.writable, &after) else {
-                return Vec::new();
-            };
-            let prepared: Vec<Prepared> = page
-                .items
-                .iter()
-                .filter_map(|owed| push::prepare(owed, &self.device_id))
-                .collect();
-            if prepared.is_empty() {
-                if page.next.is_empty() {
-                    return Vec::new();
-                }
-                after = page.next;
-                continue;
-            }
-            self.cursor = page.next;
-            let items: Vec<wire::CalendarWriteItem> = prepared
-                .iter()
-                .flat_map(|one| one.items.iter().cloned())
-                .collect();
-            self.writing = prepared;
-            self.waiting = Waiting::Write;
-            ctx.start_timer(WRITE_TIMER, READ_TIMEOUT);
-            return vec![wire::Effect {
-                kind: Some(wire::effect::Kind::CalendarWrite(wire::CalendarWrite {
-                    items,
-                })),
-            }];
+            return self.start_read(ctx);
         }
         Vec::new()
     }
+}
 
-    /// The shell answered the write (`Some`), or it failed or was never answered (`None`).
-    /// Record what went through; what did not is owed again.
-    fn written(
-        &mut self,
-        ctx: &Ctx,
-        answered: Option<&wire::CalendarWritten>,
-    ) -> Vec<wire::Effect> {
-        if self.waiting != Waiting::Write {
-            return Vec::new();
+/// One `follow-calendar` per calendar over a read of the phone's calendars. `told` is whether
+/// the vault took any. Both the member's import and the coordinator's pass go through it.
+#[must_use]
+pub(crate) fn run(ctx: &Ctx, snapshot: &wire::CalendarSnapshot) -> (Outcome, bool) {
+    let batch = batch(ctx.locale(), snapshot);
+    let mut outcome = Outcome {
+        add_account: batch.complete && batch.records.is_empty() && batch.origins.is_empty(),
+        ..Outcome::default()
+    };
+    let mut told = false;
+    let mut doubted = 0;
+    let mut followed = Vec::new();
+    for origin in &batch.origins {
+        let records: Vec<&EventRecord> = batch
+            .records
+            .iter()
+            .filter(|record| record.origin == origin.id)
+            .collect();
+        let request = follow_request(origin, &records, batch.complete, &snapshot.device_id);
+        let key = kit_act::key(
+            &["follow-calendar", &origin.id, &snapshot.now_ms.to_string()],
+            kit_act::fresh(),
+        );
+        // undo-exempt: a follow pass has no screen of its own (the coordinator runs it unseen); its
+        // Undo is the member disconnecting the phone's calendar (`stop-following`).
+        let settled = kit_act::act(ctx, request, &key);
+        if !settled.committed {
+            outcome.refused += u32::try_from(records.len()).unwrap_or(u32::MAX);
+            continue;
         }
-        ctx.cancel_timer(WRITE_TIMER);
-        let asked = std::mem::take(&mut self.writing);
-        let verdicts = push::verdicts(&asked, answered);
-        let failed = verdicts.iter().any(|verdict| !verdict.ok);
-        let mut kept = 0_u32;
-        if verdicts.iter().any(|verdict| verdict.ok) {
-            let request = act::calendar::RecordCalendarPush {
-                items: push::pushed_items(&verdicts).to_string(),
-            };
-            let key = kit_act::key(
-                &[
-                    "record-calendar-push",
-                    asked.first().map_or("", |one| &one.event_id),
-                ],
-                kit_act::fresh(),
-            );
-            let settled = kit_act::act(ctx, request, &key);
-            if settled.committed {
-                let output: Value = serde_json::from_slice(&settled.output).unwrap_or(Value::Null);
-                kept = count(&output, "unlinked");
-            }
-        }
-        let locale = ctx.locale();
-        if failed {
-            self.status = Some(plain(calendar_words::sync_failed(locale)));
-            self.sync_status = true;
-        } else if kept > 0 {
-            self.status = Some(plain(calendar_words::sync_kept(locale, u64::from(kept))));
-            self.sync_status = true;
-        } else if self.sync_status {
-            self.status = None;
-            self.sync_status = false;
-        }
-        // A failed write ends this round (the next pass or commit asks again); a good one goes on
-        // to the next page, if the round has one.
-        if failed {
-            // No hot retry: what is owed is asked again at the next pass or commit.
-            self.cursor.clear();
-            self.want_push = false;
-        } else if !self.cursor.is_empty() {
-            self.want_push = true;
-        }
-        self.finish(ctx)
+        told = true;
+        followed.push(origin.id.clone());
+        let output: Value = serde_json::from_slice(&settled.output).unwrap_or(Value::Null);
+        outcome.added += count(&output, "added") + count(&output, "matched");
+        outcome.refused += count(&output, "refused");
+        outcome.updated += count(&output, "updated");
+        outcome.trashed += count(&output, "trashed");
+        doubted += count(&output, "doubted");
     }
+    ctx.follows()
+        .judged(Store::Calendar, doubted, !batch.complete);
+    (outcome, told)
 }
 
 fn plain(sentence: String) -> wire::StatusLine {
@@ -1174,23 +947,4 @@ fn keychain(op: wire::keychain_op::Op, value: Vec<u8>) -> wire::Effect {
             value,
         })),
     }
-}
-
-fn watch(on: bool) -> wire::Effect {
-    wire::Effect {
-        kind: Some(wire::effect::Kind::PhoneWatch(wire::PhoneWatch {
-            source: wire::ImportSource::Calendar as i32,
-            on,
-        })),
-    }
-}
-
-/// The origins the shell reported writable (both ways): the only calendars ever written.
-fn writable_origins(locale: Locale, snapshot: &wire::CalendarSnapshot) -> Vec<String> {
-    snapshot
-        .calendars
-        .iter()
-        .filter(|calendar| calendar.writable && calendar.allows_modifications)
-        .map(|calendar| origin_of(locale, calendar).id)
-        .collect()
 }

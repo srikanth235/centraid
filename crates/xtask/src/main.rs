@@ -32,6 +32,8 @@ mod ledger;
 mod native_parity;
 mod native_parity_register;
 mod native_rules;
+mod page_state;
+mod promises;
 mod rules;
 mod screens_catalog;
 mod select;

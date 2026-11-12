@@ -84,6 +84,25 @@ pub trait ScreenCtx {
     /// Whatever [`Handle::act`] refuses with.
     fn act(&self, request: &wire::ActRequest) -> Result<wire::ActResponse>;
 
+    /// One registered command by name, for the shell's own verbs that no app's
+    /// manifest declares (`vault.export_all`): the write path `act` takes, without
+    /// the manifest. An app's write is [`Self::act`]. A host without the door
+    /// refuses.
+    ///
+    /// # Errors
+    /// Whatever [`HandleState::command`] refuses with.
+    fn command(
+        &self,
+        name: &str,
+        input: &serde_json::Value,
+        invoke_key: &str,
+    ) -> Result<centraid_vault::commands::CommandOutcome> {
+        let _ = (name, input, invoke_key);
+        Err(crate::error::CoreError::Unavailable {
+            reason: "this door runs no shell commands".to_owned(),
+        })
+    }
+
     /// The keep list and the census of originals on this phone
     /// (`originals.proto`): a fact about this phone's disk, so it has no
     /// catalogue query. A host that does not carry the door refuses.
@@ -205,6 +224,15 @@ impl ScreenCtx for HandleState {
 
     fn act(&self, request: &wire::ActRequest) -> Result<wire::ActResponse> {
         HandleState::act(self, request)
+    }
+
+    fn command(
+        &self,
+        name: &str,
+        input: &serde_json::Value,
+        invoke_key: &str,
+    ) -> Result<centraid_vault::commands::CommandOutcome> {
+        HandleState::command(self, name, input, invoke_key)
     }
 
     fn originals(&self, request: &wire::OriginalsRequest) -> Result<wire::OriginalsResponse> {

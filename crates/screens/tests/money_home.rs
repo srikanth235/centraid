@@ -26,7 +26,10 @@ fn activity_is_home_and_spending_is_drawn_per_currency() {
     assert_eq!(state.chrome.as_ref().unwrap().title, "Money");
     let data = home_data(d.view(i));
     let spending = data.spending.as_ref().expect("spending data");
-    assert!(spending.empty.is_none(), "the example scenario has lines");
+    assert!(
+        home_page(d.view(i)).state.is_none(),
+        "the example scenario has lines"
+    );
     assert!(!spending.heroes.is_empty());
     for hero in &spending.heroes {
         assert!(
@@ -85,7 +88,9 @@ fn the_header_search_and_recurring_rows_are_routes() {
             "money.accounts",
             "money.rules",
             "money.categories",
-            "money.import"
+            "money.import",
+            "money.export",
+            "money.trash"
         ]
     );
 }
@@ -390,7 +395,7 @@ fn a_filter_that_matches_nothing_says_so_and_offers_no_import() {
     );
     let activity = home_data(d.view(i)).activity.as_ref().unwrap();
     assert!(activity.sections.is_empty());
-    let empty = activity.empty.as_ref().expect("an empty state");
+    let empty = home_empty(d.view(i));
     assert_eq!(empty.headline, "Nothing this month.");
     assert_eq!(empty.action_label, "Import statement");
     event(
@@ -400,13 +405,7 @@ fn a_filter_that_matches_nothing_says_so_and_offers_no_import() {
             key: "uncategorised".into(),
         })),
     );
-    let empty = home_data(d.view(i))
-        .activity
-        .as_ref()
-        .unwrap()
-        .empty
-        .clone()
-        .unwrap();
+    let empty = home_empty(d.view(i)).clone();
     assert_eq!(empty.headline, "Nothing matches these filters.");
     assert!(empty.action_label.is_empty());
 }

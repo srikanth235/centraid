@@ -44,7 +44,7 @@ internal fun readCalendarSnapshot(context: Context, daysBack: Int, daysOn: Int, 
 
 private const val DAY_MS: Long = 24L * 60 * 60 * 1000
 
-/** What the phone's calendars held at one read: the events, and every writable calendar present. */
+/** What the phone's calendars held at one read: the events, and every followed calendar that is present. */
 private class CalendarsRead(
     val events: List<PhoneCalendarEvent>,
     val calendars: List<PhoneCalendar>,
@@ -52,7 +52,7 @@ private class CalendarsRead(
     val complete: Boolean,
 )
 
-/** One calendar the member writes to: its origin and the name they know it by. */
+/** One followed calendar: its origin and the name they know it by. */
 private class CalendarRow(val key: String, val calendar: PhoneCalendar)
 
 /** What an event row says about where it lives and what it is called on every device. */
@@ -69,7 +69,7 @@ private class EventMeta(val calendarId: Long, val uid: String?)
  * how the importer knows to skip it.
  *
  * **EACH EVENT IS KEYED BY ITS iCal UID** (R-1127-10) where the provider fills it, else its row
- * id, and **belongs to its calendar**: every visible calendar the member writes to is an origin,
+ * id, and **belongs to its calendar**: every visible calendar on the phone is an origin, except Birthdays ([PhoneBirthdays]),
  * an empty one included. A calendar the member hides has no instances, so it reads as one that
  * left the phone, and the member is asked, with Keep the default.
  */
@@ -93,12 +93,12 @@ private fun readEvents(resolver: ContentResolver, windowStart: Long, windowEnd: 
         CalendarContract.Instances.ORIGINAL_INSTANCE_TIME,
         CalendarContract.Instances.EVENT_LOCATION,
     )
-    // ONLY CALENDARS THE MEMBER WRITES TO, never a cancelled instance: a
-    // subscribed holiday calendar is nobody's own events, and a contacts'
-    // birthdays calendar would copy what Contacts → People brought in.
-    val selection = "(${CalendarContract.Instances.STATUS} IS NULL OR " +
-        "${CalendarContract.Instances.STATUS} != ${CalendarContract.Events.STATUS_CANCELED}) AND " +
-        "${CalendarContract.Instances.CALENDAR_ACCESS_LEVEL} >= ${CalendarContract.Calendars.CAL_ACCESS_CONTRIBUTOR}"
+    // EVERY CALENDAR, whatever the member's access: a read-only shared or subscribed one is
+    // followed too (#1183). Nothing is written back to the phone. Which calendars count is decided
+    // by [readCalendars] (visible, not Birthdays); an instance of any other is dropped below.
+    // Never a cancelled instance.
+    val selection = "${CalendarContract.Instances.STATUS} IS NULL OR " +
+        "${CalendarContract.Instances.STATUS} != ${CalendarContract.Events.STATUS_CANCELED}"
     val device = TimeZone.getDefault()
     val rows = mutableListOf<InstanceRow>()
     resolver.query(uri, projection, selection, null, "${CalendarContract.Instances.BEGIN} ASC")?.use { cursor ->
@@ -126,7 +126,7 @@ private fun readEvents(resolver: ContentResolver, windowStart: Long, windowEnd: 
     val alerts = readAlerts(resolver, rows.map { it.eventId })
     val attendees = readAttendees(resolver, rows.map { it.eventId })
     val events = rows.mapNotNull { row ->
-        // AN INSTANCE WHOSE CALENDAR IS NOT ONE OF THE MEMBER'S VISIBLE, WRITABLE ONES is not read.
+        // AN INSTANCE WHOSE CALENDAR IS NOT ONE OF THE FOLLOWED (VISIBLE, NOT BIRTHDAYS) CALENDARS is not read.
         val meta = metas[row.eventId] ?: return@mapNotNull null
         val calendar = calendars[meta.calendarId] ?: return@mapNotNull null
         val masterId = row.originalId ?: row.eventId
@@ -183,7 +183,7 @@ private fun readEvents(resolver: ContentResolver, windowStart: Long, windowEnd: 
 }
 
 /**
- * EVERY VISIBLE CALENDAR THE MEMBER WRITES TO, by row id: its key and its titles. Empty
+ * EVERY VISIBLE CALENDAR EXCEPT BIRTHDAYS, by row id: its key and its titles. Empty
  * calendars are in it, so one with no event is not mistaken for gone (R-1127-9).
  */
 private fun readCalendars(resolver: ContentResolver): Map<Long, CalendarRow> {
@@ -194,14 +194,13 @@ private fun readCalendars(resolver: ContentResolver): Map<Long, CalendarRow> {
         SYNC_ID,
         CalendarContract.Calendars.CALENDAR_DISPLAY_NAME,
         CalendarContract.Calendars.CALENDAR_COLOR,
-        CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL,
     )
-    val selection = "${CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL} >= ${CalendarContract.Calendars.CAL_ACCESS_CONTRIBUTOR} AND " +
-        "${CalendarContract.Calendars.VISIBLE} = 1"
+    val selection = "${CalendarContract.Calendars.VISIBLE} = 1"
     val found = linkedMapOf<Long, CalendarRow>()
     resolver.query(CalendarContract.Calendars.CONTENT_URI, projection, selection, null, "${CalendarContract.Calendars._ID} ASC")?.use { cursor ->
         while (cursor.moveToNext()) {
             val id = cursor.getLong(0)
+            if (PhoneBirthdays.isBirthdays(cursor.getString(1), cursor.getString(3))) continue
             // THE PLATFORM'S OWN KEY, unprefixed: Rust makes the origin and its label.
             val key = PhoneOrigins.calendarKey(cursor.getString(1), cursor.getString(2), cursor.getString(3), id)
             found[id] = CalendarRow(
@@ -211,9 +210,6 @@ private fun readCalendars(resolver: ContentResolver): Map<Long, CalendarRow> {
                     source_title = cursor.getString(2).orEmpty(),
                     title = cursor.getString(4).orEmpty(),
                     color = if (cursor.isNull(5)) "" else "#%06X".format(cursor.getInt(5) and 0xFFFFFF),
-                    // TWO-WAY SYNC: a contributor can add; only an editor or better can change or delete.
-                    writable = cursor.getInt(6) >= CalendarContract.Calendars.CAL_ACCESS_CONTRIBUTOR,
-                    allows_modifications = cursor.getInt(6) >= CalendarContract.Calendars.CAL_ACCESS_EDITOR,
                 ),
             )
         }
@@ -292,6 +288,22 @@ internal fun attendeeStatus(status: Int): String = when (status) {
     CalendarContract.Attendees.ATTENDEE_STATUS_DECLINED -> "declined"
     CalendarContract.Attendees.ATTENDEE_STATUS_TENTATIVE -> "tentative"
     else -> "needs-action"
+}
+
+/**
+ * THE BIRTHDAYS CALENDAR IS NOT FOLLOWED: its dates already arrive through Contacts into People.
+ * `CalendarContract` has no type constant for it. The one signal the provider gives is Google's
+ * fixed calendar id for contact birthdays, `addressbook#contacts@group.v.calendar.google.com`,
+ * synced under account type `com.google` and read from `_sync_id`; never the display name, which
+ * is translated and which the member can reuse. A birthdays calendar an OEM keeps in a local
+ * account carries no such id and is not recognised here.
+ */
+internal object PhoneBirthdays {
+    private const val GOOGLE_ACCOUNT_TYPE = "com.google"
+    private const val GOOGLE_BIRTHDAYS_SYNC_ID = "addressbook#contacts@group.v.calendar.google.com"
+
+    fun isBirthdays(accountType: String?, syncId: String?): Boolean =
+        accountType == GOOGLE_ACCOUNT_TYPE && syncId == GOOGLE_BIRTHDAYS_SYNC_ID
 }
 
 private const val SYNC_ID: String = "_sync_id"

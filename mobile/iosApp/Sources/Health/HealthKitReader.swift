@@ -29,15 +29,25 @@ import HealthKit
 ///   instants, moving seconds, and the figures the workout's own statistics hold. A failed query
 ///   makes the read incomplete, which removes nothing (R-1129-5).
 ///
+/// **A READ CAN BE A DELTA (#1183).** `HealthRead.cursor` is an opaque string Rust keeps in the vault
+/// with the records it covers: here a JSON map of sample type → `HKQueryAnchor` (HealthKit anchors
+/// are per type). With a cursor that holds an anchor for every chosen type, one
+/// `HKAnchoredObjectQuery` per type says what was added and deleted since: the shell re-aggregates
+/// only the days an added sample touches (a type that lost a sample re-reads its whole window, as a
+/// deleted object names no day), sends a sum day left with no samples as 0, and names the deleted
+/// workouts. A cursor that is empty or does not decode is a complete read (`delta = false`), never an
+/// error; either way `next_cursor` is where this read got to. Anchors are taken before a complete read,
+/// so a sample that lands during it is seen again, never lost.
+///
 /// This reads and decides nothing else: Rust diffs the days, maps the kind and judges
 /// completeness.
 enum HealthKitReader {
     /// The effect's answer: a snapshot, or a refusal by value when HealthKit is not on this phone
     /// or the member's Connect sheet failed.
     static func snapshot(_ read: Centraid_Core_V1_HealthRead) async -> Centraid_Core_V1_EffectResult.OneOf_Outcome {
-        guard HKHealthStore.isHealthDataAvailable() else { return .failed(denied("health data is not available")) }
+        guard HKHealthStore.isHealthDataAvailable() else { return .failed(denied(EffectReason.unavailable)) }
         if read.askPermission {
-            guard await HealthAccess.request(read.chosen) else { return .failed(denied("health access not given")) }
+            guard await HealthAccess.request(read.chosen) else { return .failed(denied(EffectReason.denied)) }
         }
         let store = HealthAccess.store
         return await Task.detached(priority: .utility) {
@@ -45,10 +55,12 @@ enum HealthKitReader {
         }.value
     }
 
+    /// A failure by value: the member's no is `denied` (Rust says it in the one permission voice); a
+    /// phone with no HealthKit is `unavailable`, which is no refusal and so no grant's state.
     private static func denied(_ reason: String) -> Centraid_Core_V1_EffectFailed {
         var failed = Centraid_Core_V1_EffectFailed()
         failed.reason = reason
-        failed.denied = true
+        failed.denied = reason == EffectReason.denied
         return failed
     }
 
@@ -59,6 +71,26 @@ enum HealthKitReader {
     // MARK: - One read
 
     private static func read(store: HKHealthStore, read: Centraid_Core_V1_HealthRead) async -> Centraid_Core_V1_HealthSnapshot {
+        let types = sampleTypes(read.chosen)
+        var seen: [String: Changed] = [:]
+        if let held = Cursor.decode(read.cursor) {
+            for type in types {
+                guard let anchor = held[type.identifier], let found = await changes(store: store, type: type, anchor: anchor, predicate: nil) else { break }
+                seen[type.identifier] = found
+            }
+        }
+        if !types.isEmpty, seen.count == types.count {
+            return await delta(store: store, read: read, seen: seen)
+        }
+        // A complete read. The anchors are taken first: a sample that lands during the read is seen
+        // again by the next delta.
+        let next = await Cursor.now(store: store, types: types)
+        var out = await complete(store: store, read: read)
+        out.nextCursor = next
+        return out
+    }
+
+    private static func complete(store: HKHealthStore, read: Centraid_Core_V1_HealthRead) async -> Centraid_Core_V1_HealthSnapshot {
         let chosen = read.chosen
         let days = HealthCalendarDays()
         var totals: [Centraid_Core_V1_HealthDayTotal] = []
@@ -87,6 +119,104 @@ enum HealthKitReader {
         out.workouts = workouts
         out.workoutsComplete = complete
         out.deviceID = deviceID
+        return out
+    }
+
+    // MARK: - Deltas (#1183)
+
+    /// What one type gained and lost since its anchor, and the anchor now.
+    private struct Changed {
+        var added: [HKSample] = []
+        var deleted: [HKDeletedObject] = []
+        var anchor: HKQueryAnchor?
+    }
+
+    /// The types a read covers: one per chosen daily quantity, sleep and workouts.
+    private static func sampleTypes(_ chosen: [String]) -> [HKSampleType] {
+        var types: [HKSampleType] = DailyMetric.all.filter { chosen.contains($0.key) }.map { HKQuantityType($0.type) }
+        if chosen.contains(HealthAccess.Key.sleep) { types.append(HKCategoryType(.sleepAnalysis)) }
+        if chosen.contains(HealthAccess.Key.workouts) { types.append(HKObjectType.workoutType()) }
+        return types
+    }
+
+    /// The changes of [type] since [anchor] (from the start when nil), or nil when the query failed.
+    private static func changes(store: HKHealthStore, type: HKSampleType, anchor: HKQueryAnchor?, predicate: NSPredicate?) async -> Changed? {
+        await withCheckedContinuation { continuation in
+            let query = HKAnchoredObjectQuery(type: type, predicate: predicate, anchor: anchor, limit: HKObjectQueryNoLimit) { _, added, deleted, newAnchor, error in
+                continuation.resume(returning: error == nil ? Changed(added: added ?? [], deleted: deleted ?? [], anchor: newAnchor) : nil)
+            }
+            store.execute(query)
+        }
+    }
+
+    /// `HealthRead.cursor`: a JSON map of sample type identifier → base64 of the archived anchor. Opaque to Rust.
+    private enum Cursor {
+        static func encode(_ anchors: [String: HKQueryAnchor]) -> String {
+            let text = anchors.compactMapValues { try? NSKeyedArchiver.archivedData(withRootObject: $0, requiringSecureCoding: true).base64EncodedString() }
+            guard text.count == anchors.count, let data = try? JSONEncoder().encode(text) else { return "" }
+            return String(decoding: data, as: UTF8.self)
+        }
+
+        static func decode(_ cursor: String) -> [String: HKQueryAnchor]? {
+            guard !cursor.isEmpty, let text = try? JSONDecoder().decode([String: String].self, from: Data(cursor.utf8)) else { return nil }
+            let anchors = text.compactMapValues { Data(base64Encoded: $0).flatMap { try? NSKeyedUnarchiver.unarchivedObject(ofClass: HKQueryAnchor.self, from: $0) } }
+            return anchors.count == text.count ? anchors : nil
+        }
+
+        /// Where each type stands now: an anchored query that matches no sample still answers the anchor.
+        /// Empty (the next read is a complete one) when any type would not say.
+        static func now(store: HKHealthStore, types: [HKSampleType]) async -> String {
+            let none = HKQuery.predicateForSamples(withStart: .distantFuture, end: nil, options: [])
+            var anchors: [String: HKQueryAnchor] = [:]
+            for type in types {
+                guard let anchor = await HealthKitReader.changes(store: store, type: type, anchor: nil, predicate: none)?.anchor else { return "" }
+                anchors[type.identifier] = anchor
+            }
+            return encode(anchors)
+        }
+    }
+
+    /// THE SNAPSHOT OF A DELTA: the days the added samples touch, re-aggregated (a day left with no
+    /// samples is a 0 for a sum), and the workouts added and deleted. A type that lost a sample re-reads
+    /// its whole window: a deleted object names no day.
+    private static func delta(store: HKHealthStore, read: Centraid_Core_V1_HealthRead, seen: [String: Changed]) async -> Centraid_Core_V1_HealthSnapshot {
+        let days = HealthCalendarDays()
+        let first = read.totalsFrom
+        let window = days.keys(from: first, through: read.today)
+        var totals: [Centraid_Core_V1_HealthDayTotal] = []
+        func touched(_ type: HKSampleType) -> [String] {
+            guard let found = seen[type.identifier] else { return [] }
+            if !found.deleted.isEmpty { return window }
+            return Array(Set(found.added.flatMap { days.keys(from: days.key($0.startDate), through: days.key($0.endDate)) }.filter { $0 >= first && $0 <= read.today })).sorted()
+        }
+        for metric in DailyMetric.all where read.chosen.contains(metric.key) {
+            let touchedDays = touched(HKQuantityType(metric.type))
+            guard let start = touchedDays.first.flatMap({ days.start(of: $0) }) else { continue }
+            let found = await statistics(store: store, metric: metric, from: start, days: days).filter { touchedDays.contains($0.day) }
+            totals += found
+            if metric.option == .cumulativeSum {
+                totals += touchedDays.filter { day in !found.contains { $0.day == day } }.map { dayTotal($0, metric.key, 0) }
+            }
+        }
+        let sleepDays = read.chosen.contains(HealthAccess.Key.sleep) ? touched(HKCategoryType(.sleepAnalysis)) : []
+        if let start = sleepDays.first.flatMap({ days.start(of: $0) }) {
+            let nights = await sleep(store: store, from: start, through: read.today, days: days).filter { sleepDays.contains($0.day) }
+            totals += nights
+            totals += sleepDays.filter { day in !nights.contains { $0.day == day } }.map { dayTotal($0, HealthAccess.Key.sleep, 0) }
+        }
+        var out = Centraid_Core_V1_HealthSnapshot()
+        out.store = .appleHealth
+        out.storePresent = true
+        out.delta = true
+        out.days = totals
+        out.workoutsComplete = true
+        out.deviceID = deviceID
+        if let found = seen[HKObjectType.workoutType().identifier] {
+            out.workouts = found.added.compactMap { ($0 as? HKWorkout).map(workout) }
+            out.deletedWorkoutIds = found.deleted.map { $0.uuid.uuidString }
+        }
+        let anchors = seen.compactMapValues(\.anchor)
+        out.nextCursor = anchors.count == seen.count ? Cursor.encode(anchors) : ""
         return out
     }
 
@@ -296,6 +426,17 @@ struct HealthCalendarDays {
     func key(_ date: Date) -> String { formatter.string(from: date) }
 
     func start(of day: String) -> Date? { formatter.date(from: day).map { calendar.startOfDay(for: $0) } }
+
+    /// Every day from [first] through [last], as `YYYY-MM-DD`.
+    func keys(from first: String, through last: String) -> [String] {
+        var out: [String] = []
+        var at = start(of: first)
+        while let date = at, key(date) <= last, out.count < 800 {
+            out.append(key(date))
+            at = calendar.date(byAdding: .day, value: 1, to: date)
+        }
+        return out
+    }
 }
 
 /// AN INSTANT AS THE VAULT SPELLS IT: UTC, milliseconds, `Z`.

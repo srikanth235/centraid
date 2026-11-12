@@ -21,8 +21,28 @@ fn tap(d: &mut centraid_screens::testing::Driver, i: u64, key: &str) {
         i,
         wire::screen_event::Kind::Transfer(wire::TransferEvent {
             key: key.to_owned(),
+            ..Default::default()
         }),
     );
+}
+
+/// Answer the owner check as a member who passes it, however many effects it raises.
+fn pass_owner_check(d: &mut centraid_screens::testing::Driver) {
+    while matches!(
+        d.effects
+            .first()
+            .and_then(|e| e.effect.as_ref())
+            .and_then(|e| e.kind.as_ref()),
+        Some(wire::effect::Kind::OwnerCheck(_))
+    ) {
+        d.answer_effect(wire::effect_result::Outcome::OwnerChecked(
+            wire::OwnerChecked {
+                available: true,
+                outcome: wire::owner_checked::Outcome::Succeeded as i32,
+                ..wire::OwnerChecked::default()
+            },
+        ));
+    }
 }
 
 fn library_titles(d: &centraid_screens::testing::Driver) -> Vec<String> {
@@ -49,7 +69,7 @@ fn library_titles(d: &centraid_screens::testing::Driver) -> Vec<String> {
 fn a_folder_is_previewed_then_imported_on_the_members_tap_and_a_second_import_adds_nothing() {
     let mut d = driver();
     let seeded = library_titles(&d);
-    let i = d.push("notes", routes::transfer(false, "Notes"));
+    let i = d.push("notes", routes::import("Notes"));
     assert_eq!(state(d.view(i)).title, "Import notes");
     assert_eq!(
         state(d.view(i))
@@ -135,11 +155,21 @@ fn an_export_saves_an_archive_through_the_os_save_sheet() {
             ..Default::default()
         },
     );
-    let i = d.push("notes", routes::transfer(true, "Notes"));
+    let entry =
+        centraid_screens::kit::export::entry(centraid_screens::strings::Locale::En, "notes.export");
+    assert_eq!(entry.label, "Export");
+    let i = d.push("notes", entry.route);
     assert_eq!(state(d.view(i)).title, "Export notes");
+    assert_eq!(state(d.view(i)).back_label, "Notes");
     assert_eq!(state(d.view(i)).rows[0].label, "All notes");
     d.effects.clear();
     tap(&mut d, i, "all");
+    // Nothing leaves before the owner check passes.
+    assert!(!d.effects.iter().any(|e| matches!(
+        e.effect.as_ref().and_then(|e| e.kind.as_ref()),
+        Some(wire::effect::Kind::SaveFile(_))
+    )));
+    pass_owner_check(&mut d);
     let Some(wire::effect::Kind::SaveFile(save)) = d
         .effects
         .last()
@@ -157,6 +187,7 @@ fn an_export_saves_an_archive_through_the_os_save_sheet() {
             .status
             .as_ref()
             .map(|s| s.sentence.as_str()),
-        Some(format!("Exported {} notes", before + 1).as_str())
+        Some("Export saved")
     );
+    let _ = before;
 }

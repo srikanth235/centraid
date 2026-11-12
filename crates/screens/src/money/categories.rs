@@ -9,10 +9,11 @@ use wire::money_categories_event::Kind as C;
 use wire::money_categories_state::Sheet;
 use wire::screen_event::Kind as E;
 
-use super::fold::{self, Phase};
+use super::fold;
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
-use crate::kit::read;
+use crate::kit::read::{self, Page};
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, money as words};
 
@@ -28,19 +29,19 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     };
     Some(Box::new(Categories {
         parent: args.parent.clone(),
-        phase: Phase::Loading,
+        page: Page::loading(),
         sheet: Sheet::None,
         category_id: String::new(),
         name_draft: String::new(),
         group_id: String::new(),
         merge_into: String::new(),
-        status: None,
+        undo: Undo::default(),
     }))
 }
 
 struct Categories {
     parent: String,
-    phase: Phase<wire::MoneyCategories>,
+    page: Page<wire::MoneyCategories>,
     sheet: Sheet,
     /// The category a row sheet or a merge is about.
     category_id: String,
@@ -48,7 +49,8 @@ struct Categories {
     group_id: String,
     /// The category a merge waits on a confirmation to move into.
     merge_into: String,
-    status: Option<wire::StatusLine>,
+    /// The status line and what its Undo reverses (the kit's one door).
+    undo: Undo,
 }
 
 fn entry<'a>(
@@ -64,20 +66,20 @@ fn entry<'a>(
 
 impl Categories {
     fn reload(&mut self, ctx: &Ctx) {
-        self.phase = Phase::of(read::read(ctx, load::money::Categories {}, |a| match a {
-            wire::app_query_response::Answer::MoneyCategories(x) => Some(x),
-            _ => None,
-        }));
+        fold::reread(
+            &mut self.page,
+            ctx.locale(),
+            read::read(ctx, load::money::Categories {}, |a| match a {
+                wire::app_query_response::Answer::MoneyCategories(x) => Some(x),
+                _ => None,
+            }),
+            |_| false,
+        );
     }
 
     fn submit(&mut self, ctx: &Ctx, request: impl Into<wire::ActRequest>, done: String) {
         let key = kit_act::key(&["money", "category"], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        self.status = Some(if settled.committed {
-            fold::done(done)
-        } else {
-            fold::refusal(ctx.locale(), &settled.refusal)
-        });
+        self.undo.act(ctx, request, &key, |_| done);
         self.reload(ctx);
     }
 
@@ -133,7 +135,7 @@ impl Categories {
                 self.sheet = Sheet::Add;
                 self.name_draft.clear();
                 self.group_id.clear();
-                self.status = None;
+                self.undo.clear();
             }
             Some(C::Name(typed)) => self.name_draft = typed.text,
             Some(C::Group(picked)) => self.group_id = picked.group_id,
@@ -141,11 +143,11 @@ impl Categories {
             Some(C::Category(tapped)) => {
                 self.sheet = Sheet::Row;
                 self.category_id = tapped.category_id;
-                self.status = None;
+                self.undo.clear();
             }
             Some(C::RowAction(action)) => self.row_action(&action.key, ctx),
             Some(C::MergeInto(into)) => {
-                if self.phase.data().is_some_and(|a| {
+                if self.page.data().is_some_and(|a| {
                     entry(a, &self.category_id).is_some() && entry(a, &into.category_id).is_some()
                 }) {
                     self.merge_into = into.category_id;
@@ -223,13 +225,6 @@ impl Categories {
         };
         wire::MoneyCategoriesData {
             add_label: words::category_add(locale),
-            empty: groups
-                .iter()
-                .all(|g| g.rows.is_empty())
-                .then(|| wire::EmptyState {
-                    headline: words::categories_empty(locale),
-                    ..Default::default()
-                }),
             add_title: words::category_add_title(locale),
             name_label: words::category_name(locale),
             group_label: words::category_group(locale),
@@ -288,7 +283,7 @@ impl Categories {
     }
 
     fn confirm(&self, locale: Locale) -> Option<wire::Confirm> {
-        let answer = self.phase.data()?;
+        let answer = self.page.data()?;
         if self.merge_into.is_empty() {
             return None;
         }
@@ -316,6 +311,12 @@ impl Screen for Categories {
                 kind: Some(wire::money_categories_event::Kind::Refreshed(_)),
             })) => self.reload(ctx),
             Some(E::MoneyCategories(c)) => self.event(c, ctx),
+            Some(E::StatusActed(_)) => {
+                if self.undo.acted(ctx) {
+                    self.reload(ctx);
+                }
+            }
+            Some(E::Left(_)) => self.undo.clear(),
             _ => {}
         }
         Vec::new()
@@ -324,16 +325,26 @@ impl Screen for Categories {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::money_categories_state::Content;
         let locale = ctx.locale();
-        let content = match &self.phase {
-            Phase::Loading => Content::Loading(wire::Loading { first_load: true }),
-            Phase::Failed => Content::Failure(read::failure(locale)),
-            Phase::Denied => Content::Denied(fold::denied(locale)),
-            Phase::Ready(answer) => Content::Data(Box::new(self.data(locale, answer))),
-        };
+        let content = self
+            .page
+            .data()
+            .map(|answer| Content::Data(Box::new(self.data(locale, answer))));
+        // No category at all is the page's own empty state; the answer stays, because the add sheet
+        // still offers its groups.
+        let nothing = self
+            .page
+            .data()
+            .is_some_and(|answer| answer.groups.iter().all(|g| g.categories.is_empty()));
+        let page = fold::wire_page_keeping(&self.page, locale, nothing, || wire::EmptyState {
+            headline: words::categories_empty(locale),
+            action_label: words::category_add(locale),
+            ..Default::default()
+        });
         wire::ViewState {
             kind: Some(wire::view_state::Kind::MoneyCategories(
                 wire::MoneyCategoriesState {
-                    content: Some(content),
+                    content,
+                    page: Some(page),
                     sheet: self.sheet as i32,
                     category_id: self.category_id.clone(),
                     name_draft: self.name_draft.clone(),
@@ -344,7 +355,7 @@ impl Screen for Categories {
                         words::categories_title(locale),
                         &self.parent,
                     )),
-                    status: self.status.clone(),
+                    status: self.undo.status(),
                 },
             )),
             ..wire::ViewState::default()

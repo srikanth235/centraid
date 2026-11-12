@@ -43,32 +43,42 @@
 //! nothing (#1146). A write a shell may re-offer without a key is idempotent by
 //! its own content, or by an id the phone minted before the first attempt.
 
+pub mod arrival;
 pub mod blob;
-pub mod calendar_push;
 pub mod contact_point;
 pub mod container;
+mod csv;
 pub mod document;
+pub mod document_portable;
 pub mod edge;
 pub mod entity;
 pub mod event;
+pub mod event_portable;
 pub mod flag;
 pub mod follow;
+pub mod health_portable;
+pub mod history;
+pub mod ical;
 pub mod locker;
 pub mod measurement;
 pub mod money;
 pub mod note;
 pub mod note_portable;
+pub mod origin_cursor;
 pub mod person;
 pub mod person_portable;
-pub mod person_reminder;
 pub mod photo;
+pub mod photo_portable;
 pub mod place;
 pub mod rule;
 pub mod sealed;
 pub mod tag;
 pub mod task;
+pub mod task_portable;
 pub mod thread;
+pub mod txn_portable;
 pub mod vault;
+pub mod vault_export;
 pub mod workout;
 
 use std::collections::BTreeMap;
@@ -300,7 +310,7 @@ impl Registry {
     /// The registry the phone serves: every command this build carries.
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
-        let modules: [fn() -> Vec<CommandDefinition>; 23] = [
+        let modules: [fn() -> Vec<CommandDefinition>; 30] = [
             blob::definitions,
             contact_point::definitions,
             container::definitions,
@@ -308,21 +318,28 @@ impl Registry {
             edge::definitions,
             entity::definitions,
             event::definitions,
+            event_portable::definitions,
             flag::definitions,
             follow::definitions,
+            history::definitions,
             locker::definitions,
             measurement::definitions,
             money::definitions,
             note::definitions,
             person::definitions,
-            person_reminder::definitions,
             photo::definitions,
             place::definitions,
             rule::definitions,
             tag::definitions,
             task::definitions,
+            task_portable::definitions,
             thread::definitions,
+            txn_portable::definitions,
+            health_portable::definitions,
+            document_portable::definitions,
+            photo_portable::definitions,
             vault::definitions,
+            vault_export::definitions,
             workout::definitions,
         ];
         for definitions in modules {
@@ -401,6 +418,9 @@ impl Registry {
 pub struct Command {
     pub name: String,
     pub input: serde_json::Value,
+    /// A QUIET save: an editor's autosave, which the caller says it is (never inferred from the
+    /// name). Its history may fold into the session of the last one; see [`crate::history`].
+    pub quiet: bool,
 }
 
 impl Command {
@@ -409,7 +429,15 @@ impl Command {
         Self {
             name: name.into(),
             input,
+            quiet: false,
         }
+    }
+
+    /// This command as a quiet save (an editor's autosave).
+    #[must_use]
+    pub const fn quiet(mut self) -> Self {
+        self.quiet = true;
+        self
     }
 }
 
@@ -507,6 +535,7 @@ impl Vault {
 
         let ran = self.commit(|tx| {
             tx.set_producer(&command.name);
+            tx.set_quiet(command.quiet);
             let connection = tx.connection();
             if let Some(mark) = keyed
                 && action_key::recall(connection, mark.key)?.is_some()

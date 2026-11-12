@@ -36,26 +36,27 @@ fn nothing_connected_every_tab_is_one_sentence_and_connect_naming_the_phones_sto
     let d = driver();
     let i = root(&d);
     let state = home_state(d.view(i));
-    let data = home_data(d.view(i));
-    let empty = data.empty.as_ref().expect("an empty state");
+    let empty = empty_of(state);
     assert_eq!(
         empty.headline,
         "Bring in your steps, sleep and workouts from Apple Health."
     );
-    assert_eq!(empty.action_label, "Connect Apple Health");
-    assert!(data.today_data.is_none());
+    assert_eq!(empty.action_label, "Connect to Apple Health");
+    assert!(state.content.is_none());
     let band: Vec<&str> = state.band.iter().map(|tab| tab.label.as_str()).collect();
     assert_eq!(band, ["Summary", "Trends", "Workouts", "More"]);
     let more: Vec<&str> = state.more_rows.iter().map(|row| row.key.as_str()).collect();
-    assert_eq!(more, ["reads", "choose"]);
-    // The row that opens Connect carries the route, and the empty state's
-    // action does too: no shell names a destination.
+    // THE STOP SLOT IS NEVER EMPTY: reading nothing, it offers "Turn on" in the same words as
+    // every app's, and the row opens Connect (the route is carried, no shell names it).
+    assert_eq!(more, ["reads", "export", "trash", "turn-on"]);
+    let turn_on = &state.more_rows[3];
+    assert_eq!(turn_on.label, "Turn on Apple Health");
     assert_eq!(
-        state.more_rows[1].route.as_ref().map(|r| r.screen.as_str()),
+        turn_on.route.as_ref().map(|r| r.screen.as_str()),
         Some("health.connect")
     );
     assert_eq!(
-        data.connect.as_ref().map(|r| r.screen.as_str()),
+        state.connect.as_ref().map(|r| r.screen.as_str()),
         Some("health.connect")
     );
 }
@@ -63,11 +64,13 @@ fn nothing_connected_every_tab_is_one_sentence_and_connect_naming_the_phones_sto
 #[test]
 fn the_phones_store_is_its_os_health_connect_on_android() {
     let d = driver_on("android", "en-GB");
-    let data = home_data(d.view(root(&d)));
+    // On Android the store is Health Connect, in the sentence and on the action: never Apple Health.
+    let empty = empty_of(home_state(d.view(root(&d))));
     assert_eq!(
-        data.empty.as_ref().unwrap().action_label,
-        "Connect Health Connect"
+        empty.headline,
+        "Bring in your steps, sleep and workouts from Health Connect."
     );
+    assert_eq!(empty.action_label, "Connect to Health Connect");
 }
 
 #[test]
@@ -248,7 +251,7 @@ fn a_record_days_write_redraws_today_with_no_tap() {
 
 #[test]
 fn more_says_what_health_reads_and_a_chosen_type_that_read_nothing_and_stops_behind_a_confirm() {
-    let mut d = driver();
+    let (mut d, follower) = driver_following_on("ios", "de-DE");
     let today = today(&d);
     connect_store(&d);
     record(&d, &today, &[(0, "steps", 8_412.0), (1, "weight_kg", 71.4)]);
@@ -256,8 +259,15 @@ fn more_says_what_health_reads_and_a_chosen_type_that_read_nothing_and_stops_beh
     // The phone's habit: connected, with steps, sleep, weight and workouts chosen.
     assert!(matches!(pending(&d), wire::effect::Kind::Keychain(_)));
     d.answer_effect(keychain("1|steps,sleep_min,weight_kg,workouts"));
-    // The pass it starts asks the shell to read the store, and never asks the OS.
-    match pending(&d) {
+    // The pass the coordinator starts reads the same habit, then asks the shell to read the
+    // store, and never asks the OS.
+    d.pump(std::time::Duration::from_millis(2_600));
+    answer_for(
+        &mut d,
+        follower,
+        keychain("1|steps,sleep_min,weight_kg,workouts"),
+    );
+    match pending_for(&d, follower) {
         wire::effect::Kind::HealthRead(read) => {
             assert!(!read.ask_permission);
             assert_eq!(read.chosen, ["steps", "sleep_min", "weight_kg", "workouts"]);
@@ -265,18 +275,22 @@ fn more_says_what_health_reads_and_a_chosen_type_that_read_nothing_and_stops_beh
         }
         other => panic!("{other:?}"),
     }
-    d.answer_effect(wire::effect_result::Outcome::Health(wire::HealthSnapshot {
-        store: wire::health_snapshot::Store::AppleHealth as i32,
-        store_present: true,
-        workouts_complete: true,
-        device_id: "phone-a".to_owned(),
-        ..Default::default()
-    }));
+    answer_for(
+        &mut d,
+        follower,
+        wire::effect_result::Outcome::Health(wire::HealthSnapshot {
+            store: wire::health_snapshot::Store::AppleHealth as i32,
+            store_present: true,
+            workouts_complete: true,
+            device_id: "phone-a".to_owned(),
+            ..Default::default()
+        }),
+    );
     let state = home_state(d.view(i));
     let rows: Vec<&str> = state.more_rows.iter().map(|row| row.key.as_str()).collect();
-    assert_eq!(rows, ["reads", "choose", "stop"]);
-    assert_eq!(state.more_rows[2].label, "Stop reading Apple Health");
-    assert_eq!(state.more_rows[2].tone, wire::status_chip::Tone::Net as i32);
+    assert_eq!(rows, ["reads", "choose", "export", "trash", "stop"]);
+    assert_eq!(state.more_rows[4].label, "Stop reading Apple Health");
+    assert_eq!(state.more_rows[4].tone, wire::status_chip::Tone::Net as i32);
     let facts: Vec<(&str, &str)> = state
         .reads_facts
         .iter()
@@ -317,7 +331,10 @@ fn more_says_what_health_reads_and_a_chosen_type_that_read_nothing_and_stops_beh
     home_event(&mut d, i, he::Kind::Stop(he::StopConfirmed {}));
     let after = home_state(d.view(i));
     assert_eq!(after.sheet, Sheet::None as i32);
-    assert!(home_data(d.view(i)).empty.is_some());
+    assert!(empty_state_of(home_state(d.view(i))).is_some());
+    // THE SLOT SWAPS: the stop row is gone and "Turn on" is in its place, never neither.
+    let keys: Vec<&str> = after.more_rows.iter().map(|row| row.key.as_str()).collect();
+    assert_eq!(keys, ["reads", "export", "trash", "turn-on"]);
     match pending(&d) {
         wire::effect::Kind::Keychain(op) => {
             assert_eq!(op.op, wire::keychain_op::Op::Set as i32);
@@ -339,18 +356,25 @@ fn more_says_what_health_reads_and_a_chosen_type_that_read_nothing_and_stops_beh
 
 #[test]
 fn health_connect_names_a_refused_type_exactly() {
-    let mut d = driver_on("android", "en-GB");
+    let (mut d, follower) = driver_following_on("android", "en-GB");
     let today = today(&d);
     connect_store(&d);
     record(&d, &today, &[(0, "steps", 8_412.0)]);
     let i = root(&d);
     d.answer_effect(keychain("1|steps,sleep_min"));
-    d.answer_effect(wire::effect_result::Outcome::Health(wire::HealthSnapshot {
-        store: wire::health_snapshot::Store::HealthConnect as i32,
-        store_present: true,
-        refused: vec!["sleep_min".to_owned()],
-        ..Default::default()
-    }));
+    // The home asked the coordinator for a pass: after the settle it reads the same habit.
+    d.pump(std::time::Duration::from_millis(2_600));
+    answer_for(&mut d, follower, keychain("1|steps,sleep_min"));
+    answer_for(
+        &mut d,
+        follower,
+        wire::effect_result::Outcome::Health(wire::HealthSnapshot {
+            store: wire::health_snapshot::Store::HealthConnect as i32,
+            store_present: true,
+            refused: vec!["sleep_min".to_owned()],
+            ..Default::default()
+        }),
+    );
     let facts = &home_state(d.view(i)).reads_facts;
     let last = facts.last().unwrap();
     assert_eq!(
@@ -621,14 +645,8 @@ fn a_workout_re_reads_home_and_an_unrelated_write_does_not() {
     let i = root(&d);
     band(&mut d, i, "workouts");
     d.pump(Duration::from_millis(300));
-    assert!(
-        home_data(d.view(i))
-            .workouts
-            .as_ref()
-            .unwrap()
-            .sections
-            .is_empty()
-    );
+    // No workout yet is the page's own empty state, never ready data.
+    assert_eq!(empty_of(home_state(d.view(i))).headline, "No workouts yet.");
 
     // Nothing Health reads changed: no screen update arrives.
     arrange(
@@ -654,4 +672,17 @@ fn a_workout_re_reads_home_and_an_unrelated_write_does_not() {
         home_data(d.view(i)).workouts.as_ref().unwrap().sections[0].rows[0].title,
         "Morning run"
     );
+}
+
+/// The page's own empty state, when it is empty.
+fn empty_state_of(state: &wire::HealthHomeState) -> Option<&wire::EmptyState> {
+    match state.page.as_ref().and_then(|page| page.state.as_ref()) {
+        Some(wire::page_state::State::Empty(empty)) => Some(empty),
+        _ => None,
+    }
+}
+
+/// The page's empty state, or a panic naming the page.
+fn empty_of(state: &wire::HealthHomeState) -> &wire::EmptyState {
+    empty_state_of(state).unwrap_or_else(|| panic!("not empty: {:?}", state.page))
 }

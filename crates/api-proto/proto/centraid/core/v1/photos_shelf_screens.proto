@@ -24,9 +24,11 @@ message PhotosShelfState {
   // (an album's name, a place's phrase).
   string title = 1;
   PhotosShelfKind kind = 2;
+  // 3 and 4 were `loading` and `failure`: the read is `page` (#1185).
+  reserved 3, 4;
+  reserved "loading", "failure";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 3;
-    Failure failure = 4;
     PhotosShelfData data = 5;
   }
   // Select mode, the picked set, the bar and the confirm over its destructive
@@ -60,6 +62,7 @@ message PhotosShelfState {
   PhotosShelfBar bar = 19;
   // The sheet's way out: "Keep them" over the trash, "Keep it" over an album.
   string prompt_cancel_label = 20;
+  PageState page = 21;
 
   enum Prompt {
     // No prompt is open.
@@ -85,9 +88,10 @@ message PhotosShelfData {
   // More of the shelf is unread: `show_more_label` sends `load_more`.
   bool can_show_more = 3;
   string show_more_label = 6;
-  // Present when the shelf holds nothing: this shelf's own sentence.
-  optional EmptyState empty = 4;
+  // 4 was `empty`: a shelf that holds nothing is the page's own Empty state.
   // "Empty trash", on the trash and while it holds something.
+  reserved 4;
+  reserved "empty";
   optional string empty_trash_label = 5;
 }
 
@@ -167,9 +171,13 @@ message PhotosShelfEvent {
     AlbumRestored album_restored = 11;
     // "Download original": the pick into this device's photos.
     DownloadRequested download = 12;
+    // Retry: read the shelf again (a failed read's Retry, or a note's).
+    Refreshed refreshed = 13;
   }
 
   message LoadMore {}
+
+  message Refreshed {}
 
   message PromptOpened {
     PhotosShelfState.Prompt prompt = 1;
@@ -213,10 +221,11 @@ message PhotosPickerData {
   repeated PhotosPickerCell cells = 1;
   bool can_show_more = 2;
   string show_more_label = 4;
-  // Present when there is nothing left to add: "Everything in your library is
-  // already in this album."
-  optional EmptyState empty = 3;
+  // 3 was `empty`: nothing left to add ("Everything in your library is already in this
+  // album.") is the page's own Empty state.
   // What a taken cell is spoken as: "Already in this album".
+  reserved 3;
+  reserved "empty";
   string taken_label = 5;
 }
 
@@ -230,14 +239,17 @@ message PhotosPickerState {
   bool add_enabled = 4;
   // "An album points to a photo where it lives."
   string refers_note = 5;
+  // 6 and 7 were `loading` and `failure`: the read is `page` (#1185).
+  reserved 6, 7;
+  reserved "loading", "failure";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 6;
-    Failure failure = 7;
     PhotosPickerData data = 8;
   }
   optional StatusLine status = 9;
   // Every pick landed: the shell pops.
   bool finished = 10;
+  PageState page = 11;
 }
 
 message PhotosPickerEvent {
@@ -245,9 +257,13 @@ message PhotosPickerEvent {
     LoadMore load_more = 1;
     PickToggled pick = 2;
     ConfirmRequested confirm = 3;
+    // Retry: read the library again.
+    Refreshed refreshed = 4;
   }
 
   message LoadMore {}
+
+  message Refreshed {}
 
   message PickToggled {
     string photo_id = 1;
@@ -290,9 +306,10 @@ message PhotosPlaceRow {
 
 message PhotosPlacesData {
   repeated PhotosPlaceRow places = 1;
-  // Present when there are no places at all.
-  optional EmptyState empty = 2;
+  // 2 was `empty`: no places at all is the page's own Empty state.
   // Present on the map when no place has a location.
+  reserved 2;
+  reserved "empty";
   optional EmptyState map_empty = 3;
   // "3 photos have no place." with `unplaced_open_label` ("Open them.").
   string unplaced_label = 4;
@@ -311,15 +328,18 @@ message PhotosPlacesState {
   Presentation presentation = 2;
   string cards_label = 3;
   string map_label = 4;
+  // 5 and 6 were `loading` and `failure`: the read is `page` (#1185).
+  reserved 5, 6;
+  reserved "loading", "failure";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 5;
-    Failure failure = 6;
     PhotosPlacesData data = 7;
   }
   // A refused rename, in its own slot.
   optional StatusLine status = 8;
   // The sheet that names a place.
   optional PhotosPlaceNameSheet name_sheet = 9;
+  PageState page = 10;
 
   enum Presentation {
     PRESENTATION_UNSPECIFIED = 0;
@@ -344,7 +364,11 @@ message PhotosPlacesEvent {
     NameRequested name_requested = 2;
     NameDismissed name_dismissed = 3;
     Renamed renamed = 4;
+    // Retry: read the places again.
+    Refreshed refreshed = 5;
   }
+
+  message Refreshed {}
 
   message PresentationChanged {
     PhotosPlacesState.Presentation presentation = 1;

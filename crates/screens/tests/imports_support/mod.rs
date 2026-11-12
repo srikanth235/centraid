@@ -169,6 +169,8 @@ pub struct Library {
     pub in_cloud: BTreeSet<String>,
     pub link: wire::LinkReading,
     pub keychain: BTreeMap<String, String>,
+    /// This install's id, as the shell answers it with the grant.
+    pub device: String,
     /// `(ref, allow_network)` per stage asked.
     pub asked: Vec<(String, bool)>,
     /// `(ref, tier)` per derivative rendered and staged.
@@ -191,6 +193,7 @@ impl Library {
             in_cloud: BTreeSet::new(),
             link: wifi(),
             keychain: BTreeMap::new(),
+            device: "device-1".to_owned(),
             asked: Vec::new(),
             rendered: Vec::new(),
             staged: Vec::new(),
@@ -226,6 +229,7 @@ pub fn serve_library(shell: &mut Shell, library: &mut Library) {
                 }
                 O::LibraryPermissionRead(wire::LibraryPermissionRead {
                     permission: library.permission as i32,
+                    device_id: library.device.clone(),
                 })
             }
             K::Keychain(op) => match wire::keychain_op::Op::try_from(op.op).unwrap() {

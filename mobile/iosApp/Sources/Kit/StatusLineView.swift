@@ -2,13 +2,16 @@ import SwiftUI
 
 /// THE ONE STATUS LINE (product-intuition/references/design-behaviour.md § Status line): one clause, at most one verb
 /// ("Undo"). The sentence and the verb are the machine's; what the verb does
-/// is the screen's own event, which `onAct` sends.
+/// is the screen's own event when it passes `onAct`, else the kit's one `StatusActed`
+/// (`ScreenEvent.status_acted`), which `RustScreenView` states once through
+/// `\.statusActed`. A screen that draws the line needs no callback of its own.
 struct StatusLineView: View {
     let status: Centraid_Core_V1_StatusLine
     var identifier: String = "status-action"
-    let onAct: () -> Void
+    var onAct: (() -> Void)? = nil
 
     @Environment(\.appAccent) private var accent
+    @Environment(\.statusActed) private var statusActed
 
     var body: some View {
         if !status.sentence.isEmpty {
@@ -18,7 +21,7 @@ struct StatusLineView: View {
                     .foregroundStyle(status.refused ? StateColor.red.text : Surface.ink)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if !status.actionLabel.isEmpty {
-                    Button(action: onAct) {
+                    Button(action: { (onAct ?? statusActed)() }) {
                         Text(status.actionLabel)
                             .kitType(.row)
                             .fontWeight(.semibold)
@@ -34,6 +37,19 @@ struct StatusLineView: View {
             .modifier(KitStatusPill())
             .padding(.horizontal, CentraidGeometry.pageMargin)
         }
+    }
+}
+
+/// THE KIT'S ONE `StatusActed` SEND, stated once per screen by `RustScreenView` and read by
+/// every status line that has no event of its own. Outside a Rust screen it does nothing.
+private struct StatusActedKey: EnvironmentKey {
+    static var defaultValue: () -> Void { {} }
+}
+
+extension EnvironmentValues {
+    var statusActed: () -> Void {
+        get { self[StatusActedKey.self] }
+        set { self[StatusActedKey.self] = newValue }
     }
 }
 

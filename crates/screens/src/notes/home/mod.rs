@@ -18,20 +18,22 @@ use centraid_api_proto::core_v1 as wire;
 use wire::notes_home_event::Kind as H;
 use wire::screen_event::Kind as E;
 
-use super::{Phase, denied, routes};
+use super::routes;
 use crate::catalog::act;
 use crate::kit::act as kit_act;
+use crate::kit::export;
 use crate::kit::menu;
-use crate::kit::read;
+use crate::kit::read::Page;
+use crate::kit::undo::Undo as Door;
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, notes as words};
+use crate::strings::{Locale, notes as words, shared};
 
 mod journal;
 mod library;
 mod notebooks;
 
 use journal::{Compose, Journal};
-use library::{Content, Library};
+use library::Library;
 use notebooks::{Form, Notebooks, UNFILED};
 
 #[must_use]
@@ -51,7 +53,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         sheet: wire::NotesSheet::Unspecified,
         menu_id: String::new(),
         asking: Asking::Nothing,
-        status: None,
+        line: Door::default(),
         form: None,
         compose: None,
     }))
@@ -74,7 +76,7 @@ struct Home {
     menu_id: String,
     asking: Asking,
     /// A refusal's sentence over the page; the page stays.
-    status: Option<wire::StatusLine>,
+    line: Door,
     form: Option<Form>,
     compose: Option<Compose>,
 }
@@ -90,9 +92,9 @@ impl Home {
 
     fn denied(&self) -> bool {
         match self.place {
-            wire::NotesPlace::Notebooks => matches!(self.notebooks.phase, Phase::Denied(_)),
-            wire::NotesPlace::Journal => matches!(self.journal.phase, Phase::Denied(_)),
-            _ => matches!(self.library.phase, Phase::Denied(_)),
+            wire::NotesPlace::Notebooks => matches!(self.notebooks.page, Page::Refused(_)),
+            wire::NotesPlace::Journal => matches!(self.journal.page, Page::Refused(_)),
+            _ => matches!(self.library.page, Page::Refused(_)),
         }
     }
 
@@ -106,7 +108,7 @@ impl Home {
         self.place = place;
         self.close_sheet();
         self.asking = Asking::Nothing;
-        self.status = None;
+        self.line.clear();
         self.form = None;
         self.compose = None;
         if place == wire::NotesPlace::Notes {
@@ -117,15 +119,16 @@ impl Home {
 
     /// One write under a key of its own; a refusal is the status line, and
     /// either way the place is read again. Returns whether it committed.
-    fn write(&mut self, ctx: &Ctx, request: impl Into<wire::ActRequest>, subject: &str) -> bool {
+    fn write(
+        &mut self,
+        ctx: &Ctx,
+        request: impl Into<wire::ActRequest>,
+        subject: &str,
+        said: impl FnOnce(Locale) -> String,
+    ) -> bool {
         let request = request.into();
         let key = kit_act::key(&[&request.action.clone(), subject], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        self.status = (!settled.committed).then(|| wire::StatusLine {
-            sentence: settled.refusal.clone(),
-            action_label: String::new(),
-            refused: true,
-        });
+        let settled = self.line.act(ctx, request, &key, said);
         self.reload(ctx);
         settled.committed
     }
@@ -146,6 +149,7 @@ impl Home {
                     flag: act::notes::UnflagNoteFlag::Pinned,
                 },
                 note_id,
+                words::note_unpinned,
             );
         } else {
             self.write(
@@ -155,6 +159,7 @@ impl Home {
                     flag: act::notes::FlagNoteFlag::Pinned,
                 },
                 note_id,
+                words::note_pinned,
             );
         }
     }
@@ -195,6 +200,7 @@ impl Home {
                 notebook_id: notebook_id_field,
             },
             &to,
+            words::note_moved,
         );
     }
 
@@ -209,12 +215,18 @@ impl Home {
     fn confirmed(&mut self, ctx: &Ctx) {
         match std::mem::replace(&mut self.asking, Asking::Nothing) {
             Asking::TrashNote(id) => {
+                let title = self
+                    .library
+                    .find(ctx.locale(), &id)
+                    .map(|found| found.title)
+                    .unwrap_or_default();
                 self.write(
                     ctx,
                     act::notes::DeleteNote {
                         note_id: id.clone(),
                     },
                     &id,
+                    |locale| crate::kit::trash::moved_to_trash(locale, &title),
                 );
             }
             Asking::DeleteNotebook(id) => {
@@ -224,6 +236,7 @@ impl Home {
                         notebook_id: id.clone(),
                     },
                     &id,
+                    words::notebook_deleted,
                 );
             }
             Asking::Nothing => {}
@@ -260,7 +273,7 @@ impl Home {
         };
         self.place = wire::NotesPlace::Notes;
         self.library = library;
-        self.status = None;
+        self.line.clear();
         self.library.reload(ctx);
     }
 
@@ -289,6 +302,7 @@ impl Home {
             return;
         }
         let key = form.notebook_id.clone();
+        let creating = key.is_empty();
         let request: wire::ActRequest = if key.is_empty() {
             act::notes::CreateNotebook {
                 title: name.clone(),
@@ -304,14 +318,21 @@ impl Home {
         };
         let subject = if key.is_empty() { name } else { key };
         let request_key = kit_act::key(&[&request.action.clone(), &subject], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &request_key);
+        let said = if creating {
+            words::notebook_created
+        } else {
+            words::notebook_renamed
+        };
+        let settled = self.line.act(ctx, request, &request_key, said);
         // A COMMITTED SAVE closes the sheet; a refused one keeps the name typed,
-        // with the sentence over it.
+        // with the sentence over it (not on the page behind).
         if settled.committed {
             self.form = None;
-            self.status = None;
-        } else if let Some(form) = &mut self.form {
-            form.status = settled.refusal;
+        } else {
+            self.line.clear();
+            if let Some(form) = &mut self.form {
+                form.status = settled.refusal;
+            }
         }
         self.reload(ctx);
     }
@@ -320,18 +341,18 @@ impl Home {
         if self.compose.is_some() {
             return;
         }
-        let Some(journal) = self.journal.phase.data() else {
+        let Some((today, tz)) = self.journal.clock() else {
             return;
         };
         // No day to date it by: the answer has not landed, so nothing opens.
-        if journal.today.is_empty() {
+        if today.is_empty() {
             return;
         }
         self.compose = Some(Compose {
-            day: journal.today.clone(),
+            day: today.clone(),
             // The zone the day was read in rides with the sheet, so the entry
             // is filed on `day` IN it (east of UTC+11:59 noon UTC is the next day).
-            tz: journal.tz.clone(),
+            tz: tz.clone(),
             mood: String::new(),
             text: String::new(),
             status: String::new(),
@@ -357,12 +378,15 @@ impl Home {
         }
         .into();
         let key = kit_act::key(&["person.add_journal_entry", &day, &mood], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
+        let settled = self.line.act(ctx, request, &key, words::entry_added);
         // FILED: the sheet goes; a refused one keeps the words, with the sentence over them.
         if settled.committed {
             self.compose = None;
-        } else if let Some(compose) = &mut self.compose {
-            compose.refused(ctx.locale(), &settled.refusal);
+        } else {
+            self.line.clear();
+            if let Some(compose) = &mut self.compose {
+                compose.refused(ctx.locale(), &settled.refusal);
+            }
         }
         self.reload(ctx);
     }
@@ -541,7 +565,7 @@ impl Home {
                 };
                 let choices = if self.sheet == wire::NotesSheet::FileInto {
                     self.library
-                        .phase
+                        .page
                         .data()
                         .map(|library| {
                             super::fold::file_choices(
@@ -583,6 +607,10 @@ impl Screen for Home {
             Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => {
                 self.reload(ctx);
             }
+            Some(E::StatusActed(_)) => {
+                self.line.acted(ctx);
+                self.reload(ctx);
+            }
             Some(E::NotesHome(home)) => self.event(home, ctx),
             _ => {}
         }
@@ -592,27 +620,30 @@ impl Screen for Home {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::notes_home_state::Content as C;
         let locale = ctx.locale();
-        let loading = || C::Loading(wire::Loading { first_load: true });
-        let from_phase = |content: Content| match content {
-            Content::Loading => loading(),
-            Content::Failed => C::Failure(read::failure(locale)),
-            Content::Denied(denial) => C::Denied(denied(locale, &denial)),
-            Content::Data(data) => C::Library(data),
-        };
-        let content = match self.place {
-            wire::NotesPlace::Notebooks => match &self.notebooks.phase {
-                Phase::Loading => loading(),
-                Phase::Failed => C::Failure(read::failure(locale)),
-                Phase::Denied(denial) => C::Denied(denied(locale, denial)),
-                Phase::Ready(answer) => C::Notebooks(Notebooks::data(locale, answer)),
-            },
-            wire::NotesPlace::Journal => match &self.journal.phase {
-                Phase::Loading => loading(),
-                Phase::Failed => C::Failure(read::failure(locale)),
-                Phase::Denied(denial) => C::Denied(denied(locale, denial)),
-                Phase::Ready(answer) => C::Journal(Journal::data(locale, ctx.hour_cycle(), answer)),
-            },
-            _ => from_phase(self.library.content(locale)),
+        // The read is the page; the data is the place that is showing, when the page is ready
+        // (and not over an open search, whose rows are `search`).
+        let (page, content) = match self.place {
+            wire::NotesPlace::Notebooks => (
+                self.notebooks.wire(locale),
+                self.notebooks
+                    .page
+                    .data()
+                    .map(|answer| C::Notebooks(Notebooks::data(locale, answer))),
+            ),
+            wire::NotesPlace::Journal => (
+                self.journal.wire(locale),
+                self.journal
+                    .page
+                    .data()
+                    .map(|answer| C::Journal(Journal::data(locale, ctx.hour_cycle(), answer))),
+            ),
+            _ => (
+                self.library.wire(locale),
+                self.library
+                    .shelf(locale)
+                    .filter(|_| !self.library.search.open)
+                    .map(C::Library),
+            ),
         };
         let notes_place = !matches!(
             self.place,
@@ -625,30 +656,35 @@ impl Screen for Home {
             title: self.title(locale),
             band: self.band(locale),
             chrome: Some(Self::chrome(locale, self.place)),
-            content: Some(content),
+            content,
+            page: Some(page),
             search: notes_place.then(|| self.library.search_state(locale)),
             more_rows: if denied_now {
                 Vec::new()
             } else {
                 let back = words::title(locale);
+                let export = export::entry(locale, super::EXPORT);
                 vec![
                     wire::NotesMoreRow {
                         key: "import".to_owned(),
                         label: words::more_import(locale),
                         icon_key: "Download".to_owned(),
-                        route: Some(routes::transfer(false, &back)),
+                        route: Some(routes::import(&back)),
+                        meta: String::new(),
                     },
                     wire::NotesMoreRow {
-                        key: "export".to_owned(),
-                        label: words::more_export(locale),
-                        icon_key: "Upload".to_owned(),
-                        route: Some(routes::transfer(true, &back)),
+                        key: export.key.to_owned(),
+                        label: export.label,
+                        icon_key: export.icon_key.to_owned(),
+                        route: Some(export.route),
+                        meta: String::new(),
                     },
                     wire::NotesMoreRow {
                         key: "trash".to_owned(),
                         label: words::trash_label(locale),
                         icon_key: "Trash".to_owned(),
                         route: Some(routes::trash()),
+                        meta: shared::trash_entry_meta(locale),
                     },
                 ]
             },
@@ -656,7 +692,7 @@ impl Screen for Home {
             menu,
             choices,
             confirm: self.confirm(locale),
-            status: self.status.clone(),
+            status: self.line.status(),
             form: self.form.as_ref().map(|form| form.view(locale)),
             compose: self.compose.as_ref().map(|compose| compose.view(locale)),
             new_note: Some(routes::new_note()),

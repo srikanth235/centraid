@@ -27,6 +27,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -43,28 +44,28 @@ import centraid.core.v1.PeoplePersonData
 import centraid.core.v1.PeoplePersonEvent
 import centraid.core.v1.PeoplePersonSheet
 import centraid.core.v1.PeoplePersonState
+import centraid.core.v1.PhoneSaysTaken
 import centraid.core.v1.PeopleSheetFrame
 import centraid.core.v1.Route
 import centraid.core.v1.StatusChip
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
-import dev.centraid.android.kit.EmptyStateView
-import dev.centraid.android.kit.FailureView
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.OutlineButton
+import dev.centraid.android.kit.EarlierEntryCard
+import dev.centraid.android.kit.PhoneSaysLine
 import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.RowSkeleton
-import dev.centraid.android.kit.ScreenContent
 import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.StatusChipView
-import dev.centraid.android.kit.screenContentOf
+import dev.centraid.android.screens.agenda.AgendaAttachmentsView
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -83,6 +84,7 @@ public fun PeoplePersonScreen(
     onEvent: (PeoplePersonEvent) -> Unit,
     onOpen: (Route) -> Unit,
     onBack: () -> Unit,
+    onPhoneSays: (PhoneSaysTaken) -> Unit,
 ) {
     val chrome = state.chrome
     val data = state.data_
@@ -96,20 +98,20 @@ public fun PeoplePersonScreen(
         },
         status = state.status?.sentence.orEmpty(),
     ) {
-        val gone = state.gone
-        if (gone != null) {
-            EmptyStateView(gone, onAction = null)
-        } else {
-            ReadStateView(
-                content = screenContentOf(state.loading, state.failure, data, state.denied),
-                onRetry = { onEvent(PeoplePersonEvent(refreshed = PeoplePersonEvent.Refreshed())) },
-                retryLabel = chrome?.retry.orEmpty(),
-                skeleton = { RowSkeleton(label = chrome?.loading.orEmpty()) },
-            ) { person -> PersonBody(person, state, onEvent, onOpen, ::open) }
+        ReadStateView(
+            page = state.page!!,
+            onRetry = { onEvent(PeoplePersonEvent(refreshed = PeoplePersonEvent.Refreshed())) },
+            retryLabel = chrome?.retry.orEmpty(),
+            skeleton = { RowSkeleton(label = chrome?.loading.orEmpty()) },
+        ) {
+            data?.let { person -> PersonBody(person, state, onEvent, onOpen, onPhoneSays, ::open) }
         }
     }
 
     state.sheet?.let { sheet -> PersonSheet(sheet, onEvent) }
+    state.link_picker?.takeIf { it.open_ }?.let { picker ->
+        dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(PeoplePersonEvent(link = link)) }
+    }
     state.confirm?.let { confirm ->
         ConfirmSheet(
             confirm = confirm,
@@ -125,11 +127,12 @@ private fun PersonBody(
     state: PeoplePersonState,
     onEvent: (PeoplePersonEvent) -> Unit,
     onOpen: (Route) -> Unit,
+    onPhoneSays: (PhoneSaysTaken) -> Unit,
     open: (Which) -> Unit,
 ) {
     val chrome = state.chrome
     LazyColumn(Modifier.testTag("people-person")) {
-        item(key = "hero") { Hero(person) }
+        item(key = "hero") { Hero(person, onPhoneSays) }
         if (person.hero.isNotEmpty()) {
             item(key = "hero-actions") {
                 HeroActions(person.hero) { key ->
@@ -138,6 +141,9 @@ private fun PersonBody(
             }
         }
         items(person.facts, key = { "f-" + it.label }) { fact -> FieldRow(fact.label, fact.value_) }
+        person.nickname_phone_says?.let { line ->
+            item(key = "nickname-phone-says") { PhoneSaysLine(line, onPhoneSays, Modifier.padding(horizontal = KitGeometry.GUTTER)) }
+        }
 
         person.channels_head?.let { head ->
             item(key = "channels-head") { SectionHeader(head.toKit()) { open(Which.WHICH_CHANNEL) } }
@@ -175,6 +181,14 @@ private fun PersonBody(
             }
         }
 
+        if (person.channels_phone_says.isNotEmpty()) {
+            item(key = "channels-phone-says") {
+                Column(Modifier.padding(horizontal = KitGeometry.GUTTER)) {
+                    person.channels_phone_says.forEach { PhoneSaysLine(it, onPhoneSays) }
+                }
+            }
+        }
+
         person.dates_head?.let { head -> item(key = "dates-head") { SectionHeader(head.toKit()) { open(Which.WHICH_DATE) } } }
         if (person.dates.isEmpty() && person.dates_empty.isNotEmpty()) {
             item(key = "dates-empty") { RailEmpty(person.dates_empty) }
@@ -197,6 +211,10 @@ private fun PersonBody(
             }
         }
 
+        person.birthday_phone_says?.let { line ->
+            item(key = "birthday-phone-says") { PhoneSaysLine(line, onPhoneSays, Modifier.padding(horizontal = KitGeometry.GUTTER)) }
+        }
+
         if (person.relations.isNotEmpty()) {
             person.relations_head?.let { head -> item(key = "relations-head") { SectionHeader(head.toKit()) } }
             items(person.relations, key = { "r-" + it.party_id + it.meta }) { relation ->
@@ -211,6 +229,25 @@ private fun PersonBody(
 
         if (person.vault.isNotEmpty()) {
             item(key = "vault") { VaultCard(person, onOpen) }
+        }
+
+        // ATTACHMENTS (#1185): the kit's section, after "In your vault"; Rust makes every word and row.
+        person.attachments?.let { section ->
+            item(key = "attachments") {
+                AgendaAttachmentsView(
+                    section = section,
+                    prefix = "people-person",
+                    onEvent = { onEvent(PeoplePersonEvent(attachment = it)) },
+                    onOpen = onOpen,
+                )
+            }
+        }
+
+        // LINKED TO (#1185): the kit's section, after the attachments; Rust makes every word and row.
+        person.links?.let { section ->
+            item(key = "links") {
+                dev.centraid.android.kit.LinkSectionView(section, { link -> onEvent(PeoplePersonEvent(link = link)) }, onOpen)
+            }
         }
 
         person.notes_head?.let { head -> item(key = "notes-head") { SectionHeader(head.toKit()) { open(Which.WHICH_NOTE) } } }
@@ -236,6 +273,10 @@ private fun PersonBody(
             )
         }
 
+        // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the entry at the foot, when Rust has one.
+        state.earlier?.let { entry -> item(key = "earlier") { EarlierEntryCard(entry, onOpen) } }
+        item(key = "origin") { dev.centraid.android.kit.OriginLineView(state.origin) }
+
         if (chrome != null && !person.is_me) {
             item(key = "foot") {
                 Column(Modifier.padding(top = 16.dp, bottom = 24.dp)) {
@@ -245,6 +286,12 @@ private fun PersonBody(
                         selected = person.starred,
                         testTag = "people-person-star",
                         onTap = { onEvent(PeoplePersonEvent(star = PeoplePersonEvent.StarToggled())) },
+                    )
+                    SheetRow(
+                        chrome.share,
+                        iconKey = "Share",
+                        testTag = "people-person-share",
+                        onTap = { onEvent(PeoplePersonEvent(share_requested = PeoplePersonEvent.ShareRequested())) },
                     )
                     SheetRow(chrome.merge, iconKey = "dupe", testTag = "people-person-merge", onTap = { open(Which.WHICH_MERGE) })
                     SheetRow(
@@ -262,7 +309,7 @@ private fun PersonBody(
 
 /** THE HERO: a centred avatar, the name, the role and the cadence line; the owner's own card says "My card". */
 @Composable
-private fun Hero(person: PeoplePersonData) {
+private fun Hero(person: PeoplePersonData, onPhoneSays: (PhoneSaysTaken) -> Unit) {
     val accent = appAccent("people")
     Column(
         Modifier
@@ -280,7 +327,9 @@ private fun Hero(person: PeoplePersonData) {
             Surface.ink,
             modifier = Modifier.padding(top = 10.dp).semantics { heading() },
         )
+        PhoneSaysLine(person.name_phone_says, onPhoneSays, centered = true)
         if (person.role.isNotEmpty()) KitText(person.role, KitType.Row, Surface.body)
+        PhoneSaysLine(person.role_phone_says, onPhoneSays, centered = true)
         val line = if (person.is_me) person.my_card_label else person.cadence_line
         if (line.isNotEmpty()) KitText(line, KitType.Meta, Surface.meta, modifier = Modifier.padding(top = 4.dp))
         person.due_chip?.let { chip ->
@@ -461,16 +510,11 @@ private fun PersonSheet(sheet: PeoplePersonSheet, onEvent: (PeoplePersonEvent) -
     sheet.merge?.let { s ->
         SheetRoom(title = s.title, onDismiss = close) {
             if (s.body.isNotEmpty()) RailEmpty(s.body)
-            when (val content = screenContentOf(s.loading, s.failure, s.choices)) {
-                is ScreenContent.Loading -> RowSkeleton(rows = 3)
-                is ScreenContent.Failure -> FailureView(content.sentence, content.remedy, onRetry = null)
-                is ScreenContent.Gate -> Unit
-                is ScreenContent.Data -> {
-                    val empty = content.value.empty
-                    if (content.value.choices.isEmpty() && empty != null) {
-                        RailEmpty(empty.headline)
-                    }
-                    content.value.choices.forEach { choice ->
+            // WHO CAN BE FOLDED IN: failed, empty (no one else) or the choices, drawn by the shared
+            // page view.
+            ReadStateView(page = s.page!!, onRetry = null, modifier = Modifier.height(240.dp)) {
+                LazyColumn {
+                    items(s.choices?.choices.orEmpty(), key = { it.party_id }) { choice ->
                         CentraidRow(
                             title = choice.name,
                             meta = choice.role,

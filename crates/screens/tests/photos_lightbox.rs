@@ -149,7 +149,7 @@ fn view(d: &Driver, at: u64) -> View {
 fn photo_of(state: &View) -> &wire::PhotosLightboxPhoto {
     match &state.content {
         Some(wire::photos_lightbox_state::Content::Photo(photo)) => photo,
-        other => panic!("no photograph: {other:?}"),
+        None => panic!("no photograph: {:?}", state.page),
     }
 }
 
@@ -390,9 +390,10 @@ fn a_write_over_no_photograph_is_withheld_with_the_not_in_a_vault_sentence_and_n
     let at = open(&mut d, "no-such-photo", &[], "");
     let state = view(&d, at);
     assert!(matches!(
-        state.content,
-        Some(wire::photos_lightbox_state::Content::Failure(_))
+        state.page.as_ref().and_then(|page| page.state.as_ref()),
+        Some(wire::page_state::State::Failed(_))
     ));
+    assert!(state.content.is_none());
     // Writes over nothing are refused, whatever event arrives.
     send(
         &mut d,
@@ -455,7 +456,7 @@ fn trash_is_reversible_in_place_and_delete_forever_asks_first_and_then_the_scree
     tap(&mut d, at, V::DeleteForever);
     let asked = view(&d, at);
     let confirm = asked.confirm.expect("asked first");
-    assert_eq!(confirm.title, "Delete 1 photo forever?");
+    assert_eq!(confirm.title, "Delete this photo forever?");
     assert!(confirm.destructive);
     assert!(cell_of(&d, &id).1, "nothing was purged by asking");
     // Dismissing takes the question back.
@@ -518,6 +519,94 @@ fn the_caption_is_trimmed_and_an_unchanged_one_is_not_a_write() {
         }),
     );
     assert_eq!(cell_of(&d, &id).0.title, "");
+}
+
+/// A write another device made after the page read the photograph.
+fn elsewhere(d: &Driver, request: impl Into<wire::ActRequest>) {
+    let response = d.act(request.into().keyed(format!("lb:{}", kit_act::fresh())));
+    assert_eq!(
+        response.status,
+        wire::ActStatus::Executed as i32,
+        "{}",
+        response.reason
+    );
+}
+
+#[test]
+fn a_caption_over_a_photo_that_changed_elsewhere_is_refused_and_the_typed_words_are_kept() {
+    let mut d = driver();
+    let id = photo(
+        &d,
+        Shot {
+            title: Some("Pier day"),
+            ..Shot::new("lb-stale")
+        },
+    );
+    let at = open(&mut d, &id, &[], "");
+    elsewhere(
+        &d,
+        act::photos::RetitlePhoto {
+            photo_id: id.clone(),
+            title: "Theirs".into(),
+            expected_rev: None,
+        },
+    );
+    send(
+        &mut d,
+        at,
+        ev::Kind::Caption(ev::CaptionChanged {
+            caption: "Mine".into(),
+        }),
+    );
+    // The photograph is as the vault has it, and the line says what happened and where the words went.
+    assert_eq!(cell_of(&d, &id).0.title, "Theirs");
+    assert_eq!(photo_of(&view(&d, at)).caption, "Theirs");
+    let line = view(&d, at).status.clone().expect("a line");
+    assert_eq!(
+        line.sentence,
+        "This photo changed somewhere else. Your text is in Earlier versions."
+    );
+    assert!(line.refused);
+    // The next caption names the revision just read, so it goes through.
+    send(
+        &mut d,
+        at,
+        ev::Kind::Caption(ev::CaptionChanged {
+            caption: "Mine again".into(),
+        }),
+    );
+    assert_eq!(cell_of(&d, &id).0.title, "Mine again");
+}
+
+#[test]
+fn a_caption_over_a_photo_moved_to_the_trash_elsewhere_says_so_and_keeps_the_words() {
+    let mut d = driver();
+    let id = photo(
+        &d,
+        Shot {
+            title: Some("Pier day"),
+            ..Shot::new("lb-stale-trash")
+        },
+    );
+    let at = open(&mut d, &id, &[], "");
+    elsewhere(
+        &d,
+        act::photos::DeletePhoto {
+            photo_id: id.clone(),
+        },
+    );
+    send(
+        &mut d,
+        at,
+        ev::Kind::Caption(ev::CaptionChanged {
+            caption: "Mine".into(),
+        }),
+    );
+    assert_eq!(cell_of(&d, &id).0.title, "Pier day", "nothing was written");
+    assert_eq!(
+        view(&d, at).status.clone().expect("a line").sentence,
+        "This photo was moved to the trash. Restore it to find your text in Earlier versions."
+    );
 }
 
 #[test]
@@ -609,10 +698,8 @@ fn a_refused_write_is_a_sentence_beside_the_photograph_and_does_not_travel_with_
     let status = state.status.expect("the vault's sentence");
     assert!(status.refused && !status.sentence.is_empty());
     // The photograph is still on screen, not replaced by the error.
-    assert!(matches!(
-        state.content,
-        Some(wire::photos_lightbox_state::Content::Photo(_))
-    ));
+    assert!(state.content.is_some());
+    assert!(state.page.as_ref().is_some_and(|page| page.state.is_none()));
     // A refusal is about the photograph it was tried on.
     send(&mut d, at, ev::Kind::Moved(ev::Moved { photo_id: second }));
     assert!(view(&d, at).status.is_none());
@@ -840,6 +927,30 @@ fn export_of(effects: Vec<wire::effect::Kind>) -> wire::ExportOriginals {
         .expect("an export")
 }
 
+/// A send raises the owner check and nothing else; the member passes it and
+/// what the check was guarding goes out.
+fn after_check(d: &mut Driver, at: u64) -> Vec<wire::effect::Kind> {
+    let asked = effects_of(d);
+    assert!(
+        matches!(asked.as_slice(), [wire::effect::Kind::OwnerCheck(c)] if c.ask),
+        "only the owner check is asked: {asked:?}"
+    );
+    d.send(
+        at,
+        E::EffectResult(wire::EffectResult {
+            effect_id: 0,
+            outcome: Some(wire::effect_result::Outcome::OwnerChecked(
+                wire::OwnerChecked {
+                    available: true,
+                    biometry: wire::Biometry::Face as i32,
+                    outcome: wire::owner_checked::Outcome::Succeeded as i32,
+                },
+            )),
+        }),
+    );
+    effects_of(d)
+}
+
 fn exported(status: wire::originals_exported::Status) -> wire::effect_result::Outcome {
     wire::effect_result::Outcome::OriginalsExported(wire::OriginalsExported {
         status: status as i32,
@@ -856,7 +967,7 @@ fn a_photo_with_no_place_is_sent_without_asking_which_location() {
     d.effects.clear();
     tap(&mut d, at, V::Share);
     assert_eq!(view(&d, at).sheet, Sheet::None as i32);
-    let export = export_of(effects_of(&mut d));
+    let export = export_of(after_check(&mut d, at));
     assert_eq!(export.mode, wire::export_originals::Mode::Send as i32);
     assert!(!export.keep_location);
 }
@@ -881,9 +992,20 @@ fn favorite_archive_and_trash_each_say_what_they_did() {
     let state = view(&d, at);
     let receipt = state.status.expect("receipt");
     assert!(!receipt.refused);
-    assert_eq!(receipt.sentence, "Moved to Trash. Restore brings it back.");
+    assert!(receipt.sentence.ends_with(" moved to trash"), "{receipt:?}");
+    assert_eq!(receipt.action_label, "Undo");
     let kinds: Vec<i32> = state.toolbar.iter().map(|v| v.kind).collect();
     assert_eq!(kinds, [V::Restore as i32, V::DeleteForever as i32]);
+    // Undo restores it.
+    send(&mut d, at, ev::Kind::StatusActed(ev::StatusActed {}));
+    let state = view(&d, at);
+    // The kit's door says "Undone" and offers nothing more.
+    let undone = state.status.clone().expect("receipt");
+    assert_eq!(
+        (undone.sentence.as_str(), undone.action_label.as_str()),
+        ("Undone", "")
+    );
+    assert!(state.toolbar.iter().any(|v| v.kind == V::Trash as i32));
 }
 
 #[test]
@@ -925,7 +1047,7 @@ fn a_send_is_a_decision_about_bytes_and_every_receipt_says_what_went_none_includ
             precision: Precision::None as i32,
         }),
     );
-    let export = export_of(effects_of(&mut d));
+    let export = export_of(after_check(&mut d, at));
     assert_eq!(export.photo_ids, std::slice::from_ref(&id));
     assert_eq!(export.mode, wire::export_originals::Mode::Send as i32);
     assert!(
@@ -952,7 +1074,7 @@ fn a_send_is_a_decision_about_bytes_and_every_receipt_says_what_went_none_includ
             precision: Precision::Exact as i32,
         }),
     );
-    assert!(export_of(effects_of(&mut d)).keep_location);
+    assert!(export_of(after_check(&mut d, at)).keep_location);
     d.send(
         at,
         E::EffectResult(wire::EffectResult {
@@ -974,7 +1096,7 @@ fn a_send_is_a_decision_about_bytes_and_every_receipt_says_what_went_none_includ
             precision: Precision::None as i32,
         }),
     );
-    effects_of(&mut d);
+    after_check(&mut d, at);
     d.send(
         at,
         E::EffectResult(wire::EffectResult {
@@ -996,7 +1118,7 @@ fn a_send_is_a_decision_about_bytes_and_every_receipt_says_what_went_none_includ
             precision: Precision::None as i32,
         }),
     );
-    effects_of(&mut d);
+    after_check(&mut d, at);
     d.send(
         at,
         E::EffectResult(wire::EffectResult {
@@ -1042,6 +1164,7 @@ fn download_saves_the_original_into_the_phones_library_and_says_so() {
                 reason: "x".into(),
                 denied: false,
                 cancelled: false,
+                ..Default::default()
             })),
         }),
     );
@@ -1147,7 +1270,11 @@ fn make_key_photo_is_offered_only_inside_the_album_it_was_opened_from() {
     let at = open(&mut d, &id, &[], &keepers);
     assert!(verb(&view(&d, at), V::MakeKey).enabled);
     tap(&mut d, at, V::MakeKey);
-    assert!(view(&d, at).status.is_none(), "{:?}", view(&d, at).status);
+    let status = view(&d, at).status.expect("a line");
+    assert_eq!(
+        (status.sentence.as_str(), status.action_label.as_str()),
+        ("Cover changed", "Undo")
+    );
 }
 
 #[test]
@@ -1352,4 +1479,314 @@ fn people_in_a_photo_are_picked_by_name_added_and_removed_by_hand() {
         link(le::Kind::Remove(le::RemoveTapped { id: maya })),
     );
     assert!(people(&d).rows.is_empty());
+}
+
+// -----------------------------------------------------------------------------
+// Linked to (#1185): any item but a Locker one, by link, separate from who is in it
+// -----------------------------------------------------------------------------
+
+fn linked_rows(d: &Driver, at: u64) -> Vec<(String, String)> {
+    photo_of(&view(d, at))
+        .links
+        .clone()
+        .expect("the Linked to section")
+        .rows
+        .into_iter()
+        .map(|row| (row.title, row.meta))
+        .collect()
+}
+
+fn link_to(kind: wire::link_event::Kind) -> ev::Kind {
+    ev::Kind::Link(wire::LinkEvent { kind: Some(kind) })
+}
+
+fn add_link(d: &mut Driver, at: u64, kind: &str, to: &str) {
+    use wire::link_event as le;
+    for step in [
+        le::Kind::Add(le::AddTapped { key: "link".into() }),
+        le::Kind::Pick(le::Picked { id: kind.into() }),
+        le::Kind::Pick(le::Picked { id: to.into() }),
+    ] {
+        send(d, at, link_to(step));
+    }
+}
+
+#[test]
+fn a_photo_lists_what_it_is_linked_to_and_a_pick_links_it_apart_from_who_is_in_it() {
+    use wire::link_event as le;
+    let mut d = driver();
+    let (id, other) = (
+        photo(&d, Shot::new("lb-linked-a")),
+        photo(&d, Shot::new("lb-linked-b")),
+    );
+    let at = open(&mut d, &id, std::slice::from_ref(&id), "");
+    let section = photo_of(&view(&d, at)).links.clone().expect("section");
+    assert_eq!(section.title, "Linked to");
+    assert_eq!(section.empty, "Nothing linked yet");
+    assert_eq!(section.adds.len(), 1, "one Add link row for many kinds");
+    assert!(linked_rows(&d, at).is_empty());
+
+    send(
+        &mut d,
+        at,
+        link_to(le::Kind::Add(le::AddTapped { key: "link".into() })),
+    );
+    let picker = view(&d, at).link_picker.clone().expect("chooser");
+    assert!(picker.open);
+    assert!(
+        picker.candidates.iter().any(|c| c.id == "photo"),
+        "a photograph may link to another photograph"
+    );
+    send(
+        &mut d,
+        at,
+        link_to(le::Kind::Pick(le::Picked { id: "photo".into() })),
+    );
+    let picker = view(&d, at).link_picker.clone().expect("photos");
+    assert!(picker.candidates.iter().any(|c| c.id == other));
+    assert!(
+        picker.candidates.iter().all(|c| c.id != id),
+        "a photograph is never offered itself"
+    );
+    send(
+        &mut d,
+        at,
+        link_to(le::Kind::Pick(le::Picked { id: other.clone() })),
+    );
+
+    let state = view(&d, at);
+    assert!(state.link_picker.is_none_or(|picker| !picker.open));
+    let status = state.status.expect("status");
+    assert_eq!(status.sentence, "Linked");
+    assert_eq!(status.action_label, "Undo");
+    assert_eq!(linked_rows(&d, at).len(), 1);
+    assert_eq!(linked_rows(&d, at)[0].1, "Photo");
+    assert!(
+        photo_of(&view(&d, at))
+            .people
+            .as_ref()
+            .is_some_and(|people| people.rows.is_empty()),
+        "a link is not who is in the photograph"
+    );
+
+    // The link has no direction: the other photograph lists this one.
+    let there = open(&mut d, &other, std::slice::from_ref(&other), "");
+    assert_eq!(linked_rows(&d, there).len(), 1);
+}
+
+#[test]
+fn a_tap_on_remove_unlinks_a_photo_and_undo_links_it_again() {
+    use wire::link_event as le;
+    let mut d = driver();
+    let (id, other) = (
+        photo(&d, Shot::new("lb-unlink-a")),
+        photo(&d, Shot::new("lb-unlink-b")),
+    );
+    let at = open(&mut d, &id, std::slice::from_ref(&id), "");
+    add_link(&mut d, at, "photo", &other);
+    assert_eq!(linked_rows(&d, at).len(), 1);
+
+    send(
+        &mut d,
+        at,
+        link_to(le::Kind::Remove(le::RemoveTapped { id: other.clone() })),
+    );
+    assert!(linked_rows(&d, at).is_empty());
+    let status = view(&d, at).status.expect("status");
+    assert_eq!(status.sentence, "Link removed");
+    assert_eq!(status.action_label, "Undo");
+
+    d.send(at, E::StatusActed(wire::StatusActed {}));
+    assert_eq!(linked_rows(&d, at).len(), 1, "Undo puts the link back");
+}
+
+#[test]
+fn a_photo_in_the_trash_has_no_linked_section() {
+    let mut d = driver();
+    let id = photo(&d, Shot::new("lb-linked-trash"));
+    let at = open(&mut d, &id, std::slice::from_ref(&id), "");
+    assert!(photo_of(&view(&d, at)).links.is_some());
+    let response = d.act(
+        act::photos::DeletePhoto {
+            photo_id: id.clone(),
+        }
+        .request()
+        .keyed(format!("lb:{}", kit_act::fresh())),
+    );
+    assert_eq!(
+        response.status,
+        wire::ActStatus::Executed as i32,
+        "{}",
+        response.reason
+    );
+    d.send(at, E::DataChanged(wire::DataChanged::default()));
+    assert!(
+        photo_of(&view(&d, at)).links.is_none(),
+        "no section on a photograph in the trash"
+    );
+}
+
+// -----------------------------------------------------------------------------
+// Attachments (#1185): the photos and files on one photograph, the kit's section
+// -----------------------------------------------------------------------------
+
+fn attachments_of(d: &Driver, at: u64) -> wire::AgendaAttachmentsSection {
+    photo_of(&view(d, at))
+        .attachments
+        .clone()
+        .expect("an attachments section")
+}
+
+fn on_attachments(d: &mut Driver, at: u64, kind: wire::agenda_attachment_event::Kind) {
+    send(
+        d,
+        at,
+        ev::Kind::Attachment(wire::AgendaAttachmentEvent { kind: Some(kind) }),
+    );
+}
+
+/// Answer the oldest effect the lightbox asked, whatever other screens have pending.
+fn answer_lightbox(d: &mut Driver, instance: u64, outcome: wire::effect_result::Outcome) {
+    let at = d
+        .effects
+        .iter()
+        .position(|request| request.instance == instance)
+        .expect("the lightbox asked for an effect");
+    let request = d.effects.remove(at);
+    d.send(
+        instance,
+        E::EffectResult(wire::EffectResult {
+            effect_id: request.effect_id,
+            outcome: Some(outcome),
+        }),
+    );
+}
+
+#[test]
+fn a_photo_with_nothing_attached_says_so_and_offers_both_adds() {
+    let mut d = driver();
+    let id = photo(&d, Shot::new("lb-attach-empty"));
+    let at = open(&mut d, &id, std::slice::from_ref(&id), "");
+    let section = attachments_of(&d, at);
+    assert_eq!(section.heading, "Attachments");
+    assert!(section.items.is_empty());
+    assert_eq!(section.empty_label, "Nothing attached yet.");
+    assert_eq!(section.add_photo_label, "Add photo");
+    assert_eq!(section.add_file_label, "Add file");
+}
+
+#[test]
+fn add_file_files_it_in_docs_and_attaches_it_to_the_photo_and_remove_detaches_only_the_edge() {
+    use wire::agenda_attachment_event as ae;
+    use wire::effect_result::Outcome as O;
+    let mut d = driver();
+    let id = photo(&d, Shot::new("lb-attach-file"));
+    let at = open(&mut d, &id, std::slice::from_ref(&id), "");
+    on_attachments(&mut d, at, ae::Kind::AddFile(Default::default()));
+    assert!(attachments_of(&d, at).busy, "the pick is under way");
+    answer_lightbox(
+        &mut d,
+        at,
+        O::FilePicked(wire::FilePicked {
+            blob: "b".repeat(64),
+            byte_size: 2_400_000,
+            name: "Receipt.pdf".to_owned(),
+            media_type: String::new(),
+        }),
+    );
+    let section = attachments_of(&d, at);
+    assert_eq!(section.items.len(), 1, "{:?}", section.status);
+    let tile = &section.items[0];
+    assert_eq!(tile.kind, "document");
+    assert_eq!(tile.title, "Receipt.pdf");
+    let attached = tile.attachment_id.clone();
+
+    on_attachments(
+        &mut d,
+        at,
+        ae::Kind::RemoveAsked(ae::RemoveAsked {
+            attachment_id: attached,
+        }),
+    );
+    let confirm = attachments_of(&d, at).remove_confirm.expect("a confirm");
+    assert_eq!(confirm.body, "It comes off here. The file stays in Docs.");
+    on_attachments(&mut d, at, ae::Kind::RemoveConfirmed(Default::default()));
+    assert!(attachments_of(&d, at).items.is_empty());
+}
+
+#[test]
+fn a_photo_in_the_trash_has_no_attachments_section() {
+    let mut d = driver();
+    let id = photo(&d, Shot::new("lb-attach-trash"));
+    let at = open(&mut d, &id, std::slice::from_ref(&id), "");
+    assert!(photo_of(&view(&d, at)).attachments.is_some());
+    let response = d.act(
+        act::photos::DeletePhoto {
+            photo_id: id.clone(),
+        }
+        .request()
+        .keyed(format!("lb:{}", kit_act::fresh())),
+    );
+    assert_eq!(
+        response.status,
+        wire::ActStatus::Executed as i32,
+        "{}",
+        response.reason
+    );
+    d.send(at, E::DataChanged(wire::DataChanged::default()));
+    assert!(
+        photo_of(&view(&d, at)).attachments.is_none(),
+        "no section on a photograph in the trash"
+    );
+}
+
+fn answer_check(d: &mut Driver, at: u64, outcome: wire::owner_checked::Outcome) {
+    d.send(
+        at,
+        E::EffectResult(wire::EffectResult {
+            effect_id: 0,
+            outcome: Some(wire::effect_result::Outcome::OwnerChecked(
+                wire::OwnerChecked {
+                    available: outcome != wire::owner_checked::Outcome::Unavailable,
+                    biometry: wire::Biometry::Face as i32,
+                    outcome: outcome as i32,
+                },
+            )),
+        }),
+    );
+}
+
+#[test]
+fn a_send_that_is_not_confirmed_sends_nothing_and_a_phone_with_no_passcode_warns() {
+    use wire::owner_checked::Outcome as C;
+    let mut d = driver();
+    let id = photo(&d, Shot::new("lb-owner"));
+    let at = open(&mut d, &id, &[], "");
+    d.effects.clear();
+    // Dismissed: nothing goes, nothing is said.
+    tap(&mut d, at, V::Share);
+    effects_of(&mut d);
+    answer_check(&mut d, at, C::Cancelled);
+    assert!(effects_of(&mut d).is_empty());
+    assert!(view(&d, at).status.is_none());
+    // Not recognised: a sentence, nothing goes.
+    tap(&mut d, at, V::Share);
+    effects_of(&mut d);
+    answer_check(&mut d, at, C::Failed);
+    assert!(effects_of(&mut d).is_empty());
+    assert!(view(&d, at).status.expect("a sentence").refused);
+    // No passcode: it goes, with the warning shown.
+    tap(&mut d, at, V::Share);
+    effects_of(&mut d);
+    answer_check(&mut d, at, C::Unavailable);
+    let sent = effects_of(&mut d);
+    assert_eq!(
+        export_of(sent).mode,
+        wire::export_originals::Mode::Send as i32
+    );
+    let warning = view(&d, at).status.expect("the warning");
+    assert!(!warning.refused && warning.sentence.contains("no passcode"));
+    // Saving to the phone's own library asks nothing.
+    tap(&mut d, at, V::Download);
+    assert!(export_of(effects_of(&mut d)).mode == wire::export_originals::Mode::Save as i32);
 }

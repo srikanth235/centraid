@@ -98,8 +98,11 @@ pub struct CommandsUnavailable {
 pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
-/// The nineteen, in the manifest's own order.
+/// The twenty-three, in the manifest's own order.
 pub const ACTIONS: &[ActionRow] = &[
+    // THE GENERAL LINK (#1185): any item to any other, and the link taken off.
+    act("link", "edge.add"),
+    act("unlink", "edge.remove"),
     act("add-task", "task.add"),
     act("edit-task", "task.edit"),
     // AN ACTION SAYS THE STATE IT WANTS (R-1135-3-10): the v0 `set-status` took a
@@ -114,6 +117,7 @@ pub const ACTIONS: &[ActionRow] = &[
     act("delete-task", "entity.trash"),
     // EMPTYING THE TRASH (#1015 D1), behind the manifest's confirmation.
     confirmed("purge-task", "entity.purge"),
+    confirmed("empty-trash", "entity.empty_trash"),
     // RESTORE UNDOES THE DELETE GESTURE (the trash's one verb every app has).
     act("restore-task", "entity.restore"),
     // A project, an area and a section are containers: the shared verb.
@@ -131,6 +135,12 @@ pub const ACTIONS: &[ActionRow] = &[
     // An attachment is an `attached` edge from the task: the shared verbs.
     act("attach", "edge.add"),
     act("detach", "edge.remove"),
+    // THE REMINDERS AS A FILE (#1185): the More sheet's Export and a reminder's Share. It writes
+    // nothing (`writes_nothing`).
+    act("export-ics", "task.export_ics"),
+    // THE PHONE'S REMINDERS, FOLLOWED (#1185), and its Undo: disconnecting (it asks first).
+    act("follow-reminders", "follow.reminders"),
+    confirmed("stop-following", "follow.stop"),
 ];
 
 /// The row for an action, by name.
@@ -162,7 +172,7 @@ mod tests {
 
     #[test]
     fn the_tasks_own_are_the_verbs_the_rest_are_shared_and_no_event_is_touched() {
-        assert_eq!(ACTIONS.len(), 19);
+        assert_eq!(ACTIONS.len(), 25);
         assert!(
             ACTIONS.iter().all(|row| !row.command.starts_with("event.")),
             "Reminders never writes an event"
@@ -182,7 +192,8 @@ mod tests {
                 "task.complete",
                 "task.reopen",
                 "task.cancel",
-                "task.organize"
+                "task.organize",
+                "task.export_ics"
             ]
         );
         // The shared verbs serve several actions without a wrapper: a project and a section are
@@ -193,7 +204,7 @@ mod tests {
             .map(|row| row.action)
             .collect();
         assert_eq!(creates, ["create-project", "create-section"]);
-        assert_eq!(act_scope_tables().len(), 18);
+        assert_eq!(act_scope_tables().len(), 22);
     }
 
     /// EVERY command this app names is in the vault's own catalogue. **A button

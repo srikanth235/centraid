@@ -604,7 +604,7 @@ fn a_series_occurrence_asks_which_occurrences_and_each_scope_writes_its_command(
     let page = open(&mut world);
     let data = world.editor_data(page);
     assert!(data.show_skip);
-    assert_eq!(data.skip_label, "Skip this occurrence");
+    assert_eq!(data.skip_label, "Skip this one");
     assert_eq!(
         data.repeat_note,
         "A repeat rule belongs to the whole series."
@@ -719,7 +719,7 @@ fn a_series_occurrence_asks_which_occurrences_and_each_scope_writes_its_command(
     assert!(!series_row.enabled);
     assert_eq!(
         series_row.note,
-        "To move every occurrence, edit the first one."
+        "To move every event in the series, edit the first one."
     );
 }
 
@@ -753,7 +753,7 @@ fn skip_asks_then_skips_the_occurrence_and_a_one_off_has_no_skip() {
     let state = world.editor_state(page);
     assert_eq!(
         state.confirm.as_ref().expect("question").title,
-        "Skip this occurrence?"
+        "Skip this one?"
     );
     // Not now: nothing is written.
     world.send_editor(
@@ -804,11 +804,23 @@ fn a_change_elsewhere_re_reads_and_never_overwrites_the_draft_and_a_search_hit_e
         "Mine",
         "what the member is typing stands"
     );
+    // The save names the revision the draft was read at, and the event has moved on: refused,
+    // the other surface's title stands and the member's is kept as an earlier version.
     world.save(page);
-    assert!(world.editor_state(page).dismissed);
+    assert!(!world.editor_state(page).dismissed);
     assert_eq!(
         world.event_row(&series).expect("event").summary.as_deref(),
-        Some("Mine")
+        Some("Theirs")
+    );
+    assert_eq!(world.draft(page).title, "Theirs");
+    assert_eq!(
+        world
+            .editor_state(page)
+            .status
+            .as_ref()
+            .expect("a line")
+            .sentence,
+        "This event changed somewhere else. Your text is in Earlier versions."
     );
 }
 
@@ -845,17 +857,24 @@ fn an_edit_whose_event_is_gone_says_so_and_a_failed_first_read_is_a_failure() {
     let mut world = World::new();
     let page = world.open_edit("no-such-event", "no-such-event", None, "2099-06-15");
     let state = world.editor_state(page);
-    let Some(wire::agenda_editor_state::Content::Gone(gone)) = &state.content else {
-        panic!("{:?}", state.content)
+    assert!(state.content.is_none());
+    let Some(wire::page_state::State::Failed(gone)) =
+        state.page.as_ref().and_then(|page| page.state.as_ref())
+    else {
+        panic!("gone is a failure: {:?}", state.page)
     };
-    assert_eq!(gone.title, "This event was removed.");
+    assert_eq!(gone.sentence, "This event was removed.");
+    assert!(gone.permanent, "trying again cannot bring it back");
 
     world.zone("Not/A_Zone");
     let failed = world.open_new("2099-06-15", Kind::Event);
-    let Some(wire::agenda_editor_state::Content::Failure(failure)) =
-        &world.editor_state(failed).content
+    let Some(wire::page_state::State::Failed(failure)) = world
+        .editor_state(failed)
+        .page
+        .as_ref()
+        .and_then(|page| page.state.as_ref())
     else {
-        panic!("{:?}", world.editor_state(failed).content)
+        panic!("{:?}", world.editor_state(failed).page)
     };
     assert_eq!(failure.sentence, "Part of this didn't arrive. Try again.");
     world.zone(calendar_support::ZONE);
@@ -1187,6 +1206,24 @@ fn a_timed_event_has_a_zone_the_phones_by_default_and_all_day_has_none() {
     world.send_editor(day, all_day(false));
     assert!(world.editor_data(day).show_zone);
     assert_eq!(world.draft(day).zone, "Europe/London");
+}
+
+#[test]
+fn the_alert_row_says_so_when_the_event_is_all_day_and_a_timed_one_has_no_such_sentence() {
+    let mut world = World::new();
+    let page = world.open_new("2099-06-18", Kind::Event);
+    // A TIMED EVENT: the alert control is as it always was.
+    assert_eq!(world.editor_data(page).reminder_note, "");
+    // ALL DAY HAS NO MOMENT: the row says no alert will sound, and keeps the choice it was given.
+    world.send_editor(page, all_day(true));
+    let data = world.editor_data(page);
+    assert_eq!(
+        data.reminder_note,
+        "No alert will sound because no time is set"
+    );
+    assert!(!data.reminders.is_empty(), "the choice is told, not hidden");
+    world.send_editor(page, all_day(false));
+    assert_eq!(world.editor_data(page).reminder_note, "");
 }
 
 #[test]
@@ -1812,4 +1849,277 @@ fn a_busy_event_with_no_travel_opens_as_the_defaults_and_a_title_edit_keeps_them
     assert_eq!(saved.summary.as_deref(), Some("Daily standup"));
     assert!(saved.busy);
     assert_eq!(saved.travel_min, None);
+}
+
+#[test]
+fn a_save_over_an_event_that_changed_elsewhere_is_refused_and_the_words_are_kept_as_a_version() {
+    let mut world = World::new();
+    let id = world.propose(
+        "Review",
+        "2099-06-15T14:00:00",
+        "2099-06-15T15:00:00",
+        |p| p.description = Field::Is("Old notes".to_owned()),
+    );
+    let page = world.open_edit(&id, &id, None, "2099-06-15");
+    world.title(page, "My title");
+    world.send_editor(page, notes("My notes"));
+    // Another surface edits the event after the page read it.
+    world.act(act::calendar::EditEvent {
+        event_id: id.clone(),
+        title: Some("Elsewhere".to_owned()),
+        ..Default::default()
+    });
+    world.save(page);
+    // Nothing of the member's overwrote the other edit, and the editor shows the event as it is.
+    let row = world.event_row(&id).expect("event");
+    assert_eq!(row.summary.as_deref(), Some("Elsewhere"));
+    assert_eq!(row.description.as_deref(), Some("Old notes"));
+    let state = world.editor_state(page);
+    assert!(
+        !state.dismissed,
+        "the editor stays open on the vault's event"
+    );
+    assert_eq!(
+        state.status.as_ref().expect("a line").sentence,
+        "This event changed somewhere else. Your text is in Earlier versions."
+    );
+    assert_eq!(
+        world.editor_data(page).draft.as_ref().expect("draft").title,
+        "Elsewhere"
+    );
+    // The next save is from the new revision, and lands.
+    world.title(page, "Third title");
+    world.save(page);
+    assert_eq!(
+        world.event_row(&id).expect("event").summary.as_deref(),
+        Some("Third title")
+    );
+}
+
+/// What the newest earlier version of an event held: field to the value it held, as JSON.
+fn newest_version(
+    world: &World,
+    id: &str,
+) -> std::collections::BTreeMap<String, serde_json::Value> {
+    let wire::app_query_response::Answer::EarlierVersions(listed) =
+        world.load(centraid_screens::catalog::load::shell::EarlierVersions {
+            entity_id: id.to_owned(),
+        })
+    else {
+        panic!("earlier versions answered something else");
+    };
+    let newest = listed
+        .versions
+        .iter()
+        .max_by_key(|version| version.seq)
+        .expect("a version");
+    newest
+        .field_changes
+        .iter()
+        .map(|change| {
+            (
+                change.field.clone(),
+                serde_json::from_str(&change.before_json).expect("json"),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn a_refused_save_keeps_every_field_the_member_changed_as_an_earlier_version() {
+    let mut world = World::new();
+    let maya = world.person("Maya Alvarez");
+    let place = found_place(&mut world, "Harbour Cafe");
+    let made = world.act(act::calendar::CreateCalendar {
+        title: "Work".to_owned(),
+        ..Default::default()
+    });
+    let output: serde_json::Value = serde_json::from_slice(&made.output).expect("json output");
+    let other_calendar = output["id"].as_str().expect("the id").to_owned();
+    let id = world.propose(
+        "Review",
+        "2099-06-15T14:00:00",
+        "2099-06-15T15:00:00",
+        |p| p.description = Field::Is("Old notes".to_owned()),
+    );
+    let page = world.open_edit(&id, &id, None, "2099-06-15");
+    world.title(page, "My title");
+    world.send_editor(page, notes("My notes"));
+    world.send_editor(page, start("2099-06-16", "10:00"));
+    world.send_editor(page, end("2099-06-16", "11:30"));
+    world.send_editor(page, zone("Asia/Tokyo"));
+    world.send_editor(page, repeat("weekly"));
+    world.send_editor(page, reminder("30"));
+    world.send_editor(page, link("https://example.test/room"));
+    world.send_editor(page, self::place(&place));
+    world.send_editor(page, availability("free"));
+    world.send_editor(page, travel("30"));
+    world.send_editor(page, calendar(&other_calendar));
+    world.send_editor(page, guest(&maya));
+    // Another surface edits the event after the page read it.
+    world.act(act::calendar::EditEvent {
+        event_id: id.clone(),
+        title: Some("Elsewhere".to_owned()),
+        ..Default::default()
+    });
+    world.save(page);
+    assert_eq!(
+        world.event_row(&id).expect("event").summary.as_deref(),
+        Some("Elsewhere"),
+        "nothing of the draft overwrote the other edit"
+    );
+    assert_eq!(
+        world
+            .editor_state(page)
+            .status
+            .as_ref()
+            .expect("a line")
+            .sentence,
+        "This event changed somewhere else. Your text is in Earlier versions."
+    );
+    // EVERY FIELD THE MEMBER CHANGED is in the version kept: the words, the times as the instants
+    // the vault would hold, the repeat, place, availability, travel, calendar, link, alert, guest.
+    let kept = newest_version(&world, &id);
+    let held = |field: &str| {
+        kept.get(field)
+            .unwrap_or_else(|| panic!("`{field}` kept: {kept:?}"))
+    };
+    assert_eq!(held("entity.title"), "My title");
+    assert_eq!(held("event.description"), "My notes");
+    // 10:00-11:30 on the 16th, in Tokyo.
+    assert_eq!(held("event.starts"), "2099-06-16T01:00:00.000Z");
+    assert_eq!(held("event.ends"), "2099-06-16T02:30:00.000Z");
+    assert_eq!(held("event.zone"), "Asia/Tokyo");
+    assert_eq!(held("event.rule"), "FREQ=WEEKLY");
+    assert_eq!(held("event.place_id"), place.as_str());
+    assert_eq!(held("event.busy"), 0);
+    assert_eq!(held("event.travel_min"), 30);
+    assert_eq!(held("event.calendar_id"), other_calendar.as_str());
+    assert_eq!(held("event.url"), "https://example.test/room");
+    assert_eq!(held("event.reminders"), "[30]");
+    assert_eq!(held(&format!("attendee[{maya}]"))["to_id"], maya.as_str());
+    // The event itself stands as the other surface left it.
+    let row = world.event_row(&id).expect("event");
+    assert_eq!(row.summary.as_deref(), Some("Elsewhere"));
+    assert_eq!(row.description.as_deref(), Some("Old notes"));
+}
+
+#[test]
+fn changing_one_day_of_a_series_that_changed_elsewhere_is_refused_and_the_words_are_kept() {
+    let mut world = World::new();
+    let series = world.weekdays("Stand-up");
+    let key = format!("{series}:2099-06-16T10:00:00");
+    let page = world.open_edit(&series, &key, Some("2099-06-16T10:00:00"), "2099-06-16");
+    world.title(page, "Daily sync");
+    world.send_editor(page, notes("Bring the numbers"));
+    // Another surface edits the series after the page read it.
+    world.act(act::calendar::EditEvent {
+        event_id: series.clone(),
+        title: Some("Elsewhere".to_owned()),
+        ..Default::default()
+    });
+    world.save(page);
+    world.send_editor(page, scope(Scope::Occurrence));
+    world.save(page);
+    // The day was not changed; the editor stays open on the event as the vault has it.
+    let state = world.editor_state(page);
+    assert!(!state.dismissed);
+    let status = state.status.as_ref().expect("a line");
+    assert_eq!(
+        status.sentence,
+        "This event changed somewhere else. Your text is in Earlier versions."
+    );
+    assert!(status.refused);
+    let titles: Vec<String> = world
+        .window("2099-06-15T00:00:00Z", "2099-06-18T00:00:00Z")
+        .into_iter()
+        .filter(|e| e.event_id == series)
+        .map(|e| e.summary.unwrap_or_default())
+        .collect();
+    assert_eq!(titles, ["Elsewhere", "Elsewhere", "Elsewhere"]);
+    // The day's words are kept as the day's own override; the series' title is not touched.
+    let kept = newest_version(&world, &series);
+    let day = kept
+        .get("occurrence[2099-06-16T10:00:00/occurrence]")
+        .unwrap_or_else(|| panic!("the day kept: {kept:?}"));
+    assert_eq!(day["title"], "Daily sync");
+    assert_eq!(day["description"], "Bring the numbers");
+    assert!(day["starts"].is_null() && day["ends"].is_null());
+    assert!(!kept.contains_key("entity.title"));
+    // The next change is from the revision just read, and lands.
+    world.title(page, "Sync");
+    world.save(page);
+    world.send_editor(page, scope(Scope::Occurrence));
+    world.save(page);
+    assert!(world.editor_state(page).dismissed);
+}
+
+#[test]
+fn a_refused_change_to_the_days_times_keeps_the_days_override_and_restore_puts_it_back() {
+    let mut world = World::new();
+    let series = world.weekdays("Stand-up");
+    let key = format!("{series}:2099-06-16T10:00:00");
+    let page = world.open_edit(&series, &key, Some("2099-06-16T10:00:00"), "2099-06-16");
+    world.send_editor(page, start("2099-06-16", "15:00"));
+    world.send_editor(page, end("2099-06-16", "16:00"));
+    world.act(act::calendar::EditEvent {
+        event_id: series.clone(),
+        title: Some("Elsewhere".to_owned()),
+        ..Default::default()
+    });
+    world.save(page);
+    world.send_editor(page, scope(Scope::Occurrence));
+    world.save(page);
+    assert!(!world.editor_state(page).dismissed);
+    let day_of = |world: &World| -> Vec<(String, String)> {
+        world
+            .window("2099-06-15T00:00:00Z", "2099-06-18T00:00:00Z")
+            .into_iter()
+            .filter(|e| e.event_id == series)
+            .map(|e| (e.dtstart, e.summary.unwrap_or_default()))
+            .collect()
+    };
+    let before = day_of(&world);
+    assert!(
+        before
+            .iter()
+            .all(|(starts, _)| !starts.contains("T15:00") && !starts.contains("T13:00")),
+        "the day was not moved: {before:?}"
+    );
+    let kept = newest_version(&world, &series);
+    let day = kept
+        .get("occurrence[2099-06-16T10:00:00/occurrence]")
+        .unwrap_or_else(|| panic!("the day kept: {kept:?}"));
+    assert!(
+        day["starts"]
+            .as_str()
+            .is_some_and(|s| s.starts_with("2099-06-16"))
+    );
+    assert!(day["ends"].as_str().is_some());
+    // Restore on that version moves the day.
+    let wire::app_query_response::Answer::EarlierVersions(listed) =
+        world.load(centraid_screens::catalog::load::shell::EarlierVersions {
+            entity_id: series.clone(),
+        })
+    else {
+        panic!("earlier versions answered something else");
+    };
+    let seq = listed
+        .versions
+        .iter()
+        .map(|v| v.seq)
+        .max()
+        .expect("a version");
+    world.act(act::shell::RestoreVersion {
+        earlier_version_id: series.clone(),
+        seq,
+    });
+    let after = day_of(&world);
+    assert_ne!(after, before, "the restored day reads at its own time");
+    assert!(
+        after
+            .iter()
+            .any(|(starts, _)| starts.contains("2099-06-16") && !starts.contains("T10:00")),
+        "the 16th moved: {after:?}"
+    );
 }

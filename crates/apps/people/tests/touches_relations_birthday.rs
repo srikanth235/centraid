@@ -204,10 +204,9 @@ fn a_relationship_shows_on_both_sheets_each_read_from_its_own_side() {
 }
 
 #[test]
-fn a_birthday_reminder_cannot_be_turned_off() {
+fn a_birthday_is_on_the_upcoming_rail_with_nothing_to_switch() {
     let w = World::new();
     let ada = w.person("Ada", json!({ "birthday": "01-20" }));
-    let bob = w.person("Bob", json!({}));
     let reminder = |w: &World| {
         let sheet = w
             .read(|door| load_person(door, &ada).expect("reads"))
@@ -232,37 +231,8 @@ fn a_birthday_reminder_cannot_be_turned_off() {
     assert_eq!(
         reminder(&w),
         (Some(true), true, 1),
-        "a birthday has its reminder by default"
+        "a birthday is on the Upcoming rail (it is shown on its day; it notifies nobody)"
     );
-    let refused = w
-        .vault
-        .execute(
-            &w.registry,
-            &Principal::owner("phone"),
-            &Command::new(
-                "person.set_birthday_reminder",
-                json!({ "id": ada, "on": false }),
-            ),
-        )
-        .expect("the refusal answers");
-    assert_eq!(refused.status, CommandStatus::Failed);
-    assert_eq!(reminder(&w), (Some(true), true, 1));
-    w.ok(
-        "person.set_birthday_reminder",
-        json!({ "id": ada, "on": true }),
-    );
-    assert_eq!(reminder(&w), (Some(true), true, 1));
-    // A person with no birthday has no reminder to switch.
-    let outcome = w
-        .vault
-        .execute(
-            &w.registry,
-            &Principal::owner("phone"),
-            &Command::new(
-                "person.set_birthday_reminder",
-                json!({ "id": bob, "on": false }),
-            ),
-        )
-        .expect("runs");
-    assert_eq!(outcome.status, CommandStatus::Failed);
+    // No command takes it off the rail: the birthday is the person's own column.
+    assert_eq!(reminder(&w).0, Some(true));
 }

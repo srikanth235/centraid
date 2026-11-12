@@ -146,6 +146,7 @@ fn a_write_to_a_table_the_screen_read_redraws_it_once() {
             action: "propose".to_owned(),
             input,
             invoke_key: "proof-1".to_owned(),
+            autosave: false,
         })
         .expect("act answers");
     assert_eq!(done.status, wire::ActStatus::Executed as i32, "{done:?}");

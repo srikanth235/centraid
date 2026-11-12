@@ -4,8 +4,12 @@
 //! person forever, with everything written about them alone that went to the
 //! trash with them (a task about them stays the member's). The vault refuses it
 //! while the owner is the person, and that refusal is the core's sentence on the
-//! status line. There is no People action that empties the whole trash, so no
-//! "Empty trash": the purge sweep erases the rest on each row's day.
+//! status line. `empty-trash` (`entity.empty_trash`, kind person and with it kind list) deletes every
+//! trashed person and list forever the same way (#1185).
+//!
+//! A list is a row of the same shelf, called a list: it was moved to the trash with `delete-list`,
+//! its members were not touched, and one restore brings it back with them in it. Its purge says
+//! nothing about a person's profile (the kit's own lead, as any row with its own noun).
 //!
 //! The list is the core's `people.trash` (the name lives on the party), not a
 //! page of `entity` rows.
@@ -16,35 +20,51 @@ use wire::app_query_response::Answer;
 use super::denied;
 use crate::catalog::{act, load};
 use crate::kit::read::{self, Reading};
-use crate::kit::trash::{self, TrashCopy, TrashItem, TrashSpec};
+use crate::kit::trash::{self, TrashItem, TrashSpec};
 use crate::screen::{Ctx, Screen};
-use crate::strings::people as words;
+use crate::strings::{people as words, shared};
 
 /// People's trash, as the kit's screen takes it.
 pub static SPEC: TrashSpec = TrashSpec {
+    // A LIST IS A ROW OF THE SAME SHELF: its restore and its move back are the list's own actions.
+    of_row: Some(|item| {
+        item.noun?;
+        let (delete, restore) = super::lists::trash_pair(&item.id);
+        Some((restore, delete))
+    }),
     app: act::people::APP,
     icon_key: "User",
-    copy: TrashCopy {
-        purge_body: Some(words::trash_purge_body),
-        purges_on: Some(words::trash_erases),
-        ..TrashCopy::KIT
-    },
+    noun: shared::trash_noun_person,
+    purge_lead: Some(words::trash_purge_lead),
     back_label: words::app_title,
     denied,
     load: trashed,
+    trash: |id| {
+        act::people::TrashPerson {
+            person_id: id.to_owned(),
+        }
+        .into()
+    },
     restore: |id| {
         act::people::RestorePerson {
             person_id: id.to_owned(),
         }
         .into()
     },
-    purge: Some(|id| {
+    purge: |id| {
         act::people::PurgePerson {
             person_id: id.to_owned(),
         }
         .into()
-    }),
-    empty: None,
+    },
+    empty: || {
+        act::people::EmptyTrash {
+            kind: Some(act::people::EmptyTrashKind::Person),
+            with_kind: Some(act::people::EmptyTrashWithKind::List),
+            ..Default::default()
+        }
+        .into()
+    },
 };
 
 #[must_use]
@@ -65,10 +85,13 @@ fn trashed(ctx: &Ctx) -> Reading<Vec<TrashItem>> {
                 .people
                 .into_iter()
                 .map(|row| TrashItem {
+                    with: String::new(),
                     id: row.party_id,
                     title: row.name,
                     deleted_day: row.deleted_local_day,
                     purge_day: row.purge_local_day,
+                    // A list on the shelf of people says what it is.
+                    noun: row.list.then_some(shared::trash_noun_list as _),
                 })
                 .collect(),
         ),

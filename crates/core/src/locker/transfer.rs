@@ -108,12 +108,22 @@ pub(super) fn export(
             }
         }
         for (field_id, index) in &source.sealed_fields {
-            let opened = vault
-                .locker_sealed_field_cell(&source.item_id, field_id)?
-                .and_then(|sealed| {
-                    let ciphertext = sealed.ciphertext?;
-                    open(sealed.key_id, field_id, &ciphertext)
-                });
+            // An export follows the one rule for every sealed value: a one-time-code field's
+            // seed opens like a sealed field's value (a reveal, which refuses a seed, is not this).
+            let otp = source
+                .entry
+                .fields
+                .get(*index)
+                .is_some_and(|field| field.kind == "otp");
+            let cell = if otp {
+                vault.locker_otp_field_cell(&source.item_id, field_id)?
+            } else {
+                vault.locker_sealed_field_cell(&source.item_id, field_id)?
+            };
+            let opened = cell.and_then(|sealed| {
+                let ciphertext = sealed.ciphertext?;
+                open(sealed.key_id, field_id, &ciphertext)
+            });
             match (opened, source.entry.fields.get_mut(*index)) {
                 (Some(value), Some(field)) => field.value = value,
                 _ => unopened += 1,
@@ -217,6 +227,7 @@ pub(super) fn import(
             owner,
             cell,
             changes,
+            arrived_from: arrival_label(&asked.file_name),
         };
         for (entry, one) in file.entries.iter().zip(&planned) {
             let written = match one.verdict {
@@ -245,6 +256,27 @@ struct Writer<'a> {
     owner: &'a Principal,
     cell: &'a Cell,
     changes: &'a crate::events::ChangeFeed,
+    /// The CSV file's base name, where the items this import makes say they came from.
+    arrived_from: Option<String>,
+}
+
+/// The origin label for a picked file: its base name, nothing else. Never content, never a path.
+fn arrival_label(file_name: &str) -> Option<String> {
+    let name = file_name
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or_default()
+        .trim();
+    Some(name.to_owned()).filter(|name| !name.is_empty())
+}
+
+/// Say on a new item's input that it arrived from a CSV file of this name (nothing when the
+/// platform named none: no half an arrival).
+fn say_arrival(input: &mut serde_json::Value, file: Option<&str>) {
+    if let Some(file) = file {
+        input["arrived_system"] = serde_json::Value::String("csv".to_owned());
+        input["arrived_label"] = serde_json::Value::String(file.to_owned());
+    }
 }
 
 impl Writer<'_> {
@@ -290,6 +322,7 @@ impl Writer<'_> {
         if entry.compromised {
             input["compromised"] = serde_json::Value::Bool(true);
         }
+        say_arrival(&mut input, self.arrived_from.as_deref());
         self.write("locker.add_item", input)?;
         for (position, field) in entry.fields.iter().enumerate() {
             self.write(
@@ -371,5 +404,40 @@ impl Writer<'_> {
             }
         }
         self.write("locker.edit_item", input).map(|_| ())
+    }
+}
+
+#[cfg(test)]
+mod arrival_tests {
+    use super::{arrival_label, say_arrival};
+
+    #[test]
+    fn a_new_item_says_the_file_it_came_from_and_carries_nothing_else_of_it() {
+        let mut input =
+            serde_json::json!({ "item_id": "i1", "title": "Shop", "password": "lk1:x" });
+        say_arrival(&mut input, Some("passwords.csv"));
+        assert_eq!(input["arrived_system"], "csv");
+        assert_eq!(input["arrived_label"], "passwords.csv");
+        let mut unnamed = serde_json::json!({ "item_id": "i2" });
+        say_arrival(&mut unnamed, None);
+        assert!(unnamed.get("arrived_system").is_none() && unnamed.get("arrived_label").is_none());
+    }
+
+    #[test]
+    fn an_import_is_named_by_its_files_base_name_only() {
+        assert_eq!(
+            arrival_label("passwords.csv").as_deref(),
+            Some("passwords.csv")
+        );
+        assert_eq!(
+            arrival_label("/Downloads/Chrome Passwords.csv").as_deref(),
+            Some("Chrome Passwords.csv")
+        );
+        assert_eq!(
+            arrival_label("C:\\Users\\ada\\export.csv").as_deref(),
+            Some("export.csv")
+        );
+        assert_eq!(arrival_label("  "), None);
+        assert_eq!(arrival_label(""), None);
     }
 }

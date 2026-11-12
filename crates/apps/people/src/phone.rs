@@ -128,6 +128,7 @@ mod tests {
             starred,
             reminders: Vec::new(),
             snippet: None,
+            in_earlier_version: false,
         }
     }
 

@@ -130,6 +130,11 @@
         "verbs": "act"
       },
       {
+        "schema": "document",
+        "table": "export_zip",
+        "verbs": "act"
+      },
+      {
         "schema": "container",
         "table": "create",
         "verbs": "act"
@@ -143,6 +148,11 @@
         "schema": "edge",
         "table": "remove",
         "verbs": "act"
+      },
+      {
+        "schema": "vault",
+        "table": "photo",
+        "verbs": "read"
       }
     ]
   },
@@ -196,6 +206,16 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 200000
+          },
+          "arrived_system": {
+            "type": "string",
+            "enum": ["scan", "upload"],
+            "description": "How the item came in when the member did not type it. Omit it for a typed item."
+          },
+          "arrived_label": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "The file or device it came from: a name, never content. Required with arrived_system."
           }
         },
         "required": ["title", "blob", "media_type"],
@@ -300,6 +320,10 @@
             "type": "string",
             "minLength": 1,
             "aliases": ["name"]
+          },
+          "expected_rev": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": ["id", "title"],
@@ -724,7 +748,7 @@
       "name": "recolor-label",
       "verb": "edit",
       "kind": "document",
-      "inverse": null,
+      "inverse": "recolor-label",
       "sealed": [],
       "command": "tag.color",
       "phrasings": [
@@ -776,7 +800,7 @@
       "name": "edit",
       "verb": "edit",
       "kind": "document",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "document.edit",
       "phrasings": [
@@ -799,6 +823,10 @@
           "title": {
             "type": "string",
             "minLength": 1
+          },
+          "expected_rev": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": ["id"],
@@ -823,7 +851,7 @@
       "name": "replace",
       "verb": "edit:content",
       "kind": "document",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "document.replace",
       "phrasings": [
@@ -882,7 +910,7 @@
       "name": "restore-version",
       "verb": "restore",
       "kind": "document",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "document.restore_version",
       "phrasings": [
@@ -1073,7 +1101,7 @@
         "the school form is about Ravi",
         "mark the lease as about Maya"
       ],
-      "description": "Say who a document is about through edge.add (rel about, from the document to a person). The document keeps its place in Recents; adding it twice changes nothing.",
+      "description": "Say who a document is about through edge.add (rel about, from the document to a person). The document keeps its place in Recents; adding it twice changes nothing. With rel links it joins the document to any other item but a Locker item instead (a link, not an about).",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -1084,7 +1112,7 @@
           },
           "rel": {
             "type": "string",
-            "enum": ["about"]
+            "enum": ["about", "links"]
           },
           "to": {
             "type": "string",
@@ -1121,7 +1149,7 @@
         "take Ravi off the school form",
         "the lease is not about Maya"
       ],
-      "description": "Take a person off a document through edge.remove (rel about).",
+      "description": "Take a person off a document through edge.remove (rel about), or any other item it is linked to (rel links).",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -1132,7 +1160,7 @@
           },
           "rel": {
             "type": "string",
-            "enum": ["about"]
+            "enum": ["about", "links"]
           },
           "to": {
             "type": "string",
@@ -1154,6 +1182,134 @@
           "reason": {
             "type": "string"
           }
+        }
+      }
+    },
+    {
+      "name": "attach",
+      "verb": "attach",
+      "kind": "document",
+      "inverse": "detach",
+      "sealed": [],
+      "command": "edge.add",
+      "phrasings": [
+        "attach the scan to the lease",
+        "add the photo to the warranty document",
+        "attach the receipt to my tax return"
+      ],
+      "description": "Attach a document or photo to a document through edge.add (rel attached); the bytes are the document's or photo's own, found by hash.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["attached"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "detach",
+      "verb": "detach",
+      "kind": "document",
+      "inverse": "attach",
+      "sealed": [],
+      "command": "edge.remove",
+      "phrasings": [
+        "take the scan off the lease",
+        "remove the photo from the warranty document",
+        "detach the receipt from my tax return"
+      ],
+      "description": "Detach a document or photo from a document through edge.remove; the document or photo is kept.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["attached"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "export-zip",
+      "verb": "log",
+      "bulk": true,
+      "kind": "document",
+      "inverse": null,
+      "writes_nothing": true,
+      "sealed": [],
+      "command": "document.export_zip",
+      "phrasings": [
+        "export all my documents as one archive",
+        "save my documents as a zip file",
+        "back up one folder of documents as a zip"
+      ],
+      "description": "Write every document that is not in the trash (all of them, or one folder's and the folders below it) as one zip archive of the original files, in the folders the member sees, through document.export_zip. Answers the staged file's path, name and counts. Writes nothing to the vault.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "folder_id": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
         }
       }
     }
@@ -1270,6 +1426,55 @@
         "properties": {
           "versions": {
             "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "attachments",
+      "kind": "document",
+      "figures": ["attachments"],
+      "description": "What is attached to one document, a page at a time: each attachment's id, kind (document or photo), title, media type, byte size and where its bytes are served, in the order of the attached file's id. Pass the page's `next` cursor as `after` for the next page. An id that is no live document answers an empty page, and an attached file in the trash is left out until it is restored.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "after": {
+            "type": "object",
+            "properties": {
+              "sortKey": {
+                "type": "string"
+              },
+              "pk": {
+                "type": "string"
+              }
+            },
+            "required": ["sortKey", "pk"],
+            "additionalProperties": false
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "attachments": {
+            "type": "array"
+          },
+          "next": {
+            "type": ["object", "null"]
           },
           "vaultDenied": {
             "type": "object"

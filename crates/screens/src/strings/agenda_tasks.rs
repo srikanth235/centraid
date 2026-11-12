@@ -15,6 +15,13 @@ catalog! {
     plain quick_tag = ("Tag", "Tag");
     plain quick_flag = ("Flag", "Flag");
     plain quick_flagged = ("Flagged", "Flagged");
+    plain quick_link = ("Link", "Link");
+    plain quick_photo = ("Photo", "Photo");
+    plain quick_staged_group = ("Staged for the next reminder", "Staged for the next reminder");
+    plain quick_staged_link = ("Link · {kind}", "Link · {kind}");
+    plain quick_link_failed = ("Added, but the link to {title} did not save.", "Added, but the link to {title} did not save.");
+    plain quick_photo_failed = ("Added, but the photo did not attach.", "Added, but the photo did not attach.");
+    plain quick_staged_failed = ("Added, but {n} things staged with it did not attach.", "Added, but {n} things staged with it did not attach.");
     plain group_date_time = ("Date & time", "Date & time");
     plain group_organisation = ("Organisation", "Organisation");
     plain field_flag = ("Flag", "Flag");

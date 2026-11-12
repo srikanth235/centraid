@@ -10,7 +10,9 @@ pub mod catalog;
 pub mod chat;
 pub mod custody;
 pub mod docs;
+pub mod effect_reason;
 pub mod field;
+pub mod follow;
 pub mod health;
 pub mod imports;
 pub mod kit;
@@ -76,6 +78,7 @@ pub fn assemble() -> (Runtime, std::sync::Arc<vault::Shelf>) {
             .merge(pairing::registry(&secrets))
             .merge(backup::registry(&secrets))
             .merge(passes::registry(&secrets))
+            .merge(follow::registry())
             .merge(vault::registry(&shelf, &secrets)),
         // THE PHONE IMPORTS ARE HIDDEN TAB ROOTS, NOT SERVICES: the shell sends
         // them its events and forwards their views, so it must see their instances and their views, which a
@@ -91,14 +94,17 @@ pub fn assemble() -> (Runtime, std::sync::Arc<vault::Shelf>) {
         ]
         .concat(),
     )
+    .with_units(&secrets)
     .with_band(shell::band::view)
     .with_services(
         [
             passes::services(),
+            follow::services(),
             custody::services(),
             vault::services(),
             agenda::notify::services(),
             agenda::glance::services(),
+            health::glance::services(),
         ]
         .concat(),
     );

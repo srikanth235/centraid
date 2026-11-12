@@ -77,6 +77,7 @@ fn is_permission(kind: &wire::effect::Kind) -> bool {
 fn read(permission: wire::PhotosMediaPermission) -> wire::effect_result::Outcome {
     wire::effect_result::Outcome::LibraryPermissionRead(wire::LibraryPermissionRead {
         permission: permission as i32,
+        device_id: "device-1".to_owned(),
     })
 }
 

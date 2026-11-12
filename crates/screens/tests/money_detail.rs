@@ -74,7 +74,7 @@ fn a_transaction_page_shows_what_the_bank_wrote_and_how_to_change_it() {
     assert_eq!(category.action, "category");
     assert!(data.amount.contains('$'));
     let keys: Vec<&str> = data.actions.iter().map(|a| a.key.as_str()).collect();
-    assert!(keys.contains(&"category") && keys.contains(&"name") && keys.contains(&"void"));
+    assert!(keys.contains(&"category") && keys.contains(&"name") && keys.contains(&"trash"));
 }
 
 #[test]
@@ -191,39 +191,19 @@ fn naming_a_line_saves_the_name_and_a_cleared_name_goes_back_to_the_banks() {
     assert_eq!(txn_data(d.view(i)).title, raw);
 }
 
+/// A void is what a member could do before the trash (#1185), and a vault may still hold one: the
+/// page draws it struck with its chip, offers no more changes to it, and offers no void (the one
+/// control left is Move to trash).
 #[test]
-fn voiding_asks_first_and_a_void_line_offers_no_more_changes() {
+fn a_void_line_a_vault_already_holds_offers_no_more_changes_and_no_void() {
     let mut d = driver();
     let id = a_line(&mut d);
+    let voided = d
+        .handle
+        .command("txn.void", &serde_json::json!({ "id": id }), "void-fixture")
+        .expect("the vault voids it");
+    assert_eq!(voided.status, centraid_vault::CommandStatus::Executed);
     let i = open(&mut d, &id);
-    event(
-        &mut d,
-        i,
-        txn_event(te::Kind::Action(te::ActionPicked { key: "void".into() })),
-    );
-    let confirm = txn_state(d.view(i))
-        .confirm
-        .clone()
-        .expect("a confirmation");
-    assert_eq!(confirm.title, "Void this transaction?");
-    assert!(confirm.destructive);
-    event(
-        &mut d,
-        i,
-        txn_event(te::Kind::ConfirmDismissed(te::ConfirmDismissed {})),
-    );
-    assert!(txn_state(d.view(i)).confirm.is_none());
-    assert!(txn_data(d.view(i)).chips.iter().all(|c| c.label != "Void"));
-    event(
-        &mut d,
-        i,
-        txn_event(te::Kind::Action(te::ActionPicked { key: "void".into() })),
-    );
-    event(
-        &mut d,
-        i,
-        txn_event(te::Kind::ConfirmAccepted(te::ConfirmAccepted {})),
-    );
     let data = txn_data(d.view(i));
     assert!(data.chips.iter().any(|c| c.label == "Void"));
     assert!(data.actions.iter().all(|a| a.key != "void"));
@@ -233,20 +213,29 @@ fn voiding_asks_first_and_a_void_line_offers_no_more_changes() {
             .filter(|a| a.key == "category" || a.key == "name")
             .all(|a| !a.enabled)
     );
-    assert_eq!(
-        txn_state(d.view(i)).status.as_ref().unwrap().sentence,
-        "Marked void"
-    );
+    let trash = data
+        .actions
+        .iter()
+        .find(|a| a.key == "trash")
+        .expect("a voided line can still go to the trash");
+    assert!(trash.enabled && trash.destructive);
+    assert_eq!(trash.label, "Move to trash");
 }
 
 #[test]
 fn an_unknown_line_is_a_failure_never_an_empty_page() {
     let mut d = driver();
     let i = open(&mut d, "no-such-line");
-    assert!(matches!(
-        txn_state(d.view(i)).content,
-        Some(wire::money_transaction_state::Content::Failure(_))
-    ));
+    // A line that is not there is the page's final failure, in its own words, with no Retry.
+    let state = txn_state(d.view(i));
+    assert!(state.content.is_none());
+    let Some(wire::page_state::State::Failed(failure)) =
+        state.page.as_ref().and_then(|page| page.state.as_ref())
+    else {
+        panic!("an unknown line is a failed page");
+    };
+    assert_eq!(failure.sentence, "This transaction is no longer here.");
+    assert!(failure.permanent);
 }
 
 // --- target ------------------------------------------------------------------
@@ -409,10 +398,12 @@ fn recurring_charges_are_rows_with_a_cadence_and_a_state() {
         panic!("not recurring");
     };
     assert_eq!(state.chrome.as_ref().unwrap().title, "Recurring");
+    // No recurring charge is the page's own empty state; otherwise the rows are the data.
     let Some(wire::money_recurring_state::Content::Data(data)) = state.content else {
-        panic!("no recurring data");
+        assert!(empty_of(&state.page).is_some(), "no data is the empty page");
+        return;
     };
-    assert!(data.empty.is_some() == data.rows.is_empty());
+    assert!(empty_of(&state.page).is_none());
     for row in &data.rows {
         assert!(row.meta.contains('·'), "{}", row.meta);
         assert!(row.detail.contains("seen"), "{}", row.detail);
@@ -436,6 +427,14 @@ fn search_state(v: &wire::ViewState) -> &wire::MoneySearchState {
     }
 }
 
+/// The empty state of a page, when the page is empty.
+fn empty_of(page: &Option<wire::PageState>) -> Option<&wire::EmptyState> {
+    match page.as_ref().and_then(|page| page.state.as_ref()) {
+        Some(wire::page_state::State::Empty(empty)) => Some(empty),
+        _ => None,
+    }
+}
+
 fn search_event(kind: se::Kind) -> wire::screen_event::Kind {
     wire::screen_event::Kind::MoneySearch(wire::MoneySearchEvent { kind: Some(kind) })
 }
@@ -446,7 +445,9 @@ fn search_rests_until_there_is_a_term_and_reads_nothing_for_a_blank_one() {
     let i = push(&mut d, routes::search("Money"));
     let state = search_state(d.view(i));
     assert_eq!(
-        state.resting.as_ref().unwrap().headline,
+        empty_of(&state.page)
+            .expect("the resting page is empty")
+            .headline,
         "Search by name, bank words or category."
     );
     assert!(state.content.is_none());
@@ -484,7 +485,7 @@ fn a_term_that_matches_nothing_says_so_and_a_clear_goes_back_to_resting() {
             route: Some(centraid_screens::chat::routes::ask("Find zzqqxx", "money")),
         })
     );
-    let empty = data.empty.expect("an empty state");
+    let empty = empty_of(&search_state(d.view(i)).page).expect("an empty state");
     assert_eq!(empty.headline, "Nothing matches zzqqxx.");
     assert_eq!(
         empty.body,
@@ -492,7 +493,7 @@ fn a_term_that_matches_nothing_says_so_and_a_clear_goes_back_to_resting() {
     );
     event(&mut d, i, search_event(se::Kind::Cleared(se::Cleared {})));
     let state = search_state(d.view(i));
-    assert!(state.resting.is_some() && state.content.is_none() && state.term.is_empty());
+    assert!(empty_of(&state.page).is_some() && state.content.is_none() && state.term.is_empty());
 }
 
 #[test]
@@ -568,6 +569,7 @@ fn a_payee_that_names_a_person_is_proposed_and_written_only_when_confirmed() {
         act::money::SetDisplayName {
             transaction_id: id.clone(),
             title: "UPI Priya Rao 4412".into(),
+            expected_rev: None,
         },
     );
     let priya = arrange(
@@ -645,4 +647,96 @@ fn a_payee_that_names_a_person_is_proposed_and_written_only_when_confirmed() {
     );
     assert!(!txn_state(d.view(j)).with_picker.clone().unwrap().open);
     assert_eq!(with_fact(d.view(j)), "No one");
+}
+
+#[test]
+fn naming_a_line_that_changed_elsewhere_is_refused_and_the_typed_name_is_kept() {
+    let mut d = driver();
+    let id = a_line(&mut d);
+    let i = open(&mut d, &id);
+    event(
+        &mut d,
+        i,
+        txn_event(te::Kind::Action(te::ActionPicked { key: "name".into() })),
+    );
+    event(
+        &mut d,
+        i,
+        txn_event(te::Kind::NameEdited(te::NameEdited {
+            text: "Mine".into(),
+        })),
+    );
+    arrange(
+        &d,
+        act::money::SetDisplayName {
+            transaction_id: id.clone(),
+            title: "Theirs".into(),
+            expected_rev: None,
+        },
+    );
+    event(&mut d, i, txn_event(te::Kind::NameSaved(te::NameSaved {})));
+    assert_eq!(txn_data(d.view(i)).title, "Theirs");
+    assert_eq!(
+        txn_state(d.view(i)).status.as_ref().unwrap().sentence,
+        "This transaction changed somewhere else. Your text is in Earlier versions."
+    );
+}
+
+#[test]
+fn filing_a_line_that_changed_elsewhere_is_refused_and_the_pick_is_kept() {
+    let mut d = driver();
+    let id = a_line(&mut d);
+    let i = open(&mut d, &id);
+    event(
+        &mut d,
+        i,
+        txn_event(te::Kind::Action(te::ActionPicked {
+            key: "category".into(),
+        })),
+    );
+    let before = txn_data(d.view(i))
+        .facts
+        .iter()
+        .find(|f| f.label == "Category")
+        .unwrap()
+        .detail
+        .clone();
+    // A category the line does not already hold.
+    let pick = txn_data(d.view(i))
+        .category_options
+        .iter()
+        .find(|o| !o.key.is_empty() && o.label != before)
+        .expect("a category")
+        .clone();
+    // Another device renames the line while the sheet is open.
+    arrange(
+        &d,
+        act::money::SetDisplayName {
+            transaction_id: id.clone(),
+            title: "Theirs".into(),
+            expected_rev: None,
+        },
+    );
+    event(
+        &mut d,
+        i,
+        txn_event(te::Kind::Category(te::CategoryPicked {
+            category_id: pick.key.clone(),
+        })),
+    );
+    assert_eq!(txn_data(d.view(i)).title, "Theirs");
+    let status = txn_state(d.view(i)).status.clone().expect("a line");
+    assert_eq!(
+        status.sentence,
+        "This transaction changed somewhere else. Your text is in Earlier versions."
+    );
+    assert!(status.refused);
+    let after = txn_data(d.view(i))
+        .facts
+        .iter()
+        .find(|f| f.label == "Category")
+        .unwrap()
+        .detail
+        .clone();
+    assert_eq!(after, before, "the refused pick did not file the line");
 }

@@ -45,7 +45,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         parent: args.parent.clone(),
         on: KEYS.iter().map(|_| true).collect(),
         seeded: false,
-        follow: HealthFollow::connecting(),
+        follow: HealthFollow::new(),
     }))
 }
 
@@ -186,11 +186,18 @@ impl Screen for Connect {
                             on: *on,
                         })
                         .collect(),
-                    note: format!(
-                        "{} {}",
-                        fill(&words::connect_note(locale), &[("store", &store)]),
-                        words::connect_depth_note(locale)
-                    ),
+                    note: {
+                        let note = format!(
+                            "{} {}",
+                            fill(&words::connect_note(locale), &[("store", &store)]),
+                            words::connect_depth_note(locale)
+                        );
+                        if Store::of(ctx) == Store::HealthConnect {
+                            format!("{note} {}", words::connect_background_why(locale))
+                        } else {
+                            note
+                        }
+                    },
                     connect_label: fill(&words::connect_action(locale), &[("store", &store)]),
                     can_connect: !chosen.is_empty() && !working,
                     working,

@@ -413,6 +413,7 @@ fn the_demo_locker_reveals_under_the_demo_words_and_no_others() {
             column: "value_sealed".to_owned(),
             field_id: "demo-locker-bank-recovery".to_owned(),
             copy: false,
+            earlier_seq: 0,
         }),
     )
     .revealed

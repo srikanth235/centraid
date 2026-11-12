@@ -94,7 +94,7 @@ public fun KitChip(
     ) {
         Row(
             Modifier
-                .height(32.dp)
+                .heightIn(min = 32.dp)
                 .clip(shape)
                 .background(centraidColor(if (selected) "bgSunken" else "bg"), shape)
                 .border(KitGeometry.HAIRLINE, centraidColor(if (selected) "lineStrong" else "line"), shape)

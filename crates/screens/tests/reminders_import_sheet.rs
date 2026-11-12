@@ -8,7 +8,9 @@
 #[path = "schedule_routes/mod.rs"]
 mod routes;
 use centraid_api_proto::core_v1 as wire;
+use centraid_screens::catalog::act;
 use centraid_screens::custody::secrets::VaultSecrets;
+use centraid_screens::field::Keyed;
 use centraid_screens::testing::Driver;
 use centraid_screens::{Runtime, agenda, imports};
 use wire::agenda_home_event::Kind as H;
@@ -73,7 +75,7 @@ impl Rig {
 
     fn tap_row(&mut self) {
         self.send(H::MoreRow(wire::agenda_home_event::MoreRowPicked {
-            key: "import-reminders".to_owned(),
+            key: "turn-on".to_owned(),
         }));
     }
 
@@ -145,7 +147,7 @@ fn reminders(items: &[(&str, bool)]) -> O {
 fn the_row_is_offered_only_where_the_platform_has_a_reminders_source() {
     let ios = rig("ios");
     assert!(
-        ios.more_keys().contains(&"import-reminders".to_owned()),
+        ios.more_keys().contains(&"turn-on".to_owned()),
         "{:?}",
         ios.more_keys()
     );
@@ -153,16 +155,18 @@ fn the_row_is_offered_only_where_the_platform_has_a_reminders_source() {
         .state()
         .more_rows
         .iter()
-        .find(|row| row.key == "import-reminders")
+        .find(|row| row.key == "turn-on")
         .expect("the row");
-    assert_eq!(row.label, "Import reminders");
-    assert_eq!(row.icon_key, "Download");
+    // THE STOP SLOT, in the words every app shares: Turn on while it does not read the phone.
+    assert_eq!(row.label, "Turn on Phone reminders");
+    assert_eq!(row.icon_key, "Power");
 
     for platform in ["android", ""] {
         let rig = rig(platform);
         assert!(
-            !rig.more_keys().contains(&"import-reminders".to_owned()),
-            "{platform}: no reminders store, no row"
+            !rig.more_keys().contains(&"turn-on".to_owned())
+                && !rig.more_keys().contains(&"stop".to_owned()),
+            "{platform}: no reminders store, neither row"
         );
     }
     // And a tap on a row the sheet does not hold does nothing, and nothing is read.
@@ -286,6 +290,7 @@ fn a_refusal_and_an_empty_phone_say_so_on_the_line_in_the_import_words() {
         reason: "denied".to_owned(),
         denied: true,
         cancelled: false,
+        ..Default::default()
     }));
     assert_eq!(
         r.line().summary,
@@ -299,4 +304,151 @@ fn a_refusal_and_an_empty_phone_say_so_on_the_line_in_the_import_words() {
     ));
     r.answer(reminders(&[]));
     assert_eq!(r.line().summary, "No open reminders to import");
+}
+
+#[test]
+fn a_shell_answering_unavailable_makes_the_screen_say_the_phone_has_no_reminders() {
+    // The row is offered only where a Reminders store exists, so ask as a phone that offers it and
+    // let the shell answer that the store is not there after all.
+    let mut r = rig("ios");
+    r.tap_row();
+    r.send(H::ImportRemindersSubmitted(
+        wire::agenda_home_event::ImportRemindersSubmitted {},
+    ));
+    // The shell reports the fact only; the sentence is Rust's.
+    r.answer(O::Failed(wire::EffectFailed {
+        reason: imports::made::UNAVAILABLE.to_owned(),
+        ..wire::EffectFailed::default()
+    }));
+    assert_eq!(r.line().summary, "This phone has no Reminders to import");
+}
+
+#[test]
+fn after_the_import_the_slot_stops_asks_first_and_after_a_stop_turns_on_again() {
+    let mut r = rig("ios");
+    assert!(r.more_keys().contains(&"turn-on".to_owned()));
+    r.tap_row();
+    r.send(H::ImportRemindersSubmitted(
+        wire::agenda_home_event::ImportRemindersSubmitted {},
+    ));
+    r.answer(reminders(&[("Renew passport", false)]));
+
+    // THE SLOT SWAPS: Stop is in the place of Turn on, never both and never neither.
+    let keys = r.more_keys();
+    assert!(
+        keys.contains(&"stop".to_owned()) && !keys.contains(&"turn-on".to_owned()),
+        "{keys:?}"
+    );
+    let stop = r
+        .state()
+        .more_rows
+        .iter()
+        .find(|row| row.key == "stop")
+        .expect("the stop row")
+        .clone();
+    assert_eq!(
+        (stop.label.as_str(), stop.icon_key.as_str()),
+        ("Stop reading Phone reminders", "Stop")
+    );
+    assert!(stop.route.is_none());
+
+    // It asks first, in the shared sheet's words; dismissing keeps following.
+    r.send(H::MoreRow(wire::agenda_home_event::MoreRowPicked {
+        key: "stop".to_owned(),
+    }));
+    let confirm = r.state().stop.clone().expect("asked first");
+    assert_eq!(confirm.title, "Stop reading Phone reminders?");
+    assert_eq!(
+        confirm.body,
+        "Reminders stops reading Phone reminders on this phone. The reminders already here stay."
+    );
+    assert_eq!(confirm.confirm_label, "Stop reading");
+    assert!(confirm.destructive);
+    r.send(H::StopDismissed(wire::agenda_home_event::StopDismissed {}));
+    assert!(r.state().stop.is_none());
+    assert!(r.more_keys().contains(&"stop".to_owned()));
+
+    // Confirming retires the lists and forgets the habit; the tasks stay.
+    r.send(H::MoreRow(wire::agenda_home_event::MoreRowPicked {
+        key: "stop".to_owned(),
+    }));
+    r.d.effects.clear();
+    r.send(H::StopConfirmed(wire::agenda_home_event::StopConfirmed {}));
+    let ops: Vec<i32> =
+        r.d.effects
+            .iter()
+            .filter_map(|request| match request.effect.as_ref()?.kind.as_ref()? {
+                K::Keychain(op) => Some(op.op),
+                _ => None,
+            })
+            .collect();
+    assert_eq!(ops, [wire::keychain_op::Op::Delete as i32]);
+    assert_eq!(
+        r.state().status.as_ref().map(|s| s.sentence.as_str()),
+        Some("Reminders stopped reading your phone reminders.")
+    );
+    let keys = r.more_keys();
+    assert!(
+        keys.contains(&"turn-on".to_owned()) && !keys.contains(&"stop".to_owned()),
+        "{keys:?}"
+    );
+
+    // A confirm that was never asked stops nothing.
+    r.d.effects.clear();
+    r.send(H::StopConfirmed(wire::agenda_home_event::StopConfirmed {}));
+    assert!(r.d.effects.is_empty());
+}
+
+#[test]
+fn a_cold_start_reads_the_stored_follow_and_stop_works_from_it() {
+    let mut r = rig("ios");
+    // Nothing is followed: the slot offers Turn on.
+    assert!(r.more_keys().contains(&"turn-on".to_owned()));
+    // The vault follows a list of the phone's Reminders (a pass in an earlier launch stored it);
+    // THIS runtime has run no pass and holds nothing in memory about one.
+    let followed = r.d.act(
+        wire::ActRequest::from(act::reminders::FollowReminders {
+            origin: serde_json::json!({ "ref": "list-1", "label": "Home" }).to_string(),
+            records: serde_json::json!([{
+                "external_id": "r1",
+                "fields": { "title": "Renew passport", "status": "open", "done_at": null },
+            }])
+            .to_string(),
+            complete: Some(false),
+            since: None,
+            ..Default::default()
+        })
+        .keyed("arrange:cold-start".to_owned()),
+    );
+    assert_eq!(
+        followed.status,
+        wire::ActStatus::Executed as i32,
+        "{}",
+        followed.reason
+    );
+    r.d.send(r.home, E::Appeared(wire::Appeared {}));
+
+    // THE ROW SAYS WHAT IS STORED: Stop, never Turn on while the phone is followed.
+    let keys = r.more_keys();
+    assert!(
+        keys.contains(&"stop".to_owned()) && !keys.contains(&"turn-on".to_owned()),
+        "{keys:?}"
+    );
+
+    // And Stop works from that state: it retires the stored list and the row swaps.
+    r.send(H::MoreRow(wire::agenda_home_event::MoreRowPicked {
+        key: "stop".to_owned(),
+    }));
+    assert!(r.state().stop.is_some());
+    r.d.effects.clear();
+    r.send(H::StopConfirmed(wire::agenda_home_event::StopConfirmed {}));
+    let keys = r.more_keys();
+    assert!(
+        keys.contains(&"turn-on".to_owned()) && !keys.contains(&"stop".to_owned()),
+        "{keys:?}"
+    );
+    assert_eq!(
+        r.state().status.as_ref().map(|s| s.sentence.as_str()),
+        Some("Reminders stopped reading your phone reminders.")
+    );
 }

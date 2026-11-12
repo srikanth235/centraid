@@ -9,6 +9,7 @@
 //! | One person | [`PERSON`] | [`person`] |
 //! | The profile, autosaving | [`EDITOR`] | [`editor`] |
 //! | The trash | [`TRASH`] | [`trash`] |
+//! | Earlier versions of a person | [`EARLIER`] | [`earlier`] |
 //!
 //! People and Touch are ONE screen with the destination a value, so a tap on the
 //! band swaps what is drawn and never a stack entry: back never walks through
@@ -35,12 +36,14 @@
 use centraid_api_proto::core_v1 as wire;
 
 use crate::Registry;
-use crate::kit::read::Reading;
 
 pub mod contacts;
+pub mod earlier;
 pub mod editor;
+pub mod export;
 pub mod fold;
 pub mod home;
+pub mod lists;
 pub mod person;
 pub mod sections;
 pub mod transfer;
@@ -50,6 +53,8 @@ pub const HOME: &str = "people.home";
 pub const PERSON: &str = "people.person";
 pub const EDITOR: &str = "people.editor";
 pub const TRASH: &str = "people.trash";
+pub const EARLIER: &str = "people.earlier";
+pub const LISTS: &str = "people.lists";
 pub const IMPORT: &str = "people.import";
 pub const EXPORT: &str = "people.export";
 
@@ -64,8 +69,10 @@ pub fn registry() -> Registry {
         .with(PERSON, person::build)
         .with(EDITOR, editor::build)
         .with(TRASH, trash::build)
+        .with(EARLIER, earlier::build)
+        .with(LISTS, lists::build)
         .with(IMPORT, transfer::build_import)
-        .with(EXPORT, transfer::build_export)
+        .with(EXPORT, export::build)
 }
 
 /// A runtime with People's screens and one tab, `people`, rooted at its home. The
@@ -80,33 +87,6 @@ pub fn runtime() -> crate::Runtime {
             routes::home(wire::PeopleDestination::People),
         )],
     )
-}
-
-/// What a read came to while a screen waits on it: nothing yet, a refusal, a
-/// gate or the answer. A failed read is never an empty list.
-#[derive(Clone, Debug)]
-pub(crate) enum Phase<T> {
-    Loading,
-    Failed,
-    Denied(wire::AppQueryDenial),
-    Ready(T),
-}
-
-impl<T> Phase<T> {
-    pub(crate) fn of(reading: Reading<T>) -> Self {
-        match reading {
-            Reading::Data(data) => Self::Ready(data),
-            Reading::Denied(denial) => Self::Denied(denial),
-            Reading::Failed => Self::Failed,
-        }
-    }
-
-    pub(crate) fn data(&self) -> Option<&T> {
-        match self {
-            Self::Ready(data) => Some(data),
-            _ => None,
-        }
-    }
 }
 
 /// The gate drawn when the vault will not let People read: the core's own words
@@ -130,7 +110,7 @@ pub(crate) fn denied(
 
 /// The routes People's own screens hand to a shell inside a view state.
 pub mod routes {
-    use super::{EDITOR, HOME, PERSON, TRASH, wire};
+    use super::{EDITOR, HOME, LISTS, PERSON, TRASH, wire};
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
         wire::Route {
@@ -190,12 +170,23 @@ pub mod routes {
         )
     }
 
+    /// The member's lists; `back` names the page it was pushed from.
+    #[must_use]
+    pub fn lists(back: &str) -> wire::Route {
+        route(
+            LISTS,
+            wire::route::Args::PeopleLists(wire::PeopleListsRoute {
+                back_label: back.to_owned(),
+            }),
+        )
+    }
+
     /// The kit's transfer screen on People's vCards, either way; `back` names the page it was
     /// pushed from.
     #[must_use]
-    pub fn transfer(export: bool, back: &str) -> wire::Route {
+    pub fn import(back: &str) -> wire::Route {
         route(
-            if export { super::EXPORT } else { super::IMPORT },
+            super::IMPORT,
             wire::route::Args::Transfer(wire::TransferRoute {
                 back_label: back.to_owned(),
             }),

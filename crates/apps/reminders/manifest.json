@@ -11,6 +11,11 @@
     "scopes": [
       {
         "schema": "vault",
+        "table": "revision",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
         "table": "entity",
         "verbs": "read"
       },
@@ -86,6 +91,11 @@
       },
       {
         "schema": "entity",
+        "table": "empty_trash",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
         "table": "restore",
         "verbs": "act"
       },
@@ -141,6 +151,11 @@
       },
       {
         "schema": "task",
+        "table": "export_ics",
+        "verbs": "act"
+      },
+      {
+        "schema": "task",
         "table": "organize",
         "verbs": "act"
       },
@@ -148,11 +163,117 @@
         "schema": "task",
         "table": "reopen",
         "verbs": "act"
+      },
+      {
+        "schema": "follow",
+        "table": "reminders",
+        "verbs": "act"
+      },
+      {
+        "schema": "follow",
+        "table": "stop",
+        "verbs": "act"
       }
     ]
   },
   "actionSideEffect": "vault-write",
   "actions": [
+    {
+      "name": "link",
+      "verb": "link",
+      "kind": "task",
+      "inverse": "unlink",
+      "sealed": [],
+      "command": "edge.add",
+      "phrasings": [
+        "link the passport task to Sam",
+        "connect the dentist task to my trip note",
+        "link the rent task to Friday's event"
+      ],
+      "description": "Link a task to any other item (a person, place, event, task, note, document, photo, account, transaction or workout) through edge.add (rel links, from the task); never to a Locker item. A link has no direction: it shows on both pages, and linking twice changes nothing.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["links"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "unlink",
+      "verb": "unlink",
+      "kind": "task",
+      "inverse": "link",
+      "sealed": [],
+      "command": "edge.remove",
+      "phrasings": [
+        "unlink the passport task from Sam",
+        "disconnect the dentist task from my trip note",
+        "take the link off the rent task"
+      ],
+      "description": "Take the link between a task and another item off through edge.remove (rel links, from either end); both items stay.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["links"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
     {
       "name": "add-task",
       "verb": "create",
@@ -316,6 +437,10 @@
             "type": ["string", "null"],
             "maxLength": 2048,
             "description": "A link the task points at; null clears it."
+          },
+          "expected_rev": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": ["id"],
@@ -494,6 +619,10 @@
           },
           "zone": {
             "type": ["string", "null"]
+          },
+          "expected_rev": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": ["id"],
@@ -577,6 +706,50 @@
           }
         },
         "required": ["id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "empty-trash",
+      "verb": "purge",
+      "kind": "task",
+      "inverse": null,
+      "sealed": [],
+      "bulk": true,
+      "command": "entity.empty_trash",
+      "phrasings": [
+        "empty the task trash",
+        "clear out the trashed tasks for good",
+        "permanently delete everything in the reminders trash"
+      ],
+      "description": "Empty the task trash through entity.empty_trash with kind task. Irreversible and takes no id: every task in the trash is destroyed now, as purge destroys one.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["task"]
+          },
+          "due_only": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
         "additionalProperties": false
       },
       "output": {
@@ -747,7 +920,7 @@
       "name": "create-section",
       "verb": "create",
       "kind": "section",
-      "inverse": null,
+      "inverse": "delete-task",
       "sealed": [],
       "command": "container.create",
       "phrasings": [
@@ -1114,6 +1287,204 @@
         },
         "required": ["from", "rel", "to"],
         "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "export-ics",
+      "verb": "log",
+      "bulk": true,
+      "kind": "task",
+      "inverse": null,
+      "writes_nothing": true,
+      "sealed": [],
+      "command": "task.export_ics",
+      "phrasings": [
+        "export my reminders as ics",
+        "save a list as a calendar file",
+        "send someone this reminder as an ics file"
+      ],
+      "description": "Answer every list's reminders, one list's, or one reminder, as a calendar file (.ics) of to-dos through task.export_ics. Writes nothing.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "list_id": {
+            "type": "string",
+            "minLength": 1,
+            "aliases": ["list"]
+          },
+          "task_id": {
+            "type": "string",
+            "minLength": 1,
+            "aliases": ["task"]
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "follow-reminders",
+      "verb": "import",
+      "kind": "task",
+      "inverse": "stop-following",
+      "sealed": [],
+      "bulk": true,
+      "command": "follow.reminders",
+      "phrasings": [
+        "import my phone's reminders",
+        "sync reminders from this phone",
+        "pull in my reminders"
+      ],
+      "description": "Follow the phone's Reminders through follow.reminders, one list at a time: a field the member never changed follows the phone, one they changed stands, a reminder the vault does not know is matched by title to a task of the member's own before one is added, one the phone completes completes the task, and one gone from a complete read goes to the trash if the member never edited it.",
+      "confirmation": "none",
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "complete": {
+            "type": "boolean"
+          },
+          "gone": {
+            "description": "The source ids the store says were deleted since the cursor (a delta's, in place of a complete read): the row is kept and its source forgotten. Only for a system whose gone rows are kept.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "origin": {
+            "additionalProperties": false,
+            "properties": {
+              "color": {
+                "description": "The colour the phone paints the store with, as the design wheel names it.",
+                "maxLength": 64,
+                "type": ["string", "null"]
+              },
+              "config": {
+                "type": ["object", "null"]
+              },
+              "cursor": {
+                "description": "Where this read of the store got to: it moves in this commit, as the install named by device_id read it (a phone store's, never an account's).",
+                "maxLength": 4096,
+                "minLength": 1,
+                "type": "string"
+              },
+              "device_id": {
+                "type": ["string", "null"]
+              },
+              "fills": {
+                "type": ["string", "null"]
+              },
+              "label": {
+                "type": "string"
+              },
+              "ref": {
+                "type": "string"
+              }
+            },
+            "required": ["ref", "label"],
+            "type": "object"
+          },
+          "records": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "device_id": {
+                  "type": ["string", "null"]
+                },
+                "external_id": {
+                  "type": "string"
+                },
+                "fields": {
+                  "type": "object"
+                },
+                "size": {
+                  "description": "How large the bytes a record names are, counted by the phone; the command claims them.",
+                  "minimum": 0,
+                  "type": ["integer", "null"]
+                }
+              },
+              "required": ["external_id", "fields"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "since": {
+            "type": "string"
+          }
+        },
+        "required": ["origin", "records"],
+        "type": "object"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "stop-following",
+      "verb": "detach",
+      "kind": "task",
+      "inverse": null,
+      "sealed": [],
+      "command": "follow.stop",
+      "phrasings": [
+        "stop reading the phone's reminders",
+        "disconnect reminders on this phone",
+        "stop following phone reminders"
+      ],
+      "description": "Stop following one of the phone's Reminders lists through follow.stop: its origin is retired and its tasks forget their source. Every task stays, an ordinary one from now on. It is the Undo of follow-reminders, and it asks first because following again needs the phone's own read.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "required": ["system", "ref"],
+        "additionalProperties": false,
+        "properties": {
+          "system": {
+            "type": "string",
+            "enum": ["phone_reminders"]
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
       },
       "output": {
         "type": "object",

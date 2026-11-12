@@ -13,6 +13,12 @@ catalog! {
         "Photos here are deleted forever {days} days after you trash them.",
         "Photos here are deleted forever {days} days after you trash them."
     );
+    plain album_created = ("Album created", "Album created");
+    plain album_deleted = ("Album deleted", "Album deleted");
+    plain album_renamed = ("Album renamed", "Album renamed");
+    plain album_restored = ("Album restored", "Album restored");
+    plain cover_changed = ("Cover changed", "Cover changed");
+    plain place_named = ("Place named", "Place named");
     plain album_in_trash = ("This album is in the trash.", "This album is in the trash.");
     plain album_restore = ("Restore album", "Restore album");
     plain write_refused = ("Centraid could not make that change.", "Centraid could not make that change.");

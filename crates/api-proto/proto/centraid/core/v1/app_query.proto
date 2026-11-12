@@ -47,6 +47,7 @@ import "centraid/core/v1/notes.proto";
 import "centraid/core/v1/people.proto";
 import "centraid/core/v1/photos.proto";
 import "centraid/core/v1/imports_screens.proto";
+import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/vault_screens.proto";
 import "centraid/core/v1/vault_search.proto";
 
@@ -96,6 +97,8 @@ message AppQueryRequest {
     // The earliest-due open tasks of a window, at any vault size (#1173).
     AgendaTaskDueRowsRequest agenda_task_due_rows = 25;
     CalendarDatedRemindersRequest calendar_dated_reminders = 29;
+    // The events in the trash (#1185): the shelf the page door cannot read, since the trash is the entity's.
+    CalendarTrashRequest calendar_trash = 34;
     DocsDriveRequest docs_drive = 30;
     DocsSearchRequest docs_search = 31;
     DocsDocumentRequest docs_document = 32;
@@ -134,7 +137,7 @@ message AppQueryRequest {
     PhotosPhotoRequest photos_photo = 94;
     PhotosAlbumsRequest photos_albums = 95;
     PhotosPlacesRequest photos_places = 96;
-    // Money (#1099, R-1099-12): 100-109. 111-119 stay reserved for Money. The
+    // Money (#1099, R-1099-12): 100-112 (111 is the import plan's answer). 113-119 stay reserved for Money. The
     // import plan rides `Request.money` (`money.proto`).
     MoneySpendingRequest money_spending = 100;
     MoneyActivityRequest money_activity = 101;
@@ -148,7 +151,9 @@ message AppQueryRequest {
     MoneySearchRequest money_search = 109;
     // Home's tile, as the manifest's `home-tile` query (it also rides `Request.money`).
     MoneyHomeTileRequest money_home_tile = 110;
-    // Health (#1129, R-1129-12): 120-125. 126-139 stay reserved for Health. The
+    // The transactions in the trash (#1185): the shelf the page door cannot read, since the trash is the entity's.
+    MoneyTrashRequest money_trash = 112;
+    // Health (#1129, R-1129-12): 120-126. 127-139 stay reserved for Health. The
     // writes are `health.*` commands; `health_follow_view` is the follower
     // engine's read, not a screen's.
     HealthTodayRequest health_today = 120;
@@ -157,6 +162,8 @@ message AppQueryRequest {
     HealthWorkoutsRequest health_workouts = 123;
     HealthWorkoutRequest health_workout = 124;
     HealthFollowViewRequest health_follow_view = 125;
+    // The workouts in the trash (#1185): the shelf the page door cannot read, since the trash is the entity's.
+    HealthTrashRequest health_trash = 126;
   }
 }
 
@@ -181,6 +188,10 @@ message AppQueryResponse {
   reserved "locker_access";
   reserved 33;
   reserved "docs_activity";
+  // 1701 was `imports_calendar_owed`: Calendar follows the phone one way and nothing is written
+  // back to it (#1183), so nothing is owed.
+  reserved 1701;
+  reserved "imports_calendar_owed";
   oneof answer {
     AgendaUpcoming agenda_upcoming = 1;
     AgendaDayContext agenda_day_context = 2;
@@ -197,6 +208,7 @@ message AppQueryResponse {
     AgendaTaskSmartCounts agenda_task_smart_counts = 26;
     AgendaTaskDueRows agenda_task_due_rows = 25;
     CalendarDatedReminders calendar_dated_reminders = 29;
+    CalendarTrash calendar_trash = 34;
     // What an event or a task has attached (`agenda.attachments`, #1173).
     AgendaAttachments agenda_attachments = 27;
     DocsDrive docs_drive = 30;
@@ -241,6 +253,7 @@ message AppQueryResponse {
     MoneyRecurring money_recurring = 108;
     MoneySearch money_search = 109;
     MoneyHomeTile money_home_tile = 110;
+    MoneyTrash money_trash = 112;
     // The plan a statement would make, as the manifest's `import-plan` query.
     MoneyImportPlan money_import_plan = 111;
     HealthToday health_today = 120;
@@ -249,6 +262,7 @@ message AppQueryResponse {
     HealthWorkouts health_workouts = 123;
     HealthWorkout health_workout = 124;
     HealthFollowView health_follow_view = 125;
+    HealthTrash health_trash = 126;
     // ---- the shell's own queries (1300-1599, lane H2): `shell.manifest.json` ----
     // `backup-status` (1450-1499 are the backup's).
     ShellBackupStatus shell_backup_status = 1450;
@@ -257,11 +271,56 @@ message AppQueryResponse {
     Holdings holdings = 1540;
     // The shell's own answers (lane I: the followed folders a vault holds).
     ImportsFilesHeld imports_files_held = 1700;
-    // What the phone's calendars are owed (`shell.calendar-owed`, two-way sync).
-    ImportsCalendarOwed imports_calendar_owed = 1701;
+    // The phone stores the vault was following, with the device that last did (#1185):
+    // `shell.followed-stores`, read by the Reconnect screen.
+    FollowedStores followed_stores = 1705;
+    // What the phone says that differs from a followed row (#1183): `shell.phone-differences`.
+    FollowDifferences follow_differences = 1702;
+    // A record's earlier values, a page (#1185): `shell.earlier-versions`, and how many it
+    // holds, `shell.earlier-count`.
+    EarlierVersions earlier_versions = 1703;
+    EarlierCount earlier_count = 1704;
+    // One earlier version, whole (#1185): `shell.earlier-record`, behind the preview.
+    EarlierRecord earlier_record = 1712;
+    // Where one record came from (#1185): `shell.origin-of`.
+    OriginOf origin_of = 1706;
+    // Where the last read of a phone store got to (#1183): `shell.origin-cursor`.
+    OriginCursor origin_cursor = 1707;
+    // The general link (#1185): what an item is linked to, `shell.links`, and the items the
+    // picker offers, `shell.link-candidates`.
+    LinkedItems linked_items = 1710;
+    LinkCandidates link_candidates = 1711;
     // The vault would not let this app read. At a number no query will take.
     AppQueryDenial denied = 15;
   }
+}
+
+// The phone stores a vault follows, as its `origin` rows hold them: the shell query
+// `followed-stores`. A restored vault holds these although the new phone follows nothing yet.
+message FollowedStores {
+  repeated FollowedStore stores = 1;
+}
+
+message FollowedStore {
+  string origin_id = 1;
+  // `contacts`, `calendar`, `files` or `health`.
+  string system = 2;
+  // The shell's own name for the source (`folder:<uuid>` for a folder).
+  string origin_ref = 3;
+  // An account, a calendar, a folder or a store, as the member knows it.
+  string label = 4;
+  // The install that last followed it.
+  string device_id = 5;
+  // What the origin fills: the id of the calendar a phone calendar feeds, the folder a folder
+  // follow feeds; empty when it fills nothing (an account of contacts).
+  string fills = 6;
+}
+
+// The cursor a phone store's origin holds for this install (#1183): the shell query
+// `origin-cursor`. Empty when there is none, the origin is not there, or another install wrote it,
+// which is a complete read.
+message OriginCursor {
+  string cursor = 1;
 }
 
 // A CONSENT DENIAL, the shape every app's payload carries.

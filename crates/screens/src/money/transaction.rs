@@ -1,8 +1,13 @@
 //! ONE TRANSACTION (`money.transaction`): what the bank said never changes; the
 //! category and the name are the member's decisions, layered on top. The page
-//! draws what the core derived and offers four acts: file it, name it, void it,
-//! and take back a transfer. A transfer and a rule are PROPOSED by the app and
+//! draws what the core derived and offers four acts: file it, name it, move it to
+//! the trash, and take back a transfer. A transfer and a rule are PROPOSED by the app and
 //! written only when the member accepts.
+//!
+//! MOVE TO TRASH (#1185) is the member's way to remove a line, and it replaces the final void: it asks
+//! nothing (the status line says what happened with Undo, and the trash restores it for 30 days), the
+//! line leaves every balance, total, recurring charge and search result, and the bank's own words are
+//! untouched. The page stays open on the gone state so the line shows.
 
 use centraid_api_proto::core_v1 as wire;
 use wire::MoneyFlag as Flag;
@@ -11,19 +16,29 @@ use wire::money_transaction_state::Sheet;
 use wire::screen_event::Kind as E;
 use wire::status_chip::Tone;
 
-use super::fold::{self, Phase};
+use super::fold;
 use super::rows;
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
+use crate::kit::attachments::Attachments;
+use crate::kit::earlier;
 use crate::kit::links::{self, Kind, Links, Outcome};
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Page, Reading};
+use crate::kit::share::{self, Share};
+use crate::kit::stale;
+use crate::kit::trash;
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, fill, links as link_words, money as words};
+use crate::strings::{Locale, fill, links as link_words, money as words, shared};
 
 const ACTION_CATEGORY: &str = "category";
 const ACTION_NAME: &str = "name";
 const ACTION_UNLINK: &str = "unlink";
-const ACTION_VOID: &str = "void";
+/// Move the line to the trash (#1185).
+const ACTION_TRASH: &str = "trash";
+/// Hand the line to the OS share sheet as a spreadsheet file (#1185): the shells draw every action
+/// row and send its key, so the row needs no shell code of its own.
+const ACTION_SHARE: &str = "share";
 /// The "With" row (#1173): who the line was with, picked by name.
 const ACTION_WITH: &str = "with";
 const OFFER_TRANSFER: &str = "transfer";
@@ -41,13 +56,23 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     Some(Box::new(Transaction {
         txn_id: args.txn_id.clone(),
         parent: args.parent.clone(),
-        phase: Phase::Loading,
+        page: Page::loading(),
+        gone: false,
         sheet: Sheet::None,
         name_draft: String::new(),
-        confirm_void: false,
-        status: None,
+        rev: None,
+        name_rev: None,
+        category_rev: None,
+        undo: Undo::default(),
         dismissed: Vec::new(),
         links: Links::new(&[Kind::Person]),
+        // A transaction may link to another transaction; the picker leaves this one out.
+        every: Links::new(&Kind::ALL).for_entity(&args.txn_id),
+        linked: None,
+        linked_unread: false,
+        attachments: Attachments::of("money", &args.txn_id),
+        earlier: earlier::Foot::default(),
+        share: Share::default(),
     }))
 }
 
@@ -63,20 +88,45 @@ struct Loaded {
 struct Transaction {
     txn_id: String,
     parent: String,
-    phase: Phase<Loaded>,
+    page: Page<Loaded>,
+    /// The line has no row any more (moved to the trash here, or never on this phone): the page's
+    /// final failure in its own words.
+    gone: bool,
     sheet: Sheet,
     name_draft: String,
-    confirm_void: bool,
-    status: Option<wire::StatusLine>,
+    /// The line's revision when the page was last read, and when the name sheet opened: what a
+    /// rename names as the one it replaces (#1185).
+    rev: Option<i64>,
+    name_rev: Option<i64>,
+    /// The line's revision when the category sheet opened (#1185).
+    category_rev: Option<i64>,
+    /// The status line and what its Undo reverses (the kit's one door).
+    undo: Undo,
     /// Offers the member waved off this sitting: `transfer`, `rule`, `with`.
     dismissed: Vec<String>,
     /// The "With" row's picker and the people it lists.
     links: Links,
+    /// THE "Linked to" SECTION'S PICKER (#1185): what the line can link to, any item but a Locker
+    /// one ("With", above, is people only and says who the line was with).
+    every: Links,
+    /// What the line is linked to, either end (`links::read_linked`). `None` until read, and
+    /// while a read did not land.
+    linked: Option<Vec<wire::LinkedItem>>,
+    /// The read of `linked` was refused or failed: the status line says so, no empty section.
+    linked_unread: bool,
+    /// The photos and files on the line (#1185): the kit's section, read with the page.
+    attachments: Attachments,
+    /// The entry to the line's earlier versions, read with the page (#1185).
+    earlier: earlier::Foot,
+    /// The line handed to the OS share sheet as a spreadsheet file (#1185).
+    share: Share,
 }
 
 impl Transaction {
     fn reload(&mut self, ctx: &Ctx) {
         use wire::app_query_response::Answer;
+        // The revision first: a change between the two reads refuses the next save.
+        self.rev = stale::read_rev(ctx, &self.txn_id);
         let txn = read::read(
             ctx,
             load::money::Transaction {
@@ -92,7 +142,8 @@ impl Transaction {
             _ => None,
         });
         let with = links::read_people(ctx, &self.txn_id);
-        self.phase = match (txn, categories, with) {
+        self.gone = matches!(&txn, Reading::Data(txn) if !txn.found);
+        let reading = match (txn, categories, with) {
             (Reading::Data(txn), Reading::Data(categories), Reading::Data(with)) if txn.found => {
                 let linked: Vec<String> = with.iter().map(|p| p.party_id.clone()).collect();
                 let voided = txn.flags.contains(&(Flag::Void as i32));
@@ -102,21 +153,94 @@ impl Transaction {
                     let people = self.links.people(ctx);
                     links::propose(&[&txn.display_name, &txn.raw], people, &linked).cloned()
                 };
-                Phase::Ready(Loaded {
+                Reading::Data(Loaded {
                     txn,
                     categories,
                     with,
                     with_proposal,
                 })
             }
-            (Reading::Denied(_), _, _) => Phase::Denied,
-            _ => Phase::Failed,
+            (Reading::Denied(denial), _, _) => Reading::Denied(denial),
+            _ => Reading::Failed,
         };
+        if self.gone {
+            // Gone beats a held page: nothing of the line is shown.
+            self.page = Page::Failed;
+        } else {
+            fold::reread(&mut self.page, ctx.locale(), reading, |_| false);
+        }
+        self.read_linked(ctx);
+        if self.page.data().is_some() {
+            self.attachments.reload(ctx);
+        }
+        self.earlier = match self.page.data() {
+            Some(loaded) => {
+                earlier::foot(ctx, super::EARLIER, &self.txn_id, &loaded.txn.display_name)
+            }
+            None => earlier::Foot::default(),
+        };
+    }
+
+    /// What the line is linked to, in both directions. A refused or failed read is said on the
+    /// status line and never drawn as an empty section; a line that was not read has none.
+    fn read_linked(&mut self, ctx: &Ctx) {
+        if self.page.data().is_none() {
+            self.linked = None;
+            self.linked_unread = false;
+            self.every.close();
+            return;
+        }
+        match links::read_linked(ctx, &self.txn_id) {
+            Reading::Data(items) => {
+                self.linked = Some(items);
+                self.linked_unread = false;
+            }
+            Reading::Denied(_) | Reading::Failed => {
+                self.linked = None;
+                self.linked_unread = true;
+                self.every.close();
+            }
+        }
+        self.every.reload(ctx);
+    }
+
+    fn linked_ids(&self) -> Vec<String> {
+        self.linked.as_deref().map(links::ids).unwrap_or_default()
+    }
+
+    /// One tap in the "Linked to" section or its picker. `add-with` and `remove-with` carry rel
+    /// `links` for every kind, a person included, as a link and not as who the line was with.
+    fn linked_event(&mut self, event: &wire::LinkEvent, ctx: &Ctx) {
+        let linked = self.linked_ids();
+        let from = self.txn_id.clone();
+        match self.every.update(event, &linked, ctx) {
+            Outcome::Add { id: to, .. } => self.submit(
+                ctx,
+                act::money::AddWith {
+                    from,
+                    rel: act::money::AddWithRel::Links,
+                    to,
+                    ..Default::default()
+                },
+                words::link_added(ctx.locale()),
+            ),
+            Outcome::Remove { id: to } => self.submit(
+                ctx,
+                act::money::RemoveWith {
+                    from,
+                    rel: act::money::RemoveWithRel::Links,
+                    to,
+                    ..Default::default()
+                },
+                words::link_removed(ctx.locale()),
+            ),
+            Outcome::Moved => {}
+        }
     }
 
     /// The ids of the people the line is with now.
     fn with_ids(&self) -> Vec<String> {
-        self.phase
+        self.page
             .data()
             .map(|loaded| loaded.with.iter().map(|p| p.party_id.clone()).collect())
             .unwrap_or_default()
@@ -170,24 +294,106 @@ impl Transaction {
     /// Submit one write and read again; the verdict is the status line.
     fn submit(&mut self, ctx: &Ctx, request: impl Into<wire::ActRequest>, done: String) {
         let key = kit_act::key(&["money", "txn", &self.txn_id], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        self.status = Some(if settled.committed {
-            fold::done(done)
-        } else {
-            fold::refusal(ctx.locale(), &settled.refusal)
+        self.undo.act(ctx, request, &key, |_| done);
+        self.reload(ctx);
+    }
+
+    /// The line's own name, saved from the sheet. The save names the revision the sheet opened on; a
+    /// line that changed elsewhere since, or went to the trash, is refused, the typed name is kept
+    /// as an earlier version and the page reads the line as it is (#1185).
+    fn rename(&mut self, ctx: &Ctx, text: String) {
+        let locale = ctx.locale();
+        let key = kit_act::key(&["money", "txn", &self.txn_id], kit_act::fresh());
+        let settled = self.undo.act(
+            ctx,
+            act::money::SetDisplayName {
+                transaction_id: self.txn_id.clone(),
+                title: text.clone(),
+                expected_rev: self.name_rev,
+            },
+            &key,
+            words::done_name,
+        );
+        let said = settled.stale().map(|stale| {
+            stale::on_button(
+                ctx,
+                &crate::strings::chat_confirm::noun_transaction(locale),
+                &self.txn_id,
+                stale,
+                vec![("entity.title".to_owned(), text.into())],
+            )
         });
+        self.reload(ctx);
+        if let Some(said) = said {
+            self.undo.refuse(said);
+        }
+    }
+
+    /// The line's category, picked from the sheet. The save names the revision the sheet opened on;
+    /// a line that changed elsewhere since, or went to the trash, is refused, the category picked is
+    /// kept as an earlier version and the page reads the line as it is (#1185).
+    fn categorize(&mut self, ctx: &Ctx, category_id: Option<String>) {
+        let locale = ctx.locale();
+        let key = kit_act::key(&["money", "txn", &self.txn_id], kit_act::fresh());
+        let settled = self.undo.act(
+            ctx,
+            act::money::Categorize {
+                ids: serde_json::json!([self.txn_id]).to_string(),
+                category_id: category_id.clone(),
+                expected_rev: self.category_rev,
+            },
+            &key,
+            words::done_category,
+        );
+        let said = settled.stale().map(|stale| {
+            stale::on_button(
+                ctx,
+                &crate::strings::chat_confirm::noun_transaction(locale),
+                &self.txn_id,
+                stale,
+                vec![("txn.category_id".to_owned(), category_id.into())],
+            )
+        });
+        self.reload(ctx);
+        if let Some(said) = said {
+            self.undo.refuse(said);
+        }
+    }
+
+    /// MOVE TO TRASH: the title the status line names is the line's own, as its page shows it.
+    fn trash_line(&mut self, ctx: &Ctx) {
+        let Some(loaded) = self.page.data() else {
+            return;
+        };
+        let title = if loaded.txn.display_name.is_empty() {
+            loaded.txn.raw.clone()
+        } else {
+            loaded.txn.display_name.clone()
+        };
+        let id = self.txn_id.clone();
+        let key = kit_act::key(&["trash-transaction", &id], kit_act::fresh());
+        self.undo.act(
+            ctx,
+            act::money::TrashTransaction { transaction_id: id },
+            &key,
+            |locale| trash::moved_to_trash(locale, &title),
+        );
         self.reload(ctx);
     }
 
     fn action(&mut self, key: &str, ctx: &Ctx) {
         match key {
-            ACTION_CATEGORY => self.sheet = Sheet::Category,
+            ACTION_CATEGORY => {
+                self.category_rev = self.rev;
+                self.sheet = Sheet::Category;
+            }
             ACTION_NAME => {
                 self.name_draft = self
-                    .phase
+                    .page
                     .data()
                     .map(|l| l.txn.display_name.clone())
                     .unwrap_or_default();
+                self.name_rev = self.rev;
                 self.sheet = Sheet::Name;
             }
             ACTION_UNLINK => self.submit(
@@ -197,7 +403,7 @@ impl Transaction {
                 },
                 words::done_unlinked(ctx.locale()),
             ),
-            ACTION_VOID => self.confirm_void = true,
+            ACTION_TRASH => self.trash_line(ctx),
             ACTION_WITH => {
                 let linked = self.with_ids();
                 let open = wire::LinkEvent {
@@ -212,7 +418,7 @@ impl Transaction {
     }
 
     fn accept(&mut self, key: &str, ctx: &Ctx) {
-        let Some(loaded) = self.phase.data() else {
+        let Some(loaded) = self.page.data() else {
             return;
         };
         let locale = ctx.locale();
@@ -260,26 +466,21 @@ impl Transaction {
         }
     }
 
-    fn event(&mut self, event: wire::MoneyTransactionEvent, ctx: &Ctx) {
-        let locale = ctx.locale();
+    fn event(&mut self, event: wire::MoneyTransactionEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             Some(T::Action(picked)) => self.action(&picked.key, ctx),
             Some(T::Category(picked)) => {
                 self.sheet = Sheet::None;
-                self.submit(
+                self.categorize(
                     ctx,
-                    act::money::Categorize {
-                        ids: serde_json::json!([self.txn_id]).to_string(),
-                        category_id: (!picked.category_id.is_empty()).then_some(picked.category_id),
-                    },
-                    words::done_category(locale),
+                    (!picked.category_id.is_empty()).then_some(picked.category_id),
                 );
             }
             Some(T::NameEdited(edited)) => self.name_draft = edited.text,
             Some(T::NameSaved(_)) => {
                 // A cleared name goes back to the bank's own words.
                 let raw = self
-                    .phase
+                    .page
                     .data()
                     .map(|l| l.txn.raw.clone())
                     .unwrap_or_default();
@@ -289,33 +490,23 @@ impl Transaction {
                 };
                 self.sheet = Sheet::None;
                 if !text.is_empty() {
-                    self.submit(
-                        ctx,
-                        act::money::SetDisplayName {
-                            transaction_id: self.txn_id.clone(),
-                            title: text,
-                        },
-                        words::done_name(locale),
-                    );
+                    self.rename(ctx, text);
                 }
             }
             Some(T::SheetClosed(_)) => self.sheet = Sheet::None,
             Some(T::OfferAccepted(accepted)) => self.accept(&accepted.key, ctx),
             Some(T::OfferDismissed(dismissed)) => self.dismiss(&dismissed.key),
             Some(T::WithLink(link)) => self.link_event(&link, ctx),
-            Some(T::ConfirmAccepted(_)) if self.confirm_void => {
-                self.confirm_void = false;
-                self.submit(
-                    ctx,
-                    act::money::VoidTransaction {
-                        transaction_id: self.txn_id.clone(),
-                    },
-                    words::done_void(locale),
-                );
+            Some(T::Link(link)) => self.linked_event(&link, ctx),
+            Some(T::Attachment(attachment)) => return self.attachments.event(ctx, attachment),
+            Some(T::StatusActed(_)) => {
+                if self.undo.acted(ctx) {
+                    self.reload(ctx);
+                }
             }
-            Some(T::ConfirmDismissed(_)) => self.confirm_void = false,
             _ => {}
         }
+        Vec::new()
     }
 
     fn data(&self, locale: Locale, loaded: &Loaded) -> wire::MoneyTransactionData {
@@ -378,16 +569,6 @@ impl Transaction {
             if let Some(value) = value.as_ref().filter(|v| !v.trim().is_empty()) {
                 facts.push(fact(label, value.clone()));
             }
-        }
-        if let Some(from) = &answer.imported_from {
-            facts.push(fact(
-                words::fact_imported(locale),
-                if from == "ofx" {
-                    words::source_ofx_from(locale)
-                } else {
-                    words::source_csv_from(locale)
-                },
-            ));
         }
         let transfer_offer = answer
             .transfer_proposal
@@ -490,15 +671,20 @@ impl Transaction {
                 false,
             ));
         }
-        if !voided {
-            actions.push(action(
-                ACTION_VOID,
-                words::action_void(locale),
-                "Trash",
-                true,
-                true,
-            ));
-        }
+        actions.push(action(
+            ACTION_SHARE,
+            share::label(locale),
+            share::ICON,
+            true,
+            false,
+        ));
+        actions.push(action(
+            ACTION_TRASH,
+            shared::trash_move(locale),
+            "Trash",
+            true,
+            true,
+        ));
         let mut category_options = vec![fold::choice(
             "",
             &words::no_category(locale),
@@ -529,6 +715,10 @@ impl Transaction {
             // Money out is ink, not red: red is a state. Money in is green.
             amount_tone: if struck { Tone::Seam } else { Tone::Neutral } as i32,
             amount_positive: !struck && answer.amount.as_ref().is_some_and(|a| a.minor > 0),
+            // The "Linked to" section and the attachments are the page's own reads, laid on by
+            // `view`.
+            links: None,
+            attachments: None,
             direction_label: if minor < 0 {
                 words::money_out(locale)
             } else {
@@ -567,7 +757,33 @@ impl Screen for Transaction {
             Some(E::MoneyTransaction(wire::MoneyTransactionEvent {
                 kind: Some(wire::money_transaction_event::Kind::Refreshed(_)),
             })) => self.reload(ctx),
-            Some(E::MoneyTransaction(t)) => self.event(t, ctx),
+            Some(E::MoneyTransaction(wire::MoneyTransactionEvent {
+                kind: Some(T::Action(picked)),
+            })) if picked.key == ACTION_SHARE => return self.share.tap(ctx.locale()),
+            Some(E::MoneyTransaction(t)) => return self.event(t, ctx),
+            // THE SHELL'S ANSWER to the owner check or the share sheet.
+            Some(E::EffectResult(result)) => {
+                let id = self.txn_id.clone();
+                let shared = self.share.result(ctx, &result, |ctx| {
+                    super::export::file(ctx, None, Some(&id))
+                });
+                if !shared.is_empty() || self.share.status().is_some() {
+                    return shared;
+                }
+                // The shell's answer to a pick: the attachments' (an add under way).
+                if let Some(outcome) = &result.outcome {
+                    return self.attachments.result(ctx, outcome).unwrap_or_default();
+                }
+            }
+            Some(E::StatusActed(_)) => {
+                if self.undo.acted(ctx) {
+                    self.reload(ctx);
+                }
+            }
+            Some(E::Left(_)) => {
+                self.undo.clear();
+                return self.share.left();
+            }
             _ => {}
         }
         Vec::new()
@@ -576,35 +792,73 @@ impl Screen for Transaction {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::money_transaction_state::Content;
         let locale = ctx.locale();
-        let content = match &self.phase {
-            Phase::Loading => Content::Loading(wire::Loading { first_load: true }),
-            Phase::Failed => Content::Failure(read::failure(locale)),
-            Phase::Denied => Content::Denied(fold::denied(locale)),
-            Phase::Ready(loaded) => Content::Data(Box::new(self.data(locale, loaded))),
+        let content = if self.gone {
+            None
+        } else {
+            self.page.data().map(|loaded| {
+                let mut data = self.data(locale, loaded);
+                data.attachments = Some(self.attachments.view(locale, ctx.units()));
+                data.links = self.linked.as_ref().map(|linked| {
+                    self.every.section(
+                        locale,
+                        link_words::section_linked(locale),
+                        links::rows(locale, linked),
+                        words::links_empty(locale),
+                    )
+                });
+                Content::Data(Box::new(data))
+            })
+        };
+        // A line that has no row any more is the page's final failure, in its own words and with no
+        // Retry; the status line (Move to trash, with Undo) shows over it.
+        let page = if self.gone {
+            wire::PageState {
+                state: Some(wire::page_state::State::Failed(read::gone(
+                    words::transaction_gone(locale),
+                    String::new(),
+                ))),
+                note: None,
+            }
+        } else {
+            fold::wire_page(&self.page, locale, wire::EmptyState::default)
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::MoneyTransaction(
                 wire::MoneyTransactionState {
                     txn_id: self.txn_id.clone(),
-                    content: Some(content),
-                    confirm: self.confirm_void.then(|| wire::Confirm {
-                        title: words::void_title(locale),
-                        body: words::void_body(locale),
-                        confirm_label: words::void_confirm(locale),
-                        destructive: true,
-                    }),
+                    content,
+                    page: Some(page),
                     sheet: self.sheet as i32,
                     with_picker: Some(self.links.picker(locale, &self.with_ids())),
+                    link_picker: (self.linked.is_some() && self.every.is_open())
+                        .then(|| self.every.picker(locale, &self.linked_ids())),
                     name_draft: self.name_draft.clone(),
                     chrome: Some(fold::chrome(
                         locale,
                         words::transaction_title(locale),
                         &self.parent,
                     )),
-                    status: self.status.clone(),
+                    status: self
+                        .undo
+                        .status()
+                        .or_else(|| self.share.status())
+                        .or_else(|| self.earlier.status(locale))
+                        .or_else(|| {
+                            self.linked_unread.then(|| wire::StatusLine {
+                                sentence: words::links_unread(locale),
+                                action_label: String::new(),
+                                refused: false,
+                            })
+                        }),
+                    earlier: self.earlier.entry.clone(),
+                    origin: self.earlier.origin.clone(),
                 },
             )),
             ..wire::ViewState::default()
         }
     }
 }
+
+#[cfg(test)]
+#[path = "transaction_link_tests.rs"]
+mod link_tests;

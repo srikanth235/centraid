@@ -136,7 +136,29 @@ pub fn drive_data(v: &wire::ViewState) -> &wire::DocsDriveData {
     }
 }
 
+/// The drive's empty state: what the page says when there is nothing to show.
+pub fn drive_empty(v: &wire::ViewState) -> &wire::EmptyState {
+    match drive_state(v)
+        .page
+        .as_ref()
+        .and_then(|page| page.state.as_ref())
+    {
+        Some(wire::page_state::State::Empty(empty)) => empty,
+        other => panic!("the drive is not empty: {other:?}"),
+    }
+}
+
+/// The shelf's titles; an empty shelf (the page's empty state) holds none.
 pub fn titles(v: &wire::ViewState) -> Vec<String> {
+    if matches!(
+        drive_state(v)
+            .page
+            .as_ref()
+            .and_then(|page| page.state.as_ref()),
+        Some(wire::page_state::State::Empty(_))
+    ) {
+        return Vec::new();
+    }
     drive_data(v)
         .rows
         .iter()
@@ -170,13 +192,6 @@ pub fn editor_state(v: &wire::ViewState) -> &wire::DocsEditorState {
     match &v.kind {
         Some(wire::view_state::Kind::DocsEditor(state)) => state,
         other => panic!("not an editor: {other:?}"),
-    }
-}
-
-pub fn versions_state(v: &wire::ViewState) -> &wire::DocsVersionsState {
-    match &v.kind {
-        Some(wire::view_state::Kind::DocsVersions(state)) => state,
-        other => panic!("not a version history: {other:?}"),
     }
 }
 

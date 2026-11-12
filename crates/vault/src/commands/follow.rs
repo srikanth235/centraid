@@ -12,7 +12,14 @@
 //!   never changed it and the new value is written;
 //! - if it differs, the member's value stands;
 //!
-//! and then `source.stated` becomes the new statement. A record that is new is
+//! and then `source.stated` becomes the new statement. A field made of items (a
+//! contact's points, an event's guests, a series' days) follows the same rule **per
+//! item**: an item the member has not changed takes the source's word, including its
+//! removal; one they changed, added or removed stands
+//! ([#1183](https://github.com/srikanth235/centraid/issues/1183)). A field is "edited" only
+//! while the vault's value differs from the statement, so it follows again by itself once
+//! they are equal. [`differences`] reads, per call, where a field differs from what the
+//! source said, and `follow.take_stated` copies the stated value back. A record that is new is
 //! **matched** first, by the system's match key (a name; a title and a start; a
 //! file name; a workout kind and its start) against rows nothing follows yet,
 //! and only then added. What a record gone from a *complete* read does is the
@@ -49,13 +56,15 @@
 //! rows that hang off them (a contact's points, an event's attendees, a
 //! workout's measures) are added by the lane that owns the kind.
 
+use std::collections::BTreeMap;
+
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Map, Value as Json};
 
 use crate::blob;
 use crate::commands::entity::{self, trash_stamp};
-use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
-use crate::commands::{calendar_push, contact_point, container, document, event, workout};
+use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, arrival};
+use crate::commands::{contact_point, container, event, origin_cursor, workout};
 use crate::error::{Result, VaultError};
 use crate::model::{DEFAULT_CALENDAR_ID, Kind};
 
@@ -101,7 +110,32 @@ pub struct Child {
     /// Apply what the source says now, given what it said last (`None`: it has
     /// not spoken for this row before). Returns whether anything changed.
     pub merge: fn(&CommandCtx<'_, '_>, &str, Option<&Json>, &Json) -> Result<bool>,
+    /// The items a canonical value is made of, each under the key that names it across
+    /// statements (a point's kind and reach key, a guest's email, a measure's column), for a
+    /// child whose items the member changes one at a time. `None` for a child that is judged
+    /// whole ([`differences`] then reports the field as one).
+    pub items: Option<Items>,
+    /// Make the rows what the source last stated (`stated`, as stated): the one item named by the
+    /// key, or all of them. The same writes the merge makes, forced. Returns whether anything
+    /// changed.
+    pub take: Take,
+    /// Note, in the statement the source link keeps, what a merge of the child depended on and
+    /// the statement alone cannot say (a guest's person at the time it was merged), so the next
+    /// merge judges the member's changes against what was applied then and not against what is
+    /// true now. Given the statement the child last had, the value now, and whether this pass
+    /// merged the child (an unchanged child keeps what was noted). `None` for a child with
+    /// nothing to note.
+    pub stamp: Option<Stamp>,
 }
+
+/// See [`Child::stamp`].
+pub type Stamp = fn(&Connection, Option<&Json>, &Json, bool) -> Result<Json>;
+
+/// See [`Child::take`].
+pub type Take = fn(&CommandCtx<'_, '_>, &str, Option<&str>, &Json) -> Result<bool>;
+
+/// See [`Child::items`].
+pub type Items = fn(&Json) -> BTreeMap<String, Json>;
 
 /// What a record gone from a complete read does to its row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -200,18 +234,9 @@ pub struct SystemMap {
     /// What a row derives from what the source stated (a rule's support), run
     /// after the fields are written.
     pub settle: Settle,
-    /// What a row keeps of what the source is about to replace (a file's old
-    /// bytes, as a revision), run on a row that exists before its fields are
-    /// written.
-    pub replaced: Replaced,
     /// What a row the source has just ADDED is called, run once after its fields are written
     /// (a statement line takes the payee a rule names; a re-import never renames).
     pub named: Settle,
-    /// Whether a row the member edited, whose record the phone then deleted, keeps its source
-    /// row with `gone_at` set (and the row live) instead of losing it: the mark that says the
-    /// phone unlinked it, so the vault does not hand it back to the phone as a new event
-    /// ([`crate::commands::calendar_push`], C5).
-    pub unlink_mark: bool,
 }
 
 /// See [`SystemMap::shape`].
@@ -219,9 +244,6 @@ pub type Shape = fn(&CommandCtx<'_, '_>, &mut Map<String, Json>) -> std::result:
 
 /// See [`SystemMap::settle`].
 pub type Settle = fn(&CommandCtx<'_, '_>, &str) -> Result<()>;
-
-/// See [`SystemMap::replaced`].
-pub type Replaced = fn(&CommandCtx<'_, '_>, &str, &[(&str, &Json)]) -> Result<()>;
 
 fn as_stated(_: &CommandCtx<'_, '_>, _: &mut Map<String, Json>) -> std::result::Result<(), String> {
     Ok(())
@@ -235,10 +257,6 @@ fn event_shape(
 }
 
 fn nothing_to_settle(_: &CommandCtx<'_, '_>, _: &str) -> Result<()> {
-    Ok(())
-}
-
-fn nothing_replaced(_: &CommandCtx<'_, '_>, _: &str, _: &[(&str, &Json)]) -> Result<()> {
     Ok(())
 }
 
@@ -285,6 +303,18 @@ fn calendar_defaults(
     )])
 }
 
+fn project_defaults(
+    _: &Connection,
+    origin: &OriginRow,
+) -> Result<Vec<(&'static str, rusqlite::types::Value)>> {
+    Ok(origin
+        .fills
+        .clone()
+        .map(|project| ("project_id", project.into()))
+        .into_iter()
+        .collect())
+}
+
 fn folder_defaults(
     _: &Connection,
     origin: &OriginRow,
@@ -326,7 +356,8 @@ fn statement_defaults(
 fn stated_read(connection: &Connection, id: &str, name: &str) -> Result<Json> {
     let stated: Option<String> = connection
         .query_row(
-            "SELECT stated FROM source WHERE entity_id = ?1",
+            "SELECT stated FROM source WHERE entity_id = ?1 AND origin_id IN
+               (SELECT id FROM origin WHERE retired_at IS NULL)",
             [id],
             |row| row.get(0),
         )
@@ -335,6 +366,10 @@ fn stated_read(connection: &Connection, id: &str, name: &str) -> Result<Json> {
         .and_then(|text| serde_json::from_str::<Json>(&text).ok())
         .and_then(|stated| stated.get(name).cloned())
         .unwrap_or(Json::Null))
+}
+
+fn stated_take(_: &CommandCtx<'_, '_>, _: &str, _: Option<&str>, _: &Json) -> Result<bool> {
+    Ok(false)
 }
 
 fn stated_canon(value: &Json) -> Json {
@@ -355,6 +390,9 @@ const STAT: Child = Child {
     read: |connection, id| stated_read(connection, id, "stat"),
     canon: stated_canon,
     merge: stated_merge,
+    items: None,
+    take: stated_take,
+    stamp: None,
 };
 
 /// What a statement said of a line beyond what the model keeps: its memo, its
@@ -364,9 +402,12 @@ const LINE: Child = Child {
     read: |connection, id| stated_read(connection, id, "line"),
     canon: stated_canon,
     merge: stated_merge,
+    items: None,
+    take: stated_take,
+    stamp: None,
 };
 
-/// The five systems the vault follows.
+/// The six systems the vault follows.
 pub const SYSTEMS: &[SystemMap] = &[
     SystemMap {
         system: "contacts",
@@ -382,6 +423,9 @@ pub const SYSTEMS: &[SystemMap] = &[
             read: contact_point::read,
             canon: contact_point::canon,
             merge: contact_point::merge,
+            items: Some(contact_point::items),
+            take: contact_point::take,
+            stamp: None,
         }],
         match_on: &[Match::Title],
         gone: Gone::Trash,
@@ -390,9 +434,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         founds: None,
         shape: as_stated,
         settle: nothing_to_settle,
-        replaced: nothing_replaced,
         named: nothing_to_settle,
-        unlink_mark: false,
     },
     SystemMap {
         system: "calendar",
@@ -420,14 +462,21 @@ pub const SYSTEMS: &[SystemMap] = &[
                 read: event::overrides_read,
                 canon: event::overrides_canon,
                 merge: event::overrides_merge,
+                // Judged whole: a day is not an item the screens name one at a time.
+                items: None,
+                take: event::overrides_take,
+                stamp: None,
             },
             // The guests the phone states: a guest whose email is a person's is that person's
             // `attendee` edge; the rest stay in the statement and are read from it.
             Child {
                 name: "attendees",
-                read: |connection, id| stated_read(connection, id, "attendees"),
+                read: event::attendees_read,
                 canon: event::attendees_canon,
                 merge: event::attendees_merge,
+                items: Some(event::attendees_items),
+                take: event::attendees_take,
+                stamp: Some(event::attendees_stamp),
             },
         ],
         match_on: &[Match::Title, Match::Column("starts")],
@@ -437,9 +486,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         founds: Some(container::follow_calendar),
         shape: event_shape,
         settle: event::settle,
-        replaced: nothing_replaced,
         named: nothing_to_settle,
-        unlink_mark: true,
     },
     SystemMap {
         system: "files",
@@ -458,9 +505,40 @@ pub const SYSTEMS: &[SystemMap] = &[
         founds: None,
         shape: as_stated,
         settle: nothing_to_settle,
-        replaced: document::keep_replaced_by_write,
         named: nothing_to_settle,
-        unlink_mark: false,
+    },
+    // A reminder of the phone's Reminders app (iOS): a task in the list it sat in. The
+    // member's own edit of a field stands; a reminder the phone completes completes the task
+    // (the status and its date are two fields written as one, so the table's own CHECK holds),
+    // and one deleted on the phone goes to the trash if the member never touched the task.
+    SystemMap {
+        system: "phone_reminders",
+        command: "follow.reminders",
+        kind: Kind::Task,
+        fills: Some(Kind::Project),
+        origin: OriginOf::Phone,
+        claims: None,
+        fields: &[
+            "description",
+            "due",
+            "zone",
+            "priority",
+            "rule",
+            "remind_before_min",
+            "url",
+            "status",
+            "done_at",
+        ],
+        fixed: &[],
+        children: &[],
+        match_on: &[Match::Title],
+        gone: Gone::Trash,
+        window: None,
+        defaults: project_defaults,
+        founds: None,
+        shape: as_stated,
+        settle: nothing_to_settle,
+        named: nothing_to_settle,
     },
     // A workout: an activity of a workout kind, its span, and what the store
     // measured. A record states the store's word for the kind and the vault
@@ -483,9 +561,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         founds: None,
         shape: workout::shape,
         settle: workout::settle,
-        replaced: nothing_replaced,
         named: nothing_to_settle,
-        unlink_mark: false,
     },
     // A line of a statement: its title is the bank's words until the member
     // renames it, its day and amount are the bank's and never edited, and the
@@ -507,9 +583,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         founds: None,
         shape: as_stated,
         settle: nothing_to_settle,
-        replaced: nothing_replaced,
         named: super::rule::name_new_line,
-        unlink_mark: false,
     },
 ];
 
@@ -657,6 +731,27 @@ fn upsert_origin(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<OriginRow>
             )
             .optional()?
     };
+    // A RETIRED ORIGIN IS REVIVED, never made again: Stop kept its row, its home (`fills`) and its
+    // sources, so the same `ref` followed again finds all three. Naming a different home than the
+    // retired one filled (the member trashed it, and a new one was made) starts over: the sources
+    // of the old home name documents that are not the new home's.
+    let retired: Option<(Option<String>, bool)> = match &known {
+        Some(id) if !account_origin => connection
+            .query_row(
+                "SELECT fills, retired_at IS NOT NULL FROM origin WHERE id = ?1",
+                [id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?
+            .filter(|(_, retired)| *retired),
+        _ => None,
+    };
+    if let (Some(id), Some((old_home, _))) = (&known, &retired)
+        && fills.is_some()
+        && fills != *old_home
+    {
+        connection.execute("DELETE FROM source WHERE origin_id = ?1", [id])?;
+    }
     let label_was: Option<String> = match &known {
         Some(id) => connection
             .query_row("SELECT label FROM origin WHERE id = ?1", [id], |row| {
@@ -675,8 +770,12 @@ fn upsert_origin(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<OriginRow>
             )?;
         } else {
             connection.execute(
-                "UPDATE origin SET label = ?2, device_id = ?3, fills = COALESCE(?4, fills),
-                        config = COALESCE(?5, config)
+                // A cursor is the word of the install that wrote it: an origin another install takes
+                // over (`device_id` changes) keeps none of the last one's (#1183).
+                "UPDATE origin SET label = ?2, fills = COALESCE(?4, fills),
+                        config = CASE WHEN device_id IS ?3 THEN COALESCE(?5, config)
+                                      ELSE json_remove(COALESCE(?5, config), '$.cursor') END,
+                        device_id = ?3, retired_at = NULL
                   WHERE id = ?1",
                 rusqlite::params![id, label, device, fills, config],
             )?;
@@ -843,8 +942,11 @@ fn write_fields(
     if fields.is_empty() {
         return Ok(());
     }
-    (map.replaced)(ctx, id, fields)?;
     let connection = ctx.connection();
+    // The kind's own columns go in ONE statement: a table's CHECKs judge the row after the
+    // statement, so fields that only hold together (a task's status and the date it was done,
+    // its rule and its due) are never seen half-written.
+    let mut columns: Vec<(&str, rusqlite::types::Value)> = Vec::new();
     for (name, value) in fields {
         if *name == "title" {
             connection.execute(
@@ -852,15 +954,25 @@ fn write_fields(
                 rusqlite::params![id, value.as_str().unwrap_or_default()],
             )?;
         } else {
-            connection.execute(
-                &format!(
-                    "UPDATE {} SET {} = ?2 WHERE id = ?1",
-                    crate::log::quoted(map.kind.host()),
-                    crate::log::quoted(name)
-                ),
-                rusqlite::params![id, to_sql(value)],
-            )?;
+            columns.push((name, to_sql(value)));
         }
+    }
+    if !columns.is_empty() {
+        let sets = columns
+            .iter()
+            .enumerate()
+            .map(|(index, (name, _))| format!("{} = ?{}", crate::log::quoted(name), index + 2))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let mut values: Vec<rusqlite::types::Value> = vec![id.to_owned().into()];
+        values.extend(columns.into_iter().map(|(_, value)| value));
+        connection.execute(
+            &format!(
+                "UPDATE {} SET {sets} WHERE id = ?1",
+                crate::log::quoted(map.kind.host())
+            ),
+            rusqlite::params_from_iter(values),
+        )?;
     }
     (map.settle)(ctx, id)?;
     ctx.touch(id)
@@ -942,6 +1054,28 @@ fn merge_children(
     Ok(changed)
 }
 
+/// The fields of a record as the source link keeps them: each child that notes something
+/// ([`Child::stamp`]) carries its note. `stated` is what the link kept before (`None` for a
+/// record the link is new for).
+fn statement_fields(
+    connection: &Connection,
+    map: &SystemMap,
+    stated: Option<&Json>,
+    fields: &Map<String, Json>,
+) -> Result<Map<String, Json>> {
+    let mut out = fields.clone();
+    for (name, value) in fields {
+        let Some(stamp) = map.child(name).and_then(|child| child.stamp) else {
+            continue;
+        };
+        let before = stated.and_then(|stated| stated.get(name.as_str()));
+        // The same test `merge_children` makes: a child that agrees was not merged.
+        let merged = before.is_none_or(|before| !map.agree(name, Some(before), Some(value)));
+        out.insert(name.clone(), stamp(connection, before, value, merged)?);
+    }
+    Ok(out)
+}
+
 fn link(
     ctx: &CommandCtx<'_, '_>,
     map: &SystemMap,
@@ -967,7 +1101,13 @@ fn link(
             record.device_id,
             entity_id,
             map.kind.as_str(),
-            Json::Object(record.fields.clone()).to_string(),
+            Json::Object(statement_fields(
+                ctx.connection(),
+                map,
+                None,
+                &record.fields
+            )?)
+            .to_string(),
             ctx.now
         ],
     )?;
@@ -1003,7 +1143,8 @@ fn matchable(map: &SystemMap, record: &Record) -> bool {
 /// The first row of this kind that nothing follows and the record's match key
 /// names, never the owner. A row followed only by another phone's id (a vault
 /// restored onto a new phone) is not followed: its source is that phone's, and
-/// the row is the new phone's to re-find.
+/// the row is the new phone's to re-find. A row whose only sources belong to a RETIRED origin is
+/// not followed either (a reconnected folder's new origin re-finds what the old one filled).
 fn match_existing(
     connection: &Connection,
     map: &SystemMap,
@@ -1034,10 +1175,20 @@ fn match_existing(
         "SELECT e.id FROM entity e JOIN {} k ON k.id = e.id
           WHERE e.kind = ?1 AND e.deleted_at IS NULL
             AND NOT EXISTS (SELECT 1 FROM source s WHERE s.entity_id = e.id
+                              AND s.system NOT IN ({})
+                              AND s.stated <> '{{}}'
+                              AND s.origin_id IN (SELECT id FROM origin WHERE retired_at IS NULL)
                               AND (?2 IS NULL OR s.device_id IS NULL OR s.device_id = ?2))
             AND {}
           ORDER BY e.created_at, e.id",
         crate::log::quoted(map.kind.host()),
+        // An item that only arrived once (a vCard, a Markdown file) is nobody's to follow
+        // yet: the store that now states it takes the row over.
+        arrival::SYSTEMS
+            .iter()
+            .map(|(system, _)| format!("'{system}'"))
+            .collect::<Vec<_>>()
+            .join(","),
         clauses.join(" AND ")
     );
     let candidates = connection
@@ -1120,6 +1271,155 @@ fn edited(connection: &Connection, map: &SystemMap, id: &str, stated: &Json) -> 
         .any(|(name, said)| !map.agree(name, now.get(name.as_str()), Some(said))))
 }
 
+// ---------------------------------------------------------------------------
+// What the phone says that differs
+// ---------------------------------------------------------------------------
+
+/// One item of a multi-valued field where the vault and the source disagree.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ItemDifference {
+    /// The key that names the item across statements: `kind:reach-key` for a contact point,
+    /// the email (else `name:<name>`) for a guest, the column for a workout measure.
+    pub key: String,
+    /// The item as the source states it; `None` when the source never stated it (the member
+    /// added it).
+    pub stated: Option<Json>,
+    /// The item as the vault holds it; `None` when the vault no longer holds it.
+    pub held: Option<Json>,
+}
+
+/// A field whose held value differs from what the linked source last stated.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Difference {
+    /// The field's stable name: `title`, a column of the kind's own row (`birthday`,
+    /// `starts`, ...), or a child (`points`, `attendees`, `overrides`, `workout`).
+    pub field: String,
+    /// The value the source last stated (a child in its canonical form).
+    pub stated: Json,
+    /// The value the vault holds.
+    pub held: Json,
+    /// For a field made of items, those that differ, in key order; empty for a field judged
+    /// whole.
+    pub items: Vec<ItemDifference>,
+}
+
+/// The system a `follow.<system>` pass command is for, `None` for any other command: what the
+/// history reads to say a change came from a phone's store and not from the member.
+pub(crate) fn system_of(command: &str) -> Option<&'static str> {
+    SYSTEMS
+        .iter()
+        .find(|map| map.command == command)
+        .map(|map| map.system)
+}
+
+/// The system and statement of the live source link of an entity: the entity is live (not in the
+/// trash), its source link is still there, and it names a system the vault follows.
+pub(crate) fn live_link(
+    connection: &Connection,
+    id: &str,
+) -> Result<Option<(&'static SystemMap, Json)>> {
+    let row: Option<(String, String)> = connection
+        .query_row(
+            "SELECT s.system, s.stated FROM source s JOIN entity e ON e.id = s.entity_id
+              WHERE s.entity_id = ?1 AND s.gone_at IS NULL AND e.deleted_at IS NULL
+                AND s.origin_id IN (SELECT id FROM origin WHERE retired_at IS NULL)
+              LIMIT 1",
+            [id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+    Ok(row.and_then(|(system, stated)| {
+        let map = SYSTEMS.iter().find(|map| map.system == system)?;
+        Some((map, serde_json::from_str(&stated).ok()?))
+    }))
+}
+
+/// The fields a followed entity holds differently from what its source last stated, derived on
+/// each call from `source.stated` and the held rows (nothing is stored): the field is "edited"
+/// exactly while the two differ, and follows again by itself once they are equal.
+///
+/// Only a field the source stated is reported (one it never stated has nothing to compare), and
+/// only for an entity that is live with a live source link: a tombstone, a trashed row and one
+/// nothing follows have no differences. A field that a system writes
+/// once and never after (`fixed`) is not reported, for the source will not change it either.
+/// A series' `overrides` are reported whole, not day by day: a day's change is not a thing the
+/// screens name one at a time.
+///
+/// # Errors
+///
+/// A database error.
+pub fn differences(connection: &Connection, id: &str) -> Result<Vec<Difference>> {
+    let Some((map, stated)) = live_link(connection, id)? else {
+        return Ok(Vec::new());
+    };
+    let now = current(connection, map, id)?;
+    let names = std::iter::once("title")
+        .chain(map.fields.iter().copied())
+        .chain(map.children.iter().map(|child| child.name))
+        .filter(|name| !map.fixed.contains(name));
+    let mut out = Vec::new();
+    for name in names {
+        let Some(said) = stated.get(name) else {
+            continue;
+        };
+        let held = now.get(name);
+        if map.agree(name, held, Some(said)) {
+            continue;
+        }
+        let Some(child) = map.child(name) else {
+            out.push(Difference {
+                field: name.to_owned(),
+                stated: said.clone(),
+                held: held.cloned().unwrap_or(Json::Null),
+                items: Vec::new(),
+            });
+            continue;
+        };
+        let (said, held) = (
+            (child.canon)(said),
+            (child.canon)(held.unwrap_or(&Json::Null)),
+        );
+        let items = child.items.map_or_else(Vec::new, |items| {
+            let (stated_items, held_items) = (items(&said), items(&held));
+            stated_items
+                .keys()
+                .chain(held_items.keys())
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .filter(|key| stated_items.get(*key) != held_items.get(*key))
+                .map(|key| ItemDifference {
+                    key: key.clone(),
+                    stated: stated_items.get(key).cloned(),
+                    held: held_items.get(key).cloned(),
+                })
+                .collect()
+        });
+        out.push(Difference {
+            field: name.to_owned(),
+            stated: said,
+            held,
+            items,
+        });
+    }
+    Ok(out)
+}
+
+/// A pass read a record that changes nothing about its source link. `seen_at` is when the link
+/// last changed (it was made, re-pointed or re-stated), and the only readers that need more are
+/// a statement's: Money's "last import" is the newest line a statement spoke of, so an import of
+/// the same statement again still dates it. A phone store's pass is not an event anyone reads, so
+/// an unchanged record there writes nothing (`match_tombstone` only orders by it, with the id
+/// breaking ties).
+fn spoke_of(ctx: &CommandCtx<'_, '_>, map: &SystemMap, source_id: &str) -> Result<()> {
+    if map.system == "statement" {
+        ctx.connection().execute(
+            "UPDATE source SET seen_at = ?2 WHERE id = ?1",
+            [source_id, &ctx.now],
+        )?;
+    }
+    Ok(())
+}
+
 fn merge_record(
     ctx: &CommandCtx<'_, '_>,
     map: &SystemMap,
@@ -1176,10 +1476,7 @@ fn merge_record(
     };
     // A tombstone: the row was purged, and the source never takes another.
     let Some(entity_id) = entity_id else {
-        connection.execute(
-            "UPDATE source SET seen_at = ?2 WHERE id = ?1",
-            [&source_id, &ctx.now],
-        )?;
+        spoke_of(ctx, map, &source_id)?;
         tally.unchanged += 1;
         return Ok(());
     };
@@ -1190,10 +1487,7 @@ fn merge_record(
         // the member made stands, and the statement is left where it was so a
         // restore finds a row that still compares as untouched.
         if gone_at != held.deleted_at || edited(connection, map, &entity_id, &stated)? {
-            connection.execute(
-                "UPDATE source SET seen_at = ?2 WHERE id = ?1",
-                [&source_id, &ctx.now],
-            )?;
+            spoke_of(ctx, map, &source_id)?;
             tally.unchanged += 1;
             return Ok(());
         }
@@ -1219,7 +1513,8 @@ fn merge_record(
     write_fields(ctx, map, &entity_id, &writes)?;
     let rows_changed = merge_children(ctx, map, &entity_id, Some(&stated), &record.fields)?;
     let mut statement = stated.as_object().cloned().unwrap_or_default();
-    for (name, value) in &record.fields {
+    let fields = statement_fields(connection, map, Some(&stated), &record.fields)?;
+    for (name, value) in &fields {
         // A field written once and never after keeps the source's first words:
         // a statement line's payee is the bank's, whatever a later import (its
         // rules, the member's rename) calls it.
@@ -1228,10 +1523,17 @@ fn merge_record(
         }
         statement.insert(name.clone(), value.clone());
     }
-    connection.execute(
-        "UPDATE source SET stated = ?2, seen_at = ?3, gone_at = NULL WHERE id = ?1",
-        rusqlite::params![source_id, Json::Object(statement).to_string(), ctx.now],
-    )?;
+    // A record that says what it said, on a link that is not marked gone, changes nothing:
+    // one comparison and no write.
+    let statement = Json::Object(statement);
+    if statement != stated || gone_at.is_some() {
+        connection.execute(
+            "UPDATE source SET stated = ?2, seen_at = ?3, gone_at = NULL WHERE id = ?1",
+            rusqlite::params![source_id, statement.to_string(), ctx.now],
+        )?;
+    } else {
+        spoke_of(ctx, map, &source_id)?;
+    }
     if writes.is_empty() && !rows_changed {
         tally.unchanged += 1;
     } else {
@@ -1247,7 +1549,6 @@ struct Followed {
     device_id: Option<String>,
     entity_id: Option<String>,
     stated: Json,
-    gone_at: Option<String>,
 }
 
 /// Whether a row is dated before the read began, so the read could not have held
@@ -1290,7 +1591,7 @@ fn settle_absent(
     let connection = ctx.connection();
     let rows: Vec<Followed> = connection
         .prepare(
-            "SELECT id, external_id, device_id, entity_id, stated, gone_at FROM source
+            "SELECT id, external_id, device_id, entity_id, stated FROM source
               WHERE origin_id = ?1",
         )?
         .query_map([&origin.id], |row| {
@@ -1301,21 +1602,9 @@ fn settle_absent(
                 device_id: row.get(2)?,
                 entity_id: row.get(3)?,
                 stated: serde_json::from_str(&stated).unwrap_or(Json::Null),
-                gone_at: row.get(5)?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?;
-    // A row the phone unlinked (marked, still live) is nobody's record any more.
-    let unlinked = |row: &Followed| {
-        map.unlink_mark
-            && row.gone_at.is_some()
-            && row.entity_id.as_deref().is_some_and(|id| {
-                entity::find(connection, id)
-                    .ok()
-                    .flatten()
-                    .is_some_and(|held| held.deleted_at.is_none())
-            })
-    };
     let absent = |row: &Followed| {
         !seen.iter().any(|(seen_id, seen_device)| {
             *seen_id == row.external_id
@@ -1333,7 +1622,6 @@ fn settle_absent(
                 continue;
             };
             if other_phone(row)
-                || unlinked(row)
                 || before_window(connection, map, entity_id, since)?
                 || entity::require(connection, entity_id)?.deleted_at.is_some()
             {
@@ -1348,7 +1636,7 @@ fn settle_absent(
         }
     }
 
-    for row in rows.iter().filter(|row| absent(row) && !unlinked(row)) {
+    for row in rows.iter().filter(|row| absent(row)) {
         let Some(entity_id) = &row.entity_id else {
             // A tombstone whose record is gone is forgotten; the table does not
             // grow with every contact the member ever purged. A record dated
@@ -1374,14 +1662,7 @@ fn settle_absent(
         }
         let held = entity::require(connection, entity_id)?;
         if map.gone == Gone::Forget || edited(connection, map, entity_id, &row.stated)? {
-            if map.unlink_mark && held.deleted_at.is_none() {
-                connection.execute(
-                    "UPDATE source SET gone_at = ?2 WHERE id = ?1",
-                    [&row.id, &ctx.now],
-                )?;
-            } else {
-                connection.execute("DELETE FROM source WHERE id = ?1", [&row.id])?;
-            }
+            connection.execute("DELETE FROM source WHERE id = ?1", [&row.id])?;
             tally.forgotten += 1;
         } else if held.deleted_at.is_none() {
             let stamp = trash_stamp(ctx)?;
@@ -1397,9 +1678,76 @@ fn settle_absent(
     Ok(())
 }
 
+/// The records the store says were deleted (`gone`, a delta's word for what a complete read finds
+/// absent): each row is kept and its source forgotten, the same end a complete read gives a record
+/// of a system that keeps what the phone loses. Only this phone's: another phone's source is its own.
+fn forget_gone(ctx: &CommandCtx<'_, '_>, origin: &OriginRow, tally: &mut Tally) -> Result<()> {
+    let ids = ctx.input.get("gone").and_then(Json::as_array);
+    for id in ids.into_iter().flatten().filter_map(Json::as_str) {
+        tally.forgotten += ctx.connection().execute(
+            "DELETE FROM source WHERE origin_id = ?1 AND external_id = ?2
+                AND ifnull(device_id, '') = ?3 AND entity_id IS NOT NULL",
+            rusqlite::params![origin.id, id, origin.device.as_deref().unwrap_or_default()],
+        )?;
+    }
+    Ok(())
+}
+
+/// A followed calendar the member trashed stays trashed: a pass is not a restore, and an event the
+/// phone states into it now goes to the trash with it, under the calendar's own stamp, so one
+/// restore of the calendar brings back exactly what went with it.
+fn keep_in_a_trashed_home(ctx: &CommandCtx<'_, '_>, origin: &OriginRow) -> Result<()> {
+    let Some(home) = origin.fills.as_deref() else {
+        return Ok(());
+    };
+    let connection = ctx.connection();
+    let stamp: Option<(String, Option<String>)> = connection
+        .query_row(
+            "SELECT deleted_at, purge_at FROM entity WHERE id = ?1 AND kind = 'calendar'
+                AND deleted_at IS NOT NULL",
+            [home],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+    let Some((deleted_at, purge_at)) = stamp else {
+        return Ok(());
+    };
+    let arrivals: Vec<String> = connection
+        .prepare(
+            "SELECT ev.id FROM event ev JOIN entity en ON en.id = ev.id
+              JOIN source s ON s.entity_id = ev.id
+              WHERE ev.calendar_id = ?1 AND s.origin_id = ?2 AND en.deleted_at IS NULL",
+        )?
+        .query_map([home, origin.id.as_str()], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    for id in arrivals {
+        connection.execute(
+            "UPDATE entity SET deleted_at = ?2, purge_at = ?3 WHERE id = ?1",
+            rusqlite::params![id, deleted_at, purge_at],
+        )?;
+        ctx.touch(&id)?;
+    }
+    Ok(())
+}
+
 /// Apply one batch of records from a system.
 pub fn apply(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<serde_json::Value> {
     let origin = upsert_origin(ctx, map)?;
+    // THE STORE'S CURSOR RIDES WITH THE RECORDS IT COVERS (#1183): one commit.
+    if let Some(cursor) = ctx
+        .input
+        .get("origin")
+        .and_then(|origin| origin.get("cursor"))
+        .and_then(Json::as_str)
+    {
+        origin_cursor::advance(
+            ctx,
+            map.system,
+            ctx.input["origin"]["ref"].as_str().unwrap_or_default(),
+            origin.device.as_deref().unwrap_or_default(),
+            cursor,
+        )?;
+    }
     let (records, refused) = records_of(ctx, map)?;
     let mut tally = Tally {
         refused: refused.len(),
@@ -1413,6 +1761,8 @@ pub fn apply(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<serde_json::Va
         merge_record(ctx, map, &origin, record, &mut tally)?;
         seen.push((record.external_id.clone(), record.device_id.clone()));
     }
+    keep_in_a_trashed_home(ctx, &origin)?;
+    forget_gone(ctx, &origin, &mut tally)?;
     let complete = ctx
         .input
         .get("complete")
@@ -1494,6 +1844,24 @@ fn pre_records(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
             return Ok(Some(format!("the origin needs a `{key}`")));
         }
     }
+    let map = map_of(ctx)?;
+    if origin.get("cursor").is_some()
+        && (map.origin != OriginOf::Phone
+            || origin
+                .get("device_id")
+                .and_then(Json::as_str)
+                .is_none_or(|device| device.trim().is_empty()))
+    {
+        return Ok(Some(
+            "a cursor is a phone store's, with the install that read it".to_owned(),
+        ));
+    }
+    if ctx.input.get("gone").is_some() && map.gone != Gone::Forget {
+        return Ok(Some(format!(
+            "`{}` forgets no deleted record: its rows follow a complete read",
+            map.system
+        )));
+    }
     Ok(None)
 }
 
@@ -1517,7 +1885,9 @@ const SCHEMA: &str = r#"{
         "fills": { "type": ["string", "null"] },
         "color": { "type": ["string", "null"], "maxLength": 64,
           "description": "The colour the phone paints the store with, as the design wheel names it." },
-        "config": { "type": ["object", "null"] }
+        "config": { "type": ["object", "null"] },
+        "cursor": { "type": "string", "minLength": 1, "maxLength": 4096,
+          "description": "Where this read of the store got to: it moves in this commit, as the install named by device_id read it (a phone store's, never an account's)." }
       }
     },
     "records": {
@@ -1536,7 +1906,9 @@ const SCHEMA: &str = r#"{
       }
     },
     "complete": { "type": "boolean" },
-    "since": { "type": "string" }
+    "since": { "type": "string" },
+    "gone": { "type": "array", "items": { "type": "string" },
+      "description": "The source ids the store says were deleted since the cursor (a delta's, in place of a complete read): the row is kept and its source forgotten. Only for a system whose gone rows are kept." }
   }
 }"#;
 
@@ -1545,7 +1917,7 @@ const STOP_SCHEMA: &str = r#"{
   "required": ["system", "ref"],
   "additionalProperties": false,
   "properties": {
-    "system": { "type": "string", "enum": ["contacts", "calendar", "files", "health", "statement"] },
+    "system": { "type": "string", "enum": ["contacts", "calendar", "files", "health", "statement", "phone_reminders"] },
     "ref": { "type": "string", "minLength": 1 }
   }
 }"#;
@@ -1557,15 +1929,19 @@ fn pre_stop(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     }))
 }
 
-/// Stop following one origin: the sources that name its rows are forgotten and
-/// the origin is retired. **Every row stays** and is the member's own from now
-/// on; nothing is trashed. Stopping what is not followed is nothing.
+/// Stop following one origin: it is RETIRED, not deleted. **Every row stays** and is the member's own
+/// from now on (nothing is trashed, and a followed row's "Phone says" lines go), and the origin keeps
+/// its home (`fills`) and its sources, so following the same `ref` again finds both: no second
+/// calendar, folder or project, and no record added twice. Its cursor goes, so a followed-again
+/// store starts with a complete read. Stopping what is not followed (never followed, or already
+/// retired) is nothing. A reconnected folder's NEW origin finds the rows the retired one filled by
+/// the record's match key, as it finds any row nothing follows, and takes their sources over.
 fn stop(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let (system, reference) = (ctx.required_str("system")?, ctx.required_str("ref")?);
     let connection = ctx.connection();
     let origin: Option<String> = connection
         .query_row(
-            "SELECT id FROM origin WHERE system = ?1 AND ref = ?2",
+            "SELECT id FROM origin WHERE system = ?1 AND ref = ?2 AND retired_at IS NULL",
             [system, reference],
             |row| row.get(0),
         )
@@ -1573,9 +1949,94 @@ fn stop(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let Some(origin) = origin else {
         return Ok(serde_json::json!({ "stopped": false, "forgotten": 0 }));
     };
-    let forgotten = connection.execute("DELETE FROM source WHERE origin_id = ?1", [&origin])?;
-    connection.execute("DELETE FROM origin WHERE id = ?1", [&origin])?;
-    Ok(serde_json::json!({ "stopped": true, "forgotten": forgotten }))
+    connection.execute(
+        "UPDATE origin SET retired_at = ?2, config = json_remove(COALESCE(config, '{}'), '$.cursor')
+          WHERE id = ?1",
+        rusqlite::params![origin, ctx.now],
+    )?;
+    Ok(serde_json::json!({ "stopped": true, "forgotten": 0 }))
+}
+
+const TAKE_SCHEMA: &str = r#"{
+  "type": "object",
+  "required": ["entity", "field"],
+  "additionalProperties": false,
+  "properties": {
+    "entity": { "type": "string", "minLength": 1 },
+    "field": { "type": "string", "minLength": 1,
+      "description": "A name `follow::differences` reports: `title`, a column, or a child such as `points`." },
+    "item_key": { "type": "string", "minLength": 1,
+      "description": "For a field made of items, the one item to take (a key `follow::differences` reports); leave out for the whole field." }
+  }
+}"#;
+
+fn pre_take(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let (id, field) = (ctx.required_str("entity")?, ctx.required_str("field")?);
+    let connection = ctx.connection();
+    let Some((map, stated)) = live_link(connection, id)? else {
+        return Ok(Some(
+            "that is not following anything on the phone, so there is nothing to take".to_owned(),
+        ));
+    };
+    if !map.states(field) || map.fixed.contains(&field) || stated.get(field).is_none() {
+        return Ok(Some(format!(
+            "the phone has never said what its {field} should be"
+        )));
+    }
+    if let Some(item) = ctx.optional_str("item_key") {
+        let Some(items) = map.child(field).and_then(|child| child.items) else {
+            return Ok(Some(format!(
+                "the {field} is taken as a whole, not item by item"
+            )));
+        };
+        let child = map.child(field).ok_or_else(|| VaultError::Invariant {
+            context: "a field with items is a child".to_owned(),
+        })?;
+        let held = (child.read)(connection, id)?;
+        let known = |value: &Json| items(&(child.canon)(value)).contains_key(item);
+        if !known(&held) && !known(&stated[field]) {
+            return Ok(Some(format!("there is no `{item}` in the {field}")));
+        }
+    }
+    if field == "blob" {
+        let held: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM blob WHERE hash = ?1",
+            [stated["blob"].as_str().unwrap_or_default()],
+            |row| row.get(0),
+        )?;
+        if held == 0 {
+            return Ok(Some(
+                "the file the phone last stated is no longer held".to_owned(),
+            ));
+        }
+    }
+    Ok(None)
+}
+
+/// Take what the source last stated for a field the member changed: the held field (or one held
+/// item) becomes the stated value through the same writes the merge makes, as an ordinary edit. The
+/// field then agrees with the statement again, so it is no longer reported and the next pass
+/// treats it as untouched. A field that already agrees is left alone.
+fn take_stated(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let (id, field) = (ctx.required_str("entity")?, ctx.required_str("field")?);
+    let connection = ctx.connection();
+    let (map, stated) = live_link(connection, id)?.ok_or_else(|| VaultError::Invariant {
+        context: "a take names a live source link".to_owned(),
+    })?;
+    let said = stated.get(field).cloned().unwrap_or(Json::Null);
+    let changed = if let Some(child) = map.child(field) {
+        let changed = (child.take)(ctx, id, ctx.optional_str("item_key"), &said)?;
+        if changed {
+            ctx.touch(id)?;
+        }
+        changed
+    } else if map.agree(field, current(connection, map, id)?.get(field), Some(&said)) {
+        false
+    } else {
+        write_fields(ctx, map, id, &[(field, &said)])?;
+        true
+    };
+    Ok(serde_json::json!({ "id": id, "field": field, "changed": changed }))
 }
 
 #[must_use]
@@ -1607,6 +2068,25 @@ pub fn definitions() -> Vec<CommandDefinition> {
         }],
         stop,
     ));
-    definitions.extend(calendar_push::definitions());
+    definitions.push(CommandDefinition::plain(
+        "follow.take_stated",
+        "follow",
+        TAKE_SCHEMA,
+        Idempotency::Idempotent,
+        &[CommandCondition {
+            predicate: "field_is_one_the_phone_stated_of_a_followed_row",
+            check: pre_take,
+        }],
+        take_stated,
+    ));
+    // Where a read of a phone store got to, moved with no record riding along (#1183).
+    definitions.push(CommandDefinition::plain(
+        "follow.advance_cursor",
+        "follow",
+        origin_cursor::SCHEMA,
+        Idempotency::Idempotent,
+        &[],
+        origin_cursor::advance_cursor,
+    ));
     definitions
 }

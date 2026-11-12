@@ -35,7 +35,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use centraid_apps_kit::error::{KitError, KitResult};
-use centraid_apps_kit::graph;
+use centraid_apps_kit::graph::{self, GraphSource};
 use centraid_apps_kit::page::PageRequest;
 use centraid_apps_kit::reads::{JOIN_FAN_OUT, PageDoor, Read, in_list, read_pages, read_window};
 use centraid_apps_kit::row::{Row, integer_or_zero, text_of};
@@ -183,6 +183,8 @@ pub struct SearchRow {
     pub notebook_names: Vec<String>,
     pub attachments: Vec<Attachment>,
     pub snippet: String,
+    /// The words matched only in an earlier version of the note (#1185).
+    pub in_earlier_version: bool,
 }
 
 /// What `search` answers.
@@ -545,25 +547,13 @@ fn links_of(
     BTreeMap<String, Vec<ReferenceEntry>>,
     BTreeMap<String, Vec<BacklinkEntry>>,
 )> {
-    let links = Some(("rel = ?", vec![PageBindValue::Text("links".to_owned())]));
-    let out = Read {
-        name: "notes.library.links",
-        table: "edge",
-        select: "from_id, to_id, anchor",
-        order: ("from_id", "to_id"),
-        column: "from_id",
-    }
-    .of(door, ids, links.clone())?;
-    let back = Read {
-        name: "notes.library.backlinks",
-        table: "edge",
-        select: "from_id, to_id",
-        order: ("to_id", "from_id"),
-        column: "to_id",
-    }
-    .of(door, ids, links)?;
-    let mut others: Vec<String> = texts(&out, "to_id");
-    others.extend(texts(&back, "from_id"));
+    // THE GRAPH'S OWN READER: the `links` edges that start at the notes and the ones that end at
+    // them, planned by the catalogue and read through this door.
+    let source = graph::DoorSource::new(door, JOIN_FAN_OUT);
+    let out = source.edges(graph::End::From, ids, &["links"])?;
+    let back = source.edges(graph::End::To, ids, &["links"])?;
+    let mut others: Vec<String> = out.iter().map(|edge| edge.to.clone()).collect();
+    others.extend(back.iter().map(|edge| edge.from.clone()));
     let cards = cards::resolve(door, &others)?;
     let card = |id: &str| {
         cards
@@ -571,23 +561,34 @@ fn links_of(
             .cloned()
             .unwrap_or_else(|| RefCard::missing(id))
     };
+    // A Locker item is seen only inside Locker (owner ruling D11): it starts links to notes, and
+    // is never named here, in either direction.
+    let locker = |id: &str| card(id).kind == "locker_item";
     let mut references: BTreeMap<String, Vec<ReferenceEntry>> = BTreeMap::new();
-    for row in &out {
-        if let (Some(from), Some(to)) = (text_of(row, "from_id"), text_of(row, "to_id")) {
-            references.entry(from).or_default().push(ReferenceEntry {
-                // An unreadable anchor is just an unanchored reference.
-                selector: text_of(row, "anchor").and_then(|json| serde_json::from_str(&json).ok()),
-                card: card(&to),
-            });
+    for edge in &out {
+        if !locker(&edge.to) {
+            references
+                .entry(edge.from.clone())
+                .or_default()
+                .push(ReferenceEntry {
+                    // An unreadable anchor is just an unanchored reference.
+                    selector: edge
+                        .anchor
+                        .as_deref()
+                        .and_then(|json| serde_json::from_str(json).ok()),
+                    card: card(&edge.to),
+                });
         }
     }
     let mut backlinks: BTreeMap<String, Vec<BacklinkEntry>> = BTreeMap::new();
-    for row in &back {
-        if let (Some(from), Some(to)) = (text_of(row, "from_id"), text_of(row, "to_id")) {
+    for edge in &back {
+        if !locker(&edge.from) {
             backlinks
-                .entry(to)
+                .entry(edge.to.clone())
                 .or_default()
-                .push(BacklinkEntry { card: card(&from) });
+                .push(BacklinkEntry {
+                    card: card(&edge.from),
+                });
         }
     }
     Ok((references, backlinks))
@@ -891,12 +892,18 @@ fn search_body(
         return Ok(SearchData::default());
     }
     // VAULT ORDER IS RANK ORDER (best match first) — keep it.
-    let ranked: Vec<(String, String)> = page
+    let ranked: Vec<(String, String, bool)> = page
         .rows
         .iter()
-        .map(|target| (target.id.clone(), target.snippet.clone()))
+        .map(|target| {
+            (
+                target.id.clone(),
+                target.snippet.clone(),
+                target.in_earlier_version,
+            )
+        })
         .collect();
-    let hit_ids: Vec<String> = ranked.iter().map(|(id, _)| id.clone()).collect();
+    let hit_ids: Vec<String> = ranked.iter().map(|(id, _, _)| id.clone()).collect();
     let notes = note_rows(door, &hit_ids)?;
     let pinned = pinned_ids(door)?;
     let books = notebooks(door)?;
@@ -904,7 +911,7 @@ fn search_body(
     Ok(SearchData {
         notes: ranked
             .into_iter()
-            .filter_map(|(id, snippet)| {
+            .filter_map(|(id, snippet, in_earlier_version)| {
                 let note = notes.get(&id)?;
                 let (notebook_ids, notebook_names) = notebook_names(&books, note);
                 Some(SearchRow {
@@ -919,6 +926,7 @@ fn search_body(
                     notebook_names,
                     attachments: attachments.remove(&id).unwrap_or_default(),
                     snippet,
+                    in_earlier_version,
                     note_id: id,
                 })
             })
@@ -964,24 +972,61 @@ fn history_body(door: &dyn PageDoor, note_id: &str) -> KitResult<HistoryData> {
         .iter()
         .map(|row| text_of(row, "at").unwrap_or_default())
         .collect();
+    // A revision is also kept when only the title, the notebook or the pin
+    // moved (the one history at the commit door, #1185); this screen lists the
+    // WORDS, so a revision whose words match the version newer than it (or that
+    // kept none, because they did not change) adds nothing. The newest of a run of equal words stays, dated by the run's
+    // oldest member (the stamp says when those words became the note's).
+    let mut newer = note.body.clone();
+    let words_changed: Vec<bool> = page
+        .rows
+        .iter()
+        .map(|row| {
+            // A revision that kept no words (the commit left them as they were) held the
+            // words of the version newer than it.
+            let Some(body) = text_of(row, "body") else {
+                return false;
+            };
+            let changed = body != newer;
+            newer = body;
+            changed
+        })
+        .collect();
+    let became_current = |index: usize| {
+        let mut oldest = index;
+        while words_changed.get(oldest + 1) == Some(&false) {
+            oldest += 1;
+        }
+        stamps
+            .get(oldest + 1)
+            .cloned()
+            .unwrap_or_else(|| note.created_at.clone())
+    };
+    // The current words became the note's when the newest kept version was
+    // replaced.
+    let current_since = page
+        .rows
+        .iter()
+        .zip(&words_changed)
+        .take(HISTORY_ROWS)
+        .zip(&stamps)
+        .find_map(|((_, changed), stamp)| changed.then(|| stamp.clone()))
+        .unwrap_or_else(|| note.created_at.clone());
     let mut versions = vec![Version {
         seq: 0,
-        body: note.body,
+        body: note.body.clone(),
         current: true,
-        asserted_at: stamps
-            .first()
-            .cloned()
-            .unwrap_or_else(|| note.created_at.clone()),
+        asserted_at: current_since,
     }];
     for (index, row) in page.rows.iter().take(HISTORY_ROWS).enumerate() {
+        if !words_changed[index] {
+            continue;
+        }
         versions.push(Version {
             seq: integer_or_zero(row, "seq"),
             body: text_of(row, "body").unwrap_or_default(),
             current: false,
-            asserted_at: stamps
-                .get(index + 1)
-                .cloned()
-                .unwrap_or_else(|| note.created_at.clone()),
+            asserted_at: became_current(index),
         });
     }
     Ok(HistoryData {
@@ -1207,13 +1252,19 @@ pub fn load_link_targets(
     };
     let mut targets: Vec<Target> = Vec::new();
     // ONE QUERY PER KIND, so each kind keeps its own column of the sheet.
-    for kind in centraid_vault::commands::note::LINKABLE {
+    for kind in centraid_vault::commands::note::LINKABLE
+        .into_iter()
+        .filter(|kind| kind.is_link_end())
+    {
         let mut request = SearchRequest::new(kind.as_str(), term, LINK_TARGET_ROWS);
         if kind == centraid_vault::model::Kind::Note {
             request = request.excluding(memos.clone());
         }
         if let Ok(Answer::Data { page, .. }) = search.query(principal, &request) {
-            targets.extend(page.rows);
+            // A link is made to a thing by what it is called now: a sheet of targets has no
+            // line to say "in an earlier version", so what only an earlier version matched is
+            // left to the searches (#1185).
+            targets.extend(page.rows.into_iter().filter(|row| !row.in_earlier_version));
         }
     }
     Ok((LinkTargetsData { targets }, None))

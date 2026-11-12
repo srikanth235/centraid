@@ -316,7 +316,7 @@ fn a_list_is_restyled_from_its_page_and_an_unstyled_one_keeps_its_derived_colour
     let id = project(&d, "Allotment");
     d.pump(std::time::Duration::from_millis(400));
     let i = d.push(agenda::TAB, routes::project(&id, "Allotment"));
-    let data = project_data(d.view(i));
+    let data = project_head(d.view(i));
     assert_eq!(data.style_label, "Edit List");
     assert_eq!(data.icon_key, "");
     let derived = data.list_color_key.clone();
@@ -351,7 +351,7 @@ fn a_list_is_restyled_from_its_page_and_an_unstyled_one_keeps_its_derived_colour
         .expect("the list");
     assert_eq!(stored.icon.as_deref(), Some("Home"));
     assert_eq!(stored.color, None, "no colour was chosen, none is stored");
-    let data = project_data(d.view(i));
+    let data = project_head(d.view(i));
     assert_eq!(data.icon_key, "Home");
     assert_eq!(data.list_color_key, derived);
     assert_eq!(
@@ -382,7 +382,7 @@ fn a_list_is_restyled_from_its_page_and_an_unstyled_one_keeps_its_derived_colour
     send_project(&mut d, i, pe::Kind::StyleSubmitted(pe::StyleSubmitted {}));
     let state = project_state(d.view(i));
     assert_eq!(state.title, "Plot 7");
-    let data = project_data(d.view(i));
+    let data = project_head(d.view(i));
     assert_eq!(data.list_color_key, other);
     assert_eq!(data.icon_key, "");
     let stored = projects(&d)

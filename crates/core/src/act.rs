@@ -96,9 +96,19 @@ pub(crate) fn act(ctx: &Ctx<'_>, request: &wire::ActRequest) -> Result<wire::Act
                     .to_owned(),
         });
     }
-    let app = catalog::app(&request.app).ok_or_else(|| CoreError::InvalidRequest {
+    let mut app = catalog::app(&request.app).ok_or_else(|| CoreError::InvalidRequest {
         detail: format!("`{}` is not an app this core carries", request.app),
     })?;
+    // THE UNDOS EVERY APP SHARES: an edit's Undo is the vault's history putting the record back
+    // and a create's is the trash, so `undo-change` and `undo-create` are the shell's actions, run
+    // under whichever app's screen asks.
+    if centraid_apps_kit::manifest::SHELL_UNDOS.contains(&request.action.as_str())
+        && app.manifest().action(&request.action).is_none()
+    {
+        app = catalog::app(crate::shell::ID).ok_or_else(|| CoreError::Invariant {
+            context: "the shell's catalogue is not addressable".to_owned(),
+        })?;
+    }
     let entry =
         app.manifest()
             .action(&request.action)
@@ -141,11 +151,15 @@ pub(crate) fn act(ctx: &Ctx<'_>, request: &wire::ActRequest) -> Result<wire::Act
             context: format!("a decoded input is not JSON: {error}"),
         })?,
         invoke_key: request.invoke_key.clone(),
+        quiet: request.autosave,
     };
     let mark = centraid_vault::action_key::KeyMark {
         key: &request.invoke_key,
         asked: &asked,
     };
+    // An edit's Undo names the version the act makes: how many the record held before is asked
+    // first, and again after (see `inverse`).
+    let earlier = earlier_target(ctx, entry, &request.app, &request.action, &input)?;
     let outcome = match crate::api::command(
         ctx.vault,
         ctx.locker,
@@ -182,11 +196,18 @@ pub(crate) fn act(ctx: &Ctx<'_>, request: &wire::ActRequest) -> Result<wire::Act
     };
     let answer = match outcome.status {
         CommandStatus::Executed => {
-            let inverse = inverse::of(&request.app, &request.action, input_object, &outcome.output)
-                .map(|(action, input)| wire::ActInverse {
-                    action: action.to_owned(),
-                    input: input_to_wire(&input),
-                });
+            let taken_back = match earlier {
+                // An act that edits one record or creates another (a date) falls back to what it
+                // created when the vault made no version.
+                Some((id, before)) => earlier_inverse(ctx, &id, before)?.or_else(|| {
+                    inverse::of(&request.app, &request.action, input_object, &outcome.output)
+                }),
+                None => inverse::of(&request.app, &request.action, input_object, &outcome.output),
+            };
+            let inverse = taken_back.map(|(action, input)| wire::ActInverse {
+                action: action.to_owned(),
+                input: input_to_wire(&input),
+            });
             wire::ActResponse {
                 status: wire::ActStatus::Executed as i32,
                 output: serde_json::to_vec(&outcome.output).map_err(|error| {
@@ -213,6 +234,46 @@ pub(crate) fn act(ctx: &Ctx<'_>, request: &wire::ActRequest) -> Result<wire::Act
         ),
     };
     Ok(answer)
+}
+
+/// For an action the table takes back by the record's earlier version: the record it acts on and
+/// how many versions it holds before the command runs. `None` for every other action.
+fn earlier_target(
+    ctx: &Ctx<'_>,
+    entry: &centraid_apps_kit::manifest::ActionEntry,
+    app: &str,
+    action: &str,
+    input: &Value,
+) -> Result<Option<(String, u32)>> {
+    if !inverse::is_earlier(app, action) {
+        return Ok(None);
+    }
+    let Some(id) = entry
+        .id_property()
+        .and_then(|property| input.get(property))
+        .and_then(Value::as_str)
+    else {
+        return Ok(None);
+    };
+    let before = ctx
+        .vault
+        .read(|connection| centraid_vault::history::count(connection, id))?;
+    Ok(Some((id.to_owned(), before)))
+}
+
+/// The Undo of an act that was to make one version of `id`: offered only when the vault now holds
+/// exactly one more version than before, so an act the history did not capture (nothing a member
+/// can see changed, or a change the history leaves out) offers none, and the Undo names the
+/// version this act made.
+fn earlier_inverse(
+    ctx: &Ctx<'_>,
+    id: &str,
+    before: u32,
+) -> Result<Option<(&'static str, Map<String, Value>)>> {
+    let after = ctx
+        .vault
+        .read(|connection| centraid_vault::history::count(connection, id))?;
+    Ok((after == before.saturating_add(1)).then(|| inverse::earlier(id, after)))
 }
 
 /// THE IDS A MANIFEST SAYS THE CORE MINTS (`"x-minted": true` on an input property).
@@ -281,6 +342,7 @@ pub(crate) fn command_keyed(
             context: format!("an input is not JSON: {error}"),
         })?,
         invoke_key: key.to_owned(),
+        quiet: false,
     };
     let mark = centraid_vault::action_key::KeyMark { key, asked: &asked };
     let outcome = match crate::api::command(

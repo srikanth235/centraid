@@ -5,6 +5,8 @@
 //! on an entity is not a change to the entity: nothing is touched, but the word
 //! is part of the entity's search text, so it is re-indexed.
 
+use rusqlite::OptionalExtension;
+
 use crate::commands::entity::{lookup_live, require};
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
 use crate::error::{Result, VaultError};
@@ -158,11 +160,25 @@ fn remove(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
 fn recolor(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let tag = concept_id(Kind::Tag, &fold_label(ctx.required_str("label")?));
     let color = ctx.required_str("color")?;
+    // The colour it wore, so the act can be taken back: the one value this command replaces.
+    let replaced: Option<String> = ctx
+        .connection()
+        .query_row(
+            "SELECT color FROM concept WHERE id = ?1",
+            [tag.as_str()],
+            |row| row.get(0),
+        )
+        .optional()?
+        .flatten();
     let changed = ctx.connection().execute(
         "UPDATE concept SET color = ?2 WHERE id = ?1 AND color IS NOT ?2",
         [tag.as_str(), color],
     )?;
-    Ok(serde_json::json!({ "tag": tag, "changed": changed > 0 }))
+    Ok(serde_json::json!({
+        "tag": tag,
+        "changed": changed > 0,
+        "replaced": { "color": replaced },
+    }))
 }
 
 fn pre_known_label(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {

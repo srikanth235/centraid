@@ -14,18 +14,9 @@ struct PeoplePersonView: View {
     let send: (Centraid_Core_V1_PeoplePersonEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
     let onBack: () -> Void
+    let onPhoneSays: (Centraid_Core_V1_PhoneSaysTaken) -> Void
 
     @Environment(\.colorScheme) private var scheme
-
-    private var content: ScreenContent<Centraid_Core_V1_PeoplePersonData> {
-        switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        case .gone?, nil: return .loading(true)
-        }
-    }
 
     var body: some View {
         let chrome = state.chrome
@@ -52,16 +43,12 @@ struct PeoplePersonView: View {
                 }
             }
         } content: {
-            if case let .gone(gone)? = state.content {
-                EmptyStateView(gone)
-            } else {
-                ReadStateView(
-                    content: content,
-                    loadingLabel: chrome.loading,
-                    onRetry: { send(PeopleEvents.person { $0.refreshed = .init() }) }
-                ) { person in
-                    PeoplePersonBody(person: person, state: state, send: send, open: open)
-                }
+            PageReadStateView(
+                page: state.page,
+                loadingLabel: chrome.loading,
+                onRetry: { send(PeopleEvents.person { $0.refreshed = .init() }) }
+            ) {
+                PeoplePersonBody(person: state.data, state: state, send: send, open: open, onPhoneSays: onPhoneSays)
             }
         }
         .sheet(isPresented: Binding(
@@ -86,6 +73,7 @@ struct PeoplePersonView: View {
                 onDismiss: { send(PeopleEvents.person { $0.dismissed = .init() }) }
             )
         }
+        .linkPickerSheet(state.linkPicker) { link in send(PeopleEvents.person { $0.link = link }) }
         .onChange(of: state.done) { _, done in
             if done { onBack() }
         }
@@ -102,6 +90,12 @@ struct PeoplePersonView: View {
                 send(PeopleEvents.person { $0.star = .init() })
             }
             .accessibilityIdentifier("people-person-star")
+            if !chrome.share.isEmpty {
+                Button(chrome.share) {
+                    send(PeopleEvents.person { $0.shareRequested = .init() })
+                }
+                .accessibilityIdentifier("people-person-share")
+            }
             if !chrome.merge.isEmpty {
                 Button(chrome.merge) {
                     send(PeopleEvents.person { $0.sheetOpened = .with { $0.which = .merge } })
@@ -130,6 +124,7 @@ private struct PeoplePersonBody: View {
     let state: Centraid_Core_V1_PeoplePersonState
     let send: (Centraid_Core_V1_PeoplePersonEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
+    let onPhoneSays: (Centraid_Core_V1_PhoneSaysTaken) -> Void
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.appAccent) private var accent
@@ -162,6 +157,8 @@ private struct PeoplePersonBody: View {
                     }
                     .peopleCard()
                 }
+                // WHAT THE PHONE SAYS about the channels, together after the rows (#1183).
+                PhoneSaysLines(lines: person.channelsPhoneSays, onTake: onPhoneSays)
 
                 SectionHeader(
                     title: person.datesHead.title,
@@ -181,6 +178,13 @@ private struct PeoplePersonBody: View {
                     }
                     .peopleCard()
                 }
+                if person.hasBirthdayPhoneSays {
+                    PhoneSaysLines(lines: [person.birthdayPhoneSays], onTake: onPhoneSays)
+                }
+                // The nickname is a fact, and the facts are the last rows of the card above.
+                if person.hasNicknamePhoneSays {
+                    PhoneSaysLines(lines: [person.nicknamePhoneSays], onTake: onPhoneSays)
+                }
 
                 if !person.relations.isEmpty {
                     SectionHeader(title: person.relationsHead.title, count: person.relationsHead.count)
@@ -199,6 +203,24 @@ private struct PeoplePersonBody: View {
 
                 if !person.vault.isEmpty {
                     vault
+                }
+
+                // ATTACHMENTS (#1185): the kit's section, after "In your vault"; Rust makes every word and row.
+                if person.hasAttachments {
+                    AgendaAttachmentsView(
+                        section: person.attachments,
+                        idPrefix: "people-person-attachment",
+                        headIdentifier: "people-person-attachments",
+                        open: open,
+                        send: { attachment in send(PeopleEvents.person { $0.attachment = attachment }) }
+                    )
+                }
+
+                // LINKED TO (#1185): the kit's section, after the attachments; Rust makes every word and row.
+                if person.hasLinks {
+                    LinkSectionView(section: person.links, send: { link in
+                        send(PeopleEvents.person { $0.link = link })
+                    }, open: open)
                 }
 
                 SectionHeader(
@@ -240,6 +262,10 @@ private struct PeoplePersonBody: View {
                         .peopleCard()
                     }
                 }
+
+                // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the entry at the foot, when Rust has one.
+                EarlierEntryRow(entry: state.hasEarlier ? state.earlier : nil, open: open)
+                OriginLineView(line: state.hasOrigin ? state.origin : nil)
             }
             .padding(.bottom, CentraidGeometry.pageMargin)
         }
@@ -274,10 +300,16 @@ private struct PeoplePersonBody: View {
                 .minimumScaleFactor(largestText ? 1 : 0.7)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
+            if person.hasNamePhoneSays {
+                PhoneSaysLines(lines: [person.namePhoneSays], centered: true, padded: false, onTake: onPhoneSays)
+            }
             if !person.role.isEmpty {
                 Text(person.role)
                     .kitType(.row)
                     .foregroundStyle(Surface.body)
+            }
+            if person.hasRolePhoneSays {
+                PhoneSaysLines(lines: [person.rolePhoneSays], centered: true, padded: false, onTake: onPhoneSays)
             }
             if person.isMe {
                 Text(person.myCardLabel)
@@ -551,30 +583,22 @@ private struct PeoplePersonSheetView: View {
                         .centraidType("body")
                         .foregroundStyle(Theme.color("textSoft", scheme))
                 }
-                switch merge.content {
-                case .loading?, nil:
-                    RowSkeleton(rows: 3, label: merge.title)
-                        .frame(height: 170)
-                case let .failure(failure)?:
-                    FailureView(sentence: failure.sentence, remedy: failure.remedy, onRetry: nil)
-                case let .choices(choices)?:
-                    if choices.hasEmpty {
-                        EmptyStateView(choices.empty)
-                    } else {
-                        ScrollView {
-                            VStack(spacing: 0) {
-                                ForEach(choices.choices, id: \.partyID) { choice in
-                                    HStack(spacing: 0) {
-                                        PeopleAvatarView(avatar: choice.avatar)
-                                        CentraidRow(
-                                            title: choice.name,
-                                            meta: choice.role,
-                                            identifier: "people-merge-\(choice.partyID)",
-                                            onTap: {
-                                                send(PeopleEvents.person { $0.mergePicked = .with { $0.partyID = choice.partyID } })
-                                            }
-                                        )
-                                    }
+                // WHO CAN BE FOLDED IN: failed, empty (no one else) or the choices, drawn by the
+                // shared page view.
+                PageReadStateView(page: merge.page, onRetry: nil) {
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            ForEach(merge.choices.choices, id: \.partyID) { choice in
+                                HStack(spacing: 0) {
+                                    PeopleAvatarView(avatar: choice.avatar)
+                                    CentraidRow(
+                                        title: choice.name,
+                                        meta: choice.role,
+                                        identifier: "people-merge-\(choice.partyID)",
+                                        onTap: {
+                                            send(PeopleEvents.person { $0.mergePicked = .with { $0.partyID = choice.partyID } })
+                                        }
+                                    )
                                 }
                             }
                         }

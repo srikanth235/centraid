@@ -132,6 +132,14 @@ pub fn home_data(d: &Driver, id: u64) -> wire::LockerHomeData {
     }
 }
 
+/// The empty state of Locker's home, when its page is empty.
+pub fn home_empty(d: &Driver, id: u64) -> wire::EmptyState {
+    match home(d, id).page.and_then(|page| page.state) {
+        Some(wire::page_state::State::Empty(empty)) => empty,
+        other => panic!("home is not empty: {other:?}"),
+    }
+}
+
 pub fn item(d: &Driver, id: u64) -> wire::LockerItemState {
     match &d.view(id).kind {
         Some(wire::view_state::Kind::LockerItem(item)) => (**item).clone(),

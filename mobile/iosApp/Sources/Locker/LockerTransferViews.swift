@@ -34,34 +34,27 @@ struct LockerExportView: View {
 
     @Environment(\.colorScheme) private var scheme
 
-    private var content: ScreenContent<Centraid_Core_V1_LockerExportData> {
-        switch state.content {
-        case .loading?, nil: return .loading(true)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        }
-    }
-
     var body: some View {
         LockerCovered(wall: state.hasWall ? state.wall : nil, backLabel: state.chrome.backLabel, send: sendWall, onWords: onWords, onBack: onBack) {
             PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
                 EmptyView()
             } content: {
                 LockerShield(secure: state.secure) {
-                    ReadStateView(
-                        content: content,
+                    PageReadStateView(
+                        page: state.page,
                         onRetry: { send(LockerExportEvents.make { $0.refreshed = .init() }) }
-                    ) { export in
-                        ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 0) { page(export) }
-                                .padding(.bottom, 16)
+                    ) {
+                        if case let .data(export)? = state.content {
+                            ScrollView {
+                                LazyVStack(alignment: .leading, spacing: 0) { page(export) }
+                                    .padding(.bottom, 16)
+                            }
                         }
                     }
                 }
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     if state.hasStatus {
-                        StatusLineView(status: state.status, identifier: "locker-export-status") {}
+                        StatusLineView(status: state.status, identifier: "locker-export-status")
                             .padding(.vertical, 4)
                             .background(Theme.color("bg", scheme))
                     }
@@ -135,34 +128,27 @@ struct LockerImportView: View {
 
     @Environment(\.colorScheme) private var scheme
 
-    private var content: ScreenContent<Centraid_Core_V1_LockerImportData> {
-        switch state.content {
-        case .loading?, nil: return .loading(true)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        }
-    }
-
     var body: some View {
         LockerCovered(wall: state.hasWall ? state.wall : nil, backLabel: state.chrome.backLabel, send: sendWall, onWords: onWords, onBack: onBack) {
             PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
                 EmptyView()
             } content: {
                 LockerShield(secure: state.secure) {
-                    ReadStateView(
-                        content: content,
+                    PageReadStateView(
+                        page: state.page,
                         onRetry: { send(LockerImportEvents.make { $0.refreshed = .init() }) }
-                    ) { plan in
-                        ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 0) { page(plan) }
-                                .padding(.bottom, 16)
+                    ) {
+                        if case let .data(plan)? = state.content {
+                            ScrollView {
+                                LazyVStack(alignment: .leading, spacing: 0) { page(plan) }
+                                    .padding(.bottom, 16)
+                            }
                         }
                     }
                 }
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     if state.hasStatus {
-                        StatusLineView(status: state.status, identifier: "locker-import-status") {}
+                        StatusLineView(status: state.status, identifier: "locker-import-status")
                             .padding(.vertical, 4)
                             .background(Theme.color("bg", scheme))
                     }

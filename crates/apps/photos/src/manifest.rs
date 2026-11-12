@@ -50,8 +50,8 @@ mod tests {
         // `storage` and `enrichment-status`, whose producers left with the custody
         // sweep and the enricher (R-1135-5); then the screens' reads: one shelf, one
         // photograph, the collections and the places.
-        assert_eq!(manifest.queries.len(), 5);
-        assert_eq!(manifest.actions.len(), 23);
+        assert_eq!(manifest.queries.len(), 6);
+        assert_eq!(manifest.actions.len(), 27);
         for name in ["search", "shelf", "photo", "albums", "places"] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
@@ -125,7 +125,7 @@ mod tests {
             .filter(|row| row.confirm == Confirm::Required)
             .map(|row| row.action)
             .collect();
-        assert_eq!(required, ["purge-photo", "delete-album"]);
+        assert_eq!(required, ["purge-photo", "empty-trash", "delete-album"]);
     }
 
     /// PHOTOS' ACTIONS INVOKE ITS OWN VERBS AND THE SHARED ONES, and the table says
@@ -167,7 +167,7 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_twenty_two_scopes_seven_reads_and_one_act_per_command() {
+    fn it_declares_twenty_three_scopes_seven_reads_and_sixteen_acts() {
         use centraid_apps_kit::manifest::ScopeVerbs;
 
         let manifest = manifest();
@@ -175,7 +175,7 @@ mod tests {
             .vault
             .as_ref()
             .expect("Photos declares its vault reach");
-        assert_eq!(vault.scopes.len(), 22);
+        assert_eq!(vault.scopes.len(), 25);
         let mut reads: Vec<&str> = vault
             .scopes
             .iter()
@@ -192,6 +192,7 @@ mod tests {
                 "blob",
                 "container",
                 "derivative",
+                "document",
                 "edge",
                 "entity",
                 "photo",
@@ -214,7 +215,7 @@ mod tests {
             .collect();
         declared.sort_unstable();
         assert_eq!(declared, crate::commands::act_scope_tables());
-        assert_eq!(declared.len(), 15);
+        assert_eq!(declared.len(), 17);
         assert!(
             manifest.ext_tables.is_empty(),
             "Photos is a projection over the vault's own tables"

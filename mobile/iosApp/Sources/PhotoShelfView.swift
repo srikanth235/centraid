@@ -25,8 +25,7 @@ struct PhotoShelfView: View {
     private var selecting: Bool { selection.selecting }
 
     private var cells: [Centraid_Core_V1_PhotosShelfCell] {
-        if case let .data(data)? = state.content { return data.cells }
-        return []
+        state.content != nil ? state.data.cells : []
     }
 
     private func shelf(_ build: (inout Centraid_Core_V1_PhotosShelfEvent) -> Void) {
@@ -112,7 +111,7 @@ struct PhotoShelfView: View {
                         .accessibilityIdentifier("photos.shelf.writeFailure")
                 } else if state.hasStatus {
                     // WHAT THE LAST BATCH DID, said once where the member made it.
-                    StatusLineView(status: state.status, onAct: {})
+                    StatusLineView(status: state.status)
                         .accessibilityIdentifier("photos.shelf.receipt")
                 }
 
@@ -124,34 +123,31 @@ struct PhotoShelfView: View {
                         .accessibilityIdentifier("photos.shelf.exportNotice")
                 }
 
-                switch state.content {
-                case .loading?, nil:
-                    RowSkeleton().padding(.horizontal, CentraidGeometry.pageMargin)
-                case let .failure(failure)?:
-                    ScreenFailureView(sentence: failure.sentence, remedy: failure.remedy)
-                        .padding(.horizontal, CentraidGeometry.pageMargin)
-                case let .data(data)?:
-                    if data.hasEmpty {
-                        ScreenEmptyView(sentence: data.empty.headline, remedy: data.empty.body)
-                            .padding(.horizontal, CentraidGeometry.pageMargin)
-                    } else {
-                        PhotoCellsGrid(
-                            cells: data.cells.map(\.tile),
-                            selected: Set(selection.selectedIds),
-                            onTap: { identifier in
-                                if selecting {
-                                    select { $0.toggled = .with { $0.photoID = identifier } }
-                                } else if let cell = data.cells.first(where: { $0.tile.photoID == identifier }) {
-                                    open(cell.open)
+                PageReadStateView(
+                    page: state.page,
+                    onRetry: { shelf { $0.refreshed = .init() } },
+                    skeleton: { RowSkeleton().padding(.horizontal, CentraidGeometry.pageMargin) },
+                    data: {
+                        if state.content != nil {
+                            let data = state.data
+                            PhotoCellsGrid(
+                                cells: data.cells.map(\.tile),
+                                selected: Set(selection.selectedIds),
+                                onTap: { identifier in
+                                    if selecting {
+                                        select { $0.toggled = .with { $0.photoID = identifier } }
+                                    } else if let cell = data.cells.first(where: { $0.tile.photoID == identifier }) {
+                                        open(cell.open)
+                                    }
                                 }
+                            )
+                            if data.canShowMore {
+                                KitLink(label: data.showMoreLabel) { shelf { $0.loadMore = .init() } }
+                                    .padding(.horizontal, CentraidGeometry.pageMargin)
                             }
-                        )
-                        if data.canShowMore {
-                            KitLink(label: data.showMoreLabel) { shelf { $0.loadMore = .init() } }
-                                .padding(.horizontal, CentraidGeometry.pageMargin)
                         }
                     }
-                }
+                )
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -298,18 +294,17 @@ struct PhotoShelfView: View {
                 Text(selection.title)
                     .centraidType("small")
                     .foregroundStyle(Theme.color("textSoft", scheme))
-            } else if case let .data(data)? = state.content, data.hasEmptyTrashLabel {
+            } else if state.content != nil, state.data.hasEmptyTrashLabel {
                 // EMPTY TRASH, only on the trash. An outline in `net` and never
                 // a filled one: the safety is the confirm behind it.
-                KitOutlineButton(label: data.emptyTrashLabel, tone: "net") { prompt(.emptyTrash) }
+                KitOutlineButton(label: state.data.emptyTrashLabel, tone: "net") { prompt(.emptyTrash) }
                     .accessibilityIdentifier("photos.shelf.emptyTrash")
             }
         }
     }
 
     private var countLabel: String {
-        if case let .data(data)? = state.content { return data.countLabel }
-        return ""
+        state.content != nil ? state.data.countLabel : ""
     }
 
     /// THE BAR: the verbs Rust offered for this shelf, in its order, disabled

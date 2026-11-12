@@ -2,12 +2,20 @@
 //! A sentence with a hole (`{field}`, `{n}`) is filled with `strings::fill`.
 
 catalog! {
+    plain links_unread = (
+        "Couldn’t read what this item is linked to.",
+        "Couldn’t read what this item is linked to."
+    );
     plain address = ("Address", "Address");
     plain addresses_head = ("Addresses", "Addresses");
     plain add_item = ("New item", "New item");
     plain add_title = ("New item", "New item");
     plain alias = ("Alias", "Alias");
     plain app_name = ("Locker", "Locker");
+    plain archived_said = ("Item archived", "Item archived");
+    plain starred_said = ("Item starred", "Item starred");
+    plain unarchived_said = ("Item unarchived", "Item unarchived");
+    plain unstarred_said = ("Star removed", "Star removed");
     plain archive = ("Archive", "Archive");
     plain archived_empty = ("Nothing is archived", "Nothing is archived");
     plain archived_empty_body = ("Archived items are kept but hidden from lists.", "Archived items are kept but hidden from lists.");
@@ -71,12 +79,8 @@ catalog! {
     plain export_leaves_out = ("Not included: trash, old passwords, passkey keys.", "Not included: trash, old passwords, passkey keys.");
     plain export_lede = ("This saves every item, including passwords, to an unencrypted file. Anything that opens it can read your secrets.", "This saves every item, including passwords, to an unencrypted file. Anything that opens it can read your secrets.");
     plain export_nothing = ("No items to export.", "No items to export.");
-    plain export_not_confirmed = ("Not confirmed. No file written.", "Not confirmed. No file written.");
     plain export_not_saved = ("Not saved. No file written.", "Not saved. No file written.");
     plain export_no_saver = ("This phone cannot save the file.", "This phone cannot save the file.");
-    plain export_prompt_reason = ("Confirm it's you to export every secret.", "Confirm it's you to export every secret.");
-    plain export_prompt_subtitle = ("Anything that reads the file reads your secrets.", "Anything that reads the file reads your secrets.");
-    plain export_prompt_title = ("Export Locker", "Export Locker");
     plain export_save_refused = ("Couldn't save the file.", "Couldn't save the file.");
     plain export_saving = ("Choose where the file goes.", "Choose where the file goes.");
     plain export_title = ("Export everything", "Export everything");
@@ -133,6 +137,9 @@ catalog! {
     plain field_title = ("Title", "Title");
     plain field_url = ("Address", "Address");
     plain field_username = ("Username", "Username");
+    plain earlier_field = ("{label}: {value}", "{label}: {value}");
+    plain earlier_cleared = ("{label}: none", "{label}: none");
+    plain earlier_secret_changed = ("{label} changed", "{label} changed");
     plain field_value = ("Value", "Value");
     plain filter_all = ("All", "All");
     plain filter_archived = ("Archived", "Archived");
@@ -181,6 +188,8 @@ catalog! {
     plain item_gone_body = ("It was erased, or never on this phone.", "It was erased, or never on this phone.");
     plain item_last_used = ("{type} · last used {when}", "{type} · last used {when}");
     plain item_never_used = ("{type} · never used", "{type} · never used");
+    plain item_added = ("Item added", "Item added");
+    plain item_saved = ("Item saved", "Item saved");
     plain item_starred = ("Starred", "Starred");
     plain item_status = ("Revealed secrets hide again after 30 seconds.", "Revealed secrets hide again after 30 seconds.");
     plain keeps_backup = ("Backup", "Backup");
@@ -242,8 +251,6 @@ catalog! {
     plain more_import_meta = ("From a password manager", "From a password manager");
     plain more_lock_meta = ("Cover every item now", "Cover every item now");
     plain more_title = ("Locker", "Locker");
-    plain more_trash = ("Trash", "Trash");
-    plain more_trash_meta = ("Thirty days, then erased", "Thirty days, then erased");
     plain no_answer = ("The lock didn't respond. Try again.", "The lock didn't respond. Try again.");
     plain no_vault = ("No vault is open on this phone.", "No vault is open on this phone.");
     plain open = ("Open", "Open");
@@ -276,9 +283,7 @@ catalog! {
     plain prompt_subtitle = ("Your items stay covered until you do.", "Your items stay covered until you do.");
     plain prompt_title = ("Unlock Locker", "Unlock Locker");
     plain purged = ("Item erased", "Item erased");
-    plain purge_action = ("Delete forever", "Delete forever");
-    plain purge_body = ("It's erased with its secrets and history. This cannot be undone.", "It's erased with its secrets and history. This cannot be undone.");
-    plain purge_title = ("Delete this item forever?", "Delete this item forever?");
+    plain purge_lead = ("It's erased with its secrets and history.", "It's erased with its secrets and history.");
     plain read_incomplete = ("Locker could not read this item.", "Locker could not read this item.");
     plain regenerate = ("Generate another", "Generate another");
     plain restore = ("Restore", "Restore");
@@ -337,10 +342,7 @@ catalog! {
     plain tile_open_line = ("Locks when you leave Centraid", "Locks when you leave Centraid");
     plain title_needed = ("A title is needed.", "A title is needed.");
     plain trash = ("Move to trash", "Move to trash");
-    plain trashed = ("Moved to trash", "Moved to trash");
     plain trashed_note = ("In the trash · erased on {day}", "In the trash · erased on {day}");
-    plain trash_empty_body = ("Trashed items stay for thirty days.", "Trashed items stay for thirty days.");
-    plain trash_purges_on = ("Erased {day}", "Erased {day}");
     plain item_type = ("Type", "Type");
     plain types_card = ("Cards", "Cards");
     plain types_identity = ("Identities", "Identities");

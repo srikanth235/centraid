@@ -332,7 +332,38 @@ fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             draft.display_name
         ],
     )? > 0;
-    Ok(json!({ "id": id, "changed": changed }))
+    // A rule is no record, so the history keeps none: the answer names what each field the
+    // command stated held before, and the same edit with those values takes it back.
+    let replaced = changed.then(|| {
+        let held = |key: &str| match key {
+            "match" => json!(rule.kind),
+            "text" => pattern.get("text").cloned().unwrap_or(Json::Null),
+            "min" => json!(rule.min),
+            "max" => json!(rule.max),
+            "account_id" => json!(rule.account),
+            "category_id" => json!(rule.category),
+            "display_name" => json!(rule.display_name),
+            _ => json!(rule.position),
+        };
+        let stated = [
+            "match",
+            "text",
+            "min",
+            "max",
+            "account_id",
+            "category_id",
+            "display_name",
+            "position",
+        ];
+        Json::Object(
+            stated
+                .into_iter()
+                .filter(|key| ctx.input.get(*key).is_some())
+                .map(|key| (key.to_owned(), held(key)))
+                .collect(),
+        )
+    });
+    Ok(json!({ "id": id, "changed": changed, "replaced": replaced }))
 }
 
 fn delete(ctx: &CommandCtx<'_, '_>) -> Result<Json> {

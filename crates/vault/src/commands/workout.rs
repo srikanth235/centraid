@@ -13,6 +13,8 @@
 //! is refused by `workout.edit` with a sentence naming the store, because the
 //! next read would state it again. The follower's merge keeps a figure the member set (one they logged on a row the store is only now matching, or changed since the store last stated it).
 
+use std::collections::BTreeMap;
+
 use rusqlite::OptionalExtension;
 use rusqlite::types::Value as Sql;
 use serde_json::{Map, Value as Json};
@@ -42,7 +44,20 @@ pub const MEASURES: Child = Child {
     read,
     canon,
     merge,
+    items: Some(items),
+    take,
+    stamp: None,
 };
+
+/// The measures by column.
+fn items(value: &Json) -> BTreeMap<String, Json> {
+    value
+        .as_object()
+        .into_iter()
+        .flatten()
+        .map(|(column, figure)| (column.clone(), figure.clone()))
+        .collect()
+}
 
 /// The measures a record states in the one form the engine compares: only what
 /// is stated, numbers as reals, words squashed.
@@ -117,7 +132,29 @@ fn merge(ctx: &CommandCtx<'_, '_>, id: &str, before: Option<&Json>, new: &Json) 
             }
         }
     }
-    let new = stated;
+    store(ctx, id, &stated)
+}
+
+/// Make the measures what the store last stated (one column, or all): a figure the member changed
+/// is put back, one they cleared comes back and one they added is cleared.
+fn take(ctx: &CommandCtx<'_, '_>, id: &str, item: Option<&str>, stated: &Json) -> Result<bool> {
+    let (said, mut target) = (canon(stated), canon(&read(ctx.connection(), id)?));
+    for column in COLUMNS
+        .iter()
+        .filter(|column| item.is_none_or(|item| item == **column))
+    {
+        match said.get(*column) {
+            Some(value) => target[*column] = value.clone(),
+            None => {
+                target.as_object_mut().map(|map| map.remove(*column));
+            }
+        }
+    }
+    store(ctx, id, &target)
+}
+
+/// Write the measures (in [`canon`]'s form) as the activity's row, adding it if it has none.
+fn store(ctx: &CommandCtx<'_, '_>, id: &str, new: &Json) -> Result<bool> {
     let bind = |column: &str| -> Sql {
         match new.get(column) {
             Some(Json::Number(number)) if WHOLE.contains(&column) => {
@@ -225,7 +262,7 @@ fn followed_by(connection: &rusqlite::Connection, id: &str) -> Result<Option<Str
     Ok(connection
         .query_row(
             "SELECT o.label FROM source s JOIN origin o ON o.id = s.origin_id
-              WHERE s.entity_id = ?1 AND s.system = 'health'",
+              WHERE s.entity_id = ?1 AND s.system = 'health' AND o.retired_at IS NULL",
             [id],
             |row| row.get(0),
         )

@@ -1,4 +1,4 @@
-//! One document, its version history, its editor and its trash: ports of the
+//! One document, its editor and its trash: ports of the
 //! `DocsSpec` document, editor and trash cases, through `Driver`.
 
 mod docs_support;
@@ -124,15 +124,21 @@ fn a_document_over_bytes_this_device_does_not_hold_says_why() {
 }
 
 #[test]
-fn a_document_that_is_gone_is_a_state_not_a_failure() {
+fn a_document_that_is_gone_is_a_final_failure_never_an_empty_page() {
     let mut d = driver();
     let i = open(&mut d, "nope", "", "");
-    let data = document_data(d.view(i));
-    assert!(data.row.is_none());
-    assert!(matches!(
-        data.surface,
-        Some(wire::docs_document_data::Surface::Gone(_))
-    ));
+    let state = document_state(d.view(i));
+    assert!(
+        state.content.is_none(),
+        "nothing is drawn for a gone document"
+    );
+    let Some(wire::page_state::State::Failed(failure)) =
+        state.page.as_ref().and_then(|page| page.state.as_ref())
+    else {
+        panic!("gone is a failure: {:?}", state.page);
+    };
+    assert_eq!(failure.sentence, "This document is no longer here.");
+    assert!(failure.permanent, "trying again cannot bring it back");
 }
 
 #[test]
@@ -239,7 +245,7 @@ fn delete_forever_on_a_trashed_document_asks_first_purges_it_and_the_page_leaves
     pick_doc(&mut d, i, "purge");
     let state = document_state(d.view(i));
     let confirm = state.confirm.as_ref().unwrap();
-    assert_eq!(confirm.title, "Delete this forever?");
+    assert_eq!(confirm.title, "Delete this document forever?");
     assert_eq!(
         confirm.body,
         "It leaves this vault for good. This cannot be undone."
@@ -250,102 +256,6 @@ fn delete_forever_on_a_trashed_document_asks_first_purges_it_and_the_page_leaves
     document_send(&mut d, i, DD::Confirmed(dd::Confirmed {}));
     assert!(document_state(d.view(i)).dismissed);
     assert!(document(&d, &id).document.is_none());
-}
-
-#[test]
-fn version_history_is_a_page_and_an_earlier_version_is_made_current_by_a_restore() {
-    let mut d = driver();
-    let id = text(&d, "Letter", "first");
-    arrange(
-        &d,
-        act::docs::Edit {
-            document_id: id.clone(),
-            body_text: Some("second".to_owned()),
-            title: None,
-        },
-    );
-    let i = open(&mut d, &id, "Letter", "Docs");
-    let link = document_data(d.view(i))
-        .versions
-        .as_ref()
-        .expect("a versions row");
-    assert_eq!(link.label, "Versions");
-    assert_eq!(link.count_label, "2 versions");
-    let route = link.route.clone().unwrap();
-    assert_eq!(route.screen, docs::VERSIONS);
-    let page = d.push(docs::TAB, route);
-    let state = versions_state(d.view(page));
-    assert_eq!(state.chrome.as_ref().unwrap().back, "Letter");
-    let Some(wire::docs_versions_state::Content::Data(data)) = &state.content else {
-        panic!("{:?}", state.content);
-    };
-    assert_eq!(data.versions.len(), 2);
-    assert_eq!(data.versions[0].label, "Version 2");
-    assert!(data.versions[0].current);
-    assert!(
-        data.versions[0].meta.starts_with("Current"),
-        "{}",
-        data.versions[0].meta
-    );
-    assert_eq!(data.versions[0].restore_label, "");
-    assert_eq!(data.versions[1].label, "Version 1");
-    assert_eq!(data.versions[1].restore_label, "Restore");
-    d.send(
-        page,
-        wire::screen_event::Kind::DocsVersions(wire::DocsVersionsEvent {
-            kind: Some(wire::docs_versions_event::Kind::Restored(
-                wire::docs_versions_event::Restored {
-                    key: "1".to_owned(),
-                },
-            )),
-        }),
-    );
-    // Version 1's words are the document again, and the history walks on.
-    assert_eq!(document(&d, &id).body.as_deref(), Some("first"));
-    let state = versions_state(d.view(page));
-    let Some(wire::docs_versions_state::Content::Data(data)) = &state.content else {
-        panic!();
-    };
-    assert_eq!(data.versions.len(), 3);
-    assert!(state.status.is_none());
-    // The current version is nothing to restore.
-    d.send(
-        page,
-        wire::screen_event::Kind::DocsVersions(wire::DocsVersionsEvent {
-            kind: Some(wire::docs_versions_event::Kind::Restored(
-                wire::docs_versions_event::Restored {
-                    key: "3".to_owned(),
-                },
-            )),
-        }),
-    );
-    assert_eq!(document(&d, &id).versions.len(), 3);
-}
-
-#[test]
-fn a_trashed_documents_versions_offer_no_restore() {
-    let mut d = driver();
-    let id = text(&d, "Letter", "first");
-    arrange(
-        &d,
-        act::docs::Edit {
-            document_id: id.clone(),
-            body_text: Some("second".to_owned()),
-            title: None,
-        },
-    );
-    arrange(
-        &d,
-        act::docs::Trash {
-            document_id: id.clone(),
-        },
-    );
-    let page = d.push(docs::TAB, routes::versions(&id, "Letter"));
-    let state = versions_state(d.view(page));
-    let Some(wire::docs_versions_state::Content::Data(data)) = &state.content else {
-        panic!();
-    };
-    assert!(data.versions.iter().all(|v| v.restore_label.is_empty()));
 }
 
 // ---------------------------------------------------------------------------
@@ -455,6 +365,7 @@ fn a_vault_change_never_replaces_words_being_typed() {
             document_id: id.clone(),
             body_text: Some("elsewhere".to_owned()),
             title: None,
+            expected_rev: None,
         },
     );
     d.pump(Duration::from_millis(300));
@@ -463,14 +374,21 @@ fn a_vault_change_never_replaces_words_being_typed() {
         panic!();
     };
     assert_eq!(draft.body, "mine");
-    assert_eq!(state.remote_note, "Changed elsewhere; saving reloads it.");
+    assert_eq!(
+        state.remote_note,
+        "Changed elsewhere; your next save will ask to reload."
+    );
 }
 
 #[test]
 fn only_a_live_text_document_with_text_opens_in_the_editor() {
     let mut d = driver();
-    let sentence = |d: &Driver, i: u64| match &editor_state(d.view(i)).content {
-        Some(wire::docs_editor_state::Content::Failure(f)) => f.sentence.clone(),
+    let sentence = |d: &Driver, i: u64| match editor_state(d.view(i))
+        .page
+        .as_ref()
+        .and_then(|page| page.state.as_ref())
+    {
+        Some(wire::page_state::State::Failed(f)) => f.sentence.clone(),
         other => panic!("{other:?}"),
     };
     let binary = pdf(&d, "Lease.pdf", 'f');
@@ -501,9 +419,18 @@ fn trash_send(d: &mut Driver, i: u64, kind: T) {
 }
 
 fn trash_ids(v: &wire::ViewState) -> Vec<String> {
-    match &trash_view(v).content {
+    let view = trash_view(v);
+    match &view.content {
         Some(wire::trash_view::Content::Data(data)) => {
             data.rows.iter().map(|row| row.id.clone()).collect()
+        }
+        // A trash with nothing in it is the empty page and carries no rows.
+        None if matches!(
+            view.page.as_ref().and_then(|page| page.state.as_ref()),
+            Some(wire::page_state::State::Empty(_))
+        ) =>
+        {
+            Vec::new()
         }
         other => panic!("{other:?}"),
     }
@@ -537,15 +464,16 @@ fn the_trash_destroys_on_photos_path_delete_forever_and_empty_trash_each_behind_
     let row = data.rows.iter().find(|row| row.id == a).unwrap();
     assert!(row.meta.starts_with("Deleted "), "{}", row.meta);
     assert!(
-        !row.meta.contains("Erased"),
-        "no row says when it will be erased"
+        row.meta.contains(" · Erased "),
+        "every row says when it will be erased: {}",
+        row.meta
     );
     assert_eq!(row.purge_label, "Delete forever");
     assert_eq!(data.empty_label, "Empty trash");
     // Delete forever: the kit's confirm, then the bytes go.
     trash_send(&mut d, i, T::Purge(te::PurgeTapped { id: a.clone() }));
     let confirm = trash_view(d.view(i)).confirm.as_ref().unwrap();
-    assert_eq!(confirm.title, "Delete this forever?");
+    assert_eq!(confirm.title, "Delete this document forever?");
     assert!(confirm.destructive);
     trash_send(&mut d, i, T::Confirmed(te::Confirmed {}));
     assert_eq!(trash_ids(d.view(i)), std::slice::from_ref(&b));
@@ -557,12 +485,16 @@ fn the_trash_destroys_on_photos_path_delete_forever_and_empty_trash_each_behind_
     trash_send(&mut d, i, T::Confirmed(te::Confirmed {}));
     assert!(trash_ids(d.view(i)).is_empty());
     assert!(document(&d, &b).document.is_none());
-    let Some(wire::trash_view::Content::Data(data)) = &trash_view(d.view(i)).content else {
-        panic!();
+    let Some(wire::page_state::State::Empty(empty)) = trash_view(d.view(i))
+        .page
+        .as_ref()
+        .and_then(|page| page.state.as_ref())
+    else {
+        panic!("an empty trash is an empty page");
     };
     assert_eq!(
-        data.empty.as_ref().unwrap().body,
-        "Trashed documents can be restored for 30 days."
+        empty.body,
+        "Deleted items wait here for 30 days, then they are erased."
     );
 }
 
@@ -643,48 +575,11 @@ fn share_hands_the_file_to_the_platform_or_says_it_is_not_here() {
         document_state(d.view(i)).status.as_ref().unwrap().sentence,
         "This document isn't on this phone yet."
     );
-}
-
-#[test]
-fn only_the_current_version_says_current_and_none_is_dimmed() {
-    let mut d = driver();
-    let id = text(&d, "Letter", "first");
-    for body in ["second", "third"] {
-        arrange(
-            &d,
-            act::docs::Edit {
-                document_id: id.clone(),
-                body_text: Some(body.to_owned()),
-                title: None,
-            },
-        );
-    }
-    let i = open(&mut d, &id, "Letter", "Docs");
-    let route = document_data(d.view(i))
-        .versions
-        .as_ref()
-        .unwrap()
-        .route
-        .clone()
-        .unwrap();
-    let page = d.push(docs::TAB, route);
-    let state = versions_state(d.view(page));
-    let Some(wire::docs_versions_state::Content::Data(data)) = &state.content else {
-        panic!("{:?}", state.content);
-    };
-    let current: Vec<&str> = data
-        .versions
-        .iter()
-        .filter(|version| version.meta.contains("Current"))
-        .map(|version| version.label.as_str())
-        .collect();
-    assert_eq!(current, ["Version 3"]);
-    assert_eq!(
-        data.versions
+    // And no owner check was raised for a share that cannot happen.
+    assert!(
+        waiting(&d)
             .iter()
-            .filter(|version| version.current)
-            .count(),
-        1
+            .all(|effect| !matches!(effect.kind, Some(wire::effect::Kind::OwnerCheck(_))))
     );
 }
 
@@ -763,4 +658,104 @@ fn a_document_is_about_people_picked_by_name_and_taken_off_again() {
         link(le::Kind::Remove(le::RemoveTapped { id: maya })),
     );
     assert!(about(&d, i).rows.is_empty());
+}
+
+#[test]
+fn a_save_over_a_document_that_changed_elsewhere_is_refused_and_reload_keeps_the_words() {
+    let mut d = driver();
+    let id = text(&d, "Letter", "first");
+    let i = editor(&mut d, &id);
+    editor_send(
+        &mut d,
+        i,
+        EE::Body(ee::BodyEdited {
+            body: "my words".to_owned(),
+        }),
+    );
+    arrange(
+        &d,
+        act::docs::Edit {
+            document_id: id.clone(),
+            body_text: Some("elsewhere".to_owned()),
+            title: None,
+            expected_rev: None,
+        },
+    );
+    d.pump(Duration::from_millis(1300));
+    assert_eq!(document(&d, &id).body.as_deref(), Some("elsewhere"));
+    let state = editor_state(d.view(i));
+    let autosave = state.autosave.clone().unwrap();
+    assert_eq!(autosave.phase, wire::autosave::Phase::Conflict as i32);
+    assert_eq!(state.status_label, "This document changed somewhere else.");
+    assert_eq!(autosave.reload_label, "Reload");
+    let Some(wire::docs_editor_state::Content::Draft(draft)) = &state.content else {
+        panic!("{:?}", state.content);
+    };
+    assert_eq!(draft.body, "my words");
+    // Reload: the words are kept as an earlier version and the vault's document is shown.
+    d.send(
+        i,
+        wire::screen_event::Kind::StatusActed(wire::StatusActed {}),
+    );
+    let state = editor_state(d.view(i));
+    let Some(wire::docs_editor_state::Content::Draft(draft)) = &state.content else {
+        panic!("{:?}", state.content);
+    };
+    assert_eq!(draft.body, "elsewhere");
+    assert_eq!(state.remote_note, "Your text is in Earlier versions.");
+    assert_eq!(state.version_label, "Version 3");
+    // The next save is fresh.
+    editor_send(
+        &mut d,
+        i,
+        EE::Body(ee::BodyEdited {
+            body: "from the new one".to_owned(),
+        }),
+    );
+    d.pump(Duration::from_millis(1300));
+    assert_eq!(document(&d, &id).body.as_deref(), Some("from the new one"));
+}
+
+#[test]
+fn a_document_trashed_elsewhere_refuses_the_save_as_trashed_and_reload_keeps_the_words() {
+    let mut d = driver();
+    let id = text(&d, "Letter", "first");
+    let i = editor(&mut d, &id);
+    editor_send(
+        &mut d,
+        i,
+        EE::Body(ee::BodyEdited {
+            body: "my words".to_owned(),
+        }),
+    );
+    arrange(
+        &d,
+        act::docs::Trash {
+            document_id: id.clone(),
+        },
+    );
+    d.pump(Duration::from_millis(1300));
+    let state = editor_state(d.view(i));
+    assert_eq!(state.status_label, "This document was moved to the trash.");
+    d.send(
+        i,
+        wire::screen_event::Kind::StatusActed(wire::StatusActed {}),
+    );
+    let state = editor_state(d.view(i));
+    let Some(wire::page_state::State::Failed(failure)) =
+        state.page.as_ref().and_then(|page| page.state.as_ref())
+    else {
+        panic!("{:?}", state.page);
+    };
+    assert_eq!(
+        failure.remedy,
+        "Restore it to find your text in Earlier versions."
+    );
+    arrange(
+        &d,
+        act::docs::Restore {
+            document_id: id.clone(),
+        },
+    );
+    assert_eq!(document(&d, &id).versions.len(), 2);
 }

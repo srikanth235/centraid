@@ -496,6 +496,26 @@
       "verb": "unarchive"
     },
     {
+      "action": "trash-transaction",
+      "app": "money",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "transaction",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "restore-transaction",
+      "app": "money",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "transaction",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    },
+    {
       "action": "set-display-name",
       "app": "money",
       "command": "entity.retitle",
@@ -1175,6 +1195,42 @@
   "catalog": {
     "actions": [
       {
+        "action": "link",
+        "also": [],
+        "app": "calendar",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.add",
+        "inverse": "unlink",
+        "kind": "event",
+        "phrasings": [
+          "link the dentist event to Sam",
+          "connect the trip event to my packing note",
+          "link Friday's event to the plumber task"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "link"
+      },
+      {
+        "action": "unlink",
+        "also": [],
+        "app": "calendar",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "link",
+        "kind": "event",
+        "phrasings": [
+          "unlink the dentist event from Sam",
+          "disconnect the trip event from my packing note",
+          "take the link off Friday's event"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "unlink"
+      },
+      {
         "action": "propose",
         "also": [],
         "app": "calendar",
@@ -1237,7 +1293,7 @@
         "bulk": false,
         "chat": "card",
         "command": "event.edit_occurrence",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "event",
         "phrasings": [
           "skip this week's standup",
@@ -1303,6 +1359,78 @@
         "verb": "restore"
       },
       {
+        "action": "purge-event",
+        "also": [],
+        "app": "calendar",
+        "bulk": false,
+        "chat": "card",
+        "command": "entity.purge",
+        "inverse": null,
+        "kind": "event",
+        "phrasings": [
+          "erase the dentist event forever",
+          "permanently delete the trashed team offsite",
+          "purge that trashed event"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "purge"
+      },
+      {
+        "action": "empty-trash",
+        "also": [],
+        "app": "calendar",
+        "bulk": true,
+        "chat": "card",
+        "command": "entity.empty_trash",
+        "inverse": null,
+        "kind": "event",
+        "phrasings": [
+          "empty the calendar trash",
+          "clear out the trashed events for good",
+          "permanently delete everything in the Calendar trash"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "purge"
+      },
+      {
+        "action": "delete-calendar",
+        "also": [],
+        "app": "calendar",
+        "bulk": false,
+        "chat": "card",
+        "command": "entity.trash",
+        "inverse": null,
+        "kind": "calendar",
+        "phrasings": [
+          "delete the Work calendar",
+          "remove the Birthdays calendar",
+          "trash the Family calendar"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "delete"
+      },
+      {
+        "action": "restore-calendar",
+        "also": [],
+        "app": "calendar",
+        "bulk": false,
+        "chat": "card",
+        "command": "entity.restore",
+        "inverse": null,
+        "kind": "calendar",
+        "phrasings": [
+          "bring the Work calendar back",
+          "restore the Family calendar",
+          "undelete the Birthdays calendar"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "restore"
+      },
+      {
         "action": "attach",
         "also": [],
         "app": "calendar",
@@ -1345,7 +1473,7 @@
         "bulk": true,
         "chat": "card",
         "command": "follow.calendar",
-        "inverse": null,
+        "inverse": "stop-following",
         "kind": "event",
         "phrasings": [
           "import my phone's calendar",
@@ -1357,13 +1485,31 @@
         "verb": "import"
       },
       {
+        "action": "stop-following",
+        "also": [],
+        "app": "calendar",
+        "bulk": false,
+        "chat": "card",
+        "command": "follow.stop",
+        "inverse": null,
+        "kind": "event",
+        "phrasings": [
+          "stop reading the phone's calendars",
+          "disconnect the calendar on this phone",
+          "stop following the phone calendar"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "detach"
+      },
+      {
         "action": "create-calendar",
         "also": [],
         "app": "calendar",
         "bulk": false,
         "chat": "card",
         "command": "container.create",
-        "inverse": null,
+        "inverse": "undo-create",
         "kind": "list",
         "phrasings": [
           "make a calendar called Family",
@@ -1417,7 +1563,7 @@
         "bulk": false,
         "chat": "card",
         "command": "place.add",
-        "inverse": null,
+        "inverse": "undo-create",
         "kind": "event",
         "phrasings": [
           "remember the Café Roma as a place",
@@ -1429,22 +1575,22 @@
         "verb": "create"
       },
       {
-        "action": "record-calendar-push",
+        "action": "export-ics",
         "also": [],
         "app": "calendar",
         "bulk": true,
         "chat": "card",
-        "command": "follow.pushed",
+        "command": "event.export_ics",
         "inverse": null,
         "kind": "event",
         "phrasings": [
-          "record what was written back to my phone's calendar",
-          "mark these events as pushed to the phone",
-          "note which events the phone's calendar now holds"
+          "export my calendar as ics",
+          "save a calendar as a calendar file",
+          "send someone this event as an ics file"
         ],
-        "qualifier": "items",
+        "qualifier": null,
         "sealed": [],
-        "verb": "import"
+        "verb": "log"
       },
       {
         "action": "upload",
@@ -1671,7 +1817,7 @@
         "bulk": false,
         "chat": "card",
         "command": "tag.color",
-        "inverse": null,
+        "inverse": "recolor-label",
         "kind": "document",
         "phrasings": [
           "make the taxes label blue",
@@ -1689,7 +1835,7 @@
         "bulk": false,
         "chat": "card",
         "command": "document.edit",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "document",
         "phrasings": [
           "change the second line of my packing list",
@@ -1707,7 +1853,7 @@
         "bulk": false,
         "chat": "card",
         "command": "document.replace",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "document",
         "phrasings": [
           "replace the lease with the new scan",
@@ -1725,7 +1871,7 @@
         "bulk": false,
         "chat": "card",
         "command": "document.restore_version",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "document",
         "phrasings": [
           "go back to yesterday's version of the lease",
@@ -1827,13 +1973,103 @@
         "verb": "unlink"
       },
       {
+        "action": "attach",
+        "also": [],
+        "app": "docs",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.add",
+        "inverse": "detach",
+        "kind": "document",
+        "phrasings": [
+          "attach the scan to the lease",
+          "add the photo to the warranty document",
+          "attach the receipt to my tax return"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "attach"
+      },
+      {
+        "action": "detach",
+        "also": [],
+        "app": "docs",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "attach",
+        "kind": "document",
+        "phrasings": [
+          "take the scan off the lease",
+          "remove the photo from the warranty document",
+          "detach the receipt from my tax return"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "detach"
+      },
+      {
+        "action": "export-zip",
+        "also": [],
+        "app": "docs",
+        "bulk": true,
+        "chat": "card",
+        "command": "document.export_zip",
+        "inverse": null,
+        "kind": "document",
+        "phrasings": [
+          "export all my documents as one archive",
+          "save my documents as a zip file",
+          "back up one folder of documents as a zip"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "log"
+      },
+      {
+        "action": "link",
+        "also": [],
+        "app": "health",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.add",
+        "inverse": "unlink",
+        "kind": "workout",
+        "phrasings": [
+          "link this run to my race note",
+          "connect Tuesday's workout to the physio event",
+          "link this ride to the bike photo"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "link"
+      },
+      {
+        "action": "unlink",
+        "also": [],
+        "app": "health",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "link",
+        "kind": "workout",
+        "phrasings": [
+          "unlink this run from my race note",
+          "disconnect Tuesday's workout from the physio event",
+          "take the link off this ride"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "unlink"
+      },
+      {
         "action": "record-days",
         "also": [],
         "app": "health",
         "bulk": true,
         "chat": "card",
         "command": "measurement.record",
-        "inverse": null,
+        "inverse": "stop-following",
         "kind": "daily_figure",
         "phrasings": [
           "log 8000 steps for today",
@@ -1851,7 +2087,7 @@
         "bulk": true,
         "chat": "card",
         "command": "follow.health",
-        "inverse": null,
+        "inverse": "stop-following",
         "kind": "workout",
         "phrasings": [
           "pull in my latest workouts",
@@ -1953,6 +2189,42 @@
         "verb": "restore"
       },
       {
+        "action": "purge-workout",
+        "also": [],
+        "app": "health",
+        "bulk": false,
+        "chat": "card",
+        "command": "entity.purge",
+        "inverse": null,
+        "kind": "workout",
+        "phrasings": [
+          "erase the morning run forever",
+          "permanently delete the trashed swim",
+          "purge that trashed workout"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "purge"
+      },
+      {
+        "action": "empty-trash",
+        "also": [],
+        "app": "health",
+        "bulk": true,
+        "chat": "card",
+        "command": "entity.empty_trash",
+        "inverse": null,
+        "kind": "workout",
+        "phrasings": [
+          "empty the workout trash",
+          "clear out the trashed workouts for good",
+          "permanently delete everything in the Health trash"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "purge"
+      },
+      {
         "action": "edit-figure",
         "also": [],
         "app": "health",
@@ -2005,6 +2277,60 @@
         "qualifier": null,
         "sealed": [],
         "verb": "delete"
+      },
+      {
+        "action": "attach",
+        "also": [],
+        "app": "health",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.add",
+        "inverse": "detach",
+        "kind": "workout",
+        "phrasings": [
+          "attach the route map to this workout",
+          "add the photo to my Sunday run",
+          "attach the coach's plan to the workout"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "attach"
+      },
+      {
+        "action": "detach",
+        "also": [],
+        "app": "health",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "attach",
+        "kind": "workout",
+        "phrasings": [
+          "take the route map off this workout",
+          "remove the photo from my Sunday run",
+          "detach the coach's plan from the workout"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "detach"
+      },
+      {
+        "action": "export-csv",
+        "also": [],
+        "app": "health",
+        "bulk": true,
+        "chat": "card",
+        "command": "health.export_csv",
+        "inverse": null,
+        "kind": "workout",
+        "phrasings": [
+          "export my health data as a spreadsheet",
+          "save my workouts as a csv file",
+          "send someone this workout as a csv file"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "log"
       },
       {
         "action": "add-item",
@@ -2103,6 +2429,24 @@
           "erase the old Netflix login forever",
           "permanently delete the expired card",
           "purge that trashed item"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "purge"
+      },
+      {
+        "action": "empty-trash",
+        "also": [],
+        "app": "locker",
+        "bulk": true,
+        "chat": "card",
+        "command": "entity.empty_trash",
+        "inverse": null,
+        "kind": "locker_item",
+        "phrasings": [
+          "empty the Locker trash",
+          "clear out the trashed items for good",
+          "permanently delete everything in the Locker trash"
         ],
         "qualifier": null,
         "sealed": [],
@@ -2223,7 +2567,7 @@
         "bulk": false,
         "chat": "card",
         "command": "locker.duplicate_item",
-        "inverse": null,
+        "inverse": "undo-create",
         "kind": "locker_item",
         "phrasings": [
           "clone my Netflix login for my sister's account",
@@ -2241,7 +2585,7 @@
         "bulk": false,
         "chat": "card",
         "command": "locker.set_field",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "locker_field",
         "phrasings": [
           "add a security question field to my bank login",
@@ -2261,7 +2605,7 @@
         "bulk": false,
         "chat": "card",
         "command": "locker.remove_field",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "locker_field",
         "phrasings": [
           "remove the security question from my bank login",
@@ -2279,7 +2623,7 @@
         "bulk": false,
         "chat": "card",
         "command": "locker.set_addresses",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "locker_item",
         "phrasings": [
           "add a second website to my Google login",
@@ -2297,7 +2641,7 @@
         "bulk": false,
         "chat": "card",
         "command": "locker.set_passkey",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "locker_passkey",
         "phrasings": [
           "save a passkey on my GitHub login",
@@ -2317,7 +2661,7 @@
         "bulk": false,
         "chat": "card",
         "command": "locker.clear_passkey",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "locker_passkey",
         "phrasings": [
           "remove the passkey from my GitHub login",
@@ -2335,7 +2679,7 @@
         "bulk": false,
         "chat": "card",
         "command": "locker.set_memo",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "locker_item",
         "phrasings": [
           "write a memo on my bank login",
@@ -2551,7 +2895,7 @@
         "bulk": false,
         "chat": "card",
         "command": "account.remember_layout",
-        "inverse": null,
+        "inverse": "save-import-profile",
         "kind": "account",
         "phrasings": [
           "remember how this bank's CSV is laid out",
@@ -2569,7 +2913,7 @@
         "bulk": true,
         "chat": "card",
         "command": "txn.categorize",
-        "inverse": null,
+        "inverse": "categorize",
         "kind": "transaction",
         "phrasings": [
           "file that Starbucks charge under coffee",
@@ -2581,22 +2925,76 @@
         "verb": "categorize"
       },
       {
-        "action": "void-transaction",
+        "action": "trash-transaction",
+        "also": [],
+        "app": "money",
+        "bulk": false,
+        "chat": "direct",
+        "command": "entity.trash",
+        "inverse": "restore-transaction",
+        "kind": "transaction",
+        "phrasings": [
+          "delete the duplicate Netflix charge",
+          "remove that charge from my figures",
+          "trash the Amazon line from Tuesday"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "delete"
+      },
+      {
+        "action": "restore-transaction",
+        "also": [],
+        "app": "money",
+        "bulk": false,
+        "chat": "direct",
+        "command": "entity.restore",
+        "inverse": "trash-transaction",
+        "kind": "transaction",
+        "phrasings": [
+          "restore the Netflix charge I deleted",
+          "bring back that transaction",
+          "undo deleting the Amazon line"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "restore"
+      },
+      {
+        "action": "purge-transaction",
         "also": [],
         "app": "money",
         "bulk": false,
         "chat": "card",
-        "command": "txn.void",
+        "command": "entity.purge",
         "inverse": null,
         "kind": "transaction",
         "phrasings": [
-          "void the duplicate Netflix charge",
-          "remove that charge from my figures",
-          "void the Amazon line from Tuesday"
+          "erase the duplicate charge forever",
+          "permanently delete the trashed Amazon line",
+          "purge that trashed transaction"
         ],
         "qualifier": null,
         "sealed": [],
-        "verb": "void"
+        "verb": "purge"
+      },
+      {
+        "action": "empty-trash",
+        "also": [],
+        "app": "money",
+        "bulk": true,
+        "chat": "card",
+        "command": "entity.empty_trash",
+        "inverse": null,
+        "kind": "transaction",
+        "phrasings": [
+          "empty the Money trash",
+          "clear out the trashed transactions for good",
+          "permanently delete everything in the Money trash"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "purge"
       },
       {
         "action": "set-display-name",
@@ -2869,6 +3267,60 @@
         "verb": "unlink"
       },
       {
+        "action": "attach",
+        "also": [],
+        "app": "money",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.add",
+        "inverse": "detach",
+        "kind": "transaction",
+        "phrasings": [
+          "attach the receipt to this transaction",
+          "add the invoice to the rent payment",
+          "attach the warranty to the laptop purchase"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "attach"
+      },
+      {
+        "action": "detach",
+        "also": [],
+        "app": "money",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "attach",
+        "kind": "transaction",
+        "phrasings": [
+          "take the receipt off this transaction",
+          "remove the invoice from the rent payment",
+          "detach the warranty from the laptop purchase"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "detach"
+      },
+      {
+        "action": "export-csv",
+        "also": [],
+        "app": "money",
+        "bulk": true,
+        "chat": "card",
+        "command": "txn.export_csv",
+        "inverse": null,
+        "kind": "transaction",
+        "phrasings": [
+          "export my transactions as a spreadsheet",
+          "save one account's transactions as a csv file",
+          "send someone this transaction as a csv file"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "log"
+      },
+      {
         "action": "create-note",
         "also": [],
         "app": "notes",
@@ -3015,13 +3467,49 @@
         "verb": "restore"
       },
       {
+        "action": "purge-note",
+        "also": [],
+        "app": "notes",
+        "bulk": false,
+        "chat": "card",
+        "command": "entity.purge",
+        "inverse": null,
+        "kind": "note",
+        "phrasings": [
+          "erase the plumber note forever",
+          "permanently delete the trashed trip itinerary",
+          "purge that trashed note"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "purge"
+      },
+      {
+        "action": "empty-trash",
+        "also": [],
+        "app": "notes",
+        "bulk": true,
+        "chat": "card",
+        "command": "entity.empty_trash",
+        "inverse": null,
+        "kind": "note",
+        "phrasings": [
+          "empty the notes trash",
+          "clear out the trashed notes for good",
+          "permanently delete everything in the Notes trash"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "purge"
+      },
+      {
         "action": "restore-note-version",
         "also": [],
         "app": "notes",
         "bulk": false,
         "chat": "card",
         "command": "note.restore_version",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "note",
         "phrasings": [
           "go back to the earlier version of my trip note",
@@ -3075,7 +3563,7 @@
         "bulk": false,
         "chat": "card",
         "command": "edge.add",
-        "inverse": null,
+        "inverse": "unlink",
         "kind": "note",
         "phrasings": [
           "link my trip note to Sam",
@@ -3087,13 +3575,31 @@
         "verb": "link"
       },
       {
+        "action": "unlink",
+        "also": [],
+        "app": "notes",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "link",
+        "kind": "note",
+        "phrasings": [
+          "unlink my trip note from Sam",
+          "disconnect the book ideas note from the reading list task",
+          "take the link off the plumber note"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "unlink"
+      },
+      {
         "action": "send-to-tasks",
         "also": [],
         "app": "notes",
         "bulk": false,
         "chat": "card",
         "command": "task.add",
-        "inverse": null,
+        "inverse": "undo-create",
         "kind": "task",
         "phrasings": [
           "turn this checklist line into a task",
@@ -3213,6 +3719,42 @@
         "verb": "log"
       },
       {
+        "action": "link",
+        "also": [],
+        "app": "people",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.add",
+        "inverse": "unlink",
+        "kind": "person",
+        "phrasings": [
+          "link Sam to my trip note",
+          "connect Maya to the school event",
+          "link Priya to the lease document"
+        ],
+        "qualifier": "rel",
+        "sealed": [],
+        "verb": "link"
+      },
+      {
+        "action": "unlink",
+        "also": [],
+        "app": "people",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "link",
+        "kind": "person",
+        "phrasings": [
+          "unlink Sam from my trip note",
+          "disconnect Maya from the school event",
+          "take the link off Priya"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "unlink"
+      },
+      {
         "action": "add-person",
         "also": [],
         "app": "people",
@@ -3321,13 +3863,31 @@
         "verb": "purge"
       },
       {
+        "action": "empty-trash",
+        "also": [],
+        "app": "people",
+        "bulk": true,
+        "chat": "card",
+        "command": "entity.empty_trash",
+        "inverse": null,
+        "kind": "person",
+        "phrasings": [
+          "empty the people trash",
+          "clear out the trashed people for good",
+          "permanently delete everyone in the trash"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "purge"
+      },
+      {
         "action": "log-interaction",
         "also": [],
         "app": "people",
         "bulk": false,
         "chat": "direct",
         "command": "person.log_interaction",
-        "inverse": null,
+        "inverse": "undo-create",
         "kind": "person",
         "phrasings": [
           "I called Sam today",
@@ -3383,7 +3943,7 @@
         "bulk": false,
         "chat": "card",
         "command": "person.move",
-        "inverse": null,
+        "inverse": "move-person",
         "kind": "person",
         "phrasings": [
           "put Sam in my Family list",
@@ -3401,7 +3961,7 @@
         "bulk": false,
         "chat": "card",
         "command": "person.add_note",
-        "inverse": null,
+        "inverse": "undo-create",
         "kind": "note",
         "phrasings": [
           "add a note about Sam: loves hiking",
@@ -3419,7 +3979,7 @@
         "bulk": false,
         "chat": "card",
         "command": "person.add_task",
-        "inverse": null,
+        "inverse": "undo-create",
         "kind": "task",
         "phrasings": [
           "remind me to send Sam the photos",
@@ -3437,7 +3997,7 @@
         "bulk": false,
         "chat": "card",
         "command": "task.complete",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "task",
         "phrasings": [
           "mark the follow-up with Sam done",
@@ -3455,7 +4015,7 @@
         "bulk": false,
         "chat": "card",
         "command": "task.reopen",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "task",
         "phrasings": [
           "reopen the follow-up with Sam",
@@ -3473,7 +4033,7 @@
         "bulk": false,
         "chat": "card",
         "command": "person.add_date",
-        "inverse": null,
+        "inverse": "undo-create",
         "kind": "important_date",
         "phrasings": [
           "add Sam's anniversary on June 5",
@@ -3491,30 +4051,12 @@
         "bulk": false,
         "chat": "card",
         "command": "event.edit",
-        "inverse": null,
+        "inverse": "set-reminder",
         "kind": "important_date",
         "phrasings": [
           "remind me a week before Sam's anniversary",
           "turn off the reminder for Maria's graduation",
           "remind me the day of Priya's birthday"
-        ],
-        "qualifier": null,
-        "sealed": [],
-        "verb": "edit"
-      },
-      {
-        "action": "set-birthday-reminder",
-        "also": [],
-        "app": "people",
-        "bulk": false,
-        "chat": "card",
-        "command": "person.set_birthday_reminder",
-        "inverse": null,
-        "kind": "person",
-        "phrasings": [
-          "stop reminding me of Maria's birthday",
-          "turn off the birthday reminder for Sam",
-          "remind me of Priya's birthday again"
         ],
         "qualifier": null,
         "sealed": [],
@@ -3527,7 +4069,7 @@
         "bulk": false,
         "chat": "card",
         "command": "person.add_relationship",
-        "inverse": null,
+        "inverse": "remove-relationship",
         "kind": "person",
         "phrasings": [
           "Sam is Maria's brother",
@@ -3539,13 +4081,31 @@
         "verb": "link"
       },
       {
+        "action": "remove-relationship",
+        "also": [],
+        "app": "people",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": null,
+        "kind": "person",
+        "phrasings": [
+          "Sam is no longer Maria's brother",
+          "remove the cousin link between Priya and me",
+          "unlink Sam as Maria's manager"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "unlink"
+      },
+      {
         "action": "add-gift",
         "also": [],
         "app": "people",
         "bulk": false,
         "chat": "card",
         "command": "person.add_gift",
-        "inverse": null,
+        "inverse": "undo-create",
         "kind": "gift",
         "phrasings": [
           "gift idea for Sam: a hiking book",
@@ -3563,7 +4123,7 @@
         "bulk": false,
         "chat": "card",
         "command": "container.create",
-        "inverse": null,
+        "inverse": "delete-list",
         "kind": "people_list",
         "phrasings": [
           "make a list called Family",
@@ -3581,7 +4141,7 @@
         "bulk": false,
         "chat": "card",
         "command": "entity.retitle",
-        "inverse": null,
+        "inverse": "rename-list",
         "kind": "people_list",
         "phrasings": [
           "rename Family to Relatives",
@@ -3611,13 +4171,31 @@
         "verb": "delete"
       },
       {
+        "action": "restore-list",
+        "also": [],
+        "app": "people",
+        "bulk": false,
+        "chat": "card",
+        "command": "entity.restore",
+        "inverse": null,
+        "kind": "people_list",
+        "phrasings": [
+          "bring the Family list back",
+          "restore the Work list",
+          "undelete the college friends list"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "restore"
+      },
+      {
         "action": "add-journal-entry",
         "also": [],
         "app": "people",
         "bulk": false,
         "chat": "card",
         "command": "person.add_journal_entry",
-        "inverse": null,
+        "inverse": "undo-create",
         "kind": "journal_entry",
         "phrasings": [
           "journal: today was a good day",
@@ -3635,7 +4213,7 @@
         "bulk": false,
         "chat": "card",
         "command": "person.save_contact_point",
-        "inverse": null,
+        "inverse": "save-contact-channel",
         "kind": "contact_point",
         "phrasings": [
           "add Sam's phone number",
@@ -3689,7 +4267,7 @@
         "bulk": true,
         "chat": "card",
         "command": "follow.contacts",
-        "inverse": null,
+        "inverse": "stop-following",
         "kind": "person",
         "phrasings": [
           "import my phone's contacts",
@@ -3699,6 +4277,24 @@
         "qualifier": null,
         "sealed": [],
         "verb": "import"
+      },
+      {
+        "action": "stop-following",
+        "also": [],
+        "app": "people",
+        "bulk": false,
+        "chat": "card",
+        "command": "follow.stop",
+        "inverse": null,
+        "kind": "person",
+        "phrasings": [
+          "stop reading my phone's contacts",
+          "disconnect the address book",
+          "stop following contacts"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "detach"
       },
       {
         "action": "import-vcf",
@@ -3737,6 +4333,42 @@
         "verb": "log"
       },
       {
+        "action": "attach",
+        "also": [],
+        "app": "people",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.add",
+        "inverse": "detach",
+        "kind": "person",
+        "phrasings": [
+          "attach the contract to Dana's card",
+          "add the photo to Sam's card",
+          "attach the vet record to Maya"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "attach"
+      },
+      {
+        "action": "detach",
+        "also": [],
+        "app": "people",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "attach",
+        "kind": "person",
+        "phrasings": [
+          "take the contract off Dana's card",
+          "remove the photo from Sam's card",
+          "detach the vet record from Maya"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "detach"
+      },
+      {
         "action": "upload",
         "also": [],
         "app": "photos",
@@ -3761,7 +4393,7 @@
         "bulk": false,
         "chat": "card",
         "command": "photo.edit",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "photo",
         "phrasings": [
           "fix the date on this photo",
@@ -3917,6 +4549,24 @@
         "verb": "purge"
       },
       {
+        "action": "empty-trash",
+        "also": [],
+        "app": "photos",
+        "bulk": true,
+        "chat": "card",
+        "command": "entity.empty_trash",
+        "inverse": null,
+        "kind": "photo",
+        "phrasings": [
+          "empty the photo trash",
+          "clear out the trashed photos for good",
+          "permanently delete everything in the Photos trash"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "purge"
+      },
+      {
         "action": "create-album",
         "also": [],
         "app": "photos",
@@ -3959,7 +4609,7 @@
         "bulk": false,
         "chat": "card",
         "command": "album.set_cover",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "album",
         "phrasings": [
           "use the beach photo as the Italy cover",
@@ -4049,7 +4699,7 @@
         "bulk": false,
         "chat": "card",
         "command": "photo.set_place",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "place",
         "phrasings": [
           "this photo was taken in Lisbon",
@@ -4067,7 +4717,7 @@
         "bulk": false,
         "chat": "card",
         "command": "entity.retitle",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "place",
         "phrasings": [
           "call this place Grandma's house",
@@ -4145,6 +4795,96 @@
           "Maya is not in the beach photo",
           "take Ravi off this picture",
           "untag Maya from the beach photo"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "unlink"
+      },
+      {
+        "action": "attach",
+        "also": [],
+        "app": "photos",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.add",
+        "inverse": "detach",
+        "kind": "photo",
+        "phrasings": [
+          "attach the receipt to this photo",
+          "add the PDF to the wedding photo",
+          "attach the scan to my passport photo"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "attach"
+      },
+      {
+        "action": "detach",
+        "also": [],
+        "app": "photos",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "attach",
+        "kind": "photo",
+        "phrasings": [
+          "take the receipt off this photo",
+          "remove the PDF from the wedding photo",
+          "detach the scan from my passport photo"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "detach"
+      },
+      {
+        "action": "export-zip",
+        "also": [],
+        "app": "photos",
+        "bulk": true,
+        "chat": "card",
+        "command": "photo.export_zip",
+        "inverse": null,
+        "kind": "photo",
+        "phrasings": [
+          "export all my photos as one archive",
+          "save my photos and videos as a zip file",
+          "back up one album as a zip"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "log"
+      },
+      {
+        "action": "link",
+        "also": [],
+        "app": "reminders",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.add",
+        "inverse": "unlink",
+        "kind": "task",
+        "phrasings": [
+          "link the passport task to Sam",
+          "connect the dentist task to my trip note",
+          "link the rent task to Friday's event"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "link"
+      },
+      {
+        "action": "unlink",
+        "also": [],
+        "app": "reminders",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "link",
+        "kind": "task",
+        "phrasings": [
+          "unlink the passport task from Sam",
+          "disconnect the dentist task from my trip note",
+          "take the link off the rent task"
         ],
         "qualifier": null,
         "sealed": [],
@@ -4299,6 +5039,24 @@
         "verb": "purge"
       },
       {
+        "action": "empty-trash",
+        "also": [],
+        "app": "reminders",
+        "bulk": true,
+        "chat": "card",
+        "command": "entity.empty_trash",
+        "inverse": null,
+        "kind": "task",
+        "phrasings": [
+          "empty the task trash",
+          "clear out the trashed tasks for good",
+          "permanently delete everything in the reminders trash"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "purge"
+      },
+      {
         "action": "restore-task",
         "also": [],
         "app": "reminders",
@@ -4359,7 +5117,7 @@
         "bulk": false,
         "chat": "card",
         "command": "container.create",
-        "inverse": null,
+        "inverse": "delete-task",
         "kind": "section",
         "phrasings": [
           "add a section called Kitchen to Home renovation",
@@ -4495,6 +5253,60 @@
         "qualifier": null,
         "sealed": [],
         "verb": "detach"
+      },
+      {
+        "action": "export-ics",
+        "also": [],
+        "app": "reminders",
+        "bulk": true,
+        "chat": "card",
+        "command": "task.export_ics",
+        "inverse": null,
+        "kind": "task",
+        "phrasings": [
+          "export my reminders as ics",
+          "save a list as a calendar file",
+          "send someone this reminder as an ics file"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "log"
+      },
+      {
+        "action": "follow-reminders",
+        "also": [],
+        "app": "reminders",
+        "bulk": true,
+        "chat": "card",
+        "command": "follow.reminders",
+        "inverse": "stop-following",
+        "kind": "task",
+        "phrasings": [
+          "import my phone's reminders",
+          "sync reminders from this phone",
+          "pull in my reminders"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "import"
+      },
+      {
+        "action": "stop-following",
+        "also": [],
+        "app": "reminders",
+        "bulk": false,
+        "chat": "card",
+        "command": "follow.stop",
+        "inverse": null,
+        "kind": "task",
+        "phrasings": [
+          "stop reading the phone's reminders",
+          "disconnect reminders on this phone",
+          "stop following phone reminders"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "detach"
       }
     ],
     "queries": [
@@ -4561,6 +5373,15 @@
         "query": "dated-reminders"
       },
       {
+        "app": "calendar",
+        "figures": [
+          "events",
+          "purge_dates"
+        ],
+        "kind": "event",
+        "query": "trash"
+      },
+      {
         "app": "docs",
         "figures": [
           "folders",
@@ -4585,6 +5406,14 @@
         ],
         "kind": "document",
         "query": "history"
+      },
+      {
+        "app": "docs",
+        "figures": [
+          "attachments"
+        ],
+        "kind": "document",
+        "query": "attachments"
       },
       {
         "app": "health",
@@ -4644,12 +5473,29 @@
       {
         "app": "health",
         "figures": [
+          "workouts",
+          "purge_dates"
+        ],
+        "kind": "workout",
+        "query": "trash"
+      },
+      {
+        "app": "health",
+        "figures": [
           "newest_day",
           "newest_workout",
           "daily_totals"
         ],
         "kind": "daily_figure",
         "query": "follow-view"
+      },
+      {
+        "app": "health",
+        "figures": [
+          "attachments"
+        ],
+        "kind": "workout",
+        "query": "attachments"
       },
       {
         "app": "locker",
@@ -4827,6 +5673,23 @@
         "query": "search"
       },
       {
+        "app": "money",
+        "figures": [
+          "transactions",
+          "purge_dates"
+        ],
+        "kind": "transaction",
+        "query": "trash"
+      },
+      {
+        "app": "money",
+        "figures": [
+          "attachments"
+        ],
+        "kind": "transaction",
+        "query": "attachments"
+      },
+      {
         "app": "notes",
         "figures": [
           "targets"
@@ -4905,6 +5768,14 @@
         "query": "about"
       },
       {
+        "app": "notes",
+        "figures": [
+          "attachments"
+        ],
+        "kind": "note",
+        "query": "attachments"
+      },
+      {
         "app": "people",
         "figures": [
           "people",
@@ -4961,6 +5832,14 @@
         "query": "links"
       },
       {
+        "app": "people",
+        "figures": [
+          "attachments"
+        ],
+        "kind": "person",
+        "query": "attachments"
+      },
+      {
         "app": "photos",
         "figures": [
           "matches",
@@ -5010,6 +5889,14 @@
         ],
         "kind": "place",
         "query": "places"
+      },
+      {
+        "app": "photos",
+        "figures": [
+          "attachments"
+        ],
+        "kind": "photo",
+        "query": "attachments"
       },
       {
         "app": "reminders",
@@ -6019,7 +6906,7 @@
       ]
     },
     {
-      "card": "transaction: name, date (posted), amount (USD), account, category, transfer, status (posted|void) · verbs: edit unlink",
+      "card": "transaction: name, date (posted), amount (USD), account, category, transfer, status (posted|void) · verbs: edit delete restore unlink",
       "container": false,
       "date": {
         "label": "posted",
@@ -6103,6 +6990,8 @@
       "trash": false,
       "verbs": [
         "edit",
+        "delete",
+        "restore",
         "unlink"
       ],
       "where_fields": [
@@ -6965,6 +7854,10 @@
           "entity.trash"
         ],
         [
+          "transaction",
+          "entity.trash"
+        ],
+        [
           "daily_figure",
           "measurement.clear"
         ],
@@ -7011,6 +7904,10 @@
         ],
         [
           "locker_item",
+          "entity.restore"
+        ],
+        [
+          "transaction",
           "entity.restore"
         ],
         [

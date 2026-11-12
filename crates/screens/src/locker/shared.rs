@@ -1,4 +1,4 @@
-//! What every Locker screen shares beyond the wall: the three states of a read,
+//! What every Locker screen shares beyond the wall: a read answered again on the kit's page,
 //! the session's reveal as a screen asks it, an item as a list draws it, and
 //! the small status-line helpers.
 
@@ -7,35 +7,15 @@ use std::time::Duration;
 use centraid_api_proto::core_v1 as wire;
 
 use super::types;
-use crate::kit::read::Reading;
+use crate::kit::read::{Page, Reading};
 use crate::screen::Ctx;
 use crate::strings::{Locale, fill, locker as words};
 
-/// What a Locker page holds of one read: nothing yet, a refusal, a gate or the
-/// answer. A failed read is never an empty list.
-#[derive(Clone, Debug)]
-pub(super) enum Phase<T> {
-    Loading,
-    Failed,
-    Denied(wire::AppQueryDenial),
-    Ready(T),
-}
-
-impl<T> Phase<T> {
-    pub(super) fn of(reading: Reading<T>) -> Self {
-        match reading {
-            Reading::Data(data) => Self::Ready(data),
-            Reading::Denied(denial) => Self::Denied(denial),
-            Reading::Failed => Self::Failed,
-        }
-    }
-
-    pub(super) fn data(&self) -> Option<&T> {
-        match self {
-            Self::Ready(data) => Some(data),
-            _ => None,
-        }
-    }
+/// A page's read answered again. What is shown stays (a refresh that failed keeps it under the
+/// page's one sentence); a failure or gate becomes the skeleton until the answer lands.
+pub(super) fn reread<T>(page: &mut Page<T>, locale: Locale, reading: Reading<T>) {
+    let kept = std::mem::replace(page, Page::loading());
+    *page = kept.refreshing().after(reading, locale, |_| false);
 }
 
 /// The gate drawn when the vault will not let Locker read.
@@ -48,6 +28,39 @@ pub(super) fn denied(locale: Locale, denial: &wire::AppQueryDenial) -> wire::Den
             .clone()
             .unwrap_or_else(|| words::denied_scope(locale)),
     }
+}
+
+/// The code a closed Locker's refusal carries.
+pub(super) const LOCKED: &str = "locker-locked";
+
+/// The refusal a page behind the wall gets while the session is closed: `None` once it is open.
+/// A title or an earlier value is inside Locker, so nothing of it is read before the member opens
+/// it (the core's metadata list is plaintext by design; this wall is the screen's).
+pub(super) fn closed(ctx: &Ctx) -> Option<wire::AppQueryDenial> {
+    let open = ctx
+        .locker(&wire::LockerSessionRequest {
+            step: Some(wire::locker_session_request::Step::State(
+                wire::LockerStateAsk::default(),
+            )),
+        })
+        .is_ok_and(|answer| answer.state == wire::LockerSessionState::Unlocked as i32);
+    (!open).then(|| wire::AppQueryDenial {
+        code: Some(LOCKED.to_owned()),
+        message: Some(words::locked_sentence(ctx.locale())),
+        revoked_at: None,
+    })
+}
+
+/// The gate drawn when the Locker is closed or the vault will not let it read.
+pub(super) fn gate(locale: Locale, denial: &wire::AppQueryDenial) -> wire::Denied {
+    if denial.code.as_deref() == Some(LOCKED) {
+        return wire::Denied {
+            title: words::locked_sentence(locale),
+            body: words::lock_body_lead(locale),
+            receipt: String::new(),
+        };
+    }
+    denied(locale, denial)
 }
 
 /// A one-line status.
@@ -120,13 +133,16 @@ fn refusal_of(locale: Locale, answer: &wire::LockerSessionResponse) -> Refused {
 
 /// Reveal one sealed cell (`column`), or a custom field's value (`field_id`
 /// set, the column `value_sealed`). The core stamps the item as used before the
-/// value exists. `copy` sends the value to the clipboard; the value is the same.
+/// value exists. `copy` sends the value to the clipboard; the value is the same. `earlier_seq` > 0
+/// opens the cell as that earlier version of the item held it (Earlier versions); 0 is the live
+/// cell.
 pub(super) fn reveal(
     ctx: &Ctx,
     item_id: &str,
     column: &str,
     field_id: &str,
     copy: bool,
+    earlier_seq: i64,
 ) -> Result<Opened, Refused> {
     let locale = ctx.locale();
     let answer = ctx
@@ -141,6 +157,7 @@ pub(super) fn reveal(
                     },
                     field_id: field_id.to_owned(),
                     copy,
+                    earlier_seq,
                 },
             )),
         })
@@ -161,7 +178,7 @@ pub(super) struct Code {
     pub remaining: u32,
 }
 
-pub(super) fn totp(ctx: &Ctx, item_id: &str, copy: bool) -> Result<Code, Refused> {
+pub(super) fn totp(ctx: &Ctx, item_id: &str, field_id: &str, copy: bool) -> Result<Code, Refused> {
     let locale = ctx.locale();
     let answer = ctx
         .locker(&wire::LockerSessionRequest {
@@ -169,6 +186,7 @@ pub(super) fn totp(ctx: &Ctx, item_id: &str, copy: bool) -> Result<Code, Refused
                 wire::LockerTotpAsk {
                     item_id: item_id.to_owned(),
                     copy,
+                    field_id: field_id.to_owned(),
                 },
             )),
         })

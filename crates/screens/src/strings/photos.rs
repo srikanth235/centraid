@@ -32,11 +32,9 @@ catalog! {
     plain photos_band_collections = ("Collections", "Collections");
     plain photos_band_library = ("Library", "Library");
     plain photos_band_more = ("More", "More");
-    plain photos_bytes_many = ("{count} bytes", "{count} bytes");
-    plain photos_byte_one = ("1 byte", "1 byte");
     plain photos_cancel = ("Cancel", "Cancel");
-    plain photos_receipt_trashed = ("Moved to Trash. Restore brings it back.", "Moved to Trash. Restore brings it back.");
     plain photos_receipt_restored = ("Restored.", "Restored.");
+    plain photos_receipt_removed_from_album = ("Removed from the album.", "Removed from the album.");
     plain photos_receipt_favorited = ("Added to Favorites.", "Added to Favorites.");
     plain photos_receipt_unfavorited = ("Removed from Favorites.", "Removed from Favorites.");
     plain photos_receipt_archived = ("Moved to the archive.", "Moved to the archive.");
@@ -77,11 +75,9 @@ catalog! {
     plain photos_delete_album = ("Delete album", "Delete album");
     plain photos_delete_album_body = ("Photos stay in the library.", "Photos stay in the library.");
     plain photos_delete_album_title = ("Delete this album?", "Delete this album?");
-    plain photos_delete_forever = ("Delete forever", "Delete forever");
     plain photos_delete_forever_body = ("Captions, tags and album entries go too. This cannot be undone.", "Captions, tags and album entries go too. This cannot be undone.");
-    plain photos_delete_forever_confirm = ("Delete {count} forever", "Delete {count} forever");
     plain photos_delete_forever_many = ("Delete {count} photos forever?", "Delete {count} photos forever?");
-    plain photos_delete_forever_one = ("Delete 1 photo forever?", "Delete 1 photo forever?");
+    plain photos_delete_forever_one = ("Delete this photo forever?", "Delete this photo forever?");
     plain photos_deselect = ("Deselect", "Deselect");
     plain photos_deselect_day = ("Deselect {title}", "Deselect {title}");
     plain photos_done = ("Done", "Done");
@@ -89,6 +85,16 @@ catalog! {
     plain photos_download_original = ("Download original", "Download original");
     plain photos_edit = ("Edit", "Edit");
     plain photos_editor_title = ("Crop and rotate", "Crop and rotate");
+    plain photos_export_all = ("All photos and videos", "All photos and videos");
+    plain photos_export_lede = (
+        "Your original photos and videos in one .zip, named by date taken.",
+        "Your original photos and videos in one .zip, named by date taken."
+    );
+    plain photos_export_nothing = (
+        "There are no photos or videos on this phone to export.",
+        "There are no photos or videos on this phone to export."
+    );
+    plain photos_export_title = ("Export photos", "Export photos");
     plain photos_edit_cannot_draw = ("Centraid could not draw the edit.", "Centraid could not draw the edit.");
     plain photos_edit_cannot_open = ("Centraid could not open the original.", "Centraid could not open the original.");
     plain photos_edit_crop = ("Crop", "Crop");
@@ -106,12 +112,10 @@ catalog! {
     plain photos_edit_ratio_three_two = ("3 : 2", "3 : 2");
     plain photos_edit_reset = ("Reset", "Reset");
     plain photos_edit_rotate = ("Rotate 90°", "Rotate 90°");
+    plain photos_edit_saved = ("Saved as a new photo", "Saved as a new photo");
     plain photos_edit_saving = ("Saving new photo", "Saving new photo");
     plain photos_edit_still_loading = ("The original is still loading.", "The original is still loading.");
     plain photos_empty_favorites = ("No favorites yet — tap the heart on any photo.", "No favorites yet — tap the heart on any photo.");
-    plain photos_empty_trash = ("Empty trash", "Empty trash");
-    plain photos_empty_trash_body = ("Every photo in the trash is deleted, with its captions and tags. This cannot be undone.", "Every photo in the trash is deleted, with its captions and tags. This cannot be undone.");
-    plain photos_empty_trash_title = ("Delete everything in the trash forever?", "Delete everything in the trash forever?");
     plain photos_error_edit_not_saved = ("Photo not saved.", "Photo not saved.");
     plain photos_error_export_failed = ("Photo not exported.", "Photo not exported.");
     plain photos_error_export_failed_retry = ("Photo not exported. Try again.", "Photo not exported. Try again.");
@@ -146,7 +150,6 @@ catalog! {
     plain photos_grid_select = ("Select photos", "Select photos");
     plain photos_grid_selected_many = ("{count} photos selected", "{count} photos selected");
     plain photos_grid_selected_one = ("1 photo selected", "1 photo selected");
-    plain photos_grid_trash_confirm = ("Move to trash", "Move to trash");
     plain photos_import_looking = ("Looking through your camera roll", "Looking through your camera roll");
     plain photos_import_now = ("Import now", "Import now");
     plain photos_import_paused_disk = ("Paused: this phone is out of space", "Paused: this phone is out of space");
@@ -156,7 +159,7 @@ catalog! {
     plain photos_import_wait_wifi = ("Waiting for Wi-Fi", "Waiting for Wi-Fi");
     plain photos_info = ("Info", "Info");
     plain photos_keep_it = ("Keep it", "Keep it");
-    plain photos_keep_originals_label = ("Keep originals on this phone", "Keep originals on this phone");
+    plain photos_keep_originals_label = ("Keep originals here", "Keep originals here");
     plain photos_keep_originals_title = ("Keep originals on this phone", "Keep originals on this phone");
     plain photos_keep_them = ("Keep them", "Keep them");
     plain photos_labels = ("Labels", "Labels");
@@ -191,10 +194,6 @@ catalog! {
     plain photos_original_held_back = ("Original not downloaded — your download setting is holding it back.", "Original not downloaded — your download setting is holding it back.");
     plain photos_original_on_phone = ("The original is on this phone.", "The original is on this phone.");
     plain photos_original_your_choice = ("Original not downloaded — your download setting leaves that to you.", "Original not downloaded — your download setting leaves that to you.");
-    plain photos_permission_denied = ("Photo access is off. Turn it on in Settings to import your camera roll.", "Photo access is off. Turn it on in Settings to import your camera roll.");
-    plain photos_permission_limited = ("Centraid imports the photos you selected.", "Centraid imports the photos you selected.");
-    plain photos_permission_not_asked = ("Centraid needs access to your photos to import them.", "Centraid needs access to your photos to import them.");
-    plain photos_permission_restricted = ("This phone does not allow photo access.", "This phone does not allow photo access.");
     plain photos_picker_nothing_chosen = ("Nothing chosen yet", "Nothing chosen yet");
     plain photos_picker_nothing_left = ("Everything in your library is already in this album.", "Everything in your library is already in this album.");
     plain photos_picker_title = ("Add to “{name}”", "Add to “{name}”");
@@ -231,7 +230,6 @@ catalog! {
     plain photos_remove_from_album = ("Remove from album", "Remove from album");
     plain photos_remove_item = ("Remove {label}", "Remove {label}");
     plain photos_rename_album = ("Rename album", "Rename album");
-    plain photos_restore = ("Restore", "Restore");
     plain photos_review_checked = ("Albums are checked. Favorites are not.", "Albums are checked. Favorites are not.");
     plain photos_review_choose_first = ("Choose the copy to keep first.", "Choose the copy to keep first.");
     plain photos_review_in_album = ("In an album", "In an album");
@@ -291,9 +289,6 @@ catalog! {
     plain photos_title = ("Photos", "Photos");
     plain photos_to_reclaim = ("{size} to reclaim.", "{size} to reclaim.");
     plain photos_trash = ("Trash", "Trash");
-    plain photos_trash_body = ("Restore them from the trash later. Your camera roll is not touched.", "Restore them from the trash later. Your camera roll is not touched.");
-    plain photos_trash_many = ("Move {count} photos to the trash?", "Move {count} photos to the trash?");
-    plain photos_trash_one = ("Move 1 photo to the trash?", "Move 1 photo to the trash?");
     plain photos_unarchive = ("Unarchive", "Unarchive");
     plain photos_undated = ("Undated", "Undated");
     plain photos_unfavorite = ("Unfavorite", "Unfavorite");
@@ -320,14 +315,15 @@ catalog! {
     // Counted forms of the pairs above: `{n}` is the count.
     counted receipt_favorited_n = ("1 photo added to Favorites.", "{n} photos added to Favorites.");
     counted receipt_unfavorited_n = ("1 photo removed from Favorites.", "{n} photos removed from Favorites.");
+    counted receipt_trashed_n = ("1 photo moved to trash", "{n} photos moved to trash");
     counted receipt_archived_n = ("1 photo moved to the archive.", "{n} photos moved to the archive.");
     counted receipt_unarchived_n = ("1 photo moved out of the archive.", "{n} photos moved out of the archive.");
+    counted receipt_restored_n = ("1 photo restored", "{n} photos restored");
+    counted receipt_removed_from_album_n = ("1 photo removed from the album", "{n} photos removed from the album");
     counted receipt_album_n = ("1 photo added to {album}.", "{n} photos added to {album}.");
     counted selected_title = ("1 photo selected", "{n} photos selected");
     counted chosen_title = ("{n} chosen", "{n} chosen");
-    counted trash_question = ("Move 1 photo to the trash?", "Move {n} photos to the trash?");
-    counted delete_forever_question = ("Delete 1 photo forever?", "Delete {n} photos forever?");
-    counted delete_forever_label = ("Delete {n} forever", "Delete {n} forever");
+    counted delete_forever_question = ("Delete this photo forever?", "Delete {n} photos forever?");
     counted places_unpinned = ("1 place has no location, so it is not on the map.", "{n} places have no location, so they are not on the map.");
     counted review_trash_others = ("Trash the other {n} copies", "Trash the other {n} copies");
 }

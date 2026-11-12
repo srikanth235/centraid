@@ -129,6 +129,11 @@ impl BlobStore for ContentBytes {
             .map_err(|error| door_error(id, error))
     }
 
+    /// `<vault>.exports` beside `<vault>.bytes`: a streamed export's plaintext is staged there.
+    fn staging_dir(&self) -> Option<PathBuf> {
+        Some(self.store.root().with_extension("exports"))
+    }
+
     fn ids(&self) -> Result<BTreeSet<String>> {
         Ok(self
             .store

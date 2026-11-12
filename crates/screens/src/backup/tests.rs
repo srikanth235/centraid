@@ -692,7 +692,10 @@ fn a_pass_is_told_in_one_sentence_per_reason_and_a_deadline_is_not_an_error() {
         say(S::Empty, 0),
         "Your backup device has everything that was ready."
     );
-    assert_eq!(say(S::Deadline, 2_000_000), "Still backing up. 2 MB to go.");
+    assert_eq!(
+        say(S::Deadline, 2_000_000),
+        "Still backing up. 2.0 MB to go."
+    );
     assert_eq!(
         say(S::Unreachable, 99),
         "Backup device didn't answer. Will try again."
@@ -728,6 +731,10 @@ fn a_pass_is_told_in_one_sentence_per_reason_and_a_deadline_is_not_an_error() {
 fn bytes_are_decimal_and_rounded_down() {
     assert_eq!(claim::bytes(999), "999 bytes");
     assert_eq!(claim::bytes(12_345), "12 KB");
+    assert_eq!(claim::bytes(12_345_678), "12.3 MB");
+    // A TENTH BELOW 100 OF THE UNIT, WHOLE FROM THERE, rounded down: both sides of the line.
+    assert_eq!(claim::bytes(99_999_999), "99.9 MB");
+    assert_eq!(claim::bytes(100_000_000), "100 MB");
     assert_eq!(claim::bytes(340_000_000), "340 MB");
     // GIGABYTES UNDER A HUNDRED KEEP ONE DECIMAL, never rounded up (#1144).
     assert_eq!(claim::bytes(2_999_999_999), "2.9 GB");
@@ -763,9 +770,10 @@ fn a_read_draws_the_line_the_gateways_and_the_controls_every_word_finished() {
     // UNTIL THE PHONE'S OWN SETTINGS HAVE BEEN READ the screen is loading, never
     // the default rule flipping to the member's.
     assert!(matches!(
-        page.state().body,
-        Some(wire::backup_home_state::Body::Loading(_))
+        page.state().page.and_then(|page| page.state),
+        Some(wire::page_state::State::Loading(_))
     ));
+    assert!(page.state().body.is_none());
     page.serve();
     page.shell.device.insert(
         super::rule::RULE_KEY.to_owned(),
@@ -1157,7 +1165,10 @@ fn a_read_that_fails_is_a_failure_and_a_refresh_that_fails_keeps_what_was_read()
     let mut page = page;
     page.send(E::Appeared(wire::Appeared {}));
     page.serve();
-    let Some(wire::backup_home_state::Body::Failure(failure)) = page.state().body else {
+    let state = page.state();
+    assert!(state.body.is_none());
+    let Some(wire::page_state::State::Failed(failure)) = state.page.and_then(|page| page.state)
+    else {
         panic!("a failed read is a failure");
     };
     assert!(!failure.sentence.is_empty() && !failure.remedy.is_empty());
@@ -1168,10 +1179,21 @@ fn a_read_that_fails_is_a_failure_and_a_refresh_that_fails_keeps_what_was_read()
     ));
     page.serve();
     assert_eq!(page.data().destinations.len(), 2);
-    // A refresh that fails keeps the last reading.
+    // A refresh that fails keeps the last reading, under the one sentence.
     *page.fake.status.borrow_mut() = None;
     page.send(E::DataChanged(wire::DataChanged { tables: vec![] }));
     assert_eq!(page.data().destinations.len(), 2);
+    let shown = page.state().page.expect("a page");
+    assert!(shown.state.is_none(), "what was read stays");
+    let note = shown.note.expect("a note over what is shown");
+    assert_eq!(
+        note.sentence,
+        crate::strings::shared::read_refresh_failed(crate::strings::Locale::En)
+    );
+    // Reading again clears it.
+    page.set_status(both());
+    page.send(E::DataChanged(wire::DataChanged { tables: vec![] }));
+    assert!(page.state().page.expect("a page").note.is_none());
 }
 
 #[test]
@@ -1854,12 +1876,12 @@ fn in_this_backup_lists_every_app_biggest_first_with_what_it_holds() {
         [
             ("Photos", "1,240 photos and videos · 4.4 GB", "Backed up"),
             ("Docs", "58 documents · 412 MB", "Backed up"),
-            ("Locker", "86 items · 96 MB", "Backed up"),
-            ("Notes", "312 notes · 38 MB", "Backed up"),
-            ("Money", "3,412 transactions · 21 MB", "Backed up"),
-            ("People", "418 people · 14 MB", "Backed up"),
-            ("Calendar", "640 events · 6 MB", "Backed up"),
-            ("Health", "731 days, 96 workouts · 3 MB", "Backed up"),
+            ("Locker", "86 items · 96.0 MB", "Backed up"),
+            ("Notes", "312 notes · 38.0 MB", "Backed up"),
+            ("Money", "3,412 transactions · 21.0 MB", "Backed up"),
+            ("People", "418 people · 14.0 MB", "Backed up"),
+            ("Calendar", "640 events · 6.0 MB", "Backed up"),
+            ("Health", "731 days, 96 workouts · 3.0 MB", "Backed up"),
         ]
     );
     assert!(
@@ -1869,7 +1891,7 @@ fn in_this_backup_lists_every_app_biggest_first_with_what_it_holds() {
     );
     assert_eq!(
         data.apps[3].accessibility_label,
-        "Notes. 312 notes · 38 MB. Backed up"
+        "Notes. 312 notes · 38.0 MB. Backed up"
     );
     assert_eq!(data.apps[0].app_id, "photos");
     // EACH BACKUP DEVICE SAYS WHAT IT HOLDS.

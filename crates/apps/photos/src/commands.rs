@@ -106,8 +106,8 @@ pub struct CommandsUnavailable {
 pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
-/// THE TABLE. Twenty-three actions, in the manifest's own order.
-pub const ACTIONS: [ActionRow; 23] = [
+/// THE TABLE. Twenty-seven actions, in the manifest's own order.
+pub const ACTIONS: [ActionRow; 27] = [
     act("upload", "photo.add"),
     act("edit-photo", "photo.edit"),
     act("retitle-photo", "entity.retitle"),
@@ -117,9 +117,10 @@ pub const ACTIONS: [ActionRow; 23] = [
     act("unarchive-photo", "flag.clear"),
     act("delete-photo", "entity.trash"),
     act("restore-photo", "entity.restore"),
-    // THE TWO CONFIRM-GATED ACTIONS: one trashed photograph forever, and an
-    // album (its photographs stay in the library).
+    // THE CONFIRM-GATED ACTIONS: one trashed photograph forever, the whole photo trash (#1185,
+    // the shared verb), and an album (its photographs stay in the library).
     confirmed("purge-photo", "entity.purge"),
+    confirmed("empty-trash", "entity.empty_trash"),
     act("create-album", "container.create"),
     act("rename-album", "entity.retitle"),
     act("set-album-cover", "album.set_cover"),
@@ -134,6 +135,13 @@ pub const ACTIONS: [ActionRow; 23] = [
     // A link set by hand (#1173): one edge, shaped by the vault.
     act("add-person", "edge.add"),
     act("remove-person", "edge.remove"),
+    // AN ATTACHMENT is an `attached` edge from the item to a document or a photo: the shared
+    // verbs, one pair in every app (the Attach promise, #1185).
+    act("attach", "edge.add"),
+    act("detach", "edge.remove"),
+    // THE ORIGINALS AS ONE ARCHIVE (#1185): Export beside Trash. A streamed file the shell saves;
+    // it writes nothing to the vault (`writes_nothing`).
+    act("export-zip", "photo.export_zip"),
 ];
 
 /// One action's row, by the name the manifest gives it.
@@ -177,7 +185,7 @@ mod tests {
 
     #[test]
     fn every_action_invokes_one_command_and_the_photo_verbs_are_the_photographs_own() {
-        assert_eq!(ACTIONS.len(), 23);
+        assert_eq!(ACTIONS.len(), 27);
         let own: Vec<&str> = ACTIONS
             .iter()
             .map(|row| row.command)
@@ -189,7 +197,8 @@ mod tests {
                 "photo.add",
                 "photo.edit",
                 "album.set_cover",
-                "photo.set_place"
+                "photo.set_place",
+                "photo.export_zip"
             ],
             "what only a photograph or an album has; everything else is a shared verb"
         );
@@ -245,20 +254,20 @@ mod tests {
     }
 
     #[test]
-    fn the_two_destroys_are_the_only_confirmed_actions() {
+    fn the_destroys_are_the_only_confirmed_actions() {
         let required: Vec<&str> = ACTIONS
             .iter()
             .filter(|row| row.confirm == Confirm::Required)
             .map(|row| row.action)
             .collect();
-        assert_eq!(required, ["purge-photo", "delete-album"]);
+        assert_eq!(required, ["purge-photo", "empty-trash", "delete-album"]);
     }
 
     /// ONE ACT SCOPE PER DISTINCT COMMAND — never one `read+act` over a whole
     /// family. Widening it would hand Photos every `entity.*` verb it never sends.
     #[test]
     fn the_act_scopes_are_one_per_distinct_command() {
-        assert_eq!(act_scope_tables().len(), 15);
+        assert_eq!(act_scope_tables().len(), 17);
         assert!(act_scope_tables().contains(&("photo", "add")));
         assert!(
             !act_scope_tables()

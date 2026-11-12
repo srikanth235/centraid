@@ -33,6 +33,7 @@ struct DocsSheetView: View {
                         SheetRow(
                             iconKey: action.iconKey,
                             label: action.label,
+                            detail: action.meta,
                             destructive: action.destructive,
                             identifier: "docs-action-\(action.key)",
                             onTap: { actions.onAction(action) }
@@ -265,6 +266,7 @@ struct DocsRenameField: View {
     @State private var typed = ""
     @FocusState private var focused: Bool
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.statusActed) private var statusActed
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -280,9 +282,25 @@ struct DocsRenameField: View {
                 KitLink(label: doneLabel, identifier: "docs-rename-done", action: onClose)
             }
             if !rename.statusLabel.isEmpty {
-                Text(rename.statusLabel)
-                    .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color(rename.autosave.refused ? "net" : "textFaint", scheme))
+                HStack(spacing: 8) {
+                    Text(rename.statusLabel)
+                        .centraidType("annotLabel")
+                        .foregroundStyle(Theme.color(rename.autosave.refused ? "net" : "textFaint", scheme))
+                    // A RENAME THE VAULT REFUSED BECAUSE THE DOCUMENT CHANGED ELSEWHERE (#1185): Reload
+                    // is the one verb, the kit's `statusActed`.
+                    if !rename.autosave.reloadLabel.isEmpty {
+                        Button(action: { statusActed() }) {
+                            Text(rename.autosave.reloadLabel)
+                                .centraidType("annotLabel")
+                                .fontWeight(.semibold)
+                                .foregroundStyle(Theme.color("text", scheme))
+                                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("docs-rename-reload")
+                    }
+                }
             }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)

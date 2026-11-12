@@ -12,6 +12,7 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
+import "centraid/core/v1/agenda_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/route.proto";
 
@@ -117,10 +118,11 @@ message MoneyAction {
 
 message MoneyHomeState {
   Destination destination = 2;
+  // 3, 4 and 5 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 3, 4, 5;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 3;
-    Failure failure = 4;
-    Denied denied = 5;
     MoneyHomeData data = 6;
   }
   Sheet sheet = 7;
@@ -144,6 +146,9 @@ message MoneyHomeState {
   // (`MonthTapped`), the one way to change month. Activity and Spending; unset
   // on Cash flow, which reads twelve months at once.
   optional HeaderSubtitle subtitle = 16;
+  // THE STATUS LINE (#1185): what a page that closed above this one said ("Target saved") with
+  // Undo, handed down by the runtime. The verb is the kit's `StatusActed`.
+  optional StatusLine status = 17;
 
   enum Destination {
     DESTINATION_UNSPECIFIED = 0;
@@ -161,6 +166,8 @@ message MoneyHomeState {
     reserved 4, 5;
     reserved "SHEET_ACCOUNT", "SHEET_CATEGORY";
   }
+  // THE READ: loading, failed, refused, empty, or ready, with a note when a re-read failed.
+  PageState page = 18;
 }
 
 message MoneyBandTab {
@@ -220,8 +227,9 @@ message MoneyHomeData {
 }
 
 message MoneySpendingData {
-  // Day one: no account or no transaction yet. One sentence and Import.
-  optional EmptyState empty = 1;
+  // 1 was `empty`: a month with nothing is the page's own empty state (#1185).
+  reserved 1;
+  reserved "empty";
   // One per currency, in the core's order.
   repeated MoneyHero heroes = 2;
   // "17 days left".
@@ -360,7 +368,9 @@ message MoneyActivityData {
   // "Showing 50"; empty when every row is drawn.
   string window = 6;
   bool more = 7;
-  optional EmptyState empty = 8;
+  // 8 was `empty`: no row, or none the filter lets through, is the page's own empty state (#1185).
+  reserved 8;
+  reserved "empty";
   // The category filter that lists the rows `needs_label` counts; empty while
   // there are none. A tap on the Needs row sends it as `category_picked`.
   string needs_key = 9;
@@ -377,7 +387,9 @@ message MoneyActivityData {
 }
 
 message MoneyCashflowData {
-  optional EmptyState empty = 1;
+  // 1 was `empty`: a flow with nothing is the page's own empty state (#1185).
+  reserved 1;
+  reserved "empty";
   repeated MoneyCashflowSeries series = 2;
   repeated MoneyFact definitions = 3;
   string window_note = 4;
@@ -489,13 +501,19 @@ message MoneyHomeEvent {
 
 message MoneyTransactionState {
   string txn_id = 2;
+  // 3, 4 and 5 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 3, 4, 5;
+  reserved "loading", "failure", "denied";
+  // 14 was `gone`: a line that is no longer there is the page's final failure (#1185).
+  reserved 14;
+  reserved "gone";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 3;
-    Failure failure = 4;
-    Denied denied = 5;
     MoneyTransactionData data = 6;
   }
-  optional Confirm confirm = 8;
+  // 8 was `confirm`, the confirm over Void: a transaction goes to the trash and asks nothing (#1185).
+  reserved 8;
+  reserved "confirm";
   Sheet sheet = 9;
   // THE "WITH" PICKER (#1173): who the line was with, picked by name. Open while the sheet is up.
   LinkPicker with_picker = 13;
@@ -504,6 +522,13 @@ message MoneyTransactionState {
   MoneyPageChrome chrome = 11;
   // What the last act did: "Category saved", or the core's refusal.
   optional StatusLine status = 12;
+  // "Earlier versions   2 ›" at the foot of the page (#1185); absent when there are none.
+  optional EarlierEntry earlier = 15;
+  // Where it came from, under the Earlier versions entry (#1185). Absent for a typed item.
+  optional OriginLine origin = 16;
+  // The picker over the "Linked to" section, while it is up (#1185). The kit's generic picker,
+  // over every kind (`with_picker` above is people only).
+  optional LinkPicker link_picker = 18;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -511,6 +536,8 @@ message MoneyTransactionState {
     SHEET_CATEGORY = 2;
     SHEET_NAME = 3;
   }
+  // THE READ: loading, failed, refused, empty, or ready, with a note when a re-read failed.
+  PageState page = 17;
 }
 
 message MoneyTransactionData {
@@ -545,6 +572,14 @@ message MoneyTransactionData {
   reserved "is_transfer";
   // Money in: the amount is drawn green. Money out is ink.
   bool amount_positive = 19;
+  // "Linked to" (#1185): every item the line is linked to, from either end, with the add row. The
+  // kit's shared section, above the earlier versions. Absent while what it is linked to was not
+  // read. Its events go back as `MoneyTransactionEvent.link`.
+  optional LinkSection links = 21;
+  // The attachments (#1185): the photos and files on this line, with Add photo and Add file. The
+  // kit's shared section (`AgendaAttachmentsSection`), after the offers and before "Linked to".
+  // Its events go back as `MoneyTransactionEvent.attachment`.
+  AgendaAttachmentsSection attachments = 22;
 }
 
 // An offer the app PROPOSES and never applies on its own.
@@ -570,11 +605,20 @@ message MoneyTransactionEvent {
     SheetClosed sheet_closed = 7;
     OfferAccepted offer_accepted = 8;
     OfferDismissed offer_dismissed = 9;
-    ConfirmAccepted confirm_accepted = 10;
-    ConfirmDismissed confirm_dismissed = 11;
+    // 10 and 11 were `confirm_accepted` and `confirm_dismissed`, the confirm over Void (#1185).
+    // "Undo" on the status line after Move to trash or its Undo (#1185).
+    StatusActed status_acted = 12;
     // The "With" picker's own events (#1173).
     LinkEvent with_link = 31;
+    // The "Linked to" section and its picker (#1185): the kit's `LinkEvent`.
+    LinkEvent link = 32;
+    // The attachments section's events (#1185): the kit's `AgendaAttachmentEvent`.
+    AgendaAttachmentEvent attachment = 33;
   }
+  reserved 10, 11;
+  reserved "confirm_accepted", "confirm_dismissed";
+
+  message StatusActed {}
 
   message ActionPicked {
     string key = 1;
@@ -601,10 +645,6 @@ message MoneyTransactionEvent {
     string key = 1;
   }
 
-  message ConfirmAccepted {}
-
-  message ConfirmDismissed {}
-
   message Refreshed {}
 }
 
@@ -617,10 +657,11 @@ message MoneyTargetState {
   string month = 2;
   string category_id = 3;
   string currency = 4;
+  // 5, 6 and 7 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 5, 6, 7;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 5;
-    Failure failure = 6;
-    Denied denied = 7;
     MoneyTargetData data = 8;
   }
   // What the member is typing, and whether unused money carries.
@@ -630,6 +671,8 @@ message MoneyTargetState {
   optional StatusLine status = 14;
   // The target was saved or removed: the shell pops.
   bool finished = 15;
+  // THE READ: loading, failed, refused, empty, or ready, with a note when a re-read failed.
+  PageState page = 16;
 }
 
 message MoneyTargetData {
@@ -686,18 +729,23 @@ message MoneyTargetEvent {
 // ---------------------------------------------------------------------------
 
 message MoneyRecurringState {
+  // 2, 3 and 4 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 2, 3, 4;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 2;
-    Failure failure = 3;
-    Denied denied = 4;
     MoneyRecurringData data = 5;
   }
   MoneyPageChrome chrome = 6;
+  // THE READ: loading, failed, refused, empty, or ready, with a note when a re-read failed.
+  PageState page = 7;
 }
 
 message MoneyRecurringData {
   repeated MoneyRecurringRow rows = 1;
-  optional EmptyState empty = 2;
+  // 2 was `empty`: no recurring charge is the page's own empty state (#1185).
+  reserved 2;
+  reserved "empty";
   repeated MoneyFact definitions = 3;
   string window_note = 4;
 }
@@ -728,26 +776,32 @@ message MoneyRecurringEvent {
 // ---------------------------------------------------------------------------
 
 message MoneySearchState {
+  // 2, 3 and 4 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 2, 3, 4;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 2;
-    Failure failure = 3;
-    Denied denied = 4;
     MoneySearchData data = 5;
   }
-  // The resting page: no term, nothing read.
-  optional EmptyState resting = 6;
+  // 6 was `resting`: the resting page is the page's own empty state (#1185).
+  reserved 6;
+  reserved "resting";
   MoneyPageChrome chrome = 7;
   string placeholder = 8;
   string clear_label = 9;
   // What the member has typed.
   string term = 10;
+  // THE READ: loading, failed, refused, empty, or ready, with a note when a re-read failed.
+  PageState page = 11;
 }
 
 message MoneySearchData {
   repeated MoneyRow rows = 1;
   // "12 matches", "50 of 212 matches"; empty with no rows.
   string count_label = 2;
-  optional EmptyState empty = 3;
+  // 3 was `empty`: a term that matched nothing is the page's own empty state (#1185).
+  reserved 3;
+  reserved "empty";
   // The spelling the index searched for instead, when it corrected the term.
   string corrected = 4;
   // THE ASK (the owner's ruling: Ask in every search): hands the term to the
@@ -777,10 +831,11 @@ message MoneySearchEvent {
 // ---------------------------------------------------------------------------
 
 message MoneyAccountsState {
+  // 2, 3 and 4 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 2, 3, 4;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 2;
-    Failure failure = 3;
-    Denied denied = 4;
     MoneyAccountsData data = 5;
   }
   Sheet sheet = 6;
@@ -794,6 +849,8 @@ message MoneyAccountsState {
     SHEET_NONE = 1;
     SHEET_EDITOR = 2;
   }
+  // THE READ: loading, failed, refused, empty, or ready, with a note when a re-read failed.
+  PageState page = 11;
 }
 
 message MoneyAccountsData {
@@ -801,7 +858,9 @@ message MoneyAccountsData {
   string net_worth_label = 2;
   repeated MoneyFigure net_worth = 3;
   string net_worth_note = 4;
-  optional EmptyState empty = 5;
+  // 5 was `empty`: no account is the page's own empty state (#1185).
+  reserved 5;
+  reserved "empty";
   string add_label = 6;
   repeated MoneyFact definitions = 7;
 }
@@ -929,10 +988,11 @@ message MoneyAccountsEvent {
 // ---------------------------------------------------------------------------
 
 message MoneyCategoriesState {
+  // 2, 3 and 4 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 2, 3, 4;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 2;
-    Failure failure = 3;
-    Denied denied = 4;
     MoneyCategoriesData data = 5;
   }
   Sheet sheet = 6;
@@ -952,12 +1012,16 @@ message MoneyCategoriesState {
     SHEET_ROW = 3;
     SHEET_MERGE = 4;
   }
+  // THE READ: loading, failed, refused, empty, or ready, with a note when a re-read failed.
+  PageState page = 13;
 }
 
 message MoneyCategoriesData {
   repeated MoneyCategoryGroup groups = 1;
   string add_label = 2;
-  optional EmptyState empty = 3;
+  // 3 was `empty`: no category is the page's own empty state (#1185).
+  reserved 3;
+  reserved "empty";
   string add_title = 4;
   string name_label = 5;
   string group_label = 6;
@@ -1041,10 +1105,11 @@ message MoneyCategoriesEvent {
 // ---------------------------------------------------------------------------
 
 message MoneyRulesState {
+  // 2, 3 and 4 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 2, 3, 4;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 2;
-    Failure failure = 3;
-    Denied denied = 4;
     MoneyRulesData data = 5;
   }
   Sheet sheet = 6;
@@ -1060,13 +1125,17 @@ message MoneyRulesState {
     SHEET_CATEGORY = 3;
     SHEET_ACCOUNT = 4;
   }
+  // THE READ: loading, failed, refused, empty, or ready, with a note when a re-read failed.
+  PageState page = 11;
 }
 
 message MoneyRulesData {
   repeated MoneyRuleRow rows = 1;
   // "3 of 100".
   string limit_line = 2;
-  optional EmptyState empty = 3;
+  // 3 was `empty`: no rule is the page's own empty state (#1185).
+  reserved 3;
+  reserved "empty";
   string add_label = 4;
   string apply_label = 5;
   repeated MoneyChoice category_options = 6;
@@ -1209,10 +1278,11 @@ message MoneyRulesEvent {
 
 message MoneyImportState {
   Phase phase = 2;
+  // 3, 4 and 5 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 3, 4, 5;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 3;
-    Failure failure = 4;
-    Denied denied = 5;
     MoneyImportData data = 6;
   }
   MoneyPageChrome chrome = 7;
@@ -1239,6 +1309,8 @@ message MoneyImportState {
     SHEET_NONE = 1;
     SHEET_ACCOUNT = 2;
   }
+  // THE READ: loading, failed, refused, empty, or ready, with a note when a re-read failed.
+  PageState page = 15;
 }
 
 message MoneyImportData {
@@ -1262,7 +1334,9 @@ message MoneyImportData {
   string publish_note = 14;
   string discard_label = 15;
   string done_label = 16;
-  optional EmptyState empty = 17;
+  // 17 was `empty`: no account to import into is the page's own empty state (#1185).
+  reserved 17;
+  reserved "empty";
   // 18 was `add_account_label`: nothing read it (#1152).
   reserved 18;
   reserved "add_account_label";

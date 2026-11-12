@@ -202,6 +202,45 @@ pub fn list(v: &wire::ViewState) -> &wire::TodoListState {
     }
 }
 
+/// The empty state a page drew, when the page is empty.
+pub fn page_empty(page: &Option<wire::PageState>) -> &wire::EmptyState {
+    match page.as_ref().and_then(|page| page.state.as_ref()) {
+        Some(wire::page_state::State::Empty(empty)) => empty,
+        other => panic!("the page is not empty: {other:?}"),
+    }
+}
+
+fn is_empty_page(page: &Option<wire::PageState>) -> bool {
+    matches!(
+        page.as_ref().and_then(|page| page.state.as_ref()),
+        Some(wire::page_state::State::Empty(_))
+    )
+}
+
+/// The list's groups; an empty view (the page's empty state) holds none.
+pub fn list_groups(v: &wire::ViewState) -> &[wire::TodoRowGroup] {
+    if is_empty_page(&list(v).page) {
+        return &[];
+    }
+    &list_data(v).groups
+}
+
+/// The project's groups; an empty project (the page's empty state) holds none.
+pub fn project_groups(v: &wire::ViewState) -> &[wire::TodoRowGroup] {
+    if is_empty_page(&project_state(v).page) {
+        return &[];
+    }
+    &project_data(v).groups
+}
+
+/// Catch up's piles; nothing behind (the page's empty state) holds none.
+pub fn catch_up_piles(v: &wire::ViewState) -> &[wire::TodoPile] {
+    if is_empty_page(&catch_up(v).page) {
+        return &[];
+    }
+    &catch_up_data(v).piles
+}
+
 pub fn list_data(v: &wire::ViewState) -> &wire::TodoListData {
     match &list(v).content {
         Some(wire::todo_list_state::Content::Data(data)) => data,
@@ -221,6 +260,11 @@ pub fn project_data(v: &wire::ViewState) -> &wire::TodoProjectData {
         Some(wire::todo_project_state::Content::Data(data)) => data,
         other => panic!("the project has no data: {other:?}"),
     }
+}
+
+/// The project's header words and look (set while the project is on the page, ready or empty).
+pub fn project_head(v: &wire::ViewState) -> &wire::TodoProjectHead {
+    project_state(v).head.as_ref().expect("the project's head")
 }
 
 pub fn detail(v: &wire::ViewState) -> &wire::TodoDetailState {
@@ -259,9 +303,20 @@ pub fn trash(v: &wire::ViewState) -> &wire::TrashView {
 }
 
 pub fn trash_data(v: &wire::ViewState) -> &wire::TrashData {
+    static NOTHING: std::sync::OnceLock<wire::TrashData> = std::sync::OnceLock::new();
     match &trash(v).content {
         Some(wire::trash_view::Content::Data(data)) => data,
+        // A trash with nothing in it is the page's own empty state and carries no data.
+        None if trash_empty_state(v).is_some() => NOTHING.get_or_init(wire::TrashData::default),
         other => panic!("the trash has no data: {other:?}"),
+    }
+}
+
+/// The empty state of a trash page, when the page is empty.
+pub fn trash_empty_state(v: &wire::ViewState) -> Option<&wire::EmptyState> {
+    match trash(v).page.as_ref().and_then(|page| page.state.as_ref()) {
+        Some(wire::page_state::State::Empty(empty)) => Some(empty),
+        _ => None,
     }
 }
 
@@ -330,4 +385,45 @@ pub fn choose(d: &mut Driver, i: u64, field: &str, key: &str) {
             key: key.to_owned(),
         }),
     );
+}
+
+/// The phone's Reminders follow a list of records (`follow-reminders`), as the follower would.
+pub fn follow_reminders(
+    d: &Driver,
+    list: (&str, &str),
+    records: serde_json::Value,
+    complete: bool,
+) -> wire::ActResponse {
+    arrange(
+        d,
+        act::reminders::FollowReminders {
+            origin: serde_json::json!({ "ref": list.0, "label": list.1 }).to_string(),
+            records: records.to_string(),
+            complete: Some(complete),
+            since: None,
+            gone: None,
+        },
+    )
+}
+
+/// One followed reminder's fields: open, with the extras.
+pub fn reminder_fields(title: &str, extra: serde_json::Value) -> serde_json::Value {
+    let mut fields = serde_json::json!({ "title": title, "status": "open", "done_at": null });
+    fields
+        .as_object_mut()
+        .expect("an object")
+        .extend(extra.as_object().expect("an object").clone());
+    fields
+}
+
+/// The id of the open task titled `title`, from the "All" board.
+pub fn id_by_title(d: &Driver, title: &str) -> String {
+    let board = load_board(d, load::reminders::BoardView::All, None);
+    board
+        .groups
+        .iter()
+        .flat_map(|group| group.tasks.iter())
+        .find(|task| task.title == title)
+        .map(|task| task.task_id.clone())
+        .unwrap_or_else(|| panic!("no task titled {title}"))
 }

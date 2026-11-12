@@ -6,11 +6,24 @@ use centraid_api_proto::core_v1 as wire;
 
 use super::held::Held;
 use crate::kit::schedule::rows;
+use crate::kit::search as kit_search;
 use crate::reminders::routes;
 use crate::strings::{Locale, agenda as words, shared};
 
 /// The index entity a project container carries.
 const PROJECT_ENTITY: &str = "project";
+
+/// The term found nothing: no task and no project by name.
+#[must_use]
+pub fn nothing(held: &Held) -> bool {
+    held.search.as_ref().is_some_and(|tasks| {
+        tasks.tasks.is_empty()
+            && !tasks
+                .containers
+                .iter()
+                .any(|hit| hit.entity == PROJECT_ENTITY)
+    })
+}
 
 /// The tasks a search term found, as one group; `None` when it found none.
 #[must_use]
@@ -23,7 +36,25 @@ pub fn hits_group(locale: Locale, held: &Held, ctx: &rows::Context) -> Option<wi
     ctx.day_in_head = false;
     let rows: Vec<wire::TodoRow> = found
         .iter()
-        .map(|task| rows::row(locale, task, &ctx, false))
+        .map(|task| {
+            let mut row = rows::row(locale, task, &ctx, false);
+            // Words only an earlier version of the task held: say so, and open its Earlier
+            // versions (#1185).
+            if task.in_earlier_version {
+                row.meta = kit_search::earlier_meta(locale, &row.meta);
+                row.accessibility_label = format!(
+                    "{}, {}",
+                    row.accessibility_label,
+                    kit_search::in_earlier_version(locale)
+                );
+                row.route = Some(kit_search::earlier_route(
+                    locale,
+                    crate::reminders::EARLIER,
+                    &task.task_id,
+                ));
+            }
+            row
+        })
         .collect();
     Some(wire::TodoRowGroup {
         key: "results".to_owned(),

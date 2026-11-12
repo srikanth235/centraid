@@ -17,7 +17,8 @@
 //! by walking what the file says points at a person or at an entity (every
 //! foreign key into `person` or `entity`, read from `PRAGMA foreign_key_list`,
 //! as the blob plane reads what rents a blob) and the `edge` table, and then the
-//! merged person is purged. Nothing here lists a renting table: a table added
+//! merged person is purged (its history, a `revision` row, goes with it: it is the history of a
+//! person who no longer exists, and is never re-pointed). Nothing here lists a renting table: a table added
 //! tomorrow that points at `entity` is merged correctly today
 //! ([#1146](https://github.com/srikanth235/centraid/issues/1146)). **A merge is
 //! confirmed**: it ends a person for good, like a purge.
@@ -35,12 +36,14 @@ use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Value as Json, json};
 
 use crate::commands::edge::{self, Extras};
-use crate::commands::entity::{find, lookup_live, purge_one};
+use crate::commands::entity::{self, find, lookup_live, purge_one};
 use crate::commands::event::{self, NewEvent};
 use crate::commands::note;
 use crate::commands::tag::{ensure_concept, set_tagged};
 use crate::commands::task::{self, NewTask};
-use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk};
+use crate::commands::{
+    CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk, arrival,
+};
 use crate::error::{Result, VaultError};
 use crate::model::{Kind, Rel};
 use crate::time::Semantics;
@@ -144,7 +147,8 @@ fn merge(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
 fn references_to_a_person(connection: &rusqlite::Connection) -> Result<Vec<(String, String)>> {
     let tables: Vec<String> = connection
         .prepare(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT IN ('person', 'edge')
+            "SELECT name FROM sqlite_master WHERE type = 'table'
+                AND name NOT IN ('person', 'edge', 'revision')
                AND sql NOT LIKE 'CREATE VIRTUAL%' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'
               ORDER BY name",
         )?
@@ -362,7 +366,7 @@ fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         )?;
     }
     ctx.touch(id)?;
-    Ok(json!({ "id": id }))
+    entity::with_rev(ctx, id, json!({ "id": id }))
 }
 
 // ---------------------------------------------------------------------------
@@ -380,6 +384,16 @@ fn pre_move(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 /// them out of the list they were in.
 fn move_person(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let id = ctx.required_str("id")?;
+    // The list they were in, so the move is taken back by moving them there again (`null`: none).
+    let was: Option<String> = ctx
+        .connection()
+        .query_row(
+            "SELECT from_id FROM edge WHERE rel = 'contains' AND to_id = ?1
+                AND from_id IN (SELECT id FROM container WHERE kind = 'list')",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?;
     ctx.connection().execute(
         "DELETE FROM edge WHERE rel = 'contains' AND to_id = ?1
             AND from_id IN (SELECT id FROM container WHERE kind = 'list')",
@@ -390,7 +404,11 @@ fn move_person(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     if let Some(list) = ctx.optional_str("list_id") {
         edge::put(ctx, list, Rel::Contains, id, None, &Extras::default())?;
     }
-    Ok(json!({ "id": id, "list_id": ctx.optional_str("list_id") }))
+    Ok(json!({
+        "id": id,
+        "list_id": ctx.optional_str("list_id"),
+        "replaced": { "list_id": was }
+    }))
 }
 
 // ---------------------------------------------------------------------------
@@ -735,7 +753,8 @@ const EDIT: &str = r#"{
     "role": { "type": ["string", "null"] },
     "met": { "type": ["string", "null"] },
     "birthday": { "type": ["string", "null"] },
-    "cadence_days": { "type": ["integer", "null"], "minimum": 0 }
+    "cadence_days": { "type": ["integer", "null"], "minimum": 0 },
+    "expected_rev": { "type": "integer", "minimum": 0 }
   }
 }"#;
 
@@ -1074,6 +1093,7 @@ fn import_vcf(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
                         },
                     )?;
                     write_points(ctx, &id, card, &(0..card.points.len()).collect::<Vec<_>>())?;
+                    arrival::record(ctx, &id, Kind::Person)?;
                 }
             }
         }
@@ -1090,12 +1110,14 @@ fn import_vcf(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     }))
 }
 
-/// `person.export_vcf`: everyone (or one list's people) as vCards in one file. Writes nothing.
+/// `person.export_vcf`: everyone, one list's people, or one person (`person_id`, what a detail
+/// page shares) as vCards in one file. Writes nothing.
 /// The owner's own card is not in it: it is the member's, not someone to add to another book.
 fn export_vcf(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let list = ctx.optional_str("list_id");
+    let person = ctx.optional_str("person_id");
     let mut file_name = "People".to_owned();
-    if let Some(list) = list {
+    if let Some(list) = list.or(person) {
         let title: Option<String> = ctx
             .connection()
             .query_row("SELECT title FROM entity WHERE id = ?1", [list], |row| {
@@ -1104,15 +1126,33 @@ fn export_vcf(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             .ok();
         file_name = title.map_or_else(|| "People".to_owned(), |t| note::portable_stem(&t));
     }
-    let mut people = ctx.connection().prepare_cached(
+    let (text, count) = vcard_file(ctx.connection(), list, person)?;
+    Ok(serde_json::json!({
+        "name": format!("{file_name}.vcf"),
+        "media_type": "text/vcard",
+        "count": count,
+        "content": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, text),
+    }))
+}
+
+/// The vCards of everyone (or one list's people, or one person) as one file's text and how many
+/// cards it holds. `person.export_vcf` answers it; the whole-vault export writes the same text
+/// as `People/people.vcf`.
+pub(crate) fn vcard_file(
+    connection: &rusqlite::Connection,
+    list: Option<&str>,
+    person: Option<&str>,
+) -> Result<(String, usize)> {
+    let mut people = connection.prepare_cached(
         "SELECT e.id, e.title, p.nickname, p.role, p.birthday
            FROM entity e JOIN person p ON p.id = e.id
           WHERE e.kind = 'person' AND e.deleted_at IS NULL AND e.id IS NOT (SELECT self_id FROM vault)
             AND (?1 IS NULL OR e.id IN (SELECT to_id FROM edge WHERE from_id = ?1 AND rel = 'contains'))
+            AND (?2 IS NULL OR e.id = ?2)
           ORDER BY e.title COLLATE NOCASE, e.created_at, e.id",
     )?;
     let rows = people
-        .query_map([list], |row| {
+        .query_map(rusqlite::params![list, person], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
@@ -1122,7 +1162,7 @@ fn export_vcf(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             ))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    let mut points = ctx.connection().prepare_cached(
+    let mut points = connection.prepare_cached(
         "SELECT kind, value, label FROM contact_point WHERE person_id = ?1 ORDER BY position",
     )?;
     let mut text = String::new();
@@ -1159,12 +1199,7 @@ fn export_vcf(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
                 .collect(),
         }));
     }
-    Ok(serde_json::json!({
-        "name": format!("{file_name}.vcf"),
-        "media_type": "text/vcard",
-        "count": rows.len(),
-        "content": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, text),
-    }))
+    Ok((text, rows.len()))
 }
 
 fn permanent(mut definition: CommandDefinition) -> CommandDefinition {
@@ -1179,16 +1214,21 @@ pub fn definitions() -> Vec<CommandDefinition> {
         CommandDefinition::plain(
             "person.import_vcf",
             "person",
-            r#"{
+            concat!(
+                r#"{
               "type": "object",
               "required": ["cards"],
               "additionalProperties": false,
               "properties": {
                 "cards": { "type": "string" },
                 "dry_run": { "type": "boolean" },
-                "merge": { "type": "boolean" }
+                "merge": { "type": "boolean" },
+                "#,
+                arrival::arrived_property!(),
+                r#"
               }
-            }"#,
+            }"#
+            ),
             Idempotency::Idempotent,
             &[],
             import_vcf,
@@ -1200,7 +1240,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "list_id": { "type": ["string", "null"] }
+                "list_id": { "type": ["string", "null"] },
+                "person_id": { "type": ["string", "null"] }
               }
             }"#,
             Idempotency::Idempotent,
@@ -1223,10 +1264,14 @@ pub fn definitions() -> Vec<CommandDefinition> {
             "person",
             EDIT,
             Idempotency::Idempotent,
-            &[CommandCondition {
-                predicate: "person_can_be_edited",
-                check: pre_edit,
-            }],
+            &[
+                entity::STALE_GUARD[0],
+                entity::STALE_GUARD[1],
+                CommandCondition {
+                    predicate: "person_can_be_edited",
+                    check: pre_edit,
+                },
+            ],
             edit,
         ),
         CommandDefinition::plain(

@@ -34,7 +34,8 @@ use super::{media, routes};
 use crate::catalog::{act, load};
 use crate::field::Field;
 use crate::kit::act as kit_act;
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Page, Reading};
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, photos as words, photos_lightbox as own, shared};
 
@@ -372,7 +373,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     };
     Some(Box::new(Editor {
         photo_id: args.photo_id.clone(),
-        content: Content::Loading,
+        content: Page::loading(),
         plan: fresh_plan(),
         phase: Phase::Editing,
         discard_open: false,
@@ -380,6 +381,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         saved_route: None,
         rendering: None,
         crop_touched: false,
+        undo: Undo::default(),
     }))
 }
 
@@ -392,16 +394,10 @@ struct Source {
     absent_reason: String,
 }
 
-enum Content {
-    Loading,
-    Failed,
-    Denied(wire::AppQueryDenial),
-    Data(Box<Source>),
-}
-
 struct Editor {
     photo_id: String,
-    content: Content,
+    /// The read of this photograph: its source is the page's data.
+    content: Page<Box<Source>>,
     plan: wire::PhotosEditPlan,
     phase: Phase,
     discard_open: bool,
@@ -412,6 +408,8 @@ struct Editor {
     /// The member moved, resized or ratio-picked the crop: a straighten leaves it alone.
     /// Until then the crop is the frame a straighten leaves full of photograph.
     crop_touched: bool,
+    /// The kit's one door; the save leaves the page, so it only ever holds a refusal.
+    undo: Undo,
 }
 
 /// The plan a render was asked for, so a settle for a plan the member has since
@@ -434,20 +432,22 @@ impl Editor {
             Reading::Data(found) => match found.photo.and_then(|detail| detail.cell) {
                 Some(cell) => {
                     let (original_path, os_ref, absent_reason) = locate(ctx, &cell);
-                    self.content = Content::Data(Box::new(Source {
-                        cell,
-                        original_path,
-                        os_ref,
-                        absent_reason,
-                    }));
+                    self.content = Page::Ready {
+                        data: Box::new(Source {
+                            cell,
+                            original_path,
+                            os_ref,
+                            absent_reason,
+                        }),
+                        note: None,
+                    };
                 }
-                None => self.content = Content::Failed,
+                None => self.content = Page::Failed,
             },
-            Reading::Denied(denial) => self.content = Content::Denied(denial),
+            Reading::Denied(denial) => self.content = Page::Refused(denial),
             Reading::Failed => {
-                if !matches!(self.content, Content::Data(_)) {
-                    self.content = Content::Failed;
-                }
+                let held = std::mem::replace(&mut self.content, Page::loading());
+                self.content = held.after(Reading::Failed, ctx.locale(), |_| false);
             }
         }
     }
@@ -457,7 +457,7 @@ impl Editor {
     /// THE ORIGINAL, NEVER THE DISPLAY COPY: rendering from a thumbnail would
     /// silently write a smaller photograph than the one the member edited.
     fn save_refusal(&self, locale: Locale) -> Option<String> {
-        let Content::Data(source) = &self.content else {
+        let Some(source) = self.content.data() else {
             return Some(words::photos_edit_not_loaded(locale));
         };
         if !matches!(source.cell.form.as_deref(), Some("photo" | "scan")) {
@@ -475,8 +475,8 @@ impl Editor {
 
     /// The photograph's own shape (width over height), when the vault knows its pixels.
     fn source_ratio(&self) -> f64 {
-        match &self.content {
-            Content::Data(source) => match (source.cell.width, source.cell.height) {
+        match self.content.data() {
+            Some(source) => match (source.cell.width, source.cell.height) {
                 (Some(width), Some(height)) if width > 0 && height > 0 => {
                     width as f64 / height as f64
                 }
@@ -559,7 +559,7 @@ impl Editor {
         if self.save_refusal(locale).is_some() {
             return Vec::new();
         }
-        let Content::Data(source) = &self.content else {
+        let Some(source) = self.content.data() else {
             return Vec::new();
         };
         let mut plan = self.plan;
@@ -594,7 +594,10 @@ impl Editor {
             &["edit", &self.photo_id, &rendered.content_hash],
             kit_act::fresh(),
         );
-        let settled = kit_act::act(
+        // The editor leaves for the new photograph on success, so the line (and its Undo, which
+        // moves the new photograph to trash) goes to the page the shell opens next, the new
+        // photograph's, where the member lands (#1185).
+        let settled = self.undo.act_handing_onward(
             ctx,
             act::photos::Upload {
                 blob: rendered.content_hash,
@@ -607,6 +610,7 @@ impl Editor {
                 ..Default::default()
             },
             &key,
+            words::photos_edit_saved,
         );
         if settled.committed {
             self.phase = Phase::Saved;
@@ -629,6 +633,7 @@ impl Editor {
             } else {
                 why.to_owned()
             },
+            permanent: false,
         });
     }
 }
@@ -719,36 +724,26 @@ impl Screen for Editor {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
-        use wire::photos_editor_state::Content as C;
-        let content = match &self.content {
-            Content::Loading => C::Loading(wire::Loading { first_load: true }),
-            Content::Failed => C::Failure(read::failure(locale)),
-            Content::Denied(denial) => C::Denied(wire::Denied {
-                title: own::denied_title(locale),
-                body: own::denied_body(locale),
-                receipt: denial.code.clone().unwrap_or_default(),
-            }),
-            Content::Data(source) => {
-                let cell = &source.cell;
-                let offset = cell.offset_min.unwrap_or(0);
-                let date = cell
-                    .taken_at
-                    .as_deref()
-                    .map(|at| media::stamp_date(locale, at, offset))
-                    .unwrap_or_default();
-                C::Data(Box::new(wire::PhotosEditorData {
-                    tile: Some(cells::tile(cell, Link::default(), locale)),
-                    original_path: source.original_path.clone(),
-                    width: cell.width.map_or(0, |w| u32::try_from(w).unwrap_or(0)),
-                    height: cell.height.map_or(0, |h| u32::try_from(h).unwrap_or(0)),
-                    meta: if date.is_empty() {
-                        words::photos_edit_from_undated(locale)
-                    } else {
-                        fill(&words::photos_edit_from_dated(locale), &[("date", &date)])
-                    },
-                }))
+        let data = self.content.data().map(|source| {
+            let cell = &source.cell;
+            let offset = cell.offset_min.unwrap_or(0);
+            let date = cell
+                .taken_at
+                .as_deref()
+                .map(|at| media::stamp_date(locale, at, offset))
+                .unwrap_or_default();
+            wire::PhotosEditorData {
+                tile: Some(cells::tile(cell, Link::default(), locale)),
+                original_path: source.original_path.clone(),
+                width: cell.width.map_or(0, |w| u32::try_from(w).unwrap_or(0)),
+                height: cell.height.map_or(0, |h| u32::try_from(h).unwrap_or(0)),
+                meta: if date.is_empty() {
+                    words::photos_edit_from_undated(locale)
+                } else {
+                    fill(&words::photos_edit_from_dated(locale), &[("date", &date)])
+                },
             }
-        };
+        });
         let current = Ratio::try_from(self.plan.ratio).unwrap_or(Ratio::Unspecified);
         let discard = self.discard_open.then(|| wire::Confirm {
             title: words::photos_edit_discard_question(locale),
@@ -759,7 +754,12 @@ impl Screen for Editor {
         let state = wire::PhotosEditorState {
             photo_id: self.photo_id.clone(),
             title: words::photos_editor_title(locale),
-            content: Some(content),
+            page: Some(self.content.wire(
+                locale,
+                |denial| super::denied(locale, denial),
+                wire::EmptyState::default,
+            )),
+            content: data.map(|data| wire::photos_editor_state::Content::Data(Box::new(data))),
             phase: self.phase as i32,
             status_line: if self.phase == Phase::Saving {
                 words::photos_edit_saving(locale)

@@ -43,7 +43,6 @@ import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.StatusChipView
 import dev.centraid.android.kit.StatusLine
-import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -69,13 +68,14 @@ internal fun LockerExportScreen(
             title = chrome?.title.orEmpty(),
             parentTitle = chrome?.back_label.orEmpty(),
             onBack = onBack,
-            statusLine = { StatusLine(state.status) {} },
+            statusLine = { StatusLine(state.status) },
         ) {
             ReadStateView(
-                content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
+                page = state.page!!,
                 onRetry = { onEvent(LockerExportEvent(refreshed = LockerExportEvent.Refreshed())) },
                 retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
-            ) { export ->
+            ) {
+                val export = state.data_ ?: return@ReadStateView
                 LazyColumn(Modifier.fillMaxSize().testTag("locker-export")) {
                     item(key = "lede") {
                         KitText(
@@ -152,13 +152,14 @@ internal fun LockerImportScreen(
             title = chrome?.title.orEmpty(),
             parentTitle = chrome?.back_label.orEmpty(),
             onBack = onBack,
-            statusLine = { StatusLine(state.status) {} },
+            statusLine = { StatusLine(state.status) },
         ) {
             ReadStateView(
-                content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
+                page = state.page!!,
                 onRetry = { onEvent(LockerImportEvent(refreshed = LockerImportEvent.Refreshed())) },
                 retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
-            ) { plan ->
+            ) {
+                val plan = state.data_ ?: return@ReadStateView
                 LazyColumn(Modifier.fillMaxSize().testTag("locker-import")) {
                     item(key = "lede") { LockerNote(plan.lede) }
                     item(key = "file") {

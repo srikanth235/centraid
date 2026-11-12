@@ -11,6 +11,7 @@ use std::time::Duration;
 use calendar_support::World;
 use centraid_api_proto::core_v1 as wire;
 use centraid_screens::calendar::follow::{self as calendar, CalendarFollow};
+use centraid_screens::catalog::act;
 use centraid_screens::kit::civil;
 use centraid_screens::strings::Locale;
 use centraid_screens::{Registry, Screen};
@@ -114,7 +115,6 @@ fn work() -> wire::PhoneCalendar {
         source_title: "Google".to_owned(),
         title: "Work".to_owned(),
         color: "#007AFF".to_owned(),
-        ..wire::PhoneCalendar::default()
     }
 }
 
@@ -382,7 +382,6 @@ fn a_calendar_is_painted_with_the_wheel_hue_nearest_its_phone_colour_and_a_grey_
                 source_title: String::new(),
                 title: "Home".to_owned(),
                 color: color.to_owned(),
-                ..wire::PhoneCalendar::default()
             },
         )
         .color
@@ -406,7 +405,6 @@ fn a_calendar_names_itself_by_its_source_and_title() {
                 source_title: source.to_owned(),
                 title: title.to_owned(),
                 color: String::new(),
-                ..wire::PhoneCalendar::default()
             },
         )
         .label
@@ -446,8 +444,9 @@ fn the_sentence_an_import_ends_on() {
 // The flow, through the runtime
 // ---------------------------------------------------------------------------
 
-/// A long-lived screen that hosts the flow the way Agenda's home does: the
-/// Import tap is the proof screen's copy tap, and the status line is its title.
+/// A long-lived screen that hosts the import the way Calendar's home does: the Import tap is the
+/// proof screen's copy tap, and the status line is its title. Following is the coordinator's
+/// (`centraid_screens::follow`), which the following tests run beside it.
 struct Host {
     follow: CalendarFollow,
 }
@@ -475,6 +474,7 @@ impl Screen for Host {
                     .map(|s| s.sentence.clone())
                     .unwrap_or_default(),
                 content: None,
+                ..Default::default()
             })),
             ..wire::ViewState::default()
         }
@@ -489,12 +489,16 @@ fn host_route() -> wire::Route {
     }
 }
 
-fn world() -> World {
-    World::with(Registry::default().with("test.calendar", |_| {
+fn hosts() -> Registry {
+    Registry::default().with("test.calendar", |_| {
         Some(Box::new(Host {
             follow: CalendarFollow::new(),
         }))
-    }))
+    })
+}
+
+fn world() -> World {
+    World::with(hosts())
 }
 
 fn status(world: &World, host: u64) -> String {
@@ -551,6 +555,11 @@ fn is_keychain(kind: &wire::effect::Kind) -> bool {
     matches!(kind, wire::effect::Kind::Keychain(_))
 }
 
+/// The habit read: what a device asks the keychain before it follows.
+fn is_habit_read(kind: &wire::effect::Kind) -> bool {
+    matches!(kind, wire::effect::Kind::Keychain(op) if op.op == wire::keychain_op::Op::Get as i32)
+}
+
 fn reads(world: &World) -> Vec<wire::CalendarRead> {
     world
         .driver
@@ -578,11 +587,25 @@ fn watches(world: &World) -> Vec<bool> {
         .collect()
 }
 
-fn changed(world: &mut World, host: u64) {
+/// The OS says the calendar changed, under the one effect id of the watch the coordinator asked.
+fn changed(world: &mut World) {
+    let watch = world
+        .driver
+        .effects
+        .iter()
+        .find(|request| {
+            matches!(
+                request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+                Some(wire::effect::Kind::PhoneWatch(watch))
+                    if watch.on && watch.source == wire::ImportSource::Calendar as i32
+            )
+        })
+        .cloned()
+        .expect("the coordinator watches the calendar");
     world.driver.send(
-        host,
+        watch.instance,
         E::EffectResult(wire::EffectResult {
-            effect_id: 0,
+            effect_id: watch.effect_id,
             outcome: Some(wire::effect_result::Outcome::PhoneChanged(
                 wire::PhoneChanged {
                     source: wire::ImportSource::Calendar as i32,
@@ -628,8 +651,6 @@ fn the_import_tap_asks_the_os_reads_say_importing_and_the_vault_merges_what_it_i
             value: vec![],
         }),
     );
-    assert!(watches(&world).is_empty());
-
     tap_import(&mut world, host);
     let ask = reads(&world);
     assert_eq!(ask.len(), 1);
@@ -655,12 +676,13 @@ fn the_import_tap_asks_the_os_reads_say_importing_and_the_vault_merges_what_it_i
     assert_eq!(dentist.len(), 1);
     // The wall clock and its zone: noon in Paris in March is 11:00Z, and reads back in London as 11:00.
     assert_eq!(dentist[0].local_start, "2099-03-11T11:00");
-    // This device follows from now on: remembered, and the store is watched.
+    // This device follows from now on: remembered. The store is watched by the follow
+    // coordinator, not by this screen.
     assert!(done.effects.iter().any(|r| matches!(
         r.effect.as_ref().and_then(|e| e.kind.as_ref()),
         Some(wire::effect::Kind::Keychain(op)) if op.op == wire::keychain_op::Op::Set as i32 && op.key == "agenda_calendar_imported"
     )));
-    assert_eq!(watches(&world), [true]);
+    assert!(watches(&world).is_empty(), "this screen watches nothing");
 
     assert!(reads(&world).is_empty(), "the second tap was nothing");
 
@@ -673,6 +695,109 @@ fn the_import_tap_asks_the_os_reads_say_importing_and_the_vault_merges_what_it_i
     );
     assert_eq!(in_window(&world, "Offsite").len(), 1);
     assert_eq!(in_window(&world, "Dentist").len(), 1);
+}
+
+/// THE MEMBER'S OWN TRASH STANDS (#1185): a followed event the member moved to trash is not
+/// brought back by the next pass over the same phone record, and a restore is the member's.
+#[test]
+fn a_followed_event_the_member_trashed_is_not_resurrected_by_the_next_pass() {
+    let mut world = world();
+    let host = world.driver.push("calendar", host_route());
+    answer(
+        &mut world,
+        is_keychain,
+        wire::effect_result::Outcome::Keychain(wire::KeychainValue {
+            found: false,
+            value: vec![],
+        }),
+    );
+    let events = vec![future("Offsite", "2099-03-10", "uid:offsite@google")];
+    tap_import(&mut world, host);
+    answer(
+        &mut world,
+        is_read,
+        wire::effect_result::Outcome::Calendar(snapshot(events.clone())),
+    );
+    let offsite = in_window(&world, "Offsite");
+    assert_eq!(offsite.len(), 1);
+    let id = offsite[0].event_id.clone();
+
+    world.act(act::calendar::TrashEvent {
+        event_id: id.clone(),
+    });
+    assert!(in_window(&world, "Offsite").is_empty());
+
+    // The phone still holds the record; the pass runs again.
+    tap_import(&mut world, host);
+    answer(
+        &mut world,
+        is_read,
+        wire::effect_result::Outcome::Calendar(snapshot(events.clone())),
+    );
+    assert!(
+        in_window(&world, "Offsite").is_empty(),
+        "the pass did not bring a trashed event back"
+    );
+    let wire::app_query_response::Answer::CalendarTrash(trash) =
+        world.load(centraid_screens::catalog::load::calendar::Trash::default())
+    else {
+        panic!("calendar.trash answered something else");
+    };
+    assert!(
+        trash.events.iter().any(|row| row.event_id == id),
+        "it is still in the trash, restorable"
+    );
+
+    // The member's restore is the member's: it is back, and a later pass keeps it so.
+    world.act(act::calendar::RestoreEvent {
+        event_id: id.clone(),
+    });
+    assert_eq!(in_window(&world, "Offsite").len(), 1);
+    tap_import(&mut world, host);
+    answer(
+        &mut world,
+        is_read,
+        wire::effect_result::Outcome::Calendar(snapshot(events)),
+    );
+    assert_eq!(in_window(&world, "Offsite").len(), 1);
+}
+
+#[test]
+fn a_write_only_or_blocked_calendar_says_what_it_is_in_the_permission_voice() {
+    // iOS 17's write-only access is NOT ENOUGH to read (`limited`); a policy that blocks Calendar is
+    // `restricted` and points nowhere. A shell reports the state and words nothing.
+    for (failed, want) in [
+        (
+            wire::EffectFailed {
+                limited: true,
+                ..Default::default()
+            },
+            "Centraid needs full calendar access, not only adding events. Turn it on in Settings.",
+        ),
+        (
+            wire::EffectFailed {
+                restricted: true,
+                ..Default::default()
+            },
+            "This phone does not allow calendar access.",
+        ),
+    ] {
+        let mut world = world();
+        let host = world.driver.push("calendar", host_route());
+        answer(
+            &mut world,
+            is_keychain,
+            wire::effect_result::Outcome::Keychain(wire::KeychainValue::default()),
+        );
+        tap_import(&mut world, host);
+        answer(
+            &mut world,
+            is_read,
+            wire::effect_result::Outcome::Failed(failed),
+        );
+        assert_eq!(status(&world, host), want);
+        assert!(watches(&world).is_empty());
+    }
 }
 
 #[test]
@@ -838,48 +963,52 @@ fn a_repeating_series_imports_as_one_event_that_skips_what_the_phone_does_not_sh
 // The follow (PhoneFollowSpec, Agenda's pass)
 // ---------------------------------------------------------------------------
 
-fn following_world() -> (World, u64) {
-    let mut world = world();
-    let host = world.driver.push("calendar", host_route());
+/// The coordinator runs beside a screen that hosts the import; nobody has imported yet.
+fn following_world() -> World {
+    World::following(hosts())
+}
+
+/// The coordinator's habit read is answered: this device did import (`found`), or never did.
+fn habit(world: &mut World, found: bool) {
     answer(
-        &mut world,
-        is_keychain,
+        world,
+        is_habit_read,
         wire::effect_result::Outcome::Keychain(wire::KeychainValue {
-            found: true,
-            value: b"1".to_vec(),
+            found,
+            value: if found { b"1".to_vec() } else { Vec::new() },
         }),
     );
-    (world, host)
+}
+
+/// The OS says it changed, the settle passes, and the pass reads the habit; the device imported.
+fn changed_and_followed(world: &mut World) {
+    changed(world);
+    world.driver.pump(Duration::from_millis(2_500));
+    habit(world, true);
 }
 
 #[test]
 fn a_device_that_never_imported_is_not_followed_and_the_phone_is_not_even_read() {
-    let mut world = world();
-    let host = world.driver.push("calendar", host_route());
-    answer(
-        &mut world,
-        is_keychain,
-        wire::effect_result::Outcome::Keychain(wire::KeychainValue::default()),
-    );
-    assert!(watches(&world).is_empty());
-    changed(&mut world, host);
+    let mut world = following_world();
+    changed(&mut world);
     world.driver.pump(Duration::from_millis(2_500));
+    habit(&mut world, false);
     assert!(reads(&world).is_empty());
 }
 
 #[test]
-fn an_imported_device_watches_the_store_and_follows_once_the_two_seconds_are_up_never_asking_the_os()
- {
-    let (mut world, host) = following_world();
-    assert_eq!(watches(&world), [true]);
-    // Following starts at once, after the settle time, and not before.
-    world.driver.pump(Duration::from_millis(1_500));
-    assert!(reads(&world).is_empty(), "not before the two seconds");
+fn an_imported_device_follows_once_the_two_seconds_are_up_never_asking_the_os() {
+    let mut world = following_world();
+    changed(&mut world);
+    // Following starts after the settle time, and not before.
     world.driver.pump(Duration::from_millis(1_000));
+    assert!(reads(&world).is_empty(), "not before the two seconds");
+    world.driver.pump(Duration::from_millis(1_600));
+    habit(&mut world, true);
     let ask = reads(&world);
     assert_eq!(ask.len(), 1);
     assert!(!ask[0].ask_permission, "a pass never asks the OS");
-    assert_eq!(status(&world, host), "", "a pass says nothing");
+    assert_eq!((ask[0].days_back, ask[0].days_on), (7, 62));
 
     answer(
         &mut world,
@@ -891,17 +1020,12 @@ fn an_imported_device_watches_the_store_and_follows_once_the_two_seconds_are_up_
         )])),
     );
     assert_eq!(in_window(&world, "Offsite").len(), 1);
-    assert_eq!(
-        status(&world, host),
-        "",
-        "a pass says nothing, even when it wrote"
-    );
 }
 
 #[test]
 fn a_burst_of_changes_is_one_pass_and_changes_during_a_pass_queue_exactly_one_more() {
-    let (mut world, host) = following_world();
-    world.driver.pump(Duration::from_millis(2_500));
+    let mut world = following_world();
+    changed_and_followed(&mut world);
     answer(
         &mut world,
         is_read,
@@ -911,20 +1035,22 @@ fn a_burst_of_changes_is_one_pass_and_changes_during_a_pass_queue_exactly_one_mo
 
     // TEN TRIGGERS, ONE PASS.
     for _ in 0..10 {
-        changed(&mut world, host);
+        changed(&mut world);
     }
     world.driver.pump(Duration::from_millis(2_500));
+    habit(&mut world, true);
     assert_eq!(reads(&world).len(), 1);
 
     // FOUR MORE DURING THE PASS: the one in flight read before them, so one more follows it, and no third.
     for _ in 0..4 {
-        changed(&mut world, host);
+        changed(&mut world);
     }
     answer(
         &mut world,
         is_read,
         wire::effect_result::Outcome::Calendar(snapshot(vec![])),
     );
+    habit(&mut world, true);
     assert_eq!(reads(&world).len(), 1, "the queued pass starts at once");
     answer(
         &mut world,
@@ -932,13 +1058,20 @@ fn a_burst_of_changes_is_one_pass_and_changes_during_a_pass_queue_exactly_one_mo
         wire::effect_result::Outcome::Calendar(snapshot(vec![])),
     );
     world.driver.pump(Duration::from_millis(2_500));
-    assert!(reads(&world).is_empty(), "and no third follows");
+    assert!(
+        !world.driver.effects.iter().any(|request| request
+            .effect
+            .as_ref()
+            .and_then(|e| e.kind.as_ref())
+            .is_some_and(is_habit_read)),
+        "and no third follows"
+    );
 }
 
 #[test]
 fn a_pass_with_no_access_asks_nothing_and_the_next_change_follows_again() {
-    let (mut world, host) = following_world();
-    world.driver.pump(Duration::from_millis(2_500));
+    let mut world = following_world();
+    changed_and_followed(&mut world);
     answer(
         &mut world,
         is_read,
@@ -948,39 +1081,435 @@ fn a_pass_with_no_access_asks_nothing_and_the_next_change_follows_again() {
             ..Default::default()
         }),
     );
-    assert_eq!(
-        status(&world, host),
-        "",
-        "a following pass is silent when access is off"
+    assert!(
+        world.driver.effects.iter().all(|request| !request
+            .effect
+            .as_ref()
+            .and_then(|e| e.kind.as_ref())
+            .is_some_and(is_keychain)),
+        "a following pass is silent when access is off: it asks no one"
     );
-    assert!(world.driver.effects.iter().all(|r| !matches!(
-        r.effect.as_ref().and_then(|e| e.kind.as_ref()),
-        Some(wire::effect::Kind::Keychain(_))
-    )));
-    changed(&mut world, host);
-    world.driver.pump(Duration::from_millis(2_500));
+    changed_and_followed(&mut world);
     assert_eq!(reads(&world).len(), 1);
+    assert!(!reads(&world)[0].ask_permission);
 }
 
 #[test]
-fn an_import_tapped_during_a_pass_waits_for_it() {
-    let (mut world, host) = following_world();
-    world.driver.pump(Duration::from_millis(2_500));
+fn an_import_turns_the_follow_on_and_a_pass_follows_it_without_asking() {
+    let mut world = World::following(hosts());
+    let host = world.driver.push("calendar", host_route());
+    // The screen's own habit read is the oldest: this device has not imported yet.
+    answer(
+        &mut world,
+        is_habit_read,
+        wire::effect_result::Outcome::Keychain(wire::KeychainValue::default()),
+    );
     tap_import(&mut world, host);
-    assert_eq!(
-        reads(&world).len(),
-        1,
-        "the pass in flight is the only read out"
+    assert!(
+        reads(&world)[0].ask_permission,
+        "the member's import may ask"
     );
     answer(
         &mut world,
         is_read,
-        wire::effect_result::Outcome::Calendar(snapshot(vec![])),
+        wire::effect_result::Outcome::Calendar(snapshot(vec![future(
+            "Offsite",
+            "2099-03-10",
+            "uid:offsite@google",
+        )])),
     );
+    assert_eq!(status(&world, host), "1 event imported");
+    // The import told the coordinator; after the settle it reads the habit the import kept.
+    world.driver.pump(Duration::from_millis(2_500));
+    habit(&mut world, true);
     let ask = reads(&world);
     assert_eq!(ask.len(), 1);
     assert!(
-        ask[0].ask_permission,
-        "then the member's import, which may ask"
+        !ask[0].ask_permission,
+        "the follow that comes of it never asks"
     );
+}
+
+#[test]
+fn alerts_and_guests_ride_the_record_alerts_once_each_and_guests_only_when_there_are_any() {
+    let mut party = event(
+        "Party",
+        "2099-03-10T12:00:00",
+        "2099-03-10T13:00:00",
+        "uid:party",
+    );
+    party.alerts = vec![10, 60, 10];
+    party.attendees = vec![
+        wire::PhoneAttendee {
+            name: " Ada ".into(),
+            email: "ada@example.com".into(),
+            status: "accepted".into(),
+        },
+        wire::PhoneAttendee::default(),
+    ];
+    let bare = event(
+        "Bare",
+        "2099-03-10T12:00:00",
+        "2099-03-10T13:00:00",
+        "uid:bare",
+    );
+    let batch = calendar::batch(Locale::En, &snapshot(vec![party, bare]));
+    let party = &batch.records[0].fields;
+    assert_eq!(party["reminders"], serde_json::json!([10, 60]));
+    assert_eq!(
+        party["attendees"],
+        serde_json::json!([{ "name": "Ada", "email": "ada@example.com", "state": "accepted" }])
+    );
+    let bare = &batch.records[1].fields;
+    assert!(bare["reminders"].is_null());
+    assert!(bare.get("attendees").is_none());
+}
+
+// ---------------------------------------------------------------------------
+// A stored rule this build cannot read (#1173, owner decision)
+// ---------------------------------------------------------------------------
+
+/// An imported series whose rule the engine does not expand (a sub-daily rule, `BYHOUR`) is
+/// stored as the phone said it. It must still load: the event shows once, at its anchor; its
+/// detail renders; the editor opens it read-only as Custom and offers Replace; and Replace with a
+/// rule the engine reads writes it.
+#[test]
+fn a_followed_series_whose_rule_this_build_cannot_read_still_loads_everywhere() {
+    use wire::agenda_editor_event as events;
+    use wire::agenda_editor_event::Kind as K;
+
+    const UNREADABLE: &str = "FREQ=DAILY;BYHOUR=9";
+    let mut world = world();
+    let host = world.driver.push("calendar", host_route());
+    answer(
+        &mut world,
+        is_keychain,
+        wire::effect_result::Outcome::Keychain(wire::KeychainValue {
+            found: false,
+            value: vec![],
+        }),
+    );
+    let day = |day: &str| wire::PhoneCalendarEvent {
+        title: "Standup".to_owned(),
+        start: format!("{day}T09:00:00"),
+        end: format!("{day}T09:30:00"),
+        tz: "Europe/Paris".to_owned(),
+        series: Some(wire::PhoneCalendarSeries {
+            id: "uid:standup".to_owned(),
+            rrule: format!("RRULE:{UNREADABLE}"),
+            start: "2099-03-02T09:00:00".to_owned(),
+            end: "2099-03-02T09:30:00".to_owned(),
+        }),
+        phone_id: format!("local:ek-{day}"),
+        calendar_key: "work".to_owned(),
+        ..wire::PhoneCalendarEvent::default()
+    };
+    tap_import(&mut world, host);
+    answer(
+        &mut world,
+        is_read,
+        wire::effect_result::Outcome::Calendar(snapshot(vec![day("2099-03-02")])),
+    );
+
+    // It shows, once, at its anchor, carrying the stored rule for the editor.
+    let shown: Vec<wire::AgendaEvent> = world
+        .window("2099-01-01T00:00:00Z", "2099-12-31T00:00:00Z")
+        .into_iter()
+        .filter(|event| event.summary.as_deref() == Some("Standup"))
+        .collect();
+    assert_eq!(shown.len(), 1, "{shown:?}");
+    let id = shown[0].event_id.clone();
+    assert_eq!(shown[0].rrule.as_deref(), Some(UNREADABLE));
+
+    // Its detail renders, and says "Custom" for a rule nobody can read, never the rule.
+    let page = world.open_event(&id, &id, None, "2099-03-02");
+    let data = world.event_data(page);
+    let repeats = data
+        .facts
+        .iter()
+        .find(|fact| fact.label == "Repeats")
+        .expect("a repeat fact");
+    assert_eq!(repeats.detail, "Custom");
+    assert!(!data.facts.iter().any(|fact| fact.detail.contains("BYHOUR")));
+
+    // The editor opens it read-only as Custom, with Replace.
+    let editor = world.open_edit(&id, "", None, "2099-03-02");
+    assert_eq!(world.draft(editor).repeat_key, "custom");
+    world.send_editor(
+        editor,
+        K::Repeat(events::RepeatPicked {
+            key: "custom".into(),
+        }),
+    );
+    let sheet = world
+        .editor_data(editor)
+        .custom_repeat
+        .clone()
+        .expect("the sheet");
+    assert!(sheet.read_only);
+    assert_eq!(sheet.replace_label, "Replace this rule");
+    assert!(!sheet.summary.is_empty() && !sheet.summary.contains("BYHOUR"));
+    // Done leaves the stored rule alone: nothing to save.
+    world.send_editor(editor, K::CustomApplied(events::CustomApplied {}));
+    assert!(!world.editor_data(editor).dirty);
+    // Replace starts a fresh rule the engine reads, and saving writes it.
+    world.send_editor(
+        editor,
+        K::Repeat(events::RepeatPicked {
+            key: "custom".into(),
+        }),
+    );
+    world.send_editor(editor, K::CustomReplace(events::CustomReplaceTapped {}));
+    assert!(
+        !world
+            .editor_data(editor)
+            .custom_repeat
+            .clone()
+            .expect("sheet")
+            .read_only
+    );
+    world.send_editor(editor, K::CustomApplied(events::CustomApplied {}));
+    assert!(world.editor_data(editor).dirty);
+}
+
+// ---------------------------------------------------------------------------
+// STOP READING (#1185): Calendar's menu sheet, in the shared words
+// ---------------------------------------------------------------------------
+
+fn stop_world() -> World {
+    World::with(Registry::default().with(
+        centraid_screens::calendar::HOME,
+        centraid_screens::calendar::home::build,
+    ))
+}
+
+fn agenda_home_route() -> wire::Route {
+    wire::Route {
+        sheet: false,
+        screen: centraid_screens::calendar::HOME.to_owned(),
+        args: Some(wire::route::Args::AgendaHome(wire::AgendaHomeRoute {
+            destination: wire::AgendaDestination::Month as i32,
+            quick_add_title: String::new(),
+            open_quick_add: false,
+        })),
+    }
+}
+
+fn home_state(world: &World, home: u64) -> &wire::AgendaHomeState {
+    match &world.driver.view(home).kind {
+        Some(wire::view_state::Kind::AgendaHome(state)) => state,
+        other => panic!("not Calendar's home: {other:?}"),
+    }
+}
+
+fn send_home(world: &mut World, home: u64, kind: wire::agenda_home_event::Kind) {
+    world.driver.send(
+        home,
+        E::AgendaHome(wire::AgendaHomeEvent { kind: Some(kind) }),
+    );
+}
+
+fn open_menu(world: &mut World, home: u64) {
+    send_home(
+        world,
+        home,
+        wire::agenda_home_event::Kind::Band(wire::agenda_home_event::BandPicked {
+            key: "menu".to_owned(),
+        }),
+    );
+}
+
+fn tap_stop(world: &mut World, home: u64) {
+    open_menu(world, home);
+    send_home(
+        world,
+        home,
+        wire::agenda_home_event::Kind::MoreRow(wire::agenda_home_event::MoreRowPicked {
+            key: "stop".to_owned(),
+        }),
+    );
+}
+
+fn menu_keys(world: &World, home: u64) -> Vec<String> {
+    home_state(world, home)
+        .more_rows
+        .iter()
+        .map(|row| row.key.clone())
+        .collect()
+}
+
+#[test]
+fn stop_reading_is_offered_only_while_following_asks_in_the_shared_words_and_the_events_stay() {
+    use wire::agenda_home_event::{Kind as H, StopConfirmed, StopDismissed};
+    let mut world = stop_world();
+    let home = world
+        .driver
+        .push(centraid_screens::agenda::TAB, agenda_home_route());
+    habit(&mut world, false);
+
+    // Nothing is followed yet: the menu holds Export and Trash, and the stop row's slot offers
+    // "Turn on", so the slot is never empty.
+    open_menu(&mut world, home);
+    assert_eq!(menu_keys(&world, home), ["export", "trash", "turn-on"]);
+    let turn_on = home_state(&world, home).more_rows[2].clone();
+    assert_eq!(
+        (turn_on.label.as_str(), turn_on.icon_key.as_str()),
+        ("Turn on Phone calendars", "Power")
+    );
+    assert!(turn_on.route.is_none());
+    // A tap on a row that is not there asks nothing.
+    send_home(
+        &mut world,
+        home,
+        H::MoreRow(wire::agenda_home_event::MoreRowPicked {
+            key: "stop".to_owned(),
+        }),
+    );
+    assert!(home_state(&world, home).stop.is_none());
+
+    // The Import tap follows (the pass says which calendar).
+    send_home(&mut world, home, H::ImportRequested(Default::default()));
+    answer(
+        &mut world,
+        is_read,
+        wire::effect_result::Outcome::Calendar(snapshot(vec![future(
+            "Offsite",
+            "2099-03-10",
+            "uid:offsite@google",
+        )])),
+    );
+    world.driver.effects.clear();
+    open_menu(&mut world, home);
+    assert_eq!(menu_keys(&world, home), ["export", "trash", "stop"]);
+    // The same words as Health's and People's, on a row with no route of its own.
+    let stop = home_state(&world, home).more_rows[2].clone();
+    assert_eq!(
+        (stop.label.as_str(), stop.icon_key.as_str()),
+        ("Stop reading Phone calendars", "Stop")
+    );
+    assert!(stop.route.is_none());
+    assert!(home_state(&world, home).stop.is_none());
+
+    // Tapping it asks first, in the shared sheet's words; dismissing keeps following.
+    tap_stop(&mut world, home);
+    let confirm = home_state(&world, home).stop.clone().expect("asked first");
+    assert_eq!(confirm.title, "Stop reading Phone calendars?");
+    assert_eq!(
+        confirm.body,
+        "Calendar stops reading Phone calendars on this phone. The events already here stay."
+    );
+    assert_eq!(confirm.confirm_label, "Stop reading");
+    assert!(confirm.destructive);
+    send_home(&mut world, home, H::StopDismissed(StopDismissed {}));
+    assert!(home_state(&world, home).stop.is_none());
+    assert!(world.driver.effects.is_empty(), "dismissing stops nothing");
+    open_menu(&mut world, home);
+    assert_eq!(menu_keys(&world, home), ["export", "trash", "stop"]);
+
+    // Confirming retires the store: the habit is forgotten and the events stay.
+    tap_stop(&mut world, home);
+    send_home(&mut world, home, H::StopConfirmed(StopConfirmed {}));
+    let ops: Vec<i32> = world
+        .driver
+        .effects
+        .iter()
+        .filter_map(|request| match request.effect.as_ref()?.kind.as_ref()? {
+            wire::effect::Kind::Keychain(op) => Some(op.op),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(ops, [wire::keychain_op::Op::Delete as i32]);
+    let state = home_state(&world, home);
+    assert!(state.stop.is_none());
+    assert_eq!(
+        state.status.as_ref().map(|status| status.sentence.as_str()),
+        Some("Calendar stopped reading your phone calendars.")
+    );
+    open_menu(&mut world, home);
+    // THE SLOT SWAPS: Stop is gone and "Turn on" is in its place.
+    assert_eq!(menu_keys(&world, home), ["export", "trash", "turn-on"]);
+    assert_eq!(in_window(&world, "Offsite").len(), 1);
+
+    // Tapping it asks the phone for the permission now (the calendar read), and the answer
+    // brings the Stop row back in the slot.
+    world.driver.effects.clear();
+    send_home(
+        &mut world,
+        home,
+        H::MoreRow(wire::agenda_home_event::MoreRowPicked {
+            key: "turn-on".to_owned(),
+        }),
+    );
+    assert!(
+        world
+            .driver
+            .effects
+            .iter()
+            .filter_map(|request| request.effect.as_ref()?.kind.as_ref())
+            .any(is_read),
+        "the phone is asked at that moment"
+    );
+    answer(
+        &mut world,
+        is_read,
+        wire::effect_result::Outcome::Calendar(snapshot(vec![future(
+            "Offsite",
+            "2099-03-10",
+            "uid:offsite@google",
+        )])),
+    );
+    open_menu(&mut world, home);
+    assert_eq!(menu_keys(&world, home), ["export", "trash", "stop"]);
+    // Stopping once more, for the rest of the test.
+    tap_stop(&mut world, home);
+    send_home(&mut world, home, H::StopConfirmed(StopConfirmed {}));
+
+    // A confirm that was never asked stops nothing.
+    world.driver.effects.clear();
+    send_home(&mut world, home, H::StopConfirmed(StopConfirmed {}));
+    assert!(world.driver.effects.is_empty());
+}
+
+#[test]
+fn a_cold_start_reads_the_stored_follow_so_the_stop_row_is_there_and_stop_works_from_it() {
+    use centraid_screens::field::Keyed;
+    use wire::agenda_home_event::{Kind as H, StopConfirmed};
+    let mut world = stop_world();
+    let home = world
+        .driver
+        .push(centraid_screens::agenda::TAB, agenda_home_route());
+    habit(&mut world, false);
+    open_menu(&mut world, home);
+    assert_eq!(menu_keys(&world, home), ["export", "trash", "turn-on"]);
+
+    // The vault follows a calendar of the phone's (a pass in an earlier launch stored it); THIS
+    // runtime has run no pass and holds nothing in memory about one.
+    let followed = world.driver.act(
+        wire::ActRequest::from(act::calendar::FollowCalendar {
+            origin: serde_json::json!({ "ref": "cal-1", "label": "Work", "device_id": "phone" })
+                .to_string(),
+            records: "[]".to_owned(),
+            complete: Some(false),
+            since: None,
+            ..Default::default()
+        })
+        .keyed("arrange:cold-start".to_owned()),
+    );
+    assert_eq!(
+        followed.status,
+        wire::ActStatus::Executed as i32,
+        "{}",
+        followed.reason
+    );
+    world.driver.send(home, E::Appeared(wire::Appeared {}));
+    open_menu(&mut world, home);
+    // THE SLOT SAYS WHAT IS STORED: Stop, never Turn on while the vault follows.
+    assert_eq!(menu_keys(&world, home), ["export", "trash", "stop"]);
+
+    // And Stop works from that state.
+    tap_stop(&mut world, home);
+    assert!(home_state(&world, home).stop.is_some());
+    send_home(&mut world, home, H::StopConfirmed(StopConfirmed {}));
+    open_menu(&mut world, home);
+    assert_eq!(menu_keys(&world, home), ["export", "trash", "turn-on"]);
 }

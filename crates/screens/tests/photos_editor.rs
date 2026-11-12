@@ -213,7 +213,7 @@ fn opened(bytes: &[u8]) -> (Driver, u64, String) {
 fn data(state: &wire::PhotosEditorState) -> &wire::PhotosEditorData {
     match &state.content {
         Some(wire::photos_editor_state::Content::Data(data)) => data,
-        other => panic!("no data: {other:?}"),
+        None => panic!("no data: {:?}", state.page),
     }
 }
 
@@ -500,6 +500,7 @@ fn a_render_the_shell_could_not_do_is_a_sentence_beside_the_editor_and_the_plan_
         reason: "no decoder".to_owned(),
         denied: false,
         cancelled: false,
+        ..Default::default()
     }));
     let state = state_of(&d, at);
     assert_eq!(state.phase, Phase::Editing as i32);
@@ -711,4 +712,112 @@ fn an_untouched_crop_follows_the_straighten_and_a_chosen_one_stays() {
     assert_eq!(crop_of(&d), editor::inscribed_crop(400.0 / 300.0, 1, 3));
     send(&mut d, at, ev::Kind::Reset(ev::Reset {}));
     assert_eq!(crop_of(&d), Some(FULL_CROP));
+}
+
+#[test]
+fn a_saved_edit_leaves_its_line_and_undo_on_the_new_photo_the_member_lands_on_and_undo_trashes_it()
+{
+    let mut d = Driver::with_runtime(photos::runtime());
+    d.start();
+    let original = upload(&d, b"editor-undo-original", Some("Pier day"), None);
+    let lightbox = d.push("photos", routes::lightbox(&original, &[], ""));
+    let at = d.push("photos", routes::editor(&original));
+    d.effects.clear();
+    send(&mut d, at, ev::Kind::Rotate(ev::Rotated {}));
+    send(&mut d, at, ev::Kind::Save(ev::Saved {}));
+    let staged = stage_bytes(&d, b"rendered for undo");
+    d.answer_effect(wire::effect_result::Outcome::EditRendered(
+        wire::EditRendered {
+            content_hash: staged.content_hash,
+            byte_size: staged.byte_size,
+            media_type: "image/jpeg".to_owned(),
+            width: 300,
+            height: 400,
+        },
+    ));
+    let state = state_of(&d, at);
+    assert!(state.dismissed, "the editor finishes");
+    let route = state.saved_route.expect("route");
+    let Some(wire::route::Args::PhotosLightbox(made)) = route.args.clone() else {
+        panic!("not the lightbox");
+    };
+
+    // THE SHELL POPS THE EDITOR AND THEN PUSHES THE NEW PHOTOGRAPH: the line is not drawn on the
+    // photo beneath, which the member never sees, but on the one they land on.
+    d.pop("photos", at);
+    let beneath = match &d.view(lightbox).kind {
+        Some(wire::view_state::Kind::PhotosLightbox(state)) => state.status.clone(),
+        other => panic!("not the lightbox: {other:?}"),
+    };
+    assert!(beneath.is_none(), "{beneath:?}");
+    let landed = d.push("photos", route);
+    let status = |d: &Driver| match &d.view(landed).kind {
+        Some(wire::view_state::Kind::PhotosLightbox(state)) => state.status.clone(),
+        other => panic!("not the lightbox: {other:?}"),
+    };
+    let said = |line: Option<wire::StatusLine>| {
+        let line = line.expect("a status line");
+        (line.sentence, line.action_label)
+    };
+    assert_eq!(
+        said(status(&d)),
+        ("Saved as a new photo".to_owned(), "Undo".to_owned())
+    );
+    let trashed = |d: &Driver| {
+        d.with_ctx(|ctx| {
+            let answer = ctx
+                .load(
+                    load::photos::Photo {
+                        id: made.photo_id.clone(),
+                    }
+                    .into(),
+                )
+                .expect("photo");
+            match answer.answer.and_then(|a| a.answer) {
+                Some(wire::app_query_response::Answer::PhotosPhoto(found)) => {
+                    found.photo.is_some_and(|photo| photo.trashed)
+                }
+                other => panic!("photo answered {other:?}"),
+            }
+        })
+    };
+    assert!(!trashed(&d));
+    d.send(landed, E::StatusActed(wire::StatusActed {}));
+    assert!(trashed(&d), "undo moves the new photograph to trash");
+    assert_eq!(said(status(&d)), ("Undone".to_owned(), String::new()));
+    assert_eq!(title_of(&d, &original).0, "Pier day");
+}
+
+#[test]
+fn a_line_left_for_the_page_opened_next_is_dropped_by_any_other_navigation() {
+    let mut d = Driver::with_runtime(photos::runtime());
+    d.start();
+    let original = upload(&d, b"editor-undo-dropped", Some("Pier day"), None);
+    let lightbox = d.push("photos", routes::lightbox(&original, &[], ""));
+    let at = d.push("photos", routes::editor(&original));
+    d.effects.clear();
+    send(&mut d, at, ev::Kind::Rotate(ev::Rotated {}));
+    send(&mut d, at, ev::Kind::Save(ev::Saved {}));
+    let staged = stage_bytes(&d, b"rendered for a dropped line");
+    d.answer_effect(wire::effect_result::Outcome::EditRendered(
+        wire::EditRendered {
+            content_hash: staged.content_hash,
+            byte_size: staged.byte_size,
+            media_type: "image/jpeg".to_owned(),
+            width: 300,
+            height: 400,
+        },
+    ));
+    let route = state_of(&d, at).saved_route.expect("route");
+    d.pop("photos", at);
+    // The member goes back instead of landing on the new photograph: the line is gone, for the
+    // page beneath and for any page pushed afterwards.
+    d.pop("photos", lightbox);
+    let landed = d.push("photos", route);
+    match &d.view(landed).kind {
+        Some(wire::view_state::Kind::PhotosLightbox(state)) => {
+            assert!(state.status.is_none(), "{:?}", state.status);
+        }
+        other => panic!("not the lightbox: {other:?}"),
+    }
 }

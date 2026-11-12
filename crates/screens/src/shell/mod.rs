@@ -7,6 +7,7 @@
 //! | The springboard | [`HOME`] | [`home`] |
 //! | Search over every app | [`SEARCH`] | [`search`] |
 //! | Settings | [`SETTINGS`] | [`settings`] |
+//! | Export everything | [`EXPORT`] | [`export`] |
 //!
 //! Home is the root of the `home` tab; an app opens as a page pushed on that
 //! tab and back returns to Home. A tile and a search row carry the
@@ -17,6 +18,7 @@ use centraid_api_proto::core_v1 as wire;
 use crate::Registry;
 
 pub mod band;
+pub mod export;
 pub mod home;
 pub mod policy;
 pub mod row_routes;
@@ -27,6 +29,7 @@ pub mod tiles;
 pub const HOME: &str = "home.springboard";
 pub const SEARCH: &str = "home.search";
 pub const SETTINGS: &str = "home.settings";
+pub const EXPORT: &str = "home.export";
 
 /// The tab Home is the root of.
 pub const TAB: &str = band::HOME;
@@ -38,6 +41,7 @@ pub fn registry(secrets: &crate::custody::secrets::VaultSecrets) -> Registry {
         .with(HOME, home::build(secrets))
         .with(SEARCH, search::build)
         .with(SETTINGS, settings::build(secrets))
+        .with(EXPORT, export::build)
 }
 
 /// The routes the shell's own screens hand to a shell inside a view state.

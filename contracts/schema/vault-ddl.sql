@@ -439,8 +439,11 @@ CREATE TABLE locker_item_field (
   -- while the version is unchanged, and its own UPDATE moves it). Nothing compares it; it is not an
   -- entity version (#1146, R-1146-0-2).
   row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1), key_id TEXT,
-  CHECK (kind = 'sealed' OR value_sealed IS NULL),
-  CHECK (kind <> 'sealed' OR value_text IS NULL)
+  -- A one-time-code seed is a secret like a `sealed` value: `otp` keeps its kind so the page shows
+  -- a rolling code, but its value lives only as `lk1:` ciphertext, never in the plain column.
+  CHECK (kind IN ('sealed', 'otp') OR value_sealed IS NULL),
+  CHECK (kind NOT IN ('sealed', 'otp') OR value_text IS NULL),
+  CHECK (kind <> 'otp' OR value_sealed IS NOT NULL)
 ) STRICT;
 
 -- table locker_item_passkey on locker_item_passkey
@@ -556,15 +559,25 @@ CREATE TABLE occurrence (
 -- table origin on origin
 CREATE TABLE origin (
   id         TEXT PRIMARY KEY,
-  system     TEXT NOT NULL CHECK (system IN ('contacts','calendar','files','health','statement')),
+  -- Where a row came from: the five stores the engine follows, and the eight one-shot arrivals
+  -- (camera_roll, picker, vcard, markdown, csv, scan, upload, phone_reminders) that name a file or a
+  -- device once (crates/vault/src/commands/arrival.rs). A typed row has neither.
+  system     TEXT NOT NULL CHECK (system IN ('contacts','calendar','files','health','statement',
+    'camera_roll','picker','vcard','markdown','csv','scan','upload','phone_reminders')),
   ref        TEXT NOT NULL CHECK (length(trim(ref)) > 0),
   label      TEXT NOT NULL CHECK (length(trim(label)) > 0),
   device_id  TEXT,
   fills      TEXT REFERENCES entity(id),
   config     TEXT CHECK (config IS NULL OR json_valid(config)),
   created_at TEXT NOT NULL,
+  -- Stop following RETIRES a store's origin instead of deleting it: it keeps its `fills` (the
+  -- calendar, folder or project it filled) and its sources, so following the same `ref` again
+  -- finds them and neither makes the home twice nor adds each record twice. A retired origin is
+  -- followed by nobody: every read of what a phone follows leaves it out.
+  retired_at TEXT,
   UNIQUE (system, ref),
   UNIQUE (id, system),
+  CHECK (retired_at IS NULL OR system IN ('contacts','calendar','files','health','phone_reminders')),
   -- A statement is an account's, not a phone's store (#1146).
   CHECK (system <> 'statement' OR device_id IS NULL)
 ) STRICT;
@@ -583,9 +596,7 @@ CREATE TABLE person (
                  OR (length(birthday) = 10 AND date(birthday) = birthday)),
   avatar       TEXT REFERENCES blob(hash),
   cadence_days INTEGER CHECK (cadence_days IS NULL OR cadence_days > 0),
-  -- The member's switch for this person's birthday reminder: the birthday is this row's column,
-  -- not an event, so it has no `reminders` of its own.
-  birthday_reminder INTEGER NOT NULL DEFAULT 1 CHECK (birthday_reminder IN (0,1)),
+  -- A birthday is this row's column, not an event: it is shown on its day and does not notify.
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT;
 
@@ -626,10 +637,18 @@ CREATE TABLE revision (
   entity_id  TEXT NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
   seq        INTEGER NOT NULL CHECK (seq >= 1),
   at         TEXT NOT NULL,
+  cause      TEXT NOT NULL DEFAULT '',
+  state      TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(state)),
   body       TEXT,
   blob       TEXT REFERENCES blob(hash),
   media_type TEXT,
-  CHECK ((body IS NULL) <> (blob IS NULL)),
+  -- Whether a quiet save (an editor's autosave) made this version, and when its session last
+  -- folded another in (NULL: never; the session is only its first commit, at `at`). A quiet save
+  -- of the same command by the same actor within ten idle minutes, and within an hour of `at`,
+  -- writes no version: this one already holds the state before the session began.
+  autosave   INTEGER NOT NULL DEFAULT 0 CHECK (autosave IN (0, 1)),
+  touched_at TEXT,
+  CHECK (body IS NULL OR blob IS NULL),
   CHECK ((blob IS NULL) = (media_type IS NULL)),
   PRIMARY KEY (entity_id, seq)
 ) STRICT, WITHOUT ROWID;
@@ -671,6 +690,26 @@ CREATE TABLE search_owed (
   after TEXT NOT NULL
 ) STRICT;
 
+-- table search_past on search_past
+CREATE VIRTUAL TABLE search_past USING fts5(
+  title, body, content = '', contentless_delete = 1, prefix = '2 3',
+  tokenize = "unicode61 remove_diacritics 2");
+
+-- table search_past_config on search_past_config
+CREATE TABLE 'search_past_config'(k PRIMARY KEY, v) WITHOUT ROWID;
+
+-- table search_past_data on search_past_data
+CREATE TABLE 'search_past_data'(id INTEGER PRIMARY KEY, block BLOB);
+
+-- table search_past_docsize on search_past_docsize
+CREATE TABLE 'search_past_docsize'(id INTEGER PRIMARY KEY, sz BLOB, origin INTEGER);
+
+-- table search_past_idx on search_past_idx
+CREATE TABLE 'search_past_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID;
+
+-- table search_past_vocab on search_past_vocab
+CREATE VIRTUAL TABLE search_past_vocab USING fts5vocab(search_past, row);
+
 -- table search_vocab on search_vocab
 CREATE VIRTUAL TABLE search_vocab USING fts5vocab(search, row);
 
@@ -699,7 +738,9 @@ CREATE TABLE source (
   CHECK ((entity_id IS NULL) = (entity_kind IS NULL)),
   CHECK (system <> 'statement' OR device_id IS NULL),
   CHECK (entity_kind IS NULL OR system || '/' || entity_kind IN
-    ('contacts/person','calendar/event','files/document','health/activity','statement/txn'))
+    ('contacts/person','calendar/event','files/document','health/activity','statement/txn',
+     'camera_roll/photo','picker/photo','vcard/person','markdown/note','csv/locker_item',
+     'scan/document','upload/document','phone_reminders/task'))
 ) STRICT;
 
 -- table task on task
@@ -862,7 +903,8 @@ CREATE TRIGGER message_outcome_settles_once BEFORE UPDATE OF outcome ON message
   END;
 
 -- trigger revision_is_history on revision
-CREATE TRIGGER revision_is_history BEFORE UPDATE ON revision
+CREATE TRIGGER revision_is_history
+  BEFORE UPDATE OF entity_id, seq, at, cause, state, body, blob, media_type, autosave ON revision
   BEGIN SELECT RAISE(ABORT, 'a revision is history'); END;
 
 -- trigger revision_is_kept on revision

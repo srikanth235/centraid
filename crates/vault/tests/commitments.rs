@@ -75,6 +75,11 @@ fn is_search_shadow(name: &str) -> bool {
         "search_content",
         "search_docsize",
         "search_config",
+        "search_past_data",
+        "search_past_idx",
+        "search_past_content",
+        "search_past_docsize",
+        "search_past_config",
     ]
     .contains(&name)
 }
@@ -566,7 +571,7 @@ fn every_column_that_rents_a_blob_says_whose_the_bytes_are() {
 
 /// The shapes `edge_shape` is seeded with, written out once more so the table,
 /// the trigger and the spec are three witnesses of one list.
-const SHAPES: [(&str, &str, &str); 20] = [
+const SHAPES: [(&str, &str, &str); 129] = [
     ("contains", "album", "photo"),
     ("contains", "list", "person"),
     ("tagged", "*", "tag"),
@@ -574,7 +579,6 @@ const SHAPES: [(&str, &str, &str); 20] = [
     ("about", "note", "*"),
     ("about", "task", "*"),
     ("about", "event", "*"),
-    ("links", "note", "*"),
     ("attached", "*", "document"),
     ("attached", "*", "photo"),
     ("attendee", "event", "person"),
@@ -587,6 +591,116 @@ const SHAPES: [(&str, &str, &str); 20] = [
     ("about", "locker_item", "place"),
     ("about", "locker_item", "person"),
     ("with", "locker_item", "person"),
+    ("links", "person", "person"),
+    ("links", "person", "place"),
+    ("links", "person", "event"),
+    ("links", "person", "task"),
+    ("links", "person", "activity"),
+    ("links", "person", "note"),
+    ("links", "person", "document"),
+    ("links", "person", "photo"),
+    ("links", "person", "account"),
+    ("links", "person", "txn"),
+    ("links", "place", "person"),
+    ("links", "place", "place"),
+    ("links", "place", "event"),
+    ("links", "place", "task"),
+    ("links", "place", "activity"),
+    ("links", "place", "note"),
+    ("links", "place", "document"),
+    ("links", "place", "photo"),
+    ("links", "place", "account"),
+    ("links", "place", "txn"),
+    ("links", "event", "person"),
+    ("links", "event", "place"),
+    ("links", "event", "event"),
+    ("links", "event", "task"),
+    ("links", "event", "activity"),
+    ("links", "event", "note"),
+    ("links", "event", "document"),
+    ("links", "event", "photo"),
+    ("links", "event", "account"),
+    ("links", "event", "txn"),
+    ("links", "task", "person"),
+    ("links", "task", "place"),
+    ("links", "task", "event"),
+    ("links", "task", "task"),
+    ("links", "task", "activity"),
+    ("links", "task", "note"),
+    ("links", "task", "document"),
+    ("links", "task", "photo"),
+    ("links", "task", "account"),
+    ("links", "task", "txn"),
+    ("links", "activity", "person"),
+    ("links", "activity", "place"),
+    ("links", "activity", "event"),
+    ("links", "activity", "task"),
+    ("links", "activity", "activity"),
+    ("links", "activity", "note"),
+    ("links", "activity", "document"),
+    ("links", "activity", "photo"),
+    ("links", "activity", "account"),
+    ("links", "activity", "txn"),
+    ("links", "note", "person"),
+    ("links", "note", "place"),
+    ("links", "note", "event"),
+    ("links", "note", "task"),
+    ("links", "note", "activity"),
+    ("links", "note", "note"),
+    ("links", "note", "document"),
+    ("links", "note", "photo"),
+    ("links", "note", "account"),
+    ("links", "note", "txn"),
+    ("links", "document", "person"),
+    ("links", "document", "place"),
+    ("links", "document", "event"),
+    ("links", "document", "task"),
+    ("links", "document", "activity"),
+    ("links", "document", "note"),
+    ("links", "document", "document"),
+    ("links", "document", "photo"),
+    ("links", "document", "account"),
+    ("links", "document", "txn"),
+    ("links", "photo", "person"),
+    ("links", "photo", "place"),
+    ("links", "photo", "event"),
+    ("links", "photo", "task"),
+    ("links", "photo", "activity"),
+    ("links", "photo", "note"),
+    ("links", "photo", "document"),
+    ("links", "photo", "photo"),
+    ("links", "photo", "account"),
+    ("links", "photo", "txn"),
+    ("links", "account", "person"),
+    ("links", "account", "place"),
+    ("links", "account", "event"),
+    ("links", "account", "task"),
+    ("links", "account", "activity"),
+    ("links", "account", "note"),
+    ("links", "account", "document"),
+    ("links", "account", "photo"),
+    ("links", "account", "account"),
+    ("links", "account", "txn"),
+    ("links", "txn", "person"),
+    ("links", "txn", "place"),
+    ("links", "txn", "event"),
+    ("links", "txn", "task"),
+    ("links", "txn", "activity"),
+    ("links", "txn", "note"),
+    ("links", "txn", "document"),
+    ("links", "txn", "photo"),
+    ("links", "txn", "account"),
+    ("links", "txn", "txn"),
+    ("links", "locker_item", "person"),
+    ("links", "locker_item", "place"),
+    ("links", "locker_item", "event"),
+    ("links", "locker_item", "task"),
+    ("links", "locker_item", "activity"),
+    ("links", "locker_item", "note"),
+    ("links", "locker_item", "document"),
+    ("links", "locker_item", "photo"),
+    ("links", "locker_item", "account"),
+    ("links", "locker_item", "txn"),
 ];
 
 fn shape_allows(rel: &str, from: &str, to: &str) -> bool {
@@ -679,11 +793,19 @@ fn index_dump(vault: &Vault) -> BTreeSet<(String, i64, String, i64)> {
         .commit(|tx| {
             let c = tx.connection();
             c.execute_batch("CREATE VIRTUAL TABLE temp.search_instances USING fts5vocab(main, search, instance)")?;
-            let rows = c
+            // What items said before is part of the index: a row of `search_past` is dumped
+            // under its column's name prefixed `past:`, so a stale or missing one is a diff.
+            c.execute_batch("CREATE VIRTUAL TABLE temp.search_past_instances USING fts5vocab(main, search_past, instance)")?;
+            let mut rows = c
                 .prepare("SELECT term, doc, col, \"offset\" FROM temp.search_instances")?
                 .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))?
                 .collect::<rusqlite::Result<BTreeSet<_>>>()?;
-            c.execute_batch("DROP TABLE temp.search_instances")?;
+            rows.extend(
+                c.prepare("SELECT term, doc, 'past:' || col, \"offset\" FROM temp.search_past_instances")?
+                    .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))?
+                    .collect::<rusqlite::Result<BTreeSet<_>>>()?,
+            );
+            c.execute_batch("DROP TABLE temp.search_instances; DROP TABLE temp.search_past_instances")?;
             Ok(rows)
         })
         .expect("dumps")
@@ -1014,7 +1136,7 @@ fn script_every_search_relevant_command(scratch: &common::Scratch, registry: &Re
         vault,
         registry,
         "edge.add",
-        json!({"from": "n3", "rel": "links", "to": "lk1"}),
+        json!({"from": "lk1", "rel": "links", "to": "n3"}),
     );
     run(
         vault,
@@ -1062,6 +1184,33 @@ fn the_incremental_index_equals_a_rebuild_after_every_search_relevant_command() 
     script_every_search_relevant_command(&scratch, &registry);
     let incremental = index_dump(&scratch.vault);
     assert!(!incremental.is_empty(), "the script left something to find");
+    // What items said before is part of the index the comparison covers: the script's edits
+    // left earlier versions of several kinds in it, and not one of a Locker item (its history
+    // is sealed).
+    let past_docs: BTreeSet<i64> = incremental
+        .iter()
+        .filter(|(_, _, column, _)| column.starts_with("past:"))
+        .map(|(_, doc, _, _)| *doc >> 24)
+        .collect();
+    let past_kinds: BTreeSet<String> = read(&scratch.vault, |connection| {
+        let mut kinds = BTreeSet::new();
+        for n in &past_docs {
+            kinds.insert(connection.query_row(
+                "SELECT kind FROM entity WHERE n = ?1",
+                [n],
+                |row| row.get::<_, String>(0),
+            )?);
+        }
+        Ok(kinds)
+    });
+    assert!(
+        past_kinds.len() >= 3 && past_kinds.contains("note"),
+        "the script left the past of too few kinds to compare: {past_kinds:?}"
+    );
+    assert!(
+        !past_kinds.contains("locker_item"),
+        "a Locker item's earlier versions are in the index"
+    );
     // The positive control: a Locker item's plain text IS findable, so the
     // equality below compares an index that holds it.
     let held = vocabulary(&scratch.vault);
@@ -1113,7 +1262,7 @@ fn the_incremental_index_equals_a_rebuild_after_every_search_relevant_command() 
 fn vocabulary(vault: &Vault) -> BTreeSet<String> {
     read(vault, |connection| {
         Ok(connection
-            .prepare("SELECT term FROM search_vocab")?
+            .prepare("SELECT term FROM search_vocab UNION SELECT term FROM search_past_vocab")?
             .query_map([], |row| row.get(0))?
             .collect::<rusqlite::Result<_>>()?)
     })
@@ -1155,8 +1304,20 @@ fn the_word_list_gains_a_word_on_index_and_loses_it_on_a_purge_or_a_rebuild() {
     // An edit that drops a word leaves it in the list: it still costs nothing to
     // offer a word the index no longer holds, and finding out is not free.
     go("note.edit", json!({"id": "a", "body": "au lait"}));
-    assert!(!vocabulary(vault).contains("cafe"));
-    assert!(has("cafe"), "an edit leaves the dropped word in the list");
+    let now = |word: &str| {
+        read(vault, |connection| {
+            Ok(connection.query_row(
+                "SELECT EXISTS (SELECT 1 FROM search_vocab WHERE term = ?1)",
+                [word],
+                |row| row.get::<_, bool>(0),
+            )?)
+        })
+    };
+    assert!(!now("cafe"), "the live index no longer holds it");
+    assert!(
+        vocabulary(vault).contains("cafe") && has("cafe"),
+        "what the note said before is findable, so the word stays"
+    );
 
     // A purge takes the words the entity holds that no other row holds, and keeps
     // those another row does. It cannot name a word an edit dropped earlier.
@@ -1165,15 +1326,16 @@ fn the_word_list_gains_a_word_on_index_and_loses_it_on_a_purge_or_a_rebuild() {
     assert!(!has("zeppelin"), "its own title goes");
     assert!(has("au") && has("lait"), "a word another note holds stays");
     assert!(
-        has("cafe"),
-        "a word an edit dropped is not the purge's to name"
+        !has("cafe") && !has("o") && !has("brien"),
+        "a purge names the words of the earlier versions too: their rows go with it"
     );
 
-    // Only a rebuild rewrites the list from the rows.
+    // A rebuild rewrites the list from the rows, earlier versions' included.
     go("note.edit", json!({"id": "b", "body": "au only"}));
     assert!(has("lait"));
     rebuilt(vault);
-    assert!(!has("lait") && !has("cafe"));
+    assert!(has("lait"), "b said `lait` before, which is still findable");
+    assert!(!has("cafe"));
     assert_eq!(word_list(vault), vocabulary(vault));
 }
 
@@ -1271,6 +1433,8 @@ fn the_founded_file_holds_the_spec_s_tables_and_nothing_else() {
         "action_key",
         "search",
         "search_vocab",
+        "search_past",
+        "search_past_vocab",
         "search_word",
         "search_owed",
         // the kinds' own rows and their children
@@ -1511,7 +1675,7 @@ fn no_column_stores_a_rollup_except_the_stated_figures_the_spec_names() {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Reach {
     /// In the text of its own entity (`text_of`: its row and its children), or
-    /// its title. A title also folds into the text of what it labels, and a
+    /// its title, or (`revision.body`) in the earlier text of its entity. A title also folds into the text of what it labels, and a
     /// note's body into what it is about; section 10 asks those.
     Own,
     /// Not indexed, and why.
@@ -1522,6 +1686,11 @@ enum Reach {
 /// reach. Every other `TEXT` column of the file is structural (an id, an enum, a
 /// date, a hash, JSON, a Locker cell) and the test below recognises it by its
 /// declaration, so adding a text column fails here until it is placed.
+///
+/// `edge.anchor` has no row: it is JSON, so the declaration marks it structural.
+/// It is only ever a note's `{"wikilink": title}`, the words of a `[[title]]`
+/// that sit in `note.body`, which is `Own`; `a_note_is_found_by_the_words_of_its_link`
+/// holds that.
 const CENSUS: &[(&str, &str, Reach)] = &[
     ("entity", "title", Reach::Own),
     (
@@ -1555,17 +1724,17 @@ const CENSUS: &[(&str, &str, Reach)] = &[
     ("event", "description", Reach::Own),
     ("event", "zone", Reach::Not("a time zone name, not prose")),
     ("event", "rule", Reach::Not("an RFC 5545 rule")),
-    ("event", "url", Reach::Not("a link, not prose")),
+    ("event", "url", Reach::Own),
     (
         "occurrence",
         "zone",
         Reach::Not("a time zone name, not prose"),
     ),
-    ("occurrence", "url", Reach::Not("a link, not prose")),
+    ("occurrence", "url", Reach::Own),
     ("occurrence", "title", Reach::Own),
     ("occurrence", "description", Reach::Own),
     ("task", "description", Reach::Own),
-    ("task", "url", Reach::Not("a link, not prose")),
+    ("task", "url", Reach::Own),
     ("task", "rule", Reach::Not("an RFC 5545 rule")),
     ("task", "zone", Reach::Not("a time zone name, not prose")),
     ("note", "body", Reach::Own),
@@ -1586,11 +1755,10 @@ const CENSUS: &[(&str, &str, Reach)] = &[
         Reach::Not("a MIME type, not prose"),
     ),
     ("derivative", "text", Reach::Own),
-    (
-        "revision",
-        "body",
-        Reach::Not("history: the note's current body is indexed, not its past"),
-    ),
+    // An earlier version's words are in the entity's `search_past` rows (#1185): the hit is
+    // the live item, said to match "in an earlier version", and it opens that item's Earlier
+    // versions, which contain the term. A Locker item's history is sealed and has no row.
+    ("revision", "body", Reach::Own),
     (
         "revision",
         "media_type",
@@ -1662,6 +1830,11 @@ const CENSUS: &[(&str, &str, Reach)] = &[
     ("occurrence", "ends", Reach::Not("an instant")),
     ("action_key", "at", Reach::Not("an instant")),
     ("revision", "at", Reach::Not("an instant")),
+    (
+        "revision",
+        "cause",
+        Reach::Not("the name of the command that made the change"),
+    ),
     // Locker: the plain cells a member sees in the list are found by; every
     // sealed cell is `lk1:` ciphertext and is never text (`SEALED_ITEM_CELLS`).
     ("locker_item", "username", Reach::Own),
@@ -1728,17 +1901,17 @@ const CENSUS: &[(&str, &str, Reach)] = &[
     (
         "locker_item_field",
         "section",
-        Reach::Not("a custom field's group name; an owner question whether it is searched"),
+        Reach::Not("a custom field's group name; out of search by owner decision D11"),
     ),
     (
         "locker_item_field",
         "label",
-        Reach::Not("a custom field's name; an owner question whether it is searched"),
+        Reach::Not("a custom field's name; out of search by owner decision D11"),
     ),
     (
         "locker_item_field",
         "value_text",
-        Reach::Not("a custom field's plain value; an owner question whether it is searched"),
+        Reach::Not("a custom field's plain value; out of search by owner decision D11"),
     ),
     (
         "locker_item_passkey",
@@ -1859,6 +2032,21 @@ fn every_text_column_is_findable_folded_into_what_it_labels_or_argued_out() {
         );
         Ok(())
     });
+}
+
+#[test]
+fn every_column_the_past_index_reads_is_a_column_the_census_reaches() {
+    // The earlier versions' text and the live text are one list of what a member typed.
+    for (table, columns) in centraid_vault::index::EARLIER_COLUMNS {
+        for column in *columns {
+            assert!(
+                CENSUS
+                    .iter()
+                    .any(|(t, c, reach)| t == table && c == column && matches!(reach, Reach::Own)),
+                "{table}.{column} is read for earlier versions and is not `Own` in CENSUS"
+            );
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2156,6 +2344,86 @@ fn a_title_that_labels_is_part_of_the_text_of_what_it_labels() {
         Ok(c.query_row("SELECT id FROM activity LIMIT 1", [], |r| r.get(0))?)
     });
     is_found(vault, &call, "call", "an activity's kind");
+}
+
+/// A link a member pasted is found by its words, and editing it re-indexes.
+#[test]
+fn a_link_on_an_event_an_occurrence_or_a_task_finds_it() {
+    let scratch = founded("c10url");
+    let vault = &scratch.vault;
+    let registry = Registry::with_system_commands().expect("a registry");
+    let go = |name: &str, input: serde_json::Value| run(vault, &registry, name, input);
+
+    go(
+        "event.propose",
+        json!({"id": "ev", "title": "Sync", "starts": "2026-03-10T09:00",
+        "rule": "FREQ=DAILY;COUNT=5", "url": "https://zoom.us/j/123"}),
+    );
+    is_found(vault, "ev", "zoom", "an event's link");
+    go(
+        "event.edit",
+        json!({"id": "ev", "url": "https://meet.example/room"}),
+    );
+    is_found(vault, "ev", "meet", "an event's link edited");
+    is_not_found(vault, "ev", "zoom", "an event's link edited");
+
+    go(
+        "event.propose",
+        json!({"id": "ev2", "title": "Weekly", "starts": "2026-03-10T09:00",
+        "rule": "FREQ=DAILY;COUNT=5"}),
+    );
+    go(
+        "event.edit_occurrence",
+        json!({"id": "ev2", "original_start": "2026-03-11T09:00:00",
+        "scope": "occurrence", "action": "override", "url": "https://webex.example/call"}),
+    );
+    is_found(vault, "ev2", "webex", "an occurrence's link");
+    go(
+        "event.edit_occurrence",
+        json!({"id": "ev2", "original_start": "2026-03-11T09:00:00",
+        "scope": "occurrence", "action": "override", "url": "https://teams.example/call"}),
+    );
+    is_found(vault, "ev2", "teams", "an occurrence's link edited");
+    is_not_found(vault, "ev2", "webex", "an occurrence's link edited");
+
+    go(
+        "task.add",
+        json!({"id": "tk", "title": "Read", "url": "https://articles.example/long-read"}),
+    );
+    is_found(vault, "tk", "articles", "a task's link");
+    go(
+        "task.edit",
+        json!({"id": "tk", "url": "https://papers.example/short"}),
+    );
+    is_found(vault, "tk", "papers", "a task's link edited");
+    is_not_found(vault, "tk", "articles", "a task's link edited");
+}
+
+/// The words of a note's `[[link]]` are in its body, which is indexed; the
+/// anchor on the edge adds nothing to search.
+#[test]
+fn a_note_is_found_by_the_words_of_its_link() {
+    let scratch = founded("c10link");
+    let vault = &scratch.vault;
+    let registry = Registry::with_system_commands().expect("a registry");
+    let go = |name: &str, input: serde_json::Value| run(vault, &registry, name, input);
+    go(
+        "note.create",
+        json!({"id": "target", "title": "Harbour", "body": "x"}),
+    );
+    go(
+        "note.create",
+        json!({"id": "src", "title": "Trip", "body": "see [[Harbour]] soon"}),
+    );
+    let anchors: i64 = read(vault, |c| {
+        Ok(c.query_row(
+            "SELECT count(*) FROM edge WHERE from_id = 'src' AND rel = 'links' AND anchor IS NOT NULL",
+            [],
+            |r| r.get(0),
+        )?)
+    });
+    assert_eq!(anchors, 1, "the link compiled to an edge with an anchor");
+    is_found(vault, "src", "harbour", "a note's link words");
 }
 
 #[test]

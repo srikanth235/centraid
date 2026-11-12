@@ -45,17 +45,18 @@ public fun TrashScreen(
         title = view.title,
         parentTitle = view.back_label,
         onBack = onBack,
-        status = view.status?.sentence.orEmpty(),
+        statusLine = {
+            StatusLine(view.status, actTag = "trash-status-action") {
+                onEvent(TrashEvent(status_acted = TrashEvent.StatusActed()))
+            }
+        },
         meta = data?.count_label.orEmpty(),
     ) {
         ReadStateView(
-            content = screenContentOf(view.loading, view.failure, view.data_, view.denied),
+            page = view.page!!,
             onRetry = { onEvent(TrashEvent(refreshed = TrashEvent.Refreshed())) },
-        ) { trash ->
-            val empty = trash.empty
-            if (trash.rows.isEmpty() && empty != null) {
-                EmptyStateView(empty, onAction = null)
-            } else {
+        ) {
+            val trash = view.data_ ?: return@ReadStateView
                 LazyColumn(Modifier.padding(horizontal = KitGeometry.GUTTER)) {
                     item(key = "rows") {
                         // THE ROWS ARE ONE CARD (#1173); the last hairline falls outside the clip.
@@ -79,7 +80,6 @@ public fun TrashScreen(
                         }
                     }
                 }
-            }
         }
     }
     val confirm = view.confirm

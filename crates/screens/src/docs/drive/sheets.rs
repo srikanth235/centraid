@@ -5,12 +5,14 @@ use centraid_api_proto::core_v1 as wire;
 use wire::docs_sheet::{Body, Kind};
 
 use super::{
-    Drive, KEY_FOLLOW_FOLDER, KEY_FOLLOWED, KEY_NEW_FOLDER, KEY_RECENT, KEY_SCAN, KEY_STOP_PREFIX,
-    KEY_TEXT, KEY_TRASH_SHELF, KEY_UPLOAD,
+    Drive, KEY_EXPORT, KEY_FOLLOW_FOLDER, KEY_FOLLOWED, KEY_NEW_FOLDER, KEY_RECENT, KEY_SCAN,
+    KEY_STOP_PREFIX, KEY_TEXT, KEY_TRASH_SHELF, KEY_UPLOAD,
 };
 use crate::docs::fold::{self, TRASH_ICON};
 use crate::docs::{folders, routes};
-use crate::strings::{Locale, docs as words, fill};
+use crate::kit::export;
+use crate::kit::permission::{self, Resource, State};
+use crate::strings::{Locale, docs as words, shared};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum Sheet {
@@ -77,6 +79,13 @@ pub(super) fn view(drive: &Drive, locale: Locale) -> wire::DocsSheet {
                     "Folder",
                 ));
             }
+            // EXPORT (#1185): the kit's row, the same in every app, a route the shell pushes.
+            let export = export::entry(locale, crate::docs::EXPORT);
+            rows.push(wire::DocsAction {
+                route: Some(export.route),
+                meta: words::more_export_meta(locale),
+                ..fold::action(KEY_EXPORT, export.label, export.icon_key)
+            });
             rows.push(wire::DocsAction {
                 detail: if rail.trash_count > 0 {
                     fold::count_label(locale, rail.trash_count)
@@ -84,6 +93,7 @@ pub(super) fn view(drive: &Drive, locale: Locale) -> wire::DocsSheet {
                     String::new()
                 },
                 route: Some(routes::trash()),
+                meta: shared::trash_entry_meta(locale),
                 ..fold::action(KEY_TRASH_SHELF, words::more_trash(locale), TRASH_ICON)
             });
             sheet(
@@ -105,7 +115,7 @@ pub(super) fn view(drive: &Drive, locale: Locale) -> wire::DocsSheet {
                     ),
                     ..fold::action(
                         &format!("{KEY_STOP_PREFIX}{}", folder.origin_id),
-                        fill(&words::followed_stop(locale), &[("name", &folder.name)]),
+                        crate::kit::follow::stop_row(locale, &folder.name),
                         "Folder",
                     )
                 })
@@ -204,24 +214,17 @@ pub(super) fn view(drive: &Drive, locale: Locale) -> wire::DocsSheet {
 /// The Add sheet: what the OS lets the shell offer (law 4), and a folder.
 fn add_rows(drive: &Drive, locale: Locale) -> Vec<wire::DocsAction> {
     use wire::DocsPermission as P;
-    let gated = |key: &str,
-                 label: String,
-                 icon: &str,
-                 permission: P,
-                 denied: String,
-                 restricted: String| {
+    let gated = |key: &str, label: String, icon: &str, permission: P, resource: Resource| {
+        // THE ONE PERMISSION VOICE: the row says why it is off in `kit::permission`'s words.
+        let off = |state| wire::DocsAction {
+            enabled: false,
+            detail: permission::says(locale, resource, state),
+            ..fold::action(key, label.clone(), icon)
+        };
         match permission {
             P::Unavailable => None,
-            P::Denied => Some(wire::DocsAction {
-                enabled: false,
-                detail: denied,
-                ..fold::action(key, label, icon)
-            }),
-            P::Restricted => Some(wire::DocsAction {
-                enabled: false,
-                detail: restricted,
-                ..fold::action(key, label, icon)
-            }),
+            P::Denied => Some(off(State::Refused)),
+            P::Restricted => Some(off(State::Restricted)),
             _ => Some(fold::action(key, label, icon)),
         }
     };
@@ -231,8 +234,7 @@ fn add_rows(drive: &Drive, locale: Locale) -> Vec<wire::DocsAction> {
             words::add_upload(locale),
             "Upload",
             drive.files,
-            words::files_denied(locale),
-            words::files_restricted(locale),
+            Resource::Files,
         ),
         Some(fold::action(
             KEY_FOLLOW_FOLDER,
@@ -244,8 +246,7 @@ fn add_rows(drive: &Drive, locale: Locale) -> Vec<wire::DocsAction> {
             words::add_scan(locale),
             "Camera",
             drive.camera,
-            words::camera_denied(locale),
-            words::camera_restricted(locale),
+            Resource::Camera,
         ),
         Some(fold::action(KEY_TEXT, words::add_text(locale), "FileText")),
         Some(fold::action(

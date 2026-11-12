@@ -1,6 +1,7 @@
 package dev.centraid.android.screens
 
 import dev.centraid.android.kit.SearchAskRow
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,6 +10,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -16,25 +19,27 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.PhotosHomeEvent
+import centraid.core.v1.PhotosEarlierRow
 import centraid.core.v1.PhotosSearchDoor
 import centraid.core.v1.PhotosSearchResting
 import centraid.core.v1.PhotosSearchView
 import centraid.core.v1.Route
 import dev.centraid.android.kit.BandPolicy
 import dev.centraid.android.kit.CentraidIcon
-import dev.centraid.android.kit.EmptyStateView
+import dev.centraid.android.kit.ContentImage
+import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.LocalBandClearance
 import dev.centraid.android.kit.PhotoCellsGrid
+import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RowSkeleton
-import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
@@ -65,51 +70,52 @@ internal fun PhotosSearchScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         val resting = search.resting
-        val loading = search.loading
-        val failure = search.failure
         val hits = search.hits
-        when {
-            resting != null -> RestingPanel(resting, onEvent, onOpen)
+        ReadStateView(
+            page = search.page!!,
+            onRetry = { onEvent(PhotosHomeEvent(refreshed = centraid.core.v1.PhotosRefreshed())) },
+            modifier = Modifier.weight(1f),
+            skeleton = { RowSkeleton() },
+        ) {
+            when {
+                resting != null -> RestingPanel(resting, onEvent, onOpen)
 
-            loading != null -> RowSkeleton()
-
-            failure != null -> ScreenFailure(failure.sentence, failure.remedy)
-
-            hits != null -> {
-                val empty = hits.empty
-                if (empty != null) {
-                    // NOTHING MATCHED IS NOT NOTHING TYPED: the query quoted back and
-                    // everywhere search looked, in the kit's empty state.
-                    Box(Modifier.fillMaxWidth().padding(top = 160.dp).testTag("photos-search-no-match")) {
-                        EmptyStateView(empty, onAction = null)
-                    }
-                    SearchAskRow(search.ask, onOpen)
-                } else {
-                    PhotoCellsGrid(
-                        cells = hits.tiles,
-                        // `onTap` BY NAME: this composable's last parameter is `header`.
-                        onTap = { photoId ->
-                            val template = hits.open_
-                            val args = template?.photos_lightbox
-                            if (template != null && args != null) {
-                                onOpen(template.copy(photos_lightbox = args.copy(photo_id = photoId)))
-                            }
-                        },
-                        onFetch = { photoId, _ -> onEvent(PhotosHomeEvent(original_requested = photoId)) },
-                        // THE DOORS AND THE REASONS SCROLL WITH THE GRID, in its own
-                        // scroller: a head that stayed put over a grid of hits would
-                        // eat the screen the hits need.
-                        header = {
-                            item(span = { GridItemSpan(maxLineSpan) }) {
-                                HitsHead(hits.doors, hits.matched_label, onOpen)
-                            }
-                            // THE ASK ROW closes the answer (#1097).
-                            item(span = { GridItemSpan(maxLineSpan) }) { SearchAskRow(search.ask, onOpen) }
-                        },
-                    )
-                }
+                // NOTHING MATCHED is the page's Empty state (Rust quotes the query back and says
+                // everywhere search looked); hits are only ever something.
+                hits != null -> PhotoCellsGrid(
+                    cells = hits.tiles,
+                    // `onTap` BY NAME: this composable's last parameter is `header`.
+                    onTap = { photoId ->
+                        val template = hits.open_
+                        val args = template?.photos_lightbox
+                        if (template != null && args != null) {
+                            onOpen(template.copy(photos_lightbox = args.copy(photo_id = photoId)))
+                        }
+                    },
+                    onFetch = { photoId, _ -> onEvent(PhotosHomeEvent(original_requested = photoId)) },
+                    // THE DOORS AND THE REASONS SCROLL WITH THE GRID, in its own
+                    // scroller: a head that stayed put over a grid of hits would
+                    // eat the screen the hits need.
+                    header = {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            HitsHead(hits.doors, hits.matched_label, onOpen)
+                        }
+                        // THE ASK ROW closes the answer (#1097).
+                        item(span = { GridItemSpan(maxLineSpan) }) { SearchAskRow(search.ask, onOpen) }
+                    },
+                    // PHOTOGRAPHS FOUND ONLY BY WHAT THEY SAID BEFORE (#1185): a tile has no line to
+                    // say so, so each is a row under the grid, opening its Earlier versions.
+                    footer = {
+                        hits.earlier.forEach { row ->
+                            item(span = { GridItemSpan(maxLineSpan) }) { EarlierPhotoRow(row, onOpen) }
+                        }
+                    },
+                )
             }
         }
+        // THE ASK ROW closes an answer that matched nothing too (#1097): with hits it rides at
+        // the foot of the grid above, so only an answer with no hits draws it here.
+        if (hits == null) SearchAskRow(search.ask, onOpen)
     }
 }
 
@@ -127,6 +133,41 @@ private fun HitsHead(doors: List<PhotosSearchDoor>, matched: String, onOpen: (Ro
                 modifier = Modifier.padding(top = 4.dp),
             )
         }
+    }
+}
+
+/**
+ * One photograph the words matched only in an earlier version of it: its thumbnail, its title and
+ * the line "In an earlier version". A tap opens that photograph's Earlier versions.
+ */
+@Composable
+private fun EarlierPhotoRow(row: PhotosEarlierRow, onOpen: (Route) -> Unit) {
+    val path = row.tile?.thumbnail_path
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+            .clickable { row.route?.let(onOpen) }
+            .semantics(mergeDescendants = true) {
+                contentDescription = row.accessibility_label
+                role = Role.Button
+            },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            Modifier
+                .size(52.dp)
+                .clip(RoundedCornerShape(KitGeometry.RADIUS))
+                .background(centraidColor("skel")),
+        ) {
+            if (!path.isNullOrEmpty()) ContentImage(path)
+        }
+        Column(Modifier.weight(1f)) {
+            Text(row.title, style = centraidType("body"), color = centraidColor("text"), maxLines = 1)
+            Text(row.line, style = centraidType("small"), color = centraidColor("textSoft"), maxLines = 1)
+        }
+        CentraidIcon(iconKey = "ChevronRight", tint = centraidColor("textFaint"))
     }
 }
 

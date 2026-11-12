@@ -236,6 +236,7 @@ pub(crate) fn trash(
                     name: row.name,
                     role: row.role,
                     purge_at: row.purge_at,
+                    list: row.list,
                 })
                 .collect(),
             truncated: data.truncated,
@@ -312,6 +313,7 @@ pub(crate) fn search(
                         .map(|target| SearchHit {
                             party_id: target.id,
                             snippet: Some(target.snippet),
+                            in_earlier_version: target.in_earlier_version,
                         })
                         .collect::<Vec<_>>(),
                     Ok(centraid_search::Answer::Denied(denial)) => {
@@ -432,6 +434,7 @@ fn row_to_wire_with(
         days_since_contact: cadence.days_since_contact,
         reminders: reminders.to_vec(),
         snippet: row.snippet,
+        in_earlier_version: row.in_earlier_version,
     }
 }
 
@@ -533,6 +536,7 @@ fn sheet_to_wire(person: people::person::Person, clock: &Clock) -> wire::PeopleS
             })
             .collect(),
         is_me: person.is_me,
+        rev: person.rev,
         touches: person
             .touches
             .into_iter()

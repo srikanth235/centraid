@@ -11,7 +11,9 @@ use crate::Registry;
 pub mod buckets;
 pub mod catch_up;
 pub mod detail;
+pub mod earlier;
 pub mod editor;
+pub mod export;
 pub mod home;
 pub mod list;
 pub mod ops;
@@ -27,11 +29,15 @@ pub const HOME: &str = "reminders.home";
 /// The Anytime, All, Logbook, Reminders, smart-list and Inbox pages.
 pub const TODO_LIST: &str = "reminders.list";
 pub const PROJECT: &str = "reminders.project";
+/// Reminders' export of tasks as a calendar file (#1185).
+pub const EXPORT: &str = "reminders.export";
 pub const TASK: &str = crate::kit::schedule::routes::TASK;
 /// The new-reminder sheet.
 pub const EDITOR: &str = "reminders.editor";
 pub const CATCH_UP: &str = "reminders.catch_up";
 pub const TRASH: &str = "reminders.trash";
+/// The earlier versions of a task (#1185).
+pub const EARLIER: &str = "reminders.earlier";
 
 /// Reminders' screens, registered under their route names.
 #[must_use]
@@ -44,4 +50,6 @@ pub fn registry() -> Registry {
         .with(CATCH_UP, catch_up::build)
         .with(EDITOR, editor::build)
         .with(TRASH, trash::build)
+        .with(EXPORT, export::build)
+        .with(EARLIER, earlier::build)
 }

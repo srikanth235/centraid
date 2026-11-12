@@ -136,11 +136,89 @@ pub(crate) fn canon(points: &Json) -> Json {
     )
 }
 
-/// A three-way merge of a person's points: what the source dropped since it last
-/// spoke goes, what it added comes, and a point the member added or removed is
-/// left as they made it. `stated` is what the source said last, `None` when it
-/// has not spoken for this person before (then it only adds). Returns whether a
-/// row changed.
+/// Make one point what `wants` says (`None`: not there), given whether the person holds it now.
+fn put_point(
+    ctx: &CommandCtx<'_, '_>,
+    person: &str,
+    (kind, normalized): &(String, String),
+    held: bool,
+    wants: Option<&(String, Option<String>)>,
+) -> Result<bool> {
+    let connection = ctx.connection();
+    Ok(match wants {
+        None => {
+            connection.execute(
+                "DELETE FROM contact_point WHERE person_id = ?1 AND kind = ?2 AND normalized = ?3",
+                [person, kind, normalized],
+            )? > 0
+        }
+        Some((value, label)) if held => {
+            connection.execute(
+                "UPDATE contact_point SET value = ?4, label = ?5
+                  WHERE person_id = ?1 AND kind = ?2 AND normalized = ?3",
+                rusqlite::params![person, kind, normalized, value, label],
+            )? > 0
+        }
+        Some((value, label)) => {
+            connection.execute(
+                "INSERT OR IGNORE INTO contact_point (id, person_id, kind, value, normalized, label, position)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6,
+                         (SELECT COALESCE(MAX(position), 0) + 1 FROM contact_point WHERE person_id = ?2))",
+                rusqlite::params![ctx.next_id(), person, kind, value, normalized, label],
+            )? > 0
+        }
+    })
+}
+
+/// Make the points what the source last stated (one point, named by its [`items`] key, or all):
+/// a point the member removed comes back, one they relabelled or added is put back to the statement
+/// or taken off. Returns whether a row changed.
+pub(crate) fn take(
+    ctx: &CommandCtx<'_, '_>,
+    person: &str,
+    item: Option<&str>,
+    stated: &Json,
+) -> Result<bool> {
+    let (said, held) = (keyed(stated), keyed(&read(ctx.connection(), person)?));
+    let keys: std::collections::BTreeSet<&(String, String)> =
+        said.keys().chain(held.keys()).collect();
+    let mut changed = false;
+    for key in keys {
+        if item.is_some_and(|item| format!("{}:{}", key.0, key.1) != item) {
+            continue;
+        }
+        let (mine, wants) = (held.get(key), said.get(key));
+        if mine != wants {
+            changed |= put_point(ctx, person, key, mine.is_some(), wants)?;
+        }
+    }
+    Ok(changed)
+}
+
+/// The points of a canonical list by the key that names each across statements: its kind and
+/// reach key.
+pub(crate) fn items(points: &Json) -> BTreeMap<String, Json> {
+    points
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|point| {
+            let kind = point.get("kind")?.as_str()?;
+            let value = point.get("value")?.as_str()?;
+            Some((format!("{kind}:{}", reach_key(kind, value)), point.clone()))
+        })
+        .collect()
+}
+
+/// A three-way merge of a person's points, **per item** (the follower's rule, one point at a
+/// time): a point is `(kind, key)` and its parts are its spelling and its label. A point the
+/// member has not changed (the vault holds what the source last stated of it, or holds nothing
+/// where the source stated nothing) takes the source's word now: its new spelling or label, its
+/// removal, or its addition. A point the member changed (relabelled, respelled, added, or
+/// removed) stands as they left it, and keeps whatever the member set on it (preferred,
+/// position). `stated` is what the source said last, `None` when it has not spoken for this
+/// person before (then every point the member holds stands, and the source only adds the rest).
+/// Returns whether a row changed.
 pub(crate) fn merge(
     ctx: &CommandCtx<'_, '_>,
     person: &str,
@@ -149,20 +227,17 @@ pub(crate) fn merge(
 ) -> Result<bool> {
     let connection = ctx.connection();
     let (was, now) = (stated.map(keyed).unwrap_or_default(), keyed(new));
+    let held = keyed(&read(connection, person)?);
+    let keys: std::collections::BTreeSet<&(String, String)> =
+        was.keys().chain(now.keys()).chain(held.keys()).collect();
     let mut changed = false;
-    for ((kind, key), _) in was.iter().filter(|(key, _)| !now.contains_key(*key)) {
-        changed |= connection.execute(
-            "DELETE FROM contact_point WHERE person_id = ?1 AND kind = ?2 AND normalized = ?3",
-            [person, kind, key],
-        )? > 0;
-    }
-    for ((kind, key), (value, label)) in now.iter().filter(|(key, _)| !was.contains_key(*key)) {
-        changed |= connection.execute(
-            "INSERT OR IGNORE INTO contact_point (id, person_id, kind, value, normalized, label, position)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6,
-                     (SELECT COALESCE(MAX(position), 0) + 1 FROM contact_point WHERE person_id = ?2))",
-            rusqlite::params![ctx.next_id(), person, kind, value, key, label],
-        )? > 0;
+    for key in keys {
+        let (mine, said, wants) = (held.get(key), was.get(key), now.get(key));
+        // The member changed this point: it stands.
+        if mine != said || mine == wants {
+            continue;
+        }
+        changed |= put_point(ctx, person, key, mine.is_some(), wants)?;
     }
     Ok(changed)
 }

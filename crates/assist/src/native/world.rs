@@ -1135,7 +1135,7 @@ impl World {
             "id, label, created_at",
             "created_at",
             "id",
-            "system = ?",
+            "system = ? AND retired_at IS NULL",
             &["health".to_owned()],
         )?;
         self.health_store = origins.iter().find_map(|origin| text(origin, "label"));

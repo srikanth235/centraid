@@ -5,8 +5,9 @@
 //! doctrine (#1099):
 //!
 //! - one account is one currency; nothing sums across currencies;
-//! - an imported transaction is never edited (a category and a void are the
-//!   member's decisions, not edits to what the bank said);
+//! - an imported transaction is never edited (a category, a name and the trash are the
+//!   member's decisions, not edits to what the bank said; a trashed line leaves every figure and
+//!   a re-import never brings it back);
 //! - re-importing the same file writes nothing;
 //! - the fuzzy duplicate pass only proposes;
 //! - the statement's bytes are read once and never stored;
@@ -17,6 +18,7 @@
 //! into the normalised row and plans it against the account's existing rows;
 //! [`rules`] is the rule semantics the vault agrees with.
 
+pub mod attachments;
 pub mod civil;
 pub mod commands;
 pub mod engine;
@@ -26,4 +28,7 @@ pub mod phone;
 pub mod queries;
 pub mod recurring;
 pub mod rules;
+pub mod trash;
 pub mod year3;
+
+pub use attachments::load_attachments;

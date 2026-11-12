@@ -31,6 +31,10 @@ message Route {
   // 806 and 807 were Photos' Duplicates and its review, retired (#1146 D5).
   reserved 806, 807;
   reserved "photos_duplicates", "photos_duplicate_review";
+  // 203 and 602 were `docs.versions` and `notes.history`, replaced by the kit's earlier-versions
+  // screen (#1185).
+  reserved 203, 602;
+  reserved "docs_versions", "notes_history";
   oneof args {
     CounterRoute counter = 10;
     // ---- words (1300-1399, lane H2) ----
@@ -73,7 +77,6 @@ message Route {
     DocsDriveRoute docs_drive = 200;
     DocsDocumentRoute docs_document = 201;
     DocsEditorRoute docs_editor = 202;
-    DocsVersionsRoute docs_versions = 203;
     // ---- health (300-399) ----
     HealthHomeRoute health_home = 300;
     HealthMetricRoute health_metric = 301;
@@ -82,14 +85,17 @@ message Route {
     // ---- notes (600-699) ----
     NotesHomeRoute notes_home = 600;
     NotesEditorRoute notes_editor = 601;
-    NotesHistoryRoute notes_history = 602;
     // ---- people (700-799) ----
     PeopleHomeRoute people_home = 700;
     PeoplePersonRoute people_person = 701;
     PeopleEditorRoute people_editor = 702;
+    PeopleListsRoute people_lists = 703;
     // ---- the kit (900-999) ----
     TrashRoute trash = 900;
     TransferRoute transfer = 901;
+    EarlierRoute earlier = 903;
+    // The full preview of one earlier version (#1185), pushed from a row of the list.
+    EarlierPreviewRoute earlier_preview = 904;
     // ---- backup (1450-1499, lane H2) ----
     BackupHomeRoute backup_home = 1450;
     // ---- the shell: chat (1600-1699) ----
@@ -102,6 +108,7 @@ message Route {
     HomeSearchRoute home_search = 1001;
     ShellAskRoute ask = 1002;
     SettingsRoute settings = 1010;
+    ReconnectRoute reconnect = 1011;
   }
 }
 
@@ -360,14 +367,12 @@ message DocsDocumentRoute {
 
 // `docs.editor`: a text document's editor.
 message DocsEditorRoute {
+  // Empty: a NEW document. The editor opens on an empty draft and nothing is created until the
+  // first autosave, which is the create (as a note's).
   string document_id = 1;
   string title = 2;
-}
-
-// `docs.versions`: one document's version history.
-message DocsVersionsRoute {
-  string document_id = 1;
-  string title = 2;
+  // A new document's folder ("" is the drive's root).
+  string folder_id = 3;
 }
 
 // ---------------------------------------------------------------------------
@@ -445,13 +450,6 @@ message NotesEditorRoute {
   bool is_new = 2;
 }
 
-// `notes.history`: one note's versions. The title rides along so the back
-// control has words before the read lands.
-message NotesHistoryRoute {
-  string note_id = 1;
-  string note_title = 2;
-}
-
 // ---------------------------------------------------------------------------
 // People
 // ---------------------------------------------------------------------------
@@ -485,12 +483,38 @@ message PeopleEditorRoute {
   bool is_new = 2;
 }
 
+// `people.lists` (#1185): the member's lists, to make, rename and move to the trash. `back_label` is the
+// title of the page it was pushed from.
+message PeopleListsRoute {
+  string back_label = 1;
+}
+
 // ---------------------------------------------------------------------------
 // The kit
 // ---------------------------------------------------------------------------
 
 // `<app>.trash`: the kit's one trash screen; the screen name says which app.
 message TrashRoute {}
+
+// `<app>.earlier` (#1185): the kit's one earlier-versions screen, for the record the page it
+// was pushed from shows; the screen name says which app.
+message EarlierRoute {
+  // The entity whose earlier values the screen lists.
+  string entity_id = 1;
+  // The title of the page it was pushed from: its back control says it.
+  string back_label = 2;
+}
+
+// `<app>.earlier` opened on one version (#1185): the kit's full, read-only preview of a record as
+// it was, with Restore and Close.
+message EarlierPreviewRoute {
+  // The entity whose earlier version is shown.
+  string entity_id = 1;
+  // The version's number (`EarlierRow.seq`).
+  int64 seq = 2;
+  // The title of the page it was pushed from: its back control says it.
+  string back_label = 3;
+}
 
 // `<app>.import` and `<app>.export` (#1173, items 14 and 20): the kit's one transfer screen
 // (Notes' Markdown, People's vCards); the screen name says which app and which way.
@@ -627,6 +651,10 @@ message HomeSearchRoute {}
 
 // Settings takes no arguments.
 message SettingsRoute {}
+
+// The Reconnect page (#1185): the phone stores a vault followed on another phone, offered one
+// by one. It takes no arguments.
+message ReconnectRoute {}
 
 // What a tap on a search's Ask row opens: the assistant, asking `question` in
 // `scope` (an app's id, or empty for every app). The chat lane registers the

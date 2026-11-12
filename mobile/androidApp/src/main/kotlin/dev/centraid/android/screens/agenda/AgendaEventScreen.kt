@@ -29,6 +29,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
@@ -37,25 +41,29 @@ import androidx.compose.ui.unit.dp
 import centraid.core.v1.AgendaEventData
 import centraid.core.v1.AgendaEventEvent
 import centraid.core.v1.AgendaEventState
-import centraid.core.v1.AgendaGone
 import centraid.core.v1.AgendaScopeChoice
+import centraid.core.v1.EarlierEntry
+import dev.centraid.android.kit.EarlierEntryCard
+import centraid.core.v1.PhoneSaysTaken
 import centraid.core.v1.Route
-import centraid.core.v1.EmptyState
 import dev.centraid.android.kit.SectionHead
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.ConfirmSheet
-import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OutlineButton
+import dev.centraid.android.kit.PhoneSaysLine
+import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.PushedPage
+import dev.centraid.android.kit.RoomAction
+import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.SheetPrimary
+import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
-import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -73,28 +81,37 @@ internal fun AgendaEventScreen(
     onOpen: (Route) -> Unit,
     onBack: () -> Unit,
     onCall: (String) -> Unit,
+    onPhoneSays: (PhoneSaysTaken) -> Unit,
 ) {
     val chrome = state.chrome
+    var menuOpen by remember { mutableStateOf(false) }
+    val menu = state.data_?.menu.orEmpty()
     PushedPage(
         // THE EVENT'S OWN NAME IS THE TITLE, in the top row beside the chevron (round 9).
         title = state.data_?.title.orEmpty(),
         parentTitle = chrome?.back.orEmpty(),
         onBack = onBack,
-        status = state.status?.sentence.orEmpty(),
+        // THE "…" KEY holds the verbs that do not fit the bar of three (Share).
+        trailing = menu.takeIf { it.isNotEmpty() }?.let {
+            RoomAction("MoreHoriz", state.data_?.menu_label.orEmpty(), "agenda-event-menu") { menuOpen = true }
+        },
+        statusLine = {
+            // "{title} moved to trash" with Undo over the removed page (#1185), and a refusal's sentence.
+            StatusLine(state.status, actTag = "agenda-status-action") {
+                onEvent(AgendaEventEvent(status_acted = AgendaEventEvent.StatusActed()))
+            }
+        },
     ) {
-        val gone = state.gone
-        if (gone != null) {
-            GoneCard(gone, onBack)
-            return@PushedPage
-        }
         Column(Modifier.fillMaxSize()) {
             ReadStateView(
-                content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
+                page = state.page!!,
                 onRetry = { onEvent(AgendaEventEvent(refreshed = AgendaEventEvent.Refreshed())) },
                 retryLabel = chrome?.retry?.ifEmpty { null } ?: KitWords.RETRY,
                 skeleton = { RowSkeleton(rows = 5, label = chrome?.loading?.ifEmpty { null } ?: KitWords.OPENING) },
                 modifier = Modifier.weight(1f),
-            ) { data -> EventBody(data, onEvent, onOpen, onCall) }
+            ) {
+                state.data_?.let { data -> EventBody(data, state.earlier, state.origin, onEvent, onOpen, onCall, onPhoneSays) }
+            }
         }
     }
     if (state.sheet == AgendaEventState.Sheet.SHEET_CANCEL_SCOPE && chrome != null) {
@@ -110,6 +127,20 @@ internal fun AgendaEventScreen(
             onDismiss = { onEvent(AgendaEventEvent(sheet_closed = AgendaEventEvent.SheetClosed())) },
         )
     }
+    if (menuOpen && menu.isNotEmpty()) {
+        OptionSheet(
+            title = state.data_?.menu_label.orEmpty(),
+            options = menu.map { SheetOption(key = it.key, label = it.label, destructive = it.destructive) },
+            onPick = { key ->
+                menuOpen = false
+                onEvent(AgendaEventEvent(action = AgendaEventEvent.ActionPicked(key = key)))
+            },
+            onDismiss = { menuOpen = false },
+        )
+    }
+    state.link_picker?.takeIf { it.open_ }?.let { picker ->
+        dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(AgendaEventEvent(link = link)) }
+    }
     val confirm = state.confirm
     if (confirm != null) {
         ConfirmSheet(
@@ -124,14 +155,19 @@ internal fun AgendaEventScreen(
 @Composable
 private fun EventBody(
     data: AgendaEventData,
+    earlier: EarlierEntry?,
+    origin: centraid.core.v1.OriginLine?,
     onEvent: (AgendaEventEvent) -> Unit,
     onOpen: (Route) -> Unit,
     onCall: (String) -> Unit,
+    onPhoneSays: (PhoneSaysTaken) -> Unit,
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("agenda-event")) {
         Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)) {
+            PhoneSaysLine(data.title_phone_says, onPhoneSays)
             if (data.date_label.isNotEmpty()) Text(data.date_label, style = centraidType("body"), color = centraidColor("text"))
             if (data.when_label.isNotEmpty()) Text(data.when_label, style = centraidType("small"), color = centraidColor("textSoft"))
+            data.when_phone_says.forEach { PhoneSaysLine(it, onPhoneSays) }
             if (data.calendar_name.isNotEmpty()) {
                 Row(Modifier.padding(top = 4.dp).testTag("agenda-event-calendar"), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(8.dp).clip(CircleShape).background(gridHue(data.calendar_hue_key)))
@@ -152,6 +188,11 @@ private fun EventBody(
                 }
             }
         }
+        if (data.facts_phone_says.isNotEmpty()) {
+            Column(Modifier.padding(horizontal = KitGeometry.GUTTER)) {
+                data.facts_phone_says.forEach { PhoneSaysLine(it, onPhoneSays) }
+            }
+        }
         if (data.call_uri.isNotEmpty() && data.call_label.isNotEmpty()) {
             OutlineButton(
                 label = data.call_label,
@@ -168,6 +209,7 @@ private fun EventBody(
                 modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
             )
         }
+        PhoneSaysLine(data.notes_phone_says, onPhoneSays, Modifier.padding(horizontal = KitGeometry.GUTTER))
         val rsvp = data.rsvp
         if (rsvp != null) {
             Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)) {
@@ -217,6 +259,11 @@ private fun EventBody(
                 }
             }
         }
+        if (data.guests_phone_says.isNotEmpty()) {
+            Column(Modifier.padding(horizontal = KitGeometry.GUTTER)) {
+                data.guests_phone_says.forEach { PhoneSaysLine(it, onPhoneSays) }
+            }
+        }
         // THE GUESTS OF A FOLLOWED CALENDAR'S EVENT (#1173): names and replies the phone's calendar holds.
         if (data.followed_guests.isNotEmpty()) {
             Column(Modifier.fillMaxWidth().testTag("agenda-event-followed")) {
@@ -240,6 +287,13 @@ private fun EventBody(
                 onOpen = onOpen,
             )
         }
+        // LINKED TO (#1185): the kit's section, after the attachments; Rust makes every word and row.
+        data.links?.let { section ->
+            dev.centraid.android.kit.LinkSectionView(section, { link -> onEvent(AgendaEventEvent(link = link)) }, onOpen)
+        }
+        // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the actions.
+        EarlierEntryCard(earlier, onOpen)
+        dev.centraid.android.kit.OriginLineView(origin)
         // THE ACTIONS IN ONE ROW OF EQUAL KEYS (#1173): Open in Maps, Edit and Cancel share the
         // width, Cancel in the red outline.
         ChoiceRow(Modifier.padding(KitGeometry.GUTTER)) {
@@ -299,9 +353,4 @@ internal fun ScopeSheet(
             SheetRow(label = keep, testTag = "agenda-scope-keep", onTap = onDismiss)
         }
     }
-}
-
-@Composable
-internal fun GoneCard(gone: AgendaGone, onAction: () -> Unit) {
-    EmptyStateView(EmptyState(headline = gone.title, body = gone.body, action_label = gone.action_label), onAction = onAction)
 }

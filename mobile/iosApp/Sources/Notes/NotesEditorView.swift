@@ -9,8 +9,8 @@ import SwiftUI
 /// flushes what is unsaved when it sees the page leave (`Left`).
 ///
 /// **EVERY WORD IS RUST'S** — the close verb, the placeholders, the pin, link,
-/// history and Send to Agenda labels and the status (`NotesEditorChrome`).
-/// History and Send to Agenda are routes the state carries; the powerbox is a
+/// Send to Agenda labels and the status (`NotesEditorChrome`).
+/// Earlier versions and Send to Agenda are routes the state carries; the powerbox is a
 /// sheet the state opens (`link`), also on a typed `[[`.
 struct NotesEditorView: View {
     let state: Centraid_Core_V1_NotesEditorState
@@ -38,16 +38,7 @@ struct NotesEditorView: View {
     }
 
     private var draft: Centraid_Core_V1_NotesEditorDraft? {
-        if case let .draft(draft)? = state.content { return draft }
-        return nil
-    }
-
-    private var content: ScreenContent<Centraid_Core_V1_NotesEditorDraft> {
-        switch state.content {
-        case .loading?, nil: return .loading(true)
-        case let .failure(failure)?: return .failed(failure)
-        case let .draft(draft)?: return .data(draft)
-        }
+        state.content != nil ? state.draft : nil
     }
 
     @FocusState private var tagFocused: Bool
@@ -91,11 +82,36 @@ struct NotesEditorView: View {
                 Menu {
                     Button(chrome.pinLabel) { send(event { $0.pin = .init() }) }
                     Button(chrome.linkLabel) { send(event { $0.linkRequested = .init() }) }
-                    if chrome.historyEnabled, state.hasHistory {
-                        Button(chrome.historyLabel) { open(state.history) }
+                    if state.hasAttachmentsEntry {
+                        // ATTACHMENTS (#1185): the photos and files on the note; a sheet over the editor.
+                        Button([state.attachmentsEntry.label, state.attachmentsEntry.countLabel].filter { !$0.isEmpty }.joined(separator: "  ")) {
+                            send(event { $0.attachmentsOpened = .init() })
+                        }
+                        .accessibilityIdentifier("note-editor-attachments")
+                    }
+                    if state.hasLinksEntry {
+                        // LINKED TO (#1185): everything the note is linked to; a sheet over the editor.
+                        Button([state.linksEntry.label, state.linksEntry.countLabel].filter { !$0.isEmpty }.joined(separator: "  ")) {
+                            send(event { $0.linksOpened = .init() })
+                        }
+                        .accessibilityIdentifier("note-editor-linked-to")
+                    }
+                    if state.hasEarlier, EarlierEntryRow.isDrawn(state.earlier) {
+                        Button("\(state.earlier.label)  \(state.earlier.countLabel)") { open(state.earlier.route) }
+                            .accessibilityIdentifier(EarlierEntryRow.identifier)
+                    }
+                    if state.hasOrigin, OriginLineView.isDrawn(state.origin) {
+                        // WHERE IT CAME FROM (#1185): a quiet line in the menu, nothing to tap.
+                        Button(state.origin.text) {}
+                            .disabled(true)
+                            .accessibilityLabel(state.origin.accessibilityLabel)
+                            .accessibilityIdentifier(OriginLineView.identifier)
                     }
                     if state.hasSendToAgenda {
                         Button(chrome.sendToAgendaLabel) { open(state.sendToAgenda) }
+                    }
+                    if !chrome.shareLabel.isEmpty {
+                        Button(chrome.shareLabel) { send(event { $0.shareRequested = .init() }) }
                     }
                 } label: {
                     ToolbarIconFace(iconKey: "MoreHoriz")
@@ -104,11 +120,12 @@ struct NotesEditorView: View {
                 .accessibilityIdentifier("note-editor-menu")
             }
         } content: {
-            ReadStateView(
-                content: content,
-                skeleton: { RowSkeleton(rows: 4, meta: false, label: "") },
-                onRetry: { send(event { $0.refreshed = .init() }) }
-            ) { draft in
+            PageReadStateView(
+                page: state.page,
+                onRetry: { send(event { $0.refreshed = .init() }) },
+                skeleton: { RowSkeleton(rows: 4, meta: false, label: "") }
+            ) {
+                let draft = state.draft
                 VStack(alignment: .leading, spacing: 0) {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 8) {
@@ -185,6 +202,42 @@ struct NotesEditorView: View {
             }
         )) {
             NotesLinkSheet(sheet: state.link, send: dispatch)
+        }
+        .sheet(isPresented: Binding(
+            get: { state.hasLinks },
+            set: { shown in
+                guard !shown, state.hasLinks else { return }
+                send(event { $0.linksClosed = .init() })
+            }
+        )) {
+            NotesLinkedSheet(
+                section: state.links,
+                picker: state.hasLinkPicker ? state.linkPicker : nil,
+                send: { link in send(event { $0.link = link }) },
+                open: { route in
+                    // The sheet gives way to the page it opens.
+                    send(event { $0.linksClosed = .init() })
+                    open(route)
+                }
+            )
+        }
+        .sheet(isPresented: Binding(
+            get: { state.hasAttachments },
+            set: { shown in
+                guard !shown, state.hasAttachments else { return }
+                send(event { $0.attachmentsClosed = .init() })
+            }
+        )) {
+            NotesAttachmentsSheet(
+                title: state.attachmentsEntry.label,
+                section: state.attachments,
+                send: { attachment in send(event { $0.attachment = attachment }) },
+                open: { route in
+                    // The sheet gives way to the page it opens.
+                    send(event { $0.attachmentsClosed = .init() })
+                    open(route)
+                }
+            )
         }
         .appAccent("notes")
     }
@@ -437,15 +490,6 @@ private struct NotesLinkSheet: View {
         return event
     }
 
-    private var content: ScreenContent<Centraid_Core_V1_NotesLinkData> {
-        switch sheet.content {
-        case .loading?, nil: return .loading(true)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        }
-    }
-
     var body: some View {
         SheetRoom(title: sheet.title, status: sheet.foot) {
             CentraidSearchField(
@@ -456,29 +500,27 @@ private struct NotesLinkSheet: View {
                 onTerm: { term in send(event { $0.linkTerm = .with { $0.term = term } }) },
                 onClose: { send(event { $0.linkDismissed = .init() }) }
             )
-            ReadStateView(
-                content: content,
-                skeleton: { RowSkeleton(rows: 4, label: sheet.loadingLabel) },
-                onRetry: { send(event { $0.refreshed = .init() }) }
-            ) { picker in
-                if picker.domains.allSatisfy({ $0.rows.isEmpty }) {
-                    EmptyStateView(picker.empty)
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            ForEach(Array(picker.domains.enumerated()), id: \.offset) { _, domain in
-                                SectionHeader(title: domain.head.title, count: domain.head.count)
-                                    .padding(.horizontal, -CentraidGeometry.pageMargin)
-                                ForEach(domain.rows, id: \.id) { row in
-                                    CentraidRow(
-                                        title: row.title,
-                                        meta: row.subtitle,
-                                        accessibility: row.accessibilityLabel,
-                                        identifier: "notes-link-\(row.id)",
-                                        onTap: { send(event { $0.linkPicked = .with { $0.id = row.id } }) }
-                                    )
-                                    .padding(.horizontal, -CentraidGeometry.pageMargin)
-                                }
+            // The powerbox's read is the page: Retry reads the targets again.
+            PageReadStateView(
+                page: sheet.page,
+                onRetry: { send(event { $0.refreshed = .init() }) },
+                skeleton: { RowSkeleton(rows: 4, label: sheet.loadingLabel) }
+            ) {
+                let picker = sheet.data
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(picker.domains.enumerated()), id: \.offset) { _, domain in
+                            SectionHeader(title: domain.head.title, count: domain.head.count)
+                                .padding(.horizontal, -CentraidGeometry.pageMargin)
+                            ForEach(domain.rows, id: \.id) { row in
+                                CentraidRow(
+                                    title: row.title,
+                                    meta: row.subtitle,
+                                    accessibility: row.accessibilityLabel,
+                                    identifier: "notes-link-\(row.id)",
+                                    onTap: { send(event { $0.linkPicked = .with { $0.id = row.id } }) }
+                                )
+                                .padding(.horizontal, -CentraidGeometry.pageMargin)
                             }
                         }
                     }
@@ -488,103 +530,45 @@ private struct NotesLinkSheet: View {
     }
 }
 
-/// ONE VERSION: its label (the date, or "Current version"), its first words, and Restore in the
-/// app's colour on every row but the current one.
-private struct NotesVersionRow: View {
-    let row: Centraid_Core_V1_NotesVersionRow
-    let onRestore: () -> Void
-
-    @Environment(\.appAccent) private var accent
+/// THE "Attachments" SHEET (#1185): the photos and files on the note, Add photo and Add file, and the
+/// remove confirm. Rust makes every word and row; a tap is an `AgendaAttachmentEvent`.
+private struct NotesAttachmentsSheet: View {
+    let title: String
+    let section: Centraid_Core_V1_AgendaAttachmentsSection
+    let send: (Centraid_Core_V1_AgendaAttachmentEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(row.label)
-                    .kitType(.row)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(Surface.ink)
-                    .lineLimit(1)
-                Text(row.preview)
-                    .kitType(.meta)
-                    .foregroundStyle(Surface.body)
-                    .lineLimit(1)
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(row.accessibilityLabel)
-            .accessibilityIdentifier("notes-version-\(row.contentID)")
-            Spacer(minLength: 8)
-            if !row.current, !row.restoreLabel.isEmpty {
-                Button(action: onRestore) {
-                    Text(row.restoreLabel)
-                        .kitType(.row)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(accent.text)
-                        .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("notes-restore-\(row.contentID)")
+        SheetRoom(title: title, titleIdentifier: "notes-attachments") {
+            ScrollView {
+                AgendaAttachmentsView(
+                    section: section,
+                    idPrefix: "notes-editor-attachment",
+                    headIdentifier: "notes-editor-attachments",
+                    open: open,
+                    send: send,
+                    padded: false
+                )
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .frame(minHeight: CentraidGeometry.targetMinCoarse)
     }
 }
 
-/// `notes.history` — one note's versions, newest first (#1135).
-struct NotesHistoryView: View {
-    let state: Centraid_Core_V1_NotesHistoryState
-    let send: (Centraid_Core_V1_NotesHistoryEvent) -> Void
-    let onBack: () -> Void
-
-    private func event(_ build: (inout Centraid_Core_V1_NotesHistoryEvent) -> Void) -> Centraid_Core_V1_NotesHistoryEvent {
-        var event = Centraid_Core_V1_NotesHistoryEvent()
-        build(&event)
-        return event
-    }
-
-    private var content: ScreenContent<Centraid_Core_V1_NotesHistoryData> {
-        switch state.content {
-        case .loading?, nil: return .loading(true)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        }
-    }
+/// THE "Linked to" SHEET (#1185): every item the note is linked to (the `[[title]]` wikilinks among
+/// them), the add row, and the kit's picker over it. Rust makes every word and row; a tap is a
+/// `LinkEvent`.
+private struct NotesLinkedSheet: View {
+    let section: Centraid_Core_V1_LinkSection
+    let picker: Centraid_Core_V1_LinkPicker?
+    let send: (Centraid_Core_V1_LinkEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
 
     var body: some View {
-        PushedPage(title: state.title, parentTitle: state.back, onBack: onBack) {
-            EmptyView()
-        } content: {
-            VStack(spacing: 0) {
-                StatusLineView(status: state.status, identifier: "notes-history-status") {}
-                ReadStateView(
-                    content: content,
-                    loadingLabel: state.loadingLabel,
-                    onRetry: { send(event { $0.refreshed = .init() }) }
-                ) { history in
-                    if history.rows.count <= 1, history.hasEmpty {
-                        EmptyStateView(history.empty)
-                    } else {
-                        ScrollView {
-                            // NOTHING IS DIMMED: the current version says "Current" in its label
-                            // and has no Restore; every other row is dated and restorable.
-                            NotesCard {
-                                ForEach(Array(history.rows.enumerated()), id: \.element.contentID) { at, row in
-                                    NotesVersionRow(row: row) {
-                                        send(event { $0.restore = .with { $0.contentID = row.contentID } })
-                                    }
-                                    if at < history.rows.count - 1 { NotesCardRule() }
-                                }
-                            }
-                        }
-                        .refreshable { send(event { $0.refreshed = .init() }) }
-                        .accessibilityIdentifier("notes-history")
-                    }
-                }
+        SheetRoom(title: section.title, titleIdentifier: "notes-linked-to") {
+            ScrollView {
+                LinkSectionView(section: section, send: send, open: open, padded: false)
             }
         }
-        .appAccent("notes")
+        .linkPickerSheet(picker ?? Centraid_Core_V1_LinkPicker(), send: send)
     }
 }

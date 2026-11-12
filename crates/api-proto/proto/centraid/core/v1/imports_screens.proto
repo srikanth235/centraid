@@ -15,6 +15,7 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
+import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/photos_home_screens.proto";
 import "centraid/core/v1/route.proto";
 
@@ -86,6 +87,9 @@ message ImportsCameraRollState {
   // first), counted per round.
   uint32 fed_last_round = 4;
   uint32 fed_rounds = 5;
+  // THE READ of the vault's cursor, the one thing the walk reads: loading until the first walk asks,
+  // then ready, or failed (the walk then reads the roll from the start, as it does with no cursor).
+  PageState page = 6;
 }
 
 // ---------------------------------------------------------------------------
@@ -109,6 +113,11 @@ message ImportsFilesEvent {
   message FolderFollowed {
     string origin = 1;
     string name = 2;
+    // The earlier origin of this same folder (a reconnect after a restore, or after the phone
+    // lost its access): the vault's Docs folder that origin filled is filled by the new one, so
+    // the documents already there are matched and not made twice, and the earlier origin is
+    // retired. Absent for a folder picked for the first time.
+    optional string replaces = 3;
   }
 
   message FolderStopped {
@@ -131,6 +140,10 @@ message ImportsFilesState {
 // What the vault holds of followed folders: the shell query `files-followed`.
 message ImportsFilesHeld {
   repeated ImportsHeldFolder folders = 1;
+  // The folders Stop retired (#1185): followed by nobody, but kept with the Docs folder they filled,
+  // so picking the same folder again follows it into that folder and finds its documents. Only the
+  // pick reads them; `origin_id`, `origin_ref`, `label` and `docs_folder` are set.
+  repeated ImportsHeldFolder retired = 2;
 }
 
 message ImportsHeldFolder {
@@ -142,6 +155,8 @@ message ImportsHeldFolder {
   uint32 documents = 4;
   // Each followed file's last stated stat (`<size>:<modified ms>`), by path.
   repeated ImportsHeldFile files = 5;
+  // The Docs folder this origin fills, or empty when it fills none.
+  string docs_folder = 6;
 }
 
 message ImportsHeldFile {
@@ -149,26 +164,33 @@ message ImportsHeldFile {
   string stat = 2;
 }
 
-// What the phone's writable calendars are owed: the shell query `calendar-owed`, derived in the
-// vault at read time (`centraid_vault::commands::calendar_push::owed_pushes`), one page.
-message ImportsCalendarOwed {
-  repeated ImportsOwedPush items = 1;
-  // Pass as `after_event` to read the next page; empty when nothing is left.
-  string next = 2;
+// WHAT THE PHONE SAYS THAT DIFFERS (#1183): the shell query `phone-differences`. For one followed
+// row, each field the member's edit holds apart from what the phone's store last stated, with
+// both values as JSON text in the form the vault keeps them. A field made of items (a contact's
+// numbers, an event's guests, a workout's figures) lists only the items that differ. Empty for a
+// row nothing follows, a trashed one and one that agrees. Nothing is stored; it is worked out on
+// each read, and each detail screen words it.
+message FollowDifferences {
+  repeated FollowDifference fields = 1;
 }
 
-message ImportsOwedPush {
-  // `create`, `update` or `delete`.
-  string op = 1;
-  string event_id = 2;
-  string origin_ref = 3;
-  string external_id = 4;
-  string device_id = 5;
-  repeated string changed = 6;
-  // JSON: what the phone last stated (`null` for a create), and the followed fields as the
-  // vault holds them (`null` for a delete).
-  string stated_json = 7;
-  string fields_json = 8;
+message FollowDifference {
+  // The field's stable name: `title`, `birthday`, `starts`, `points`, `attendees`, `workout`.
+  string field = 1;
+  // What the store last stated and what the vault holds, as JSON text.
+  string stated_json = 2;
+  string held_json = 3;
+  repeated FollowItemDifference items = 4;
+}
+
+message FollowItemDifference {
+  // The key that names the item across statements (`kind:reach-key`, a guest's email, a
+  // measure's column).
+  string key = 1;
+  // Absent: the store never stated it (the member added it).
+  optional string stated_json = 2;
+  // Absent: the vault no longer holds it (the member removed it).
+  optional string held_json = 3;
 }
 
 // ---------------------------------------------------------------------------
@@ -227,10 +249,14 @@ message LibraryPermission {
 
 message LibraryPermissionRead {
   PhotosMediaPermission permission = 1;
+  // This install's id (the one a phone read carries as `device_id`): the camera roll's cursor in
+  // the vault is this install's word, and another's is not trusted (#1183).
+  string device_id = 2;
 }
 
 // The next page of the library after `cursor` (empty: the start). The cursor is the
-// shell's own; Rust keeps it in the keychain between passes. Answer `RollPaged`.
+// shell's own; Rust keeps it in the vault, on the camera roll's origin, between passes (#1183).
+// Answer `RollPaged`.
 message RollPage {
   string cursor = 1;
   uint32 limit = 2;
@@ -439,7 +465,10 @@ message PhoneReminder {
   string tz = 5;
   // EventKit's raw priority, 0..9.
   int32 priority = 6;
-  bool flagged = 7;
+  // 7 was `flagged`: EventKit has no public flag and Android has no Reminders store, so no shell
+  // can state it and nothing reads it (#1185).
+  reserved 7;
+  reserved "flagged";
   // RFC 5545 rule text (`FREQ=WEEKLY;BYDAY=MO`, with or without `RRULE:`), or empty.
   string rrule = 8;
   // Minutes before the due time of the first alarm, or absent.
@@ -453,6 +482,10 @@ message PhoneReminder {
   reserved 12, 13;
   reserved "external_id", "parent_id";
   string url = 14;
+  // 17 and 18 let the vault FOLLOW the Reminders store: the reminder's durable id on the phone
+  // (EventKit's external identifier, else its item identifier), and its list's identifier.
+  string phone_id = 17;
+  string list_id = 18;
   bool completed = 15;
   // When it was completed, `YYYY-MM-DDTHH:MM:SSZ` (UTC), or empty.
   string completed_at = 16;

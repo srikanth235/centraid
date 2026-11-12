@@ -133,7 +133,7 @@ fn bar(d: &Driver, page: u64) -> wire::TodoQuickAdd {
 }
 
 #[test]
-fn the_toolbar_offers_date_tag_and_flag_and_nothing_that_does_nothing() {
+fn the_toolbar_offers_date_tag_flag_link_and_photo() {
     let mut d = ts::driver();
     let (page, _) = project_page(&mut d, "Garden");
     let quick = bar(&d, page);
@@ -146,13 +146,17 @@ fn the_toolbar_offers_date_tag_and_flag_and_nothing_that_does_nothing() {
         [
             ("date", "Date", "Calendar", false),
             ("tag", "Tag", "Tag", false),
-            ("flag", "Flag", "Flag", false)
+            ("flag", "Flag", "Flag", false),
+            ("link", "Link", "Link", false),
+            ("photo", "Photo", "Image", false)
         ]
     );
     assert_eq!(quick.staged_label, "");
     assert_eq!(quick.open_tool, "");
     assert!(quick.due_choices.is_empty());
     assert_eq!(quick.tag_placeholder, "Add a tag");
+    assert!(quick.staged_rows.is_empty(), "nothing staged, no tray");
+    assert!(quick.link_picker.is_none());
 }
 
 #[test]
@@ -191,7 +195,11 @@ fn the_toolbar_stages_a_due_a_tag_and_the_flag_and_return_adds_them_and_keeps_th
     quick_tool(&mut d, page, "flag");
     let quick = bar(&d, page);
     assert_eq!(quick.staged_label, "Tomorrow · #errand · Flagged");
-    assert!(quick.tools.iter().all(|t| t.on));
+    // Date, Tag and Flag are lit; Link and Photo have nothing staged.
+    assert_eq!(
+        quick.tools.iter().map(|t| t.on).collect::<Vec<_>>(),
+        [true, true, true, false, false]
+    );
 
     type_title(&mut d, page, "Buy bulbs");
     submit(&mut d, page);
@@ -237,7 +245,7 @@ fn the_flag_tool_is_a_switch_and_a_date_can_be_taken_back() {
     quick_due(&mut d, page, "none");
     assert_eq!(bar(&d, page).staged_label, "");
     // A tool or a choice the bar does not hold is nothing.
-    quick_tool(&mut d, page, "photo");
+    quick_tool(&mut d, page, "sparkle");
     quick_due(&mut d, page, "someday");
     assert_eq!(bar(&d, page).staged_label, "");
     assert_eq!(bar(&d, page).open_tool, "");
@@ -289,7 +297,7 @@ fn to_dos_quick_add_takes_the_same_toolbar_and_files_in_the_inbox() {
         id,
         H::QuickAddOpened(wire::agenda_home_event::QuickAddOpened {}),
     );
-    assert_eq!(home_bar(&d, id).tools.len(), 3);
+    assert_eq!(home_bar(&d, id).tools.len(), 5);
     send_home(
         &mut d,
         id,

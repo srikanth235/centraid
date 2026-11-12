@@ -15,11 +15,13 @@ use wire::money_accounts_state::Sheet;
 use wire::screen_event::Kind as E;
 use wire::status_chip::Tone;
 
-use super::fold::{self, Phase};
+use super::fold;
 use crate::catalog::{act, load};
 use crate::field::Field;
 use crate::kit::act as kit_act;
-use crate::kit::read;
+use crate::kit::read::{self, Page};
+use crate::kit::stale;
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, money as words};
 
@@ -32,10 +34,11 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     };
     Some(Box::new(Accounts {
         parent: args.parent.clone(),
-        phase: Phase::Loading,
+        page: Page::loading(),
         editor: None,
         confirm_remove_number: false,
-        status: None,
+        stale: None,
+        undo: Undo::default(),
     }))
 }
 
@@ -59,14 +62,21 @@ struct Editor {
     external_ref: String,
     has_external_ref: bool,
     closed: bool,
+    /// The account's revision when the sheet opened: what a save names as the one it replaces
+    /// (#1185). `None` for a new account.
+    rev: Option<i64>,
 }
 
 struct Accounts {
     parent: String,
-    phase: Phase<wire::MoneyAccounts>,
+    page: Page<wire::MoneyAccounts>,
     editor: Option<Editor>,
     confirm_remove_number: bool,
-    status: Option<wire::StatusLine>,
+    /// Why the vault refused the last write, when the account had changed (or gone to the trash)
+    /// since the sheet opened.
+    stale: Option<stale::Stale>,
+    /// The status line and what its Undo reverses (the kit's one door).
+    undo: Undo,
 }
 
 fn lines(answer: &wire::MoneyAccounts) -> Vec<(&wire::money_accounts::AccountLine, bool)> {
@@ -80,10 +90,15 @@ fn lines(answer: &wire::MoneyAccounts) -> Vec<(&wire::money_accounts::AccountLin
 
 impl Accounts {
     fn reload(&mut self, ctx: &Ctx) {
-        self.phase = Phase::of(read::read(ctx, load::money::Accounts {}, |a| match a {
-            wire::app_query_response::Answer::MoneyAccounts(x) => Some(x),
-            _ => None,
-        }));
+        fold::reread(
+            &mut self.page,
+            ctx.locale(),
+            read::read(ctx, load::money::Accounts {}, |a| match a {
+                wire::app_query_response::Answer::MoneyAccounts(x) => Some(x),
+                _ => None,
+            }),
+            |answer| lines(answer).is_empty(),
+        );
     }
 
     fn issue(editor: &Editor, locale: Locale) -> String {
@@ -100,13 +115,39 @@ impl Accounts {
         }
     }
 
-    fn submit(&mut self, ctx: &Ctx, request: impl Into<wire::ActRequest>) -> bool {
+    /// One write. `said` is the sentence when this write is the one the line is about; a write that
+    /// follows another (the close beside an edit) passes `None`: the line stays as it is and its
+    /// Undo takes this write back too, in the same tap.
+    fn submit(
+        &mut self,
+        ctx: &Ctx,
+        request: impl Into<wire::ActRequest>,
+        said: Option<String>,
+    ) -> bool {
         let key = kit_act::key(&["money", "account"], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        if !settled.committed {
-            self.status = Some(fold::refusal(ctx.locale(), &settled.refusal));
-        }
+        let settled = match said {
+            Some(said) => self.undo.act(ctx, request, &key, |_| said),
+            None => self.undo.act_joining(ctx, request, &key),
+        };
+        self.stale = settled.stale();
         settled.committed
+    }
+
+    /// The vault refused the save: the account changed, or went to the trash, since the sheet
+    /// opened (#1185). The name typed is kept as an earlier version, the sheet closes on the
+    /// account as it is, and the line says what happened and where the words went.
+    fn stale_edit(&mut self, ctx: &Ctx, editor: &Editor, stale: stale::Stale) {
+        let locale = ctx.locale();
+        let said = stale::on_button(
+            ctx,
+            &crate::strings::chat_confirm::noun_account(locale),
+            &editor.account_id,
+            stale,
+            vec![("entity.title".to_owned(), editor.name.trim().into())],
+        );
+        self.editor = None;
+        self.reload(ctx);
+        self.undo.refuse(said);
     }
 
     fn save(&mut self, ctx: &Ctx) {
@@ -134,10 +175,11 @@ impl Accounts {
                     on_budget: Some(editor.on_budget),
                     ..Default::default()
                 },
+                Some(words::done_account(locale)),
             )
         } else {
             let before_closed = self
-                .phase
+                .page
                 .data()
                 .and_then(|answer| {
                     lines(answer)
@@ -152,6 +194,7 @@ impl Accounts {
                     account_id: editor.account_id.clone(),
                     external_ref: number.map_or(Field::Keep, Field::Is),
                     on_budget: Some(editor.on_budget),
+                    expected_rev: editor.rev,
                     title: Some(editor.name.trim().to_owned()),
                     r#type: Some(match editor.kind.as_str() {
                         "savings" => act::money::EditAccountType::Savings,
@@ -160,7 +203,12 @@ impl Accounts {
                         _ => act::money::EditAccountType::Checking,
                     }),
                 },
+                Some(words::done_account(locale)),
             );
+            if let Some(stale) = self.stale.take() {
+                self.stale_edit(ctx, &editor, stale);
+                return;
+            }
             // A closed account is the archived flag on it: its own action, sent beside the edit.
             if edited && before_closed != editor.closed {
                 if editor.closed {
@@ -170,6 +218,7 @@ impl Accounts {
                             flag: act::money::CloseAccountFlag::Archived,
                             account_id: editor.account_id.clone(),
                         },
+                        None,
                     )
                 } else {
                     self.submit(
@@ -178,6 +227,7 @@ impl Accounts {
                             flag: act::money::ReopenAccountFlag::Archived,
                             account_id: editor.account_id.clone(),
                         },
+                        None,
                     )
                 }
             } else {
@@ -186,7 +236,6 @@ impl Accounts {
         };
         if committed {
             self.editor = None;
-            self.status = Some(fold::done(words::done_account(locale)));
         }
         self.reload(ctx);
     }
@@ -200,13 +249,17 @@ impl Accounts {
         if self.submit(
             ctx,
             act::money::EditAccount {
-                account_id: editor.account_id,
+                account_id: editor.account_id.clone(),
                 external_ref: Field::Clear,
+                expected_rev: editor.rev,
                 ..Default::default()
             },
+            Some(words::account_number_removed(ctx.locale())),
         ) {
             self.editor = None;
-            self.status = Some(fold::done(words::account_number_removed(ctx.locale())));
+        } else if let Some(stale) = self.stale.take() {
+            self.stale_edit(ctx, &editor, stale);
+            return;
         }
         self.reload(ctx);
     }
@@ -214,7 +267,7 @@ impl Accounts {
     fn event(&mut self, event: wire::MoneyAccountsEvent, ctx: &Ctx) {
         match event.kind {
             Some(A::Add(_)) => {
-                self.status = None;
+                self.undo.clear();
                 self.editor = Some(Editor {
                     mode: Mode::Add,
                     account_id: String::new(),
@@ -225,10 +278,11 @@ impl Accounts {
                     external_ref: String::new(),
                     has_external_ref: false,
                     closed: false,
+                    rev: None,
                 });
             }
             Some(A::Account(tapped)) => {
-                let Some(answer) = self.phase.data() else {
+                let Some(answer) = self.page.data() else {
                     return;
                 };
                 let Some((line, on_budget)) = lines(answer)
@@ -247,8 +301,9 @@ impl Accounts {
                     external_ref: String::new(),
                     has_external_ref: line.mask.is_some(),
                     closed: line.closed,
+                    rev: stale::read_rev(ctx, &line.account_id),
                 });
-                self.status = None;
+                self.undo.clear();
             }
             Some(A::ConfirmDismissed(_)) => self.confirm_remove_number = false,
             Some(A::ConfirmAccepted(_)) if self.confirm_remove_number => self.remove_number(ctx),
@@ -444,11 +499,6 @@ impl Accounts {
             } else {
                 String::new()
             },
-            empty: sections.is_empty().then(|| wire::EmptyState {
-                headline: words::accounts_empty(locale),
-                action_label: words::add_account(locale),
-                ..Default::default()
-            }),
             sections,
             add_label: words::add_account(locale),
             definitions: fold::definitions(locale, &answer.definitions),
@@ -464,6 +514,12 @@ impl Screen for Accounts {
                 kind: Some(wire::money_accounts_event::Kind::Refreshed(_)),
             })) => self.reload(ctx),
             Some(E::MoneyAccounts(a)) => self.event(a, ctx),
+            Some(E::StatusActed(_)) => {
+                if self.undo.acted(ctx) {
+                    self.reload(ctx);
+                }
+            }
+            Some(E::Left(_)) => self.undo.clear(),
             _ => {}
         }
         Vec::new()
@@ -472,16 +528,21 @@ impl Screen for Accounts {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::money_accounts_state::Content;
         let locale = ctx.locale();
-        let content = match &self.phase {
-            Phase::Loading => Content::Loading(wire::Loading { first_load: true }),
-            Phase::Failed => Content::Failure(read::failure(locale)),
-            Phase::Denied => Content::Denied(fold::denied(locale)),
-            Phase::Ready(answer) => Content::Data(Box::new(Self::data(locale, answer))),
-        };
+        let content = self
+            .page
+            .data()
+            .map(|answer| Content::Data(Box::new(Self::data(locale, answer))));
+        // An account list with no account is the page's own empty state, and its one action adds one.
+        let page = fold::wire_page(&self.page, locale, || wire::EmptyState {
+            headline: words::accounts_empty(locale),
+            action_label: words::add_account(locale),
+            ..Default::default()
+        });
         wire::ViewState {
             kind: Some(wire::view_state::Kind::MoneyAccounts(
                 wire::MoneyAccountsState {
-                    content: Some(content),
+                    content,
+                    page: Some(page),
                     sheet: if self.editor.is_some() {
                         Sheet::Editor
                     } else {
@@ -499,7 +560,7 @@ impl Screen for Accounts {
                         words::accounts_title(locale),
                         &self.parent,
                     )),
-                    status: self.status.clone(),
+                    status: self.undo.status(),
                 },
             )),
             ..wire::ViewState::default()

@@ -242,7 +242,7 @@ final class DocsFollow: ObservableObject {
 
     private func fail() {
         var failed = Centraid_Core_V1_EffectFailed()
-        failed.reason = "the folder could not be followed"
+        failed.reason = EffectReason.failed
         answer?(.failed(failed))
         answer = nil
     }

@@ -9,7 +9,7 @@ use wire::status_chip::Tone;
 
 use crate::kit::civil;
 use crate::kit::money::{self, Amount};
-use crate::kit::read::Reading;
+use crate::kit::read::{Page, Reading};
 use crate::strings::{Locale, fill, money as words};
 
 /// The locale amounts are drawn in. The vault does not name one yet, so every
@@ -362,40 +362,40 @@ pub fn with_n(template: String, n: impl ToString) -> String {
     fill(&template, &[("n", &n.to_string())])
 }
 
-// --- The three states of a read ------------------------------------------------
+// --- A read on the kit's page ---------------------------------------------------------------
 
-/// What a screen holds of its read: nothing yet, a failure, a gate, or data.
-pub(crate) enum Phase<T> {
-    Loading,
-    Failed,
-    Denied,
-    Ready(T),
+/// A page's read answered again. What is shown stays (a refresh that failed keeps it under the
+/// page's one sentence); a failure or gate becomes the skeleton until the answer lands.
+pub(crate) fn reread<T>(
+    page: &mut Page<T>,
+    locale: Locale,
+    reading: Reading<T>,
+    is_empty: impl FnOnce(&T) -> bool,
+) {
+    let kept = std::mem::replace(page, Page::loading());
+    *page = kept.refreshing().after(reading, locale, is_empty);
 }
 
-impl<T> Phase<T> {
-    pub(crate) fn of(reading: Reading<T>) -> Self {
-        match reading {
-            Reading::Data(data) => Self::Ready(data),
-            Reading::Denied(_) => Self::Denied,
-            Reading::Failed => Self::Failed,
-        }
-    }
+/// The page as the wire carries it: the gate in Money's words, and `empty` for the one empty state
+/// of the screen.
+pub(crate) fn wire_page<T>(
+    page: &Page<T>,
+    locale: Locale,
+    empty: impl FnOnce() -> wire::EmptyState,
+) -> wire::PageState {
+    page.wire(locale, |_| denied(locale), empty)
+}
 
-    pub(crate) fn map<U>(self, f: impl FnOnce(T) -> U) -> Phase<U> {
-        match self {
-            Self::Loading => Phase::Loading,
-            Self::Failed => Phase::Failed,
-            Self::Denied => Phase::Denied,
-            Self::Ready(data) => Phase::Ready(f(data)),
-        }
-    }
-
-    pub(crate) fn data(&self) -> Option<&T> {
-        match self {
-            Self::Ready(data) => Some(data),
-            _ => None,
-        }
-    }
+/// [`wire_page`] for a screen that keeps its answer while it is empty, because a sheet still reads
+/// it (the group a new category files under): an answer that holds nothing is the page's empty
+/// state; one whose refresh failed over nothing is the failure, never an empty list.
+pub(crate) fn wire_page_keeping<T>(
+    page: &Page<T>,
+    locale: Locale,
+    holds_nothing: bool,
+    empty: impl FnOnce() -> wire::EmptyState,
+) -> wire::PageState {
+    page.wire_keeping(locale, |_| denied(locale), holds_nothing, empty)
 }
 
 /// The gate drawn when the vault will not let Money read.

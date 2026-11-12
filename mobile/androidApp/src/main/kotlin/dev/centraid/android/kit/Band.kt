@@ -415,7 +415,7 @@ public fun AppBand(
                 val mark = BandPolicy.BAND_MARK_SIZE.dp
                 val x by animateDpAsState(
                     targetValue = pad + tabWidth * lit + (tabWidth - mark) / 2,
-                    animationSpec = STATE_CHANGE,
+                    animationSpec = motion(STATE_CHANGE),
                     label = "band-rule",
                 )
                 Box(

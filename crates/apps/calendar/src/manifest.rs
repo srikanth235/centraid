@@ -44,10 +44,10 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_seven_queries_and_fifteen_actions() {
+    fn it_declares_seven_queries_and_fourteen_actions() {
         let manifest = manifest();
-        assert_eq!(manifest.queries.len(), 7);
-        assert_eq!(manifest.actions.len(), 15);
+        assert_eq!(manifest.queries.len(), 8);
+        assert_eq!(manifest.actions.len(), 22);
         for name in [
             "upcoming",
             "search",
@@ -66,7 +66,7 @@ mod tests {
     /// `reopen-task`, sent by the screen under Reminders' name. So Calendar READS `task` (a title, a
     /// due day and time, the state) and holds no general task write and no complete or uncomplete
     /// permission either: no scope on `task` but the read, no `task.*` command, no action of that
-    /// kind among its fifteen.
+    /// kind among its fourteen.
     #[test]
     fn calendar_reads_reminders_and_holds_no_task_write_the_tick_is_reminders() {
         let vault = manifest().vault.as_ref().expect("reach");
@@ -136,9 +136,9 @@ mod tests {
     /// NON-OWNER invocation regardless of risk; what is absent here is the
     /// owner-facing prompt on the member's own gesture.
     ///
-    /// The one exception is `purge-task` (#1015 D1), which is not v0's and is the one
-    /// irreversible act: it confirms, as every other app's destroy does. `delete-task` trashes a
-    /// task AND every subtask under it, which is as destructive as `delete-note`.
+    /// The exceptions are `purge-event` and `empty-trash` (#1185), the irreversible acts: they
+    /// confirm, as every other app's destroys do; so does `stop-following`, which cannot be taken
+    /// back by one action.
     #[test]
     fn calendar_confirms_nothing_and_the_command_gate_is_the_other_one() {
         for row in ACTIONS {
@@ -146,7 +146,18 @@ mod tests {
                 .action(row.action)
                 .expect("checked above")
                 .confirmation;
-            let expected = (Confirmation::None, Confirm::None);
+            let expected = if matches!(
+                row.action,
+                "purge-event"
+                    | "empty-trash"
+                    | "stop-following"
+                    | "delete-calendar"
+                    | "restore-calendar"
+            ) {
+                (Confirmation::Required, Confirm::Required)
+            } else {
+                (Confirmation::None, Confirm::None)
+            };
             assert_eq!((declared, row.confirm), expected, "{}", row.action);
         }
     }
@@ -187,7 +198,7 @@ mod tests {
                 scope.table.as_deref().expect("a read names a table")
             })
             .collect();
-        assert_eq!(reads.len(), 12);
+        assert_eq!(reads.len(), 13);
         assert!(
             vault
                 .scopes

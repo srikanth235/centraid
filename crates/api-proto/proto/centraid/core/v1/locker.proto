@@ -347,12 +347,20 @@ message LockerReveal {
   // The value goes to the clipboard, not the screen; the value answered is the
   // same.
   bool copy = 4;
+  // Reveal the cell as the item's version `earlier_seq` held it (Earlier versions, #1185): the
+  // sealed value a change replaced, opened with the same key, behind the same unlock, and
+  // stamping the item as used the same way. 0 (absent): the live cell. `otp_seed` and a
+  // one-time-code field are refused here as they are live.
+  int64 earlier_seq = 5;
 }
 
 message LockerTotpAsk {
   string item_id = 1;
   // The code goes to the clipboard, not the screen.
   bool copy = 2;
+  // A custom one-time-code (`otp`) field of `item_id`, whose seed is bound to this id; empty asks
+  // for the login's own `otp_seed`.
+  string field_id = 3;
 }
 
 enum LockerExportFormat {
@@ -396,6 +404,9 @@ message LockerImportAsk {
   bytes content = 1;
   // Write it. Without this the answer is the plan and nothing is written.
   bool publish = 2;
+  // The picked file's name, kept as where the items came from (their origin's label). A name
+  // only, never content: the core keeps its base name. Empty when the platform named none.
+  string file_name = 3;
 }
 
 // What an import would do, row by row — or, published, what it did. No row

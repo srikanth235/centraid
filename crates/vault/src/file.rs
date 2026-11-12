@@ -295,6 +295,7 @@ impl Vault {
         // opens the file for writing.
         Self::apply_pragmas(&connection)?;
         crate::log::guard::install_without_rowid_census(&connection)?;
+        crate::history::install(&connection)?;
         Ok(Self {
             connection: Held(RefCell::new(Some(connection))),
             path,

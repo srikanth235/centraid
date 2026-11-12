@@ -274,7 +274,7 @@ struct AppBand: View {
         .padding(.top, BandMetrics.topGap)
         .padding(.bottom, BandMetrics.floorPadding)
         .sensoryFeedback(.selection, trigger: lit)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: folded)
+        .kitAnimation(.easeInOut(duration: 0.18), value: folded)
         // `.contain`, as on Home's band: without it the container's identifier
         // REPLACES each tab's own, and every tab reads `<app>-band` (#1128's
         // flows found it).

@@ -7,13 +7,13 @@
 //! (`tag.add`), a notebook (`container.create`, `entity.retitle`), a link made
 //! by hand or an attachment (`edge.add`). What is here is what only a note has.
 //!
-//! ## History is the words that were replaced
+//! ## History is the commit door's
 //!
-//! An edit that changes the body writes the body it replaced as a `revision`
-//! (`seq` counts up from one); the current words live only on the note. A
-//! restore writes the current words as a revision and the chosen ones as
-//! current, and an edit or a restore that lands on the words already there
-//! writes nothing, because it revised nothing.
+//! An edit that changes a note keeps the note as it was (its words in `revision.body`, its
+//! title and notebook in `revision.state`) without this file doing anything: the commit door
+//! writes every record's history ([`crate::history`]). A restore of a version's words is the same
+//! generic restore limited to the words, and an edit or a restore that lands on what is already
+//! there writes nothing, because it changed nothing.
 //!
 //! ## The text is the source; the edges are its compilation (Q-1047-9)
 //!
@@ -37,8 +37,8 @@ use rusqlite::OptionalExtension;
 
 use crate::commands::tag::{ensure_concept, next_color, set_tagged};
 
-use crate::commands::entity::lookup_live;
-use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
+use crate::commands::entity::{STALE_GUARD, lookup_live, with_rev};
+use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, arrival};
 use crate::error::Result;
 use crate::model::Kind;
 
@@ -55,9 +55,9 @@ pub const MAX_LINKS: usize = 100;
 /// member can link a note to. One list, because a pick the compile could not
 /// resolve would be a `[[title]]` that links nothing.
 ///
-/// A Locker item is one (#1135): its title is plain and searchable, a link holds
-/// no secret, and opening it asks Locker's gate like any Locker destination. The
-/// compile resolves it for every principal, the assistant's included.
+/// A Locker item is one of Home's rows (#1135), but a `[[title]]` never resolves to it: a Locker
+/// item cannot be the target of a link (owner ruling D11, #1185), so the compile and the
+/// powerbox keep to the kinds that are [`Kind::is_link_end`].
 pub const LINKABLE: [Kind; 7] = [
     Kind::Note,
     Kind::Person,
@@ -188,16 +188,6 @@ fn create(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     Ok(serde_json::json!({ "id": id }))
 }
 
-/// Write the words a note is about to stop having as its newest revision.
-fn keep_replaced(ctx: &CommandCtx<'_, '_>, id: &str, replaced: &str) -> Result<()> {
-    ctx.connection().execute(
-        "INSERT INTO revision (entity_id, seq, at, body)
-         VALUES (?1, (SELECT COALESCE(MAX(seq), 0) + 1 FROM revision WHERE entity_id = ?1), ?2, ?3)",
-        rusqlite::params![id, ctx.now, replaced],
-    )?;
-    Ok(())
-}
-
 /// Set a note's words: the one path an edit and a restore both take.
 /// Returns whether the words changed.
 fn set_body(ctx: &CommandCtx<'_, '_>, id: &str, body: &str) -> Result<bool> {
@@ -209,7 +199,6 @@ fn set_body(ctx: &CommandCtx<'_, '_>, id: &str, body: &str) -> Result<bool> {
     if current == body {
         return Ok(false);
     }
-    keep_replaced(ctx, id, &current)?;
     ctx.connection()
         .execute("UPDATE note SET body = ?2 WHERE id = ?1", [id, body])?;
     compile_wikilinks(ctx, id, body)?;
@@ -232,7 +221,7 @@ fn edit(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         )?;
     }
     ctx.touch(id)?;
-    Ok(serde_json::json!({ "id": id }))
+    with_rev(ctx, id, serde_json::json!({ "id": id }))
 }
 
 fn move_note(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
@@ -247,16 +236,23 @@ fn move_note(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
 
 fn restore_version(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let id = ctx.required_str("id")?;
-    let chosen: String = ctx.connection().query_row(
-        "SELECT body FROM revision WHERE entity_id = ?1 AND seq = ?2",
-        rusqlite::params![id, ctx.input["seq"].as_i64()],
-        |row| row.get(0),
-    )?;
-    let restored = set_body(ctx, id, &chosen)?;
-    if restored {
-        ctx.touch(id)?;
-    }
+    let seq = ctx.input["seq"].as_i64().unwrap_or_default();
+    // The words of the version: one path with every other restore (`history.restore_version`),
+    // limited to the words, as this verb always was. The words it replaces are kept as a version
+    // by the commit door.
+    let restored = crate::history::restore_version(ctx, id, seq, crate::history::Scope::Content)?
+        .is_some_and(|restored| restored.restored);
     Ok(serde_json::json!({ "id": id, "restored": restored }))
+}
+
+/// Compile the links a note's words name again, after something other than an edit set them.
+pub(crate) fn relink(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<()> {
+    let body: String =
+        ctx.connection()
+            .query_row("SELECT body FROM note WHERE id = ?1", [id], |row| {
+                row.get(0)
+            })?;
+    compile_wikilinks(ctx, id, &body)
 }
 
 // ---------------------------------------------------------------------------
@@ -306,6 +302,7 @@ fn compile_wikilinks(ctx: &CommandCtx<'_, '_>, note: &str, body: &str) -> Result
     )?;
     let linkable = LINKABLE
         .iter()
+        .filter(|kind| kind.is_link_end())
         .map(|kind| format!("'{}'", kind.as_str()))
         .collect::<Vec<_>>()
         .join(", ");
@@ -392,6 +389,7 @@ fn already_there(ctx: &CommandCtx<'_, '_>, parsed: &Parsed) -> Result<bool> {
 fn names_something(ctx: &CommandCtx<'_, '_>, title: &str) -> Result<bool> {
     let linkable = LINKABLE
         .iter()
+        .filter(|kind| kind.is_link_end())
         .map(|kind| format!("'{}'", kind.as_str()))
         .collect::<Vec<_>>()
         .join(", ");
@@ -536,6 +534,7 @@ fn import(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
             }
             set_tagged(ctx, &id, &concept, true)?;
         }
+        arrival::record(ctx, &id, Kind::Note)?;
         made.push((id, note.body.clone()));
     }
     // A link to a note imported after the one that names it resolves now that all are there.
@@ -550,19 +549,36 @@ fn import(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
 /// a folder per notebook, `[[links]]` as written, tags in front matter. Writes nothing.
 /// Journal entries are People's and are not exported here.
 fn export(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let notebook = ctx.optional_str("notebook_id");
+    let (archive_name, entries) =
+        markdown_entries(ctx.connection(), ctx.optional_str("notebook_id"))?;
+    let count = entries.len();
+    let bytes = portable::zip(&entries);
+    Ok(serde_json::json!({
+        "name": format!("{archive_name}.zip"),
+        "media_type": "application/zip",
+        "count": count,
+        "content": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes),
+    }))
+}
+
+/// The archive's name and the Markdown files of the member's notes (a notebook's, or all), a
+/// folder per notebook. `note.export` zips them; the whole-vault export (`vault.export_all`)
+/// writes the same entries under `Notes/`.
+pub(crate) fn markdown_entries(
+    connection: &rusqlite::Connection,
+    notebook: Option<&str>,
+) -> Result<(String, Vec<Entry>)> {
     let mut scope: BTreeSet<String> = BTreeSet::new();
     let mut archive_name = "Notes".to_owned();
     if let Some(id) = notebook {
-        let title: Option<String> = ctx
-            .connection()
+        let title: Option<String> = connection
             .query_row("SELECT title FROM entity WHERE id = ?1", [id], |row| {
                 row.get(0)
             })
             .optional()?;
         archive_name = title.map_or_else(|| "Notes".to_owned(), |t| portable::file_stem(&t));
         scope.insert(id.to_owned());
-        let mut children = ctx.connection().prepare_cached(
+        let mut children = connection.prepare_cached(
             "SELECT c.id FROM container c JOIN entity e ON e.id = c.id
               WHERE c.parent_id = ?1 AND c.kind = 'notebook' AND e.deleted_at IS NULL",
         )?;
@@ -578,7 +594,7 @@ fn export(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
             }
         }
     }
-    let mut statement = ctx.connection().prepare_cached(
+    let mut statement = connection.prepare_cached(
         "SELECT e.id, e.title, n.body, nb.title
            FROM entity e JOIN note n ON n.id = e.id
            LEFT JOIN entity nb ON nb.id = n.notebook_id AND nb.deleted_at IS NULL
@@ -604,7 +620,7 @@ fn export(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
             },
         )?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    let mut tags = ctx.connection().prepare_cached(
+    let mut tags = connection.prepare_cached(
         "SELECT c.key FROM edge t JOIN concept c ON c.id = t.to_id AND c.kind = 'tag'
           WHERE t.from_id = ?1 AND t.rel = 'tagged' ORDER BY c.key",
     )?;
@@ -633,14 +649,7 @@ fn export(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
             bytes: portable::markdown_of(&title, &body, &labels).into_bytes(),
         });
     }
-    let count = entries.len();
-    let bytes = portable::zip(&entries);
-    Ok(serde_json::json!({
-        "name": format!("{archive_name}.zip"),
-        "media_type": "application/zip",
-        "count": count,
-        "content": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes),
-    }))
+    Ok((archive_name, entries))
 }
 
 #[must_use]
@@ -649,10 +658,14 @@ pub fn definitions() -> Vec<CommandDefinition> {
         predicate: "note_has_a_title_a_body_within_budget_and_a_notebook",
         check: pre_create,
     }];
-    const EDIT: &[CommandCondition] = &[CommandCondition {
-        predicate: "note_is_live_and_body_within_budget",
-        check: pre_edit,
-    }];
+    const EDIT: &[CommandCondition] = &[
+        STALE_GUARD[0],
+        STALE_GUARD[1],
+        CommandCondition {
+            predicate: "note_is_live_and_body_within_budget",
+            check: pre_edit,
+        },
+    ];
     const MOVE: &[CommandCondition] = &[CommandCondition {
         predicate: "note_is_live_and_notebook_exists",
         check: pre_move,
@@ -665,15 +678,20 @@ pub fn definitions() -> Vec<CommandDefinition> {
         CommandDefinition::plain(
             "note.import",
             "note",
-            r#"{
+            concat!(
+                r#"{
               "type": "object",
               "required": ["files"],
               "additionalProperties": false,
               "properties": {
                 "files": { "type": ["array", "string"] },
-                "dry_run": { "type": "boolean" }
+                "dry_run": { "type": "boolean" },
+                "#,
+                arrival::arrived_property!(),
+                r#"
               }
-            }"#,
+            }"#
+            ),
             Idempotency::Idempotent,
             &[],
             import,
@@ -722,7 +740,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
                 "id": { "type": "string", "minLength": 1 },
                 "title": { "type": "string", "maxLength": 1000 },
                 "body": { "type": "string" },
-                "format": { "type": "string", "enum": ["markdown", "plain"] }
+                "format": { "type": "string", "enum": ["markdown", "plain"] },
+                "expected_rev": { "type": "integer", "minimum": 0 }
               }
             }"#,
             Idempotency::Idempotent,

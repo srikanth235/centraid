@@ -1127,7 +1127,9 @@ fn integer_of(row: &Row, column: &str) -> i64 {
 
 fn field_of(row: &Row) -> PhoneField {
     let kind = text_of(row, "kind").unwrap_or_default();
-    let sealed = kind == "sealed";
+    // A one-time-code field's seed is sealed like a `sealed` field's value: only its presence is
+    // read here, and the schema keeps `value_text` empty for both.
+    let sealed = matches!(kind.as_str(), "sealed" | "otp");
     let value = if sealed {
         None
     } else {

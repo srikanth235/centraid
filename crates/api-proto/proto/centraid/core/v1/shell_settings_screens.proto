@@ -25,6 +25,16 @@ message SettingsAppearance {
   string note = 3;
 }
 
+// THE UNITS ROW: one switch, metric or imperial, for every app (never one per measure). The
+// choice shown is the stored one: "phone" (follows the region, nothing stored) is the default.
+message SettingsUnits {
+  string title = 1;
+  // "phone", "metric" or "imperial", each `SettingsChoice.id`.
+  repeated SettingsChoice choices = 2;
+  // What the switch changes, in plain words.
+  string note = 3;
+}
+
 // One row of a section. A row with a route opens a page; one without is read.
 message SettingsRow {
   string id = 1;
@@ -61,13 +71,17 @@ message SettingsData {
   string version_title = 3;
   string version = 4;
   string about_title = 5;
+  SettingsUnits units = 6;
 }
 
 message SettingsState {
   string title = 1;
   string back_label = 2;
+  // 3 was `loading`: the read is `page` (#1185).
+  reserved 3;
+  reserved "loading";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 3;
     SettingsData data = 4;
   }
   // The page handed its job to Home (the vault switcher is Home's sheet): the shell pops it.
@@ -76,6 +90,11 @@ message SettingsState {
   // member's one transfer rule, the same three choices Home's gear and the Backup page draw,
   // from the same store.
   optional HomeTransferSheet transfer_sheet = 6;
+  // A write the page made was refused: one sentence ("Couldn't save your units. Try again."),
+  // `refused` set, drawn as the kit's status line. Absent when there is nothing to say.
+  optional StatusLine status = 7;
+  // THE READ: loading until the phone's own settings have been read, then ready.
+  PageState page = 8;
 }
 
 message SettingsEvent {
@@ -85,6 +104,12 @@ message SettingsEvent {
     // A choice in the sheet (`BackupRuleChoice.stored`): kept, the pass service told, the sheet closes.
     TransferRuleChosen transfer_rule_chosen = 3;
     TransferRulesClosed transfer_rules_closed = 4;
+    UnitsPicked units_picked = 5;
+  }
+
+  message UnitsPicked {
+    // A `SettingsChoice.id` of the units row.
+    string id = 1;
   }
 
   message TransferRuleChosen {

@@ -226,7 +226,7 @@ message NotesLinkTargets {
 message NotesNote {
   // `body_content_id` and `current_revision_id`: a body is the note's own
   // column now and a version is a `revision` with a `seq`. `row_version` (9) was the
-  // editor's base; there is no entity version and the last save wins (#1146).
+  // editor's base; the base is `rev` now (#1185).
   reserved 7, 8, 9;
   reserved "body_content_id", "current_revision_id", "row_version";
   bool found = 1;
@@ -255,6 +255,9 @@ message NotesNote {
   repeated NotesAttachment attachments = 19;
   // What the note is about, as in `NotesRow.about`.
   repeated NotesCard about = 20;
+  // The note's revision: the newest version its history holds (0 when none). A save names it as
+  // `expected_rev`; the vault refuses a save made from a revision that is no longer the note's.
+  int64 rev = 21;
 }
 
 // ---------------------------------------------------------------------------
@@ -310,6 +313,9 @@ message NotesSearchHit {
   // EMPTY when the instant is absent or no zone resolved.
   string created_local_day = 14;
   string updated_local_day = 15;
+  // The words matched only in an EARLIER VERSION of the item, not in what it says now (#1185):
+  // the row is the live item, once, and it opens that item's Earlier versions. Search rows only.
+  bool in_earlier_version = 16;
 }
 
 // A notebook is a `core_collection` whose `kind` is `notebook` (#274, rung

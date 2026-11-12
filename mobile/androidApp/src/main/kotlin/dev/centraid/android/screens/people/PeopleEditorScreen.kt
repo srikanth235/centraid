@@ -36,14 +36,12 @@ import centraid.core.v1.PeopleEditorEvent
 import centraid.core.v1.PeopleEditorState
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EditorRoom
-import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.StatusLine
-import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -72,17 +70,13 @@ public fun PeopleEditorScreen(
         onDeparted = {},
     ) {
         StatusLine(state.status?.sentence.orEmpty())
-        val gone = state.gone
-        if (gone != null) {
-            EmptyStateView(gone, onAction = null)
-            return@EditorRoom
-        }
         ReadStateView(
-            content = screenContentOf(state.loading, state.failure, draft, state.denied),
+            page = state.page!!,
             onRetry = { onEvent(PeopleEditorEvent(refreshed = PeopleEditorEvent.Refreshed())) },
             retryLabel = chrome?.retry.orEmpty(),
             skeleton = { RowSkeleton(rows = 4, meta = false, label = chrome?.loading.orEmpty()) },
-        ) { profile ->
+        ) {
+            val profile = draft ?: return@ReadStateView
             Column(
                 Modifier.fillMaxWidth().background(Surface.page).verticalScroll(rememberScrollState()).testTag("people-editor"),
             ) {

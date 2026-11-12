@@ -21,6 +21,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import centraid.core.v1.PageState
 import centraid.core.v1.TransferEvent
 import centraid.core.v1.TransferView
 
@@ -39,52 +40,59 @@ public fun TransferScreen(
         title = view.title,
         parentTitle = view.back_label,
         onBack = onBack,
-        status = view.status?.sentence.orEmpty(),
+        statusLine = { StatusLine(view.status) },
     ) {
-        LazyColumn(Modifier.padding(horizontal = KitGeometry.GUTTER)) {
-            item(key = "lede") {
-                Column(Modifier.padding(top = 4.dp, bottom = 14.dp)) {
-                    KitText(view.lede, KitType.Row, Surface.meta)
-                    if (view.headline.isNotEmpty()) {
-                        KitText(
-                            view.headline,
-                            KitType.Row,
-                            Surface.ink,
-                            modifier = Modifier.padding(top = 14.dp).testTag("transfer-headline"),
-                        )
+        // THE READ (#1185): a page that reads the vault (Reconnect) is loading or failed with Retry;
+        // the others read nothing and carry no page, which is ready.
+        ReadStateView(
+            page = view.page ?: PageState(),
+            onRetry = { onEvent(TransferEvent(refreshed = true)) },
+        ) {
+            LazyColumn(Modifier.padding(horizontal = KitGeometry.GUTTER)) {
+                item(key = "lede") {
+                    Column(Modifier.padding(top = 4.dp, bottom = 14.dp)) {
+                        KitText(view.lede, KitType.Row, Surface.meta)
+                        if (view.headline.isNotEmpty()) {
+                            KitText(
+                                view.headline,
+                                KitType.Row,
+                                Surface.ink,
+                                modifier = Modifier.padding(top = 14.dp).testTag("transfer-headline"),
+                            )
+                        }
                     }
                 }
-            }
-            if (view.rows.isNotEmpty()) {
-                item(key = "rows") {
-                    Column(Modifier.kitCard()) {
-                        view.rows.forEach { row -> TransferRow(row, view.busy, onEvent) }
+                if (view.rows.isNotEmpty()) {
+                    item(key = "rows") {
+                        Column(Modifier.kitCard()) {
+                            view.rows.forEach { row -> TransferRow(row, view.busy, onEvent) }
+                        }
                     }
                 }
-            }
-            view.actions.forEach { action ->
-                item(key = "action-${action.key}") {
-                    val enabled = action.enabled && !view.busy
-                    if (action.primary) {
-                        KitPillButton(
-                            label = action.label,
-                            onPress = { onEvent(TransferEvent(key = action.key)) },
-                            modifier = Modifier.padding(top = 14.dp),
-                            testTag = "transfer-${action.key}",
-                            enabled = enabled,
-                        )
-                    } else {
-                        Text(
-                            action.label,
-                            style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
-                            color = appAccent().text,
-                            modifier = Modifier
-                                .heightIn(min = KitGeometry.ROW_MIN)
-                                .clickable(enabled = enabled) { onEvent(TransferEvent(key = action.key)) }
-                                .padding(vertical = 12.dp)
-                                .testTag("transfer-${action.key}")
-                                .semantics { role = Role.Button },
-                        )
+                view.actions.forEach { action ->
+                    item(key = "action-${action.key}") {
+                        val enabled = action.enabled && !view.busy
+                        if (action.primary) {
+                            KitPillButton(
+                                label = action.label,
+                                onPress = { onEvent(TransferEvent(key = action.key)) },
+                                modifier = Modifier.padding(top = 14.dp),
+                                testTag = "transfer-${action.key}",
+                                enabled = enabled,
+                            )
+                        } else {
+                            Text(
+                                action.label,
+                                style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
+                                color = appAccent().text,
+                                modifier = Modifier
+                                    .heightIn(min = KitGeometry.ROW_MIN)
+                                    .clickable(enabled = enabled) { onEvent(TransferEvent(key = action.key)) }
+                                    .padding(vertical = 12.dp)
+                                    .testTag("transfer-${action.key}")
+                                    .semantics { role = Role.Button },
+                            )
+                        }
                     }
                 }
             }

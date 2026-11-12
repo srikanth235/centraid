@@ -19,6 +19,7 @@ import centraid.core.v1.NavEvent
 import centraid.core.v1.NavPopped
 import centraid.core.v1.ScreenEvent
 import dev.centraid.android.kit.OutlineButton
+import dev.centraid.android.kit.ReadStateView
 import dev.centraid.core.Screens
 import kotlinx.coroutines.launch
 
@@ -54,15 +55,18 @@ fun ProofScreen(screens: Screens, tab: String) {
 private fun Counter(view: CounterView, send: (CounterEvent) -> Unit) {
     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(view.title)
-        view.loading?.let { Text(it.label) }
-        view.failed?.let {
-            Text(it.sentence)
-            OutlineButton(it.remedy) { send(CounterEvent(retry_tapped = CounterRetryTapped())) }
-        }
-        view.data_?.let {
-            Text(it.count_label)
-            OutlineButton(it.copy_label) { send(CounterEvent(copy_tapped = CounterCopyTapped())) }
-            if (it.notice.isNotEmpty()) Text(it.notice)
+        // THE READ IS THE KIT'S PAGE STATE (#1185): loading, failure with Retry, or the count.
+        ReadStateView(
+            page = view.page!!,
+            onRetry = { send(CounterEvent(retry_tapped = CounterRetryTapped())) },
+        ) {
+            view.data_?.let {
+                Column {
+                    Text(it.count_label)
+                    OutlineButton(it.copy_label) { send(CounterEvent(copy_tapped = CounterCopyTapped())) }
+                    if (it.notice.isNotEmpty()) Text(it.notice)
+                }
+            }
         }
     }
 }

@@ -20,12 +20,13 @@ use wire::money_rules_event::Kind as R;
 use wire::money_rules_state::Sheet;
 use wire::screen_event::Kind as E;
 
-use super::fold::{self, Phase};
+use super::fold;
 use crate::catalog::{act, load};
 use crate::field::Field;
 use crate::kit::act as kit_act;
 use crate::kit::money as money_kit;
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Page, Reading};
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, money as words};
 
@@ -38,11 +39,11 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     };
     Some(Box::new(Rules {
         parent: args.parent.clone(),
-        phase: Phase::Loading,
+        page: Page::loading(),
         sheet: Sheet::None,
         editor: None,
         pending: None,
-        status: None,
+        undo: Undo::default(),
     }))
 }
 
@@ -79,11 +80,12 @@ struct Editor {
 
 struct Rules {
     parent: String,
-    phase: Phase<Loaded>,
+    page: Page<Loaded>,
     sheet: Sheet,
     editor: Option<Editor>,
     pending: Option<Pending>,
-    status: Option<wire::StatusLine>,
+    /// The status line and what its Undo reverses (the kit's one door).
+    undo: Undo,
 }
 
 fn kinds(locale: Locale) -> Vec<(&'static str, String)> {
@@ -209,17 +211,18 @@ impl Rules {
             Answer::MoneyAccounts(x) => Some(x),
             _ => None,
         });
-        self.phase = match (rules, categories, accounts) {
+        let reading = match (rules, categories, accounts) {
             (Reading::Data(rules), Reading::Data(categories), Reading::Data(accounts)) => {
-                Phase::Ready(Loaded {
+                Reading::Data(Loaded {
                     rules,
                     categories,
                     accounts,
                 })
             }
-            (Reading::Denied(_), ..) => Phase::Denied,
-            _ => Phase::Failed,
+            (Reading::Denied(denial), ..) => Reading::Denied(denial),
+            _ => Reading::Failed,
         };
+        fold::reread(&mut self.page, ctx.locale(), reading, |_| false);
     }
 
     fn issue(loaded: &Loaded, editor: &Editor, locale: Locale) -> String {
@@ -249,21 +252,18 @@ impl Rules {
 
     fn submit(&mut self, ctx: &Ctx, request: impl Into<wire::ActRequest>, done: String) -> bool {
         let key = kit_act::key(&["money", "rule"], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
+        let settled = self.undo.act(ctx, request, &key, |_| done);
         if settled.committed {
             // SAVED, DELETED OR APPLIED: the sheet goes and the list reads again.
             self.sheet = Sheet::None;
             self.editor = None;
-            self.status = Some(fold::done(done));
-        } else {
-            self.status = Some(fold::refusal(ctx.locale(), &settled.refusal));
         }
         self.reload(ctx);
         settled.committed
     }
 
     fn save(&mut self, ctx: &Ctx) {
-        let (Some(editor), Some(loaded)) = (self.editor.clone(), self.phase.data()) else {
+        let (Some(editor), Some(loaded)) = (self.editor.clone(), self.page.data()) else {
             return;
         };
         let locale = ctx.locale();
@@ -352,7 +352,7 @@ impl Rules {
     }
 
     fn open_rule(&mut self, rule_id: &str) {
-        let Some(loaded) = self.phase.data() else {
+        let Some(loaded) = self.page.data() else {
             return;
         };
         let Some(rule) = loaded.rules.rules.iter().find(|r| r.rule_id == rule_id) else {
@@ -402,11 +402,11 @@ impl Rules {
             rename: rule.rename_to.clone().unwrap_or_default(),
         });
         self.sheet = Sheet::Editor;
-        self.status = None;
+        self.undo.clear();
     }
 
     fn pick_account(&mut self, account_id: &str) {
-        let (Some(loaded), Some(editor)) = (self.phase.data(), self.editor.as_mut()) else {
+        let (Some(loaded), Some(editor)) = (self.page.data(), self.editor.as_mut()) else {
             return;
         };
         let line = loaded
@@ -434,7 +434,7 @@ impl Rules {
         let locale = ctx.locale();
         match event.kind {
             Some(R::Add(_)) => {
-                self.status = None;
+                self.undo.clear();
                 self.sheet = Sheet::Editor;
                 self.editor = Some(Editor {
                     mode: Mode::Add,
@@ -502,7 +502,7 @@ impl Rules {
             }
             Some(R::Category(picked)) => {
                 let label = self
-                    .phase
+                    .page
                     .data()
                     .map(|l| l.category_label(&picked.category_id))
                     .unwrap_or_default();
@@ -708,11 +708,6 @@ impl Rules {
                     ],
                 )
             },
-            empty: rows.is_empty().then(|| wire::EmptyState {
-                headline: words::rules_empty(locale),
-                action_label: words::rule_add_save(locale),
-                ..Default::default()
-            }),
             add_label: words::rule_add_save(locale),
             apply_label: if rows.is_empty() {
                 String::new()
@@ -736,6 +731,12 @@ impl Screen for Rules {
                 kind: Some(wire::money_rules_event::Kind::Refreshed(_)),
             })) => self.reload(ctx),
             Some(E::MoneyRules(r)) => self.event(r, ctx),
+            Some(E::StatusActed(_)) => {
+                if self.undo.acted(ctx) {
+                    self.reload(ctx);
+                }
+            }
+            Some(E::Left(_)) => self.undo.clear(),
             _ => {}
         }
         Vec::new()
@@ -744,19 +745,29 @@ impl Screen for Rules {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::money_rules_state::Content;
         let locale = ctx.locale();
-        let content = match &self.phase {
-            Phase::Loading => Content::Loading(wire::Loading { first_load: true }),
-            Phase::Failed => Content::Failure(read::failure(locale)),
-            Phase::Denied => Content::Denied(fold::denied(locale)),
-            Phase::Ready(loaded) => Content::Data(Box::new(self.data(locale, loaded))),
-        };
-        let editor = match (&self.phase, &self.editor) {
-            (Phase::Ready(loaded), Some(editor)) => Some(self.editor_view(locale, loaded, editor)),
+        let content = self
+            .page
+            .data()
+            .map(|loaded| Content::Data(Box::new(self.data(locale, loaded))));
+        // No rule at all is the page's own empty state; the answer stays, because the rule sheet
+        // still reads its categories and accounts.
+        let nothing = self
+            .page
+            .data()
+            .is_some_and(|loaded| loaded.rules.rules.is_empty());
+        let page = fold::wire_page_keeping(&self.page, locale, nothing, || wire::EmptyState {
+            headline: words::rules_empty(locale),
+            action_label: words::rule_add_save(locale),
+            ..Default::default()
+        });
+        let editor = match (self.page.data(), &self.editor) {
+            (Some(loaded), Some(editor)) => Some(self.editor_view(locale, loaded, editor)),
             _ => None,
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::MoneyRules(wire::MoneyRulesState {
-                content: Some(content),
+                content,
+                page: Some(page),
                 sheet: self.sheet as i32,
                 editor,
                 confirm: self.pending.map(|pending| match pending {
@@ -778,7 +789,7 @@ impl Screen for Rules {
                     words::rules_title(locale),
                     &self.parent,
                 )),
-                status: self.status.clone(),
+                status: self.undo.status(),
             })),
             ..wire::ViewState::default()
         }

@@ -34,10 +34,13 @@ import centraid.core.v1.NavPopped
 import centraid.core.v1.NavPush
 import centraid.core.v1.NavSelectTab
 import centraid.core.v1.PhotosDestination
+import centraid.core.v1.StatusActed
 import centraid.core.v1.PhotosHomeEvent
 import centraid.core.v1.Route
 import centraid.core.v1.ScreenEvent
 import dev.centraid.android.kit.AndroidHealth
+import dev.centraid.android.kit.EarlierPreviewScreen
+import dev.centraid.android.kit.EarlierScreen
 import dev.centraid.android.kit.TrashScreen
 import dev.centraid.android.kit.TransferScreen
 import dev.centraid.android.screens.agenda.AgendaEditorScreen
@@ -56,7 +59,6 @@ import dev.centraid.android.screens.docs.DocsDocumentScreen
 import dev.centraid.android.screens.docs.DocsDriveScreen
 import dev.centraid.android.screens.docs.DocsEditorScreen
 import dev.centraid.android.screens.docs.DocsFiles
-import dev.centraid.android.screens.docs.DocsVersionsScreen
 import dev.centraid.android.screens.docs.rememberDocsPickers
 import dev.centraid.android.screens.health.HealthConnectScreen
 import dev.centraid.android.screens.health.HealthHomeScreen
@@ -79,10 +81,10 @@ import dev.centraid.android.screens.money.MoneySearchScreen
 import dev.centraid.android.screens.money.MoneyTargetScreen
 import dev.centraid.android.screens.money.MoneyTransactionScreen
 import dev.centraid.android.screens.notes.NotesEditorScreen
-import dev.centraid.android.screens.notes.NotesHistoryScreen
 import dev.centraid.android.screens.notes.NotesHomeScreen
 import dev.centraid.android.screens.people.PeopleEditorScreen
 import dev.centraid.android.screens.people.PeopleHomeScreen
+import dev.centraid.android.screens.people.PeopleListsScreen
 import dev.centraid.android.screens.people.PeoplePersonScreen
 import dev.centraid.android.screens.photos.PhotosEditorScreen
 import dev.centraid.android.screens.photos.PhotosHomeScreen
@@ -94,9 +96,11 @@ import dev.centraid.android.backup.MediaStoreDeleter
 import androidx.compose.runtime.CompositionLocalProvider
 import dev.centraid.android.kit.LocalAppAccentId
 import dev.centraid.android.glance.AgendaIntents
+import dev.centraid.android.glance.HealthIntents
 import dev.centraid.android.kit.HostScreenEffects
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.LocalShellLine
+import dev.centraid.android.kit.LocalStatusActed
 import dev.centraid.android.kit.ShellBanner
 import dev.centraid.android.session.AppSession
 import kotlinx.coroutines.CoroutineScope
@@ -387,6 +391,7 @@ internal class RustRoot(
         // above it. Sent from the producer, a cold start's fact could beat the performer and be
         // answered cancelled, so the bar never opened.
         LaunchedEffect(runtime) { AgendaIntents.deliver(runtime) }
+        LaunchedEffect(runtime) { HealthIntents.deliver(runtime) }
         val owner = LocalLifecycleOwner.current
         DisposableEffect(owner, runtime) {
             val observer = LifecycleEventObserver { _, event ->
@@ -433,6 +438,16 @@ internal class RustRoot(
      */
     @Composable
     private fun Page(runtime: Screens, view: centraid.core.v1.ViewState, instance: Long) {
+        // THE KIT'S ONE `StatusActed`, stated once: a status line's verb on any page sends it
+        // (`ScreenEvent.status_acted`) unless the page has an event of its own.
+        val statusActed: () -> Unit = remember(runtime, instance) {
+            { scope?.launch { runtime.send(instance, ScreenEvent(status_acted = StatusActed())) }; Unit }
+        }
+        CompositionLocalProvider(LocalStatusActed provides statusActed) { PageBody(runtime, view, instance) }
+    }
+
+    @Composable
+    private fun PageBody(runtime: Screens, view: centraid.core.v1.ViewState, instance: Long) {
         val context = LocalContext.current
         val send: (ScreenEvent) -> Unit = { event -> scope?.launch { runtime.send(instance, event) } }
         val open: (Route) -> Unit = ::push
@@ -451,6 +466,8 @@ internal class RustRoot(
         val detail = view.todo_detail
         val catchUp = view.todo_catch_up
         val trash = view.trash
+        val earlier = view.earlier
+        val earlierPreview = view.earlier_preview
         val transfer = view.transfer
         val lockerHome = view.locker_home
         val lockerItem = view.locker_item
@@ -469,14 +486,13 @@ internal class RustRoot(
         val moneySearch = view.money_search
         val drive = view.docs_drive
         val doc = view.docs_document
-        val versions = view.docs_versions
         val docEditor = view.docs_editor
         val notesHome = view.notes_home
         val notesEditor = view.notes_editor
-        val notesHistory = view.notes_history
         val peopleHome = view.people_home
         val peoplePerson = view.people_person
         val peopleEditor = view.people_editor
+        val peopleLists = view.people_lists
         val healthHome = view.health_home
         val healthMetric = view.health_metric
         val healthWorkout = view.health_workout
@@ -489,7 +505,7 @@ internal class RustRoot(
 
         // THE SCREEN IS DONE (a cancel committed, the editor saved or left, the task deleted): its page goes.
         val done = event?.dismissed == true || editor?.dismissed == true || detail?.finished == true ||
-            doc?.dismissed == true || peoplePerson?.done == true || healthConnect?.finished == true ||
+            doc?.dismissed == true || peoplePerson?.done == true || earlierPreview?.done == true || healthConnect?.finished == true ||
             lockerItem?.finished == true || lockerEditor?.finished == true || lockerLock?.finished == true ||
             moneyTarget?.finished == true || moneyImport?.finished == true ||
             wordsMake?.finished == true || wordsEnter?.finished == true || wordsShow?.finished == true
@@ -534,6 +550,7 @@ internal class RustRoot(
                     onOpen = open,
                     onBack = back,
                     onCall = { uri -> openCall(context, uri) },
+                    onPhoneSays = { send(ScreenEvent(phone_says_taken = it)) },
                 )
             }
             editor != null -> CompositionLocalProvider(LocalAppAccentId provides "calendar") {
@@ -565,6 +582,7 @@ internal class RustRoot(
                     onOpen = open,
                     // CLOSE = DONE: the pop; Rust flushes the autosave when it sees the page leave.
                     onClose = back,
+                    onPhoneSays = { send(ScreenEvent(phone_says_taken = it)) },
                 )
             }
             catchUp != null -> CompositionLocalProvider(LocalAppAccentId provides "reminders") {
@@ -627,6 +645,7 @@ internal class RustRoot(
             moneyTransaction != null -> MoneyTransactionScreen(
                 state = moneyTransaction,
                 onEvent = { send(ScreenEvent(money_transaction = it)) },
+                onOpen = open,
                 onBack = back,
             )
             moneyTarget != null -> MoneyTargetScreen(
@@ -682,11 +701,7 @@ internal class RustRoot(
                 onEvent = { send(ScreenEvent(docs_document = it)) },
                 onOpen = open,
                 onBack = back,
-            )
-            versions != null -> DocsVersionsScreen(
-                state = versions,
-                onEvent = { send(ScreenEvent(docs_versions = it)) },
-                onBack = back,
+                onPhoneSays = { send(ScreenEvent(phone_says_taken = it)) },
             )
             docEditor != null -> DocsEditorScreen(
                 state = docEditor,
@@ -706,11 +721,6 @@ internal class RustRoot(
                 onOpen = open,
                 onClose = back,
             )
-            notesHistory != null -> NotesHistoryScreen(
-                state = notesHistory,
-                onEvent = { send(ScreenEvent(notes_history = it)) },
-                onBack = back,
-            )
             peopleHome != null -> PeopleHomeScreen(
                 state = peopleHome,
                 onEvent = { send(ScreenEvent(people_home = it)) },
@@ -722,12 +732,18 @@ internal class RustRoot(
                 onEvent = { send(ScreenEvent(people_person = it)) },
                 onOpen = open,
                 onBack = back,
+                onPhoneSays = { send(ScreenEvent(phone_says_taken = it)) },
             )
             // CLOSE = DONE: the pop; Rust flushes the autosave when it sees the page leave.
             peopleEditor != null -> PeopleEditorScreen(
                 state = peopleEditor,
                 onEvent = { send(ScreenEvent(people_editor = it)) },
                 onClose = back,
+            )
+            peopleLists != null -> PeopleListsScreen(
+                state = peopleLists,
+                onEvent = { send(ScreenEvent(people_lists = it)) },
+                onBack = back,
             )
             healthHome != null -> HealthHomeScreen(
                 state = healthHome,
@@ -743,7 +759,9 @@ internal class RustRoot(
             healthWorkout != null -> HealthWorkoutScreen(
                 state = healthWorkout,
                 onEvent = { send(ScreenEvent(health_workout = it)) },
+                onOpen = open,
                 onBack = back,
+                onPhoneSays = { send(ScreenEvent(phone_says_taken = it)) },
             )
             healthConnect != null -> HealthConnectScreen(
                 state = healthConnect,
@@ -797,6 +815,19 @@ internal class RustRoot(
             trash != null -> TrashScreen(
                 view = trash,
                 onEvent = { send(ScreenEvent(trash = it)) },
+                onBack = back,
+            )
+            // EVERY RECORD'S EARLIER VERSIONS (#1185).
+            earlier != null -> EarlierScreen(
+                view = earlier,
+                onEvent = { send(ScreenEvent(earlier = it)) },
+                onOpen = open,
+                onBack = back,
+            )
+            // THE FULL PREVIEW OF ONE EARLIER VERSION (#1185).
+            earlierPreview != null -> EarlierPreviewScreen(
+                view = earlierPreview,
+                onEvent = { send(ScreenEvent(earlier_preview = it)) },
                 onBack = back,
             )
             // IMPORT AND EXPORT (#1173): Notes' Markdown and People's vCards.

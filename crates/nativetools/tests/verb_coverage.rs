@@ -77,6 +77,13 @@ const UNDRIVEN: &[(&str, &str, &str)] = &[
          restore: the catalog serves the verb (`restore-album`, the inverse of a delete), and the \
          runtime's undo is what brings an album back",
     ),
+    (
+        "restore",
+        "transaction",
+        "a trashed transaction is in no read the assistant has (Money's model is the live window), so \
+         no selector reaches it to restore: the catalog serves the verb (`restore-transaction`, the \
+         inverse of a delete), and the runtime's undo is what brings a line back",
+    ),
 ];
 
 /// Executed commands the harness's door has run on the world's vault, counted per command id.

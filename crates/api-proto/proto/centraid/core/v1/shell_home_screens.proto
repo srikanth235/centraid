@@ -374,23 +374,26 @@ enum HomeScheme {
 message HomeState {
   HomeBar bar = 1;
   optional HomeStatus status = 2;
+  // 3 and 4 were `loading` and `failure`: the read is `page` (#1185).
+  reserved 3, 4;
+  reserved "loading", "failure";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 3;
-    // The device holds no vault, or the read failed: Home says which and does
-    // not draw empty tiles.
-    Failure failure = 4;
     HomeData data = 5;
   }
   optional HomeVaultSheet sheet = 6;
   HomeScheme scheme = 7;
   // "Loading".
   string loading_label = 8;
-  // THE FIRST-LAUNCH GATE: set when the phone holds no vault (`content` is then
+  // THE FIRST-LAUNCH GATE: set when the phone holds no vault (`page` is then
   // the `Failure`), and drawn in place of Home. Its doors are `MakePressed` and
   // `RestorePressed`.
   optional HomeFirstLaunch first_launch = 9;
   // THE TRANSFER RULES SHEET, set while it is open (`TransferRulesPressed`).
   optional HomeTransferSheet transfer_sheet = 10;
+  // THE READ: loading until the shelf has spoken, a final failure when the device holds no vault
+  // (Home says so and does not draw empty tiles), or ready.
+  PageState page = 11;
 }
 
 // The sheet behind the gear beside "N originals waiting": the member's one transfer

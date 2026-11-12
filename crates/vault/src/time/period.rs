@@ -25,7 +25,7 @@
 //! MONTHLY and YEARLY, the weekday for WEEKLY, the month for YEARLY), and a
 //! `BYWEEKNO` with no day beside it takes the anchor's weekday. The anchor's
 //! day of the month is NEVER clamped (RFC 5545 section 3.3.10, owner decision
-//! on #1173, so a two-way sync with EventKit and CalendarContract expands the
+//! on #1173, so a calendar followed from EventKit and CalendarContract expands the
 //! phone's own occurrences): a plain MONTHLY rule anchored on the 31st skips
 //! the months with no 31st, and a plain YEARLY rule anchored on Feb 29 skips
 //! the common years. A member who wants "the last day" writes it explicitly

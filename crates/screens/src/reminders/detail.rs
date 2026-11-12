@@ -19,24 +19,33 @@ use wire::screen_event::Kind as E;
 use wire::todo_detail_event::Kind as D;
 use wire::todo_detail_state::Asking;
 
-use super::list::{self, Phase};
+use super::list;
+use centraid_vault::time::{FireZone, parse_civil_ms};
+
 use crate::catalog::{act, load};
 use crate::field::Field;
 use crate::kit::act as kit_act;
-use crate::kit::autosave::{Autosave, Draft};
+use crate::kit::attachments::Attachments;
+use crate::kit::autosave::{Autosave, Draft, Resolved};
 use crate::kit::civil::{self, HourCycle};
-use crate::kit::read::{self, Reading};
-use crate::kit::schedule::attachments::{Attachments, Of};
+use crate::kit::earlier;
+use crate::kit::follow;
+use crate::kit::links::{self, Kind, Links, Outcome};
+use crate::kit::quantity::UnitsPref;
+use crate::kit::read::{self, Note, Page, Reading};
 use crate::kit::schedule::custom::{Custom, Done};
 use crate::kit::schedule::ops::Ops;
 use crate::kit::schedule::repeat::{REPEAT_CUSTOM, normalize_url};
 use crate::kit::schedule::rows::{self, Context};
 use crate::kit::schedule::rule_words;
+use crate::kit::share::{self, Share};
+use crate::kit::stale;
 use crate::reminders::routes;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
     Locale, agenda_editor as editor_words, agenda_event as link_words,
-    agenda_repeat as repeat_words, agenda_tasks as card_words, task as words,
+    agenda_notify as notify_words, agenda_repeat as repeat_words, agenda_tasks as card_words,
+    links as link_label, task as words,
 };
 
 /// `TodoField.key`s.
@@ -83,10 +92,17 @@ struct Typed {
     id: String,
     title: String,
     notes: String,
+    /// The task's revision when it was read, advanced by each save's answer: what an edit names as
+    /// the one it replaces (#1185).
+    rev: i64,
 }
 
 impl Draft for Typed {
     const ACTION: &'static str = act::reminders::EditTask::NAME;
+
+    fn noun(locale: Locale) -> String {
+        crate::strings::chat_confirm::noun_reminder(locale)
+    }
 
     fn subject(&self) -> &str {
         &self.id
@@ -116,10 +132,45 @@ impl Draft for Typed {
                     (true, true) => Field::Clear,
                     (true, false) => Field::Is(self.notes.clone()),
                 },
+                expected_rev: Some(self.rev),
                 ..Default::default()
             }
             .into(),
         )
+    }
+
+    fn committed(&mut self, output: &[u8]) {
+        if let Some(rev) = serde_json::from_slice::<serde_json::Value>(output)
+            .ok()
+            .and_then(|value| value.get("rev")?.as_i64())
+        {
+            self.rev = rev;
+        }
+    }
+
+    fn subject_id(&self) -> Option<&str> {
+        Some(&self.id)
+    }
+
+    fn base_rev(&self) -> Option<i64> {
+        Some(self.rev)
+    }
+
+    fn rebased(&mut self, rev: i64) {
+        self.rev = rev;
+    }
+
+    /// The words the task does not hold, by the vault's names for them.
+    fn kept_fields(&self, baseline: &Self) -> Vec<(String, serde_json::Value)> {
+        let mut kept = Vec::new();
+        if self.title.trim() != baseline.title.trim() {
+            kept.push(("entity.title".to_owned(), self.title.trim().into()));
+        }
+        if self.notes != baseline.notes {
+            let notes = Some(self.notes.as_str()).filter(|notes| !notes.trim().is_empty());
+            kept.push(("task.description".to_owned(), notes.into()));
+        }
+        kept
     }
 }
 
@@ -162,21 +213,32 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     }
     Some(Box::new(Detail {
         task_id: args.task_id.clone(),
-        phase: Phase::Loading,
+        page: Page::loading(),
+        gone: false,
         projects: None,
         autosave: Autosave::new(),
         asking: Asking::None,
         open_field: String::new(),
         ops: Ops::default(),
         finished: false,
-        attachments: Attachments::of(Of::Task, &args.task_id),
+        attachments: Attachments::of("reminders", &args.task_id),
         custom: None,
+        earlier: earlier::Foot::default(),
+        differences: follow::Phone::default(),
+        share: Share::default(),
+        // A task may link to another task; the picker leaves this one out (`for_entity`).
+        links: Links::new(&Kind::ALL).for_entity(&args.task_id),
+        linked: None,
+        linked_unread: false,
     }))
 }
 
 struct Detail {
     task_id: String,
-    phase: Phase<Answered>,
+    /// The read. A task that is gone is [`Page::Failed`] (`gone`), in its own words.
+    page: Page<Answered>,
+    /// No live task has the id: never made, deleted, or in the trash.
+    gone: bool,
     /// The last projects read that landed, kept over a read that does not.
     projects: Option<wire::AgendaTaskProjects>,
     autosave: Autosave<Typed>,
@@ -190,6 +252,20 @@ struct Detail {
     /// The Custom repeat sheet's working rule, while it is open: the editor's own
     /// model (#1173), saved to this task on Done.
     custom: Option<Custom>,
+    /// The entry to the task's earlier versions, read with the page (#1185).
+    earlier: earlier::Foot,
+    /// Where the phone's Reminders differ from the task, read with the page.
+    differences: follow::Phone,
+    /// The task handed to the OS share sheet as a calendar file (#1185).
+    share: Share,
+    /// THE "Linked to" SECTION'S PICKER (#1185): what the task can link to, any item but a Locker
+    /// one.
+    links: Links,
+    /// What the task is linked to, either end (`links::read_linked`). `None` until read, and while
+    /// a read did not land.
+    linked: Option<Vec<wire::LinkedItem>>,
+    /// The read of `linked` was refused or failed: the status line says so, no empty section.
+    linked_unread: bool,
 }
 
 impl Detail {
@@ -215,21 +291,54 @@ impl Detail {
         if let Reading::Data(projects) = &projects {
             self.projects = Some(projects.clone());
         }
-        self.phase = match (detail, projects) {
-            (Reading::Data(detail), _) => Phase::Ready(Answered {
+        // Words not yet saved are the only copy: a task trashed elsewhere does not replace the page
+        // under them. The save is refused as stale and Reload keeps them (#1185).
+        if let Reading::Data(detail) = &detail
+            && detail.task.is_none()
+            && self.autosave.unsaved()
+        {
+            self.autosave.vault_moved();
+            return;
+        }
+        let reading = match (detail, projects) {
+            (Reading::Data(detail), _) => Reading::Data(Answered {
                 detail: *detail,
                 projects: self.projects.clone(),
             }),
-            (Reading::Denied(denial), _) | (_, Reading::Denied(denial)) => Phase::Denied(denial),
-            (Reading::Failed, _) => Phase::Failed,
+            (Reading::Denied(denial), _) | (_, Reading::Denied(denial)) => Reading::Denied(denial),
+            (Reading::Failed, _) => Reading::Failed,
         };
-        let Phase::Ready(answer) = &self.phase else {
+        // GONE is the page's failure in its own words, never an empty page: never made, deleted,
+        // or in the trash.
+        if let Reading::Data(answer) = &reading
+            && answer.task().is_none()
+        {
+            self.gone = true;
+            self.page = Page::Failed;
+            return;
+        }
+        self.gone = false;
+        let landed = matches!(reading, Reading::Data(_));
+        // A re-read never blanks the page shown: a failed one keeps it under a note.
+        let held = std::mem::replace(&mut self.page, Page::loading());
+        self.page = held.after(reading, ctx.locale(), |_| false);
+        if !landed {
+            return;
+        }
+        let Page::Ready { data: answer, .. } = &self.page else {
             return;
         };
         let Some(task) = answer.task() else {
             return;
         };
         self.attachments.reload(ctx);
+        self.differences = follow::read(ctx, &self.task_id);
+        let title = if task.title.trim().is_empty() {
+            words::untitled(ctx.locale())
+        } else {
+            task.title.clone()
+        };
+        self.earlier = earlier::foot(ctx, super::EARLIER, &self.task_id, &title);
         let open: Vec<&wire::AgendaTask> = task
             .children
             .iter()
@@ -243,35 +352,130 @@ impl Detail {
             id: task.task_id.clone(),
             title: task.title.clone(),
             notes: task.description.clone().unwrap_or_default(),
+            rev: answer.detail.rev,
         });
+        self.read_linked(ctx);
+    }
+
+    /// What the task is linked to, in both directions. A refused or failed read is said on the
+    /// status line and never drawn as an empty section.
+    fn read_linked(&mut self, ctx: &Ctx) {
+        match links::read_linked(ctx, &self.task_id) {
+            Reading::Data(items) => {
+                self.linked = Some(items);
+                self.linked_unread = false;
+            }
+            Reading::Denied(_) | Reading::Failed => {
+                self.linked = None;
+                self.linked_unread = true;
+                self.links.close();
+            }
+        }
+        self.links.reload(ctx);
+    }
+
+    fn linked_ids(&self) -> Vec<String> {
+        self.linked.as_deref().map(links::ids).unwrap_or_default()
+    }
+
+    /// One tap in the "Linked to" section or its picker, written through the kit's door (Undo when
+    /// the core can take it back); the page is read again.
+    fn link_event(&mut self, ctx: &Ctx, event: &wire::LinkEvent) {
+        let linked = self.linked_ids();
+        let id = self.task_id.clone();
+        let (request, said): (wire::ActRequest, fn(Locale) -> String) =
+            match self.links.update(event, &linked, ctx) {
+                Outcome::Moved => return,
+                Outcome::Add { id: to, .. } => (
+                    act::reminders::Link {
+                        from: id.clone(),
+                        to,
+                    }
+                    .into(),
+                    words::link_added,
+                ),
+                Outcome::Remove { id: to } => (
+                    act::reminders::Unlink {
+                        from: id.clone(),
+                        to,
+                    }
+                    .into(),
+                    words::link_removed,
+                ),
+            };
+        let name = request.action.clone();
+        self.write(ctx, request, &[&name, &id], said);
     }
 
     fn task(&self) -> Option<wire::AgendaTask> {
-        self.phase.data().and_then(Answered::task).cloned()
+        self.page.data().and_then(Answered::task).cloned()
     }
 
     fn today(&self) -> String {
-        self.phase
+        self.page
             .data()
             .map(|answer| answer.today().to_owned())
             .unwrap_or_default()
     }
 
-    /// One field write: the status line is cleared, then says the refusal when
-    /// there is one; the page is read again either way.
-    fn write(&mut self, ctx: &Ctx, request: impl Into<wire::ActRequest>, parts: &[&str]) -> bool {
-        self.ops.status = None;
+    /// One write through the kit's door: the status line says `said` with Undo when the core can
+    /// take it back, or the refusal; the page is read again either way.
+    fn write(
+        &mut self,
+        ctx: &Ctx,
+        request: impl Into<wire::ActRequest>,
+        parts: &[&str],
+        said: impl FnOnce(Locale) -> String,
+    ) -> bool {
+        // Words not yet saved go first: this is a write of the same task, and it names the
+        // revision they just left (#1185). A delete takes the words with the task.
+        let request = request.into();
+        if request.action != act::reminders::DeleteTask::NAME {
+            let _ = self.autosave.flush(ctx);
+        }
+        let request = stale::guarded(
+            request,
+            &[
+                act::reminders::EditTask::NAME,
+                act::reminders::OrganizeTask::NAME,
+            ],
+            self.autosave.draft().and_then(Draft::base_rev),
+        );
         let key = kit_act::key(parts, kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        if !settled.committed {
-            self.ops.status = Some(wire::StatusLine {
-                sentence: settled.refusal.clone(),
-                action_label: String::new(),
-                refused: true,
-            });
+        let settled = self.ops.line.act(ctx, request, &key, said);
+        let locale = ctx.locale();
+        if let Some(stale) = settled.stale() {
+            if self.autosave.unsaved() {
+                self.autosave.conflicted(locale, stale);
+            } else {
+                // Nothing typed to keep: the page reads the task again at once, and says why.
+                self.ops.line.refuse(stale::sentence(
+                    locale,
+                    &<Typed as Draft>::noun(locale),
+                    stale,
+                ));
+            }
         }
         self.reload(ctx);
         settled.committed
+    }
+
+    /// RELOAD after a save the vault refused as stale (#1185): the words typed are kept as an
+    /// earlier version of the task, then the vault's task is read and shown.
+    fn reload_after_conflict(&mut self, ctx: &Ctx) {
+        let locale = ctx.locale();
+        let Resolved::Reloaded { kept, .. } = self.autosave.resolve(ctx) else {
+            return;
+        };
+        self.ops.clear();
+        self.reload(ctx);
+        if kept {
+            self.ops.line.say(if self.task().is_none() {
+                stale::kept_in_trash(locale)
+            } else {
+                stale::kept(locale)
+            });
+        }
     }
 
     fn edit(
@@ -286,6 +490,7 @@ impl Detail {
             ctx,
             edit,
             &[act::reminders::EditTask::NAME, &task.task_id, field, value],
+            words::task_updated,
         );
     }
 
@@ -423,6 +628,7 @@ impl Detail {
                             ANCHOR,
                             key,
                         ],
+                        words::task_updated,
                     );
                 }
             }
@@ -474,7 +680,7 @@ impl Detail {
                     _ => return,
                 };
                 if on != task.flagged {
-                    self.ops.status = None;
+                    self.ops.clear();
                     self.ops.flag(ctx, &task.task_id, on);
                     self.reload(ctx);
                 }
@@ -494,6 +700,7 @@ impl Detail {
                             &task.task_id,
                             &tag.concept_id,
                         ],
+                        words::tag_removed,
                     );
                 }
             }
@@ -506,7 +713,7 @@ impl Detail {
         if task.parent_task_id.is_some() {
             return;
         }
-        let Some(answer) = self.phase.data() else {
+        let Some(answer) = self.page.data() else {
             return;
         };
         let (projects, sections) = answer.lists();
@@ -546,6 +753,7 @@ impl Detail {
                 PROJECT,
                 key,
             ],
+            words::task_moved,
         );
     }
 
@@ -554,7 +762,6 @@ impl Detail {
         let Some(task) = self.task() else {
             return;
         };
-        let locale = ctx.locale();
         match asking {
             Asking::Delete => {
                 let request = act::reminders::DeleteTask {
@@ -564,24 +771,25 @@ impl Detail {
                     ctx,
                     request,
                     &[act::reminders::DeleteTask::NAME, &task.task_id],
+                    |locale| crate::kit::trash::moved_to_trash(locale, &task.title),
                 ) {
+                    // THE PAGE CLOSES: "moved to trash" and its Undo go to the page beneath.
+                    self.ops.line.hand_down(ctx);
                     self.finished = true;
                     // The words are gone with the task: leaving saves nothing.
                     self.autosave = Autosave::new();
-                    self.ops.status = Some(say(words::task_deleted(locale)));
                 }
             }
             Asking::Release => {
                 let request = act::reminders::CancelTask {
                     task_id: task.task_id.clone(),
                 };
-                if self.write(
+                self.write(
                     ctx,
                     request,
                     &[act::reminders::CancelTask::NAME, &task.task_id],
-                ) {
-                    self.ops.status = Some(say(words::task_released(locale)));
-                }
+                    words::task_released,
+                );
             }
             _ => {}
         }
@@ -591,6 +799,11 @@ impl Detail {
     fn event(&mut self, event: wire::TodoDetailEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             Some(D::OpenLink(_)) => return self.open_link(),
+            Some(D::ShareRequested(_)) => {
+                if self.task().is_some() {
+                    return self.share.tap(ctx.locale());
+                }
+            }
             Some(D::Attachment(attachment)) => return self.attachments.event(ctx, attachment),
             _ => self.changed(event, ctx),
         }
@@ -616,6 +829,7 @@ impl Detail {
     fn changed(&mut self, event: wire::TodoDetailEvent, ctx: &Ctx) {
         match event.kind {
             Some(D::Refreshed(_)) => self.reload(ctx),
+            Some(D::Link(link)) => self.link_event(ctx, &link),
             Some(D::Title(typed)) => self.autosave.edit(ctx, |draft| draft.title = typed.title),
             Some(D::Notes(typed)) => self.autosave.edit(ctx, |draft| draft.notes = typed.notes),
             Some(D::FieldChoice(choice)) => self.choose(ctx, &choice.field, &choice.key),
@@ -671,6 +885,7 @@ impl Detail {
                         ctx,
                         request,
                         &[act::reminders::AddTaskTag::NAME, &task.task_id, &label],
+                        words::tag_added,
                     );
                 }
             }
@@ -692,8 +907,12 @@ impl Detail {
                 }
             }
             Some(D::StatusActed(_)) => {
-                self.ops.undo(ctx);
-                self.reload(ctx);
+                if self.autosave.conflict().is_some() {
+                    self.reload_after_conflict(ctx);
+                } else {
+                    self.ops.undo(ctx);
+                    self.reload(ctx);
+                }
             }
             Some(D::SubtaskAdded(added)) => {
                 let title = added.title.trim().to_owned();
@@ -712,6 +931,7 @@ impl Detail {
                     ctx,
                     request,
                     &[act::reminders::AddTask::NAME, &task.task_id, "sub", &title],
+                    words::subtask_added,
                 );
             }
             Some(D::Delete(_)) => self.asking = Asking::Delete,
@@ -720,7 +940,7 @@ impl Detail {
             Some(D::Confirmed(_)) => self.confirmed(ctx),
             Some(D::Dismissed(_)) => self.asking = Asking::None,
             // The page's asks of the shell are `event`'s.
-            Some(D::OpenLink(_) | D::Attachment(_)) | None => {}
+            Some(D::OpenLink(_) | D::Attachment(_) | D::ShareRequested(_)) | None => {}
         }
     }
 
@@ -784,6 +1004,7 @@ impl Detail {
     fn data(
         &self,
         locale: Locale,
+        units: UnitsPref,
         cycle: HourCycle,
         answer: &Answered,
         task: &wire::AgendaTask,
@@ -861,11 +1082,20 @@ impl Detail {
             notes_placeholder: words::notes_placeholder(locale),
             add_subtask_placeholder: words::subtask_placeholder(locale),
             delete_label: words::delete(locale),
+            share_label: share::label(locale),
             release_label: words::release(locale),
             can_release: open,
             today: today.to_owned(),
             link: link_of(locale, task),
-            attachments: Some(self.attachments.view(locale)),
+            attachments: Some(self.attachments.view(locale, units)),
+            links: self.linked.as_ref().map(|linked| {
+                self.links.section(
+                    locale,
+                    link_label::section_linked(locale),
+                    links::rows(locale, linked),
+                    words::links_empty(locale),
+                )
+            }),
             custom_repeat: self.custom_sheet(locale, task),
         }
     }
@@ -889,18 +1119,18 @@ fn link_of(locale: Locale, task: &wire::AgendaTask) -> Option<wire::TodoLink> {
     })
 }
 
-fn say(sentence: String) -> wire::StatusLine {
-    wire::StatusLine {
-        sentence,
-        action_label: String::new(),
-        refused: false,
-    }
-}
-
 impl Screen for Detail {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
+            Some(E::StatusActed(_)) => {
+                if self.autosave.conflict().is_some() {
+                    self.reload_after_conflict(ctx);
+                } else {
+                    self.ops.undo(ctx);
+                    self.reload(ctx);
+                }
+            }
             Some(E::TimerFired(fired)) => {
                 if self.autosave.fired(ctx, &fired.timer) {
                     self.reload(ctx);
@@ -909,10 +1139,28 @@ impl Screen for Detail {
             // CLOSE = DONE: whatever is typed is saved.
             Some(E::Left(_)) => {
                 let _ = self.autosave.flush(ctx);
+                return self.share.left();
+            }
+            Some(E::PhoneSaysTaken(taken)) => {
+                if let Some(settled) = follow::take(ctx, &self.task_id, &taken) {
+                    if settled.committed {
+                        self.ops.clear();
+                    } else {
+                        self.ops.line.refuse(settled.refusal);
+                    }
+                    self.reload(ctx);
+                }
             }
             Some(E::TodoDetail(detail)) => return self.event(detail, ctx),
             // THE SHELL'S ANSWER TO A PICK: the attachments' (an add under way).
             Some(E::EffectResult(result)) => {
+                let id = self.task_id.clone();
+                let shared = self.share.result(ctx, &result, |ctx| {
+                    super::export::file(ctx, None, Some(&id))
+                });
+                if !shared.is_empty() || self.share.status().is_some() {
+                    return shared;
+                }
                 if let Some(outcome) = &result.outcome {
                     return self.attachments.result(ctx, outcome).unwrap_or_default();
                 }
@@ -925,31 +1173,71 @@ impl Screen for Detail {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::todo_detail_state::Content;
         let locale = ctx.locale();
-        let content = match &self.phase {
-            Phase::Loading => Content::Loading(wire::Loading { first_load: true }),
-            Phase::Failed => Content::Failure(read::failure(locale)),
-            Phase::Denied(denial) => Content::Denied(list::denied(locale, denial)),
-            // GONE is drawn, not failed: never made, deleted, or in the trash.
-            Phase::Ready(answer) => match answer.task() {
-                Some(task) => {
-                    Content::Data(Box::new(self.data(locale, ctx.hour_cycle(), answer, task)))
-                }
-                None => Content::Gone(wire::EmptyState {
-                    headline: words::task_gone(locale),
-                    ..wire::EmptyState::default()
-                }),
-            },
+        // A check of what the phone says that was not made is a note over the task.
+        let page = self.page.clone().noted(Note::unchecked(
+            &self.differences,
+            locale,
+            follow::Source::Phone,
+        ));
+        let content = match page.data() {
+            Some(answer) => answer.task().map(|task| {
+                Content::Data(Box::new(self.data(
+                    locale,
+                    ctx.units(),
+                    ctx.hour_cycle(),
+                    answer,
+                    task,
+                )))
+            }),
+            None => None,
         };
+        let mut wired = page.wire(
+            locale,
+            |denial| list::denied(locale, denial),
+            wire::EmptyState::default,
+        );
+        // A task that is gone (never made, deleted, or in the trash) says so in its own words.
+        if self.gone && matches!(wired.state, Some(wire::page_state::State::Failed(_))) {
+            wired.state = Some(wire::page_state::State::Failed(read::gone(
+                words::task_gone(locale),
+                String::new(),
+            )));
+        }
         wire::ViewState {
             kind: Some(wire::view_state::Kind::TodoDetail(wire::TodoDetailState {
                 task_id: self.task_id.clone(),
-                content: Some(content),
+                content,
+                page: Some(wired),
                 autosave: Some(self.autosave.view(locale)),
                 confirm: self.confirm(locale),
                 open_field: self.open_field.clone(),
                 chrome: Some(rows::chrome(locale)),
-                status: self.ops.status.clone(),
+                status: self
+                    .ops
+                    .status()
+                    .or_else(|| self.share.status())
+                    .or_else(|| self.earlier.status(locale))
+                    .or_else(|| {
+                        self.linked_unread.then(|| wire::StatusLine {
+                            sentence: words::links_unread(locale),
+                            action_label: String::new(),
+                            refused: false,
+                        })
+                    }),
                 finished: self.finished,
+                earlier: self.earlier.entry.clone(),
+                origin: self.earlier.origin.clone(),
+                phone_says: phone_says(
+                    &Wording {
+                        locale,
+                        cycle: ctx.hour_cycle(),
+                        zone: ctx.zone(),
+                        today: &self.today(),
+                    },
+                    &self.differences,
+                ),
+                link_picker: (self.linked.is_some() && self.links.is_open())
+                    .then(|| self.links.picker(locale, &self.linked_ids())),
             })),
             ..wire::ViewState::default()
         }
@@ -1018,7 +1306,7 @@ fn simple(key: &str, label: String, selected: bool) -> wire::TodoChoice {
     chip(key, label, selected, true, String::new())
 }
 
-fn lead_label(locale: Locale, lead: u32) -> String {
+pub(super) fn lead_label(locale: Locale, lead: u32) -> String {
     match lead {
         0 => words::remind_at_time(locale),
         60 => words::remind_hour(locale),
@@ -1150,10 +1438,13 @@ fn fields(
         key: REMINDER.to_owned(),
         label: words::field_reminder(locale),
         value: reminder_value(locale, cycle, task, today),
-        note: if dated {
-            words::reminder_note_a(locale)
-        } else {
+        // A DATE IS NOT A MOMENT: a date-only reminder never sounds, and the row says so.
+        note: if !dated {
             words::reminder_needs_due(locale)
+        } else if task.due_time.is_empty() {
+            notify_words::no_alert_without_time(locale)
+        } else {
+            words::reminder_note_a(locale)
         },
         choices: reminder_choices,
         enabled: dated,
@@ -1412,4 +1703,331 @@ fn place_choices(
         }));
     }
     out
+}
+
+/// What the lines need to word a value the way the page words it.
+#[derive(Clone, Copy)]
+struct Wording<'a> {
+    locale: Locale,
+    cycle: HourCycle,
+    /// The member's own zone (the device's): a stated instant is read here, never in UTC.
+    zone: &'a str,
+    /// The core's today in that zone.
+    today: &'a str,
+}
+
+/// A stated `due` as the page words the task's own: the day as "When" says it ("Today", "Wed 11
+/// March"), then the time as "Time" says it when the due has one, read in the member's zone. A
+/// value that is no date is left as the phone stated it.
+fn due_words(wording: &Wording<'_>, stated: &str) -> String {
+    let Wording {
+        locale,
+        cycle,
+        zone,
+        today,
+    } = *wording;
+    let local = if stated.len() == 10 {
+        Some(stated.to_owned())
+    } else {
+        FireZone::named(zone).ok().and_then(|zone| {
+            let at = zone.zoned_parts(parse_civil_ms(stated, &zone)?);
+            Some(format!(
+                "{:04}-{:02}-{:02}T{:02}:{:02}",
+                at.year, at.month, at.day, at.hour, at.minute
+            ))
+        })
+    };
+    let Some(local) = local.filter(|local| civil::epoch_day_of(&local[..10]).is_some()) else {
+        return stated.to_owned();
+    };
+    let day = civil::relative_day(locale, &local[..10], today);
+    match civil::clock(&local) {
+        time if time.is_empty() => day,
+        _ => format!("{day} {}", civil::clock_for(locale, &local, cycle)),
+    }
+}
+
+/// The lines "Phone says …" under the task: one per field the member's value differs on.
+fn phone_says(wording: &Wording<'_>, differences: &follow::Phone) -> Vec<wire::PhoneSays> {
+    let locale = wording.locale;
+    let line = |field: &str, noun: String, show: &dyn Fn(&str) -> String| {
+        let difference = follow::of(differences, field)?;
+        let stated = follow::text(&difference.stated)
+            .or_else(|| difference.stated.as_i64().map(|number| number.to_string()))?;
+        Some(follow::says(
+            locale,
+            follow::Source::Phone,
+            &show(&stated),
+            &noun,
+            field,
+            None,
+        ))
+    };
+    let same = |text: &str| text.to_owned();
+    let due = |text: &str| due_words(wording, text);
+    let bangs = |level: &str| match level {
+        "3" => "!!!".to_owned(),
+        "2" => "!!".to_owned(),
+        "1" => "!".to_owned(),
+        _ => words::says_priority_none(locale),
+    };
+    [
+        line("title", words::says_noun_title(locale), &same),
+        line("description", words::says_noun_notes(locale), &same),
+        line("due", words::says_noun_due(locale), &due),
+        line("priority", words::says_noun_priority(locale), &bangs),
+        line("url", words::says_noun_link(locale), &same),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::kit::act as kit_act;
+    use crate::testing::Driver;
+    use wire::link_event::Kind as L;
+
+    /// The Driver supplies a real vault; only the `links` read and the act log are replaced.
+    struct Flaky<'a> {
+        core: &'a centraid_core::Handle,
+        fail_links: std::cell::Cell<bool>,
+        /// The `app.action` of each act made through this ctx, in order.
+        acted: std::cell::RefCell<Vec<String>>,
+        /// The `from`/`to` of each link or unlink act, in order.
+        inputs: std::cell::RefCell<Vec<(String, String, String)>>,
+    }
+
+    impl centraid_core::screens::ScreenCtx for Flaky<'_> {
+        fn load(&self, request: &wire::LoadRequest) -> centraid_core::Result<wire::LoadResponse> {
+            if self.fail_links.get() && request.app == "shell" && request.query == "links" {
+                Err(centraid_core::CoreError::Unavailable {
+                    reason: "test read failure".into(),
+                })
+            } else {
+                self.core.load(request)
+            }
+        }
+
+        fn act(&self, request: &wire::ActRequest) -> centraid_core::Result<wire::ActResponse> {
+            self.acted
+                .borrow_mut()
+                .push(format!("{}.{}", request.app, request.action));
+            if request.action == "link" || request.action == "unlink" {
+                let text = |key: &str| match request.input.get(key).and_then(|v| v.kind.as_ref()) {
+                    Some(wire::value::Kind::Text(text)) => text.clone(),
+                    _ => String::new(),
+                };
+                self.inputs
+                    .borrow_mut()
+                    .push((text("from"), text("to"), text("rel")));
+            }
+            self.core.act(request)
+        }
+
+        fn push(&self, _update: wire::ScreenUpdate) {}
+        fn wake_after(&self, _after: std::time::Duration) {}
+    }
+
+    fn flaky(core: &centraid_core::Handle) -> Flaky<'_> {
+        Flaky {
+            core,
+            fail_links: false.into(),
+            acted: Vec::new().into(),
+            inputs: Vec::new().into(),
+        }
+    }
+
+    fn make(driver: &Driver, title: &str) -> String {
+        let mut request: wire::ActRequest = act::reminders::AddTask {
+            title: title.into(),
+            ..Default::default()
+        }
+        .into();
+        request.invoke_key = format!("test:{}", kit_act::fresh());
+        let created = driver.act(request);
+        let output: serde_json::Value = serde_json::from_slice(&created.output).expect("output");
+        output["id"].as_str().expect("id").to_owned()
+    }
+
+    fn opened<'a>(core: &'a Flaky, id: &str) -> (Box<dyn Screen>, Ctx<'a>) {
+        let env: &'static crate::screen::Environment =
+            Box::leak(Box::new(crate::screen::Environment::default()));
+        let ctx = Ctx::new(core, env);
+        let mut screen = build(&routes::task(id)).expect("task page");
+        screen.update(
+            wire::ScreenEvent {
+                kind: Some(E::Appeared(wire::Appeared {})),
+            },
+            &ctx,
+        );
+        (screen, ctx)
+    }
+
+    fn link(screen: &mut Box<dyn Screen>, ctx: &Ctx, kind: L) {
+        screen.update(
+            wire::ScreenEvent {
+                kind: Some(E::TodoDetail(wire::TodoDetailEvent {
+                    kind: Some(D::Link(wire::LinkEvent { kind: Some(kind) })),
+                })),
+            },
+            ctx,
+        );
+    }
+
+    fn state(screen: &dyn Screen, ctx: &Ctx) -> wire::TodoDetailState {
+        let Some(wire::view_state::Kind::TodoDetail(state)) = screen.view(ctx).kind else {
+            panic!("task state")
+        };
+        state
+    }
+
+    fn rows(screen: &dyn Screen, ctx: &Ctx) -> Vec<(String, String)> {
+        let Some(wire::todo_detail_state::Content::Data(data)) = state(screen, ctx).content else {
+            panic!("task data")
+        };
+        data.links
+            .expect("the Linked to section")
+            .rows
+            .into_iter()
+            .map(|row| (row.title, row.meta))
+            .collect()
+    }
+
+    #[test]
+    fn the_page_lists_what_the_task_is_linked_to_and_a_pick_links_through_reminders_link() {
+        let driver = Driver::with_runtime(crate::agenda::runtime());
+        let other = make(&driver, "Book the flat");
+        let id = make(&driver, "Pack");
+        let core = flaky(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        assert!(rows(&*screen, &ctx).is_empty());
+        let Some(wire::todo_detail_state::Content::Data(data)) = state(&*screen, &ctx).content
+        else {
+            panic!("task data")
+        };
+        let section = data.links.expect("section");
+        assert_eq!(section.title, "Linked to");
+        assert_eq!(section.empty, "Nothing linked yet");
+        assert_eq!(section.adds.len(), 1, "one Add link row for many kinds");
+        link(
+            &mut screen,
+            &ctx,
+            L::Add(wire::link_event::AddTapped { key: "link".into() }),
+        );
+        let picker = state(&*screen, &ctx).link_picker.expect("kind chooser");
+        assert!(picker.open);
+        assert!(
+            picker.candidates.iter().any(|row| row.id == "task"),
+            "a task may link to another task"
+        );
+        link(
+            &mut screen,
+            &ctx,
+            L::Pick(wire::link_event::Picked { id: "task".into() }),
+        );
+        let picker = state(&*screen, &ctx).link_picker.expect("tasks");
+        assert!(picker.candidates.iter().any(|row| row.id == other));
+        assert!(
+            picker.candidates.iter().all(|row| row.id != id),
+            "a task is never offered itself"
+        );
+        link(
+            &mut screen,
+            &ctx,
+            L::Pick(wire::link_event::Picked { id: other.clone() }),
+        );
+        assert_eq!(core.acted.borrow().as_slice(), ["reminders.link"]);
+        assert_eq!(
+            core.inputs.borrow().as_slice(),
+            [(id.clone(), other.clone(), "links".to_owned())]
+        );
+        let view = state(&*screen, &ctx);
+        assert!(view.link_picker.is_none_or(|picker| !picker.open));
+        let status = view.status.expect("status");
+        assert_eq!(status.sentence, "Linked");
+        assert_eq!(status.action_label, "Undo");
+        assert_eq!(
+            rows(&*screen, &ctx),
+            [("Book the flat".to_owned(), "Task".to_owned())]
+        );
+        // The link has no direction: the other task's page lists this one.
+        let there = flaky(&driver.handle);
+        let (other_screen, other_ctx) = opened(&there, &other);
+        assert_eq!(rows(&*other_screen, &other_ctx).len(), 1);
+    }
+
+    #[test]
+    fn a_tap_on_remove_unlinks_and_undo_links_again() {
+        let driver = Driver::with_runtime(crate::agenda::runtime());
+        let other = make(&driver, "Book the flat");
+        let id = make(&driver, "Pack");
+        let core = flaky(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        for kind in [
+            L::Add(wire::link_event::AddTapped { key: "link".into() }),
+            L::Pick(wire::link_event::Picked { id: "task".into() }),
+            L::Pick(wire::link_event::Picked { id: other.clone() }),
+        ] {
+            link(&mut screen, &ctx, kind);
+        }
+        assert_eq!(rows(&*screen, &ctx).len(), 1);
+        link(
+            &mut screen,
+            &ctx,
+            L::Remove(wire::link_event::RemoveTapped { id: other.clone() }),
+        );
+        assert_eq!(
+            core.acted.borrow().as_slice(),
+            ["reminders.link", "reminders.unlink"]
+        );
+        assert_eq!(
+            core.inputs.borrow().last(),
+            Some(&(id.clone(), other.clone(), "links".to_owned()))
+        );
+        assert!(rows(&*screen, &ctx).is_empty());
+        let status = state(&*screen, &ctx).status.expect("status");
+        assert_eq!(status.sentence, "Link removed");
+        assert_eq!(status.action_label, "Undo");
+        screen.update(
+            wire::ScreenEvent {
+                kind: Some(E::StatusActed(wire::StatusActed {})),
+            },
+            &ctx,
+        );
+        assert_eq!(rows(&*screen, &ctx).len(), 1);
+    }
+
+    #[test]
+    fn links_that_could_not_be_read_are_said_not_drawn_as_none() {
+        let driver = Driver::with_runtime(crate::agenda::runtime());
+        let id = make(&driver, "Pack");
+        let core = flaky(&driver.handle);
+        core.fail_links.set(true);
+        let (mut screen, ctx) = opened(&core, &id);
+        let view = state(&*screen, &ctx);
+        let Some(wire::todo_detail_state::Content::Data(data)) = view.content else {
+            panic!("task data")
+        };
+        assert!(data.links.is_none(), "no section for what was not read");
+        assert_eq!(
+            view.status.expect("status").sentence,
+            "Couldn’t read what this task is linked to."
+        );
+        // Read again, the section comes back.
+        core.fail_links.set(false);
+        screen.update(
+            wire::ScreenEvent {
+                kind: Some(E::TodoDetail(wire::TodoDetailEvent {
+                    kind: Some(D::Refreshed(wire::todo_detail_event::Refreshed {})),
+                })),
+            },
+            &ctx,
+        );
+        assert!(rows(&*screen, &ctx).is_empty());
+        assert!(state(&*screen, &ctx).status.is_none());
+        assert!(core.acted.borrow().is_empty());
+    }
 }

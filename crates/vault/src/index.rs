@@ -14,6 +14,11 @@
 //! touch that was `with` them (an interaction's note). A read joins `entity` on
 //! `n` for the kind and the trash filter.
 //!
+//! What an item said in an EARLIER VERSION is in `search_past`, one row per kept
+//! version, written when the version is kept (`history::keep`, in the commit that
+//! replaced it) and removed with the item's trash or purge in the same transaction
+//! (`past`). Only a kind with an Earlier versions page has them.
+//!
 //! A Locker item is in the index by its **plain** text only ([`text_of`]: never
 //! a sealed cell, a sealed field's value or a passkey key). Whether a surface
 //! offers it is a question for its readers (the assistant's search kinds leave
@@ -32,8 +37,11 @@ use rusqlite::{Connection, OptionalExtension};
 use crate::error::Result;
 use crate::model::Kind;
 
+mod past;
 mod text;
 
+pub(crate) use past::version_kept;
+pub use past::{EARLIER_COLUMNS, EARLIER_KINDS, earlier_texts, past_rowid, version_text};
 pub use text::{MIN_PHONE_DIGITS, SEARCHABLE, text_of, untitled_label};
 
 /// Re-index the touched ids, and whatever their text feeds.
@@ -200,6 +208,7 @@ const DEPENDENTS: &str = "\
 /// restored vault with a damaged index would run.
 pub fn rebuild(connection: &Connection) -> Result<()> {
     connection.execute("DELETE FROM search", [])?;
+    connection.execute("DELETE FROM search_past", [])?;
     // The word list is rewritten from the rows too: this is where a word an edit
     // dropped finally goes.
     connection.execute("DELETE FROM search_word", [])?;
@@ -261,10 +270,19 @@ pub fn purge(connection: &Connection, id: &str) -> Result<()> {
         Some(kind) => text_of(connection, id, kind)?.unwrap_or_default(),
         None => String::new(),
     };
+    // What the entity said before goes in the same transaction: its past rows, then the words
+    // only they held (a revision is still there to name them; its cascade runs after this).
+    let earlier = past::words_of(connection, id)?;
     forget(connection, n)?;
-    let mut held = connection.prepare_cached("SELECT 1 FROM search_vocab WHERE term = ?1")?;
+    past::forget_entity(connection, n)?;
+    let mut held = connection.prepare_cached(
+        "SELECT 1 FROM search_vocab WHERE term = ?1
+         UNION ALL SELECT 1 FROM search_past_vocab WHERE term = ?1 LIMIT 1",
+    )?;
     let mut drop = connection.prepare_cached("DELETE FROM search_word WHERE word = ?1")?;
-    for word in distinct_words(&[&title, &body]) {
+    let mut words = distinct_words(&[&title, &body]);
+    words.extend(earlier);
+    for word in words {
         if !held.exists([&word])? {
             drop.execute([&word])?;
         }
@@ -312,6 +330,8 @@ fn reindex_one(connection: &Connection, id: &str) -> Result<()> {
     };
     forget(connection, n)?;
     if deleted_at.is_some() {
+        // A trashed entity leaves the index with what it said before.
+        past::forget_entity(connection, n)?;
         return Ok(());
     }
     let Some(kind) = Kind::parse(&kind) else {
@@ -320,6 +340,9 @@ fn reindex_one(connection: &Connection, id: &str) -> Result<()> {
     let Some(body) = text_of(connection, id, kind)? else {
         return Ok(());
     };
+    // Back from the trash, or an index thrown away: the past rows are written once, from the
+    // versions the entity has. A version kept later is written when it is kept.
+    past::ensure(connection, id)?;
     if title.trim().is_empty() && body.trim().is_empty() {
         return Ok(());
     }

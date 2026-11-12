@@ -18,31 +18,29 @@
 //! A refused account is counted and the rest go on: one malformed address must
 //! not cost the member the other hundred people.
 //!
-//! ## Following ([`ContactsFollow`])
+//! ## Importing ([`ContactsFollow`]) and following
 //!
-//! A screen that lives as long as People does (its home) hosts one
-//! [`ContactsFollow`]. The member's Import tap asks the OS for permission and
-//! imports; from then on this device FOLLOWS: a [`wire::PhoneWatch`] makes the
-//! shell report each change of the address book, bursts are coalesced (the first
-//! change arms a two-second timer, the ones before it fires join it, and changes
-//! during a pass queue exactly one more), and a pass reads the address book only
-//! if the OS already allows it. **A pass never asks the OS for permission and
-//! never runs before this device imported.**
+//! The member's Import tap asks the OS for permission and imports ([`ContactsFollow`], hosted by
+//! People's home and the made vault's importer); from then on this device FOLLOWS. Following is
+//! not a screen's: the follow coordinator ([`crate::follow`]) watches the address book, hears
+//! the app come to the front and the background windows, coalesces them, and runs the pass
+//! ([`run`]) when the habit below says this device imported. **A pass never asks the OS for
+//! permission and never runs before this device imported.**
 //!
 //! "This device imported" is a per-device habit kept in the keychain
 //! ([`IMPORTED_KEY`]), not a fact read back from the vault: the OS permission a
 //! pass needs is per device too, and a vault restored onto a new phone must be
-//! imported from there once. Agenda's calendar follows by the same rule
-//! (`agenda::calendar`).
-
-use std::time::Duration;
+//! imported from there once. Calendar follows by the same rule
+//! (`calendar::follow`).
 
 use centraid_api_proto::core_v1 as wire;
 use serde_json::{Value, json};
 use wire::screen_event::Kind as E;
 
 use crate::catalog::act;
+use crate::follow::Store;
 use crate::kit::act as kit_act;
+use crate::kit::permission::{self, Resource};
 use crate::screen::Ctx;
 use crate::strings::{Locale, people as words};
 
@@ -54,14 +52,6 @@ pub const IMPORTED_KEY: &str = "people_contacts_imported";
 const IMPORTED_VALUE: &[u8] = b"1";
 /// The same key, when the member paused the follow: the device imported and follows no more.
 const PAUSED_VALUE: &[u8] = b"paused";
-
-/// Triggers within this long of the first are one pass.
-pub const SETTLE: Duration = Duration::from_secs(2);
-/// A read that has not answered in two minutes is abandoned, so one stuck read
-/// cannot hold the follow for good.
-pub const READ_TIMEOUT: Duration = Duration::from_secs(120);
-const SETTLE_TIMER: &str = "contacts-settle";
-const READ_TIMER: &str = "contacts-read";
 
 /// `person.save_contact_point`'s `value` ceiling.
 const VALUE_MAX: usize = 500;
@@ -315,6 +305,7 @@ pub fn follow_request(
         records: Value::Array(records).to_string(),
         complete: Some(complete),
         since: None,
+        gone: None,
     }
 }
 
@@ -359,52 +350,31 @@ fn count(output: &Value, name: &str) -> u32 {
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Purpose {
-    /// The member's tap: the OS may ask for permission, and a sentence says how it went.
-    Import,
-    /// A following pass: silent, and never asks.
-    Follow,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Waiting {
     Nothing,
     /// The keychain's answer to "did this device import?".
     Flag,
-    Read(Purpose),
+    /// The member's Import read, which may ask the OS for permission.
+    Read,
 }
 
-/// When a following pass runs. Pure: the timers are the runtime's.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Gate {
-    Idle,
-    /// A trigger armed the settle timer; later ones join it.
-    Armed,
-    /// A pass is out; `queued` is a trigger that arrived during it.
-    Running {
-        queued: bool,
-    },
-}
-
-/// THE IMPORT AND THE FOLLOW, as one component a long-lived screen hosts. The
-/// host sends it the events it does not know ([`Self::on_event`]), draws its
-/// [`Self::status`] on the status line, and returns the effects it hands back.
+/// THE IMPORT, as one component a screen hosts (People's home, the made vault's importer). The
+/// host sends it the events it does not know ([`Self::on_event`]), draws its [`Self::status`]
+/// on the status line and its [`Self::row`], and returns the effects it hands back.
+///
+/// It does not follow: a turned-on device is followed by the coordinator
+/// ([`crate::follow`]), which this tells ([`crate::follow::Follows::changed`]) whenever the
+/// habit it keeps changes, and which says what the last pass found (the row's detail).
 pub struct ContactsFollow {
     waiting: Waiting,
-    gate: Gate,
     /// This device imported its contacts: a pass may run.
     followed: bool,
-    watching: bool,
     /// An Import tapped while a read was out.
     import_queued: bool,
     status: Option<wire::StatusLine>,
     outcome: Option<Outcome>,
     /// The member paused the follow (their word, kept in the keychain).
     paused: bool,
-    /// The phone refused the address book, the last time a read was tried.
-    denied: bool,
-    /// What the last read held, and when it was.
-    last_read: Option<(u32, std::time::Instant)>,
 }
 
 impl Default for ContactsFollow {
@@ -413,64 +383,65 @@ impl Default for ContactsFollow {
     }
 }
 
+/// Whether the keychain's answer says this device follows its contacts.
+#[must_use]
+pub(crate) fn followed_in(value: &wire::KeychainValue) -> bool {
+    value.found && value.value == IMPORTED_VALUE
+}
+
+/// The read of the address book a pass or an import performs.
+#[must_use]
+pub(crate) fn read_effect(ask_permission: bool) -> wire::Effect {
+    wire::Effect {
+        kind: Some(wire::effect::Kind::ContactsRead(wire::ContactsRead {
+            ask_permission,
+        })),
+    }
+}
+
+/// Read the habit this device keeps for contacts.
+#[must_use]
+pub(crate) fn habit_read() -> wire::Effect {
+    keychain(wire::keychain_op::Op::Get, Vec::new())
+}
+
 impl ContactsFollow {
     #[must_use]
     pub fn new() -> Self {
         Self {
             waiting: Waiting::Nothing,
-            gate: Gate::Idle,
             followed: false,
-            watching: false,
             import_queued: false,
             status: None,
             outcome: None,
             paused: false,
-            denied: false,
-            last_read: None,
         }
     }
 
-    /// The host came up: learn whether this device follows. Asked once.
+    /// The host came up: learn whether this device follows.
     pub fn attach(&mut self) -> Vec<wire::Effect> {
         if self.followed || self.waiting != Waiting::Nothing {
             return Vec::new();
         }
         self.waiting = Waiting::Flag;
-        vec![keychain(wire::keychain_op::Op::Get, Vec::new())]
+        vec![habit_read()]
     }
 
     /// The member tapped Import. ONE IMPORT AT A TIME: a second tap while one
-    /// runs would write every person twice, so it is nothing. A tap during a
-    /// following pass (or before the device has said whether it follows) waits
-    /// for it.
+    /// runs would write every person twice, so it is nothing. A tap before the device has said
+    /// whether it follows waits for it.
     pub fn import(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        if self.waiting == Waiting::Read(Purpose::Import) {
+        if self.waiting == Waiting::Read {
             return Vec::new();
         }
         if self.waiting != Waiting::Nothing {
             self.import_queued = true;
             return Vec::new();
         }
-        self.start_read(ctx, Purpose::Import)
+        self.start_read(ctx)
     }
 
-    /// The phone may have changed (or the app came forward): follow soon.
-    pub fn request(&mut self, ctx: &Ctx) {
-        if !self.followed {
-            return;
-        }
-        match self.gate {
-            Gate::Idle => {
-                self.gate = Gate::Armed;
-                ctx.start_timer(SETTLE_TIMER, SETTLE);
-            }
-            Gate::Armed => {}
-            Gate::Running { .. } => self.gate = Gate::Running { queued: true },
-        }
-    }
-
-    /// The status line this flow wants drawn: the running sentence, then the
-    /// outcome's. A following pass says nothing.
+    /// The status line this flow wants drawn: the running sentence, then the outcome's.
     #[must_use]
     pub fn status(&self) -> Option<&wire::StatusLine> {
         self.status.as_ref()
@@ -489,38 +460,56 @@ impl ContactsFollow {
         if self.followed {
             self.followed = false;
             self.paused = true;
-            self.watching = false;
-            ctx.cancel_timer(SETTLE_TIMER);
-            self.gate = Gate::Idle;
-            return vec![
-                keychain(wire::keychain_op::Op::Set, PAUSED_VALUE.to_vec()),
-                watch(false),
-            ];
+            return vec![keychain(wire::keychain_op::Op::Set, PAUSED_VALUE.to_vec())];
         }
         if self.paused {
             self.paused = false;
             self.followed = true;
-            let mut effects = vec![keychain(
+            ctx.follows().changed(ctx, Store::Contacts);
+            return vec![keychain(
                 wire::keychain_op::Op::Set,
                 IMPORTED_VALUE.to_vec(),
             )];
-            effects.extend(self.begin_following(ctx));
-            return effects;
         }
         self.import(ctx)
     }
 
+    /// STOP READING: every account the passes followed is retired (`stop-following`, the same door
+    /// chat and Undo use) and this device no longer follows, so the row offers "Turn on" again.
+    /// **Every person stays**, an ordinary one from now on. `None` when the vault refused part of
+    /// it (the rest is done, and stopping again finishes it); the effects forget the habit.
+    pub fn stop(&mut self, ctx: &Ctx, stored: &[String]) -> Option<Vec<wire::Effect>> {
+        let mut clean = true;
+        for origin in stored {
+            let request = act::people::StopFollowing {
+                r#ref: origin.clone(),
+            };
+            let key = kit_act::key(&["stop-following", origin], kit_act::fresh());
+            // undo-exempt: Stop reading asks first and is itself the Undo of a follow; the row
+            // offers "Turn on" again, so no line of its own takes it back.
+            clean = kit_act::act(ctx, request, &key).committed && clean;
+        }
+        if !clean {
+            return None;
+        }
+        self.followed = false;
+        self.paused = false;
+        Some(vec![keychain(wire::keychain_op::Op::Delete, Vec::new())])
+    }
+
     /// Whether the row's action is Settings: the phone said no.
     #[must_use]
-    pub fn needs_settings(&self) -> bool {
-        self.denied
+    pub fn needs_settings(&self, ctx: &Ctx) -> bool {
+        ctx.follows().report(Store::Contacts).denied
     }
 
     /// THE ROW: whether People follows, how many, when it last looked, and the one action.
     #[must_use]
-    pub fn row(&self, locale: Locale) -> wire::PeopleContactsRow {
+    pub fn row(&self, ctx: &Ctx) -> wire::PeopleContactsRow {
         use wire::people_contacts_row::State;
-        let (state, label, action) = if self.denied {
+        let locale = ctx.locale();
+        let report = ctx.follows().report(Store::Contacts);
+        let (state, label, action) = if report.denied {
             (
                 State::Denied,
                 words::contacts_state_denied(locale),
@@ -545,7 +534,7 @@ impl ContactsFollow {
                 words::contacts_turn_on(locale),
             )
         };
-        let detail = match (state, self.last_read) {
+        let detail = match (state, report.read) {
             (State::Following | State::Paused, Some((count, at))) => {
                 let minutes = at.elapsed().as_secs() / 60;
                 let when = match minutes {
@@ -580,12 +569,10 @@ impl ContactsFollow {
         self.followed
     }
 
-    /// Offer the host's event. `Some(effects)` when it was this flow's (a timer
-    /// it started, or the answer to an effect it asked); `None` otherwise.
+    /// Offer the host's event. `Some(effects)` when it was the answer to an effect this flow
+    /// asked; `None` otherwise.
     pub fn on_event(&mut self, event: &E, ctx: &Ctx) -> Option<Vec<wire::Effect>> {
         match event {
-            E::TimerFired(fired) if fired.timer == SETTLE_TIMER => Some(self.settled(ctx)),
-            E::TimerFired(fired) if fired.timer == READ_TIMER => Some(self.read_ended(ctx, None)),
             E::EffectResult(result) => self.on_result(result, ctx),
             _ => None,
         }
@@ -594,182 +581,114 @@ impl ContactsFollow {
     fn on_result(&mut self, result: &wire::EffectResult, ctx: &Ctx) -> Option<Vec<wire::Effect>> {
         use wire::effect_result::Outcome as O;
         match (&self.waiting, &result.outcome) {
-            (_, Some(O::PhoneChanged(changed)))
-                if changed.source == wire::ImportSource::Contacts as i32 =>
-            {
-                self.request(ctx);
-                Some(Vec::new())
-            }
             (Waiting::Flag, Some(O::Keychain(value))) => {
                 self.waiting = Waiting::Nothing;
-                self.followed = value.found && value.value == IMPORTED_VALUE;
+                self.followed = followed_in(value);
                 self.paused = value.found && value.value == PAUSED_VALUE;
-                Some(self.begin_following(ctx))
+                Some(self.finish(ctx))
             }
             (Waiting::Flag, Some(O::Failed(_))) => {
                 self.waiting = Waiting::Nothing;
-                Some(Vec::new())
+                Some(self.finish(ctx))
             }
-            (Waiting::Read(_), Some(O::Contacts(snapshot))) => {
-                Some(self.read_ended(ctx, Some(snapshot)))
-            }
-            (Waiting::Read(_), Some(O::Failed(failed))) => {
-                let denied = failed.denied;
-                Some(self.read_failed(ctx, denied))
-            }
+            (Waiting::Read, Some(O::Contacts(snapshot))) => Some(self.read_ended(ctx, snapshot)),
+            (Waiting::Read, Some(O::Failed(failed))) => Some(self.read_failed(ctx, failed)),
             _ => None,
         }
     }
 
-    /// Watch the store and follow once, now that this device follows.
-    fn begin_following(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        if !self.followed || self.watching {
-            return Vec::new();
-        }
-        self.watching = true;
-        self.request(ctx);
-        vec![watch(true)]
+    fn start_read(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
+        self.waiting = Waiting::Read;
+        self.outcome = None;
+        self.status = Some(plain(words::import_contacts_running(ctx.locale())));
+        vec![read_effect(true)]
     }
 
-    /// The settle timer fired: start the pass.
-    fn settled(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        if self.gate != Gate::Armed {
-            return Vec::new();
-        }
-        if !self.followed {
-            self.gate = Gate::Idle;
-            return Vec::new();
-        }
-        if self.waiting != Waiting::Nothing {
-            // An import is out: the pass waits the settle time again.
-            ctx.start_timer(SETTLE_TIMER, SETTLE);
-            return Vec::new();
-        }
-        self.gate = Gate::Running { queued: false };
-        self.start_read(ctx, Purpose::Follow)
-    }
-
-    fn start_read(&mut self, ctx: &Ctx, purpose: Purpose) -> Vec<wire::Effect> {
-        self.waiting = Waiting::Read(purpose);
-        match purpose {
-            Purpose::Import => {
-                self.outcome = None;
-                self.status = Some(plain(words::import_contacts_running(ctx.locale())));
-            }
-            // Only a read with no dialog can go unanswered.
-            Purpose::Follow => ctx.start_timer(READ_TIMER, READ_TIMEOUT),
-        }
-        vec![wire::Effect {
-            kind: Some(wire::effect::Kind::ContactsRead(wire::ContactsRead {
-                ask_permission: purpose == Purpose::Import,
-            })),
-        }]
-    }
-
-    fn read_failed(&mut self, ctx: &Ctx, denied: bool) -> Vec<wire::Effect> {
-        let Waiting::Read(purpose) = self.waiting else {
-            return Vec::new();
-        };
-        self.denied = denied;
-        if purpose == Purpose::Import {
-            let locale = ctx.locale();
-            self.status = Some(plain(if denied {
-                words::import_contacts_denied(locale)
-            } else {
-                words::import_contacts_failed(locale)
-            }));
-        }
+    fn read_failed(&mut self, ctx: &Ctx, failed: &wire::EffectFailed) -> Vec<wire::Effect> {
+        let refusal = permission::refusal(ctx.locale(), Resource::Contacts, failed);
+        ctx.follows().denied(Store::Contacts, refusal.is_some());
+        let locale = ctx.locale();
+        self.status = Some(plain(
+            refusal.unwrap_or_else(|| words::import_contacts_failed(locale)),
+        ));
+        self.waiting = Waiting::Nothing;
         self.finish(ctx)
     }
 
-    /// A read came back (`Some`) or timed out (`None`).
-    fn read_ended(
-        &mut self,
-        ctx: &Ctx,
-        snapshot: Option<&wire::ContactsSnapshot>,
-    ) -> Vec<wire::Effect> {
-        let Waiting::Read(purpose) = self.waiting else {
-            return Vec::new();
-        };
-        let Some(snapshot) = snapshot else {
-            return self.read_failed(ctx, false);
-        };
-        let (outcome, told) = self.run(ctx, snapshot);
-        self.denied = false;
-        self.last_read = Some((outcome.read, std::time::Instant::now()));
+    /// A read came back.
+    fn read_ended(&mut self, ctx: &Ctx, snapshot: &wire::ContactsSnapshot) -> Vec<wire::Effect> {
+        let (outcome, told) = run(ctx, snapshot);
+        ctx.follows().read(Store::Contacts, outcome.read);
+        self.status = Some(plain(sentence(ctx.locale(), &outcome)));
+        self.outcome = Some(outcome);
+        self.waiting = Waiting::Nothing;
         let mut effects = Vec::new();
-        if purpose == Purpose::Import {
-            self.status = Some(plain(sentence(ctx.locale(), &outcome)));
-            self.outcome = Some(outcome);
-            // THIS DEVICE FOLLOWS FROM NOW ON, once the vault took an account.
-            if told && !self.followed {
-                self.followed = true;
-                effects.push(keychain(
-                    wire::keychain_op::Op::Set,
-                    IMPORTED_VALUE.to_vec(),
-                ));
-            }
+        // THIS DEVICE FOLLOWS FROM NOW ON, once the vault took an account.
+        if told && !self.followed {
+            self.followed = true;
+            self.paused = false;
+            effects.push(keychain(
+                wire::keychain_op::Op::Set,
+                IMPORTED_VALUE.to_vec(),
+            ));
+        }
+        if self.followed {
+            ctx.follows().changed(ctx, Store::Contacts);
         }
         effects.extend(self.finish(ctx));
-        if self.followed && !self.watching {
-            effects.extend(self.begin_following(ctx));
-        }
         effects
     }
 
-    /// One `follow-contacts` per account. `told` is whether the vault took any.
-    fn run(&mut self, ctx: &Ctx, snapshot: &wire::ContactsSnapshot) -> (Outcome, bool) {
-        let batch = batch(ctx.locale(), snapshot);
-        let mut outcome = Outcome {
-            add_account: batch.complete && batch.records.is_empty() && batch.origins.is_empty(),
-            read: u32::try_from(batch.records.len()).unwrap_or(u32::MAX),
-            ..Outcome::default()
-        };
-        let mut told = false;
-        for origin in &batch.origins {
-            let records: Vec<&Record> = batch
-                .records
-                .iter()
-                .filter(|record| record.origin == origin.id)
-                .collect();
-            let request = follow_request(origin, &records, batch.complete, &snapshot.device_id);
-            let key = kit_act::key(&["follow-contacts", &origin.id], kit_act::fresh());
-            let settled = kit_act::act(ctx, request, &key);
-            if !settled.committed {
-                outcome.refused += u32::try_from(records.len()).unwrap_or(u32::MAX);
-                continue;
-            }
-            told = true;
-            let output: Value = serde_json::from_slice(&settled.output).unwrap_or(Value::Null);
-            outcome.added += count(&output, "added") + count(&output, "matched");
-            outcome.refused += count(&output, "refused");
-            outcome.updated += count(&output, "updated");
-            outcome.trashed += count(&output, "trashed");
-        }
-        (outcome, told)
-    }
-
-    /// A read is over, however it ended: the next thing waiting goes.
+    /// A read is over, however it ended: an Import tapped meanwhile goes.
     fn finish(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        ctx.cancel_timer(READ_TIMER);
-        self.waiting = Waiting::Nothing;
-        if self.import_queued {
+        if self.waiting == Waiting::Nothing && self.import_queued {
             self.import_queued = false;
-            return self.start_read(ctx, Purpose::Import);
+            return self.start_read(ctx);
         }
-        match self.gate {
-            // Triggers arrived during the pass: one more, at once.
-            Gate::Running { queued: true } => {
-                self.gate = Gate::Running { queued: false };
-                self.start_read(ctx, Purpose::Follow)
-            }
-            Gate::Running { queued: false } => {
-                self.gate = Gate::Idle;
-                Vec::new()
-            }
-            _ => Vec::new(),
-        }
+        Vec::new()
     }
+}
+
+/// One `follow-contacts` per account over a read of the address book. `told` is whether the
+/// vault took any. Both the member's import and the coordinator's pass go through it.
+#[must_use]
+pub(crate) fn run(ctx: &Ctx, snapshot: &wire::ContactsSnapshot) -> (Outcome, bool) {
+    let batch = batch(ctx.locale(), snapshot);
+    let mut outcome = Outcome {
+        add_account: batch.complete && batch.records.is_empty() && batch.origins.is_empty(),
+        read: u32::try_from(batch.records.len()).unwrap_or(u32::MAX),
+        ..Outcome::default()
+    };
+    let mut told = false;
+    let mut doubted = 0;
+    let mut followed = Vec::new();
+    for origin in &batch.origins {
+        let records: Vec<&Record> = batch
+            .records
+            .iter()
+            .filter(|record| record.origin == origin.id)
+            .collect();
+        let request = follow_request(origin, &records, batch.complete, &snapshot.device_id);
+        let key = kit_act::key(&["follow-contacts", &origin.id], kit_act::fresh());
+        // undo-exempt: a follow pass runs unseen and has no status line; its Undo is Stop reading
+        // in the More sheet (`stop-following`).
+        let settled = kit_act::act(ctx, request, &key);
+        if !settled.committed {
+            outcome.refused += u32::try_from(records.len()).unwrap_or(u32::MAX);
+            continue;
+        }
+        told = true;
+        followed.push(origin.id.clone());
+        let output: Value = serde_json::from_slice(&settled.output).unwrap_or(Value::Null);
+        outcome.added += count(&output, "added") + count(&output, "matched");
+        outcome.refused += count(&output, "refused");
+        outcome.updated += count(&output, "updated");
+        outcome.trashed += count(&output, "trashed");
+        doubted += count(&output, "doubted");
+    }
+    ctx.follows()
+        .judged(Store::Contacts, doubted, !batch.complete);
+    (outcome, told)
 }
 
 fn plain(sentence: String) -> wire::StatusLine {
@@ -786,15 +705,6 @@ fn keychain(op: wire::keychain_op::Op, value: Vec<u8>) -> wire::Effect {
             op: op as i32,
             key: IMPORTED_KEY.to_owned(),
             value,
-        })),
-    }
-}
-
-fn watch(on: bool) -> wire::Effect {
-    wire::Effect {
-        kind: Some(wire::effect::Kind::PhoneWatch(wire::PhoneWatch {
-            source: wire::ImportSource::Contacts as i32,
-            on,
         })),
     }
 }

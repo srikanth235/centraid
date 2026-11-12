@@ -120,24 +120,8 @@ pub fn search_data(locale: Locale, cycle: HourCycle, held: &Held) -> Option<wire
     ctx.cycle = cycle;
     let task_hits = search::hits_group(locale, held, &ctx);
     let containers = search::containers(locale, held);
-    let none = task_hits.is_none() && containers.is_empty();
     Some(wire::AgendaHomeData {
         today,
-        empty: if none {
-            wire::AgendaEmpty::NoMatch as i32
-        } else {
-            wire::AgendaEmpty::None as i32
-        },
-        empty_title: if none {
-            crate::strings::agenda::empty_no_match(locale)
-        } else {
-            String::new()
-        },
-        empty_body: if none {
-            crate::strings::agenda::empty_no_match_body(locale)
-        } else {
-            String::new()
-        },
         task_hits: task_hits.into_iter().collect(),
         containers,
         catch_up: Some(routes::catch_up()),

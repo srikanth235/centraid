@@ -13,6 +13,7 @@ enum WidgetPalette {
     static let meta = Color(CentraidAsset.textMeta)
     static let agenda = Color(CentraidAsset.appCalendar)
     static let red = Color(CentraidAsset.stateRed)
+    static let health = Color(CentraidAsset.appHealthText)
 
     /// A snapshot's `tint` key as a colour. An unknown key is Agenda's own.
     static func tint(_ key: String) -> Color {

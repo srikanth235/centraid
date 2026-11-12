@@ -166,6 +166,7 @@ pub(crate) fn task(
                 .map(|parent| task_to_wire(&views::place(parent, &zone, &today))),
             project: project.map(|project| project_to_wire(project, &family)),
             section: section.map(|section| section_to_wire(section, &family)),
+            rev: detail.rev,
         }))
     })
 }
@@ -612,6 +613,7 @@ fn task_to_wire(placed: &Placed) -> wire::AgendaTask {
         children: placed.children.iter().map(task_to_wire).collect(),
         done_children: count(task.done_children.unwrap_or_default()),
         snippet: task.snippet.clone(),
+        in_earlier_version: task.in_earlier_version,
     }
 }
 

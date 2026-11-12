@@ -4,7 +4,7 @@ import SwiftUI
 /// proposes (a transfer, a rule) and the actions (#1099).
 ///
 /// Nothing is written until the member accepts an offer or picks an action; the
-/// category and name edits are sheets, and a void is the state's `Confirm`. Every
+/// category and name edits are sheets, and a transaction goes to the trash and asks nothing (#1185). Every
 /// word, the direction, the amount's tone and each action's enabled flag are the
 /// machine's.
 struct MoneyTransactionView: View {
@@ -22,43 +22,41 @@ struct MoneyTransactionView: View {
     }
 
     var body: some View {
-        let content = state.readContent
         let sheetBinding = moneySheetBinding(state.sheet == .category || state.sheet == .name) {
             send(event { $0.sheetClosed = .init() })
-        }
-        let confirmBinding = moneySheetBinding(state.hasConfirm) {
-            send(event { $0.confirmDismissed = .init() })
         }
         // THE PAGE HEADS ITSELF with the merchant's name, so the bar carries only the back chevron
         // (the board draws no small title over it).
         PushedPage(title: "", parentTitle: state.chrome.backLabel, onBack: onBack) {
             EmptyView()
         } content: {
-            ReadStateView(
-                content: content,
-                onRetry: { send(event { $0.refreshed = .init() }) }
-            ) { transaction in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) { page(transaction) }
-                        .padding(.bottom, 16)
+            // THE PAGE STAYS ON THE GONE FAILURE AFTER MOVE TO TRASH (a final failure with no Retry), and
+            // the status line under it carries "{title} moved to trash" with Undo (#1185).
+            Group {
+                PageReadStateView(
+                    page: state.page,
+                    onRetry: { send(event { $0.refreshed = .init() }) }
+                ) {
+                    if case let .data(transaction)? = state.content {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 0) { page(transaction) }
+                                .padding(.bottom, 16)
+                        }
+                    }
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 MoneyStatusFoot(
                     status: MoneyWords.line(state.hasStatus ? state.status : nil),
-                    identifier: "money-transaction-status"
-                )
+                    identifier: "money-status-action"
+                ) {
+                    send(event { $0.statusActed = .init() })
+                }
             }
         }
-        .sheet(isPresented: sheetBinding) { sheetContent(state, transaction: content.loaded) }
-        .sheet(isPresented: confirmBinding) {
-            ConfirmSheet(
-                state.confirm,
-                onConfirm: { send(event { $0.confirmAccepted = .init() }) },
-                onDismiss: { send(event { $0.confirmDismissed = .init() }) }
-            )
-        }
+        .sheet(isPresented: sheetBinding) { sheetContent(state, transaction: state.loaded) }
         .linkPickerSheet(state.withPicker) { link in send(event { $0.withLink = link }) }
+        .linkPickerSheet(state.linkPicker) { link in send(event { $0.link = link }) }
     }
 
     @ViewBuilder
@@ -116,6 +114,25 @@ struct MoneyTransactionView: View {
         if transaction.hasTransferOffer { offer(transaction.transferOffer, key: "transfer") }
         if transaction.hasRuleOffer { offer(transaction.ruleOffer, key: "rule") }
         if transaction.hasWithOffer { offer(transaction.withOffer, key: "with") }
+        // ATTACHMENTS (#1185): the kit's section, after the offers; Rust makes every word and row.
+        if transaction.hasAttachments {
+            AgendaAttachmentsView(
+                section: transaction.attachments,
+                idPrefix: "money-transaction-attachment",
+                headIdentifier: "money-transaction-attachments",
+                open: open,
+                send: { attachment in send(event { $0.attachment = attachment }) }
+            )
+        }
+        // LINKED TO (#1185): the kit's section, after the attachments; Rust makes every word and row.
+        if transaction.hasLinks {
+            LinkSectionView(section: transaction.links, send: { link in
+                send(event { $0.link = link })
+            }, open: open)
+        }
+        // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the actions.
+        EarlierEntryRow(entry: state.hasEarlier ? state.earlier : nil, open: open)
+        OriginLineView(line: state.hasOrigin ? state.origin : nil)
         // THE ACTIONS ARE ALTERNATIVES: one stack.
         KitChoiceStack {
             ForEach(Array(transaction.actions.filter { !folded.contains($0.key) }.enumerated()), id: \.offset) { _, action in
@@ -227,17 +244,18 @@ struct MoneyTargetView: View {
     }
 
     var body: some View {
-        let content = state.readContent
         SheetPage(title: state.chrome.title, onCancel: onBack) {
-            ReadStateView(
-                content: content,
+            PageReadStateView(
+                page: state.page,
                 onRetry: { send(event { $0.refreshed = .init() }) }
-            ) { target in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) { page(target, state: state) }
-                        .padding(.bottom, 16)
+            ) {
+                if case let .data(target)? = state.content {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) { page(target, state: state) }
+                            .padding(.bottom, 16)
+                    }
+                    .scrollDismissesKeyboard(.interactively)
                 }
-                .scrollDismissesKeyboard(.interactively)
             }
         } foot: {
             VStack(spacing: 0) {
@@ -245,7 +263,7 @@ struct MoneyTargetView: View {
                     status: MoneyWords.line(state.hasStatus ? state.status : nil),
                     identifier: "money-target-status"
                 )
-                if let target = content.loaded {
+                if let target = state.loaded {
                     footKeys(target)
                 }
             }
@@ -381,13 +399,11 @@ struct MoneyRecurringView: View {
         PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
             EmptyView()
         } content: {
-            ReadStateView(
-                content: state.readContent,
+            PageReadStateView(
+                page: state.page,
                 onRetry: { send(Centraid_Core_V1_MoneyRecurringEvent.with { $0.refreshed = .init() }) }
-            ) { recurring in
-                if recurring.hasEmpty {
-                    EmptyStateView(recurring.empty)
-                } else {
+            ) {
+                if case let .data(recurring)? = state.content {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) {
                             MoneyPageCard {

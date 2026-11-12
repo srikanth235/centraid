@@ -36,6 +36,16 @@ button{font:inherit;color:inherit}
   </div>
   <p style="margin: 6px 32px 0; font-size: 13px; color: #6F6B64; line-height: 1.4;">System follows your phone. Text follows your phone's text size.</p>
 
+  <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.4px; color: #6F6B64; margin: 16px 32px 6px;">UNITS</div>
+  <div style="margin: 0 16px; background: #FFFFFF; border-radius: 16px; padding: 8px;">
+    <div role="radiogroup" aria-label="Units" style="display: flex; background: #F2EFEA; border-radius: 12px; padding: 3px; font-size: 15px;">
+      <span role="radio" aria-checked="true" style="flex: 1; height: 34px; border-radius: 9px; background: #FFFFFF; border: 1px solid #E4E0D8; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-weight: 600;">Phone's setting</span>
+      <span role="radio" aria-checked="false" style="flex: 1; height: 34px; display: flex; align-items: center; justify-content: center; color: #4A4741;">Metric</span>
+      <span role="radio" aria-checked="false" style="flex: 1; height: 34px; display: flex; align-items: center; justify-content: center; color: #4A4741;">Imperial</span>
+    </div>
+  </div>
+  <p style="margin: 6px 32px 0; font-size: 13px; color: #6F6B64; line-height: 1.4;">Distances, weights and temperatures. Phone's setting follows your region.</p>
+
   <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.4px; color: #6F6B64; margin: 16px 32px 6px;">VAULT</div>
   <div style="margin: 0 16px; background: #FFFFFF; border-radius: 16px;">
     <div style="display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-bottom: 1px solid #EEEBE5;">
@@ -56,10 +66,20 @@ button{font:inherit;color:inherit}
       <div style="flex-grow: 1;"><div style="font-size: 16px;">Backup</div><div style="font-size: 13px; color: #6F6B64;">10 minutes ago to Srikanth's Mac mini</div></div>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8E897F" stroke-width="2.4" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
     </a>
-    <div style="display: flex; align-items: center; gap: 12px; padding: 11px 14px;">
+    <div style="display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-bottom: 1px solid #EEEBE5;">
       <span style="width: 30px; height: 30px; border-radius: 8px; background: #6E6B66; display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12M7 11l5 5 5-5M5 20h14"></path></svg></span>
       <span style="flex-grow: 1; font-size: 16px;">Download settings</span>
       <span style="font-size: 15px; color: #6F6B64;">Wi‑Fi only</span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8E897F" stroke-width="2.4" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+    </div>
+    <a href="Reconnect.dc.html" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-bottom: 1px solid #EEEBE5;">
+      <span style="width: 30px; height: 30px; border-radius: 8px; background: #6E6B66; display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 0-3 6.2"></path><path d="M20 6v6h-6"></path></svg></span>
+      <span style="flex-grow: 1; font-size: 16px;">Reconnect phone data</span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8E897F" stroke-width="2.4" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+    </a>
+    <div style="display: flex; align-items: center; gap: 12px; padding: 11px 14px;">
+      <span style="width: 30px; height: 30px; border-radius: 8px; background: #6E6B66; display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"></path></svg></span>
+      <span style="flex-grow: 1; font-size: 16px;">Export everything</span>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8E897F" stroke-width="2.4" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
     </div>
   </div>
@@ -80,6 +100,10 @@ button{font:inherit;color:inherit}
       <span style="flex-grow: 1; font-size: 16px;">Version</span>
       <span style="font-size: 15px; color: #6F6B64;">1.0 (412)</span>
     </div>
+  </div>
+
+  <div role="status" aria-live="polite" style="position: absolute; left: 16px; right: 16px; bottom: 24px; min-height: 44px; border-radius: 22px; background: #FFFFFF; border: 1px solid #E4E0D8; display: flex; align-items: center; padding: 0 16px; box-sizing: border-box;">
+    <span style="flex-grow: 1; font-size: 15px; color: #C8392F;">Couldn’t save your units. Try again.</span>
   </div>
 </div>
 </x-dc>

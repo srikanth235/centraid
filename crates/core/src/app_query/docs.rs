@@ -3,12 +3,9 @@
 //!
 //! The shelves, the filters, the order, the kinds and every civil date are the
 //! crate's (`centraid_apps_docs::{phone, kind}`); this module resolves the zone
-//! and the vault clock, runs the loader, and converts. Two facts only the core
+//! and the vault clock, runs the loader, and converts. One fact only the core
 //! can add, and adds here:
 //!
-//! - **the size phrase**, through `centraid_vault::page::format_byte_size` —
-//!   the formatter Home's Docs tile already reads, so a launcher row and a
-//!   drive row cannot disagree about one file;
 //! - **whether the head's bytes are on this device, and the file**, through
 //!   [`Vault::content_location`], which asks the byte store — a question no
 //!   page read can answer. The path is handed out only for a type that may be
@@ -25,7 +22,6 @@ use centraid_apps_kit::Denial;
 use centraid_apps_kit::civil as local;
 use centraid_apps_kit::error::KitResult;
 use centraid_vault::Vault;
-use centraid_vault::page::format_byte_size;
 use centraid_vault::time::zone::FireZone;
 
 use super::{
@@ -326,6 +322,7 @@ pub(crate) fn document(
     };
     settle(door, loaded, |(data, history)| {
         Answer::DocsDocument(wire::DocsDocument {
+            rev: data.rev,
             document: data.row.map(|row| row_to_wire(row, &zone, clock.now_ms)),
             path: data
                 .path
@@ -364,10 +361,6 @@ pub(crate) fn document(
 
 fn count_of(count: usize) -> u32 {
     u32::try_from(count).unwrap_or(u32::MAX)
-}
-
-fn size_of(bytes: Option<i64>) -> String {
-    bytes.map(format_byte_size).unwrap_or_default()
 }
 
 fn folder_to_wire(folder: FolderRow, count: usize) -> wire::DocsFolder {
@@ -420,7 +413,7 @@ fn row_to_wire(row: DocumentRow, zone: &FireZone, now_ms: i64) -> wire::DocsDocu
         kind: kind_to_wire(kind) as i32,
         kind_name: kind.name().to_owned(),
         surface: surface_to_wire(surface) as i32,
-        size: size_of(row.byte_size),
+        byte_size: row.byte_size,
         created_local: phone::local_minute(zone, &created_at),
         updated_local: phone::local_minute(zone, &updated_at),
         trashed_local: phone::local_minute(zone, &trashed_at),
@@ -443,6 +436,7 @@ fn row_to_wire(row: DocumentRow, zone: &FireZone, now_ms: i64) -> wire::DocsDocu
         trashed_at,
         purge_at,
         snippet: row.snippet.unwrap_or_default(),
+        in_earlier_version: row.in_earlier_version,
         thumbnail_path: String::new(),
     }
 }
@@ -479,7 +473,7 @@ fn with_thumbnails(vault: &Vault, rows: &mut [wire::DocsDocumentRow]) -> Result<
 fn version_to_wire(version: VersionRow, zone: &FireZone) -> wire::DocsVersion {
     let asserted_at = version.asserted_at.unwrap_or_default();
     wire::DocsVersion {
-        size: size_of(version.byte_size),
+        byte_size: version.byte_size,
         number: count_of(version.number),
         asserted_local: phone::local_minute(zone, &asserted_at),
         asserted_at,

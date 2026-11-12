@@ -257,6 +257,7 @@ fn put_back(task_id: &str, task: &TaskFacts) -> wire::ActRequest {
 }
 
 fn edit(ctx: &Ctx, task_id: &str, due: String, lead: Field<i64>) -> Settled {
+    // undo-exempt: a notification has no status line; its receipt offers the Undo.
     kit_act::act(
         ctx,
         act::reminders::EditTask {
@@ -321,6 +322,7 @@ pub fn handle(
                 return Handled::Ignored;
             };
             if let Some(request) = held.undo.clone() {
+                // undo-exempt: this is the receipt's own Undo.
                 kit_act::act(ctx, request, &key("undo", &held.task_id));
             }
             Handled::Undone
@@ -331,6 +333,7 @@ pub fn handle(
             };
             match verb {
                 Verb::Done => {
+                    // undo-exempt: a notification has no status line; its receipt offers the Undo.
                     let settled = kit_act::act(
                         ctx,
                         act::reminders::CompleteTask {
@@ -348,6 +351,7 @@ pub fn handle(
                             action: inverse.action,
                             input: inverse.input,
                             invoke_key: String::new(),
+                            autosave: false,
                         });
                     done(
                         ctx,

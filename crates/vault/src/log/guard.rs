@@ -79,6 +79,10 @@ pub struct Pending {
     /// The ids already stamped in this commit, so a second touch does not stamp
     /// `updated_at` a second time: a commit is one change.
     stamped: BTreeSet<String>,
+    /// The command (or other producer) the commit is for: the `cause` of the history it keeps.
+    producer: String,
+    /// Whether the commit is a quiet save (an editor's autosave): see [`CommitTx::set_quiet`].
+    quiet: bool,
 }
 
 impl<'conn> CommitTx<'conn> {
@@ -92,7 +96,17 @@ impl<'conn> CommitTx<'conn> {
     /// enricher. Kept for the diagnostic line a commit writes; nothing
     /// persists it since the log rows went.
     pub fn set_producer(&self, producer: impl Into<String>) {
-        *self.producer.borrow_mut() = producer.into();
+        let producer = producer.into();
+        self.pending.borrow_mut().producer.clone_from(&producer);
+        *self.producer.borrow_mut() = producer;
+    }
+
+    /// Mark this commit as a QUIET save: an editor's autosave, a write the screen makes with no
+    /// status line and no Undo. The caller says so; the vault never infers it from the command's
+    /// name. A quiet save may fold into the session of the version the same command's last quiet
+    /// save wrote ([`crate::history::settle`]) instead of writing another.
+    pub fn set_quiet(&self, quiet: bool) {
+        self.pending.borrow_mut().quiet = quiet;
     }
 
     /// Stamp an entity as changed: `updated_at`, and a place on the
@@ -255,6 +269,21 @@ impl Vault {
             // land together or not at all.
             let owed = std::mem::take(&mut self.pending.borrow_mut().reindex);
             crate::index::reindex(&connection, &owed)?;
+            // The history is part of the commit too: the states it replaced are kept with the
+            // change that replaced them, or neither lands.
+            let producer = std::mem::take(&mut self.pending.borrow_mut().producer);
+            let quiet = self.pending.borrow().quiet;
+            let now = self.clock().now_text();
+            crate::history::settle(
+                &connection,
+                &now,
+                if producer.is_empty() {
+                    "unnamed"
+                } else {
+                    &producer
+                },
+                quiet,
+            )?;
             bump_writes(&connection, &census, &self.clock().now_text())?;
             Ok(value)
         })();
@@ -309,7 +338,11 @@ const FTS_SHADOW_SUFFIXES: [&str; 5] = ["_content", "_data", "_docsize", "_idx",
 /// list of its words: derived rows the writer keeps and a rebuild rewrites,
 /// not rows a member made.
 pub(crate) fn is_index(table: &str) -> bool {
-    table == "search" || table == "search_word" || table == "search_owed" || is_fts_shadow(table)
+    table == "search"
+        || table == "search_past"
+        || table == "search_word"
+        || table == "search_owed"
+        || is_fts_shadow(table)
 }
 
 /// Whether a table is one of FTS5's shadows of the `search` index.
@@ -515,6 +548,11 @@ mod tests {
             "search_config",
             "search_word",
             "search_owed",
+            "search_past",
+            "search_past_data",
+            "search_past_docsize",
+            "search_past_idx",
+            "search_past_config",
             "action_key",
             "sqlite_sequence",
         ] {

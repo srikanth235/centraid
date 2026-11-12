@@ -76,10 +76,11 @@ import centraid.core.v1.PhotosLightboxWords
 import centraid.core.v1.Route
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ConfirmSheet
+import dev.centraid.android.kit.EarlierEntryCard
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.PhotosAlbumChoiceSheet
-import dev.centraid.android.kit.ScreenFailure
+import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.StageKey
@@ -110,9 +111,6 @@ public fun PhotosLightboxScreen(
 ) {
     val context = LocalContext.current
     val words = state.words ?: PhotosLightboxWords()
-    val loading = state.loading
-    val failure = state.failure
-    val denied = state.denied
     val photo = state.photo
     val screenReader = rememberScreenReader(context)
     val reduceMotion = rememberReducedMotion()
@@ -141,47 +139,44 @@ public fun PhotosLightboxScreen(
             // both schemes.
             .background(centraidColor("stage")),
     ) {
-        when {
-            // BEFORE THE READ LANDS THE STAGE STILL DRAWS what it has — the
-            // strip frame of the photograph a member swiped to — and the
-            // opening words only over a stage with nothing at all (never a ring).
-            loading != null -> {
-                LightboxStage(state, reduceMotion, player, live, onEvent, onClose)
-                if (state.film.none { it.photo_id == state.photo_id && it.tile != null }) {
-                    Text(
-                        text = words.opening,
-                        color = centraidColor("onStageSoft"),
-                        style = centraidType("small"),
-                        modifier = Modifier.align(Alignment.Center),
-                    )
+        // THE SHARED PAGE VIEW, in its stage variant: the gate, the failure and the note are drawn
+        // by it in the dark scheme; the stage draws what it has.
+        ReadStateView(
+            page = state.page!!,
+            onRetry = { onEvent(PhotosLightboxEvent(refreshed = PhotosLightboxEvent.Refreshed())) },
+            stage = true,
+            skeleton = {
+                // BEFORE THE READ LANDS THE STAGE STILL DRAWS what it has — the
+                // strip frame of the photograph a member swiped to — and the
+                // opening words only over a stage with nothing at all (never a ring).
+                Box(Modifier.fillMaxSize()) {
+                    LightboxStage(state, reduceMotion, player, live, onEvent, onClose)
+                    if (state.film.none { it.photo_id == state.photo_id && it.tile != null }) {
+                        Text(
+                            text = words.opening,
+                            color = centraidColor("onStageSoft"),
+                            style = centraidType("small"),
+                            modifier = Modifier.align(Alignment.Center),
+                        )
+                    }
                 }
-            }
-
-            failure != null -> ScreenFailure(
-                sentence = failure.sentence,
-                remedy = failure.remedy,
-                modifier = Modifier.align(Alignment.Center).padding(KitGeometry.GUTTER),
-            )
-
-            denied != null -> ScreenFailure(
-                sentence = denied.title,
-                remedy = denied.body,
-                modifier = Modifier.align(Alignment.Center).padding(16.dp),
-            )
-
-            photo != null -> {
-                LightboxStage(state, reduceMotion, player, live, onEvent, onClose)
-                if (drawnPath(photo) == null) {
-                    // NEVER A BROKEN IMAGE. Each of these is a truthful state.
-                    Text(
-                        text = photo.stage_label,
-                        color = centraidColor("onStage"),
-                        textAlign = TextAlign.Center,
-                        style = centraidType("body"),
-                        modifier = Modifier.align(Alignment.Center).padding(KitGeometry.GUTTER),
-                    )
+            },
+        ) {
+            if (photo != null) {
+                Box(Modifier.fillMaxSize()) {
+                    LightboxStage(state, reduceMotion, player, live, onEvent, onClose)
+                    if (drawnPath(photo) == null) {
+                        // NEVER A BROKEN IMAGE. Each of these is a truthful state.
+                        Text(
+                            text = photo.stage_label,
+                            color = centraidColor("onStage"),
+                            textAlign = TextAlign.Center,
+                            style = centraidType("body"),
+                            modifier = Modifier.align(Alignment.Center).padding(KitGeometry.GUTTER),
+                        )
+                    }
+                    if (chromeVisible) Chrome(state, photo, words, player, live, onEvent, onOpen, onClose)
                 }
-                if (chromeVisible) Chrome(state, photo, words, player, live, onEvent, onOpen, onClose)
             }
         }
         Sheets(state, photo, onEvent)
@@ -205,8 +200,6 @@ private fun LightViewer(
     onOpen: (Route) -> Unit,
     onClose: () -> Unit,
 ) {
-    val failure = state.failure
-    val denied = state.denied
     val infoOpen = state.sheet == PhotosLightboxState.Sheet.SHEET_INFO
     Column(Modifier.fillMaxSize().background(Surface.page).statusBarsPadding().navigationBarsPadding()) {
         Row(
@@ -226,22 +219,19 @@ private fun LightViewer(
             }
             MoreMenu(state.menu, words.more, onEvent)
         }
-        when {
-            failure != null -> ScreenFailure(
-                sentence = failure.sentence,
-                remedy = failure.remedy,
-                modifier = Modifier.padding(KitGeometry.GUTTER).weight(1f),
-            )
-            denied != null -> ScreenFailure(
-                sentence = denied.title,
-                remedy = denied.body,
-                modifier = Modifier.padding(KitGeometry.GUTTER).weight(1f),
-            )
-            else -> DetailsSheetHost(
+        val stage: @Composable () -> Unit = {
+            DetailsSheetHost(
                 open = infoOpen,
                 onOpenChanged = { open -> onEvent(sheetEvent(if (open) PhotosLightboxState.Sheet.SHEET_INFO else PhotosLightboxState.Sheet.SHEET_NONE)) },
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                details = { if (photo != null) InfoCards(state, photo, words, onEvent, onOpen) },
+                modifier = Modifier.fillMaxSize(),
+                details = {
+                    if (photo != null) {
+                        InfoCards(state, photo, words, onEvent, onOpen)
+                        // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the foot of the details.
+                        EarlierEntryCard(photo.earlier, onOpen)
+                        dev.centraid.android.kit.OriginLineView(photo.origin)
+                    }
+                },
             ) {
                 // THE PHOTOGRAPH ON THE LIGHT PAGE, no black letterbox, with what plays or loads over its foot.
                 Box(Modifier.fillMaxSize()) {
@@ -290,6 +280,16 @@ private fun LightViewer(
                                     }
             }
         }
+        // A FIRST READ DRAWS THE STAGE ALONE (the photograph's frame is already known from the
+        // film); a failed or refused one draws the shared failure or gate; a failed re-read keeps
+        // the photograph under the one-sentence note.
+        ReadStateView(
+            page = state.page!!,
+            onRetry = { onEvent(PhotosLightboxEvent(refreshed = PhotosLightboxEvent.Refreshed())) },
+            modifier = Modifier.weight(1f),
+            skeleton = stage,
+            data = stage,
+        )
         // THE BAR IS THE PAGE'S LAST ROW: the photograph and the details are laid out above it, so
         // it never covers the Place card's links.
         if (photo != null) {
@@ -300,7 +300,20 @@ private fun LightViewer(
                     .padding(bottom = 8.dp),
             ) {
                 state.status?.takeIf { it.sentence.isNotEmpty() && !it.refused }?.let {
-                    KitText(it.sentence, KitType.Meta, Surface.meta, Modifier.fillMaxWidth().padding(bottom = 4.dp).testTag("photos.lightbox.status"))
+                    Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        KitText(it.sentence, KitType.Meta, Surface.meta, Modifier.weight(1f).testTag("photos.lightbox.status"))
+                        if (it.action_label.isNotEmpty()) {
+                            KitText(
+                                it.action_label,
+                                KitType.Meta,
+                                Surface.ink,
+                                Modifier
+                                    .clickable { onEvent(PhotosLightboxEvent(status_acted = PhotosLightboxEvent.StatusActed())) }
+                                    .padding(start = 8.dp)
+                                    .testTag("photos-lightbox-status-action"),
+                            )
+                        }
+                    }
                 }
                 Box(Modifier.clip(CircleShape).background(Surface.card)) {
                     Toolbar(state, words, photo.trashed, onEvent, onOpen, Surface.meta, light = true)
@@ -442,16 +455,31 @@ private fun Chrome(
         state.status?.takeIf { it.sentence.isNotEmpty() }?.let { status ->
             // ON ITS OWN PLATE, clear of the photograph's pixels beneath it.
             Box(Modifier.fillMaxWidth().padding(bottom = 8.dp), contentAlignment = Alignment.Center) {
-                Text(
-                    text = status.sentence,
-                    color = ink,
-                    textAlign = TextAlign.Center,
-                    style = centraidType("small"),
+                Row(
                     modifier = Modifier
                         .clip(CircleShape)
                         .background(centraidColor("stageSunken"))
                         .padding(horizontal = 16.dp, vertical = 8.dp),
-                )
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = status.sentence,
+                        color = ink,
+                        textAlign = TextAlign.Center,
+                        style = centraidType("small"),
+                    )
+                    if (status.action_label.isNotEmpty()) {
+                        Text(
+                            text = status.action_label,
+                            color = ink,
+                            style = centraidType("small"),
+                            modifier = Modifier
+                                .clickable { onEvent(PhotosLightboxEvent(status_acted = PhotosLightboxEvent.StatusActed())) }
+                                .padding(start = 12.dp)
+                                .testTag("photos-lightbox-status-action"),
+                        )
+                    }
+                }
             }
         }
 
@@ -629,6 +657,9 @@ private fun Sheets(
     state.people_picker?.takeIf { it.open_ }?.let { picker ->
         dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(PhotosLightboxEvent(people = link)) }
     }
+    state.link_picker?.takeIf { it.open_ }?.let { picker ->
+        dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(PhotosLightboxEvent(link = link)) }
+    }
     val album = state.album_choice
     if (album != null && album.open_) {
         PhotosAlbumChoiceSheet(album) { event -> onEvent(PhotosLightboxEvent(album_choice = event)) }
@@ -777,6 +808,27 @@ private fun InfoCards(
             dev.centraid.android.kit.LinkSectionView(
                 people,
                 { link -> onEvent(PhotosLightboxEvent(people = link)) },
+                onOpen,
+                padded = false,
+            )
+        }
+
+        // ATTACHMENTS (#1185): the kit's section, after who is in it; Rust makes every word and row.
+        photo.attachments?.let { section ->
+            dev.centraid.android.screens.agenda.AgendaAttachmentsView(
+                section = section,
+                prefix = "photos-lightbox",
+                onEvent = { onEvent(PhotosLightboxEvent(attachment = it)) },
+                onOpen = onOpen,
+                padded = false,
+            )
+        }
+
+        // LINKED TO (#1185): the kit's section, after the attachments; Rust makes every word and row.
+        photo.links?.let { section ->
+            dev.centraid.android.kit.LinkSectionView(
+                section,
+                { link -> onEvent(PhotosLightboxEvent(link = link)) },
                 onOpen,
                 padded = false,
             )

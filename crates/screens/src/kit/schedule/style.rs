@@ -49,6 +49,18 @@ pub struct Draft {
 }
 
 impl Draft {
+    /// The id of what an edit started from (`None` while making one).
+    #[must_use]
+    pub fn editing_id(&self) -> Option<&str> {
+        self.initial.as_ref().map(|initial| initial.id.as_str())
+    }
+
+    /// The name the draft holds.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
     /// A new list or calendar: no name, the palette's first colour, no icon.
     pub fn making(subject: Subject) -> Self {
         Self {
@@ -174,6 +186,9 @@ impl Draft {
             color_key: self.color.clone(),
             icon_key: self.icon.clone().unwrap_or_default(),
             cancel_label: words::cancel(locale),
+            // The host that may remove what the sheet edits sets this.
+            delete_label: String::new(),
+            delete_note: String::new(),
         }
     }
 

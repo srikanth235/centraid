@@ -76,6 +76,10 @@ message PhotosSearch {
   // photograph and the labels on one (twelve at most of each), by name.
   repeated PhotosNamed resting_places = 9;
   repeated PhotosNamed resting_labels = 10;
+  // THE LIVE PHOTOGRAPHS FOUND ONLY BY WHAT THEY SAID BEFORE (#1185): an earlier caption, place
+  // or recognised text held the words and nothing the photograph says now does, and no leg
+  // above put it in `cells`. Rank order, at most `limit`. Each opens its Earlier versions.
+  repeated PhotosCell earlier_cells = 11;
 }
 
 // A place, an album or a label by the name it was found under.

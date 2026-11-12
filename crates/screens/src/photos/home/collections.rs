@@ -7,7 +7,7 @@
 //! Four sections, each foldable, with the rows sorted the way the system sorts
 //! them: Pinned holds what a member reaches for (Favorites, Videos, and Places in
 //! the slot the system gives its Map); Albums the member's own; Utilities the
-//! housekeeping (Archive, Trash); Recently deleted the albums in the
+//! housekeeping (Archive, Trash, Export); Recently deleted the albums in the
 //! trash, each with its Restore. A tap on a card is the route in the card.
 
 use centraid_api_proto::core_v1 as wire;
@@ -18,9 +18,13 @@ use super::super::cells::{self, Link};
 use super::super::routes;
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
-use crate::kit::read::{self, Reading};
+use crate::kit::export;
+use crate::kit::read::{self, Page};
+use crate::kit::undo::Undo;
 use crate::screen::Ctx;
-use crate::strings::{Locale, fill, photos as words, photos_home as sentences};
+use crate::strings::{
+    Locale, fill, photos as words, photos_home as sentences, photos_shelf as shelf_words,
+};
 
 pub const PINNED: &str = "pinned";
 pub const ALBUMS: &str = "albums";
@@ -28,25 +32,39 @@ pub const UTILITIES: &str = "utilities";
 pub const DELETED: &str = "deleted";
 const SECTIONS: [&str; 4] = [PINNED, ALBUMS, UTILITIES, DELETED];
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Collections {
-    pub reading: Option<Reading<wire::PhotosAlbums>>,
+    /// The albums read, as a page: nothing yet is loading, and a failed refresh keeps them.
+    pub page: Page<wire::PhotosAlbums>,
     pub folded: Vec<String>,
     pub new_album_name: String,
     /// The album a delete confirm is asking about.
     pub deleting: Option<String>,
 }
 
+impl Default for Collections {
+    fn default() -> Self {
+        Self {
+            page: Page::loading(),
+            folded: Vec::new(),
+            new_album_name: String::new(),
+            deleting: None,
+        }
+    }
+}
+
 impl Collections {
     pub fn read(&mut self, ctx: &Ctx) {
-        self.reading = Some(read::read(
+        let reading = read::read(
             ctx,
             load::photos::Albums::default(),
             |answer| match answer {
                 Answer::PhotosAlbums(albums) => Some(*albums),
                 _ => None,
             },
-        ));
+        );
+        let held = std::mem::replace(&mut self.page, Page::loading());
+        self.page = held.after(reading, ctx.locale(), |_| false);
     }
 
     pub fn toggle(&mut self, section: &str) {
@@ -80,19 +98,20 @@ impl Collections {
     ///
     /// # Errors
     /// The vault's sentence for a refused create.
-    pub fn create(&mut self, ctx: &Ctx) -> Result<bool, String> {
+    pub fn create(&mut self, ctx: &Ctx, door: &mut Undo) -> Result<bool, String> {
         let name = self.new_album_name.trim().to_owned();
         if name.is_empty() {
             return Ok(false);
         }
         let key = kit_act::key(&["create-album", &name], kit_act::fresh());
-        let settled = kit_act::act(
+        let settled = door.act(
             ctx,
             act::photos::CreateAlbum {
                 title: name,
                 id: None,
             },
             &key,
+            shelf_words::album_created,
         );
         if settled.committed {
             self.new_album_name.clear();
@@ -107,14 +126,15 @@ impl Collections {
     ///
     /// # Errors
     /// The vault's sentence for a refused delete.
-    pub fn delete(ctx: &Ctx, album_id: &str) -> Result<(), String> {
+    pub fn delete(ctx: &Ctx, door: &mut Undo, album_id: &str) -> Result<(), String> {
         let key = kit_act::key(&["delete-album", album_id], kit_act::fresh());
-        let settled = kit_act::act(
+        let settled = door.act(
             ctx,
             act::photos::DeleteAlbum {
                 album_id: album_id.to_owned(),
             },
             &key,
+            shelf_words::album_deleted,
         );
         if settled.committed {
             Ok(())
@@ -127,14 +147,15 @@ impl Collections {
     ///
     /// # Errors
     /// The vault's sentence for a refused restore.
-    pub fn restore(ctx: &Ctx, album_id: &str) -> Result<(), String> {
+    pub fn restore(ctx: &Ctx, door: &mut Undo, album_id: &str) -> Result<(), String> {
         let key = kit_act::key(&["restore-album", album_id], kit_act::fresh());
-        let settled = kit_act::act(
+        let settled = door.act(
             ctx,
             act::photos::RestoreAlbum {
                 album_id: album_id.to_owned(),
             },
             &key,
+            shelf_words::album_restored,
         );
         if settled.committed {
             Ok(())
@@ -144,19 +165,17 @@ impl Collections {
     }
 
     pub fn view(&self, locale: Locale, link: Link) -> wire::PhotosCollections {
-        let content = match &self.reading {
-            None => wire::photos_collections::Content::Loading(wire::Loading { first_load: true }),
-            Some(Reading::Data(albums)) => {
+        wire::PhotosCollections {
+            page: Some(self.page.wire(
+                locale,
+                |denial| super::super::denied(locale, denial),
+                wire::EmptyState::default,
+            )),
+            content: self.page.data().map(|albums| {
                 wire::photos_collections::Content::Data(wire::PhotosCollectionsData {
                     sections: self.sections(locale, link, albums),
                 })
-            }
-            Some(Reading::Denied(_) | Reading::Failed) => {
-                wire::photos_collections::Content::Failure(read::failure(locale))
-            }
-        };
-        wire::PhotosCollections {
-            content: Some(content),
+            }),
             folded: self.folded.clone(),
             new_album_name: self.new_album_name.clone(),
             new_album_can_submit: !self.new_album_name.trim().is_empty(),
@@ -301,6 +320,19 @@ impl Collections {
                     .unwrap_or(&wire::PhotosShelfTile::default()),
                 "trash",
             ),
+            // EXPORT (#1185): the kit's row, beside Trash, a route the shell pushes.
+            {
+                let entry = export::entry(locale, crate::photos::EXPORT);
+                wire::PhotosCollectionCard {
+                    kind: Kind::Shelf as i32,
+                    id: entry.key.to_owned(),
+                    accessibility_label: entry.label.clone(),
+                    title: entry.label,
+                    route: Some(entry.route),
+                    icon_key: entry.icon_key.to_owned(),
+                    ..wire::PhotosCollectionCard::default()
+                }
+            },
         ];
 
         let album_cards: Vec<wire::PhotosCollectionCard> = albums

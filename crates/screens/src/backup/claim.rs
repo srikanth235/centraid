@@ -16,6 +16,7 @@
 
 use centraid_api_proto::core_v1 as wire;
 
+use crate::kit::quantity::{Quantity, UnitsPref};
 use crate::strings::{Locale, backup as line_words, backup_home as words, fill};
 
 /// The whole line, from the only facts a gateway produced: `acked_at_ms` is the
@@ -63,16 +64,7 @@ pub fn frozen(locale: Locale, unacked: u64, since: &str) -> String {
 /// is rounded DOWN: a size said never claims a byte more than there is.
 #[must_use]
 pub fn bytes(count: u64) -> String {
-    match count {
-        0..=999 => format!("{count} bytes"),
-        1_000..=999_999 => format!("{} KB", count / 1_000),
-        1_000_000..=999_999_999 => format!("{} MB", count / 1_000_000),
-        1_000_000_000..=99_999_999_999 => {
-            let tenths = count / 100_000_000;
-            format!("{}.{} GB", tenths / 10, tenths % 10)
-        }
-        _ => format!("{} GB", count / 1_000_000_000),
-    }
+    Quantity::bytes_floor(count).words(Locale::En, UnitsPref::Metric)
 }
 
 /// What a member is told when a pass stopped, one sentence per reason.

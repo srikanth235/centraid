@@ -410,6 +410,7 @@ pub(crate) fn note(
                 format: note.format,
                 pinned: note.pinned,
                 body: note.body,
+                rev: note.rev,
                 created_at: note.created_at,
                 updated_at: note.updated_at,
                 deleted_at: note.deleted_at,
@@ -531,6 +532,7 @@ fn hit_to_wire(hit: SearchRow, zone: Option<&FireZone>) -> wire::NotesSearchHit 
             .map(attachment_to_wire)
             .collect(),
         snippet: hit.snippet,
+        in_earlier_version: hit.in_earlier_version,
     }
 }
 
@@ -853,6 +855,42 @@ mod tests {
         assert!(nothing.hits.is_empty() && nothing.corrected.is_empty());
     }
 
+    /// NOTES' SEARCH SAYS WHEN THE WORDS ARE ONLY IN AN EARLIER VERSION (#1185): the row is
+    /// the live note, once, and the flag is set only when nothing matches now.
+    #[test]
+    fn a_note_found_only_by_an_earlier_version_says_so() {
+        let scratch = Scratch::founded();
+        let note = scratch.run(
+            "note.create",
+            serde_json::json!({ "title": "Plan", "body": "alpha shared" }),
+        )["id"]
+            .as_str()
+            .expect("a note id")
+            .to_owned();
+        scratch.run(
+            "note.edit",
+            serde_json::json!({ "id": note, "body": "beta shared" }),
+        );
+        let search = |term: &str| {
+            let Ok(Answer::NotesSearch(found)) =
+                scratch.ask(Q::NotesSearch(wire::NotesSearchRequest {
+                    term: term.to_owned(),
+                    tz: TZ.to_owned(),
+                }))
+            else {
+                panic!("search answers");
+            };
+            found
+                .hits
+                .into_iter()
+                .map(|hit| (hit.note_id, hit.in_earlier_version))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(search("alpha"), [(note.clone(), true)]);
+        assert_eq!(search("beta"), [(note.clone(), false)]);
+        assert_eq!(search("shared"), [(note, false)]);
+    }
+
     /// A TYPO THAT IS IN THE VAULT TOO: one note says `budegt` and five say
     /// `budget`. The exact words find the one note; because that is a thin
     /// answer and `budegt` is a whole word held by one document where `budget`
@@ -1038,7 +1076,8 @@ mod tests {
         };
         assert!(filtered.notes.is_empty(), "the one live note is filed");
 
-        // A LOCKER ITEM IS A LINK TARGET (#1135), found by its plain title.
+        // A LOCKER ITEM IS NEVER A LINK TARGET (#1185, D11): a note cannot link to one, so the
+        // powerbox does not offer it, though its plain title would match.
         scratch.run(
             "locker.add_item",
             serde_json::json!({"item_id": "tomato-login", "type": "login",
@@ -1059,12 +1098,10 @@ mod tests {
                 .any(|target| target.entity == "note" && target.id == kept)
         );
         assert!(
-            targets
+            !targets
                 .targets
                 .iter()
-                .any(|target| target.entity == "locker_item"
-                    && target.id == "tomato-login"
-                    && target.app_id == "locker"),
+                .any(|target| target.entity == "locker_item"),
             "{:?}",
             targets.targets
         );

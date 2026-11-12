@@ -66,7 +66,7 @@ import centraid.core.v1.BackupHomeState
 import centraid.core.v1.BackupInk
 import centraid.core.v1.Route
 import dev.centraid.android.kit.AppTile
-import dev.centraid.android.kit.FailureView
+import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.InkButton
 import dev.centraid.android.kit.KitProgressBar
 import dev.centraid.android.kit.KitSpinner
@@ -74,7 +74,6 @@ import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.kitTextStyle
 import androidx.compose.ui.text.font.FontWeight
 import dev.centraid.android.kit.OutlineButton
-import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
@@ -107,16 +106,14 @@ internal fun BackupHomeScreen(
     onEvent: (BackupHomeEvent) -> Unit,
     onOpen: (Route) -> Unit,
 ) {
-    val data = state.data_
-    val failure = state.failure
-    when {
-        data != null -> BackupPage(data, onEvent, onOpen)
-        failure != null -> FailureView(
-            sentence = failure.sentence,
-            remedy = failure.remedy,
-            onRetry = { onEvent(BackupHomeEvent(retry = BackupHomeEvent.Retry())) },
-        )
-        else -> RowSkeleton()
+    // THE READ IS THE KIT'S PAGE STATE (#1185): loading, failure with Retry, and the page under the
+    // one sentence a refresh that failed leaves.
+    ReadStateView(
+        page = state.page!!,
+        onRetry = { onEvent(BackupHomeEvent(retry = BackupHomeEvent.Retry())) },
+    ) {
+        val data = state.data_ ?: return@ReadStateView
+        BackupPage(data, onEvent, onOpen)
     }
 }
 

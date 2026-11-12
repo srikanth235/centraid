@@ -25,6 +25,12 @@
 //!  ORDER BY hits.tier, hits.rank, e.id LIMIT ?
 //! ```
 //!
+//! A third leg reads what an item said in an EARLIER VERSION (`search_past`, #1185), for the
+//! items that do not match now: the newest [`TAIL_ROWS`] matching versions (the cap counts the
+//! versions the index yields, before the two tests below, so the work is bounded by it), each
+//! kept only when it is the item's newest matching version and the live index does not match the
+//! item. The row is the live item once, with a tier of [`EARLIER_STAGE`] or more.
+//!
 //! `<filters>` is `e.deleted_at IS NULL AND (e.title <> '' OR e.kind = 'photo') AND e.kind IN (...)`
 //! and `e.id NOT IN (...)` when the caller excludes ids.
 //!
@@ -100,6 +106,11 @@ const RANK_FUNCTION: &str = "bm25(2.0, 1.0)";
 /// bm25 score among forty thousand rows, and ranking all of them is what cost
 /// seconds a keystroke. A match in a TITLE is not capped (tier 0).
 pub const TAIL_ROWS: usize = 500;
+
+/// The stage number the earlier-version slabs count from: stage `EARLIER_STAGE + k` (k from one) is the
+/// `k`-th slab of items found only by what they said before, after every live stage. A hit whose
+/// tier is at least this is "in an earlier version".
+pub const EARLIER_STAGE: i64 = 1_000_000;
 
 /// The door, over a connection to a vault and the word list that vault keeps.
 pub struct SqliteDoor<'connection> {
@@ -214,6 +225,9 @@ fn stage_cte(
     excluded_ids: &[String],
     binds: &mut Binds,
 ) -> Result<String, SearchError> {
+    if stage >= EARLIER_STAGE {
+        return past_cte(stage - EARLIER_STAGE - 1, query, kinds, excluded_ids, binds);
+    }
     let rank = binds.text(RANK_FUNCTION);
     let expression = if stage == 0 {
         binds.text(title_expression(query)?)
@@ -262,6 +276,7 @@ fn hits_cte(
     );
     let cap = binds.push(Value::Integer(i64::try_from(TAIL_ROWS).unwrap_or(i64::MAX)));
     let filters = filters_of(kinds, excluded_ids, binds);
+    let earlier = past_leg(EARLIER_STAGE + 1, 0, query, kinds, excluded_ids, binds)?;
     // **THE PLAN OF THE TAIL LEG** (`EXPLAIN QUERY PLAN`, held by
     // `the_tail_leg_streams_the_index_and_does_not_sort_its_matches`): the index
     // is walked by FTS5 itself in rowid descending order, `entity` is probed by
@@ -280,8 +295,70 @@ fn hits_cte(
                FROM search JOIN entity e ON e.n = search.rowid
               WHERE search MATCH {tail} AND search.rank MATCH {rank} AND {filters}
               ORDER BY search.rowid DESC
-              LIMIT {cap}))"
+              LIMIT {cap})
+           UNION ALL
+           {earlier})"
     ))
+}
+
+/// The leg that finds an item by what it said in an earlier version, for the items that do not
+/// match what they say now: the newest [`TAIL_ROWS`] matching versions after `slab` slabs, each
+/// kept only if it is the item's newest matching version (so an item is one row, in the slab
+/// of its newest match) and the live index does not match the item. The cap counts the
+/// versions the index yields, before those two tests, so the work is bounded by the cap and
+/// not by how many items also match now. Its rows carry tier `tier`, which says "in an earlier
+/// version" and which slab ([`EARLIER_STAGE`]).
+fn past_leg(
+    tier: i64,
+    slab: i64,
+    query: &str,
+    kinds: &[Kind],
+    excluded_ids: &[String],
+    binds: &mut Binds,
+) -> Result<String, SearchError> {
+    let expression = binds.text(match_expression(query)?);
+    let rank = binds.text(RANK_FUNCTION);
+    let filters = filters_of(kinds, excluded_ids, binds);
+    let cap = binds.push(Value::Integer(i64::try_from(TAIL_ROWS).unwrap_or(i64::MAX)));
+    let skip = binds.push(Value::Integer(
+        i64::try_from(TAIL_ROWS)
+            .unwrap_or(i64::MAX)
+            .saturating_mul(slab),
+    ));
+    Ok(format!(
+        "SELECT p.pn, {tier}, p.rank FROM (
+           SELECT (search_past.rowid >> 24) AS pn, search_past.rowid AS rid, search_past.rank AS rank
+             FROM search_past
+            WHERE search_past MATCH {expression} AND search_past.rank MATCH {rank}
+            ORDER BY search_past.rowid DESC
+            LIMIT {cap} OFFSET {skip}) p
+           JOIN entity e ON e.n = p.pn
+          WHERE {filters}
+            AND NOT EXISTS (SELECT 1 FROM search WHERE search.rowid = p.pn AND search MATCH {expression})
+            AND NOT EXISTS (SELECT 1 FROM search_past q
+                             WHERE q.rowid > p.rid AND q.rowid <= ((p.pn << 24) | 16777215)
+                               AND search_past MATCH {expression})"
+    ))
+}
+
+/// One slab of the earlier-version stage as a CTE named `hits(n, tier, rank)`; `slab` counts
+/// from zero.
+fn past_cte(
+    slab: i64,
+    query: &str,
+    kinds: &[Kind],
+    excluded_ids: &[String],
+    binds: &mut Binds,
+) -> Result<String, SearchError> {
+    let leg = past_leg(
+        EARLIER_STAGE + slab + 1,
+        slab,
+        query,
+        kinds,
+        excluded_ids,
+        binds,
+    )?;
+    Ok(format!("hits(n, tier, rank) AS ({leg})"))
 }
 
 /// The tier-1 expression: the words anywhere, and not all in the title (those
@@ -311,7 +388,22 @@ type Hit = (String, String, String, i64, f64);
 impl SqliteDoor<'_> {
     /// The text the entity was indexed from, excerpted around the words asked
     /// for; empty when the hit was on the title alone.
-    fn snippet(&self, id: &str, kind: &str, tokens: &[String]) -> Result<String, SearchError> {
+    fn snippet(
+        &self,
+        id: &str,
+        kind: &str,
+        tokens: &[String],
+        earlier: bool,
+    ) -> Result<String, SearchError> {
+        if earlier {
+            // The words that matched are in an earlier version: the newest one that says them.
+            let texts = centraid_vault::index::earlier_texts(self.connection, id)
+                .map_err(|error| SearchError::Sqlite(error.to_string()))?;
+            return Ok(texts
+                .iter()
+                .find_map(|text| snippet_of(text, tokens))
+                .unwrap_or_default());
+        }
         Ok(Kind::parse(kind)
             .map(|kind| centraid_vault::index::text_of(self.connection, id, kind))
             .transpose()
@@ -387,9 +479,14 @@ impl SqliteDoor<'_> {
             );
             let rows = self.hits(&sql, binds)?;
             // A slab read whole and found empty is the end of the tail; one read
-            // past a cursor may only be the end of that slab.
+            // past a cursor may only be the end of that slab. The live tail's end is the
+            // start of the items found only by what they said before.
             if stage > 0 && rows.is_empty() && stage > resumed {
-                break;
+                if stage >= EARLIER_STAGE {
+                    break;
+                }
+                stage = EARLIER_STAGE + 1;
+                continue;
             }
             hits.extend(rows);
             stage += 1;
@@ -403,7 +500,8 @@ impl SqliteDoor<'_> {
         tokens: &[String],
         with_snippet: bool,
     ) -> Result<Target, SearchError> {
-        let (id, kind, title, _, _) = hit;
+        let (id, kind, title, tier, _) = hit;
+        let earlier = *tier >= EARLIER_STAGE;
         // A photograph with no title is answered under the day it was taken.
         let title = match Kind::parse(kind) {
             Some(parsed) if title.is_empty() => {
@@ -419,10 +517,11 @@ impl SqliteDoor<'_> {
             id: id.clone(),
             title,
             snippet: if with_snippet {
-                self.snippet(id, kind, tokens)?
+                self.snippet(id, kind, tokens, earlier)?
             } else {
                 String::new()
             },
+            in_earlier_version: earlier,
         })
     }
 }
@@ -742,9 +841,11 @@ mod tests {
         );
     }
 
-    /// The per-kind statement reads the index twice, once per tier, and probes
-    /// `entity` by its key; the window function orders the rows the tiers
-    /// produced and nothing else.
+    /// The per-kind statement reads the index twice, once per tier, and the earlier-version
+    /// index once, newest first and capped like the tail (`search_past`'s walk streams in rowid
+    /// order and stops at the cap), probing the live index by rowid and the earlier index by
+    /// the item's rowid range for each version it yields; it probes `entity` by its key; the
+    /// window function orders the rows the tiers produced and nothing else.
     #[test]
     fn the_per_kind_statement_reads_the_index_once_per_tier() {
         let dir = tempfile::tempdir().expect("a directory");
@@ -765,8 +866,17 @@ mod tests {
             })
             .expect("explains");
         let scans = |needle: &str| plan.iter().filter(|text| text.contains(needle)).count();
-        assert_eq!(scans("VIRTUAL TABLE INDEX 192:"), 1, "{plan:?}");
-        assert_eq!(scans("VIRTUAL TABLE INDEX 0:"), 1, "{plan:?}");
+        assert_eq!(scans("SCAN search VIRTUAL TABLE INDEX 192:"), 1, "{plan:?}");
+        assert_eq!(scans("SCAN search VIRTUAL TABLE INDEX 0:rM"), 1, "{plan:?}");
+        assert_eq!(
+            scans("SCAN search_past VIRTUAL TABLE INDEX 192:"),
+            1,
+            "{plan:?}"
+        );
+        // The two probes of the earlier leg: the live index by the item's rowid, and the
+        // earlier index above the version by the item's own rowid range.
+        assert_eq!(scans("SCAN search VIRTUAL TABLE INDEX 0:=M"), 1, "{plan:?}");
+        assert_eq!(scans("SCAN q VIRTUAL TABLE INDEX 0:M"), 1, "{plan:?}");
         assert_eq!(scans("SCAN e"), 0, "{plan:?}");
     }
 }

@@ -9,6 +9,7 @@ use centraid_screens::field::Keyed;
 use centraid_screens::kit::act as kit_act;
 use centraid_screens::kit::civil::HourCycle;
 use centraid_screens::kit::read::{self, Reading};
+use centraid_screens::kit::undo::Undo;
 use centraid_screens::photos;
 use centraid_screens::photos::album_choice::{self, AlbumChoice};
 use centraid_screens::photos::cells::{self, Link};
@@ -504,7 +505,7 @@ fn the_bar_says_how_many_in_the_screens_own_words_and_offers_the_verbs_for_where
             ("Favorite", true),
             ("Unfavorite", true),
             ("Add to album", true),
-            ("Trash", true)
+            ("Move to trash", true)
         ]
     );
 
@@ -568,12 +569,12 @@ fn favouriting_keeps_the_library_selection_and_a_heart_lands_on_every_pick() {
 }
 
 #[test]
-fn trash_asks_first_in_full_sentences_and_a_library_trash_ends_the_mode() {
+fn move_to_trash_asks_nothing_says_so_with_undo_and_a_library_trash_ends_the_mode() {
     let d = driver();
     let keep = photo(&d, "trash-keep");
     let gone = photo(&d, "trash-gone");
     let mut selection = Selection::new(Offer::Library, Drain::Ends, Wording::Selected);
-    // Nothing picked asks nothing.
+    // Nothing picked writes nothing.
     assert_eq!(
         update(&d, &mut selection, &tap(Verb::Trash), &[]),
         Outcome::Moved
@@ -581,47 +582,31 @@ fn trash_asks_first_in_full_sentences_and_a_library_trash_ends_the_mode() {
     assert!(selection.view(Locale::En).confirm.is_none());
 
     selection.toggle(&gone);
-    assert_eq!(
-        update(&d, &mut selection, &tap(Verb::Trash), &[]),
-        Outcome::Moved
-    );
-    let view = selection.view(Locale::En);
-    let confirm = view.confirm.expect("a confirm");
-    assert_eq!(confirm.title, "Move 1 photo to the trash?");
-    assert_eq!(
-        confirm.body,
-        "Restore them from the trash later. Your camera roll is not touched."
-    );
-    assert_eq!(confirm.confirm_label, "Move to trash");
-    assert!(confirm.destructive);
-    assert!(
-        ids_of(&shelf(&d, load::photos::ShelfView::Live, None)).contains(&gone),
-        "nothing happened yet"
-    );
-
-    // Dismissed: nothing is written and the pick stays.
-    update(
-        &d,
-        &mut selection,
-        &selection_event(sel::Kind::Dismissed(sel::ConfirmDismissed {})),
-        &[],
-    );
-    assert!(selection.view(Locale::En).confirm.is_none());
-    assert_eq!(selection.picked(), std::slice::from_ref(&gone));
-
-    // Confirmed: trashed, and the mode ends as the writes go.
-    update(&d, &mut selection, &tap(Verb::Trash), &[]);
-    let outcome = update(
-        &d,
-        &mut selection,
-        &selection_event(sel::Kind::Confirmed(sel::Confirmed {})),
-        &[],
-    );
+    let outcome = update(&d, &mut selection, &tap(Verb::Trash), &[]);
     assert!(matches!(outcome, Outcome::Wrote(ref w) if w.ok()));
+    assert!(selection.view(Locale::En).confirm.is_none(), "no confirm");
     assert!(!selection.selecting() && selection.picked().is_empty());
+    let status = selection.status(Locale::En).expect("a status line");
+    assert_eq!(status.sentence, "1 photo moved to trash");
+    assert_eq!(status.action_label, "Undo");
     let live = ids_of(&shelf(&d, load::photos::ShelfView::Live, None));
     assert!(!live.contains(&gone) && live.contains(&keep));
     assert!(ids_of(&shelf(&d, load::photos::ShelfView::Trash, None)).contains(&gone));
+
+    // Undo restores exactly those photographs.
+    let outcome = update(
+        &d,
+        &mut selection,
+        &selection_event(sel::Kind::StatusActed(sel::StatusActed {})),
+        &[],
+    );
+    assert!(matches!(outcome, Outcome::Wrote(ref w) if w.ok()));
+    // The kit's door says "Undone" and offers nothing more.
+    let status = selection.status(Locale::En).expect("a status line");
+    assert_eq!(status.sentence, "Undone");
+    assert_eq!(status.action_label, "");
+    let live = ids_of(&shelf(&d, load::photos::ShelfView::Live, None));
+    assert!(live.contains(&gone) && live.contains(&keep));
 }
 
 #[test]
@@ -659,7 +644,7 @@ fn a_shelf_drains_the_pick_as_photographs_settle_and_keeps_the_ones_the_vault_re
     );
     assert!(selection.selecting());
     assert_eq!(selection.refusal(), Some(sentence.as_str()));
-    let status = selection.status().expect("a status line");
+    let status = selection.status(Locale::En).expect("a status line");
     assert!(status.refused && status.sentence == sentence);
     assert!(ids_of(&shelf(&d, load::photos::ShelfView::Live, None)).contains(&trashed));
 
@@ -716,7 +701,7 @@ fn delete_forever_asks_with_the_whole_cost_and_destroys_only_when_confirmed() {
         confirm.body,
         "Captions, tags and album entries go too. This cannot be undone."
     );
-    assert_eq!(confirm.confirm_label, "Delete 2 forever");
+    assert_eq!(confirm.confirm_label, "Delete forever");
     assert!(confirm.destructive);
     assert!(ids_of(&shelf(&d, load::photos::ShelfView::Trash, None)).contains(&one));
 
@@ -766,7 +751,7 @@ fn pick(
     event: &wire::PhotosAlbumChoiceEvent,
     picked: &[String],
 ) -> album_choice::Outcome {
-    d.with_ctx(|ctx| sheet.update(event, picked, ctx))
+    d.with_ctx(|ctx| sheet.update(event, picked, &mut Undo::default(), ctx))
 }
 
 fn titles(view: &wire::PhotosAlbumChoice) -> Vec<String> {
@@ -850,7 +835,8 @@ fn a_new_album_keeps_the_sheet_open_and_joins_the_list_for_the_next_tap() {
     assert!(members.contains(&one) && members.contains(&two));
 
     // Adding twice changes nothing and is not a refusal (an edge is idempotent).
-    let again = d.with_ctx(|ctx| album_choice::add(ctx, &picked, &album_id));
+    let again =
+        d.with_ctx(|ctx| album_choice::add(ctx, &mut Undo::default(), &picked, &album_id, None));
     assert!(again.ok(), "{again:?}");
     assert_eq!(
         ids_of(&shelf(&d, load::photos::ShelfView::Album, Some(&album_id))).len(),

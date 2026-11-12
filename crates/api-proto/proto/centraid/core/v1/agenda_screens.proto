@@ -29,12 +29,12 @@ message AgendaHomeState {
   string search_term = 5;
   // Calendars switched off, FOR THE SESSION (not persisted).
   repeated string hidden_calendar_ids = 6;
+  // 7 to 9 were `loading`, `failure` and `denied`: the read is `page` (#1185). A refusal is the
+  // kit's gate, a state and not a failure: no band, no toolbar.
+  reserved 7, 8, 9;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 7;
-    Failure failure = 8;
-    // The vault would not let Agenda read. A state and not a failure: no band,
-    // no toolbar, the kit's gate.
-    Denied denied = 9;
     AgendaHomeData data = 10;
   }
   Sheet sheet = 11;
@@ -124,6 +124,18 @@ message AgendaHomeState {
   // completed) and Sort. Present on the Reminders place only; absent on the Calendar,
   // the gate and while a search answers. A pick comes back as `FilterMenuPicked`.
   optional FilterMenu filter_menu = 36;
+  // THE STOP CONFIRM (#1185), set while the member is asked to stop reading the phone's calendars: the
+  // same sheet and the same words as every followed store (Health's and People's `Stop reading`).
+  // Present only after the menu's More row `stop` was tapped; `StopConfirmed` stops, `StopDismissed`
+  // (or a tap outside) keeps following. Calendar only: Reminders never sets it.
+  optional Confirm stop = 41;
+  // THE READ (#1185): loading, failed, refused, empty (a place with nothing to show, or a search
+  // that matched nothing, each in its own sentence) or ready, with a note when a refresh or a wider
+  // window failed over what is shown. Over an open search it is the search's read.
+  PageState page = 42;
+  // The words on the empty state's calendar Import ("Import calendar"), finished: set while the page
+  // is empty and its `import_source` is CALENDAR, else empty.
+  string import_label = 43;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -285,14 +297,10 @@ message AgendaHomeData {
   reserved "now_local";
   // In day order. Past days are not drawn except as search hits.
   repeated AgendaDaySection days = 3;
-  // `AGENDA_EMPTY_NONE` whenever `days` has a section, and under a search
-  // whenever `task_hits` or `containers` has one.
-  AgendaEmpty empty = 4;
-  // The empty state's words; empty strings draw nothing. `empty_action` sends
-  // `NewEventRequested`.
-  string empty_title = 5;
-  string empty_body = 6;
-  string empty_action = 7;
+  // 4 to 7 were `empty`, `empty_title`, `empty_body` and `empty_action`: a place with nothing to
+  // show is the page's own Empty state, in its own sentence and action (#1185).
+  reserved 4, 5, 6, 7;
+  reserved "empty", "empty_title", "empty_body", "empty_action";
   // Every calendar the member has, for the More sheet.
   repeated AgendaCalendarChoice calendars = 8;
   // 9 was `waiting_count`: nothing read it (#1152).
@@ -710,8 +718,12 @@ message AgendaEventRow {
   string accessibility_label = 11;
   // Ended before now: drawn dimmed.
   bool is_past = 12;
-  // WHERE A TAP GOES: this occurrence's page, drawn under the section's day.
+  // WHERE A TAP GOES: this occurrence's page, drawn under the section's day. A search hit found
+  // only by an earlier version goes to the event's Earlier versions instead.
   Route route = 13;
+  // "In an earlier version" on a search hit whose words the event said only before (#1185),
+  // drawn as a line under the title; empty for every other row.
+  string earlier_label = 14;
 }
 
 enum AgendaRowStatus {
@@ -749,7 +761,8 @@ message AgendaMoreRow {
   // `calendar-<calendar_id>`, `new-calendar` (opens SHEET_NEW_CALENDAR), a Tasks
   // place (`anytime`, `logbook`, `reminders`, `trash`), `import-reminders`
   // (opens SHEET_IMPORT_REMINDERS; only where the platform has a reminders
-  // source) or `reads`.
+  // source), `reads`, or Calendar's menu `stop` (#1185; no `route`: it opens
+  // `AgendaHomeState.stop`).
   string key = 1;
   string label = 2;
   // "Shown" / "Hidden" on a calendar row; empty on an action row.
@@ -777,18 +790,6 @@ message AgendaMoreRow {
   // label ("Edit Work"). The control sends `CalendarEditRequested`. Empty
   // where the row has none. `icon_key` (9) is now also a calendar's own icon.
   string edit_label = 12;
-}
-
-enum AgendaEmpty {
-  AGENDA_EMPTY_UNSPECIFIED = 0;
-  AGENDA_EMPTY_NONE = 1;
-  // Schedule's whole window holds nothing, with no search and no calendar
-  // hidden: "Nothing in your calendar yet."
-  AGENDA_EMPTY_DAY_ONE = 2;
-  // "Nothing on this day." / "Nothing on these days."
-  AGENDA_EMPTY_NOTHING_ON_DAY = 3;
-  AGENDA_EMPTY_NOTHING_WAITING = 4;
-  AGENDA_EMPTY_NO_MATCH = 5;
 }
 
 // What a view sends. A row that opens a page carries its own `Route` and the
@@ -867,9 +868,30 @@ message AgendaHomeEvent {
     // THE REMINDERS FILTER AND SORT MENU: a pick, and the clear row.
     FilterMenuPicked filter_menu_picked = 60;
     FilterMenuCleared filter_menu_cleared = 61;
+    // THE STOP CONFIRM (#1185): the menu's `stop` More row asks first (`MoreRowPicked`), then one of
+    // these answers it.
+    StopConfirmed stop_confirmed = 62;
+    StopDismissed stop_dismissed = 63;
+    // THE QUICK ADD'S LINK AND PHOTO KEYS: the link picker's taps, and the ×
+    // on a staged row.
+    LinkEvent quick_link = 64;
+    QuickStagedRemoved quick_staged_removed = 65;
+    // THE EDIT CALENDAR SHEET'S MOVE TO TRASH (#1185): the calendar and its events go to the trash.
+    StyleTrashed style_trashed = 66;
+  }
+
+  message QuickStagedRemoved {
+    // `TodoStagedRow.key`.
+    string key = 1;
   }
 
   // The "‹ November" chip: back to the month the anchor is in.
+  message StopConfirmed {}
+
+  message StopDismissed {}
+
+  message StyleTrashed {}
+
   message MonthChipTapped {}
 
   // A layout key choice (`AgendaCalendarHeader.layouts`), keeping the anchor.
@@ -1077,14 +1099,6 @@ message AgendaScopeChoice {
   string note = 5;
 }
 
-// "This event is no longer on your calendar": the answer has no such
-// occurrence — cancelled, moved or deleted since it was picked.
-message AgendaGone {
-  string title = 1;
-  string body = 2;
-  string action_label = 3;
-}
-
 // A button on the detail. `key` is what `ActionPicked` carries.
 message AgendaAction {
   string key = 1;
@@ -1101,12 +1115,13 @@ message AgendaAction {
 
 // `agenda.event`. Its arguments are its `Route`; this is only what it shows.
 message AgendaEventState {
+  // 6 to 8 and 10 were `loading`, `failure`, `denied` and `gone`: the read is `page`, and an event
+  // that is no longer there is a final failure on it (#1185).
+  reserved 6, 7, 8, 10;
+  reserved "loading", "failure", "denied", "gone";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 6;
-    Failure failure = 7;
-    Denied denied = 8;
     AgendaEventData data = 9;
-    AgendaGone gone = 10;
   }
   Sheet sheet = 12;
   // The confirm step for cancelling an event that does not repeat. Absent
@@ -1122,6 +1137,15 @@ message AgendaEventState {
   // What the last write came to when the vault refused it: the core's own
   // sentence. Absent otherwise; a commit shows in the data.
   optional StatusLine status = 19;
+  // "Earlier versions   2 ›" at the foot of the page (#1185); absent when there are none.
+  optional EarlierEntry earlier = 20;
+  // Where it came from, under the Earlier versions entry (#1185). Absent for a typed item.
+  optional OriginLine origin = 21;
+  // The picker over the "Linked to" section, while it is up (#1185). The kit's generic picker.
+  optional LinkPicker link_picker = 22;
+  // The read: loading, failed, refused or ready (with a note when a refresh failed or the phone
+  // could not be checked). An event no longer there is a final failure, never an empty page.
+  PageState page = 23;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -1177,6 +1201,26 @@ message AgendaEventData {
   // The guests the phone's calendar states for an event the vault follows,
   // read-only.
   repeated AgendaFollowedGuestRow followed_guests = 19;
+  // WHAT THE PHONE SAYS (#1183), only where the member's value differs from the phone's, each
+  // under the field or list it belongs to. The title, under the title.
+  optional PhoneSays title_phone_says = 20;
+  // Under the date and time: the start and the end.
+  repeated PhoneSays when_phone_says = 21;
+  // Under the notes.
+  optional PhoneSays notes_phone_says = 22;
+  // Under the facts: the zone, the repeat, the joining link, availability and the alerts.
+  repeated PhoneSays facts_phone_says = 23;
+  // Under the guests: a guest whose reply the member changed ("Phone says ...") and one they
+  // took off ("Phone still has ..."). A guest the member added has no line.
+  repeated PhoneSays guests_phone_says = 24;
+  // THE "…" MENU in the top bar (#1185): the verbs that do not fit the bar of three, in order
+  // (Share). Same shape as `actions`; empty draws no key. `menu_label` names the key ("More").
+  repeated AgendaAction menu = 25;
+  string menu_label = 26;
+  // "Linked to" (#1185): every item the event is linked to, from either end, with the add row. The
+  // kit's shared section, after the attachments. Absent while what it is linked to was not read
+  // (the status line says so). Its events go back as `AgendaEventEvent.link`.
+  optional LinkSection links = 27;
 }
 
 // One guest the phone's calendar states: a name or an address, and the reply
@@ -1292,7 +1336,7 @@ message AgendaGuestRow {
 message AgendaRsvp {
   string question = 1;
   repeated AgendaRsvpChoice choices = 2;
-  // "Your answer is for every occurrence." on a series.
+  // "Your answer is for every event in the series." on a series.
   string note = 3;
 }
 
@@ -1310,8 +1354,8 @@ message AgendaEventEvent {
     // Read again (the failure's retry).
     Refreshed refreshed = 2;
     RsvpPicked rsvp = 6;
-    // `AgendaAction.key`. Only `cancel` is an event: it opens the confirm or
-    // the scope sheet. `edit` carries a route and is the shell's push.
+    // `AgendaAction.key`. `cancel` opens the confirm or the scope sheet and `trash` moves the whole
+    // event to the trash at once (#1185). `edit` carries a route and is the shell's push.
     ActionPicked action = 7;
     ScopePicked scope = 8;
     SheetClosed sheet_closed = 9;
@@ -1320,9 +1364,15 @@ message AgendaEventEvent {
     ConfirmDismissed confirm_dismissed = 11;
     // The attachments section's controls (#1173).
     AgendaAttachmentEvent attachment = 20;
+    // "Undo" on the status line after Move to trash or its Undo (#1185).
+    StatusActed status_acted = 21;
+    // The "Linked to" section and its picker (#1185): the kit's `LinkEvent`.
+    LinkEvent link = 22;
   }
 
   message Refreshed {}
+
+  message StatusActed {}
 
   message RsvpPicked {
     string partstat = 1;
@@ -1346,12 +1396,13 @@ message AgendaEventEvent {
 // `agenda.editor`. Its arguments are its `Route`; this is only what it shows.
 message AgendaEditorState {
   Mode mode = 2;
+  // 7 to 9 and 11 were `loading`, `failure`, `denied` and `gone`: the read is `page`, and an event
+  // or task that is no longer there is a final failure on it (#1185).
+  reserved 7, 8, 9, 11;
+  reserved "loading", "failure", "denied", "gone";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 7;
-    Failure failure = 8;
-    Denied denied = 9;
     AgendaEditorData data = 10;
-    AgendaGone gone = 11;
   }
   Sheet sheet = 13;
   // The discard or skip question, while it is asked.
@@ -1370,6 +1421,8 @@ message AgendaEditorState {
   // What the last Save came to when the vault refused it: the core's own
   // sentence, over the draft that stays. Absent otherwise.
   optional StatusLine status = 19;
+  // THE READ (#1185): loading, failed, refused, or ready, with a note when a re-read failed.
+  PageState page = 20;
 
   enum Mode {
     MODE_UNSPECIFIED = 0;
@@ -1557,7 +1610,7 @@ message AgendaEditorData {
   // Why Save is not armed: "Add a title to save." / "An event must end after
   // it starts." Empty when it is, or when nothing changed.
   string blocked_reason = 19;
-  // "Skip this occurrence", on a series occurrence.
+  // "Skip this one", on an event of a series.
   bool show_skip = 20;
   string skip_label = 21;
   string foot_note = 22;
@@ -1629,6 +1682,9 @@ message AgendaEditorData {
   // What Save will write for the address ("https://example.com"), empty when
   // none or when it is refused.
   string url_saved_as = 56;
+  // Under the first alert: says no alert will sound when the event is all-day (an alert needs a
+  // time). Empty when the event is timed.
+  string reminder_note = 57;
 }
 
 // THE CUSTOM REPEAT SHEET. Every choice list marks what is picked; the shell
@@ -2108,11 +2164,13 @@ message TodoQuickAdd {
   // (`QuickAddClosed`); a pushed page, which has no Plus, keeps it open.
   bool drawn = 7;
   // THE KEYBOARD TOOLBAR (#1173), drawn over the keyboard while the field
-  // has it: Date, Tag and Flag. Each stages what the next add carries; Return
-  // adds it, clears the field and keeps the keyboard for the next one.
+  // has it: Date, Tag, Flag, Link and Photo. Each stages what the next add
+  // carries; Return adds it, clears the field and keeps the keyboard for the
+  // next one.
   repeated TodoQuickTool tools = 8;
   // What the next add carries, under the field: "Tomorrow · #errand ·
-  // Flagged"; empty when nothing is staged.
+  // Flagged"; empty when nothing is staged. A staged link or photo is not
+  // here: it is a row of `staged_rows`.
   string staged_label = 9;
   // The tool that is open: `date` draws `due_choices`, `tag` a tag field;
   // empty for none.
@@ -2125,11 +2183,33 @@ message TodoQuickAdd {
   // member taps Add. Absent when no phrase was read, or the member dismissed it
   // for these words.
   QuickAddChip chip = 13;
+  // THE STAGED TRAY (`ListQuickStaged`): the links and photos the next add
+  // carries, one removable row each, under the field. Empty when none are
+  // staged. They are made, and the photos filed, only when the add is
+  // submitted.
+  repeated TodoStagedRow staged_rows = 14;
+  // The tray's spoken name: "Staged for the next reminder".
+  string staged_group_label = 15;
+  // The Link key's picker (`LinkEvent` answers it), absent while closed.
+  LinkPicker link_picker = 16;
+}
+
+// One link or photo staged for the next add.
+message TodoStagedRow {
+  // What the ×, `QuickStagedRemoved`, sends back.
+  string key = 1;
+  // "Link · Note", "Photo".
+  string kind_label = 2;
+  // The item's title, or the photo's file name.
+  string title = 3;
+  string icon_key = 4;
+  // "Remove Lisbon trip".
+  string remove_label = 5;
 }
 
 // One key of the quick add's keyboard toolbar.
 message TodoQuickTool {
-  // `date`, `tag`, `flag`.
+  // `date`, `tag`, `flag`, `link`, `photo`.
   string key = 1;
   // The spoken name: "Date", "Tag", "Flag".
   string label = 2;
@@ -2188,6 +2268,14 @@ message AgendaStyleSheet {
   string icon_key = 13;
   // The sheet's close verb, "Cancel".
   string cancel_label = 14;
+  // "Move to trash", on the sheet that EDITS a calendar the vault may remove (not the one every
+  // vault is founded with): its tap is `StyleTrashed`, which asks nothing and says "<name> moved to
+  // trash" with Undo. Empty: the sheet has no such control.
+  string delete_label = 15;
+  // A calendar read from the phone cannot be deleted while it is: where the control would be,
+  // "Read from your phone. To delete it, stop reading Phone calendars first."
+  // Empty when there is nothing to say.
+  string delete_note = 16;
 }
 
 message AgendaStyleSwatch {
@@ -2233,12 +2321,13 @@ message TodoListState {
   TodoView view = 2;
   // "Anytime", "All", "Logbook", "Reminders".
   string title = 3;
+  // The list, when the page is ready (there is something to show).
   oneof content {
-    Loading loading = 4;
-    Failure failure = 5;
-    Denied denied = 6;
     TodoListData data = 7;
   }
+  // 4, 5 and 6 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 4, 5, 6;
+  reserved "loading", "failure", "denied";
   TodoChrome chrome = 8;
   StatusLine status = 9;
   // THE SMART LIST'S COLOUR (#1173): a token name (`listBlue`) the page's large title is drawn
@@ -2248,13 +2337,17 @@ message TodoListState {
   // the core's today. Empty while the page has no data to add against.
   string add_label = 11;
   optional Route add_route = 12;
+  // THE LIST'S READ (#1185): loading, failed, refused, empty (this view has no task: its own
+  // sentence) or ready, with a note when a refresh or a wider window failed over the rows shown.
+  PageState page = 13;
 }
 
 message TodoListData {
   string today = 1;
   repeated TodoRowGroup groups = 2;
-  // Present only when no group has a row: what this view says when empty.
-  optional EmptyState empty = 3;
+  // 3 was `empty`: a view with no task is the page's own Empty state (#1185).
+  reserved 3;
+  reserved "empty";
   string count_label = 4;
   // "100 tasks · more not shown" when the window is not everything.
   string window_label = 5;
@@ -2314,12 +2407,14 @@ message TodoProjectState {
   reserved "project_id";
   // The name, riding along from the route until the answer names it.
   string title = 3;
+  // The project, when the page is ready.
   oneof content {
-    Loading loading = 4;
-    Failure failure = 5;
-    Denied denied = 6;
     TodoProjectData data = 7;
   }
+  // 4, 5 and 6 were `loading`, `failure` and `denied`: the read is `page` (#1185). A project that
+  // is gone is the page's failure, in its own sentence.
+  reserved 4, 5, 6;
+  reserved "loading", "failure", "denied";
   TodoChrome chrome = 8;
   StatusLine status = 9;
   TodoQuickAdd quick_add = 10;
@@ -2335,6 +2430,12 @@ message TodoProjectState {
   bool rename_can_submit = 16;
   // THE STYLE SHEET (#1173 wave 2), set while `sheet` is SHEET_STYLE.
   AgendaStyleSheet style = 17;
+  // THE PROJECT'S READ (#1185): loading, failed (also a project that is gone, in its own words),
+  // refused, empty (no task, no section and nothing completed) or ready, with a note when a
+  // refresh failed over what is shown.
+  PageState page = 18;
+  // The header's words and look, while the project is on the page (ready or empty).
+  optional TodoProjectHead head = 19;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -2351,27 +2452,37 @@ message TodoProjectData {
   // Unsectioned first (when it has rows), then EVERY section in its order,
   // an empty one included — each with the "Add task" verb.
   repeated TodoRowGroup groups = 2;
-  // Present when the project has no row and no section, or is gone.
-  optional EmptyState empty = 3;
+  // 3 was `empty`: a project with no task, section or completed task is the page's own Empty
+  // state (#1185).
+  reserved 3;
+  reserved "empty";
   string count_label = 4;
-  // "Add section".
-  string add_section_label = 5;
-  // False when the answer names no live project by this id.
-  bool found = 6;
-  // The Rename sheet's words: the header verb, the sheet title, the field
-  // placeholder and the submit verb.
-  string rename_label = 7;
-  string rename_title = 8;
-  string rename_placeholder = 9;
-  string rename_verb = 10;
-  // The list's colour key (the `[list]` names): the title is drawn in it.
-  string list_color_key = 11;
+  // 5 to 11, 13 and 14 were the head's words (`add_section_label`, `rename_*`, `list_color_key`,
+  // `icon_key`, `style_label`) and 6 was `found`: they ride on `TodoProjectState.head`, so an
+  // empty project keeps its header verbs, and a project that is gone is the page's failure.
+  reserved 5, 6, 7, 8, 9, 10, 11, 13, 14;
+  reserved "add_section_label", "found", "rename_label", "rename_title", "rename_placeholder", "rename_verb", "list_color_key", "icon_key", "style_label";
   // Completed work in this list; `count` 0 draws nothing.
   TodoCompleted completed = 12;
+}
+
+// THE PROJECT'S HEAD (#1185): the words and look of its header, set while the page is ready or
+// empty (the project exists), and absent while loading, failed or refused.
+message TodoProjectHead {
+  // "Add section".
+  string add_section_label = 1;
+  // The Rename sheet's words: the header verb, the sheet title, the field
+  // placeholder and the submit verb.
+  string rename_label = 2;
+  string rename_title = 3;
+  string rename_placeholder = 4;
+  string rename_verb = 5;
+  // The list's colour key (the `[list]` names): the title is drawn in it.
+  string list_color_key = 6;
   // The list's own icon, drawn beside the title; empty for none.
-  string icon_key = 13;
+  string icon_key = 7;
   // The header verb that opens the style sheet: "Edit list".
-  string style_label = 14;
+  string style_label = 8;
 }
 
 message TodoProjectEvent {
@@ -2407,6 +2518,13 @@ message TodoProjectEvent {
     StyleColorPicked style_color = 26;
     StyleIconPicked style_icon = 27;
     StyleSubmitted style_submitted = 28;
+    // THE QUICK ADD'S LINK AND PHOTO KEYS, as on Agenda's home.
+    LinkEvent quick_link = 29;
+    QuickStagedRemoved quick_staged_removed = 30;
+  }
+
+  message QuickStagedRemoved {
+    string key = 1;
   }
 
   message StyleRequested {}
@@ -2511,15 +2629,15 @@ message TodoDraft {
 // `agenda.task`: one task, an editor that saves as the member types.
 message TodoDetailState {
   string task_id = 2;
+  // The task, when the page is ready.
   oneof content {
-    Loading loading = 3;
-    Failure failure = 4;
-    Denied denied = 5;
     TodoDetailData data = 6;
-    // NO LIVE TASK HAS THE ID — never made, deleted, or in the trash. A
-    // state the screen draws ("This task is gone."), not a failed read.
-    EmptyState gone = 17;
   }
+  // 3, 4 and 5 were `loading`, `failure` and `denied`, and 17 was `gone` (no live task has the id:
+  // never made, deleted, or in the trash): the read is `page` (#1185), and a task that is gone is
+  // its failure, in its own sentence.
+  reserved 3, 4, 5, 17;
+  reserved "loading", "failure", "denied", "gone";
   Autosave autosave = 7;
   // The confirm on screen, and what it asks about.
   optional Confirm confirm = 11;
@@ -2532,6 +2650,18 @@ message TodoDetailState {
   StatusLine status = 15;
   // THE TASK LEFT (deleted): the shell pops.
   bool finished = 16;
+  // "Earlier versions   2 ›" at the foot of the page (#1185); absent when there are none.
+  optional EarlierEntry earlier = 18;
+  // Where it came from, under the Earlier versions entry (#1185). Absent for a typed item.
+  optional OriginLine origin = 19;
+  // What the phone's Reminders say that differs from this task, each with one tap to take it
+  // (#1185); empty when the task is not followed or agrees.
+  repeated PhoneSays phone_says = 20;
+  // The picker over the "Linked to" section, while it is up (#1185). The kit's generic picker.
+  optional LinkPicker link_picker = 21;
+  // THE TASK'S READ (#1185): loading, failed (also a task that is gone, in its own words),
+  // refused, or ready, with a note when a re-read failed or the phone's check was not made.
+  PageState page = 22;
 
   enum Asking {
     ASKING_UNSPECIFIED = 0;
@@ -2579,6 +2709,12 @@ message TodoDetailData {
   // The Custom repeat sheet, while it is open: the editor's own sheet, over
   // this task's stored rule. Its events go back as `TodoDetailEvent.custom_repeat`.
   optional AgendaCustomRepeatSheet custom_repeat = 22;
+  // "Share": the button that hands the task to the OS as a calendar file (#1185).
+  string share_label = 23;
+  // "Linked to" (#1185): every item the task is linked to, from either end, with the add row. The
+  // kit's shared section, after the attachments. Absent while what it is linked to was not read
+  // (the status line says so). Its events go back as `TodoDetailEvent.link`.
+  optional LinkSection links = 24;
 }
 
 // A task's address and the one control that opens it in the browser.
@@ -2659,9 +2795,15 @@ message TodoDetailEvent {
     AgendaAttachmentEvent attachment = 31;
     // The Custom repeat sheet's controls: the editor's `custom_*` events, same meaning.
     AgendaEditorEvent custom_repeat = 32;
+    // The Share button (#1185): Rust asks the owner check, then hands the calendar file to the OS.
+    ShareRequested share_requested = 33;
+    // The "Linked to" section and its picker (#1185): the kit's `LinkEvent`.
+    LinkEvent link = 34;
   }
 
   message Refreshed {}
+
+  message ShareRequested {}
 
   // Asks the shell to open the task's address (an `OpenUrl` effect).
   message OpenLinkTapped {}
@@ -2724,18 +2866,22 @@ message TodoDetailEvent {
 
 // `agenda.catch_up`: what came due, what repeats and is behind, what has sat.
 message TodoCatchUpState {
+  // The piles, when the page is ready.
   oneof content {
-    Loading loading = 2;
-    Failure failure = 3;
-    Denied denied = 4;
     TodoCatchUpData data = 5;
   }
+  // 2, 3 and 4 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 2, 3, 4;
+  reserved "loading", "failure", "denied";
   TodoChrome chrome = 6;
   StatusLine status = 7;
   optional Confirm confirm = 8;
   // 9 was `asking_pile`: nothing read it (#1152).
   reserved 9;
   reserved "asking_pile";
+  // THE CATCH-UP'S READ (#1185): loading, failed, refused, empty (nothing has come due, repeats
+  // behind or sat) or ready, with a note when a refresh failed over the piles shown.
+  PageState page = 10;
 }
 
 message TodoCatchUpData {
@@ -2745,8 +2891,9 @@ message TodoCatchUpData {
   string head = 2;
   // Dated, repeating, sitting — an empty pile is not drawn.
   repeated TodoPile piles = 3;
-  // Present only when no pile has a row.
-  optional EmptyState empty = 4;
+  // 4 was `empty`: no pile with a row is the page's own Empty state (#1185).
+  reserved 4;
+  reserved "empty";
 }
 
 message TodoPile {

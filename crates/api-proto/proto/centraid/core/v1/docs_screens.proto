@@ -27,6 +27,7 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
+import "centraid/core/v1/agenda_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/route.proto";
 
@@ -48,13 +49,14 @@ message DocsDriveState {
   reserved "query";
   Layout layout = 5;
   DocsSearchField search = 6;
+  // The shelf, when the page is ready (something to show).
   oneof content {
-    Loading loading = 7;
-    Failure failure = 8;
-    // The vault would not let Docs read: no band, the gate's words.
-    Denied denied = 9;
     DocsDriveData data = 10;
   }
+  // 7, 8 and 9 were `loading`, `failure` and `denied`: the read is `page` (#1185). The vault
+  // refusing Docs is `page.refused`: no band, the gate's words.
+  reserved 7, 8, 9;
+  reserved "loading", "failure", "denied";
   // 11 was `refreshing`: a read is answered at once, so no re-read runs over
   // rows the screen keeps drawing.
   reserved 11;
@@ -89,6 +91,21 @@ message DocsDriveState {
   // (a window, not a filter) it holds the View section alone; unset while denied.
   // "Clear filters" is `FilterMenuCleared`.
   optional FilterMenu filter_menu = 23;
+  // THE STOP CONFIRM (#1185), set while the member is asked to stop reading a followed folder: the same
+  // sheet and the same words as every followed store ("Stop reading {folder}?"). Present only after a
+  // row of the Followed folders sheet was tapped; `StopConfirmed` stops it, `StopDismissed` (or a tap
+  // outside) keeps following. The trash confirm above is its own.
+  optional Confirm stop = 24;
+  // WHAT THE READ SHOWS (#1185): the first load, the gate, the failure, a shelf with nothing to
+  // show (its own sentence), or ready with `data` under an optional note (a failed refresh, or a
+  // followed folder the phone read part of).
+  PageState page = 25;
+  // What the empty page's action sends (the action's label is `page.empty.action_label`); NONE
+  // unless `page.empty` is set and carries one.
+  DocsDriveData.EmptyAction empty_action = 26;
+  // FOLDERS only: the path to the folder open, top level first. Set while the page is ready or
+  // empty, so an empty folder still shows the way back up.
+  repeated DocsCrumb crumbs = 27;
   enum Layout {
     LAYOUT_UNSPECIFIED = 0;
     LAYOUT_LIST = 1;
@@ -191,13 +208,15 @@ message DocsDriveData {
   Mode mode = 1;
   // The shelf's rows (or the hits), in the core's order.
   repeated DocsRowView rows = 2;
-  // FOLDERS only: the open folder's child folders, and the path to it.
+  // FOLDERS only: the open folder's child folders.
   repeated DocsFolderNode folders = 3;
-  repeated DocsCrumb crumbs = 4;
-  // Set exactly when there is nothing to draw: no rows and no folders.
-  optional EmptyState empty = 5;
-  // What the empty state's action sends; NONE when it has none.
-  EmptyAction empty_action = 6;
+  // 4 was `crumbs`: the path is the page's (`DocsDriveState.crumbs`), so an empty folder keeps it.
+  reserved 4;
+  reserved "crumbs";
+  // 5 and 6 were `empty` and `empty_action`: a shelf with nothing to draw is the page's empty
+  // state (#1185), and its action is `DocsDriveState.empty_action`.
+  reserved 5, 6;
+  reserved "empty", "empty_action";
   // "Showing the newest 200. Search reaches the rest." EMPTY when whole.
   string truncated_note = 7;
   // Recently changed's one-line rule. EMPTY elsewhere.
@@ -303,6 +322,8 @@ message DocsAction {
   // WHERE THE ACTION GOES when it opens a page (Edit, Trash, Versions): the
   // shell sends the pick and pushes this.
   optional Route route = 7;
+  // The rule under the label (#1185): Trash says "30 days, then erased". Empty for the others.
+  string meta = 8;
 }
 
 // A FOLDER DOCS FOLLOWS ON THIS PHONE (#1127): its origin (`folder:<uuid>`), the
@@ -467,6 +488,9 @@ message DocsDriveEvent {
     FilterMenuCleared filter_menu_cleared = 27;
     // A label chip over the shelf: on, or off when it is the one set.
     LabelChipPicked label_chip = 28;
+    // THE STOP CONFIRM (#1185): a Followed folders row asks first, then one of these answers it.
+    StopConfirmed stop_confirmed = 29;
+    StopDismissed stop_dismissed = 30;
   }
   // `FollowedChanged`: the drive reads what the vault follows itself.
   reserved 23;
@@ -540,6 +564,10 @@ message DocsDriveEvent {
 
   message Dismissed {}
 
+  message StopConfirmed {}
+
+  message StopDismissed {}
+
   message PermissionChanged {
     Surface surface = 1;
     DocsPermission permission = 2;
@@ -570,11 +598,12 @@ message DocsDocumentState {
   // Rides along, so the head has words before the read.
   string title_hint = 2;
   oneof content {
-    Loading loading = 3;
-    Failure failure = 4;
-    Denied denied = 5;
     DocsDocumentData data = 6;
   }
+  // 3, 4 and 5 were `loading`, `failure` and `denied`: the read is `page` (#1185). A document
+  // that is gone is the page's empty state.
+  reserved 3, 4, 5;
+  reserved "loading", "failure", "denied";
   // 7 was `refreshing` (see `DocsDriveState`).
   reserved 7;
   reserved "refreshing";
@@ -590,6 +619,11 @@ message DocsDocumentState {
   bool dismissed = 14;
   // THE "ABOUT" PICKER (#1173): who the document is about, picked by name.
   LinkPicker about_picker = 15;
+  // WHAT THE READ SHOWS (#1185): see `DocsDriveState.page`.
+  PageState page = 16;
+  // The picker over the "Linked to" section, while it is up (#1185). The kit's generic picker,
+  // over every kind (the About picker above is people only).
+  optional LinkPicker link_picker = 17;
 
   enum Asking {
     ASKING_UNSPECIFIED = 0;
@@ -618,7 +652,7 @@ message DocsDocumentChrome {
 }
 
 message DocsDocumentData {
-  // The document, as its head draws it. Unset when it is gone.
+  // The document, as its head draws it.
   optional DocsRowView row = 1;
   // WHICH SURFACE, and what it draws (law 3).
   oneof surface {
@@ -626,15 +660,16 @@ message DocsDocumentData {
     DocsStage stage = 3;
     // Docs cannot render this kind: the facts below are the answer.
     DocsFactsOnly facts_only = 4;
-    // No such document: deleted elsewhere, or a stale link.
-    EmptyState gone = 5;
   }
+  // 5 was `gone`: a document deleted elsewhere, or a stale link, is the page's empty state.
+  reserved 5;
+  reserved "gone";
   repeated DocsFact facts = 6;
   // The folder path, top level first, for the breadcrumb.
   repeated DocsCrumb path = 7;
-  // The version history row: "Versions" and how many. Absent for a document
-  // with one version.
-  optional DocsVersionsLink versions = 8;
+  // 8 was `versions`: the foot's row is `earlier` (#1185).
+  reserved 8;
+  reserved "versions";
   // 9 and 10 were the Activity rows and their empty line: the rail read the command journal,
   // which is gone (#1146).
   reserved 9, 10;
@@ -661,14 +696,22 @@ message DocsDocumentData {
   string labels_heading = 19;
   // "About" (#1173): the people the document is about.
   LinkSection about = 20;
-}
-
-// The row that opens the version history.
-message DocsVersionsLink {
-  string label = 1;
-  // How many versions: "3 versions".
-  string count_label = 2;
-  Route route = 3;
+  // WHAT THE FOLDER SAYS (#1183), under the name, when the member renamed a document a followed
+  // folder still names otherwise. Absent when they agree.
+  optional PhoneSays title_phone_says = 21;
+  // The foot's "Earlier versions   2 ›" row (#1185): the kit's entry, absent until the document
+  // holds an earlier version. Its route is the kit's one screen, `docs.earlier`.
+  optional EarlierEntry earlier = 22;
+  // Where it came from, under the Earlier versions entry (#1185). Absent for a typed item.
+  optional OriginLine origin = 23;
+  // "Linked to" (#1185): every item the document is linked to, from either end, with the add row.
+  // The kit's shared section, after About. Absent while what it is linked to was not read, and on
+  // a document in the trash. Its events go back as `DocsDocumentEvent.link`.
+  optional LinkSection links = 24;
+  // The attachments (#1185): the photos and files on this document, with Add photo and Add file.
+  // The kit's shared section (`AgendaAttachmentsSection`), after About and before "Linked to", on a
+  // live document. Its events go back as `DocsDocumentEvent.attachment`.
+  AgendaAttachmentsSection attachments = 25;
 }
 
 message DocsReader {
@@ -750,6 +793,10 @@ message DocsDocumentEvent {
     Dismissed dismissed = 12;
     // The About section's and picker's events (#1173).
     LinkEvent about = 13;
+    // The "Linked to" section and its picker (#1185): the kit's `LinkEvent`.
+    LinkEvent link = 14;
+    // The attachments section's events (#1185): the kit's `AgendaAttachmentEvent`.
+    AgendaAttachmentEvent attachment = 15;
   }
 
   message Refreshed {}
@@ -794,63 +841,6 @@ message DocsDocumentEvent {
 }
 
 // ---------------------------------------------------------------------------
-// Version history (`docs.versions`): `docs.history` and `restore-version`
-// ---------------------------------------------------------------------------
-
-message DocsVersionsState {
-  string document_id = 1;
-  string title = 2;
-  oneof content {
-    Loading loading = 3;
-    Failure failure = 4;
-    Denied denied = 5;
-    DocsVersionsData data = 6;
-  }
-  StatusLine status = 7;
-  DocsVersionsChrome chrome = 8;
-}
-
-message DocsVersionsChrome {
-  // The page this one was pushed from: the document's title.
-  string back = 1;
-  string heading = 2;
-  string retry = 3;
-  string loading = 4;
-}
-
-message DocsVersionsData {
-  repeated DocsVersionRow versions = 1;
-  // Set when the document is gone or has nothing to list.
-  optional EmptyState empty = 2;
-}
-
-message DocsVersionRow {
-  // The version's own key is its number: two versions can hold the same bytes.
-  string key = 1;
-  // "Version 3".
-  string label = 2;
-  // "Current · 2.4 MB · 3 March 09:12".
-  string meta = 3;
-  bool current = 4;
-  // "Restore" on an earlier version of a live document; EMPTY otherwise.
-  string restore_label = 5;
-}
-
-message DocsVersionsEvent {
-  oneof kind {
-    Refreshed refreshed = 1;
-    Restored restored = 2;
-  }
-
-  message Refreshed {}
-
-  // A `DocsVersionRow.key` whose Restore was tapped.
-  message Restored {
-    string key = 1;
-  }
-}
-
-// ---------------------------------------------------------------------------
 // The text editor (#1015 D3: autosave everywhere, close = done)
 // ---------------------------------------------------------------------------
 //
@@ -862,21 +852,26 @@ message DocsEditorState {
   string document_id = 1;
   string title_hint = 2;
   oneof content {
-    Loading loading = 3;
-    Failure failure = 4;
     DocsEditorDraft draft = 5;
   }
+  // 3 and 4 were `loading` and `failure`: the read is `page` (#1185). A document that cannot be
+  // edited here (gone, in the trash, no text) is the page's failure in its own words.
+  reserved 3, 4;
+  reserved "loading", "failure";
   Autosave autosave = 6;
   // "Version 4" — the vault's, re-read after a save commits.
   string version_label = 7;
   // "Saved" / "Saving" / "Edited" / the refusal's sentence; EMPTY while
   // clean.
   string status_label = 8;
-  // "Changed elsewhere; saving reloads it." EMPTY unless
+  // "Changed elsewhere; your next save will ask to reload." EMPTY unless
   // `autosave.remote_changed`.
   string remote_note = 9;
   DocsReader.Format format = 10;
   DocsEditorChrome chrome = 11;
+  // WHAT THE READ SHOWS (#1185): see `DocsDriveState.page`. A failed re-read over the words is
+  // a note under them, never in their place.
+  PageState page = 12;
 }
 
 message DocsEditorDraft {

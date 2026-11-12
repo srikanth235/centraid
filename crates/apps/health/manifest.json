@@ -75,6 +75,11 @@
         "verbs": "act"
       },
       {
+        "schema": "health",
+        "table": "export_csv",
+        "verbs": "act"
+      },
+      {
         "schema": "measurement",
         "table": "log",
         "verbs": "act"
@@ -85,8 +90,48 @@
         "verbs": "act"
       },
       {
+        "schema": "entity",
+        "table": "purge",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "empty_trash",
+        "verbs": "act"
+      },
+      {
         "schema": "measurement",
         "table": "clear",
+        "verbs": "act"
+      },
+      {
+        "schema": "vault",
+        "table": "edge",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "document",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "photo",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "blob",
+        "verbs": "read"
+      },
+      {
+        "schema": "edge",
+        "table": "add",
+        "verbs": "act"
+      },
+      {
+        "schema": "edge",
+        "table": "remove",
         "verbs": "act"
       }
     ]
@@ -94,10 +139,142 @@
   "actionSideEffect": "vault-write",
   "actions": [
     {
+      "name": "link",
+      "verb": "link",
+      "kind": "workout",
+      "inverse": "unlink",
+      "sealed": [],
+      "command": "edge.add",
+      "phrasings": [
+        "link this run to my race note",
+        "connect Tuesday's workout to the physio event",
+        "link this ride to the bike photo"
+      ],
+      "description": "Link a workout to any other item (a person, place, event, task, note, document, photo, account, transaction or workout) through edge.add (rel links, from the workout); never to a Locker item. A link has no direction: it shows on both pages, and linking twice changes nothing.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": [
+              "contains",
+              "about",
+              "links",
+              "attached",
+              "attendee",
+              "with",
+              "related",
+              "depicts"
+            ]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": ["string", "null"],
+            "maxLength": 200
+          },
+          "position": {
+            "type": ["number", "null"]
+          },
+          "state": {
+            "type": ["string", "null"],
+            "enum": ["needs-action", "accepted", "declined", "tentative", null]
+          },
+          "anchor": {
+            "type": ["object", "null"]
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "unlink",
+      "verb": "unlink",
+      "kind": "workout",
+      "inverse": "link",
+      "sealed": [],
+      "command": "edge.remove",
+      "phrasings": [
+        "unlink this run from my race note",
+        "disconnect Tuesday's workout from the physio event",
+        "take the link off this ride"
+      ],
+      "description": "Take the link between a workout and another item off through edge.remove (rel links, from either end); both items stay.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": [
+              "contains",
+              "about",
+              "links",
+              "attached",
+              "attendee",
+              "with",
+              "related",
+              "depicts"
+            ]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": ["string", "null"],
+            "maxLength": 200
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
       "name": "record-days",
       "verb": "log",
       "kind": "daily_figure",
-      "inverse": null,
+      "inverse": "stop-following",
       "sealed": [],
       "bulk": true,
       "command": "measurement.record",
@@ -106,11 +283,27 @@
         "record last night's sleep as seven hours",
         "note my weight as 70 kilos this morning"
       ],
-      "description": "Record a batch of the store's daily totals through measurement.record: a value the vault already holds is not written, a changed one is replaced, a new one added. A day is never deleted.",
+      "description": "Record a batch of the store's daily totals through measurement.record: a value the vault already holds is not written, a changed one is replaced, a new one added. A day is never deleted. It is the follow pass writing the store's totals, never a member's own act (a figure by hand is log-figure), so its Undo is stopping the follow. The store's cursor rides with the days it covers, in the same commit.",
       "confirmation": "none",
       "input": {
         "additionalProperties": false,
         "properties": {
+          "cursor": {
+            "description": "The store's cursor once these days are in: it moves in this commit.",
+            "maxLength": 4096,
+            "minLength": 1,
+            "type": "string"
+          },
+          "cursor_device": {
+            "description": "The install that read the store; required with cursor.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "cursor_ref": {
+            "description": "The store's origin the cursor is for; required with cursor.",
+            "minLength": 1,
+            "type": "string"
+          },
           "days": {
             "items": {
               "additionalProperties": false,
@@ -167,7 +360,7 @@
       "name": "follow-workouts",
       "verb": "import",
       "kind": "workout",
-      "inverse": null,
+      "inverse": "stop-following",
       "sealed": [],
       "bulk": true,
       "command": "follow.health",
@@ -176,13 +369,20 @@
         "sync workouts from the health store",
         "import this week's runs"
       ],
-      "description": "Follow the store's workouts through follow.health: each is an activity of a workout kind and what the store measured, written or corrected in place under the store's own id; one gone from a complete read keeps its row and forgets its source.",
+      "description": "Follow the store's workouts through follow.health: each is an activity of a workout kind and what the store measured, written or corrected in place under the store's own id; one gone from a complete read, or named deleted by a delta (gone), keeps its row and forgets its source. The store's cursor rides with the workouts it covers, in the same commit.",
       "confirmation": "none",
       "input": {
         "additionalProperties": false,
         "properties": {
           "complete": {
             "type": "boolean"
+          },
+          "gone": {
+            "description": "The source ids the store says were deleted since the cursor (a delta's, in place of a complete read): the row is kept and its source forgotten. Only for a system whose gone rows are kept.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "origin": {
             "additionalProperties": false,
@@ -194,6 +394,12 @@
               },
               "config": {
                 "type": ["object", "null"]
+              },
+              "cursor": {
+                "description": "Where this read of the store got to: it moves in this commit, as the install named by device_id read it (a phone store's, never an account's).",
+                "maxLength": 4096,
+                "minLength": 1,
+                "type": "string"
               },
               "device_id": {
                 "type": ["string", "null"]
@@ -309,8 +515,8 @@
         "disconnect Apple Health",
         "stop following Health Connect"
       ],
-      "description": "Stop following the phone's health store through follow.stop: the store's origin is retired and its workouts forget their source. Every day and every workout stays, an ordinary row from now on.",
-      "confirmation": "none",
+      "description": "Stop following the phone's health store through follow.stop: the store's origin is retired and its workouts forget their source. Every day and every workout stays, an ordinary row from now on. It is the Undo of follow-workouts, and it asks first (the app's Stop reading sheet confirms) because following again needs the phone's own read.",
+      "confirmation": "required",
       "input": {
         "type": "object",
         "required": ["system", "ref"],
@@ -318,7 +524,14 @@
         "properties": {
           "system": {
             "type": "string",
-            "enum": ["contacts", "calendar", "files", "health", "statement"]
+            "enum": [
+              "contacts",
+              "calendar",
+              "files",
+              "health",
+              "statement",
+              "phone_reminders"
+            ]
           },
           "ref": {
             "type": "string",
@@ -557,6 +770,94 @@
       }
     },
     {
+      "name": "purge-workout",
+      "verb": "purge",
+      "kind": "workout",
+      "inverse": null,
+      "sealed": [],
+      "command": "entity.purge",
+      "phrasings": [
+        "erase the morning run forever",
+        "permanently delete the trashed swim",
+        "purge that trashed workout"
+      ],
+      "description": "Delete one ALREADY-TRASHED workout forever through entity.purge. Irreversible: the workout, its figures and the words kept of it go now. A workout a health store still states is not brought back by the next read.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "empty-trash",
+      "verb": "purge",
+      "kind": "workout",
+      "inverse": null,
+      "sealed": [],
+      "bulk": true,
+      "command": "entity.empty_trash",
+      "phrasings": [
+        "empty the workout trash",
+        "clear out the trashed workouts for good",
+        "permanently delete everything in the Health trash"
+      ],
+      "description": "Empty the workout trash through entity.empty_trash with kind activity and having workout (a touch trashed with its person is not a workout and stays). Irreversible and takes no id: every workout in the trash is destroyed now, as purge destroys one.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["activity"]
+          },
+          "having": {
+            "type": "string",
+            "enum": ["workout"]
+          },
+          "due_only": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
       "name": "edit-figure",
       "verb": "edit",
       "kind": "daily_figure",
@@ -740,6 +1041,147 @@
           }
         }
       }
+    },
+    {
+      "name": "attach",
+      "verb": "attach",
+      "kind": "workout",
+      "inverse": "detach",
+      "sealed": [],
+      "command": "edge.add",
+      "phrasings": [
+        "attach the route map to this workout",
+        "add the photo to my Sunday run",
+        "attach the coach's plan to the workout"
+      ],
+      "description": "Attach a document or photo to a workout through edge.add (rel attached); the bytes are the document's or photo's own, found by hash.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["attached"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "detach",
+      "verb": "detach",
+      "kind": "workout",
+      "inverse": "attach",
+      "sealed": [],
+      "command": "edge.remove",
+      "phrasings": [
+        "take the route map off this workout",
+        "remove the photo from my Sunday run",
+        "detach the coach's plan from the workout"
+      ],
+      "description": "Detach a document or photo from a workout through edge.remove; the document or photo is kept.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["attached"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "export-csv",
+      "verb": "log",
+      "bulk": true,
+      "kind": "workout",
+      "inverse": null,
+      "writes_nothing": true,
+      "sealed": [],
+      "command": "health.export_csv",
+      "phrasings": [
+        "export my health data as a spreadsheet",
+        "save my workouts as a csv file",
+        "send someone this workout as a csv file"
+      ],
+      "description": "Answer the daily totals (every metric's or one metric's) or the workouts (every one, or one) as a spreadsheet file (.csv) through health.export_csv. Writes nothing.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "what": { "enum": ["measurements", "workouts"] },
+          "metric": {
+            "enum": [
+              "steps",
+              "active_energy_kcal",
+              "exercise_min",
+              "sleep_min",
+              "resting_hr_bpm",
+              "weight_kg",
+              null
+            ]
+          },
+          "id": { "type": ["string", "null"] }
+        },
+        "required": ["what"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      }
     }
   ],
   "queries": [
@@ -872,6 +1314,28 @@
       }
     },
     {
+      "name": "trash",
+      "kind": "workout",
+      "figures": ["workouts", "purge_dates"],
+      "description": "Workouts in reversible trash, most recently trashed first, with the day each was trashed and the day it will be erased.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "workouts": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
       "name": "follow-view",
       "kind": "daily_figure",
       "figures": ["newest_day", "newest_workout", "daily_totals"],
@@ -884,6 +1348,55 @@
       "output": {
         "type": "object",
         "properties": {}
+      }
+    },
+    {
+      "name": "attachments",
+      "kind": "workout",
+      "figures": ["attachments"],
+      "description": "What is attached to one workout, a page at a time: each attachment's id, kind (document or photo), title, media type, byte size and where its bytes are served, in the order of the attached file's id. Pass the page's `next` cursor as `after` for the next page. An id that is no live workout answers an empty page, and an attached file in the trash is left out until it is restored.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "after": {
+            "type": "object",
+            "properties": {
+              "sortKey": {
+                "type": "string"
+              },
+              "pk": {
+                "type": "string"
+              }
+            },
+            "required": ["sortKey", "pk"],
+            "additionalProperties": false
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "attachments": {
+            "type": "array"
+          },
+          "next": {
+            "type": ["object", "null"]
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
       }
     }
   ],

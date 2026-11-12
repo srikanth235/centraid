@@ -48,8 +48,8 @@ mod tests {
     #[test]
     fn it_declares_six_queries_and_twenty_nine_actions() {
         let manifest = manifest();
-        assert_eq!(manifest.queries.len(), 6);
-        assert_eq!(manifest.actions.len(), 29);
+        assert_eq!(manifest.queries.len(), 7);
+        assert_eq!(manifest.actions.len(), 36);
         for name in ["people", "person", "dashboard", "search", "trash", "links"] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
@@ -98,7 +98,7 @@ mod tests {
         }
     }
 
-    /// THIRTY-SIX SCOPES: eleven reads of the vault's own tables and one `act`
+    /// THIRTY-FIVE SCOPES: eleven reads of the vault's own tables and one `act`
     /// per command the actions invoke. The `act` half is compared against the
     /// action table rather than transcribed: an action with no scope is an
     /// action the grant does not cover, and a scope with no action is reach
@@ -107,7 +107,7 @@ mod tests {
     fn it_declares_eleven_reads_and_one_act_scope_per_command() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("People declares its reach");
-        assert_eq!(vault.scopes.len(), 38);
+        assert_eq!(vault.scopes.len(), 45);
         let mut declared: Vec<(&str, &str)> = vault
             .scopes
             .iter()
@@ -133,7 +133,7 @@ mod tests {
                 scope.table.as_deref().expect("a read names a table")
             })
             .collect();
-        assert_eq!(reads.len(), 11);
+        assert_eq!(reads.len(), 15);
         // NOTHING WIDER and nothing revealed: no whole-schema grant, and
         // `reveal` is Locker's alone.
         assert!(
@@ -193,6 +193,7 @@ mod tests {
             [
                 "birthday",
                 "cadence_days",
+                "expected_rev",
                 "id",
                 "met",
                 "nickname",

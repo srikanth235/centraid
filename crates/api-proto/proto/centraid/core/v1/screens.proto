@@ -36,6 +36,7 @@ import "centraid/core/v1/pair_screens.proto";
 import "centraid/core/v1/passes_screens.proto";
 import "centraid/core/v1/plumbing_screens.proto";
 import "centraid/core/v1/docs_screens.proto";
+import "centraid/core/v1/health_glance_screens.proto";
 import "centraid/core/v1/health_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/photos_home_screens.proto";
@@ -224,6 +225,10 @@ message ScreenEvent {
   // 806 and 807 were Photos' Duplicates and its review, retired (#1146 D5).
   reserved 806, 807;
   reserved "photos_duplicates", "photos_duplicate_review";
+  // 203 and 602 were `docs.versions` and `notes.history`, replaced by the kit's earlier-versions
+  // screen (#1185).
+  reserved 203, 602;
+  reserved "docs_versions", "notes_history";
   oneof kind {
     // The screen came into view. The first one loads.
     Appeared appeared = 1;
@@ -298,7 +303,6 @@ message ScreenEvent {
     DocsDriveEvent docs_drive = 200;
     DocsDocumentEvent docs_document = 201;
     DocsEditorEvent docs_editor = 202;
-    DocsVersionsEvent docs_versions = 203;
     // ---- notes (600-699) ----
     HealthHomeEvent health_home = 300;
     HealthMetricEvent health_metric = 301;
@@ -306,16 +310,23 @@ message ScreenEvent {
     HealthConnectEvent health_connect = 303;
     NotesHomeEvent notes_home = 600;
     NotesEditorEvent notes_editor = 601;
-    NotesHistoryEvent notes_history = 602;
     // ---- people (700-799) ----
     PeopleHomeEvent people_home = 700;
     PeoplePersonEvent people_person = 701;
     PeopleEditorEvent people_editor = 702;
+    PeopleListsEvent people_lists = 703;
     // ---- pairing (1400-1449, lane H2) ----
     PairLaptopEvent pair_laptop = 1400;
     // ---- the kit (900-999) ----
     TrashEvent trash = 900;
     TransferEvent transfer = 901;
+    // The action under a "phone says" line, from any page that draws one (#1183).
+    PhoneSaysTaken phone_says_taken = 902;
+    // The earlier-versions screen (#1185).
+    EarlierEvent earlier = 903;
+    // The verb of any status line ("Undo"), from any screen; no per-screen arm is needed (#1185).
+    StatusActed status_acted = 904;
+    EarlierPreviewEvent earlier_preview = 905;
     // ---- backup (1450-1499, lane H2) ----
     BackupHomeEvent backup_home = 1450;
     // ---- passes (1500-1599): passes_screens.proto ----
@@ -384,6 +395,10 @@ message ViewState {
   // 806 and 807 were Photos' Duplicates and its review, retired (#1146 D5).
   reserved 806, 807;
   reserved "photos_duplicates", "photos_duplicate_review";
+  // 203 and 602 were `docs.versions` and `notes.history`, replaced by the kit's earlier-versions
+  // screen (#1185).
+  reserved 203, 602;
+  reserved "docs_versions", "notes_history";
   oneof kind {
     CounterView counter = 10;
     // ---- words (1300-1399, lane H2) ----
@@ -426,7 +441,6 @@ message ViewState {
     DocsDriveState docs_drive = 200;
     DocsDocumentState docs_document = 201;
     DocsEditorState docs_editor = 202;
-    DocsVersionsState docs_versions = 203;
     // ---- notes (600-699) ----
     HealthHomeState health_home = 300;
     HealthMetricState health_metric = 301;
@@ -434,16 +448,18 @@ message ViewState {
     HealthConnectState health_connect = 303;
     NotesHomeState notes_home = 600;
     NotesEditorState notes_editor = 601;
-    NotesHistoryState notes_history = 602;
     // ---- people (700-799) ----
     PeopleHomeState people_home = 700;
     PeoplePersonState people_person = 701;
     PeopleEditorState people_editor = 702;
+    PeopleListsState people_lists = 703;
     // ---- pairing (1400-1449, lane H2) ----
     PairLaptopState pair_laptop = 1400;
     // ---- the kit (900-999) ----
     TrashView trash = 900;
     TransferView transfer = 901;
+    EarlierView earlier = 903;
+    EarlierPreviewView earlier_preview = 904;
     // ---- backup (1450-1499, lane H2) ----
     BackupHomeState backup_home = 1450;
     // ---- the shell (1000-1999): chat (1600-1699) ----
@@ -513,11 +529,18 @@ message Effect {
     // then reload the widgets (`agenda_glance_screens.proto`). 150 stays clear
     // of a parallel notifications branch.
     AgendaGlance agenda_glance = 150;
+    // ---- health (300-399): outside the app ----
+    // Keep the Health widget's snapshot (`health_glance_screens.proto`).
+    HealthGlance health_glance = 350;
     PickFile pick_file = 200;
     FollowFolder follow_folder = 201;
     StopFollowing stop_following = 202;
     // Hand one document's file to the platform's share sheet.
     ShareFile share_file = 203;
+    // Hand one small item made in memory (a note, a vCard) to the platform's share sheet as a file.
+    ShareBytes share_bytes = 204;
+    // Offer a file already on disk (a streamed export) to the OS save sheet, copied by streaming.
+    SaveFilePath save_file_path = 205;
     // ---- pairing (1340-1349, lane H2): pair_screens.proto ----
     ScanCode scan_code = 1340;
     BrowseGateways browse_gateways = 1341;
@@ -543,8 +566,6 @@ message Effect {
     FoldersRead folders_read = 1705;
     StageFolderFile stage_folder_file = 1706;
     RemindersRead reminders_read = 1707;
-    // Write owed changes to the phone's calendars (two-way sync); answer `CalendarWritten`.
-    CalendarWrite calendar_write = 1708;
     // ---- the shell (1000-1999) ----
     // Home asks the shell to act on the vaults the phone holds.
     VaultCommand vault_command = 1000;
@@ -561,6 +582,10 @@ message Effect {
   // no screen asked for them and neither shell performed them (#1152).
   reserved 6, 7, 11;
   reserved "pick_photos", "capture_photo", "schedule_notification";
+  // 1708 was `calendar_write`: the phone's calendars are followed one way and nothing is written
+  // back to them (#1183).
+  reserved 1708;
+  reserved "calendar_write";
 }
 
 message ClipboardSet {
@@ -620,6 +645,14 @@ message HealthRead {
   string totals_from = 3;
   string today = 4;
   int64 workouts_since_ms = 5;
+  // With `ask_permission` on Health Connect: the same sheet also asks to read
+  // Health while Centraid is closed (D16). Asked only at the Connect tap, never
+  // by a pass. HealthKit needs no such ask and ignores it.
+  bool ask_background = 6;
+  // WHERE THE LAST READ GOT TO (#1183): an opaque string the vault keeps with the records it
+  // covers, which Rust hands back and never opens. On iOS a JSON map of sample type to HealthKit
+  // anchor; on Android the Health Connect changes token. Empty is a complete read.
+  string cursor = 7;
 }
 
 message KeychainOp {
@@ -767,8 +800,14 @@ message LibraryDeleteItem {
 message LibraryDeleted {
   // The `content_hash` of every item whose asset the platform deleted.
   repeated string deleted_hashes = 1;
+  // The member said no in the system's dialog, or the platform refused to delete: nothing went.
   bool declined = 2;
-  string error = 3;
+  // 3 was `error`, the platform's own words: they stay in the shell's log, and Rust words the
+  // sentence from `failed` (#1185).
+  reserved 3;
+  reserved "error";
+  // The platform could not delete, for any other reason. Nothing is reported deleted.
+  bool failed = 4;
 }
 
 // WHAT RUST KNOWS ABOUT FREEING SPACE, as `photos::free_up` assembles it from
@@ -793,8 +832,10 @@ message FreeUpFacts {
   Outcome outcome = 9;
   // For `OUTCOME_FREED`: the bytes that went.
   uint64 freed_bytes = 10;
-  // For `OUTCOME_PLATFORM_ERROR`: the platform's own words.
-  string platform_error = 11;
+  // 11 was `platform_error`, the platform's own words: they stay in the shell's log, and the
+  // row says its own sentence for `OUTCOME_PLATFORM_ERROR` (#1185).
+  reserved 11;
+  reserved "platform_error";
 
   enum Outcome {
     OUTCOME_UNSPECIFIED = 0;
@@ -940,7 +981,6 @@ message EffectResult {
     FoldersListing folders_listing = 1705;
     FolderFileStaged folder_file_staged = 1706;
     RemindersSnapshot reminders_snapshot = 1707;
-    CalendarWritten calendar_written = 1708;
     // ---- vault plumbing (1300-1399, lane H2) ----
     SecretBatched secrets = 1300;
     SyncedSecretsStatus synced_status = 1302;
@@ -957,6 +997,9 @@ message EffectResult {
   // 4 was `photos` (`PhotosPicked`): no effect asked for it and no shell sent it (#1152).
   reserved 4;
   reserved "photos";
+  // 1708 was `calendar_written`, the answer to the write-back `Effect` (#1183).
+  reserved 1708;
+  reserved "calendar_written";
 }
 
 message EffectDone {}
@@ -968,6 +1011,12 @@ message EffectFailed {
   bool denied = 2;
   // The member dismissed it (a save sheet): not a failure.
   bool cancelled = 3;
+  // A GRANT'S STATE, reported and never worded (#1185): the shell says which, Rust says the sentence
+  // (`kit::permission`). `denied` is the member's no; `restricted` is a policy that blocks it (parental
+  // controls, a managed phone) which no button here can change; `limited` is a grant that is not
+  // enough (a chosen selection of photos or contacts, write-only calendar or reminders).
+  bool restricted = 4;
+  bool limited = 5;
 }
 
 // WHAT THE SHELL READ OF THE HEALTH STORE. Nothing here is a decision: Rust diffs
@@ -983,7 +1032,7 @@ message HealthSnapshot {
   // a refusal, so iOS leaves this empty.
   repeated string refused = 3;
   // Every day total the store has in the window, chosen metrics only; a day the
-  // store has nothing for is absent, never a zero.
+  // store has nothing for is absent, never a zero. With `delta`, only the days the changes touched.
   repeated HealthDayTotal days = 4;
   repeated HealthPhoneWorkout workouts = 5;
   // False when the workout read may have missed some (a query failed part-way).
@@ -993,6 +1042,21 @@ message HealthSnapshot {
   // With `store_present` false: Health Connect is not installed and Google Play
   // can bring it, so Connect says where to get it.
   bool installable = 8;
+  // Health Connect would not let Centraid read in the background (asked with
+  // `HealthRead.ask_background`): following still works while the app is open.
+  // Always false on iOS and when it was not asked.
+  bool background_refused = 9;
+  // TRUE when this answers `HealthRead.cursor`: `days` are then only the days the changes since
+  // touched (a sum day left with no samples is 0, never absent), `workouts` only those added or
+  // changed, and `deleted_workout_ids` the store's ids of those removed. FALSE is a complete read of
+  // the window: what an empty, expired or unusable cursor is answered with, never an error.
+  bool delta = 10;
+  // Where this read got to: the cursor of the next one, taken before the read began so a change
+  // that landed during it is seen again. Empty when the store would not say (the next read is complete).
+  string next_cursor = 11;
+  // With `delta`: the store's ids of workouts deleted since the cursor. The vault keeps each row
+  // and forgets its source.
+  repeated string deleted_workout_ids = 12;
 
   enum Store {
     STORE_UNSPECIFIED = 0;
@@ -1056,16 +1120,10 @@ message PhoneCalendar {
   string title = 3;
   // The colour the phone paints it with, `#RRGGBB`; empty when it has none.
   string color = 4;
-  // TWO-WAY SYNC: the shell's final word on whether the app may create events in this calendar.
-  // iOS: `EKCalendar.allowsContentModifications` and the type is local, calDAV or exchange (never
-  // subscription or birthday). Android: `CALENDAR_ACCESS_LEVEL >= CAL_ACCESS_CONTRIBUTOR` and the
-  // calendar is not a read-only account type. Absent is false: a calendar never reported is never
-  // written.
-  bool writable = 5;
-  // Existing events of this calendar may be changed or deleted. iOS: the same as `writable`.
-  // Android: `CALENDAR_ACCESS_LEVEL >= CAL_ACCESS_EDITOR` (a contributor can add but not change).
-  // The core writes to a calendar only when BOTH are true.
-  bool allows_modifications = 6;
+  // 5 and 6 were `writable` and `allows_modifications`: the calendars are followed one way and
+  // nothing is written back to them (#1183).
+  reserved 5, 6;
+  reserved "writable", "allows_modifications";
 }
 
 // One occurrence. An all-day `start`/`end` is `YYYY-MM-DD` with `end` the LAST
@@ -1090,7 +1148,7 @@ message PhoneCalendarEvent {
   // The event's link and where it is, as the phone holds them; empty when it has none.
   string url = 13;
   string location = 14;
-  // The guests the phone holds (read only: never written back).
+  // The guests the phone holds.
   repeated PhoneAttendee attendees = 15;
   // The alerts, each as whole minutes BEFORE the start (0 = at the start). An absolute alert is
   // converted by the shell to minutes before this occurrence's start; one after the start (a
@@ -1114,122 +1172,6 @@ message PhoneCalendarSeries {
   string rrule = 2;
   string start = 3;
   string end = 4;
-}
-
-// ---------------------------------------------------------------------------
-// Two-way calendar sync (#1173): what the core asks the shell to write to the phone's calendars
-// ---------------------------------------------------------------------------
-
-// Perform each item against the phone's calendar store, then answer `CalendarWritten` with one
-// `CalendarWrittenItem` per item (same `event_id`). The shell NEVER asks the OS for permission to
-// do this (the core only sends it for an imported device whose last read was allowed); an item it
-// cannot perform answers `ok: false`. A whole-effect failure (`EffectFailed`) fails every item.
-message CalendarWrite {
-  repeated CalendarWriteItem items = 1;
-}
-
-message CalendarWriteItem {
-  // The vault's event.
-  string event_id = 1;
-  Op op = 2;
-  // `PhoneCalendar.key` of the calendar to write in (not prefixed with `calendar:`).
-  string calendar_key = 3;
-  // The phone's id for the event: `PhoneCalendarEvent.phone_id` kind-prefixed (`uid:`, `lookup:`,
-  // `local:`). Empty for a create. For an update or delete the shell finds the event by it
-  // (EventKit: `calendarItemExternalIdentifier` for `uid:`, `eventIdentifier` for `local:`;
-  // Android: `Events._ID` for `local:`, `_SYNC_ID`/`UID_2445` for `uid:`/`lookup:`).
-  string external_id = 4;
-  // The fields to set (absent for a delete). A field the item states is written as stated.
-  CalendarWriteFields fields = 5;
-  // WHICH EVENTS OF A SERIES the item touches (C10); `SPAN_SERIES` for a single event too. A
-  // series edit is one `SPAN_SERIES` item; each changed or cancelled day is its own `SPAN_THIS`.
-  Span span = 6;
-  // For `SPAN_THIS`: the occurrence's series-local original start in the
-  // series' own wall clock (`YYYY-MM-DDTHH:MM:SS`, or `YYYY-MM-DD` for an all-day series).
-  string original_start = 7;
-  // What the phone last stated of this event, for a DELETE only (C6/C7): the shell compares its
-  // own copy with this and, if it differs, DOES NOT delete and answers `phone_kept: true`.
-  CalendarStated expected = 8;
-  // An occurrence edit that CANCELS the day: `SPAN_THIS` with `cancel` removes just that day
-  // (EKSpan.thisEvent remove; CalendarContract: an exception row with STATUS_CANCELED).
-  bool cancel = 9;
-  // This install's id; the answer's `external_id` is minted for it on a create.
-  string device_id = 10;
-
-  enum Op {
-    OP_UNSPECIFIED = 0;
-    OP_CREATE = 1;
-    OP_UPDATE = 2;
-    OP_DELETE = 3;
-  }
-  enum Span {
-    SPAN_UNSPECIFIED = 0;
-    // The whole series (or the one event when it does not repeat).
-    SPAN_SERIES = 1;
-    // This occurrence only (EKSpan.thisEvent; an Android exception).
-    SPAN_THIS = 2;
-    // 3 was `SPAN_FUTURE`: the vault stores "this and following" as moved days of one series, so
-    // the core cannot tell it from single-day edits and never asked for it.
-    reserved 3;
-    reserved "SPAN_FUTURE";
-  }
-}
-
-// The fields of an event as they are written. Times are in the form of `PhoneCalendarEvent`:
-// an all-day `start`/`end` is `YYYY-MM-DD` with `end` the LAST day, inclusive; a timed one is
-// `YYYY-MM-DDTHH:MM:SS` in `tz` (the series' or event's own wall clock), `end` exclusive; a
-// floating one has no `tz` and is a wall clock on whatever zone the phone is in.
-message CalendarWriteFields {
-  string title = 1;
-  string notes = 2;
-  string url = 3;
-  bool all_day = 4;
-  string start = 5;
-  string end = 6;
-  // IANA zone; empty for an all-day or floating event.
-  string tz = 7;
-  // RFC 5545 rule text without `RRULE:`, or empty for a single event. Write it as given.
-  string rrule = 8;
-  // Blocks its time (EventKit availability busy / `Events.AVAILABILITY_BUSY`); false is free.
-  bool busy = 9;
-  // Alerts, minutes before the start, REPLACING the event's alerts (empty clears them).
-  repeated uint32 alerts = 10;
-  // Which fields this item states: a `false` leaves the phone's value alone. A create states all.
-  bool states_notes = 11;
-  bool states_url = 12;
-  bool states_alerts = 13;
-  bool states_rrule = 14;
-  // `title` / the time fields (`all_day`, `start`, `end`, `tz`) / `busy` are stated too only when
-  // these are true (always true on a create): an update writes only what the member changed here.
-  bool states_title = 15;
-  bool states_when = 16;
-  bool states_busy = 17;
-}
-
-// What the phone last stated of an event: the fields a delete is checked against. Empty strings
-// are absent.
-message CalendarStated {
-  string title = 1;
-  string notes = 2;
-  string url = 3;
-  string start = 4;
-  string end = 5;
-}
-
-message CalendarWritten {
-  repeated CalendarWrittenItem items = 1;
-}
-
-message CalendarWrittenItem {
-  string event_id = 1;
-  bool ok = 2;
-  // For a create: the id the phone minted (same kinds as `CalendarWriteItem.external_id`).
-  string external_id = 3;
-  // For a delete that was NOT performed because the phone's copy differs from `expected` (C7):
-  // `ok` is true and this is true. Not a failure; the vault forgets the link.
-  bool phone_kept = 4;
-  // Why it was not done, for logs; never shown.
-  string error = 5;
 }
 
 // The phone's address book as the OS holds it. Rust makes every record: it
@@ -1352,6 +1294,37 @@ message ShareFile {
   string chooser_title = 4;
 }
 
+// SHARE ONE SMALL ITEM AS A FILE (#1185, take out): write `content` to a temporary file called
+// `name` (the receiver sees it: "Plan.md", "Ada Lovelace.vcf") and open the platform's share
+// sheet on it, Android's `ACTION_SEND` through the app's `FileProvider`, iOS's
+// `UIActivityViewController`. The copy is plaintext outside the vault, so the shell removes it
+// when the sheet closes (iOS) or when the next share replaces it (Android). Answers done once the
+// sheet is up, or `EffectFailed` when the file cannot be written. Rust asks the owner check first.
+message ShareBytes {
+  string name = 1;
+  string media_type = 2;
+  bytes content = 3;
+  // The share sheet's title.
+  string chooser_title = 4;
+}
+
+// SAVE A FILE ALREADY ON DISK (#1185, take out; owner decision D17: a large export is written as
+// a streamed file, never built in memory): the core staged the export at `path` (a file under the
+// vault's staging folder, which holds plaintext, so Rust asks the owner check first) and the
+// shell offers the platform's save sheet for it and copies it by STREAMING, never reading the
+// whole file: iOS `UIDocumentPickerViewController(forExporting:asCopy:)` on the file, Android
+// `ACTION_CREATE_DOCUMENT` named `name`, then an input stream copied to the chosen document's
+// output stream in fixed-size pieces. Answers `EffectDone` once saved, `EffectFailed` with
+// `cancelled` when the sheet is dismissed, `EffectFailed` when the copy fails. The shell deletes
+// the staged file whatever the answer was.
+message SaveFilePath {
+  // Absolute path of the staged file.
+  string path = 1;
+  // The file's name as the member sees it in the save sheet: "Documents.zip".
+  string name = 2;
+  string media_type = 3;
+}
+
 message StopFollowing {
   string origin = 1;
 }
@@ -1377,15 +1350,17 @@ message CounterRetryTapped {}
 
 message CounterView {
   string title = 1;
+  // 2 and 3 were `loading` and `failed`: the read is `page` (#1185).
+  reserved 2, 3;
+  reserved "loading", "failed";
+  // Set when the page is ready.
   oneof content {
-    CounterLoading loading = 2;
-    Failure failed = 3;
     CounterData data = 4;
   }
-}
-
-message CounterLoading {
-  string label = 1;
+  // THE READ: loading, failed, or ready.
+  PageState page = 5;
+  // "Loading…", said under the skeleton while the first read is out.
+  string loading_label = 6;
 }
 
 message CounterData {

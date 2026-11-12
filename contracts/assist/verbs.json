@@ -112,11 +112,6 @@
       "done": "filed"
     },
     {
-      "name": "void",
-      "args": "",
-      "done": "voided"
-    },
-    {
       "name": "link",
       "args": "to: #n",
       "done": "linked"

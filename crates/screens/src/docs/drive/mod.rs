@@ -41,12 +41,14 @@ use wire::screen_event::Kind as E;
 use super::fold::{KEY_LABELS, KEY_MOVE, KEY_RENAME, KEY_STAR, KEY_TRASH, KEY_UNSTAR};
 use super::folders::TOP_LEVEL;
 use super::rename::Rename;
-use super::{Phase, refusal};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::menu;
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Page, Reading};
+use crate::kit::trash;
+use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
+use crate::strings::Locale;
 use crate::strings::docs as words;
 
 mod ingest;
@@ -62,6 +64,8 @@ use sheets::Sheet;
 /// The Add sheet's, More's and the followed list's row keys.
 pub const KEY_RECENT: &str = "recent";
 pub const KEY_TRASH_SHELF: &str = "trash_shelf";
+/// The More sheet's Export row (a route, so the shell pushes it).
+pub const KEY_EXPORT: &str = "export";
 pub const KEY_UPLOAD: &str = "upload";
 pub const KEY_SCAN: &str = "scan";
 pub const KEY_TEXT: &str = "text";
@@ -142,11 +146,13 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         // THE GRID IS THE DEFAULT: real thumbnails are the board's whole point.
         grid: true,
         search: Search::default(),
-        phase: Phase::Loading,
+        page: Page::loading(),
+        asked: String::new(),
         rail: None,
         sheet: Sheet::None,
-        status: None,
+        undo: Undo::default(),
         asking: None,
+        asking_stop: None,
         rename: None,
         camera: wire::DocsPermission::NotAsked,
         files: wire::DocsPermission::NotAsked,
@@ -166,13 +172,21 @@ struct Drive {
     query: Query,
     grid: bool,
     search: Search,
-    phase: Phase<Held>,
+    /// The read. A shelf, folder or search with nothing to show is [`Page::Empty`] (see
+    /// [`Drive::reload`]), never ready data with no rows.
+    page: Page<Held>,
+    /// What `page` was asked for, apart from the window: data read for another shelf, filter,
+    /// order or term is not shown under a failed read of this one.
+    asked: String,
     rail: Option<Rail>,
     sheet: Sheet,
     /// A refused write's sentence, over the rows.
-    status: Option<wire::StatusLine>,
+    /// The status line and what its Undo reverses (the kit's one door).
+    undo: Undo,
     /// The document a trash confirm asks about.
     asking: Option<String>,
+    /// The followed folder's origin a stop-reading confirm asks about (#1185).
+    asking_stop: Option<String>,
     rename: Option<Rename>,
     camera: wire::DocsPermission,
     files: wire::DocsPermission,
@@ -205,26 +219,41 @@ impl Drive {
                 Answer::DocsSearch(search) => Some(search),
                 _ => None,
             });
-            self.phase = match reading {
-                Reading::Data(search) => Phase::Ready(Held {
-                    search: true,
-                    rows: search.documents,
-                    today: search.today,
-                    truncated: false,
-                    corrected: search.corrected,
-                    containers: search.containers,
-                }),
-                Reading::Denied(denial) => Phase::Denied(denial),
-                Reading::Failed => Phase::Failed,
+            let nothing = |search: &wire::DocsSearch| {
+                search.documents.is_empty()
+                    && !search.containers.iter().any(|hit| hit.entity == "folder")
             };
+            let reading = match reading {
+                Reading::Data(search) => Reading::Data((
+                    nothing(&search),
+                    Held {
+                        search: true,
+                        rows: search.documents,
+                        today: search.today,
+                        truncated: false,
+                        corrected: search.corrected,
+                        containers: search.containers,
+                    },
+                )),
+                Reading::Denied(denial) => Reading::Denied(denial),
+                Reading::Failed => Reading::Failed,
+            };
+            self.landed(ctx.locale(), reading);
             return;
         }
         let reading = read::read(ctx, self.drive_request(), |answer| match answer {
             Answer::DocsDrive(drive) => Some(drive),
             _ => None,
         });
-        self.phase = match reading {
+        let reading = match reading {
             Reading::Data(drive) => {
+                // The open folder's child folders count as something to show.
+                let children = self.destination == wire::DocsDestination::Folders
+                    && drive
+                        .folders
+                        .iter()
+                        .any(|folder| folder.parent_id == self.folder_id);
+                let nothing = drive.documents.is_empty() && !children;
                 self.rail = Some(Rail {
                     folders: drive.folders,
                     labels: drive.labels,
@@ -234,18 +263,52 @@ impl Drive {
                     starred_count: drive.starred_count,
                     trash_count: drive.trash_count,
                 });
-                Phase::Ready(Held {
-                    search: false,
-                    rows: drive.documents,
-                    today: drive.today,
-                    truncated: drive.truncated,
-                    corrected: String::new(),
-                    containers: Vec::new(),
-                })
+                Reading::Data((
+                    nothing,
+                    Held {
+                        search: false,
+                        rows: drive.documents,
+                        today: drive.today,
+                        truncated: drive.truncated,
+                        corrected: String::new(),
+                        containers: Vec::new(),
+                    },
+                ))
             }
-            Reading::Denied(denial) => Phase::Denied(denial),
-            Reading::Failed => Phase::Failed,
+            Reading::Denied(denial) => Reading::Denied(denial),
+            Reading::Failed => Reading::Failed,
         };
+        self.landed(ctx.locale(), reading);
+    }
+
+    /// What the read now showing was asked for, without its window.
+    fn asking(&self) -> String {
+        match self.active_term() {
+            Some(term) => format!("search/{term}"),
+            None => format!("{:?}/{}/{:?}", self.destination, self.folder_id, self.query),
+        }
+    }
+
+    /// The page after `reading` landed over the one before. A refresh never blanks the rows
+    /// shown (a failed one keeps them under a note); a read for another shelf, filter, order or
+    /// term starts from nothing, so a failure of it is the failure and never the old rows.
+    fn landed(&mut self, locale: Locale, reading: Reading<(bool, Held)>) {
+        let asked = self.asking();
+        let kept = std::mem::replace(&mut self.page, Page::loading());
+        let held = if self.asked == asked {
+            kept.refreshing()
+        } else {
+            Page::loading()
+        };
+        self.asked = asked;
+        let nothing = matches!(reading, Reading::Data((true, _)));
+        let reading = match reading {
+            Reading::Data((_, held)) => Reading::Data(held),
+            Reading::Denied(denial) => Reading::Denied(denial),
+            Reading::Failed => Reading::Failed,
+        };
+        // A shelf with nothing to show is the page's empty state, which holds no rows.
+        self.page = held.after(reading, locale, |_| nothing);
     }
 
     /// The shelf as the core's request.
@@ -276,7 +339,7 @@ impl Drive {
     }
 
     fn rows(&self) -> &[wire::DocsDocumentRow] {
-        self.phase.data().map_or(&[], |held| held.rows.as_slice())
+        self.page.data().map_or(&[], |held| held.rows.as_slice())
     }
 
     fn row(&self, document_id: &str) -> Option<&wire::DocsDocumentRow> {
@@ -294,16 +357,18 @@ impl Drive {
     // Writes
     // -----------------------------------------------------------------------
 
-    /// One write under a key of its own: a refusal is the status line, and the
-    /// page is read again either way.
-    fn write(&mut self, ctx: &Ctx, request: impl Into<wire::ActRequest>, subject: &str) -> bool {
+    /// One write under a key of its own: the status line says what happened (with Undo when the
+    /// core can take it back) or the refusal, and the page is read again either way.
+    fn write(
+        &mut self,
+        ctx: &Ctx,
+        request: impl Into<wire::ActRequest>,
+        subject: &str,
+        said: impl FnOnce(Locale) -> String,
+    ) -> bool {
         let request: wire::ActRequest = request.into();
-        self.status = None;
         let key = kit_act::key(&[&request.action, subject], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        if !settled.committed {
-            self.status = Some(refusal(settled.refusal));
-        }
+        let settled = self.undo.act(ctx, request, &key, said);
         self.reload(ctx);
         settled.committed
     }
@@ -314,7 +379,10 @@ impl Drive {
 
     fn event(&mut self, event: wire::DocsDriveEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
-            Some(D::Refreshed(_)) => self.reload(ctx),
+            Some(D::Refreshed(_)) => {
+                self.reload(ctx);
+                ctx.follows().changed(ctx, crate::follow::Store::Files);
+            }
             Some(D::Band(picked)) => self.band(ctx, &picked.key),
             Some(D::SearchOpened(_)) => self.search.open = true,
             Some(D::SearchTerm(typed)) => {
@@ -373,16 +441,23 @@ impl Drive {
             Some(D::FolderCreated(_)) => self.folder_created(ctx),
             Some(D::Confirmed(_)) => {
                 if let Some(id) = self.asking.take() {
+                    let title = self
+                        .row(&id)
+                        .map(|row| row.title.clone())
+                        .unwrap_or_default();
                     self.write(
                         ctx,
                         act::docs::Trash {
                             document_id: id.clone(),
                         },
                         &id,
+                        |locale| trash::moved_to_trash(locale, &title),
                     );
                 }
             }
             Some(D::Dismissed(_)) => self.asking = None,
+            Some(D::StopConfirmed(_)) => return self.stop(ctx),
+            Some(D::StopDismissed(_)) => self.asking_stop = None,
             Some(D::Permission(changed)) => self.permission(&changed),
             Some(D::IngestRetried(_)) => {
                 let effects = self.ingest.retry(ctx);
@@ -491,6 +566,7 @@ impl Drive {
                             folder_id: Some(folder_id.to_owned()).filter(|id| !id.is_empty()),
                         },
                         &format!("{document_id}:{key}"),
+                        words::moved_said,
                     );
                 }
             }
@@ -508,31 +584,45 @@ impl Drive {
             },
             Sheet::Add => return self.add(ctx, key),
             Sheet::RowMenu(document_id) => self.row_action(ctx, &document_id, key),
+            // A FOLLOWED FOLDER'S ROW ASKS FIRST (#1185): the kit's stop confirm, in the shared
+            // words, then `stop` runs. A row for a folder the list no longer holds asks nothing.
             Sheet::Followed => {
                 self.sheet = Sheet::None;
-                if let Some(origin) = key.strip_prefix(KEY_STOP_PREFIX).filter(|o| !o.is_empty()) {
-                    // The shell forgets its access and tells the core to forget
-                    // the folder's links; every document stays.
-                    self.followed.retain(|folder| folder.origin_id != origin);
-                    // THE VAULT FORGETS THE FOLDER'S LINKS (`imports.files`); the shell, its access.
-                    tell_files(
-                        ctx,
-                        wire::imports_files_event::Kind::FolderStopped(
-                            wire::imports_files_event::FolderStopped {
-                                origin: origin.to_owned(),
-                            },
-                        ),
-                    );
-                    return vec![wire::Effect {
-                        kind: Some(wire::effect::Kind::StopFollowing(wire::StopFollowing {
-                            origin: origin.to_owned(),
-                        })),
-                    }];
+                if let Some(origin) = key.strip_prefix(KEY_STOP_PREFIX).filter(|o| !o.is_empty())
+                    && self
+                        .followed
+                        .iter()
+                        .any(|folder| folder.origin_id == origin)
+                {
+                    self.asking_stop = Some(origin.to_owned());
                 }
             }
             _ => {}
         }
         Vec::new()
+    }
+
+    /// STOP READING a followed folder, once the member said so: the shell forgets its access and
+    /// the vault forgets the folder's links; every document stays.
+    fn stop(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
+        let Some(origin) = self.asking_stop.take() else {
+            return Vec::new();
+        };
+        self.followed.retain(|folder| folder.origin_id != origin);
+        // THE VAULT FORGETS THE FOLDER'S LINKS (`imports.files`); the shell, its access.
+        tell_files(
+            ctx,
+            wire::imports_files_event::Kind::FolderStopped(
+                wire::imports_files_event::FolderStopped {
+                    origin: origin.clone(),
+                },
+            ),
+        );
+        vec![wire::Effect {
+            kind: Some(wire::effect::Kind::StopFollowing(wire::StopFollowing {
+                origin,
+            })),
+        }]
     }
 
     /// The Add sheet's row: a capture is the ingest's, a folder is a sheet.
@@ -589,6 +679,7 @@ impl Drive {
                         document_id: document_id.to_owned(),
                     },
                     document_id,
+                    words::starred_said,
                 );
             }
             KEY_UNSTAR => {
@@ -599,6 +690,7 @@ impl Drive {
                         document_id: document_id.to_owned(),
                     },
                     document_id,
+                    words::unstarred_said,
                 );
             }
             KEY_RENAME => {
@@ -611,7 +703,7 @@ impl Drive {
                         return;
                     }
                 }
-                self.rename = Some(Rename::open(document_id, &row.title));
+                self.rename = Some(Rename::open(ctx, document_id, &row.title));
             }
             KEY_MOVE => self.sheet = Sheet::Move(document_id.to_owned()),
             KEY_LABELS => {
@@ -652,6 +744,7 @@ impl Drive {
                 color: None,
             },
             &format!("{document_id}:{label}"),
+            words::label_added_said,
         );
     }
 
@@ -674,6 +767,7 @@ impl Drive {
                 label: label.clone(),
             },
             &format!("{document_id}:{label}"),
+            words::label_removed_said,
         );
     }
 
@@ -695,6 +789,7 @@ impl Drive {
                 ..Default::default()
             },
             &name,
+            words::folder_created_said,
         );
     }
 
@@ -720,7 +815,23 @@ impl Screen for Drive {
                 }
             }
             // CLOSE = DONE: whatever is typed is saved.
+            Some(E::StatusActed(_)) => {
+                // A rename the vault refused as stale: Reload keeps the title typed and reads it again.
+                if self.rename.as_ref().is_some_and(Rename::conflicted) {
+                    if self
+                        .rename
+                        .as_mut()
+                        .is_some_and(|rename| !rename.reload(ctx))
+                    {
+                        self.rename = None;
+                    }
+                    self.reload(ctx);
+                } else if self.undo.acted(ctx) {
+                    self.reload(ctx);
+                }
+            }
             Some(E::Left(_)) => {
+                self.undo.clear();
                 if let Some(rename) = self.rename.as_mut() {
                     let _ = rename.close(ctx);
                 }
@@ -796,6 +907,7 @@ impl Drive {
                         wire::imports_files_event::FolderFollowed {
                             origin: followed.origin.clone(),
                             name: followed.name.clone(),
+                            replaces: None,
                         },
                     ),
                 );
@@ -808,7 +920,7 @@ impl Drive {
                 }
             }
             O::Failed(_) => {
-                self.status = Some(refusal(words::follow_failed(ctx.locale())));
+                self.undo.refuse(words::follow_failed(ctx.locale()));
             }
             _ => {}
         }

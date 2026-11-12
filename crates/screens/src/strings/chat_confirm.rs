@@ -36,6 +36,7 @@ catalog! {
     plain noun_folder = ("folder", "folder");
     plain noun_photo = ("photo", "photo");
     plain noun_album = ("album", "album");
+    plain noun_place = ("place", "place");
     plain noun_transaction = ("transaction", "transaction");
     plain noun_account = ("account", "account");
     plain noun_category = ("category", "category");

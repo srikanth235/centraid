@@ -1,6 +1,7 @@
 package dev.centraid.android.screens
 
 import dev.centraid.android.kit.KitText
+import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.kitTextStyle
@@ -609,7 +610,7 @@ private fun PeriodCard(
             Modifier
                 .fillMaxWidth()
                 .height(coverHeight)
-                .clip(RoundedCornerShape(RADIUS_MD.dp))
+                .clip(RoundedCornerShape((LocalCentraidTokens.current.radii["md"] ?: 0).dp))
                 .background(centraidColor("skel")),
         ) {
             val cover = period.cover?.thumbnail_path.orEmpty()
@@ -679,4 +680,3 @@ private const val CARD_BOTTOM: Int = 20
 
 /** The ground a page that has not landed stands on: the smallest rung's height. */
 private const val SENTINEL_HEIGHT: Int = 64
-private const val RADIUS_MD: Int = 7

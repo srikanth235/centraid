@@ -132,6 +132,12 @@ impl<'a> Params<'a> {
         }
     }
 
+    /// The request's `after` as it was sent, for a query whose cursor is one number.
+    pub(crate) fn after_raw(&mut self) -> String {
+        self.after_taken = true;
+        self.request.after.clone()
+    }
+
     /// The request's `after`, split into its two keys.
     pub(crate) fn after(&mut self) -> Result<Option<(String, String)>> {
         self.after_taken = true;
@@ -360,16 +366,16 @@ fn read(
                 overdue_before: p.text("overdue_before")?,
             },
         )?,
-        ("calendar", "attachments") => app_query::attachments::attachments(
+        ("calendar", "trash") => {
+            app_query::calendar_trash::trash(vault, door, &wire::CalendarTrashRequest { tz })?
+        }
+        (
+            app @ ("calendar" | "reminders" | "notes" | "people" | "photos" | "docs" | "health"
+            | "money"),
+            "attachments",
+        ) => app_query::attachments::attachments(
             door,
-            app_query::attachments::Of::Event,
-            &p.text("item_id")?,
-            p.after()?,
-            p.limit(ATTACHMENTS_ROWS),
-        )?,
-        ("reminders", "attachments") => app_query::attachments::attachments(
-            door,
-            app_query::attachments::Of::Task,
+            app,
             &p.text("item_id")?,
             p.after()?,
             p.limit(ATTACHMENTS_ROWS),
@@ -603,14 +609,42 @@ fn read(
         // ---- the shell's own catalogue (`shell/manifest.json`) ----
         // imports (lane I): the folders the vault follows, with each file's last stat
         ("shell", "files-followed") => app_query::imports::files_followed(door)?,
-        // imports (two-way calendar sync): what the writable phone calendars are owed
-        ("shell", "calendar-owed") => app_query::imports::calendar_owed(
+        // reconnect (#1185): the phone stores the vault was following, on whichever phone
+        ("shell", "followed-stores") => app_query::imports::followed_stores(door)?,
+        // following (#1183): what the phone says that differs from one followed row
+        ("shell", "phone-differences") => {
+            app_query::follow::differences(vault, &p.text("entity_id")?)?
+        }
+        // history (#1185): a page of one record's earlier versions, and how many it holds
+        ("shell", "earlier-versions") => {
+            let after = p.after_raw();
+            let limit = p.limit(app_query::history::PAGE as u32);
+            app_query::history::versions(vault, &p.text("entity_id")?, &tz, &after, limit as usize)?
+        }
+        ("shell", "earlier-record") => app_query::history::record(
             vault,
-            door,
-            &p.list("origins")?,
-            &p.text("after_event")?,
-            p.limit(0),
+            &p.text("entity_id")?,
+            p.opt_int("seq")?.unwrap_or_default(),
+            &tz,
         )?,
+        // following (#1183): where the last read of a phone store got to, for this install
+        ("shell", "origin-cursor") => app_query::follow::origin_cursor(
+            vault,
+            &p.text("system")?,
+            &p.text("ref")?,
+            &p.text("device_id")?,
+        )?,
+        // arrival (#1185): where one record came from, a followed store or a one-shot arrival
+        ("shell", "origin-of") => app_query::follow::origin_of(vault, &p.text("entity_id")?)?,
+        ("shell", "earlier-count") => app_query::history::count(vault, &p.text("entity_id")?)?,
+        // the general link (#1185): what an item is linked to, and the picker's rows
+        ("shell", "links") => app_query::links::linked(vault, &p.text("entity_id")?)?,
+        ("shell", "link-candidates") => {
+            let kind = p.text("kind")?;
+            let term = p.text("term")?;
+            let limit = p.limit(centraid_vault::links::MAX_CANDIDATES as u32);
+            app_query::links::candidates(vault, &kind, &term, limit as usize)?
+        }
         // chat (lane I): the drawer's list or search, one stored chat, and a card's liveness
         ("shell", "chats") => app_query::chat::threads(
             vault,
@@ -815,6 +849,10 @@ fn read(
             },
         )?,
 
+        ("money", "trash") => {
+            app_query::money_trash::trash(vault, door, &wire::MoneyTrashRequest { tz })?
+        }
+
         // Health (#1129): no zone and no clock; the request states its day.
         ("health", "today") => {
             app_query::health::today(vault, door, now, &wire::HealthTodayRequest { tz })?
@@ -861,6 +899,9 @@ fn read(
                 tz,
             },
         )?,
+        ("health", "trash") => {
+            app_query::health_trash::trash(vault, door, &wire::HealthTrashRequest { tz })?
+        }
         ("health", "follow-view") => {
             app_query::health::follow_view(vault, door, now, &wire::HealthFollowViewRequest { tz })?
         }

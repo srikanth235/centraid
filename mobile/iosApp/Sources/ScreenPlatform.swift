@@ -176,13 +176,43 @@ enum FilePerformer {
         do {
             try save.content.write(to: url, options: [.completeFileProtection])
         } catch {
-            done(.failed(ScreenStore.failure("could not stage the file")))
+            done(.failed(ScreenStore.failure(EffectReason.failed)))
             return
         }
         let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)
         let holder = PickerHolder { urls in
             try? FileManager.default.removeItem(at: url)
-            done(urls.isEmpty ? .failed(ScreenStore.failure("dismissed", cancelled: true)) : .done(Centraid_Core_V1_EffectDone()))
+            done(urls.isEmpty ? .failed(ScreenStore.failure(EffectReason.cancelled, cancelled: true)) : .done(Centraid_Core_V1_EffectDone()))
+        }
+        present(picker, holder)
+    }
+
+    /// `SaveFilePath` (a streamed export, too large to hold in memory): the file the core staged is
+    /// renamed in place to the name the member sees (a move within the app's container, not a copy),
+    /// protected, and offered to the save sheet, which COPIES it from disk (`asCopy`), so no byte
+    /// of it passes through memory here. The staged file is removed whatever the answer was.
+    static func savePath(
+        _ save: Centraid_Core_V1_SaveFilePath,
+        _ done: @escaping (Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void
+    ) {
+        let manager = FileManager.default
+        let staged = URL(fileURLWithPath: save.path)
+        let named = URL(fileURLWithPath: save.name).lastPathComponent
+        let url = manager.temporaryDirectory.appendingPathComponent(named.isEmpty ? staged.lastPathComponent : named)
+        do {
+            try? manager.removeItem(at: url)
+            try manager.moveItem(at: staged, to: url)
+            try manager.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: url.path)
+        } catch {
+            try? manager.removeItem(at: staged)
+            try? manager.removeItem(at: url)
+            done(.failed(ScreenStore.failure(EffectReason.failed)))
+            return
+        }
+        let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)
+        let holder = PickerHolder { urls in
+            try? FileManager.default.removeItem(at: url)
+            done(urls.isEmpty ? .failed(ScreenStore.failure(EffectReason.cancelled, cancelled: true)) : .done(Centraid_Core_V1_EffectDone()))
         }
         present(picker, holder)
     }

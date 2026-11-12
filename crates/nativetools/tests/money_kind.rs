@@ -147,8 +147,10 @@ fn a_sum_is_one_figure_per_currency_and_never_across_them() {
     );
 }
 
+/// What the bank wrote is never written by chat: it cannot create a line or file one, and a line goes
+/// only the way the member's own screen sends it, to the trash (#1185). Nothing parks a card for it.
 #[test]
-fn nothing_can_write_a_transaction() {
+fn chat_can_only_trash_a_transaction_and_write_nothing_else() {
     let world = seeded_with(&world_json());
     let mut session = world.session();
     let found = find(
@@ -159,7 +161,6 @@ fn nothing_can_write_a_transaction() {
     assert_eq!(row.len(), 1, "{found}");
     for args in [
         json!({"verb": "edit", "rows": "#1", "args": "category: Groceries"}),
-        json!({"verb": "delete", "rows": "#1"}),
         json!({"verb": "create", "kind": "transaction", "args": "name: Lunch"}),
     ] {
         let out = call(&mut session, "act", args.clone());
@@ -172,6 +173,22 @@ fn nothing_can_write_a_transaction() {
         );
         assert!(session.pending().is_none(), "{args} parked a write");
     }
+
+    let trashed = call(&mut session, "act", json!({"verb": "delete", "rows": "#1"}));
+    assert!(
+        trashed["text"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("deleted:"),
+        "{trashed}"
+    );
+    assert!(session.pending().is_none());
+    // A trashed line is in no read the assistant has: it is gone from what it finds.
+    let found = find(
+        &mut session,
+        json!({"kind": "transaction", "name": "Blue Bottle"}),
+    );
+    assert!(ids(&found["effect"]["rows"]).is_empty(), "{found}");
 }
 
 /// What the runtime asked a door for.

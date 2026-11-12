@@ -4,6 +4,7 @@
 
 use centraid_api_proto::core_v1 as wire;
 
+use crate::kit::read::Page;
 use crate::people::fold;
 use crate::strings::{Locale, people as words};
 
@@ -199,6 +200,7 @@ impl Sheet {
             failure: self.failure.as_ref().map(|sentence| wire::Failure {
                 sentence: sentence.clone(),
                 remedy: String::new(),
+                permanent: false,
             }),
         }
     }
@@ -251,11 +253,8 @@ impl Sheet {
                 title: words::merge_title(locale),
                 body: words::merge_body(locale),
                 cancel_label: words::cancel(locale),
-                content: Some(match merge {
-                    Merge::Failed => wire::people_merge_sheet::Content::Failure(
-                        crate::kit::read::failure(locale),
-                    ),
-                    Merge::Choices(people) => {
+                content: match merge {
+                    Merge::Choices(people) if !people.is_empty() => Some(
                         wire::people_merge_sheet::Content::Choices(wire::PeopleMergeChoices {
                             choices: people
                                 .iter()
@@ -266,13 +265,30 @@ impl Sheet {
                                     role: row.role.clone(),
                                 })
                                 .collect(),
-                            empty: people.is_empty().then(|| wire::EmptyState {
-                                headline: words::empty_merge(locale),
-                                ..wire::EmptyState::default()
-                            }),
-                        })
+                        }),
+                    ),
+                    _ => None,
+                },
+                // A read that came to nothing is the failure; no one to fold in is the sheet's
+                // own empty state, never a blank list.
+                page: Some(
+                    match merge {
+                        Merge::Failed => Page::<()>::Failed,
+                        Merge::Choices(people) if people.is_empty() => Page::Empty,
+                        Merge::Choices(_) => Page::Ready {
+                            data: (),
+                            note: None,
+                        },
                     }
-                }),
+                    .wire(
+                        locale,
+                        |denial| crate::people::denied(locale, denial),
+                        || wire::EmptyState {
+                            headline: words::empty_merge(locale),
+                            ..wire::EmptyState::default()
+                        },
+                    ),
+                ),
             }),
         };
         wire::PeoplePersonSheet { kind: Some(kind) }

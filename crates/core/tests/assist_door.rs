@@ -555,7 +555,7 @@ fn sealed(key_id: &str, row_id: &str, plaintext: &str) -> String {
     .expect("the cell seals")
 }
 
-/// A Locker item with every kind of sealed value, tagged, starred and linked by a note, through
+/// A Locker item with every kind of sealed value, tagged, starred and linking a note (a Locker item is never a link's target, so the link starts at the item), through
 /// the owner's own door.
 /// Returns the item's id, the note's, and the key generation the cells are sealed under.
 fn with_a_locker_item(pair: &Pair) -> (String, String, String) {
@@ -643,7 +643,7 @@ fn with_a_locker_item(pair: &Pair) -> (String, String, String) {
     executed(
         &run(
             "edge.add",
-            serde_json::json!({"from": note_id, "rel": "links", "to": "lk-bank"}),
+            serde_json::json!({"from": "lk-bank", "rel": "links", "to": note_id}),
         ),
         "edge.add",
     );
@@ -820,13 +820,13 @@ fn a_shared_verb_on_a_locker_item_runs_through_the_core_door() {
         ),
         (
             "l6:0",
-            "edge.add",
-            serde_json::json!({"from": note, "rel": "about", "to": item}),
+            "edge.remove",
+            serde_json::json!({"from": item, "rel": "links", "to": note}),
         ),
         (
             "l7:0",
-            "edge.remove",
-            serde_json::json!({"from": note, "rel": "links", "to": item}),
+            "edge.add",
+            serde_json::json!({"from": item, "rel": "links", "to": note}),
         ),
         ("l8:0", "locker.counts", serde_json::json!({})),
         ("l9:0", "entity.trash", serde_json::json!({"id": item})),

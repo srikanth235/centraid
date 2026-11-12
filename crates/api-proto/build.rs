@@ -16,7 +16,7 @@ use std::path::PathBuf;
 /// Every file in the tree, named rather than globbed: a `.proto` that is not on
 /// this list is a file nothing generates from, and a glob would hide that.
 /// `tests/tree.rs` asserts the list and the directory agree.
-const PROTOS: [&str; 52] = [
+const PROTOS: [&str; 53] = [
     "proto/centraid/core/v1/value.proto",
     "proto/centraid/core/v1/row.proto",
     "proto/centraid/core/v1/query.proto",
@@ -92,6 +92,7 @@ const PROTOS: [&str; 52] = [
     "proto/centraid/core/v1/locker_screens.proto",
     "proto/centraid/core/v1/money_screens.proto",
     "proto/centraid/core/v1/docs_screens.proto",
+    "proto/centraid/core/v1/health_glance_screens.proto",
     "proto/centraid/core/v1/health_screens.proto",
     "proto/centraid/core/v1/notes_screens.proto",
     "proto/centraid/core/v1/people_screens.proto",
@@ -140,6 +141,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // does not carry the largest arm's size inline (`large_enum_variant`).
         // Every app screen's `data` arm: the answer is the whole screen, and
         // its siblings (loading, empty, refused) are a line or two each.
+        .boxed(".centraid.core.v1.NotesEditorState.links")
+        .boxed(".centraid.core.v1.NotesEditorState.link_picker")
+        .boxed(".centraid.core.v1.NotesEditorState.attachments")
         .boxed(".centraid.core.v1.PhotosDuplicatesState.content.data")
         .boxed(".centraid.core.v1.PhotosDuplicateReviewState.content.data")
         .boxed(".centraid.core.v1.PhotosEditorState.content.data")
@@ -149,6 +153,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.core.v1.MoneySearchState.content.data")
         .boxed(".centraid.core.v1.AgendaHomeState.content.data")
         .boxed(".centraid.core.v1.AgendaEventState.content.data")
+        .boxed(".centraid.core.v1.SettingsState.content.data")
         .boxed(".centraid.core.v1.AgendaEditorState.content.data")
         .boxed(".centraid.core.v1.TodoDetailState.content.data")
         .boxed(".centraid.core.v1.BackupHomeState.body.data")

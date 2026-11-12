@@ -137,13 +137,6 @@ pub fn editor_state(v: &wire::ViewState) -> &wire::NotesEditorState {
     }
 }
 
-pub fn history_state(v: &wire::ViewState) -> &wire::NotesHistoryState {
-    match &v.kind {
-        Some(wire::view_state::Kind::NotesHistory(state)) => state,
-        other => panic!("not the notes history: {other:?}"),
-    }
-}
-
 pub fn trash_state(v: &wire::ViewState) -> &wire::TrashView {
     match &v.kind {
         Some(wire::view_state::Kind::Trash(state)) => state,
@@ -151,7 +144,20 @@ pub fn trash_state(v: &wire::ViewState) -> &wire::TrashView {
     }
 }
 
-/// The library's rows, flat.
+/// What a page says, or nothing when it is ready.
+pub fn page_of(page: Option<&wire::PageState>) -> Option<&wire::page_state::State> {
+    page.expect("a page is drawn").state.as_ref()
+}
+
+/// The home's page, which must be the empty state: the screen's own sentence.
+pub fn empty_of(v: &wire::ViewState) -> &wire::EmptyState {
+    match page_of(home_state(v).page.as_ref()) {
+        Some(wire::page_state::State::Empty(empty)) => empty,
+        other => panic!("not empty: {other:?}"),
+    }
+}
+
+/// The library's rows, flat. A library with nothing to show is the page's empty state: no rows.
 pub fn library_rows(v: &wire::ViewState) -> Vec<&wire::NotesNoteRow> {
     match &home_state(v).content {
         Some(wire::notes_home_state::Content::Library(data)) => data
@@ -159,6 +165,13 @@ pub fn library_rows(v: &wire::ViewState) -> Vec<&wire::NotesNoteRow> {
             .iter()
             .flat_map(|section| section.rows.iter())
             .collect(),
+        None if matches!(
+            page_of(home_state(v).page.as_ref()),
+            Some(wire::page_state::State::Empty(_))
+        ) =>
+        {
+            Vec::new()
+        }
         other => panic!("not the library: {other:?}"),
     }
 }
@@ -188,13 +201,6 @@ pub fn send_editor(d: &mut Driver, i: u64, event: wire::notes_editor_event::Kind
     d.send(
         i,
         wire::screen_event::Kind::NotesEditor(wire::NotesEditorEvent { kind: Some(event) }),
-    );
-}
-
-pub fn send_history(d: &mut Driver, i: u64, event: wire::notes_history_event::Kind) {
-    d.send(
-        i,
-        wire::screen_event::Kind::NotesHistory(wire::NotesHistoryEvent { kind: Some(event) }),
     );
 }
 

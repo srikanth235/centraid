@@ -105,8 +105,8 @@ pub struct CommandsUnavailable {
 pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
-/// THE TABLE. Twenty-one actions, twenty-one commands, in the manifest's own order.
-pub const ACTIONS: [ActionRow; 21] = [
+/// THE TABLE. Twenty-four actions, in the manifest's own order.
+pub const ACTIONS: [ActionRow; 24] = [
     act("upload", "document.add"),
     // The Add sheet's "Text" (#1047): words in, a text document out.
     act("create-text", "document.create_text"),
@@ -132,6 +132,13 @@ pub const ACTIONS: [ActionRow; 21] = [
     // A link set by hand (#1173): one edge, shaped by the vault.
     act("add-about", "edge.add"),
     act("remove-about", "edge.remove"),
+    // AN ATTACHMENT is an `attached` edge from the item to a document or a photo: the shared
+    // verbs, one pair in every app (the Attach promise, #1185).
+    act("attach", "edge.add"),
+    act("detach", "edge.remove"),
+    // THE ORIGINALS AS ONE ARCHIVE (#1185): the More sheet's Export. A streamed file the shell
+    // saves; it writes nothing to the vault (`writes_nothing`).
+    act("export-zip", "document.export_zip"),
 ];
 
 /// One action's row, by the name the manifest gives it.
@@ -175,7 +182,7 @@ mod tests {
 
     #[test]
     fn every_action_invokes_one_command_and_the_document_verbs_are_the_documents_own() {
-        assert_eq!(ACTIONS.len(), 21);
+        assert_eq!(ACTIONS.len(), 24);
         let own: Vec<&str> = ACTIONS
             .iter()
             .map(|row| row.command)
@@ -189,7 +196,8 @@ mod tests {
                 "document.move",
                 "document.edit",
                 "document.replace",
-                "document.restore_version"
+                "document.restore_version",
+                "document.export_zip"
             ],
             "what only a document has; everything else is a shared verb"
         );
@@ -244,7 +252,7 @@ mod tests {
     /// family. Widening it would hand Docs every `entity.*` verb it never sends.
     #[test]
     fn the_act_scopes_are_one_per_distinct_command() {
-        assert_eq!(act_scope_tables().len(), 19);
+        assert_eq!(act_scope_tables().len(), 20);
         assert!(act_scope_tables().contains(&("document", "add")));
         assert!(!act_scope_tables().contains(&("person", "merge")));
     }

@@ -229,7 +229,7 @@ impl FireZone {
     }
 
     /// RESOLVE A SERIES' WALL CLOCK THE WAY RFC 5545 SECTION 3.3.5 READS IT
-    /// (owner decision on #1173, so a two-way sync with EventKit and
+    /// (owner decision on #1173, so a calendar followed from EventKit and
     /// CalendarContract expands exactly the phone's occurrences).
     ///
     /// An existing wall time and a fold are [`Self::resolve_wall_time`]'s: an

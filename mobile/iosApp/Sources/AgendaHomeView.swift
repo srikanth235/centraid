@@ -8,9 +8,9 @@ import SwiftUI
 /// literal below is a bug: the words come through the state's `chrome`. A row
 /// that opens a page carries its `Route`, and a tap hands it to `open`.
 ///
-/// Four content branches, never two — loading, failure, denied, data — and the
-/// denied branch draws no band, because a gate with tabs under it would offer
-/// doors the member cannot open.
+/// The kit's page state draws the read (#1185): loading, failure, the gate, an empty list and data
+/// under its note. The gate draws no band, because a gate with tabs under it would offer doors
+/// the member cannot open.
 ///
 /// **FIVE PLACES, ONE LIST EACH (#1128).** Day and Schedule draw a dated task as
 /// a row of its day, its round box checking it off in place; To-do draws the
@@ -30,17 +30,18 @@ struct AgendaHomeView: View {
     @State private var quickAddTyping = false
 
     var body: some View {
-        let content = readContent(state)
+        // The gate has no band, search or add.
+        let denied = isDenied(state)
         // THE SHARED HEADER (Day, Week and Reminders) stands in the bar; Reminders keeps its title under it.
         let header = state.hasCalendarHeader && state.calendarHeader.shown ? state.calendarHeader : nil
         let eventCountText = eventCountLabel(state)
         AppPlace(
             app: state.appKey,
             title: header?.title.isEmpty == false ? header?.title ?? "" : state.chrome.title,
-            trailing: addAction(state, denied: content.isDenied),
+            trailing: addAction(state, denied: denied),
             // SEARCH IS THE BAND'S TRAILING KEY (R-CHROME-2); a tap opens the field
             // through Rust, at the foot. None on the gate, which has nothing to search.
-            search: content.isDenied ? nil : SearchSlot(
+            search: denied ? nil : SearchSlot(
                 field: searchField(state),
                 placeholder: state.chrome.searchPlaceholder,
                 closeLabel: state.chrome.searchClose,
@@ -57,7 +58,7 @@ struct AgendaHomeView: View {
                     showsTitle: !header.title.isEmpty
                 )
             },
-            showsBand: !content.isDenied && !state.band.isEmpty && !quickAddTyping
+            showsBand: !denied && !state.band.isEmpty && !quickAddTyping
         ) {
             AppBand(
                 app: state.appKey,
@@ -100,27 +101,33 @@ struct AgendaHomeView: View {
                         .frame(maxWidth: .infinity, alignment: .trailing)
                         .padding(.horizontal, CentraidGeometry.pageMargin)
                 }
-                ReadStateView(
-                    content: content,
-                    loadingLabel: state.chrome.loading,
-                    onRetry: { send(AgendaEvents.make { $0.refreshed = .init() }) }
-                ) { home in
-                    homeContent(home, state: state)
+                Group {
+                    PageReadStateView(
+                        page: state.page,
+                        loadingLabel: state.chrome.loading,
+                        onRetry: { send(AgendaEvents.make { $0.refreshed = .init() }) },
+                        onEmptyAction: offersImport(state) ? nil : { if state.hasNewEvent { open(state.newEvent) } },
+                        emptyExtra: { AnyView(emptyUnder(state)) }
+                    ) {
+                        if case let .data(home)? = state.content {
+                            homeContent(home, state: state)
+                        }
+                    }
                 }
                 // THE FLOATING TODAY KEY, bottom-leading above the band, while the anchor is not today.
                 .overlay(alignment: .bottomLeading) {
                     if let header {
-                        if header.todayShown, !content.isDenied {
+                        if header.todayShown, !denied {
                             AgendaTodayButton(label: header.todayLabel, send: send)
                         }
-                    } else if state.toolbar.shown, !state.toolbar.atToday, !content.isDenied {
+                    } else if state.toolbar.shown, !state.toolbar.atToday, !denied {
                         AgendaTodayButton(label: state.chrome.today, send: send)
                     }
                 }
                 StatusLineView(status: state.status, identifier: "agenda-status-action") {
                     send(AgendaEvents.make { $0.statusActed = .init() })
                 }
-                if !content.isDenied {
+                if !denied {
                     TodoQuickAddBar(
                         quickAdd: state.quickAdd,
                         placeholder: state.chrome.tasks.quickAddPlaceholder,
@@ -138,7 +145,9 @@ struct AgendaHomeView: View {
                         // THE KEYBOARD TOOLBAR (#1173).
                         onTool: { key in send(AgendaEvents.make { $0.quickTool = .with { $0.key = key } }) },
                         onDue: { key in send(AgendaEvents.make { $0.quickDue = .with { $0.key = key } }) },
-                        onTag: { text in send(AgendaEvents.make { $0.quickTag = .with { $0.text = text } }) }
+                        onTag: { text in send(AgendaEvents.make { $0.quickTag = .with { $0.text = text } }) },
+                        onLink: { link in send(AgendaEvents.make { $0.quickLink = link }) },
+                        onStagedRemove: { key in send(AgendaEvents.make { $0.quickStagedRemoved = .with { $0.key = key } }) }
                     )
                 }
             }
@@ -188,7 +197,22 @@ struct AgendaHomeView: View {
                 onColor: { key in send(AgendaEvents.make { $0.styleColor = .with { $0.key = key } }) },
                 onIcon: { key in send(AgendaEvents.make { $0.styleIcon = .with { $0.key = key } }) },
                 onSubmit: { send(AgendaEvents.make { $0.styleSubmitted = .init() }) },
-                onCancel: { send(AgendaEvents.make { $0.sheetClosed = .init() }) }
+                onCancel: { send(AgendaEvents.make { $0.sheetClosed = .init() }) },
+                onTrash: { send(AgendaEvents.make { $0.styleTrashed = .init() }) }
+            )
+        }
+        // THE STOP CONFIRM (#1185): the kit's sheet in Rust's own sentences, the same as Health's and People's.
+        .sheet(isPresented: Binding(
+            get: { state.hasStop },
+            set: { shown in
+                guard !shown, state.hasStop else { return }
+                send(AgendaEvents.make { $0.stopDismissed = .init() })
+            }
+        )) {
+            ConfirmSheet(
+                state.stop,
+                onConfirm: { send(AgendaEvents.make { $0.stopConfirmed = .init() }) },
+                onDismiss: { send(AgendaEvents.make { $0.stopDismissed = .init() }) }
             )
         }
         // THE SHEETS WEAR AGENDA'S BLUE (the boards' Create, Save and Import reminders): the accent
@@ -217,16 +241,27 @@ struct AgendaHomeView: View {
         )
     }
 
-    /// The state's four content branches as the kit's one read shape.
-    private func readContent(
-        _ state: Centraid_Core_V1_AgendaHomeState
-    ) -> ScreenContent<Centraid_Core_V1_AgendaHomeData> {
-        switch state.content {
-        case .loading?, nil: return .loading(true)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(home)?: return .data(home)
+    /// The vault refused Agenda: the page's gate.
+    private func isDenied(_ state: Centraid_Core_V1_AgendaHomeState) -> Bool {
+        if case .refused? = state.page.state { return true }
+        return false
+    }
+
+    /// Whether the empty page offers the phone's calendar import, which Rust names on the empty state.
+    private func offersImport(_ state: Centraid_Core_V1_AgendaHomeState) -> Bool {
+        if case let .empty(empty)? = state.page.state { return empty.importSource == .calendar }
+        return false
+    }
+
+    /// WHAT THE EMPTY PAGE DRAWS UNDER ITS WORDS: where the phone holds a calendar, its import is day one's
+    /// action (sent to Rust as `ImportRequested`; "Add" stays in the header), and a search that found
+    /// nothing gets the Ask row.
+    @ViewBuilder
+    private func emptyUnder(_ state: Centraid_Core_V1_AgendaHomeState) -> some View {
+        if offersImport(state) {
+            CalendarImportButton(label: state.importLabel, identifier: "kit-empty-import", send: send)
         }
+        if state.hasSearchAskRow { SearchAskRow(ask: state.searchAskRow) }
     }
 
     /// THE HEADER'S SUBTITLE (HeaderSubtitle): the period, then how many events it holds.
@@ -293,15 +328,6 @@ struct AgendaHomeView: View {
         }
     }
 
-    /// The day-one empty's words and import door, as the kit's message.
-    private func emptyState(_ home: Centraid_Core_V1_AgendaHomeData) -> Centraid_Core_V1_EmptyState {
-        var empty = Centraid_Core_V1_EmptyState()
-        empty.headline = home.emptyTitle
-        empty.body = home.emptyBody
-        empty.actionLabel = home.emptyAction
-        return empty
-    }
-
     @ViewBuilder
     private func homeContent(
         _ home: Centraid_Core_V1_AgendaHomeData,
@@ -316,27 +342,6 @@ struct AgendaHomeView: View {
             AgendaMonthView(home: home, chrome: state.chrome, send: send, open: open)
         } else if home.hasYear {
             AgendaYearView(year: home.year, send: send)
-        } else if home.empty != .none, home.empty != .unspecified {
-            if home.empty == .noMatch {
-                // A SEARCH THAT FOUND NOTHING: the kit's one no-match state, and the Ask row under it.
-                EmptyStateView(emptyState(home))
-                if state.hasSearchAskRow { SearchAskRow(ask: state.searchAskRow) }
-            } else {
-                // WHERE THE PHONE HOLDS A CALENDAR, ITS IMPORT IS DAY ONE'S
-                // ACTION, sent to Rust as `ImportRequested`; "Add" stays in
-                // the header.
-                //
-                // A DAY THAT HOLDS OVERDUE WORK OR THE ABSENCE NOTICE sends no
-                // empty sentence, so it is drawn by the list above.
-                let offersImport = home.importSource == .calendar
-                EmptyStateView(
-                    emptyState(home),
-                    onAction: offersImport ? nil : { if state.hasNewEvent { open(state.newEvent) } }
-                )
-                if offersImport {
-                    CalendarImportButton(label: home.importLabel, identifier: "kit-empty-import", send: send)
-                }
-            }
         } else {
             AgendaList(
                 home: home,
@@ -888,11 +893,21 @@ private struct AgendaEventRowView: View {
                     .centraidType("annotLabel")
                     .foregroundStyle(Theme.color(row.isPast ? "textFaint" : "textSoft", scheme))
                     .frame(width: 52, alignment: .leading)
-                Text(row.title)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color(row.isPast ? "textFaint" : "text", scheme))
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(row.title)
+                        .centraidType("body")
+                        .foregroundStyle(Theme.color(row.isPast ? "textFaint" : "text", scheme))
+                        .lineLimit(2)
+                    // A search hit whose words only an earlier version of the event held
+                    // (#1185): the row says so and opens Earlier versions.
+                    if !row.earlierLabel.isEmpty {
+                        Text(row.earlierLabel)
+                            .centraidType("annotLabel")
+                            .foregroundStyle(Theme.color("textSoft", scheme))
+                            .lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 if !row.statusLabel.isEmpty {
                     let tone = "textSoft"
                     Text(row.statusLabel)
@@ -984,6 +999,7 @@ private struct AgendaMoreSheet: View {
                         SheetRow(
                             iconKey: sheetIcon(of: row),
                             label: row.label,
+                            detail: row.toggle ? "" : row.meta,
                             selected: row.toggle && row.on,
                             identifier: "agenda-more-\(row.key)"
                         ) {

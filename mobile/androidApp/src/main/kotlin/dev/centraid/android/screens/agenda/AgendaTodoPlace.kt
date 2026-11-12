@@ -259,6 +259,7 @@ internal fun AgendaTaskSheet(state: AgendaHomeState, words: TodoChrome, onEvent:
                 onIcon = { onEvent(AgendaHomeEvent(style_icon = AgendaHomeEvent.StyleIconPicked(key = it))) },
                 onSubmit = { onEvent(AgendaHomeEvent(style_submitted = AgendaHomeEvent.StyleSubmitted())) },
                 onCancel = close,
+                onTrash = { onEvent(AgendaHomeEvent(style_trashed = AgendaHomeEvent.StyleTrashed())) },
             )
         }
         else -> Unit

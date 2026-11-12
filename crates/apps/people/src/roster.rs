@@ -56,6 +56,8 @@ pub struct RosterRow {
     pub reminders: Vec<Reminder>,
     /// The hit snippet, on a `search` row only.
     pub snippet: Option<String>,
+    /// On a `search` row: the words matched only in an earlier version (#1185).
+    pub in_earlier_version: bool,
 }
 
 /// What `people` answers.
@@ -86,6 +88,9 @@ pub struct TrashRow {
     pub role: String,
     pub deleted_at: Option<String>,
     pub purge_at: Option<String>,
+    /// The row is a list, not a person: a list in the trash keeps its members and they are in it
+    /// again once it is restored.
+    pub list: bool,
 }
 
 /// What `trash` answers.
@@ -101,6 +106,8 @@ pub struct TrashData {
 pub struct SearchHit {
     pub party_id: String,
     pub snippet: Option<String>,
+    /// The words matched only in an earlier version of the person (#1185).
+    pub in_earlier_version: bool,
 }
 
 /// Rank hits into one ordered list with one snippet each: the first hit of a
@@ -113,13 +120,16 @@ pub fn rank_hits(hits: &[SearchHit]) -> Vec<SearchHit> {
             None => ranked.push(SearchHit {
                 party_id: hit.party_id.clone(),
                 snippet: Some(hit.snippet.clone().unwrap_or_default()),
+                in_earlier_version: hit.in_earlier_version,
             }),
             Some(seen) if seen.snippet.as_deref().is_none_or(str::is_empty) => {
+                // A person who matches now once is the live person, whatever else matched.
+                seen.in_earlier_version &= hit.in_earlier_version;
                 if let Some(snippet) = hit.snippet.as_ref().filter(|text| !text.is_empty()) {
                     seen.snippet = Some(snippet.clone());
                 }
             }
-            Some(_) => {}
+            Some(seen) => seen.in_earlier_version &= hit.in_earlier_version,
         }
     }
     ranked
@@ -155,6 +165,7 @@ pub(crate) fn rows_of(
             starred: stars.contains(&person.id),
             reminders: due.remove(&person.id).unwrap_or_default(),
             snippet: None,
+            in_earlier_version: false,
         })
         .collect())
 }
@@ -210,6 +221,7 @@ pub fn load_search(
         .zip(hits.iter().filter(|hit| live.contains_key(&hit.party_id)))
     {
         row.snippet = hit.snippet.clone();
+        row.in_earlier_version = hit.in_earlier_version;
     }
     Ok((SearchData { people }, None))
 }
@@ -226,19 +238,31 @@ pub fn load_links(
 /// `trash` — the reversible shelf.
 pub fn load_trash(door: &dyn PageDoor) -> KitResult<(TrashData, Option<Denial>)> {
     let shelf = asked!(read_trashed(door), TrashData::default());
+    let mut rows: Vec<TrashRow> = shelf
+        .members
+        .into_iter()
+        .map(|person| TrashRow {
+            party_id: person.id,
+            name: person.name,
+            role: person.role,
+            deleted_at: person.deleted_at,
+            purge_at: person.purge_at,
+            list: false,
+        })
+        .chain(shelf.lists.into_iter().map(|list| TrashRow {
+            party_id: list.id,
+            name: list.name,
+            role: String::new(),
+            deleted_at: list.deleted_at,
+            purge_at: list.purge_at,
+            list: true,
+        }))
+        .collect();
+    // Most recently trashed first, whichever kind it is (the stamps are ISO instants).
+    rows.sort_by(|a, b| b.deleted_at.cmp(&a.deleted_at));
     Ok((
         TrashData {
-            people: shelf
-                .members
-                .into_iter()
-                .map(|person| TrashRow {
-                    party_id: person.id,
-                    name: person.name,
-                    role: person.role,
-                    deleted_at: person.deleted_at,
-                    purge_at: person.purge_at,
-                })
-                .collect(),
+            people: rows,
             truncated: shelf.filled,
         },
         None,
@@ -264,6 +288,7 @@ mod tests {
         let hit = |id: &str, snippet: Option<&str>| SearchHit {
             party_id: id.to_owned(),
             snippet: snippet.map(str::to_owned),
+            in_earlier_version: false,
         };
         let ranked = rank_hits(&[
             hit("b", None),

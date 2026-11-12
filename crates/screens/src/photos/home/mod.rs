@@ -48,6 +48,9 @@ use super::cells::{self, Link};
 use super::keep_originals::FreeUpRow;
 use super::selection::{Drain, Offer, Outcome, Selection, Verb, Wording};
 use super::{fetch, free_up, routes};
+use crate::kit::owner::{Answer as Owner, Leaving, NoPasscode, OwnerGate};
+use crate::kit::quantity::UnitsPref;
+use crate::kit::read::Page;
 use crate::kit::{civil, menu};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, photos as words, photos_home as sentences};
@@ -63,6 +66,10 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
 }
 
 struct Home {
+    /// The owner check a send asks first; no passcode warns and goes ahead.
+    gate: OwnerGate,
+    /// The send waiting on the check: whether the exact place travels.
+    sending: bool,
     destination: Dest,
     search_origin: Dest,
     sheet: Sheet,
@@ -123,6 +130,8 @@ impl Home {
             free_up: FreeUpRow::default(),
             deleting: Vec::new(),
             status: None,
+            gate: OwnerGate::default(),
+            sending: false,
         }
     }
 
@@ -268,16 +277,13 @@ impl Home {
             }
             H::AlbumChoice(event) => {
                 let picked = self.selection.picked().to_vec();
-                match self.choice.update(&event, &picked, ctx) {
+                match self
+                    .choice
+                    .update(&event, &picked, self.selection.door(), ctx)
+                {
                     ChoiceOutcome::Moved => {}
-                    ChoiceOutcome::Added { album_id, written } => {
+                    ChoiceOutcome::Added { written, .. } => {
                         self.selection.settle(&written, Verb::AddToAlbum);
-                        self.selection.acknowledge(
-                            ctx.locale(),
-                            Verb::AddToAlbum,
-                            &written,
-                            self.choice.title_of(&album_id),
-                        );
                         self.read_library(ctx);
                     }
                     ChoiceOutcome::Created { refusal } => self.selection.refuse(refusal),
@@ -357,7 +363,7 @@ impl Home {
             H::SectionToggled(section) => self.collections.toggle(&section),
             H::FoldAll(_) => self.collections.fold_all(),
             H::NewAlbumName(name) => self.collections.new_album_name = name,
-            H::NewAlbumSubmitted(_) => match self.collections.create(ctx) {
+            H::NewAlbumSubmitted(_) => match self.collections.create(ctx, self.selection.door()) {
                 // THE SHEET STAYS OPEN UNTIL THE WRITE COMMITS: closing it would be
                 // the screen claiming an album exists because a button was pressed,
                 // and a refusal would then have nowhere to be read.
@@ -367,18 +373,21 @@ impl Home {
                     self.collections.read(ctx);
                 }
                 Ok(false) => {}
-                Err(sentence) => self.status = Some(refused(sentence)),
+                // The refusal is the door's line, drawn beside the selection's.
+                Err(_) => self.status = None,
             },
             H::AlbumDeleteAsked(id) => self.collections.deleting = Some(id),
             H::AlbumDeleteDismissed(_) => self.collections.deleting = None,
             H::AlbumDeleteConfirmed(_) => {
                 if let Some(id) = self.collections.deleting.take() {
-                    self.status = Collections::delete(ctx, &id).err().map(refused);
+                    self.status = None;
+                    let _ = Collections::delete(ctx, self.selection.door(), &id);
                     self.collections.read(ctx);
                 }
             }
             H::AlbumRestored(id) => {
-                self.status = Collections::restore(ctx, &id).err().map(refused);
+                self.status = None;
+                let _ = Collections::restore(ctx, self.selection.door(), &id);
                 self.collections.read(ctx);
             }
             H::Permission(changed) => {
@@ -429,16 +438,9 @@ impl Home {
                 if self.sheet == Sheet::CopyPlace && !self.selection.picked().is_empty() {
                     self.sheet = Sheet::None;
                     self.status = None;
-                    return vec![wire::Effect {
-                        kind: Some(wire::effect::Kind::ExportOriginals(
-                            super::export_originals(
-                                locale,
-                                self.selection.picked().to_vec(),
-                                wire::export_originals::Mode::Send,
-                                chosen.keep_location,
-                            ),
-                        )),
-                    }];
+                    // SENDING ASKS THE OWNER CHECK FIRST: the bytes leave the phone.
+                    self.sending = chosen.keep_location;
+                    return self.gate.begin(locale, Leaving::Share);
                 }
             }
         }
@@ -460,7 +462,7 @@ impl Home {
         // the last import, and a census lists the whole content store.
         if sheet == Sheet::More {
             let facts = free_up::count(ctx, free_up::Last::default());
-            self.counted(facts, ctx.locale());
+            self.counted(facts, ctx.locale(), ctx.units());
         }
         Vec::new()
     }
@@ -475,7 +477,8 @@ impl Home {
                         wire::photos_album_choice_event::Opened {},
                     )),
                 };
-                self.choice.update(&opened, &picked, ctx);
+                self.choice
+                    .update(&opened, &picked, self.selection.door(), ctx);
             }
             Outcome::Wrote(_) => self.read_library(ctx),
         }
@@ -518,7 +521,7 @@ impl Home {
         }
         match free_up::answered(done) {
             Some(free_up::Answered::Counted(facts)) => {
-                self.free_up = FreeUpRow::from_facts(locale, &facts);
+                self.free_up = FreeUpRow::from_facts(locale, ctx.units(), &facts);
             }
             Some(free_up::Answered::Listed(listed)) => match free_up::deletable(listed) {
                 Ok(items) => {
@@ -526,7 +529,7 @@ impl Home {
                     self.deleting = items;
                     return vec![effect];
                 }
-                Err(last) => self.counted(free_up::count(ctx, last), locale),
+                Err(last) => self.counted(free_up::count(ctx, last), locale, ctx.units()),
             },
             None => {}
         }
@@ -535,9 +538,9 @@ impl Home {
 
     /// A count that answered at once (a platform that cannot delete); one that
     /// runs off the lock lands in [`Self::on_job`].
-    fn counted(&mut self, facts: Option<wire::FreeUpFacts>, locale: Locale) {
+    fn counted(&mut self, facts: Option<wire::FreeUpFacts>, locale: Locale, units: UnitsPref) {
         if let Some(facts) = facts {
-            self.free_up = FreeUpRow::from_facts(locale, &facts);
+            self.free_up = FreeUpRow::from_facts(locale, units, &facts);
         }
     }
 
@@ -550,7 +553,7 @@ impl Home {
             Some(outcome @ (O::LibraryDeleted(_) | O::Failed(_))) if !self.deleting.is_empty() => {
                 let items = std::mem::take(&mut self.deleting);
                 let (freed, last) = free_up::gone(&items, outcome);
-                self.counted(free_up::released(ctx, freed, last), locale);
+                self.counted(free_up::released(ctx, freed, last), locale, ctx.units());
             }
             Some(O::OriginalsExported(exported)) => self.exported(locale, exported),
             Some(O::Keychain(value)) if value.found => {
@@ -559,6 +562,40 @@ impl Home {
                 }
             }
             _ => {}
+        }
+    }
+
+    /// The owner check's answer for a send.
+    fn checked(&mut self, checked: &wire::OwnerChecked, locale: Locale) -> Vec<wire::Effect> {
+        let ids = self.selection.picked().to_vec();
+        let send = |keep_location: bool| {
+            vec![wire::Effect {
+                kind: Some(wire::effect::Kind::ExportOriginals(
+                    super::export_originals(
+                        locale,
+                        ids.clone(),
+                        wire::export_originals::Mode::Send,
+                        keep_location,
+                    ),
+                )),
+            }]
+        };
+        let line = |sentence: String, refused: bool| wire::StatusLine {
+            sentence,
+            action_label: String::new(),
+            refused,
+        };
+        match self.gate.answer(locale, NoPasscode::Warn, checked) {
+            Some(Owner::Passed) if !ids.is_empty() => send(self.sending),
+            Some(Owner::PassedUnprotected(warning)) if !ids.is_empty() => {
+                self.status = Some(line(warning, false));
+                send(self.sending)
+            }
+            Some(Owner::Refused(sentence)) => {
+                self.status = Some(line(sentence, true));
+                Vec::new()
+            }
+            _ => Vec::new(),
         }
     }
 
@@ -595,30 +632,27 @@ impl Home {
     fn library_view(&self, locale: Locale) -> wire::PhotosLibrary {
         let rung = self.rung;
         let target = f64::from(layout::RUNG_HEIGHTS[layout::clamp_rung(rung) as usize]);
-        let content = match self.library.phase {
-            library::Phase::Failed => {
-                wire::photos_library::Content::Failure(crate::kit::read::failure(locale))
-            }
-            library::Phase::Loading => {
-                wire::photos_library::Content::Loading(wire::PhotosLibraryLoading {
-                    skeleton: if self.viewport.0 > 0.0 {
-                        layout::skeleton(self.viewport.0, target, self.viewport.1)
-                            .into_iter()
-                            .map(|row| wire::PhotosPackedRow {
-                                packed: row.into_iter().map(|t| packed(&t)).collect(),
-                            })
-                            .collect()
-                    } else {
-                        Vec::new()
-                    },
-                })
-            }
-            library::Phase::Ready => {
-                wire::photos_library::Content::Data(Box::new(self.library_data(locale, target)))
-            }
-        };
+        let loading = matches!(self.library.page, Page::Loading);
+        let page = self.library.drawn(locale);
         wire::PhotosLibrary {
-            content: Some(content),
+            page: Some(page.wire(
+                locale,
+                |denial| crate::photos::denied(locale, denial),
+                || self.library_empty(locale),
+            )),
+            skeleton: if loading && self.viewport.0 > 0.0 {
+                layout::skeleton(self.viewport.0, target, self.viewport.1)
+                    .into_iter()
+                    .map(|row| wire::PhotosPackedRow {
+                        packed: row.into_iter().map(|t| packed(&t)).collect(),
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            },
+            content: page.data().map(|()| {
+                wire::photos_library::Content::Data(Box::new(self.library_data(locale, target)))
+            }),
             grain: self.grain as i32,
             filter: self.filter as i32,
             rung,
@@ -734,21 +768,6 @@ impl Home {
             }
         };
         let complete = self.library.complete();
-        let empty = (self.library.cells.is_empty() && complete).then(|| {
-            if self.filter == Filter::Favorites {
-                wire::EmptyState {
-                    headline: words::photos_grid_no_favorites(locale),
-                    body: words::photos_grid_no_favorites_caption(locale),
-                    ..wire::EmptyState::default()
-                }
-            } else {
-                wire::EmptyState {
-                    headline: words::photos_grid_empty(locale),
-                    body: words::photos_grid_empty_caption(locale),
-                    ..wire::EmptyState::default()
-                }
-            }
-        });
         wire::PhotosLibraryData {
             count_label: cells::count_phrase(
                 locale,
@@ -761,7 +780,6 @@ impl Home {
             rows,
             grain_items,
             complete,
-            empty,
             undated_note: if matches!(self.grain, Grain::Years | Grain::Months) {
                 words::photos_library_undated_note(locale)
             } else {
@@ -798,6 +816,24 @@ impl Home {
                 _ => true,
             });
         bar
+    }
+
+    /// NOTHING TO SHOW, AND WHY: the Favorites filter has its own sentence, never the
+    /// empty-library copy.
+    fn library_empty(&self, locale: Locale) -> wire::EmptyState {
+        if self.filter == Filter::Favorites {
+            wire::EmptyState {
+                headline: words::photos_grid_no_favorites(locale),
+                body: words::photos_grid_no_favorites_caption(locale),
+                ..wire::EmptyState::default()
+            }
+        } else {
+            wire::EmptyState {
+                headline: words::photos_grid_empty(locale),
+                body: words::photos_grid_empty_caption(locale),
+                ..wire::EmptyState::default()
+            }
+        }
     }
 
     fn empty_library(&self) -> bool {
@@ -894,8 +930,38 @@ impl Screen for Home {
                     })),
                 }];
             }
-            Some(E::EnvironmentChanged(_) | E::DataChanged(_)) => self.read(ctx),
-            Some(E::EffectResult(result)) => self.on_effect(&result, ctx),
+            Some(E::EnvironmentChanged(_) | E::DataChanged(_)) => {
+                self.read(ctx);
+                // A PAGE ABOVE CLOSED (an album deleted): its line and Undo are drawn here.
+                self.selection.door().take_handed(ctx);
+            }
+            Some(E::EffectResult(result)) => {
+                use wire::effect_result::Outcome as O;
+                if self.gate.asking() {
+                    let checked = match &result.outcome {
+                        Some(O::OwnerChecked(checked)) => Some(*checked),
+                        // The prompt itself errored: the same as not recognised.
+                        Some(O::Failed(_)) => Some(wire::OwnerChecked {
+                            outcome: wire::owner_checked::Outcome::Failed as i32,
+                            ..Default::default()
+                        }),
+                        _ => None,
+                    };
+                    if let Some(checked) = checked {
+                        return self.checked(&checked, ctx.locale());
+                    }
+                }
+                self.on_effect(&result, ctx);
+            }
+            Some(E::StatusActed(_)) => {
+                if self.selection.acted(ctx) {
+                    self.read(ctx);
+                }
+            }
+            Some(E::Left(_)) => {
+                self.selection.door().clear();
+                return self.gate.cancel();
+            }
             Some(E::OffThreadDone(done)) => return self.on_job(&done, ctx),
             Some(E::PhotosHome(home)) => {
                 if let Some(kind) = home.kind {
@@ -911,7 +977,10 @@ impl Screen for Home {
         let locale = ctx.locale();
         let library = chrome::is_library(self.destination);
         let more_up = matches!(self.sheet, Sheet::More | Sheet::TileSize);
-        let status = self.status.clone().or_else(|| self.selection.status());
+        let status = self
+            .status
+            .clone()
+            .or_else(|| self.selection.status(locale));
         let mut state = wire::PhotosHomeState {
             destination: self.destination as i32,
             band: chrome::band(locale, self.destination, more_up),

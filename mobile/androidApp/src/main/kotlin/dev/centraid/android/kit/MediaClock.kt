@@ -6,7 +6,7 @@ package dev.centraid.android.kit
  * share, so a clip is the same length everywhere it is named. A length of a
  * stream the player has not loaded (NaN, infinite) is nought. Moved here with
  * the shared module's retirement (#1135); the byte formatter it sat beside is
- * the core's (`photos_bytes_many`), not a view's.
+ * the core's (`kit::quantity`), not a view's.
  */
 object MediaClock {
     private const val SECONDS_PER_MINUTE: Long = 60L

@@ -1266,6 +1266,7 @@ fn the_app_queries_round_trip_through_call() {
                 })
                 .collect(),
                 invoke_key: "contract-4e".to_owned(),
+                autosave: false,
             })),
         ),
     );

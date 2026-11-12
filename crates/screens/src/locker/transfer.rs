@@ -19,17 +19,18 @@ use wire::locker_export_event::Kind as X;
 use wire::locker_import_event::Kind as I;
 use wire::screen_event::Kind as E;
 
-use super::shared::{self, Phase};
+use super::shared;
 use super::types;
 use super::wall::{Change, Wall};
 use crate::catalog::load;
-use crate::kit::read;
+use crate::kit::owner::{Answer as Owner, Leaving, NoPasscode, OwnerGate};
+use crate::kit::read::{self, Page, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, locker as words};
 
 /// The item count both pages read: the shelf's own counts, a small window.
-fn read_count(ctx: &Ctx) -> Phase<wire::LockerItems> {
-    Phase::of(read::read(
+fn read_count(ctx: &Ctx) -> Reading<wire::LockerItems> {
+    read::read(
         ctx,
         load::locker::Items {
             archived: None,
@@ -39,7 +40,7 @@ fn read_count(ctx: &Ctx) -> Phase<wire::LockerItems> {
             Answer::LockerItems(items) => Some(items),
             _ => None,
         },
-    ))
+    )
 }
 
 /// Live and archived items — what an export writes. `None` while unknown.
@@ -59,9 +60,10 @@ pub fn build_export(route: &wire::Route) -> Option<Box<dyn Screen>> {
     Some(Box::new(Export {
         parent: args.parent.clone(),
         wall: Wall::default(),
-        count: Phase::Loading,
+        count: Page::loading(),
         json: false,
         confirm: false,
+        gate: OwnerGate::default(),
         phase: wire::locker_export_state::Phase::Idle,
         status: None,
         unopened: 0,
@@ -71,9 +73,11 @@ pub fn build_export(route: &wire::Route) -> Option<Box<dyn Screen>> {
 struct Export {
     parent: String,
     wall: Wall,
-    count: Phase<wire::LockerItems>,
+    count: Page<wire::LockerItems>,
     json: bool,
     confirm: bool,
+    /// The export's owner check; no passcode refuses it (D15).
+    gate: OwnerGate,
     phase: wire::locker_export_state::Phase,
     status: Option<wire::StatusLine>,
     /// Sealed values that did not open and are not in the file.
@@ -87,7 +91,7 @@ impl Export {
 
     fn reload(&mut self, ctx: &Ctx) {
         if self.wall.is_open() {
-            self.count = read_count(ctx);
+            shared::reread(&mut self.count, ctx.locale(), read_count(ctx));
         }
     }
 
@@ -95,7 +99,7 @@ impl Export {
         match step.change {
             Change::Opened => self.reload(ctx),
             Change::Closed => {
-                self.count = Phase::Loading;
+                self.count = Page::loading();
                 self.confirm = false;
                 self.phase = wire::locker_export_state::Phase::Idle;
                 self.status = None;
@@ -107,31 +111,31 @@ impl Export {
 
     /// Take down the export's own owner check when one is up.
     fn withdraw_check(&mut self, popped: bool) -> Vec<wire::Effect> {
-        let checking = self.phase == wire::locker_export_state::Phase::Checking;
+        let effects = self.gate.cancel();
         if popped {
             self.confirm = false;
             self.phase = wire::locker_export_state::Phase::Idle;
-        } else if checking {
+        } else if !effects.is_empty() {
             self.phase = wire::locker_export_state::Phase::Idle;
         }
-        if !checking {
-            return Vec::new();
-        }
-        vec![wire::Effect {
-            kind: Some(wire::effect::Kind::OwnerCheck(wire::OwnerCheck {
-                cancel: true,
-                ..Default::default()
-            })),
-        }]
+        effects
     }
 
     /// The owner check's answer, for an export that is checking.
     fn checked(&mut self, ctx: &Ctx, checked: &wire::OwnerChecked) -> Vec<wire::Effect> {
         let locale = ctx.locale();
-        if checked.outcome != wire::owner_checked::Outcome::Succeeded as i32 {
-            self.phase = wire::locker_export_state::Phase::Idle;
-            self.status = shared::status(words::export_not_confirmed(locale));
-            return Vec::new();
+        match self.gate.answer(locale, NoPasscode::Refuse, checked) {
+            Some(Owner::Passed) => {}
+            Some(Owner::Refused(sentence)) => {
+                self.phase = wire::locker_export_state::Phase::Idle;
+                self.status = shared::status(sentence);
+                return Vec::new();
+            }
+            // Dismissed, or not ours: nothing is written and nothing is said.
+            _ => {
+                self.phase = wire::locker_export_state::Phase::Idle;
+                return Vec::new();
+            }
         }
         self.phase = wire::locker_export_state::Phase::Writing;
         let format = if self.json {
@@ -234,15 +238,7 @@ impl Export {
             Some(X::Confirmed(_)) if self.confirm => {
                 self.confirm = false;
                 self.phase = wire::locker_export_state::Phase::Checking;
-                vec![wire::Effect {
-                    kind: Some(wire::effect::Kind::OwnerCheck(wire::OwnerCheck {
-                        ask: true,
-                        reason: words::export_prompt_reason(locale),
-                        title: words::export_prompt_title(locale),
-                        subtitle: words::export_prompt_subtitle(locale),
-                        cancel: false,
-                    })),
-                }]
+                self.gate.begin(locale, Leaving::Export)
             }
             Some(X::Refreshed(_)) => {
                 self.reload(ctx);
@@ -310,7 +306,7 @@ impl Screen for Export {
             Some(E::Appeared(_)) => {
                 let step = self.wall.appeared(ctx, false);
                 let effects = self.walled(ctx, step);
-                if self.wall.is_open() && matches!(self.count, Phase::Loading) {
+                if self.wall.is_open() && matches!(self.count, Page::Loading) {
                     self.reload(ctx);
                 }
                 effects
@@ -374,25 +370,32 @@ impl Screen for Export {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
         let open = self.wall.is_open();
-        let content = open.then(|| match &self.count {
-            Phase::Loading => {
-                wire::locker_export_state::Content::Loading(wire::Loading { first_load: true })
+        let data = if open {
+            self.count.data().and_then(|items| self.data(locale, items))
+        } else {
+            None
+        };
+        // An answer that arrived without its total is a read that came up short.
+        let short = open && data.is_none() && matches!(self.count, Page::Ready { .. });
+        let denied = |denial: &wire::AppQueryDenial| shared::denied(locale, denial);
+        let page = if !open {
+            Page::<()>::loading().wire(locale, denied, wire::EmptyState::default)
+        } else if short {
+            wire::PageState {
+                state: Some(wire::page_state::State::Failed(read::incomplete(locale))),
+                note: None,
             }
-            Phase::Failed => wire::locker_export_state::Content::Failure(read::failure(locale)),
-            Phase::Denied(denial) => {
-                wire::locker_export_state::Content::Denied(shared::denied(locale, denial))
-            }
-            Phase::Ready(items) => match self.data(locale, items) {
-                Some(data) => wire::locker_export_state::Content::Data(Box::new(data)),
-                None => wire::locker_export_state::Content::Failure(read::incomplete(locale)),
-            },
-        });
+        } else {
+            self.count.wire(locale, denied, wire::EmptyState::default)
+        };
+        let content = data.map(|data| wire::locker_export_state::Content::Data(Box::new(data)));
         wire::ViewState {
             kind: Some(wire::view_state::Kind::LockerExport(
                 wire::LockerExportState {
                     wall: self.wall.view(locale),
                     secure: open,
                     content,
+                    page: Some(page),
                     chrome: Some(wire::LockerExportChrome {
                         title: words::export_title(locale),
                         back_label: if self.parent.is_empty() {
@@ -430,7 +433,7 @@ pub fn build_import(route: &wire::Route) -> Option<Box<dyn Screen>> {
     Some(Box::new(Import {
         parent: args.parent.clone(),
         wall: Wall::default(),
-        count: Phase::Loading,
+        count: Page::loading(),
         phase: wire::locker_import_state::Phase::Idle,
         file: None,
         plan: None,
@@ -448,7 +451,7 @@ struct Held {
 struct Import {
     parent: String,
     wall: Wall,
-    count: Phase<wire::LockerItems>,
+    count: Page<wire::LockerItems>,
     phase: wire::locker_import_state::Phase,
     file: Option<Held>,
     plan: Option<wire::LockerImportPlan>,
@@ -458,7 +461,7 @@ struct Import {
 impl Import {
     fn reload(&mut self, ctx: &Ctx) {
         if self.wall.is_open() {
-            self.count = read_count(ctx);
+            shared::reread(&mut self.count, ctx.locale(), read_count(ctx));
         }
     }
 
@@ -472,7 +475,7 @@ impl Import {
         match step.change {
             Change::Opened => self.reload(ctx),
             Change::Closed => {
-                self.count = Phase::Loading;
+                self.count = Page::loading();
                 self.drop_file();
                 self.phase = wire::locker_import_state::Phase::Idle;
                 self.status = None;
@@ -499,6 +502,7 @@ impl Import {
                 wire::LockerImportAsk {
                     content: file.bytes.clone(),
                     publish,
+                    file_name: file.name.clone(),
                 },
             )),
         });
@@ -761,7 +765,7 @@ impl Screen for Import {
             Some(E::Appeared(_)) => {
                 let step = self.wall.appeared(ctx, false);
                 let effects = self.walled(ctx, step);
-                if self.wall.is_open() && matches!(self.count, Phase::Loading) {
+                if self.wall.is_open() && matches!(self.count, Page::Loading) {
                     self.reload(ctx);
                 }
                 effects
@@ -823,24 +827,21 @@ impl Screen for Import {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
         let open = self.wall.is_open();
-        let content = open.then(|| match &self.count {
-            Phase::Loading => {
-                wire::locker_import_state::Content::Loading(wire::Loading { first_load: true })
-            }
-            Phase::Failed => wire::locker_import_state::Content::Failure(read::failure(locale)),
-            Phase::Denied(denial) => {
-                wire::locker_import_state::Content::Denied(shared::denied(locale, denial))
-            }
-            Phase::Ready(_) => {
-                wire::locker_import_state::Content::Data(Box::new(self.data(locale)))
-            }
-        });
+        let denied = |denial: &wire::AppQueryDenial| shared::denied(locale, denial);
+        let page = if open {
+            self.count.wire(locale, denied, wire::EmptyState::default)
+        } else {
+            Page::<()>::loading().wire(locale, denied, wire::EmptyState::default)
+        };
+        let content = (open && self.count.data().is_some())
+            .then(|| wire::locker_import_state::Content::Data(Box::new(self.data(locale))));
         wire::ViewState {
             kind: Some(wire::view_state::Kind::LockerImport(
                 wire::LockerImportState {
                     wall: self.wall.view(locale),
                     secure: open,
                     content,
+                    page: Some(page),
                     chrome: Some(wire::LockerImportChrome {
                         title: words::import_title(locale),
                         back_label: if self.parent.is_empty() {

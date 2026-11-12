@@ -235,6 +235,11 @@ pub struct Target {
     pub subtitle: String,
     /// The highlight of the match, or empty when it had none.
     pub snippet: String,
+    /// The words matched only in an earlier version of the item, not in what it says now
+    /// (#1185). The item is the live one, once; a surface says so and opens its Earlier
+    /// versions. Not written when false, so a tool's answer keeps its shape.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub in_earlier_version: bool,
 }
 
 /// THE DOOR. One method, and it reads.

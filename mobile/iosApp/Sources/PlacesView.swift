@@ -53,22 +53,20 @@ struct PlacesView: View {
                         .kitCard()
                 }
 
-                switch state.content {
-                case .loading?, nil:
-                    RowSkeleton()
-                case let .failure(failure)?:
-                    ScreenFailureView(sentence: failure.sentence, remedy: failure.remedy)
-                case let .data(data)?:
-                    if data.hasEmpty {
-                        ScreenEmptyView(sentence: data.empty.headline, remedy: data.empty.body)
-                    } else if state.presentation == .map, data.hasMapEmpty {
-                        ScreenEmptyView(sentence: data.mapEmpty.headline, remedy: data.mapEmpty.body)
-                    } else if state.presentation == .map {
-                        PlacesPlot(data: data, open: open)
-                    } else {
-                        cards(data.places)
+                PageReadStateView(page: state.page, onRetry: { event { $0.refreshed = .init() } }) {
+                    if state.content != nil {
+                        let data = state.data
+                        // NO PLACES AT ALL is the page's Empty state; the map's "none pinned" is a
+                        // section of a page that still has places, so it stays here.
+                        if state.presentation == .map, data.hasMapEmpty {
+                            ScreenEmptyView(sentence: data.mapEmpty.headline, remedy: data.mapEmpty.body)
+                        } else if state.presentation == .map {
+                            PlacesPlot(data: data, open: open)
+                        } else {
+                            cards(data.places)
+                        }
+                        footer(data)
                     }
-                    footer(data)
                 }
             }
             .padding(.vertical, 12)
@@ -181,14 +179,29 @@ private struct PlaceCard: View {
     }
 
     var body: some View {
-        Button(action: onOpen) {
-            card
+        // THE NAME IS A VISIBLE LINK UNDER THE CARD, as on Android: a place with no name is not
+        // asked for it in a menu nobody finds. The long press and the accessibility action stay.
+        VStack(alignment: .leading, spacing: 0) {
+            Button(action: onOpen) {
+                top
+            }
+            .buttonStyle(KitRowPress())
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(row.spoken)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction(named: row.nameLabel, onName)
+            KitLink(
+                label: row.nameLabel,
+                dense: true,
+                identifier: "places-name-\(row.placeID)",
+                action: onName
+            )
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .buttonStyle(KitRowPress())
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(row.spoken)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityAction(named: row.nameLabel, onName)
+        .kitCard()
+        .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+        .frame(maxWidth: .infinity, alignment: .leading)
         .contextMenu {
             Button {
                 onName()
@@ -202,7 +215,8 @@ private struct PlaceCard: View {
         }
     }
 
-    private var card: some View {
+    /// The cover, the name and the count: the part of the card that opens the place's shelf.
+    private var top: some View {
         VStack(alignment: .leading, spacing: 0) {
             Color.clear
                 .aspectRatio(4 / 3, contentMode: .fit)
@@ -228,11 +242,10 @@ private struct PlaceCard: View {
                 }
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.top, 10)
+            .padding(.bottom, 2)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .kitCard()
-        .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
     }

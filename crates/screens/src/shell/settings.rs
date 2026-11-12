@@ -4,14 +4,19 @@
 //! | Section | What it holds |
 //! |---|---|
 //! | Appearance | System, Light or Dark: one choice, kept in the Keychain under the key Home reads |
+//! | Units | Phone's setting, Metric or Imperial: one switch for every app, kept on the phone ([`quantity::set_op`]); Phone's setting (nothing stored) follows the region |
 //! | Vault | how many vaults this phone holds; a tap opens Home's vault switcher |
-//! | Backup | the one honest line ([`crate::backup::line`]) and the Backup page behind it |
+//! | Backup | the one honest line ([`crate::backup::line`]) and the Backup page behind it; "Export everything", every app but Locker as one archive ([`super::export`]) |
 //! | Recovery key | where the key is ([`crate::backup::key`]) and the page that shows it |
 //! | About | the version |
 //!
 //! **The appearance has one store.** Home's key `appearance` holds `""`, `"light"` or `"dark"`;
-//! Settings writes the same three values to the same key and then wakes Home, which reads the key
-//! again and draws the scheme it names. There is no second copy to drift.
+//! Settings writes the same three values to the same key and, once the Keychain says it stuck,
+//! wakes Home, which draws the scheme it names. There is no second copy to drift.
+//!
+//! **No refused save is silent.** Every row that writes is a [`Row`], and each names its own
+//! "Couldn't save your <thing>. Try again." sentence; [`Settings::refuse`] shows it on the status
+//! line, the old value stays selected, and the next pick or visit clears it.
 //!
 //! The pages the rows open are Backup's (`backup.home`, `words.show`); the words are theirs too.
 //! "Download settings" opens its own sheet, the transfer rule Home's gear draws, from the same store.
@@ -24,6 +29,7 @@ use wire::settings_event::Kind as S;
 use crate::backup::{self, key::KeyCustody, line, reading};
 use crate::catalog::load;
 use crate::custody::secrets::{self as secrets, VaultSecrets};
+use crate::kit::quantity::{self, UnitsPref};
 use crate::kit::read::Reading;
 use crate::passes::{Rules, TransferRule, rule};
 use crate::screen::{Ctx, Screen};
@@ -36,6 +42,8 @@ const VAULTS_ROW: &str = "vaults";
 const DOWNLOAD_ROW: &str = "download-settings";
 
 /// The Keychain key the appearance is kept under: Home's, the same three values.
+/// The units choice that stores nothing, so the phone's region decides.
+const PHONE_UNITS: &str = "phone";
 const APPEARANCE_KEY: &str = "appearance";
 
 /// The registry factory.
@@ -85,6 +93,32 @@ impl Appearance {
     }
 }
 
+/// Every Settings row that writes. A write the platform refuses is never silent: each row names its
+/// own sentence here, and [`Settings::refuse`] is the one place that shows it. The `match` has no
+/// wildcard, so a new writing row cannot be added without its sentence.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Row {
+    /// The transfer rule: the pass service is told when it stuck.
+    Rule,
+    /// The units: every other open screen draws again when it stuck.
+    Units,
+    /// The appearance: kept in the Keychain, then Home draws the scheme it names.
+    Appearance,
+}
+
+impl Row {
+    pub const ALL: [Self; 3] = [Self::Rule, Self::Units, Self::Appearance];
+
+    /// What the member is told when this row's save was refused.
+    pub fn refused(self, locale: crate::strings::Locale) -> String {
+        match self {
+            Self::Rule => words::settings_rule_refused(locale),
+            Self::Units => words::settings_units_refused(locale),
+            Self::Appearance => words::settings_appearance_refused(locale),
+        }
+    }
+}
+
 struct Settings {
     secrets: VaultSecrets,
     /// `None` until the Keychain has answered: the page is loading, never a guess.
@@ -97,8 +131,17 @@ struct Settings {
     finished: bool,
     /// THE DOWNLOAD SETTINGS SHEET is open.
     transfer_open: bool,
-    /// The rule's write is out: its answer is what tells the pass service.
-    keeping: Option<Vec<wire::SecretOp>>,
+    /// The writes to the device store that are out, oldest first: the answers come back in the
+    /// same order, and each says what to do when it lands.
+    keeping: std::collections::VecDeque<(Row, Vec<wire::SecretOp>)>,
+    /// The appearance writes to the Keychain that are out, oldest first, each with the number the
+    /// runtime gave its effect (`None` until [`Screen::effects_numbered`] says). The choice shows
+    /// and Home draws it only once the Keychain's answer to THAT effect says it stuck.
+    keeping_appearance: std::collections::VecDeque<(Option<u64>, Appearance)>,
+    /// Where the appearance write sits in the effects the last update returned.
+    asking_appearance: Option<usize>,
+    /// The sentence for a write the platform refused; the next pick or visit clears it.
+    refused: Option<String>,
 }
 
 impl Settings {
@@ -111,7 +154,10 @@ impl Settings {
             vault_name: None,
             finished: false,
             transfer_open: false,
-            keeping: None,
+            keeping: std::collections::VecDeque::new(),
+            keeping_appearance: std::collections::VecDeque::new(),
+            asking_appearance: None,
+            refused: None,
         }
     }
 
@@ -135,15 +181,99 @@ impl Settings {
     /// The device store answered the rule's write. THE PASS SERVICE READS THE SAME CACHE, so the
     /// answer is folded in before it is told: a rule that stuck is a new constraint on every window
     /// the OS holds (Home's gear and the Backup page do the same).
-    fn rule_kept(&mut self, batched: &wire::SecretBatched, ctx: &Ctx) {
-        let Some(ops) = self.keeping.take() else {
+    fn write_kept(&mut self, batched: &wire::SecretBatched, ctx: &Ctx) {
+        let Some((kept, ops)) = self.keeping.pop_front() else {
             return;
         };
         self.secrets.absorb(&ops, &batched.answers);
-        if batched.answers.len() >= ops.len() && batched.answers.iter().all(|answer| answer.ok) {
-            self.secrets
-                .conductor()
-                .ask(ctx, wire::pass_asked::Ask::RuleChanged);
+        // A write the platform refused changed nothing in the cache, so the page keeps showing
+        // what is stored.
+        if batched.answers.len() < ops.len() || !batched.answers.iter().all(|answer| answer.ok) {
+            self.refuse(kept, ctx);
+        } else {
+            match kept {
+                Row::Rule => self
+                    .secrets
+                    .conductor()
+                    .ask(ctx, wire::pass_asked::Ask::RuleChanged),
+                Row::Units => ctx.redraw_all(),
+                // Appearance goes through the Keychain, not a secret batch.
+                Row::Appearance => {}
+            }
+        }
+    }
+
+    /// THE ONE PLACE A REFUSED SAVE IS SHOWN: the row's own sentence, on the status line. The old
+    /// value stays selected because nothing was changed; the next pick or visit clears the line.
+    fn refuse(&mut self, row: Row, ctx: &Ctx) {
+        self.refused = Some(row.refused(ctx.locale()));
+    }
+
+    /// Whether `effect_id` is the answer to an appearance write that is out.
+    fn is_appearance_write(&self, effect_id: u64) -> bool {
+        self.keeping_appearance
+            .iter()
+            .any(|(id, _)| *id == Some(effect_id))
+    }
+
+    /// The Keychain answered the appearance write numbered `effect_id`. A choice that stuck is
+    /// shown and Home is woken to draw it; one that did not changes nothing.
+    fn appearance_kept(&mut self, effect_id: u64, stuck: bool, ctx: &Ctx) {
+        let Some(at) = self
+            .keeping_appearance
+            .iter()
+            .position(|(id, _)| *id == Some(effect_id))
+        else {
+            return;
+        };
+        let Some((_, chosen)) = self.keeping_appearance.remove(at) else {
+            return;
+        };
+        if !stuck {
+            self.refuse(Row::Appearance, ctx);
+            return;
+        }
+        self.appearance = Some(chosen);
+        // HOME OWNS THE SCHEME: it reads the choice from the one key, which now holds it.
+        ctx.post(
+            super::HOME,
+            wire::ScreenEvent {
+                kind: Some(E::Home(wire::HomeEvent {
+                    kind: Some(wire::home_event::Kind::AppearanceChosen(
+                        wire::home_event::AppearanceChosen {
+                            stored: chosen.stored().to_owned(),
+                        },
+                    )),
+                })),
+            },
+        );
+    }
+
+    /// The units row: the STORED choice, or Phone's setting when none is stored (the effective
+    /// reading every screen's `Ctx::units` makes follows the region then).
+    fn units(&self, locale: crate::strings::Locale) -> wire::SettingsUnits {
+        let shown = quantity::stored(&self.secrets);
+        let choice = |id: &str, each: Option<UnitsPref>, label: String| wire::SettingsChoice {
+            id: id.to_owned(),
+            label,
+            selected: each == shown,
+        };
+        wire::SettingsUnits {
+            title: words::settings_units(locale),
+            choices: vec![
+                choice(PHONE_UNITS, None, words::settings_units_phone(locale)),
+                choice(
+                    UnitsPref::Metric.stored(),
+                    Some(UnitsPref::Metric),
+                    words::settings_units_metric(locale),
+                ),
+                choice(
+                    UnitsPref::Imperial.stored(),
+                    Some(UnitsPref::Imperial),
+                    words::settings_units_imperial(locale),
+                ),
+            ],
+            note: words::settings_units_note(locale),
         }
     }
 
@@ -231,6 +361,7 @@ impl Settings {
                     .collect(),
                 note: words::settings_appearance_note(locale),
             }),
+            units: Some(self.units(locale)),
             sections: vec![
                 wire::SettingsSection {
                     key: "vault".to_owned(),
@@ -308,6 +439,27 @@ impl Settings {
                             download.pressable = true;
                             download
                         },
+                        // THE STORES THE VAULT FOLLOWED ON ANOTHER PHONE, offered again (#1185).
+                        row(
+                            "reconnect",
+                            words::settings_reconnect(locale),
+                            String::new(),
+                            "Backup",
+                            Some(crate::follow::reconnect::route()),
+                            "neutral",
+                            String::new(),
+                        ),
+                        // EVERYTHING BUT LOCKER as one archive: the kit's export page, behind the owner
+                        // check (#1185).
+                        row(
+                            "export",
+                            words::settings_export(locale),
+                            String::new(),
+                            "Upload",
+                            Some(crate::kit::export::entry(locale, super::EXPORT).route),
+                            "neutral",
+                            String::new(),
+                        ),
                     ],
                 },
                 wire::SettingsSection {
@@ -336,6 +488,7 @@ impl Screen for Settings {
         match event.kind {
             Some(E::Appeared(_)) => {
                 self.read(ctx);
+                self.refused = None;
                 return vec![
                     effect(wire::effect::Kind::Keychain(wire::KeychainOp {
                         op: wire::keychain_op::Op::Get as i32,
@@ -356,16 +509,26 @@ impl Screen for Settings {
                         Appearance::System
                     });
                 }
+                // The Keychain kept the choice.
+                Some(wire::effect_result::Outcome::Done(_)) => {
+                    self.appearance_kept(result.effect_id, true, ctx);
+                }
                 // A Keychain that cannot answer leaves the phone's own scheme: the choice shows
                 // as System rather than the page waiting for ever.
                 Some(wire::effect_result::Outcome::Failed(_)) if self.appearance.is_none() => {
                     self.appearance = Some(Appearance::System);
                 }
+                // A write the Keychain refused (or could not perform) changed nothing.
+                Some(wire::effect_result::Outcome::Failed(_))
+                    if self.is_appearance_write(result.effect_id) =>
+                {
+                    self.appearance_kept(result.effect_id, false, ctx);
+                }
                 Some(wire::effect_result::Outcome::SyncedStatus(status)) => {
                     self.synced = Some(status);
                 }
                 Some(wire::effect_result::Outcome::Secrets(batched)) => {
-                    self.rule_kept(&batched, ctx);
+                    self.write_kept(&batched, ctx);
                 }
                 _ => {}
             },
@@ -402,8 +565,25 @@ impl Screen for Settings {
                         // device store as a `SecretBatch`, and its answer is what tells the pass
                         // service (`rule_kept`).
                         self.transfer_open = false;
+                        self.refused = None;
                         let ops = vec![Rules::write_rule(TransferRule::of(Some(&chosen.stored)))];
-                        self.keeping = Some(ops.clone());
+                        self.keeping.push_back((Row::Rule, ops.clone()));
+                        return vec![secrets::effect(ops)];
+                    }
+                    Some(S::UnitsPicked(picked)) => {
+                        // ONE SWITCH, written to the phone's device store; the answer is folded in
+                        // (`write_kept`) and only then do the other screens draw again.
+                        // Phone's setting stores nothing, so the region decides again.
+                        let chosen = if picked.id == PHONE_UNITS {
+                            None
+                        } else if let Some(chosen) = UnitsPref::of_stored(&picked.id) {
+                            Some(chosen)
+                        } else {
+                            return Vec::new();
+                        };
+                        self.refused = None;
+                        let ops = vec![quantity::set_op(chosen)];
+                        self.keeping.push_back((Row::Units, ops.clone()));
                         return vec![secrets::effect(ops)];
                     }
                     _ => {}
@@ -412,21 +592,16 @@ impl Screen for Settings {
                     && let Some(chosen) = Appearance::of_id(&picked.id)
                     && self.appearance != Some(chosen)
                 {
-                    self.appearance = Some(chosen);
-                    // HOME OWNS THE STORE AND THE SCHEME: it keeps the choice in the Keychain
-                    // and draws what it names.
-                    ctx.post(
-                        super::HOME,
-                        wire::ScreenEvent {
-                            kind: Some(E::Home(wire::HomeEvent {
-                                kind: Some(wire::home_event::Kind::AppearanceChosen(
-                                    wire::home_event::AppearanceChosen {
-                                        stored: chosen.stored().to_owned(),
-                                    },
-                                )),
-                            })),
-                        },
-                    );
+                    // THE KEYCHAIN IS WRITTEN HERE so a refusal is seen here; the choice shows
+                    // and Home draws it when the write is answered (`appearance_kept`).
+                    self.refused = None;
+                    self.keeping_appearance.push_back((None, chosen));
+                    self.asking_appearance = Some(0);
+                    return vec![effect(wire::effect::Kind::Keychain(wire::KeychainOp {
+                        op: wire::keychain_op::Op::Set as i32,
+                        key: APPEARANCE_KEY.to_owned(),
+                        value: chosen.stored().as_bytes().to_vec(),
+                    }))];
                 }
             }
             _ => {}
@@ -434,19 +609,47 @@ impl Screen for Settings {
         Vec::new()
     }
 
+    fn effects_numbered(&mut self, ids: &[Option<u64>]) {
+        let Some(index) = self.asking_appearance.take() else {
+            return;
+        };
+        if let Some(last) = self.keeping_appearance.back_mut() {
+            last.0 = ids.get(index).copied().flatten();
+        }
+    }
+
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
-        let content = match self.appearance {
-            None => wire::settings_state::Content::Loading(wire::Loading { first_load: true }),
-            Some(appearance) => wire::settings_state::Content::Data(self.data(ctx, appearance)),
-        };
+        // THE READ (#1185): the page is loading until the Keychain has answered, then ready.
+        let content = self.appearance.map(|appearance| {
+            wire::settings_state::Content::Data(Box::new(self.data(ctx, appearance)))
+        });
+        let page = if self.appearance.is_some() {
+            crate::kit::read::Page::<()>::Ready {
+                data: (),
+                note: None,
+            }
+        } else {
+            crate::kit::read::Page::<()>::loading()
+        }
+        .wire(
+            locale,
+            |_| wire::Denied::default(),
+            wire::EmptyState::default,
+        );
         wire::ViewState {
             kind: Some(wire::view_state::Kind::Settings(wire::SettingsState {
                 title: words::settings_title(locale),
                 back_label: home_words::band_home(locale),
-                content: Some(content),
+                content,
+                page: Some(page),
                 finished: self.finished,
                 transfer_sheet: self.transfer_sheet(locale),
+                status: self.refused.clone().map(|sentence| wire::StatusLine {
+                    sentence,
+                    action_label: String::new(),
+                    refused: true,
+                }),
             })),
             ..wire::ViewState::default()
         }

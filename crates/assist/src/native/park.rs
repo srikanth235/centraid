@@ -519,6 +519,12 @@ fn is_container(kind: Kind) -> bool {
     )
 }
 
+/// The kinds that leave the model's world when they go to the trash: the containers, and a Money
+/// transaction (its read is the live window, so a trashed line is in no read the model has, #1185).
+fn leaves_when_trashed(kind: Kind) -> bool {
+    is_container(kind) || kind == Kind::Transaction
+}
+
 /// What goes to the trash with a holder, and comes back with it (the vault's `members`): a
 /// notebook's notes and notebooks, a folder's documents and folders, a list's tasks, a task's
 /// subtasks, and what was written about one person alone (a note or an event; a task about them
@@ -572,8 +578,8 @@ fn trash_with(
     out: &mut Vec<String>,
 ) {
     let kids = members(world, key);
-    if is_container(key.0) {
-        // a container the model has no trash for leaves the world, with the edges it held
+    if leaves_when_trashed(key.0) {
+        // a row the model has no trash for leaves the world, with the edges it held
         let held: Vec<Edge> = world
             .edges
             .iter()

@@ -5,6 +5,11 @@
   reports that to the core, which opens Reminders with the quick-add bar ready.
   Nothing is written until the member taps Add. The package is the applicationId
   (`build.gradle.kts`); a static shortcut cannot take a manifest placeholder.
+
+  "What's next" (#1185): the counterpart of the iOS intent of the same name. Siri speaks the
+  snapshot's sentence there; a launcher shortcut cannot speak, so this one starts the app on
+  `dev.centraid.action.AGENDA_OPEN` with no key, which the core answers with Agenda's home
+  (where Up next is read). Nothing is written.
 -->
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
     <shortcut
@@ -15,6 +20,17 @@
         android:shortcutShortLabel="@string/glance_shortcut_add_short">
         <intent
             android:action="dev.centraid.action.ADD_REMINDER"
+            android:targetClass="dev.centraid.android.MainActivity"
+            android:targetPackage="dev.centraid" />
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/glance_shortcut_next"
+        android:shortcutId="agenda_next"
+        android:shortcutLongLabel="@string/glance_shortcut_next_long"
+        android:shortcutShortLabel="@string/glance_shortcut_next_short">
+        <intent
+            android:action="dev.centraid.action.AGENDA_OPEN"
             android:targetClass="dev.centraid.android.MainActivity"
             android:targetPackage="dev.centraid" />
     </shortcut>

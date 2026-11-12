@@ -21,6 +21,8 @@
 //!   the top level (`DETACH`): a note the member restored on its own is not lost
 //!   with its notebook's purge. What cannot live without the holder (a section
 //!   without its project, a transaction without its account) is purged.
+//! - **A calendar is a holder too**: its events go to the trash with it and come back with it,
+//!   and the vault's own calendar (the one every vault is founded with) is never trashed.
 //! - **A person is a holder of what is written about them alone**: a note, a
 //!   touch or a yearly date about that person and no one else goes to the trash
 //!   with them and comes back with them. A task about them stays.
@@ -33,7 +35,7 @@ use rusqlite::{Connection, OptionalExtension};
 
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk};
 use crate::error::{Result, VaultError};
-use crate::model::Kind;
+use crate::model::{DEFAULT_CALENDAR_ID, Kind};
 
 /// How long a trashed entity waits before a sweep may purge it.
 pub const TRASH_DAYS: i64 = 30;
@@ -91,6 +93,94 @@ pub(crate) fn lookup_live(
     }))
 }
 
+// ---------------------------------------------------------------------------
+// A save that says which revision it replaces (#1185)
+// ---------------------------------------------------------------------------
+
+/// The predicate a guarded save is refused with when the record changed since the screen read
+/// it. A screen branches on it; the member never sees it.
+pub const STALE_REVISION: &str = "stale_revision";
+
+/// The predicate a guarded save is refused with when the record is in the trash.
+pub const STALE_TRASHED: &str = "stale_trashed";
+
+/// The revision a save says it replaces, when it says one. Absent is today's behaviour (the
+/// assistant, a follow pass and the shared verbs name none).
+fn expected_rev(ctx: &CommandCtx<'_, '_>) -> Option<i64> {
+    ctx.input
+        .get("expected_rev")
+        .and_then(serde_json::Value::as_i64)
+}
+
+/// The record a guarded save is of: `id`, or `item_id` for Locker's commands, or the one line a
+/// command that files many (`ids`) was given. A save of several records names no revision, so
+/// none is held to one.
+fn subject<'a>(ctx: &'a CommandCtx<'_, '_>) -> Option<&'a str> {
+    ctx.optional_str("id")
+        .or_else(|| ctx.optional_str("item_id"))
+        .or_else(|| match ctx.input.get("ids")?.as_array()?.as_slice() {
+            [only] => only.as_str(),
+            _ => None,
+        })
+}
+
+fn stale_trashed(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let (Some(_), Some(id)) = (expected_rev(ctx), subject(ctx)) else {
+        return Ok(None);
+    };
+    Ok(find(ctx.connection(), id)?
+        .filter(|found| found.deleted_at.is_some())
+        .map(|found| format!("“{}” was moved to the trash", found.title)))
+}
+
+fn stale_revision(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let (Some(expected), Some(id)) = (expected_rev(ctx), subject(ctx)) else {
+        return Ok(None);
+    };
+    if find(ctx.connection(), id)?.is_none() {
+        return Ok(None);
+    }
+    Ok((crate::history::head(ctx.connection(), id)? != expected)
+        .then(|| "It changed somewhere else since you opened it".to_owned()))
+}
+
+/// THE GUARD of a save that names `expected_rev`: refused as [`STALE_TRASHED`] when the record
+/// is in the trash and as [`STALE_REVISION`] when its revision is not the one named. Put it
+/// first among a command's preconditions; with no `expected_rev` it holds. The command's schema
+/// carries the optional `expected_rev` (an integer, 0 or more), and its handler answers
+/// [`rev_after`].
+pub(crate) const STALE_GUARD: [CommandCondition; 2] = [
+    CommandCondition {
+        predicate: STALE_TRASHED,
+        check: stale_trashed,
+    },
+    CommandCondition {
+        predicate: STALE_REVISION,
+        check: stale_revision,
+    },
+];
+
+/// The revision a guarded save leaves: put in its output as `rev` when the save named one, so
+/// the next save names it.
+pub(crate) fn rev_after(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Option<i64>> {
+    if expected_rev(ctx).is_none() {
+        return Ok(None);
+    }
+    Ok(Some(crate::history::head_after(ctx.connection(), id)?))
+}
+
+/// A guarded save's answer: `answer` with `rev` added when the save named an `expected_rev`.
+pub(crate) fn with_rev(
+    ctx: &CommandCtx<'_, '_>,
+    id: &str,
+    mut answer: serde_json::Value,
+) -> Result<serde_json::Value> {
+    if let Some(rev) = rev_after(ctx, id)? {
+        answer["rev"] = rev.into();
+    }
+    Ok(answer)
+}
+
 /// A handler's view of the same: the entity must be there, because the
 /// precondition said so.
 pub(crate) fn require(connection: &Connection, id: &str) -> Result<Found> {
@@ -137,6 +227,9 @@ fn members(connection: &Connection, holder: &Found) -> Result<Vec<String>> {
              UNION ALL SELECT id FROM task WHERE project_id = ?1"
         }
         Kind::Account => "SELECT id FROM txn WHERE account_id = ?1",
+        // A calendar holds its events (a repeating one is one row): they go to the trash with it
+        // and, stamped with its own `deleted_at`, only those come back with it.
+        Kind::Calendar => "SELECT id FROM event WHERE calendar_id = ?1",
         // What was written or logged about one person and no one else: their
         // notes and journal words, the touches that were with them alone, and
         // their yearly dates. A task about them is the member's own and stays,
@@ -245,9 +338,19 @@ fn purge_refusal(connection: &Connection, found: &Found) -> Result<Option<String
     let refusal = match found.kind {
         Kind::Flag => Some("a flag is built in and cannot be removed".to_owned()),
         Kind::Calendar => {
+            if found.id == DEFAULT_CALENDAR_ID {
+                return Ok(Some(
+                    "this is the calendar every vault is founded with; it cannot be removed"
+                        .to_owned(),
+                ));
+            }
+            // Events that went to the trash WITH the calendar are purged with it; any other is
+            // still the member's.
             let events = count(
                 connection,
-                "SELECT COUNT(*) FROM event WHERE calendar_id = ?1",
+                "SELECT COUNT(*) FROM event ev JOIN entity en ON en.id = ev.id
+                  WHERE ev.calendar_id = ?1
+                    AND en.deleted_at IS NOT (SELECT deleted_at FROM entity WHERE id = ?1)",
                 &found.id,
             )?;
             (events > 0).then(|| {
@@ -473,7 +576,7 @@ fn retitle(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     ctx.connection()
         .execute("UPDATE entity SET title = ?2 WHERE id = ?1", [id, title])?;
     ctx.touch(id)?;
-    Ok(serde_json::json!({ "id": id, "title": title }))
+    with_rev(ctx, id, serde_json::json!({ "id": id, "title": title }))
 }
 
 fn pre_trash(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -484,6 +587,11 @@ fn pre_trash(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if is_self(ctx.connection(), &found.id)? {
         return Ok(Some(
             "this is you; a vault cannot do without its owner".to_owned(),
+        ));
+    }
+    if found.id == DEFAULT_CALENDAR_ID {
+        return Ok(Some(
+            "this is the calendar every vault is founded with; it cannot be removed".to_owned(),
         ));
     }
     Ok((!found.kind.has_trash())
@@ -504,6 +612,25 @@ fn pre_restore(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     };
     if found.deleted_at.is_none() {
         return Ok(Some(format!("“{}” is not in the trash", found.title)));
+    }
+    // An event is not brought back into a calendar that is in the trash: the calendar comes back
+    // first, and takes with it the events that went with it.
+    if found.kind == Kind::Event {
+        let calendar: Option<String> = ctx
+            .connection()
+            .query_row(
+                "SELECT c.title FROM event ev JOIN entity c ON c.id = ev.calendar_id
+                  WHERE ev.id = ?1 AND c.deleted_at IS NOT NULL",
+                [&found.id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if let Some(title) = calendar {
+            return Ok(Some(format!(
+                "“{}” is on “{title}”, which is in the trash; restore the calendar first",
+                found.title
+            )));
+        }
     }
     // THE GRACE WINDOW REFUSES NOTHING. An overdue row is emptied by the pass
     // at launch (`Vault::empty_overdue_trash`); until that pass runs it is a
@@ -544,9 +671,7 @@ pub(crate) fn restore_one(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Vec<Stri
     Ok(restored)
 }
 
-/// `entity.restore`. It writes nothing about the phone: a restored event in a followed phone
-/// calendar whose source a pushed delete tombstoned has no source, and the create it is then owed
-/// is DERIVED at the next read ([`crate::commands::calendar_push`], rule C12).
+/// `entity.restore`.
 fn restore(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let restored = restore_one(ctx, ctx.required_str("id")?)?;
     Ok(serde_json::json!({ "restored": restored }))
@@ -576,26 +701,39 @@ fn purge(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
 }
 
 fn pre_empty(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    Ok(match ctx.optional_str("kind") {
-        None => None,
-        Some(word) => match Kind::parse(word) {
-            None => Some(format!("`{word}` is not a kind of thing in this vault")),
-            Some(kind) if !kind.has_trash() => {
-                Some(format!("a {} has no trash to empty", kind.noun()))
+    for name in ["kind", "with_kind"] {
+        let Some(word) = ctx.optional_str(name) else {
+            continue;
+        };
+        match Kind::parse(word) {
+            None => {
+                return Ok(Some(format!(
+                    "`{word}` is not a kind of thing in this vault"
+                )));
             }
-            Some(_) => None,
-        },
-    })
+            Some(kind) if !kind.has_trash() => {
+                return Ok(Some(format!("a {} has no trash to empty", kind.noun())));
+            }
+            Some(_) => {}
+        }
+    }
+    if ctx.optional_str("with_kind").is_some() && ctx.optional_str("kind").is_none() {
+        return Ok(Some(
+            "`with_kind` names a second kind beside `kind`, which is absent".to_owned(),
+        ));
+    }
+    Ok(None)
 }
 
 /// How many trashed rows one read of the pass takes.
 const DOOMED_CHUNK: i64 = 64;
 
-/// Purge what is in the trash: one kind's, or every kind's; all of it, or only
+/// Purge what is in the trash: one kind's (with `with_kind`, a second beside it: a People trash holds people and lists), or every kind's; all of it, or only
 /// what has waited out its window; and, with a `limit`, at most that many
 /// roots (what went with them is not counted against it), saying `more` when
-/// something else is due. What cannot be purged as it stands (a calendar with
-/// events, the self person) stays in the trash, and does not stop the rest. With
+/// something else is due. With `having: "workout"` only the activities that have a workout row
+/// (what Health's trash lists; a touch trashed with its person has none and stays). What cannot
+/// be purged as it stands (a calendar with events, the self person) stays in the trash, and does not stop the rest. With
 /// `defer_collect` the bytes nothing names any more are not collected here: the caller of a
 /// pass in batches collects once at its end.
 fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
@@ -615,6 +753,8 @@ fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         .and_then(serde_json::Value::as_bool)
         .unwrap_or(false);
     let kind = ctx.optional_str("kind");
+    let with_kind = ctx.optional_str("with_kind");
+    let having = ctx.optional_str("having");
     let mut purged = Vec::new();
     let mut roots = 0usize;
     let mut more = false;
@@ -628,9 +768,11 @@ fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
             .prepare(
                 "SELECT id, deleted_at, n FROM entity
                   WHERE deleted_at IS NOT NULL
-                    AND (?1 IS NULL OR kind = ?1)
+                    AND (?1 IS NULL OR kind = ?1 OR kind = ?8)
                     AND (?2 = 0 OR purge_at <= ?3)
                     AND (?4 IS NULL OR (deleted_at, n) > (?4, ?5))
+                    AND (?7 IS NULL OR (?7 = 'workout'
+                         AND EXISTS (SELECT 1 FROM workout WHERE workout.id = entity.id)))
                   ORDER BY deleted_at, n LIMIT ?6",
             )?
             .query_map(
@@ -640,7 +782,9 @@ fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
                     ctx.now,
                     after.as_ref().map(|(at, _)| at),
                     after.as_ref().map_or(0, |(_, n)| *n),
-                    DOOMED_CHUNK
+                    DOOMED_CHUNK,
+                    having,
+                    with_kind
                 ],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )?
@@ -687,14 +831,19 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "additionalProperties": false,
               "properties": {
                 "id": { "type": "string", "minLength": 1 },
-                "title": { "type": "string", "maxLength": 1000 }
+                "title": { "type": "string", "maxLength": 1000 },
+                "expected_rev": { "type": "integer", "minimum": 0 }
               }
             }"#,
             Idempotency::Idempotent,
-            &[CommandCondition {
-                predicate: "title_is_changeable",
-                check: pre_retitle,
-            }],
+            &[
+                STALE_GUARD[0],
+                STALE_GUARD[1],
+                CommandCondition {
+                    predicate: "title_is_changeable",
+                    check: pre_retitle,
+                },
+            ],
             retitle,
         ),
         CommandDefinition::plain(
@@ -738,6 +887,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "additionalProperties": false,
               "properties": {
                 "kind": { "type": "string", "minLength": 1 },
+                "with_kind": { "type": "string", "minLength": 1 },
+                "having": { "type": "string", "enum": ["workout"] },
                 "due_only": { "type": "boolean" },
                 "limit": { "type": "integer", "minimum": 1 },
                 "defer_collect": { "type": "boolean" }

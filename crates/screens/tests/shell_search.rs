@@ -145,7 +145,11 @@ fn a_term_that_finds_nothing_says_so_and_still_offers_the_ask() {
     type_term(&mut d, i, "zzqxjv");
     let found = data(&d, i);
     assert!(found.groups.is_empty());
-    let empty = found.empty.expect("an empty state");
+    // Nothing matched is the page's own empty state; the answer stays for the Ask row under it.
+    let Some(wire::page_state::State::Empty(empty)) = state(&d, i).page.and_then(|page| page.state)
+    else {
+        panic!("a term that found nothing is an empty page");
+    };
     assert_eq!(empty.headline, "No matches");
     assert_eq!(empty.body, "Nothing in this vault matches “zzqxjv”.");
     assert!(found.ask.is_some());

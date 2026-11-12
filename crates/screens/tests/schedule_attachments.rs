@@ -205,10 +205,12 @@ fn add_photo_asks_the_shell_for_a_photo_then_makes_it_and_attaches_it() {
         .driver
         .answer_effect(picked('a', 4096, "IMG_0042.jpg", "image/jpeg"));
     let section = section(&world, page);
-    assert!(
-        !section.busy && section.status.is_none(),
-        "{:?}",
-        section.status
+    // The attach says so, with Undo (#1185).
+    assert!(!section.busy);
+    let status = section.status.as_ref().expect("a status line");
+    assert_eq!(
+        (status.sentence.as_str(), status.action_label.as_str()),
+        ("Attachment added", "Undo")
     );
     assert_eq!(section.items.len(), 1);
     let tile = &section.items[0];
@@ -269,10 +271,14 @@ fn a_closed_picker_says_nothing_and_a_refusal_says_where_to_turn_it_on() {
         reason: "denied".to_owned(),
         denied: true,
         cancelled: false,
+        ..Default::default()
     }));
     let status = section(&world, page).status.clone().expect("a refusal");
     assert!(status.refused);
-    assert_eq!(status.sentence, "Allow access in Settings to add it.");
+    assert_eq!(
+        status.sentence,
+        "Photo access is off. Turn it on in Settings."
+    );
     on_event(&mut world, page, A::StatusDismissed(Default::default()));
     assert!(section(&world, page).status.is_none());
 

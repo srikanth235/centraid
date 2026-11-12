@@ -115,7 +115,9 @@ impl Vault {
                 .prepare(
                     "SELECT name FROM sqlite_master WHERE type = 'table'
                         AND name NOT LIKE 'sqlite_%' AND sql NOT LIKE 'CREATE VIRTUAL%'
-                        AND name NOT IN ('search_config', 'search_data', 'search_docsize', 'search_idx')",
+                        AND name NOT IN ('search_config', 'search_data', 'search_docsize', 'search_idx',
+                            'search_past_config', 'search_past_data', 'search_past_docsize',
+                            'search_past_idx')",
                 )?
                 .query_map([], |row| row.get::<_, String>(0))?
                 .collect::<rusqlite::Result<Vec<_>>>()?;

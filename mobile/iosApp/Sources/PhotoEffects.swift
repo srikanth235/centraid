@@ -39,14 +39,14 @@ enum PhotoEffects {
             )
         }.value
         guard case let .made(path, width, height) = made else {
-            return failed("the edit could not be drawn")
+            return failed(EffectReason.failed)
         }
         defer { try? FileManager.default.removeItem(atPath: path) }
         guard let bytes = try? Data(contentsOf: URL(fileURLWithPath: path)) else {
-            return failed("the edited photo could not be read")
+            return failed(EffectReason.unreadable)
         }
         guard case let .staged(handle) = await StageDoor.stage(core, bytes: bytes, StageDoor.Begin(mediaType: "image/jpeg")) else {
-            return failed("the edited photo could not be staged")
+            return failed(EffectReason.unwritable)
         }
         var done = Centraid_Core_V1_EditRendered()
         done.contentHash = handle.contentHash
