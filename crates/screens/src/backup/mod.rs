@@ -36,6 +36,7 @@ pub mod key;
 pub mod line;
 pub mod reading;
 pub mod rule;
+pub mod stale;
 
 #[cfg(test)]
 mod tests;

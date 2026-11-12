@@ -40,4 +40,8 @@ catalog! {
     plain check_stop = ("Stop", "Stop");
     // THE ROW ON BACKUP that opens the page.
     plain check_row = ("Check my backup", "Check my backup");
+
+    // THE STALE NOTICE (`backup::stale`), written before the day comes: no reason is claimed.
+    plain stale_title = ("Backup is {n} days old", "Backup is {n} days old");
+    plain stale_body = ("Nothing has reached {device} since {since}. Open Centraid to see why.", "Nothing has reached {device} since {since}. Open Centraid to see why.");
 }
