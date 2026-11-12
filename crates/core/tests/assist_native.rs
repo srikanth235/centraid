@@ -313,7 +313,7 @@ fn a_follow_up_in_the_same_chat_reads_the_conversation_so_far() {
 #[test]
 fn every_kind_is_drawn_as_a_card_of_one_of_the_six_apps_and_the_homeless_ones_open_their_apps_home()
 {
-    // One `answer kind=…` turn each, in one chat. (app, entity) per kind, from the kind table.
+    // One `find kind=…` then `answer rows=@1` turn each, in one chat. (app, entity) per kind, from the kind table.
     let kinds = [
         ("person", "people", "person"),
         ("event", "calendar", "event"),
@@ -327,7 +327,19 @@ fn every_kind_is_drawn_as_a_card_of_one_of_the_six_apps_and_the_homeless_ones_op
     ];
     let steps: Vec<[String; 2]> = kinds
         .iter()
-        .map(|(kind, _, _)| step("plan: answer", "answer", &[("kind", kind)]))
+        .enumerate()
+        .flat_map(|(at, (kind, _, _))| {
+            // a session numbers its results across its turns, and an answer takes one too: the
+            // nth turn's find is `@2n-1`
+            [
+                step("plan: look", "find", &[("kind", kind)]),
+                step(
+                    "plan: answer",
+                    "answer",
+                    &[("rows", &format!("@{}", 2 * at + 1))],
+                ),
+            ]
+        })
         .collect();
     let sample = native_sample(script(&steps));
     let session = sample.start("");
@@ -339,7 +351,7 @@ fn every_kind_is_drawn_as_a_card_of_one_of_the_six_apps_and_the_homeless_ones_op
             assert_eq!(
                 (card.app.as_str(), card.entity.as_str()),
                 (*app, *entity),
-                "{kind}"
+                "{kind}: {answer:?}"
             );
             assert!(!card.id.is_empty() && !card.title.is_empty(), "{kind}");
         }
@@ -384,14 +396,17 @@ fn a_decline_other_than_out_of_scope_is_a_composed_line_with_no_cards_no_activit
 
 #[test]
 fn a_question_for_the_vault_that_finds_nothing_says_so() {
-    let model = script(&[step(
-        "plan: answer",
-        "answer",
-        &[("kind", "task"), ("name", "zzyzx")],
-    )]);
+    let model = script(&[
+        step(
+            "plan: look",
+            "find",
+            &[("kind", "task"), ("where", "status = \"cancelled\"")],
+        ),
+        step("plan: answer", "answer", &[("rows", "@1")]),
+    ]);
     let sample = native_sample(model);
     let session = sample.start("");
-    let sent = sample.send(session, 1, "any zzyzx tasks?");
+    let sent = sample.send(session, 1, "any cancelled tasks?");
     let answer = answered(&sent);
     assert_eq!(answer.text, "Nothing found.");
     assert!(answer.cards.is_empty());
@@ -821,13 +836,14 @@ fn a_confirmed_write_is_seen_by_the_next_question_in_the_same_chat() {
         ),
         step(
             "plan: ask again",
-            "answer",
+            "find",
             &[
                 ("kind", "task"),
                 ("where", "status = \"completed\""),
                 ("name", "dry cleaning"),
             ],
         ),
+        step("plan: answer", "answer", &[("rows", "@2")]),
     ]));
     let session = sample.start("");
     sample.send(session, 1, "complete the dry cleaning task");
@@ -1380,7 +1396,8 @@ fn a_session_keeps_the_conversation_across_a_screens_write_and_reads_what_the_sc
     let model = script(&[
         read_tasks()[0].clone(),
         read_tasks()[1].clone(),
-        step("plan: lists", "answer", &[("kind", "list")]),
+        step("plan: lists", "find", &[("kind", "list")]),
+        step("plan: answer", "answer", &[("rows", "@3")]),
     ]);
     let sample = native_sample(model.clone());
     let session = sample.start("");
