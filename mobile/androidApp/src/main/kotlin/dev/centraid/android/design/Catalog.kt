@@ -115,6 +115,9 @@ public object CentraidCatalog {
             NativeIconPath(d = "M4 5h16v4H4z", filled = false, evenOdd = false),
             NativeIconPath(d = "M6 9v10h12V9M9 13h6", filled = false, evenOdd = false),
         ),
+        "ArrowDown" to listOf(
+            NativeIconPath(d = "M12 5v14M6 13l6 6 6-6", filled = false, evenOdd = false),
+        ),
         "ArrowLeft" to listOf(
             NativeIconPath(d = "M19 12H5M12 19l-7-7 7-7", filled = false, evenOdd = false),
         ),

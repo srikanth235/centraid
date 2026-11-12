@@ -42,6 +42,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.foundation.gestures.scrollBy
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -438,9 +441,33 @@ private fun ChatThread(
 ) {
     val list = rememberLazyListState()
     val last = state.messages.lastOrNull()
-    // FOLLOW THE ANSWER as it is written: the foot of the thread stays in view.
-    LaunchedEffect(state.messages.size, last?.text?.length, last?.cards?.size) {
-        if (state.messages.isNotEmpty()) list.scrollToItem(state.messages.size - 1)
+    // FOLLOW THE ANSWER as it is written, while the member is at the foot of the thread. Scrolling
+    // up stops the following and offers LATEST (ChatStreaming.dc.html); a tap on it returns to the
+    // foot and follows again. A new message is the member's own act, so it always goes to the foot.
+    var pinned by remember { mutableStateOf(true) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val atFoot by remember {
+        derivedStateOf {
+            val info = list.layoutInfo
+            val tail = info.visibleItemsInfo.lastOrNull()
+            tail == null || (tail.index == info.totalItemsCount - 1 && tail.offset + tail.size <= info.viewportEndOffset)
+        }
+    }
+    LaunchedEffect(list.isScrollInProgress) {
+        if (!list.isScrollInProgress) pinned = atFoot
+    }
+    suspend fun toFoot() {
+        if (state.messages.isNotEmpty()) {
+            list.scrollToItem(state.messages.size - 1)
+            list.scrollBy(1_000_000f)
+        }
+    }
+    LaunchedEffect(state.messages.size) {
+        pinned = true
+        toFoot()
+    }
+    LaunchedEffect(last?.text?.length, last?.cards?.size, state.activity) {
+        if (pinned) toFoot()
     }
     if (state.messages.isEmpty()) {
         Column(
@@ -469,6 +496,7 @@ private fun ChatThread(
         }
         return
     }
+    Box(Modifier.fillMaxSize()) {
     LazyColumn(
         state = list,
         modifier = Modifier.fillMaxSize().testTag("chat-thread"),
@@ -508,6 +536,33 @@ private fun ChatThread(
                 )
             }
         }
+    }
+    if (!pinned && state.messages.isNotEmpty()) {
+        Row(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 8.dp)
+                .heightIn(min = KitGeometry.ROW_MIN)
+                .clip(CircleShape)
+                .background(centraidColor("bgElev"))
+                .border(KitGeometry.HAIRLINE, centraidColor("lineStrong"), CircleShape)
+                .clickable {
+                    pinned = true
+                    scope.launch { toFoot() }
+                }
+                .padding(start = 12.dp, end = 16.dp)
+                .semantics {
+                    contentDescription = state.jump_to_latest_label
+                    role = Role.Button
+                }
+                .testTag("chat-latest"),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            CentraidIcon("ArrowDown", tint = centraidColor("text"), size = 16.dp)
+            Text(state.latest_label, style = centraidType("body"), color = centraidColor("text"), fontWeight = FontWeight.SemiBold)
+        }
+    }
     }
 }
 

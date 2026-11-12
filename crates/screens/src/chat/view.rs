@@ -253,6 +253,8 @@ impl Chat {
             editing_title: words::editing_title(locale),
             editing_body: words::editing_body(locale),
             cancel_edit_label: words::cancel_edit(locale),
+            latest_label: words::latest(locale),
+            jump_to_latest_label: words::jump_to_latest(locale),
             can_retry: ready
                 && !self.running
                 && self.asked.is_some()

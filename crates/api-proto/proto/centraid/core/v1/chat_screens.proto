@@ -133,6 +133,10 @@ message ChatState {
   string editing_title = 65;
   string editing_body = 66;
   string cancel_edit_label = 67;
+  // The key over the composer when the member has scrolled up from the foot of the thread, and
+  // its spoken label.
+  string latest_label = 68;
+  string jump_to_latest_label = 69;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;

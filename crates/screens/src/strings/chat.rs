@@ -27,6 +27,8 @@ catalog! {
     plain confirm = ("Confirm", "Confirm");
     plain copied = ("Copied", "Copied");
     plain copy = ("Copy", "Copy");
+    plain jump_to_latest = ("Jump to latest", "Jump to latest");
+    plain latest = ("Latest", "Latest");
     plain current_chat = ("Open chat", "Open chat");
     plain cancel_edit = ("Cancel editing", "Cancel editing");
     plain delete = ("Delete", "Delete");

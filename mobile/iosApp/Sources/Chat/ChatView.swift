@@ -263,6 +263,32 @@ struct ChatView: View {
             )
             .simultaneousGesture(TapGesture().onEnded { focused = false })
             .accessibilityIdentifier("chat-thread")
+            // LATEST: scrolled up from the foot, the thread stops following and offers the way back
+            // (ChatStreaming.dc.html); a tap returns to the foot and follows again.
+            .overlay(alignment: .bottom) {
+                if !pinned, !state.messages.isEmpty {
+                    Button {
+                        pinned = true
+                        scrollToFoot(proxy)
+                    } label: {
+                        HStack(spacing: 6) {
+                            CentraidIconView(iconKey: "ArrowDown", tint: Theme.color("text", scheme), size: 16, solid: false)
+                            Text(verbatim: state.latestLabel)
+                                .kitScaledFont(CentraidScale.rowSize, weight: .semibold)
+                                .foregroundStyle(Theme.color("text", scheme))
+                        }
+                        .padding(.leading, 12)
+                        .padding(.trailing, 16)
+                        .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                        .background(Capsule().fill(Theme.color("bgElev", scheme)))
+                        .overlay(Capsule().strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.bottom, 8)
+                    .accessibilityLabel(state.jumpToLatestLabel)
+                    .accessibilityIdentifier("chat-latest")
+                }
+            }
             // A send, a retry or a new chat changes how many messages there
             // are: that is the member's own act, so it always goes to the foot.
             .onChange(of: state.messages.count) { _, _ in

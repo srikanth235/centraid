@@ -678,3 +678,16 @@ fn sending_an_edit_replaces_the_question_and_its_answer_and_leaves_an_applied_wr
     // THE EARLIER ANSWER'S WRITE IS NOT UNDONE BY BEING REPLACED
     assert_eq!(task_status(&chat, DRY_CLEANING), "done");
 }
+
+#[test]
+fn the_latest_key_has_its_words_from_the_core() {
+    let chat = proposing();
+    let state = chat.state();
+    assert_eq!(
+        (
+            state.latest_label.as_str(),
+            state.jump_to_latest_label.as_str()
+        ),
+        ("Latest", "Jump to latest")
+    );
+}
