@@ -662,3 +662,87 @@ fn a_calendar_read_from_the_phone_offers_no_delete_but_one_plain_line_until_it_i
     assert_eq!(sheet.delete_note, "");
     let _ = H::StyleTrashed(wire::agenda_home_event::StyleTrashed {});
 }
+
+/// A phone calendar the vault follows (`cal-1`), and the calendar it fills.
+fn follow_phone_calendar(world: &mut World) -> String {
+    let before: Vec<String> = world
+        .calendar_names()
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect();
+    let followed = follow_again(world);
+    assert_eq!(
+        followed.status,
+        wire::ActStatus::Executed as i32,
+        "{}",
+        followed.reason
+    );
+    world
+        .calendar_names()
+        .into_iter()
+        .find(|(id, _)| !before.contains(id))
+        .expect("the follow made a calendar")
+        .0
+}
+
+/// The same phone calendar followed (again): the vault finds the origin, retired or not.
+fn follow_again(world: &mut World) -> wire::ActResponse {
+    world.act(act::calendar::FollowCalendar {
+        origin: serde_json::json!({ "ref": "cal-1", "label": "Phone work", "device_id": "phone" })
+            .to_string(),
+        records: "[]".to_owned(),
+        complete: Some(false),
+        gone: None,
+        since: None,
+    })
+}
+
+#[test]
+fn a_stopped_phone_calendar_can_be_deleted_and_a_revived_one_cannot() {
+    use wire::agenda_home_event::Kind as H;
+    let mut world = world();
+    let calendar = follow_phone_calendar(&mut world);
+    let home = world.driver.push(agenda::TAB, agenda_home());
+    let delete_label = |world: &mut World| {
+        world.driver.send(home, E::Appeared(wire::Appeared {}));
+        edit_calendar(world, home, &calendar);
+        home_state(world, home)
+            .style
+            .clone()
+            .expect("the sheet")
+            .delete_label
+    };
+    assert_eq!(delete_label(&mut world), "", "followed: no Move to trash");
+
+    // STOP RETIRES THE ORIGIN: nobody follows the calendar, so it is an ordinary one and the control
+    // appears (the origin and its home are kept, but a retired origin is not "read from the phone").
+    world.act(act::calendar::StopFollowing {
+        r#ref: "cal-1".to_owned(),
+    });
+    assert_eq!(delete_label(&mut world), "Move to trash");
+
+    // FOLLOWED AGAIN: the same origin revives into the same calendar, and the control goes again.
+    follow_again(&mut world);
+    assert_eq!(
+        delete_label(&mut world),
+        "",
+        "revived: read from the phone again"
+    );
+    world.act(act::calendar::StopFollowing {
+        r#ref: "cal-1".to_owned(),
+    });
+
+    // AND THE CONTROL WORKS once stopped: the calendar goes to the trash with an Undo.
+    assert_eq!(delete_label(&mut world), "Move to trash");
+    world.driver.send(
+        home,
+        E::AgendaHome(wire::AgendaHomeEvent {
+            kind: Some(H::StyleTrashed(wire::agenda_home_event::StyleTrashed {})),
+        }),
+    );
+    assert!(!world.calendar_names().iter().any(|(id, _)| *id == calendar));
+    assert!(
+        home_state(&world, home).status.is_some(),
+        "the move says so, with Undo"
+    );
+}
