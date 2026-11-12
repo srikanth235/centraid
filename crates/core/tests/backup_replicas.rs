@@ -331,3 +331,42 @@ fn the_oldest_waiting_item_is_reported() {
 fn pair_id_of(status: &wire::BackupStatusResponse) -> String {
     status.destinations[0].gateway_id.clone()
 }
+
+/// **FORGETTING THE LAST GATEWAY LEAVES NOTHING OF IT** (#1188). Its spooled parts are no one's,
+/// so the queue and the spool empty; its refusal, rollback and high-water marks go with it, and
+/// pairing it again starts clean.
+#[test]
+fn forgetting_the_only_gateway_leaves_nothing_queued_and_no_stale_state() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = phone(dir.path());
+    let id = pair_id(&phone, &gateway);
+    originals(&phone, "a photograph left in the spool", 3, 60_000);
+    gateway.spawned.fill_disk(true);
+    drain(&phone, at_home());
+    assert!(!ledger(&path).queued().expect("reads").is_empty(), "parts wait in the spool");
+    assert_eq!(row(&status(&phone), &id).reach, wire::WaitReason::Refused as i32);
+
+    forget(&phone, &id);
+    let book = ledger(&path);
+    assert!(book.queued().expect("reads").is_empty(), "nothing is queued");
+    let spooled: u64 = std::fs::read_dir(dir.path().join("vault.spool"))
+        .map(|entries| {
+            entries
+                .filter_map(Result::ok)
+                .filter(|entry| entry.file_name().len() == 64)
+                .map(|entry| entry.metadata().map_or(0, |meta| meta.len()))
+                .sum()
+        })
+        .unwrap_or(0);
+    assert_eq!(spooled, 0, "nothing is spooled");
+    assert!(book.meta(&format!("reach:{id}")).expect("reads").is_none());
+
+    gateway.spawned.fill_disk(false);
+    let again = pair_id(&phone, &gateway);
+    let after = status(&phone);
+    let paired = row(&after, &again);
+    assert_eq!(paired.reach, wire::WaitReason::Unspecified as i32, "{paired:?}");
+    assert!(!paired.rolled_back, "{paired:?}");
+}

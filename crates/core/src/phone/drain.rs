@@ -536,6 +536,15 @@ fn mark_token_refused(ledger: &Ledger, gateway_id: &str) -> Result<()> {
 /// What the last pass found at one gateway (#1188, B1): every paired gateway has its own
 /// answer, so the status can name the one that is behind. The ledger's single
 /// [`REACHABLE_KEY`] is the worst of them ([`summarise_reach`]).
+/// A forgotten gateway's answer goes with it, so pairing it again starts from nothing and not from
+/// the last thing it said.
+pub(crate) fn forget_reach(ledger: &Ledger, gateway_id: &str) -> Result<()> {
+    ledger
+        .forget_meta(&reach_key(gateway_id))
+        .map_err(plane_error)?;
+    summarise_reach(ledger)
+}
+
 fn reach_key(gateway_id: &str) -> String {
     format!("{REACH_PREFIX}{gateway_id}")
 }

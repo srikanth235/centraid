@@ -490,6 +490,9 @@ pub fn forget_destination(
     ledger
         .remove_destination(&request.gateway_id)
         .map_err(plane_error)?;
+    drain::forget_reach(&ledger, &request.gateway_id)?;
+    // FORGETTING THE LAST GATEWAY LEAVES NOTHING QUEUED: no gateway owes the spooled parts now.
+    centraid_vault::backup::mover::sweep_unowed(&ledger, &plane.spool()?).map_err(plane_error)?;
     let revoked = vault.is_some_and(|vault| revoke(&destination, vault, runtime));
     Ok(wire::ForgetDestinationResponse {
         forgotten: true,
