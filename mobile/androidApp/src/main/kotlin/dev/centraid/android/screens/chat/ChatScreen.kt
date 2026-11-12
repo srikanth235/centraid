@@ -501,7 +501,7 @@ private fun ChatThread(
             Modifier.fillMaxSize().padding(KitGeometry.GUTTER),
             verticalArrangement = Arrangement.Center,
         ) {
-            Text(state.empty_line, style = centraidType("body"), color = centraidColor("textSoft"))
+            Text(state.empty_line, style = centraidType("body"), color = centraidColor("textSoft"), modifier = Modifier.testTag("chat-empty"))
             Spacer(Modifier.size(12.dp))
             state.suggestions.forEachIndexed { index, suggestion ->
                 Row(
@@ -1301,10 +1301,10 @@ private fun ChatModelStepView(state: ChatState, onEvent: (ChatEvent) -> Unit) {
                 Text(step.title, style = centraidType("smallStrong"), color = centraidColor("text"), modifier = Modifier.testTag("chat-model-title"))
             }
             if (step.size_line.isNotEmpty()) {
-                Text(step.size_line, style = centraidType("smallStrong"), color = centraidColor("text"))
+                Text(step.size_line, style = centraidType("smallStrong"), color = centraidColor("text"), modifier = Modifier.testTag("chat-model-size"))
             }
             if (step.note_line.isNotEmpty()) {
-                Text(step.note_line, style = centraidType("small"), color = centraidColor("textSoft"))
+                Text(step.note_line, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.testTag("chat-model-note"))
             }
             if (step.extra_line.isNotEmpty()) {
                 Text(step.extra_line, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.testTag("chat-model-extra"))
@@ -1313,7 +1313,7 @@ private fun ChatModelStepView(state: ChatState, onEvent: (ChatEvent) -> Unit) {
                 KitProgressBar(step.progress, fill = centraidResource(R.color.centraid_shell))
             }
             if (step.status_line.isNotEmpty()) {
-                Text(step.status_line, style = centraidType("small"), color = centraidColor("textSoft"))
+                Text(step.status_line, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.testTag("chat-model-status"))
             }
             if (step.action_label.isNotEmpty()) {
                 DownloadButton(step.action_label, testTag = "chat-download") {
@@ -1372,13 +1372,13 @@ private fun VisionBanner(step: ChatModelStep, onDownload: () -> Unit) {
             .padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)
             .background(centraidColor("bgSunken"))
             .padding(12.dp)
-            .testTag("chat-vision-line"),
+            .testTag("chat-vision-step"),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        if (step.size_line.isNotEmpty()) Text(step.size_line, style = centraidType("small"), color = centraidColor("textSoft"))
+        if (step.size_line.isNotEmpty()) Text(step.size_line, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.testTag("chat-vision-line"))
         if (step.progress_known) KitProgressBar(step.progress, fill = centraidResource(R.color.centraid_shell))
         if (step.status_line.isNotEmpty()) {
-            Text(step.status_line, style = centraidType("small"), color = centraidColor("textSoft"))
+            Text(step.status_line, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.testTag("chat-vision-status"))
         }
         if (step.action_label.isNotEmpty()) {
             DownloadButton(step.action_label, testTag = "chat-vision-download", onPress = onDownload)

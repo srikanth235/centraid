@@ -172,8 +172,10 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `chat-field` | Chat | the composer's text field (ready phase only) |
 | `chat-send` | Chat | Send, which becomes `chat-stop` while a turn runs |
 | `chat-stop` | Chat | Stop, while a turn runs |
-| `chat-download` | Chat | "Download model", in the model step |
-| `chat-model-note` | Chat | the model step's one sentence |
+| `chat-download` | Chat | the model step's primary action: "Download on Wi‑Fi", "Download now" on mobile data, "Check again" when the phone is short of space (a phone short of memory has none) |
+| `chat-download-secondary` | Chat | its quieter second action: "Use mobile data instead", "Wait for Wi‑Fi", "Use mobile data for the rest" |
+| `chat-model-title`, `chat-model-size`, `chat-model-status`, `chat-model-extra` | Chat | the model step's heading ("Not enough space", "Waiting for Wi‑Fi", "Checking this phone"), its size line, its status line and the second sentence (the photo reader's own download) |
+| `chat-model-note` | Chat | the model step's sentence |
 | `chat-empty` | Chat | the empty thread's one line |
 | `chat-suggestion-<n>` | Chat | the n-th suggested question, from 0: a row in the empty thread, a chip in `chat-suggestion-chips` above the composer once the thread has messages |
 | `chat-suggestion-chips` | Chat | the chips' row above the composer in a live thread |
@@ -212,3 +214,17 @@ Home, its Settings and vault sheets, the Backup screen, the welcome screen and C
 **A CONTAINER'S ID LEAKS ONTO ITS CHILDREN ON iOS.** `.accessibilityIdentifier` on a plain `VStack`/`HStack` is handed down to every child that is not an element of its own, over the child's own id — every Home tile read `home-grid`, and the empty state's buttons read `kit-empty`. A container that carries an id and has selectable children marks itself `.accessibilityElement(children: .contain)` first (`TileGrid`, `KitEmpty`). The Docs band's buttons all still read `docs-band`; no flow selects them yet.
 
 **Run on the iOS simulator (2026-10-13):** `first-launch.yaml`, `onboarding.yaml` and `home.yaml` pass. The two fresh-install flows launch with `permissions: all: deny` — Maestro grants every permission by default, and a made vault imports what it is granted — and need `xcrun simctl keychain <udid> reset` first. `home.yaml` runs on the vault `onboarding.yaml` leaves. `chat.yaml` and Android are not yet run.
+
+### Chat, added with the work of #1188 (one set, both shells)
+
+| Id | Screen | What renders it |
+| --- | --- | --- |
+| `chat-copy` | Chat | Copy, under every message (the member's and the answer's) |
+| `chat-edit`, `chat-edit-banner`, `chat-edit-cancel` | Chat | Edit under the last member message; the banner over the composer while editing and its cancel (the question fills the composer) |
+| `chat-retry` | Chat | Try again, under the last answer (a stopped or failed one too) |
+| `chat-mark` | Chat | "Stopped" or "Did not finish" under an answer that kept its words |
+| `chat-latest` | Chat | the "Latest" key over the thread when it is scrolled up from its foot |
+| `chat-pending-undo-<n>` | Chat | the n-th write's Undo on an applied card, from 0 (a write that cannot be taken back has its "Made by Chat" line and no key) |
+| `chat-dictate`, `chat-listening`, `chat-dictation-off` | Chat | the microphone key (drawn only where the phone recognises speech without a network), the line while it listens, the sentence when the microphone or speech is refused |
+| `chat-table`, `chat-code` | Chat | a table and a fenced block in an answer |
+| `chat-vision-step`, `chat-vision-line`, `chat-vision-status`, `chat-vision-download` | Chat | the photo reader's banner, its offer line, its status line and its Download |
