@@ -20,6 +20,11 @@ impl Chat {
         if !self.ready() || self.running || line.is_empty() || self.vision_blocked() {
             return Vec::new();
         }
+        // too long to read: said at once, nothing is sent and the draft stays to be shortened
+        if line.chars().count() > centraid_assist::native_turn::MESSAGE_MAX {
+            self.error = Some(Fail::TooLong);
+            return Vec::new();
+        }
         // taken: the shell may clear the words it kept as a draft (#1188 C9)
         if token != 0 {
             self.accepted_send = token;
@@ -367,6 +372,7 @@ impl Chat {
             R::AttachmentUnsupported => Some(Fail::AttachUnsupported),
             R::AttachmentUnreadable => Some(Fail::AttachUnreadable),
             R::AttachmentTooLarge => Some(Fail::AttachTooLarge),
+            R::TooLong => Some(Fail::TooLong),
             _ => Some(Fail::Generic),
         }
     }

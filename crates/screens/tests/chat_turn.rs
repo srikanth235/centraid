@@ -481,3 +481,20 @@ fn a_sent_token_is_echoed_only_when_the_question_is_taken() {
     }));
     assert_eq!(early.state().accepted_send, 0);
 }
+
+#[test]
+fn a_message_too_long_to_read_is_said_at_once_and_the_draft_stays() {
+    let mut chat = ready();
+    let long = "x".repeat(centraid_assist::native_turn::MESSAGE_MAX + 1);
+    chat.event(C::Sent(wire::chat_event::Sent {
+        text: long,
+        token: 5,
+    }));
+    let state = chat.state();
+    assert_eq!(
+        state.error,
+        "That is too long for Chat to read at once. Shorten it and try again."
+    );
+    assert!(state.messages.is_empty(), "nothing was sent");
+    assert_eq!(state.accepted_send, 0, "so the shell keeps the draft");
+}

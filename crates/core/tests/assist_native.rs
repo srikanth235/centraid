@@ -1743,3 +1743,72 @@ fn a_free_reply_reads_what_the_chat_said_last() {
     assert!(free.contains(&format!("<|im_start|>assistant\n{FOUND_TASKS}<|im_end|>")));
     assert!(!free.contains("<tool_response>") && !free.contains("<tool_call>"));
 }
+
+/// Says the context is full while an early turn is still in the prompt, as an engine whose own
+/// count is higher than the estimate would (#1188 C4).
+struct FullWhileHolding {
+    inner: Arc<ScriptedModel>,
+    held: &'static str,
+    refusals: AtomicUsize,
+}
+impl Model for FullWhileHolding {
+    fn generate(
+        &self,
+        request: &GenerateRequest<'_>,
+        on_token: &mut dyn FnMut(&str) -> Control,
+    ) -> Result<Generation, ModelError> {
+        if request.prompt.contains(self.held) {
+            self.refusals.fetch_add(1, Ordering::SeqCst);
+            return Err(ModelError::ContextExceeded {
+                needed: 9_000,
+                held: 8_192,
+            });
+        }
+        self.inner.generate(request, on_token)
+    }
+}
+
+#[test]
+fn a_prompt_the_engine_finds_too_big_loses_its_oldest_turn_and_the_chat_answers() {
+    let sample = native_sample(script(&read_tasks()));
+    let session = sample.start("");
+    let first = sample.send(session, 1, "what tasks do I have? FIRSTWORDS");
+    assert_eq!(answered(&first).text, FOUND_TASKS);
+    let model = Arc::new(FullWhileHolding {
+        inner: script(&read_tasks()),
+        held: "FIRSTWORDS",
+        refusals: AtomicUsize::new(0),
+    });
+    sample.install(model.clone());
+    let second = sample.send(session, 2, "what tasks do I have?");
+    assert_eq!(
+        answered(&second).text,
+        FOUND_TASKS,
+        "not a generic model error"
+    );
+    assert_eq!(
+        model.refusals.load(Ordering::SeqCst),
+        1,
+        "asked again once, without the oldest turn"
+    );
+}
+
+#[test]
+fn one_turn_that_cannot_fit_and_a_message_past_the_cap_are_said_as_too_long() {
+    // the only turn is still too big: nothing older to drop
+    let sample = native_sample(Arc::new(FullWhileHolding {
+        inner: script(&[]),
+        held: "what tasks",
+        refusals: AtomicUsize::new(0),
+    }));
+    let session = sample.start("");
+    let sent = sample.send(session, 1, "what tasks do I have?");
+    assert_eq!(refusal_of(&sent), wire::AssistRefusalReason::TooLong as i32);
+    // a message over the cap is refused before the model is asked, and is not saved
+    let long = "x".repeat(centraid_assist::native_turn::MESSAGE_MAX + 1);
+    let model = script(&[]);
+    sample.install(model.clone());
+    let sent = sample.send(session, 2, &long);
+    assert_eq!(refusal_of(&sent), wire::AssistRefusalReason::TooLong as i32);
+    assert!(model.prompts().is_empty(), "the model was never asked");
+}

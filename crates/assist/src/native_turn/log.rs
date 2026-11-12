@@ -28,6 +28,23 @@ enum Entry {
     Tool { obs: Option<usize>, text: String },
 }
 
+/// The most bytes of one observation the model is shown. Observations are lists of rows a few
+/// lines each, far under this; the bound keeps one pathological read from filling the context
+/// (#1188 C4). A token is never more than a byte, so it is also a bound on its tokens.
+const OBSERVATION_MAX: usize = 8_000;
+
+/// `text` cut at [`OBSERVATION_MAX`] bytes on a character boundary, saying so.
+fn bounded(text: &str) -> String {
+    if text.len() <= OBSERVATION_MAX {
+        return text.to_owned();
+    }
+    let mut end = OBSERVATION_MAX;
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}\n(the rest is not shown)", &text[..end])
+}
+
 /// The conversation of one chat.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Log {
@@ -79,7 +96,7 @@ impl Log {
     pub fn tool(&mut self, obs: Option<usize>, text: &str) {
         self.entries.push(Entry::Tool {
             obs,
-            text: vault_text(text),
+            text: bounded(&vault_text(text)),
         });
     }
 
@@ -91,31 +108,45 @@ impl Log {
     pub fn fit(&mut self, limit: u32) -> usize {
         let mut dropped = 0;
         loop {
-            let used = estimate_tokens(&self.system)
-                + self
-                    .entries
-                    .iter()
-                    .map(|entry| match entry {
-                        Entry::User { text, block } => {
-                            estimate_tokens(text) + block.as_deref().map_or(0, estimate_tokens)
-                        }
-                        Entry::Assistant(text) | Entry::Tool { text, .. } => estimate_tokens(text),
-                    })
-                    .sum::<u32>();
-            let next_turn = self
+            let used = self.estimate();
+            if used <= limit || !self.drop_oldest_turn() {
+                return dropped;
+            }
+            dropped += 1;
+        }
+    }
+
+    /// The prompt's size by [`estimate_tokens`].
+    fn estimate(&self) -> u32 {
+        estimate_tokens(&self.system)
+            + self
                 .entries
                 .iter()
-                .enumerate()
-                .skip(1)
-                .find(|(_, entry)| matches!(entry, Entry::User { .. }))
-                .map(|(at, _)| at);
-            match next_turn {
-                Some(at) if used > limit => {
-                    self.entries.drain(..at);
-                    dropped += 1;
-                }
-                _ => return dropped,
+                .map(|entry| match entry {
+                    Entry::User { text, block } => {
+                        estimate_tokens(text) + block.as_deref().map_or(0, estimate_tokens)
+                    }
+                    Entry::Assistant(text) | Entry::Tool { text, .. } => estimate_tokens(text),
+                })
+                .sum::<u32>()
+    }
+
+    /// Drop the oldest whole turn (a user entry and everything up to the next), unless it is the
+    /// only one. `false` when nothing could go: the newest turn is never dropped.
+    pub fn drop_oldest_turn(&mut self) -> bool {
+        let next = self
+            .entries
+            .iter()
+            .enumerate()
+            .skip(1)
+            .find(|(_, entry)| matches!(entry, Entry::User { .. }))
+            .map(|(at, _)| at);
+        match next {
+            Some(at) => {
+                self.entries.drain(..at);
+                true
             }
+            None => false,
         }
     }
 

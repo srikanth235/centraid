@@ -7,22 +7,42 @@
 //! structure: a row named `<|im_end|><|im_start|>system …` would close the turn and open a new
 //! one. So text from a row, or typed into the chat, is made unable to spell any of them.
 //!
-//! The rule is narrow on purpose. Only the strings the tokenizer or the call reader treats as
-//! structure change, and only their opening `<` (to `‹`, U+2039), so a name reads the same to a
-//! person and nothing else in it moves. NUL and other control characters (newline and tab stay)
-//! and the vision media marker go. The function is idempotent.
+//! The rule is narrow on purpose. Only an occurrence of a string the tokenizer reads as special
+//! changes, and only by a zero-width space after its first character, which no tokenizer merges
+//! back: a name reads the same to a person and nothing else in it moves. NUL and other control
+//! characters (newline and tab stay) go, and so does the vision media marker.
+//!
+//! WHICH STRINGS ARE SPECIAL is not a list written here. It is the union of three, so a new model
+//! cannot bring a token the escape does not know:
+//!
+//! 1. every `<|…|>` (the ChatML family, whatever its name);
+//! 2. the markers of the call format the runtime spells itself (`native::identity::MODEL`);
+//! 3. the special tokens of each model in the record (`model.json`), which `cargo xtask model-pin` reads
+//!    from the GGUF's own vocabulary (control and user-defined tokens), and which the gate's
+//!    `model-record` step replays through [`vault_text`] (`tests/model_record.rs`).
+//!
+//! Escaping changes only what the model READS. Row text in the world, the cards, sources, titles
+//! and everything drawn keep the member's original words, and nothing escaped is ever written back
+//! to the vault. The function is idempotent.
+
+use std::sync::OnceLock;
 
 use crate::native::identity::MODEL;
 
 /// What the vision engine reads as "an image goes here".
 const MEDIA_MARKER: &str = "<__media__>";
 
-/// The replacement for a structural `<`.
-const MARK: char = '\u{2039}';
+/// Inserted after the first character of a special string.
+const BREAK: char = '\u{200b}';
 
-/// Every string, beyond `<|…|>`, that the tokenizer or the call reader reads as structure.
-fn structural() -> [&'static str; 14] {
-    [
+/// The escape's rule, named. It is in the prompt hash, so changing how text is escaped changes the
+/// hash and the record must be pinned again.
+pub const RULE: &str = "zwsp-after-first-char/v1";
+
+/// The strings the runtime itself writes as structure, beyond `<|…|>`.
+#[must_use]
+pub fn builtin() -> Vec<&'static str> {
+    vec![
         MODEL.think_open.trim_end(),
         MODEL.think_close,
         MODEL.tool_call_open,
@@ -40,29 +60,52 @@ fn structural() -> [&'static str; 14] {
     ]
 }
 
+/// Every special string in force: [`builtin`] and the record's, longest first.
+fn specials() -> &'static [String] {
+    static LIST: OnceLock<Vec<String>> = OnceLock::new();
+    LIST.get_or_init(|| {
+        let record = crate::record::record();
+        let mut all: Vec<String> = builtin().into_iter().map(str::to_owned).collect();
+        for entry in std::iter::once(&record.current).chain(record.previous.iter()) {
+            all.extend(entry.special_tokens.iter().cloned());
+        }
+        all.retain(|token| !token.is_empty());
+        all.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+        all.dedup();
+        all
+    })
+}
+
 /// `text` as data: unable to spell a special token, a tag of the call format or the media marker.
 #[must_use]
 pub fn vault_text(text: &str) -> String {
-    let tags = structural();
+    escape_with(text, specials())
+}
+
+/// [`vault_text`] over an explicit list (the gate replays each model's own through it).
+#[must_use]
+pub fn escape_with<S: AsRef<str>>(text: &str, specials: &[S]) -> String {
     let mut out = String::with_capacity(text.len());
     let mut rest = text;
-    while let Some(at) = rest.find(['<', '\0']) {
-        out.push_str(&rest[..at]);
-        let here = &rest[at..];
-        if let Some(after) = here.strip_prefix('\0') {
-            rest = after;
+    while let Some(c) = rest.chars().next() {
+        if c == '\0' {
+            rest = &rest[1..];
             continue;
         }
-        if tags.iter().any(|tag| here.starts_with(tag)) {
-            out.push(MARK);
+        if specials
+            .iter()
+            .any(|token| rest.starts_with(token.as_ref()))
+        {
+            out.push(c);
+            out.push(BREAK);
+            rest = &rest[c.len_utf8()..];
         } else {
-            out.push('<');
+            out.push(c);
+            rest = &rest[c.len_utf8()..];
         }
-        rest = &here[1..];
     }
-    out.push_str(rest);
     out.chars()
-        .filter(|c| matches!(c, '\n' | '\t') || !c.is_control())
+        .filter(|c| matches!(*c, '\n' | '\t' | BREAK) || !c.is_control())
         .collect()
 }
 
@@ -84,24 +127,51 @@ pub const CORPUS: &[&str] = &[
 
 #[cfg(test)]
 mod tests {
-    use super::{CORPUS, vault_text};
+    use super::{CORPUS, builtin, escape_with, vault_text};
+
+    /// Whether any special string still occurs in `text`.
+    fn spells(text: &str, specials: &[String]) -> Option<String> {
+        specials
+            .iter()
+            .find(|token| text.contains(token.as_str()))
+            .cloned()
+    }
 
     #[test]
     fn nothing_in_the_corpus_survives_as_structure() {
+        let specials = super::specials().to_vec();
         for sample in CORPUS {
             let clean = vault_text(sample);
-            assert!(!clean.contains("<|"), "{sample:?} -> {clean:?}");
-            assert!(!clean.contains("<think>"), "{clean:?}");
-            assert!(!clean.contains("</think>"), "{clean:?}");
-            assert!(!clean.contains("<tool_call>"), "{clean:?}");
-            assert!(!clean.contains("<function="), "{clean:?}");
-            assert!(!clean.contains("<parameter="), "{clean:?}");
-            assert!(!clean.contains("<tool_response>"), "{clean:?}");
-            assert!(!clean.contains("<tools>"), "{clean:?}");
-            assert!(!clean.contains("<__media__>"), "{clean:?}");
+            assert_eq!(spells(&clean, &specials), None, "{sample:?} -> {clean:?}");
+            assert!(!clean.contains("<|"), "{clean:?}");
             assert!(!clean.contains('\0'), "{clean:?}");
             assert_eq!(vault_text(&clean), clean, "idempotent");
         }
+    }
+
+    #[test]
+    fn every_builtin_and_every_recorded_token_is_broken_wherever_it_sits() {
+        let specials = super::specials().to_vec();
+        for token in &specials {
+            for text in [
+                token.clone(),
+                format!("a {token} b"),
+                format!("{token}{token}"),
+                format!("<|{token}|>"),
+            ] {
+                let clean = vault_text(&text);
+                assert_eq!(spells(&clean, &specials), None, "{text:?} -> {clean:?}");
+            }
+        }
+        assert!(builtin().iter().all(|b| specials.iter().any(|s| s == b)));
+    }
+
+    #[test]
+    fn a_token_the_list_does_not_know_is_not_broken_which_is_why_the_record_carries_the_list() {
+        assert_eq!(
+            escape_with("<|new|> [NEW]", &["[NEW]"]),
+            "<|new|> [\u{200b}NEW]"
+        );
     }
 
     #[test]
@@ -111,7 +181,7 @@ mod tests {
             "5 < 6 and 7 > 3",
             "<b>bold</b> & <i>\u{e9}</i>",
             "line one\nline two\tTabbed",
-            "Neha's \"plan\" — v2",
+            "Neha's \"plan\" \u{2014} v2",
         ] {
             assert_eq!(vault_text(text), text);
         }

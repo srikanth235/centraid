@@ -322,7 +322,11 @@ impl<'a> NativePlane<'a> {
         chat.session
             .set_clock(now, tz)
             .map_err(Refusal::QueryFailed)?;
-        let message: String = text.trim().chars().take(MESSAGE_MAX).collect();
+        // a message past the cap is refused, not cut: the member shortens it (#1188 C4)
+        let message = text.trim().to_owned();
+        if message.chars().count() > MESSAGE_MAX {
+            return Err(Refusal::TooLong);
+        }
         let user = chat.session.user(&message);
         chat.log.compact(&user["compacted"]);
         chat.log.user(&message, user["block"].as_str());
@@ -345,16 +349,27 @@ impl<'a> NativePlane<'a> {
                 // the message may take and a margin for the template's own words (#1188 C4)
                 chat.log
                     .fit(CONTEXT_BUDGET.saturating_sub(self.options.max_new));
-                let prompt = chat.log.prompt().map_err(Refusal::ModelFailed)?;
-                let written = decode_step(
-                    self.model,
-                    &prompt,
-                    dates,
-                    TraceMode::V4,
-                    self.options,
-                    cancel,
-                )
-                .map_err(failed)?;
+                // the engine's own count is the last word: a prompt it still finds too big loses
+                // its oldest turn and is asked again, and one turn alone that does not fit is said
+                let written = loop {
+                    let prompt = chat.log.prompt().map_err(Refusal::ModelFailed)?;
+                    match decode_step(
+                        self.model,
+                        &prompt,
+                        dates,
+                        TraceMode::V4,
+                        self.options,
+                        cancel,
+                    ) {
+                        Ok(written) => break written,
+                        Err(ModelError::ContextExceeded { .. }) => {
+                            if !chat.log.drop_oldest_turn() {
+                                return Err(Refusal::TooLong);
+                            }
+                        }
+                        Err(other) => return Err(failed(other)),
+                    }
+                };
                 if written.info.cancelled || cancel.is_cancelled() {
                     return Err(Refusal::Cancelled);
                 }

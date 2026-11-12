@@ -322,6 +322,7 @@ fn refusal_to_wire(refusal: &Refusal) -> wire::AssistRefusal {
         Refusal::AttachmentUnsupported => (R::AttachmentUnsupported, String::new()),
         Refusal::AttachmentUnreadable => (R::AttachmentUnreadable, String::new()),
         Refusal::AttachmentTooLarge => (R::AttachmentTooLarge, String::new()),
+        Refusal::TooLong => (R::TooLong, String::new()),
     };
     wire::AssistRefusal {
         reason: reason as i32,
@@ -1001,6 +1002,7 @@ mod tests {
             (Refusal::AttachmentUnsupported, R::AttachmentUnsupported),
             (Refusal::AttachmentUnreadable, R::AttachmentUnreadable),
             (Refusal::AttachmentTooLarge, R::AttachmentTooLarge),
+            (Refusal::TooLong, R::TooLong),
         ];
         let mut seen = std::collections::BTreeSet::new();
         for (refusal, reason) in cases {

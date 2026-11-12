@@ -36,6 +36,10 @@ pub struct Entry {
     pub tools_hash: String,
     /// BLAKE3 of the static system turn in that mode, lowercase hex.
     pub prompt_hash: String,
+    /// The model's special tokens (the GGUF vocabulary's control and user-defined tokens), sorted,
+    /// written by `cargo xtask model-pin` from the file itself. [`crate::escape`] breaks every one
+    /// in text the model reads as data, and the gate replays each through it.
+    pub special_tokens: Vec<String>,
     /// The score the model earned on the frozen sets, 0 to 1, or `None` for a file that was never scored
     /// (a stock base model).
     pub score: Option<f64>,
@@ -79,7 +83,12 @@ pub fn runtime_hashes(mode: ToolsMode) -> (String, String) {
         kind_card_for(mode, "USD").join("\n"),
         identity::MODEL.im_end,
     );
-    let prompt = format!("{}\n{system}", identity::json());
+    let prompt = format!(
+        "{}\n{system}\n{}\n{}",
+        identity::json(),
+        crate::escape::RULE,
+        crate::escape::builtin().join("\n")
+    );
     (
         blake3::hash(catalogue.as_bytes()).to_hex().to_string(),
         blake3::hash(prompt.as_bytes()).to_hex().to_string(),

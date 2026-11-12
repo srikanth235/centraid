@@ -61,6 +61,9 @@ pub enum Refusal {
     /// The attachment is bigger than the chat will take.
     #[error("the attachment is too large")]
     AttachmentTooLarge,
+    /// The message, or what answering it needs read, is more than the chat can read at once.
+    #[error("that is too long for the chat to read at once")]
+    TooLong,
 }
 
 /// What the model is reading before it answers: shown while a long prefill

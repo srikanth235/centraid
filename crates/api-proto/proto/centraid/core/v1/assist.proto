@@ -413,6 +413,9 @@ enum AssistRefusalReason {
   ASSIST_REFUSAL_REASON_ATTACHMENT_UNREADABLE = 10;
   // The attachment is bigger than the chat will take.
   ASSIST_REFUSAL_REASON_ATTACHMENT_TOO_LARGE = 11;
+  // The member's message, or what it needs read, is longer than the chat can read at once. Said in a
+  // sentence of its own; the turn is not saved, so the draft stays to be shortened (#1188 C4).
+  ASSIST_REFUSAL_REASON_TOO_LONG = 12;
 }
 
 message AssistRefusal {

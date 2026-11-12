@@ -100,7 +100,8 @@ pub const fn refusal_word(refusal: &Refusal) -> Option<&'static str> {
         Refusal::AttachmentUnsupported => "attachment_unsupported",
         Refusal::AttachmentUnreadable => "attachment_unreadable",
         Refusal::AttachmentTooLarge => "attachment_too_large",
-        Refusal::Cancelled | Refusal::Busy => return None,
+        // a turn that never read the question is not a turn to save: the draft stays to be shortened
+        Refusal::Cancelled | Refusal::Busy | Refusal::TooLong => return None,
     })
 }
 

@@ -2508,7 +2508,7 @@
     "ChatUnavailable.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "Chat · unavailable",
+      "title": "Chat · unavailable (reasons: memory, processor, no engine in this build)",
       "w": 390,
       "x": 2350,
       "y": 32000
@@ -2516,7 +2516,7 @@
     "ChatUnavailableDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "Chat · unavailable · dark",
+      "title": "Chat · unavailable (reasons: memory, processor, no engine in this build) · dark",
       "w": 390,
       "x": 2350,
       "y": 32000
@@ -2540,7 +2540,7 @@
     "ChatModelUpdate.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "Chat · model update row",
+      "title": "Chat · model update row (empty chat only)",
       "w": 390,
       "x": 3290,
       "y": 32000
@@ -2548,7 +2548,7 @@
     "ChatModelUpdateDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "Chat · model update row · dark",
+      "title": "Chat · model update row (empty chat only) · dark",
       "w": 390,
       "x": 3290,
       "y": 32000
@@ -2604,7 +2604,7 @@
     "ChatCards.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "Chat · card states",
+      "title": "Chat · cards: proposed, done with Undo, undone, Undo refused",
       "w": 390,
       "x": 1410,
       "y": 33100
@@ -2612,7 +2612,7 @@
     "ChatCardsDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "Chat · card states · dark",
+      "title": "Chat · cards: proposed, done with Undo, undone, Undo refused · dark",
       "w": 390,
       "x": 1410,
       "y": 33100
@@ -2620,7 +2620,7 @@
     "ChatMessageActions.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "Chat · message actions",
+      "title": "Chat · message actions (Copy on every message, Edit on the last member message, Try again on the last answer)",
       "w": 390,
       "x": 1880,
       "y": 33100
@@ -2628,7 +2628,7 @@
     "ChatMessageActionsDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "Chat · message actions · dark",
+      "title": "Chat · message actions (Copy on every message, Edit on the last member message, Try again on the last answer) · dark",
       "w": 390,
       "x": 1880,
       "y": 33100
@@ -2668,7 +2668,7 @@
     "ChatDictation.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "Chat · dictation",
+      "title": "Chat · dictation (the button is absent, not disabled, where on-device recognition cannot be guaranteed)",
       "w": 390,
       "x": 3290,
       "y": 33100
@@ -2676,7 +2676,7 @@
     "ChatDictationDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "Chat · dictation · dark",
+      "title": "Chat · dictation (the button is absent, not disabled, where on-device recognition cannot be guaranteed) · dark",
       "w": 390,
       "x": 3290,
       "y": 33100
@@ -2840,6 +2840,70 @@
       "w": 390,
       "x": 7520,
       "y": 6580
+    },
+    "ChatPhotoDownload.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · photo reader, asked at the first attach",
+      "w": 390,
+      "x": 3290,
+      "y": 34200
+    },
+    "ChatPhotoDownloadDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · photo reader, asked at the first attach · dark",
+      "w": 390,
+      "x": 3290,
+      "y": 34200
+    },
+    "ChatFoundNothing.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · found nothing",
+      "w": 390,
+      "x": 0,
+      "y": 35300
+    },
+    "ChatFoundNothingDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · found nothing · dark",
+      "w": 390,
+      "x": 0,
+      "y": 35300
+    },
+    "ChatTooLong.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · message too long",
+      "w": 390,
+      "x": 470,
+      "y": 35300
+    },
+    "ChatTooLongDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · message too long · dark",
+      "w": 390,
+      "x": 470,
+      "y": 35300
+    },
+    "ChatCardsMore.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · cards: a chain of changes, stale, gone",
+      "w": 390,
+      "x": 2820,
+      "y": 34200
+    },
+    "ChatCardsMoreDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · cards: a chain of changes, stale, gone · dark",
+      "w": 390,
+      "x": 2820,
+      "y": 34200
     }
   },
   "createdOnFiles": {
@@ -3655,7 +3719,15 @@
     "BackupCheck.dc.html",
     "BackupStaleNotice.dc.html",
     "RestoreOlder.dc.html",
-    "RecoveryKeyPrompt.dc.html"
+    "RecoveryKeyPrompt.dc.html",
+    "ChatPhotoDownload.dc.html",
+    "ChatPhotoDownloadDark.dc.html",
+    "ChatFoundNothing.dc.html",
+    "ChatFoundNothingDark.dc.html",
+    "ChatTooLong.dc.html",
+    "ChatTooLongDark.dc.html",
+    "ChatCardsMore.dc.html",
+    "ChatCardsMoreDark.dc.html"
   ],
   "pages": [
     {

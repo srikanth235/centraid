@@ -403,16 +403,6 @@ impl World {
         world.load_money_lists(door)?;
         world.load_health(door, at)?;
         world.load_links(door)?;
-        // VAULT TEXT IS DATA (#1188 C2): a title, a note, a followed event's words or any other
-        // text a row carries cannot spell a special token, whichever line of the prompt it lands on
-        for row in world.rows.values_mut() {
-            row.name = crate::escape::vault_text(&row.name);
-            for value in row.fields.values_mut() {
-                if let Val::Text(text) = value {
-                    *text = crate::escape::vault_text(text);
-                }
-            }
-        }
         // an edge is kept when both of its ends are rows the model talks about
         let rows = &world.rows;
         world

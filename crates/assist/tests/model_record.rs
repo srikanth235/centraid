@@ -55,3 +55,21 @@ fn a_drifted_record_is_refused() {
             .any(|p| p.contains("pinned to a commit"))
     );
 }
+
+#[test]
+fn the_escape_breaks_every_special_token_of_every_pinned_model() {
+    use centraid_assist::escape::vault_text;
+    for (which, entry) in entries() {
+        assert!(
+            !entry.special_tokens.is_empty(),
+            "{which} names no special token"
+        );
+        for token in &entry.special_tokens {
+            let clean = vault_text(&format!("a {token} b"));
+            assert!(
+                !clean.contains(token.as_str()),
+                "{which}: {token:?} survives"
+            );
+        }
+    }
+}
