@@ -32,7 +32,18 @@ internal object ChatDeviceFacts {
     fun freeBytes(context: Context): Long =
         runCatching { StatFs(context.filesDir.path).availableBytes }.getOrDefault(0L)
 
+    /** The phone's memory, as it reports it; 0 when it cannot say. */
+    fun memoryBytes(context: Context): Long = runCatching {
+        val info = android.app.ActivityManager.MemoryInfo()
+        context.getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(info)
+        info.totalMem
+    }.getOrDefault(0L)
+
     fun event(context: Context): ChatEvent = ChatEvent(
-        device_facts = ChatEvent.DeviceFacts(network = network(context), free_bytes = freeBytes(context)),
+        device_facts = ChatEvent.DeviceFacts(
+            network = network(context),
+            free_bytes = freeBytes(context),
+            memory_bytes = memoryBytes(context),
+        ),
     )
 }

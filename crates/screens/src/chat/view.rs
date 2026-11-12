@@ -53,6 +53,7 @@ fn spoken(text: &str) -> String {
 impl Chat {
     fn model_step(&self, locale: Locale) -> Option<wire::ChatModelStep> {
         match self.phase {
+            Phase::NeedsModel if self.too_little_memory() => Some(self.unavailable_step(locale)),
             Phase::NeedsModel => Some(self.needs_step(locale)),
             Phase::Downloading => {
                 let waiting = self.waiting_for_wifi();
@@ -87,11 +88,32 @@ impl Chat {
                 status_line: words::loading(locale),
                 ..wire::ChatModelStep::default()
             }),
-            Phase::Unavailable => Some(wire::ChatModelStep {
-                status_line: words::unavailable(locale),
+            Phase::Unavailable => Some(self.unavailable_step(locale)),
+            // CHECKING SAYS WHAT IT LOOKS AT, not a blank page (#1188 C12).
+            Phase::Checking => Some(wire::ChatModelStep {
+                title: words::checking_title(locale),
+                note_line: words::checking_body(locale),
                 ..wire::ChatModelStep::default()
             }),
             _ => None,
+        }
+    }
+
+    /// CHAT CANNOT RUN HERE, and why when the phone said: too little memory, in the board's words.
+    fn unavailable_step(&self, locale: Locale) -> wire::ChatModelStep {
+        if self.too_little_memory() {
+            return wire::ChatModelStep {
+                title: words::unavailable_title(locale),
+                note_line: fill(
+                    &words::unavailable_memory(locale),
+                    &[("have", &size_text(self.memory_bytes))],
+                ),
+                ..wire::ChatModelStep::default()
+            };
+        }
+        wire::ChatModelStep {
+            status_line: words::unavailable(locale),
+            ..wire::ChatModelStep::default()
         }
     }
 

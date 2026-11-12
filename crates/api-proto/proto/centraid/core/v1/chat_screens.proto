@@ -421,6 +421,8 @@ message ChatEvent {
   message DeviceFacts {
     Network network = 1;
     uint64 free_bytes = 2;
+    // The phone's memory (0 is unknown): a phone with too little cannot run the model.
+    uint64 memory_bytes = 3;
 
     enum Network {
       NETWORK_UNSPECIFIED = 0;

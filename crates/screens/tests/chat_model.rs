@@ -50,14 +50,20 @@ fn open_in(chat: &mut Chat, dir: &Path) {
 }
 
 #[test]
-fn a_fresh_chat_checks_and_draws_only_its_header() {
+fn a_fresh_chat_checks_and_draws_its_header_and_what_it_is_looking_at() {
     let chat = Chat::with(None);
     let state = chat.state();
     assert_eq!(state.phase(), Phase::Checking);
     assert_eq!(state.title, "New chat");
     assert_eq!(state.subtitle, "On this phone");
     assert!(state.messages.is_empty() && state.empty_line.is_empty());
-    assert!(state.model_step.is_none());
+    // the blank page of a check says what it looks at (#1188 C12)
+    let step = state.model_step.clone().expect("a step");
+    assert_eq!(step.title, "Checking this phone");
+    assert_eq!(
+        step.note_line,
+        "Looking at memory and free space for the model."
+    );
 }
 
 #[test]
@@ -500,6 +506,7 @@ fn facts(chat: &mut Chat, network: wire::chat_event::device_facts::Network, free
     chat.event(C::DeviceFacts(wire::chat_event::DeviceFacts {
         network: network as i32,
         free_bytes,
+        ..Default::default()
     }));
 }
 
@@ -578,4 +585,29 @@ fn wifi_is_the_default_the_download_carries_no_permission_for_mobile_data() {
     chat.driver.effects.clear();
     chat.event(C::Download(wire::chat_event::DownloadTapped::default()));
     assert!(!download_effect(&chat).expect("a download").allow_cellular);
+}
+
+#[test]
+fn a_phone_with_too_little_memory_is_told_why_and_is_offered_no_download() {
+    use wire::chat_event::device_facts::Network;
+    let mut chat = Chat::with(None);
+    chat.open("");
+    chat.event(C::DeviceFacts(wire::chat_event::DeviceFacts {
+        network: Network::Wifi as i32,
+        free_bytes: 2_000_000_000,
+        memory_bytes: 3_000_000_000,
+    }));
+    let step = chat.state().model_step.clone().expect("a step");
+    assert_eq!(step.title, "Chat can’t run on this phone");
+    assert_eq!(
+        step.note_line,
+        "It needs 4 GB of memory and this phone has 3.0 GB."
+    );
+    assert!(step.action_label.is_empty());
+    chat.driver.effects.clear();
+    chat.event(C::Download(wire::chat_event::DownloadTapped::default()));
+    assert!(
+        download_effect(&chat).is_none(),
+        "nothing is fetched for a phone that cannot run it"
+    );
 }

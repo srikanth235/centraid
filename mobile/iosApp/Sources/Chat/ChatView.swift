@@ -103,10 +103,10 @@ struct ChatView: View {
                 case .ready:
                     thread(state)
                     composer(state)
-                case .needsModel, .downloading, .loading, .unavailable:
+                case .needsModel, .downloading, .loading, .unavailable, .checking:
                     ChatModelStepView(state: state, onChoose: { chat.downloadTapped($0) })
                     Spacer(minLength: 0)
-                case .checking, .unspecified, .UNRECOGNIZED:
+                case .unspecified, .UNRECOGNIZED:
                     Spacer(minLength: 0)
                 }
             }
@@ -1588,8 +1588,10 @@ private struct ChatModelStepView: View {
                         .foregroundStyle(Theme.color("net", scheme))
                         .accessibilityIdentifier("chat-error")
                 }
-                ChatDownloadButton(label: step.actionLabel, action: { onChoose(step.actionKind) })
-                    .accessibilityIdentifier("chat-download")
+                if !step.actionLabel.isEmpty {
+                    ChatDownloadButton(label: step.actionLabel, action: { onChoose(step.actionKind) })
+                        .accessibilityIdentifier("chat-download")
+                }
                 if !step.secondaryLabel.isEmpty {
                     ChatSecondaryButton(label: step.secondaryLabel, action: { onChoose(step.secondaryKind) })
                         .accessibilityIdentifier("chat-download-secondary")
@@ -1617,11 +1619,25 @@ private struct ChatModelStepView: View {
                     ChatSecondaryButton(label: step.secondaryLabel, action: { onChoose(step.secondaryKind) })
                         .accessibilityIdentifier("chat-download-secondary")
                 }
-            case .loading, .unavailable:
-                Text(step.statusLine)
-                    .chatType("body")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
-                    .accessibilityIdentifier("chat-model-status")
+            case .loading, .unavailable, .checking:
+                if !step.title.isEmpty {
+                    Text(step.title)
+                        .chatType("labelOn")
+                        .foregroundStyle(Theme.color("text", scheme))
+                        .accessibilityIdentifier("chat-model-title")
+                }
+                if !step.noteLine.isEmpty {
+                    Text(step.noteLine)
+                        .chatType("body")
+                        .foregroundStyle(Theme.color("textSoft", scheme))
+                        .accessibilityIdentifier("chat-model-note")
+                }
+                if !step.statusLine.isEmpty {
+                    Text(step.statusLine)
+                        .chatType("body")
+                        .foregroundStyle(Theme.color("textSoft", scheme))
+                        .accessibilityIdentifier("chat-model-status")
+                }
             default:
                 EmptyView()
             }

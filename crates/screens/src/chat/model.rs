@@ -159,6 +159,9 @@ pub(super) enum VisionPhase {
 }
 
 /// Whether the loaded model can read a photo, and the step on the way there.
+/// What a phone must report for the model to run on it.
+pub(super) const MIN_MEMORY_BYTES: u64 = 3_500_000_000;
+
 #[derive(Clone, Debug, Default)]
 pub(super) struct Vision {
     pub phase: VisionPhase,
@@ -259,6 +262,7 @@ pub(super) struct Chat {
     /// whether the member allowed mobile data. Unknown until the shell tells.
     pub network: Network,
     pub free_bytes: u64,
+    pub memory_bytes: u64,
     pub cellular_ok: bool,
     /// The stored thread this chat is saved in, or empty until a turn has been saved.
     pub thread_id: String,
@@ -309,6 +313,7 @@ impl Default for Chat {
             vision: Vision::default(),
             network: Network::Unspecified,
             free_bytes: 0,
+            memory_bytes: 0,
             cellular_ok: false,
             thread_id: String::new(),
             thread_title: String::new(),
@@ -661,8 +666,8 @@ impl Chat {
             // the consent; the model's step asks on its own (the sheet for the reader is a follow-up).
             _ => self.cellular_ok || vision,
         };
-        // NOT ENOUGH SPACE: nothing is fetched into a phone that cannot keep it.
-        if self.too_little_space(model.bytes) {
+        // NOT ENOUGH SPACE OR MEMORY: nothing is fetched into a phone that cannot keep it or run it.
+        if self.too_little_space(model.bytes) || self.too_little_memory() {
             return Vec::new();
         }
         let waiting = !vision && self.phase == Phase::Downloading;
@@ -705,7 +710,14 @@ impl Chat {
     fn device_facts(&mut self, facts: &wire::chat_event::DeviceFacts) -> Vec<wire::Effect> {
         self.network = Network::try_from(facts.network).unwrap_or(Network::Unspecified);
         self.free_bytes = facts.free_bytes;
+        self.memory_bytes = facts.memory_bytes;
         Vec::new()
+    }
+
+    /// The model needs about 4 GB of memory; a phone reports a little under what it is sold as, so
+    /// the line is drawn at 3.5 GB. An unknown amount is not "too little".
+    pub(super) fn too_little_memory(&self) -> bool {
+        self.memory_bytes > 0 && self.memory_bytes < MIN_MEMORY_BYTES
     }
 
     /// Whether the phone says it has less free than `needed` (an unknown amount is not "less").

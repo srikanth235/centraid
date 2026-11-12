@@ -190,6 +190,7 @@ final class ChatModel: ObservableObject {
         send(.deviceFacts(.with {
             $0.network = ChatDeviceWatcher.shared.network
             $0.freeBytes = ChatDeviceWatcher.shared.freeBytes
+            $0.memoryBytes = ProcessInfo.processInfo.physicalMemory
         }))
     }
 

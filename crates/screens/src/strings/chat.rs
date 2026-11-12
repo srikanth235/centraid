@@ -49,6 +49,11 @@ catalog! {
         "Its messages are removed from this vault. This cannot be undone."
     );
     plain delete_title = ("Delete this chat?", "Delete this chat?");
+    plain checking_body = (
+        "Looking at memory and free space for the model.",
+        "Looking at memory and free space for the model."
+    );
+    plain checking_title = ("Checking this phone", "Checking this phone");
     plain check_again = ("Check again", "Check again");
     plain download_action = ("Download on Wi‑Fi", "Download on Wi‑Fi");
     plain download_now = ("Download now", "Download now");
@@ -151,6 +156,11 @@ catalog! {
     plain unlock_reason = ("Unlock Locker to confirm this change", "Unlock Locker to confirm this change");
     plain unlock_subtitle = ("Confirm it is you", "Confirm it is you");
     plain unlock_title = ("Unlock Locker", "Unlock Locker");
+    plain unavailable_memory = (
+        "It needs 4 GB of memory and this phone has {have}.",
+        "It needs 4 GB of memory and this phone has {have}."
+    );
+    plain unavailable_title = ("Chat can’t run on this phone", "Chat can’t run on this phone");
     plain unavailable = ("Chat is not available here.", "Chat is not available here.");
     plain vision_action = ("Download", "Download");
     plain vision_line = ("Reading photos needs a {size} download", "Reading photos needs a {size} download");
