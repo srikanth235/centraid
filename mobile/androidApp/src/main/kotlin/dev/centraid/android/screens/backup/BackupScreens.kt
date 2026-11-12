@@ -157,6 +157,41 @@ private fun BackupPage(
             modifier = Modifier.padding(horizontal = 4.dp).testTag("backup-title").semantics { heading() },
         )
         // THE STATUS CARD: where the backup stands, and the one act that moves it (iOS `statusCard`).
+        // THE ONE-TIME PROMPT after the first confirmed backup (#1188, NB5): dismissible, no checkbox.
+        model.key_prompt?.let { prompt ->
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(CardRadius)).background(Surface.card).padding(16.dp).testTag("backup-key-prompt"),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(prompt.title, style = centraidType("title").copy(fontSize = tokenSp(R.dimen.centraid_text_section)), color = Surface.ink)
+                Sentence(prompt.body)
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        prompt.save_label,
+                        style = centraidType("body"),
+                        color = appAccent("").text,
+                        modifier = Modifier
+                            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+                            .clickable(role = Role.Button) {
+                                onEvent(BackupHomeEvent(key_prompt_answered = BackupHomeEvent.KeyPromptAnswered()))
+                                prompt.save?.let(onOpen)
+                            }
+                            .testTag("backup-key-prompt-save"),
+                    )
+                    Text(
+                        prompt.not_now_label,
+                        style = centraidType("body"),
+                        color = Surface.meta,
+                        modifier = Modifier
+                            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+                            .clickable(role = Role.Button) {
+                                onEvent(BackupHomeEvent(key_prompt_answered = BackupHomeEvent.KeyPromptAnswered()))
+                            }
+                            .testTag("backup-key-prompt-not-now"),
+                    )
+                }
+            }
+        }
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(CardRadius)).background(Surface.card).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),

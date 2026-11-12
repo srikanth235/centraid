@@ -117,12 +117,31 @@ fn device(op: wire::secret_op::Op, key: &str, value: &str) -> wire::SecretOp {
     }
 }
 
-/// The two reads, in this order: the rule, then whether videos are included.
+/// The device-store key that remembers the recovery-key prompt was answered (#1188, NB5).
+pub const KEY_PROMPT_KEY: &str = "backup.key-prompt";
+
+/// Keep that the recovery-key prompt was answered.
+#[must_use]
+pub fn write_key_prompt_answered() -> wire::SecretOp {
+    device(wire::secret_op::Op::Set, KEY_PROMPT_KEY, "answered")
+}
+
+/// Whether the prompt was answered, from the third answer to [`read_ops`].
+#[must_use]
+pub fn key_prompt_answered(answers: &[wire::SecretAnswer]) -> bool {
+    answers
+        .get(2)
+        .is_some_and(|answer| answer.ok && answer.found)
+}
+
+/// The three reads, in this order: the rule, whether videos are included, and whether the
+/// recovery-key prompt was answered.
 #[must_use]
 pub fn read_ops() -> Vec<wire::SecretOp> {
     vec![
         device(wire::secret_op::Op::Get, RULE_KEY, ""),
         device(wire::secret_op::Op::Get, INCLUDE_VIDEOS_KEY, ""),
+        device(wire::secret_op::Op::Get, KEY_PROMPT_KEY, ""),
     ]
 }
 

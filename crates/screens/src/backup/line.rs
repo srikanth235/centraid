@@ -152,7 +152,7 @@ pub fn line(
         } as i32,
         ..Default::default()
     };
-    finish(name_the_one_behind(locale, reading, now_ms, built))
+    finish(name_the_one_behind(locale, reading, built))
 }
 
 /// The name the member gave a backup device, or the plain word for one with none.
@@ -181,7 +181,6 @@ pub fn worst(reading: &Reading) -> Option<&super::reading::Destination> {
 fn name_the_one_behind(
     locale: Locale,
     reading: &Reading,
-    now_ms: i64,
     mut line: wire::BackupLine,
 ) -> wire::BackupLine {
     let Some(worst) = worst(reading) else {
@@ -193,25 +192,37 @@ fn name_the_one_behind(
         Footing::Full => words_home::device_full(locale),
         _ => words_home::device_behind(locale),
     };
+    // The headline and the status both name it; what the others hold is `last_good`.
     line.status = fill(&title, &[("name", &name)]);
+    line.sentence = line.status.clone();
+    line.tone = Tone::Attention as i32;
+    line
+}
+
+/// "Backed up to Srikanth's Mac mini 10 minutes ago": what the devices that are current hold, under
+/// the headline that names the one behind. Empty when none is behind or none is current.
+#[must_use]
+pub fn behind_last_good(locale: Locale, reading: &Reading, now_ms: i64) -> String {
+    if worst(reading).is_none() {
+        return String::new();
+    }
     let current: Vec<&super::reading::Destination> = reading
         .destinations
         .iter()
         .filter(|d| d.footing() == Footing::Current)
         .collect();
-    if let Some(at) = current.iter().filter_map(|d| d.last_ack_ms).max() {
-        let others = current
-            .iter()
-            .map(|d| device_name(locale, d))
-            .collect::<Vec<_>>()
-            .join(", ");
-        line.sentence = fill(
-            &words_home::device_backed_up_to(locale),
-            &[("others", &others), ("when", &ago(locale, at, now_ms))],
-        );
-    }
-    line.tone = Tone::Attention as i32;
-    line
+    let Some(at) = current.iter().filter_map(|d| d.last_ack_ms).max() else {
+        return String::new();
+    };
+    let others = current
+        .iter()
+        .map(|d| device_name(locale, d))
+        .collect::<Vec<_>>()
+        .join(", ");
+    fill(
+        &words_home::device_backed_up_to(locale),
+        &[("others", &others), ("when", &ago(locale, at, now_ms))],
+    )
 }
 
 /// The one sentence under the card for the device that is behind: why, in words a member can act

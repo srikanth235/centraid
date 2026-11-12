@@ -2296,7 +2296,8 @@ mod one_device_behind {
         .data();
         let line = data.line.expect("a line");
         assert_eq!(line.status, "Office NAS is behind");
-        assert_eq!(line.sentence, "Backed up to Home laptop just now");
+        assert_eq!(line.sentence, "Office NAS is behind");
+        assert_eq!(data.last_good, "Backed up to Home laptop just now");
         assert_eq!(line.tone, Tone::Attention as i32);
         assert!(
             data.reason.starts_with("Office NAS hasn't answered since "),
@@ -2342,5 +2343,70 @@ mod one_device_behind {
             data.destinations[1].detail,
             "Older backup than this phone sent"
         );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The one-time recovery-key prompt after the first confirmed backup (#1188, NB5).
+// ---------------------------------------------------------------------------
+
+mod recovery_key_prompt {
+    use super::*;
+
+    fn key_only_here(status: wire::BackupStatusResponse) -> Page {
+        let mut page = Page::over(status);
+        page.shell.synced.clear();
+        page.send(E::Appeared(wire::Appeared {}));
+        page.serve();
+        page
+    }
+
+    #[test]
+    fn it_is_asked_once_after_the_first_confirmed_backup_and_never_again() {
+        let mut page = key_only_here(steady());
+        let prompt = page.data().key_prompt.expect("the prompt is due");
+        assert_eq!(prompt.title, "Save your recovery key");
+        assert_eq!(
+            prompt.body,
+            "Your first backup is done. Without the recovery key it can't be opened on a new phone."
+        );
+        assert_eq!(
+            (prompt.save_label.as_str(), prompt.not_now_label.as_str()),
+            ("Save recovery key", "Not now")
+        );
+        assert_eq!(prompt.save, Some(routes::show_key()));
+        assert!(!prompt.body.to_lowercase().contains("words"));
+
+        page.say(wire::backup_home_event::Kind::KeyPromptAnswered(
+            wire::backup_home_event::KeyPromptAnswered {},
+        ));
+        page.serve();
+        assert!(page.data().key_prompt.is_none());
+        assert!(
+            page.shell.device.contains_key(rule_key_prompt()),
+            "remembered on this phone"
+        );
+        // A LATER OPEN READS IT BACK.
+        page.send(E::Appeared(wire::Appeared {}));
+        page.serve();
+        assert!(page.data().key_prompt.is_none());
+    }
+
+    #[test]
+    fn it_waits_for_a_confirmed_backup() {
+        let mut never = steady();
+        never.acked_at_ms = None;
+        assert!(key_only_here(never).data().key_prompt.is_none());
+    }
+
+    #[test]
+    fn it_is_not_asked_when_the_key_is_already_saved_somewhere() {
+        let page = Page::open(steady());
+        // The fake's key is in the synced store: nothing to ask.
+        assert!(page.data().key_prompt.is_none());
+    }
+
+    fn rule_key_prompt() -> &'static str {
+        super::super::rule::KEY_PROMPT_KEY
     }
 }

@@ -71,4 +71,11 @@ catalog! {
     plain row_behind_many = ("{n} files behind", "{n} files behind");
     plain row_full = ("Full", "Full");
     plain row_older = ("Older backup than this phone sent", "Older backup than this phone sent");
+
+    // THE ONE-TIME PROMPT after the first confirmed backup (#1188, NB5): "recovery key", never
+    // "words"; no checkbox.
+    plain key_prompt_title = ("Save your recovery key", "Save your recovery key");
+    plain key_prompt_body = ("Your first backup is done. Without the recovery key it can't be opened on a new phone.", "Your first backup is done. Without the recovery key it can't be opened on a new phone.");
+    plain key_prompt_save = ("Save recovery key", "Save recovery key");
+    plain key_prompt_not_now = ("Not now", "Not now");
 }

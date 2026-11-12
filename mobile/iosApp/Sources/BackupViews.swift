@@ -124,6 +124,34 @@ struct BackupHomeView: View {
                     if !model.lastGood.isEmpty { sentence(model.lastGood, id: "backup-last-good") }
                 }
             }
+            // THE ONE-TIME PROMPT after the first confirmed backup (#1188, NB5): dismissible, no checkbox.
+            if model.hasKeyPrompt {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(model.keyPrompt.title).kitType(.section).foregroundStyle(Surface.ink)
+                    sentence(model.keyPrompt.body)
+                    HStack(spacing: 16) {
+                        Button {
+                            send(event { $0.keyPromptAnswered = .init() })
+                            open(model.keyPrompt.save)
+                        } label: {
+                            Text(model.keyPrompt.saveLabel).kitType(.row).foregroundStyle(AppAccent.shell.text)
+                                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("backup-key-prompt-save")
+                        Button {
+                            send(event { $0.keyPromptAnswered = .init() })
+                        } label: {
+                            Text(model.keyPrompt.notNowLabel).kitType(.row).foregroundStyle(Surface.meta)
+                                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("backup-key-prompt-not-now")
+                    }
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("backup-key-prompt")
+            }
             // WHY THE DEVICE IS NOT ANSWERING is an amber callout of its own, not a quiet line.
             if !model.reason.isEmpty {
                 WordsCallout(text: model.reason, state: .amber, identifier: "backup-reason")

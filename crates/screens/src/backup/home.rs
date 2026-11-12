@@ -60,6 +60,8 @@ enum Job {
     Load,
     Rule(TransferRule),
     Videos,
+    /// The recovery-key prompt was answered: remember it.
+    Prompt,
     /// Moving the recovery key into the keychain, or out of it: the first batch,
     /// then (once it said whether the platform took it) the second.
     Seed {
@@ -99,6 +101,8 @@ struct Backup {
     settled: bool,
     rule: TransferRule,
     include_videos: bool,
+    /// The one-time recovery-key prompt was answered (read from the device store).
+    key_prompt_answered: bool,
     /// The platform took a background window; `None` before it says.
     registered: Option<bool>,
     /// The platform's reading of its synchronised store; `None` before it says.
@@ -129,6 +133,7 @@ impl Backup {
             settled: false,
             rule: TransferRule::default(),
             include_videos: true,
+            key_prompt_answered: false,
             registered: None,
             synced: None,
             backing_up_now: false,
@@ -221,6 +226,7 @@ impl Backup {
             }
             Job::Rule(rule) => vec![rule::write_rule(*rule)],
             Job::Videos => vec![rule::write_include_videos(self.include_videos)],
+            Job::Prompt => vec![rule::write_key_prompt_answered()],
             Job::Seed { write, stage, .. } => match stage {
                 Stage::First => write.first(),
                 // The second batch is built from the first's answers, in `answered`.
@@ -253,8 +259,11 @@ impl Backup {
                 let (rule, include) = rule::from_answers(answers.get(2..).unwrap_or_default());
                 self.rule = rule;
                 self.include_videos = include;
+                self.key_prompt_answered =
+                    rule::key_prompt_answered(answers.get(2..).unwrap_or_default());
                 self.settled = true;
             }
+            Job::Prompt => {}
             Job::Rule(_) | Job::Videos => {
                 // Written as the member set it; a store that refused leaves the
                 // value on screen until the next load says what it holds.
@@ -436,6 +445,10 @@ impl Backup {
             }
             Some(B::ForgetDestination(forget)) => self.forget(&forget.gateway_id, ctx),
             Some(B::SetKeySync(set)) => self.set_key_sync(set.on, ctx),
+            Some(B::KeyPromptAnswered(_)) => {
+                self.key_prompt_answered = true;
+                self.run(Job::Prompt)
+            }
             Some(B::Retry(_)) => self.open(ctx),
             // RESTORE IS HOME'S: the same door the vault sheet opens, asked from here.
             Some(B::RestorePressed(_)) => {
@@ -779,7 +792,7 @@ impl Backup {
             }
             // ONE DEVICE BEHIND, FULL OR HOLDING AN OLDER BACKUP names its reason (#1188, NB1).
             (_, Some(reading)) if !frozen => (
-                String::new(),
+                line::behind_last_good(locale, reading, now),
                 line::behind_reason(locale, ctx.zone(), reading, now).unwrap_or_default(),
             ),
             _ => (String::new(), String::new()),
@@ -881,6 +894,19 @@ impl Backup {
                 crate::strings::backup_check::check_row(locale)
             },
             check: Some(super::routes::check()),
+            // ONCE, AFTER THE FIRST CONFIRMED BACKUP, while the key is nowhere but this phone.
+            key_prompt: (!frozen
+                && !self.key_prompt_answered
+                && !key.saved
+                && !key.synced
+                && self.reading().is_some_and(|r| r.last_ack_ms.is_some()))
+            .then(|| wire::BackupKeyPrompt {
+                title: backup_home::key_prompt_title(locale),
+                body: backup_home::key_prompt_body(locale),
+                save_label: backup_home::key_prompt_save(locale),
+                not_now_label: backup_home::key_prompt_not_now(locale),
+                save: Some(super::routes::show_key()),
+            }),
         }
     }
 }

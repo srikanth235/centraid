@@ -261,6 +261,9 @@ message BackupHomeData {
   // empty with nothing paired or on a vault that moved.
   string check_label = 42;
   Route check = 43;
+  // THE ONE-TIME PROMPT after the first confirmed backup (#1188, NB5): unset when it is not due,
+  // already answered, or the key is already saved somewhere.
+  BackupKeyPrompt key_prompt = 44;
   // A RUN'S BYTES, for the status card's bar under `progress` ("Backing up — 412
   // MB to go"). Known only while a run is going and the phone can say how many
   // bytes the backup covers; the fraction is what a gateway has acknowledged
@@ -285,6 +288,16 @@ enum BackupCondition {
   BACKUP_CONDITION_MOVED = 5;
 }
 
+// "Save your recovery key": shown once, dismissible, with no checkbox.
+message BackupKeyPrompt {
+  string title = 1;
+  string body = 2;
+  string save_label = 3;
+  string not_now_label = 4;
+  // Where Save goes: the page that shows the key behind the passcode.
+  Route save = 5;
+}
+
 message BackupHomeEvent {
   oneof kind {
     BackUpNow back_up_now = 1;
@@ -298,7 +311,11 @@ message BackupHomeEvent {
     Retry retry = 6;
     // Restore this phone's vaults: Home's own restore, asked from here.
     RestorePressed restore_pressed = 7;
+    // The prompt was answered, by Save or by Not now: it is not shown again.
+    KeyPromptAnswered key_prompt_answered = 8;
   }
+
+  message KeyPromptAnswered {}
 
   message RestorePressed {}
 
