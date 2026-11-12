@@ -512,6 +512,20 @@ impl Writer<'_, '_, '_> {
             names.push(crate::log::quoted(column));
             values.push(sql_of(value));
         }
+        // A record put back in a list or an album goes to the END of it: where a member sits is
+        // the container's, a version does not keep it, and a missing position would sort first.
+        if part.alias == "membership"
+            && let Some(container) = row.get("from_id").and_then(Json::as_str)
+        {
+            let end: f64 = self.ctx.connection().query_row(
+                "SELECT COALESCE(MAX(position), 0) + 1 FROM edge
+                  WHERE from_id = ?1 AND rel = 'contains'",
+                [container],
+                |found| found.get(0),
+            )?;
+            names.push(crate::log::quoted("position"));
+            values.push(Sql::Real(end));
+        }
         let marks: Vec<String> = (1..=values.len()).map(|n| format!("?{n}")).collect();
         self.ctx.connection().execute(
             &format!(

@@ -1818,3 +1818,56 @@ fn undoing_a_change_alone_survives_a_star_or_a_tag_made_since_but_not_an_edit_of
     assert!(sentence.contains("no longer be undone"), "{sentence}");
     assert_eq!(w.state(&id)["entity"]["title"], "Ada King");
 }
+
+#[test]
+fn a_member_put_back_by_a_restore_goes_to_the_end_and_the_others_keep_their_order() {
+    let w = World::new();
+    let list = w.id(
+        "container.create",
+        json!({ "kind": "list", "title": "Family" }),
+    );
+    let people: Vec<String> = ["Ada", "Bob", "Cy"]
+        .iter()
+        .map(|name| w.id("person.add", json!({ "title": name })))
+        .collect();
+    for person in &people {
+        w.ok(
+            "edge.add",
+            json!({ "from": list, "rel": "contains", "to": person }),
+        );
+    }
+    let order = |w: &World| -> Vec<String> {
+        w.scratch
+            .vault
+            .read(|c| {
+                let mut statement = c.prepare(
+                    "SELECT to_id FROM edge WHERE from_id = ?1 AND rel = 'contains'
+                      ORDER BY position, to_id",
+                )?;
+                Ok(statement
+                    .query_map([&list], |row| row.get::<_, String>(0))?
+                    .collect::<rusqlite::Result<Vec<_>>>()?)
+            })
+            .expect("the order")
+    };
+    assert_eq!(order(&w), people);
+    // The first member leaves, and a restore of the version before brings them back: last, with a
+    // position of their own, and Bob and Cy where they were.
+    w.ok(
+        "edge.remove",
+        json!({ "from": list, "rel": "contains", "to": people[0] }),
+    );
+    let seq = w.versions(&people[0])[0].seq;
+    w.ok(
+        "history.restore_version",
+        json!({ "id": people[0], "seq": seq }),
+    );
+    assert_eq!(
+        order(&w),
+        [people[1].clone(), people[2].clone(), people[0].clone()]
+    );
+    let nulls = w.count(&format!(
+        "SELECT COUNT(*) FROM edge WHERE from_id = '{list}' AND rel = 'contains' AND position IS NULL"
+    ));
+    assert_eq!(nulls, 0, "every member has a position");
+}
