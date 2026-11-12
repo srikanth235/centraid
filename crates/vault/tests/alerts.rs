@@ -219,3 +219,63 @@ fn a_followed_phone_reminder_holds_no_alert_and_stopping_the_follow_changes_noth
     w.ok("task.edit", json!({ "id": id, "remind_before_min": 5 }));
     assert_eq!(w.rows().len(), 1, "a retired origin never notifies");
 }
+
+/// A LONG EVENT KEEPS ITS BANNER: a row outlives its firing while the event is running, and goes
+/// when it has ended.
+#[test]
+fn an_event_that_is_still_running_keeps_its_row_past_the_keep_window() {
+    let w = World::new();
+    // Fires 2026-01-01T09:50Z; runs for ten days.
+    w.event(json!({
+        "starts": "2026-01-01T10:00:00Z", "ends": "2026-01-11T10:00:00Z", "reminders": [10],
+    }));
+    w.scratch.clock.advance_days(5);
+    w.scratch.vault.advance_alerts().expect("advance");
+    assert_eq!(w.rows().len(), 1, "still running on day five");
+    w.scratch.clock.advance_days(6);
+    w.scratch.vault.advance_alerts().expect("advance");
+    assert!(w.rows().is_empty(), "over: the row goes");
+}
+
+/// A RESTORED VAULT IS THE FILE: the rows come back with it, and they are what a rebuild from the
+/// items would write.
+#[test]
+fn the_rows_equal_a_rebuild_from_the_items() {
+    let w = World::new();
+    w.event(json!({ "starts": "2026-03-01T10:00:00Z", "reminders": [10, 60] }));
+    w.event(json!({
+        "starts": "2025-12-30T10:00:00Z", "rule": "FREQ=DAILY", "reminders": [10],
+    }));
+    w.ok(
+        "task.add",
+        json!({ "title": "Call", "due": "2026-03-01T09:00:00Z", "remind_before_min": 15 }),
+    );
+    w.ok(
+        "task.add",
+        json!({ "title": "Walk", "due": "2026-03-01T09:00", "remind_before_min": 0 }),
+    );
+    let before = w.rows();
+    assert_eq!(before.len(), 5);
+    let ids: std::collections::BTreeSet<String> = w
+        .scratch
+        .vault
+        .read(|c| {
+            Ok(c.prepare("SELECT id FROM entity")?
+                .query_map([], |r| r.get(0))?
+                .collect::<rusqlite::Result<_>>()?)
+        })
+        .expect("ids");
+    w.scratch
+        .vault
+        .commit(|tx| {
+            tx.connection().execute("DELETE FROM alert", [])?;
+            alerts::refresh(
+                tx.connection(),
+                &ids,
+                alerts::now_ms("2026-01-01T00:00:00.000Z"),
+            )?;
+            Ok(())
+        })
+        .expect("rebuild");
+    assert_eq!(w.rows(), before);
+}

@@ -136,8 +136,9 @@ impl Window {
     }
 }
 
-/// How far back a delivered reminder can still be wanted, in days: what a member may have left on
-/// the screen. The alert index keeps a one-off item's row this long (`alerts::KEEP_PAST_MS`).
+/// How far back the service reads events for the delivered reading, in days. A bound on the READ
+/// only: an event running longer keeps its banner (the loader keeps what is still running), and a
+/// task reminder is named for `alerts::KEEP_PAST_MS`.
 pub const LIVE_DAYS: i64 = 2;
 /// The most delivered ids named at once.
 pub const LIVE_CAP: usize = 64;
@@ -177,7 +178,8 @@ pub fn live(inputs: &Inputs) -> Vec<String> {
         return Vec::new();
     };
     let window = Window {
-        from: now - LIVE_DAYS * DAY_MS,
+        // No lower bound: the index names only what may still be live (see `alerts::advance`).
+        from: i64::MIN,
         to: now,
         ongoing_at: Some(now),
     };

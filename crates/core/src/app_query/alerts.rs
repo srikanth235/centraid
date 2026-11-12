@@ -28,18 +28,14 @@ pub(crate) fn names(vault: &Vault, zone: &FireZone, now: &str, count: u32) -> Re
     );
     let mut rows = vault
         .read(|connection| index::next(connection, &fixed, &floating, count as usize + SPARE))?;
-    // What fired in the last two days and is still the item's: it may be on the screen.
-    let lookback = index::KEEP_PAST_MS;
+    // What fired and is still the item's (a task within two days; an event until it ends): it may
+    // be on the screen. The index drops the rest.
     let recent = vault.read(|connection| {
         index::recent(
             connection,
-            (&index::Timing::Fixed.key_of(now_ms - lookback), &fixed),
+            ("0000", &fixed),
             (
-                &index::Timing::Floating.key_of(
-                    centraid_vault::time::zone::wall_epoch(zone.zoned_parts(now_ms))
-                        - lookback
-                        - index::FLOATING_SLACK_MS,
-                ),
+                "0000",
                 &index::Timing::Floating.key_of(centraid_vault::time::zone::wall_epoch(
                     zone.zoned_parts(now_ms),
                 )),

@@ -340,3 +340,43 @@ fn an_events_alert_leaves_with_its_trash_and_returns_with_its_restore() {
     changed(&mut d, service);
     assert_eq!(latest(&d).all.len(), 1, "a restored event alerts again");
 }
+
+/// A DELIVERED EVENT ALERT STAYS UNTIL THE EVENT ENDS, however long it runs: a week-long event that
+/// began five days ago is still live, and one that ended yesterday is not.
+#[test]
+fn a_long_events_alert_stays_live_until_it_ends() {
+    use centraid_screens::catalog::act::calendar::{Propose, ProposeTiming};
+    let (mut d, service) = rig();
+    clear_tasks(&d);
+    let (began, over, ended) = (day(&d, -5), day(&d, 3), day(&d, -1));
+    arrange(
+        &d,
+        Propose {
+            title: "Conference".to_owned(),
+            starts: format!("{began}T10:00:00Z"),
+            ends: Field::Is(format!("{over}T10:00:00Z")),
+            timing: Some(ProposeTiming::Zoned),
+            zone: Field::Is("UTC".to_owned()),
+            reminders: Field::Is("[10]".to_owned()),
+            busy: Some(false),
+            ..Default::default()
+        },
+    );
+    arrange(
+        &d,
+        Propose {
+            title: "Workshop".to_owned(),
+            starts: format!("{}T10:00:00Z", day(&d, -3)),
+            ends: Field::Is(format!("{ended}T10:00:00Z")),
+            timing: Some(ProposeTiming::Zoned),
+            zone: Field::Is("UTC".to_owned()),
+            reminders: Field::Is("[10]".to_owned()),
+            busy: Some(false),
+            ..Default::default()
+        },
+    );
+    changed(&mut d, service);
+    let live = latest(&d).live_ids;
+    assert_eq!(live.len(), 1, "{live:?}");
+    assert!(live[0].starts_with("event||"), "{live:?}");
+}
