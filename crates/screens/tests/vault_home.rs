@@ -315,10 +315,18 @@ fn pair_in_the_ledger(phone: &mut Phone, vault: &str, acked_at_ms: Option<u64>) 
         1,
         now,
     );
-    row.seen_ms = Some(now);
-    row.ack_ms = acked_at_ms;
     row.head_ms = acked_at_ms;
     ledger.put_gateway(&row).expect("the gateway is recorded");
+    // What a pass records beside the row: the gateway answered, and acknowledged a head. The
+    // pairing's row never carries either (a pairing again keeps what the ledger already knows).
+    ledger
+        .touch_seen("gw-zq", now)
+        .expect("the gateway answered");
+    if let Some(at) = acked_at_ms {
+        ledger
+            .touch_ack("gw-zq", at)
+            .expect("the head was acknowledged");
+    }
     let _ = core.call(&wire::Request {
         kind: Some(wire::request::Kind::ForgetDestination(
             wire::ForgetDestinationRequest {
