@@ -135,7 +135,7 @@ fn the_card_says_what_the_data_is_and_what_it_was_built_from() {
 fn a_dry_run_lists_every_file_with_size_and_hash_and_sends_nothing() {
     let dir = good();
     let p = publish::prepare(dir.path(), publish::EXAMPLE_REPO).expect("prepares");
-    let text = publish::dry_run(&p, None, true);
+    let text = publish::dry_run(&p, None, true, None);
     assert!(text.contains("dry run: nothing is uploaded"));
     assert!(text.contains("private"));
     for f in &p.files {
@@ -222,7 +222,7 @@ fn an_upload_hands_the_transport_the_staged_tree_and_the_token_only_through_its_
     std::fs::write(
         &stub,
         format!(
-            "#!/bin/sh\necho \"args: $@\" > {r}\ncat >> {r}\necho \"env: $HF_TOKEN\" >> {r}\n[ -f \"$4/manifest.json\" ] && echo staged >> {r}\nls -R \"$4\" >> {r}\necho done\n",
+            "#!/bin/sh\nif [ $# -eq 2 ]; then cat > /dev/null; echo '[\".gitattributes\", \"data/test.jsonl.zst\", \"worlds/test-00.json\"]'; exit 0; fi\necho \"args: $@\" > {r}\ncat >> {r}\necho \"env: $HF_TOKEN\" >> {r}\necho \"deletes: $(cat \"$6\")\" >> {r}\n[ -f \"$4/manifest.json\" ] && echo staged >> {r}\nls -R \"$4\" >> {r}\necho done\n",
             r = record.display()
         ),
     )
@@ -256,6 +256,11 @@ fn an_upload_hands_the_transport_the_staged_tree_and_the_token_only_through_its_
         .any(|l| l.contains(token));
     assert!(!script_has_token, "the token is in the script");
     assert!(seen.contains("staged") && seen.contains("test.jsonl.zst"));
+    // the remote listing's strays go to the commit as deletes; plumbing and the publish set do not
+    assert!(
+        seen.contains("deletes: [\"data/test.jsonl.zst\",\"worlds/test-00.json\"]"),
+        "{seen}"
+    );
     // a repo that is not owner/name is refused before anything runs
     assert!(publish::upload(&p, "nope", true, "false", token).is_err());
 }
@@ -273,4 +278,75 @@ fn a_transport_failure_is_reported_without_the_token() {
     )
     .expect_err("fails");
     assert!(!err.to_string().contains("hf_secret_value_123"));
+}
+
+fn paths(list: &[&str]) -> Vec<String> {
+    list.iter().map(|p| (*p).to_owned()).collect()
+}
+
+#[test]
+fn the_plan_deletes_exactly_the_remote_paths_outside_the_publish_set_and_keeps_plumbing() {
+    let set = paths(&[
+        "manifest.json",
+        "README.md",
+        "data/train.jsonl.zst",
+        "data/val.jsonl.zst",
+        "test/test.jsonl.zst",
+        "worlds/train-00.json",
+        "test/worlds/test-00.json",
+    ]);
+    let stale = [
+        "data/test.jsonl.zst",
+        "worlds/test-00.json",
+        "worlds/test-01.json",
+        "worlds/test-02.json",
+        "worlds/test-03.json",
+        "worlds/test-04.json",
+        "worlds/test-05.json",
+        "build/llm-cache.jsonl.zst",
+        "build/render-dropped.jsonl",
+    ];
+    // the remote holds some of the set (to be replaced), the nine strays and the LFS rules
+    let mut remote = paths(&stale);
+    remote.extend(paths(&[
+        ".gitattributes",
+        "manifest.json",
+        "data/train.jsonl.zst",
+    ]));
+    let planned = publish::plan(&set, &remote);
+    let mut want = paths(&stale);
+    want.sort();
+    assert_eq!(planned.deletes, want);
+    assert_eq!(planned.deletes.len(), 9);
+    assert!(!planned.deletes.iter().any(|d| d == ".gitattributes"));
+    let mut puts = set.clone();
+    puts.sort();
+    assert_eq!(planned.puts, puts);
+    assert!(planned.deletes.iter().all(|d| !set.contains(d)));
+}
+
+#[test]
+fn an_empty_remote_and_a_remote_equal_to_the_publish_set_delete_nothing() {
+    let set = paths(&[
+        "manifest.json",
+        "data/train.jsonl.zst",
+        "test/test.jsonl.zst",
+    ]);
+    assert_eq!(publish::plan(&set, &[]).deletes.len(), 0);
+    assert_eq!(publish::plan(&set, &[]).puts.len(), 3);
+    assert_eq!(publish::plan(&set, &set).deletes.len(), 0);
+    let mut with_rules = set.clone();
+    with_rules.push(".gitattributes".to_owned());
+    assert_eq!(publish::plan(&set, &with_rules).deletes.len(), 0);
+}
+
+#[test]
+fn a_dry_run_that_knows_the_remote_lists_the_paths_it_would_remove() {
+    let dir = good();
+    let p = publish::prepare(dir.path(), publish::EXAMPLE_REPO).expect("prepares");
+    let mut remote = publish::publish_set(&p);
+    remote.extend(paths(&[".gitattributes", "data/test.jsonl.zst"]));
+    let text = publish::dry_run(&p, Some(publish::EXAMPLE_REPO), true, Some(&remote));
+    assert!(text.contains("1 path(s)") && text.contains("remove  data/test.jsonl.zst"));
+    assert!(!text.contains("remove  .gitattributes"));
 }

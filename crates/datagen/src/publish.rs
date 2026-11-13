@@ -21,6 +21,11 @@
 //!
 //! A version never overwrites an earlier one: it is committed to a branch of its own and then tagged with its name, the
 //! tag is the revision, and a tag or branch that already exists is refused before anything is sent.
+//!
+//! A version's tree is exactly its publish set. The branch starts from `main`, whose tree holds the earlier builds, so
+//! the one commit also deletes every path of that tree that is not in the publish set ([`plan`], a pure function of the
+//! publish set and the remote listing; the dry run prints what it would delete). Only the repo's plumbing file
+//! `.gitattributes` (the LFS rules) is kept.
 
 use std::fmt::Write as _;
 use std::io::Read;
@@ -335,9 +340,51 @@ pub fn prepare(dir: &Path, repo: &str) -> Result<Publication> {
     Ok(Publication { version, files })
 }
 
-/// The dry run: every file with its size and hash, and what a real upload would do. Nothing is sent.
+/// Repo plumbing that is not part of any version and is never deleted: the LFS rules the Hub needs to store the data.
+pub const KEPT: [&str; 1] = [".gitattributes"];
+
+/// What the one commit of a publish does to the repo's tree.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Plan {
+    /// Every path of the publish set: added when the repo lacks it, replaced when it has it.
+    pub puts: Vec<String>,
+    /// Every path of the remote tree that is not in the publish set and not plumbing, sorted: removed in the commit.
+    pub deletes: Vec<String>,
+}
+
+/// The commit a publish makes, from the publish set and the paths the repo's base tree holds. A pure function: the
+/// result holds the whole publish set to put and every other remote path to delete, except [`KEPT`].
 #[must_use]
-pub fn dry_run(p: &Publication, repo: Option<&str>, private: bool) -> String {
+pub fn plan(publish_set: &[String], remote: &[String]) -> Plan {
+    let wanted: std::collections::BTreeSet<&str> = publish_set.iter().map(String::as_str).collect();
+    let mut deletes: Vec<String> = remote
+        .iter()
+        .filter(|r| !wanted.contains(r.as_str()) && !KEPT.contains(&r.as_str()))
+        .cloned()
+        .collect();
+    deletes.sort();
+    deletes.dedup();
+    Plan {
+        puts: wanted.into_iter().map(str::to_owned).collect(),
+        deletes,
+    }
+}
+
+/// The paths of a publication, as the repo holds them.
+#[must_use]
+pub fn publish_set(p: &Publication) -> Vec<String> {
+    p.files.iter().map(|f| f.remote.clone()).collect()
+}
+
+/// The dry run: every file with its size and hash, and what a real upload would do. Nothing is sent. `remote` is the
+/// repo's current tree when it was read (a read-only listing), and then the paths the commit would remove are listed.
+#[must_use]
+pub fn dry_run(
+    p: &Publication,
+    repo: Option<&str>,
+    private: bool,
+    remote: Option<&[String]>,
+) -> String {
     let mut out = String::new();
     let _ = writeln!(
         out,
@@ -351,6 +398,26 @@ pub fn dry_run(p: &Publication, repo: Option<&str>, private: bool) -> String {
         let _ = writeln!(out, "  {:>12}  {}  {}", f.bytes, f.blake3, f.remote);
     }
     let _ = writeln!(out, "  {total:>12}  total in {} files", p.files.len());
+    match remote {
+        Some(tree) => {
+            let planned = plan(&publish_set(p), tree);
+            let _ = writeln!(
+                out,
+                "the version's tree is exactly these files; {} path(s) of the repo's tree would be removed in the commit (kept: {}):",
+                planned.deletes.len(),
+                KEPT.join(", ")
+            );
+            for d in &planned.deletes {
+                let _ = writeln!(out, "  remove  {d}");
+            }
+        }
+        None => {
+            let _ = writeln!(
+                out,
+                "paths of the repo's tree outside this list would be removed in the commit; they are listed when the dry run is given --repo and {TOKEN_ENV} (a read-only listing)"
+            );
+        }
+    }
     let _ = writeln!(
         out,
         "to upload: datagen publish --in <version dir> --repo {} --upload   (HF_TOKEN in the environment)",
@@ -359,12 +426,28 @@ pub fn dry_run(p: &Publication, repo: Option<&str>, private: bool) -> String {
     out
 }
 
-/// The transport: `huggingface_hub`, run by `python3` with this script on its standard input. It reads the token from
-/// `HF_TOKEN` itself; the arguments are the repo, the version, the staged directory and `private` or `public`.
-const TRANSPORT: &str = r#"
-import sys
+/// The read-only transport: `huggingface_hub` lists the files of the repo's `main`, printed as a JSON array of paths
+/// (`[]` for a repo or a tree that does not exist yet). The arguments are the repo.
+const LIST_TRANSPORT: &str = r#"
+import json, sys
 from huggingface_hub import HfApi
-repo, version, folder, visibility = sys.argv[1:5]
+from huggingface_hub.utils import RepositoryNotFoundError, RevisionNotFoundError
+try:
+    files = HfApi().list_repo_files(sys.argv[1], repo_type="dataset", revision="main")
+except (RepositoryNotFoundError, RevisionNotFoundError):
+    files = []
+print(json.dumps(sorted(files)))
+"#;
+
+/// The write transport: `huggingface_hub`, run by `python3` with this script on its standard input. It reads the token
+/// from `HF_TOKEN` itself; the arguments are the repo, the version, the staged directory, `private` or `public` and a
+/// JSON file listing the paths to delete. The one commit puts every staged file and deletes those paths, so the
+/// branch's tree, and the tag's, is the publish set.
+const TRANSPORT: &str = r#"
+import json, os, sys
+from huggingface_hub import CommitOperationAdd, CommitOperationDelete, HfApi
+repo, version, folder, visibility, deletes_file = sys.argv[1:6]
+deletes = json.load(open(deletes_file))
 api = HfApi()
 api.create_repo(repo, repo_type="dataset", private=(visibility == "private"), exist_ok=True)
 refs = api.list_repo_refs(repo, repo_type="dataset")
@@ -373,7 +456,13 @@ branch = "incoming-" + version
 if version in taken or branch in taken:
     sys.exit("revision %s already exists in %s: a version is never overwritten" % (version, repo))
 api.create_branch(repo, branch=branch, repo_type="dataset")
-info = api.upload_folder(repo_id=repo, repo_type="dataset", folder_path=folder, revision=branch,
+ops = []
+for root, _, names in os.walk(folder):
+    for name in names:
+        path = os.path.join(root, name)
+        ops.append(CommitOperationAdd(path_in_repo=os.path.relpath(path, folder).replace(os.sep, "/"), path_or_fileobj=path))
+ops += [CommitOperationDelete(path_in_repo=d) for d in deletes]
+info = api.create_commit(repo_id=repo, repo_type="dataset", operations=ops, revision=branch,
                          commit_message="data version " + version)
 api.create_tag(repo, tag=version, revision=info.oid, repo_type="dataset")
 api.delete_branch(repo, branch=branch, repo_type="dataset")
@@ -388,6 +477,7 @@ pub fn transport_command(
     version: &str,
     folder: &Path,
     private: bool,
+    deletes_file: &Path,
 ) -> (Vec<String>, &'static str) {
     (
         vec![
@@ -397,9 +487,55 @@ pub fn transport_command(
             version.to_owned(),
             folder.display().to_string(),
             if private { "private" } else { "public" }.to_owned(),
+            deletes_file.display().to_string(),
         ],
         TRANSPORT,
     )
+}
+
+/// Run `python` with `script` on its standard input and `args`, the token in its environment only.
+fn run_python(python: &str, args: &[String], script: &str, token: &str) -> Result<String> {
+    let mut child = Command::new(python)
+        .arg("-")
+        .args(args)
+        // the token reaches the one child through its environment, never through an argument or the script
+        .env(TOKEN_ENV, token)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .with_context(|| format!("starting {python}"))?;
+    {
+        use std::io::Write as _;
+        child
+            .stdin
+            .take()
+            .context("no stdin")?
+            .write_all(script.as_bytes())?;
+    }
+    let out = child.wait_with_output()?;
+    if !out.status.success() {
+        let err = String::from_utf8_lossy(&out.stderr).replace(token, "<token>");
+        bail!("the transport failed ({}): {}", out.status, err.trim());
+    }
+    Ok(String::from_utf8_lossy(&out.stdout)
+        .replace(token, "<token>")
+        .trim()
+        .to_owned())
+}
+
+/// The paths the repo's `main` holds now: a read-only listing, no commit and no branch.
+///
+/// # Errors
+///
+/// A repo that is not owner/name, or the listing failed. The token is never in the message.
+pub fn list_remote(repo: &str, python: &str, token: &str) -> Result<Vec<String>> {
+    if repo.trim().is_empty() || !repo.contains('/') {
+        bail!("--repo takes an owner/name, for example {EXAMPLE_REPO}");
+    }
+    let text = run_python(python, &[repo.to_owned()], LIST_TRANSPORT, token)?;
+    serde_json::from_str(&text)
+        .context("the listing of the repo's tree is not a JSON array of paths")
 }
 
 /// Write the staged tree under `staging` in the repo's layout.
@@ -450,33 +586,21 @@ pub fn upload(
     if repo.trim().is_empty() || !repo.contains('/') {
         bail!("--repo takes an owner/name, for example {EXAMPLE_REPO}");
     }
+    let remote = list_remote(repo, python, token)?;
+    let planned = plan(&publish_set(p), &remote);
     let staging = tempfile::tempdir()?;
     stage(p, staging.path())?;
-    let (args, script) = transport_command(python, repo, &p.version, staging.path(), private);
-    let mut child = Command::new(&args[0])
-        .args(&args[1..])
-        // the token reaches the one child through its environment, never through an argument or the script
-        .env(TOKEN_ENV, token)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .with_context(|| format!("starting {}", args[0]))?;
-    {
-        use std::io::Write as _;
-        child
-            .stdin
-            .take()
-            .context("no stdin")?
-            .write_all(script.as_bytes())?;
-    }
-    let out = child.wait_with_output()?;
-    if !out.status.success() {
-        let err = String::from_utf8_lossy(&out.stderr).replace(token, "<token>");
-        bail!("the upload failed ({}): {}", out.status, err.trim());
-    }
-    Ok(String::from_utf8_lossy(&out.stdout)
-        .replace(token, "<token>")
-        .trim()
-        .to_owned())
+    // outside the staged tree, so it is not uploaded
+    let aside = tempfile::tempdir()?;
+    let deletes_file = aside.path().join("deletes.json");
+    std::fs::write(&deletes_file, serde_json::to_vec(&planned.deletes)?)?;
+    let (args, script) = transport_command(
+        python,
+        repo,
+        &p.version,
+        staging.path(),
+        private,
+        &deletes_file,
+    );
+    run_python(python, &args[2..], script, token)
 }

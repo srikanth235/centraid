@@ -170,7 +170,8 @@ enum Command {
     },
     /// Publish a built data version to a Hugging Face dataset repo, one revision per version. A DRY RUN unless `--upload`:
     /// it checks the version (file hashes, a clean build, publishable, no sealed placeholder), lists every file with
-    /// its size and hash and uploads nothing. A real upload needs `--upload`, `--repo` and `HF_TOKEN` in the
+    /// its size and hash and uploads nothing (with `--repo` and `HF_TOKEN` it also reads the repo's tree and lists the
+    /// paths the commit would remove: a version's tree is exactly its files). A real upload needs `--upload`, `--repo` and `HF_TOKEN` in the
     /// environment; the repo is private unless `--public`, the revision is the version's name, and an existing
     /// revision is never overwritten.
     Publish {
@@ -767,9 +768,14 @@ fn main() -> Result<()> {
                 let done = publish::upload(&publication, &repo, !public, &python, &token)?;
                 println!("{done}");
             } else {
+                // a read-only listing of the repo's tree, when it can be had, so the removals are shown
+                let remote = match (repo.as_deref(), publish::token_from_env()) {
+                    (Some(r), Ok(token)) => Some(publish::list_remote(r, &python, &token)?),
+                    _ => None,
+                };
                 print!(
                     "{}",
-                    publish::dry_run(&publication, repo.as_deref(), !public)
+                    publish::dry_run(&publication, repo.as_deref(), !public, remote.as_deref())
                 );
             }
         }
