@@ -86,7 +86,7 @@ pub fn shelves_statement() -> PageQuery {
 pub fn trashed_statement() -> PageQuery {
     PageQuery::new(
         "locker.phone.trashed",
-        "id, updated_at",
+        "id, deleted_at",
         "entity",
         PageOrder::desc("deleted_at", "id"),
     )
