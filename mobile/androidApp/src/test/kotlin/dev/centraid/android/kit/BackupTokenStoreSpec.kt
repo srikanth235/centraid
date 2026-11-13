@@ -25,9 +25,9 @@ class BackupTokenStoreSpec {
     private val nameKey = KeyGenerator.getInstance(SealedEntries.HMAC).generateKey()
     private val sealing = SealedEntries(valueKey = { valueKey }, nameKey = { nameKey })
 
-    private val vault = "a1".repeat(16)
+    private val vault = "a1".repeat(32)
     private val gateway = "b2".repeat(16)
-    private val token = "tok-" + "7f3c9e".repeat(10)
+    private val token = "7f3c9e5a".repeat(8)
     private val logical = "centraid.v1.gateway-token.$vault.$gateway"
 
     @Test

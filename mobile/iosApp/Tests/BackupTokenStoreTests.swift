@@ -12,8 +12,8 @@ import XCTest
 /// backup), no file the app writes holds the token's bytes, and a delete removes it. A restart and the
 /// real first-unlock are the owner's device walk.
 final class BackupTokenStoreTests: XCTestCase {
-    private let key = "gateway-token." + String(repeating: "a1", count: 16) + "." + String(repeating: "b2", count: 16)
-    private let token = Data(("tok-" + String(repeating: "7f3c9e", count: 10)).utf8)
+    private let key = "gateway-token." + String(repeating: "a1", count: 32) + "." + String(repeating: "b2", count: 16)
+    private let token = Data(String(repeating: "7f3c9e5a", count: 8).utf8)
 
     override func tearDown() {
         _ = run(.delete)
