@@ -27,8 +27,8 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use centraid_vault::backup::state::{DeviceState, LocalSource};
 use centraid_vault::backup::naming::PlaintextHash;
+use centraid_vault::backup::state::{DeviceState, LocalSource};
 use centraid_vault::bytes::{BlobError, BlobStore, Located, Result};
 
 use crate::hash::ContentHash;
@@ -65,7 +65,7 @@ impl ContentBytes {
     /// The same door, answering for the operating system's library through
     /// the ledger's `local_bytes`. See the module header.
     #[must_use]
-    pub fn with_ledger(self, ledger: Arc<Mutex<DeviceState>>) -> Self {
+    pub fn with_state(self, ledger: Arc<Mutex<DeviceState>>) -> Self {
         Self {
             ledger: Some(ledger),
             ..self
@@ -80,7 +80,7 @@ impl ContentBytes {
 
     /// The ledger this door reads, when one is attached.
     #[must_use]
-    pub const fn ledger(&self) -> Option<&Arc<Mutex<DeviceState>>> {
+    pub const fn state(&self) -> Option<&Arc<Mutex<DeviceState>>> {
         self.ledger.as_ref()
     }
 
@@ -204,7 +204,7 @@ mod tests {
             DeviceState::open_beside(&dir.path().join("vault.db")).expect("the device state opens"),
         ));
         (
-            ContentBytes::new(store).with_ledger(Arc::clone(&ledger)),
+            ContentBytes::new(store).with_state(Arc::clone(&ledger)),
             ledger,
         )
     }

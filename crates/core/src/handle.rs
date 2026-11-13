@@ -718,7 +718,7 @@ impl HandleState {
         let ledger_path = centraid_vault::backup::state::DeviceState::path_for(&self.path);
         let door = match centraid_vault::backup::state::DeviceState::open_beside(&self.path) {
             Ok(ledger) => {
-                centraid_blobs::ContentBytes::new(store).with_ledger(Arc::new(Mutex::new(ledger)))
+                centraid_blobs::ContentBytes::new(store).with_state(Arc::new(Mutex::new(ledger)))
             }
             Err(error) => {
                 tracing::warn!(
@@ -2357,7 +2357,7 @@ mod tests {
         );
         assert!(door.state().is_some(), "the door reads the backup ledger");
         assert!(
-            scratch.dir.join("vault.backup.db").is_file(),
+            scratch.dir.join("vault.state.db").is_file(),
             "the ledger is beside the vault, where the backup plane keeps it"
         );
     }

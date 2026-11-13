@@ -4,7 +4,7 @@ What the phone does to back its vault up and to get it back. Wording and rules a
 
 ## State, and where it lives
 
-- The ledger (`<stem>.backup.db`), the spool (`<stem>.spool/`) and the scratch copy (`<stem>.scratch/`) sit beside the vault file, never inside it. The shells keep them out of OS backup.
+- The device state (`<stem>.state.db`), the spool (`<stem>.spool/`) and the scratch copy (`<stem>.scratch/`) sit beside the vault file, never inside it. The shells keep them out of OS backup.
 - All three are derived. Lose them and the phone re-pairs and re-asks each gateway what it holds. The backup is not lost.
 - The core writes no key to disk. Keys arrive through the open configuration. A core without them reads and writes the vault but cannot back up.
 
@@ -16,17 +16,18 @@ What the phone does to back its vault up and to get it back. Wording and rules a
 - The manifest carries the write counter and a per-table row census. A vault whose counter and `user_version` match the newest snapshot, held whole at every gateway, is not copied again.
 - Settle moves the head only when every range and the manifest are confirmed. It is a compare-and-set on the head this phone last set there.
 
-## Ledger
+## Device state
 
-- Six tables: `destination`, `queue`, `confirmed`, `snapshot`, `local_bytes`, `meta`. Each caches somebody else's truth. `application_id` is `CBL1`, and a ledger a newer build wrote is refused.
-- A part is confirmed when its `PUT` succeeded. `NAME_TAKEN` counts, because a name is a function of the plaintext.
-- `local_bytes` records where a library original already is, so the phone keeps no second copy of it.
-- The first pass of a core's life asks each gateway about every confirmed name. So does a pass that finds a gateway's head went backwards. A name no longer held goes back to unconfirmed.
+- Three tables, no key-value table: `gateway` (the pairing and what this phone knows of that gateway: epoch, head and its time, generation and writes, the blob cursor, reach, the snapshot in flight, the sample counter), `outbox` (per gateway, each name owed: range, leaf, manifest, directory or blob; sealed or waiting) and `local_bytes` (where a hash's bytes are on this device). Each caches somebody else's truth. `application_id` is `CBS1`, and a state a newer build wrote is refused. A `<stem>.backup.db` found beside the vault is deleted unread.
+- **Nothing is recorded as acknowledged.** An outbox row leaves when its `PUT` succeeds (`NAME_TAKEN` with the phone's own digest counts; with other bytes it never does). What a gateway holds is whatever it answers to `exists`.
+- **No token is in the state.** The shell keeps `gateway-token.<vault>.<gateway>` in the device secret store and hands them to the core (`gateway_tokens`) at open; the core holds them in memory. A gateway with none is `pair_again`.
+- **The blob cursor.** Each gateway has a cursor over `blob.seq`. A pass reads the claims past it a page at a time, asks `exists` about each part name, and writes an outbox row for each missing one, moving the cursor in the same transaction. An unchanged library costs one statement. A blob only lapsed entities rent leaves `lapsed` rows, looked at again each pass. The first pass of a core's life walks from the start again; so does a pass that finds a gateway's head went backwards.
+- The member's rule and "Include videos" come with every `drain` request (the shell keeps them in the device secret store); a request without a rule is refused. The link (metered, charging) lasts for the pass.
 
 ## Mover and spool
 
-- Every paired gateway is a full replica. A part leaves the spool when no paired gateway still owes it. The wait for a silent one is bounded to a day.
-- Small parts go in bundles of up to 256 MiB, and their answers are confirmed in one transaction. An original goes alone. The manifest is queued after every range and goes alone.
+- Every paired gateway is a full replica. A sealed part is written once and each gateway has a row for it; the file leaves the spool when no row names it. The wait for a silent gateway is bounded to a day, after which its rows go and its walk starts again.
+- Ranges, leaves and derivatives go in bundles of up to 256 MiB, and their answers are let go in one transaction. An original goes alone. The manifest is queued after every range and goes alone.
 - A part answered `DIGEST_MISMATCH` three times in a row by one gateway stops the pass to that gateway.
 - A part is sealed once and the same file is re-sent on every retry. A file reaches its name by rename after fsync, so a crash leaves a whole part or a `.partial`, which opening the spool sweeps.
 - The budget is the smaller of 2 GiB and a tenth of free space. One part over the whole budget is sealed alone into an empty spool, and only while 256 MiB would stay free.
@@ -35,19 +36,18 @@ What the phone does to back its vault up and to get it back. Wording and rules a
 ## Retention
 
 - Keep 7 daily, 4 weekly and 6 monthly snapshots, UTC. A period counts only if it holds a snapshot. The newest is always kept. A snapshot dated after now is judged as taken now.
-- It runs after a head is set, and only when retention drops at least one snapshot. A dropped snapshot's manifest and ranges are deleted at once. Any other listed name that no kept manifest, vault content hash, queued part or not-yet-acknowledged snapshot implies is held back until every kept snapshot was taken after this phone first saw it unlive.
-- A file the vault deleted stays until every kept snapshot was taken after this phone first saw it unlive. While any kept snapshot is future-dated, none of that held garbage is collected.
+- It runs after a head is set, and only when retention drops at least one snapshot (or a snapshot spooled and never made a head was superseded). It deletes a dropped snapshot's manifest and the ranges only it named, minus every kept manifest's ranges, everything in the outbox and any snapshot in flight. **Nothing else is collected until the exact collection (B10) lands**: there is no per-name grave, and a v3 manifest does not name the files its rows do. A kept manifest that will not open stops collection.
 
 ## The pass
 
 - `drain` reaches every paired gateway, refuses with `VaultMoved` if one holds a later writer epoch, then takes a snapshot if one is due and moves the records. The head is set before media move.
 - Media then go in interleaved rounds, one gateway at a time: prepare what it lacks (derivatives, then originals, newest first), then move it.
-- A snapshot is due an hour after the newest snapshot a head named was taken, and not while a newer one is still on its way whole. It is due at once when asked, when a gateway has no head set by this phone, when its head went backwards, or when it no longer holds its head whole. A snapshot dated more than a few minutes ahead of now does not count as recent.
+- A snapshot is due an hour after the newest snapshot a head named was taken, and not while a newer one is still on its way whole. It is due at once when asked, when a gateway has no head set by this phone, when its head went backwards, or when a read-back found it no longer holds its head whole. A snapshot dated more than a few minutes ahead of now does not count as recent.
 - If a pass confirmed files whose rows no snapshot covers, it takes another snapshot (or owes one to the next pass).
-- Read-back: each pass opens 3 random acknowledged parts of at most 1 MiB per gateway, and streams the large part read back least recently, off a metered link. A part that is gone or will not open is unconfirmed and sent again.
+- Read-back (E10): before it writes, each pass reads a keyed random sample (64 parts, 8 on a metered link) of the ranges the gateway's head names and opens each under its name. The draw is a function of a key only the phone has, the gateway id and a counter in the state, never of a clock. A part that is gone or will not open makes the pass retake the snapshot at once; one the gateway itself says is damaged is freed by a signed delete first. Originals' chunks are sampled once the manifest lists their digests (B9, B13).
 - Originals only the OS library holds are named in `need_bytes` (at most 64). The shell streams them through the stage door, which seals them.
 - What may be sealed and moved under each rule is `Conditions` in [`drain.rs`](../../../crates/core/src/phone/drain.rs). The rule itself is in product.md.
-- On iOS `handoff` gives queued parts to the OS and `settle` records its report. A handoff unsettled for 25 hours that the gateway does not hold returns to the queue.
+- On iOS `handoff` gives queued parts to the OS and `settle` records its report. A handoff unsettled for 25 hours that the gateway does not hold returns to the outbox.
 
 ## Restore
 

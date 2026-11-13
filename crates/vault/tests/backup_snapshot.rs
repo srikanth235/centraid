@@ -71,9 +71,7 @@ fn back_up(vault: &Vault, dir: &Path, store: &MemoryStore) -> Snapshot {
     )
     .expect("moves");
     assert_eq!(moved.stopped, Stop::Empty);
-    match snapshot::settle(&state, store, &SystemClock)
-    .expect("settles")
-    {
+    match snapshot::settle(&state, store, &SystemClock).expect("settles") {
         Settled::HeadSet(head) => assert_eq!(head.name, snapshot.manifest_name),
         other => panic!("the head did not move: {other:?}"),
     }

@@ -19,10 +19,10 @@ use centraid_api_proto::core_v1 as wire;
 use centraid_blobs::{ByteStore, ContentHash};
 use centraid_media::sealed::{self, Assembler};
 use centraid_vault::backup::files::{ContentFile, content_files};
-use centraid_vault::backup::state::LocalSource;
 use centraid_vault::backup::naming::{
     BackupKeys, Name, PlaintextHash, name as part_name, part_count,
 };
+use centraid_vault::backup::state::LocalSource;
 use centraid_vault::backup::store::{
     BUNDLE_BYTES, FRAME_HEADER_BYTES, NAMES_PER_CALL, Store, StoreError,
 };

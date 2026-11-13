@@ -90,9 +90,9 @@ use centraid_gateway::rules::payload::PairPayload;
 use centraid_vault::Vault;
 use centraid_vault::backup::PlaneError;
 use centraid_vault::backup::files::{ContentFile, content_files};
-use centraid_vault::backup::state::Gateway;
 use centraid_vault::backup::naming::Name;
 use centraid_vault::backup::restore::{RestoreError, Restored, fetch_and_assemble};
+use centraid_vault::backup::state::Gateway;
 use centraid_vault::backup::store::StoreError;
 
 use super::link::GatewayStore;

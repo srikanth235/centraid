@@ -100,10 +100,9 @@ fn a_phone_that_took_the_vault_over_moves_the_head() {
     );
     let (epoch, head) = gateway.writer(&vault_id());
     assert_eq!(epoch, 2, "the takeover claimed the next epoch");
-    let taken = ledger(&second_path).snapshots().expect("reads");
+    let taken = state(&second_path).gateways().expect("reads");
     assert_eq!(
-        head,
-        taken.last().map(|snapshot| snapshot.name),
+        head, taken[0].head,
         "the gateway's head is the second phone's newest snapshot"
     );
 
@@ -167,10 +166,10 @@ fn pairing_again_with_a_gateway_that_lost_the_vault_sends_everything_again() {
 
     // BEFORE THE MEMBER PAIRS AGAIN: the phone's token opens nothing there,
     // and the gateway holds nothing for the vault.
-    let book = ledger(&path);
-    let mut row = book.destination(&id).expect("reads").expect("paired");
+    let book = state(&path);
+    let mut row = book.gateway(&id).expect("reads").expect("paired");
     row.addrs = vec![gateway.spawned.addr.to_string()];
-    book.put_destination(&row).expect("writes");
+    book.put_gateway(&row).expect("writes");
     let refused = try_drain(&phone, at_home()).expect_err("the gateway does not know the token");
     assert_eq!(refused.code(), wire::ErrorCode::Unauthorized, "{refused}");
     assert!(gateway.held(&vault_id()).is_empty());
@@ -196,10 +195,9 @@ fn pairing_again_with_a_gateway_that_lost_the_vault_sends_everything_again() {
     assert!(missing.is_empty(), "the gateway lacks {missing:?}");
     let backed = status(&phone);
     assert_eq!(backed.content_confirmed, backed.content_total, "{backed:?}");
-    let confirmed = ledger(&path).confirmed_names(&id).expect("reads");
     assert!(
-        confirmed.iter().all(|name| held.contains(name)),
-        "nothing the ledger confirms is missing from the gateway"
+        owed(&path, &id).is_empty(),
+        "nothing is owed once the gateway holds everything"
     );
     let new_dir = tempfile::tempdir().expect("a directory");
     let restored = restore(new_dir.path(), &gateway);
@@ -251,16 +249,13 @@ fn a_gateway_that_goes_away_mid_pass_is_blamed_and_the_next_pass_finishes() {
     );
     // A PASS CUT OFF AFTER CONFIRMING FILES OWES THEIR ROWS A SNAPSHOT
     // (R-1080-C15): the next pass that reaches the gateway takes it first.
-    assert_eq!(
-        ledger(&path).meta("pass.snapshot_owed").expect("reads"),
-        Some("1".to_owned()),
+    assert!(
+        phone.plane().snapshot_owed(),
         "the cut pass owes the snapshot"
     );
-    let held = gateway.held(&vault_id());
-    let confirmed = ledger(&path).confirmed_names(&id).expect("reads");
     assert!(
-        confirmed.is_subset(&held),
-        "the ledger confirms nothing the gateway does not hold"
+        !owed(&path, &id).is_empty(),
+        "what the gateway did not take is still owed"
     );
     let left = 6 - u64::from(cut.confirmed_parts);
     // ALL SIX WAIT FOR THE GATEWAY: the bytes it did not take, and the rows
@@ -287,16 +282,15 @@ fn a_gateway_that_goes_away_mid_pass_is_blamed_and_the_next_pass_finishes() {
         "{resumed:?}"
     );
     assert_eq!(
-        u64::from(resumed.confirmed_parts - snapshot_parts_after(&path, &held_before)),
+        u64::from(resumed.confirmed_parts - snapshot_parts_after(&gateway, &phone, &held_before)),
         left,
         "nothing acknowledged is sent again"
     );
     // A PASS THAT CONFIRMS FILES TAKES THE SNAPSHOT THEIR ROWS NEED
     // (R-1080-C15): the cut pass owed it, the next took it first, so the bytes
     // AND the rows are there the moment it finishes — no wait for the hour.
-    assert_eq!(
-        ledger(&path).meta("pass.snapshot_owed").expect("reads"),
-        Some("0".to_owned()),
+    assert!(
+        !phone.plane().snapshot_owed(),
         "the snapshot the cut pass owed was taken"
     );
     let after_resume = status(&phone);
@@ -320,10 +314,9 @@ fn a_gateway_that_goes_away_mid_pass_is_blamed_and_the_next_pass_finishes() {
     let backed = status(&phone);
     assert_eq!(backed.content_confirmed, backed.content_total);
     assert!(backed.waiting.is_empty(), "{:?}", backed.waiting);
-    assert_eq!(
-        gateway.held(&vault_id()),
-        ledger(&path).confirmed_names(&id).expect("reads"),
-        "the gateway holds exactly what the ledger confirms"
+    assert!(
+        owed(&path, &id).is_empty(),
+        "nothing is owed: the gateway holds what it was sent"
     );
 }
 
@@ -336,7 +329,7 @@ fn a_gateway_that_goes_away_mid_pass_is_blamed_and_the_next_pass_finishes() {
 fn a_gateway_that_goes_away_mid_question_is_an_unreachable_pass() {
     let gateway = gateway();
     let dir = tempfile::tempdir().expect("a directory");
-    let path = dir.path().join("vault.db");
+    let _path = dir.path().join("vault.db");
     let phone = phone(dir.path());
     pair(&phone, &gateway);
     drain(&phone, at_home());
@@ -374,7 +367,7 @@ fn a_gateway_that_goes_away_mid_question_is_an_unreachable_pass() {
         "{resumed:?}"
     );
     assert_eq!(
-        resumed.confirmed_parts - snapshot_parts_after(&path, &held_before),
+        resumed.confirmed_parts - snapshot_parts_after(&gateway, &phone, &held_before),
         50
     );
     drain(
@@ -415,7 +408,7 @@ fn a_part_a_crash_left_in_the_spool_is_swept_by_the_next_core() {
     let dir = tempfile::tempdir().expect("a directory");
     let path = dir.path().join("vault.db");
     let phone = phone(dir.path());
-    let id = pair(&phone, &gateway)
+    let _id = pair(&phone, &gateway)
         .destination
         .expect("a destination")
         .gateway_id;
@@ -427,12 +420,10 @@ fn a_part_a_crash_left_in_the_spool_is_swept_by_the_next_core() {
 
     // WHAT THE CRASH LEFT: a confirmed part's file, and a sealed part whose
     // queue row never landed.
-    let confirmed = *ledger(&path)
-        .confirmed_names(&id)
-        .expect("reads")
+    let confirmed = *file_names(&phone)
         .iter()
         .next()
-        .expect("a confirmed name");
+        .expect("a name the gateway holds");
     let spool = dir.path().join("vault.spool");
     std::fs::write(
         spool.join(confirmed.to_hex()),
@@ -509,17 +500,8 @@ fn what_the_gateway_lost_is_sent_again_by_the_next_launch() {
 
     // THE FILES GO: the photograph's, the thumbnail's, and one range of the
     // head. The gateway's index still lists all three.
-    let book = ledger(&path);
-    let head = book.head(&id).expect("reads").expect("a head");
-    let taken = book
-        .snapshots()
-        .expect("reads")
-        .into_iter()
-        .find(|snapshot| snapshot.name == head)
-        .expect("this phone took the head");
-    let manifest =
-        centraid_vault::backup::snapshot::Manifest::from_json(taken.manifest_json.as_bytes())
-            .expect("a manifest");
+    let head = head_of(&path, &id);
+    let manifest = manifest_at(&gateway, &head);
     let range = manifest.ranges[0].name;
     let lost: Vec<Name> = file_names(&phone).into_iter().chain([range]).collect();
     assert_eq!(lost.len(), 3);
@@ -574,7 +556,7 @@ fn a_status_read_while_a_pass_runs_always_answers() {
     let dir = tempfile::tempdir().expect("a directory");
     let path = dir.path().join("vault.db");
     let phone = std::sync::Arc::new(phone(dir.path()));
-    let id = pair(&phone, &gateway)
+    let _id = pair(&phone, &gateway)
         .destination
         .expect("a destination")
         .gateway_id;
@@ -617,15 +599,18 @@ fn a_status_read_while_a_pass_runs_always_answers() {
         "{drained:?}"
     );
     assert_eq!(
-        drained.confirmed_parts - snapshot_parts_after(&path, &held_before),
+        drained.confirmed_parts - snapshot_parts_after(&gateway, &phone, &held_before),
         120
     );
     assert!(reads > 1, "the screen read the status while the pass ran");
     assert!(refused_second, "a second pass is refused while one runs");
     assert!(!phone.plane().asking(), "the tap ended with its pass");
     let held = gateway.held(&vault_id());
-    assert_eq!(held, ledger(&path).confirmed_names(&id).expect("reads"));
-    assert!(ledger(&path).queued().expect("reads").is_empty());
+    assert!(
+        file_names(&phone).iter().all(|name| held.contains(name)),
+        "the gateway holds every file"
+    );
+    assert!(owed_any(&path).is_empty());
 }
 
 /// The sealed bytes the spool holds: its whole parts.
@@ -739,17 +724,13 @@ fn the_planes_batches_are_the_gateways_caps() {
     }
 }
 
-/// **A LEDGER PAST A THOUSAND NAMES** (#1080, B6). A large library's ledger
-/// confirms tens of thousands of names; a relaunch's first pass asks the
-/// gateway about every one, a thousand at a time, and nothing is refused
-/// for its size. Here the ledger confirms 2,500 names the gateway never
-/// held, which costs a test none of a large library's hours of disk: they
-/// come back missing and are unconfirmed, the library's own names stay
-/// confirmed, and nothing is sent again. Collection keeps the ledger true
-/// too: a name retention deletes is no longer confirmed. (The 2,000-item
-/// run at nightly scale is the owner's hand-off H-5.)
+/// **A LIBRARY OF MANY NAMES IS ASKED ABOUT A THOUSAND AT A TIME** (#1080, B6; #1191, E11). A
+/// relaunch's first pass walks the library's claims again from the start, a page at a time, and
+/// asks the gateway about each page's names a thousand at a time; nothing is refused for the
+/// library's size and nothing is sent again. Within that life the walk is not repeated: the
+/// cursor sits at the end of the claims.
 #[test]
-fn a_ledger_past_a_thousand_names_is_asked_about_a_thousand_at_a_time() {
+fn a_library_past_a_thousand_names_is_asked_about_a_thousand_at_a_time() {
     let gateway = gateway();
     let dir = tempfile::tempdir().expect("a directory");
     let path = dir.path().join("vault.db");
@@ -764,25 +745,14 @@ fn a_ledger_past_a_thousand_names_is_asked_about_a_thousand_at_a_time() {
     note(&phone, "Another", "a second head");
     let second = drain(&phone, at_home());
     assert!(second.acked_at_ms.is_some(), "{second:?}");
-    assert_eq!(
-        ledger(&path).confirmed_names(&id).expect("reads"),
-        gateway.held(&vault_id()),
-        "the ledger confirms what the gateway holds, and no more"
-    );
+    assert!(owed(&path, &id).is_empty(), "nothing is owed");
+    let walked = state(&path)
+        .gateway(&id)
+        .expect("reads")
+        .expect("paired")
+        .cursor;
+    assert!(walked > 0, "the walk passed the library's claims");
 
-    let strangers: Vec<(Name, u64)> = (0..2_500)
-        .map(|index| {
-            (
-                Name::from_bytes(
-                    *blake3::hash(format!("never held {index}").as_bytes()).as_bytes(),
-                ),
-                64,
-            )
-        })
-        .collect();
-    ledger(&path)
-        .confirm_many(&strangers, &id, 1)
-        .expect("confirms");
     drop(phone);
     let phone = reopen(&path);
     let relaunched = drain(&phone, quietly());
@@ -793,8 +763,13 @@ fn a_ledger_past_a_thousand_names_is_asked_about_a_thousand_at_a_time() {
     );
     assert_eq!(relaunched.confirmed_parts, 0, "nothing is sent again");
     assert_eq!(
-        ledger(&path).confirmed_names(&id).expect("reads"),
-        gateway.held(&vault_id())
+        state(&path)
+            .gateway(&id)
+            .expect("reads")
+            .expect("paired")
+            .cursor,
+        walked,
+        "the walk came back to the end of the claims"
     );
     let backed = status(&phone);
     assert_eq!((backed.content_confirmed, backed.content_total), (20, 20));
@@ -824,7 +799,7 @@ fn a_gateway_forgotten_mid_pass_ends_the_pass_and_keeps_nothing() {
     );
     let running = std::sync::Arc::clone(&phone);
     let pass = std::thread::spawn(move || try_drain(&running, quietly()));
-    while ledger(&path).confirmed_names(&id).expect("reads").len() < 30 && !pass.is_finished() {
+    while gateway.held(&vault_id()).len() < 30 && !pass.is_finished() {
         std::thread::yield_now();
     }
     assert!(forget(&phone, &id).forgotten);
@@ -835,9 +810,9 @@ fn a_gateway_forgotten_mid_pass_ends_the_pass_and_keeps_nothing() {
             || drained.stopped == wire::DrainStop::Empty as i32),
         "the pass answers: {answered:?}"
     );
-    let book = ledger(&path);
-    assert!(book.destinations().expect("reads").is_empty());
-    assert!(book.confirmed_names(&id).expect("reads").is_empty());
+    let book = state(&path);
+    assert!(book.gateways().expect("reads").is_empty());
+    assert!(owed_any(&path).is_empty());
     let after = status(&phone);
     assert!(after.destinations.is_empty());
     assert_eq!(
@@ -974,7 +949,7 @@ fn a_pairing_code_that_does_not_pair_keeps_nothing() {
 fn a_gateway_asleep_when_the_pass_begins_is_waited_for() {
     let gateway = gateway();
     let dir = tempfile::tempdir().expect("a directory");
-    let path = dir.path().join("vault.db");
+    let _path = dir.path().join("vault.db");
     let phone = phone(dir.path());
     pair(&phone, &gateway);
     drain(&phone, at_home());
@@ -1002,7 +977,7 @@ fn a_gateway_asleep_when_the_pass_begins_is_waited_for() {
     let awake = drain(&phone, quietly());
     assert_eq!(awake.stopped, wire::DrainStop::Empty as i32, "{awake:?}");
     assert_eq!(
-        awake.confirmed_parts - snapshot_parts_after(&path, &held_before),
+        awake.confirmed_parts - snapshot_parts_after(&awake_gateway, &phone, &held_before),
         3
     );
     // THE PASS THAT CONFIRMED THEM SNAPSHOTTED THEIR ROWS TOO (R-1080-C15).
@@ -1044,7 +1019,14 @@ fn a_phone_killed_after_sealing_moves_its_spool_next_time() {
         },
     );
     assert_eq!(sealed.confirmed_parts, 0, "{sealed:?}");
-    assert_eq!(ledger(&path).queued().expect("reads").len(), 3);
+    assert_eq!(
+        owed(&path, &id)
+            .iter()
+            .filter(|row| row.part_path.is_some())
+            .count(),
+        3,
+        "the three sealed parts wait in the outbox"
+    );
     drop(phone);
 
     let phone = reopen(&path);
@@ -1052,14 +1034,15 @@ fn a_phone_killed_after_sealing_moves_its_spool_next_time() {
     let moved = drain(&phone, quietly());
     assert_eq!(moved.stopped, wire::DrainStop::Empty as i32, "{moved:?}");
     assert_eq!(
-        moved.confirmed_parts - snapshot_parts_after(&path, &held_before),
+        moved.confirmed_parts - snapshot_parts_after(&gateway, &phone, &held_before),
         3,
         "each sealed part once"
     );
-    assert!(ledger(&path).queued().expect("reads").is_empty());
-    assert_eq!(
-        gateway.held(&vault_id()),
-        ledger(&path).confirmed_names(&id).expect("reads")
+    assert!(owed(&path, &id).is_empty());
+    assert!(
+        file_names(&phone)
+            .iter()
+            .all(|name| gateway.held(&vault_id()).contains(name))
     );
     assert!(spooled(dir.path()).is_empty());
 }
@@ -1099,13 +1082,7 @@ fn a_part_the_os_moved_unsettled_is_confirmed_by_the_next_core() {
     };
     assert_eq!(batch.parts.len(), 2);
     // THE OPERATING SYSTEM UPLOADS EACH, as handed; nobody settles.
-    let token: centraid_gateway::rules::ids::Token = ledger(&path)
-        .destination(&id)
-        .expect("reads")
-        .expect("paired")
-        .token
-        .parse()
-        .expect("a token");
+    let token: centraid_gateway::rules::ids::Token = phone.plane().tokens()[&id];
     let client = gateway.spawned.client(token);
     for part in &batch.parts {
         let digest = part
@@ -1136,17 +1113,16 @@ fn a_part_the_os_moved_unsettled_is_confirmed_by_the_next_core() {
     // snapshot their rows need (R-1080-C15): the snapshot's new parts are the
     // only ones it sent.
     assert_eq!(
-        next.confirmed_parts - snapshot_parts_after(&path, &held_before),
+        next.confirmed_parts - snapshot_parts_after(&gateway, &phone, &held_before),
         0,
         "no file part is sent again"
     );
-    assert!(ledger(&path).queued().expect("reads").is_empty());
-    assert!(file_names(&phone).iter().all(|name| {
-        ledger(&path)
-            .confirmed_names(&id)
-            .expect("reads")
-            .contains(name)
-    }));
+    assert!(owed(&path, &id).is_empty());
+    assert!(
+        file_names(&phone)
+            .iter()
+            .all(|name| gateway.held(&vault_id()).contains(name))
+    );
     drain(
         &phone,
         wire::DrainRequest {
@@ -1306,13 +1282,7 @@ fn two_vaults_on_one_gateway_cannot_reach_each_other() {
     assert_eq!(status(&two).content_confirmed, 3);
 
     // VAULT ONE'S TOKEN AGAINST VAULT TWO'S OBJECTS.
-    let token: centraid_gateway::rules::ids::Token = ledger(&one_dir.path().join("vault.db"))
-        .destination(&one_id)
-        .expect("reads")
-        .expect("paired")
-        .token
-        .parse()
-        .expect("a token");
+    let token: centraid_gateway::rules::ids::Token = one.plane().tokens()[&one_id];
     let client = gateway.spawned.client(token);
     let theirs: Vec<centraid_gateway::rules::ids::Name> = gateway
         .held(&two_vault)
@@ -1439,17 +1409,22 @@ fn an_item_deleted_after_backup_is_collected_once_purged() {
         );
         assert!(next.acked_at_ms.is_some(), "{next:?}");
     }
+    // UNTIL THE EXACT COLLECTION (#1191, B10) NOTHING IS COLLECTED ON A GUESS: a kept snapshot's
+    // v3 manifest does not name the files its rows do, and no per-name grave is kept any more, so
+    // the purged photograph stays on the gateway. What retention did drop is the manifest and the
+    // ranges only a dropped snapshot named. B10's tree manifests turn this into "collected, held
+    // for the gateway's week".
     assert!(
-        !gateway.held(&vault_id()).contains(&object),
-        "the purged photograph's object is collected"
+        gateway.held(&vault_id()).contains(&object),
+        "the purged photograph's object is kept until the exact collection lands"
     );
     assert!(
         gateway
             .objects(&vault_id())
             .iter()
-            .any(|record| Name::from_bytes(*record.name.as_bytes()) == object
-                && record.hold.is_some()),
-        "held, with the gateway's week"
+            .all(|record| Name::from_bytes(*record.name.as_bytes()) != object
+                || record.hold.is_none()),
+        "and it is not held for deletion"
     );
 }
 
@@ -1524,10 +1499,10 @@ fn a_gateway_that_lost_its_store_reads_pair_again_and_pairing_clears_it() {
     identity_into(gateway.spawned.data_dir(), replaced.path());
     drop(gateway);
     let gateway = gateway_in(replaced);
-    let book = ledger(&path);
-    let mut row = book.destination(&id).expect("reads").expect("paired");
+    let book = state(&path);
+    let mut row = book.gateway(&id).expect("reads").expect("paired");
     row.addrs = vec![gateway.spawned.addr.to_string()];
-    book.put_destination(&row).expect("writes");
+    book.put_gateway(&row).expect("writes");
 
     // BEFORE ANY PASS HAS MET THE REFUSAL the ledger still says everything is
     // held, and says nothing else: that is the lie this closes.
@@ -1587,11 +1562,11 @@ fn an_ordinary_pass_that_moves_a_photograph_snapshots_its_row_too() {
     // RETENTION KEEPS ONE SNAPSHOT A DAY, so the newest one's name is the
     // count of snapshots taken: it moves when one is, and not otherwise.
     let newest = |path: &std::path::Path| {
-        ledger(path)
-            .snapshots()
+        state(path)
+            .gateways()
             .expect("reads")
-            .last()
-            .map(|snapshot| snapshot.name)
+            .first()
+            .and_then(|row| row.head)
     };
     let before = newest(&path);
 
@@ -1668,12 +1643,7 @@ fn a_deleted_file_stays_while_a_kept_snapshot_may_name_it() {
     drain(&phone, at_home());
     let object = Name::from_bytes(*gateway_name(&staged.content_hash, 0).as_bytes());
     assert!(gateway.held(&vault_id()).contains(&object));
-    let from_before = ledger(&path)
-        .snapshots()
-        .expect("reads")
-        .last()
-        .expect("one")
-        .name;
+    let from_before = first_head(&path);
 
     // TWO DAYS ON, THE PHOTOGRAPH IS DELETED FOREVER, and two snapshots fall on
     // the new day: the second drops the first, and the one from before stays.
@@ -1691,22 +1661,12 @@ fn a_deleted_file_stays_while_a_kept_snapshot_may_name_it() {
         "deleted-forever",
     );
     drain(&phone, at_home());
-    let dropped_next = ledger(&path)
-        .snapshots()
-        .expect("reads")
-        .last()
-        .expect("one")
-        .name;
+    let dropped_next = first_head(&path);
     clock.advance_ms(60 * 60 * 1000);
     // A vault no commit has changed is not copied again (#1188): the hour needs a change in it.
     note(&phone, "An hour later", "so the next snapshot is owed");
     drain(&phone, at_home());
-    let newest = ledger(&path)
-        .snapshots()
-        .expect("reads")
-        .last()
-        .expect("one")
-        .name;
+    let newest = first_head(&path);
     assert_ne!(dropped_next, newest);
 
     let held = gateway.held(&vault_id());
@@ -1730,4 +1690,116 @@ fn a_deleted_file_stays_while_a_kept_snapshot_may_name_it() {
             .all(|record| record.hold.is_none()),
         "and not even held"
     );
+}
+
+/// **THE MEMBER'S RULE IS SENT WITH EVERY REQUEST, AND NONE IS ASSUMED** (#1191). The core keeps no
+/// rule of its own across a restart: a pass with no rule is refused with a typed error, and the
+/// next pass after a restart uses the rule its own request carries.
+#[test]
+fn a_pass_uses_the_rule_its_request_carries_and_a_request_without_one_is_refused() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = phone(dir.path());
+    pair(&phone, &gateway);
+    drain(&phone, at_home());
+    originals(&phone, "a photograph the rule decides", 2, 30_000);
+
+    // NO RULE: refused before anything is read or written.
+    let refused = try_drain(
+        &phone,
+        wire::DrainRequest {
+            rule: wire::TransferRule::Unspecified as i32,
+            ..at_home()
+        },
+    )
+    .expect_err("a request without a rule is refused");
+    assert_eq!(refused.code(), wire::ErrorCode::InvalidRequest, "{refused}");
+
+    // MANUAL, NOT ASKED: nothing is sealed.
+    let held = drain(
+        &phone,
+        wire::DrainRequest {
+            rule: wire::TransferRule::Manual as i32,
+            ..quietly()
+        },
+    );
+    assert_eq!(held.confirmed_parts, 0, "{held:?}");
+
+    // A RESTART: the core remembers no rule. The next pass carries its own.
+    drop(phone);
+    let phone = reopen(&path);
+    let none = try_drain(
+        &phone,
+        wire::DrainRequest {
+            rule: wire::TransferRule::Unspecified as i32,
+            ..quietly()
+        },
+    )
+    .expect_err("still refused after a restart");
+    assert_eq!(none.code(), wire::ErrorCode::InvalidRequest, "{none}");
+    let moved = drain(&phone, quietly());
+    assert_eq!(moved.stopped, wire::DrainStop::Empty as i32, "{moved:?}");
+    let backed = status(&phone);
+    assert_eq!(backed.content_confirmed, backed.content_total, "{backed:?}");
+}
+
+/// **THE TOKEN IS IN NO FILE THE CORE OWNS** (#1191, E12): not the device state, not the vault,
+/// not the spool, not the content store. The shell keeps it in the device secret store; the core
+/// holds it in memory.
+#[test]
+fn a_gateway_token_is_in_no_file_the_core_writes() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = phone(dir.path());
+    let paired = pair(&phone, &gateway);
+    let token = paired.tokens[0].token.clone();
+    assert_eq!(token.len(), 64, "a token is 64 hex");
+    originals(
+        &phone,
+        "a photograph so the spool and the store are used",
+        2,
+        30_000,
+    );
+    // SEALED AND LEFT IN THE SPOOL over a metered link, then everything closed.
+    drain(
+        &phone,
+        wire::DrainRequest {
+            metered: true,
+            ..quietly()
+        },
+    );
+    drain(&phone, at_home());
+    drop(phone);
+
+    let mut scanned = 0_usize;
+    let mut stack = vec![dir.path().to_path_buf()];
+    while let Some(directory) = stack.pop() {
+        for entry in std::fs::read_dir(&directory).expect("lists") {
+            let entry = entry.expect("an entry").path();
+            if entry.is_dir() {
+                stack.push(entry);
+                continue;
+            }
+            let bytes = std::fs::read(&entry).expect("reads");
+            scanned += 1;
+            assert!(
+                !contains(&bytes, token.as_bytes()),
+                "the token is in {}",
+                entry.display()
+            );
+            let raw: Vec<u8> = (0..token.len())
+                .step_by(2)
+                .map(|at| u8::from_str_radix(&token[at..at + 2], 16).expect("hex"))
+                .collect();
+            assert!(
+                !contains(&bytes, &raw),
+                "the token's bytes are in {}",
+                entry.display()
+            );
+        }
+    }
+    assert!(scanned > 3, "the vault, its state and its stores were read");
+    assert!(path.exists());
 }

@@ -73,14 +73,14 @@ use std::time::{Duration, Instant};
 use centraid_api_proto::core_v1 as wire;
 use centraid_media::sealed::{self, PartSealer};
 use centraid_vault::backup::files::{ContentFile, content_files};
-use centraid_vault::backup::state::{
-    DeviceState, Gateway, LocalSource, Outbox, OutboxKind, Reach, Waiting,
-};
 use centraid_vault::backup::mover::{self, Stop};
 use centraid_vault::backup::naming::{BackupKeys, Name, name as part_name, names_of, part_count};
 use centraid_vault::backup::retention;
 use centraid_vault::backup::snapshot::{self, Manifest, Settled};
 use centraid_vault::backup::spool::Spool;
+use centraid_vault::backup::state::{
+    DeviceState, Gateway, LocalSource, Outbox, OutboxKind, Reach, Waiting,
+};
 use centraid_vault::backup::store::{self as plane_store, Refusal, Store, StoreError};
 use centraid_vault::clock::SystemClock;
 
@@ -130,10 +130,9 @@ impl Kind {
     #[must_use]
     pub fn of_part(part: &Outbox) -> Self {
         match part.kind {
-            OutboxKind::Range
-            | OutboxKind::Leaf
-            | OutboxKind::Manifest
-            | OutboxKind::Directory => Self::Records,
+            OutboxKind::Range | OutboxKind::Leaf | OutboxKind::Manifest | OutboxKind::Directory => {
+                Self::Records
+            }
             OutboxKind::Blob if part.derivative => Self::Derivative,
             OutboxKind::Blob => Self::Original {
                 video: part.is_video(),
@@ -414,6 +413,10 @@ struct Pass {
     /// How many parts this pass read back, and the gateways it found damage at.
     sampled: usize,
     repairing: BTreeSet<String>,
+    /// A snapshot spooled for a gateway that never became its head and that a newer one has
+    /// superseded, by gateway: its manifest and the ranges only it named are garbage once the
+    /// newer head is set.
+    abandoned: BTreeMap<String, Name>,
 }
 
 impl Pass {
@@ -436,6 +439,7 @@ impl Pass {
             rolled: BTreeSet::new(),
             sampled: 0,
             repairing: BTreeSet::new(),
+            abandoned: BTreeMap::new(),
         }
     }
 
@@ -666,9 +670,8 @@ pub(crate) fn run_cancellable(
         };
         return answer(&spool, pass);
     }
-    let everyone = fleet.silent.is_empty()
-        && fleet.untrusted.is_empty()
-        && fleet.pair_again.is_empty();
+    let everyone =
+        fleet.silent.is_empty() && fleet.untrusted.is_empty() && fleet.pair_again.is_empty();
     let mut reached = fleet.reached;
     for gateway in &mut reached {
         gateway.store.set_cancellation(cancellation.clone());
@@ -812,6 +815,10 @@ fn pass_over(
     pass: &mut Pass,
 ) -> Result<()> {
     let mut live: Vec<&Reached> = fleet.iter().collect();
+    let reachable: Vec<String> = fleet
+        .iter()
+        .map(|reached| reached.gateway.gateway_id.clone())
+        .collect();
     let round = Round {
         handle,
         keyring,
@@ -820,6 +827,13 @@ fn pass_over(
         spool,
         deadline,
     };
+    // A GATEWAY FOUND TO HAVE LOST SOMETHING by an earlier pass (a head that went backwards, a
+    // read-back that found damage) is retaken at once, until a current head is set there.
+    for reached in fleet {
+        if plane.rolled(&reached.gateway.gateway_id) {
+            pass.rolled.insert(reached.gateway.gateway_id.clone());
+        }
+    }
     // A ROW KEPT FOR A GATEWAY THAT NEVER CAME BACK IS KEPT A DAY, not for ever.
     mover::release_expired(state, spool, now_ms()).map_err(plane_error)?;
 
@@ -859,6 +873,7 @@ fn pass_over(
                     tracing::warn!(gateway = %id, "the gateway's head went backwards");
                     state.set_cursor(id, 0).map_err(plane_error)?;
                     pass.rolled.insert(id.clone());
+                    plane.set_rolled(id, true);
                 }
             }
             Err(StoreError::Unreachable(reason)) => {
@@ -874,7 +889,13 @@ fn pass_over(
             Err(error) => return Err(store_error(error)),
         }
         // EVERY NAME OWED, ASKED ONCE A LIFE (or at once, after a rollback): the ones the gateway
-        // already holds are let go.
+        // already holds are let go. **AND THE LIBRARY IS WALKED AGAIN FROM ITS START ONCE A LIFE**
+        // (#1080 ruling 7, "on every launch"): a gateway that lost a file since is found by
+        // `exists`, one question per thousand names, until the read-back samples originals' chunks
+        // (B13) and finds it sooner.
+        if owes_reconcile {
+            state.set_cursor(id, 0).map_err(plane_error)?;
+        }
         if owes_reconcile || pass.rolled.contains(id) {
             let squared =
                 mover::reconcile(state, spool, store, &SystemClock).map_err(plane_error)?;
@@ -887,6 +908,21 @@ fn pass_over(
     if owes_reconcile && everyone && squared_all && live.len() == fleet.len() {
         handle.reconciled_fully();
     }
+
+    // 0. THE PHONE VERIFIES, BEFORE IT WRITES (#1188, B4; #1191, E10): a keyed random sample of what each gateway
+    // holds of the newest snapshot is read back and opened, so a gateway that lost or damaged a
+    // part is found by this pass and not by a restore: a snapshot is retaken at once.
+    each(&mut live, state, pass, |reached, pass| {
+        verify_sample(
+            plane,
+            state,
+            &reached.store,
+            &keyring.backup,
+            conditions.metered,
+            pass,
+        )?;
+        Ok(Flow::Continue)
+    })?;
 
     let budget = plane.budget();
     pass.free = plane.free_bytes();
@@ -942,6 +978,7 @@ fn pass_over(
                 conditions,
                 budget,
                 deadline,
+                &reachable,
                 pass,
             );
             match step {
@@ -967,21 +1004,19 @@ fn pass_over(
     // A gateway that left the pass was not finished.
     all_finished &= live.len() == fleet.len();
 
-    // 2b. THE PHONE VERIFIES (#1188, B4; #1191, E10): a keyed random sample of what each gateway
-    // holds of the newest snapshot is read back and opened, so a gateway that lost or damaged a
-    // part is found by the next pass and not by a restore.
-    each(&mut live, state, pass, |reached, pass| {
-        verify_sample(plane, state, &reached.store, &keyring.backup, conditions.metered, pass)?;
-        Ok(Flow::Continue)
-    })?;
-
     // 3. THE RECORDS AGAIN, WHEN THIS PASS CONFIRMED FILES THEIR ROWS ARE NOT IN A SNAPSHOT
     // FOR (R-1080-C15). A pass that was cut off owes it to the next, which takes it first.
     if pass.media_confirmed > 0 && conditions.may_move(Kind::Records) {
         let now_files = handle.with_vault(|vault| content_files(vault).map_err(plane_error))?;
         let mut uncovered = false;
         for reached in fleet {
-            uncovered |= rows_uncovered(handle, state, &reached.gateway.gateway_id, conditions, &now_files)?;
+            uncovered |= rows_uncovered(
+                handle,
+                state,
+                &reached.gateway.gateway_id,
+                conditions,
+                &now_files,
+            )?;
         }
         if uncovered {
             if all_finished {
@@ -1008,7 +1043,11 @@ fn verify_sample(
 ) -> Result<()> {
     use centraid_vault::backup::verify::{SAMPLE_CHUNKS, SAMPLE_CHUNKS_METERED, sample};
     let id = store.gateway_id();
-    let Some(head) = state.gateway(id).map_err(plane_error)?.and_then(|row| row.head) else {
+    let Some(head) = state
+        .gateway(id)
+        .map_err(plane_error)?
+        .and_then(|row| row.head)
+    else {
         return Ok(());
     };
     // THE HEAD'S OWN MANIFEST NAMES THE RANGES: read and opened, a read of one small part.
@@ -1018,6 +1057,8 @@ fn verify_sample(
         Err(error) => {
             tracing::warn!(%error, gateway = %id, "the head's manifest would not open");
             plane.set_snapshot_owed(true);
+            plane.set_rolled(id, true);
+            pass.rolled.insert(id.to_owned());
             return Ok(());
         }
     };
@@ -1028,7 +1069,11 @@ fn verify_sample(
         keys,
         &names,
         counter,
-        if metered { SAMPLE_CHUNKS_METERED } else { SAMPLE_CHUNKS },
+        if metered {
+            SAMPLE_CHUNKS_METERED
+        } else {
+            SAMPLE_CHUNKS
+        },
     );
     pass.sampled = pass.sampled.saturating_add(found.checked);
     if let Some(error) = found.unanswered {
@@ -1040,8 +1085,14 @@ fn verify_sample(
             wrong = found.wrong.len(),
             "a gateway no longer holds what it acknowledged"
         );
-        plane_store::delete_all(store, &found.wrong).map_err(store_error)?;
+        // A DAMAGED NAME THE GATEWAY KNOWS is freed by a signed delete at once; the rest are the
+        // gateway's scrub to find, and the next walk sends them once `exists` says they are gone.
+        plane_store::delete_all(store, &found.freeable).map_err(store_error)?;
+        state.set_cursor(id, 0).map_err(plane_error)?;
         plane.set_snapshot_owed(true);
+        // The head is retaken at once and, until a current one is set, the status says so.
+        plane.set_rolled(id, true);
+        pass.rolled.insert(id.to_owned());
         pass.repairing.insert(id.to_owned());
     }
     Ok(())
@@ -1075,11 +1126,11 @@ impl Round<'_> {
             let failures = match take_snapshot(
                 self.handle,
                 self.keyring,
-                self.plane,
                 self.state,
                 self.spool,
                 &stores,
                 budget,
+                &mut pass.abandoned,
             )? {
                 // NOT ENOUGH ROOM TO COPY THE VAULT: the snapshot stays owed, the status says why
                 // (`WAIT_REASON_NO_ROOM`), and the rest of the pass runs.
@@ -1127,7 +1178,15 @@ impl Round<'_> {
             }
             // RETENTION IS JUDGED ON THE VAULT'S OWN CLOCK, the one every snapshot's
             // `taken_at_ms` is dated by.
-            settle_newest(self.state, store, self.keyring, files, now, pass)?;
+            settle_newest(
+                self.plane,
+                self.state,
+                store,
+                self.keyring,
+                files,
+                now,
+                pass,
+            )?;
             Ok(Flow::Continue)
         })?;
         Ok(stopped)
@@ -1231,12 +1290,13 @@ fn snapshot_due(state: &DeviceState, gateway_id: &str, wanted: bool, rolled: boo
 fn take_snapshot(
     handle: &Handle,
     keyring: &Keyring,
-    plane: &Plane,
     state: &DeviceState,
     spool: &Spool,
     stores: &[&GatewayStore],
     budget: u64,
+    abandoned: &mut BTreeMap<String, Name>,
 ) -> Result<Taken> {
+    let plane = handle.plane();
     // A COPY A CRASH LEFT is the only thing that can be here: passes are one at a time
     // (`Handle`'s drain guard). The guard removes the directory on every way out of this
     // function, the error and the panic included.
@@ -1262,6 +1322,16 @@ fn take_snapshot(
         }
         if plans.is_empty() {
             return Ok(failures);
+        }
+        // A SNAPSHOT SPOOLED FOR A GATEWAY AND NEVER ITS HEAD is superseded by this one.
+        for (gateway, _) in &plans {
+            if let Some(row) = state.gateway(gateway).map_err(plane_error)?
+                && let Some(previous) = row.snapshot
+                && row.head != Some(previous)
+                && previous != taken.manifest_name
+            {
+                abandoned.insert(gateway.clone(), previous);
+            }
         }
         snapshot::spool(
             &taken,
@@ -1384,6 +1454,7 @@ fn store_error_of(error: centraid_vault::backup::PlaneError) -> CoreError {
 /// Move the head to the newest snapshot spooled for `store` once nothing of it is owed there;
 /// and when it moves, let retention drop what it no longer keeps.
 fn settle_newest(
+    plane: &Plane,
     state: &DeviceState,
     store: &GatewayStore,
     keyring: &Keyring,
@@ -1393,8 +1464,10 @@ fn settle_newest(
 ) -> Result<()> {
     match snapshot::settle(state, store, &SystemClock).map_err(plane_error)? {
         Settled::HeadSet(head) => {
+            plane.set_rolled(store.gateway_id(), false);
             pass.acked_at_ms = i64::try_from(head.set_at_ms).ok();
-            retain(state, store, &keyring.backup, files, now)?;
+            let abandoned = pass.abandoned.remove(store.gateway_id());
+            retain(state, store, &keyring.backup, files, now, abandoned)?;
         }
         Settled::Nothing => {}
         Settled::Waiting { unconfirmed } => {
@@ -1440,10 +1513,11 @@ fn retain(
     keys: &BackupKeys,
     _files: &[ContentFile],
     now: u64,
+    abandoned: Option<Name>,
 ) -> Result<()> {
     let registered = store.snapshots().map_err(store_error)?;
     let decided = retention::keep(&registered, now);
-    if decided.drop.is_empty() {
+    if decided.drop.is_empty() && abandoned.is_none() {
         return Ok(());
     }
     // WHAT A DROPPED SNAPSHOT IS MADE OF — its manifest and its ranges — is garbage the moment
@@ -1472,6 +1546,16 @@ fn retain(
         }
     }
     let mut promptly: BTreeSet<Name> = BTreeSet::new();
+    // A SNAPSHOT THIS PHONE SPOOLED AND NEVER MADE A HEAD, superseded by the one just set, is
+    // garbage with the ranges only it named (nothing registered keeps it).
+    if let Some(name) = abandoned {
+        promptly.insert(name);
+        match manifest_of(store, keys, &name) {
+            Ok(manifest) => promptly.extend(manifest.range_names()),
+            Err(error @ CoreError::Unavailable { .. }) => return Err(error),
+            Err(_) => {}
+        }
+    }
     for name in &decided.drop {
         promptly.insert(*name);
         match manifest_of(store, keys, name) {
@@ -1529,9 +1613,11 @@ const WALK_PAGE: usize = 500;
 /// the same transaction. An unchanged library returns no claims: one statement, and no gateway
 /// call. A blob only lapsed entities rent leaves a `lapsed` row and is not asked about. Answers
 /// whether the walk reached the end.
+#[allow(clippy::too_many_arguments)]
 fn walk_claims(
     handle: &Handle,
     state: &DeviceState,
+    spool: &Spool,
     store: &GatewayStore,
     keys: &BackupKeys,
     feed_files: &mut BTreeMap<centraid_vault::backup::naming::PlaintextHash, ContentFile>,
@@ -1550,19 +1636,22 @@ fn walk_claims(
             return Ok(true);
         };
         let after = i64::try_from(row.cursor).unwrap_or(i64::MAX);
-        let claims = handle.with_vault(|vault| {
-            claims_after(vault, after, WALK_PAGE).map_err(plane_error)
-        })?;
+        let claims = handle
+            .with_vault(|vault| claims_after(vault, after, WALK_PAGE).map_err(plane_error))?;
         let Some(last) = claims.last().map(|claim| claim.seq) else {
             return Ok(true);
         };
         let hashes: Vec<_> = claims.iter().map(|claim| claim.hash).collect();
-        let found = handle.with_vault(|vault| content_files_for(vault, &hashes).map_err(plane_error))?;
+        let found =
+            handle.with_vault(|vault| content_files_for(vault, &hashes).map_err(plane_error))?;
         let now = now_ms();
         let mut ask: Vec<Name> = Vec::new();
         let mut rows: Vec<Outbox> = Vec::new();
-        let mut owed: Vec<(Name, centraid_vault::backup::naming::PlaintextHash, ContentFile)> =
-            Vec::new();
+        let mut owed: Vec<(
+            Name,
+            centraid_vault::backup::naming::PlaintextHash,
+            ContentFile,
+        )> = Vec::new();
         for claim in &claims {
             let names = names_of(keys, &claim.hash, claim.len);
             match found.get(&claim.hash) {
@@ -1574,7 +1663,14 @@ fn walk_claims(
                 }
                 Some(Found::Lapsed) => {
                     for name in names {
-                        let mut row = blob_row(&gateway, name, claim.hash, "application/octet-stream", false, now);
+                        let mut row = blob_row(
+                            &gateway,
+                            name,
+                            claim.hash,
+                            "application/octet-stream",
+                            false,
+                            now,
+                        );
                         row.waiting = Some(Waiting::Lapsed);
                         rows.push(row);
                     }
@@ -1599,6 +1695,12 @@ fn walk_claims(
                     feed_files.insert(hash, file);
                 } else {
                     pass.media_confirmed = pass.media_confirmed.saturating_add(1);
+                    // THE GATEWAY HOLDS IT: a file the stage door sealed for nobody is not wanted.
+                    if spool.contains(&name)
+                        && state.owed_among(&[name]).map_err(plane_error)?.is_empty()
+                    {
+                        spool.remove(&name).map_err(plane_error)?;
+                    }
                 }
             }
         }
@@ -1606,6 +1708,26 @@ fn walk_claims(
             .advance(&gateway, &rows, u64::try_from(last).unwrap_or(0))
             .map_err(plane_error)?;
     }
+}
+
+/// The length and digest of a sealed file in the spool.
+fn file_seal(path: &Path) -> std::io::Result<(u64, centraid_vault::backup::naming::Digest)> {
+    let mut file = File::open(path)?;
+    let mut hasher = blake3::Hasher::new();
+    let mut buffer = vec![0_u8; READ_CHUNK];
+    let mut len = 0_u64;
+    loop {
+        let read = file.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+        len += read as u64;
+    }
+    Ok((
+        len,
+        centraid_vault::backup::naming::Digest::from_bytes(*hasher.finalize().as_bytes()),
+    ))
 }
 
 /// An owed blob part, not sealed yet.
@@ -1658,10 +1780,18 @@ fn reexamine_lapsed(
         return Ok(());
     }
     let hashes: Vec<_> = hashes.into_iter().collect();
-    let found = handle.with_vault(|vault| content_files_for(vault, &hashes).map_err(plane_error))?;
-    let mut ask: Vec<(Name, centraid_vault::backup::naming::PlaintextHash, ContentFile)> = Vec::new();
+    let found =
+        handle.with_vault(|vault| content_files_for(vault, &hashes).map_err(plane_error))?;
+    let mut ask: Vec<(
+        Name,
+        centraid_vault::backup::naming::PlaintextHash,
+        ContentFile,
+    )> = Vec::new();
     let mut gone: Vec<Name> = Vec::new();
-    for row in lapsed.iter().filter(|row| row.waiting == Some(Waiting::Lapsed)) {
+    for row in lapsed
+        .iter()
+        .filter(|row| row.waiting == Some(Waiting::Lapsed))
+    {
         let Some(hash) = row.hash else { continue };
         match found.get(&hash) {
             Some(Found::Lapsed) => {}
@@ -1683,7 +1813,14 @@ fn reexamine_lapsed(
     let mut rows = Vec::new();
     for (name, hash, file) in ask {
         if missing.contains(&name) {
-            rows.push(blob_row(gateway, name, hash, &file.media_type, file.variant.is_some(), now));
+            rows.push(blob_row(
+                gateway,
+                name,
+                hash,
+                &file.media_type,
+                file.variant.is_some(),
+                now,
+            ));
             feed_files.insert(hash, file);
         }
     }
@@ -1724,15 +1861,30 @@ fn media_round<'a>(
     conditions: &Conditions,
     budget: u64,
     deadline: Instant,
+    reachable: &[String],
     pass: &mut Pass,
 ) -> Result<Flow> {
     let store = &feed.reached.store;
+    if spool.bytes().map_err(plane_error)? >= budget {
+        // THE SPOOL IS FULL OF PARTS A GATEWAY THAT DID NOT ANSWER STILL OWES: the room is
+        // needed more than the wait; that gateway is fed again from the vault when it returns.
+        mover::release_to_reachable(state, spool, reachable).map_err(plane_error)?;
+    }
     if !feed.examined {
         reexamine_lapsed(handle, state, store, keys, &mut feed.files, pass)?;
         feed.examined = true;
     }
     if !feed.walked {
-        feed.walked = walk_claims(handle, state, store, keys, &mut feed.files, deadline, pass)?;
+        feed.walked = walk_claims(
+            handle,
+            state,
+            spool,
+            store,
+            keys,
+            &mut feed.files,
+            deadline,
+            pass,
+        )?;
     }
     let sealed = prepare(
         feed, handle, state, spool, keys, bytes, conditions, budget, deadline, pass,
@@ -1793,8 +1945,8 @@ fn prepare<'a>(
         .into_iter()
         .collect();
     if !missing_info.is_empty() {
-        let found =
-            handle.with_vault(|vault| content_files_for(vault, &missing_info).map_err(plane_error))?;
+        let found = handle
+            .with_vault(|vault| content_files_for(vault, &missing_info).map_err(plane_error))?;
         let mut gone: Vec<Name> = Vec::new();
         for row in &unsealed {
             let Some(hash) = row.hash else { continue };
@@ -1867,6 +2019,23 @@ fn prepare<'a>(
                         state
                             .seal_outbox(gateway, &name, path, size, digest)
                             .map_err(plane_error)?;
+                    }
+                }
+                // A FILE THE STAGE DOOR SEALED BEFORE ANY ROW OWED IT sits in the spool unowned:
+                // this gateway's row takes it, sized and digested from the file itself.
+                None if spool.contains(&name) => {
+                    let path = spool.path(&name);
+                    match file_seal(&path) {
+                        Ok((size, digest)) => {
+                            state
+                                .seal_outbox(gateway, &name, &path, size, &digest)
+                                .map_err(plane_error)?;
+                        }
+                        Err(error) => {
+                            tracing::warn!(%error, "a spooled part cannot be read; it is sealed again");
+                            spool.remove(&name).map_err(plane_error)?;
+                            fresh.push((index, name));
+                        }
                     }
                 }
                 _ => fresh.push((index, name)),
@@ -2062,9 +2231,11 @@ fn seal_store_file(
     Ok(sealed)
 }
 
-/// Give the parts the stage door sealed beside a library item's stream (the root's ruling A8) to
-/// the gateways that owe them: each part some gateway owes and nobody has sealed yet is moved to its
-/// name in the spool and fills every owing row; the rest are dropped. Answers how many were kept.
+/// Keep the parts the stage door sealed beside a library item's stream (the root's ruling A8):
+/// each is moved to its name in the spool and fills every gateway's row that owes it. A part no
+/// row owes yet is kept all the same while any gateway is paired: the blob walk meets the new
+/// claim a moment later and finds the file already sealed (`prepare`). With nothing paired they
+/// are dropped. Answers how many were kept.
 ///
 /// # Errors
 /// The device state's or the spool's refusal.
@@ -2074,21 +2245,18 @@ pub fn queue_sealed(
     sealed: &sealed::FileSeal,
     _media_type: &str,
 ) -> Result<usize> {
+    let paired = !state.gateways().map_err(plane_error)?.is_empty();
     let mut count = 0;
     for part in &sealed.parts {
-        // A PART IS KEPT WHILE ANY PAIRED GATEWAY LACKS IT (#1188, B1), and is sealed once.
-        let owed = !state
-            .owed_among(&[part.name])
-            .map_err(plane_error)?
-            .is_empty();
-        let shared = state.sealed_copy(&part.name).map_err(plane_error)?.is_some()
-            && spool.contains(&part.name);
-        if !owed || shared {
+        // A PART IS SEALED ONCE: one already in the spool is not replaced.
+        if !paired || spool.contains(&part.name) {
             let _ = std::fs::remove_file(&part.path);
             continue;
         }
         let part_path = spool.adopt(&part.path, &part.name).map_err(plane_error)?;
-        adopt_sealed(state, &part.name, &part_path, part.len, &part.digest)?;
+        state
+            .seal_everywhere(&part.name, &part_path, part.len, &part.digest)
+            .map_err(plane_error)?;
         count += 1;
     }
     Ok(count)
@@ -2133,7 +2301,8 @@ pub fn handoff(
         .into_iter()
         .enumerate()
         .collect();
-    ordered.sort_by_key(|(order, gateway)| (std::cmp::Reverse(gateway.seen_ms.unwrap_or(0)), *order));
+    ordered
+        .sort_by_key(|(order, gateway)| (std::cmp::Reverse(gateway.seen_ms.unwrap_or(0)), *order));
     if ordered.is_empty() {
         return Ok(wire::HandoffResponse { parts: Vec::new() });
     }
@@ -2296,9 +2465,7 @@ fn requeue(state: &DeviceState, gateway_id: &str, name: &Name, reason: &str) -> 
     state
         .record_attempt(gateway_id, name, reason)
         .map_err(plane_error)?;
-    state
-        .unhand_many(gateway_id, &[*name])
-        .map_err(plane_error)
+    state.unhand_many(gateway_id, &[*name]).map_err(plane_error)
 }
 
 /// **Square the outbox with what a gateway holds** (`reconcile`, #1080
@@ -2382,21 +2549,21 @@ mod tests {
     #[test]
     fn a_refusal_is_classed_by_its_code_and_an_unknown_one_is_its_own_kind() {
         assert_eq!(refused_by("UNAUTHORIZED"), Refused::Token);
-        assert_eq!(refused_by("DISK_FULL"), Refused::Limit(REACH_REFUSED));
-        assert_eq!(refused_by("TOO_LARGE"), Refused::Limit(REACH_TOO_LARGE));
-        assert_eq!(refused_by("QUOTA"), Refused::Limit(REACH_REFUSED_OTHER));
+        assert_eq!(refused_by("DISK_FULL"), Refused::Limit(Reach::RefusedDisk));
+        assert_eq!(refused_by("TOO_LARGE"), Refused::Limit(Reach::RefusedLarge));
+        assert_eq!(refused_by("QUOTA"), Refused::Limit(Reach::RefusedOther));
         assert_eq!(
             refused_by("SOMETHING_NEW"),
-            Refused::Limit(REACH_REFUSED_OTHER)
+            Refused::Limit(Reach::RefusedOther)
         );
-        assert_eq!(heard_of(&Refusal::DiskFull), REACH_REFUSED);
-        assert_eq!(heard_of(&Refusal::TooLarge), REACH_TOO_LARGE);
+        assert_eq!(heard_of(&Refusal::DiskFull), Reach::RefusedDisk);
+        assert_eq!(heard_of(&Refusal::TooLarge), Reach::RefusedLarge);
         // A GATEWAY THAT KEEPS RETURNING A DAMAGED COPY stops its own pass with this refusal: it is
         // "refusing", never "no room left".
-        assert_eq!(heard_of(&Refusal::DigestMismatch), REACH_REFUSED_OTHER);
+        assert_eq!(heard_of(&Refusal::DigestMismatch), Reach::RefusedOther);
         assert_eq!(
             heard_of(&Refusal::Other("X".to_owned())),
-            REACH_REFUSED_OTHER
+            Reach::RefusedOther
         );
     }
 
@@ -2657,7 +2824,8 @@ mod tests {
             wants_snapshot: true,
             asked: false,
             ..wire::DrainRequest::default()
-        });
+        })
+        .expect("a rule");
         assert!(leaving.snapshot, "the snapshot is still taken now");
         assert!(!leaving.may_prepare(Kind::Original { video: false }));
         assert!(leaving.may_prepare(Kind::Derivative));
@@ -2666,17 +2834,18 @@ mod tests {
             wants_snapshot: true,
             asked: true,
             ..wire::DrainRequest::default()
-        });
+        })
+        .expect("a rule");
         assert!(tapped.may_prepare(Kind::Original { video: false }));
     }
 
-    /// An unspecified rule is `WIFI_ONLY`, and what a pass was told is what
-    /// a handoff reads back.
+    /// **NO RULE IS ASSUMED** (#1191): a request that names none is refused with a typed error,
+    /// and what a pass was told is what a hand-off reads back, in this core's life only.
     #[test]
-    fn the_rule_a_pass_was_told_is_remembered_for_the_handoff() {
+    fn a_request_without_a_rule_is_refused_and_the_rule_a_pass_was_told_is_remembered() {
         let dir = tempfile::tempdir().expect("a directory");
-        let ledger = Ledger::open(dir.path().join("v.backup.db")).expect("a ledger");
-        let unknown = Conditions::remembered(&ledger).expect("reads");
+        let plane = Plane::of(&dir.path().join("vault.db"));
+        let unknown = Conditions::remembered(&plane);
         assert_eq!(unknown.rule, wire::TransferRule::WifiOnly);
         assert!(unknown.metered && !unknown.charging && !unknown.exclude_videos);
         let told = Conditions::of(&wire::DrainRequest {
@@ -2685,20 +2854,20 @@ mod tests {
             charging: true,
             exclude_videos: true,
             ..wire::DrainRequest::default()
-        });
-        told.remember(&ledger).expect("remembers");
-        let back = Conditions::remembered(&ledger).expect("reads");
+        })
+        .expect("a rule");
+        plane.remember(told);
         assert_eq!(
-            back,
+            Conditions::remembered(&plane),
             Conditions {
                 asked: false,
                 snapshot: false,
                 ..told
             }
         );
-        assert_eq!(
-            Conditions::of(&wire::DrainRequest::default()).rule,
-            wire::TransferRule::WifiOnly
-        );
+        assert!(matches!(
+            Conditions::of(&wire::DrainRequest::default()),
+            Err(CoreError::InvalidRequest { .. })
+        ));
     }
 }

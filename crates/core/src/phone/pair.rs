@@ -68,9 +68,9 @@ use centraid_gateway::rules::signing::{sign_claim, sign_pair, sign_read};
 use centraid_gateway::rules::wire::{
     ClaimBody, PairKind, PairRequest, Paired, ReadBody, SecretBody,
 };
-use centraid_vault::backup::state::Gateway;
 use centraid_vault::backup::naming::Name as PlaneName;
 use centraid_vault::backup::snapshot::{History, Manifest};
+use centraid_vault::backup::state::Gateway;
 
 use super::{Keyring, Plane, now_ms, plane_error, wire_destination};
 use crate::error::{CoreError, Result};
@@ -452,7 +452,8 @@ pub fn pair(
         now,
     );
     destination.seen_ms = Some(now);
-    destination.head = head.map(|head| centraid_vault::backup::naming::Name::from_bytes(*head.as_bytes()));
+    destination.head =
+        head.map(|head| centraid_vault::backup::naming::Name::from_bytes(*head.as_bytes()));
     // A PAIRING STARTS THIS GATEWAY'S RECORD OVER (#1080, the sweep's B3 and
     // R-1080-C17). Whatever the ledger kept under this gateway's id from an
     // earlier pairing — every acknowledgement, the head this phone last set

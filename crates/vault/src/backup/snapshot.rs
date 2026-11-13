@@ -75,9 +75,9 @@ use centraid_media::sealed;
 use rusqlite::{Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
 
-use super::state::{DeviceState, Outbox, OutboxKind};
 use super::naming::{BackupKeys, Digest, Name, PlaintextHash, name};
 use super::spool::Spool;
+use super::state::{DeviceState, Outbox, OutboxKind};
 use super::store::{self, Head, Store, StoreError};
 use super::{Result, invariant};
 use crate::clock::Clock;
@@ -746,7 +746,10 @@ pub fn spool(
     };
     let union_plan = union(
         snapshot,
-        &plans.iter().map(|(_, plan)| plan.clone()).collect::<Vec<_>>(),
+        &plans
+            .iter()
+            .map(|(_, plan)| plan.clone())
+            .collect::<Vec<_>>(),
     );
     // THE GATEWAY'S SNAPSHOT IN FLIGHT is recorded first, so the pass that moves its parts, or a
     // later one, knows which manifest the head moves to.
@@ -924,10 +927,7 @@ pub fn settle(state: &DeviceState, store: &dyn Store, clock: &dyn Clock) -> Resu
         .filter(|row| {
             matches!(
                 row.kind,
-                OutboxKind::Range
-                    | OutboxKind::Leaf
-                    | OutboxKind::Manifest
-                    | OutboxKind::Directory
+                OutboxKind::Range | OutboxKind::Leaf | OutboxKind::Manifest | OutboxKind::Directory
             )
         })
         .map(|row| row.name)
@@ -938,7 +938,12 @@ pub fn settle(state: &DeviceState, store: &dyn Store, clock: &dyn Clock) -> Resu
 
     let mut prev = row.head;
     for attempt in 0..2 {
-        match store.set_head(&manifest_name, prev.as_ref(), taken_at_ms, row.snapshot_writes) {
+        match store.set_head(
+            &manifest_name,
+            prev.as_ref(),
+            taken_at_ms,
+            row.snapshot_writes,
+        ) {
             Ok(head) => {
                 // ONE STATEMENT: the head, and the generation and writes it was signed at, which
                 // the next signed record continues from (E3).
@@ -1329,7 +1334,14 @@ mod tests {
         let planned = plan(&snapshot, &store).expect("plans");
         let state = DeviceState::open(dir.path().join("vault.state.db")).expect("a device state");
         state
-            .put_gateway(&Gateway::paired("gw".to_owned(), Vec::new(), Vec::new(), "laptop".to_owned(), 1, 0))
+            .put_gateway(&Gateway::paired(
+                "gw".to_owned(),
+                Vec::new(),
+                Vec::new(),
+                "laptop".to_owned(),
+                1,
+                0,
+            ))
             .expect("pairs");
         let spool_dir = Spool::open(dir.path().join("vault.spool")).expect("a spool");
         // THE BUDGET IS ONE RANGE'S WORST CASE, not a number of bytes. A part is admitted into
@@ -1340,17 +1352,16 @@ mod tests {
         // the schema moves that, and the squash of the ladder did (a founded vault seals to
         // ~85 KB now, which a budget of 150 KiB admits whole).
         let budget = super::super::spool::sealed_bound(snapshot.ranges[0].len);
-        let spooled =
-            spool(
-                &snapshot,
-                &[("gw".to_owned(), planned)],
-                &spool_dir,
-                &state,
-                &keys,
-                budget,
-                1,
-            )
-            .expect("spools");
+        let spooled = spool(
+            &snapshot,
+            &[("gw".to_owned(), planned)],
+            &spool_dir,
+            &state,
+            &keys,
+            budget,
+            1,
+        )
+        .expect("spools");
         assert!(
             spool_dir.bytes().expect("sums") <= budget,
             "{} bytes under a budget of {budget}",
@@ -1387,7 +1398,14 @@ mod tests {
         fs::write(&snapshot.path, &bytes).expect("tampers");
         let state = DeviceState::open(dir.path().join("vault.state.db")).expect("a device state");
         state
-            .put_gateway(&Gateway::paired("gw".to_owned(), Vec::new(), Vec::new(), "laptop".to_owned(), 1, 0))
+            .put_gateway(&Gateway::paired(
+                "gw".to_owned(),
+                Vec::new(),
+                Vec::new(),
+                "laptop".to_owned(),
+                1,
+                0,
+            ))
             .expect("pairs");
         let spool_dir = Spool::open(dir.path().join("vault.spool")).expect("a spool");
         let outcome = spool(

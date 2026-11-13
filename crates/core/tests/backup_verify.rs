@@ -62,7 +62,8 @@ fn a_pass_reads_back_a_sample_and_finds_a_part_a_gateway_damaged() {
         .gateway_id;
     note(&phone, "something to back up");
     drain(&phone, at_home());
-    let before = ledger(&path).confirmed_names(&id).expect("reads");
+    let _ = (&path, &id);
+    let before = gateway.held(&vault_id());
     assert!(!before.is_empty());
 
     // EVERY OBJECT THE GATEWAY HOLDS LOSES A BIT, so any sample finds one.
@@ -73,13 +74,24 @@ fn a_pass_reads_back_a_sample_and_finds_a_part_a_gateway_damaged() {
             .corrupt(&vault_id(), &wire_name)
             .expect("damages");
     }
+    // THE GATEWAY'S OWN SCRUB NAMES WHAT IS DAMAGED, and the read-back finds the names it no
+    // longer serves.
+    gateway
+        .runtime
+        .block_on(gateway.spawned.scrub_now())
+        .expect("the scrub runs");
     drain(&phone, quietly());
-    let after = ledger(&path).confirmed_names(&id).expect("reads");
     assert!(
-        after.len() < before.len(),
-        "the damaged parts are no longer confirmed: {} of {}",
-        after.len(),
-        before.len()
+        phone.plane().snapshot_owed(),
+        "the read-back found the damage, so the snapshot is owed again"
+    );
+    // THE NEXT PASS RETAKES IT: the damaged names were freed at the gateway and are sent anew.
+    let mended = drain(&phone, at_home());
+    assert!(mended.acked_at_ms.is_some(), "{mended:?}");
+    let again = drain(&phone, quietly());
+    assert!(
+        again.acked_at_ms.is_none() && !phone.plane().snapshot_owed(),
+        "nothing found damaged the second time: {again:?}"
     );
 }
 
@@ -207,19 +219,11 @@ fn a_snapshot_dated_in_the_future_does_not_suppress_the_next_one() {
 
     // THE CLOCK WAS A YEAR AHEAD WHEN THAT SNAPSHOT WAS TAKEN.
     let year = 365 * 24 * 60 * 60 * 1_000_u64;
-    let book = ledger(&path);
-    for snapshot in book.snapshots().expect("reads") {
-        book.forget_snapshot(&snapshot.name).expect("forgets");
-        book.record_snapshot(
-            &snapshot.name,
-            snapshot.taken_at_ms + year,
-            &snapshot.manifest_json,
-        )
-        .expect("re-dates");
-        if let Some(acked) = snapshot.acked_ms {
-            book.ack_snapshot(&snapshot.name, acked)
-                .expect("acknowledged");
-        }
+    let book = state(&path);
+    for mut row in book.gateways().expect("reads") {
+        row.head_ms = row.head_ms.map(|at| at + year);
+        row.snapshot_ms = row.snapshot_ms.map(|at| at + year);
+        book.put_gateway(&row).expect("re-dates");
     }
     let next = drain(&phone, quietly());
     assert!(
@@ -243,8 +247,9 @@ fn a_gateway_that_lies_about_exists_is_found_and_then_refilled() {
         .gateway_id;
     note(&phone, "something to back up");
     drain(&phone, at_home());
-    let before = ledger(&path).confirmed_names(&id).expect("reads").len();
-    assert!(before > 0);
+    let _ = (&path, &id);
+    let before = gateway.held(&vault_id());
+    assert!(!before.is_empty());
 
     gateway.spawned.lie_about_exists(true);
     for name in gateway.held(&vault_id()) {
@@ -255,24 +260,28 @@ fn a_gateway_that_lies_about_exists_is_found_and_then_refilled() {
             .expect("the file is lost");
     }
     drain(&phone, quietly());
-    let after = ledger(&path).confirmed_names(&id).expect("reads").len();
     assert!(
-        after < before,
-        "the read-back found what exists denied: {after} of {before}"
+        phone.plane().snapshot_owed(),
+        "the read-back found what exists denied, so the snapshot is owed again"
     );
 
     gateway.spawned.lie_about_exists(false);
-    // EACH PASS READS BACK A SAMPLE, so parts it never sampled are found over later passes and
-    // sent again; a small bound is enough for a handful of parts.
+    // THE NEXT PASSES RETAKE THE SNAPSHOT against an honest gateway: every range is missing, so
+    // every range is sealed and sent again, and the head moves to a manifest the gateway holds.
     for _ in 0..40 {
         drain(&phone, at_home());
-        if ledger(&path).confirmed_names(&id).expect("reads").len() == before {
+        let head = gateway.writer(&vault_id()).1;
+        if head.is_some_and(|head| gateway.held(&vault_id()).contains(&head)) {
             break;
         }
     }
-    assert_eq!(
-        ledger(&path).confirmed_names(&id).expect("reads").len(),
-        before,
-        "an honest gateway is refilled"
+    let head = gateway.writer(&vault_id()).1.expect("a head");
+    let held = gateway.held(&vault_id());
+    assert!(held.contains(&head), "an honest gateway is refilled");
+    assert!(
+        held.len() >= before.len() - 1,
+        "every range came back: {} of {}",
+        held.len(),
+        before.len()
     );
 }

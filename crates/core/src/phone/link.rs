@@ -63,8 +63,8 @@ use centraid_gateway::rules::wire::{
     ClaimView, DeleteRequest, HeadView, HeldKind as WireHeldKind, Info, NameState as WireState,
     SetHead, UndoRequest,
 };
-use centraid_vault::backup::state::{DeviceState, Gateway, Reach};
 use centraid_vault::backup::naming::{Digest, Name};
+use centraid_vault::backup::state::{DeviceState, Gateway, Reach};
 use centraid_vault::backup::store::{
     Deleted, Head, HeldEntry, HeldKind, NameState, ObjectEntry, Outgoing, PartAnswer, Put, Refusal,
     SnapshotEntry, Store, StoreError,

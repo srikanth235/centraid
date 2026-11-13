@@ -40,8 +40,8 @@ use std::path::{Path, PathBuf};
 use centraid_api_proto::core_v1 as wire;
 use centraid_core::{Core, CoreConfig, Handle};
 use centraid_gateway::server::harness::{self, Spawned};
-use centraid_vault::backup::ledger::Ledger;
 use centraid_vault::backup::naming::names_of;
+use centraid_vault::backup::state::DeviceState;
 
 /// The BIP-39 test vector: the whole input to a restore.
 const WORDS: &str = "abandon abandon abandon abandon abandon abandon abandon abandon \
@@ -365,19 +365,14 @@ fn lose_the_phone_restore_from_the_words_and_the_old_phone_freezes() {
         names.len() > files.len(),
         "the film above 64 MiB is more than one part"
     );
-    let ledger = Ledger::open(Ledger::path_for(&old_path)).expect("the ledger opens");
-    let confirmed = ledger.confirmed_names(&gateway_id).expect("reads");
-    let unconfirmed: Vec<_> = names
-        .iter()
-        .filter(|name| !confirmed.contains(name))
-        .collect();
-    assert!(unconfirmed.is_empty(), "unconfirmed: {unconfirmed:?}");
-    let destination = ledger
-        .destination(&gateway_id)
-        .expect("reads")
-        .expect("paired");
+    let state = DeviceState::open_beside(&old_path).expect("the device state opens");
+    assert!(
+        state.outbox(&gateway_id).expect("reads").is_empty(),
+        "nothing is owed: every name was acknowledged"
+    );
+    let destination = state.gateway(&gateway_id).expect("reads").expect("paired");
     assert_eq!(destination.epoch, 1, "pairing is the first claim");
-    let token = destination.token.parse().expect("a token");
+    let token = old.plane().tokens()[&gateway_id];
     // The gateway's own name type: the same 32 bytes, declared by the protocol.
     let asked: Vec<centraid_gateway::rules::Name> = names
         .iter()
@@ -474,9 +469,9 @@ fn lose_the_phone_restore_from_the_words_and_the_old_phone_freezes() {
     };
     assert_eq!(restored.vaults.len(), 1, "{restored:?}");
     let path = PathBuf::from(&restored.vaults[0].path);
-    let claimed = Ledger::open(Ledger::path_for(&path))
-        .expect("the restored ledger opens")
-        .destination(&gateway_id)
+    let claimed = DeviceState::open_beside(&path)
+        .expect("the restored device state opens")
+        .gateway(&gateway_id)
         .expect("reads")
         .expect("the restore paired the gateway");
     assert_eq!(

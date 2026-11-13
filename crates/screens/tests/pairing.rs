@@ -650,22 +650,17 @@ fn sighting(name: &str, gw: &str, addresses: &[&str]) -> wire::GatewaySighting {
 }
 
 fn record(driver: &Driver, gateway_id: &str, addrs: &[&str]) {
-    let ledger = centraid_vault::backup::ledger::Ledger::open(
-        centraid_vault::backup::ledger::Ledger::path_for(driver.handle.path()),
-    )
-    .expect("the ledger opens");
+    let ledger = centraid_vault::backup::state::DeviceState::open_beside(driver.handle.path())
+        .expect("the device state opens");
     ledger
-        .put_destination(&centraid_vault::backup::ledger::Destination {
-            gateway_id: gateway_id.to_owned(),
-            addrs: addrs.iter().map(|a| (*a).to_owned()).collect(),
-            cert_der: vec![1, 2, 3],
-            token: "token".to_owned(),
-            epoch: 1,
-            label: "Home laptop".to_owned(),
-            paired_at_ms: 1,
-            last_seen_ms: None,
-            last_ack_ms: None,
-        })
+        .put_gateway(&centraid_vault::backup::state::Gateway::paired(
+            gateway_id.to_owned(),
+            addrs.iter().map(|a| (*a).to_owned()).collect(),
+            vec![1, 2, 3],
+            "Home laptop".to_owned(),
+            1,
+            1,
+        ))
         .expect("the destination is recorded");
 }
 

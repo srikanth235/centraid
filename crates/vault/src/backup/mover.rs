@@ -180,6 +180,44 @@ pub fn release_expired(state: &DeviceState, spool: &Spool, now_ms: u64) -> Resul
     Ok(expired.len())
 }
 
+/// End the wait for the gateways that did not answer: every sealed row owed to a gateway not in
+/// `reachable` goes, with its spool file once nobody owes it, and that gateway's blob walk starts
+/// again so what it lacks is found by `exists` when it returns. What a pass runs when the spool is
+/// at its budget and the room is needed. Answers how many rows went.
+///
+/// # Errors
+/// The state's or the spool's refusal.
+pub fn release_to_reachable(
+    state: &DeviceState,
+    spool: &Spool,
+    reachable: &[String],
+) -> Result<usize> {
+    let mut count = 0;
+    let mut names: Vec<Name> = Vec::new();
+    for gateway in state.gateways()? {
+        if reachable.contains(&gateway.gateway_id) {
+            continue;
+        }
+        let rows: Vec<Outbox> = state
+            .outbox(&gateway.gateway_id)?
+            .into_iter()
+            .filter(|row| row.part_path.is_some())
+            .collect();
+        if rows.is_empty() {
+            continue;
+        }
+        let owed: Vec<Name> = rows.iter().map(|row| row.name).collect();
+        state.done_many(&gateway.gateway_id, &owed)?;
+        if rows.iter().any(|row| row.kind == OutboxKind::Blob) {
+            state.set_cursor(&gateway.gateway_id, 0)?;
+        }
+        count += owed.len();
+        names.extend(owed);
+    }
+    free_spool(state, spool, &names)?;
+    Ok(count)
+}
+
 /// Why a part waits after `NAME_TAKEN` by other bytes: the state, recorded
 /// as its attempt.
 fn taken_reason(refusal: &Refusal) -> String {
@@ -273,8 +311,11 @@ impl Pass<'_> {
                 // reason, and goes again on a later pass (the hold ends, or the name is
                 // freed); the pass to the others goes on.
                 Err(refusal @ Refusal::NameTaken { .. }) => {
-                    self.state
-                        .record_attempt(&self.gateway, &part.name, &taken_reason(&refusal))?;
+                    self.state.record_attempt(
+                        &self.gateway,
+                        &part.name,
+                        &taken_reason(&refusal),
+                    )?;
                 }
                 Err(Refusal::DigestMismatch) => {
                     // THE PART IS SEALED AGAIN, BUT NOT FOREVER: the same part, refused as
@@ -486,10 +527,7 @@ pub fn move_queue_where(
         let stop = if bundled(part, size_of(part)) {
             let mut run: Vec<&Outbox> = Vec::new();
             let mut bytes = 0_u64;
-            while let Some(part) = queue
-                .get(next)
-                .filter(|part| bundled(part, size_of(part)))
-            {
+            while let Some(part) = queue.get(next).filter(|part| bundled(part, size_of(part))) {
                 let cost = size_of(part).saturating_add(FRAME_HEADER_BYTES);
                 if bytes.saturating_add(cost) > BUNDLE_BYTES {
                     break;
@@ -599,7 +637,14 @@ mod tests {
     }
 
     fn gateway(id: &str, label: &str) -> Gateway {
-        Gateway::paired(id.to_owned(), Vec::new(), Vec::new(), label.to_owned(), 1, 0)
+        Gateway::paired(
+            id.to_owned(),
+            Vec::new(),
+            Vec::new(),
+            label.to_owned(),
+            1,
+            0,
+        )
     }
 
     fn rig() -> Rig {
@@ -656,7 +701,9 @@ mod tests {
     }
 
     fn pair_second(rig: &Rig) {
-        rig.state.put_gateway(&gateway("gw2", "nas")).expect("pairs a second");
+        rig.state
+            .put_gateway(&gateway("gw2", "nas"))
+            .expect("pairs a second");
     }
 
     /// The gateways with a row for `name`.
@@ -775,7 +822,11 @@ mod tests {
         assert!(!rig.spool.contains(&range) && !rig.spool.contains(&photo));
         assert!(rig.state.outbox("gw2").expect("reads").is_empty());
         assert_eq!(
-            rig.state.gateway("gw2").expect("reads").expect("paired").cursor,
+            rig.state
+                .gateway("gw2")
+                .expect("reads")
+                .expect("paired")
+                .cursor,
             0,
             "a blob was let go, so the walk starts again"
         );
@@ -966,17 +1017,15 @@ mod tests {
         assert_eq!(moved.stopped, Stop::Empty);
         let mut dropped = moved.dropped.clone();
         dropped.sort();
-        let mut expected = vec![vanished];
+        let mut expected = [corrupt, vanished];
         expected.sort();
-        // THE CORRUPT FILE READS (its bytes are what they are) and the gateway refuses its
-        // digest; the vanished one never goes. Either way nothing is acknowledged.
-        assert!(moved.confirmed.is_empty() || moved.confirmed == vec![corrupt]);
-        assert!(dropped.contains(&vanished));
+        assert_eq!(dropped, expected);
+        assert!(moved.confirmed.is_empty());
+        let rows = owed(&rig);
+        assert_eq!(rows.len(), 2, "both still owed");
         assert!(
-            owed(&rig)
-                .iter()
-                .all(|row| row.name != vanished || row.part_path.is_none()),
-            "the vanished part waits to be sealed again"
+            rows.iter().all(|row| row.part_path.is_none()),
+            "and both wait to be sealed again"
         );
     }
 
@@ -1080,8 +1129,7 @@ mod tests {
             full: std::cell::Cell::new(true),
             refusal: Refusal::DiskFull,
         };
-        let refused =
-            move_queue(&rig.state, &rig.spool, &full, far(), &rig.clock).expect("a pass");
+        let refused = move_queue(&rig.state, &rig.spool, &full, far(), &rig.clock).expect("a pass");
         assert_eq!(refused.stopped, Stop::Refused(Refusal::DiskFull));
         assert!(refused.confirmed.is_empty());
         let queued = owed(&rig);
@@ -1241,7 +1289,11 @@ mod tests {
                 move_queue(&rig.state, &rig.spool, &flaky, far(), &rig.clock).expect("moves");
             let name = name.expect("queued");
             assert_eq!(moved.dropped, vec![name], "round {round}");
-            let row = rig.state.outbox_row("gw", &name).expect("asks").expect("owed");
+            let row = rig
+                .state
+                .outbox_row("gw", &name)
+                .expect("asks")
+                .expect("owed");
             assert_eq!(row.attempts, round, "round {round}");
             if round < MISMATCH_LIMIT {
                 assert_eq!(moved.stopped, Stop::Empty, "round {round}");

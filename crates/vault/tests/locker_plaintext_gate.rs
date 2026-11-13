@@ -543,10 +543,10 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
     // ever removed — AND every opened one: a range that leaked a Locker secret
     // into the plaintext it seals is a leak the moment its key is lost.
     {
-        use centraid_vault::backup::state::DeviceState;
         use centraid_vault::backup::naming::keys_from_root;
         use centraid_vault::backup::snapshot::{self, APP};
         use centraid_vault::backup::spool::{SPOOL_CEILING_BYTES, Spool};
+        use centraid_vault::backup::state::DeviceState;
         use centraid_vault::backup::store::{MemoryStore, Store as _};
 
         let vault = &sealed_vault.scratch.vault;

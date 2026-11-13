@@ -25,8 +25,8 @@ use centraid_gateway::rules::ids::VaultId;
 use centraid_gateway::rules::state::{ObjectRecord, State as _};
 use centraid_gateway::server::harness::{self, Spawned};
 use centraid_gateway::server::serve::Cable;
-use centraid_vault::backup::ledger::Ledger;
 use centraid_vault::backup::naming::Name;
+use centraid_vault::backup::state::DeviceState;
 
 /// The BIP-39 test vector: the whole input to a restore.
 pub const WORDS: &str = "abandon abandon abandon abandon abandon abandon abandon abandon \
@@ -223,12 +223,18 @@ pub fn reopen(path: &Path) -> Handle {
     handle
         .open_own_bytes(path.with_extension("bytes"))
         .expect("the store opens");
+    hand_over_tokens(&handle);
     handle
 }
 
-/// The ledger beside the vault at `path`, opened on its own connection.
-pub fn ledger(path: &Path) -> Ledger {
-    Ledger::open(Ledger::path_for(path)).expect("the ledger opens")
+/// The device state beside the vault at `path`, opened on its own connection.
+pub fn state(path: &Path) -> DeviceState {
+    DeviceState::open_beside(path).expect("the device state opens")
+}
+
+/// What `gateway_id` is still owed, by name.
+pub fn owed(path: &Path, gateway_id: &str) -> Vec<centraid_vault::backup::state::Outbox> {
+    state(path).outbox(gateway_id).expect("reads")
 }
 
 pub fn try_ask(
@@ -258,7 +264,55 @@ pub fn pair_with(handle: &Handle, payload: &str) -> wire::PairResponse {
     ) else {
         panic!("a pairing answers");
     };
+    keep_tokens_at(handle.path(), &paired.tokens);
     paired
+}
+
+/// THE SHELL'S SECRET STORE, in a test: the tokens a pairing or a restore handed back, kept
+/// per vault file (each phone has its own store) and given back to a core that is opened over
+/// the same file (`GatewayTokens`, #1191 E12). The core keeps no token of its own on disk.
+static SECRETS: std::sync::Mutex<BTreeMap<(PathBuf, String), wire::GatewayToken>> =
+    std::sync::Mutex::new(BTreeMap::new());
+
+/// Keep `tokens` for the phone whose vault file is `path`.
+pub fn keep_tokens_at(path: &Path, tokens: &[wire::GatewayToken]) {
+    let mut held = SECRETS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    for token in tokens {
+        held.insert(
+            (path.to_path_buf(), token.gateway_id.clone()),
+            token.clone(),
+        );
+    }
+}
+
+/// Keep what a restore handed back, each token for the vault file it belongs to.
+pub fn keep_restored(restored: &wire::RestoreResponse) {
+    for vault in &restored.vaults {
+        let own: Vec<wire::GatewayToken> = restored
+            .tokens
+            .iter()
+            .filter(|token| token.vault_id == vault.vault_id)
+            .cloned()
+            .collect();
+        keep_tokens_at(Path::new(&vault.path), &own);
+    }
+}
+
+/// Give a freshly opened core the tokens its phone's store holds.
+pub fn hand_over_tokens(handle: &Handle) {
+    let tokens: Vec<wire::GatewayToken> = SECRETS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .iter()
+        .filter(|((path, _), _)| path == handle.path())
+        .map(|(_, token)| token.clone())
+        .collect();
+    ask(
+        handle,
+        wire::request::Kind::GatewayTokens(wire::GatewayTokensRequest { tokens }),
+    );
 }
 
 /// Bytes nobody else has: a label's hash, stretched.
@@ -492,6 +546,7 @@ pub fn try_restore(dir: &Path, payload: &str) -> centraid_core::Result<wire::Res
         let wire::response::Kind::Restore(restored) = kind else {
             panic!("a restore answers as a restore");
         };
+        keep_restored(&restored);
         restored
     })
 }
@@ -620,19 +675,60 @@ pub fn the_os_moves_what_was_handed_off(phone: &Handle, gateway: &Gateway) -> us
     moved
 }
 
-/// The parts of the newest snapshot the gateway did not hold in `before`: what
-/// a pass that took a snapshot moved besides files (R-1080-C15 makes a pass
-/// that confirms files take one). A pass's `confirmed_parts` counts every part
-/// acknowledged, ranges and manifest included, so a test that means "each file
-/// part once" takes these off.
-pub fn snapshot_parts_after(path: &Path, before: &BTreeSet<Name>) -> u32 {
-    let book = ledger(path);
-    let snapshots = book.snapshots().expect("reads");
-    let newest = snapshots.last().expect("a snapshot was taken");
-    let manifest =
-        centraid_vault::backup::snapshot::Manifest::from_json(newest.manifest_json.as_bytes())
-            .expect("a manifest");
-    let mut names = manifest.range_names();
-    names.insert(newest.name);
-    u32::try_from(names.iter().filter(|name| !before.contains(name)).count()).expect("fits")
+/// The parts a pass that took a snapshot moved besides files (R-1080-C15 makes a pass that
+/// confirms files take one): what the gateway holds now that it did not in `before`, less the
+/// phone's file parts. A pass's `confirmed_parts` counts every part acknowledged, ranges and
+/// manifest included, so a test that means "each file part once" takes these off.
+pub fn snapshot_parts_after(gateway: &Gateway, phone: &Handle, before: &BTreeSet<Name>) -> u32 {
+    let files = file_names(phone);
+    let now = gateway.held(&vault_id());
+    u32::try_from(
+        now.iter()
+            .filter(|name| !before.contains(name) && !files.contains(name))
+            .count(),
+    )
+    .expect("fits")
+}
+
+/// The head the phone last set at `id`, from its device state.
+pub fn head_of(path: &Path, id: &str) -> Name {
+    state(path)
+        .gateway(id)
+        .expect("reads")
+        .expect("paired")
+        .head
+        .expect("a head")
+}
+
+/// A snapshot's manifest, read out of the gateway's store and opened under the test keys.
+pub fn manifest_at(gateway: &Gateway, name: &Name) -> centraid_vault::backup::snapshot::Manifest {
+    let store = gateway.spawned.shared().store();
+    let file = store.path(
+        &vault_id(),
+        &centraid_gateway::rules::ids::Name::from_bytes(*name.as_bytes()),
+    );
+    let sealed = std::fs::read(file).expect("the manifest is stored");
+    let json = centraid_media::sealed::open_whole(&keys().backup, name, &sealed)
+        .expect("the manifest opens");
+    centraid_vault::backup::snapshot::Manifest::from_json(&json).expect("a manifest")
+}
+
+/// Everything every gateway is owed.
+pub fn owed_any(path: &Path) -> Vec<centraid_vault::backup::state::Outbox> {
+    let book = state(path);
+    book.gateways()
+        .expect("reads")
+        .into_iter()
+        .flat_map(|gateway| book.outbox(&gateway.gateway_id).expect("reads"))
+        .collect()
+}
+
+/// The head the phone last set at its first gateway.
+pub fn first_head(path: &Path) -> Name {
+    state(path)
+        .gateways()
+        .expect("reads")
+        .first()
+        .and_then(|row| row.head)
+        .expect("a head")
 }

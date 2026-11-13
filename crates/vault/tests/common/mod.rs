@@ -92,7 +92,7 @@ impl Scratch {
             centraid_vault::backup::state::DeviceState::open_beside(&file)
                 .expect("the device state opens"),
         ));
-        let blobs = centraid_blobs::ContentBytes::new(store).with_ledger(Arc::clone(&ledger));
+        let blobs = centraid_blobs::ContentBytes::new(store).with_state(Arc::clone(&ledger));
         let vault = Vault::create_with(
             file,
             Box::new(Arc::clone(&clock)),

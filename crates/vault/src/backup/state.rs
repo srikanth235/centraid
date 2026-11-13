@@ -1111,9 +1111,9 @@ impl DeviceState {
             )
             .optional()?;
         let count = match before {
-            Some((attempts, Some(last))) if last == error => {
-                u32::try_from(attempts).unwrap_or(u32::MAX).saturating_add(1)
-            }
+            Some((attempts, Some(last))) if last == error => u32::try_from(attempts)
+                .unwrap_or(u32::MAX)
+                .saturating_add(1),
             _ => 1,
         };
         transaction.execute(
@@ -1376,10 +1376,15 @@ impl DeviceState {
                 }
             )));
         }
-        self.connection.execute(
-            "INSERT INTO local_bytes (hash, source, ref, edited) VALUES (?1, ?2, ?3, ?4)
-             ON CONFLICT (hash) DO UPDATE SET
-               source = excluded.source, ref = excluded.ref, edited = excluded.edited",
+        // RECORDED LAST IS RECORDED NEWEST: a hash recorded again moves to the end of the order
+        // ([`Self::locals`] reads by row id), which is how "the newer version of a ref" is told.
+        let transaction = self.connection.unchecked_transaction()?;
+        transaction.execute(
+            "DELETE FROM local_bytes WHERE hash = ?1",
+            params![local.hash.to_hex()],
+        )?;
+        transaction.execute(
+            "INSERT INTO local_bytes (hash, source, ref, edited) VALUES (?1, ?2, ?3, ?4)",
             params![
                 local.hash.to_hex(),
                 local.source.as_str(),
@@ -1387,6 +1392,7 @@ impl DeviceState {
                 i64::from(local.edited),
             ],
         )?;
+        transaction.commit()?;
         Ok(())
     }
 
@@ -1415,7 +1421,7 @@ impl DeviceState {
     pub fn locals(&self) -> Result<Vec<LocalBytes>> {
         let mut statement = self
             .connection
-            .prepare("SELECT hash, source, ref, edited FROM local_bytes ORDER BY hash")?;
+            .prepare("SELECT hash, source, ref, edited FROM local_bytes ORDER BY rowid")?;
         let rows = statement.query_map([], read_local)?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }

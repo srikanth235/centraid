@@ -31,9 +31,9 @@ use centraid_media::sealed::Assembler;
 use centraid_vault::Vault;
 use centraid_vault::backup::PlaneError;
 use centraid_vault::backup::files::{ContentFile, content_files};
-use centraid_vault::backup::state::{DeviceState, Gateway as Destination};
 use centraid_vault::backup::naming::{BackupKeys, Name, names_of};
 use centraid_vault::backup::restore::{RestoreError, fetch_and_assemble};
+use centraid_vault::backup::state::{DeviceState, Gateway as Destination};
 use centraid_vault::backup::store::{self, Store, StoreError};
 
 use super::drain::{Kind, allows_cellular};
@@ -479,11 +479,13 @@ fn files_of(
         match open_file(store, keys, file, progress) {
             Ok(()) => opened += 1,
             Err(OpenFailed::Silent) => return Ok(not_run(destination, NotRun::DidNotAnswer)),
-            Err(OpenFailed::Bad) => {
+            Err(OpenFailed::Bad(part)) => {
                 damaged += 1;
                 // A DAMAGED COPY is deleted (a damaged name is freed at once, decision 30) and the
                 // blob walk starts again, so the file is sealed and sent anew.
-                store::delete_all(store, &parts_of(keys, file)).map_err(super::store_error)?;
+                if let Some(part) = part {
+                    store::delete_all(store, &[part]).map_err(super::store_error)?;
+                }
                 ledger
                     .set_cursor(&destination.gateway_id, 0)
                     .map_err(plane_error)?;
@@ -512,7 +514,9 @@ fn files_of(
 
 enum OpenFailed {
     Silent,
-    Bad,
+    /// A part is gone, damaged or not what its name says; the part when the gateway itself
+    /// says it is damaged.
+    Bad(Option<Name>),
 }
 
 /// Fetch every part of `file` and prove the whole is the file its hash names.
@@ -529,12 +533,16 @@ fn open_file(
         match store.get(&name, &mut sealed) {
             Ok(_) => {}
             Err(error) if unreachable(&error) => return Err(OpenFailed::Silent),
-            Err(_) => return Err(OpenFailed::Bad),
+            // A PART THE GATEWAY KNOWS IS DAMAGED is freed by a signed delete at once; one it
+            // serves as sound and that will not open is the gateway's scrub to find (deleting it
+            // would only hold it, decision 30).
+            Err(StoreError::Damaged(_)) => return Err(OpenFailed::Bad(Some(name))),
+            Err(_) => return Err(OpenFailed::Bad(None)),
         }
         assembler
             .part(keys, sealed.as_slice(), &mut sink)
-            .map_err(|_| OpenFailed::Bad)?;
+            .map_err(|_| OpenFailed::Bad(None))?;
         progress.step();
     }
-    assembler.finish().map_err(|_| OpenFailed::Bad)
+    assembler.finish().map_err(|_| OpenFailed::Bad(None))
 }

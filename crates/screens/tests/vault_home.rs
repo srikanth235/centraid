@@ -300,31 +300,25 @@ fn the_backup_line_under_the_vault_is_the_backup_lanes_reading_of_it() {
 /// A gateway in the phone's ledger, as a pairing leaves it, and the announcement the core
 /// makes after a door that moves the ledger (a forget of nobody still announces).
 fn pair_in_the_ledger(phone: &mut Phone, vault: &str, acked_at_ms: Option<u64>) {
-    use centraid_vault::backup::ledger::Destination;
+    use centraid_vault::backup::state::Gateway;
     let core = phone
         .shelf
         .core_of(vault)
         .expect("the vault's core is open");
-    let ledger = core.plane().ledger().expect("the ledger opens");
+    let ledger = core.plane().state().expect("the device state opens");
     let now = u64::try_from(centraid_core::example::now_ms()).expect("a clock");
-    ledger
-        .put_destination(&Destination {
-            gateway_id: "gw-zq".to_owned(),
-            addrs: vec!["127.0.0.1:8443".to_owned()],
-            cert_der: vec![1, 2, 3],
-            token: "zq".to_owned(),
-            epoch: 1,
-            label: "Studio".to_owned(),
-            paired_at_ms: now,
-            last_seen_ms: Some(now),
-            last_ack_ms: acked_at_ms,
-        })
-        .expect("the gateway is recorded");
-    if let Some(at) = acked_at_ms {
-        ledger
-            .set_head_acked("gw-zq", at)
-            .expect("the head is acknowledged");
-    }
+    let mut row = Gateway::paired(
+        "gw-zq".to_owned(),
+        vec!["127.0.0.1:8443".to_owned()],
+        vec![1, 2, 3],
+        "Studio".to_owned(),
+        1,
+        now,
+    );
+    row.seen_ms = Some(now);
+    row.ack_ms = acked_at_ms;
+    row.head_ms = acked_at_ms;
+    ledger.put_gateway(&row).expect("the gateway is recorded");
     let _ = core.call(&wire::Request {
         kind: Some(wire::request::Kind::ForgetDestination(
             wire::ForgetDestinationRequest {

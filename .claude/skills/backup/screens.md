@@ -4,7 +4,7 @@ What the Rust screens draw, and the code that keeps them honest. The wording rul
 
 ## Where the numbers come from
 
-- Every screen reads one query, `shell.backup-status`, through `reading::load`. The core answers it from the ledger and dials nobody. A failed read is `Reading::Failed`, never an empty reading. A refresh that fails keeps what was drawn, under one sentence.
+- Every screen reads one query, `shell.backup-status`, through `reading::load`. The core answers it from the device state and dials nobody. A failed read is `Reading::Failed`, never an empty reading. A refresh that fails keeps what was drawn, under one sentence.
 - Every time that is a gateway's (acknowledgements, last answered) is the gateway's clock. The phone's clock (`now_ms`) is used only for "2 minutes ago" and for dating notices.
 - `Destination::footing` ranks a device worst-first: rolled back, refusing, too large, full, behind, current. Anything but current names the device by the label the member gave it.
 
@@ -30,7 +30,7 @@ What the Rust screens draw, and the code that keeps them honest. The wording rul
 
 ## Notices (`stale.rs`, `alerts.rs`)
 
-- `backup.alerts` is a view-less service started with the app. It re-reads the ledger on appear, lifecycle, data change and every 6 hours, and offers notices to the one notification service. A failed read leaves the last offer. A moved vault offers nothing.
+- `backup.alerts` is a view-less service started with the app. It re-reads the device state on appear, lifecycle, data change and every 6 hours, and offers notices to the one notification service. A failed read leaves the last offer. A moved vault offers nothing.
 - Notices are scheduled ahead, from the reading and the clock only. The first is due 3 days after the oldest device's last acknowledgement (or pairing, if it never had one), then at 10 days, then weekly. At most two are offered: the latest due and the next.
 - Ids are `backup-stale:<T>:<n>` for that acknowledgement `T`, so a new acknowledgement changes them all. Text claims no reason. A tap opens Backup. The Android channel is its own, `backup`.
 - No device paired, or a moved vault, means no notice.

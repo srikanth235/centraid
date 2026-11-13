@@ -61,19 +61,12 @@ fn a_pass_feeds_every_paired_gateway() {
         "nothing is left owed: {drained:?}"
     );
 
-    let book = ledger(&path);
-    let (held_one, held_two) = (
-        book.confirmed_names(&one).expect("reads"),
-        book.confirmed_names(&two).expect("reads"),
-    );
-    assert!(!held_one.is_empty());
-    assert_eq!(
-        held_one, held_two,
-        "the same names are acknowledged at both"
-    );
+    let _ = (&one, &two);
     let on_disk = |gateway: &Gateway| -> BTreeSet<Name> { gateway.held(&vault_id()) };
-    assert_eq!(on_disk(&first), held_one, "and held by the first");
-    assert_eq!(on_disk(&second), held_two, "and held by the second");
+    let (held_one, held_two) = (on_disk(&first), on_disk(&second));
+    assert!(!held_one.is_empty());
+    assert_eq!(held_one, held_two, "the same names are held at both");
+    assert!(owed_any(&path).is_empty(), "and nothing is owed to either");
     assert_eq!(
         first.writer(&vault_id()).1,
         second.writer(&vault_id()).1,
@@ -104,6 +97,14 @@ fn a_gateway_that_is_away_is_waited_for_and_fed_when_it_is_back() {
     let (one, two) = (pair_id(&phone, &first), pair_id(&phone, &second));
     originals(&phone, "a photograph while a laptop sleeps", 3, 80_000);
 
+    // SEALED OVER A METERED LINK, where nothing crosses: both gateways owe every part.
+    drain(
+        &phone,
+        wire::DrainRequest {
+            metered: true,
+            ..quietly()
+        },
+    );
     second.cable().cut();
     let drained = drain(&phone, at_home());
     assert_eq!(
@@ -111,17 +112,18 @@ fn a_gateway_that_is_away_is_waited_for_and_fed_when_it_is_back() {
         wire::DrainStop::Empty as i32,
         "{drained:?}"
     );
-    let book = ledger(&path);
-    assert!(!book.confirmed_names(&one).expect("reads").is_empty());
+    let _ = &one;
+    assert!(!first.held(&vault_id()).is_empty());
     assert!(
-        book.confirmed_names(&two).expect("reads").is_empty(),
+        second.held(&vault_id()).is_empty(),
         "the second took nothing"
     );
     // THE PARTS ARE KEPT FOR THE ONE THAT IS AWAY.
     assert!(
-        !book.queued().expect("reads").is_empty(),
-        "parts still owed to the second stay queued"
+        !owed(&path, &two).is_empty(),
+        "parts still owed to the second stay in its outbox"
     );
+    assert!(owed(&path, &one).is_empty(), "and none to the first");
     assert!(drained.pending_bytes > 0, "{drained:?}");
 
     let behind = status(&phone);
@@ -153,15 +155,8 @@ fn a_gateway_that_is_away_is_waited_for_and_fed_when_it_is_back() {
         wire::DrainStop::Empty as i32,
         "{caught_up:?}"
     );
-    let book = ledger(&path);
-    assert_eq!(
-        book.confirmed_names(&one).expect("reads"),
-        book.confirmed_names(&two).expect("reads")
-    );
-    assert!(
-        book.queued().expect("reads").is_empty(),
-        "nothing is owed any more"
-    );
+    assert_eq!(first.held(&vault_id()), second.held(&vault_id()));
+    assert!(owed_any(&path).is_empty(), "nothing is owed any more");
     assert_eq!(caught_up.pending_bytes, 0, "{caught_up:?}");
     let backed = status(&phone);
     assert_eq!(backed.content_confirmed, backed.content_total, "{backed:?}");
@@ -186,12 +181,9 @@ fn a_full_gateway_is_named_while_the_other_is_fed() {
         wire::DrainStop::Refused as i32,
         "{drained:?}"
     );
-    let book = ledger(&path);
-    assert!(
-        !book.confirmed_names(&one).expect("reads").is_empty(),
-        "the first is fed"
-    );
-    assert!(book.confirmed_names(&two).expect("reads").is_empty());
+    let _ = &one;
+    assert!(!first.held(&vault_id()).is_empty(), "the first is fed");
+    assert!(second.held(&vault_id()).is_empty());
     let behind = status(&phone);
     assert_eq!(
         row(&behind, &two).reach,
@@ -213,7 +205,7 @@ fn a_full_gateway_is_named_while_the_other_is_fed() {
     assert_eq!(moved.stopped, wire::DrainStop::Empty as i32, "{moved:?}");
     let backed = status(&phone);
     assert_eq!(backed.content_confirmed, backed.content_total, "{backed:?}");
-    assert!(ledger(&path).queued().expect("reads").is_empty());
+    assert!(owed_any(&path).is_empty());
 }
 
 /// **EACH NAME IS ASKED ONCE A PASS** (#1188, item 12). The same twelve photographs are backed
@@ -343,20 +335,17 @@ fn forgetting_the_only_gateway_leaves_nothing_queued_and_no_stale_state() {
     originals(&phone, "a photograph left in the spool", 3, 60_000);
     gateway.spawned.fill_disk(true);
     drain(&phone, at_home());
-    assert!(
-        !ledger(&path).queued().expect("reads").is_empty(),
-        "parts wait in the spool"
-    );
+    assert!(!owed_any(&path).is_empty(), "parts wait in the spool");
     assert_eq!(
         row(&status(&phone), &id).reach,
         wire::WaitReason::Refused as i32
     );
 
     forget(&phone, &id);
-    let book = ledger(&path);
+    assert!(owed_any(&path).is_empty(), "nothing is queued");
     assert!(
-        book.queued().expect("reads").is_empty(),
-        "nothing is queued"
+        state(&path).gateway(&id).expect("reads").is_none(),
+        "and the gateway's row is gone"
     );
     let spooled: u64 = std::fs::read_dir(dir.path().join("vault.spool"))
         .map(|entries| {
@@ -368,7 +357,6 @@ fn forgetting_the_only_gateway_leaves_nothing_queued_and_no_stale_state() {
         })
         .unwrap_or(0);
     assert_eq!(spooled, 0, "nothing is spooled");
-    assert!(book.meta(&format!("reach:{id}")).expect("reads").is_none());
 
     gateway.spawned.fill_disk(false);
     let again = pair_id(&phone, &gateway);
@@ -415,16 +403,25 @@ fn a_takeover_at_one_gateway_stops_the_pass_there_and_the_other_is_still_fed() {
         wire::DrainStop::Empty as i32,
         "the first gateway refused this phone: {drained:?}"
     );
-    let book = ledger(&path);
+    let book = state(&path);
     assert_eq!(
-        book.moved(&one).expect("reads"),
+        book.gateway(&one)
+            .expect("reads")
+            .expect("paired")
+            .moved_epoch,
         Some(2),
         "the first is marked"
     );
-    assert_eq!(book.moved(&two).expect("reads"), None, "the second is not");
     assert_eq!(
-        book.confirmed_names(&two).expect("reads"),
-        second.held(&vault_id()),
+        book.gateway(&two)
+            .expect("reads")
+            .expect("paired")
+            .moved_epoch,
+        None,
+        "the second is not"
+    );
+    assert!(
+        owed(&path, &two).is_empty(),
         "the second took this phone's writes"
     );
     let backed = status(&phone);

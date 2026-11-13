@@ -33,6 +33,10 @@ pub struct Sampled {
     pub checked: usize,
     /// Parts gone, damaged or not the bytes their name says.
     pub wrong: Vec<Name>,
+    /// Of those, the ones the gateway itself says are damaged: a signed delete frees them at once
+    /// (decision 30). A part it serves as sound that will not open is its scrub's to find;
+    /// deleting that would only hold it.
+    pub freeable: Vec<Name>,
     /// The gateway stopped answering part-way; the parts read before it are counted.
     pub unanswered: Option<StoreError>,
 }
@@ -40,7 +44,13 @@ pub struct Sampled {
 /// The `count` positions of `of` the draw `counter` picks for `gateway_id`, distinct and in
 /// draw order: a partial Fisher-Yates shuffle driven by BLAKE3's keyed extendable output.
 #[must_use]
-pub fn draw(keys: &BackupKeys, gateway_id: &str, counter: u64, of: usize, count: usize) -> Vec<usize> {
+pub fn draw(
+    keys: &BackupKeys,
+    gateway_id: &str,
+    counter: u64,
+    of: usize,
+    count: usize,
+) -> Vec<usize> {
     let mut hasher = blake3::Hasher::new_keyed(keys.k_name());
     hasher.update(b"centraid-sample-v1");
     hasher.update(gateway_id.as_bytes());
@@ -83,9 +93,14 @@ pub fn sample(
                     out.wrong.push(*name);
                 }
             }
-            Err(StoreError::Missing(_) | StoreError::Damaged(_)) => {
+            Err(StoreError::Missing(_)) => {
                 out.checked += 1;
                 out.wrong.push(*name);
+            }
+            Err(StoreError::Damaged(_)) => {
+                out.checked += 1;
+                out.wrong.push(*name);
+                out.freeable.push(*name);
             }
             Err(error) => {
                 out.unanswered = Some(error);
@@ -127,14 +142,26 @@ mod tests {
         distinct.sort_unstable();
         distinct.dedup();
         assert_eq!(distinct.len(), 10, "no position twice");
-        assert_ne!(one, draw(&keys, "gw", 2, 100, 10), "the counter moves the draw");
-        assert_ne!(one, draw(&keys, "other", 1, 100, 10), "the gateway moves the draw");
+        assert_ne!(
+            one,
+            draw(&keys, "gw", 2, 100, 10),
+            "the counter moves the draw"
+        );
+        assert_ne!(
+            one,
+            draw(&keys, "other", 1, 100, 10),
+            "the gateway moves the draw"
+        );
         assert_ne!(
             one,
             draw(&BackupKeys::from_root(&[6; 32]), "gw", 1, 100, 10),
             "the key moves the draw"
         );
-        assert_eq!(draw(&keys, "gw", 1, 3, 10).len(), 3, "never more than there are");
+        assert_eq!(
+            draw(&keys, "gw", 1, 3, 10).len(),
+            3,
+            "never more than there are"
+        );
     }
 
     #[test]

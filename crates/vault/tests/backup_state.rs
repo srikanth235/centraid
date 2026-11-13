@@ -214,7 +214,9 @@ fn forgetting_a_gateway_drops_its_outbox_and_nothing_else() {
 fn restore_in_place_resets_each_gateway_and_empties_the_outbox_and_keeps_local_bytes() {
     let (_dir, state) = open();
     state.put_gateway(&paired(GATEWAY, 10)).expect("one");
-    state.record_head(GATEWAY, &name(1), 9, 90, 2_000).expect("head");
+    state
+        .record_head(GATEWAY, &name(1), 9, 90, 2_000)
+        .expect("head");
     state.set_cursor(GATEWAY, 500).expect("cursor");
     state.next_sample_counter(GATEWAY).expect("a draw");
     state.set_reach(GATEWAY, Reach::Busy, 20).expect("busy");

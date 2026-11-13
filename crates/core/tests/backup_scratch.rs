@@ -78,7 +78,7 @@ fn a_second_pass_with_no_write_copies_nothing() {
 fn a_phone_with_no_room_says_so_and_catches_up_when_it_has_some() {
     let gateway = gateway();
     let dir = tempfile::tempdir().expect("a directory");
-    let path = dir.path().join("vault.db");
+    let _path = dir.path().join("vault.db");
     let phone = phone(dir.path());
     pair(&phone, &gateway);
     photos(&phone, 3);
@@ -87,11 +87,7 @@ fn a_phone_with_no_room_says_so_and_catches_up_when_it_has_some() {
     drain(&phone, at_home());
     assert_eq!(phone.copies_taken().0, 0, "no copy was started");
     nothing_in(dir.path());
-    assert_eq!(
-        ledger(&path).meta("pass.snapshot_owed").expect("reads"),
-        Some("1".to_owned()),
-        "the snapshot is still owed"
-    );
+    assert!(phone.plane().snapshot_owed(), "the snapshot is still owed");
     let stuck = status(&phone);
     assert!(
         waiting(&stuck, wire::WaitReason::NoRoom) > 0,

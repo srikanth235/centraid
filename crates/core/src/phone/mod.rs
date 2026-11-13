@@ -59,9 +59,9 @@ use centraid_gateway::rules::ids::VaultId;
 use centraid_vault::Vault;
 use centraid_vault::backup::PlaneError;
 use centraid_vault::backup::files::{ContentFile, content_files};
-use centraid_vault::backup::state::{DeviceState, Gateway, LocalSource, Reach};
 use centraid_vault::backup::naming::{BackupKeys, Name, PlaintextHash, keys_from_root};
 use centraid_vault::backup::spool::Spool;
+use centraid_vault::backup::state::{DeviceState, Gateway, LocalSource, Reach};
 use centraid_vault::backup::store::StoreError;
 
 use crate::error::{CoreError, Result};
@@ -149,6 +149,9 @@ pub struct Plane {
     conditions: std::sync::Mutex<Option<drain::Conditions>>,
     /// A snapshot the shell asked for that no pass has taken yet.
     snapshot_owed: std::sync::atomic::AtomicBool,
+    /// The gateways whose head went backwards (a restored disk), until this phone sets a
+    /// current head there. In memory: the next contact finds it again.
+    rolled: std::sync::Mutex<BTreeSet<String>>,
     /// The last snapshot could not be copied for want of room.
     no_room: std::sync::atomic::AtomicBool,
 }
@@ -166,6 +169,7 @@ impl Plane {
             tokens: std::sync::Mutex::new(link::Tokens::new()),
             conditions: std::sync::Mutex::new(None),
             snapshot_owed: std::sync::atomic::AtomicBool::new(false),
+            rolled: std::sync::Mutex::new(BTreeSet::new()),
             no_room: std::sync::atomic::AtomicBool::new(false),
         }
     }
@@ -187,14 +191,35 @@ impl Plane {
     }
 
     /// Whether a snapshot the shell asked for is still owed.
-    pub(crate) fn snapshot_owed(&self) -> bool {
-        self.snapshot_owed
-            .load(std::sync::atomic::Ordering::SeqCst)
+    #[doc(hidden)]
+    pub fn snapshot_owed(&self) -> bool {
+        self.snapshot_owed.load(std::sync::atomic::Ordering::SeqCst)
     }
 
     pub(crate) fn set_snapshot_owed(&self, owed: bool) {
         self.snapshot_owed
             .store(owed, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Note whether `gateway_id`'s head went backwards.
+    pub(crate) fn set_rolled(&self, gateway_id: &str, rolled: bool) {
+        let mut held = self
+            .rolled
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if rolled {
+            held.insert(gateway_id.to_owned());
+        } else {
+            held.remove(gateway_id);
+        }
+    }
+
+    /// Whether `gateway_id`'s head went backwards and no current one has been set.
+    pub(crate) fn rolled(&self, gateway_id: &str) -> bool {
+        self.rolled
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .contains(gateway_id)
     }
 
     /// Whether the last snapshot could not be copied for want of room.
@@ -827,8 +852,8 @@ pub(crate) fn behind_hashes(
         .filter_map(|row| row.hash)
         .collect();
     let after = i64::try_from(gateway.cursor).unwrap_or(i64::MAX);
-    for claim in
-        centraid_vault::backup::naming::claims_after(vault, after, usize::MAX >> 1).map_err(plane_error)?
+    for claim in centraid_vault::backup::naming::claims_after(vault, after, usize::MAX >> 1)
+        .map_err(plane_error)?
     {
         behind.insert(claim.hash);
     }
@@ -1078,13 +1103,8 @@ pub fn backup_status(
                 drain::Conditions::remembered(plane),
                 plane.no_room(),
             )?;
-            let held = holdings::read(
-                vault,
-                &state,
-                &files,
-                &standing.outcomes,
-                &standing.lagging,
-            )?;
+            let held =
+                holdings::read(vault, &state, &files, &standing.outcomes, &standing.lagging)?;
             (standing, held)
         }
         _ => (Standing::default(), holdings::Held::default()),
@@ -1142,7 +1162,7 @@ pub fn backup_status(
                     .collect()
             })
             .unwrap_or_default();
-        row.rolled_back = false;
+        row.rolled_back = plane.rolled(&destination.gateway_id);
         let reach = drain::gateway_reach(&state, &destination.gateway_id)?
             .unwrap_or(wire::WaitReason::Unspecified);
         row.reach = reach as i32;
@@ -1360,8 +1380,9 @@ pub fn library_assets(
     if wanted.is_empty() {
         return Ok(wire::LibraryAssetsResponse::default());
     }
-    // ONE ITEM STAGED UNDER EACH REF: a ref an edit re-staged holds two hashes; the device state
-    // keeps no time for them, so the greater hash answers (deterministic).
+    // THE NEWEST ITEM STAGED UNDER EACH REF: a ref an edit re-staged holds two
+    // hashes, and the edit's source is the version before it, which is the
+    // newer of the two at the moment the shell asks (it asks before staging).
     let mut newest: BTreeMap<&str, centraid_vault::backup::state::LocalBytes> = BTreeMap::new();
     let locals = plane.state()?.locals().map_err(plane_error)?;
     for local in locals {
@@ -1375,12 +1396,8 @@ pub fn library_assets(
         else {
             continue;
         };
-        let newer = newest.get(os_ref).is_none_or(|held| {
-            local.hash.to_hex() > held.hash.to_hex()
-        });
-        if newer {
-            newest.insert(os_ref, local);
-        }
+        // THE LAST RECORDED IS THE NEWEST (`DeviceState::locals` reads in recording order).
+        newest.insert(os_ref, local);
     }
     let hashes: Vec<String> = newest.values().map(|local| local.hash.to_hex()).collect();
     let live: BTreeMap<String, String> =
