@@ -45,6 +45,7 @@ pub mod model;
 pub mod ontology_doc;
 pub mod originals;
 pub mod page;
+pub mod pagesource;
 pub mod plans;
 pub mod portable;
 pub mod roster;
