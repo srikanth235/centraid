@@ -111,9 +111,10 @@ impl Ctx {
     }
 }
 
-/// Titles already used in one kind; makes the next one, shared or twinned on the settings' say.
+/// Titles already used in one kind (and each one normalized, kept beside it so a draw normalizes
+/// only the new title); makes the next one, shared or twinned on the settings' say.
 #[derive(Default)]
-struct Titles(Vec<String>);
+struct Titles(Vec<String>, Vec<String>);
 
 impl Titles {
     fn make(&mut self, ctx: &mut Ctx, mut draw: impl FnMut(&mut Rng) -> String) -> String {
@@ -127,9 +128,9 @@ impl Titles {
             // not the template pool, decide how ambiguous a world is
             let mut fresh = draw(&mut ctx.rng);
             for _ in 0..12 {
-                let taken = self.0.iter().any(|used| {
-                    normalize(used) == normalize(&fresh)
-                        || crate::text::near_duplicates(used, &fresh)
+                let candidate = normalize(&fresh);
+                let taken = self.1.iter().any(|used| {
+                    *used == candidate || crate::text::near_duplicates_normalized(used, &candidate)
                 });
                 if !taken {
                     break;
@@ -138,6 +139,7 @@ impl Titles {
             }
             fresh
         };
+        self.1.push(normalize(&title));
         self.0.push(title.clone());
         title
     }
@@ -254,6 +256,9 @@ fn people(ctx: &mut Ctx, root: &Rng) -> Vec<Value> {
     let count = ctx.count(14, 26, ctx.profile.social);
     let mut rows = Vec::new();
     let mut names: Vec<(String, String)> = Vec::new();
+    // the same names, for the draw below: the first names taken and each full name normalized once
+    let mut firsts: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut normalized: Vec<String> = Vec::new();
     for index in 0..count {
         let (first, last) = if !names.is_empty() && ctx.rng.chance(ctx.settings.shared_names) {
             // a spoken "Neha" now reaches two people
@@ -281,13 +286,14 @@ fn people(ctx: &mut Ctx, root: &Rng) -> Vec<Value> {
                     ctx.rng.pick(pools::FIRST).to_string(),
                     ctx.rng.pick(pools::LAST).to_string(),
                 );
-                let firsts_taken = names.iter().any(|(f, _)| *f == pair.0);
-                let near = names.iter().any(|(f, l)| {
-                    crate::text::near_duplicates(
-                        &format!("{f} {l}"),
-                        &format!("{} {}", pair.0, pair.1),
-                    )
-                });
+                let firsts_taken = firsts.contains(&pair.0);
+                // a taken first name settles the draw, so the costlier near check is for the rest
+                let near = !firsts_taken && {
+                    let candidate = normalize(&format!("{} {}", pair.0, pair.1));
+                    normalized
+                        .iter()
+                        .any(|n| crate::text::near_duplicates_normalized(n, &candidate))
+                };
                 // a very large vault has more people than the pool has first names: after a while a first name repeats
                 if (!firsts_taken && !near) || tries > 400 {
                     break;
@@ -295,6 +301,8 @@ fn people(ctx: &mut Ctx, root: &Rng) -> Vec<Value> {
             }
             pair
         };
+        firsts.insert(first.clone());
+        normalized.push(normalize(&format!("{first} {last}")));
         names.push((first.clone(), last.clone()));
         let mut row = Map::new();
         put(&mut row, "key", format!("p{index}"));
@@ -480,9 +488,15 @@ fn tasks(ctx: &mut Ctx, root: &Rng, people: &[(String, String)], lists: &[String
             .get("parent")
             .and_then(Value::as_str)
             .is_some_and(|parent| {
-                rows.iter().any(|r| {
-                    r["key"] == parent && (r.get("trashed").is_some() || r.get("status").is_some())
-                })
+                // a task's key is `t<position>`, so its parent is found by position, not by scan
+                parent
+                    .strip_prefix('t')
+                    .and_then(|n| n.parse::<usize>().ok())
+                    .and_then(|n| rows.get(n))
+                    .is_some_and(|r: &Value| {
+                        r["key"] == parent
+                            && (r.get("trashed").is_some() || r.get("status").is_some())
+                    })
             });
         let past = due.is_some_and(|d| d < ctx.today);
         if !parent_touched {
