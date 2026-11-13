@@ -67,7 +67,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 use centraid_api_proto::core_v1 as wire;
@@ -76,13 +76,14 @@ use centraid_vault::backup::files::{ContentFile, content_files};
 use centraid_vault::backup::mover::{self, Stop};
 use centraid_vault::backup::naming::{BackupKeys, Name, name as part_name, names_of, part_count};
 use centraid_vault::backup::retention;
-use centraid_vault::backup::snapshot::{self, Manifest, Settled};
+use centraid_vault::backup::snapshot::{self, Manifest, RangeSealer, Settled};
 use centraid_vault::backup::spool::Spool;
 use centraid_vault::backup::state::{
     DeviceState, Gateway, LocalSource, Outbox, OutboxKind, Reach, Waiting,
 };
 use centraid_vault::backup::store::{self as plane_store, Refusal, Store, StoreError};
 use centraid_vault::clock::SystemClock;
+use centraid_vault::pagesource;
 
 use super::link::{self, GatewayStore, Reached};
 use super::{Keyring, Plane, now_ms, plane_error, row_backed_up, store_error};
@@ -1164,10 +1165,11 @@ impl Round<'_> {
                 budget,
                 &mut pass.abandoned,
             )? {
-                // NOT ENOUGH ROOM TO COPY THE VAULT: the snapshot stays owed, the status says why
+                // NOT ENOUGH ROOM TO SPOOL THE SNAPSHOT: it stays owed, the status says why
                 // (`WAIT_REASON_NO_ROOM`), and the rest of the pass runs.
                 Taken::NoRoom => {
                     self.plane.set_no_room(true);
+                    self.plane.set_snapshot_owed(true);
                     Vec::new()
                 }
                 Taken::Done(failures) => {
@@ -1311,11 +1313,52 @@ fn snapshot_due(state: &DeviceState, gateway_id: &str, wanted: bool, rolled: boo
     Ok(gateway.head_ms.is_none_or(|at| !recent(now, at)))
 }
 
-/// Copy the vault, describe it, ask every gateway what it holds of it, and spool what each
-/// lacks: a part is sealed once and owed to each gateway that lacks it. The vault is held to
-/// read where the copy comes from and not for the copy, which a reader of its own makes in
-/// steps; the copy is deleted the moment the last range is spooled. What the new snapshot
-/// supersedes, and no other snapshot needs, leaves the outbox.
+/// The names the newest snapshot gave each range, as far as every gateway of the pass still holds
+/// them: what the walk may leave unsealed. Nothing known (no head, a manifest that will not open,
+/// a gateway that will not answer) is an empty answer, and then every range is sealed.
+fn known_ranges(
+    state: &DeviceState,
+    keyring: &Keyring,
+    stores: &[&GatewayStore],
+) -> Vec<Option<Name>> {
+    let mut newest: Option<(u64, &GatewayStore, Name)> = None;
+    for store in stores {
+        let Ok(Some(row)) = state.gateway(store.gateway_id()) else {
+            continue;
+        };
+        let Some(head) = row.head else { continue };
+        let at = row.head_ms.unwrap_or(0);
+        if newest.is_none_or(|(held, ..)| at > held) {
+            newest = Some((at, store, head));
+        }
+    }
+    let Some((_, source, head)) = newest else {
+        return Vec::new();
+    };
+    let Ok(manifest) = manifest_of(source, &keyring.backup, &head) else {
+        return Vec::new();
+    };
+    let names: Vec<Name> = manifest.range_names().into_iter().collect();
+    let mut gone = BTreeSet::new();
+    for store in stores {
+        match centraid_vault::backup::store::missing(*store, &names) {
+            Ok(missing) => gone.extend(missing),
+            Err(_) => return Vec::new(),
+        }
+    }
+    manifest
+        .ranges
+        .iter()
+        .map(|range| (!gone.contains(&range.name)).then_some(range.name))
+        .collect()
+}
+
+/// Read the vault under one pin, sealing the ranges the newest snapshot did not name into the
+/// spool as they are read; ask every gateway what it holds of those; and owe each what it lacks:
+/// a part is sealed once and owed to each gateway that lacks it. **No copy of the vault is
+/// written** and the writer is not held: the pin lives inside [`snapshot::capture_at`] and ends
+/// before a gateway is asked anything. What the new snapshot supersedes, and no other snapshot
+/// needs, leaves the outbox.
 ///
 /// Answers the gateways whose own questions failed (by id), which the caller takes out of the
 /// pass; the snapshot is spooled for the rest.
@@ -1328,112 +1371,98 @@ fn take_snapshot(
     budget: u64,
     abandoned: &mut BTreeMap<String, Name>,
 ) -> Result<Taken> {
-    let plane = handle.plane();
-    // A COPY A CRASH LEFT is the only thing that can be here: passes are one at a time
-    // (`Handle`'s drain guard). The guard removes the directory on every way out of this
-    // function, the error and the panic included.
-    let scratch = Scratch::begin(plane.scratch_dir());
-    // THE VAULT IS HELD FOR THIS READ ALONE; the copy runs on a reader of its own, in steps.
-    let source = handle.with_vault(|vault| snapshot::source(vault).map_err(plane_error))?;
-    if plane.free_bytes() < super::check::scratch_budget(source.len) {
+    // WHAT THE LAST SNAPSHOT NAMED comes from the gateways, before the pin: a pin never spans a
+    // gateway call.
+    let known = known_ranges(state, keyring, stores);
+    let (path, taken_at_ms) = handle.with_vault(|vault| {
+        Ok((
+            vault.path().to_path_buf(),
+            u64::try_from(vault.clock().now_ms()).unwrap_or(0),
+        ))
+    })?;
+    let mut sealer = RangeSealer::new(spool, &keyring.backup, budget).map_err(plane_error)?;
+    debug_assert_eq!(pagesource::live_pins(), 0);
+    let taken = snapshot::capture_at(
+        &path,
+        taken_at_ms,
+        &keyring.backup,
+        &keyring.vault_hex(),
+        APP,
+        &|i| {
+            known
+                .get(usize::try_from(i).unwrap_or(usize::MAX))
+                .copied()
+                .flatten()
+        },
+        &mut sealer,
+    )
+    .map_err(plane_error)?;
+    debug_assert_eq!(pagesource::live_pins(), 0, "no pin outlives the walk");
+    handle.note_walk(taken.sealed.names.len() as u64);
+
+    let mut plans: Vec<(String, snapshot::Plan)> = Vec::with_capacity(stores.len());
+    let mut failures = Vec::new();
+    for store in stores {
+        match snapshot::plan(&taken, *store) {
+            Ok(planned) => plans.push((store.gateway_id().to_owned(), planned)),
+            Err(error) => failures.push((store.gateway_id().to_owned(), store_error_of(error))),
+        }
+    }
+    if plans.is_empty() {
+        // NOBODY TO OWE: what the walk sealed has no row and goes with the next sweep.
+        return Ok(Taken::Done(failures));
+    }
+    // A SNAPSHOT SPOOLED FOR A GATEWAY AND NEVER ITS HEAD is superseded by this one.
+    for (gateway, _) in &plans {
+        if let Some(row) = state.gateway(gateway).map_err(plane_error)?
+            && let Some(previous) = row.snapshot
+            && row.head != Some(previous)
+            && previous != taken.manifest_name
+        {
+            abandoned.insert(gateway.clone(), previous);
+        }
+    }
+    let spooled = snapshot::spool(
+        &taken,
+        &plans,
+        spool,
+        state,
+        &keyring.backup,
+        budget,
+        now_ms(),
+    )
+    .map_err(plane_error)?;
+    // WHAT THE NEWER SNAPSHOT SUPERSEDES IS NOT SENT: a gateway still behind is brought to
+    // the new snapshot, never walked through the old ones.
+    let mut keep = taken.manifest.range_names();
+    keep.insert(taken.manifest_name);
+    for (gateway, _) in &plans {
+        let stale: Vec<Name> = state
+            .outbox(gateway)
+            .map_err(plane_error)?
+            .into_iter()
+            .filter(|row| {
+                matches!(row.kind, OutboxKind::Range | OutboxKind::Manifest)
+                    && !keep.contains(&row.name)
+            })
+            .map(|row| row.name)
+            .collect();
+        mover::release_many(state, spool, gateway, &stale, false).map_err(plane_error)?;
+    }
+    // THE SPOOL COULD NOT TAKE THE WHOLE SNAPSHOT because the phone's free space, and not the
+    // spool's own ceiling, set its budget: the snapshot stays owed and the status says why.
+    if !spooled.deferred.is_empty() && handle.plane().room_limited() {
         return Ok(Taken::NoRoom);
     }
-    let (copied, stats) =
-        snapshot::copy_from(&source, scratch.path(), &mut |_| Ok(())).map_err(plane_error)?;
-    handle.note_copy(stats.pages);
-    let outcome = (|| -> Result<Vec<(String, CoreError)>> {
-        let taken = snapshot::describe(&copied, &keyring.backup, &keyring.vault_hex(), APP)
-            .map_err(plane_error)?;
-        let mut plans: Vec<(String, snapshot::Plan)> = Vec::with_capacity(stores.len());
-        let mut failures = Vec::new();
-        for store in stores {
-            match snapshot::plan(&taken, *store) {
-                Ok(planned) => plans.push((store.gateway_id().to_owned(), planned)),
-                Err(error) => failures.push((store.gateway_id().to_owned(), store_error_of(error))),
-            }
-        }
-        if plans.is_empty() {
-            return Ok(failures);
-        }
-        // A SNAPSHOT SPOOLED FOR A GATEWAY AND NEVER ITS HEAD is superseded by this one.
-        for (gateway, _) in &plans {
-            if let Some(row) = state.gateway(gateway).map_err(plane_error)?
-                && let Some(previous) = row.snapshot
-                && row.head != Some(previous)
-                && previous != taken.manifest_name
-            {
-                abandoned.insert(gateway.clone(), previous);
-            }
-        }
-        snapshot::spool(
-            &taken,
-            &plans,
-            spool,
-            state,
-            &keyring.backup,
-            budget,
-            now_ms(),
-        )
-        .map_err(plane_error)?;
-        // THE COPY HOLDS THE VAULT IN THE CLEAR: it goes the moment the last range is spooled.
-        scratch.clear();
-        // WHAT THE NEWER SNAPSHOT SUPERSEDES IS NOT SENT: a gateway still behind is brought to
-        // the new snapshot, never walked through the old ones.
-        let mut keep = taken.manifest.range_names();
-        keep.insert(taken.manifest_name);
-        for (gateway, _) in &plans {
-            let stale: Vec<Name> = state
-                .outbox(gateway)
-                .map_err(plane_error)?
-                .into_iter()
-                .filter(|row| {
-                    matches!(row.kind, OutboxKind::Range | OutboxKind::Manifest)
-                        && !keep.contains(&row.name)
-                })
-                .map(|row| row.name)
-                .collect();
-            mover::release_many(state, spool, gateway, &stale, false).map_err(plane_error)?;
-        }
-        Ok(failures)
-    })();
-    scratch.clear();
-    outcome.map(Taken::Done)
+    Ok(Taken::Done(failures))
 }
 
 /// What a pass found when it came to take a snapshot.
 enum Taken {
     /// Taken and spooled; the gateways whose own questions failed, by id.
     Done(Vec<(String, CoreError)>),
-    /// This phone has too little free space to copy its vault.
+    /// This phone has too little free space to spool its snapshot.
     NoRoom,
-}
-
-/// **THE SCRATCH COPY'S KEEPER.** The directory goes when this is dropped, so no way out of a pass —
-/// an error, a panic, an early return — leaves the vault in the clear on disk; a crash is the one
-/// way left, and the next core open removes what it left (`Plane::spool`).
-pub(super) struct Scratch(PathBuf);
-
-impl Scratch {
-    /// Clear whatever is at `dir` and keep it.
-    pub(super) fn begin(dir: PathBuf) -> Self {
-        let _ = std::fs::remove_dir_all(&dir);
-        Self(dir)
-    }
-
-    pub(super) fn path(&self) -> &Path {
-        &self.0
-    }
-
-    /// Remove the directory now.
-    pub(super) fn clear(&self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        self.clear();
-    }
 }
 
 /// Whether the vault shows what the newest snapshot was taken from and every gateway in the pass
@@ -2613,57 +2642,6 @@ mod tests {
     }
 
     use super::*;
-
-    fn plant(dir: &Path) {
-        std::fs::create_dir_all(dir).expect("makes");
-        std::fs::write(dir.join("snapshot-1-a.db"), b"the vault in the clear").expect("writes");
-    }
-
-    /// **THE SCRATCH COPY HAS NO WAY OUT THAT KEEPS IT**: normal, early error and panic each
-    /// leave the directory gone; a crash is the next open's (`backup_scratch.rs`).
-    #[test]
-    fn the_scratch_copy_goes_on_every_way_out_of_a_pass() {
-        let root = tempfile::tempdir().expect("a directory");
-        let dir = root.path().join("vault.scratch");
-
-        {
-            let _kept = Scratch::begin(dir.clone());
-            plant(&dir);
-            assert!(dir.exists());
-        }
-        assert!(!dir.exists(), "the end of the pass");
-
-        let failing = || -> Result<()> {
-            let _kept = Scratch::begin(dir.clone());
-            plant(&dir);
-            Err(CoreError::Invariant {
-                context: "the spool refused".to_owned(),
-            })
-        };
-        assert!(failing().is_err());
-        assert!(!dir.exists(), "an error out of the pass");
-
-        let panicked = std::panic::catch_unwind(|| {
-            let _kept = Scratch::begin(dir.clone());
-            plant(&dir);
-            panic!("the pass died");
-        });
-        assert!(panicked.is_err());
-        assert!(!dir.exists(), "a panic out of the pass");
-
-        let kept = Scratch::begin(dir.clone());
-        plant(&dir);
-        kept.clear();
-        assert!(!dir.exists(), "the moment the last range is spooled");
-
-        plant(&dir);
-        let swept = Scratch::begin(dir.clone());
-        assert!(
-            !dir.exists(),
-            "what a crash left is cleared when a pass begins"
-        );
-        drop(swept);
-    }
 
     const RULES: [wire::TransferRule; 3] = [
         wire::TransferRule::WifiOnly,

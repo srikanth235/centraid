@@ -3122,28 +3122,36 @@ pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 9] = [
         ],
     ),
     (
-        "a backup never holds the vault's writer for a copy, and the copy goes once spooled",
+        "a backup never holds the vault's writer and writes no copy of the vault, and a damaged vault is not backed up",
         &[
             (
                 "crates/vault/src/backup/snapshot.rs",
-                "a_commit_between_steps_is_not_blocked_and_is_in_the_next_copy",
+                "no_snapshot_is_taken_inside_a_commit",
+            ),
+            (
+                "crates/vault/tests/backup_snapshot.rs",
+                "a_snapshot_taken_while_another_thread_commits_is_exactly_a_committed_state",
+            ),
+            (
+                "crates/vault/tests/backup_snapshot.rs",
+                "the_quick_check_runs_before_the_head_is_signed",
             ),
             (
                 "crates/core/tests/backup_scratch.rs",
-                "a_commit_lands_between_steps_of_a_copy_a_pass_would_take",
+                "a_pass_writes_no_plaintext_copy_of_the_vault",
+            ),
+            (
+                "crates/core/tests/backup_scratch.rs",
+                "a_damaged_page_stops_a_backup_pass",
             ),
             (
                 "crates/core/tests/backup_scratch.rs",
                 "a_copy_a_crash_left_is_gone_at_the_next_open",
             ),
-            (
-                "crates/core/src/phone/drain.rs",
-                "the_scratch_copy_goes_on_every_way_out_of_a_pass",
-            ),
         ],
     ),
     (
-        "a phone with no room says so, and an unchanged vault is not copied again",
+        "a phone with no room says so, and an unchanged vault is not walked again",
         &[
             (
                 "crates/core/tests/backup_scratch.rs",
@@ -3151,7 +3159,7 @@ pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 9] = [
             ),
             (
                 "crates/core/tests/backup_scratch.rs",
-                "a_second_pass_with_no_write_copies_nothing",
+                "a_second_pass_with_no_write_walks_nothing",
             ),
         ],
     ),

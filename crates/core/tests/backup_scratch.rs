@@ -1,10 +1,14 @@
-//! THE SNAPSHOT'S COPY OF THE VAULT (#1188, design 6): taken without holding the vault, kept
-//! only as long as it is needed, never copied when nothing changed, and refused with a reason
-//! when the phone has no room. Every assertion is a count or a file that is there or is not.
+//! THE SNAPSHOT READS THE VAULT UNDER ONE PIN AND WRITES NO COPY OF IT (#1191, B11): taken
+//! without holding the vault, sealed as it is read, never walked again when nothing changed,
+//! refused with a reason when the phone has no room, and refused outright over a damaged page.
+//! Every assertion is a count or a file that is there or is not.
 
 mod common;
 
+use std::collections::BTreeSet;
+
 use centraid_api_proto::core_v1 as wire;
+use centraid_vault::pagesource::{self, PinnedPages};
 use common::*;
 
 fn photos(handle: &centraid_core::Handle, count: usize) {
@@ -27,23 +31,78 @@ fn nothing_in(dir: &std::path::Path) {
     );
 }
 
-/// **A PASS LEAVES NO COPY BEHIND**, whatever it did.
-#[test]
-fn a_pass_leaves_no_copy_of_the_vault() {
-    let gateway = gateway();
-    let dir = tempfile::tempdir().expect("a directory");
-    let phone = phone(dir.path());
-    pair(&phone, &gateway);
-    photos(&phone, 3);
-    drain(&phone, at_home());
-    assert_eq!(phone.copies_taken().0, 1, "one pass, one copy");
-    nothing_in(dir.path());
+/// Every file under `dir` except the vault's own three, with its bytes.
+fn others(dir: &std::path::Path) -> Vec<(std::path::PathBuf, Vec<u8>)> {
+    let mut out = Vec::new();
+    let mut pending = vec![dir.to_path_buf()];
+    while let Some(next) = pending.pop() {
+        for entry in std::fs::read_dir(&next).expect("lists").flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                pending.push(path);
+                continue;
+            }
+            let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
+            if matches!(
+                name.as_deref(),
+                Some("vault.db" | "vault.db-wal" | "vault.db-shm")
+            ) {
+                continue;
+            }
+            out.push((path.clone(), std::fs::read(&path).unwrap_or_default()));
+        }
+    }
+    out
 }
 
-/// **A VAULT THAT HAS NOT CHANGED IS NOT COPIED AGAIN**: two passes with no write between them
-/// copy zero pages on the second, though the member asked for a snapshot both times.
+/// **A PASS WRITES NO PLAINTEXT COPY OF THE VAULT** (V21, `no_plaintext_vault_copy_on_disk`
+/// against the real pass, not only the reader): after a pass that sealed the whole vault, no
+/// file beside the vault's own three holds a page of it, and no scratch directory exists.
 #[test]
-fn a_second_pass_with_no_write_copies_nothing() {
+fn a_pass_writes_no_plaintext_copy_of_the_vault() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    pair(&phone, &gateway);
+    photos(&phone, 3);
+    let path = dir.path().join("vault.db");
+    let (page_size, pages): (usize, BTreeSet<[u8; 32]>) = {
+        let mut pinned = PinnedPages::begin(&path).expect("a pin");
+        let page_size = usize::try_from(pinned.page_size()).expect("a size");
+        let mut set = BTreeSet::new();
+        for index in 0..pinned.range_count() {
+            for page in pinned.range(index).expect("a range").chunks(page_size) {
+                if page.iter().any(|byte| *byte != 0) {
+                    set.insert(*blake3::hash(page).as_bytes());
+                }
+            }
+        }
+        pinned.end().expect("ends");
+        (page_size, set)
+    };
+    assert!(
+        pages.len() > 16,
+        "a founded vault with photographs is many pages"
+    );
+    drain(&phone, at_home());
+    assert_eq!(phone.walks_taken().0, 1, "one pass, one walk");
+    assert_eq!(pagesource::live_pins(), 0, "no pin outlives the pass");
+    nothing_in(dir.path());
+    for (file, bytes) in others(dir.path()) {
+        for page in bytes.chunks(page_size).filter(|p| p.len() == page_size) {
+            assert!(
+                !pages.contains(blake3::hash(page).as_bytes()),
+                "{} holds a page of the vault in the clear",
+                file.display()
+            );
+        }
+    }
+}
+
+/// **A VAULT THAT HAS NOT CHANGED IS NOT WALKED AGAIN**: two passes with no write between them
+/// walk nothing on the second, though the member asked for a snapshot both times.
+#[test]
+fn a_second_pass_with_no_write_walks_nothing() {
     let gateway = gateway();
     let dir = tempfile::tempdir().expect("a directory");
     let phone = phone(dir.path());
@@ -51,41 +110,51 @@ fn a_second_pass_with_no_write_copies_nothing() {
     photos(&phone, 3);
     drain(&phone, at_home());
     drain(&phone, at_home());
-    let (copies, pages) = phone.copies_taken();
-    assert!(copies >= 1 && pages > 0);
-    let after_settling = phone.copies_taken();
+    let (walks, sealed) = phone.walks_taken();
+    assert!(walks >= 1 && sealed > 0);
+    let after_settling = phone.walks_taken();
 
     let again = drain(&phone, at_home());
     assert_eq!(
-        phone.copies_taken(),
+        phone.walks_taken(),
         after_settling,
-        "an unchanged vault, held whole, is not copied: {again:?}"
+        "an unchanged vault, held whole, is not walked: {again:?}"
     );
     nothing_in(dir.path());
 
-    // A WRITE MAKES THE NEXT PASS COPY AGAIN.
+    // A WRITE MAKES THE NEXT PASS WALK AGAIN, AND SEAL ONLY WHAT CHANGED.
     photos_from(&phone, 1000, 1);
     drain(&phone, at_home());
+    let (walks_now, sealed_now) = phone.walks_taken();
+    assert!(walks_now > after_settling.0, "the write is owed");
     assert!(
-        phone.copies_taken().0 > after_settling.0,
-        "the write is owed"
+        sealed_now - after_settling.1 < sealed,
+        "one write seals fewer ranges ({}) than the whole vault ({sealed})",
+        sealed_now - after_settling.1
     );
 }
 
 /// **A PHONE WITH NO ROOM SAYS SO, AND LEAVES THE SNAPSHOT OWED.** The reason is a status line,
-/// not an empty screen; room mended, the next pass takes the snapshot and the reason goes.
+/// not an empty screen; the spool holds no more than its budget; room mended, the next pass takes
+/// the snapshot and the reason goes.
 #[test]
 fn a_phone_with_no_room_says_so_and_catches_up_when_it_has_some() {
     let gateway = gateway();
     let dir = tempfile::tempdir().expect("a directory");
-    let _path = dir.path().join("vault.db");
     let phone = phone(dir.path());
     pair(&phone, &gateway);
     photos(&phone, 3);
 
-    phone.pretend_free_bytes(Some(1024 * 1024));
+    phone.pretend_free_bytes(Some(64 * 1024));
     drain(&phone, at_home());
-    assert_eq!(phone.copies_taken().0, 0, "no copy was started");
+    let spool =
+        centraid_vault::backup::spool::Spool::open(phone.plane().spool_dir()).expect("the spool");
+    assert!(
+        spool.bytes().expect("sums")
+            <= centraid_vault::backup::spool::Spool::budget(64 * 1024)
+                .max(centraid_vault::backup::spool::sealed_bound(64 * 1024)),
+        "the spool held no more than its budget"
+    );
     nothing_in(dir.path());
     assert!(phone.plane().snapshot_owed(), "the snapshot is still owed");
     let stuck = status(&phone);
@@ -97,7 +166,6 @@ fn a_phone_with_no_room_says_so_and_catches_up_when_it_has_some() {
 
     phone.pretend_free_bytes(None);
     drain(&phone, at_home());
-    assert_eq!(phone.copies_taken().0, 1);
     let mended = status(&phone);
     assert_eq!(
         waiting(&mended, wire::WaitReason::NoRoom),
@@ -105,9 +173,10 @@ fn a_phone_with_no_room_says_so_and_catches_up_when_it_has_some() {
         "{:?}",
         mended.waiting
     );
+    assert!(!phone.plane().snapshot_owed(), "the snapshot was taken");
 }
 
-/// **A COPY A CRASH LEFT GOES WHEN THE CORE OPENS.**
+/// **A DIRECTORY A CRASH (OR AN EARLIER BUILD) LEFT GOES WHEN THE CORE OPENS.**
 #[test]
 fn a_copy_a_crash_left_is_gone_at_the_next_open() {
     let dir = tempfile::tempdir().expect("a directory");
@@ -124,61 +193,63 @@ fn a_copy_a_crash_left_is_gone_at_the_next_open() {
     drop(reopened);
 }
 
-/// **THE VAULT IS FREE WHILE A COPY RUNS**: a commit lands between two steps of a copy taken the
-/// way a pass takes one (the vault held for `source` alone), without waiting for it. The copy is
-/// the moment it began; the commit is in the next.
+/// **A DAMAGED PAGE STOPS A BACKUP PASS** (D1, V21). Eight bytes of a table page of the vault
+/// file are overwritten under a core that is running; the next pass finds it on the same pin
+/// that read the pages, answers the vault-damaged code, signs no head, queues nothing, and the
+/// gateway's head stays where it was.
 #[test]
-fn a_commit_lands_between_steps_of_a_copy_a_pass_would_take() {
-    use centraid_vault::backup::snapshot;
+fn a_damaged_page_stops_a_backup_pass() {
+    let gateway = gateway();
     let dir = tempfile::tempdir().expect("a directory");
     let phone = phone(dir.path());
-    photos(&phone, 60);
-    let source = phone
-        .with_vault(|vault| Ok(snapshot::source(vault).expect("a source")))
-        .expect("held for the source alone");
-    let scratch = dir.path().join("aside");
-    let mut landed = 0_u32;
-    let (copied, stats) = snapshot::copy_from(&source, &scratch, &mut |step| {
-        if landed == 0 {
-            // `with_vault` would deadlock here if the copy held the vault.
-            photos_from(&phone, 1000, 1);
-            landed = step;
-        }
-        Ok(())
-    })
-    .expect("copies");
-    assert!(
-        stats.steps > 1 && landed == 1,
-        "{stats:?} landed at {landed}"
-    );
-    let census_total = |copied: &snapshot::Copied| -> i64 {
-        snapshot::describe(
-            copied,
-            &centraid_vault::backup::naming::BackupKeys::from_root(&[1; 32]),
-            &"ab".repeat(32),
-            "test",
-        )
-        .expect("describes")
-        .manifest
-        .census
-        .values()
-        .sum()
+    pair(&phone, &gateway);
+    photos(&phone, 3);
+    drain(&phone, at_home());
+    let path = dir.path().join("vault.db");
+    let before = first_head(&path);
+
+    // Fold the WAL into the file, then damage a table leaf in it.
+    pagesource::fold_wal(&path).expect("folds the WAL into the file");
+    let mut bytes = std::fs::read(&path).expect("reads");
+    let page_size = {
+        let pinned = PinnedPages::begin(&path).expect("a pin");
+        let size = usize::try_from(pinned.page_size()).expect("a size");
+        pinned.end().expect("ends");
+        size
     };
-    let first = census_total(&copied);
-    let second = {
-        let next = phone
-            .with_vault(|vault| {
-                snapshot::copy(vault, &dir.path().join("next")).map_err(|error| {
-                    centraid_core::CoreError::Invariant {
-                        context: error.to_string(),
-                    }
-                })
-            })
-            .expect("copies");
-        census_total(&next)
+    // THE PAGE OF A TABLE NO PHOTOGRAPH WRITES TO (the founder's row lives in `person`), so the
+    // commit below leaves the damage where it is.
+    let leaf = {
+        let pinned = PinnedPages::begin(&path).expect("a pin");
+        let root = pinned.root_page("person").expect("reads").expect("a table");
+        pinned.end().expect("ends");
+        usize::try_from(root).expect("a page") - 1
     };
-    assert!(
-        second > first,
-        "the commit is in the next copy and not the first: {first} {second}"
+    assert_eq!(bytes[leaf * page_size], 0x0d, "a table leaf");
+    for offset in 3..11 {
+        bytes[leaf * page_size + offset] = 0xff;
+    }
+    std::fs::write(&path, &bytes).expect("damages");
+
+    // A WRITE SINCE THE LAST SNAPSHOT makes the next pass take one.
+    photos_from(&phone, 2000, 1);
+    let owed_before = owed_any(&path).len();
+    let refused = try_drain(
+        &phone,
+        wire::DrainRequest {
+            asked: true,
+            ..at_home()
+        },
     );
+    let error = refused.expect_err("a damaged vault is not backed up");
+    assert!(
+        matches!(
+            error,
+            centraid_core::CoreError::Vault(centraid_vault::VaultError::Damaged { .. })
+        ),
+        "{error:?}"
+    );
+    assert_eq!(pagesource::live_pins(), 0, "the pin ended");
+    assert_eq!(first_head(&path), before, "no head was set");
+    assert_eq!(owed_any(&path).len(), owed_before, "nothing was queued");
 }

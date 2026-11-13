@@ -537,7 +537,7 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
 
     // ---- 4. THE BACKUP SNAPSHOT, SEALED AND OPENED (#1080) ---------------
     //
-    // A backup is the file copied page for page, cut into 64 KiB ranges, each
+    // A backup is the file read page for page, cut into 64 KiB ranges, each
     // sealed as a `centraid-sealed/2` part, plus one sealed manifest. The scan
     // reads every sealed part — which would pass vacuously if the sealing were
     // ever removed — AND every opened one: a range that leaked a Locker secret
@@ -556,7 +556,8 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
         let taken = snapshot::take(
             vault,
             &keys,
-            &sealed_vault.scratch.dir().join("backup-scratch"),
+            &spool,
+            SPOOL_CEILING_BYTES,
             &"5a".repeat(32),
             APP,
         )
@@ -594,7 +595,6 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
                 centraid_media::sealed::open_whole(&keys, name, &sealed).expect("the part opens");
             carries_no_secret("an opened snapshot part", &plain);
         }
-        taken.discard().expect("the scratch copy goes");
     }
 
     // ---- 5. THE VAULT FILE ITSELF ----------------------------------------

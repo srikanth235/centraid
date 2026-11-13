@@ -1,23 +1,22 @@
-//! A snapshot: the vault copied page for page, cut into named ranges and
-//! described by a manifest; then asked about, spooled and settled (#1080,
-//! "The vault snapshot plane").
+//! A snapshot: the vault read page for page through one pinned reader, cut into named ranges
+//! and described by a manifest; then asked about, spooled and settled (#1080, "The vault
+//! snapshot plane"; #1191 B11).
 //!
 //! ```text
-//! copy      sqlite3_backup of the live vault into a scratch file   (holds the vault)
-//! describe  census, 64 KiB page-aligned ranges, their names, the manifest  (does not)
-//! plan      one `exists` for every range and the manifest
-//! spool     seal only what is missing, queue it in the ledger
+//! walk      one pin: 64 KiB ranges, their names, the census, the quick check   (holds no store)
+//! seal      inside the walk, only the ranges the previous head did not name
+//! plan      one `exists` for every range the walk sealed and the manifest
+//! spool     owe each gateway what it lacks, the manifest last
 //! settle    once every range and the manifest are confirmed, move the head
 //! ```
 //!
 //! ## PAGE-IDENTICAL, SO AN UNCHANGED RANGE HAS AN UNCHANGED NAME
 //!
-//! The online backup API copies page N to page N, so a range no commit touched
-//! is byte-identical to the last snapshot's, hashes the same, and is named the
-//! same: `exists` answers "held" and nothing is sealed for it. A snapshot costs
-//! hashing the file plus sealing the ranges that changed (#1080 ruling 5). The
-//! vault never runs `VACUUM` and keeps `auto_vacuum = NONE`, which is what
-//! keeps a page where it was (`crate::file`).
+//! A range is the vault's pages at the same offsets, so a range no commit touched hashes the
+//! same and is named the same as in the last snapshot: nothing is sealed for it. A snapshot
+//! costs hashing the file plus sealing the ranges that changed (#1080 ruling 5). The vault
+//! never runs `VACUUM` and keeps `auto_vacuum = NONE`, which is what keeps a page where it was
+//! (`crate::file`).
 //!
 //! ## WHY A RANGE IS 64 KiB (Q-1080-B1, the root's ruling A14)
 //!
@@ -37,38 +36,23 @@
 //! `exists` asks about a thousand at a time and the mover sends in bundles
 //! (A14, A15). The manifest grows with them and its format does not change.
 //!
-//! ## THE COPY IS ONE MOMENT, AND THE WRITER IS NEVER HELD FOR IT (R-1080-B6, #1188 design 6)
+//! ## NO PLAINTEXT COPY OF THE VAULT IS EVER WRITTEN
 //!
-//! [`source`] takes what the copy needs from the vault in one short hold: the file's path, the
-//! vault's clock and its size. [`copy_from`] then opens the file READ-ONLY on a connection of its
-//! own, pins one read transaction (a WAL reader sees the file as it was when the transaction began,
-//! whatever commits after) and copies it in steps of [`PAGES_PER_STEP`] pages. The vault is free
-//! between steps and for the whole of the copy: a commit lands while the copy runs, is not in it,
-//! and is in the next snapshot, which the write counter in the manifest ([`unchanged`]) says is owed.
-//! The copy can carry no row that later rolls back, because an uncommitted row is on no reader's
-//! side. The one connection that writes the vault is still the only one that writes it; this one
-//! never does.
+//! [`crate::pagesource::walk`] opens the vault file read-only on a connection of its own and
+//! reads its pages through `sqlite_dbpage` under one WAL read transaction: the vault is the file
+//! as it was when the pin began, whatever commits after, and the writer is never held. One
+//! range is in memory at a time, and it goes from there to the spool already sealed. The pin
+//! ends before the walk returns, and never spans a gateway call (`pagesource::live_pins`). The
+//! census, `user_version`, the write counter and `quick_check` are read on the same pin, and a
+//! damaged vault returns an error before any manifest exists, so no head is signed over it.
 //!
-//! The copy sits in a directory only the app can enter (`0700`, the file `0600`), holds the vault
-//! in the clear, and is deleted the moment the last range is spooled, and on every way out of a pass
-//! before that. A crash leaves it for the next core open to remove.
-//!
-//! ## A VAULT THAT HAS NOT CHANGED IS NOT COPIED AGAIN
+//! ## A VAULT THAT HAS NOT CHANGED IS NOT WALKED AGAIN
 //!
 //! The vault's own write counter and `user_version` ride in every manifest. A pass whose vault shows
 //! the same two as the newest snapshot, held whole at every gateway, takes no snapshot ([`unchanged`]).
-//!
-//! ## THE CENSUS IS COUNTED ON THE COPY
-//!
-//! Every table a member has rows in, by `count(*)` on the scratch copy after
-//! the vault is released: SQLite's own tables, FTS5's shadow tables and every
-//! virtual table are left out, the same rule the commit guard reports changes
-//! by. It costs a scan of the copy, off the vault and off the request path, and
-//! a restore compares it table by table.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs::{self, File};
-use std::io::{Read, Seek, SeekFrom};
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use centraid_media::sealed;
@@ -82,6 +66,7 @@ use super::store::{self, Head, Store, StoreError};
 use super::{Result, invariant};
 use crate::clock::Clock;
 use crate::file::Vault;
+use crate::pagesource::{self, RangeRead, Walked};
 
 const _: fn() = || {
     trait AmbiguousIfSync<A> {
@@ -218,25 +203,16 @@ pub struct Range {
     pub name: Name,
 }
 
-/// A snapshot taken: the scratch copy, its ranges and its manifest.
+/// A snapshot taken: its ranges, its manifest, and which ranges the walk sealed.
 #[derive(Debug, Clone)]
 pub struct Snapshot {
-    /// The scratch copy the ranges are read from until they are spooled.
-    pub path: PathBuf,
     pub manifest: Manifest,
     pub manifest_json: Vec<u8>,
     pub manifest_name: Name,
     pub ranges: Vec<Range>,
-}
-
-impl Snapshot {
-    /// Remove the scratch copy.
-    ///
-    /// # Errors
-    /// The filesystem's refusal.
-    pub fn discard(self) -> Result<()> {
-        remove_copy(&self.path)
-    }
+    /// The ranges that changed since the snapshot the walk compared with, sealed into the spool
+    /// (or deferred) while the pin was held. No other range's bytes are at hand.
+    pub sealed: Sealed,
 }
 
 /// **HOW FAR A VAULT COPY HAS RUN**, from the write counter on its `vault` row: how many commits
@@ -295,215 +271,6 @@ pub fn unchanged(vault: &Vault, manifest: &Manifest) -> Result<bool> {
         && user_version == manifest.user_version)
 }
 
-/// The page-identical copy and when it was taken.
-#[derive(Debug, Clone)]
-pub struct Copied {
-    pub path: PathBuf,
-    pub taken_at_ms: u64,
-}
-
-/// Pages one step of the copy moves. The vault is free between steps; this size keeps one step to
-/// a few milliseconds on a phone.
-pub const PAGES_PER_STEP: i32 = 128;
-
-/// How long a step waits for a source or destination SQLite says is busy, and how many times.
-const BUSY_RETRIES: u32 = 200;
-
-/// What a copy needs from the vault, taken in one short hold.
-#[derive(Debug, Clone)]
-pub struct Source {
-    path: PathBuf,
-    taken_at_ms: u64,
-    /// The vault's size in pages times the page size: what the copy will weigh.
-    pub len: u64,
-}
-
-/// What a copy did, by counts.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct CopyStats {
-    /// Calls that moved pages.
-    pub steps: u32,
-    /// Pages in the finished copy.
-    pub pages: u32,
-    /// Times a step found the file busy and waited.
-    pub busy: u32,
-}
-
-/// Take what a copy needs from `vault`: the caller holds the vault for this call alone.
-///
-/// # Errors
-/// A copy asked for inside a commit, or SQLite's refusal.
-pub fn source(vault: &Vault) -> Result<Source> {
-    if vault.depth.get() > 0 {
-        return Err(invariant(
-            "a snapshot was asked for inside a commit; a copy is taken between commits",
-        ));
-    }
-    let (pages, page_size): (i64, i64) = {
-        let connection = vault.connection();
-        (
-            connection.query_row("PRAGMA page_count", [], |row| row.get(0))?,
-            connection.query_row("PRAGMA page_size", [], |row| row.get(0))?,
-        )
-    };
-    Ok(Source {
-        path: vault.path().to_path_buf(),
-        taken_at_ms: u64::try_from(vault.clock().now_ms()).unwrap_or(0),
-        len: u64::try_from(pages)
-            .unwrap_or(0)
-            .saturating_mul(u64::try_from(page_size).unwrap_or(0)),
-    })
-}
-
-/// Copy the vault page for page into a fresh file under `scratch_dir`, holding the vault only for
-/// [`source`].
-///
-/// # Errors
-/// A copy asked for inside a commit, or SQLite's or the filesystem's refusal.
-pub fn copy(vault: &Vault, scratch_dir: &Path) -> Result<Copied> {
-    let source = source(vault)?;
-    copy_from(&source, scratch_dir, &mut |_| Ok(())).map(|(copied, _)| copied)
-}
-
-/// Copy `source` into a fresh file under `scratch_dir` without holding the vault: one pinned read
-/// transaction, [`PAGES_PER_STEP`] pages at a time. `between` runs after every step that left pages
-/// to copy, with the number of steps so far; an error from it ends the copy and removes it (a test
-/// uses it to commit a write between steps, or to fail).
-///
-/// # Errors
-/// SQLite's or the filesystem's refusal, or `between`'s. A failed copy is removed.
-pub fn copy_from(
-    source: &Source,
-    scratch_dir: &Path,
-    between: &mut dyn FnMut(u32) -> Result<()>,
-) -> Result<(Copied, CopyStats)> {
-    make_private_dir(scratch_dir)?;
-    // A RANDOM SUFFIX, not the time alone: a copy whose ranges are still
-    // being spooled must never be replaced by a second copy taken in the same
-    // millisecond, or by any copy under a clock a test holds still.
-    let path = scratch_dir.join(format!(
-        "snapshot-{}-{:016x}.db",
-        source.taken_at_ms,
-        rand::random::<u64>()
-    ));
-    remove_copy(&path)?;
-    create_private_file(&path)?;
-    match step_through(&source.path, &path, between) {
-        Ok(stats) => Ok((
-            Copied {
-                path,
-                taken_at_ms: source.taken_at_ms,
-            },
-            stats,
-        )),
-        Err(error) => {
-            let _ = remove_copy(&path);
-            Err(error)
-        }
-    }
-}
-
-/// `sqlite3_backup` from a read-only connection to `from`, pinned to one moment, into `target`.
-fn step_through(
-    from: &Path,
-    target: &Path,
-    between: &mut dyn FnMut(u32) -> Result<()>,
-) -> Result<CopyStats> {
-    use rusqlite::backup::StepResult;
-    let live = Connection::open_with_flags(
-        from,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )?;
-    let journal: String = live.query_row("PRAGMA journal_mode", [], |row| row.get(0))?;
-    if !journal.eq_ignore_ascii_case("wal") {
-        return Err(invariant(
-            "the vault is not in WAL mode; a copy that left the writer free would not be one moment",
-        ));
-    }
-    // THE PIN: a read transaction begun here sees the file as it is now until it ends, however
-    // many commits land. The backup's own steps join it rather than begin their own.
-    live.execute_batch("BEGIN")?;
-    live.query_row("SELECT count(*) FROM sqlite_schema", [], |row| {
-        row.get::<_, i64>(0)
-    })?;
-    let mut destination = Connection::open(target)?;
-    let mut stats = CopyStats::default();
-    {
-        let backup = rusqlite::backup::Backup::new(&live, &mut destination)?;
-        loop {
-            match backup.step(PAGES_PER_STEP)? {
-                StepResult::Done => {
-                    stats.steps += 1;
-                    break;
-                }
-                StepResult::More => {
-                    stats.steps += 1;
-                    between(stats.steps)?;
-                }
-                StepResult::Busy | StepResult::Locked => {
-                    stats.busy += 1;
-                    if stats.busy > BUSY_RETRIES {
-                        return Err(invariant("the copy waited too long for a busy file"));
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(5));
-                }
-                other => {
-                    return Err(invariant(format!("the copy stopped at {other:?}")));
-                }
-            }
-        }
-        stats.pages = u32::try_from(backup.progress().pagecount).unwrap_or(0);
-    }
-    live.execute_batch("COMMIT")?;
-    destination.close().map_err(|(_, error)| error)?;
-    live.close().map_err(|(_, error)| error)?;
-    Ok(stats)
-}
-
-/// A directory only this app can enter, made if it is not there.
-fn make_private_dir(dir: &Path) -> Result<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::{DirBuilderExt as _, PermissionsExt as _};
-        fs::DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(dir)?;
-        fs::set_permissions(dir, fs::Permissions::from_mode(0o700))?;
-    }
-    #[cfg(not(unix))]
-    fs::create_dir_all(dir)?;
-    Ok(())
-}
-
-/// An empty file only this app can read, for SQLite to fill.
-fn create_private_file(path: &Path) -> Result<()> {
-    let mut options = fs::OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt as _;
-        options.mode(0o600);
-    }
-    options.open(path)?;
-    Ok(())
-}
-
-/// Remove a scratch copy and anything SQLite left beside it.
-fn remove_copy(path: &Path) -> Result<()> {
-    for suffix in ["", "-wal", "-shm", "-journal"] {
-        let mut target = path.as_os_str().to_owned();
-        target.push(suffix);
-        match fs::remove_file(PathBuf::from(target)) {
-            Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
-                return Err(error.into());
-            }
-            _ => {}
-        }
-    }
-    Ok(())
-}
-
 /// Read a copy through SQLite, read-only, and remove the `-wal` and `-shm`
 /// a WAL-mode header makes SQLite create beside it. Reading never changes a
 /// page of the copy.
@@ -558,60 +325,122 @@ pub(crate) fn census_of(connection: &Connection) -> Result<BTreeMap<String, i64>
     Ok(census)
 }
 
-/// Census, ranges, names and the manifest of a copy.
+/// The sealer a walk hands the pinned reader: it seals each changed range into the spool the
+/// moment it is read, one range in memory at a time, and keeps no plaintext.
 ///
-/// # Errors
-/// A `vault_id` that is not 64 lowercase hex, a copy that is not whole pages,
-/// or the filesystem's or SQLite's refusal.
-pub fn describe(copied: &Copied, keys: &BackupKeys, vault_id: &str, app: &str) -> Result<Snapshot> {
-    PlaintextHash::from_hex(vault_id)
-        .map_err(|_| invariant("a vault id is the identity key's 64 lowercase hex"))?;
-    let (census, page_size, user_version, written) = read_copy(&copied.path, |connection| {
-        let page_size: i64 = connection.query_row("PRAGMA page_size", [], |row| row.get(0))?;
-        let user_version: i64 =
-            connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-        Ok((
-            census_of(connection)?,
-            page_size,
-            user_version,
-            History::of(connection)?,
-        ))
-    })?;
-    let page_size = u32::try_from(page_size).map_err(|_| invariant("a negative page size"))?;
+/// A range already in the spool is not sealed again, and one the budget does not admit is
+/// deferred: it is named in the manifest all the same and waits for a later pass.
+pub struct RangeSealer<'a> {
+    spool: &'a Spool,
+    keys: &'a BackupKeys,
+    budget: u64,
+    held: u64,
+    out: Sealed,
+    /// The files this sealer wrote, which a walk that fails takes away again.
+    wrote: Vec<Name>,
+}
 
-    let mut file = File::open(&copied.path)?;
-    let db_len = file.metadata()?.len();
-    let mut whole = blake3::Hasher::new();
-    let mut buffer = vec![0_u8; usize::try_from(RANGE_BYTES).unwrap_or(usize::MAX)];
-    let mut ranges = Vec::new();
-    let mut offset = 0_u64;
-    while offset < db_len {
-        let len = RANGE_BYTES.min(db_len - offset);
-        let chunk = &mut buffer[..usize::try_from(len).unwrap_or(usize::MAX)];
-        file.read_exact(chunk)?;
-        whole.update(chunk);
-        let h = PlaintextHash::of(chunk);
-        let i = u32::try_from(ranges.len()).map_err(|_| invariant("too many ranges"))?;
-        ranges.push(Range {
-            i,
-            offset,
-            len,
-            h,
-            name: name(keys, &h, 0),
-        });
-        offset += len;
+/// What a walk sealed.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Sealed {
+    /// Changed ranges whose sealed part is in the spool.
+    pub names: BTreeSet<Name>,
+    /// Changed ranges the spool's budget did not admit.
+    pub deferred: BTreeSet<Name>,
+    /// Sealed bytes this walk added to the spool.
+    pub bytes: u64,
+}
+
+impl<'a> RangeSealer<'a> {
+    /// A sealer over `spool` that stops admitting at `budget` bytes.
+    ///
+    /// # Errors
+    /// The filesystem's refusal.
+    pub fn new(spool: &'a Spool, keys: &'a BackupKeys, budget: u64) -> Result<Self> {
+        Ok(Self {
+            spool,
+            keys,
+            budget,
+            held: spool.bytes()?,
+            out: Sealed::default(),
+            wrote: Vec::new(),
+        })
     }
 
+    /// Seal one changed range: the callback [`crate::pagesource::walk`] calls under its pin.
+    ///
+    /// # Errors
+    /// The filesystem's or the cipher's refusal.
+    pub fn seal(&mut self, read: &RangeRead, bytes: &[u8]) -> Result<()> {
+        if self.spool.contains(&read.name) {
+            self.out.names.insert(read.name);
+            return Ok(());
+        }
+        if !super::spool::admits(self.held, read.len, self.budget) {
+            self.out.deferred.insert(read.name);
+            return Ok(());
+        }
+        let sealed = sealed::seal_part(self.keys, 0, bytes, true)?;
+        self.spool.write(&read.name, &sealed)?;
+        self.wrote.push(read.name);
+        self.held += sealed.len() as u64;
+        self.out.bytes += sealed.len() as u64;
+        self.out.names.insert(read.name);
+        Ok(())
+    }
+
+    /// What was sealed.
+    #[must_use]
+    pub fn finish(self) -> Sealed {
+        self.out
+    }
+
+    /// Take away the files this sealer wrote: a walk that failed has no manifest to owe them to.
+    fn abandon(&mut self) {
+        for name in self.wrote.drain(..) {
+            let _ = self.spool.remove(&name);
+        }
+        self.out = Sealed::default();
+    }
+}
+
+/// Names and the manifest of a walk.
+///
+/// # Errors
+/// A `vault_id` that is not 64 lowercase hex, or ranges that do not tile the file.
+pub fn describe(
+    walked: &Walked,
+    taken_at_ms: u64,
+    keys: &BackupKeys,
+    vault_id: &str,
+    app: &str,
+    sealed: Sealed,
+) -> Result<Snapshot> {
+    PlaintextHash::from_hex(vault_id)
+        .map_err(|_| invariant("a vault id is the identity key's 64 lowercase hex"))?;
+    let page_size =
+        u32::try_from(walked.page_size).map_err(|_| invariant("a page size past 32 bits"))?;
+    let ranges: Vec<Range> = walked
+        .ranges
+        .iter()
+        .map(|read| Range {
+            i: read.i,
+            offset: u64::from(read.i) * RANGE_BYTES,
+            len: read.len,
+            h: read.h,
+            name: read.name,
+        })
+        .collect();
     let manifest = Manifest {
         v: MANIFEST_VERSION,
         vault_id: vault_id.to_owned(),
-        taken_at_ms: copied.taken_at_ms,
+        taken_at_ms,
         page_size,
-        db_len,
-        db_hash: PlaintextHash::from_bytes(*whole.finalize().as_bytes()),
-        user_version,
-        writes: written.writes,
-        written_at_ms: written.last_write_ms,
+        db_len: walked.db_len,
+        db_hash: walked.db_hash,
+        user_version: walked.user_version,
+        writes: walked.writes,
+        written_at_ms: walked.written_at_ms,
         app: app.to_owned(),
         ranges: ranges
             .iter()
@@ -621,35 +450,105 @@ pub fn describe(copied: &Copied, keys: &BackupKeys, vault_id: &str, app: &str) -
                 len: range.len,
             })
             .collect(),
-        census,
+        census: walked.census.clone(),
     };
     manifest.validate()?;
     let manifest_json = manifest.to_json()?;
     let manifest_name = name(keys, &PlaintextHash::of(&manifest_json), 0);
     Ok(Snapshot {
-        path: copied.path.clone(),
         manifest,
         manifest_json,
         manifest_name,
         ranges,
+        sealed,
     })
 }
 
-/// [`copy`], then [`describe`].
+/// **Read the vault and seal what changed, in one pin.** `previous(i)` is the name the newest
+/// snapshot held at range `i` at every gateway of the pass; a range named otherwise is sealed
+/// into `spool` as it is read. The vault is not held (the walk reads its file on a reader of its
+/// own), the pin is over before this returns, and a damaged vault is refused before any manifest
+/// exists.
 ///
 /// # Errors
-/// Whatever either refuses.
+/// A snapshot asked for inside a commit, a `vault_id` that is not an identity key, what the
+/// walk refuses (a vault that is not WAL, a damaged one, SQLite's refusal) or the spool's.
+pub fn capture(
+    vault: &Vault,
+    keys: &BackupKeys,
+    vault_id: &str,
+    app: &str,
+    previous: &dyn Fn(u32) -> Option<Name>,
+    sealer: &mut RangeSealer<'_>,
+) -> Result<Snapshot> {
+    if vault.depth.get() > 0 {
+        return Err(invariant(
+            "a snapshot was asked for inside a commit; a snapshot is taken between commits",
+        ));
+    }
+    let taken_at_ms = u64::try_from(vault.clock().now_ms()).unwrap_or(0);
+    capture_at(
+        vault.path(),
+        taken_at_ms,
+        keys,
+        vault_id,
+        app,
+        previous,
+        sealer,
+    )
+}
+
+/// [`capture`] for a caller that holds no [`Vault`]: the vault file's path and the moment on its
+/// clock. A phone's pass uses this so the writer's lock is not held for the walk.
+///
+/// # Errors
+/// As [`capture`].
+pub fn capture_at(
+    path: &Path,
+    taken_at_ms: u64,
+    keys: &BackupKeys,
+    vault_id: &str,
+    app: &str,
+    previous: &dyn Fn(u32) -> Option<Name>,
+    sealer: &mut RangeSealer<'_>,
+) -> Result<Snapshot> {
+    PlaintextHash::from_hex(vault_id)
+        .map_err(|_| invariant("a vault id is the identity key's 64 lowercase hex"))?;
+    let walked = match pagesource::walk(path, keys, previous, &mut |read, bytes| {
+        sealer.seal(read, bytes)
+    }) {
+        Ok(walked) => walked,
+        Err(error) => {
+            sealer.abandon();
+            return Err(error);
+        }
+    };
+    debug_assert_eq!(pagesource::live_pins(), 0, "the pin ends with the walk");
+    describe(
+        &walked,
+        taken_at_ms,
+        keys,
+        vault_id,
+        app,
+        std::mem::take(&mut sealer.out),
+    )
+}
+
+/// [`capture`] with nothing known of an earlier snapshot, into a sealer over `spool` with
+/// `budget`: every range is sealed. For a drill, a test and a first snapshot.
+///
+/// # Errors
+/// Whatever [`capture`] refuses.
 pub fn take(
     vault: &Vault,
     keys: &BackupKeys,
-    scratch_dir: &Path,
+    spool: &Spool,
+    budget: u64,
     vault_id: &str,
     app: &str,
 ) -> Result<Snapshot> {
-    let copied = copy(vault, scratch_dir)?;
-    describe(&copied, keys, vault_id, app).inspect_err(|_| {
-        let _ = remove_copy(&copied.path);
-    })
+    let mut sealer = RangeSealer::new(spool, keys, budget)?;
+    capture(vault, keys, vault_id, app, &|_| None, &mut sealer)
 }
 
 // ─── upload ─────────────────────────────────────────────────────────────────
@@ -668,7 +567,15 @@ pub struct Plan {
 /// # Errors
 /// The store's refusal.
 pub fn plan(snapshot: &Snapshot, store: &dyn Store) -> Result<Plan> {
-    let mut asked: Vec<Name> = snapshot.manifest.range_names().into_iter().collect();
+    // ONLY THE RANGES THE WALK SEALED ARE ASKED ABOUT: the others are the previous head's own
+    // names, which every gateway of the pass was found to hold before the walk began.
+    let mut asked: Vec<Name> = snapshot
+        .sealed
+        .names
+        .iter()
+        .chain(snapshot.sealed.deferred.iter())
+        .copied()
+        .collect();
     asked.push(snapshot.manifest_name);
     let missing = store::missing(store, &asked)?;
     let mut seen = BTreeSet::new();
@@ -761,10 +668,8 @@ pub fn spool(
             snapshot.manifest.writes,
         )?;
     }
-    let mut held = spool.bytes()?;
+    let held = spool.bytes()?;
     let mut out = Spooled::default();
-    let mut file = File::open(&snapshot.path)?;
-    let mut buffer = Vec::new();
 
     // THE OUTBOX ROWS GO IN BATCHES, one transaction each (`PENDING_ROWS` parts): a snapshot of
     // hundreds of ranges is a handful of syncs, not one per range. A part's file is written
@@ -801,49 +706,45 @@ pub fn spool(
         Ok(sealed.len() as u64)
     };
 
+    // A RANGE IS OWED FROM THE FILE THE WALK SEALED (or an earlier pass left): its bytes are not
+    // in the vault any more, only in the spool, so a missing range with no file waits for the next
+    // snapshot.
     for index in &union_plan.missing_ranges {
         let range = snapshot
             .ranges
             .get(usize::try_from(*index).unwrap_or(usize::MAX))
             .ok_or_else(|| invariant(format!("the plan names range {index}, which is not here")))?;
         let gateways = owing(Some(*index), false);
-        if spool.contains(&range.name)
-            && gateways.iter().all(|gateway| {
-                state
-                    .outbox_row(gateway, &range.name)
-                    .ok()
-                    .flatten()
-                    .is_some_and(|row| row.part_path.is_some())
-            })
-        {
-            out.spooled.push(range.name);
-            continue;
-        }
-        if !super::spool::admits(held, range.len, budget) {
+        if !spool.contains(&range.name) {
             out.deferred.push(range.name);
             continue;
         }
-        buffer.resize(usize::try_from(range.len).unwrap_or(usize::MAX), 0);
-        file.seek(SeekFrom::Start(range.offset))?;
-        file.read_exact(&mut buffer)?;
-        // VERIFY BEFORE SEALING: the name was computed from these bytes when
-        // the copy was described, and a part sealed under it from any other
-        // bytes would be a range no restore could open as its own.
-        if PlaintextHash::of(&buffer) != range.h {
-            return Err(invariant(format!(
-                "range {} of the scratch copy changed after it was named",
-                range.i
-            )));
+        if gateways.iter().all(|gateway| {
+            state
+                .outbox_row(gateway, &range.name)
+                .ok()
+                .flatten()
+                .is_some_and(|row| row.part_path.is_some())
+        }) {
+            out.spooled.push(range.name);
+            continue;
         }
-        let sealed = sealed::seal_part(keys, 0, &buffer, true)?;
-        held += put(
-            range.name,
-            OutboxKind::Range,
-            &gateways,
-            &sealed,
-            &mut out,
-            &mut pending,
-        )?;
+        let mut sealed = Vec::new();
+        std::io::Read::read_to_end(&mut spool.read(&range.name)?, &mut sealed)?;
+        let path = spool.path(&range.name);
+        let digest = Digest::of(&sealed);
+        for gateway in &gateways {
+            pending.push(Outbox::sealed(
+                gateway,
+                range.name,
+                OutboxKind::Range,
+                path.clone(),
+                sealed.len() as u64,
+                digest,
+                now_ms,
+            ));
+        }
+        out.spooled.push(range.name);
         if pending.len() >= PENDING_ROWS {
             flush(&mut pending)?;
         }
@@ -879,6 +780,29 @@ pub fn spool(
             )?;
             flush(&mut pending)?;
         }
+    }
+    // A RANGE THE WALK SEALED THAT EVERY GATEWAY TURNED OUT TO HOLD is owed to no one: its file
+    // goes, unless another row (an earlier pass's) still needs it.
+    let wanted: BTreeSet<Name> = union_plan
+        .missing_ranges
+        .iter()
+        .filter_map(|index| {
+            snapshot
+                .ranges
+                .get(usize::try_from(*index).unwrap_or(usize::MAX))
+                .map(|range| range.name)
+        })
+        .collect();
+    let unowed: Vec<Name> = snapshot
+        .sealed
+        .names
+        .iter()
+        .filter(|name| !wanted.contains(*name))
+        .copied()
+        .collect();
+    let owed = state.owed_among(&unowed)?;
+    for name in unowed.iter().filter(|name| !owed.contains(*name)) {
+        spool.remove(name)?;
     }
     Ok(out)
 }
@@ -994,12 +918,17 @@ pub fn unchanged_since(vault: &Vault, writes: u64) -> Result<bool> {
 mod tests {
     use super::*;
     use crate::backup::state::Gateway;
-    use crate::error::VaultError;
+    use crate::pagesource;
 
     fn founded(dir: &Path) -> Vault {
         let vault = Vault::create(dir.join("vault.db")).expect("a vault");
         vault.found("Household", "Ada").expect("founds");
         vault
+    }
+
+    /// A spool of its own under `dir`.
+    fn spool_at(dir: &Path, tag: &str) -> Spool {
+        Spool::open(dir.join(tag)).expect("a spool")
     }
 
     fn add_party(vault: &Vault, label: &str) {
@@ -1019,134 +948,6 @@ mod tests {
             .expect("commits");
     }
 
-    fn parties(path: &Path) -> i64 {
-        read_copy(path, |connection| {
-            Ok(connection.query_row("SELECT count(*) FROM person", [], |row| row.get(0))?)
-        })
-        .expect("counts")
-    }
-
-    /// **R-1080-B6.** Inside a commit no copy is asked for: the plane refuses by name. A copy
-    /// that reads the file on a connection of its own, from inside one, sees only what committed,
-    /// so no copy can carry a row that then rolls back. Between commits it holds exactly what
-    /// committed.
-    #[test]
-    fn no_copy_is_made_inside_a_commit_and_one_between_holds_what_committed() {
-        let dir = tempfile::tempdir().expect("a directory");
-        let vault = founded(dir.path());
-        let id = vault.ids().next();
-        let now = vault.clock().now_text();
-        let before = source(&vault).expect("a source outside a commit");
-        let outcome = vault.commit(|tx| {
-            tx.connection().execute(
-                "INSERT INTO entity (id, kind, title, created_at, updated_at)
-                 VALUES (?1, 'person', 'Nobody', ?2, ?2)",
-                rusqlite::params![id, now],
-            )?;
-            tx.connection()
-                .execute("INSERT INTO person (id) VALUES (?1)", [&id])?;
-            assert!(
-                matches!(
-                    copy(&vault, &dir.path().join("scratch")),
-                    Err(super::super::PlaneError::Invariant { .. })
-                ),
-                "the plane refuses a copy here"
-            );
-            let (aside, _) = copy_from(&before, &dir.path().join("aside"), &mut |_| Ok(()))
-                .expect("a reader of its own copies");
-            assert_eq!(
-                parties(&aside.path),
-                1,
-                "the uncommitted row is on no reader's side"
-            );
-            Err::<(), _>(VaultError::Invariant {
-                context: "roll back".to_owned(),
-            })
-        });
-        assert!(outcome.is_err());
-        let copied = copy(&vault, &dir.path().join("scratch")).expect("copies");
-        assert_eq!(parties(&copied.path), 1, "the rolled-back row is nowhere");
-    }
-
-    /// **#1188 design 6.** The copy runs in steps and the vault is free between them: a commit lands
-    /// between two steps, from the same thread that called the copy (so nothing is held), and the
-    /// finished copy is one moment — the file as it was when the copy began, whole and
-    /// consistent — with the commit in the next one.
-    #[test]
-    fn a_commit_between_steps_is_not_blocked_and_is_in_the_next_copy() {
-        let dir = tempfile::tempdir().expect("a directory");
-        let vault = founded(dir.path());
-        // Enough rows that the copy takes several steps.
-        for index in 0..400 {
-            add_party(&vault, &format!("Person {index:04} {}", "x".repeat(400)));
-        }
-        let begun = source(&vault).expect("a source");
-        let mut landed_at = Vec::new();
-        let (first, stats) = copy_from(&begun, &dir.path().join("one"), &mut |step| {
-            if landed_at.is_empty() {
-                add_party(&vault, "Landed between steps");
-                landed_at.push(step);
-            }
-            Ok(())
-        })
-        .expect("copies");
-        assert!(stats.steps > 1, "the copy took several steps: {stats:?}");
-        assert!(
-            i64::from(stats.pages) > i64::from(PAGES_PER_STEP),
-            "more pages than one step moves: {stats:?}"
-        );
-        assert_eq!(landed_at, vec![1], "the commit landed after the first step");
-        assert_eq!(parties(&first.path), 401, "the copy is the moment it began");
-        read_copy(&first.path, |connection| {
-            let verdict: String =
-                connection.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
-            assert_eq!(verdict, "ok");
-            Ok(())
-        })
-        .expect("checks");
-        let second = copy(&vault, &dir.path().join("two")).expect("copies");
-        assert_eq!(parties(&second.path), 402, "the next copy holds the commit");
-        // THE COMMIT LEAVES A SNAPSHOT OWED, not skipped as unchanged: the first copy's manifest
-        // no longer describes the vault.
-        let keys = BackupKeys::from_root(&[3; 32]);
-        let described = describe(&first, &keys, &"ab".repeat(32), APP).expect("describes");
-        assert!(
-            !unchanged(&vault, &described.manifest).expect("compares"),
-            "a commit that landed during the copy is a vault that changed since it"
-        );
-    }
-
-    /// **Scratch hygiene.** A copy that fails part-way is removed, and the directory and file are
-    /// the app's alone.
-    #[test]
-    fn a_failed_copy_leaves_nothing_and_a_good_one_is_private() {
-        let dir = tempfile::tempdir().expect("a directory");
-        let vault = founded(dir.path());
-        for index in 0..300 {
-            add_party(&vault, &format!("Person {index:04} {}", "x".repeat(400)));
-        }
-        let scratch = dir.path().join("scratch");
-        let begun = source(&vault).expect("a source");
-        let refused = copy_from(&begun, &scratch, &mut |_| Err(invariant("the disk filled")));
-        assert!(refused.is_err());
-        assert_eq!(
-            fs::read_dir(&scratch)
-                .expect("the directory is there")
-                .count(),
-            0,
-            "no plaintext copy remains"
-        );
-        let (good, _) = copy_from(&begun, &scratch, &mut |_| Ok(())).expect("copies");
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt as _;
-            let mode =
-                |path: &Path| fs::metadata(path).expect("exists").permissions().mode() & 0o777;
-            assert_eq!(mode(&scratch), 0o700, "only the app enters the directory");
-            assert_eq!(mode(&good.path), 0o600, "only the app reads the file");
-        }
-    }
-
     #[test]
     fn a_vault_is_unchanged_until_a_commit_or_a_migration_shows() {
         let dir = tempfile::tempdir().expect("a directory");
@@ -1155,7 +956,8 @@ mod tests {
         let taken = take(
             &vault,
             &keys,
-            &dir.path().join("scratch"),
+            &spool_at(dir.path(), "s"),
+            u64::MAX,
             &"ab".repeat(32),
             APP,
         )
@@ -1171,9 +973,22 @@ mod tests {
         let vault = founded(dir.path());
         let keys = BackupKeys::from_root(&[3; 32]);
         let vault_id = "ab".repeat(32);
-        let snapshot =
-            take(&vault, &keys, &dir.path().join("scratch"), &vault_id, APP).expect("takes");
-        let bytes = fs::read(&snapshot.path).expect("reads");
+        let snapshot = take(
+            &vault,
+            &keys,
+            &spool_at(dir.path(), "s"),
+            u64::MAX,
+            &vault_id,
+            APP,
+        )
+        .expect("takes");
+        // THE PAGES AS THE PIN SAW THEM: the vault has not changed since.
+        let mut pinned = pagesource::PinnedPages::begin(vault.path()).expect("a pin");
+        let mut bytes = Vec::new();
+        for index in 0..pinned.range_count() {
+            bytes.extend_from_slice(pinned.range(index).expect("a range"));
+        }
+        pinned.end().expect("ends");
         assert_eq!(snapshot.manifest.db_len, bytes.len() as u64);
         assert_eq!(snapshot.manifest.db_hash, PlaintextHash::of(&bytes));
         assert_eq!(snapshot.manifest.page_size, 4096);
@@ -1193,12 +1008,6 @@ mod tests {
                 .any(|table| table.starts_with("sqlite_") || table.ends_with("_docsize")),
             "SQLite's and FTS5's own tables are not a member's rows"
         );
-        // Reading the copy changed none of it.
-        assert_eq!(
-            PlaintextHash::of(&fs::read(&snapshot.path).expect("reads")),
-            snapshot.manifest.db_hash
-        );
-
         let json = snapshot.manifest.to_json().expect("serialises");
         assert_eq!(json, snapshot.manifest_json);
         assert_eq!(
@@ -1230,7 +1039,6 @@ mod tests {
             Manifest::from_json(&json).expect("reads back"),
             snapshot.manifest
         );
-        snapshot.discard().expect("discards");
     }
 
     #[test]
@@ -1270,48 +1078,70 @@ mod tests {
         let dir = tempfile::tempdir().expect("a directory");
         let vault = founded(dir.path());
         let keys = BackupKeys::from_root(&[3; 32]);
-        assert!(take(&vault, &keys, &dir.path().join("scratch"), "not-hex", APP).is_err());
+        let spool = spool_at(dir.path(), "s");
+        assert!(take(&vault, &keys, &spool, u64::MAX, "not-hex", APP).is_err());
         assert!(
-            fs::read_dir(dir.path().join("scratch"))
-                .expect("lists")
-                .next()
-                .is_none(),
-            "a refused snapshot leaves no scratch copy"
+            spool.names().expect("lists").is_empty(),
+            "a refused snapshot seals nothing"
         );
     }
 
+    /// A snapshot is taken between commits: inside one the plane refuses by name.
     #[test]
-    fn a_second_snapshot_of_an_unchanged_vault_names_the_same_ranges() {
+    fn no_snapshot_is_taken_inside_a_commit() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let vault = founded(dir.path());
+        let keys = BackupKeys::from_root(&[3; 32]);
+        let spool = spool_at(dir.path(), "s");
+        let outcome = vault.commit(|_| {
+            assert!(matches!(
+                take(&vault, &keys, &spool, u64::MAX, &"ab".repeat(32), APP),
+                Err(super::super::PlaneError::Invariant { .. })
+            ));
+            Ok(())
+        });
+        assert!(outcome.is_ok());
+        assert_eq!(pagesource::live_pins(), 0);
+    }
+
+    #[test]
+    fn a_second_snapshot_of_an_unchanged_vault_names_the_same_ranges_and_seals_none() {
         let dir = tempfile::tempdir().expect("a directory");
         let vault = founded(dir.path());
         add_party(&vault, "Grace");
         let keys = BackupKeys::from_root(&[3; 32]);
-        let first =
-            take(&vault, &keys, &dir.path().join("a"), &"cd".repeat(32), APP).expect("takes");
-        let second =
-            take(&vault, &keys, &dir.path().join("b"), &"cd".repeat(32), APP).expect("takes");
+        let first = take(
+            &vault,
+            &keys,
+            &spool_at(dir.path(), "a"),
+            u64::MAX,
+            &"cd".repeat(32),
+            APP,
+        )
+        .expect("takes");
+        assert!(
+            !first.sealed.names.is_empty(),
+            "a first snapshot seals every range"
+        );
+        let known: BTreeMap<u32, Name> = first.ranges.iter().map(|r| (r.i, r.name)).collect();
+        let spool = spool_at(dir.path(), "b");
+        let mut sealer = RangeSealer::new(&spool, &keys, u64::MAX).expect("a sealer");
+        let second = capture(
+            &vault,
+            &keys,
+            &"cd".repeat(32),
+            APP,
+            &|i| known.get(&i).copied(),
+            &mut sealer,
+        )
+        .expect("takes");
         assert_eq!(first.manifest.range_names(), second.manifest.range_names());
         assert_eq!(first.manifest.db_hash, second.manifest.db_hash);
-    }
-
-    /// A held clock gives two copies one `taken_at_ms`; they still never share
-    /// a file, so neither replaces a copy the other is spooling from.
-    #[test]
-    fn two_copies_under_a_held_clock_never_share_a_file() {
-        let dir = tempfile::tempdir().expect("a directory");
-        let vault = Vault::create_with(
-            dir.path().join("vault.db"),
-            Box::new(crate::clock::FixedClock::frozen()),
-            Box::new(crate::clock::SeededIds::new("copies")),
-        )
-        .expect("a vault");
-        vault.found("Household", "Ada").expect("founds");
-        let scratch = dir.path().join("scratch");
-        let first = copy(&vault, &scratch).expect("copies");
-        let second = copy(&vault, &scratch).expect("copies");
-        assert_eq!(first.taken_at_ms, second.taken_at_ms);
-        assert_ne!(first.path, second.path);
-        assert!(first.path.exists() && second.path.exists());
+        assert!(
+            second.sealed.names.is_empty() && second.sealed.deferred.is_empty(),
+            "nothing changed, so nothing was sealed"
+        );
+        assert!(spool.names().expect("lists").is_empty());
     }
 
     /// **The spool never holds more than its budget.** Ranges past what fits
@@ -1321,14 +1151,17 @@ mod tests {
         let dir = tempfile::tempdir().expect("a directory");
         let vault = founded(dir.path());
         let keys = BackupKeys::from_root(&[3; 32]);
-        let snapshot = take(
-            &vault,
-            &keys,
-            &dir.path().join("scratch"),
-            &"ab".repeat(32),
-            APP,
-        )
-        .expect("takes");
+        let spool_dir = Spool::open(dir.path().join("vault.spool")).expect("a spool");
+        // THE BUDGET IS ONE RANGE'S WORST CASE, not a number of bytes. A part is admitted into
+        // an empty spool whatever the budget, and into a held one only when its sealed bound
+        // fits beside what is held, so a budget of exactly one bound admits the first range and
+        // defers every other. A fixed byte count means "less than the whole snapshot" only while
+        // the founded vault is as large and as poorly compressible as the day it was written;
+        // the schema moves that, and the squash of the ladder did (a founded vault seals to
+        // ~85 KB now, which a budget of 150 KiB admits whole).
+        let budget = super::super::spool::sealed_bound(RANGE_BYTES);
+        let snapshot =
+            take(&vault, &keys, &spool_dir, budget, &"ab".repeat(32), APP).expect("takes");
         assert!(snapshot.ranges.len() > 3, "a founded vault is a few ranges");
         let store = super::super::store::MemoryStore::new("gw");
         let planned = plan(&snapshot, &store).expect("plans");
@@ -1343,15 +1176,6 @@ mod tests {
                 0,
             ))
             .expect("pairs");
-        let spool_dir = Spool::open(dir.path().join("vault.spool")).expect("a spool");
-        // THE BUDGET IS ONE RANGE'S WORST CASE, not a number of bytes. A part is admitted into
-        // an empty spool whatever the budget, and into a held one only when its sealed bound
-        // fits beside what is held, so a budget of exactly one bound admits the first range and
-        // defers every other. A fixed byte count means "less than the whole snapshot" only while
-        // the founded vault is as large and as poorly compressible as the day it was written;
-        // the schema moves that, and the squash of the ladder did (a founded vault seals to
-        // ~85 KB now, which a budget of 150 KiB admits whole).
-        let budget = super::super::spool::sealed_bound(snapshot.ranges[0].len);
         let spooled = spool(
             &snapshot,
             &[("gw".to_owned(), planned)],
@@ -1373,60 +1197,6 @@ mod tests {
             "the ranges past what fits wait: {spooled:?}"
         );
         assert!(spooled.deferred.contains(&snapshot.manifest_name));
-    }
-
-    /// **Verify before sealing.** A range is sealed under the name its bytes
-    /// were given when the copy was described; a copy that changed since is
-    /// refused rather than sealed under a name that is no longer its own.
-    #[test]
-    fn a_scratch_copy_that_changed_after_it_was_named_is_not_spooled() {
-        let dir = tempfile::tempdir().expect("a directory");
-        let vault = founded(dir.path());
-        let keys = BackupKeys::from_root(&[3; 32]);
-        let snapshot = take(
-            &vault,
-            &keys,
-            &dir.path().join("scratch"),
-            &"ef".repeat(32),
-            APP,
-        )
-        .expect("takes");
-        let store = super::super::store::MemoryStore::new("gw");
-        let plan = plan(&snapshot, &store).expect("plans");
-        let mut bytes = fs::read(&snapshot.path).expect("reads");
-        bytes[5_000] ^= 0xff;
-        fs::write(&snapshot.path, &bytes).expect("tampers");
-        let state = DeviceState::open(dir.path().join("vault.state.db")).expect("a device state");
-        state
-            .put_gateway(&Gateway::paired(
-                "gw".to_owned(),
-                Vec::new(),
-                Vec::new(),
-                "laptop".to_owned(),
-                1,
-                0,
-            ))
-            .expect("pairs");
-        let spool_dir = Spool::open(dir.path().join("vault.spool")).expect("a spool");
-        let outcome = spool(
-            &snapshot,
-            &[("gw".to_owned(), plan)],
-            &spool_dir,
-            &state,
-            &keys,
-            u64::MAX,
-            1,
-        );
-        assert!(
-            outcome
-                .as_ref()
-                .is_err_and(|error| error.to_string().contains("changed after it was named")),
-            "{outcome:?}"
-        );
-        assert!(
-            spool_dir.names().expect("lists").is_empty(),
-            "nothing was sealed"
-        );
     }
 
     /// **A name the gateway holds is no row.** A phone with a fresh device state — a restored
@@ -1470,7 +1240,7 @@ mod tests {
         let first_state = DeviceState::open(dir.path().join("one.state.db")).expect("a state");
         paired(&first_state);
         let first_spool = Spool::open(dir.path().join("one.spool")).expect("a spool");
-        let taken = take(&vault, &keys, &dir.path().join("a"), &vault_id, APP).expect("takes");
+        let taken = take(&vault, &keys, &first_spool, u64::MAX, &vault_id, APP).expect("takes");
         let planned = plan(&taken, &store).expect("plans");
         spool(
             &taken,
@@ -1492,10 +1262,10 @@ mod tests {
         tick.advance_ms(1);
         let state = DeviceState::open(dir.path().join("two.state.db")).expect("a state");
         paired(&state);
-        let again = take(&vault, &keys, &dir.path().join("b"), &vault_id, APP).expect("takes");
+        let fresh = Spool::open(dir.path().join("two.spool")).expect("a spool");
+        let again = take(&vault, &keys, &fresh, u64::MAX, &vault_id, APP).expect("takes");
         let replanned = plan(&again, &store).expect("plans");
         assert!(replanned.missing_ranges.is_empty(), "every range is held");
-        let fresh = Spool::open(dir.path().join("two.spool")).expect("a spool");
         let spooled = spool(
             &again,
             &[("gw".to_owned(), replanned)],
@@ -1510,6 +1280,11 @@ mod tests {
             spooled.spooled,
             vec![again.manifest_name],
             "only the manifest is new"
+        );
+        assert_eq!(
+            fresh.names().expect("lists"),
+            vec![again.manifest_name],
+            "the ranges the walk sealed and the gateway holds are not kept"
         );
         let waiting = settle(&state, &store, &clock).expect("settles");
         assert!(

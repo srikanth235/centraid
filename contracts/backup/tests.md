@@ -83,7 +83,7 @@ Layout used below: `gateway/tests/` is `crates/gateway/tests/`, `gateway/conform
 
 ### D1: a corrupted vault is backed up faithfully
 
-- `a_damaged_page_stops_a_backup_pass` (core, `core/tests/backup_scratch.rs`). Overwrite 8 bytes inside a table page of the closed vault file on disk, reopen it through a test-only open that skips the quick check, run a pass. Observe: no head is signed or set, nothing is queued, the status says the vault is damaged, the gateways' heads are unchanged. B11, V21.
+- `a_damaged_page_stops_a_backup_pass` (core, `core/tests/backup_scratch.rs`). Overwrite 8 bytes of a table page of the vault file on disk under a running core (the page of a table no commit after it writes), write once so a snapshot is owed, run a pass. Observe: the pass answers the vault-damaged code, no head is set, nothing is queued, the pin ended. B11, V21.
 - `the_quick_check_runs_before_the_head_is_signed` (vault, `vault/tests/backup_snapshot.rs`). Damage lands between the page read and the head. Observe: the head is not signed (counted: zero `PUT head` calls). B11.
 
 ### D2: a migrated vault reopens with foreign keys off and no injected clock
@@ -157,6 +157,6 @@ Where each lives: **rules** is a check in `cargo xtask rules` (`crates/xtask/src
 | An unchanged library costs a pass near nothing | `an_unchanged_library_costs_one_statement_and_one_call_per_gateway` | test | See lane B list; counts statements and calls |
 | Generated lists fresh | `generated_lists_are_fresh` | rules (the existing `git diff --exit-code` pattern) | Any L1 generated file (check lists, link shapes, sealed-column lists, blob renters, ontology table list, grace and page-size constants) differs from its generator's output |
 | No credential in a database file | `no_credential_is_in_a_database_file` | test | See gap 5; scans the vault file, `state.db`, the gateway's `state.db` and the data directory |
-| No plaintext copy of the vault on disk | `no_plaintext_vault_copy_on_disk` | test (`vault/tests/backup_snapshot.rs`) | During and after a snapshot pass, list the vault's directory and the scratch and spool directories: no file holds the planted note's plaintext or a SQLite header (`SQLite format 3\0`) other than the vault file itself. Depends on the spike verdict of [`spike-page-read.md`](spike-page-read.md) |
+| No plaintext copy of the vault on disk | `no_plaintext_vault_copy_on_disk` | test (`vault/tests/page_source.rs` mid-read, `core/tests/backup_scratch.rs` after a real pass) | Every file beside the vault's own three holds no page of the vault and no planted note's plaintext, mid-walk and after a pass; the scratch directory does not exist. Built on [`spike-page-read.md`](spike-page-read.md) |
 | A damaged page stops a backup | `a_damaged_page_stops_a_backup_pass` | test | See D1 |
 | Every member-visible behaviour is the same on both platforms | the existing `native_parity` and `promises` rows | rules | New B16 behaviours get rows in `promises.rs` and shared fixtures under `contracts/backup/` |

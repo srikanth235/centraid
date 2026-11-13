@@ -283,6 +283,25 @@ impl PinnedPages {
         crate::backup::snapshot::census_of(&self.connection)
     }
 
+    /// The page where `table`'s b-tree begins (1-based), for a test that must damage one page and
+    /// know which; `None` for a table the vault does not have.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    #[doc(hidden)]
+    pub fn root_page(&self, table: &str) -> Result<Option<u64>> {
+        use rusqlite::OptionalExtension as _;
+        let root: Option<i64> = self
+            .connection
+            .query_row(
+                "SELECT rootpage FROM sqlite_schema WHERE name = ?1",
+                [table],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(root.and_then(|root| u64::try_from(root).ok()))
+    }
+
     /// `PRAGMA quick_check` on the pin: every page is read through SQLite's own
     /// pager and a damaged one is refused.
     ///
@@ -300,6 +319,20 @@ impl PinnedPages {
         self.connection.execute_batch("ROLLBACK")?;
         Ok(())
     }
+}
+
+/// Fold the WAL of the vault at `path` into its file, on a connection of its own, so a test can
+/// damage a page of the file and be sure the damage is not shadowed by a newer copy in the WAL.
+///
+/// # Errors
+/// SQLite's refusal.
+#[doc(hidden)]
+pub fn fold_wal(path: &Path) -> Result<()> {
+    let connection = Connection::open(path)?;
+    connection.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+        row.get::<_, i64>(0)
+    })?;
+    Ok(())
 }
 
 // ─── one pass under one pin ─────────────────────────────────────────────────

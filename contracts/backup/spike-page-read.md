@@ -2,7 +2,7 @@
 
 Row 0.2 of [#1191](https://github.com/srikanth235/centraid/issues/1191). Question: can the snapshot read the vault's pages without writing a plaintext copy of the vault to disk, on every target? Candidate: SQLite's `sqlite_dbpage` virtual table in the bundled build.
 
-**Verdict: page read works: B11 builds on it,** after one build flag is added. It is not compiled in today.
+**Verdict: page read works, and B11 is built on it** (`crates/vault/src/pagesource.rs`; the flag is in `.cargo/config.toml`, the copy path is gone). The text below is the spike as it was run; the "not compiled in today" and "What B11 must do" parts describe the state before B11.
 
 ## Is `sqlite_dbpage` compiled in? No, and which flag turns it on
 

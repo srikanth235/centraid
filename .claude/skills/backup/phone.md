@@ -4,16 +4,17 @@ What the phone does to back its vault up and to get it back. Wording and rules a
 
 ## State, and where it lives
 
-- The device state (`<stem>.state.db`), the spool (`<stem>.spool/`) and the scratch copy (`<stem>.scratch/`) sit beside the vault file, never inside it. The shells keep them out of OS backup.
-- All three are derived. Lose them and the phone re-pairs and re-asks each gateway what it holds. The backup is not lost.
+- The device state (`<stem>.state.db`) and the spool (`<stem>.spool/`) sit beside the vault file, never inside it, and so does `<stem>.scratch/`, which exists only while "Check my backup" restores into it. The shells keep them out of OS backup.
+- The state and the spool are derived. Lose them and the phone re-pairs and re-asks each gateway what it holds. The backup is not lost.
 - The core writes no key to disk. Keys arrive through the open configuration. A core without them reads and writes the vault but cannot back up.
 
 ## Snapshot
 
-- A page-identical copy of the vault (SQLite online backup) is cut into 64 KiB ranges. Each range is sealed under a name derived from its own content, and one manifest names them. An unchanged range keeps its name, so `exists` says held and nothing is sealed.
-- The copy runs on its own read-only connection in steps of 128 pages. The vault is held only to read its path and size, never for the copy, and it never runs `VACUUM`.
-- The scratch directory is 0700 and its file 0600. It is deleted once the last range is spooled. A core removes a crash's leftover when it opens.
-- The manifest carries the write counter and a per-table row census. A vault whose counter and `user_version` match the newest snapshot, held whole at every gateway, is not copied again.
+- The vault's pages are read through `sqlite_dbpage` on a pinned read-only connection (`pagesource::walk`, one WAL read transaction), cut into 64 KiB ranges. **No plaintext copy of the vault is written to disk.** Each range is named from its own content; a range the newest head already names, at every gateway of the pass, is not sealed; a changed one is sealed into the spool as it is read, one range in memory at a time. One manifest names them all.
+- The pin never spans a gateway call: what the last head named is asked of the gateways before the walk, what the walk sealed is asked about after it (`pagesource::live_pins()` is zero at both). The writer is never held for the walk. A vault that is not WAL, or whose build lacks `SQLITE_ENABLE_DBPAGE_VTAB`, refuses with a typed error.
+- The census, `user_version`, the write counter and `quick_check` are read on the same pin. A damaged vault is refused before any manifest exists, so no head is signed over it; the pass answers `ERROR_CODE_VAULT_DAMAGED`.
+- The spool's byte budget bounds a first snapshot: a range it will not admit is deferred, the manifest waits with it, and the status says "no room" when the phone's free space set that budget. `db_hash` is BLAKE3 over the pages in order; it is not equal to a hash of an online-backup copy.
+- The manifest carries the write counter and a per-table row census. A vault whose counter and `user_version` match the newest snapshot, held whole at every gateway, is not walked again.
 - Settle moves the head only when every range and the manifest are confirmed. It is a compare-and-set on the head this phone last set there.
 
 ## Device state

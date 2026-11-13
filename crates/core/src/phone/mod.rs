@@ -19,15 +19,15 @@
 //! # WHERE THE PLANE'S STATE LIVES, AND WHY IT IS NOT IN THE VAULT
 //!
 //! Beside the vault file, never inside it, all of it device-local and derived
-//! (#1080, "WHAT IS DEVICE-LOCAL AND DERIVED"): `<stem>.backup.db` is the
-//! ledger — the gateways this phone is paired with, their tokens and pinned
-//! certificates, every acknowledgement, the queue, and where each content
-//! hash's bytes are on this phone; `<stem>.spool/` holds sealed parts waiting
-//! to move; `<stem>.scratch/` holds a snapshot's page-identical copy while it
-//! is described. A snapshot of the vault therefore never carries the state of
-//! its own upload, and a restored phone inherits no dead phone's token. Lose
-//! all three and the phone re-pairs and re-asks the gateway what it holds; the
-//! backup is not lost. The shells exclude the whole directory from OS backup.
+//! (#1080, "WHAT IS DEVICE-LOCAL AND DERIVED"): `<stem>.state.db` is the
+//! device state — the gateways this phone is paired with (never their tokens: those live in
+//! memory and the shell's secret store), every acknowledgement, the outbox, and where each
+//! content hash's bytes are on this phone; `<stem>.spool/` holds sealed parts waiting to move;
+//! `<stem>.scratch/` exists only while a check restores a backup into it. No snapshot is ever
+//! copied to disk: the vault's pages are read through one pinned reader and sealed as they go.
+//! A snapshot of the vault therefore never carries the state of its own upload, and a restored
+//! phone inherits no dead phone's token. Lose the state and the phone re-pairs and re-asks the
+//! gateway what it holds; the backup is not lost. The shells exclude the whole directory from OS backup.
 //!
 //! # WHERE THE KEYS COME FROM, AND WHY THIS FILE HOLDS NONE
 //!
@@ -327,20 +327,19 @@ impl Plane {
         Spool::dir_for(&self.vault_file)
     }
 
-    /// `<stem>.scratch/`: a snapshot's page-identical copy, for as long as
-    /// describing and spooling it takes.
+    /// `<stem>.scratch/`: where a check restores a backup to prove it opens.
     #[must_use]
     pub fn scratch_dir(&self) -> PathBuf {
         self.vault_file.with_extension("scratch")
     }
 
-    /// Remove a snapshot's copy of the vault a crash left in `<stem>.scratch/`. A core calls this
-    /// when it opens, before any pass can begin one.
+    /// Remove what a crash left in `<stem>.scratch/` (a check's restore, or the plaintext copy an
+    /// earlier build wrote). A core calls this when it opens, before any pass can begin.
     pub fn sweep_scratch(&self) {
         if let Err(error) = std::fs::remove_dir_all(self.scratch_dir())
             && error.kind() != std::io::ErrorKind::NotFound
         {
-            tracing::warn!(%error, "a snapshot's scratch copy could not be removed");
+            tracing::warn!(%error, "the scratch directory could not be removed");
         }
     }
 
@@ -399,6 +398,12 @@ impl Plane {
     #[must_use]
     pub fn budget(&self) -> u64 {
         Spool::budget_under(self.ceiling, self.free_bytes())
+    }
+
+    /// Whether the phone's free space, and not the spool's own ceiling, is what limits the spool.
+    #[must_use]
+    pub(crate) fn room_limited(&self) -> bool {
+        self.free_bytes() / 10 < self.ceiling
     }
 
     /// How many bytes are free on the spool's volume; zero for a volume that
@@ -465,6 +470,11 @@ pub fn set_clock_skew_ms(ms: u64) {
 pub(crate) fn plane_error(error: PlaneError) -> CoreError {
     match error {
         PlaneError::Store(store) => store_error(store),
+        // A DAMAGED VAULT is not backed up and says so by its own code, never as a plane fault:
+        // no head is signed over a page that fails the quick check (#1191, V21).
+        PlaneError::Vault(damaged @ centraid_vault::VaultError::Damaged { .. }) => {
+            CoreError::Vault(damaged)
+        }
         other => CoreError::Invariant {
             context: format!("the backup plane: {other}"),
         },

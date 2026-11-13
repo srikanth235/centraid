@@ -10,8 +10,8 @@
 //!    changed were sealed and the store grew by exactly those plus a manifest.
 //! 5. Retention keeps the newest; garbage collection deletes exactly the
 //!    ranges only the dropped snapshot named.
-//! 6. Destroy the vault, its WAL and SHM, the spool, the device state and the
-//!    scratch: what is left is the store, which is ciphertext, and the key.
+//! 6. Destroy the vault, its WAL and SHM, the device state and the
+//!    spool: what is left is the store, which is ciphertext, and the key.
 //! 7. Restore from the head; open the file through the ladder; prove its
 //!    census, its `db_hash` and a dump of every row equal the lost vault's,
 //!    and that a file fetched by name verifies against its hash.
@@ -195,12 +195,11 @@ pub fn dump(vault: &Vault) -> Result<BTreeMap<String, Vec<String>>, DrillError> 
 fn back_up(
     vault: &Vault,
     keys: &BackupKeys,
-    scratch: &Path,
     state: &DeviceState,
     spool: &Spool,
     store: &dyn Store,
 ) -> Result<(Snapshot, snapshot::Plan), DrillError> {
-    let taken = snapshot::take(vault, keys, scratch, VAULT_ID, APP)?;
+    let taken = snapshot::take(vault, keys, spool, SPOOL_CEILING_BYTES, VAULT_ID, APP)?;
     let plan = snapshot::plan(&taken, store)?;
     let spooled = snapshot::spool(
         &taken,
@@ -309,10 +308,9 @@ pub fn run(dir: &Path) -> Result<DrillReport, DrillError> {
         now_ms(),
     ))?;
     let spool = Spool::open(Spool::dir_for(&vault_path))?;
-    let scratch = dir.join("live").join("scratch");
 
     // ---- 2. the first snapshot ---------------------------------------------
-    let (first, first_plan) = back_up(&vault, &keys, &scratch, &state, &spool, &store)?;
+    let (first, first_plan) = back_up(&vault, &keys, &state, &spool, &store)?;
     if first_plan.missing_ranges.len() != first.manifest.range_names().len() {
         return Err(fail(
             "an empty store already held part of the first snapshot",
@@ -329,7 +327,7 @@ pub fn run(dir: &Path) -> Result<DrillReport, DrillError> {
         .iter()
         .map(|entry| entry.name)
         .collect();
-    let (second, second_plan) = back_up(&vault, &keys, &scratch, &state, &spool, &store)?;
+    let (second, second_plan) = back_up(&vault, &keys, &state, &spool, &store)?;
     let after: BTreeSet<Name> = store::list_all(&store)?
         .iter()
         .map(|entry| entry.name)
@@ -407,8 +405,6 @@ pub fn run(dir: &Path) -> Result<DrillReport, DrillError> {
     let census = second.manifest.census.clone();
     let (ranges_first, ranges_second) = (first.ranges.len(), second.ranges.len());
     let head = second.manifest_name;
-    first.discard()?;
-    second.discard()?;
     vault.close()?;
     drop(state);
     std::fs::remove_dir_all(dir.join("live"))?;

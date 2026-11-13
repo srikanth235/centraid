@@ -456,22 +456,22 @@ fn moved_and_not_settled(phone: &Handle, path: &Path) -> Name {
         runtime.handle(),
     )
     .expect("a store");
-    let scratch = path.with_extension("scratch");
-    let copied = phone
-        .with_vault(|vault| {
-            Ok(centraid_vault::backup::snapshot::copy(vault, &scratch).expect("copies"))
-        })
-        .expect("the vault");
-    let taken = centraid_vault::backup::snapshot::describe(
-        &copied,
-        &keyring.backup,
-        &keyring.vault_hex(),
-        "a pass the phone did not live to finish",
-    )
-    .expect("describes");
-    let planned = centraid_vault::backup::snapshot::plan(&taken, &store).expect("plans");
     let spool = centraid_vault::backup::spool::Spool::open(path.with_extension("spool"))
         .expect("the spool");
+    let taken = phone
+        .with_vault(|vault| {
+            Ok(centraid_vault::backup::snapshot::take(
+                vault,
+                &keyring.backup,
+                &spool,
+                u64::MAX,
+                &keyring.vault_hex(),
+                "a pass the phone did not live to finish",
+            )
+            .expect("takes"))
+        })
+        .expect("the vault");
+    let planned = centraid_vault::backup::snapshot::plan(&taken, &store).expect("plans");
     centraid_vault::backup::snapshot::spool(
         &taken,
         &[(destination.gateway_id.clone(), planned)],
@@ -491,7 +491,6 @@ fn moved_and_not_settled(phone: &Handle, path: &Path) -> Name {
     )
     .expect("moves");
     assert_eq!(moved.stopped, centraid_vault::backup::mover::Stop::Empty);
-    let _ = std::fs::remove_dir_all(&scratch);
     taken.manifest_name
 }
 

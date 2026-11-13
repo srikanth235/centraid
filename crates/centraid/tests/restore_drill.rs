@@ -513,6 +513,14 @@ fn lose_the_phone_restore_from_the_words_and_the_old_phone_freezes() {
     phone
         .open_own_bytes(path.with_extension("bytes"))
         .expect("the store opens");
+    // THE SHELL'S HALF: the restore handed back the tokens, the shell's secret store kept them,
+    // and a core it opens is given them again (the core keeps none on disk).
+    ask(
+        &phone,
+        wire::request::Kind::GatewayTokens(wire::GatewayTokensRequest {
+            tokens: restored.tokens.clone(),
+        }),
+    );
     let wire::response::Kind::FetchOriginal(fetched) = ask(
         &phone,
         wire::request::Kind::FetchOriginal(wire::FetchOriginalRequest {

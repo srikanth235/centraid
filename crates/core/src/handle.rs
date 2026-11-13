@@ -179,10 +179,10 @@ pub struct HandleState {
     /// not queued (`phone.proto`): a background window's call must not sit
     /// behind a foreground pass it cannot see and expire holding nothing.
     draining: AtomicBool,
-    /// Snapshots copied from the vault by this core, and the pages those copies held: counts a
-    /// test states what a pass cost by, never how long it took.
-    copies: AtomicU64,
-    pages_copied: AtomicU64,
+    /// Walks of the vault this core has made, and the ranges they sealed: counts a test states
+    /// what a pass cost by, never how long it took.
+    walks: AtomicU64,
+    ranges_sealed: AtomicU64,
     /// How far a running "Check my backup" has got (#1188, B6).
     check_progress: crate::phone::check::Progress,
     /// One check at a time.
@@ -357,7 +357,7 @@ impl Core {
         let registry = Arc::new(Registry::with_system_commands()?);
         let launched = std::time::SystemTime::now();
         let plane = crate::phone::Plane::of(&path).with_ceiling(spool_ceiling);
-        // A SNAPSHOT'S COPY OF THE VAULT A CRASH LEFT IN THE CLEAR goes before anything else runs.
+        // A CHECK'S SCRATCH A CRASH LEFT (and any copy of the vault an earlier build left in the clear) goes first.
         plane.sweep_scratch();
         let handle = Handle::new(|me| HandleState {
             me,
@@ -379,8 +379,8 @@ impl Core {
             bytes: Mutex::new(None),
             runtime: Mutex::new(None),
             draining: AtomicBool::new(false),
-            copies: AtomicU64::new(0),
-            pages_copied: AtomicU64::new(0),
+            walks: AtomicU64::new(0),
+            ranges_sealed: AtomicU64::new(0),
             check_progress: crate::phone::check::Progress::default(),
             checking: AtomicBool::new(false),
             reconciled: AtomicBool::new(false),
@@ -1785,20 +1785,20 @@ impl HandleState {
         self.plane.pretend_free_bytes(bytes);
     }
 
-    /// Record one vault copy of `pages` pages.
-    pub(crate) fn note_copy(&self, pages: u32) {
-        self.copies.fetch_add(1, Ordering::Relaxed);
-        self.pages_copied
-            .fetch_add(u64::from(pages), Ordering::Relaxed);
+    /// Record one walk of the vault that sealed `ranges` ranges.
+    pub(crate) fn note_walk(&self, ranges: u64) {
+        self.walks.fetch_add(1, Ordering::Relaxed);
+        self.ranges_sealed.fetch_add(ranges, Ordering::Relaxed);
     }
 
-    /// How many copies of the vault this core has taken, and how many pages they held.
+    /// How many times this core has walked the vault for a snapshot, and how many ranges those
+    /// walks sealed.
     #[doc(hidden)]
     #[must_use]
-    pub fn copies_taken(&self) -> (u64, u64) {
+    pub fn walks_taken(&self) -> (u64, u64) {
         (
-            self.copies.load(Ordering::Relaxed),
-            self.pages_copied.load(Ordering::Relaxed),
+            self.walks.load(Ordering::Relaxed),
+            self.ranges_sealed.load(Ordering::Relaxed),
         )
     }
 
