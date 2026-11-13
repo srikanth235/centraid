@@ -114,6 +114,25 @@ fn the_greatest_head_across_the_directory_is_the_backup_restored() {
         2,
         "the claim landed at the gateway the newest was read from"
     );
+    // AND AT THE OTHER LISTED GATEWAY THAT ANSWERED, naming the head it checked there.
+    assert_eq!(first.writer(&vault_id()).0, 2, "claimed at both");
+    assert!(
+        restored.unclaimed.is_empty(),
+        "nothing was left unclaimed: {restored:?}"
+    );
+    assert_eq!(restored.tokens.len(), 2, "a token for each gateway");
+    // THE OLD PHONE IS REFUSED AT BOTH: its next pass is superseded.
+    let refused = try_drain(&phone, at_home()).expect_err("the old phone is superseded");
+    assert_eq!(refused.code(), wire::ErrorCode::VaultMoved, "{refused}");
+    // THE RESTORED PHONE BACKS UP TO BOTH.
+    let again = reopen(&restored_path);
+    let next = drain(&again, at_home());
+    assert!(next.acked_at_ms.is_some(), "{next:?}");
+    assert_eq!(
+        first.writer(&vault_id()).1,
+        second.writer(&vault_id()).1,
+        "both gateways hold the same head again"
+    );
 }
 
 /// **A LISTED GATEWAY THAT DOES NOT ANSWER MAKES THE NEWEST UNPROVEN**: the restore says what it
@@ -134,4 +153,14 @@ fn a_listed_gateway_that_does_not_answer_leaves_the_newest_unproven() {
     assert!(asked.vaults.is_empty(), "{asked:?}");
     assert_eq!(asked.unproven_newest.len(), 1, "{asked:?}");
     assert_eq!(first.writer(&vault_id()).0, 1, "no writer moved");
+
+    // THE MEMBER SAYS YES: claimed at the gateway that answered, the other reported.
+    let yes = restore_as_asked(new_dir.path(), restore_request(first.payload(), true));
+    assert_eq!(yes.vaults.len(), 1, "{yes:?}");
+    assert_eq!(first.writer(&vault_id()).0, 2, "claimed where it answered");
+    assert_eq!(second.writer(&vault_id()).0, 1, "not where it did not");
+    assert!(
+        yes.unclaimed.iter().any(|left| !left.claimed),
+        "the gateway that did not answer is reported: {yes:?}"
+    );
 }

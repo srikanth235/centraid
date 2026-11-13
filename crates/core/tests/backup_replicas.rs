@@ -371,7 +371,8 @@ fn forgetting_the_only_gateway_leaves_nothing_queued_and_no_stale_state() {
 }
 
 /// **ONE GATEWAY'S PROVEN TAKEOVER STOPS THAT GATEWAY ONLY** (#1191, E4, B3). Another phone
-/// restores from the words through the first gateway and claims there, and only there. This
+/// restores from the words through the first gateway while the second does not answer, so it claims
+/// there, and only there (it would claim at every listed gateway that answered, E8). This
 /// phone's next pass hears `MOVED` from the first, with a claim the vault key signed above the
 /// epoch it holds: it marks that gateway's row and goes on feeding the second, which still takes
 /// its writes. The status says another phone has taken over.
@@ -391,7 +392,9 @@ fn a_takeover_at_one_gateway_stops_the_pass_there_and_the_other_is_still_fed() {
     );
 
     let elsewhere = tempfile::tempdir().expect("a directory");
+    second.cable().cut();
     let restored = restore(elsewhere.path(), &first);
+    second.cable().mend();
     assert_eq!(restored.vaults.len(), 1, "{restored:?}");
     assert_eq!(first.writer(&vault_id()).0, 2, "claimed at the first");
     assert_eq!(second.writer(&vault_id()).0, 1, "and not at the second");

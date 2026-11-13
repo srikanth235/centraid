@@ -293,6 +293,7 @@ fn run_controlled(
         use_older: request.use_older,
         only,
         minted: std::cell::RefCell::new(Vec::new()),
+        left: std::cell::RefCell::new(Vec::new()),
     };
 
     // FIRST, EVERY VAULT IS FETCHED, LAID DOWN AND CHECKED — and no writer
@@ -447,6 +448,7 @@ fn run_controlled(
             }
         }
     }
+    unclaimed.extend(scan.left.take());
     if vaults.is_empty()
         && left_alone == 0
         && let Some(error) = first_refusal
@@ -519,6 +521,8 @@ struct Scan<'a> {
     only: Option<&'a Path>,
     /// The tokens this restore's claims minted, for the shell to keep (#1191, E12).
     minted: std::cell::RefCell<Vec<wire::GatewayToken>>,
+    /// Listed gateways a restored vault could not be claimed at, for the answer (E8).
+    left: std::cell::RefCell<Vec<wire::UnclaimedVault>>,
 }
 
 /// What looking at one index came to.
@@ -637,6 +641,26 @@ struct Staged {
     order: (u64, u64, u64),
     /// Set when this restore cannot prove it holds the newest backup (E8).
     unproven: Option<wire::UnprovenNewest>,
+    /// Every OTHER gateway the directory lists that answered with a verified head: claimed too
+    /// once this one is, each naming the head it checked (E8).
+    others: Vec<Heard>,
+    /// Listed gateways that did not answer: left unclaimed and reported.
+    unreached: Vec<String>,
+}
+
+/// A listed gateway that answered: how to reach it and the verified head it showed.
+struct Heard {
+    payload: centraid_gateway::rules::payload::PairPayload,
+    client: Client,
+    cert_der: Vec<u8>,
+    /// The writer epoch it reported; a claim is one above.
+    epoch: u64,
+    head: WireName,
+    taken_at_ms: i64,
+    writes: u64,
+    /// The head's signed order, `(epoch, generation, writes)`.
+    order: (u64, u64, u64),
+    label: String,
 }
 
 impl Staged {
@@ -726,59 +750,76 @@ impl Scan<'_> {
             return Ok(Checked::Staged(Box::new(staged)));
         };
         let mine = staged.gateway.hex();
-        let mut answered = true;
-        let mut best: Option<(
-            (u64, u64, u64),
-            centraid_gateway::rules::payload::PairPayload,
-            Client,
-        )> = None;
+        // THE GATEWAY SCANNED IS ONE THAT ANSWERED, with the head it showed.
+        let mut heard: Vec<Heard> = vec![Heard {
+            payload: self.payload.clone(),
+            client: staged.store.client().sibling(),
+            cert_der: staged.cert_der.clone(),
+            epoch: staged.epoch,
+            head: staged.head,
+            taken_at_ms: staged
+                .restored
+                .manifest
+                .taken_at_ms
+                .try_into()
+                .unwrap_or(i64::MAX),
+            writes: staged.order.2,
+            order: staged.order,
+            label: staged.label.clone(),
+        }];
+        let mut unreached: Vec<String> = Vec::new();
         for entry in directory
             .gateways
             .iter()
             .filter(|entry| entry.gateway_id != mine)
         {
             self.checkpoint()?;
-            let Some(seen) = self.look_at(entry, &staged.keyring) else {
-                answered = false;
-                continue;
-            };
-            if let Some((order, payload, client)) = seen
-                && order > best.as_ref().map_or(staged.order, |held| held.0)
-            {
-                best = Some((order, payload, client));
+            match self.look_at(entry, &staged.keyring) {
+                None => unreached.push(if entry.label.is_empty() {
+                    entry.gateway_id.clone()
+                } else {
+                    entry.label.clone()
+                }),
+                // ANSWERED, HOLDING NO HEAD OF THIS VAULT: nothing to claim there.
+                Some(None) => {}
+                Some(Some(seen)) => heard.push(seen),
             }
         }
-        let proven = answered && directory.gateways.len() > 1;
-        if let Some((_, payload, client)) = best {
+        let proven = unreached.is_empty() && directory.gateways.len() > 1;
+        // THE GREATEST HEAD, the scanned gateway's winning ties.
+        let best = (0..heard.len())
+            .max_by_key(|at| (heard[*at].order, std::cmp::Reverse(*at)))
+            .unwrap_or(0);
+        let chosen = heard.remove(best);
+        let mut finished = if chosen.payload.gw == staged.gateway {
+            staged
+        } else {
             // A GREATER HEAD ELSEWHERE IS THE BACKUP: lay it down instead.
-            let cert_der = client.cert_der().unwrap_or_default();
+            staged.forget();
+            let keyring = staged.keyring;
             let there = Scan {
                 open: self.open,
-                payload: &payload,
-                cert_der: &cert_der,
-                client: &client,
+                payload: &chosen.payload,
+                cert_der: &chosen.cert_der,
+                client: &chosen.client,
                 runtime: self.runtime,
                 cancellation: self.cancellation.clone(),
                 use_older: self.use_older,
                 only: self.only,
                 minted: std::cell::RefCell::new(Vec::new()),
+                left: std::cell::RefCell::new(Vec::new()),
             };
-            staged.forget();
-            let keyring = staged.keyring;
-            return match there.check_one(keyring, root, index)? {
-                Checked::Staged(mut other) => {
-                    if !proven {
-                        other.unproven = Some(unproven(&other));
-                    }
-                    Ok(Checked::Staged(other))
-                }
-                other => Ok(other),
-            };
-        }
+            match there.check_one(keyring, root, index)? {
+                Checked::Staged(other) => *other,
+                other => return Ok(other),
+            }
+        };
         if !proven {
-            staged.unproven = Some(unproven(&staged));
+            finished.unproven = Some(unproven(&finished));
         }
-        Ok(Checked::Staged(Box::new(staged)))
+        finished.others = heard;
+        finished.unreached = unreached;
+        Ok(Checked::Staged(Box::new(finished)))
     }
 
     /// The directory the staged backup's manifest names, read from the gateway it came from.
@@ -798,19 +839,12 @@ impl Scan<'_> {
 
     /// One listed gateway: dialled by the address and pin the directory gives, asked for a read
     /// grant and its head. `None` when it did not answer; `Some(None)` when it answered and holds
-    /// no head for this vault; otherwise the head's signed order.
-    #[allow(clippy::type_complexity)]
+    /// no head for this vault; otherwise the verified head it showed.
     fn look_at(
         &self,
         entry: &centraid_vault::backup::directory::Entry,
         keyring: &Keyring,
-    ) -> Option<
-        Option<(
-            (u64, u64, u64),
-            centraid_gateway::rules::payload::PairPayload,
-            Client,
-        )>,
-    > {
+    ) -> Option<Option<Heard>> {
         let payload = centraid_gateway::rules::payload::PairPayload {
             v: centraid_gateway::rules::payload::PAYLOAD_VERSION,
             gw: entry.gateway_id.parse().ok()?,
@@ -833,11 +867,17 @@ impl Scan<'_> {
         let Some(head) = state.head else {
             return Some(None);
         };
-        Some(Some((
-            (head.epoch, head.generation, head.writes),
-            payload,
+        Some(Some(Heard {
+            cert_der: client.cert_der().unwrap_or_default(),
             client,
-        )))
+            epoch: state.epoch,
+            head: head.name,
+            taken_at_ms: head.taken_at_ms,
+            writes: head.writes,
+            order: (head.epoch, head.generation, head.writes),
+            label: entry.label.clone(),
+            payload,
+        }))
     }
 
     fn check_one(&self, keyring: Keyring, root: &Path, index: u32) -> Result<Checked> {
@@ -930,6 +970,8 @@ impl Scan<'_> {
                     label: pair::label_of(self.payload),
                     order: (head.epoch, head.generation, head.writes),
                     unproven: None,
+                    others: Vec::new(),
+                    unreached: Vec::new(),
                 })))
             }
             Err(error) => {
@@ -1025,7 +1067,9 @@ impl Scan<'_> {
                     // Once writer authority moved, finish keeping the vault and
                     // its token before honoring a stop at the next vault.
                     staged.store.set_cancellation(None);
-                    return self.adopt_retrying(staged, &paired);
+                    let restored = self.adopt_retrying(staged, &paired)?;
+                    self.claim_others(staged);
+                    return Ok(restored);
                 }
                 ClaimAnswer::Conflict { epoch, head } => {
                     staged.epoch = epoch;
@@ -1086,6 +1130,76 @@ impl Scan<'_> {
 
     /// Adopt a vault whose claim landed, once more if the first try fails: the old phone is
     /// frozen already, so giving up costs the member a second restore.
+    /// **CLAIM AT EVERY OTHER GATEWAY THE DIRECTORY LISTS THAT ANSWERED** (E8), each naming the
+    /// head this phone checked there, and keep each as a gateway of the restored vault. One that
+    /// did not answer, or whose head moved under the claim, is left unclaimed and reported; the
+    /// next pass deals with it.
+    fn claim_others(&self, staged: &Staged) {
+        let kept = staged.file.with_file_name(HELD);
+        let report = |label: &str, why: &str| {
+            self.left.borrow_mut().push(wire::UnclaimedVault {
+                index: staged.index,
+                vault_id: staged.keyring.vault_hex(),
+                reason: format!("{label}: {why}"),
+                claimed: false,
+            });
+        };
+        for label in &staged.unreached {
+            report(label, "did not answer, so it was not claimed");
+        }
+        let Ok(ledger) = Plane::of(&kept).state() else {
+            return;
+        };
+        for other in &staged.others {
+            let name = if other.label.is_empty() {
+                other.payload.gw.hex()
+            } else {
+                other.label.clone()
+            };
+            match pair::try_claim(
+                &other.client,
+                &staged.keyring,
+                &other.payload.gw,
+                other.epoch.saturating_add(1),
+                Some(other.head),
+                self.runtime,
+            ) {
+                Ok(ClaimAnswer::Claimed(paired)) => {
+                    self.minted.borrow_mut().push(wire::GatewayToken {
+                        vault_id: staged.keyring.vault_hex(),
+                        gateway_id: paired.gateway_id.hex(),
+                        token: paired.token.hex(),
+                    });
+                    let now = now_ms();
+                    let mut row = Gateway::paired(
+                        other.payload.gw.hex(),
+                        other.payload.addrs.clone(),
+                        other.cert_der.clone(),
+                        pair::label_of(&other.payload),
+                        paired.epoch,
+                        now,
+                    );
+                    row.seen_ms = Some(now);
+                    // THE HEAD IT HOLDS IS WHERE THE NEXT HEAD CONTINUES FROM; the pass sends
+                    // what that gateway lacks of the newest snapshot.
+                    row.head = Some(Name::from_bytes(*other.head.as_bytes()));
+                    row.head_ms = Some(u64::try_from(other.taken_at_ms).unwrap_or(0));
+                    row.writes = other.writes;
+                    if ledger.put_gateway(&row).is_err() {
+                        report(&name, "was claimed but not kept");
+                    }
+                }
+                Ok(ClaimAnswer::Conflict { .. }) => {
+                    report(
+                        &name,
+                        "its head moved while it was claimed, so it was not claimed",
+                    );
+                }
+                Err(error) => report(&name, &format!("was not claimed: {error}")),
+            }
+        }
+    }
+
     fn adopt_retrying(
         &self,
         staged: &Staged,

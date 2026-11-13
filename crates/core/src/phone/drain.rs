@@ -1090,10 +1090,10 @@ fn verify_sample(
     }
     // A CHUNK THAT WAS WRONG, THE GATEWAY NOT KNOWING IT (decision 34): ask it, by a signed
     // check, to hash that one object. At most the pass's sample size are asked. A name it finds
-    // damaged is freed by a signed delete with the ones it already knew; one it finds intact is
+    // damaged is left for the mover (the one signed delete): its re-sent part meets `NAME_TAKEN`
+    // (damaged) and the mover frees the name and sends it again; one it finds intact is
     // NOT deleted (the read-back and the gateway disagree: the part is counted unverified and
     // read again next pass); one it does not hold is found by the walk's `exists`.
-    let mut freeable = found.freeable.clone();
     let mut confirmed_wrong = found.freeable.len();
     let mut unverified = 0_u32;
     // CHUNKS THE READ-BACK COULD NOT STAND BEHIND: wrong to it, intact to the gateway. They are
@@ -1107,7 +1107,6 @@ fn verify_sample(
     {
         match store.check_name(name) {
             Ok(centraid_vault::backup::store::NameCheck::Damaged) => {
-                freeable.push(*name);
                 confirmed_wrong += 1;
             }
             Ok(centraid_vault::backup::store::NameCheck::Intact) => {
@@ -1149,7 +1148,6 @@ fn verify_sample(
         wrong = confirmed_wrong,
         "a gateway no longer holds what it acknowledged"
     );
-    plane_store::delete_all(store, &freeable).map_err(store_error)?;
     state.set_cursor(id, 0).map_err(plane_error)?;
     plane.set_snapshot_owed(true);
     // The head is retaken at once and, until a current one is set, the status says so.
