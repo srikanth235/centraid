@@ -11,7 +11,7 @@ No policy: `crates/vault` decides, this crate moves bytes.
 
 ## The format is normative
 
-Every context string, header field and framing rule in `sealed` is a **format** decision: editing one re-keys every backup a member holds. The contexts are `centraid backup v2 root`, `… name` and `… object`; the framing is canonical (every chunk but the last exactly 4 MiB, only an empty part ends in an empty chunk), so one payload has one sealed shape. The formats before it — the v0 frame format and `centraid-object/1` — left with the planes that wrote them (#1080); no member holds an artefact in either.
+**A zstd upgrade is a format decision too:** chunk digests cover the compressed bytes, so the workspace pins `zstd` exactly and `contracts/crypto/chunk-digest-vectors.json` fails when its output moves (#1191 B9). Every context string, header field and framing rule in `sealed` is a **format** decision: editing one re-keys every backup a member holds. The contexts are `centraid backup v2 root`, `… name` and `… object`; the framing is canonical (every chunk but the last exactly 4 MiB, only an empty part ends in an empty chunk), so one payload has one sealed shape. The formats before it — the v0 frame format and `centraid-object/1` — left with the planes that wrote them (#1080); no member holds an artefact in either.
 
 `canonical_json` spells numbers the way `JSON.stringify` does (hence `ryu-js`), not the way `serde_json` spells integers: `1e21` is `1e+21` and `9007199254740993` is `9007199254740992`.
 
