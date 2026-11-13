@@ -31,6 +31,7 @@ pub mod catalog;
 pub mod contract;
 pub mod drift;
 pub mod facts;
+pub mod fields;
 mod generate;
 pub mod grid;
 pub mod intent;
@@ -42,6 +43,8 @@ pub mod mix;
 pub mod persona;
 pub mod plan;
 pub mod pools;
+#[cfg(test)]
+mod proofs;
 pub mod publish;
 pub mod rehearsal;
 pub mod render;

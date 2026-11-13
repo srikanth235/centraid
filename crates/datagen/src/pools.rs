@@ -673,6 +673,12 @@ pub const NEW_LOCKER: &[(&str, &str)] = &[
     ("Utility portal", "login"),
     ("Phone unlock hint", "password"),
     ("Library card", "card"),
+    ("Spare key note", "note"),
+    ("Recovery phrase note", "note"),
+    ("Safe room note", "note"),
+    ("Locksmith note", "note"),
+    ("Shed lock note", "note"),
+    ("Backup drive note", "note"),
 ];
 
 pub const NEW_ALBUMS: &[&str] = &[
@@ -820,6 +826,21 @@ pub const NEW_PHOTOS: &[&str] = &[
     "Backyard barbecue",
 ];
 
+pub const NEW_WORKOUTS: &[&str] = &[
+    "Evening jog",
+    "Morning swim",
+    "Pool laps",
+    "Hill walk",
+    "Park loop",
+    "Studio yoga",
+    "Canal ride",
+    "Stair climb",
+    "Beach run",
+    "Lunch walk",
+    "Spin class",
+    "Rowing machine",
+];
+
 pub const NEW_TRANSACTIONS: &[&str] = &[
     "Corner bakery",
     "Bookshop",
@@ -869,6 +890,7 @@ pub fn new_names(kind: &str) -> Option<Vec<&'static str>> {
         "category" => plain(NEW_CATEGORIES),
         "photo" => plain(NEW_PHOTOS),
         "transaction" => plain(NEW_TRANSACTIONS),
+        "workout" => plain(NEW_WORKOUTS),
         "locker item" => Some(NEW_LOCKER.iter().map(|(n, _)| *n).collect()),
         "account" => Some(NEW_ACCOUNTS.iter().map(|(n, _)| *n).collect()),
         _ => None,
@@ -885,6 +907,177 @@ pub fn new_type(kind: &str, name: &str) -> Option<&'static str> {
     };
     pairs.iter().find(|(n, _)| *n == name).map(|(_, t)| *t)
 }
+
+/// Values a member types into a request to store them: fake on their face, never a stored value. Each split has its own
+/// lists, so a held-out split never shares a value with train. Nothing here is a sealed value of any world: a world holds
+/// only a placeholder.
+#[derive(Debug, Clone, Copy)]
+pub struct Typed {
+    /// A password of a login, wifi or password item.
+    pub passwords: &'static [&'static str],
+    /// A card number of a card item.
+    pub card_numbers: &'static [&'static str],
+    /// The security code of a card item.
+    pub cvvs: &'static [&'static str],
+    /// The one-time seed of a login.
+    pub codes: &'static [&'static str],
+    /// The text of a secret note item.
+    pub notes: &'static [&'static str],
+    /// A user name of a login.
+    pub usernames: &'static [&'static str],
+    /// The address of a login.
+    pub urls: &'static [&'static str],
+}
+
+const TYPED_TRAIN: Typed = Typed {
+    passwords: &[
+        "fake-heron-4417",
+        "fake-otter-5832",
+        "fake-badger-6190",
+        "fake-lynx-7254",
+        "fake-falcon-8316",
+        "fake-marten-9471",
+        "fake-plover-1034",
+        "fake-weasel-2287",
+        "fake-osprey-3395",
+        "fake-ferret-4508",
+        "fake-curlew-5619",
+        "fake-gannet-6723",
+    ],
+    card_numbers: &[
+        "0000 1111 2222 3333",
+        "1111 2222 3333 4444",
+        "5555 0000 5555 0000",
+        "1234 0000 5678 0000",
+        "9999 8888 7777 6666",
+        "0101 0202 0303 0404",
+    ],
+    cvvs: &["111", "222", "333", "444", "123", "321"],
+    codes: &[
+        "FAKEAAAABBBBCCCC",
+        "FAKEDDDDEEEEFFFF",
+        "FAKEGGGGHHHHIIII",
+        "FAKEJJJJKKKKLLLL",
+        "FAKEMMMMNNNNOOOO",
+        "FAKEPPPPQQQQRRRR",
+    ],
+    notes: &[
+        "spare key hidden in the garden shed",
+        "backup drive sits behind the fake blue books",
+        "safe room combination is fake four seven two",
+        "locksmith is on speed dial under fake name Marlin",
+        "recovery words are fake river stone lantern",
+        "alarm panel backup number is fake nine nine nine",
+    ],
+    usernames: &[
+        "demo_heron",
+        "demo_otter",
+        "demo_badger",
+        "demo_lynx",
+        "demo_falcon",
+        "demo_marten",
+    ],
+    urls: &[
+        "https://demo-heron.example.com",
+        "https://demo-otter.example.com",
+        "https://demo-badger.example.com",
+        "https://demo-lynx.example.com",
+        "https://demo-falcon.example.com",
+        "https://demo-marten.example.com",
+    ],
+};
+
+const TYPED_VAL: Typed = Typed {
+    passwords: &["fake-ibis-8841", "fake-stoat-9952", "fake-teal-1063"],
+    card_numbers: &["2222 3333 4444 5555", "6666 7777 8888 9999"],
+    cvvs: &["555", "666"],
+    codes: &["FAKESSSSTTTTUUUU", "FAKEVVVVWWWWXXXX"],
+    notes: &[
+        "spare ladder lives under the fake porch",
+        "recovery words are fake copper kettle moss",
+    ],
+    usernames: &["demo_ibis", "demo_stoat"],
+    urls: &[
+        "https://demo-ibis.example.com",
+        "https://demo-stoat.example.com",
+    ],
+};
+
+const TYPED_TEST: Typed = Typed {
+    passwords: &["fake-quail-3285", "fake-newt-4396", "fake-pipit-5407"],
+    card_numbers: &["3333 4444 5555 6666", "7777 8888 9999 0000"],
+    cvvs: &["777", "888"],
+    codes: &["FAKEYYYYZZZZ2222", "FAKE333344445555"],
+    notes: &[
+        "gate remote is stored in the fake teapot",
+        "recovery words are fake amber cedar brook",
+    ],
+    usernames: &["demo_quail", "demo_newt"],
+    urls: &[
+        "https://demo-quail.example.com",
+        "https://demo-newt.example.com",
+    ],
+};
+
+/// The values a member types in, for the split.
+#[must_use]
+pub fn typed(split: crate::settings::Split) -> Typed {
+    use crate::settings::Split;
+    match split {
+        Split::Train => TYPED_TRAIN,
+        Split::Val => TYPED_VAL,
+        Split::Test => TYPED_TEST,
+    }
+}
+
+/// What a person says about a thing they add or change: a line for an event or a task.
+pub const DESCRIPTIONS: &[&str] = &[
+    "bring the printed forms",
+    "ask about the invoice",
+    "park behind the library",
+    "check the tyre pressure first",
+    "wear comfortable shoes",
+    "meet at the side entrance",
+    "take the spare charger",
+    "confirm the booking by phone",
+];
+
+/// A nickname for a person.
+pub const NICKNAMES: &[&str] = &[
+    "Bru", "Dee", "Kiki", "Mo", "Tito", "Zee", "Pip", "Nunu", "Bash", "Jojo",
+];
+
+/// The body of a note.
+pub const BODIES: &[&str] = &[
+    "oat milk and rice",
+    "ring the plumber about the tap",
+    "ideas for the garden bench",
+    "gift list for the cousins",
+    "pack sunscreen and a hat",
+    "questions for the dentist",
+    "paint colours to compare",
+    "books to borrow from the library",
+];
+
+/// The text of a document.
+pub const DOC_TEXTS: &[&str] = &[
+    "agenda for the committee meeting",
+    "packing list for the hiking trip",
+    "recipe notes for the lentil soup",
+    "checklist for the flat inspection",
+    "draft of the thank you letter",
+];
+
+/// An area a list sits in.
+pub const AREAS: &[&str] = &[
+    "Household",
+    "Garden",
+    "Errands",
+    "Studio",
+    "Travel",
+    "Hobbies",
+    "Family",
+];
 
 #[cfg(test)]
 mod new_name_tests {
@@ -904,6 +1097,7 @@ mod new_name_tests {
         "transaction",
         "locker item",
         "account",
+        "workout",
     ];
 
     /// Words the runtime reads for dates, periods, the verbs of a turn, or a retraction.
@@ -1059,6 +1253,70 @@ mod new_name_tests {
         }
         for (name, ty) in NEW_ACCOUNTS {
             assert_eq!(new_type("account", name), Some(*ty));
+        }
+    }
+
+    fn typed_values() -> Vec<(&'static str, &'static str)> {
+        let mut all = Vec::new();
+        for split in crate::settings::Split::ALL {
+            let t = typed(split);
+            for (what, pool) in [
+                ("password", t.passwords),
+                ("card_number", t.card_numbers),
+                ("cvv", t.cvvs),
+                ("code", t.codes),
+                ("notes", t.notes),
+                ("username", t.usernames),
+                ("url", t.urls),
+            ] {
+                all.extend(pool.iter().map(|v| (what, *v)));
+            }
+        }
+        all
+    }
+
+    #[test]
+    fn a_typed_value_is_in_one_split_only_and_is_fake_and_plain() {
+        let mut seen = std::collections::BTreeSet::new();
+        for (what, value) in typed_values() {
+            assert!(
+                seen.insert(value),
+                "{what}: {value:?} is in two pools or twice"
+            );
+            assert!(!value.contains("placeholder:"), "{value}");
+            for word in value
+                .to_lowercase()
+                .split(|c: char| !c.is_ascii_alphabetic())
+                .filter(|w| !w.is_empty())
+            {
+                assert!(!RESERVED.contains(&word), "{what}: {value:?} has {word:?}");
+            }
+        }
+        for split in crate::settings::Split::ALL {
+            let t = typed(split);
+            for pool in [
+                t.passwords,
+                t.card_numbers,
+                t.cvvs,
+                t.codes,
+                t.notes,
+                t.usernames,
+                t.urls,
+            ] {
+                assert!(!pool.is_empty(), "{split:?}");
+            }
+            assert!(t.passwords.iter().all(|p| p.starts_with("fake-")));
+            assert!(t.card_numbers.iter().all(|c| c.len() == 19));
+        }
+    }
+
+    #[test]
+    fn every_locker_type_the_requests_need_has_a_name_to_make_it_with() {
+        for ty in ["login", "wifi", "password", "card", "note"] {
+            assert!(
+                NEW_LOCKER.iter().filter(|(_, t)| *t == ty).count() >= 4,
+                "{ty}"
+            );
         }
     }
 }

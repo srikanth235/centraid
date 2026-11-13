@@ -665,6 +665,7 @@ pub fn render_and_mix(
     let grid = Grid::build(&catalog);
     let mut mcfg = mcfg.clone();
     mcfg.live = grid.live().iter().map(|c| c.to_string()).collect();
+    mcfg.live_fields = crate::fields::live_labels(&catalog, &grid);
     std::fs::create_dir_all(out)?;
     let spool_path = out.join(".render.spool");
     let rendered = render_all(input, rcfg, &catalog, &spool_path)?;

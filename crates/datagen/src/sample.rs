@@ -6,8 +6,11 @@
 //! only then writes the selector, so a selector always selects at least its target. The planner
 //! checks that the runtime selects exactly what [`crate::facts`] says it does.
 
+use centraid_assist::native::meta;
+
 use crate::catalog::Catalog;
 use crate::facts::{F, Facts, Row, fold};
+use crate::fields;
 use crate::grid::{Cell, Grid, cell_of, draws, measurable};
 use crate::intent::{
     Change, Cmp, Dep, Filter, Intent, Link, Lit, Measure, Outcome, Period, Reference, Scenario,
@@ -23,15 +26,6 @@ const CONSTRAINTS: &[(usize, u32)] = &[(0, 4), (1, 14), (2, 24), (3, 30), (4, 18
 
 /// Log choices (`Catalog.verbs[log].choices`).
 const LOG_CHOICES: &[&str] = &["call", "message", "visit", "coffee"];
-
-const ROLES: &[&str] = &[
-    "neighbour",
-    "colleague",
-    "cousin",
-    "coach",
-    "tutor",
-    "dentist",
-];
 
 #[derive(Debug, Clone)]
 enum Facet {
@@ -57,6 +51,103 @@ const REPAIR_FROM: usize = 84;
 
 /// A follow-up that can be a repair is one with this chance (percent).
 const REPAIR_FOLLOW_UP: usize = 14;
+
+/// An option of `find` that a plain draw of a read cell never uses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Search {
+    /// `text=`: a fuzzy name search across the vault, the kind narrowing it.
+    Text,
+    /// `trashed=true`: only rows in the trash.
+    Trashed,
+    /// `where field != value`.
+    Not,
+}
+
+impl Search {
+    pub const ALL: [Self; 3] = [Self::Text, Self::Trashed, Self::Not];
+}
+
+/// What a draw is aimed at beyond its cell: the supply the mix balances is made here, target first.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Aim {
+    /// The field of a (kind, field) pair of `create` or `edit` the turn must set (the pair's canonical name).
+    pub field: Option<String>,
+    /// The turn finds nothing.
+    pub empty: bool,
+    /// The row is said by a nickname or a misspelling.
+    pub nickname: bool,
+    /// The read goes through an option of `find` a plain draw never uses.
+    pub search: Option<Search>,
+}
+
+/// What the run still has room for: a share the run has filled stops being drawn (pronoun and handle references of the
+/// turns that point at rows, undo turns).
+#[derive(Debug, Clone, Copy)]
+pub struct Room {
+    pub pronoun: bool,
+    pub undo: bool,
+}
+
+impl Default for Room {
+    fn default() -> Self {
+        Self {
+            pronoun: true,
+            undo: true,
+        }
+    }
+}
+
+/// An opener whose draw of 0..100 is below this finds nothing, when it can (a read).
+const EMPTY_FIND: usize = 28;
+
+/// The same for a count.
+const EMPTY_COUNT: usize = 22;
+
+/// A person said by nickname when the draw (0..100) is below this and the person has a unique one.
+const NICKNAME_BELOW: usize = 35;
+
+/// A row said with a misspelling of its name when the draw (0..100) is at least this.
+const MISSPELL_FROM: usize = 72;
+
+/// The (kind, field) pairs the sampler can draw a value for: [`crate::fields`] asks it, so a pair no draw can make is
+/// listed as not live with the reason.
+#[must_use]
+pub fn draws_field(verb: &str, kind: &str, field: &str) -> bool {
+    if field == "name" {
+        return true;
+    }
+    match (verb, kind) {
+        ("create", "person") => matches!(field, "cadence" | "nickname" | "role"),
+        ("create", "event") => matches!(field, "description" | "duration" | "date"),
+        ("create", "task") => matches!(field, "description" | "date" | "effort" | "priority"),
+        ("create", "note") => field == "body",
+        ("create", "document") => field == "text",
+        ("create", "list") => field == "area",
+        ("create", "locker item") => matches!(
+            field,
+            "card_number" | "cvv" | "notes" | "code" | "password" | "type" | "url" | "username"
+        ),
+        ("create", "workout") => matches!(
+            field,
+            "climb" | "distance" | "energy" | "heart_rate" | "moving" | "date"
+        ),
+        ("create", "account") => field == "type",
+        ("edit", "person") => matches!(field, "cadence" | "met" | "nickname" | "role"),
+        ("edit", "event") => matches!(field, "description" | "duration"),
+        ("edit", "task") => matches!(field, "description" | "effort" | "priority" | "status"),
+        ("edit", "note") => matches!(field, "body" | "pinned"),
+        ("edit", "list") => field == "area",
+        ("edit", "locker item") => matches!(
+            field,
+            "card_number" | "cvv" | "notes" | "code" | "password" | "url" | "username"
+        ),
+        ("edit", "workout") => matches!(
+            field,
+            "climb" | "distance" | "energy" | "heart_rate" | "moving"
+        ),
+        _ => false,
+    }
+}
 
 pub struct Sampler<'a> {
     pub facts: &'a Facts,
@@ -503,16 +594,25 @@ impl<'a> Sampler<'a> {
     /// A first turn drawn from `cell`.
     #[must_use]
     pub fn opener(&self, cell: &Cell, rng: &mut Rng) -> Option<TurnIntent> {
+        self.opener_aim(cell, &Aim::default(), rng)
+    }
+
+    /// A first turn drawn from `cell` and aimed as `aim` says; `None` when the world holds nothing to draw it from.
+    #[must_use]
+    pub fn opener_aim(&self, cell: &Cell, aim: &Aim, rng: &mut Rng) -> Option<TurnIntent> {
         if self.world.settings.is_empty() {
-            return self.empty_opener(cell, rng);
+            return self.empty_opener(cell, aim, rng);
         }
         let c = self.constraints(rng);
         let kind = cell.kind.as_str();
         let outcome_roll = rng.below(100);
         match (cell.tool.as_str(), cell.verb.as_str()) {
             ("find", _) => {
+                if let Some(search) = aim.search {
+                    return self.search_read(kind, search, rng);
+                }
                 let (mut sel, _) = self.target_selector(kind, c, rng, ROW_CAP)?;
-                let mut empty = outcome_roll < 22 && self.empty_reads;
+                let mut empty = (aim.empty || outcome_roll < EMPTY_FIND) && self.empty_reads;
                 if empty {
                     match self.emptied(sel.clone(), rng) {
                         Some(none) => sel = none,
@@ -522,6 +622,9 @@ impl<'a> Sampler<'a> {
                     && let Some(top) = self.with_top(sel.clone(), rng)
                 {
                     sel = top;
+                }
+                if aim.empty && !empty {
+                    return None;
                 }
                 let repair = !empty && outcome_roll >= REPAIR_FROM;
                 Some(self.turn(
@@ -539,12 +642,15 @@ impl<'a> Sampler<'a> {
             }
             ("compute", "count") => {
                 let (mut sel, _) = self.target_selector(kind, c.saturating_sub(1), rng, 10_000)?;
-                let mut empty = outcome_roll < 15;
+                let mut empty = aim.empty || outcome_roll < EMPTY_COUNT;
                 if empty {
                     match self.emptied(sel.clone(), rng) {
                         Some(none) => sel = none,
                         None => empty = false,
                     }
+                }
+                if aim.empty && !empty {
+                    return None;
                 }
                 let repair = !empty && outcome_roll >= REPAIR_FROM;
                 Some(self.turn(
@@ -604,9 +710,9 @@ impl<'a> Sampler<'a> {
                 ))
             }
             ("do", "undo") => None,
-            ("do", verb) => self.write(kind, verb, rng, outcome_roll),
-            ("edit", _) => self.edit(kind, rng, outcome_roll),
-            ("create", _) => self.create(kind, rng, outcome_roll),
+            ("do", verb) => self.write(kind, verb, rng, outcome_roll, aim.nickname),
+            ("edit", _) => self.edit(kind, aim.field.as_deref(), aim.nickname, rng, outcome_roll),
+            ("create", _) => self.create(kind, aim.field.as_deref(), rng, outcome_roll),
             ("ask", _) => self.ask(kind, rng),
             ("decline", reason) => Some(self.turn(
                 Intent::Decline {
@@ -622,7 +728,7 @@ impl<'a> Sampler<'a> {
 
     /// The first turn in a new member's empty vault: nothing to draw a row from, so a read or a count finds nothing, a
     /// create makes the first row, and a decline is a decline. Every other cell has no turn here.
-    fn empty_opener(&self, cell: &Cell, rng: &mut Rng) -> Option<TurnIntent> {
+    fn empty_opener(&self, cell: &Cell, aim: &Aim, rng: &mut Rng) -> Option<TurnIntent> {
         let kind = cell.kind.as_str();
         match (cell.tool.as_str(), cell.verb.as_str()) {
             ("find", _) if self.empty_reads => Some(self.turn(
@@ -641,7 +747,7 @@ impl<'a> Sampler<'a> {
                 Outcome::Empty,
                 None,
             )),
-            ("create", _) => self.create(kind, rng, 0),
+            ("create", _) => self.create(kind, aim.field.as_deref(), rng, 0),
             ("decline", reason) => Some(self.turn(
                 Intent::Decline {
                     reason: reason.to_owned(),
@@ -652,6 +758,79 @@ impl<'a> Sampler<'a> {
             )),
             _ => None,
         }
+    }
+
+    /// A read through an option of `find` that a plain draw never uses: a fuzzy search of the names (`text`), the rows in
+    /// the trash (`trashed`), or a fixed-list field that is not a value (`!=`). `None` when the world holds no such row.
+    fn search_read(&self, kind: &str, search: Search, rng: &mut Rng) -> Option<TurnIntent> {
+        let live = self.live_rows(kind);
+        let sel = match search {
+            Search::Text => {
+                let row = live.get(rng.below(live.len().max(1)))?;
+                // the longest plain word of the name: what a person would search by
+                let word = row
+                    .name
+                    .split_whitespace()
+                    .filter(|w| w.chars().count() >= 4 && w.chars().all(char::is_alphabetic))
+                    .max_by_key(|w| w.chars().count())?
+                    .to_lowercase();
+                let mut sel = Selector::of(kind);
+                sel.text = Some(word);
+                sel
+            }
+            Search::Trashed => {
+                let mut sel = Selector::of(kind);
+                sel.trashed = true;
+                sel
+            }
+            Search::Not => {
+                let field = match kind {
+                    "task" | "transaction" => "status",
+                    "account" | "locker item" => "type",
+                    _ => return None,
+                };
+                let values: Vec<String> = self
+                    .catalog
+                    .kind(kind)?
+                    .fields
+                    .iter()
+                    .find(|f| f.name == field)?
+                    .values
+                    .clone();
+                let row = live.get(rng.below(live.len().max(1)))?;
+                let have = row.text(field)?;
+                let other: Vec<&String> = values.iter().filter(|v| *v != have).collect();
+                let value = (*other.get(rng.below(other.len().max(1)))?).clone();
+                let mut best = None;
+                for extra in 0..3 {
+                    let narrowing: Vec<Facet> = self
+                        .pick(self.facets(row, rng), extra, rng)
+                        .into_iter()
+                        .filter(|f| {
+                            matches!(f, Facet::Filter(f) if f.field != field)
+                                || matches!(f, Facet::Period(_))
+                        })
+                        .collect();
+                    let mut sel = self.selector(kind, narrowing);
+                    sel.filters.push(Filter {
+                        field: field.to_owned(),
+                        cmp: Cmp::Ne,
+                        value: Lit::Text(value.clone()),
+                    });
+                    let n = self.facts.select(&sel, None).len();
+                    if (1..=ROW_CAP).contains(&n) {
+                        best = Some(sel);
+                        break;
+                    }
+                }
+                best?
+            }
+        };
+        let n = self.facts.select(&sel, None).len();
+        if !(1..=ROW_CAP).contains(&n) {
+            return None;
+        }
+        Some(self.turn(Intent::Read { sel }, Reference::Select, Outcome::Done, None))
     }
 
     /// A selector that selects nothing: the same constraints under a period nothing falls in, or
@@ -861,10 +1040,10 @@ impl<'a> Sampler<'a> {
     // ------------------------------------------------------------------ writes
 
     /// How a row is named in a request: `(name to say, reference kind)`.
-    fn say(&self, row: &Row, rng: &mut Rng) -> Option<(String, Reference)> {
-        let roll = rng.below(100);
+    fn say(&self, row: &Row, rng: &mut Rng, nick: bool) -> Option<(String, Reference)> {
+        let roll = if nick { 0 } else { rng.below(100) };
         if row.kind == "person" {
-            if roll < 20
+            if roll < NICKNAME_BELOW
                 && let Some(nick) = row.text("nickname")
             {
                 let n = self
@@ -876,7 +1055,7 @@ impl<'a> Sampler<'a> {
                     return Some((nick.to_owned(), Reference::Nickname));
                 }
             }
-            if roll < 45 {
+            if !nick && roll < 45 {
                 let first = row.name.split_whitespace().next()?;
                 let n = self
                     .facts
@@ -896,10 +1075,13 @@ impl<'a> Sampler<'a> {
         if self.facts.named(&row.kind, &row.name).len() != 1 {
             return None;
         }
-        if roll >= 88
+        if (nick || roll >= MISSPELL_FROM)
             && let Some(typo) = misspell(&row.name, rng)
         {
             return Some((typo, Reference::Misspelling));
+        }
+        if nick {
+            return None;
         }
         Some((row.name.clone(), Reference::Name))
     }
@@ -1007,7 +1189,14 @@ impl<'a> Sampler<'a> {
         ))
     }
 
-    fn write(&self, kind: &str, verb: &str, rng: &mut Rng, roll: usize) -> Option<TurnIntent> {
+    fn write(
+        &self,
+        kind: &str,
+        verb: &str,
+        rng: &mut Rng,
+        roll: usize,
+        nickname: bool,
+    ) -> Option<TurnIntent> {
         if !draws(kind, verb) {
             return None;
         }
@@ -1050,7 +1239,7 @@ impl<'a> Sampler<'a> {
                 Reference::Name,
             )
         } else {
-            self.target_for(row, rng)?
+            self.target_for(row, rng, nickname)?
         };
         let arg = match verb {
             "reschedule" => {
@@ -1106,10 +1295,10 @@ impl<'a> Sampler<'a> {
 
     /// How a request names `row` so that it picks that row alone: by name (or nickname, or a
     /// misspelling) when the name is its own, otherwise by constraints that select only it.
-    fn target_for(&self, row: &Row, rng: &mut Rng) -> Option<(Target, Reference)> {
+    fn target_for(&self, row: &Row, rng: &mut Rng, nickname: bool) -> Option<(Target, Reference)> {
         let kind = row.kind.as_str();
         let by_name = |this: &Self, rng: &mut Rng| {
-            let (name, reference) = this.say(row, rng)?;
+            let (name, reference) = this.say(row, rng, nickname)?;
             Some((
                 Target::Name {
                     kind: kind.to_owned(),
@@ -1129,7 +1318,9 @@ impl<'a> Sampler<'a> {
                     .then_some((Target::Select { sel }, Reference::Select))
             })
         };
-        if rng.chance(0.3) {
+        if nickname {
+            by_name(self, rng).or_else(|| by_select(self, rng))
+        } else if rng.chance(0.3) {
             by_select(self, rng).or_else(|| by_name(self, rng))
         } else {
             by_name(self, rng).or_else(|| by_select(self, rng))
@@ -1146,87 +1337,187 @@ impl<'a> Sampler<'a> {
             .any(|p| p["a"] == key || p["b"] == key)
     }
 
-    fn edit(&self, kind: &str, rng: &mut Rng, roll: usize) -> Option<TurnIntent> {
+    /// Can `field` of `kind` be edited on `row`? A secret or a plain Locker field only on a type that keeps it.
+    fn edit_fits(kind: &str, field: &str, ty: Option<&str>) -> bool {
+        if kind != "locker item" {
+            return true;
+        }
+        let ty = ty.unwrap_or("login");
+        match field {
+            "password" | "code" | "card_number" | "cvv" => {
+                meta::locker_secret_column(ty, field).is_some()
+            }
+            "username" | "url" | "notes" => meta::locker_column(ty, field).is_some(),
+            _ => true,
+        }
+    }
+
+    /// A new value for `field` of `kind`: never the one the row has. `row` is `None` for a row the session just made
+    /// (`made_type` is its Locker type), `avoid` the name it was made with.
+    fn edit_value(
+        &self,
+        kind: &str,
+        field: &str,
+        row: Option<&Row>,
+        made_type: Option<&str>,
+        avoid: &str,
+        rng: &mut Rng,
+    ) -> Option<Val> {
+        let typed = self.typed();
+        let differs = |pool: &[&str], have: Option<&str>, rng: &mut Rng| -> Option<Val> {
+            let options: Vec<&&str> = pool
+                .iter()
+                .filter(|p| have.is_none_or(|h| !h.eq_ignore_ascii_case(p)))
+                .collect();
+            (!options.is_empty()).then(|| Val::Text((**rng.pick(&options)).to_owned()))
+        };
+        let number = |lo: i64, hi: i64, step: i64, rng: &mut Rng| -> Val {
+            let have = row.and_then(|r| r.num(field));
+            loop {
+                let n = (rng.range(lo, hi) * step) as f64;
+                if have != Some(n) {
+                    return Val::Num(n);
+                }
+            }
+        };
+        let text = |f: &str| row.and_then(|r| r.text(f));
+        let ty = row.and_then(|r| r.text("type")).or(made_type);
+        Some(match (kind, field) {
+            (_, "name") => {
+                let have = row.map_or(avoid, |r| r.name.as_str());
+                Val::Text(self.fresh_name(kind, rng, &[have, avoid]))
+            }
+            ("person", "role") => differs(pools::ROLES, text("role"), rng)?,
+            ("person", "nickname") => differs(pools::NICKNAMES, text("nickname"), rng)?,
+            ("person", "met") => differs(pools::MET, text("met"), rng)?,
+            ("person", "cadence") => number(1, 12, 7, rng),
+            ("event", "duration") => number(1, 8, 15, rng),
+            ("event" | "task", "description") => differs(pools::DESCRIPTIONS, None, rng)?,
+            ("task", "effort") => number(1, 8, 15, rng),
+            ("task", "priority") => number(1, 9, 1, rng),
+            ("task", "status") => differs(
+                &["open", "completed", "cancelled"],
+                text("status").or(Some("open")),
+                rng,
+            )?,
+            ("note", "body") => differs(pools::BODIES, None, rng)?,
+            ("note", "pinned") => {
+                Val::Flag(!row.is_some_and(|r| r.fields.get("pinned") == Some(&F::B(true))))
+            }
+            ("list", "area") => differs(pools::AREAS, text("area"), rng)?,
+            ("locker item", "password") => differs(typed.passwords, None, rng)?,
+            ("locker item", "code") => differs(typed.codes, None, rng)?,
+            ("locker item", "card_number") => differs(typed.card_numbers, None, rng)?,
+            ("locker item", "cvv") => differs(typed.cvvs, None, rng)?,
+            ("locker item", "username") => differs(typed.usernames, text("username"), rng)?,
+            ("locker item", "url") => differs(typed.urls, None, rng)?,
+            ("locker item", "notes") => {
+                if ty == Some("note") {
+                    differs(typed.notes, None, rng)?
+                } else {
+                    differs(pools::BODIES, None, rng)?
+                }
+            }
+            ("workout", "moving") => number(10, 150, 60, rng),
+            ("workout", "distance") => number(1, 40, 500, rng),
+            ("workout", "energy") => number(5, 120, 10, rng),
+            ("workout", "heart_rate") => number(9, 18, 10, rng),
+            ("workout", "climb") => number(1, 60, 10, rng),
+            _ => return None,
+        })
+    }
+
+    /// An edit of a workout or a daily figure of a world that follows a Health store: the runtime refuses it and names the
+    /// store (the owner's ruling: refuse edits to synced rows and name the source), and the turn ends on that refusal.
+    fn synced_edit(&self, kind: &str, rng: &mut Rng) -> Option<TurnIntent> {
         let rows: Vec<&Row> = self.live_rows(kind);
         if rows.is_empty() {
             return None;
         }
         let row = rows[rng.below(rows.len())];
-        let (target, reference) = self.target_for(row, rng)?;
-        let mut changes = Vec::new();
-        let rename = |rng: &mut Rng| Change {
-            field: "name".into(),
-            value: Val::Text(self.fresh_name(kind, rng, &[&row.name])),
-        };
-        match kind {
-            "task" => match rng.below(3) {
-                0 => changes.push(Change {
-                    field: "priority".into(),
-                    value: Val::Num(rng.range(1, 9) as f64),
-                }),
-                1 => {
-                    changes.push(Change {
-                        field: "effort".into(),
-                        value: Val::Num((rng.range(1, 8) * 15) as f64),
-                    });
-                    if rng.chance(0.5) {
-                        changes.push(Change {
-                            field: "priority".into(),
-                            value: Val::Num(rng.range(1, 9) as f64),
-                        });
-                    }
-                }
-                _ => changes.push(rename(rng)),
-            },
-            "person" => match rng.below(3) {
-                0 => changes.push(Change {
-                    field: "role".into(),
-                    value: Val::Text((*rng.pick(ROLES)).into()),
-                }),
-                1 => changes.push(Change {
-                    field: "cadence".into(),
-                    value: Val::Num((rng.range(1, 12) * 7) as f64),
-                }),
-                _ => changes.push(rename(rng)),
-            },
-            "event" => match rng.below(2) {
-                0 => changes.push(Change {
-                    field: "duration".into(),
-                    value: Val::Num((rng.range(1, 8) * 15) as f64),
-                }),
-                _ => changes.push(rename(rng)),
-            },
+        let (target, reference) = self.target_for(row, rng, false)?;
+        let changes = if kind == "workout" {
+            let (field, low, high, step) = *rng.pick(&[
+                ("moving", 10, 150, 60),
+                ("distance", 1, 40, 500),
+                ("energy", 5, 120, 10),
+                ("heart_rate", 9, 18, 10),
+                ("climb", 1, 60, 10),
+            ]);
+            vec![Change {
+                field: field.into(),
+                value: Val::Num((rng.range(low, high) * step) as f64),
+            }]
+        } else {
             // the name of a figure is its metric: what an edit changes is the value
-            "daily figure" => changes.push(Change {
+            vec![Change {
                 field: "value".into(),
                 value: Val::Num(rng.range(1, 200) as f64 * 10.0),
-            }),
-            "workout" => {
-                let (field, low, high, step) = *rng.pick(&[
-                    ("moving", 10, 150, 60),
-                    ("distance", 1, 40, 500),
-                    ("energy", 5, 120, 10),
-                    ("heart_rate", 9, 18, 10),
-                    ("climb", 1, 60, 10),
-                ]);
-                changes.push(Change {
-                    field: field.into(),
-                    value: Val::Num((rng.range(low, high) * step) as f64),
-                });
-            }
-            _ => changes.push(rename(rng)),
-        }
-        // What a health store states is not written here: every seeded world follows one, so the
-        // runtime refuses the edit, names the store, and the turn ends on that refusal (the
-        // owner's ruling: refuse edits to synced rows and name the source).
-        let synced = matches!(kind, "workout" | "daily figure");
-        let repair = !synced && roll >= REPAIR_FROM;
+            }]
+        };
         Some(self.turn(
             Intent::Edit { target, changes },
             reference,
-            if synced {
-                Outcome::Decline
-            } else if repair {
+            Outcome::Decline,
+            None,
+        ))
+    }
+
+    fn edit(
+        &self,
+        kind: &str,
+        focus: Option<&str>,
+        nickname: bool,
+        rng: &mut Rng,
+        roll: usize,
+    ) -> Option<TurnIntent> {
+        if matches!(kind, "workout" | "daily figure") {
+            return self.synced_edit(kind, rng);
+        }
+        let live = fields::live_fields(self.catalog, self.grid, "edit", kind);
+        let field = match focus {
+            Some(f) => live.iter().find(|l| *l == f)?.clone(),
+            None => live.get(rng.below(live.len().max(1)))?.clone(),
+        };
+        let rows: Vec<&Row> = self
+            .live_rows(kind)
+            .into_iter()
+            .filter(|r| Self::edit_fits(kind, &field, r.text("type")))
+            .collect();
+        if rows.is_empty() {
+            return None;
+        }
+        let row = rows[rng.below(rows.len())];
+        let (target, reference) = self.target_for(row, rng, nickname)?;
+        let mut changes = vec![Change {
+            field: field.clone(),
+            value: self.edit_value(kind, &field, Some(row), None, "", rng)?,
+        }];
+        // now and then a second plain field of the same row, as people say "make it 45 minutes and rename it"
+        if focus.is_none() && rng.chance(0.25) {
+            let plain: Vec<&String> = live
+                .iter()
+                .filter(|f| {
+                    **f != field
+                        && !matches!(f.as_str(), "status" | "pinned" | "area" | "name")
+                        && kind != "locker item"
+                        && Self::edit_fits(kind, f, row.text("type"))
+                })
+                .collect();
+            if !plain.is_empty() {
+                let second = plain[rng.below(plain.len())].clone();
+                if let Some(value) = self.edit_value(kind, &second, Some(row), None, "", rng) {
+                    changes.push(Change {
+                        field: second,
+                        value,
+                    });
+                }
+            }
+        }
+        Some(self.turn(
+            Intent::Edit { target, changes },
+            reference,
+            if roll >= REPAIR_FROM {
                 Outcome::Repair
             } else {
                 Outcome::Done
@@ -1235,77 +1526,192 @@ impl<'a> Sampler<'a> {
         ))
     }
 
-    fn create(&self, kind: &str, rng: &mut Rng, roll: usize) -> Option<TurnIntent> {
-        let name = self.fresh_name(kind, rng, &[]);
+    /// A name for a new Locker item of type `ty`, from the names the pool gives that type.
+    fn fresh_locker_name(&self, ty: &str, rng: &mut Rng) -> String {
+        let names: Vec<&str> = pools::NEW_LOCKER
+            .iter()
+            .filter(|(_, t)| *t == ty)
+            .map(|(n, _)| *n)
+            .collect();
+        let start = rng.below(names.len().max(1));
+        if let Some(name) = (0..names.len())
+            .map(|i| names[(start + i) % names.len()])
+            .find(|n| !self.taken("locker item", n))
+        {
+            return name.to_owned();
+        }
+        self.fallbacks
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let base = names.get(start).copied().unwrap_or("Locker item");
+        (2..)
+            .map(|n| format!("{base} {n}"))
+            .find(|n| !self.taken("locker item", n))
+            .unwrap_or_else(|| base.to_owned())
+    }
+
+    fn typed(&self) -> pools::Typed {
+        pools::typed(self.world.spec.split)
+    }
+
+    /// The Locker types a request that sets `field` can be made for.
+    fn locker_types_for(field: Option<&str>) -> &'static [&'static str] {
+        match field {
+            Some("password") => &["login", "wifi", "password"],
+            Some("code" | "username" | "url") => &["login"],
+            Some("card_number" | "cvv") => &["card"],
+            Some("notes") => &["login", "note"],
+            _ => &["login", "wifi", "password", "card", "note"],
+        }
+    }
+
+    fn create(
+        &self,
+        kind: &str,
+        focus: Option<&str>,
+        rng: &mut Rng,
+        roll: usize,
+    ) -> Option<TurnIntent> {
+        let live = fields::live_fields(self.catalog, self.grid, "create", kind);
+        if let Some(f) = focus
+            && !live.iter().any(|l| l == f)
+        {
+            return None;
+        }
+        let typed = self.typed();
+        let ty: Option<&str> =
+            (kind == "locker item").then(|| *rng.pick(Self::locker_types_for(focus)));
+        let name = match ty {
+            Some(ty) => self.fresh_locker_name(ty, rng),
+            None => self.fresh_name(kind, rng, &[]),
+        };
         let made_type = pools::new_type(kind, &name);
         let mut fields = vec![Change {
             field: "name".into(),
             value: Val::Text(name),
         }];
+        // a field is set when the draw is aimed at it, or by chance `p`
+        let want = |field: &str, p: f64, rng: &mut Rng| focus == Some(field) || rng.chance(p);
+        let day = |rel: i64| Val::When(Period::Day { rel }.when());
+        let mut put = |field: &str, value: Val| {
+            fields.push(Change {
+                field: field.into(),
+                value,
+            });
+        };
+        let pick = |pool: &[&str], rng: &mut Rng| Val::Text((*rng.pick(pool)).to_owned());
         match kind {
             "task" => {
-                fields.push(Change {
-                    field: "due".into(),
-                    value: Val::When(
-                        Period::Day {
-                            rel: rng.range(1, 30),
-                        }
-                        .when(),
-                    ),
-                });
-                if rng.chance(0.6) {
-                    fields.push(Change {
-                        field: "priority".into(),
-                        value: Val::Num(rng.range(1, 9) as f64),
-                    });
+                if want("date", 0.6, rng) {
+                    put("due", day(rng.range(1, 30)));
                 }
-                if rng.chance(0.4) {
-                    fields.push(Change {
-                        field: "effort".into(),
-                        value: Val::Num((rng.range(1, 8) * 15) as f64),
-                    });
+                if want("priority", 0.5, rng) {
+                    put("priority", Val::Num(rng.range(1, 9) as f64));
+                }
+                if want("effort", 0.4, rng) {
+                    put("effort", Val::Num((rng.range(1, 8) * 15) as f64));
+                }
+                if want("description", 0.3, rng) {
+                    put("description", pick(pools::DESCRIPTIONS, rng));
                 }
             }
             "event" => {
-                let day = rng.range(1, 30);
-                fields.push(Change {
-                    field: "start".into(),
-                    value: Val::When(format!(
-                        r#"{{"unit":"day","rel":{day},"time":"{:02}:00"}}"#,
+                put(
+                    "start",
+                    Val::When(format!(
+                        r#"{{"unit":"day","rel":{},"time":"{:02}:00"}}"#,
+                        rng.range(1, 30),
                         rng.range(8, 18)
                     )),
-                });
-                fields.push(Change {
-                    field: "duration".into(),
-                    value: Val::Num((rng.range(1, 6) * 30) as f64),
-                });
-            }
-            "person" => {
-                if rng.chance(0.6) {
-                    fields.push(Change {
-                        field: "role".into(),
-                        value: Val::Text((*rng.pick(ROLES)).into()),
-                    });
+                );
+                if want("duration", 0.7, rng) {
+                    put("duration", Val::Num((rng.range(1, 6) * 30) as f64));
+                }
+                if want("description", 0.3, rng) {
+                    put("description", pick(pools::DESCRIPTIONS, rng));
                 }
             }
-            "note" => fields.push(Change {
-                field: "body".into(),
-                value: Val::Text("Remember to follow up on this.".into()),
-            }),
-            "list" => fields.push(Change {
-                field: "area".into(),
-                value: Val::Text("Household".into()),
-            }),
-            "locker item" => {
-                fields.push(Change {
-                    field: "type".into(),
-                    value: Val::Text(made_type.unwrap_or("login").into()),
-                });
+            "person" => {
+                if want("role", 0.6, rng) {
+                    put("role", pick(pools::ROLES, rng));
+                }
+                if want("nickname", 0.4, rng) {
+                    put("nickname", pick(pools::NICKNAMES, rng));
+                }
+                if want("cadence", 0.3, rng) {
+                    put("cadence", Val::Num((rng.range(1, 12) * 7) as f64));
+                }
             }
-            "account" => fields.push(Change {
-                field: "type".into(),
-                value: Val::Text(made_type.unwrap_or("checking").into()),
-            }),
+            "note" => {
+                if want("body", 0.8, rng) {
+                    put("body", pick(pools::BODIES, rng));
+                }
+            }
+            "document" => {
+                if want("text", 0.6, rng) {
+                    put("text", pick(pools::DOC_TEXTS, rng));
+                }
+            }
+            "list" => {
+                if want("area", 0.7, rng) {
+                    put("area", pick(pools::AREAS, rng));
+                }
+            }
+            "locker item" => {
+                let ty = ty.unwrap_or("login");
+                put("type", Val::Text(ty.into()));
+                match ty {
+                    "login" => {
+                        if want("username", 0.5, rng) {
+                            put("username", pick(typed.usernames, rng));
+                        }
+                        if want("url", 0.4, rng) {
+                            put("url", pick(typed.urls, rng));
+                        }
+                        if want("password", 0.6, rng) {
+                            put("password", pick(typed.passwords, rng));
+                        }
+                        if want("code", 0.25, rng) {
+                            put("code", pick(typed.codes, rng));
+                        }
+                        if want("notes", 0.25, rng) {
+                            put("notes", pick(pools::BODIES, rng));
+                        }
+                    }
+                    "wifi" | "password" => {
+                        put("password", pick(typed.passwords, rng));
+                    }
+                    "card" => {
+                        put("card_number", pick(typed.card_numbers, rng));
+                        if want("cvv", 0.6, rng) {
+                            put("cvv", pick(typed.cvvs, rng));
+                        }
+                    }
+                    _ => put("notes", pick(typed.notes, rng)),
+                }
+            }
+            "account" => put("type", Val::Text(made_type.unwrap_or("checking").into())),
+            "workout" => {
+                put(
+                    "date",
+                    Val::When(format!(
+                        r#"{{"unit":"day","rel":-{},"time":"{:02}:30"}}"#,
+                        rng.range(1, 14),
+                        rng.range(6, 20)
+                    )),
+                );
+                let figures: [(&str, i64, i64, i64); 5] = [
+                    ("moving", 10, 150, 60),
+                    ("distance", 1, 40, 500),
+                    ("energy", 5, 120, 10),
+                    ("heart_rate", 9, 18, 10),
+                    ("climb", 1, 60, 10),
+                ];
+                for (field, low, high, step) in figures {
+                    if want(field, 0.4, rng) {
+                        put(field, Val::Num((rng.range(low, high) * step) as f64));
+                    }
+                }
+            }
             _ => {}
         }
         let repair = roll >= REPAIR_FROM;
@@ -1650,10 +2056,28 @@ impl<'a> Sampler<'a> {
     /// the turns before them.
     #[must_use]
     pub fn session(&self, id: &str, cell: &Cell, extra: usize, rng: &mut Rng) -> Option<Scenario> {
+        self.session_aim(id, cell, &Aim::default(), &Room::default(), extra, rng)
+    }
+
+    /// [`Self::session`] with the first turn aimed as `aim` says and the follow-ups drawn only where `room` says there is
+    /// still room for them.
+    #[must_use]
+    pub fn session_aim(
+        &self,
+        id: &str,
+        cell: &Cell,
+        aim: &Aim,
+        room: &Room,
+        extra: usize,
+        rng: &mut Rng,
+    ) -> Option<Scenario> {
         let mut turns: Vec<TurnIntent> = Vec::new();
         let mut extra = extra;
         match (cell.tool.as_str(), cell.verb.as_str()) {
             ("answer", _) => {
+                if !room.pronoun {
+                    return None;
+                }
                 // a result shown again: two questions, then the first one's answer once more
                 let value = cell.verb == "value";
                 let pool: Vec<Cell> = self
@@ -1698,7 +2122,43 @@ impl<'a> Sampler<'a> {
                 ));
                 extra = extra.saturating_sub(1);
             }
+            ("edit", _) if cell.kind == "workout" && aim.field.is_some() => {
+                // the only workouts a member can edit are ones they logged: a followed store states the rest
+                // aimed at a pair the field floor needs, so it is drawn whatever room the pronoun references have:
+                // the mix's ceiling holds their share
+                let field = aim.field.clone()?;
+                let first = self.create("workout", None, rng, 0)?;
+                let Intent::Create { fields: made, .. } = &first.intent else {
+                    return None;
+                };
+                let made_name = made
+                    .iter()
+                    .find_map(|c| (c.field == "name").then(|| c.value.render()))
+                    .unwrap_or_default();
+                let value = (0..8).find_map(|_| {
+                    let v = self.edit_value("workout", &field, None, None, &made_name, rng)?;
+                    (!made.iter().any(|c| c.field == field && c.value == v)).then_some(v)
+                })?;
+                let edit = self.turn(
+                    Intent::Edit {
+                        target: Target::Turn {
+                            turn: 0,
+                            kind: "workout".into(),
+                        },
+                        changes: vec![Change { field, value }],
+                    },
+                    Reference::Pronoun,
+                    Outcome::Done,
+                    Some((0, Dep::Pronoun)),
+                );
+                turns.push(first);
+                turns.push(edit);
+                extra = 0;
+            }
             ("do", "undo") => {
+                if !room.undo {
+                    return None;
+                }
                 let writes: Vec<Cell> = self
                     .grid
                     .live()
@@ -1718,12 +2178,13 @@ impl<'a> Sampler<'a> {
             _ => {
                 // an empty result is drawn by `opener`, so leave room for it before a window around an event
                 let across = matches!(cell.tool.as_str(), "find" | "compute")
+                    && *aim == Aim::default()
                     && !rng.chance(0.2)
                     && rng.chance(0.7);
                 let first = across
                     .then(|| self.across(cell, rng))
                     .flatten()
-                    .or_else(|| self.opener(cell, rng))?;
+                    .or_else(|| self.opener_aim(cell, aim, rng))?;
                 turns.push(first);
             }
         }
@@ -1731,7 +2192,7 @@ impl<'a> Sampler<'a> {
             return None;
         }
         for _ in 0..extra {
-            let Some(next) = self.follow(&turns, rng) else {
+            let Some(next) = self.follow(&turns, room, rng) else {
                 break;
             };
             turns.push(next);
@@ -1791,7 +2252,7 @@ impl<'a> Sampler<'a> {
 
     /// A follow-up that leans on what the turns before it showed. The branches that fit the turn
     /// before are tried in a seeded order until one yields.
-    fn follow(&self, turns: &[TurnIntent], rng: &mut Rng) -> Option<TurnIntent> {
+    fn follow(&self, turns: &[TurnIntent], room: &Room, rng: &mut Rng) -> Option<TurnIntent> {
         let last = turns.len() - 1;
         let prev = &turns[last];
         let sets = self.sets(turns);
@@ -1811,6 +2272,10 @@ impl<'a> Sampler<'a> {
             Intent::Create { .. } if prev.outcome == Outcome::Done => vec![30],
             _ => vec![],
         };
+        // a share the run has filled is not drawn again: the pronoun and handle branches, the undo
+        branches.retain(|b| {
+            (room.pronoun || !matches!(b, 1 | 3 | 5 | 12 | 21 | 30)) && (room.undo || *b != 20)
+        });
         // a seeded shuffle
         for i in (1..branches.len()).rev() {
             branches.swap(i, rng.below(i + 1));
@@ -2035,7 +2500,9 @@ impl<'a> Sampler<'a> {
                     Some((last, Dep::Pronoun)),
                 )),
                 // show the row just changed, or take the change back
-                20 if verb_of(&prev.intent) != "undo" => Some(self.follow_undo(last)),
+                20 if verb_of(&prev.intent) != "undo" && !self.seals(&prev.intent) => {
+                    Some(self.follow_undo(last))
+                }
                 21 if !set.is_empty()
                     && !set.iter().any(|k| k.starts_with('+'))
                     && !matches!(verb_of(&prev.intent), "delete" | "cancel")
@@ -2060,44 +2527,53 @@ impl<'a> Sampler<'a> {
                 }),
                 // a row just made, changed
                 30 => {
-                    let changes = match kind.as_str() {
-                        "task" => vec![Change {
-                            field: "priority".into(),
-                            value: Val::Num(rng.range(1, 9) as f64),
-                        }],
-                        "person" => vec![Change {
-                            field: "role".into(),
-                            value: Val::Text((*rng.pick(ROLES)).into()),
-                        }],
-                        _ => vec![Change {
-                            field: "name".into(),
-                            value: Val::Text({
-                                let made = match &prev.intent {
-                                    Intent::Create { fields, .. } => fields
-                                        .iter()
-                                        .find_map(|c| match &c.value {
-                                            Val::Text(t) if c.field == "name" => Some(t.as_str()),
-                                            _ => None,
-                                        })
-                                        .unwrap_or_default(),
-                                    _ => "",
-                                };
-                                self.fresh_name(&kind, rng, &[made])
-                            }),
-                        }],
+                    let Intent::Create { fields: made, .. } = &prev.intent else {
+                        continue;
                     };
-                    Some(self.turn(
-                        Intent::Edit {
-                            target: Target::Turn {
-                                turn: last,
-                                kind: kind.clone(),
-                            },
-                            changes,
-                        },
-                        Reference::Pronoun,
-                        Outcome::Done,
-                        Some((last, Dep::Pronoun)),
-                    ))
+                    let made_name = made
+                        .iter()
+                        .find_map(|c| (c.field == "name").then(|| c.value.render()))
+                        .unwrap_or_default();
+                    let made_type = made
+                        .iter()
+                        .find_map(|c| (c.field == "type").then(|| c.value.render()));
+                    let live = fields::live_fields(self.catalog, self.grid, "edit", &kind);
+                    let fits: Vec<&String> = live
+                        .iter()
+                        .filter(|f| Self::edit_fits(&kind, f, made_type.as_deref()))
+                        .collect();
+                    if fits.is_empty() {
+                        None
+                    } else {
+                        let field = fits[rng.below(fits.len())].clone();
+                        (0..8)
+                            .find_map(|_| {
+                                let v = self.edit_value(
+                                    &kind,
+                                    &field,
+                                    None,
+                                    made_type.as_deref(),
+                                    &made_name,
+                                    rng,
+                                )?;
+                                (!made.iter().any(|c| c.field == field && c.value == v))
+                                    .then_some(v)
+                            })
+                            .map(|value| {
+                                self.turn(
+                                    Intent::Edit {
+                                        target: Target::Turn {
+                                            turn: last,
+                                            kind: kind.clone(),
+                                        },
+                                        changes: vec![Change { field, value }],
+                                    },
+                                    Reference::Pronoun,
+                                    Outcome::Done,
+                                    Some((last, Dep::Pronoun)),
+                                )
+                            })
+                    }
                 }
                 _ => None,
             };
@@ -2108,6 +2584,17 @@ impl<'a> Sampler<'a> {
             }
         }
         None
+    }
+
+    /// Does the turn type a secret the vault seals? An undo cannot put an earlier sealed value back, so none follows it.
+    fn seals(&self, intent: &Intent) -> bool {
+        match intent {
+            Intent::Edit { target, changes } => changes.iter().any(|c| {
+                self.catalog
+                    .typed_secret(target_kind(target), &c.field, None)
+            }),
+            _ => false,
+        }
     }
 
     /// The keys each turn leaves for the next to lean on, read off the world.

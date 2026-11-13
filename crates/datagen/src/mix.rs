@@ -16,13 +16,18 @@
 //!    * **cells**: the grid's live cells (tool, kind, verb) share the split's turns equally (water-filled: a cell the
 //!      input cannot fill gives its share to the others), and **a floor**: every live cell has at least `floor` turns in
 //!      train (as many as the input holds), chosen first, rarest cell first;
+//!    * **fields**: the live (kind, field) pairs of `create` and `edit` ([`crate::fields`]) are balanced the same way, each
+//!      with its own floor (`field_floor`) and its own line of the report;
 //!    * **outcome** per turn: done, nothing found, ask, decline, repair;
 //!    * **action** per turn: read/count/measure, create/edit/other write, recall/undo;
 //!    * **row reference** per turn that points at a row: name, filters, pronoun or earlier answer, nickname or misspelling;
 //!    * **impossible**: the share of turns that ask for what the vault cannot do (the runtime's decline outcome);
 //!    * **turns**: one, two and three-or-more turns per session (40 / 30 / 30);
 //!    * **kinds**: the share of sessions that touch two kinds (20%);
-//!    * **reserved** (test only): the share of sessions that carry a reserved combination.
+//!    * **reserved** (test only): the share of sessions that carry a reserved combination;
+//!    * **caps**, which are ceilings and not targets: the pronoun-or-earlier-answer references are at most their share of
+//!      the turns that point at a row, and the undo turns at most [`UNDO_CAP`] of the turns. A unit that would take a cap
+//!      over is left out, so the realised share never exceeds it.
 //!
 //!    **A floor**, not a share: at least half the sessions have two turns or more, as many as the input holds.
 //! 5. **Subsets.** Nested train subsets (1,000 within 2,500 within the chosen train) are chosen by the same procedure from
@@ -39,6 +44,13 @@ use serde::Serialize;
 
 use crate::render::Features;
 use crate::rng::Rng;
+
+/// The most that undo turns may be of a split's turns. The target share of recall turns is 10% and undo is one kind of
+/// recall; undo is a thin skill the model needs to see, not a tenth of what it reads. The owner may change it here.
+pub const UNDO_CAP: f64 = 0.04;
+
+/// The cell label of an undo turn.
+const UNDO_CELL: &str = "do/-/undo";
 
 pub const OUTCOMES: [&str; 5] = ["done", "empty", "ask", "decline", "repair"];
 pub const ACTIONS: [&str; 3] = ["read", "write", "recall"];
@@ -90,6 +102,12 @@ pub struct Config {
     pub live: Vec<String>,
     /// Turns every live cell has at least, per split (train, val, test); `0` is no floor.
     pub floor: [usize; 3],
+    /// The live (kind, field) pairs of `create` and `edit` (`create/task/priority`): balanced like the cells.
+    pub live_fields: Vec<String>,
+    /// Turns every live pair has at least, per split (train, val, test); `0` is no floor, as for the cells.
+    pub field_floor: [usize; 3],
+    /// The most that undo turns may be of the turns of a split.
+    pub undo_cap: f64,
     /// Nested train subsets, in sessions (each within the next).
     pub subsets: Vec<usize>,
     /// The combinations only test may hold; when empty, [`Config::reserve`] of them are chosen from the input.
@@ -106,6 +124,9 @@ impl Default for Config {
             seed: 1,
             live: Vec::new(),
             floor: [30, 0, 0],
+            live_fields: Vec::new(),
+            field_floor: [30, 0, 0],
+            undo_cap: UNDO_CAP,
             subsets: vec![1000, 2500],
             reserved: Vec::new(),
             reserve: 8,
@@ -160,6 +181,18 @@ pub struct ShareReport {
     pub lines: Vec<Line>,
 }
 
+/// A ceiling's line of the report: the share of its base the chosen turns reach.
+#[derive(Debug, Clone, Serialize)]
+pub struct CapLine {
+    pub name: String,
+    /// What the share may be of its base at most.
+    pub cap: f64,
+    pub realised: usize,
+    pub base: usize,
+    /// The share the input would have given with no cap: the base is every turn it holds.
+    pub supply: usize,
+}
+
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct SplitReport {
     pub split: String,
@@ -183,6 +216,10 @@ pub struct SplitReport {
     /// The app is a tag, not a target: sessions by first app, for reading.
     pub apps: Vec<Line>,
     pub cells: Vec<CellLine>,
+    /// The (kind, field) pairs of `create` and `edit`, as the cells are: `hit`, `supply` or `short`.
+    pub fields: Vec<CellLine>,
+    /// The ceilings: pronoun references and undo turns.
+    pub caps: Vec<CapLine>,
     /// What the input could not give, in words.
     pub missed: Vec<String>,
 }
@@ -301,6 +338,7 @@ fn labelled(f: &Features) -> Vec<(f64, Vec<String>)> {
     };
     vec![
         (1.0, f.cells.iter().map(|c| format!("cell:{c}")).collect()),
+        (1.0, f.fields.iter().map(|x| format!("field:{x}")).collect()),
         per_turn("outcome", &f.outcomes),
         per_turn("action", &f.actions),
         per_turn("reference", &f.refs),
@@ -351,6 +389,31 @@ struct Tally {
     got: BTreeMap<String, usize>,
     sessions: usize,
     want: usize,
+    /// Turns of the sessions taken, and those that point at a row: the bases of the ceilings.
+    turns: usize,
+    refs: usize,
+}
+
+/// The ceilings of a selection.
+#[derive(Debug, Clone, Copy)]
+struct Caps {
+    /// Pronoun references, of the turns that point at a row.
+    pronoun: f64,
+    /// Undo turns, of the turns.
+    undo: f64,
+}
+
+/// What a unit adds to the counts a ceiling reads: `(pronoun, referencing turns, undo, turns)`.
+fn cap_counts(features: &[Features], unit: &Unit) -> (usize, usize, usize, usize) {
+    let mut n = (0, 0, 0, 0);
+    for m in &unit.members {
+        let f = &features[*m];
+        n.0 += f.refs.iter().filter(|r| *r == "pronoun").count();
+        n.1 += f.refs.iter().filter(|r| !r.is_empty()).count();
+        n.2 += f.cells.iter().filter(|c| *c == UNDO_CELL).count();
+        n.3 += f.turns;
+    }
+    n
 }
 
 fn deficit(target: f64, got: usize) -> f64 {
@@ -384,7 +447,24 @@ impl Tally {
         total / unit.members.len() as f64
     }
 
+    /// May `unit` be taken without a ceiling going over? A ceiling is checked on the counts after the unit, so the share
+    /// at the end of the selection is under it whatever the order the units were taken in.
+    fn allows(&self, features: &[Features], unit: &Unit, caps: &Caps) -> bool {
+        let (pronoun, refs, undo, turns) = cap_counts(features, unit);
+        let got = |k: &str| self.got.get(k).copied().unwrap_or(0);
+        let ok_pronoun = pronoun == 0
+            || (got("reference:pronoun") + pronoun) as f64
+                <= caps.pronoun * (self.refs + refs) as f64 + 1e-9;
+        let ok_undo = undo == 0
+            || (got(&format!("cell:{UNDO_CELL}")) + undo) as f64
+                <= caps.undo * (self.turns + turns) as f64 + 1e-9;
+        ok_pronoun && ok_undo
+    }
+
     fn add(&mut self, features: &[Features], unit: &Unit) {
+        let (_, refs, _, turns) = cap_counts(features, unit);
+        self.refs += refs;
+        self.turns += turns;
         for m in &unit.members {
             for (_, labels) in labelled(&features[*m]) {
                 for l in labels {
@@ -403,6 +483,64 @@ struct Chosen {
     supply: BTreeMap<String, usize>,
     supply_sessions: usize,
     avg_turns: f64,
+    /// The pairs of `create` and `edit` a session of the input sets, on average.
+    avg_fields: f64,
+    /// Turns of the input, those that point at a row, and the undo turns.
+    supply_turns: (usize, usize, usize),
+}
+
+/// The labels of `dim` (`cells` or `fields`) a feature carries.
+fn dim_labels<'f>(f: &'f Features, dim: &str) -> &'f [String] {
+    if dim == "field" { &f.fields } else { &f.cells }
+}
+
+/// The floor of one dimension: every eligible label has at least `floor` turns (as many as the input holds), the rarest
+/// label first, a unit that would take a ceiling over left out.
+#[allow(clippy::too_many_arguments)]
+fn fill_floor(
+    features: &[Features],
+    units: &[Unit],
+    dim: &str,
+    eligible: &BTreeMap<String, usize>,
+    floor: usize,
+    caps: &Caps,
+    tally: &mut Tally,
+    taken: &mut [bool],
+    picked: &mut Vec<usize>,
+) {
+    if floor == 0 {
+        return;
+    }
+    let mut by_label: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+    for (i, u) in units.iter().enumerate() {
+        let labels: BTreeSet<&String> = u
+            .members
+            .iter()
+            .flat_map(|m| dim_labels(&features[*m], dim).iter())
+            .collect();
+        for l in labels {
+            if eligible.contains_key(l) {
+                by_label.entry(l.clone()).or_default().push(i);
+            }
+        }
+    }
+    let mut order: Vec<(usize, String)> = eligible.iter().map(|(c, n)| (*n, c.clone())).collect();
+    order.sort();
+    for (n, label) in order {
+        let need = floor.min(n);
+        let key = format!("{dim}:{label}");
+        while tally.got.get(&key).copied().unwrap_or(0) < need && tally.sessions < tally.want {
+            let best = by_label[&label]
+                .iter()
+                .filter(|i| !taken[**i] && tally.allows(features, &units[**i], caps))
+                .map(|i| (scaled(tally.score(features, &units[*i])), units[*i].tie, *i))
+                .max();
+            let Some((_, _, i)) = best else { break };
+            tally.add(features, &units[i]);
+            taken[i] = true;
+            picked.extend(units[i].members.iter().copied());
+        }
+    }
 }
 
 /// Choose `want` sessions from `units`: the floor of every live cell first, then the greedy over every target.
@@ -411,14 +549,18 @@ fn select(
     units: &[Unit],
     want: usize,
     cfg: &Config,
-    floor: usize,
+    (floor, field_floor): (usize, usize),
     test: bool,
 ) -> Chosen {
     let supply_sessions: usize = units.iter().map(|u| u.members.len()).sum();
     let want = want.min(supply_sessions);
     let mut supply: BTreeMap<String, usize> = BTreeMap::new();
     let mut turns_supply = 0_usize;
+    let mut supply_counts = (0_usize, 0_usize, 0_usize);
     for u in units {
+        let (_, refs, undo, _) = cap_counts(features, u);
+        supply_counts.1 += refs;
+        supply_counts.2 += undo;
         for m in &u.members {
             for (_, labels) in labelled(&features[*m]) {
                 for l in labels {
@@ -439,6 +581,7 @@ fn select(
     };
     let scale = want as f64 / supply_sessions.max(1) as f64;
     let avg_turns = turns_supply as f64 / supply_sessions.max(1) as f64;
+    supply_counts.0 = turns_supply;
     let mut target: BTreeMap<String, f64> = BTreeMap::new();
     // cells: equal shares of the turns, water-filled, and never under the floor (as far as the input holds it)
     let live: BTreeSet<&String> = cfg.live.iter().collect();
@@ -449,6 +592,17 @@ fn select(
     for (cell, t) in water_fill(&eligible, want as f64 * avg_turns) {
         let floored = t.max(floor.min(eligible[&cell]) as f64);
         target.insert(format!("cell:{cell}"), floored);
+    }
+    // fields: the live pairs of create and edit share the turns that set one equally, with a floor of their own
+    let live_fields: BTreeSet<&String> = cfg.live_fields.iter().collect();
+    let eligible_fields: BTreeMap<String, usize> = per("field")
+        .into_iter()
+        .filter(|(f, _)| live_fields.contains(f))
+        .collect();
+    let avg_fields = eligible_fields.values().sum::<usize>() as f64 / supply_sessions.max(1) as f64;
+    for (field, t) in water_fill(&eligible_fields, want as f64 * avg_fields) {
+        let floored = t.max(field_floor.min(eligible_fields[&field]) as f64);
+        target.insert(format!("field:{field}"), floored);
     }
     let mut share_dim = |dim: &str, shares: &[(&str, f64)], total: f64| {
         let shares: Vec<(String, f64)> =
@@ -508,6 +662,12 @@ fn select(
         got: BTreeMap::new(),
         sessions: 0,
         want,
+        turns: 0,
+        refs: 0,
+    };
+    let caps = Caps {
+        pronoun: s.reference[2],
+        undo: cfg.undo_cap,
     };
     let mut taken = vec![false; units.len()];
     let mut picked: Vec<usize> = Vec::new();
@@ -517,38 +677,30 @@ fn select(
         picked.extend(units[i].members.iter().copied());
     };
 
-    // the floor: every live cell has at least `floor` turns (as many as the input holds), the rarest cell first
-    if floor > 0 {
-        let mut by_cell: BTreeMap<String, Vec<usize>> = BTreeMap::new();
-        for (i, u) in units.iter().enumerate() {
-            let cells: BTreeSet<&String> = u
-                .members
-                .iter()
-                .flat_map(|m| features[*m].cells.iter())
-                .collect();
-            for c in cells {
-                if live.contains(c) {
-                    by_cell.entry(c.clone()).or_default().push(i);
-                }
-            }
-        }
-        let mut order: Vec<(usize, String)> =
-            eligible.iter().map(|(c, n)| (*n, c.clone())).collect();
-        order.sort();
-        for (n, cell) in order {
-            let need = floor.min(n);
-            let label = format!("cell:{cell}");
-            while tally.got.get(&label).copied().unwrap_or(0) < need && tally.sessions < want {
-                let best = by_cell[&cell]
-                    .iter()
-                    .filter(|i| !taken[**i])
-                    .map(|i| (scaled(tally.score(features, &units[*i])), units[*i].tie, *i))
-                    .max();
-                let Some((_, _, i)) = best else { break };
-                take(i, &mut tally, &mut taken, &mut picked);
-            }
-        }
-    }
+    // the floors: every live cell, then every live (kind, field) pair, has at least `floor` turns (as many as the input
+    // holds), the rarest first
+    fill_floor(
+        features,
+        units,
+        "cell",
+        &eligible,
+        floor,
+        &caps,
+        &mut tally,
+        &mut taken,
+        &mut picked,
+    );
+    fill_floor(
+        features,
+        units,
+        "field",
+        &eligible_fields,
+        field_floor,
+        &caps,
+        &mut tally,
+        &mut taken,
+        &mut picked,
+    );
 
     // greedy, lazily
     let multi_supply =
@@ -560,11 +712,17 @@ fn select(
         .filter(|(i, _)| !taken[*i])
         .map(|(i, u)| (scaled(tally.score(features, u)), u.tie, i))
         .collect();
+    // a unit that would take a ceiling over waits: the share it needs room in may have room once more is taken
+    let mut deferred: Vec<usize> = Vec::new();
     while tally.sessions < want {
         let Some((_, tie, i)) = heap.pop() else {
             break;
         };
         if taken[i] {
+            continue;
+        }
+        if !tally.allows(features, &units[i], &caps) {
+            deferred.push(i);
             continue;
         }
         let got_multi = tally.got.get("turns:1").copied().unwrap_or(0)
@@ -590,6 +748,23 @@ fn select(
         }
         take(i, &mut tally, &mut taken, &mut picked);
     }
+    loop {
+        let mut progress = false;
+        for i in std::mem::take(&mut deferred) {
+            if tally.sessions >= want || taken[i] {
+                continue;
+            }
+            if tally.allows(features, &units[i], &caps) {
+                take(i, &mut tally, &mut taken, &mut picked);
+                progress = true;
+            } else {
+                deferred.push(i);
+            }
+        }
+        if !progress {
+            break;
+        }
+    }
     picked.sort_unstable();
     Chosen {
         picked,
@@ -597,6 +772,8 @@ fn select(
         supply,
         supply_sessions,
         avg_turns,
+        avg_fields,
+        supply_turns: supply_counts,
     }
 }
 
@@ -616,7 +793,7 @@ fn report_of(
     features: &[Features],
     chosen: &Chosen,
     cfg: &Config,
-    floor: usize,
+    (floor, field_floor): (usize, usize),
     name: &str,
     target_sessions: usize,
 ) -> SplitReport {
@@ -763,6 +940,61 @@ fn report_of(
             },
         });
     }
+    let uniform_fields = want as f64 * chosen.avg_fields / cfg.live_fields.len().max(1) as f64;
+    for field in &cfg.live_fields {
+        let k = format!("field:{field}");
+        let (realised, supply) = (got(&k), supply(&k));
+        let need = if field_floor > 0 {
+            field_floor as f64
+        } else {
+            uniform_fields
+        };
+        report.fields.push(CellLine {
+            cell: field.clone(),
+            target: need,
+            realised,
+            supply,
+            status: if realised as f64 + 1e-9 >= need {
+                "hit"
+            } else if realised >= supply {
+                "supply"
+            } else {
+                "short"
+            },
+        });
+    }
+    let (_, ref_supply, undo_supply) = chosen.supply_turns;
+    let (_, in_refs, _, in_turns) = {
+        let mut n = (0, 0, 0, 0);
+        for i in picked {
+            let (a, b, c, d) = cap_counts(
+                features,
+                &Unit {
+                    members: vec![*i],
+                    tie: 0,
+                },
+            );
+            n = (n.0 + a, n.1 + b, n.2 + c, n.3 + d);
+        }
+        n
+    };
+    report.caps = vec![
+        CapLine {
+            name: "pronoun or earlier-answer references (of the turns that point at a row)"
+                .to_owned(),
+            cap: cfg.shares.reference[2],
+            realised: got("reference:pronoun"),
+            base: in_refs,
+            supply: supply("reference:pronoun").min(ref_supply),
+        },
+        CapLine {
+            name: "undo turns (of the turns)".to_owned(),
+            cap: cfg.undo_cap,
+            realised: got(&format!("cell:{UNDO_CELL}")),
+            base: in_turns,
+            supply: undo_supply,
+        },
+    ];
     if want < target_sessions {
         report.missed.push(format!(
             "{target_sessions} sessions wanted, the input holds {} after duplicates and broken pairs",
@@ -795,6 +1027,23 @@ fn report_of(
         report.missed.push(format!(
             "multi-turn share {:.1}% is under the 50% floor",
             report.multi_turn_share * 100.0
+        ));
+    }
+    let unfilled_fields = report.fields.iter().filter(|c| c.status != "hit").count();
+    if unfilled_fields > 0 {
+        let supplied = report
+            .fields
+            .iter()
+            .filter(|c| c.status == "supply")
+            .count();
+        let what = if field_floor > 0 {
+            format!("the floor of {field_floor} turns")
+        } else {
+            "the uniform target".to_owned()
+        };
+        report.missed.push(format!(
+            "{unfilled_fields} of {} live (kind, field) pairs under {what} ({supplied} because the input holds no more)",
+            report.fields.len()
         ));
     }
     let unfilled = report.cells.iter().filter(|c| c.status != "hit").count();
@@ -925,10 +1174,10 @@ pub fn mix(input: &[Features], cfg: &Config) -> Result<Selection> {
     let mut seen: BTreeSet<&str> = BTreeSet::new();
     let mut train_units: Vec<Unit> = Vec::new();
     // held-out splits first, so a duplicate is dropped from train
-    for (name, target, floor) in [
-        ("test", cfg.targets[2], cfg.floor[2]),
-        ("val", cfg.targets[1], cfg.floor[1]),
-        ("train", cfg.targets[0], cfg.floor[0]),
+    for (name, target, floors) in [
+        ("test", cfg.targets[2], (cfg.floor[2], cfg.field_floor[2])),
+        ("val", cfg.targets[1], (cfg.floor[1], cfg.field_floor[1])),
+        ("train", cfg.targets[0], (cfg.floor[0], cfg.field_floor[0])),
     ] {
         let mine: Vec<usize> = (0..features.len())
             .filter(|i| features[*i].split == name)
@@ -978,8 +1227,8 @@ pub fn mix(input: &[Features], cfg: &Config) -> Result<Selection> {
             }
         }
         units.sort_by_key(|u| u.members[0]);
-        let result = select(features, &units, target, cfg, floor, name == "test");
-        let mut report = report_of(features, &result, cfg, floor, name, target);
+        let result = select(features, &units, target, cfg, floors, name == "test");
+        let mut report = report_of(features, &result, cfg, floors, name, target);
         report.input_sessions = input_sessions;
         report.duplicates = duplicates;
         report.orphan_pairs = orphans;
@@ -1024,10 +1273,11 @@ pub fn mix(input: &[Features], cfg: &Config) -> Result<Selection> {
                 tie: u.tie,
             })
             .collect();
-        let floor = (cfg.floor[0] * size).div_ceil(cfg.targets[0].max(1));
-        let result = select(features, &units, size, cfg, floor, false);
+        let scaled_floor = |floor: usize| (floor * size).div_ceil(cfg.targets[0].max(1));
+        let floors = (scaled_floor(cfg.floor[0]), scaled_floor(cfg.field_floor[0]));
+        let result = select(features, &units, size, cfg, floors, false);
         let name = format!("train-{size}");
-        let mut report = report_of(features, &result, cfg, floor, &name, size);
+        let mut report = report_of(features, &result, cfg, floors, &name, size);
         report.input_sessions = within.len();
         within = result.picked.iter().copied().collect();
         subsets.insert(name, result.picked);
@@ -1144,6 +1394,32 @@ fn report_lines(out: &mut String, r: &SplitReport) {
             out.push_str(&format!(
                 "   {:<44} {:>8.1} {:>8} {:>6} {}\n",
                 c.cell, c.target, c.realised, c.supply, c.status
+            ));
+        }
+    }
+    if !r.fields.is_empty() {
+        out.push_str(
+            "   fields (turns that set a (kind, field) pair)       need realised supply status\n",
+        );
+        for c in &r.fields {
+            out.push_str(&format!(
+                "   {:<44} {:>8.1} {:>8} {:>6} {}\n",
+                c.cell, c.target, c.realised, c.supply, c.status
+            ));
+        }
+    }
+    if !r.caps.is_empty() {
+        out.push_str(
+            "   ceilings (never over)                              cap%  realised  of  supply\n",
+        );
+        for c in &r.caps {
+            out.push_str(&format!(
+                "   {:<50} {:>5.1} {:>9} {:>3} {:>7}\n",
+                c.name,
+                c.cap * 100.0,
+                c.realised,
+                c.base,
+                c.supply
             ));
         }
     }
@@ -1502,6 +1778,180 @@ mod tests {
         let (mut all, cfg) = input();
         all[0].world = "val-4".to_owned();
         assert!(mix(&all, &cfg).is_err());
+    }
+
+    /// The input with a pair of `create` or `edit` on some sessions: one everywhere, one on a few, one on fewer than the
+    /// floor, and one (never drawn) the config names live.
+    fn with_fields(all: &mut [Features]) -> Vec<String> {
+        for (n, f) in all.iter_mut().enumerate() {
+            if f.split == "noise" {
+                continue;
+            }
+            f.fields = vec!["create/task/name".to_owned()];
+            if n % 50 == 0 {
+                f.fields.push("create/task/priority".to_owned());
+            }
+            if n % 133 == 0 {
+                f.fields.push("edit/task/effort".to_owned());
+            }
+        }
+        vec![
+            "create/task/name".to_owned(),
+            "create/task/priority".to_owned(),
+            "edit/task/effort".to_owned(),
+            "edit/person/role".to_owned(),
+        ]
+    }
+
+    #[test]
+    fn fields_are_a_balanced_dimension_with_a_floor_and_a_line_of_the_report_per_pair() {
+        let (mut all, mut cfg) = input();
+        cfg.live_fields = with_fields(&mut all);
+        let selection = mix(&all, &cfg).unwrap();
+        let train = report(&selection, "train");
+        // the report lists every live pair, like the cells
+        let listed: Vec<&str> = train.fields.iter().map(|c| c.cell.as_str()).collect();
+        assert_eq!(
+            listed,
+            cfg.live_fields
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+        );
+        let line = |name: &str| train.fields.iter().find(|c| c.cell == name).unwrap();
+        // a pair the input holds enough of reaches the floor of 30 turns, though it is on 2% of the sessions
+        let rare = line("create/task/priority");
+        assert!(rare.supply >= 30, "{rare:?}");
+        assert!(rare.realised >= 30 && rare.status == "hit", "{rare:?}");
+        assert_eq!(line("create/task/name").status, "hit");
+        // a pair the input holds less than the floor of is reported as the supply's, with all of it taken
+        let thin = line("edit/task/effort");
+        assert!(thin.supply < 30 || thin.status == "hit", "{thin:?}");
+        if thin.supply < 30 {
+            assert_eq!(
+                (thin.status, thin.realised),
+                ("supply", thin.supply),
+                "{thin:?}"
+            );
+        }
+        // a pair no session sets is reported with no supply, never faked
+        let never = line("edit/person/role");
+        assert_eq!(
+            (never.supply, never.realised, never.status),
+            (0, 0, "supply")
+        );
+        assert!(
+            train
+                .missed
+                .iter()
+                .any(|m| m.contains("(kind, field) pairs"))
+        );
+        // the report text has the pairs
+        let text = text(&selection);
+        assert!(text.contains("create/task/priority") && text.contains("fields (turns"));
+        // val and test have no floor, as the cells have none: the pairs are reported against the uniform target
+        assert_eq!(report(&selection, "val").fields.len(), 4);
+    }
+
+    #[test]
+    fn a_pair_the_floor_does_not_reach_in_a_thin_input_is_still_chosen_whole() {
+        let (mut all, mut cfg) = input();
+        cfg.live_fields = with_fields(&mut all);
+        // only 12 sessions of train carry the pair: all 12 are chosen
+        let mut carried = 0;
+        for f in all.iter_mut().filter(|f| f.split == "train") {
+            f.fields.retain(|x| x != "create/task/priority");
+            if carried < 12 {
+                f.fields.push("create/task/priority".to_owned());
+                carried += 1;
+            }
+        }
+        let selection = mix(&all, &cfg).unwrap();
+        let line = report(&selection, "train")
+            .fields
+            .iter()
+            .find(|c| c.cell == "create/task/priority")
+            .unwrap()
+            .clone();
+        assert_eq!(
+            (line.supply, line.realised, line.status),
+            (12, 12, "supply")
+        );
+    }
+
+    /// The input with an over-supply of pronoun references and of undo turns.
+    fn heavy(all: &mut [Features]) {
+        for (n, f) in all.iter_mut().enumerate() {
+            if n % 5 == 0 {
+                f.cells[0] = "do/-/undo".to_owned();
+                f.actions[0] = "recall".to_owned();
+                f.refs[0] = String::new();
+            }
+            for r in f.refs.iter_mut().filter(|r| !r.is_empty()) {
+                if n % 4 != 0 {
+                    *r = "pronoun".to_owned();
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn pronoun_references_and_undo_turns_are_capped_so_the_share_never_goes_over() {
+        let (mut all, mut cfg) = input();
+        cfg.live.push("do/-/undo".to_owned());
+        heavy(&mut all);
+        // the input holds far more of both than the ceilings allow
+        let (mut pronoun, mut refs, mut undo, mut turns) = (0, 0, 0, 0);
+        for f in all.iter().filter(|f| f.split == "train") {
+            pronoun += f.refs.iter().filter(|r| *r == "pronoun").count();
+            refs += f.refs.iter().filter(|r| !r.is_empty()).count();
+            undo += f.cells.iter().filter(|c| *c == "do/-/undo").count();
+            turns += f.turns;
+        }
+        assert!(pronoun as f64 > 0.3 * refs as f64, "{pronoun} of {refs}");
+        assert!(undo as f64 > 0.1 * turns as f64, "{undo} of {turns}");
+        let selection = mix(&all, &cfg).unwrap();
+        for r in selection.reports.iter().chain(&selection.subset_reports) {
+            let (chosen, counts) = match r.split.as_str() {
+                "train" | "val" | "test" => (&selection.chosen[&r.split], true),
+                name => (&selection.subsets[name], true),
+            };
+            assert!(counts && !chosen.is_empty(), "{}", r.split);
+            let (mut p, mut n, mut u, mut t) = (0, 0, 0, 0);
+            for i in chosen {
+                let f = &all[*i];
+                p += f.refs.iter().filter(|r| *r == "pronoun").count();
+                n += f.refs.iter().filter(|r| !r.is_empty()).count();
+                u += f.cells.iter().filter(|c| *c == "do/-/undo").count();
+                t += f.turns;
+            }
+            assert!(
+                p as f64 <= cfg.shares.reference[2] * n as f64 + 1e-9,
+                "{}: {p} pronoun of {n} references",
+                r.split
+            );
+            assert!(
+                u as f64 <= cfg.undo_cap * t as f64 + 1e-9,
+                "{}: {u} undo of {t} turns",
+                r.split
+            );
+            // the report says the same
+            for cap in &r.caps {
+                assert!(
+                    cap.realised as f64 <= cap.cap * cap.base as f64 + 1e-9,
+                    "{}: {cap:?}",
+                    r.split
+                );
+            }
+        }
+        // and the selection still has what it can: some of each is chosen, not none
+        let train = report(&selection, "train");
+        assert!(
+            train.caps.iter().all(|c| c.realised > 0),
+            "{:?}",
+            train.caps
+        );
+        assert_eq!(selection.chosen["train"].len(), 600);
     }
 
     #[test]

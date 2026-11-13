@@ -17,9 +17,11 @@ use crate::catalog::Catalog;
 use crate::facts::Facts;
 use crate::grid::{Cell, Grid};
 use crate::intent::{Scenario, Span};
+use crate::labels;
+use crate::mix::UNDO_CAP;
 use crate::plan::WorldRun;
 use crate::rng::Rng;
-use crate::sample::Sampler;
+use crate::sample::{Aim, Room, Sampler, Search};
 use crate::settings::Split;
 use crate::world::{World, plan_sized};
 
@@ -28,16 +30,39 @@ const PAIR_EVERY: usize = 60;
 
 /// How many times a cell is drawn against the others as the first turn of a session. A turn the model decides alone
 /// (recalling an answer, undoing a write, declining, asking which row) is a few cells but a large share of what the
-/// mix aims at, so those cells are drawn more often.
+/// mix aims at, so those cells are drawn more often. An undo and a recall are capped at the mix ([`Room`] stops drawing
+/// them once the run has its share), so their weight only sets how fast the share fills.
 fn weight(cell: &Cell) -> usize {
     match (cell.tool.as_str(), cell.verb.as_str()) {
         ("answer", _) => 10,
-        ("do", "undo") => 12,
-        ("decline", "not_found") => 4,
-        ("decline", _) => 7,
-        ("ask", _) => 3,
+        ("do", "undo") => 8,
+        ("decline", "not_found") => 16,
+        ("decline", _) => 32,
+        ("ask", _) => 30,
         _ => 1,
     }
+}
+
+/// Draws of each live (kind, field) pair of `create` and `edit`, aimed at the pair, so every pair reaches the floor of
+/// the mix target-first.
+const FIELD_DRAWS: usize = 2;
+
+/// Draws of each read and count cell aimed at finding nothing: the nothing-found share is 8% of the turns and a
+/// world seldom holds a request that finds nothing by chance.
+const EMPTY_DRAWS: usize = 9;
+
+/// Draws of each write and edit cell aimed at a row said by a nickname or a misspelling (15% of the turns that point at a
+/// row; a person has a nickname or a long name only now and then).
+const NICKNAME_DRAWS: usize = 5;
+
+/// Draws of each read cell through each option of `find` a plain draw never uses.
+const SEARCH_DRAWS: usize = 1;
+
+/// One draw: a cell and what it is aimed at.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Draw {
+    pub cell: Cell,
+    pub aim: Aim,
 }
 
 /// Every live cell once, then each again as often as its weight says.
@@ -48,6 +73,109 @@ fn schedule(live: &[Cell]) -> Vec<Cell> {
         out.extend(live.iter().filter(|c| weight(c) > round).cloned());
     }
     out
+}
+
+/// The draws of one sweep of a world: the weighted cells, then the draws aimed target-first at the live (kind, field)
+/// pairs, at turns that find nothing, at rows said by a nickname or a misspelling, and at the options of `find` a plain
+/// draw never uses. A world with nothing to draw from simply gives none of an aimed draw.
+#[must_use]
+pub fn draws(catalog: &Catalog, grid: &Grid) -> Vec<Draw> {
+    let live: Vec<Cell> = grid.live().into_iter().cloned().collect();
+    let mut out: Vec<Draw> = schedule(&live)
+        .into_iter()
+        .map(|cell| Draw {
+            cell,
+            aim: Aim::default(),
+        })
+        .collect();
+    for label in crate::fields::live_labels(catalog, grid) {
+        let Some((verb, kind, field)) = crate::fields::split(&label) else {
+            continue;
+        };
+        for _ in 0..FIELD_DRAWS {
+            out.push(Draw {
+                cell: Cell::new(verb, kind, verb),
+                aim: Aim {
+                    field: Some(field.to_owned()),
+                    ..Aim::default()
+                },
+            });
+        }
+    }
+    for cell in &live {
+        let reads = (cell.tool == "find" && cell.verb == "read")
+            || (cell.tool == "compute" && cell.verb == "count");
+        if reads {
+            for _ in 0..EMPTY_DRAWS {
+                out.push(Draw {
+                    cell: cell.clone(),
+                    aim: Aim {
+                        empty: true,
+                        ..Aim::default()
+                    },
+                });
+            }
+        }
+        let writes = (cell.tool == "do" && !matches!(cell.verb.as_str(), "undo" | "restore"))
+            || cell.tool == "edit";
+        if writes {
+            for _ in 0..NICKNAME_DRAWS {
+                out.push(Draw {
+                    cell: cell.clone(),
+                    aim: Aim {
+                        nickname: true,
+                        ..Aim::default()
+                    },
+                });
+            }
+        }
+        if cell.tool == "find" && cell.verb == "read" {
+            for search in Search::ALL {
+                for _ in 0..SEARCH_DRAWS {
+                    out.push(Draw {
+                        cell: cell.clone(),
+                        aim: Aim {
+                            search: Some(search),
+                            ..Aim::default()
+                        },
+                    });
+                }
+            }
+        }
+    }
+    out
+}
+
+/// What a split's kept turns hold of the shares the sampler stops drawing once they are full.
+#[derive(Debug, Clone, Copy, Default)]
+struct Filled {
+    turns: usize,
+    /// Turns that point at a row, and those that do it by a pronoun or an earlier answer.
+    refs: usize,
+    pronoun: usize,
+    undo: usize,
+}
+
+impl Filled {
+    fn add(&mut self, turns: &[crate::intent::TurnIntent]) {
+        for turn in turns {
+            self.turns += 1;
+            let reference = labels::reference(turn);
+            self.refs += usize::from(!reference.is_empty());
+            self.pronoun += usize::from(reference == "pronoun");
+            self.undo += usize::from(crate::grid::cell_of(turn).to_string() == "do/-/undo");
+        }
+    }
+
+    /// Room for the shares that have a ceiling: pronoun references at their share of the references, undo at
+    /// [`UNDO_CAP`] of the turns.
+    fn room(&self) -> Room {
+        Room {
+            pronoun: self.pronoun as f64
+                <= crate::mix::Shares::default().reference[2] * self.refs as f64,
+            undo: self.undo as f64 <= UNDO_CAP * self.turns as f64,
+        }
+    }
 }
 
 /// One ask-or-act pair: the same words said in two worlds of a split, a name that fits several rows in one (the model
@@ -210,7 +338,8 @@ pub fn generate_with(
 ) -> Result<Generated> {
     let grid = Grid::build(catalog);
     let live: Vec<Cell> = grid.live().into_iter().cloned().collect();
-    let order = schedule(&live);
+    let order = draws(catalog, &grid);
+    let mut filled = [Filled::default(); 3];
     let specs = plan_sized(config.seed, |split| match split {
         Split::Train => config.counts[0],
         Split::Val => config.counts[1],
@@ -272,7 +401,8 @@ pub fn generate_with(
         let mut drawn = 0;
         let offset = number * 31;
         while kept < target && drawn < target * 3 {
-            let cell = &order[(offset + drawn) % order.len()];
+            let draw = &order[(offset + drawn) % order.len()];
+            let cell = &draw.cell;
             drawn += 1;
             let mut shape = root.fork(&format!("shape:{drawn}"));
             let extra = *shape.weighted(EXTRA_TURNS);
@@ -281,7 +411,10 @@ pub fn generate_with(
                 let mut rng = root.fork(&format!("draw:{drawn}:{attempt}"));
                 // later attempts fall back toward fewer turns, so a cell a follow-up cannot lean on is still served
                 let extra = extra.saturating_sub(attempt / 2);
-                let Some(scenario) = sampler.session(&id, cell, extra, &mut rng) else {
+                let room = filled[split_index(spec.split)].room();
+                let Some(scenario) =
+                    sampler.session_aim(&id, cell, &draw.aim, &room, extra, &mut rng)
+                else {
                     if let Some(stat) = out.cells.get_mut(cell) {
                         stat.undrawn += 1;
                     }
@@ -318,6 +451,7 @@ pub fn generate_with(
                     *stat.drops.entry(dropped.why.word().to_owned()).or_default() += 1;
                 }
                 if let Some(record) = solution.record {
+                    filled[split_index(spec.split)].add(&scenario.turns[..solution.kept]);
                     out.kept.push(Kept {
                         split: spec.split,
                         world: world.id(),

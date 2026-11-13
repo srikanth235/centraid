@@ -182,16 +182,16 @@ fn a_written_run_loads_in_the_eval_with_its_worlds() {
 fn the_grid_marks_what_the_runtime_or_the_world_cannot_serve_as_not_live() {
     let grid = Grid::build(catalog());
     let not_live: Vec<String> = grid.not_live().iter().map(|(c, _)| c.to_string()).collect();
-    for cell in [
-        "create/workout/create",
-        "create/daily figure/create",
-        "do/locker item/reveal",
-    ] {
+    for cell in ["create/daily figure/create", "do/locker item/reveal"] {
         assert!(
             not_live.iter().any(|c| c == cell),
             "{cell} should be not live: {not_live:?}"
         );
     }
+    // a workout the member logs is made by the runtime (the store states only the rows it follows)
+    assert!(grid.is_live(&centraid_datagen::grid::Cell::new(
+        "create", "workout", "create"
+    )));
     let compare_live = catalog().ops.iter().any(|o| o.name == "compare" && o.live);
     let cell = centraid_datagen::grid::Cell::new("compute", "transaction", "compare");
     assert_eq!(grid.is_live(&cell), compare_live);

@@ -335,6 +335,9 @@ struct MixArgs {
     /// Turns every live cell has at least, per split as `train,val,test`.
     #[arg(long, value_delimiter = ',', default_values_t = [30_usize, 0, 0])]
     cell_floor: Vec<usize>,
+    /// Turns every live (kind, field) pair of create and edit has at least, per split as `train,val,test`.
+    #[arg(long, value_delimiter = ',', default_values_t = [30_usize, 0, 0])]
+    field_floor: Vec<usize>,
     /// Nested train subsets, in sessions (for a learning curve).
     #[arg(long, value_delimiter = ',', default_values_t = [1000_usize, 2500])]
     subsets: Vec<usize>,
@@ -363,6 +366,9 @@ impl MixArgs {
         let [f_train, f_val, f_test] = self.cell_floor[..] else {
             anyhow::bail!("--cell-floor takes three numbers: train,val,test");
         };
+        let [ff_train, ff_val, ff_test] = self.field_floor[..] else {
+            anyhow::bail!("--field-floor takes three numbers: train,val,test");
+        };
         Ok(mix::Config {
             targets: [train, val, test],
             shares: Shares {
@@ -379,6 +385,9 @@ impl MixArgs {
             seed: self.mix_seed,
             live: Vec::new(),
             floor: [f_train, f_val, f_test],
+            live_fields: Vec::new(),
+            field_floor: [ff_train, ff_val, ff_test],
+            undo_cap: mix::UNDO_CAP,
             subsets: self.subsets.clone(),
             reserved: Vec::new(),
             reserve: self.reserve,

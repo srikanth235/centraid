@@ -57,6 +57,7 @@ fn mix_config() -> mix::Config {
         subsets: vec![20, 40],
         reserved: Vec::new(),
         reserve: 0,
+        ..mix::Config::default()
     }
 }
 

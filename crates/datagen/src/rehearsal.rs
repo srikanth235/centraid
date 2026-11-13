@@ -65,7 +65,10 @@ impl Rehearsal {
                 let briefer = Briefer { catalog, today };
                 for (i, turn) in scenario.turns.iter().enumerate() {
                     let b = briefer.turn(turn, i);
-                    expected.insert(marker(&b.ask, &b.how), verify::expected(turn, today));
+                    expected.insert(
+                        marker(&b.ask, &b.how),
+                        verify::expected(catalog, turn, today),
+                    );
                 }
             }
         }
@@ -136,7 +139,8 @@ impl Llm for Rehearsal {
                                     .map(|(f, v)| json!({"field": f, "value": v}))
                                     .collect::<Vec<_>>(),
                                 "names": want.names,
-                                "excluding": Vec::<String>::new(),
+                                "excluding": want.excluding,
+                                "typed": want.typed,
                             }),
                             None => json!({"act": "unknown", "kind": "unknown"}),
                         }

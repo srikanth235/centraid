@@ -454,6 +454,7 @@ impl Facts {
         match (have, &filter.value) {
             (F::N(a), Lit::Num(b)) => match filter.cmp {
                 Cmp::Eq => (a - b).abs() < 1e-9,
+                Cmp::Ne => (a - b).abs() >= 1e-9,
                 Cmp::Lt => a < b,
                 Cmp::Le => a <= b,
                 Cmp::Gt => a > b,
@@ -466,21 +467,41 @@ impl Facts {
                     "role" | "met" | "description" | "body"
                 ) =>
             {
-                filter.cmp == Cmp::Eq && a.to_lowercase().contains(&b.to_lowercase())
+                let has = a.to_lowercase().contains(&b.to_lowercase());
+                match filter.cmp {
+                    Cmp::Eq => has,
+                    Cmp::Ne => !has,
+                    _ => false,
+                }
             }
-            (F::T(a), Lit::Text(b)) => filter.cmp == Cmp::Eq && a.eq_ignore_ascii_case(b),
+            (F::T(a), Lit::Text(b)) => match filter.cmp {
+                Cmp::Eq => a.eq_ignore_ascii_case(b),
+                Cmp::Ne => !a.eq_ignore_ascii_case(b),
+                _ => false,
+            },
             (F::B(a), Lit::Flag(b)) => filter.cmp == Cmp::Eq && a == b,
             _ => false,
         }
     }
 
-    /// The live rows a selector picks, in the runtime's default order (date, then name).
-    /// `within` is the keys of the earlier result it narrows.
+    /// The live rows a selector picks (the trashed ones when it says so), in the runtime's default
+    /// order (date, then name). `within` is the keys of the earlier result it narrows.
     #[must_use]
     pub fn select(&self, sel: &Selector, within: Option<&BTreeSet<String>>) -> Vec<&Row> {
         let range = sel.period.as_ref().and_then(|p| p.range(self.today));
+        let words: Vec<String> = sel
+            .text
+            .iter()
+            .flat_map(|t| fold(t).split(' ').map(str::to_owned).collect::<Vec<_>>())
+            .collect();
         let mut out: Vec<&Row> = self
-            .of_kind(&sel.kind)
+            .rows
+            .iter()
+            .filter(|r| r.kind == sel.kind && r.trashed == sel.trashed)
+            .filter(|r| {
+                let name = fold(&r.name);
+                words.iter().all(|w| name.contains(w.as_str()))
+            })
             .filter(|r| sel.name.as_ref().is_none_or(|n| fold(&r.name) == fold(n)))
             .filter(|r| sel.filters.iter().all(|f| self.passes(r, f)))
             .filter(|r| match (&sel.period, range) {

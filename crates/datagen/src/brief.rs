@@ -24,6 +24,9 @@ pub struct TurnBrief {
     pub spans: Vec<String>,
     /// How the turn points at its rows and which earlier turn it leans on.
     pub how: String,
+    /// The secrets the member types in the turn (a password, a card number, the text of a secret note): made-up values the
+    /// writer must say as given, each also one of `spans`. Never a value a vault stores.
+    pub typed: Vec<String>,
 }
 
 pub struct Briefer<'a> {
@@ -85,6 +88,7 @@ fn cmp_words(filter: &Filter) -> &'static str {
     use crate::intent::Cmp;
     match filter.cmp {
         Cmp::Eq => "is",
+        Cmp::Ne => "is not",
         Cmp::Lt => "is below",
         Cmp::Le => "is at most",
         Cmp::Gt => "is above",
@@ -154,6 +158,15 @@ impl Briefer<'_> {
             .iter()
             .map(|f| self.filter(&sel.kind, f))
             .collect();
+        if let Some(text) = &sel.text {
+            spans.push(text.clone());
+            parts.push(format!(
+                "found by searching for the word \"{text}\" (say the word; it is part of a name, so do not say the whole name)"
+            ));
+        }
+        if sel.trashed {
+            parts.push("only the ones in the trash (deleted ones)".to_owned());
+        }
         if let Some(link) = &sel.link {
             parts.push(Self::link(link, spans));
         }
@@ -245,13 +258,28 @@ impl Briefer<'_> {
         }
     }
 
-    fn change(&self, change: &Change, spans: &mut Vec<String>) -> String {
+    /// One field set to a value, in words. `typed` collects the values the member types as secrets.
+    fn change(
+        &self,
+        kind: &str,
+        item_type: Option<&str>,
+        change: &Change,
+        spans: &mut Vec<String>,
+        typed: &mut Vec<String>,
+    ) -> String {
         let value = match &change.value {
             Val::Text(t) => {
                 spans.push(t.clone());
-                format!("\"{t}\"")
+                if self.catalog.typed_secret(kind, &change.field, item_type) {
+                    typed.push(t.clone());
+                    format!(
+                        "\"{t}\" (a made-up secret the person types in on purpose; say it exactly)"
+                    )
+                } else {
+                    format!("\"{t}\"")
+                }
             }
-            Val::Num(n) => number(*n),
+            Val::Num(n) => format!("{}{}", number(*n), self.unit(kind, &change.field)),
             Val::Flag(b) => if *b { "yes" } else { "no" }.to_owned(),
             Val::When(json) => self.when_json(json),
         };
@@ -275,15 +303,23 @@ impl Briefer<'_> {
     #[must_use]
     pub fn turn(&self, turn: &TurnIntent, index: usize) -> TurnBrief {
         let mut spans = Vec::new();
-        let ask = self.ask(&turn.intent, turn, &mut spans);
+        let mut typed = Vec::new();
+        let ask = self.ask(&turn.intent, turn, &mut spans, &mut typed);
         TurnBrief {
             ask,
             spans: unique(spans),
             how: how_of(turn, index),
+            typed: unique(typed),
         }
     }
 
-    fn ask(&self, intent: &Intent, turn: &TurnIntent, spans: &mut Vec<String>) -> String {
+    fn ask(
+        &self,
+        intent: &Intent,
+        turn: &TurnIntent,
+        spans: &mut Vec<String>,
+        typed: &mut Vec<String>,
+    ) -> String {
         match intent {
             Intent::Read { sel } => {
                 format!("Show me {}.", self.selector(sel, spans, true))
@@ -317,11 +353,22 @@ impl Briefer<'_> {
             }
             Intent::Edit { target, changes } => {
                 let what = self.target(target, spans);
-                let changes: Vec<String> = changes.iter().map(|c| self.change(c, spans)).collect();
+                let kind = target_kind(target);
+                let changes: Vec<String> = changes
+                    .iter()
+                    .map(|c| self.change(kind, None, c, spans, typed))
+                    .collect();
                 format!("Change {what}: set {}.", changes.join(", "))
             }
             Intent::Create { kind, fields } => {
-                let fields: Vec<String> = fields.iter().map(|c| self.change(c, spans)).collect();
+                let item_type = fields.iter().find_map(|c| match &c.value {
+                    Val::Text(t) if c.field == "type" => Some(t.as_str()),
+                    _ => None,
+                });
+                let fields: Vec<String> = fields
+                    .iter()
+                    .map(|c| self.change(kind, item_type, c, spans, typed))
+                    .collect();
                 format!("Make a new {kind} with {}.", fields.join(", "))
             }
             Intent::Recall { turn: from, value } => format!(
@@ -347,6 +394,13 @@ impl Briefer<'_> {
             }
             Intent::Decline { reason } => decline_phrase(reason, spans, turn),
         }
+    }
+}
+
+fn target_kind(target: &Target) -> &str {
+    match target {
+        Target::Name { kind, .. } | Target::Turn { kind, .. } => kind,
+        Target::Select { sel } => &sel.kind,
     }
 }
 

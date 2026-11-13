@@ -125,6 +125,13 @@ pub fn constraints(sel: &Selector) -> usize {
         + usize::from(sel.anchor.is_some())
 }
 
+/// The (kind, field) pairs a turn sets, as `create/task/priority` (`fields::of_turn`): what the mix balances beside the
+/// cells.
+#[must_use]
+pub fn fields(turn: &TurnIntent) -> Vec<String> {
+    crate::fields::of_turn(turn)
+}
+
 /// The combinations a turn is an instance of: `kf:<kind>:<field>` for each field a selector filters on and
 /// `kvn:<kind>:<verb or op>:<constraints>` for what it does with a selector. They are what a split by combination
 /// reserves: a combination in test is one train and val never show.

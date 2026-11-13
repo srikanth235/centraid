@@ -349,6 +349,16 @@ impl Catalog {
         self.verbs.iter().find(|verb| verb.name == name)
     }
 
+    /// Is `field` a secret the member types into Chat for a Locker item: a sealed column a typed value fills (`password`,
+    /// `code`, `card_number`, `cvv`), or the notes of a `note` item, which the vault seals? Everything else a Locker item
+    /// holds is plain text. A stored sealed value is never one of these: no world, prompt or record carries it.
+    #[must_use]
+    pub fn typed_secret(&self, kind: &str, field: &str, item_type: Option<&str>) -> bool {
+        kind == "locker item"
+            && ((field != "content" && self.sealed.iter().any(|s| s == field))
+                || (field == "notes" && item_type == Some("note")))
+    }
+
     /// The kinds an app owns.
     pub fn kinds_of<'a>(&'a self, app: &'a str) -> impl Iterator<Item = &'a Kind> {
         self.kinds.iter().filter(move |kind| kind.app == app)

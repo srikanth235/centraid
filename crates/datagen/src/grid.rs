@@ -246,8 +246,8 @@ impl Grid {
             let has = |verb: &str| kind.verbs.iter().any(|v| v == verb);
             cells.insert(
                 Cell::new("create", k, "create"),
-                if matches!(k, "workout" | "daily figure") {
-                    Live::NotLive("workouts and daily figures are read-only in chat today; live-pending the regroup's Health writes (owner-approved, not landed)".into())
+                if k == "daily figure" {
+                    Live::NotLive("a world follows a Health store, and the runtime answers a create with `These figures come from Health; change them there, not here`".into())
                 } else if has("create") && live("create") {
                     Live::Live
                 } else {

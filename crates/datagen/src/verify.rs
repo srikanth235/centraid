@@ -124,6 +124,11 @@ pub struct Expected {
     pub filters: Vec<(String, String)>,
     /// The names the words carry: a named row, a row a selection is linked to or reads a period off.
     pub names: Vec<String>,
+    /// The values the member types in to be stored (a password, a card number, a security code, the text of a secret
+    /// note): made-up, and the one secret a message may carry.
+    pub typed: Vec<String>,
+    /// Every value the turn rules out (`status != open`), lowercased.
+    pub excluding: Vec<String>,
 }
 
 fn filters_of(sel: &Selector, out: &mut Vec<(String, String)>) {
@@ -136,6 +141,16 @@ fn filters_of(sel: &Selector, out: &mut Vec<(String, String)>) {
     }
 }
 
+fn excluded_by(sel: &Selector, out: &mut Vec<String>) {
+    for f in &sel.filters {
+        if f.cmp == crate::intent::Cmp::Ne
+            && let Lit::Text(t) = &f.value
+        {
+            out.push(t.trim().to_lowercase());
+        }
+    }
+}
+
 fn names_of(sel: &Selector, spoken: bool, out: &mut Vec<String>) {
     if spoken && let Some(n) = &sel.name {
         out.push(n.clone());
@@ -143,6 +158,8 @@ fn names_of(sel: &Selector, spoken: bool, out: &mut Vec<String>) {
     for l in [&sel.link, &sel.anchor].into_iter().flatten() {
         out.push(l.name.clone());
     }
+    // the word searched for is said whole, whatever the reference
+    out.extend(sel.text.iter().cloned());
 }
 
 fn numbers_of(sel: &Selector, out: &mut Vec<f64>) {
@@ -169,12 +186,13 @@ fn period_of(sel: &Selector, today: Date) -> Option<(Date, Date)> {
 
 /// The slots of `turn`.
 #[must_use]
-pub fn expected(turn: &TurnIntent, today: Date) -> Expected {
+pub fn expected(catalog: &Catalog, turn: &TurnIntent, today: Date) -> Expected {
     let named = matches!(
         turn.reference,
         Reference::Name | Reference::Nickname | Reference::Misspelling
     );
     let mut numbers = Vec::new();
+    let mut typed: Vec<String> = Vec::new();
     let mut e = Expected {
         act: String::new(),
         kind: None,
@@ -190,15 +208,18 @@ pub fn expected(turn: &TurnIntent, today: Date) -> Expected {
         decline: None,
         filters: Vec::new(),
         names: Vec::new(),
+        typed: Vec::new(),
+        excluding: Vec::new(),
     };
-    let (mut filters, mut names) = (Vec::new(), Vec::new());
+    let (mut filters, mut names, mut excluding) = (Vec::new(), Vec::new(), Vec::new());
     let said = matches!(turn.reference, Reference::Name);
     let mut selects = |sel: &Selector, numbers: &mut Vec<f64>| {
         numbers_of(sel, numbers);
         filters_of(sel, &mut filters);
+        excluded_by(sel, &mut excluding);
         names_of(sel, said, &mut names);
         (
-            (sel.name.is_none() && !named).then(|| sel.kind.clone()),
+            (sel.name.is_none() && sel.text.is_none() && !named).then(|| sel.kind.clone()),
             period_of(sel, today),
         )
     };
@@ -246,14 +267,29 @@ pub fn expected(turn: &TurnIntent, today: Date) -> Expected {
                 if let Val::Num(n) = c.value {
                     numbers.push(n);
                 }
+                if let (Target::Name { kind, .. } | Target::Turn { kind, .. }, Val::Text(t)) =
+                    (target, &c.value)
+                    && catalog.typed_secret(kind, &c.field, None)
+                {
+                    typed.push(t.clone());
+                }
             }
         }
         Intent::Create { kind, fields } => {
             "create".clone_into(&mut e.act);
             e.kind = Some(kind.clone());
+            let item_type = fields.iter().find_map(|c| match &c.value {
+                Val::Text(t) if c.field == "type" => Some(t.as_str()),
+                _ => None,
+            });
             for c in fields {
                 if let Val::Num(n) = c.value {
                     numbers.push(n);
+                }
+                if let Val::Text(t) = &c.value
+                    && catalog.typed_secret(kind, &c.field, item_type)
+                {
+                    typed.push(t.clone());
                 }
             }
         }
@@ -269,6 +305,8 @@ pub fn expected(turn: &TurnIntent, today: Date) -> Expected {
     e.numbers = numbers;
     e.filters = filters;
     e.names = names;
+    e.typed = typed;
+    e.excluding = excluding;
     e
 }
 
@@ -280,6 +318,7 @@ pub fn reader_prompt(
     catalog: &Catalog,
     batch: &[(String, Date, Vec<String>)],
     attempt: usize,
+    typed: bool,
 ) -> String {
     let kinds: Vec<String> = catalog.kinds.iter().map(|k| k.name.clone()).collect();
     let verbs: Vec<String> = catalog.verbs.iter().map(|v| v.name.clone()).collect();
@@ -333,10 +372,15 @@ For EVERY message return an object with:\n\
 - \"filters\": every condition on a fixed-list or text field the message sets, as [{{\"field\": ..., \"value\": ...}}] with the value as the fixed list says it (fixed lists: {lists}); [] if none.\n\
 - \"names\": every person, row or title the message names, as it is written; [] if none.\n\
 - \"excluding\": every value the message rules OUT (\"not\", \"except\", \"without\", \"other than\"); [] if none.\n\
-\n\
+{typed_line}\n\
 Answer with JSON only: {{\"sessions\": [{{\"id\": \"s1\", \"turns\": [{{...}}, ...]}}, ...]}} with one object per message, in order.{retry}\n\
 \n\
 Sessions:\n{sessions}\n",
+        typed_line = if typed {
+            "- \"typed\": every value the person types in to be stored (a password, a card number, a security code, the text of a secret note), exactly as written; [] if none.\n"
+        } else {
+            ""
+        },
         verbs = verbs.join(", "),
         kinds = kinds.join(", "),
         units = units.join("; "),
@@ -358,6 +402,8 @@ pub struct Read {
     pub filters: Vec<(String, String)>,
     pub names: Vec<String>,
     pub excluding: Vec<String>,
+    /// Values the person typed in to be stored, as written, lowercased.
+    pub typed: Vec<String>,
 }
 
 fn strings(v: &Value) -> Vec<String> {
@@ -404,6 +450,7 @@ fn read_of(v: &Value) -> Option<Read> {
             .collect(),
         names: strings(&v["names"]),
         excluding: strings(&v["excluding"]),
+        typed: strings(&v["typed"]),
     })
 }
 
@@ -545,11 +592,26 @@ pub fn slots(catalog: &Catalog, want: &Expected, got: &Read, index: usize) -> Ve
             format!("meant `{name}`, read back {:?}", got.names)
         }));
     }
-    if want.act != "decline" {
-        // no intent rules a value out: a reader that finds an exclusion read something the words did not say
-        out.push(slot("exclusion", got.excluding.is_empty(), || {
-            format!("the intent excludes nothing, read back {:?}", got.excluding)
+    for value in &want.typed {
+        let squeeze = |t: &str| t.split_whitespace().collect::<String>().to_lowercase();
+        let ok = got.typed.iter().any(|g| squeeze(g) == squeeze(value));
+        out.push(slot("typed", ok, || {
+            format!("the person typed `{value}`, read back {:?}", got.typed)
         }));
+    }
+    if want.act != "decline" {
+        if want.excluding.is_empty() {
+            // no intent rules a value out: a reader that finds an exclusion read something the words did not say
+            out.push(slot("exclusion", got.excluding.is_empty(), || {
+                format!("the intent excludes nothing, read back {:?}", got.excluding)
+            }));
+        }
+        for value in &want.excluding {
+            let ok = got.excluding.iter().any(|g| names_match(value, g));
+            out.push(slot("exclusion", ok, || {
+                format!("meant `{value}` ruled out, read back {:?}", got.excluding)
+            }));
+        }
     }
     out
 }
@@ -577,8 +639,9 @@ pub fn read_back(
     catalog: &Catalog,
     batch: &[(String, Date, Vec<String>)],
     attempt: usize,
+    typed: bool,
 ) -> Result<Vec<Option<Vec<Read>>>> {
-    let prompt = reader_prompt(catalog, batch, attempt);
+    let prompt = reader_prompt(catalog, batch, attempt, typed);
     let answer = cache.complete(&prompt)?;
     let sizes: Vec<usize> = batch.iter().map(|(_, _, m)| m.len()).collect();
     // An answer that cannot be read covers no session: each is asked again, as one it skipped.

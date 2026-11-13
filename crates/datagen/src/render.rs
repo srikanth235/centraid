@@ -373,6 +373,9 @@ pub struct Features {
     pub apps: Vec<String>,
     /// The grid cell of each turn.
     pub cells: Vec<String>,
+    /// The (kind, field) pairs the turns set (`create/task/priority`): every field a create carries and every field an edit
+    /// changes, which the mix balances beside the cells.
+    pub fields: Vec<String>,
     pub turns: usize,
     pub across: bool,
     /// `pair:<id>` on a minimal pair's two sessions.
@@ -735,6 +738,7 @@ fn features_of(
             .take(kept)
             .map(|turn| cell_of(turn).to_string())
             .collect(),
+        fields: kept_turns().flat_map(labels::fields).collect(),
         turns: kept,
         across: scenario.span == Span::Across,
         pair,

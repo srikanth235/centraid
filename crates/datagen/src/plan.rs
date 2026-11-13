@@ -440,6 +440,12 @@ impl<'a> WorldRun<'a> {
         if let Some(name) = &sel.name {
             args.push(("name", name.clone()));
         }
+        if let Some(text) = &sel.text {
+            args.push(("text", text.clone()));
+        }
+        if sel.trashed {
+            args.push(("trashed", "true".to_owned()));
+        }
         if !sel.filters.is_empty() {
             let clauses: Vec<String> = sel.filters.iter().map(|f| f.clause()).collect();
             args.push(("where", clauses.join(" and ")));

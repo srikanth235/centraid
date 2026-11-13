@@ -60,6 +60,7 @@ fn version_dir() -> &'static tempfile::TempDir {
                 subsets: Vec::new(),
                 reserved: Vec::new(),
                 reserve: 0,
+                ..mix::Config::default()
             },
             &Provenance {
                 version: "test".to_owned(),

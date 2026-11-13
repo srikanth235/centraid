@@ -168,6 +168,8 @@ impl Period {
 #[serde(rename_all = "snake_case")]
 pub enum Cmp {
     Eq,
+    /// `!=`, on a fixed-list or text field.
+    Ne,
     Lt,
     Le,
     Gt,
@@ -179,6 +181,7 @@ impl Cmp {
     pub const fn symbol(self) -> &'static str {
         match self {
             Self::Eq => "=",
+            Self::Ne => "!=",
             Self::Lt => "<",
             Self::Le => "<=",
             Self::Gt => ">",
@@ -263,6 +266,12 @@ pub struct Selector {
     pub limit: Option<usize>,
     /// The earlier turn whose result this narrows (`within=@k`).
     pub within: Option<usize>,
+    /// A fuzzy name search across the vault (`text=`), the kind narrowing it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    /// Only rows in the trash (`trashed=true`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub trashed: bool,
 }
 
 impl Selector {
@@ -278,6 +287,8 @@ impl Selector {
             order: None,
             limit: None,
             within: None,
+            text: None,
+            trashed: false,
         }
     }
 }

@@ -151,12 +151,17 @@ pub fn writer_prompt(jobs: &[&Job], attempt: usize) -> String {
                 .iter()
                 .enumerate()
                 .map(|(t, b)| {
-                    json!({
+                    let mut turn = json!({
                         "turn": t + 1,
                         "ask": b.ask,
                         "say_verbatim": b.spans,
                         "how": b.how,
-                    })
+                    });
+                    // only a turn that types a secret carries the key, so every other prompt is as it was
+                    if !b.typed.is_empty() {
+                        turn["typed_secret"] = json!(b.typed);
+                    }
+                    turn
                 })
                 .collect();
             json!({
@@ -167,6 +172,9 @@ pub fn writer_prompt(jobs: &[&Job], attempt: usize) -> String {
             })
         })
         .collect();
+    let secrets = jobs
+        .iter()
+        .any(|job| job.briefs.iter().any(|b| !b.typed.is_empty()));
     let retry = if attempt > 0 {
         format!(
             "\n(attempt {}: answer with valid JSON only, one message per turn.)\n",
@@ -193,11 +201,16 @@ Hard rules:\n\
 - When no row is named, make the kind of thing unmistakable (tasks, events, people, notes, documents, photos, transactions, workouts, steps, accounts, locker items), so it cannot be read as another kind. When a row IS named, just say its name the way a person would (\"unstar Vera Haddad\", \"rename Dinner party menu to ...\"); do not add \"the person called\" or \"the task named\".\n\
 - Use plain words for fields (\"heart rate\", \"sleep\", \"due\"), never code names (no \"heart_rate\", no \"sleep_min\") and never tool or system words (\"turn\", \"vault\", \"query\", \"row\").\n\
 - Never write a password, PIN or secret value.\n\
-\n\
+{secrets}\n\
 Answer with JSON only: {{\"sessions\": [{{\"id\": \"s1\", \"messages\": [\"...\", \"...\"]}}, ...]}} with exactly one message per turn, in order.{retry}\n\
 \n\
 Sessions:\n{}\n",
-        serde_json::to_string_pretty(&sessions).unwrap_or_default()
+        serde_json::to_string_pretty(&sessions).unwrap_or_default(),
+        secrets = if secrets {
+            "- The one exception: a turn with \"typed_secret\" lists made-up values the person types in on purpose to store them (a password, a card number, a security code, the text of a secret note). Write each exactly as given, the way a person types it in; never invent another secret.\n"
+        } else {
+            ""
+        }
     )
 }
 
@@ -561,7 +574,7 @@ pub fn run(
         let expected = scenario
             .turns
             .iter()
-            .map(|t| verify::expected(t, today))
+            .map(|t| verify::expected(catalog, t, today))
             .collect();
         let n = scenario.turns.len();
         let style = style::assign(&cfg.style_shares, &scenario.id, n, cfg.seed);
@@ -846,7 +859,10 @@ pub fn run(
                         no_sealed(m)?;
                     }
                 }
-                verify::read_back(cache, catalog, &jobs, attempt)
+                let typed = batch
+                    .iter()
+                    .any(|i| items[*i].expected.iter().any(|e| !e.typed.is_empty()));
+                verify::read_back(cache, catalog, &jobs, attempt, typed)
             });
             for (batch, answer) in batches.iter().zip(answers) {
                 let answer = answer.context("a reader thread panicked")??;
@@ -1212,6 +1228,7 @@ mod tests {
 
     fn brief(spans: &[&str]) -> TurnBrief {
         TurnBrief {
+            typed: Vec::new(),
             ask: String::new(),
             spans: spans.iter().map(|s| (*s).to_owned()).collect(),
             how: String::new(),
