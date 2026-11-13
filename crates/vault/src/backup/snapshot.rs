@@ -397,12 +397,13 @@ impl Manifest {
     }
 
     /// Everything the snapshot is made of besides the root: its leaves, its ranges and the parts
-    /// of the blobs its rows name.
+    /// of the blobs its rows name, and the directory of gateways it names.
     #[must_use]
     pub fn part_names(&self) -> BTreeSet<Name> {
         let mut out = self.range_names();
         out.extend(self.leaf_names());
         out.extend(self.blob_part_names());
+        out.extend(self.directory);
         out
     }
 }
@@ -497,6 +498,8 @@ pub struct Snapshot {
     pub manifest_name: Name,
     /// The leaves the root lists, JSON and name, in order.
     pub leaves: Vec<Leaf>,
+    /// The sealed directory of gateways the manifest names, if one was given.
+    pub directory: Option<Leaf>,
     pub ranges: Vec<Range>,
     /// The ranges that changed since the snapshot the walk compared with, sealed into the spool
     /// (or deferred) while the pin was held. No other range's bytes are at hand.
@@ -646,6 +649,8 @@ pub struct Sealed {
     /// The chunk digests this phone holds for the parts of blobs it has sealed, by name: what a
     /// blobs leaf carries as `d`.
     pub part_digests: BTreeMap<Name, Vec<ChunkDigest>>,
+    /// The sealed gateway directory this snapshot names (E8): its name and plaintext.
+    pub directory: Option<Leaf>,
 }
 
 impl<'a> RangeSealer<'a> {
@@ -701,6 +706,18 @@ impl<'a> RangeSealer<'a> {
         self
     }
 
+    /// The directory of gateways the snapshot's manifest names (E8).
+    ///
+    /// # Errors
+    /// The directory will not serialise.
+    pub fn with_directory(mut self, directory: &super::directory::Directory) -> Result<Self> {
+        self.out.directory = Some(Leaf {
+            name: directory.name(self.keys)?,
+            json: directory.to_json()?,
+        });
+        Ok(self)
+    }
+
     /// What was sealed.
     #[must_use]
     pub fn finish(self) -> Sealed {
@@ -714,6 +731,7 @@ impl<'a> RangeSealer<'a> {
         }
         self.out = Sealed {
             part_digests: std::mem::take(&mut self.out.part_digests),
+            directory: self.out.directory.take(),
             ..Sealed::default()
         };
     }
@@ -820,7 +838,7 @@ pub fn describe(
             })
             .collect(),
         census: walked.census.clone(),
-        directory: None,
+        directory: sealed.directory.as_ref().map(|directory| directory.name),
         ranges_tree: Vec::new(),
         blobs_tree: Vec::new(),
     };
@@ -838,6 +856,7 @@ pub fn describe(
         manifest_json: parts.root_json,
         manifest_name,
         leaves: parts.leaves,
+        directory: sealed.directory.clone(),
         ranges,
         sealed,
     })
@@ -944,6 +963,8 @@ pub struct Plan {
     /// Leaves the destination lacks, by name.
     pub missing_leaves: Vec<Name>,
     pub manifest_missing: bool,
+    /// The destination lacks the directory the manifest names.
+    pub directory_missing: bool,
 }
 
 /// Ask `store` about every range and the manifest, in as few `exists` calls
@@ -962,6 +983,7 @@ pub fn plan(snapshot: &Snapshot, store: &dyn Store) -> Result<Plan> {
         .copied()
         .collect();
     asked.extend(snapshot.leaves.iter().map(|leaf| leaf.name));
+    asked.extend(snapshot.directory.iter().map(|directory| directory.name));
     asked.push(snapshot.manifest_name);
     let missing = store::missing(store, &asked)?;
     let mut seen = BTreeSet::new();
@@ -980,6 +1002,10 @@ pub fn plan(snapshot: &Snapshot, store: &dyn Store) -> Result<Plan> {
             .map(|leaf| leaf.name)
             .collect(),
         manifest_missing: missing.contains(&snapshot.manifest_name),
+        directory_missing: snapshot
+            .directory
+            .as_ref()
+            .is_some_and(|directory| missing.contains(&directory.name)),
     })
 }
 
@@ -1012,6 +1038,7 @@ pub fn union(snapshot: &Snapshot, plans: &[Plan]) -> Plan {
             .map(|leaf| leaf.name)
             .collect(),
         manifest_missing: plans.iter().any(|plan| plan.manifest_missing),
+        directory_missing: plans.iter().any(|plan| plan.directory_missing),
     }
 }
 
@@ -1182,6 +1209,44 @@ pub fn spool(
             held += put(
                 leaf.name,
                 OutboxKind::Leaf,
+                &gateways,
+                &sealed,
+                &mut out,
+                &mut pending,
+            )?;
+            flush(&mut pending)?;
+        }
+    }
+
+    // THE DIRECTORY OF GATEWAYS (E8), sealed once and sent as the same bytes to every gateway
+    // that lacks it, before the manifest that names it.
+    if let Some(directory) = &snapshot.directory
+        && union_plan.directory_missing
+    {
+        let gateways: Vec<&str> = plans
+            .iter()
+            .filter(|(_, plan)| plan.directory_missing)
+            .map(|(gateway, _)| gateway.as_str())
+            .collect();
+        let in_spool = spool.contains(&directory.name)
+            && gateways.iter().all(|gateway| {
+                state
+                    .outbox_row(gateway, &directory.name)
+                    .ok()
+                    .flatten()
+                    .is_some_and(|row| row.part_path.is_some())
+            });
+        if in_spool {
+            out.spooled.push(directory.name);
+        } else if !out.deferred.is_empty()
+            || !super::spool::admits(held, directory.json.len() as u64, budget)
+        {
+            out.deferred.push(directory.name);
+        } else {
+            let sealed = sealed::seal_part(keys, 0, &directory.json, true)?;
+            held += put(
+                directory.name,
+                OutboxKind::Directory,
                 &gateways,
                 &sealed,
                 &mut out,

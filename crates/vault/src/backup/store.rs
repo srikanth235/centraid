@@ -306,6 +306,10 @@ pub struct SnapshotEntry {
     pub name: Name,
     pub taken_at_ms: u64,
     pub registered_at_ms: u64,
+    /// The writer epoch and generation its head was signed at: the signed order of snapshots,
+    /// which retention judges before any clock. 0 where the destination does not say.
+    pub epoch: u64,
+    pub generation: u64,
     /// While its manifest is held for deletion: when, and when it goes (E6).
     /// A held snapshot stays listed, and a restore may still choose it.
     pub held_at_ms: Option<u64>,
@@ -903,12 +907,15 @@ impl Store for MemoryStore {
             set_at_ms: now,
         };
         shared.head = Some(head);
+        let (epoch, generation) = (head.epoch, head.generation);
         shared.snapshots.insert(
             *name,
             SnapshotEntry {
                 name: *name,
                 taken_at_ms,
                 registered_at_ms: now,
+                epoch,
+                generation,
                 held_at_ms: None,
                 purge_after_ms: None,
             },

@@ -184,6 +184,13 @@ pub fn config_from_json(bytes: &[u8]) -> Result<CoreConfig, CoreError> {
         // drill's (`CoreConfig::with_spool_ceiling`).
         spool_ceiling: None,
         shelf: None,
+        // THE ADDITIVE KEY A SHELL SENDS ONLY AFTER `VAULT_DAMAGED` (decision 35, `CONTRACT.md`
+        // §4a: an older core ignores it): a handle over the same path that opens no vault and
+        // never reads the damaged file.
+        without_vault: parsed
+            .get("restoreDamaged")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false),
     };
     // DEFAULTS TO CREATING, because a shell that named a path and said nothing
     // else is founding a vault there — which is what the phone does now
@@ -351,6 +358,18 @@ mod tests {
 
     /// THE SHELL HANDS OVER A DIRECTORY, NOT A VAULT (#1135, lane H2): the core
     /// that opens is the front of a shelf, holds no vault and is never created.
+    /// Decision 35: the additive `restoreDamaged` key asks for a handle that opens no vault at
+    /// `path`; absent, a shell gets an ordinary open.
+    #[test]
+    fn restore_damaged_opens_no_vault_at_the_path() {
+        let plain = config_from_json(br#"{"path":"/data/vault.db"}"#).expect("parses");
+        assert!(!plain.without_vault);
+        let damaged = config_from_json(br#"{"path":"/data/vault.db","restoreDamaged":true}"#)
+            .expect("parses");
+        assert!(damaged.without_vault);
+        assert_eq!(damaged.path, std::path::PathBuf::from("/data/vault.db"));
+    }
+
     #[test]
     fn a_shelf_is_a_directory_and_the_front_core_is_never_created() {
         let config = config_from_json(

@@ -1096,6 +1096,9 @@ fn verify_sample(
     let mut freeable = found.freeable.clone();
     let mut confirmed_wrong = found.freeable.len();
     let mut unverified = 0_u32;
+    // CHUNKS THE READ-BACK COULD NOT STAND BEHIND: wrong to it, intact to the gateway. They are
+    // in `sample_of` and not in `sample_checked`, so the rate sentence never overstates.
+    let mut unverified_chunks = 0_usize;
     for name in found
         .wrong
         .iter()
@@ -1107,7 +1110,10 @@ fn verify_sample(
                 freeable.push(*name);
                 confirmed_wrong += 1;
             }
-            Ok(centraid_vault::backup::store::NameCheck::Intact) => unverified += 1,
+            Ok(centraid_vault::backup::store::NameCheck::Intact) => {
+                unverified += 1;
+                unverified_chunks += found.wrong_chunks.get(name).copied().unwrap_or(1);
+            }
             // GONE, OR A GATEWAY THAT CANNOT CHECK: the walk's `exists` finds a missing one.
             Ok(
                 centraid_vault::backup::store::NameCheck::Missing
@@ -1115,10 +1121,19 @@ fn verify_sample(
             ) => confirmed_wrong += 1,
             // BUSY or a failed ask: the part is read again next pass.
             Err(error @ StoreError::Unreachable(_)) => return Err(store_error(error)),
-            Err(_) => unverified += 1,
+            Err(_) => {
+                unverified += 1;
+                unverified_chunks += found.wrong_chunks.get(name).copied().unwrap_or(1);
+            }
         }
     }
-    plane.note(id, |notes| notes.sample_unverified = unverified);
+    pass.sampled = pass.sampled.saturating_sub(unverified_chunks);
+    plane.note(id, |notes| {
+        notes.sample_unverified = unverified;
+        notes.sample_checked = notes
+            .sample_checked
+            .saturating_sub(u32::try_from(unverified_chunks).unwrap_or(u32::MAX));
+    });
     if unverified > 0 {
         tracing::warn!(
             gateway = %id,
@@ -1390,6 +1405,25 @@ fn known_ranges(
         .collect()
 }
 
+/// The directory of every gateway this phone is paired with: ids, addresses, certificate pins and
+/// labels, never a token (E8).
+fn directory_of(state: &DeviceState) -> Result<centraid_vault::backup::directory::Directory> {
+    use centraid_vault::backup::directory::{Directory, Entry};
+    let entries = state
+        .gateways()
+        .map_err(plane_error)?
+        .into_iter()
+        .take(centraid_vault::backup::directory::MAX_GATEWAYS)
+        .map(|gateway| Entry {
+            pin: centraid_gateway::rules::ids::Pin::of(&gateway.cert_der).to_string(),
+            gateway_id: gateway.gateway_id,
+            addrs: gateway.addrs,
+            label: gateway.label,
+        })
+        .collect();
+    Directory::new(entries).map_err(plane_error)
+}
+
 /// Read the vault under one pin, sealing the ranges the newest snapshot did not name into the
 /// spool as they are read; ask every gateway what it holds of those; and owe each what it lacks:
 /// a part is sealed once and owed to each gateway that lacks it. **No copy of the vault is
@@ -1417,9 +1451,13 @@ fn take_snapshot(
             u64::try_from(vault.clock().now_ms()).unwrap_or(0),
         ))
     })?;
-    let mut sealer = RangeSealer::new(spool, &keyring.backup, budget)
+    let sealer = RangeSealer::new(spool, &keyring.backup, budget)
         .map_err(plane_error)?
         .with_part_digests(state.part_digests().map_err(plane_error)?);
+    // THE SEALED DIRECTORY OF THE MEMBER'S GATEWAYS (E8) rides in every snapshot: its name is
+    // a function of its content, so an unchanged set is one `exists` and nothing sent.
+    let directory = directory_of(state)?;
+    let mut sealer = sealer.with_directory(&directory).map_err(plane_error)?;
     debug_assert_eq!(pagesource::live_pins(), 0);
     let taken = snapshot::capture_at(
         &path,
@@ -1646,7 +1684,6 @@ fn retain(
         match manifest_of(store, keys, name) {
             Ok(manifest) => {
                 live.extend(manifest.part_names());
-                live.extend(manifest.directory);
             }
             Err(error @ CoreError::Unavailable { .. }) => return Err(error),
             Err(error) => {

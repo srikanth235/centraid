@@ -462,6 +462,7 @@ fn lose_the_phone_restore_from_the_words_and_the_old_phone_freezes() {
         wire::request::Kind::Restore(wire::RestoreRequest {
             phrase: WORDS.to_owned(),
             payload: gateway.payload(),
+            confirm_unproven: true,
             ..wire::RestoreRequest::default()
         }),
     ) else {

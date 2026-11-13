@@ -172,6 +172,8 @@ Test: `the_app_queries_round_trip_through_call` (and, below the ABI, `crates/cor
 
 Test: `the_words_are_minted_judged_and_seeded_over_a_core_with_no_vault` (and, below the ABI, `crates/core/src/phone/phrase.rs`)
 
+**A restore over a vault that failed to open as damaged** (#1191, decision 35). After `centraid_open` answers `VAULT_DAMAGED` (-6) a shell may open the same path again with the additive key `"restoreDamaged": true` (an older core ignores it, clause 4a). The handle it gets holds **no vault**: it neither opens nor reads the file at `path`, which stays byte-for-byte untouched. On that handle the existing `restore` request (the words and a gateway's pairing code) runs unchanged, with one difference: it replaces **only that vault's file** (`<shelf>/<id>/vault.db`), by an atomic rename, and only after that vault's snapshot was fetched and checked; a healthy vault the phone holds is never touched. A restore that is cancelled or fails leaves the damaged file as it was, so the next launch answers `VAULT_DAMAGED` again and the same screen. There is no second shelf directory. Tests: `a_damaged_vault_is_restored_over_through_a_handle_that_holds_no_vault` and `a_restore_that_dies_before_its_claim_leaves_the_damaged_file_as_it_was` (`crates/core/tests/restore_damaged.rs`), and `restore_damaged_opens_no_vault_at_the_path` (`src/marshal.rs`).
+
 ## 4g. The backup plane's doors beside the pass are request kinds
 
 [#1080](https://github.com/srikanth235/centraid/issues/1080) adds eight arms beside `drain` (and Q-1080-D3 a ninth, `refresh_destination`), and `phone.proto` states each one's shape:

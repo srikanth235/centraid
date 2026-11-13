@@ -182,6 +182,12 @@ pub struct SnapshotView {
     pub name: Name,
     pub taken_at_ms: i64,
     pub registered_at_ms: i64,
+    /// The writer epoch and generation the head naming this snapshot was signed at: the signed
+    /// order of snapshots. Absent (0) from a gateway that does not say.
+    #[serde(default)]
+    pub epoch: u64,
+    #[serde(default)]
+    pub generation: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub held_at_ms: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

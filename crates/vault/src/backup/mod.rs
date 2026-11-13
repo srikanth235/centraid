@@ -38,6 +38,7 @@
 //! socket; the gateway client and the phone's drain and media pipeline are
 //! built over it (`crates/core/src/phone`).
 
+pub mod directory;
 pub mod drill;
 pub mod files;
 pub mod holdings;

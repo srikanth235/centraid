@@ -354,6 +354,7 @@ fn a_rotted_original_is_found_checked_freed_and_sent_again() {
     let gateway = gateway();
     let dir = tempfile::tempdir().expect("a directory");
     let (phone, _path, object) = backed_up_photograph(&gateway, dir.path());
+    let before = record_of(&gateway, &object).expect("held");
     gateway
         .spawned
         .corrupt(&vault_id(), &object)
@@ -373,6 +374,13 @@ fn a_rotted_original_is_found_checked_freed_and_sent_again() {
     assert!(
         record_of(&gateway, &object).is_some_and(|record| record.is_live()),
         "the photograph's part is live again"
+    );
+    // SEALED AGAIN UNDER A NEW SALT: the bytes differ, so a damaged name that was not freed by a
+    // signed delete (the phone's, or the mover's on NAME_TAKEN) would have refused them forever.
+    let after = record_of(&gateway, &object).expect("held");
+    assert_ne!(
+        after.digest, before.digest,
+        "the re-sealed part is not the one that rotted"
     );
 }
 
@@ -411,5 +419,15 @@ fn a_chunk_the_gateway_calls_intact_is_not_deleted() {
             && after.digest == before.digest
             && after.stored_at_ms == before.stored_at_ms,
         "a part the gateway calls intact is neither deleted nor replaced: {after:?}"
+    );
+    // THE RATE SENTENCE NEVER OVERSTATES: the chunk the read-back could not stand behind is in
+    // `sample_of` and not in `sample_checked`.
+    let status = status(&phone);
+    let row = status.destinations.first().expect("a destination");
+    assert!(
+        row.sample_checked < row.sample_of,
+        "an unverified chunk is drawn but not counted: {} of {}",
+        row.sample_checked,
+        row.sample_of
     );
 }

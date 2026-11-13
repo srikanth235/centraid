@@ -294,6 +294,7 @@ impl Core {
             seed,
             spool_ceiling,
             shelf: shelf_config,
+            without_vault,
         } = config;
         // BEFORE THE FILE IS TOUCHED. A stale core that opened the vault and
         // then refused would have already run whatever migration its own
@@ -337,7 +338,7 @@ impl Core {
         // of a restore that has not landed — and it draws that rather than
         // being handed a failure. Founding an empty one instead would be a
         // silently empty product over the member's own data.
-        let vault = if !founded && !create {
+        let vault = if without_vault || (!founded && !create) {
             None
         } else {
             Some(Self::open_vault(
@@ -1525,14 +1526,26 @@ impl HandleState {
             // whole of what it is for (F2).
             K::Restore(request) => {
                 let runtime = self.runtime_handle()?;
-                Ok(response(wire::response::Kind::Restore(
+                // A CORE THAT HOLDS NO VAULT OVER A FILE THAT IS THERE is the handle a shell asked
+                // for after the vault failed to open as damaged (decision 35): the restore may
+                // replace that vault and nothing else. A front core's path is never a file.
+                let over_damaged = !self.holds_a_replica() && self.path.is_file();
+                Ok(response(wire::response::Kind::Restore(if over_damaged {
+                    crate::phone::restore::run_over_damaged(
+                        &self.path,
+                        request,
+                        &runtime,
+                        Some(cancellation),
+                        &mut |_| {},
+                    )?
+                } else {
                     crate::phone::restore::run_cancellable(
                         &self.path,
                         request,
                         &runtime,
                         cancellation,
-                    )?,
-                )))
+                    )?
+                })))
             }
             // A STATUS READ ANSWERS WITH OR WITHOUT A VAULT: the ledger is
             // beside the file, and the content counts need the file.

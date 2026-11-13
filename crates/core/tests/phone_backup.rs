@@ -613,6 +613,7 @@ fn a_library_item_larger_than_the_spool_backs_up_a_window_at_a_time() {
     let mut answers = Vec::new();
     loop {
         let answer = drain(&phone, at_home());
+        eprintln!("DBG {answer:?}");
         assert!(spooled() <= ceiling, "{} bytes spooled", spooled());
         answers.push((answer.need_bytes.len(), answer.confirmed_parts));
         if answer.need_bytes.is_empty() {
@@ -834,6 +835,7 @@ fn a_head_set_between_the_check_and_the_claim_is_checked_before_it_is_claimed() 
         &wire::RestoreRequest {
             phrase: WORDS.to_owned(),
             payload: gateway.payload(),
+            confirm_unproven: true,
             ..wire::RestoreRequest::default()
         },
         runtime.handle(),

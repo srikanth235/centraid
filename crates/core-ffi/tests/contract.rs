@@ -1194,6 +1194,7 @@ fn the_phones_four_flows_round_trip_through_call() {
             14,
             wire::request::Kind::Restore(wire::RestoreRequest {
                 phrase: "abandon abandon abandon".to_owned(),
+                confirm_unproven: true,
                 ..wire::RestoreRequest::default()
             }),
         ),

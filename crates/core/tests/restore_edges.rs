@@ -51,6 +51,7 @@ fn a_restore_killed_before_its_claim_is_finished_by_the_next_one() {
             &wire::RestoreRequest {
                 phrase: WORDS.to_owned(),
                 payload: gateway.payload(),
+                confirm_unproven: true,
                 ..wire::RestoreRequest::default()
             },
             runtime.handle(),
@@ -208,6 +209,7 @@ fn words_that_are_not_the_members_change_nothing() {
             wire::request::Kind::Restore(wire::RestoreRequest {
                 phrase: phrase.to_owned(),
                 payload: gateway.payload(),
+                confirm_unproven: true,
                 ..wire::RestoreRequest::default()
             }),
         )
@@ -443,6 +445,7 @@ fn a_gateway_that_dies_after_the_claim_leaves_the_restored_vault() {
         &wire::RestoreRequest {
             phrase: WORDS.to_owned(),
             payload: gateway.payload(),
+            confirm_unproven: true,
             ..wire::RestoreRequest::default()
         },
         runtime.handle(),
@@ -1302,6 +1305,7 @@ fn an_older_backup_is_offered_when_the_newest_will_not_open() {
             phrase: WORDS.to_owned(),
             payload: gateway.payload(),
             use_older: true,
+            confirm_unproven: true,
             ..wire::RestoreRequest::default()
         }),
     )
@@ -1380,6 +1384,7 @@ fn a_claim_that_landed_is_never_forgotten_when_adopting_fails() {
         &wire::RestoreRequest {
             phrase: WORDS.to_owned(),
             payload: gateway.payload(),
+            confirm_unproven: true,
             ..wire::RestoreRequest::default()
         },
         runtime.handle(),
@@ -1418,6 +1423,7 @@ fn a_claim_that_landed_is_never_forgotten_when_adopting_fails() {
             phrase: WORDS.to_owned(),
             payload: gateway.payload(),
             indices: first.unclaimed.iter().map(|vault| vault.index).collect(),
+            confirm_unproven: true,
             ..wire::RestoreRequest::default()
         },
         runtime.handle(),

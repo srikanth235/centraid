@@ -469,6 +469,8 @@ impl<S: State> Gateway<S> {
                 name: snapshot.name,
                 taken_at_ms: snapshot.taken_at_ms,
                 registered_at_ms: snapshot.registered_at_ms,
+                epoch: snapshot.epoch,
+                generation: snapshot.generation,
                 held_at_ms: snapshot.hold.map(|hold| hold.at_ms),
                 purge_after_ms: snapshot.hold.map(|hold| hold.purge_after_ms),
             })

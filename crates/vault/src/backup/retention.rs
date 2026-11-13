@@ -95,12 +95,25 @@ fn month(taken_at_ms: u64) -> i64 {
 pub fn keep(entries: &[SnapshotEntry], now_ms: u64) -> Keep {
     let judged_at = |entry: &SnapshotEntry| entry.taken_at_ms.min(now_ms);
     let mut ordered: Vec<&SnapshotEntry> = entries.iter().collect();
+    // THE SIGNED ORDER COMES FIRST: (epoch, generation) is what the vault key signed into each
+    // head, so it says which snapshot is newer where two share a millisecond or a phone's clock
+    // lied. Time, then registration, then name only break a tie among snapshots whose destination
+    // does not say (0, 0).
     ordered.sort_by(|left, right| {
-        (judged_at(right), right.registered_at_ms, right.name).cmp(&(
-            judged_at(left),
-            left.registered_at_ms,
-            left.name,
-        ))
+        (
+            right.epoch,
+            right.generation,
+            judged_at(right),
+            right.registered_at_ms,
+            right.name,
+        )
+            .cmp(&(
+                left.epoch,
+                left.generation,
+                judged_at(left),
+                left.registered_at_ms,
+                left.name,
+            ))
     });
 
     let mut kept: BTreeSet<Name> = BTreeSet::new();
@@ -182,6 +195,8 @@ mod tests {
             name: name_at(taken_at_ms),
             taken_at_ms,
             registered_at_ms: taken_at_ms,
+            epoch: 0,
+            generation: 0,
             held_at_ms: None,
             purge_after_ms: None,
         }
@@ -282,6 +297,32 @@ mod tests {
         );
     }
 
+    /// **THE SIGNED ORDER DECIDES** (#1191): two snapshots that share a millisecond and a
+    /// registration are told apart by the generation the vault key signed, never by name, so the
+    /// head is kept whichever way their names fall.
+    #[test]
+    fn the_signed_generation_orders_snapshots_before_time_or_name() {
+        for (low, high) in [(1_u8, 2_u8), (2, 1)] {
+            let older = SnapshotEntry {
+                name: Name::from_bytes([low; 32]),
+                generation: 5,
+                ..entry(NOW_MS)
+            };
+            let head = SnapshotEntry {
+                name: Name::from_bytes([high; 32]),
+                generation: 6,
+                ..entry(NOW_MS)
+            };
+            let decided = keep(&[older, head], NOW_MS);
+            assert_eq!(decided.keep.first(), Some(&head.name), "the head leads");
+            assert_eq!(
+                decided.drop,
+                vec![older.name],
+                "the same day drops the older"
+            );
+        }
+    }
+
     #[test]
     fn the_newest_is_always_kept() {
         let only = [entry(NOW_MS - 400 * DAY_MS)];
@@ -298,6 +339,8 @@ mod tests {
             name: name_at(NOW_MS + 30 * DAY_MS),
             taken_at_ms: NOW_MS + 30 * DAY_MS,
             registered_at_ms: NOW_MS - 2 * HOUR_MS,
+            epoch: 0,
+            generation: 0,
             held_at_ms: None,
             purge_after_ms: None,
         };
@@ -305,6 +348,8 @@ mod tests {
             name: name_at(NOW_MS),
             taken_at_ms: NOW_MS,
             registered_at_ms: NOW_MS,
+            epoch: 0,
+            generation: 0,
             held_at_ms: None,
             purge_after_ms: None,
         };

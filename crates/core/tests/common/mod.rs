@@ -539,6 +539,7 @@ pub fn try_restore(dir: &Path, payload: &str) -> centraid_core::Result<wire::Res
         wire::request::Kind::Restore(wire::RestoreRequest {
             phrase: WORDS.to_owned(),
             payload: payload.to_owned(),
+            confirm_unproven: true,
             ..wire::RestoreRequest::default()
         }),
     )

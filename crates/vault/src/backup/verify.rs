@@ -98,6 +98,8 @@ pub struct Sampled {
     pub checked: usize,
     /// Ciphertext bytes read.
     pub bytes: u64,
+    /// How many sampled chunks of each wrong part were wrong (a part may be drawn more than once).
+    pub wrong_chunks: std::collections::BTreeMap<Name, usize>,
     /// Parts with a chunk gone, damaged or not the bytes the manifest recorded.
     pub wrong: Vec<Name>,
     /// Of those, the ones the gateway itself says are damaged: a signed delete frees them at once
@@ -140,6 +142,9 @@ pub fn sample(
     }
     let mut drawn: BTreeSet<usize> = BTreeSet::new();
     let mut wrong: BTreeSet<Name> = BTreeSet::new();
+    let count_wrong = |out: &mut Sampled, name: Name| {
+        *out.wrong_chunks.entry(name).or_insert(0) += 1;
+    };
     let attempts = (count as u64)
         .saturating_mul(16)
         .max(pieces.len() as u64)
@@ -165,14 +170,17 @@ pub fn sample(
                 out.checked += 1;
                 out.bytes += read;
                 wrong.insert(piece.name);
+                count_wrong(&mut out, piece.name);
             }
             Err(StoreError::Missing(_)) => {
                 out.checked += 1;
                 wrong.insert(piece.name);
+                count_wrong(&mut out, piece.name);
             }
             Err(StoreError::Damaged(_)) => {
                 out.checked += 1;
                 wrong.insert(piece.name);
+                count_wrong(&mut out, piece.name);
                 if !out.freeable.contains(&piece.name) {
                     out.freeable.push(piece.name);
                 }
@@ -180,6 +188,7 @@ pub fn sample(
             Err(StoreError::Io(error)) if error.kind() == std::io::ErrorKind::InvalidData => {
                 out.checked += 1;
                 wrong.insert(piece.name);
+                count_wrong(&mut out, piece.name);
             }
             Err(error) => {
                 out.unanswered = Some(error);

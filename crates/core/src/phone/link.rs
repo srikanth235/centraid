@@ -660,6 +660,8 @@ impl Store for GatewayStore {
                 name: plane_name(&view.name),
                 taken_at_ms: unsigned(view.taken_at_ms),
                 registered_at_ms: unsigned(view.registered_at_ms),
+                epoch: view.epoch,
+                generation: view.generation,
                 held_at_ms: view.held_at_ms.map(unsigned),
                 purge_after_ms: view.purge_after_ms.map(unsigned),
             })
