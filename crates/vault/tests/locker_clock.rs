@@ -161,24 +161,21 @@ fn the_file_refuses_a_second_key_a_foreign_type_column_and_a_host_stamp() {
         "locker.add_item",
         json!({ "item_id": "item-1", "type": "login", "title": "T" }),
     );
-    // A login does not own a card's columns; the command nulls them, the file refuses them.
-    for column in [
-        "card_number",
-        "cvv",
-        "brand",
-        "cardholder",
-        "content",
-        "network",
-        "fullname",
-    ] {
-        w.refuses(&format!(
-            "UPDATE locker_item SET {column} = 'x' WHERE id = 'item-1'"
-        ));
-    }
     // An item can only name the key generation the vault has.
-    w.refuses("UPDATE locker_item SET key_id = 'nobody' WHERE id = 'item-1'");
+    assert!(
+        w.refuses("UPDATE locker_item SET key_id = 'nobody' WHERE id = 'item-1'")
+            .contains("FOREIGN KEY constraint failed")
+    );
+    // The refused commit is rolled back whole: the next one runs (a COMMIT that fails on a deferred
+    // key must not leave its transaction open).
+    w.ok(
+        "locker.add_item",
+        json!({ "item_id": "item-after", "type": "note", "title": "After" }),
+    );
     // A stamp that is not the clock's one form.
-    w.refuses("UPDATE locker_item SET last_used_at = '2026-03-01 09:00:00' WHERE id = 'item-1'");
+    let why = w
+        .refuses("UPDATE locker_item SET last_used_at = '2026-03-01 09:00:00' WHERE id = 'item-1'");
+    assert!(why.contains("last_used_at IS NULL OR strftime"), "{why}");
     // No host-clock default or touch trigger remains in the Locker's tables.
     let schema = w
         .texts("SELECT sql FROM sqlite_schema WHERE name LIKE 'locker%' AND sql IS NOT NULL")
@@ -188,4 +185,96 @@ fn the_file_refuses_a_second_key_a_foreign_type_column_and_a_host_stamp() {
         "{schema}"
     );
     assert!(!schema.contains("TRIGGER"), "no Locker trigger remains");
+}
+
+/// Every type owns exactly the typed columns it names, and the file says so for every type and
+/// every column, not for a sample: a column outside its owners is refused by that column's own
+/// CHECK, a column inside them is taken.
+#[test]
+fn every_type_owns_its_typed_columns_and_no_others() {
+    // The rule as the commands state it (`type_fields` in commands/locker.rs), column by owners.
+    const TYPES: [&str; 15] = [
+        "login",
+        "card",
+        "note",
+        "identity",
+        "wifi",
+        "password",
+        "ssh_key",
+        "api_credential",
+        "passport",
+        "bank_account",
+        "driving_licence",
+        "software_licence",
+        "crypto_wallet",
+        "membership",
+        "document",
+    ];
+    let owners = |column: &str| -> Vec<&'static str> {
+        match column {
+            "username" | "url" | "otp_seed" => vec!["login"],
+            "password" => vec!["login", "wifi", "password"],
+            "notes" => TYPES
+                .iter()
+                .copied()
+                .filter(|t| !["card", "note", "identity", "wifi", "password"].contains(t))
+                .collect(),
+            "cardholder" | "card_number" | "expiry" | "cvv" | "brand" => vec!["card"],
+            "content" => vec!["note"],
+            "fullname" | "email" | "phone" | "address" => vec!["identity"],
+            "network" => vec!["wifi"],
+            other => panic!("no owners named for {other}"),
+        }
+    };
+    const COLUMNS: [&str; 16] = [
+        "username",
+        "password",
+        "url",
+        "otp_seed",
+        "notes",
+        "cardholder",
+        "card_number",
+        "expiry",
+        "cvv",
+        "brand",
+        "content",
+        "fullname",
+        "email",
+        "phone",
+        "address",
+        "network",
+    ];
+    let w = World::new();
+    let mut checked = 0;
+    for (index, kind) in TYPES.iter().enumerate() {
+        let id = format!("item-{index}");
+        w.ok(
+            "locker.add_item",
+            json!({ "item_id": id, "type": kind, "title": format!("T{index}") }),
+        );
+        for column in COLUMNS {
+            let sql = format!("UPDATE locker_item SET {column} = 'x' WHERE id = '{id}'");
+            if owners(column).contains(kind) {
+                w.scratch
+                    .vault
+                    .commit(|tx| {
+                        tx.connection().execute(&sql, [])?;
+                        tx.connection().execute(
+                            &format!("UPDATE locker_item SET {column} = NULL WHERE id = '{id}'"),
+                            [],
+                        )?;
+                        Ok(())
+                    })
+                    .unwrap_or_else(|error| panic!("{kind} should own {column}: {error}"));
+            } else {
+                let why = w.refuses(&sql);
+                assert!(
+                    why.contains(&format!("CHECK constraint failed: {column} IS NULL OR")),
+                    "{kind}.{column} was refused, but not by its own CHECK: {why}"
+                );
+            }
+            checked += 1;
+        }
+    }
+    assert_eq!(checked, 15 * 16);
 }

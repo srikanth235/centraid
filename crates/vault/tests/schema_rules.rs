@@ -313,6 +313,63 @@ fn a_container_colour_is_a_palette_key_or_a_wheel_hue_and_a_command_keeps_each_t
 // V3: one checked format per time column
 // ---------------------------------------------------------------------------------------------
 
+/// L2: the time columns the first pass left untested: `alert.fire_key` (by its `timing`),
+/// `revision.at`, `source.seen_at` and `origin.retired_at`. Each refuses a wrong shape by its own
+/// CHECK and takes the right one.
+#[test]
+fn the_alert_revision_source_and_origin_times_are_checked() {
+    let w = World::new();
+    // origin.retired_at (an instant, only of a followed system).
+    w.db_refuses_with(
+        &format!(
+            "INSERT INTO origin (id, system, ref, label, created_at, retired_at)
+             VALUES ('o-bad', 'files', 'r', 'r', '{AT}', '2026-03-01')"
+        ),
+        "retired_at IS NULL OR",
+    );
+    w.raw(&format!(
+        "INSERT INTO origin (id, system, ref, label, created_at, retired_at)
+         VALUES ('o', 'files', 'r', 'r', '{AT}', '{AT}')"
+    ))
+    .expect("an instant is taken");
+    // source.seen_at.
+    let source = |seen: &str| {
+        format!(
+            "INSERT INTO source (id, origin_id, system, external_id, stated, seen_at)
+             VALUES ('s-{}', 'o', 'files', 'x', '{{}}', '{seen}')",
+            seen.len()
+        )
+    };
+    w.db_refuses_with(&source("2026-03-01T09:00:00Z"), "seen_at");
+    w.raw(&source(AT)).expect("an instant is taken");
+    // revision.at.
+    w.entity("n1", Kind::Note);
+    let revision = |at: &str| {
+        format!(
+            "INSERT INTO revision (entity_id, seq, at) VALUES ('n1', {}, '{at}')",
+            at.len()
+        )
+    };
+    w.db_refuses_with(&revision("2026-03-01T09:00:00"), "strftime");
+    w.raw(&revision(AT)).expect("an instant is taken");
+    // alert.fire_key, by timing: a fixed alert is an instant, a floating one a wall clock.
+    let alert = |offset: i32, timing: &str, key: &str| {
+        format!(
+            "INSERT INTO alert (entity_id, offset_min, timing, fire_key)
+             VALUES ('n1', {offset}, '{timing}', '{key}')"
+        )
+    };
+    w.db_refuses_with(&alert(0, "fixed", "2026-03-01T09:00"), "fire_key");
+    w.db_refuses_with(
+        &alert(0, "floating", "2026-03-01T09:00:00.000Z"),
+        "fire_key",
+    );
+    w.db_refuses_with(&alert(0, "floating", "2026-03-01"), "fire_key");
+    w.raw(&alert(0, "fixed", AT)).expect("a fixed instant");
+    w.raw(&alert(5, "floating", "2026-03-01T09:00"))
+        .expect("a floating wall clock");
+}
+
 #[test]
 fn an_instant_is_the_clocks_one_form() {
     let w = World::new();

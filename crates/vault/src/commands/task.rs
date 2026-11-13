@@ -16,7 +16,9 @@
 //! looking at would decide whether a repeating task got its next occurrence.
 //!
 //! A repeating task has a **series**: the identity (`series_id`, the first
-//! occurrence's own id) every occurrence shares, each keeping its own row. The
+//! occurrence's own id) every occurrence after the first shares, each keeping its own row. The
+//! head's own `series_id` is NULL (a task is never its own series, a CHECK); its successor and
+//! every later one name the head's id. The
 //! successor of a completed occurrence is a new open task one step on, and it
 //! **inherits what belongs to the series**: where it is filed, its rule, and the
 //! `about` and `tagged` edges, so the successor of "call Mum" is still about Mum

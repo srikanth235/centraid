@@ -1999,7 +1999,11 @@ fn is_structural(connection: &Connection, table: &str, column: &str) -> bool {
         || sql.contains(&format!("json_valid({column})"))
         || sql.contains(&format!("date({column})"))
         || sql.contains(&format!("datetime({column})"))
-        || sql.contains(&format!(", {column}) IS {column}"))
+        // A time column: its CHECK reads it back through `strftime` in one of the time shapes
+        // (a prose column cannot pass for one by a looser `, col) IS col`).
+        || ["%Y-%m-%dT%H:%M:%fZ", "%Y-%m-%dT%H:%M:%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M"]
+            .iter()
+            .any(|shape| sql.contains(&format!("strftime('{shape}', {column}) IS {column}")))
         || sql.contains(&format!("length({column}) = 64"))
 }
 

@@ -41,6 +41,59 @@ fn a_clock_far_ahead_leaves_every_trashed_blob_in_the_backup() {
     w.ok("entity.restore", json!({ "id": trashed }));
 }
 
+/// V7: a derivative is written by an upsert (the second write of a variant replaces the first, one
+/// row, no delete-and-insert), and `derivative` and `revision` are ordinary rowid tables.
+#[test]
+fn a_derivative_written_twice_is_one_row_and_both_tables_have_rowids() {
+    let w = World::new();
+    let (_, blob) = w.document("Lease", "lease");
+    let first = w.put("first thumb");
+    let second = w.put("second thumb");
+    for out in [&first, &second] {
+        w.ok(
+            "derivative.write",
+            json!({ "blob": blob, "variant": "thumb", "out": out, "out_size": 11, "media_type": "image/jpeg" }),
+        );
+    }
+    let rows: i64 = w
+        .scratch
+        .vault
+        .read(|c| {
+            Ok(c.query_row(
+                "SELECT COUNT(*) FROM derivative WHERE blob = ?1 AND variant = 'thumb'",
+                [&blob],
+                |r| r.get(0),
+            )?)
+        })
+        .expect("counts");
+    assert_eq!(rows, 1, "the second write replaced the first");
+    let kept: String = w
+        .scratch
+        .vault
+        .read(|c| {
+            Ok(c.query_row(
+                "SELECT out FROM derivative WHERE blob = ?1 AND variant = 'thumb'",
+                [&blob],
+                |r| r.get(0),
+            )?)
+        })
+        .expect("reads");
+    assert_eq!(kept, second);
+    // A rowid table answers `rowid`; a WITHOUT ROWID one refuses the column.
+    for table in ["derivative", "revision"] {
+        w.scratch
+            .vault
+            .read(|c| {
+                Ok(
+                    c.query_row(&format!("SELECT COUNT(rowid) FROM {table}"), [], |r| {
+                        r.get::<_, i64>(0)
+                    })?,
+                )
+            })
+            .unwrap_or_else(|error| panic!("{table} is not a rowid table: {error}"));
+    }
+}
+
 struct World {
     scratch: common::Scratch,
     registry: Registry,
