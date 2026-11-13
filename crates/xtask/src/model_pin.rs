@@ -305,7 +305,7 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-fn runtime_hashes(root: &Path) -> Result<Value> {
+pub(crate) fn runtime_hashes(root: &Path) -> Result<Value> {
     let out = Command::new("cargo")
         .args([
             "run",

@@ -114,7 +114,13 @@ impl DatagenSource {
                 }
                 let id = record["world"].as_str().unwrap_or_default().to_owned();
                 if let std::collections::btree_map::Entry::Vacant(slot) = worlds.entry(id.clone()) {
-                    let file = dir.join(WORLDS).join(format!("{id}.json"));
+                    // a built version keeps its worlds flat; a published one in a folder per split
+                    let flat = dir.join(WORLDS).join(format!("{id}.json"));
+                    let file = if flat.is_file() {
+                        flat
+                    } else {
+                        dir.join(WORLDS).join(split).join(format!("{id}.json"))
+                    };
                     let text = std::fs::read_to_string(&file)
                         .with_context(|| file.display().to_string())?;
                     slot.insert(serde_json::from_str(&text)?);

@@ -208,6 +208,17 @@ enum Command {
         #[arg(long, default_value = publish::HELDOUT_REPO)]
         heldout_repo: String,
     },
+    /// Has the tool contract moved under a data version, and by how much? Replays the reference calls of train and val
+    /// (never test) through the CURRENT tools and reports, in counts: whether the contract's hashes are the same, which
+    /// calls no longer validate (shape), which run but give another result (behaviour), which tools, arguments and kinds
+    /// of the current catalogue the data hardly shows (coverage), and the level: wording (re-render from the cache),
+    /// shape or behaviour (regenerate those sessions) or coverage (new intents). The version needs a contract block
+    /// (`datagen restamp` gives one). Its worlds may be flat under `worlds/` or in `worlds/<split>/`.
+    Drift {
+        /// A data version, built or fetched from the data repo.
+        #[arg(long = "in")]
+        input: PathBuf,
+    },
     /// Write the byte-level TEST tokenizer to a file, for a rehearsal build that needs no model and no download. A
     /// version rendered with it is marked not publishable.
     TestTokenizer {
@@ -825,6 +836,9 @@ fn main() -> Result<()> {
                 contract.catalog_hash,
                 contract.tokenizer_blake3
             );
+        }
+        Command::Drift { input } => {
+            print!("{}", centraid_datagen::drift::report(&input)?.text());
         }
         Command::TestTokenizer { out } => {
             std::fs::write(&out, centraid_datagen::render::byte_level_tokenizer_json())?;

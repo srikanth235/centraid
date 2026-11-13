@@ -29,6 +29,7 @@ pub mod bpe;
 pub mod brief;
 pub mod catalog;
 pub mod contract;
+pub mod drift;
 pub mod facts;
 mod generate;
 pub mod grid;

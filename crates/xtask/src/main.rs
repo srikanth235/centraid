@@ -18,6 +18,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 
 mod artifact;
 mod ci;
+mod data_pin;
 #[cfg(test)]
 mod design_checks;
 mod design_dark;
