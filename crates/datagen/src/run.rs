@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::catalog::Catalog;
@@ -149,7 +149,7 @@ pub fn draws(catalog: &Catalog, grid: &Grid) -> Vec<Draw> {
     out
 }
 
-/// What a split's kept turns hold of the shares the sampler stops drawing once they are full.
+/// What a world's kept turns hold of the shares the sampler stops drawing once they are full.
 #[derive(Debug, Clone, Copy, Default)]
 struct Filled {
     turns: usize,
@@ -282,7 +282,7 @@ pub struct Config {
     pub mistakes: Vec<crate::mistakes::Observed>,
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CellStat {
     /// Intents drawn and run from this cell.
     pub attempts: usize,
@@ -293,14 +293,14 @@ pub struct CellStat {
 }
 
 /// One kept session and where it belongs.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Kept {
     pub split: Split,
     pub world: String,
     pub record: Value,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorldInfo {
     pub id: String,
     pub split: Split,
@@ -328,7 +328,138 @@ pub fn generate(config: &Config, catalog: &Catalog, scratch: &Path) -> Result<Ge
     generate_with(config, catalog, scratch, &World::generate)
 }
 
-/// [`generate`] over worlds made by `make` (a test that needs worlds with particular settings).
+/// What a run does besides drawing: how many worlds at once, whether to say what it drops, and where to keep the worlds it
+/// has finished.
+#[derive(Clone, Copy)]
+pub struct Options<'a> {
+    /// Worlds drawn and solved at once (at least one). The result is the same for any number: it is assembled in world order.
+    pub workers: usize,
+    /// Print every dropped turn and every world's empty reads to stderr.
+    pub verbose: bool,
+    /// Keep each finished world under this directory and skip the worlds already there ([`Checkpoints`]).
+    pub checkpoints: Option<&'a Path>,
+    /// Told after each world, in the order they finish.
+    pub progress: Option<&'a (dyn Fn(&Progress) + Sync)>,
+}
+
+impl Default for Options<'_> {
+    fn default() -> Self {
+        Self {
+            workers: 1,
+            verbose: std::env::var_os("DATAGEN_DEBUG").is_some(),
+            checkpoints: None,
+            progress: None,
+        }
+    }
+}
+
+/// One finished world, in counts.
+#[derive(Debug, Clone)]
+pub struct Progress {
+    pub id: String,
+    pub done: usize,
+    pub of: usize,
+    pub sessions: usize,
+    /// Read from a checkpoint, not drawn again.
+    pub resumed: bool,
+}
+
+/// Everything one world adds to a run. A world is a pure function of its spec, the config and the catalogue, so this is
+/// the same whichever thread makes it and whenever; it is what a checkpoint holds.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct WorldOut {
+    doc: Value,
+    info: WorldInfo,
+    kept: Vec<Kept>,
+    #[serde(with = "cells_as_list")]
+    cells: BTreeMap<Cell, CellStat>,
+    name_fallbacks: usize,
+}
+
+/// A cell is a struct, which json cannot use as a key: a checkpoint holds the cells as a list of pairs.
+mod cells_as_list {
+    use std::collections::BTreeMap;
+
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    use super::{Cell, CellStat};
+
+    pub fn serialize<S: Serializer>(
+        cells: &BTreeMap<Cell, CellStat>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        cells.iter().collect::<Vec<_>>().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<BTreeMap<Cell, CellStat>, D::Error> {
+        Ok(Vec::<(Cell, CellStat)>::deserialize(deserializer)?
+            .into_iter()
+            .collect())
+    }
+}
+
+/// The settings a checkpoint was made with: a checkpoint is reused only under the same ones.
+fn checkpoint_key(config: &Config, catalog: &Catalog) -> String {
+    let text = format!(
+        "{}|{:?}|{:?}|{:?}|{:?}|{}",
+        config.seed,
+        config.counts,
+        config.per_world,
+        config.cell_limit,
+        config.mistakes,
+        catalog.hash()
+    );
+    format!(
+        "seed {}; worlds {:?}; sessions per world {:?}; settings {}",
+        config.seed,
+        config.counts,
+        config.per_world,
+        &blake3::hash(text.as_bytes()).to_hex()[..16]
+    )
+}
+
+fn checkpoint_path(dir: &Path, spec: &crate::world::WorldSpec) -> std::path::PathBuf {
+    dir.join(format!("{}-{}.json", spec.split.name(), spec.index))
+}
+
+fn load_checkpoint(path: &Path, key: &str) -> Result<Option<WorldOut>> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let text = std::fs::read_to_string(path)
+        .with_context(|| format!("reading checkpoint {}", path.display()))?;
+    let value: Value = serde_json::from_str(&text)
+        .with_context(|| format!("checkpoint {} is not json", path.display()))?;
+    let made_with = value["key"].as_str().unwrap_or("unknown");
+    if made_with != key {
+        anyhow::bail!(
+            "checkpoint {} was made with other settings ({made_with}), this run has ({key}); use another --out or remove the checkpoints",
+            path.display()
+        );
+    }
+    Ok(Some(
+        serde_json::from_value(value["world"].clone())
+            .with_context(|| format!("checkpoint {} cannot be read", path.display()))?,
+    ))
+}
+
+fn save_checkpoint(path: &Path, key: &str, world: &WorldOut) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    // written whole, then moved into place, so a restart never leaves half a checkpoint
+    let part = path.with_extension("part");
+    std::fs::write(
+        &part,
+        serde_json::to_string(&serde_json::json!({"key": key, "world": world}))?,
+    )?;
+    std::fs::rename(&part, path)?;
+    Ok(())
+}
+
+/// [`generate`] over worlds made by `make` (a test that needs worlds with particular settings), one at a time.
 ///
 /// # Errors
 ///
@@ -337,21 +468,35 @@ pub fn generate_with(
     config: &Config,
     catalog: &Catalog,
     scratch: &Path,
-    make: &dyn Fn(crate::world::WorldSpec) -> World,
+    make: &(dyn Fn(crate::world::WorldSpec) -> World + Sync),
+) -> Result<Generated> {
+    generate_opts(config, catalog, scratch, make, &Options::default())
+}
+
+/// [`generate_with`] with [`Options`]: worlds on `workers` threads, a progress line and checkpoints.
+///
+/// The worlds are independent: each draws from its own seed and keeps its own counts of what the sampler holds back
+/// (pronoun references and undo, `Filled`), so no world sees another's turns and the result does not depend on which
+/// thread runs which world or in what order they finish. The results are put together in world order.
+///
+/// # Errors
+///
+/// If a world cannot be seeded, a vault cannot be copied, or a checkpoint was made with other settings.
+pub fn generate_opts(
+    config: &Config,
+    catalog: &Catalog,
+    scratch: &Path,
+    make: &(dyn Fn(crate::world::WorldSpec) -> World + Sync),
+    options: &Options<'_>,
 ) -> Result<Generated> {
     let grid = Grid::build(catalog);
     let live: Vec<Cell> = grid.live().into_iter().cloned().collect();
     let order = draws(catalog, &grid);
-    let mut filled = [Filled::default(); 3];
     let specs = plan_sized(config.seed, |split| match split {
         Split::Train => config.counts[0],
         Split::Val => config.counts[1],
         Split::Test => config.counts[2],
     });
-    let mut out = Generated::default();
-    for cell in &live {
-        out.cells.insert(cell.clone(), CellStat::default());
-    }
     // ask-or-act pairs are planned across the worlds of a split before any is run
     let pairs: Vec<PairPlan> = {
         let worlds: Vec<World> = specs.iter().map(|spec| make(*spec)).collect();
@@ -384,164 +529,298 @@ pub fn generate_with(
         }
         all
     };
-    for (number, spec) in specs.iter().enumerate() {
-        let world = make(*spec);
-        let dir = scratch.join(world.id());
-        let mut run = WorldRun::seed(&world, catalog, &dir)
-            .with_context(|| format!("world {}", world.id()))?;
-        run.observed.clone_from(&config.mistakes);
-        let facts = run.facts.clone();
-        if std::env::var_os("DATAGEN_DEBUG").is_some() {
-            eprintln!("world {} empty reads {}", world.id(), run.empty_reads);
-        }
-        let sampler =
-            Sampler::new(&world, &facts, catalog, &grid).with_empty_reads(run.empty_reads);
-        let root = Rng::new(config.seed).fork(&format!("intents:{}", world.id()));
-        let target = config
-            .cell_limit
-            .unwrap_or_else(|| config.per_world[split_index(spec.split)].max(order.len()));
-        let mut kept = 0;
-        let mut drawn = 0;
-        let offset = number * 31;
-        while kept < target && drawn < target * 3 {
-            let draw = &order[(offset + drawn) % order.len()];
-            let cell = &draw.cell;
-            drawn += 1;
-            let mut shape = root.fork(&format!("shape:{drawn}"));
-            let extra = *shape.weighted(EXTRA_TURNS);
-            for attempt in 0..4 {
-                let id = format!("{}-{:04}", world.id(), kept + 1);
-                let mut rng = root.fork(&format!("draw:{drawn}:{attempt}"));
-                // later attempts fall back toward fewer turns, so a cell a follow-up cannot lean on is still served
-                let extra = extra.saturating_sub(attempt / 2);
-                let room = filled[split_index(spec.split)].room();
-                let Some(scenario) =
-                    sampler.session_aim(&id, cell, &draw.aim, &room, extra, &mut rng)
-                else {
-                    if let Some(stat) = out.cells.get_mut(cell) {
-                        stat.undrawn += 1;
+    let key = checkpoint_key(config, catalog);
+    let slots: Vec<std::sync::Mutex<Option<WorldOut>>> =
+        specs.iter().map(|_| std::sync::Mutex::new(None)).collect();
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let finished = std::sync::atomic::AtomicUsize::new(0);
+    let failure: std::sync::Mutex<Option<anyhow::Error>> = std::sync::Mutex::new(None);
+    let work = || {
+        loop {
+            if failure.lock().is_ok_and(|f| f.is_some()) {
+                return;
+            }
+            let number = next.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let Some(spec) = specs.get(number) else {
+                return;
+            };
+            let path = options.checkpoints.map(|dir| checkpoint_path(dir, spec));
+            let result = (|| -> Result<(WorldOut, bool)> {
+                if let Some(path) = &path
+                    && let Some(world) = load_checkpoint(path, &key)?
+                {
+                    return Ok((world, true));
+                }
+                let world = run_world(
+                    number,
+                    spec,
+                    config,
+                    catalog,
+                    &grid,
+                    &live,
+                    &order,
+                    &pairs,
+                    make,
+                    scratch,
+                    options.verbose,
+                )?;
+                if let Some(path) = &path {
+                    save_checkpoint(path, &key, &world)?;
+                }
+                Ok((world, false))
+            })();
+            match result {
+                Ok((world, resumed)) => {
+                    let done = finished.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+                    if let Some(progress) = options.progress {
+                        progress(&Progress {
+                            id: world.info.id.clone(),
+                            done,
+                            of: specs.len(),
+                            sessions: world.info.sessions,
+                            resumed,
+                        });
                     }
-                    continue;
-                };
-                let solution = run
-                    .solve(&scenario)
-                    .with_context(|| format!("scenario {}", scenario.id))?;
-                for (kept_cell, _) in &solution.turns {
-                    if let Some(stat) = out.cells.get_mut(kept_cell) {
-                        stat.attempts += 1;
-                        stat.kept += 1;
+                    if let Ok(mut slot) = slots[number].lock() {
+                        *slot = Some(world);
                     }
                 }
-                for dropped in &solution.dropped {
-                    if std::env::var_os("DATAGEN_DEBUG").is_some() {
-                        eprintln!(
-                            "drop {} {} {}: {}\n   {}",
-                            dropped.cell,
-                            dropped.why.word(),
-                            scenario.id,
-                            dropped.detail,
-                            serde_json::to_string(
-                                &scenario.turns[..=dropped.turn]
-                                    .iter()
-                                    .map(|t| &t.intent)
-                                    .collect::<Vec<_>>()
-                            )
-                            .unwrap_or_default()
-                        );
-                    }
-                    let stat = out.cells.entry(dropped.cell.clone()).or_default();
-                    stat.attempts += 1;
-                    *stat.drops.entry(dropped.why.word().to_owned()).or_default() += 1;
-                }
-                if let Some(record) = solution.record {
-                    filled[split_index(spec.split)].add(&scenario.turns[..solution.kept]);
-                    out.kept.push(Kept {
-                        split: spec.split,
-                        world: world.id(),
-                        record,
-                    });
-                    kept += 1;
-                    // a minimal pair: the same question with one argument changed
-                    let mut twin_rng = root.fork(&format!("pair:{drawn}"));
-                    if scenario.turns.first().is_some_and(|t| t.dep.is_none())
-                        && twin_rng.chance(0.4)
-                        && let Some(twin) = sampler.pair(&scenario, &mut twin_rng)
+                Err(error) => {
+                    if let Ok(mut f) = failure.lock()
+                        && f.is_none()
                     {
-                        let solved = run.solve(&twin)?;
-                        if let Some(record) = solved.record.filter(|r| {
-                            solved.kept == 1
-                                && Some(&r["turns"][0]["gold"])
-                                    != out.kept.last().map(|k| &k.record["turns"][0]["gold"])
-                        }) {
-                            for (kept_cell, _) in &solved.turns {
-                                if let Some(stat) = out.cells.get_mut(kept_cell) {
-                                    stat.attempts += 1;
-                                    stat.kept += 1;
-                                }
-                            }
-                            if let Some(base) = out.kept.last_mut()
-                                && let Some(tags) = base.record["tags"].as_array_mut()
-                            {
-                                tags.push(Value::String(format!("pair:{}", scenario.id)));
-                            }
-                            out.kept.push(Kept {
-                                split: spec.split,
-                                world: world.id(),
-                                record,
-                            });
-                            kept += 1;
-                        }
+                        *f = Some(error);
                     }
-                    break;
+                    return;
                 }
             }
         }
-        for pair in pairs
+    };
+    std::thread::scope(|scope| {
+        for _ in 1..options.workers.clamp(1, specs.len().max(1)) {
+            scope.spawn(work);
+        }
+        work();
+    });
+    if let Ok(mut f) = failure.lock()
+        && let Some(error) = f.take()
+    {
+        return Err(error);
+    }
+    let mut out = Generated::default();
+    for cell in &live {
+        out.cells.insert(cell.clone(), CellStat::default());
+    }
+    for slot in slots {
+        let world = slot
+            .into_inner()
+            .ok()
+            .flatten()
+            .context("a world was not finished")?;
+        out.name_fallbacks += world.name_fallbacks;
+        out.docs.insert(world.info.id.clone(), world.doc);
+        out.worlds.push(world.info);
+        out.kept.extend(world.kept);
+        for (cell, stat) in world.cells {
+            let total = out.cells.entry(cell).or_default();
+            total.attempts += stat.attempts;
+            total.kept += stat.kept;
+            total.undrawn += stat.undrawn;
+            for (why, n) in stat.drops {
+                *total.drops.entry(why).or_default() += n;
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Draw and solve one world, from its spec alone.
+#[allow(clippy::too_many_arguments)]
+fn run_world(
+    number: usize,
+    spec: &crate::world::WorldSpec,
+    config: &Config,
+    catalog: &Catalog,
+    grid: &Grid,
+    live: &[Cell],
+    order: &[Draw],
+    pairs: &[PairPlan],
+    make: &(dyn Fn(crate::world::WorldSpec) -> World + Sync),
+    scratch: &Path,
+    verbose: bool,
+) -> Result<WorldOut> {
+    // what the sampler holds back counts this world's own kept turns: the ceilings hold in every world, so in the split
+    let mut filled = Filled::default();
+    let mut out = WorldOut {
+        doc: Value::Null,
+        info: WorldInfo {
+            id: String::new(),
+            split: spec.split,
+            seed: spec.seed,
+            sessions: 0,
+        },
+        kept: Vec::new(),
+        cells: live
             .iter()
-            .filter(|p| p.ask_world == number || p.act_world == number)
-        {
-            let asking = pair.ask_world == number;
-            let (turn, side) = if asking {
-                (sampler.ask_side(&pair.kind, &pair.name, &pair.verb), "ask")
-            } else {
-                (sampler.act_side(&pair.kind, &pair.name, &pair.verb), "act")
+            .map(|c| (c.clone(), CellStat::default()))
+            .collect(),
+        name_fallbacks: 0,
+    };
+    let world = make(*spec);
+    let dir = scratch.join(world.id());
+    let mut run =
+        WorldRun::seed(&world, catalog, &dir).with_context(|| format!("world {}", world.id()))?;
+    run.observed.clone_from(&config.mistakes);
+    let facts = run.facts.clone();
+    if verbose {
+        eprintln!("world {} empty reads {}", world.id(), run.empty_reads);
+    }
+    let sampler = Sampler::new(&world, &facts, catalog, grid).with_empty_reads(run.empty_reads);
+    let root = Rng::new(config.seed).fork(&format!("intents:{}", world.id()));
+    let target = config
+        .cell_limit
+        .unwrap_or_else(|| config.per_world[split_index(spec.split)].max(order.len()));
+    let mut kept = 0;
+    let mut drawn = 0;
+    let offset = number * 31;
+    while kept < target && drawn < target * 3 {
+        let draw = &order[(offset + drawn) % order.len()];
+        let cell = &draw.cell;
+        drawn += 1;
+        let mut shape = root.fork(&format!("shape:{drawn}"));
+        let extra = *shape.weighted(EXTRA_TURNS);
+        for attempt in 0..4 {
+            let id = format!("{}-{:04}", world.id(), kept + 1);
+            let mut rng = root.fork(&format!("draw:{drawn}:{attempt}"));
+            // later attempts fall back toward fewer turns, so a cell a follow-up cannot lean on is still served
+            let extra = extra.saturating_sub(attempt / 2);
+            let room = filled.room();
+            let Some(scenario) = sampler.session_aim(&id, cell, &draw.aim, &room, extra, &mut rng)
+            else {
+                if let Some(stat) = out.cells.get_mut(cell) {
+                    stat.undrawn += 1;
+                }
+                continue;
             };
-            let Some(turn) = turn else { continue };
-            let scenario = Scenario {
-                id: format!("{}-{side}{:04}", world.id(), pair.id),
-                world: world.id(),
-                span: Span::Single,
-                turns: vec![turn],
-                tags: vec![format!("pair:askact:{}", pair.id), format!("askact:{side}")],
-            };
-            let solved = run.solve(&scenario)?;
-            for (kept_cell, _) in &solved.turns {
+            let solution = run
+                .solve(&scenario)
+                .with_context(|| format!("scenario {}", scenario.id))?;
+            for (kept_cell, _) in &solution.turns {
                 if let Some(stat) = out.cells.get_mut(kept_cell) {
                     stat.attempts += 1;
                     stat.kept += 1;
                 }
             }
-            if let Some(record) = solved.record.filter(|_| solved.kept == 1) {
+            for dropped in &solution.dropped {
+                if verbose {
+                    eprintln!(
+                        "drop {} {} {}: {}\n   {}",
+                        dropped.cell,
+                        dropped.why.word(),
+                        scenario.id,
+                        dropped.detail,
+                        serde_json::to_string(
+                            &scenario.turns[..=dropped.turn]
+                                .iter()
+                                .map(|t| &t.intent)
+                                .collect::<Vec<_>>()
+                        )
+                        .unwrap_or_default()
+                    );
+                }
+                let stat = out.cells.entry(dropped.cell.clone()).or_default();
+                stat.attempts += 1;
+                *stat.drops.entry(dropped.why.word().to_owned()).or_default() += 1;
+            }
+            if let Some(record) = solution.record {
+                filled.add(&scenario.turns[..solution.kept]);
                 out.kept.push(Kept {
                     split: spec.split,
                     world: world.id(),
                     record,
                 });
                 kept += 1;
+                // a minimal pair: the same question with one argument changed
+                let mut twin_rng = root.fork(&format!("pair:{drawn}"));
+                if scenario.turns.first().is_some_and(|t| t.dep.is_none())
+                    && twin_rng.chance(0.4)
+                    && let Some(twin) = sampler.pair(&scenario, &mut twin_rng)
+                {
+                    let solved = run.solve(&twin)?;
+                    if let Some(record) = solved.record.filter(|r| {
+                        solved.kept == 1
+                            && Some(&r["turns"][0]["gold"])
+                                != out.kept.last().map(|k| &k.record["turns"][0]["gold"])
+                    }) {
+                        for (kept_cell, _) in &solved.turns {
+                            if let Some(stat) = out.cells.get_mut(kept_cell) {
+                                stat.attempts += 1;
+                                stat.kept += 1;
+                            }
+                        }
+                        if let Some(base) = out.kept.last_mut()
+                            && let Some(tags) = base.record["tags"].as_array_mut()
+                        {
+                            tags.push(Value::String(format!("pair:{}", scenario.id)));
+                        }
+                        out.kept.push(Kept {
+                            split: spec.split,
+                            world: world.id(),
+                            record,
+                        });
+                        kept += 1;
+                    }
+                }
+                break;
             }
         }
-        out.name_fallbacks += sampler.name_fallbacks();
-        out.docs.insert(world.id(), world.doc.clone());
-        out.worlds.push(WorldInfo {
-            id: world.id(),
-            split: spec.split,
-            seed: spec.seed,
-            sessions: kept,
-        });
-        // a seeded vault is the heaviest thing a run holds; free it as soon as the world is done
-        drop(run);
-        let _ = std::fs::remove_dir_all(&dir);
     }
+    for pair in pairs
+        .iter()
+        .filter(|p| p.ask_world == number || p.act_world == number)
+    {
+        let asking = pair.ask_world == number;
+        let (turn, side) = if asking {
+            (sampler.ask_side(&pair.kind, &pair.name, &pair.verb), "ask")
+        } else {
+            (sampler.act_side(&pair.kind, &pair.name, &pair.verb), "act")
+        };
+        let Some(turn) = turn else { continue };
+        let scenario = Scenario {
+            id: format!("{}-{side}{:04}", world.id(), pair.id),
+            world: world.id(),
+            span: Span::Single,
+            turns: vec![turn],
+            tags: vec![format!("pair:askact:{}", pair.id), format!("askact:{side}")],
+        };
+        let solved = run.solve(&scenario)?;
+        for (kept_cell, _) in &solved.turns {
+            if let Some(stat) = out.cells.get_mut(kept_cell) {
+                stat.attempts += 1;
+                stat.kept += 1;
+            }
+        }
+        if let Some(record) = solved.record.filter(|_| solved.kept == 1) {
+            out.kept.push(Kept {
+                split: spec.split,
+                world: world.id(),
+                record,
+            });
+            kept += 1;
+        }
+    }
+
+    out.name_fallbacks = sampler.name_fallbacks();
+    out.doc = world.doc.clone();
+    out.info = WorldInfo {
+        id: world.id(),
+        split: spec.split,
+        seed: spec.seed,
+        sessions: kept,
+    };
+    // a seeded vault is the heaviest thing a run holds; free it as soon as the world is done
+    drop(run);
+    let _ = std::fs::remove_dir_all(&dir);
     Ok(out)
 }
 
@@ -856,4 +1135,123 @@ pub fn write(
         serde_json::to_string_pretty(&manifest)?,
     )?;
     Ok(report)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex;
+
+    use super::*;
+
+    /// A run of three worlds that visits only a few cells of each, so it is quick.
+    fn tiny(seed: u64) -> Config {
+        Config {
+            seed,
+            counts: [1, 1, 1],
+            per_world: [0; 3],
+            cell_limit: Some(6),
+            mistakes: Vec::new(),
+        }
+    }
+
+    /// Everything a run holds, as text, to compare two runs for equality.
+    fn shown(g: &Generated) -> String {
+        let cells: Vec<(String, &CellStat)> =
+            g.cells.iter().map(|(c, s)| (c.to_string(), s)).collect();
+        serde_json::to_string(&serde_json::json!({
+            "docs": g.docs, "worlds": g.worlds, "kept": g.kept,
+            "cells": cells, "fallbacks": g.name_fallbacks,
+        }))
+        .expect("json")
+    }
+
+    fn run_with(config: &Config, options: &Options<'_>) -> Result<Generated> {
+        let catalog = Catalog::build()?;
+        let scratch = tempfile::tempdir()?;
+        generate_opts(config, &catalog, scratch.path(), &World::generate, options)
+    }
+
+    #[test]
+    fn the_worlds_come_out_the_same_on_one_thread_and_on_three() {
+        let config = tiny(5);
+        let one = run_with(
+            &config,
+            &Options {
+                workers: 1,
+                ..Options::default()
+            },
+        )
+        .expect("one thread");
+        let three = run_with(
+            &config,
+            &Options {
+                workers: 3,
+                ..Options::default()
+            },
+        )
+        .expect("three threads");
+        assert_eq!(one.worlds.len(), 3);
+        assert!(!one.kept.is_empty(), "the tiny run keeps sessions");
+        let ids: Vec<&str> = one.worlds.iter().map(|w| w.id.as_str()).collect();
+        assert_eq!(ids, ["train-00", "val-00", "test-00"]);
+        assert_eq!(shown(&one), shown(&three));
+    }
+
+    #[test]
+    fn a_resumed_run_equals_a_fresh_one_and_a_checkpoint_of_another_seed_is_refused() {
+        let config = tiny(5);
+        let fresh = run_with(&config, &Options::default()).expect("fresh");
+        let dir = tempfile::tempdir().expect("dir");
+        let seen: Mutex<Vec<(String, bool)>> = Mutex::new(Vec::new());
+        let progress = |p: &Progress| {
+            seen.lock().expect("lock").push((p.id.clone(), p.resumed));
+        };
+        let options = Options {
+            workers: 2,
+            checkpoints: Some(dir.path()),
+            progress: Some(&progress),
+            ..Options::default()
+        };
+        // the first run draws every world and keeps each
+        let first = run_with(&config, &options).expect("first");
+        assert_eq!(shown(&first), shown(&fresh));
+        assert!(seen.lock().expect("lock").iter().all(|(_, r)| !r));
+        assert_eq!(seen.lock().expect("lock").len(), 3);
+        for name in ["train-0", "val-0", "test-0"] {
+            assert!(dir.path().join(format!("{name}.json")).exists(), "{name}");
+        }
+        // run again: nothing is drawn, everything comes from a checkpoint, the result is the same
+        seen.lock().expect("lock").clear();
+        let again = run_with(&config, &options).expect("again");
+        assert!(seen.lock().expect("lock").iter().all(|(_, r)| *r));
+        assert_eq!(seen.lock().expect("lock").len(), 3);
+        assert_eq!(shown(&again), shown(&fresh));
+        // a run stopped part way: one world is missing and is the only one drawn
+        std::fs::remove_file(dir.path().join("val-0.json")).expect("remove");
+        seen.lock().expect("lock").clear();
+        let partial = run_with(&config, &options).expect("partial");
+        let drawn: Vec<String> = seen
+            .lock()
+            .expect("lock")
+            .iter()
+            .filter(|(_, resumed)| !resumed)
+            .map(|(id, _)| id.clone())
+            .collect();
+        assert_eq!(drawn, ["val-00"]);
+        assert_eq!(shown(&partial), shown(&fresh));
+        // the same checkpoints under another seed, or other counts, are refused and not reused
+        for other in [
+            tiny(6),
+            Config {
+                counts: [1, 1, 2],
+                ..tiny(5)
+            },
+        ] {
+            let why = run_with(&other, &options).expect_err("refused");
+            assert!(
+                format!("{why:#}").contains("made with other settings"),
+                "{why:#}"
+            );
+        }
+    }
 }

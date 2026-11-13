@@ -72,6 +72,8 @@ enum Command {
         /// these, refused by the runtime again, in place of a constructed mistake.
         #[arg(long)]
         mistakes: Option<PathBuf>,
+        #[command(flatten)]
+        worlds: WorldArgs,
     },
     /// Write phone-style messages for an intents run and verify them (stages 4 and 5): Claude
     /// Haiku through headless Claude Code writes and reads back, every output cached by prompt
@@ -167,6 +169,8 @@ enum Command {
         reuse: bool,
         #[command(flatten)]
         mix: MixArgs,
+        #[command(flatten)]
+        worlds: WorldArgs,
     },
     /// The dry run of a build: draw and solve the intents of every world through the runtime, then run the mix's selection
     /// and tally over what was planned. No message, no render, no tokenizer and no model call. Writes `plan.json` and
@@ -195,8 +199,14 @@ enum Command {
         /// Refused calls from a model's rollouts (`*.rollouts.jsonl`) for the repair turns that read.
         #[arg(long)]
         mistakes: Option<PathBuf>,
+        /// Say every dropped turn and every world's empty reads on stderr (thousands of lines). By default one line per
+        /// finished world, in counts.
+        #[arg(long)]
+        verbose: bool,
         #[command(flatten)]
         mix: MixArgs,
+        #[command(flatten)]
+        worlds: WorldArgs,
     },
     /// Publish a built data version to a Hugging Face dataset repo, one revision per version. A DRY RUN unless `--upload`:
     /// it checks the version (file hashes, a clean build, publishable, no sealed placeholder), lists every file with
@@ -368,6 +378,15 @@ enum HandoffStep {
         #[arg(long)]
         cache: PathBuf,
     },
+}
+
+/// How the worlds of a run are worked.
+#[derive(clap::Args, Clone)]
+struct WorldArgs {
+    /// Worlds drawn and solved at once, one per thread. The output is the same for any number: worlds are put together in
+    /// order. Default: the number of CPUs.
+    #[arg(long, default_value_t = std::thread::available_parallelism().map_or(1, std::num::NonZero::get))]
+    world_concurrency: usize,
 }
 
 /// The targets of the mix and the weight of a deciding token.
@@ -688,6 +707,7 @@ fn main() -> Result<()> {
             per_world,
             sessions,
             mistakes,
+            worlds,
         } => {
             let catalog = Catalog::build()?;
             let mistakes = load_mistakes(mistakes.as_deref())?;
@@ -715,7 +735,16 @@ fn main() -> Result<()> {
                 cell_limit: None,
                 mistakes,
             };
-            let generated = run::generate(&config, &catalog, scratch.path())?;
+            let generated = run::generate_opts(
+                &config,
+                &catalog,
+                scratch.path(),
+                &World::generate,
+                &run::Options {
+                    workers: worlds.world_concurrency,
+                    ..run::Options::default()
+                },
+            )?;
             let report = run::write(&out, &config, &catalog, &generated)?;
             print!("{report}");
         }
@@ -786,6 +815,7 @@ fn main() -> Result<()> {
             models,
             reuse,
             mix: mix_args,
+            worlds,
         } => {
             let catalog = Catalog::build()?;
             let counts = spec_counts(counts.as_deref())?;
@@ -815,7 +845,16 @@ fn main() -> Result<()> {
                     cell_limit: None,
                     mistakes: mistakes.clone(),
                 };
-                let generated = run::generate(&config, &catalog, scratch.path())?;
+                let generated = run::generate_opts(
+                    &config,
+                    &catalog,
+                    scratch.path(),
+                    &World::generate,
+                    &run::Options {
+                        workers: worlds.world_concurrency,
+                        ..run::Options::default()
+                    },
+                )?;
                 run::write(&intents_dir, &config, &catalog, &generated)?;
                 eprintln!("intents: {} sessions", generated.kept.len());
             }
@@ -959,7 +998,9 @@ fn main() -> Result<()> {
             batch,
             tokens_per_turn,
             mistakes,
+            verbose,
             mix: mix_args,
+            worlds,
         } => {
             let catalog = Catalog::build()?;
             let mix_config = mix_args.mix()?;
@@ -975,6 +1016,9 @@ fn main() -> Result<()> {
                 mix: mix_config,
                 tokens_per_turn,
                 batch,
+                workers: worlds.world_concurrency,
+                verbose,
+                checkpoints: Some(out.join("worlds-done")),
             };
             let plan = dryrun::plan(&settings, &catalog, load_mistakes(mistakes.as_deref())?)?;
             std::fs::create_dir_all(&out)?;

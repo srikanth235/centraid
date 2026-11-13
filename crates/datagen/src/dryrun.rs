@@ -46,6 +46,12 @@ pub struct Settings {
     pub tokens_per_turn: usize,
     /// Sessions per writer or reader call.
     pub batch: usize,
+    /// Worlds drawn and solved at once; the plan is the same for any number.
+    pub workers: usize,
+    /// Say every dropped turn on stderr.
+    pub verbose: bool,
+    /// Where each finished world is kept, so a run stopped and started again with the same settings skips them.
+    pub checkpoints: Option<std::path::PathBuf>,
 }
 
 /// What a split holds.
@@ -397,7 +403,8 @@ pub fn features_of_kept(
     Ok((features, sessions))
 }
 
-/// Draw and solve the intents of every world, then tally. The slow part is the first: one world at a time, as a build does.
+/// Draw and solve the intents of every world, then tally. The slow part is the first: worlds on `workers` threads, each
+/// kept as a checkpoint when `checkpoints` is set.
 ///
 /// # Errors
 ///
@@ -420,7 +427,32 @@ pub fn plan(
         mistakes,
     };
     let scratch = tempfile::tempdir()?;
-    let generated = crate::run::generate(&config, catalog, scratch.path())?;
+    let progress = |p: &crate::run::Progress| {
+        eprintln!(
+            "[{}/{}] {}: {} sessions{}",
+            p.done,
+            p.of,
+            p.id,
+            p.sessions,
+            if p.resumed {
+                " (from a checkpoint)"
+            } else {
+                ""
+            }
+        );
+    };
+    let generated = crate::run::generate_opts(
+        &config,
+        catalog,
+        scratch.path(),
+        &crate::world::World::generate,
+        &crate::run::Options {
+            workers: settings.workers,
+            verbose: settings.verbose,
+            checkpoints: settings.checkpoints.as_deref(),
+            progress: Some(&progress),
+        },
+    )?;
     let (features, sessions) = features_of_kept(&generated.kept, settings.tokens_per_turn)?;
     let grid = Grid::build(catalog);
     let mut settings = settings.clone();
@@ -540,6 +572,9 @@ mod tests {
             },
             tokens_per_turn: 100,
             batch: 5,
+            workers: 1,
+            verbose: false,
+            checkpoints: None,
         };
         let plan = tally(
             &features,
