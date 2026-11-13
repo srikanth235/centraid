@@ -259,7 +259,7 @@ pub trait Target {
 
 /// Every case, by name, in the order [`run`] runs them. A target's test
 /// asserts its report names exactly these, so a dropped case is a failure.
-pub const CASES: [&str; 59] = [
+pub const CASES: [&str; 61] = [
     "info/answers-before-anything-is-paired",
     "pair/a-secret-admits-one-new-vault-once",
     "pair/a-known-vault-is-refused-and-the-secret-is-not-spent",
@@ -319,6 +319,8 @@ pub const CASES: [&str; 59] = [
     "operator/a-gap-between-sweeps-is-not-counted",
     "nonce/the-nonce-route-writes-nothing",
     "nonce/a-nonce-is-checked",
+    "store/a-put-over-a-held-or-damaged-name-must-match-its-digest",
+    "takeover/a-claim-keeps-the-superseded-writers-tombstone",
 ];
 
 /// **The names tests.md gives, and the case each runs.** `tests/conformance.rs`
@@ -428,6 +430,14 @@ pub const NAMED: &[(&str, &str)] = &[
     (
         "the_nonce_route_writes_nothing_and_a_claim_still_works",
         "nonce/the-nonce-route-writes-nothing",
+    ),
+    (
+        "a_put_of_garbage_over_a_held_or_damaged_name_is_refused",
+        "store/a-put-over-a-held-or-damaged-name-must-match-its-digest",
+    ),
+    (
+        "a_claim_keeps_the_superseded_writers_tombstone_among_a_hundred_readers",
+        "takeover/a-claim-keeps-the-superseded-writers-tombstone",
     ),
     (
         "a_forged_foreign_expired_or_replayed_nonce_is_refused",
@@ -625,6 +635,12 @@ async fn run_named<T: Target>(target: &mut T, only: Option<&str>) -> Report {
     }
     if only.is_none_or(|case| case == CASES[58]) {
         report.record(CASES[58], nonce_is_checked(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[59]) {
+        report.record(CASES[59], put_over_held_must_match(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[60]) {
+        report.record(CASES[60], claim_keeps_the_writers_tombstone(target).await);
     }
     report
 }
@@ -1733,7 +1749,8 @@ async fn head_in_use<T: Target>(target: &mut T) -> Outcome {
             .await,
         "delete",
     )?;
-    let resealed = object("the same range, sealed again").1;
+    // R3: a held name comes back with the bytes it was held with.
+    let resealed = range.1.clone();
     let stored = ok(
         target
             .put(
@@ -1804,7 +1821,8 @@ async fn put_revives_tombstone<T: Target>(target: &mut T) -> Outcome {
     let part = object("purged in grace, then sent again");
     store(target, &phone, &vault, &part).await?;
     tombstone(target, &phone, &vault, &[part.0]).await?;
-    let resealed = object("the same part, sealed again").1;
+    // R3: a held name comes back with the bytes it was held with.
+    let resealed = part.1.clone();
     let answer = ok(
         target
             .put(
@@ -2027,7 +2045,8 @@ async fn scrub<T: Target>(target: &mut T) -> Outcome {
     ensure(fetched == vec![Frame::of(sound.0, sound.1.clone())], || {
         format!("a fetch must leave a rotten object out, not fail on it: {fetched:?}")
     })?;
-    let resealed = object("rotting, sealed again").1;
+    // R3: a damaged name heals with the bytes it was stored with.
+    let resealed = rotting.1.clone();
     ok(
         target
             .put(
@@ -3683,6 +3702,148 @@ async fn gap_not_counted<T: Target>(target: &mut T) -> Outcome {
     ensure(after[0].purge_after_ms == before.purge_after_ms, || {
         format!("a backwards clock moved a hold: {before:?} {after:?}")
     })
+}
+
+/// R3 (tightens E6): a `PUT` over a held or damaged name is accepted only with
+/// the digest the row records; anything else is `NAME_TAKEN` and nothing
+/// changes. A writer token can no longer swap a held manifest, or a damaged
+/// part, for garbage. The phone's own bytes still bring the name back.
+async fn put_over_held_must_match<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let garbage = object("garbage a writer token swaps in").1;
+
+    // A held manifest.
+    let (old, _) = headed(target, &phone, &vault, "held manifest", None, 1).await?;
+    let (_new, _) = headed(target, &phone, &vault, "standing manifest", Some(old.0), 2).await?;
+    tombstone(target, &phone, &vault, &[old.0]).await?;
+    let refusal = refused(
+        target
+            .put(
+                &phone.token,
+                &vault,
+                &old.0,
+                &Digest::of(&garbage),
+                &garbage,
+            )
+            .await,
+        Code::NameTaken,
+        "garbage over a held manifest",
+    )?;
+    ensure(
+        refusal
+            == Refusal::NameTaken {
+                digest: Digest::of(&old.1),
+            },
+        || format!("{refusal:?}"),
+    )?;
+    ensure(
+        ok(target.get(&phone.token, &vault, &old.0, None).await, "get")? == old.1,
+        || "garbage replaced a held manifest".to_owned(),
+    )?;
+    ensure(
+        ok(target.held(&phone.token, &vault, None, 10).await, "held")?.len() == 1,
+        || "garbage over a held name lifted the hold".to_owned(),
+    )?;
+    // The same bytes lift the hold.
+    ok(
+        target
+            .put(&phone.token, &vault, &old.0, &Digest::of(&old.1), &old.1)
+            .await,
+        "the held manifest's own bytes",
+    )?;
+    ensure(
+        ok(target.held(&phone.token, &vault, None, 10).await, "held")?.is_empty(),
+        || "the same bytes did not lift the hold".to_owned(),
+    )?;
+    ensure(
+        ok(
+            target.exists(&phone.token, &vault, &[old.0]).await,
+            "exists",
+        )?
+        .is_empty(),
+        || "a name brought back reads as missing".to_owned(),
+    )?;
+
+    // A damaged part.
+    let rotting = object("a part that rots");
+    store(target, &phone, &vault, &rotting).await?;
+    target.corrupt(&vault, &rotting.0).await?;
+    target.scrub().await?;
+    refused(
+        target
+            .put(
+                &phone.token,
+                &vault,
+                &rotting.0,
+                &Digest::of(&garbage),
+                &garbage,
+            )
+            .await,
+        Code::NameTaken,
+        "garbage over a damaged name",
+    )?;
+    ensure(
+        ok(
+            target.exists(&phone.token, &vault, &[rotting.0]).await,
+            "exists",
+        )? == vec![rotting.0],
+        || "garbage healed a damaged name".to_owned(),
+    )?;
+    refused(
+        target.get(&phone.token, &vault, &rotting.0, None).await,
+        Code::NotFound,
+        "a damaged name after the garbage",
+    )?;
+    ok(
+        target
+            .put(
+                &phone.token,
+                &vault,
+                &rotting.0,
+                &Digest::of(&rotting.1),
+                &rotting.1,
+            )
+            .await,
+        "the damaged part's own bytes",
+    )?;
+    ensure(
+        ok(
+            target.get(&phone.token, &vault, &rotting.0, None).await,
+            "get",
+        )? == rotting.1,
+        || "the phone's bytes did not heal the name".to_owned(),
+    )
+}
+
+/// R6: the tombstone trim at a claim drops read-grant tombstones first, so the
+/// superseded writer always keeps its own and hears MOVED, however many read
+/// grants the vault had.
+async fn claim_keeps_the_writers_tombstone<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let (manifest, _) = headed(target, &phone, &vault, "many readers", None, 1).await?;
+    for _ in 0..100 {
+        ok(pair_read(target, &key).await, "a read grant")?;
+    }
+    ok(
+        pair_claim(target, &key, 2, Some(manifest.0)).await,
+        "the claim",
+    )?;
+    ensure(
+        target.revoked_count(&vault).await? == MAX_REVOKED_PER_VAULT,
+        || "the vault keeps its 64".to_owned(),
+    )?;
+    refused(
+        target.head(&phone.token, &vault).await,
+        Code::Moved,
+        "the superseded writer, after 100 read grants were revoked beside it",
+    )?;
+    Ok(())
 }
 
 /// A stand-in for a sealed part: a keyed XOF stream over the plaintext and a

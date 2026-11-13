@@ -124,3 +124,51 @@ fn another_programs_database_is_refused_like_an_older_gateways() {
         Err(OpenStateError::Refused(sentence)) if sentence == OLDER_DATA_DIRECTORY
     ));
 }
+
+/// Every path under `dir` with its bytes, sorted: the folder as a whole.
+fn folder(dir: &std::path::Path) -> Vec<(String, Vec<u8>)> {
+    fn walk(root: &std::path::Path, dir: &std::path::Path, into: &mut Vec<(String, Vec<u8>)>) {
+        let mut entries: Vec<_> = std::fs::read_dir(dir)
+            .expect("reads")
+            .flatten()
+            .map(|entry| entry.path())
+            .collect();
+        entries.sort();
+        for path in entries {
+            let name = path
+                .strip_prefix(root)
+                .expect("inside")
+                .display()
+                .to_string();
+            if path.is_dir() {
+                into.push((format!("{name}/"), Vec::new()));
+                walk(root, &path, into);
+            } else {
+                into.push((name, std::fs::read(&path).expect("reads")));
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(dir, dir, &mut out);
+    out
+}
+
+/// R7: A FOLDER THE GATEWAY WILL NOT OPEN IS LEFT EXACTLY AS IT WAS — the file
+/// list as well as the bytes. The state is inspected before an identity, a
+/// nonce key or an object directory is made beside it, so a `state.db` copied
+/// alone into an empty folder is refused without a single new file.
+#[test]
+fn a_refused_folder_is_byte_identical_including_its_file_list() {
+    let dir = v2_data_dir();
+    let before = folder(dir.path());
+    assert_eq!(
+        before.len(),
+        1 + usize::from(dir.path().join("state.db-wal").exists())
+            + usize::from(dir.path().join("state.db-shm").exists())
+    );
+    for verb in ["pairings", "serve", "pair", "scrub"] {
+        let output = gateway(&[verb], dir.path());
+        assert_eq!(output.status.code(), Some(2), "{verb}: exit code 2");
+        assert_eq!(folder(dir.path()), before, "{verb} changed the folder");
+    }
+}

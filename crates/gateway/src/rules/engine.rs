@@ -1280,15 +1280,26 @@ fn put_one<S: State>(
         .into());
     }
     let existing = state.object(vault, &arrival.name)?;
-    if let Some(held) = existing.filter(ObjectRecord::is_live) {
-        return if held.digest == arrival.digest {
-            Ok(PutOutcome::AlreadyStored(held.entry()))
-        } else {
-            Err(Refusal::NameTaken {
-                digest: held.digest,
-            }
-            .into())
-        };
+    if let Some(row) = existing {
+        if row.is_live() {
+            return if row.digest == arrival.digest {
+                Ok(PutOutcome::AlreadyStored(row.entry()))
+            } else {
+                Err(Refusal::NameTaken { digest: row.digest }.into())
+            };
+        }
+        // HELD OR DAMAGED (R3): only the bytes the row records come back. A
+        // writer token that swaps garbage over a held manifest, or over a
+        // damaged part, is refused and nothing changes.
+        if row.digest != arrival.digest {
+            return Err(Refusal::NameTaken { digest: row.digest }.into());
+        }
+        if row.damaged_at_ms.is_none() {
+            // Held, and its file is not known to be damaged: the name is
+            // live again, and the file is not replaced.
+            state.set_hold(vault, &arrival.name, None)?;
+            return Ok(PutOutcome::Stored(row.entry()));
+        }
     }
     commit()?;
     let record = ObjectRecord {

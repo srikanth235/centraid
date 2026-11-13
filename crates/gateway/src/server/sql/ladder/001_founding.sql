@@ -42,6 +42,10 @@ CREATE TABLE revoked_token (
 
 CREATE INDEX revoked_token_by_vault ON revoked_token (vault, revoked_at_ms, token_hash);
 
+-- The trim at a claim keeps the highest epochs first, so a writer's tombstone
+-- (epoch 1 or more) outlives any number of read grants' (epoch 0).
+CREATE INDEX revoked_token_by_keep ON revoked_token (vault, epoch DESC, revoked_at_ms DESC, token_hash DESC);
+
 -- The last claim a vault accepted, signed, so every MOVED can carry it.
 CREATE TABLE claim (
   vault         BLOB    PRIMARY KEY REFERENCES vault (vault) ON DELETE CASCADE,

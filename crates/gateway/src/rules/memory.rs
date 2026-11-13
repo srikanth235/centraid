@@ -180,14 +180,16 @@ impl State for MemoryState {
     }
 
     fn trim_revoked(&mut self, vault: &VaultId, keep: u64) -> Result<(), StoreFault> {
-        let mut mine: Vec<(i64, TokenHash)> = self
+        // Writers' tombstones (epoch 1 and up) outlive read grants' (epoch 0):
+        // the superseded writer must always hear MOVED.
+        let mut mine: Vec<(u64, i64, TokenHash)> = self
             .revoked
             .values()
             .filter(|revoked| revoked.vault == *vault)
-            .map(|revoked| (revoked.revoked_at_ms, revoked.hash))
+            .map(|revoked| (revoked.epoch, revoked.revoked_at_ms, revoked.hash))
             .collect();
         mine.sort_unstable_by(|left, right| right.cmp(left));
-        for (_, hash) in mine
+        for (_, _, hash) in mine
             .into_iter()
             .skip(usize::try_from(keep).unwrap_or(usize::MAX))
         {

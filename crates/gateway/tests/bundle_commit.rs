@@ -232,3 +232,87 @@ async fn a_sweep_during_an_open_bundle_removes_nothing() {
     assert!(held.is_empty());
     gateway.shutdown().await;
 }
+
+/// R3: THE DAMAGED NAME A BUNDLE REPLACES IS NOT LEFT INCONSISTENT BY A
+/// ROLLBACK. The bundle heals a damaged name with its own bytes and then
+/// faults on a second frame, so the transaction rolls back: the row still
+/// says damaged and still holds the digest the phone's bytes have, the file
+/// on disk is those bytes, the second frame has no file and no row, and the
+/// next bundle completes the work.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_rolled_back_bundle_leaves_a_damaged_name_consistent() {
+    let dir = tempfile::tempdir().expect("a temp dir");
+    let gateway = spawn(dir.path()).await.expect("spawned");
+    let (vault, phone) = paired(&gateway).await;
+    let healing = frame("a part that rots");
+    let other = frame("a part the fault stops");
+    phone
+        .bundle(&vault, std::slice::from_ref(&healing))
+        .await
+        .expect("stores");
+    gateway.corrupt(&vault, &healing.name).expect("rots");
+    gateway.scrub_now().await.expect("scrubs");
+    assert_eq!(
+        phone.exists(&vault, &[healing.name]).await.expect("exists"),
+        vec![healing.name],
+        "the scrub marked it damaged"
+    );
+
+    // The second commit of the next bundle fails.
+    gateway.shared().store().knobs().fail_commit(2);
+    let both = [healing.clone(), other.clone()];
+    assert!(
+        phone.bundle(&vault, &both).await.is_err(),
+        "the fault is an error"
+    );
+    gateway.shared().store().knobs().fail_commit(0);
+
+    let on_disk = gateway
+        .shared()
+        .store()
+        .read_digest(&vault, &healing.name)
+        .expect("reads")
+        .expect("the file is there");
+    let row = gateway
+        .shared()
+        .rules(|rules| Ok(rules.state.object(&vault, &healing.name)?))
+        .expect("reads")
+        .expect("the row is there");
+    assert_eq!(
+        (row.digest, row.size),
+        on_disk,
+        "the row and the file agree on the bytes"
+    );
+    assert!(
+        row.damaged_at_ms.is_some(),
+        "the rolled-back row is still marked damaged"
+    );
+    assert!(
+        gateway
+            .shared()
+            .store()
+            .path(&vault, &other.name)
+            .metadata()
+            .is_err(),
+        "the frame that faulted left no file"
+    );
+    assert!(
+        gateway
+            .shared()
+            .rules(|rules| Ok(rules.state.object(&vault, &other.name)?))
+            .expect("reads")
+            .is_none(),
+        "and no row"
+    );
+    // The phone's next bundle finishes it.
+    let answer = phone.bundle(&vault, &both).await.expect("stores");
+    assert_eq!(answer.stored.len() + answer.already.len(), 2, "{answer:?}");
+    assert!(
+        phone
+            .exists(&vault, &[healing.name, other.name])
+            .await
+            .expect("exists")
+            .is_empty()
+    );
+    gateway.shutdown().await;
+}

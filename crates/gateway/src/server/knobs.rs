@@ -28,6 +28,8 @@ pub struct Knobs {
     exists_names: AtomicU64,
     commits: Mutex<Vec<u64>>,
     renames: AtomicU64,
+    attempts: AtomicU64,
+    fail_at: AtomicU64,
     after_rename: Mutex<Option<RenameHook>>,
 }
 
@@ -53,6 +55,20 @@ impl Knobs {
     /// a gateway that lies, which is what a phone's read-back is for.
     pub fn pretend_to_hold_everything(&self, lying: bool) {
         self.lying.store(lying, Ordering::SeqCst);
+    }
+
+    /// Make the `nth` commit from now (1 is the next) fail with a store
+    /// fault before it touches a file: the fault a bundle's transaction must
+    /// survive. `0` takes it away.
+    pub fn fail_commit(&self, nth: u64) {
+        self.attempts.store(0, Ordering::SeqCst);
+        self.fail_at.store(nth, Ordering::SeqCst);
+    }
+
+    /// Whether this commit must fail.
+    pub(crate) fn commit_fails(&self) -> bool {
+        let fail_at = self.fail_at.load(Ordering::SeqCst);
+        fail_at != 0 && self.attempts.fetch_add(1, Ordering::SeqCst) + 1 == fail_at
     }
 
     /// Run `hook` after every file a commit renames into place, before its

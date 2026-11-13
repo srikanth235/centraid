@@ -230,6 +230,10 @@ impl ObjectStore {
         vault: &VaultId,
         name: &Name,
     ) -> Result<(), Fault> {
+        #[cfg(feature = "test-harness")]
+        if self.knobs.commit_fails() {
+            return Err(StoreFault::new("a commit the test made fail").into());
+        }
         let target = self.path(vault, name);
         let parent = target
             .parent()

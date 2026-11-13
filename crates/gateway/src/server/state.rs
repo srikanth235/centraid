@@ -118,9 +118,23 @@ impl SqliteState {
 /// What the file holds, read without writing: `(application_id,
 /// user_version, tables)`.
 fn inspect(path: &Path) -> Result<(), OpenStateError> {
+    // IMMUTABLE: SQLite is told the file will not change under it, so it makes
+    // no `-wal`, no `-shm` and takes no lock. A gateway's file is in WAL mode,
+    // and an ordinary read-only open of one would add those two files beside
+    // a folder this build is about to refuse.
+    let mut uri = String::from("file:");
+    for byte in path.to_string_lossy().bytes() {
+        match byte {
+            b'?' | b'#' | b'%' | b' ' | 0..=31 | 127.. => uri.push_str(&format!("%{byte:02X}")),
+            other => uri.push(char::from(other)),
+        }
+    }
+    uri.push_str("?immutable=1");
     let connection = Connection::open_with_flags(
-        path,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        uri,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY
+            | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX
+            | rusqlite::OpenFlags::SQLITE_OPEN_URI,
     )
     .map_err(fault)?;
     let application: i32 = connection
@@ -157,6 +171,13 @@ fn climb(connection: &Connection) -> Result<(), StoreFault> {
         .and_then(|value| {
             usize::try_from(value).map_err(|_| StoreFault::new("a negative user_version"))
         })?;
+    if version > sql::LADDER.len() {
+        // Only a file whose newer rung was still in its WAL when it was
+        // inspected can get here; it is not run on.
+        return Err(StoreFault::new(
+            "the state file is at a newer rung than this build reads",
+        ));
+    }
     for (index, rung) in sql::LADDER.iter().enumerate().skip(version) {
         connection.execute_batch(sql::BEGIN).map_err(fault)?;
         let applied = (|| {

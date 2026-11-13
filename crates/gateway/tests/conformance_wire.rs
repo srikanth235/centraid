@@ -449,6 +449,8 @@ named_over_the_wire!(
     a_gap_between_sweeps_is_not_counted_against_a_hold,
     the_nonce_route_writes_nothing_and_a_claim_still_works,
     a_forged_foreign_expired_or_replayed_nonce_is_refused,
+    a_claim_keeps_the_superseded_writers_tombstone_among_a_hundred_readers,
+    a_put_of_garbage_over_a_held_or_damaged_name_is_refused,
 );
 
 /// Every name in `NAMED` has a test above.
