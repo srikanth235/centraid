@@ -48,6 +48,7 @@ pub mod restore;
 pub mod retention;
 pub mod snapshot;
 pub mod spool;
+pub mod state;
 pub mod store;
 pub mod verify;
 
