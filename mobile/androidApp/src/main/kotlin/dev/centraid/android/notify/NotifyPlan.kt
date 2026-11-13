@@ -53,8 +53,22 @@ internal object NotifyPlan {
         val cancel = before.keys.filter { it !in next }
         val drop = next.values.filter { !it.immediate && it.fire_at_ms <= nowMs }.map { it.notification_id }
         val arm = next.values.filter { !it.immediate && it.fire_at_ms > nowMs }
-        val post = next.values.filter { it.immediate && before[it.notification_id] != it }
+        val post = next.values.filter { it.immediate && it.notification_id !in before }
         return Diff(cancel = cancel, drop = drop, arm = arm, post = post)
+    }
+
+    /** Delivered cards are withdrawn only as Rust asks in retention mode. */
+    fun withdrawDelivered(
+        recorded: List<PendingNotification>,
+        wanted: List<PendingNotification>,
+        deliveredIds: List<String>,
+        retainDelivered: Boolean,
+        explicitIds: List<String>,
+    ): Set<String> = if (retainDelivered) {
+        explicitIds.toSet()
+    } else {
+        val next = wanted.map { it.notification_id }.toSet()
+        (recorded.map { it.notification_id } + deliveredIds).filter { it !in next }.toSet()
     }
 
     /** What the record keeps after [diff]: everything wanted that is still to come, and the immediates. */

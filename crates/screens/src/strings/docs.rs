@@ -135,7 +135,7 @@ catalog! {
     plain new_folder_title = ("New folder", "New folder");
     plain not_editable = ("This document has no text to edit.", "This document has no text to edit.");
     plain not_starred = ("Not starred", "Not starred");
-    plain no_text = ("This document has no text to show.", "This document has no text to show.");
+    plain no_text = ("No text preview is available for this file.", "No text preview is available for this file.");
     plain recent_rule = ("Most recently added documents.", "Most recently added documents.");
     plain remote_changed = ("Changed elsewhere; your next save will ask to reload.", "Changed elsewhere; your next save will ask to reload.");
     plain rename_placeholder = ("Document name", "Document name");

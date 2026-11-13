@@ -211,7 +211,7 @@ internal class RustRoot(
         }
     }
 
-    /** Whether the page on top stands on the photograph's stage (edge to edge, light bar icons). */
+    /** Only slideshow and photo editing use stage chrome; the ordinary viewer follows its page theme. */
     @Composable
     fun onStage(): Boolean {
         val runtime = screens ?: return false
@@ -219,7 +219,7 @@ internal class RustRoot(
         val navigation by runtime.navigation.collectAsState()
         val top = navigation?.tabs?.firstOrNull { it.tab == TAB }?.entries?.lastOrNull()?.instance
         val view = top?.let { views[it] } ?: return false
-        return view.photos_lightbox != null || view.photos_editor != null
+        return view.photos_editor != null || view.photos_lightbox?.slideshow == true
     }
 
     // -- the root ---------------------------------------------------------------

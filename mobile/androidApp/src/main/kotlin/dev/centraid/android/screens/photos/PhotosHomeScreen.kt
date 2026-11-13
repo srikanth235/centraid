@@ -193,6 +193,6 @@ internal fun PhotosHomeScreen(
         }
         // WHICH SHEET IS OPEN IS STATE — read here, beside the band that opens it,
         // so More works from every band and not only from the library body.
-        PhotosSheets(state, onEvent)
+        PhotosSheets(state, onEvent, onOpen)
     }
 }

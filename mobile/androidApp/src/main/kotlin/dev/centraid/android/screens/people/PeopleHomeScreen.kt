@@ -78,6 +78,7 @@ import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
+import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.RoomFilter
 import dev.centraid.android.kit.RoomSearch
 import dev.centraid.android.kit.RowSkeleton
@@ -108,9 +109,7 @@ public fun PeopleHomeScreen(
     val chrome = state.chrome
     val search = state.search
     val denied = state.page?.refused != null
-    val status = state.status?.sentence.orEmpty().ifEmpty {
-        state.roster?.status_line ?: state.touch?.status_line ?: ""
-    }
+    val fallbackStatus = state.roster?.status_line ?: state.touch?.status_line ?: ""
     AppPlace(
         app = "people",
         title = state.title,
@@ -145,7 +144,13 @@ public fun PeopleHomeScreen(
                 onClear = { onEvent(PeopleHomeEvent(filter_menu_cleared = FilterMenuCleared())) },
             )
         },
-        status = status,
+        statusLine = {
+            if (!state.status?.sentence.isNullOrEmpty()) {
+                StatusLine(state.status, actTag = "people-status-action")
+            } else {
+                StatusLine(fallbackStatus)
+            }
+        },
         // More is an ordinary tab, last, as Rust lists it (R-CHROME-4).
         band = if (state.band.isEmpty()) {
             null

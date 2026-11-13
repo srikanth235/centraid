@@ -390,9 +390,9 @@ struct DocsStageCard: View {
         case .pdf:
             DocsPDFStage(url: url).frame(height: 480)
         case .video:
-            DocsPlayerStage(url: url).frame(height: 280)
+            DocsPlayerStage(url: url, mediaType: stage.mediaType).frame(height: 280)
         case .audio:
-            DocsPlayerStage(url: url).frame(height: 88)
+            DocsPlayerStage(url: url, mediaType: stage.mediaType).frame(height: 88)
         case .unspecified, .UNRECOGNIZED:
             Color.clear.frame(height: 200)
         }
@@ -402,11 +402,19 @@ struct DocsStageCard: View {
 /// Audio or video on the stage: one player for the file, held across redraws.
 struct DocsPlayerStage: View {
     let url: URL
+    let mediaType: String
     @State private var player: AVPlayer?
 
     var body: some View {
         VideoPlayer(player: player)
-            .onAppear { if player == nil { player = AVPlayer(url: url) } }
+            .onAppear {
+                guard player == nil else { return }
+                // The byte door supplies the type: stored originals have no extension.
+                var options: [String: Any] = [:]
+                if !mediaType.isEmpty { options[AVURLAssetOverrideMIMETypeKey] = mediaType }
+                let asset = AVURLAsset(url: url, options: options)
+                player = AVPlayer(playerItem: AVPlayerItem(asset: asset))
+            }
             .onDisappear { player?.pause() }
     }
 }

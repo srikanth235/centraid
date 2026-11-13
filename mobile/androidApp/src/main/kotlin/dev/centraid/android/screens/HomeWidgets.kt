@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -30,6 +32,7 @@ import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
@@ -48,13 +51,14 @@ import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.kit.tokenSp
 import dev.centraid.android.theme.LocalCentraidTokens
+import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidCatalog
 
 // HOME AS WIDGETS (#1173; boards `AndroidHome`, `FirstHome`). Rust folds every
 // app's tile into widgets (`crates/screens/src/shell/policy.rs`): which widgets,
 // in what order, how wide (small is one of four columns, medium two, large all
 // four), how tall, and the rows they sit in. This file draws what it sends and
-// decides none of it; `HomeView.swift`'s `WidgetGrid` reads the same fields. A
+// preserves that order, allowing native text to reflow a row when it cannot fit. A
 // widget wears the colour of the app it shows (`app_id`); `widget` is its
 // identity (one per app since Calendar and Reminders split).
 
@@ -73,31 +77,55 @@ private fun floorOf(rows: Int): Dp = ROW * rows + GAP * (rows - 1).coerceAtLeast
  * stretching over the rest.
  */
 @Composable
-private fun WidgetRow(spans: List<Int>, floor: Dp, content: @Composable () -> Unit) {
+private fun WidgetRow(spans: List<Int>, minimumWidths: List<Int>, floor: Dp, content: @Composable () -> Unit) {
     Layout(content = content, modifier = Modifier.fillMaxWidth()) { measurables, constraints ->
         val gap = GAP.roundToPx()
         val total = constraints.maxWidth
         val unit = (total - gap * (COLUMNS - 1)) / COLUMNS
         fun widthOf(span: Int) = unit * span + gap * (span - 1)
-        val first = measurables.mapIndexed { i, m ->
-            m.measure(Constraints(minWidth = widthOf(spans[i]), maxWidth = widthOf(spans[i])))
+        // The pack's order stays Rust's. A narrow phone gives a glance enough columns for its
+        // smallest figure and an unbroken caption word, wrapping the rest onto another row.
+        val needed = spans.mapIndexed { i, span ->
+            maxOf(span, (minimumWidths[i] + gap + unit + gap - 1) / (unit + gap)).coerceAtMost(COLUMNS)
         }
-        val tall = maxOf(floor.roundToPx(), first.maxOfOrNull { it.height } ?: 0)
+        val widestGlance = needed.filterIndexed { i, _ -> spans[i] == 1 }.maxOrNull() ?: 1
+        val glanceSpan = if (widestGlance > 2) COLUMNS else widestGlance
+        val fitting = needed.mapIndexed { i, span -> if (spans[i] == 1) glanceSpan else span }
+        val rows = mutableListOf(mutableListOf<Int>())
+        var used = 0
+        fitting.forEachIndexed { i, span ->
+            if (used + span > COLUMNS) {
+                rows.add(mutableListOf())
+                used = 0
+            }
+            rows.last().add(i)
+            used += span
+        }
+        // Query heights first: Compose permits only one measure per child.
+        val heights = rows.map { row ->
+            maxOf(floor.roundToPx(), row.maxOf { measurables[it].minIntrinsicHeight(widthOf(fitting[it])) })
+        }
+        val rowOf = rows.flatMapIndexed { row, children -> children.map { it to row } }.toMap()
         val placeables = measurables.mapIndexed { i, m ->
+            val tall = heights[rowOf.getValue(i)]
             m.measure(
                 Constraints(
-                    minWidth = widthOf(spans[i]),
-                    maxWidth = widthOf(spans[i]),
+                    minWidth = widthOf(fitting[i]),
+                    maxWidth = widthOf(fitting[i]),
                     minHeight = tall,
                     maxHeight = tall,
                 ),
             )
         }
-        layout(total, tall) {
-            var x = 0
-            placeables.forEachIndexed { i, p ->
-                p.place(x, 0)
-                x += widthOf(spans[i]) + gap
+        layout(total, heights.sum() + gap * (rows.size - 1)) {
+            var y = 0
+            rows.forEachIndexed { row, children ->
+                var x = 0
+                children.forEach { i ->
+                    placeables[i].place(x, y)
+                    x += widthOf(fitting[i]) + gap
+                }
+                y += heights[row] + gap
             }
         }
     }
@@ -112,6 +140,9 @@ internal fun WidgetGrid(data: HomeData, loading: String, onOpen: (Route) -> Unit
     val byWidget = data.tiles.associateBy { it.widget }
     // AT THE LARGEST TEXT a widget has no room to share a row: each takes the whole width.
     val largest = rememberLargestText()
+    val measurer = rememberTextMeasurer()
+    val minimumFigure = centraidType("annotLabel").copy(fontSize = tokenSp(R.dimen.centraid_text_badge), fontWeight = FontWeight.SemiBold)
+    val captionStyle = centraidType("eyebrow").copy(fontWeight = FontWeight.Normal)
     Column(
         Modifier.fillMaxWidth().testTag("home-grid"),
         verticalArrangement = Arrangement.spacedBy(GAP),
@@ -121,11 +152,34 @@ internal fun WidgetGrid(data: HomeData, loading: String, onOpen: (Route) -> Unit
         for (tiles in if (largest) rows.flatten().map { listOf(it) } else rows) {
             WidgetRow(
                 spans = tiles.map { if (largest) COLUMNS else spanOf(it) },
-                floor = floorOf(tiles.minOf { it.height }.coerceAtLeast(1)),
+                minimumWidths = tiles.map { tile ->
+                    if (tile.size != HomeTileSize.HOME_TILE_SIZE_SMALL) 0 else {
+                        val (figure, caption) = glanceText(tile)
+                        val figureWidth = measurer.measure(figure, minimumFigure, softWrap = false, maxLines = 1).size.width
+                        val wordWidth = caption.split(Regex("\\s+")).maxOfOrNull {
+                            measurer.measure(it, captionStyle, softWrap = false, maxLines = 1).size.width
+                        } ?: 0
+                        maxOf(figureWidth, wordWidth) + with(androidx.compose.ui.platform.LocalDensity.current) { (PAD * 2).roundToPx() }
+                    }
+                },
+                floor = floorOf(tiles.maxOf { it.height }.coerceAtLeast(1)),
             ) {
                 for (tile in tiles) WidgetCard(tile, loading, onOpen)
             }
         }
+    }
+}
+
+/** The same glance text for drawing and measuring its minimum readable width. */
+private fun glanceText(tile: HomeTile): Pair<String, String> {
+    val body = tile.body
+    return when {
+        tile.status != HomeTileStatus.HOME_TILE_STATUS_CONTENT || body == null -> "" to tile.empty_copy
+        body.money != null -> body.money!!.amounts.firstOrNull().orEmpty() to body.money!!.caption
+        body.health != null -> body.health!!.figure to body.health!!.caption
+        body.people != null -> body.people!!.figure to body.people!!.caption
+        body.locker != null -> body.locker!!.state_label to tile.name
+        else -> "" to ""
     }
 }
 
@@ -178,15 +232,17 @@ private fun WText(
     color: Color,
     modifier: Modifier = Modifier,
     strong: Boolean = false,
-    size: androidx.compose.ui.unit.TextUnit = tokenSp(R.dimen.centraid_text_meta),
+    type: String = "annotLabel",
+    minLines: Int = 1,
     maxLines: Int = 1,
     align: TextAlign? = null,
 ) {
     Text(
         text,
         color = color,
-        fontSize = size,
+        style = centraidType(type),
         fontWeight = if (strong) FontWeight.SemiBold else FontWeight.Normal,
+        minLines = minLines,
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
         textAlign = align,
@@ -208,10 +264,10 @@ private fun WidgetBody(tile: HomeTile, loading: String, modifier: Modifier) {
             if (tile.size == HomeTileSize.HOME_TILE_SIZE_SMALL) Glance(tile, "", tile.empty_copy, modifier) else Invitation(tile, modifier)
         body.agenda != null -> AgendaWidget(tile, body.agenda!!, modifier)
         body.reminders != null -> RemindersWidget(tile, body.reminders!!, modifier)
-        body.money != null -> Glance(tile, body.money!!.amounts.firstOrNull().orEmpty(), body.money!!.caption, modifier)
-        body.health != null -> Glance(tile, body.health!!.figure, body.health!!.caption, modifier)
-        body.people != null -> Glance(tile, body.people!!.figure, body.people!!.caption, modifier)
-        body.locker != null -> Glance(tile, body.locker!!.state_label, tile.name, modifier)
+        body.money != null || body.health != null || body.people != null || body.locker != null -> {
+            val (figure, caption) = glanceText(tile)
+            Glance(tile, figure, caption, modifier)
+        }
         body.notes != null -> LineWidget(tile, body.notes!!.title, body.notes!!.edited, modifier, next = body.notes!!.next_title)
         body.docs != null -> LineWidget(
             tile,
@@ -229,7 +285,7 @@ private fun WidgetBody(tile: HomeTile, loading: String, modifier: Modifier) {
 @Composable
 private fun AgendaWidget(tile: HomeTile, day: centraid.core.v1.HomeTileBody.Agenda, modifier: Modifier) {
     Column(modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        WText(day.weekday.uppercase(), appAccent(tile.app_id).text, strong = true, size = tokenSp(R.dimen.centraid_text_badge))
+        WText(day.weekday.uppercase(), appAccent(tile.app_id).text, strong = true, type = "eyebrow")
         Text(
             day.day,
             color = ink(),
@@ -291,8 +347,19 @@ private fun Glance(tile: HomeTile, figure: String, caption: String, modifier: Mo
         CentraidCatalog.byId[tile.app_id]?.let { app ->
             CentraidIcon(iconKey = widgetIcon(tile.app_id, app.iconKey), tint = appAccent(tile.app_id).text, size = 22.dp)
         }
-        if (figure.isNotEmpty()) WText(figure, ink(), strong = true)
-        WText(caption, meta(), maxLines = 2, align = TextAlign.Center)
+        if (figure.isNotEmpty()) {
+            BasicText(
+                figure,
+                style = centraidType("annotLabel").copy(color = ink(), fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center),
+                maxLines = 1,
+                softWrap = false,
+                autoSize = TextAutoSize.StepBased(
+                    minFontSize = tokenSp(R.dimen.centraid_text_badge),
+                    maxFontSize = tokenSp(R.dimen.centraid_text_meta),
+                ),
+            )
+        }
+        WText(caption, meta(), type = "eyebrow", minLines = 2, maxLines = 2, align = TextAlign.Center)
     }
 }
 
@@ -350,13 +417,14 @@ private fun Skeleton(loading: String, modifier: Modifier) {
 
 /**
  * PHOTOS (large, or a tall medium with something to show): the newest four as one
- * big photograph and three beside it, bled to the card's edge, with the app's name
- * over the foot. A cell with no bytes on this phone is drawn grey.
+ * strip of the photographs present, with the app's name over the foot.
+ * A real cell with no bytes on this phone is drawn grey; absent cells take no space.
  */
 @Composable
 private fun PhotoWidget(tile: HomeTile) {
     val photos = tile.body?.photos ?: return
     val cells = photos.cells
+    val tokens = LocalCentraidTokens.current
     @Composable
     fun cell(index: Int, modifier: Modifier) {
         Box(modifier.background(Surface.line)) {
@@ -367,15 +435,30 @@ private fun PhotoWidget(tile: HomeTile) {
     Box(Modifier.fillMaxWidth().heightIn(min = floorOf(2))) {
         Row(Modifier.matchParentSize(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             cell(0, Modifier.weight(1f).fillMaxHeight())
-            Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                cell(1, Modifier.weight(1f).fillMaxWidth())
-                cell(2, Modifier.weight(1f).fillMaxWidth())
+            when (cells.size) {
+                2 -> cell(1, Modifier.weight(1f).fillMaxHeight())
+                3 -> Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    cell(1, Modifier.weight(1f).fillMaxWidth())
+                    cell(2, Modifier.weight(1f).fillMaxWidth())
+                }
+                in 4..Int.MAX_VALUE -> {
+                    Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        cell(1, Modifier.weight(1f).fillMaxWidth())
+                        cell(2, Modifier.weight(1f).fillMaxWidth())
+                    }
+                    cell(3, Modifier.weight(1f).fillMaxHeight())
+                }
             }
-            cell(3, Modifier.weight(1f).fillMaxHeight())
         }
-        Column(Modifier.align(Alignment.BottomStart).padding(PAD)) {
-            WText(tile.name, Color.White, strong = true)
-            if (photos.absent_line.isNotEmpty()) WText(photos.absent_line, Color.White)
+        // An opaque caption plate keeps ordinary card contrast over any photograph.
+        Column(
+            Modifier.align(Alignment.BottomStart)
+                .padding(PAD)
+                .background(Surface.card, RoundedCornerShape((tokens.radii["sm"] ?: 0).dp))
+                .padding(horizontal = (tokens.spacing["2"] ?: 0).dp, vertical = (tokens.spacing["1"] ?: 0).dp),
+        ) {
+            WText(tile.name, Surface.ink, strong = true)
+            if (photos.absent_line.isNotEmpty()) WText(photos.absent_line, Surface.meta)
         }
     }
 }

@@ -2424,6 +2424,182 @@
       "w": 1200,
       "x": 3840,
       "y": 0
+    },
+    "BackupPending.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Backup · Changes waiting",
+      "w": 390,
+      "x": 1410,
+      "y": 31840
+    },
+    "BackupPendingDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Backup · Changes waiting · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 31840
+    },
+    "BackupSharedItems.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Backup · visible shared items",
+      "w": 390,
+      "x": 7520,
+      "y": 0
+    },
+    "DocEditorUnavailable.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "Docs · Editor unavailable",
+      "w": 412,
+      "x": 3290,
+      "y": 31840
+    },
+    "DocEditorUnavailableDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "Docs · Editor unavailable · dark",
+      "w": 412,
+      "x": 3290,
+      "y": 31840
+    },
+    "DocsMissing.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "Docs · Restored original",
+      "w": 412,
+      "x": 2820,
+      "y": 31840
+    },
+    "DocsMissingDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "Docs · Restored original · dark",
+      "w": 412,
+      "x": 2820,
+      "y": 31840
+    },
+    "DocsText.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "Docs · Imported text preview",
+      "w": 412,
+      "x": 470,
+      "y": 31840
+    },
+    "HomePhotoOne.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Home · One photo",
+      "w": 390,
+      "x": 1880,
+      "y": 31840
+    },
+    "HomePhotoOneDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Home · One photo · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 31840
+    },
+    "HomeRemindersEmpty.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Home · nothing due today",
+      "w": 390,
+      "x": 2350,
+      "y": 29680
+    },
+    "HomeRemindersEmptyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Home · nothing due today · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 29680
+    },
+    "MorePhotos.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Photos · More, export and trash",
+      "w": 390,
+      "x": 0,
+      "y": 31840
+    },
+    "MorePhotosDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Photos · More, export and trash · dark",
+      "w": 390,
+      "x": 0,
+      "y": 31840
+    },
+    "NoteEditorConflict.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Notes editor · conflict kept draft",
+      "w": 390,
+      "x": 1880,
+      "y": 11600
+    },
+    "NoteEditorConflictDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Notes editor · conflict kept draft · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 11600
+    },
+    "PhotoRemote.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Photos · Load a missing original",
+      "w": 390,
+      "x": 2350,
+      "y": 31840
+    },
+    "PhotoRemoteDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Photos · Load a missing original · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 31840
+    },
+    "PhotoRemoteFailure.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Photos · Original download refused",
+      "w": 390,
+      "x": 3760,
+      "y": 31840
+    },
+    "PhotoRemoteFailureDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Photos · Original download refused · dark",
+      "w": 390,
+      "x": 3760,
+      "y": 31840
+    },
+    "PhotoVideo.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Photos · Video playback",
+      "w": 390,
+      "x": 940,
+      "y": 31840
+    },
+    "PhotoVideoDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Photos · Video playback · dark",
+      "w": 390,
+      "x": 940,
+      "y": 31840
     }
   },
   "createdOnFiles": {
@@ -2941,6 +3117,7 @@
     "Backup.dc.html",
     "Welcome.dc.html",
     "HomeWidgets.dc.html",
+    "HomeRemindersEmpty.dc.html",
     "BackupSettings.dc.html",
     "Chat.dc.html",
     "RecoveryKey.dc.html",
@@ -2991,6 +3168,7 @@
     "MoneySearch.dc.html",
     "NotesHome.dc.html",
     "NoteEditor.dc.html",
+    "NoteEditorConflict.dc.html",
     "PhotosLibrary.dc.html",
     "PhotoViewer.dc.html",
     "PhotoViewerInfo.dc.html",
@@ -3044,6 +3222,7 @@
     "AgendaQuickAddChip.dc.html",
     "WelcomeDark.dc.html",
     "HomeWidgetsDark.dc.html",
+    "HomeRemindersEmptyDark.dc.html",
     "BackupSettingsDark.dc.html",
     "ChatDark.dc.html",
     "RecoveryKeyDark.dc.html",
@@ -3092,6 +3271,7 @@
     "MoneySearchDark.dc.html",
     "NotesHomeDark.dc.html",
     "NoteEditorDark.dc.html",
+    "NoteEditorConflictDark.dc.html",
     "PhotosLibraryDark.dc.html",
     "PhotoViewerDark.dc.html",
     "PhotoViewerInfoDark.dc.html",
@@ -3187,7 +3367,24 @@
     "PhotosPlacesMap.dc.html",
     "PhotosPlacesMapDark.dc.html",
     "MoneyImportDone.dc.html",
-    "MoneyImportDoneDark.dc.html"
+    "MoneyImportDoneDark.dc.html",
+    "MorePhotos.dc.html",
+    "MorePhotosDark.dc.html",
+    "DocsText.dc.html",
+    "PhotoVideo.dc.html",
+    "PhotoVideoDark.dc.html",
+    "BackupPending.dc.html",
+    "BackupPendingDark.dc.html",
+    "HomePhotoOne.dc.html",
+    "HomePhotoOneDark.dc.html",
+    "PhotoRemote.dc.html",
+    "PhotoRemoteDark.dc.html",
+    "DocsMissing.dc.html",
+    "DocsMissingDark.dc.html",
+    "DocEditorUnavailable.dc.html",
+    "DocEditorUnavailableDark.dc.html",
+    "PhotoRemoteFailure.dc.html",
+    "PhotoRemoteFailureDark.dc.html"
   ],
   "pages": [
     {

@@ -79,9 +79,8 @@ enum BackgroundPasses {
     /// Fifteen minutes, the floor WorkManager enforces on the Android half too.
     static let earliestSeconds: TimeInterval = 15 * 60
 
-    /// THE SCREEN STORE, SET BY THE SHELL once the core exists: the road to the pass
-    /// scheduler in Rust. Nil before it; a window that opens first waits a bounded
-    /// time for it.
+    /// The shell publishes this only after the runtime's first snapshot succeeds.
+    /// A cold window or notification waits for readiness, not just an allocated store.
     @MainActor static var store: ScreenStore? {
         didSet {
             guard let store else { return }
@@ -141,7 +140,7 @@ enum BackgroundPasses {
         let name = identifier == processingIdentifier ? "centraid-night-shift" : "centraid-sync-pass"
         let work = Task { @MainActor in
             // A COLD BACKGROUND LAUNCH HAS NO SESSION YET: opening it is
-            // `ShellModel`'s, and the store is set when the core exists.
+            // `ShellModel`'s, and the store is published after its first snapshot.
             _ = ShellModel.shared
             guard let store = await installed(within: installWaitSeconds) else {
                 // NOT A FAILURE TO CLAIM AS SUCCESS. `false` is the honest
@@ -162,6 +161,14 @@ enum BackgroundPasses {
             Task { @MainActor in store?.windowExpired(name) }
             completion.finish(false)
         }
+    }
+
+    /// First finish runtime startup, then release cold platform callbacks. Startup
+    /// effects can run through the store directly without depending on publication.
+    @MainActor static func start(store: ScreenStore) async -> Bool {
+        guard await store.start() else { return false }
+        self.store = store
+        return true
     }
 
     /// The store, now or within [seconds], or nil.

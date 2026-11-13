@@ -198,6 +198,18 @@ impl Phone {
             .insert("vault-index-high-water".to_owned(), mark.to_string());
     }
 
+    /// The restore contract: persist each plan before adopting any foreground.
+    pub fn adopt_restored(&mut self, restored: &[vault::Restored]) -> vault::Effected<usize> {
+        for record in restored {
+            let writes = self
+                .shelf
+                .prepare_restored(record)
+                .expect("restore metadata prepares");
+            self.apply(&writes);
+        }
+        self.shelf.adopt_restored(restored)
+    }
+
     /// Launch: the first call starts the shelf's service and the fake shell
     /// answers its secret reads until it has opened every vault.
     pub fn launch(&mut self) {

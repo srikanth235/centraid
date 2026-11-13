@@ -28,10 +28,10 @@
 //! **The shell picks and stages; the screen files and attaches.** `PickFile` asks the
 //! platform's photo library (`KIND_PHOTO`) or file picker (`KIND_UPLOAD`) and streams the
 //! choice through the stage door; the answer names the staged blob. The photo or file is then
-//! made in Photos or Docs as it would be there (`photo.add`, `document.add`: identical bytes
-//! adopt the one that is there) and attached to the item with `attach`. Removing is `detach`:
-//! it takes the attachment off the item and nothing else, so the photo or file stays in its own
-//! app, and the confirm says so.
+//! made as it would be there: Photos adopts its existing photo for identical bytes; Docs makes
+//! a distinct document sharing the stored bytes (`photo.add`, `document.add`). It is attached
+//! with `attach`. Removing or undoing the attachment is `detach`: only the edge goes, so the
+//! photo or document stays in its own app, and the remove confirm says so.
 //!
 //! **A tap opens the photo or file where it lives.** A row carries the route of Photos' viewer
 //! or of the Docs page; the shell pushes it, and this section names no screen of its own.
@@ -52,7 +52,7 @@ use crate::kit::read::{self, Reading};
 use crate::kit::undo::Undo;
 use crate::screen::Ctx;
 use crate::shell::row_routes::{self, RowRef};
-use crate::strings::{Locale, agenda as agenda_words, agenda_event as words, fill};
+use crate::strings::{Locale, agenda_event as words, fill};
 
 /// Rows a first read asks for, and a Show more.
 const PAGE: usize = 30;
@@ -332,6 +332,7 @@ impl Attachments {
             .map(|row| row.attachment_id.clone())
             .collect();
         let busy = self.waiting.as_ref();
+        let parent = crate::shell::home::app_name(locale, self.app);
         wire::AgendaAttachmentsSection {
             heading: if self.items.is_empty() || self.next.is_some() {
                 words::attachments_heading(locale)
@@ -344,7 +345,7 @@ impl Attachments {
             items: self
                 .items
                 .iter()
-                .map(|row| tile(locale, units, row, &photos))
+                .map(|row| tile(locale, units, row, &photos, &parent))
                 .collect(),
             empty_label: if self.read == Loaded::Read && self.items.is_empty() {
                 words::attachments_empty(locale)
@@ -401,6 +402,7 @@ fn tile(
     units: UnitsPref,
     row: &wire::AgendaAttachmentRow,
     photos: &[String],
+    parent: &str,
 ) -> wire::AgendaAttachmentTile {
     let is_photo = row.kind == PHOTO;
     let kind = kind_label(locale, row);
@@ -438,7 +440,7 @@ fn tile(
         .iter()
         .map(|id| RowRef::new("photos", PHOTO, id, ""))
         .collect();
-    let route = row_routes::route(&row_ref, &agenda_words::app_title(locale), &beside);
+    let route = row_routes::route(&row_ref, parent, &beside);
     wire::AgendaAttachmentTile {
         attachment_id: row.attachment_id.clone(),
         accessibility_label: fill(
@@ -578,6 +580,49 @@ pub fn media_type_of(name: &str, stated: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn attached_documents_keep_their_host_as_back_context_without_changing_the_target() {
+        for app in [
+            "calendar",
+            "reminders",
+            "notes",
+            "people",
+            "docs",
+            "photos",
+            "money",
+            "health",
+        ] {
+            let mut attachments = Attachments::of(app, "host-item");
+            attachments.items.push(wire::AgendaAttachmentRow {
+                attachment_id: "attached-document".to_owned(),
+                kind: "document".to_owned(),
+                title: Some("Public attachment.txt".to_owned()),
+                media_type: "text/plain".to_owned(),
+                ..Default::default()
+            });
+            let section = attachments.view(Locale::En, UnitsPref::Metric);
+            let route = section.items[0].route.as_ref().expect("document route");
+            let target = row_routes::route(
+                &RowRef::new(
+                    "docs",
+                    "document",
+                    "attached-document",
+                    "Public attachment.txt",
+                ),
+                "",
+                &[],
+            )
+            .expect("the shared row table names the document page");
+            assert_eq!(route.screen, target.screen);
+            let Some(wire::route::Args::DocsDocument(args)) = &route.args else {
+                panic!("attached file must retain its Docs document route");
+            };
+            assert_eq!(args.document_id, "attached-document");
+            assert_eq!(args.title, "Public attachment.txt");
+            assert_eq!(args.parent, crate::shell::home::app_name(Locale::En, app));
+        }
+    }
 
     fn picked(name: &str) -> wire::FilePicked {
         wire::FilePicked {

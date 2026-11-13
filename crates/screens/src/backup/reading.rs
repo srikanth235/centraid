@@ -74,6 +74,15 @@ impl Reading {
         self.content_total.saturating_sub(self.content_confirmed)
     }
 
+    /// Record rows written since the latest snapshot a gateway acknowledged.
+    /// File acknowledgements alone do not cover these later changes.
+    #[must_use]
+    pub fn edits_waiting(&self) -> u64 {
+        self.apps
+            .iter()
+            .fold(0_u64, |count, app| count.saturating_add(app.edits_waiting))
+    }
+
     /// Items waiting for `reason`.
     #[must_use]
     pub fn waiting_for(&self, reason: wire::WaitReason) -> u64 {

@@ -28,6 +28,8 @@ struct AgendaHomeView: View {
     /// (as an editor's is, product-intuition/references/design-behaviour.md § Rooms), so the bar sits on the
     /// keyboard and not behind it, and a scroll or the Done key lets it go.
     @State private var quickAddTyping = false
+    /// A supplied destination waits until More has actually left the presentation stack.
+    @State private var moreRoute: Centraid_Core_V1_Route?
 
     var body: some View {
         // The gate has no band, search or add.
@@ -152,8 +154,17 @@ struct AgendaHomeView: View {
                 }
             }
         }
-        .sheet(isPresented: sheetBinding(state, .more)) {
-            AgendaMoreSheet(state: state, send: send, open: open)
+        .sheet(isPresented: sheetBinding(state, .more), onDismiss: {
+            guard let route = moreRoute else { return }
+            moreRoute = nil
+            open(route)
+        }) {
+            AgendaMoreSheet(state: state, send: send, open: { route in
+                moreRoute = route
+                // A routed row leaves More, including Export, whose MoreRow event does not
+                // change the Calendar sheet. Rust closes it; onDismiss then pushes the route.
+                send(AgendaEvents.make { $0.sheetClosed = .init() })
+            })
         }
         .sheet(isPresented: sheetBinding(state, .reads)) {
             AgendaReadsSheet(chrome: state.chrome)
@@ -1003,8 +1014,11 @@ private struct AgendaMoreSheet: View {
                             selected: row.toggle && row.on,
                             identifier: "agenda-more-\(row.key)"
                         ) {
-                            send(AgendaEvents.make { $0.moreRow = .with { $0.key = row.key } })
-                            if row.hasRoute { open(row.route) }
+                            if row.hasRoute {
+                                open(row.route)
+                            } else {
+                                send(AgendaEvents.make { $0.moreRow = .with { $0.key = row.key } })
+                            }
                         }
                         .accessibilityLabel(row.spoken.isEmpty ? row.label : row.spoken)
                         // A CALENDAR'S EDIT CONTROL (rename, colour, icon): icon-only, so it is labelled.

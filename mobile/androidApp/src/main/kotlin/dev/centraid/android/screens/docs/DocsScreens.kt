@@ -334,8 +334,10 @@ internal fun DocsDriveScreen(
             trailing = add,
             filter = filter,
             app = "docs",
-            status = state.status?.sentence.orEmpty(),
-            statusLine = adding,
+            statusLine = {
+                StatusLine(state.status, actTag = "docs-status-action")
+                adding?.invoke()
+            },
             content = body,
         )
     } else {
@@ -346,8 +348,10 @@ internal fun DocsDriveScreen(
             trailing = add,
             search = search,
             filter = filter,
-            status = state.status?.sentence.orEmpty(),
-            statusLine = adding,
+            statusLine = {
+                StatusLine(state.status, actTag = "docs-status-action")
+                adding?.invoke()
+            },
             band = {
                 // MORE IS ONE OF RUST'S TABS (R-CHROME-4), drawn as a
                 // tab and not as the kit's More.
@@ -633,7 +637,7 @@ internal fun DocsDocumentScreen(
         } else {
             null
         },
-        status = state.status?.sentence.orEmpty(),
+        statusLine = { StatusLine(state.status, actTag = "docs-status-action") },
     ) {
         ReadStateView(
             page = state.page!!,

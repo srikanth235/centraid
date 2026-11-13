@@ -25,12 +25,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * THE SHELL'S WHOLE VIEW OF THE SCREEN RUNTIME (#1135, lane C2).
  *
  * Every decision a person sees is made in Rust (`crates/screens`); this class
- * only carries it. It sends events, keeps the latest [Navigation] and
+ * only carries it. It serializes screen requests before the core dispatcher hop,
+ * so keystrokes reach Rust in submission order. It keeps the latest [Navigation] and
  * [ViewState] per screen instance for Compose to draw, and hands the platform
  * work Rust asks for ([effects]) to the shell, which answers with [answer].
  * There is no copy, no count and no timer here, and nothing in this file names
@@ -49,6 +52,10 @@ public class Screens(
     public val core: CentraidCore,
     private val scope: CoroutineScope,
 ) {
+    // Acquire before core.call hops dispatcher: concurrent IO scheduling must not
+    // apply an older keystroke after a newer one. Other core doors and the event
+    // reader keep their existing concurrency and handle-lifetime protection.
+    private val requests = Mutex()
     private val navigationState = MutableStateFlow<Navigation?>(null)
     private val viewStates = MutableStateFlow<Map<Long, ViewState>>(emptyMap())
     private val pendingEffects = Channel<EffectRequest>(Channel.UNLIMITED)
@@ -134,11 +141,13 @@ public class Screens(
         )
 
     private suspend fun request(screen: ScreenRequest): CoreOutcome<Unit> =
-        when (val outcome = core.call(Envelope(request_id = 0, request = Request(screen = screen)))) {
-            is CoreOutcome.Failed -> outcome
-            is CoreOutcome.Answered -> {
-                outcome.value.response?.screen?.update?.let(::apply)
-                CoreOutcome.Answered(Unit)
+        requests.withLock {
+            when (val outcome = core.call(Envelope(request_id = 0, request = Request(screen = screen)))) {
+                is CoreOutcome.Failed -> outcome
+                is CoreOutcome.Answered -> {
+                    outcome.value.response?.screen?.update?.let(::apply)
+                    CoreOutcome.Answered(Unit)
+                }
             }
         }
 

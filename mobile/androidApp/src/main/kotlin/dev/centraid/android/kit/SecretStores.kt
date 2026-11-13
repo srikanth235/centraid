@@ -52,6 +52,9 @@ internal object SecretStores {
     private const val INDEX = PREFIX + "\u0000names"
     private const val ADOPTED = "centraid.v1.legacy-adopted"
     private val keyLock = Any()
+    // Every ShellEffects instance shares the device value/index mutation boundary.
+    // Block Store awaits stay outside it; only synchronous local operations enter.
+    private val deviceMutations = DeviceSecretMutations()
 
     /** Run [batch] in order, one answer per op. */
     suspend fun run(context: Context, batch: SecretBatch): SecretBatched =
@@ -76,8 +79,12 @@ internal object SecretStores {
         val value = op.value_.utf8()
         return when (op.op) {
             SecretOp.Op.OP_GET -> {
-                val held = if (synced) syncedGet(context, op.key) else deviceGet(context, op.key)
-                SecretAnswer(ok = true, found = held != null, value_ = (held ?: "").encodeToByteString())
+                if (synced) {
+                    val held = syncedGet(context, op.key)
+                    SecretAnswer(ok = true, found = held != null, value_ = (held ?: "").encodeToByteString())
+                } else {
+                    deviceSecretAnswer { deviceRead(context, op.key) }
+                }
             }
             SecretOp.Op.OP_SET -> when {
                 // An empty value deletes: an empty secret that reads back as present is a credential the app believes it has.
@@ -110,32 +117,47 @@ internal object SecretStores {
     private fun preferences(context: Context) = context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE)
 
     private fun deviceGet(context: Context, key: String): String? = try {
-        val name = PREFIX + key
-        preferences(context).getString(nameOf(name), null)?.let { open(name, it) }
+        deviceRead(context, key)
     } catch (error: Exception) {
         null
     }
 
+    /** The effect's reader preserves failures; nullable legacy helpers keep their old contract. */
+    private fun deviceRead(context: Context, key: String): String? = deviceMutations.exclusive {
+        val name = PREFIX + key
+        preferences(context).getString(nameOf(name), null)?.let { open(name, it) }
+    }
+
     private fun deviceSet(context: Context, key: String, value: String): Boolean = try {
         val name = PREFIX + key
-        val written = preferences(context).edit().putString(nameOf(name), seal(name, value)).commit()
-        written && remember(context, key, add = true)
+        deviceMutations.change(
+            key = key,
+            present = true,
+            writeValue = { preferences(context).edit().putString(nameOf(name), seal(name, value)).commit() },
+            readNames = { indexNames(context) },
+            writeNames = { writeIndex(context, it) },
+        )
     } catch (error: Exception) {
         false
     }
 
     private fun deviceDelete(context: Context, key: String): Boolean = try {
         val name = PREFIX + key
-        val removed = preferences(context).edit().remove(nameOf(name)).commit()
-        removed && remember(context, key, add = false)
+        deviceMutations.change(
+            key = key,
+            present = false,
+            writeValue = { preferences(context).edit().remove(nameOf(name)).commit() },
+            readNames = { indexNames(context) },
+            writeNames = { writeIndex(context, it) },
+        )
     } catch (error: Exception) {
         false
     }
 
-    private fun deviceList(context: Context, prefix: String): List<Pair<String, String>> {
+    private fun deviceList(context: Context, prefix: String): List<Pair<String, String>> = deviceMutations.exclusive {
         adoptLegacy(context)
         val names = indexNames(context)
-        return names.filter { it.startsWith(prefix) }.mapNotNull { key -> deviceGet(context, key)?.let { key to it } }
+        names.filter { it.startsWith(prefix) }.mapNotNull { key -> deviceGet(context, key)?.let { key to it } }
     }
 
     /**
@@ -144,8 +166,8 @@ internal object SecretStores {
      * built from a vault's id (`vault-index.<id>`, `vault-own.<id>`) cannot be probed from here:
      * Rust asks for those by id once the shelf knows the vaults (`VaultSecrets::hydrate_ops`).
      */
-    private fun adoptLegacy(context: Context) {
-        if (preferences(context).getBoolean(ADOPTED, false)) return
+    private fun adoptLegacy(context: Context) = deviceMutations.exclusive {
+        if (preferences(context).getBoolean(ADOPTED, false)) return@exclusive
         val fixed = listOf(
             "recovery-seed.this-device", "recovery-words.this-device", "recovery-words-saved", "seed-settled",
             "vault-index-high-water", "vault-index-pending", "vault-seeds.this-device", "vault-seeds.to-file",
@@ -159,7 +181,7 @@ internal object SecretStores {
                     .filterTo(found) { deviceGet(context, it) != null }
             }
         val names = indexNames(context).toMutableSet().apply { addAll(found) }
-        val written = preferences(context).edit().putString(nameOf(INDEX), seal(INDEX, names.sorted().joinToString("\n"))).commit()
+        val written = writeIndex(context, names)
         if (written) preferences(context).edit().putBoolean(ADOPTED, true).apply()
     }
 
@@ -170,12 +192,9 @@ internal object SecretStores {
         emptySet()
     }
 
-    /** Keep the sealed index of written names in step with a set or a delete. */
-    private fun remember(context: Context, key: String, add: Boolean): Boolean {
-        val names = indexNames(context).toMutableSet()
-        if (add) names += key else names -= key
-        return preferences(context).edit().putString(nameOf(INDEX), seal(INDEX, names.sorted().joinToString("\n"))).commit()
-    }
+    /** Called only within the device mutation coordinator, including legacy adoption. */
+    private fun writeIndex(context: Context, names: Set<String>): Boolean =
+        preferences(context).edit().putString(nameOf(INDEX), seal(INDEX, names.sorted().joinToString("\n"))).commit()
 
     /** Every value AES-GCM sealed to its name, every name an HMAC: both keys in the Keystore. */
     private val sealing = SealedEntries(

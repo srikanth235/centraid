@@ -139,7 +139,7 @@ private struct PeoplePersonBody: View {
                 hero
                 heroActions
                 if state.hasStatus, !state.status.sentence.isEmpty {
-                    PeopleStatusLine(text: state.status.sentence)
+                    StatusLineView(status: state.status, identifier: "people-person-status-action")
                 }
 
                 SectionHeader(

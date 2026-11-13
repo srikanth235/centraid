@@ -261,8 +261,9 @@ internal fun Modifier.bandPress(onPress: () -> Unit): Modifier {
     val pressed by interaction.collectIsPressedAsState()
     val ground = if (pressed) Surface.fill else androidx.compose.ui.graphics.Color.Transparent
     return this
-        .clip(RoundedCornerShape(BandPolicy.BAND_RADIUS.dp))
-        .background(ground)
+        // Round only the press ground. Clipping the whole narrow tab cuts the
+        // lower corners off long labels such as Notebooks.
+        .background(ground, RoundedCornerShape(BandPolicy.BAND_RADIUS.dp))
         .clickable(interactionSource = interaction, indication = null, onClick = onPress)
 }
 

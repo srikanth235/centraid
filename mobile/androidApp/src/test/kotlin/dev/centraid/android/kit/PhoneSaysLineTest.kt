@@ -13,7 +13,7 @@ class PhoneSaysLineTest {
         lead = "Phone says Ada Lovelase",
         action_label = "Use phone’s",
         accessibility_label = "Use the name your phone has, Ada Lovelase",
-        take = PhoneSaysTake(field = "name"),
+        take = PhoneSaysTake(field_ = "name"),
     )
 
     @Test
@@ -42,7 +42,7 @@ class PhoneSaysLineTest {
 
     @Test
     fun anItemOfAFieldIsIdentifiedByFieldAndItem() {
-        val ids = phoneSaysIds(PhoneSaysTake(field = "channels", item_key = "email:ada@lovelace.example"))
+        val ids = phoneSaysIds(PhoneSaysTake(field_ = "channels", item_key = "email:ada@lovelace.example"))
         assertEquals("phone-says-channels-email:ada@lovelace.example", ids.line)
         assertEquals("phone-says-take-channels-email:ada@lovelace.example", ids.take)
     }

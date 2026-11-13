@@ -54,7 +54,7 @@ struct PeopleHomeView: View {
         } content: {
             VStack(spacing: 0) {
                 if state.hasStatus, !state.status.sentence.isEmpty {
-                    PeopleStatusLine(text: state.status.sentence)
+                    StatusLineView(status: state.status, identifier: "people-status-action")
                 }
                 PageReadStateView(
                     page: state.page,

@@ -314,21 +314,11 @@ struct DocsRenameField: View {
     }
 }
 
-/// A write refused, said where the member is looking: the core's own sentence.
+/// The core's whole write outcome, including its Undo verb when an inverse exists.
 struct DocsWriteLine: View {
     let status: Centraid_Core_V1_StatusLine
 
-    @Environment(\.colorScheme) private var scheme
-
     var body: some View {
-        if !status.sentence.isEmpty {
-            Text(status.sentence)
-                .centraidType("small")
-                .foregroundStyle(Theme.color("net", scheme))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, CentraidGeometry.pageMargin)
-                .padding(.vertical, 6)
-                .accessibilityIdentifier("docs-write-refused")
-        }
+        StatusLineView(status: status, identifier: "docs-status-action")
     }
 }

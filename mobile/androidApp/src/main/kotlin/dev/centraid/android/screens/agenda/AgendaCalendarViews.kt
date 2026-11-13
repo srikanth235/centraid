@@ -3,6 +3,7 @@ package dev.centraid.android.screens.agenda
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -276,7 +278,20 @@ private fun AgendaAllDayLane(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(header.all_day_label, style = kitTextStyle(KitType.Badge), color = Surface.meta, modifier = Modifier.width(GUTTER_WIDTH))
-        header.all_day.forEach { chip -> AllDayChip(chip, onOpen, onCheck, Modifier.weight(1f)) }
+        BoxWithConstraints(Modifier.weight(1f)) {
+            val laneWidth = maxWidth
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                header.all_day.forEach { chip ->
+                    AllDayChip(
+                        chip, onOpen, onCheck,
+                        Modifier.widthIn(max = laneWidth).heightIn(min = KitGeometry.ROW_MIN),
+                    )
+                }
+            }
+        }
     }
     Box(Modifier.fillMaxWidth().height(KitGeometry.HAIRLINE).background(Surface.line))
 }

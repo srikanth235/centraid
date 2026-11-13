@@ -528,7 +528,7 @@ fn restore_asks_nothing_and_brings_the_document_back_where_it_was() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn the_quick_look_bar_is_share_star_labels_move_trash_and_the_card_says_what_it_is() {
+fn the_quick_look_bar_offers_download_for_absent_bytes_and_the_card_says_what_it_is() {
     let mut d = driver();
     let folder_id = folder(&d, "Taxes 2025", None);
     let id = pdf(&d, "Passport scan.pdf", 'd');
@@ -542,7 +542,10 @@ fn the_quick_look_bar_is_share_star_labels_move_trash_and_the_card_says_what_it_
     let i = open(&mut d, &id, "Passport scan.pdf", "Recents");
     let data = document_data(d.view(i));
     let bar: Vec<&str> = data.bar.iter().map(|action| action.key.as_str()).collect();
-    assert_eq!(bar, ["share", "star", "labels", "move", "trash"]);
+    assert_eq!(
+        bar,
+        ["download-original", "star", "labels", "move", "trash"]
+    );
     assert!(data.bar.last().unwrap().destructive);
     assert_eq!(data.subtitle, "Docs \u{203a} Taxes 2025");
     assert_eq!(data.kind_size, "PDF \u{b7} 2 KB");
@@ -559,9 +562,9 @@ fn the_quick_look_bar_is_share_star_labels_move_trash_and_the_card_says_what_it_
 }
 
 #[test]
-fn share_hands_the_file_to_the_platform_or_says_it_is_not_here() {
+fn a_missing_original_offers_download_instead_of_share_and_a_stray_share_asks_nothing() {
     let mut d = driver();
-    // A PDF over bytes nobody stored: nothing to hand over, and the sentence says so.
+    // A PDF over bytes nobody stored offers retrieval; a stale Share event asks nothing.
     let id = pdf(&d, "Lease.pdf", 'e');
     let i = open(&mut d, &id, "Lease.pdf", "Recents");
     pick_doc(&mut d, i, "share");
@@ -571,9 +574,16 @@ fn share_hands_the_file_to_the_platform_or_says_it_is_not_here() {
             .all(|effect| !matches!(effect.kind, Some(wire::effect::Kind::ShareFile(_)))),
         "no file, no share sheet"
     );
-    assert_eq!(
-        document_state(d.view(i)).status.as_ref().unwrap().sentence,
-        "This document isn't on this phone yet."
+    let data = document_data(d.view(i));
+    assert_eq!(data.bar[0].key, "download-original");
+    assert!(
+        data.actions
+            .iter()
+            .any(|action| action.key == "download-original" && action.enabled)
+    );
+    assert!(
+        document_state(d.view(i)).status.is_none(),
+        "an unoffered Share does nothing"
     );
     // And no owner check was raised for a share that cannot happen.
     assert!(

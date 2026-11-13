@@ -27,6 +27,7 @@ catalog! {
     counted backup_app_health_days = ("{count} day", "{count} days");
     counted backup_app_health_workouts = ("{count} workout", "{count} workouts");
     counted backup_app_left_out = ("{count} video, {size}, left out", "{count} videos, {size}, left out");
+    counted backup_app_left_out_count = ("{count} video left out", "{count} videos left out");
     counted backup_app_locker = ("{count} item", "{count} items");
     counted backup_app_money = ("{count} transaction", "{count} transactions");
     plain backup_app_not_backed_up = ("Not backed up", "Not backed up");
@@ -34,7 +35,6 @@ catalog! {
     plain backup_app_of = ("{confirmed} of {what}", "{confirmed} of {what}");
     counted backup_app_people = ("{count} person", "{count} people");
     counted backup_app_photos = ("{count} photo or video", "{count} photos and videos");
-    counted backup_app_photos_only = ("{count} photo", "{count} photos");
     plain backup_app_waiting = ("{count} waiting", "{count} waiting");
     counted backup_apps = ("{count} app", "{count} apps");
     plain backup_apps_heading = ("In this backup", "In this backup");

@@ -763,17 +763,16 @@ impl Screen for Transaction {
             Some(E::MoneyTransaction(t)) => return self.event(t, ctx),
             // THE SHELL'S ANSWER to the owner check or the share sheet.
             Some(E::EffectResult(result)) => {
+                // A pending pick owns its replies, even while an earlier share's sentence remains.
+                if let Some(outcome) = &result.outcome
+                    && let Some(effects) = self.attachments.result(ctx, outcome)
+                {
+                    return effects;
+                }
                 let id = self.txn_id.clone();
-                let shared = self.share.result(ctx, &result, |ctx| {
+                return self.share.result(ctx, &result, |ctx| {
                     super::export::file(ctx, None, Some(&id))
                 });
-                if !shared.is_empty() || self.share.status().is_some() {
-                    return shared;
-                }
-                // The shell's answer to a pick: the attachments' (an add under way).
-                if let Some(outcome) = &result.outcome {
-                    return self.attachments.result(ctx, outcome).unwrap_or_default();
-                }
             }
             Some(E::StatusActed(_)) => {
                 if self.undo.acted(ctx) {

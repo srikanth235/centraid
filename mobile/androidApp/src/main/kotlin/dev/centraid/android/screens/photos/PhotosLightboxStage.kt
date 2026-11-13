@@ -78,6 +78,7 @@ import centraid.core.v1.PhotosLightboxState
 import dev.centraid.android.screens.decodeUpright
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.StageKey
+import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.rememberReducedMotion
 import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
@@ -511,15 +512,16 @@ internal fun PlayerSurface(player: LightboxPlayer) {
  * it is the clock the strip is drawing.
  */
 @Composable
-internal fun LightboxTransport(player: LightboxPlayer, words: centraid.core.v1.PhotosLightboxWords) {
-    LightboxTransport(player, words.play, words.pause, words.player_position, words.player_position_value)
+internal fun LightboxTransport(player: LightboxPlayer, words: centraid.core.v1.PhotosLightboxWords, light: Boolean = false) {
+    LightboxTransport(player, words.play, words.pause, words.player_position, words.player_position_value, light)
 }
 
 /** The same transport with its words given one by one (a document's stage carries its own). */
 @Composable
-internal fun LightboxTransport(player: LightboxPlayer, play: String, pause: String, position: String, positionValue: String) {
-    val ink = centraidColor("onStage")
-    val soft = centraidColor("onStageSoft")
+internal fun LightboxTransport(player: LightboxPlayer, play: String, pause: String, position: String, positionValue: String, light: Boolean = false) {
+    val ink = if (light) Surface.ink else centraidColor("onStage")
+    val soft = if (light) Surface.meta else centraidColor("onStageSoft")
+    val line = if (light) Surface.line else centraidColor("stageLine")
     val fraction = if (player.duration > 0L) player.position.toFloat() / player.duration else 0f
     Row(
         modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
@@ -530,6 +532,7 @@ internal fun LightboxTransport(player: LightboxPlayer, play: String, pause: Stri
             iconKey = if (player.playing) "Pause" else "Play",
             label = if (player.playing) pause else play,
             onClick = { player.toggle() },
+            light = light,
         )
         // The strip's width is the pointer scope's `size`; nothing reads the
         // layout's constraints.
@@ -557,7 +560,7 @@ internal fun LightboxTransport(player: LightboxPlayer, play: String, pause: Stri
                 Modifier
                     .fillMaxWidth()
                     .height(2.dp)
-                    .background(centraidColor("stageLine")),
+                    .background(line),
             )
             Box(
                 Modifier

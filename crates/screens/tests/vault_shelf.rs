@@ -665,7 +665,7 @@ fn a_restored_vaults_own_directory_is_a_holding_keyed_at_the_restores_index() {
     let laid = phone.dir.join("0a1b2c3d4e5f6071");
     std::fs::rename(dir.join("0a1b2c3d4e5f6071"), &laid).expect("moved in");
     let path = laid.join(files::VAULT_FILE).to_string_lossy().into_owned();
-    let adopted = phone.shelf.adopt_restored(&[Restored {
+    let adopted = phone.adopt_restored(&[Restored {
         path,
         index: 3,
         own: None,
@@ -708,7 +708,7 @@ fn a_restored_vault_this_phone_already_holds_is_not_added_twice() {
         .join(files::VAULT_FILE)
         .to_string_lossy()
         .into_owned();
-    let adopted = phone.shelf.adopt_restored(&[Restored {
+    let adopted = phone.adopt_restored(&[Restored {
         path,
         index: 0,
         own: None,
@@ -938,8 +938,9 @@ fn a_vault_file_outside_the_shelfs_own_directories_loses_its_holding_and_not_its
     let elsewhere = scratch();
     let id = lay_down(&elsewhere, "keep", "Elsewhere");
     let mut phone = Phone::on(&dir, None);
+    phone.keep_seed();
     phone.launch();
-    let adopted = phone.shelf.adopt_restored(&[Restored {
+    let adopted = phone.adopt_restored(&[Restored {
         path: elsewhere
             .join("keep")
             .join(files::VAULT_FILE)

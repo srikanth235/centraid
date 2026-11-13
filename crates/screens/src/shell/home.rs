@@ -789,7 +789,7 @@ pub(crate) fn app_name(locale: Locale, app: &str) -> String {
 fn empty_copy(locale: Locale, app: &str) -> String {
     match app {
         "calendar" => words::tile_empty_calendar(locale),
-        "reminders" => words::tile_empty_reminders(locale),
+        "reminders" => crate::strings::agenda_glance::no_reminders(locale),
         "docs" => words::tile_empty_docs(locale),
         "health" => words::tile_empty_health(locale),
         "locker" => words::tile_empty_locker(locale),

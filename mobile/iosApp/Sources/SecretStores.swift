@@ -57,11 +57,7 @@ enum SecretStores {
         var answer = Centraid_Core_V1_SecretAnswer()
         switch op.op {
         case .get:
-            answer.ok = true
-            if let value = read(store, key: op.key) {
-                answer.found = true
-                answer.value = value
-            }
+            answer = readAnswer(store, key: op.key)
         case .set:
             if op.value.isEmpty {
                 answer.ok = delete(store, key: op.key)
@@ -101,12 +97,30 @@ enum SecretStores {
     }
 
     private static func read(_ store: Store, key: String) -> Data? {
+        let answer = readAnswer(store, key: key)
+        return answer.ok && answer.found ? answer.value : nil
+    }
+
+    private static func readAnswer(_ store: Store, key: String) -> Centraid_Core_V1_SecretAnswer {
         var request = query(store, key: key)
         request[kSecReturnData as String] = kCFBooleanTrue
         request[kSecMatchLimit as String] = kSecMatchLimitOne
         var found: CFTypeRef?
-        guard SecItemCopyMatching(request as CFDictionary, &found) == errSecSuccess else { return nil }
-        return found as? Data
+        let status = SecItemCopyMatching(request as CFDictionary, &found)
+        return answerForRead(status: status, data: found as? Data)
+    }
+
+    /// Only an absent item means missing; locked, refused or malformed replies remain failures.
+    static func answerForRead(status: OSStatus, data: Data?) -> Centraid_Core_V1_SecretAnswer {
+        var answer = Centraid_Core_V1_SecretAnswer()
+        if status == errSecItemNotFound {
+            answer.ok = true
+        } else if status == errSecSuccess, let data {
+            answer.ok = true
+            answer.found = true
+            answer.value = data
+        }
+        return answer
     }
 
     private static func write(_ store: Store, key: String, value: Data) -> Bool {

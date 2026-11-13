@@ -1790,3 +1790,70 @@ fn a_send_that_is_not_confirmed_sends_nothing_and_a_phone_with_no_passcode_warns
     tap(&mut d, at, V::Download);
     assert!(export_of(effects_of(&mut d)).mode == wire::export_originals::Mode::Save as i32);
 }
+
+#[test]
+fn an_export_refusal_survives_an_unchanged_device_environment() {
+    let mut d = driver();
+    let id = photo(&d, Shot::new("lb-refused-environment"));
+    let at = open(&mut d, &id, &[], "");
+    d.effects.clear();
+    tap(&mut d, at, V::Share);
+    after_check(&mut d, at);
+    d.send(
+        at,
+        E::EffectResult(wire::EffectResult {
+            effect_id: 0,
+            outcome: Some(exported(
+                wire::originals_exported::Status::LocationNotRemovable,
+            )),
+        }),
+    );
+    let before = view(&d, at).status.expect("actual export refusal");
+    assert!(before.refused);
+    d.send(at, E::EnvironmentChanged(Default::default()));
+    assert_eq!(view(&d, at).status.as_ref(), Some(&before));
+    assert_eq!(view(&d, at).photo_id, id);
+}
+
+#[test]
+fn a_cancelled_zero_file_handoff_is_quiet_but_one_file_has_a_receipt() {
+    let mut d = driver();
+    let id = photo(&d, Shot::new("lb-cancelled-copy"));
+    let at = open(&mut d, &id, &[], "");
+    d.effects.clear();
+    for save in [false, true] {
+        for handed in [1, 0] {
+            tap(&mut d, at, if save { V::Download } else { V::Share });
+            if save {
+                effects_of(&mut d);
+            } else {
+                after_check(&mut d, at);
+            }
+            d.send(
+                at,
+                E::EffectResult(wire::EffectResult {
+                    effect_id: 0,
+                    outcome: Some(wire::effect_result::Outcome::OriginalsExported(
+                        wire::OriginalsExported {
+                            status: wire::originals_exported::Status::Done as i32,
+                            handed,
+                            missing: 0,
+                        },
+                    )),
+                }),
+            );
+            let state = view(&d, at);
+            if handed == 0 {
+                assert!(
+                    state.status.is_none(),
+                    "a cancelled chooser must not claim a handoff"
+                );
+            } else {
+                let receipt = state.status.expect("an actual one-file handoff");
+                assert!(!receipt.refused);
+                assert!(!receipt.sentence.is_empty());
+            }
+            assert_eq!(state.photo_id, id);
+        }
+    }
+}

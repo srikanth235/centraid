@@ -72,6 +72,12 @@ impl VaultRequest {
 
 /// What a screen runtime may ask of the core.
 pub trait ScreenCtx {
+    /// The mounted foreground vault's injected UTC clock, in milliseconds.
+    /// A host without a mounted vault clock reports absence rather than inventing an instant.
+    fn now_ms(&self) -> Option<i64> {
+        None
+    }
+
     /// The one read.
     ///
     /// # Errors
@@ -218,6 +224,13 @@ pub trait ScreenHost: Send + Sync {
 }
 
 impl ScreenCtx for HandleState {
+    fn now_ms(&self) -> Option<i64> {
+        if let Some(front) = self.foreground_if_shelved() {
+            return front.now_ms();
+        }
+        self.with_vault(|vault| Ok(vault.clock().now_ms())).ok()
+    }
+
     fn load(&self, request: &wire::LoadRequest) -> Result<wire::LoadResponse> {
         HandleState::load(self, request)
     }

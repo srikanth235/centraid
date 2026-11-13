@@ -75,7 +75,7 @@ fn every_app_says_what_it_holds_and_the_rows_add_up() {
     let photos = app(&backed, "photos");
     assert_eq!(
         (photos.items, photos.items_confirmed, photos.waiting),
-        (1, 1, 0),
+        (2, 1, 0),
         "{photos:?}"
     );
     assert_eq!(
@@ -130,4 +130,155 @@ fn a_vault_never_backed_up_holds_bytes_and_none_is_confirmed() {
     assert_eq!(unpaired.confirmed_bytes, 0, "{unpaired:?}");
     let photos = app(&unpaired, "photos");
     assert_eq!((photos.items, photos.waiting), (1, 1), "{photos:?}");
+}
+
+#[test]
+fn shared_originals_count_each_visible_app_item_without_copying_their_bytes() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    pair(&phone, &gateway);
+    let film = bytes_of("one public movie shown in Photos and Docs", 300_000);
+    let staged = stage(&phone, owned("video/mp4", &film), &film);
+    add_asset(&phone, &staged, "video");
+    let mut documents = Vec::new();
+    for n in 0..2 {
+        let made = command(
+            &phone,
+            "document.add",
+            &json!({
+                "blob": staged.content_hash,
+                "size": staged.byte_size,
+                "media_type": "video/mp4",
+                "title": format!("Public movie wrapper {n}"),
+            }),
+            &format!("shared-movie-document-{n}"),
+        );
+        documents.push(made["id"].as_str().expect("document id").to_owned());
+    }
+    let waiting = status(&phone);
+    assert_eq!(
+        (
+            app(&waiting, "photos").items,
+            app(&waiting, "photos").waiting
+        ),
+        (1, 1)
+    );
+    assert_eq!(
+        (app(&waiting, "docs").items, app(&waiting, "docs").waiting),
+        (2, 2)
+    );
+    assert_eq!(
+        waiting.content_total, 1,
+        "one physical original, three visible items"
+    );
+
+    drain(&phone, at_home());
+    let backed = status(&phone);
+    assert_eq!(
+        (
+            app(&backed, "photos").items,
+            app(&backed, "photos").items_confirmed
+        ),
+        (1, 1)
+    );
+    assert_eq!(
+        (
+            app(&backed, "docs").items,
+            app(&backed, "docs").items_confirmed
+        ),
+        (2, 2)
+    );
+    assert_eq!(backed.content_total, 1);
+    assert_eq!(backed.content_confirmed, 1);
+    assert_eq!(
+        backed.apps.iter().map(|row| row.bytes).sum::<u64>(),
+        backed.total_bytes
+    );
+    assert_eq!(backed.confirmed_bytes, backed.total_bytes);
+
+    command(
+        &phone,
+        "entity.trash",
+        &json!({ "id": documents[0] }),
+        "trash-public-wrapper",
+    );
+    let trashed = status(&phone);
+    assert_eq!(
+        app(&trashed, "docs").items,
+        1,
+        "trash retains bytes but is not a visible document"
+    );
+    assert_eq!(app(&trashed, "photos").items, 1);
+    assert_eq!(
+        trashed.content_total, 1,
+        "the shared original remains one file"
+    );
+}
+
+#[test]
+fn people_item_count_matches_the_visible_circle_and_keeps_hidden_records_in_backup() {
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    assert_eq!(
+        app(&status(&phone), "people").items,
+        0,
+        "the owner is not a circle item"
+    );
+    let person = command(
+        &phone,
+        "person.add",
+        &json!({"title":"Visible contact"}),
+        "visible-contact",
+    )["id"]
+        .as_str()
+        .expect("person id")
+        .to_owned();
+    command(
+        &phone,
+        "person.add",
+        &json!({"title":"A pet", "form":"pet"}),
+        "hidden-pet",
+    );
+    phone
+        .with_vault(|vault| {
+            let now = vault.clock().now_text();
+            Ok(vault.commit(|tx| {
+                tx.set_producer("test.entity_without_person_row");
+                tx.insert_entity(
+                    "orphan-person",
+                    centraid_vault::model::Kind::Person,
+                    "No person row",
+                    &now,
+                )?;
+                Ok(())
+            })?)
+        })
+        .expect("fixture entity");
+    let before = phone
+        .with_vault(|vault| {
+            Ok(centraid_vault::backup::holdings::holdings(vault, None).expect("holdings"))
+        })
+        .expect("vault");
+    assert_eq!(
+        before.live.get("person"),
+        Some(&4),
+        "hidden records remain in the raw backup weights"
+    );
+    assert_eq!(
+        app(&status(&phone), "people").items,
+        1,
+        "only the actual visible contact counts"
+    );
+    command(
+        &phone,
+        "entity.trash",
+        &json!({"id":person}),
+        "trash-visible-contact",
+    );
+    assert_eq!(
+        app(&status(&phone), "people").items,
+        0,
+        "trash is outside the circle"
+    );
 }

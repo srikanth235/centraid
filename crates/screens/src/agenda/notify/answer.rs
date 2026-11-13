@@ -6,24 +6,23 @@
 //! phone says now ("Task done", the task's title under it) that carries Undo
 //! when the core knows an inverse. A repeating task's completion has no Undo:
 //! the engine has opened its next occurrence already, and reopening this one
-//! would leave two open copies of one series. A snooze and a move to tomorrow
-//! undo by putting the due and the lead back as they were read: the core has no
-//! inverse for an edit.
+//! would leave two open copies of one series. Undo names the action's actual
+//! history change, so later edits to the same fields are never overwritten.
 
 use std::collections::BTreeMap;
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_vault::time::{FireZone, parse_civil_ms};
 
-use super::desired::{RECEIPT, THREAD};
+pub use super::receipt::Receipt;
 use crate::calendar::routes as calendar_routes;
 use crate::catalog::act;
 use crate::field::Field;
 use crate::kit::act::{self as kit_act, Settled};
 use crate::kit::civil;
+use crate::kit::stale;
 use crate::reminders::routes as reminder_routes;
 use crate::screen::Ctx;
-use crate::strings::{agenda_notify as words, task as task_words};
 
 /// What a notification's id names.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -106,10 +105,6 @@ pub struct TaskFacts {
     pub title: String,
     pub repeats: bool,
     pub due_time: String,
-    /// The due as the member set it, to put back on Undo (the core has no
-    /// inverse for an edit).
-    pub due: String,
-    pub remind_before_min: Option<i64>,
 }
 
 /// What the last read says about an event occurrence, enough to open it.
@@ -149,12 +144,6 @@ impl Facts {
                             title: task.title.clone(),
                             repeats: task.repeats,
                             due_time: task.due_time.clone(),
-                            due: if task.due_local.is_empty() {
-                                task.due_day.clone()
-                            } else {
-                                task.due_local.clone()
-                            },
-                            remind_before_min: task.remind_before_min,
                         },
                     )
                 })
@@ -178,14 +167,6 @@ impl Facts {
     }
 }
 
-/// The receipt held after a button: what the phone said, and how to undo it.
-#[derive(Clone, Debug)]
-pub struct Receipt {
-    pub notification: wire::PendingNotification,
-    pub task_id: String,
-    undo: Option<wire::ActRequest>,
-}
-
 /// What one answer came to.
 #[derive(Debug)]
 pub enum Handled {
@@ -195,65 +176,14 @@ pub enum Handled {
     Committed(Box<Receipt>),
     /// The write was refused: no receipt, the set is read again.
     Refused,
-    /// Undo ran (or was refused): the receipt is dropped.
-    Undone,
+    /// Persist the accepted gesture before running this guarded inverse.
+    Undo(Box<Receipt>),
     /// Open this.
     Open(Box<wire::Route>),
 }
 
-fn receipt(
-    ctx: &Ctx,
-    vault: &str,
-    task_id: &str,
-    title: &str,
-    heading: String,
-    undo: Option<wire::ActRequest>,
-) -> Receipt {
-    let locale = ctx.locale();
-    let seq = kit_act::fresh();
-    Receipt {
-        notification: wire::PendingNotification {
-            notification_id: format!("receipt|{vault}|{seq}"),
-            fire_local: String::new(),
-            zone: ctx.zone().to_owned(),
-            fire_at_ms: 0,
-            title: heading,
-            body: if title.trim().is_empty() {
-                task_words::untitled(locale)
-            } else {
-                title.to_owned()
-            },
-            category_id: if undo.is_some() {
-                RECEIPT.to_owned()
-            } else {
-                String::new()
-            },
-            thread_id: THREAD.to_owned(),
-            immediate: true,
-        },
-        task_id: task_id.to_owned(),
-        undo,
-    }
-}
-
 fn key(verb: &str, id: &str) -> String {
     kit_act::key(&["notify", verb, id], kit_act::fresh())
-}
-
-/// The edit that puts a task's due and lead back as they were: the core has no
-/// inverse for an edit, so the one Undo sends is made from what was read.
-fn put_back(task_id: &str, task: &TaskFacts) -> wire::ActRequest {
-    act::reminders::EditTask {
-        task_id: task_id.to_owned(),
-        due: if task.due.is_empty() {
-            Field::Clear
-        } else {
-            Field::Is(task.due.clone())
-        },
-        remind_before_min: task.remind_before_min.map_or(Field::Clear, Field::Is),
-        ..Default::default()
-    }
-    .request()
 }
 
 fn edit(ctx: &Ctx, task_id: &str, due: String, lead: Field<i64>) -> Settled {
@@ -268,6 +198,29 @@ fn edit(ctx: &Ctx, task_id: &str, due: String, lead: Field<i64>) -> Settled {
         },
         &key("edit-task", task_id),
     )
+}
+
+/// Whether a valid task button can replace the current receipt. Invalid or foreign
+/// notifications must never discard the member's still-live Undo.
+pub fn replaces(vault: &str, facts: &Facts, answered: &wire::NotificationAnswered) -> bool {
+    let Some(Target::Task {
+        vault: target_vault,
+        task_id,
+    }) = parse(&answered.notification_id)
+    else {
+        return false;
+    };
+    if target_vault != vault {
+        return false;
+    }
+    let Some(task) = facts.tasks.get(&task_id) else {
+        return false;
+    };
+    match wire::NotificationVerb::try_from(answered.verb) {
+        Ok(wire::NotificationVerb::Done) => true,
+        Ok(wire::NotificationVerb::SnoozeHour | wire::NotificationVerb::Tomorrow) => !task.repeats,
+        _ => false,
+    }
 }
 
 /// Answer `answered`, for the vault in front. `held` is the receipt on hold.
@@ -289,7 +242,6 @@ pub fn handle(
     let Ok(verb) = Verb::try_from(answered.verb) else {
         return Handled::Ignored;
     };
-    let locale = ctx.locale();
     match (target, verb) {
         (Target::Task { task_id, .. }, Verb::Open) => {
             Handled::Open(Box::new(reminder_routes::task(&task_id)))
@@ -321,11 +273,9 @@ pub fn handle(
             else {
                 return Handled::Ignored;
             };
-            if let Some(request) = held.undo.clone() {
-                // undo-exempt: this is the receipt's own Undo.
-                kit_act::act(ctx, request, &key("undo", &held.task_id));
-            }
-            Handled::Undone
+            ctx.now_ms()
+                .and_then(|now| held.request_undo(now))
+                .map_or(Handled::Ignored, |receipt| Handled::Undo(Box::new(receipt)))
         }
         (Target::Task { vault, task_id }, verb) => {
             let Some(task) = facts.tasks.get(&task_id) else {
@@ -333,6 +283,7 @@ pub fn handle(
             };
             match verb {
                 Verb::Done => {
+                    let before = stale::read_rev(ctx, &task_id);
                     // undo-exempt: a notification has no status line; its receipt offers the Undo.
                     let settled = kit_act::act(
                         ctx,
@@ -342,26 +293,15 @@ pub fn handle(
                         &key("complete-task", &task_id),
                     );
                     // A REPEATING TASK'S COMPLETION HAS NO UNDO: its next occurrence is open already.
-                    let undo = settled
-                        .inverse
-                        .clone()
-                        .filter(|_| !task.repeats)
-                        .map(|inverse| wire::ActRequest {
-                            app: act::reminders::APP.to_owned(),
-                            action: inverse.action,
-                            input: inverse.input,
-                            invoke_key: String::new(),
-                            autosave: false,
-                        });
-                    done(
-                        ctx,
-                        &vault,
-                        &task_id,
-                        task,
-                        settled,
-                        task_words::task_done(locale),
-                        undo,
-                    )
+                    let seq = if !task.repeats && settled.committed && settled.inverse.is_some() {
+                        before.and_then(|before| {
+                            stale::read_rev(ctx, &task_id)
+                                .filter(|after| before.checked_add(1) == Some(*after))
+                        })
+                    } else {
+                        None
+                    };
+                    done(ctx, &vault, &task_id, task, settled, Verb::Done as i32, seq)
                 }
                 // MOVING A REPEATING TASK'S DUE WOULD MOVE THE WHOLE SERIES.
                 Verb::SnoozeHour if !task.repeats => {
@@ -369,14 +309,15 @@ pub fn handle(
                         return Handled::Refused;
                     };
                     let settled = edit(ctx, &task_id, due, Field::Is(0));
+                    let seq = inverse_seq(&settled);
                     done(
                         ctx,
                         &vault,
                         &task_id,
                         task,
                         settled,
-                        words::snoozed_hour(locale),
-                        Some(put_back(&task_id, task)),
+                        Verb::SnoozeHour as i32,
+                        seq,
                     )
                 }
                 Verb::Tomorrow if !task.repeats => {
@@ -384,14 +325,15 @@ pub fn handle(
                         return Handled::Refused;
                     };
                     let settled = edit(ctx, &task_id, due, Field::Keep);
+                    let seq = inverse_seq(&settled);
                     done(
                         ctx,
                         &vault,
                         &task_id,
                         task,
                         settled,
-                        words::moved_tomorrow(locale),
-                        Some(put_back(&task_id, task)),
+                        Verb::Tomorrow as i32,
+                        seq,
                     )
                 }
                 _ => Handled::Ignored,
@@ -407,20 +349,26 @@ fn done(
     task_id: &str,
     task: &TaskFacts,
     settled: Settled,
-    heading: String,
-    undo: Option<wire::ActRequest>,
+    verb: i32,
+    seq: Option<i64>,
 ) -> Handled {
     if !settled.committed {
         return Handled::Refused;
     }
-    Handled::Committed(Box::new(receipt(
-        ctx,
-        vault,
-        task_id,
-        &task.title,
-        heading,
-        undo,
-    )))
+    Receipt::made(ctx, vault, task_id, &task.title, verb, seq).map_or(Handled::Refused, |receipt| {
+        Handled::Committed(Box::new(receipt))
+    })
+}
+
+fn inverse_seq(settled: &Settled) -> Option<i64> {
+    let inverse = settled.inverse.as_ref()?;
+    if inverse.action != act::shell::UndoChange::NAME {
+        return None;
+    }
+    match inverse.input.get("seq")?.kind.as_ref() {
+        Some(wire::value::Kind::Integer(seq)) if *seq > 0 => Some(*seq),
+        _ => None,
+    }
 }
 
 #[cfg(test)]

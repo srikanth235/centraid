@@ -28,6 +28,7 @@ import UniformTypeIdentifiers
 ///
 /// Android's twin is `screens/PhotoShelfCopies.kt`.
 enum ShelfCopyExport {
+    private enum Handoff: Sendable { case completed, cancelled, failed }
     /// One original this device holds, located for a platform hand-off.
     struct LocatedOriginal {
         let path: String
@@ -56,10 +57,14 @@ enum ShelfCopyExport {
             guard let files = await prepare(originals, keepLocation: export.keepLocation, export: export) else {
                 return exported(.locationNotRemovable)
             }
-            await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
-                Task { @MainActor in present(files) { done.resume() } }
+            let handoff = await withCheckedContinuation { (done: CheckedContinuation<Handoff, Never>) in
+                Task { @MainActor in present(files) { done.resume(returning: $0) } }
             }
-            return exported(.done, handed: files.count)
+            switch handoff {
+            case .completed: return exported(.done, handed: files.count)
+            case .cancelled: return exported(.done)
+            case .failed: return exported(.failed)
+            }
         case .save:
             let saved = await saveToLibrary(originals, export: export)
             return saved < 0 ? exported(.failed) : exported(.done, handed: saved)
@@ -150,7 +155,7 @@ enum ShelfCopyExport {
             if keepLocation {
                 copied = (try? FileManager.default.copyItem(at: source, to: target)) != nil
             } else if original.isVideo {
-                copied = await copyVideoWithoutLocation(from: source, to: target)
+                copied = await copyVideoWithoutLocation(from: source, to: target, mediaType: original.mediaType)
             } else {
                 copied = copyImageWithoutLocation(from: source, to: target)
             }
@@ -174,9 +179,11 @@ enum ShelfCopyExport {
 
     /// A video, re-muxed (never re-encoded) with the sharing filter, which drops
     /// location and the device's own identifiers.
-    private static func copyVideoWithoutLocation(from source: URL, to target: URL) async -> Bool {
+    private static func copyVideoWithoutLocation(from source: URL, to target: URL, mediaType: String) async -> Bool {
+        var options: [String: Any] = [:]
+        if !mediaType.isEmpty { options[AVURLAssetOverrideMIMETypeKey] = mediaType }
         guard let session = AVAssetExportSession(
-            asset: AVURLAsset(url: source),
+            asset: AVURLAsset(url: source, options: options),
             presetName: AVAssetExportPresetPassthrough
         ) else { return false }
         session.outputURL = target
@@ -190,16 +197,19 @@ enum ShelfCopyExport {
 
     /// The share sheet, over whatever is on top.
     @MainActor
-    private static func present(_ files: [URL], completion: @escaping () -> Void) {
+    private static func present(_ files: [URL], completion: @escaping (Handoff) -> Void) {
         let sheet = UIActivityViewController(activityItems: files, applicationActivities: nil)
-        sheet.completionWithItemsHandler = { _, _, _, _ in
+        sheet.completionWithItemsHandler = { _, completed, _, error in
             // THE COPIES GO WHEN THE SHEET DOES. They are plaintext outside the
             // vault, and a temporary directory is emptied when the system
             // decides — not when the member is done.
             files.forEach { try? FileManager.default.removeItem(at: $0) }
-            completion()
+            completion(error != nil ? .failed : (completed ? .completed : .cancelled))
         }
-        guard let top = topController() else { return completion() }
+        guard let top = topController() else {
+            files.forEach { try? FileManager.default.removeItem(at: $0) }
+            return completion(.failed)
+        }
         sheet.popoverPresentationController?.sourceView = top.view
         top.present(sheet, animated: true)
     }

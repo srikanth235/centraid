@@ -301,7 +301,7 @@ struct KitCheckBox: View {
     var body: some View {
         let radius: CGFloat = round ? 10 : Theme.radius("sm", scheme)
         let fill = Theme.color(enabled ? "accent" : "textDisabled", scheme)
-        let outline = Theme.color(enabled ? "lineStrong" : "textDisabled", scheme)
+        let outline = Theme.color(enabled ? "textSoft" : "textDisabled", scheme)
         let mark = Theme.color(enabled ? "onAccent" : "bg", scheme)
         Button(action: action) {
             ZStack {
@@ -485,9 +485,10 @@ struct KitProgressBar: View {
 /// THE SPINNER ON THE PHOTO STAGE: `KitSpinner`'s ring and label in the
 /// stage's own inks — `onStage` for the ring, `onStageSoft` for the label — so
 /// a download under a photograph is legible on its dark ground in either
-/// appearance.
+/// appearance. The light viewer opts into the page's inks.
 struct StageSpinner: View {
     var label: String = ""
+    var light: Bool = false
 
     @Environment(\.colorScheme) private var scheme
 
@@ -495,11 +496,11 @@ struct StageSpinner: View {
         HStack(spacing: 8) {
             ProgressView()
                 .controlSize(.small)
-                .tint(Theme.color("onStage", scheme))
+                .tint(light ? Surface.ink : Theme.color("onStage", scheme))
             if !label.isEmpty {
                 Text(label)
                     .centraidType("small")
-                    .foregroundStyle(Theme.color("onStageSoft", scheme))
+                    .foregroundStyle(light ? Surface.meta : Theme.color("onStageSoft", scheme))
             }
         }
         .accessibilityElement(children: .ignore)

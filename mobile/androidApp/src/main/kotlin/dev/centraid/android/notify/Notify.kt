@@ -3,17 +3,20 @@ package dev.centraid.android.notify
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.AlarmManager
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import centraid.core.v1.NotificationAnswered
+import centraid.core.v1.DeliveredNotification
 import centraid.core.v1.NotificationPermission
 import centraid.core.v1.NotificationVerb
 import centraid.core.v1.NotificationsScheduled
@@ -24,12 +27,14 @@ import dev.centraid.android.MainActivity
 import dev.centraid.android.session.AppSession
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * ANDROID'S NOTIFICATIONS, AS AGENDA ASKS FOR THEM (#1173).
  *
- * Rust sends the WHOLE desired set (`ScheduleNotifications`); this makes the OS hold exactly that and
- * decides nothing else. Every word (titles, bodies, the channel's name, each button's label) is Rust's.
+ * Rust sends future alarms and explicit delivered-card withdrawals (`ScheduleNotifications`).
+ * This performs both and reports the actual delivered cards. Every word (titles, bodies, the
+ * channel's name, each button's label) is Rust's.
  * The alarms are `AlarmManager`'s and the record of them is [NotifyStore]; a reboot re-arms from it
  * ([NotifyBootReceiver]), an alarm posts from it ([NotifyAlarmReceiver]) and a button or tap is reported
  * as `ShellFact.notification_answered` ([NotifyActionReceiver], [NotifyTaps]).
@@ -42,16 +47,18 @@ internal object Notify {
     const val CHANNEL: String = "agenda-reminders"
     const val EXTRA_ID: String = "dev.centraid.notify.ID"
     const val EXTRA_VERB: String = "dev.centraid.notify.VERB"
+    private const val EXTRA_FINGERPRINT: String = "dev.centraid.notify.SOURCE_FINGERPRINT"
 
     /**
-     * How long a button's session is held for Rust's answer to be performed (the new set, with its
-     * receipt). Rust answers within the same call; this only bounds a performer that never runs, and stays
-     * under the ten seconds `goAsync` gives a receiver.
+     * How long a button's session is held for its matching terminal answer to be performed, including
+     * any durable receipt write. This bounds a performer that never completes and stays under the
+     * ten seconds `goAsync` gives a receiver.
      */
     private const val ANSWER_GRACE_MS: Long = 8_000L
 
-    /** Completed by the next performed `ScheduleNotifications`, while a button's session waits on it. */
-    @Volatile private var performed: CompletableDeferred<Unit>? = null
+    /** Only the matching fully performed answer releases its OS background window. */
+    private data class AnswerKey(val id: String, val verb: NotificationVerb)
+    private val performed = ConcurrentHashMap<AnswerKey, CompletableDeferred<Unit>>()
 
     /** The tag every notification is posted under (with id 0), so one is cancelled by its id alone. */
     private const val SLOT: Int = 0
@@ -89,32 +96,45 @@ internal object Notify {
             // REFUSED IS QUIET: everything held goes, nothing is scheduled and nothing is said.
             NotificationPermission.NOTIFICATION_PERMISSION_DENIED -> {
                 store.load().all.forEach { cancel(app, manager, it.notification_id) }
+                delivered(app).forEach { manager.cancel(it.notification_id, SLOT) }
                 store.save(ScheduleNotifications())
                 0
             }
             else -> 0
         }
-        performed?.complete(Unit)
-        return NotificationsScheduled(permission = permission, held = count)
+        request.completed_answers.forEach { answer ->
+            performed.remove(AnswerKey(answer.notification_id, answer.verb))?.complete(Unit)
+        }
+        return NotificationsScheduled(permission = permission, held = count, delivered = delivered(app))
     }
 
     /** Make the OS hold [request]'s set; how many alarms are pending now. */
     private fun hold(app: Context, store: NotifyStore, manager: NotificationManagerCompat, request: ScheduleNotifications): Int {
         val now = System.currentTimeMillis()
-        val plan = NotifyPlan.diff(store.load().all, request.all, now)
+        val recorded = store.load().all
+        val plan = NotifyPlan.diff(recorded, request.all, now)
         manager.createNotificationChannel(
             NotificationChannelCompat.Builder(CHANNEL, NotificationManagerCompat.IMPORTANCE_DEFAULT)
                 .setName(request.channel_name)
                 .build(),
         )
-        plan.cancel.forEach { cancel(app, manager, it) }
+        plan.cancel.forEach { cancelAlarm(app, it) }
+        NotifyPlan.withdrawDelivered(
+            recorded = recorded,
+            wanted = request.all,
+            deliveredIds = delivered(app).map { it.notification_id },
+            retainDelivered = request.retain_delivered,
+            explicitIds = request.cancel_delivered_ids,
+        ).forEach { manager.cancel(it, SLOT) }
         plan.drop.forEach { cancelAlarm(app, it) }
         // THE RECORD FIRST: an alarm that fires the moment it is set finds its words in it.
-        val next = ScheduleNotifications(
+        val next = request.copy(
             all = NotifyPlan.kept(request.all, now),
             categories = request.categories,
             ask_permission = request.ask_permission,
             channel_name = request.channel_name,
+            cancel_delivered_ids = emptyList(),
+            completed_answers = emptyList(),
         )
         store.save(next)
         plan.arm.forEach { arm(app, it.notification_id, it.fire_at_ms) }
@@ -157,6 +177,8 @@ internal object Notify {
 
     /** A button was pressed (or the notification tapped): tell Rust, as it was handed over. */
     suspend fun answer(context: Context, notificationId: String, verb: Int) {
+        // A genuine user gesture consumes this card even when the requested write is refused.
+        NotificationManagerCompat.from(context.applicationContext).cancel(notificationId, SLOT)
         val said = NotificationAnswered(
             notification_id = notificationId,
             verb = NotificationVerb.fromValue(verb) ?: NotificationVerb.NOTIFICATION_VERB_UNSPECIFIED,
@@ -164,13 +186,14 @@ internal object Notify {
         // HELD UNTIL RUST'S ANSWER IS PERFORMED: the write answers with a new set (the receipt and its
         // Undo, the reminder gone), and letting go of the session first would cancel its performer.
         AppSession.use(context.applicationContext) { open ->
-            val done = CompletableDeferred<Unit>()
-            performed = done
+            val key = AnswerKey(notificationId, said.verb)
+            val created = CompletableDeferred<Unit>()
+            val waiting = performed.putIfAbsent(key, created) ?: created
             try {
-                open.screens.shellFact(ShellFact(notification_answered = said))
-                withTimeoutOrNull(ANSWER_GRACE_MS) { done.await() }
+                if (waiting === created) open.screens.shellFact(ShellFact(notification_answered = said))
+                withTimeoutOrNull(ANSWER_GRACE_MS) { waiting.await() }
             } finally {
-                if (performed === done) performed = null
+                performed.remove(key, waiting)
             }
         }
     }
@@ -236,6 +259,7 @@ internal object Notify {
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
             .setContentIntent(open)
+            .addExtras(Bundle().apply { putString(EXTRA_FINGERPRINT, item.source_fingerprint) })
         if (item.thread_id.isNotEmpty()) builder.setGroup(item.thread_id)
         val buttons = record.categories.firstOrNull { it.category_id == item.category_id && item.category_id.isNotEmpty() }
         buttons?.actions.orEmpty().forEach { action ->
@@ -252,4 +276,19 @@ internal object Notify {
         }
         manager.notify(item.notification_id, SLOT, builder.build())
     }
+
+    /** Only this performer's tagged cards; unrelated foreground-service notices are untouched. */
+    private fun delivered(app: Context): List<DeliveredNotification> =
+        app.getSystemService(NotificationManager::class.java)?.activeNotifications.orEmpty()
+            .filter { it.id == SLOT && it.tag != null }
+            .mapNotNull { shown ->
+                val id = shown.tag ?: return@mapNotNull null
+                if (!id.startsWith("task|") && !id.startsWith("event|") && !id.startsWith("receipt|")) {
+                    return@mapNotNull null
+                }
+                DeliveredNotification(
+                    notification_id = id,
+                    source_fingerprint = shown.notification.extras.getString(EXTRA_FINGERPRINT).orEmpty(),
+                )
+            }
 }

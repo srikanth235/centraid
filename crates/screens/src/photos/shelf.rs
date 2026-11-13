@@ -770,7 +770,7 @@ impl Shelf {
         let picked = self.selection.picked().len();
         wire::PhotosShelfBar {
             send_copy_label: words::photos_send_copy(locale),
-            download_label: words::photos_download_original(locale),
+            download_label: crate::strings::shared::download_original(locale),
             make_key_label: words::photos_make_key(locale),
             make_key_offered: self.is_album(),
             make_key_enabled: self.is_album() && picked == 1,

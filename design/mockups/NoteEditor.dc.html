@@ -6,6 +6,7 @@
 <script src="./support.js"></script>
 </head>
 <body>
+<!-- Notes owns save refusal/conflict on its one inline chrome.status row, with Reload only when the shared state offers it. Suppress the duplicate autosave header only while autosave.refused (Refused or Conflict); keep dirty draft words and all ordinary save/Undo states unchanged. Permanent refusal remains visible inline without inventing an action. -->
 <x-dc>
 <helmet>
 <link rel="preconnect" href="https://fonts.googleapis.com">

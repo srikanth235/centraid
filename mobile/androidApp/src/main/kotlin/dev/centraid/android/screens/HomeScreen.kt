@@ -67,6 +67,7 @@ import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.ContentImage
 import dev.centraid.android.kit.HomeBand
+import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
@@ -136,7 +137,7 @@ public fun HomeScreen(
     // in front, so the empty lockup is only ever that moment (and a phone that
     // holds none is a failure, below).
     if (bar?.vault?.vault_id.isNullOrEmpty() && !failed) {
-        Box(Modifier.fillMaxSize().background(centraidColor("bg")))
+        Box(Modifier.fillMaxSize().background(Surface.page))
         return
     }
     // THE BACKUP LINE'S DOOR: the backup tab, which Rust selects.
@@ -168,7 +169,7 @@ public fun HomeScreen(
     Column(
         Modifier
             .fillMaxSize()
-            .background(centraidColor("bg")),
+            .background(Surface.page),
     ) {
         // THE LOCKUP FIRST, ALWAYS. It is chrome for every route, and it is
         // drawn above the three-branch switch on purpose: a Home that failed to

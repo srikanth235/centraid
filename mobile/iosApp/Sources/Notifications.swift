@@ -1,9 +1,50 @@
+import os
+
+/// DEBUG-only mechanical startup phases. No notification IDs, words, keys or
+/// payload/error descriptions are accepted by this diagnostic boundary.
+enum NotificationStartupTrace {
+    enum Phase: String, Sendable {
+        case callbackEntered
+        case callbackCompleted
+        case shellModelTouchStarted
+        case shellModelTouched
+        case shellModelInitStarted
+        case coreOpenStarted
+        case coreOpenCompleted
+        case coreAttachStarted
+        case coreAttachCompleted
+        case snapshotStarted
+        case snapshotCompleted
+        case storeWaitStarted
+        case storeWaitCompleted
+        case storePublished
+        case answerWaitRegistered
+        case notificationFactStarted
+        case notificationFactCompleted
+        case notificationScheduleStarted
+        case notificationScheduleCompleted
+        case matchingAnswerPerformed
+        case answerReturned
+        case callbackExpired
+    }
+
+    #if DEBUG
+    private static let logger = Logger(subsystem: "dev.centraid.Centraid", category: "NotificationStartup")
+    #endif
+
+    nonisolated static func mark(_ phase: Phase, count: Int = 0, succeeded: Bool = true) {
+        #if DEBUG
+        logger.notice("phase=\(phase.rawValue, privacy: .public) count=\(count, privacy: .public) success=\(succeeded, privacy: .public)")
+        #endif
+    }
+}
+
 #if os(iOS)
 import Foundation
 import UserNotifications
 
-/// THE NOTIFICATION PERFORMER (#1173, Agenda wave 1c): make the operating system hold exactly the
-/// set Rust sent, and hand back what the member pressed.
+/// THE NOTIFICATION PERFORMER (#1173, Agenda wave 1c): hold Rust's future alarms, apply its explicit
+/// delivered-card withdrawals, and hand back what the member pressed.
 ///
 /// Rust decides WHICH notifications exist, WHEN each fires and WHAT each says (`agenda.notify`);
 /// this file only performs `ScheduleNotifications` and answers it under its `effect_id`
@@ -11,12 +52,14 @@ import UserNotifications
 /// `ShellFact.notificationAnswered`. It decides nothing and holds no word: the titles, bodies and
 /// button labels all arrive from Rust.
 ///
-/// THE SET IS DECLARATIVE: `all` is everything wanted pending. Whatever the OS holds (pending or
-/// already delivered) that is not in it is removed; each item in it is added, and adding an
-/// identifier that is already pending replaces it.
+/// THE SET IS DECLARATIVE: all is wanted pending work. Delivered cards remain until Rust
+/// withdraws them or the member acts on/dismisses them; the OS inventory goes back to Rust.
+/// A legacy request without retention still removes every unwanted card.
 enum Notifications {
     /// The key the notification's id travels under in `userInfo`, besides the request identifier.
     private static let idKey = "notification_id"
+    private static let fingerprintKey = "notification_source_fingerprint"
+    private static let immediatesKey = "centraid.notification.immediates"
 
     /// Perform `ScheduleNotifications` and say what the OS said.
     @MainActor static func schedule(_ schedule: Centraid_Core_V1_ScheduleNotifications) async -> Centraid_Core_V1_NotificationsScheduled {
@@ -48,22 +91,53 @@ enum Notifications {
 
         center.setNotificationCategories(Set(schedule.categories.map(category)))
 
-        // THE DIFF: remove every id not wanted, pending and delivered alike.
+        // Pending work and already-delivered cards have different lifetimes.
+        // Rust explicitly withdraws an obsolete delivered card; passing its moment alone does not.
         let wanted = Set(schedule.all.map(\.notificationID))
         let pending = await center.pendingNotificationRequests().map(\.identifier)
-        let delivered = await center.deliveredNotifications().map { $0.request.identifier }
-        let stale = Set(pending + delivered).subtracting(wanted)
+        let delivered = await center.deliveredNotifications()
+        let deliveredIDs = Set(delivered.map { $0.request.identifier })
+        let stale = Set(pending).subtracting(wanted)
         if !stale.isEmpty {
             center.removePendingNotificationRequests(withIdentifiers: Array(stale))
-            center.removeDeliveredNotifications(withIdentifiers: Array(stale))
         }
+        let withdrawn = NotificationPlan.withdrawn(
+            wanted: wanted,
+            delivered: deliveredIDs,
+            retain: schedule.retainDelivered,
+            explicit: Set(schedule.cancelDeliveredIds)
+        )
+        if !withdrawn.isEmpty {
+            center.removeDeliveredNotifications(withIdentifiers: Array(withdrawn))
+        }
+
+        // Remember only the current immediate IDs, not words or notification payloads. Dismissing
+        // an Undo receipt must not post it again on a foreground refresh or a process restart.
+        let previousImmediates = Set(UserDefaults.standard.stringArray(forKey: immediatesKey) ?? [])
+        let currentImmediates = Set(schedule.all.filter(\.immediate).map(\.notificationID))
+        var heldImmediates = NotificationPlan.rememberedImmediates(
+            current: currentImmediates, previous: previousImmediates, delivered: deliveredIDs
+        )
 
         let now = Date()
         for item in schedule.all {
+            if item.immediate, heldImmediates.contains(item.notificationID) { continue }
             guard let request = request(item, now: now) else { continue }
-            try? await center.add(request)
+            do {
+                try await center.add(request)
+                if item.immediate { heldImmediates.insert(item.notificationID) }
+            } catch {
+                // A failed post was never delivered: allow a subsequent reconciliation to retry.
+            }
         }
+        UserDefaults.standard.set(heldImmediates.sorted(), forKey: immediatesKey)
         answer.held = UInt32(await center.pendingNotificationRequests().count)
+        answer.delivered = await center.deliveredNotifications().map { notification in
+            .with {
+                $0.notificationID = notification.request.identifier
+                $0.sourceFingerprint = notification.request.content.userInfo[fingerprintKey] as? String ?? ""
+            }
+        }
         return answer
     }
 
@@ -84,7 +158,7 @@ enum Notifications {
         content.categoryIdentifier = item.categoryID
         content.threadIdentifier = item.threadID
         content.sound = .default
-        content.userInfo = [idKey: item.notificationID]
+        content.userInfo = [idKey: item.notificationID, fingerprintKey: item.sourceFingerprint]
 
         var trigger: UNNotificationTrigger?
         if !item.immediate {
@@ -126,9 +200,37 @@ enum Notifications {
             verb = Int(action).flatMap { Centraid_Core_V1_NotificationVerb(rawValue: $0) }
         }
         guard let verb else { return }
+        NotificationStartupTrace.mark(.shellModelTouchStarted)
         _ = ShellModel.shared
-        guard let store = await BackgroundPasses.installed(within: BackgroundPasses.installWaitSeconds) else { return }
-        await store.answerNotification(id: id, verb: verb)
+        NotificationStartupTrace.mark(.shellModelTouched)
+        NotificationStartupTrace.mark(.storeWaitStarted)
+        guard let store = await BackgroundPasses.installed(within: BackgroundPasses.installWaitSeconds) else {
+            NotificationStartupTrace.mark(.storeWaitCompleted, succeeded: false)
+            return
+        }
+        NotificationStartupTrace.mark(.storeWaitCompleted)
+        let matched = await store.answerNotification(id: id, verb: verb)
+        NotificationStartupTrace.mark(.answerReturned, succeeded: matched)
+    }
+}
+
+/// Mechanical OS bookkeeping only: Rust supplies both the future set and withdrawals.
+enum NotificationPlan {
+    static func withdrawn(
+        wanted: Set<String>,
+        delivered: Set<String>,
+        retain: Bool,
+        explicit: Set<String>
+    ) -> Set<String> {
+        retain ? explicit : delivered.subtracting(wanted)
+    }
+
+    static func rememberedImmediates(
+        current: Set<String>,
+        previous: Set<String>,
+        delivered: Set<String>
+    ) -> Set<String> {
+        previous.union(delivered).intersection(current)
     }
 }
 
@@ -140,19 +242,45 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Se
     /// A notification that fires while the app is in front still shows, with its sound.
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
-        willPresent notification: UNNotification
-    ) async -> UNNotificationPresentationOptions {
-        [.banner, .list, .sound]
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping @Sendable (UNNotificationPresentationOptions) -> Void
+    ) {
+        NotificationHandoff.perform(answer: {}) {
+            completionHandler([.banner, .list, .sound])
+        }
     }
 
-    /// A button or a tap. The response is not Sendable: its two strings are what crosses.
+    /// A button or a tap. The response is not Sendable: only its two strings cross.
+    /// Use the explicit callback: the async delegate bridge can complete on a cooperative
+    /// executor after an await, while UIKit's foreground response completion requires main.
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
-        didReceive response: UNNotificationResponse
-    ) async {
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping @Sendable () -> Void
+    ) {
+        NotificationStartupTrace.mark(.callbackEntered)
         let id = response.notification.request.identifier
         let action = response.actionIdentifier
-        await Notifications.answered(id: id, action: action)
+        NotificationHandoff.perform(answer: {
+            await Notifications.answered(id: id, action: action)
+        }, completion: {
+            NotificationStartupTrace.mark(.callbackCompleted)
+            completionHandler()
+        })
+    }
+}
+/// Keep the OS callback alive through the answer and complete on main even after suspension.
+/// The delegate can be called from a background queue; no notification object crosses it.
+enum NotificationHandoff {
+    @discardableResult
+    static func perform(
+        answer: @escaping @MainActor @Sendable () async -> Void,
+        completion: @escaping @Sendable () -> Void
+    ) -> Task<Void, Never> {
+        Task { @MainActor in
+            await answer()
+            completion()
+        }
     }
 }
 #endif

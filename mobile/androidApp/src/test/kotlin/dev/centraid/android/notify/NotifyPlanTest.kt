@@ -46,13 +46,48 @@ class NotifyPlanTest {
         val again = NotifyPlan.diff(recorded = listOf(receipt), wanted = listOf(receipt), nowMs = 2_000L)
         assertTrue(again.post.isEmpty())
         val changed = NotifyPlan.diff(recorded = listOf(receipt), wanted = listOf(receipt.copy(title = "other")), nowMs = 2_000L)
-        assertEquals(1, changed.post.size)
+        assertTrue("an existing receipt must not reappear after dismissal just because its title changed", changed.post.isEmpty())
     }
 
     @Test
     fun anEmptySetCancelsEverythingHeld() {
         val plan = NotifyPlan.diff(recorded = listOf(item("a"), item("b")), wanted = emptyList(), nowMs = 1_000L)
         assertEquals(listOf("a", "b"), plan.cancel)
+    }
+
+    @Test
+    fun aFiredCardSurvivesTheFutureSetBecomingEmptyInRetentionMode() {
+        val withdrawn = NotifyPlan.withdrawDelivered(
+            recorded = listOf(item("fired", at = 500L)),
+            wanted = emptyList(),
+            deliveredIds = listOf("fired"),
+            retainDelivered = true,
+            explicitIds = emptyList(),
+        )
+        assertTrue(withdrawn.isEmpty())
+    }
+
+    @Test
+    fun explicitWithdrawalDoesNotCancelTheEditedRecordsNextAlarm() {
+        val wanted = listOf(item("edited", at = 2_000L))
+        val plan = NotifyPlan.diff(listOf(item("edited", at = 500L)), wanted, nowMs = 1_000L)
+        val withdrawn = NotifyPlan.withdrawDelivered(
+            recorded = listOf(item("edited", at = 500L)), wanted = wanted,
+            deliveredIds = listOf("edited", "other"), retainDelivered = true, explicitIds = listOf("edited"),
+        )
+        assertEquals(listOf("edited"), plan.arm.map { it.notification_id })
+        assertEquals(setOf("edited"), withdrawn)
+    }
+
+    @Test
+    fun legacyOrVaultSwitchWithdrawalIncludesCardsNoLongerInThePendingRecord() {
+        assertEquals(
+            setOf("old-pending", "old-delivered"),
+            NotifyPlan.withdrawDelivered(
+                recorded = listOf(item("old-pending")), wanted = listOf(item("new-vault")),
+                deliveredIds = listOf("old-delivered"), retainDelivered = false, explicitIds = emptyList(),
+            ),
+        )
     }
 
     @Test
