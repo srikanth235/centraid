@@ -624,6 +624,18 @@ fn ledger() -> Ledger {
     serde_json::from_str(&text).expect("the ledger reads")
 }
 
+/// The app reads that were given an index of their own, and the index each walks in order with no
+/// sort of its own (#1191, V5). `crates/vault/tests/index_walks.rs` names the same for the vault's
+/// own statements.
+const WALKS: [(&str, &str); 3] = [
+    // The series, in start order: the expander's read of every repeating event.
+    ("calendar.upcoming.recurringAnchors", "event_by_rule"),
+    // The newest statement line is the end of the source index.
+    ("money.imports.last", "source_by_seen"),
+    // A month's plans across categories (the month's budget screen).
+    ("money.targets", "budget_by_month"),
+];
+
 #[test]
 fn every_read_plans_without_a_table_scan_or_a_sort_unless_the_ledger_says_why() {
     let ledger = ledger();
@@ -686,6 +698,7 @@ fn every_read_plans_without_a_table_scan_or_a_sort_unless_the_ledger_says_why() 
             // (a) the pages the apps read, as the vault composes them.
             let mut seen = BTreeSet::new();
             let mut distinct = 0usize;
+            let mut named: Vec<(String, Vec<String>)> = Vec::new();
             for page in &tapped {
                 if !seen.insert(page.page.sql.clone()) {
                     continue;
@@ -693,6 +706,7 @@ fn every_read_plans_without_a_table_scan_or_a_sort_unless_the_ledger_says_why() 
                 distinct += 1;
                 let plan = vault.explain_query_plan(&page.page.sql, &page.page.binds)?;
                 all_plans.extend(plan.iter().cloned());
+                named.push((page.name.clone(), plan.clone()));
                 for table in full_scans(&plan, &page.page.sql, &big) {
                     findings.insert(Finding {
                         kind: "page",
@@ -727,6 +741,26 @@ fn every_read_plans_without_a_table_scan_or_a_sort_unless_the_ledger_says_why() 
                 "the sweep reached {distinct} page statements; asking the apps' queries found fewer \
                  than the product holds"
             );
+
+            // The reads that were given an index of their own walk it, as the apps' own
+            // statements compose (#1191): a read named here is planned from the statement the
+            // product ran, never from a copy of its text.
+            for (read, index) in WALKS {
+                let plans: Vec<&Vec<String>> = named
+                    .iter()
+                    .filter(|(name, _)| name == read)
+                    .map(|(_, plan)| plan)
+                    .collect();
+                assert!(!plans.is_empty(), "the sweep never asked `{read}`");
+                for plan in plans {
+                    let plan = plan.join(" | ");
+                    assert!(
+                        plan.contains(&format!("INDEX {index}")),
+                        "`{read}` does not walk {index}: {plan}"
+                    );
+                    assert!(!plan.contains("TEMP B-TREE"), "`{read}` sorts: {plan}");
+                }
+            }
 
             // (b) the statements the crates write by hand.
             let root = centraid_ontology::scratch::repo_root();

@@ -20,6 +20,13 @@ use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempoten
 use crate::error::Result;
 use crate::model::{Kind, Rel, concept_id, fold_label};
 
+/// The next position at the end of a list: the last entry of the ordered index (`edge_order`),
+/// not every member's row (a plain `MAX(position)` cannot use the partial index). `edge.add` and a
+/// restore of a member run it, and `index_walks.rs` plans it.
+pub const NEXT_POSITION: &str =
+    "SELECT COALESCE((SELECT position FROM edge WHERE from_id = ?1 AND rel = 'contains'
+                         AND position IS NOT NULL ORDER BY position DESC LIMIT 1), 0) + 1";
+
 fn rel_of(ctx: &CommandCtx<'_, '_>) -> Result<Rel> {
     let word = ctx.required_str("rel")?;
     Rel::parse(word).ok_or_else(|| crate::error::VaultError::InvalidInput {
@@ -145,14 +152,10 @@ pub(crate) fn put(
         }
     }
     let next = if rel == Rel::Contains {
-        Some(ctx.connection().query_row(
-            // The end of the list, read off the ordered index (`edge_order`): its last entry, not
-            // every member's row.
-            "SELECT COALESCE((SELECT position FROM edge WHERE from_id = ?1 AND rel = 'contains'
-                                 AND position IS NOT NULL ORDER BY position DESC LIMIT 1), 0) + 1",
-            [from],
-            |row| row.get::<_, f64>(0),
-        )?)
+        Some(
+            ctx.connection()
+                .query_row(NEXT_POSITION, [from], |row| row.get::<_, f64>(0))?,
+        )
     } else {
         None
     };

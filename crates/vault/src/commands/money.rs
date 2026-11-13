@@ -44,6 +44,11 @@ pub const CATEGORIZE_MAX: usize = 2_000;
 // Small helpers. SQL lives in `crates/vault` by construction.
 // ---------------------------------------------------------------------------
 
+/// Every month a category has a plan for, read when two categories merge: a seek by the primary
+/// key `(category_id, month)`. `index_walks.rs` plans it.
+pub const PLANS_OF_CATEGORY: &str =
+    "SELECT month, amount_minor, currency, carry FROM budget WHERE category_id = ?1";
+
 fn unless(ok: bool, sentence: &str) -> Option<String> {
     (!ok).then(|| sentence.to_owned())
 }
@@ -876,7 +881,7 @@ fn merge_category(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         [from, into],
     )?;
     let plans: Vec<(String, i64, String, i64)> = connection
-        .prepare("SELECT month, amount_minor, currency, carry FROM budget WHERE category_id = ?1")?
+        .prepare(PLANS_OF_CATEGORY)?
         .query_map([from], |row| {
             Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
         })?

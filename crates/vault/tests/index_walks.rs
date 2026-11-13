@@ -1,7 +1,9 @@
 //! The indexes the baseline carries are the ones its reads walk (#1191, V5): each read below
 //! plans as a search or an ordered walk of the index named, with no sort of its own. The plan
 //! sweep of `crates/core/tests/query_plans.rs` counts the table scans of every app read over the
-//! year-3 vault; this names the index each of the new ones is served by.
+//! year-3 vault and names the index each app statement is served by; this names the index each
+//! statement of the vault's own is served by. Every statement planned here is the product's own
+//! constant, never a copy.
 
 mod common;
 
@@ -39,48 +41,17 @@ fn a_guests_address_finds_its_person_by_the_contact_point_index() {
     );
 }
 
+/// A category's plans are read by the primary key `(category_id, month)`, which the statement the
+/// merge of two categories runs seeks; no secondary index serves it. The reads of a month across
+/// categories (`budget_by_month`), the series (`event_by_rule`) and the newest statement line
+/// (`source_by_seen`) are app statements, so the vault cannot name them: their proofs plan the
+/// apps' own statements in `crates/core/tests/query_plans.rs` (`the_named_reads_walk_their_index`).
 #[test]
-fn the_series_of_a_calendar_are_walked_by_start_in_the_partial_index() {
-    let scratch = common::Scratch::founded("walk-series").expect("a vault");
-    walks(
-        &plan(
-            &scratch,
-            "SELECT id, starts FROM event WHERE status <> ?1 AND rule IS NOT NULL
-              ORDER BY starts, id LIMIT 50",
-            &["cancelled"],
-        ),
-        "event_by_rule",
-    );
-}
-
-#[test]
-fn the_newest_statement_line_is_the_end_of_the_source_index() {
-    let scratch = common::Scratch::founded("walk-source").expect("a vault");
-    walks(
-        &plan(
-            &scratch,
-            "SELECT id, entity_id, seen_at FROM source WHERE system = ?1 AND entity_id IS NOT NULL
-              ORDER BY seen_at DESC, id DESC LIMIT 1",
-            &["statement"],
-        ),
-        "source_by_seen",
-    );
-}
-
-#[test]
-fn a_months_budgets_across_categories_and_a_categorys_months_are_both_served() {
+fn a_categorys_plans_are_a_seek_of_the_budget_key() {
     let scratch = common::Scratch::founded("walk-budget").expect("a vault");
-    walks(
-        &plan(
-            &scratch,
-            "SELECT category_id, amount_minor FROM budget WHERE month = ?1 ORDER BY category_id",
-            &["2026-03"],
-        ),
-        "budget_by_month",
-    );
     let per_category = plan(
         &scratch,
-        "SELECT month, amount_minor FROM budget WHERE category_id = ?1 ORDER BY month",
+        centraid_vault::commands::money::PLANS_OF_CATEGORY,
         &["category:food"],
     );
     assert!(
@@ -135,10 +106,8 @@ fn the_edge_order_index_has_a_reader_and_is_kept() {
             Ok(())
         })
         .expect("a big list");
-    // The statement `edge.add` runs for the next position (a plain `MAX(position)` cannot use the
-    // partial index, so the command asks for the last entry of the ordered one).
-    let read = "SELECT position FROM edge WHERE from_id = ?1 AND rel = 'contains'
-                 AND position IS NOT NULL ORDER BY position DESC LIMIT 1";
+    // The statement `edge.add` and a restore run for the next position.
+    let read = centraid_vault::commands::edge::NEXT_POSITION;
     let with = plan(&scratch, read, &["list-1"]);
     assert!(
         with.contains("INDEX edge_order"),
