@@ -54,6 +54,97 @@ pub const PAGE_SIZE: i64 = 4096;
 /// that the file is not a surprise in a storage listing.
 pub const JOURNAL_SIZE_LIMIT: i64 = 64 * 1024 * 1024;
 
+/// Where a founding is built before it takes its name.
+fn founding_path(path: &Path) -> PathBuf {
+    let mut name = path
+        .file_name()
+        .map(std::ffi::OsString::from)
+        .unwrap_or_default();
+    name.push(".founding");
+    path.with_file_name(name)
+}
+
+/// Remove a founding's file and the sidecars SQLite made for it. Best effort: none may exist.
+fn remove_founding_leftovers(side: &Path) {
+    for suffix in ["", "-wal", "-shm", "-journal"] {
+        let mut name = side
+            .file_name()
+            .map(std::ffi::OsString::from)
+            .unwrap_or_default();
+        name.push(suffix);
+        let _ = std::fs::remove_file(side.with_file_name(name));
+    }
+}
+
+/// **No plaintext copy of the vault stays beside it** (#1191, V16). An earlier build wrote a
+/// gzipped copy of the whole file, `locker_key` included, to `snapshots/` before a migration and
+/// never read or deleted it. Its files are removed at open, and the directory with them when
+/// nothing else is in it.
+fn remove_pre_migration_copies(path: &Path) {
+    let Some(dir) = path.parent().map(|parent| parent.join("snapshots")) else {
+        return;
+    };
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with("snapshot-") && name.ends_with(".db.gz")
+            || name.starts_with("snapshot.building")
+        {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+    let _ = std::fs::remove_dir(&dir);
+}
+
+/// Flush a file's contents and length to the disk.
+fn sync_file(path: &Path) -> Result<()> {
+    std::fs::File::open(path)?.sync_all()?;
+    Ok(())
+}
+
+/// Flush the directory entry of `path`, so a rename into it survives a power cut.
+fn sync_directory(path: &Path) -> Result<()> {
+    #[cfg(unix)]
+    {
+        let parent = path.parent().filter(|p| !p.as_os_str().is_empty());
+        std::fs::File::open(parent.unwrap_or_else(|| Path::new(".")))?.sync_all()?;
+    }
+    #[cfg(not(unix))]
+    let _ = path;
+    Ok(())
+}
+
+/// **THE QUICK CHECK** (#1191, V21): SQLite's `PRAGMA quick_check` reads every page of the file
+/// once and every index entry against its row's existence, and answers `ok` or a list of what is
+/// wrong. A vault that fails it is [`VaultError::Damaged`]: it is not written to, not backed up
+/// and not restored over a good copy. The check costs one sequential read of the file.
+pub(crate) fn quick_check(connection: &Connection) -> Result<()> {
+    let mut statement = connection
+        .prepare("PRAGMA quick_check")
+        .map_err(VaultError::from)?;
+    let mut rows = statement.query([]).map_err(VaultError::from)?;
+    let mut found = Vec::new();
+    while let Some(row) = rows.next().map_err(VaultError::from)? {
+        let line: String = row.get(0).map_err(VaultError::from)?;
+        if line != "ok" {
+            found.push(line);
+            if found.len() == 3 {
+                break;
+            }
+        }
+    }
+    if found.is_empty() {
+        Ok(())
+    } else {
+        Err(VaultError::Damaged {
+            detail: found.join("; "),
+        })
+    }
+}
+
 /// How a vault file was opened.
 pub struct Vault {
     connection: Held,
@@ -74,8 +165,6 @@ pub struct Vault {
     /// is asking what they plan to do ([`crate::plans`]); `None` otherwise, which
     /// is every run that is not a plan test.
     pub(crate) page_tap: RefCell<Option<Vec<crate::plans::TappedPage>>>,
-    /// A fault to inject, for the snapshot builder's interrupted-build test.
-    pub(crate) fault: Cell<Option<crate::snapshot::Fault>>,
     /// THE LOCAL CONTENT STORE, where bytes that are not text go.
     ///
     /// `core_content_item.content_uri` is `blob:blake3-<hex>` for anything
@@ -83,6 +172,10 @@ pub struct Vault {
     /// a photograph in a row is a photograph in the file. See
     /// [`Vault::with_blobs`].
     blobs: Option<Box<dyn crate::bytes::BlobStore + Send + Sync>>,
+    /// The content store's directory, listed once for the whole of a sweep of unclaimed files
+    /// ([`Vault::sweep_unclaimed_files`]): the batches of a pass resume from it by name, and it
+    /// is dropped when the pass ends, so no batch lists the library again.
+    pub(crate) sweep_listing: RefCell<Option<Vec<String>>>,
 }
 
 impl Vault {
@@ -104,6 +197,13 @@ impl Vault {
     }
 
     /// Found a vault against an injected clock and id source.
+    ///
+    /// **Founding is atomic** (#1191, V17). The file is made beside its final name
+    /// (`<name>.founding`), run through the whole ladder, checkpointed into one file and
+    /// closed, flushed to disk, and only then renamed to its name, the directory flushed. A
+    /// process killed at any point leaves either no vault at the path (and a leftover the next
+    /// founding or open removes) or a complete one; there is no half-founded file that can be
+    /// neither created over nor opened.
     pub fn create_with(
         path: impl AsRef<Path>,
         clock: Box<dyn Clock>,
@@ -115,32 +215,45 @@ impl Vault {
                 context: format!("{} already exists; open it instead", path.display()),
             });
         }
+        let side = founding_path(&path);
+        remove_founding_leftovers(&side);
+        {
+            let connection = Connection::open(&side)?;
+            // THE HEADER PRAGMAS, AND ONLY HERE. `page_size` and `auto_vacuum` are
+            // both recorded in the file header and both are silently ignored once a
+            // page exists — and `journal_mode = wal` writes one. Founding is the
+            // only moment either can be stated, which is why they are not in
+            // [`Self::apply_pragmas`] with the rest: a pragma that can only be set
+            // once must not sit in a function every open calls, where its failure
+            // to take would look like success.
+            connection.pragma_update(None, "page_size", PAGE_SIZE)?;
+            // NO AUTO-VACUUM, AND `VACUUM` NEVER RUNS (#1029 §1, #1080). A vacuum
+            // renumbers pages, and a backup snapshot is the file cut into 64 KiB
+            // ranges named by their bytes: every range would read as changed, no
+            // name would match one the gateway holds, and the next backup would be
+            // a full copy of the vault. The space a vacuum reclaims is worth less
+            // than that.
+            connection.pragma_update(None, "auto_vacuum", "NONE")?;
+            Self::apply_pragmas(&connection)?;
+            connection.pragma_update(None, "application_id", APPLICATION_ID)?;
+            // OFF for the ladder: the baseline's tables point at each other (the
+            // vault row at its owner, a kind row at its entity), SQLite resolves a
+            // foreign key's target lazily, and the seeds are written in the order
+            // that reads best rather than the order that satisfies a check.
+            connection.pragma_update(None, "foreign_keys", "OFF")?;
+            crate::migrations::run_from(&connection, 0)?;
+            // Everything in the one file: no `-wal` is left to rename away from it.
+            connection.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))?;
+            connection
+                .close()
+                .map_err(|(_, error)| VaultError::from(error))?;
+        }
+        sync_file(&side)?;
+        std::fs::rename(&side, &path)?;
+        sync_directory(&path)?;
         let connection = Connection::open(&path)?;
-        // THE HEADER PRAGMAS, AND ONLY HERE. `page_size` and `auto_vacuum` are
-        // both recorded in the file header and both are silently ignored once a
-        // page exists — and `journal_mode = wal` writes one. Founding is the
-        // only moment either can be stated, which is why they are not in
-        // [`Self::apply_pragmas`] with the rest: a pragma that can only be set
-        // once must not sit in a function every open calls, where its failure
-        // to take would look like success.
-        connection.pragma_update(None, "page_size", PAGE_SIZE)?;
-        // NO AUTO-VACUUM, AND `VACUUM` NEVER RUNS (#1029 §1, #1080). A vacuum
-        // renumbers pages, and a backup snapshot is the file cut into 64 KiB
-        // ranges named by their bytes: every range would read as changed, no
-        // name would match one the gateway holds, and the next backup would be
-        // a full copy of the vault. The space a vacuum reclaims is worth less
-        // than that.
-        connection.pragma_update(None, "auto_vacuum", "NONE")?;
         Self::apply_pragmas(&connection)?;
-        connection.pragma_update(None, "application_id", APPLICATION_ID)?;
-        // OFF for the ladder: the baseline's tables point at each other (the
-        // vault row at its owner, a kind row at its entity), SQLite resolves a
-        // foreign key's target lazily, and the seeds are written in the order
-        // that reads best rather than the order that satisfies a check.
-        connection.pragma_update(None, "foreign_keys", "OFF")?;
-        crate::migrations::run_from(&connection, 0)?;
         connection.pragma_update(None, "foreign_keys", "ON")?;
-
         Self::wrap(connection, path, head_version(), clock, ids)
     }
 
@@ -151,22 +264,29 @@ impl Vault {
     }
 
     /// Open against an injected clock and id source.
+    ///
+    /// A founding that was killed leaves a `.founding` file beside the path; it is not a vault
+    /// and is removed here. A file that SQLite calls malformed, or that fails the quick check,
+    /// is [`VaultError::Damaged`]: it is not opened.
     pub fn open_with(
         path: impl AsRef<Path>,
         clock: Box<dyn Clock>,
         ids: Box<dyn Ids>,
     ) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
+        remove_founding_leftovers(&founding_path(&path));
         if !path.exists() {
             return Err(VaultError::Missing { path });
         }
+        remove_pre_migration_copies(&path);
         let connection = Connection::open(&path)?;
 
         // The tag first: `user_version` on a file that is not ours means
         // nothing, and "your file is at version 42" is a worse message than
         // "this is not a Centraid vault".
-        let application_id: i64 =
-            connection.query_row("PRAGMA application_id", [], |row| row.get(0))?;
+        let application_id: i64 = connection
+            .query_row("PRAGMA application_id", [], |row| row.get(0))
+            .map_err(VaultError::from)?;
         if application_id == EARLIER_APPLICATION_ID {
             return Err(VaultError::EarlierModel { path });
         }
@@ -189,28 +309,29 @@ impl Vault {
 
         Self::apply_pragmas(&connection)?;
         connection.pragma_update(None, "foreign_keys", "ON")?;
+        quick_check(&connection)?;
 
         if found < head_version() {
-            // THE ONE-SNAPSHOT RULE. The pre-migration safety copy is the same
-            // artifact as a backup and a seat's bootstrap, and it is taken
-            // BEFORE the ladder runs — an upgrade that fails mid-migration
-            // restores from it, which is the restore drill's own path (#1020,
-            // Compatibility). It cannot be taken from inside `run_from`:
-            // `VACUUM INTO` may not run in a transaction.
-            let staging = crate::snapshot::pre_migration_dir(&path);
-            let vault = Self::wrap(connection, path.clone(), found, clock, ids)?;
-            crate::snapshot::build_snapshot(&vault, &staging)?;
-            crate::migrations::run_from(&vault.connection(), found)?;
-            let reached: i64 = vault
-                .connection()
-                .query_row("PRAGMA user_version", [], |row| row.get(0))?;
-            let vault = Self::wrap(
-                Connection::open(&path)?,
-                path,
-                reached,
-                Box::new(SystemClock),
-                Box::new(ClockIds::system()),
-            )?;
+            // A MIGRATION RUNS ON THE OPENED CONNECTION AND THEN IS WRAPPED ONCE (#1191, V15, V16).
+            // The file is the vault's only copy: there is no plaintext safety copy beside it (it held
+            // every Locker table and was never used), and the ladder runs each rung in a
+            // transaction of its own. Wrapping after the ladder installs the history and census
+            // triggers against the migrated schema, and keeps the injected clock and id source and
+            // the foreign keys the connection was opened with.
+            connection.pragma_update(None, "foreign_keys", "OFF")?;
+            let reached = crate::migrations::run_from(&connection, found)?;
+            let broken = connection
+                .prepare("PRAGMA foreign_key_check")?
+                .query([])?
+                .next()?
+                .is_some();
+            if broken {
+                return Err(VaultError::Invariant {
+                    context: "a migration left rows that break a foreign key".to_owned(),
+                });
+            }
+            connection.pragma_update(None, "foreign_keys", "ON")?;
+            let vault = Self::wrap(connection, path, reached, clock, ids)?;
             vault.check_schema()?;
             return Ok(vault);
         }
@@ -260,9 +381,12 @@ impl Vault {
     ///   the online backup API's page-for-page copy of the file, which reads
     ///   through the WAL whatever its state (`.claude/skills/stack/sqlite/centraid.md`).
     /// - **`journal_size_limit`** — see [`JOURNAL_SIZE_LIMIT`].
-    /// - **No `secure_delete`.** The file is plaintext to whoever can read it,
-    ///   so zeroing freed cells buys nothing — and it dirties ranges the next
-    ///   snapshot then has to upload.
+    /// - **`secure_delete = ON`** (#1191, owner ruling 4). "Deleted for ever" has to erase from
+    ///   this phone: SQLite overwrites the content of a deleted row with zeros as it frees the
+    ///   cell, so the text of a purged item is not left in the free pages of the file or of its
+    ///   WAL. (The search index keeps words in segments a delete only marks; a purge merges them,
+    ///   [`crate::index::compact`].) It dirties a few more ranges for the next snapshot to
+    ///   upload; that is the price of the promise.
     ///
     /// `page_size` and `auto_vacuum` are NOT here: both are header properties
     /// that only take on an empty file, so they are stated once in
@@ -270,7 +394,15 @@ impl Vault {
     fn apply_pragmas(connection: &Connection) -> Result<()> {
         connection.pragma_update(None, "journal_mode", "wal")?;
         connection.pragma_update(None, "synchronous", "FULL")?;
+        connection.pragma_update(None, "secure_delete", "ON")?;
         connection.pragma_update(None, "journal_size_limit", JOURNAL_SIZE_LIMIT)?;
+        // A DEVICE THAT CAN LIE ABOUT A FLUSH (V18): on Apple targets a plain `fsync` does not
+        // reach the platter, `F_FULLFSYNC` does, and SQLite asks for it only when told to.
+        #[cfg(target_vendor = "apple")]
+        {
+            connection.pragma_update(None, "fullfsync", "ON")?;
+            connection.pragma_update(None, "checkpoint_fullfsync", "ON")?;
+        }
         // The busy timeout has to be set on every connection or a second writer
         // fails instantly instead of waiting.
         connection.busy_timeout(std::time::Duration::from_secs(5))?;
@@ -308,8 +440,8 @@ impl Vault {
             read_depth: Cell::new(0),
             words: crate::words::Words::default(),
             page_tap: RefCell::new(None),
-            fault: Cell::new(None),
             blobs: None,
+            sweep_listing: RefCell::new(None),
         })
     }
 
@@ -639,10 +771,19 @@ mod tests {
         assert_eq!(pragma_int(&vault, "journal_size_limit"), JOURNAL_SIZE_LIMIT);
         assert_eq!(pragma_int(&vault, "page_size"), PAGE_SIZE);
         assert_eq!(pragma_int(&vault, "auto_vacuum"), 0, "auto_vacuum = NONE");
-        // NOT SET, and that is the assertion. The file is plaintext to whoever
-        // can read it, so zeroing freed cells buys nothing and dirties ranges
-        // the next snapshot must then upload.
-        assert_eq!(pragma_int(&vault, "secure_delete"), 0, "no secure_delete");
+        // ON: a deleted row's content is zeroed as its cell is freed (#1191, V14).
+        assert_eq!(pragma_int(&vault, "secure_delete"), 1, "secure_delete = ON");
+        // On Apple targets a flush must reach the platter (V18). Not run on Linux CI: unverified
+        // until a macOS or device run.
+        #[cfg(target_vendor = "apple")]
+        {
+            assert_eq!(pragma_int(&vault, "fullfsync"), 1, "fullfsync");
+            assert_eq!(
+                pragma_int(&vault, "checkpoint_fullfsync"),
+                1,
+                "checkpoint_fullfsync"
+            );
+        }
         assert!(
             !vault
                 .connection()
@@ -680,7 +821,7 @@ mod tests {
         );
         assert_eq!(pragma_int(&reopened, "page_size"), PAGE_SIZE);
         assert_eq!(pragma_int(&reopened, "auto_vacuum"), 0);
-        assert_eq!(pragma_int(&reopened, "secure_delete"), 0);
+        assert_eq!(pragma_int(&reopened, "secure_delete"), 1);
         assert!(
             !reopened
                 .connection()
@@ -897,6 +1038,147 @@ mod tests {
             .close()
             .expect("it closes");
         assert!(Vault::create(&path).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A file BELOW the head (here the lowest rung, a tagged file with no tables) is migrated by
+    /// `open_with`, and the vault that comes back keeps what it was opened with: foreign keys on,
+    /// the injected clock and the injected ids (#1191, V15). And no copy of it is made: the
+    /// directory holds the vault and its sidecars only (V16), and a `snapshots/` left by an
+    /// earlier build is removed.
+    #[test]
+    fn a_migrated_vault_reopens_with_foreign_keys_its_clock_and_its_ids_and_leaves_no_copy() {
+        let dir = scratch();
+        std::fs::create_dir_all(&dir).expect("the scratch dir is made");
+        let path = dir.join("vault.db");
+        {
+            let lower = Connection::open(&path).expect("a file");
+            lower
+                .pragma_update(None, "application_id", APPLICATION_ID)
+                .expect("tagged");
+            lower
+                .pragma_update(None, "journal_mode", "wal")
+                .expect("wal");
+            let rung: i64 = lower
+                .query_row("PRAGMA user_version", [], |row| row.get(0))
+                .expect("a version");
+            assert_eq!(rung, 0, "below the head");
+        }
+        // What an earlier build left beside a vault it migrated.
+        let old = dir.join("snapshots");
+        std::fs::create_dir_all(&old).expect("a directory");
+        std::fs::write(
+            old.join("snapshot-0123456789abcdef.db.gz"),
+            b"a plaintext copy",
+        )
+        .expect("a copy");
+
+        let clock = std::sync::Arc::new(FixedClock::at(1_800_000_000_000));
+        let vault = Vault::open_with(
+            &path,
+            Box::new(std::sync::Arc::clone(&clock)),
+            Box::new(SeededIds::new("rung")),
+        )
+        .expect("the lower file opens, migrated");
+        assert_eq!(vault.schema_version(), head_version());
+        assert_eq!(pragma_int(&vault, "foreign_keys"), 1, "foreign keys are on");
+        // A write is stamped by the injected clock and the injected id source.
+        let founded = vault.found("Home", "Ada").expect("founds");
+        assert_eq!(
+            founded.self_id,
+            SeededIds::new("rung").next(),
+            "the first id is the injected source's"
+        );
+        let stamped: String = vault
+            .read(|connection| {
+                Ok(connection.query_row("SELECT created_at FROM vault", [], |row| row.get(0))?)
+            })
+            .expect("a stamp");
+        assert_eq!(
+            stamped,
+            clock.now_text(),
+            "the injected clock stamped the write"
+        );
+        // Foreign keys do refuse: a person row naming no entity is not taken.
+        let refused = vault.commit(|tx| {
+            tx.connection()
+                .execute("INSERT INTO person (id) VALUES ('nobody')", [])?;
+            Ok(())
+        });
+        assert!(
+            refused.is_err(),
+            "foreign keys are enforced on the migrated vault"
+        );
+        vault.close().expect("it closes");
+
+        let mut names: Vec<String> = std::fs::read_dir(&dir)
+            .expect("the directory lists")
+            .map(|entry| {
+                entry
+                    .expect("an entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        names.sort();
+        assert!(
+            names.iter().all(|name| name.starts_with("vault.db")),
+            "no file other than the vault and its sidecars: {names:?}"
+        );
+        assert!(!old.exists(), "the earlier build's copies are gone");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A founding that was killed leaves its side file; the next open and the next founding
+    /// remove it, and neither mistakes it for a vault.
+    #[test]
+    fn a_leftover_founding_is_removed_by_open_and_by_the_next_founding() {
+        let dir = scratch();
+        std::fs::create_dir_all(&dir).expect("the scratch dir is made");
+        let path = dir.join("vault.db");
+        let side = founding_path(&path);
+        std::fs::write(&side, b"half a founding").expect("a leftover");
+        assert!(matches!(
+            Vault::open(&path),
+            Err(VaultError::Missing { .. })
+        ));
+        assert!(!side.exists(), "open removed it");
+        std::fs::write(&side, b"half a founding").expect("a leftover");
+        Vault::create(&path)
+            .expect("founds over it")
+            .close()
+            .expect("closes");
+        assert!(!side.exists());
+        assert!(Vault::open(&path).is_ok());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A page of the file really damaged: `open` answers `Damaged` and does not open it.
+    #[test]
+    fn a_damaged_page_is_refused_at_open_as_damaged() {
+        let dir = scratch();
+        std::fs::create_dir_all(&dir).expect("the scratch dir is made");
+        let path = dir.join("vault.db");
+        let vault = Vault::create(&path).expect("founds");
+        vault.found("Home", "Ada").expect("founds");
+        vault.close().expect("closes");
+        // Overwrite a page in the middle of the file (page 5 of a founded file is table content).
+        let mut bytes = std::fs::read(&path).expect("reads");
+        let page = usize::try_from(PAGE_SIZE).expect("a size");
+        assert!(
+            bytes.len() > 6 * page,
+            "the founded file has pages to damage"
+        );
+        for byte in &mut bytes[4 * page..5 * page] {
+            *byte = 0xA5;
+        }
+        std::fs::write(&path, bytes).expect("writes");
+        match Vault::open(&path) {
+            Err(VaultError::Damaged { .. }) => {}
+            Err(other) => panic!("expected Damaged, got {other}"),
+            Ok(_) => panic!("a damaged vault opened"),
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

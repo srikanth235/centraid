@@ -579,3 +579,63 @@ fn a_refused_change_to_one_day_is_kept_as_the_days_override_and_restore_puts_it_
     assert_eq!(refused.status, CommandStatus::Failed);
     assert_eq!(w.versions(&once), 0);
 }
+
+/// **A SAVE AFTER AN AUTOSAVE IS NOT STALE** (#1191, V13). An editor's autosaves are quiet: the
+/// first of a session keeps a version, and the ones that follow fold into it and keep none. Each
+/// save names the revision the one before answered, so what a save answers must be the revision
+/// the history holds once it settles, folded or not. The test saves quietly, over and over, each
+/// naming the revision the last answered, and then saves with the revision the history reports.
+#[test]
+fn a_save_that_names_the_revision_an_autosave_answered_is_not_stale() {
+    let w = World::new();
+    let id = w.ok("note.create", json!({ "title": "Plan", "body": "zero" }))["id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    let mut named: i64 = 0;
+    for round in 1..=4 {
+        let outcome = w
+            .scratch
+            .vault
+            .execute(
+                &w.registry,
+                &Principal::owner("phone"),
+                &Command::new(
+                    "note.edit",
+                    json!({ "id": id, "body": format!("words {round}"), "expected_rev": named }),
+                )
+                .quiet(),
+            )
+            .expect("runs");
+        assert_eq!(
+            outcome.status,
+            CommandStatus::Executed,
+            "autosave {round} naming revision {named}: {:?}",
+            outcome.reason
+        );
+        named = outcome.output["rev"]
+            .as_i64()
+            .expect("a revision is answered");
+        // The revision it answered is the one the history now holds.
+        assert_eq!(
+            named,
+            w.count(
+                "SELECT COALESCE(MAX(seq), 0) FROM revision WHERE entity_id = ?1",
+                &id
+            ),
+            "after autosave {round} the answered revision is the head"
+        );
+    }
+    // Only the first of the session kept a version; the later ones folded into it.
+    assert_eq!(
+        w.versions(&id),
+        1,
+        "the quiet saves folded into one version"
+    );
+    // A deliberate save naming the last answer lands too, and keeps its own version.
+    let deliberate = w.ok(
+        "note.edit",
+        json!({ "id": id, "body": "final words", "expected_rev": named }),
+    );
+    assert_eq!(deliberate["rev"], named + 1);
+}

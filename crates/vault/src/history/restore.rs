@@ -518,13 +518,23 @@ impl Writer<'_, '_, '_> {
             && let Some(container) = row.get("from_id").and_then(Json::as_str)
         {
             let end: f64 = self.ctx.connection().query_row(
-                "SELECT COALESCE(MAX(position), 0) + 1 FROM edge
-                  WHERE from_id = ?1 AND rel = 'contains'",
+                "SELECT COALESCE((SELECT position FROM edge WHERE from_id = ?1
+                                     AND rel = 'contains' AND position IS NOT NULL
+                                   ORDER BY position DESC LIMIT 1), 0) + 1",
                 [container],
                 |found| found.get(0),
             )?;
             names.push(crate::log::quoted("position"));
             values.push(Sql::Real(end));
+        }
+        // A stamp a state does not keep (`OMITTED`: a child's `updated_at`) is the time of the
+        // restore, from the vault's clock; the schema has no default for it.
+        if super::shape::OMITTED
+            .iter()
+            .any(|(table, column, _)| *table == part.name && *column == "updated_at")
+        {
+            names.push(crate::log::quoted("updated_at"));
+            values.push(Sql::Text(self.ctx.now.clone()));
         }
         let marks: Vec<String> = (1..=values.len()).map(|n| format!("?{n}")).collect();
         self.ctx.connection().execute(

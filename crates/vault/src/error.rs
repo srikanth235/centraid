@@ -129,6 +129,13 @@ pub enum VaultError {
     #[error("the disk is full: {context}")]
     DiskFull { context: String },
 
+    /// The vault file is damaged: SQLite says a page is malformed, the file is not a database,
+    /// or the quick check at open found a broken page or index (#1191, V21). Typed because the
+    /// product answers it differently from "something went wrong": a damaged vault is not
+    /// written to or backed up, and the way back is a restore.
+    #[error("the vault is damaged: {detail}")]
+    Damaged { detail: String },
+
     /// A seat's cursor cannot be served; it must bootstrap from a snapshot.
     #[error("re-bootstrap required: {reason}")]
     RebootstrapRequired { reason: RebootstrapReason },
@@ -207,6 +214,19 @@ impl From<rusqlite::Error> for VaultError {
                 context: error.to_string(),
             };
         }
+        // A malformed page and a file that is no database are damage, wherever SQLite says so.
+        if matches!(
+            &error,
+            rusqlite::Error::SqliteFailure(inner, _)
+                if matches!(
+                    inner.code,
+                    rusqlite::ErrorCode::DatabaseCorrupt | rusqlite::ErrorCode::NotADatabase
+                )
+        ) {
+            return Self::Damaged {
+                detail: error.to_string(),
+            };
+        }
         Self::Sqlite(error)
     }
 }
@@ -239,6 +259,9 @@ impl VaultError {
         match Self::from(error) {
             Self::DiskFull { context: detail } => Self::DiskFull {
                 context: format!("{context}: {detail}"),
+            },
+            Self::Damaged { detail } => Self::Damaged {
+                detail: format!("{context}: {detail}"),
             },
             other => other,
         }

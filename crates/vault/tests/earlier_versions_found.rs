@@ -13,7 +13,7 @@ use centraid_vault::model::Kind;
 use centraid_vault::{Command, CommandStatus, Vault};
 use serde_json::json;
 
-const AT: &str = "2026-03-01T09:00:00Z";
+const AT: &str = "2026-03-01T09:00:00.000Z";
 
 fn go(vault: &Vault, registry: &Registry, name: &str, input: serde_json::Value) {
     let outcome = vault

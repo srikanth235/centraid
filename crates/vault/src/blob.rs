@@ -18,7 +18,7 @@
 //! A reference that *cascades* does not keep its target alive (a derivative
 //! does not keep the original it was cut from); only a plain reference does.
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 
 use crate::bytes::Located;
 use crate::error::{Result, VaultError};
@@ -181,8 +181,11 @@ pub fn write_derivative(
         stage(connection, hash, size)?;
     }
     connection.execute(
-        "INSERT OR REPLACE INTO derivative (blob, variant, out, media_type, text, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        "INSERT INTO derivative (blob, variant, out, media_type, text, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT (blob, variant) DO UPDATE SET
+           out = excluded.out, media_type = excluded.media_type, text = excluded.text,
+           created_at = excluded.created_at",
         rusqlite::params![
             blob,
             variant,
@@ -256,6 +259,40 @@ pub struct BlobReference {
 /// unreferenced in their turn.
 pub fn collect(connection: &Connection) -> Result<Vec<String>> {
     collect_up_to(connection, usize::MAX)
+}
+
+/// **Collect only these blobs, if nothing names them**: a derivative's replaced file, which a
+/// thumbnail write releases, is the one blob whose claim can have lapsed, so asking about it costs
+/// one lookup per table that points at a blob and not a walk of the library (#1191, V20).
+/// Returns the hashes it collected.
+pub fn collect_hashes(connection: &Connection, hashes: &[String]) -> Result<Vec<String>> {
+    if hashes.is_empty() {
+        return Ok(Vec::new());
+    }
+    let unclaimed = references(connection)?
+        .into_iter()
+        .filter(|reference| reference.keeps_alive)
+        .map(|r| {
+            format!(
+                "NOT EXISTS (SELECT 1 FROM {} WHERE {} = b.hash)",
+                crate::log::quoted(&r.table),
+                crate::log::quoted(&r.column)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(" AND ");
+    let sql = format!("SELECT hash FROM blob b WHERE b.hash = ?1 AND {unclaimed}");
+    let mut collected = Vec::new();
+    for hash in hashes {
+        let doomed: Option<String> = connection
+            .query_row(&sql, [hash], |row| row.get(0))
+            .optional()?;
+        if let Some(doomed) = doomed {
+            connection.execute("DELETE FROM blob WHERE hash = ?1", [&doomed])?;
+            collected.push(doomed);
+        }
+    }
+    Ok(collected)
 }
 
 /// [`collect`], stopping once `limit` blobs are collected (a chunk may take it a little over):

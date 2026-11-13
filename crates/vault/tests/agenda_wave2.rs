@@ -238,7 +238,7 @@ fn a_completed_reminder_is_founded_done_with_its_completion_time() {
     );
     assert_eq!(
         w.one::<String>("SELECT done_at FROM task WHERE id = ?1", &[&id]),
-        "2026-01-04T18:00:00Z"
+        "2026-01-04T18:00:00.000Z"
     );
     let sentence = w.refused(
         "task.add",

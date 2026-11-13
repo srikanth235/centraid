@@ -87,6 +87,12 @@ enum ErrorCode {
   // remedy is a narrower range, which is the shell's to offer.
   ERROR_CODE_READ_BOUND_REACHED = 26;
 
+  // THE VAULT FILE IS DAMAGED (#1191, V21). SQLite called a page malformed, the file is no
+  // database, or the quick check at open found a broken page or index. The vault is not opened,
+  // written to or backed up; the way back is a restore. The words a member reads for it are the
+  // Backup screens' (lane B, B16): until they exist the shell shows the generic sentence.
+  ERROR_CODE_VAULT_DAMAGED = 27;
+
   // --- intents and commands ---
   // The submitted `payload_hash` does not match the input.
   ERROR_CODE_INTENT_HASH_MISMATCH = 40;

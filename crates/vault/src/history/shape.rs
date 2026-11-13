@@ -187,7 +187,7 @@ pub const TABLES: &[(&str, Role)] = &[
         Role::Child {
             host: "*",
             via: "from_id",
-            filter: Some("rel = 'links' AND anchor IS NULL"),
+            filter: Some("rel = 'links' AND wikilink IS NULL AND anchor IS NULL"),
             alias: "link_out",
             key: &["to_id"],
         },
@@ -200,7 +200,7 @@ pub const TABLES: &[(&str, Role)] = &[
             host: "*",
             via: "to_id",
             filter: Some(
-                "rel = 'links' AND anchor IS NULL AND NOT EXISTS \
+                "rel = 'links' AND wikilink IS NULL AND anchor IS NULL AND NOT EXISTS \
                  (SELECT 1 FROM entity f WHERE f.id = from_id AND f.kind = 'locker_item')",
             ),
             alias: "link_in",
@@ -226,6 +226,28 @@ pub const TABLES: &[(&str, Role)] = &[
             filter: Some("rel = 'depicts'"),
             alias: "depicts",
             key: &["to_id"],
+        },
+    ),
+    // The two halves of a transfer are each other's state: a line's pair is a row of `transfer`
+    // whichever side it is on, so a change to the pair is an earlier version of both lines.
+    (
+        "transfer",
+        Role::Child {
+            host: "txn",
+            via: "a",
+            filter: None,
+            alias: "transfer_low",
+            key: &["b"],
+        },
+    ),
+    (
+        "transfer",
+        Role::Child {
+            host: "txn",
+            via: "b",
+            filter: None,
+            alias: "transfer_high",
+            key: &["a"],
         },
     ),
     // A custom field's sealed value (a `sealed` or `otp` kind) is kept like any other column, as
@@ -369,22 +391,12 @@ pub const OMITTED: &[(&str, &str, &str)] = &[
     (
         "locker_item_field",
         "updated_at",
-        "stamped by the table's own trigger",
-    ),
-    (
-        "locker_item_field",
-        "row_version",
-        "the table's recursion guard",
+        "a stamp, set by the command from the vault's clock; every save moves it",
     ),
     (
         "locker_item_passkey",
         "updated_at",
-        "stamped by the table's own trigger",
-    ),
-    (
-        "locker_item_passkey",
-        "row_version",
-        "the table's recursion guard",
+        "a stamp, set by the command from the vault's clock; every save moves it",
     ),
 ];
 

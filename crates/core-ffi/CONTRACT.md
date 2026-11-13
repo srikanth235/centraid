@@ -151,6 +151,8 @@ _Why this is a clause:_ a page read is one table, and Agenda's `upcoming` joins 
 
 **A denial is an answer and never an `Error`**: `denied` is an arm of `AppQueryResponse`, because a screen draws the ask. What a read cannot answer at all is the `Error` body: a search `limit` of zero is `BAD_ARGUMENT` with `ERROR_CODE_INVALID_REQUEST` (clause 4's rule for a page with no limit), as is a `tz` the bundled zone database does not know or an empty one on a vault whose settings name none — never an answer in UTC — and a read that reaches its own stated ceiling is `OK` with `ERROR_CODE_READ_BOUND_REACHED` — never a short answer that reads as a whole one.
 
+**A damaged vault is its own code** (#1191): SQLite calling a page malformed, a file that is no database, or `PRAGMA quick_check` at open failing is `VaultError::Damaged` and `ERROR_CODE_VAULT_DAMAGED` (27), never `INTERNAL`. The vault is not opened, written to or backed up; the way back is a restore. Until the Backup screens have their own words for it (lane B), the shell shows the generic sentence.
+
 Test: `the_app_queries_round_trip_through_call` (and, below the ABI, `crates/core/src/app_query.rs`)
 
 ## 4f. The 24 words are a request kind, and need no vault

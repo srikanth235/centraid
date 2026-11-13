@@ -76,7 +76,7 @@ fn decimal(minor: i64, currency: &str) -> String {
 fn lines(connection: &Connection, account: Option<&str>, one: Option<&str>) -> Result<Vec<Line>> {
     let mut statement = connection.prepare_cached(
         "SELECT t.posted_on, a.title, e.title,
-                (SELECT json_extract(s.stated, '$.title') FROM source s
+                (SELECT s.stated_title FROM source s
                   WHERE s.entity_id = t.id ORDER BY s.seen_at DESC, s.id LIMIT 1),
                 c.title, t.amount_minor, t.currency, t.status,
                 (SELECT json_extract(s.stated, '$.line.memo') FROM source s

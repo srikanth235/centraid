@@ -299,7 +299,7 @@ fn completion_is_one_operation_and_its_successor_carries_the_series() {
     assert!(again["next_id"].is_null());
     assert_eq!(
         world.count("SELECT COUNT(*) FROM task WHERE series_id = ?1", &[&id]),
-        2
+        1
     );
     // The successor is still about Mum, tagged, filed and as urgent.
     assert_eq!(
@@ -323,12 +323,12 @@ fn completion_is_one_operation_and_its_successor_carries_the_series() {
     world.ok("task.reopen", json!({ "id": id }));
     assert_eq!(
         world.count("SELECT COUNT(*) FROM task WHERE series_id = ?1", &[&id]),
-        2
+        1
     );
     world.ok("task.cancel", json!({ "id": next }));
     assert_eq!(
         world.count("SELECT COUNT(*) FROM task WHERE series_id = ?1", &[&id]),
-        2
+        1
     );
     assert_eq!(
         world

@@ -124,7 +124,7 @@ impl GraphSource for DoorSource<'_> {
         let rows = Lookup {
             name,
             table: "edge",
-            select: "from_id, to_id, rel, anchor",
+            select: "from_id, to_id, rel, anchor, wikilink",
             order,
             column,
         }
@@ -136,7 +136,10 @@ impl GraphSource for DoorSource<'_> {
                     from: text_of(row, "from_id")?,
                     to: text_of(row, "to_id")?,
                     rel: text_of(row, "rel")?,
-                    anchor: text_of(row, "anchor"),
+                    anchor: centraid_ontology::graph::selector_of(
+                        text_of(row, "anchor"),
+                        text_of(row, "wikilink").as_deref(),
+                    ),
                 })
             })
             .collect())

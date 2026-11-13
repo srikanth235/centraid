@@ -79,6 +79,16 @@ impl Vault {
     ) -> Result<Emptied> {
         let owner = crate::access::Principal::owner("launch");
         let mut purged = 0usize;
+        // A CLOCK FAR FROM THE VAULT'S LAST COMMIT PURGES NOTHING and writes nothing (#1191, V19):
+        // it would read the whole trash as overdue, and a purge is for ever. The pass resumes on
+        // one where the clock is within `CLOCK_BOUND_DAYS` of the last commit.
+        if !self.read(|connection| crate::clock::is_credible(connection, self.clock().now_ms()))? {
+            return Ok(Emptied {
+                purged: 0,
+                more: false,
+                collecting: false,
+            });
+        }
         if !collecting {
             // THE COMMON LAUNCH FINDS NOTHING OVERDUE, and then writes nothing: one
             // indexed read (`entity_purge`) instead of a commit.
@@ -128,6 +138,9 @@ impl Vault {
                     collecting: false,
                 });
             }
+            // The pass purged its last batch: the words of everything it purged leave the
+            // search indexes' pages once, here, and not once per batch.
+            self.compact_search()?;
         }
         let outcome = self.execute(
             registry,
@@ -151,6 +164,15 @@ impl Vault {
             more,
             collecting: more,
         })
+    }
+
+    /// Merge the search indexes so the words of purged items leave their pages ([`crate::index::compact`]), in a commit of its own.
+    ///
+    /// # Errors
+    /// The vault's refusal.
+    pub fn compact_search(&self) -> Result<()> {
+        self.commit(|tx| crate::index::compact(tx.connection()))?;
+        Ok(())
     }
 
     fn executed(outcome: &crate::commands::CommandOutcome, what: &str) -> Result<()> {
@@ -238,16 +260,40 @@ impl Vault {
         let mut removed = Vec::new();
         let mut looked = 0usize;
         let mut last = String::new();
-        for id in store.ids().map_err(|e| invariant("list its files", &e))? {
-            if id.as_str() <= after {
-                continue;
+        // THE DIRECTORY IS LISTED ONCE PER SWEEP (#1191, V20), by the batch that starts it
+        // (`after` empty); the batches after it resume from the listing by name. Listing the
+        // library again for every batch made a sweep quadratic in the library.
+        let mut index = {
+            let mut listing = self.sweep_listing.borrow_mut();
+            if after.is_empty() || listing.is_none() {
+                *listing = Some(
+                    store
+                        .ids()
+                        .map_err(|e| invariant("list its files", &e))?
+                        .into_iter()
+                        .collect(),
+                );
             }
+            listing
+                .as_ref()
+                .map_or(0, |ids| ids.partition_point(|id| id.as_str() <= after))
+        };
+        loop {
+            let Some(id) = self
+                .sweep_listing
+                .borrow()
+                .as_ref()
+                .and_then(|ids| ids.get(index).cloned())
+            else {
+                break;
+            };
             if looked >= limit {
                 return Ok(Swept {
                     removed,
                     next: Some(last),
                 });
             }
+            index += 1;
             looked += 1;
             last.clone_from(&id);
             let Ok(Some(path)) = store.path_of(&id) else {
@@ -275,6 +321,8 @@ impl Vault {
                 removed.push(id);
             }
         }
+        // The pass is done: the listing is not kept.
+        *self.sweep_listing.borrow_mut() = None;
         Ok(Swept {
             removed,
             next: None,

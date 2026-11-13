@@ -90,7 +90,7 @@ pub fn found(ctx: &CommandCtx<'_, '_>, task: &NewTask<'_>) -> Result<String> {
                  CASE WHEN ?15 IS NULL THEN 'open' ELSE 'done' END, ?15)",
         rusqlite::params![
             id,
-            task.due,
+            task.due.map(temporal::canonical),
             task.description,
             task.priority,
             task.effort_min,
@@ -103,7 +103,7 @@ pub fn found(ctx: &CommandCtx<'_, '_>, task: &NewTask<'_>) -> Result<String> {
             task.section_id,
             task.position,
             task.url.map(str::trim),
-            task.done_at,
+            task.done_at.map(temporal::canonical),
         ],
     )?;
     Ok(id)
@@ -185,7 +185,9 @@ fn image(ctx: &CommandCtx<'_, '_>) -> Result<Image> {
     });
     Ok(Image {
         id,
-        due: stated(ctx, "due").unwrap_or(held.due),
+        due: stated(ctx, "due")
+            .unwrap_or(held.due)
+            .map(|due| temporal::canonical(&due)),
         rule_stated: stated(ctx, "rule").is_some_and(|rule| rule.is_some()),
         rule: stated(ctx, "rule").unwrap_or(held.rule),
         remind: ctx
@@ -420,6 +422,11 @@ fn set_stated(ctx: &CommandCtx<'_, '_>, id: &str, columns: &[(&str, &str)]) -> R
                 value.as_str().map(rrule::canonicalize).map(Json::from)
             } else if *key == "url" {
                 value.as_str().map(|url| Json::from(url.trim()))
+            } else if matches!(*key, "due" | "snoozed_until") {
+                Some(value.as_str().map_or_else(
+                    || value.clone(),
+                    |text| Json::from(temporal::canonical(text)),
+                ))
             } else {
                 Some(value.clone())
             };
@@ -548,8 +555,9 @@ pub fn complete(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Completion> {
         .map_err(|_| VaultError::Invariant {
             context: format!("`{id}` is not a task, and a precondition said it was"),
         })?;
-    // A task that repeats and has no series yet is the head of its own: the
-    // identity is minted once and then never moves.
+    // A task that repeats and has no series yet is the head of its own: the series is named by
+    // the head's id, which its successors carry and the head itself does not (a task is never
+    // its own series), and the identity is minted once and then never moves.
     let series = series.or_else(|| rule.is_some().then(|| id.to_owned()));
     let mut done = Completion {
         id: id.to_owned(),
@@ -561,9 +569,8 @@ pub fn complete(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Completion> {
         return Ok(done);
     }
     connection.execute(
-        "UPDATE task SET status = 'done', done_at = ?2, series_id = ?3, snoozed_until = NULL
-          WHERE id = ?1",
-        rusqlite::params![id, ctx.now, series],
+        "UPDATE task SET status = 'done', done_at = ?2, snoozed_until = NULL WHERE id = ?1",
+        rusqlite::params![id, ctx.now],
     )?;
     ctx.touch(id)?;
     let (Some(rule), Some(due)) = (rule, due) else {
@@ -594,7 +601,7 @@ pub fn complete(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Completion> {
         "INSERT INTO task (id, status, priority, due, rule, anchor, zone, series_id,
                            remind_before_min, effort_min, parent_id, project_id, section_id,
                            description, position, url)
-         SELECT ?2, 'open', priority, ?3, rule, anchor, zone, series_id, remind_before_min,
+         SELECT ?2, 'open', priority, ?3, rule, anchor, zone, COALESCE(series_id, id), remind_before_min,
                 effort_min, parent_id, project_id, section_id, description, position, url
            FROM task WHERE id = ?1",
         rusqlite::params![id, next, next_due],

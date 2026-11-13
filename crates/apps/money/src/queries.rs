@@ -125,8 +125,6 @@ pub struct TxnRow {
     pub description: String,
     pub category_concept_id: Option<String>,
     pub external_id: Option<String>,
-    /// The other half of a transfer the member accepted.
-    pub transfer_id: Option<String>,
     /// The member's name for it, when it is not the bank's words.
     pub display_name: Option<String>,
     /// `member`, when [`Self::display_name`] is set.
@@ -187,7 +185,7 @@ pub struct CategoryRow {
     pub archived: bool,
 }
 
-/// One live transfer: the debit end `from`, the credit end `to`.
+/// One live transfer: the two lines of the pair, the lower id first (a pair has no direction).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TransferLink {
     pub from_txn: String,
@@ -218,8 +216,7 @@ fn query(name: &str, select: &str, from: &str, order: PageOrder) -> PageQuery {
     PageQuery::new(name, select, from, order)
 }
 
-const TXN_COLUMNS: &str =
-    "id, account_id, posted_on, amount_minor, currency, status, category_id, transfer_id";
+const TXN_COLUMNS: &str = "id, account_id, posted_on, amount_minor, currency, status, category_id";
 
 /// `money.transactions.month` — a month's rows by `posted_on` range, newest
 /// first. The month is a bind, never a pattern: `posted_on` is a printed day
@@ -470,18 +467,15 @@ pub fn category_entities_statement() -> PageQuery {
     )
 }
 
-/// `money.links.transfer` — the debit half of each transfer the member accepted;
-/// `transfer_id` is the credit half.
+/// `money.links.transfer` — each transfer the member accepted, one row per pair in key order:
+/// `a` is the pair's lower line and `b` its higher (a pair has no direction; the two lines'
+/// signs say which is money out).
 pub fn transfer_links_statement() -> PageQuery {
     query(
         "money.links.transfer",
-        "id, transfer_id",
-        "txn",
-        PageOrder::asc("id", "id"),
-    )
-    .filter(
-        "transfer_id IS NOT NULL AND amount_minor < ?",
-        vec![PageBindValue::from(0_i64)],
+        "a, b",
+        "transfer",
+        PageOrder::asc("a", "a"),
     )
 }
 
@@ -577,7 +571,6 @@ fn txn_of(row: &Row) -> TxnRow {
         description: String::new(),
         category_concept_id: text_of(row, "category_id"),
         external_id: None,
-        transfer_id: text_of(row, "transfer_id"),
         display_name: None,
         display_name_source: None,
         memo: None,
@@ -1029,8 +1022,8 @@ pub fn load_transfer_links(door: &dyn PageDoor) -> KitResult<Bounded<Vec<Transfe
             .rows
             .iter()
             .map(|row| TransferLink {
-                from_txn: text_of(row, "id").unwrap_or_default(),
-                to_txn: text_of(row, "transfer_id").unwrap_or_default(),
+                from_txn: text_of(row, "a").unwrap_or_default(),
+                to_txn: text_of(row, "b").unwrap_or_default(),
             })
             .filter(|link| !gone.contains(&link.from_txn) && !gone.contains(&link.to_txn))
             .collect(),
