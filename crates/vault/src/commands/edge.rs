@@ -146,7 +146,10 @@ pub(crate) fn put(
     }
     let next = if rel == Rel::Contains {
         Some(ctx.connection().query_row(
-            "SELECT COALESCE(MAX(position), 0) + 1 FROM edge WHERE from_id = ?1 AND rel = 'contains'",
+            // The end of the list, read off the ordered index (`edge_order`): its last entry, not
+            // every member's row.
+            "SELECT COALESCE((SELECT position FROM edge WHERE from_id = ?1 AND rel = 'contains'
+                                 AND position IS NOT NULL ORDER BY position DESC LIMIT 1), 0) + 1",
             [from],
             |row| row.get::<_, f64>(0),
         )?)

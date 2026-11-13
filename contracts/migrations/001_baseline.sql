@@ -441,7 +441,7 @@ CREATE TABLE contact_point (
   UNIQUE (person_id, kind, normalized)
 ) STRICT;
 -- A guest's address finds the person who has it (`person_of_email`): by kind and the normalized value.
-CREATE INDEX contact_point_by_value ON contact_point(kind, normalized);
+CREATE INDEX contact_point_by_value ON contact_point(kind, normalized, person_id);
 CREATE UNIQUE INDEX contact_point_preferred ON contact_point(person_id, kind) WHERE preferred = 1;
 
 CREATE TABLE place (
@@ -906,7 +906,6 @@ CREATE TABLE locker_item_passkey (
   -- entity version (#1146, R-1146-0-2).
   row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1), key_id TEXT
 ) STRICT;
-CREATE INDEX locker_item_passkey_rp_idx ON locker_item_passkey(rp_id);
 CREATE TRIGGER locker_item_passkey_touch_updated_at
 AFTER UPDATE ON locker_item_passkey
 WHEN NEW.row_version = OLD.row_version

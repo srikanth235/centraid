@@ -518,8 +518,9 @@ impl Writer<'_, '_, '_> {
             && let Some(container) = row.get("from_id").and_then(Json::as_str)
         {
             let end: f64 = self.ctx.connection().query_row(
-                "SELECT COALESCE(MAX(position), 0) + 1 FROM edge
-                  WHERE from_id = ?1 AND rel = 'contains'",
+                "SELECT COALESCE((SELECT position FROM edge WHERE from_id = ?1
+                                     AND rel = 'contains' AND position IS NOT NULL
+                                   ORDER BY position DESC LIMIT 1), 0) + 1",
                 [container],
                 |found| found.get(0),
             )?;
