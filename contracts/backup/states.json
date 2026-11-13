@@ -5,42 +5,59 @@
   "devices": [
     {
       "name": "current",
-      "device": { "label": "Office NAS" },
+      "device": {
+        "label": "Office NAS"
+      },
       "standing": "Up to date",
       "notes": [],
       "undo": false
     },
     {
       "name": "another_phone_took_over",
-      "device": { "label": "Office NAS", "moved": true },
+      "device": {
+        "label": "Office NAS",
+        "reach_state": "moved"
+      },
       "standing": "Another phone took over",
       "notes": [],
       "undo": false
     },
     {
       "name": "paused_by_its_operator",
-      "device": { "label": "Office NAS", "paused": true },
+      "device": {
+        "label": "Office NAS",
+        "reach_state": "frozen"
+      },
       "standing": "Paused by whoever runs it",
       "notes": [],
       "undo": false
     },
     {
       "name": "too_old",
-      "device": { "label": "Office NAS", "too_old": true },
+      "device": {
+        "label": "Office NAS",
+        "reach_state": "gateway_old"
+      },
       "standing": "Needs an update",
       "notes": [],
       "undo": false
     },
     {
       "name": "an_old_backup_cannot_be_read",
-      "device": { "label": "Office NAS", "unreadable_backup": true },
+      "device": {
+        "label": "Office NAS",
+        "manifest_unreadable": true
+      },
       "standing": "Up to date",
       "notes": ["One old backup can't be read"],
       "undo": false
     },
     {
       "name": "a_damaged_piece_is_sent_again",
-      "device": { "label": "Office NAS", "damage_found": true },
+      "device": {
+        "label": "Office NAS",
+        "reach_state": "repairing"
+      },
       "standing": "Up to date",
       "notes": ["A stored piece was damaged. Sending it again."],
       "undo": false
@@ -49,8 +66,9 @@
       "name": "three_deletes_held",
       "device": {
         "label": "Office NAS",
-        "held_files": 3,
-        "held_until_ms": 1795176000000
+        "held_count": 3,
+        "held_undoable": 3,
+        "held_purge_at_ms": 1795176000000
       },
       "standing": "Up to date",
       "notes": ["3 old files go Friday 20 November"],
@@ -60,8 +78,9 @@
       "name": "one_delete_held",
       "device": {
         "label": "Office NAS",
-        "held_files": 1,
-        "held_until_ms": 1795176000000
+        "held_count": 1,
+        "held_undoable": 1,
+        "held_purge_at_ms": 1795176000000
       },
       "standing": "Up to date",
       "notes": ["1 old file goes Friday 20 November"],
@@ -69,14 +88,23 @@
     },
     {
       "name": "held_on_a_paused_device_says_kept_and_no_date_and_cannot_be_undone_from_here",
-      "device": { "label": "Office NAS", "paused": true, "held_files": 2 },
+      "device": {
+        "label": "Office NAS",
+        "reach_state": "frozen",
+        "held_count": 2,
+        "held_undoable": 2
+      },
       "standing": "Paused by whoever runs it",
       "notes": ["2 old files kept while it is paused"],
       "undo": false
     },
     {
       "name": "a_held_count_with_no_date_says_nothing",
-      "device": { "label": "Office NAS", "held_files": 2 },
+      "device": {
+        "label": "Office NAS",
+        "held_count": 2,
+        "held_undoable": 2
+      },
       "standing": "Up to date",
       "notes": [],
       "undo": false
@@ -85,10 +113,11 @@
       "name": "all_three_notes_in_order",
       "device": {
         "label": "Office NAS",
-        "unreadable_backup": true,
-        "damage_found": true,
-        "held_files": 3,
-        "held_until_ms": 1795176000000
+        "reach_state": "repairing",
+        "manifest_unreadable": true,
+        "held_count": 3,
+        "held_undoable": 3,
+        "held_purge_at_ms": 1795176000000
       },
       "standing": "Up to date",
       "notes": [
@@ -107,7 +136,12 @@
         "last_ack_ms": 1794560280000,
         "content_total": 10,
         "content_confirmed": 10,
-        "devices": [{ "label": "Office NAS", "last_ack_ms": 1794560280000 }]
+        "devices": [
+          {
+            "label": "Office NAS",
+            "last_ack_ms": 1794560280000
+          }
+        ]
       },
       "sentence": "This phone's vault is damaged. No new backup is made.",
       "detail": "The backups already on your backup devices are untouched.",
@@ -121,11 +155,14 @@
         "content_total": 10,
         "content_confirmed": 10,
         "devices": [
-          { "label": "Mac mini", "last_ack_ms": 1794560280000 },
+          {
+            "label": "Mac mini",
+            "last_ack_ms": 1794560280000
+          },
           {
             "label": "Office NAS",
-            "paused": true,
-            "last_ack_ms": 1794560280000
+            "last_ack_ms": 1794560280000,
+            "reach_state": "frozen"
           }
         ]
       },
@@ -140,11 +177,14 @@
         "content_total": 10,
         "content_confirmed": 10,
         "devices": [
-          { "label": "Mac mini", "last_ack_ms": 1794560280000 },
+          {
+            "label": "Mac mini",
+            "last_ack_ms": 1794560280000
+          },
           {
             "label": "Office NAS",
-            "too_old": true,
-            "last_ack_ms": 1794560280000
+            "last_ack_ms": 1794560280000,
+            "reach_state": "gateway_old"
           }
         ]
       },
@@ -159,8 +199,15 @@
         "content_total": 10,
         "content_confirmed": 10,
         "devices": [
-          { "label": "Mac mini", "last_ack_ms": 1794560280000 },
-          { "label": "Office NAS", "moved": true, "last_ack_ms": 1794560280000 }
+          {
+            "label": "Mac mini",
+            "last_ack_ms": 1794560280000
+          },
+          {
+            "label": "Office NAS",
+            "last_ack_ms": 1794560280000,
+            "reach_state": "moved"
+          }
         ]
       },
       "sentence": "Another phone took over Office NAS",

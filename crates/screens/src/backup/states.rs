@@ -81,7 +81,7 @@ pub fn notes(locale: Locale, zone: &str, destination: &Destination) -> Vec<Strin
 /// refuses writes (an undo is a signed write, so a paused or moved device cannot take it).
 #[must_use]
 pub fn can_undo(destination: &Destination) -> bool {
-    destination.held_files > 0
+    destination.held_undoable > 0
         && destination.held_until_ms.is_some()
         && !matches!(destination.footing(), Footing::Paused | Footing::Moved)
 }

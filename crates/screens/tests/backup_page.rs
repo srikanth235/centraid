@@ -4,6 +4,7 @@
 //! the Rust screens make from these words, so a sentence changed here changes on both together.
 //! Nothing here dials a gateway or reads a core.
 
+use centraid_api_proto::core_v1 as wire;
 use centraid_api_proto::core_v1::backup_line::Tone;
 use centraid_screens::backup::line;
 use centraid_screens::backup::reading::{Destination, Reading};
@@ -34,33 +35,60 @@ fn time(value: &Value, key: &str) -> Option<i64> {
     value[key].as_i64()
 }
 
-fn device(value: &Value) -> Destination {
-    Destination {
-        gateway_id: format!("id-{}", text(value, "label")),
-        label: text(value, "label"),
-        last_ack_ms: time(value, "last_ack_ms"),
-        moved: flag(value, "moved"),
-        paused: flag(value, "paused"),
-        too_old: flag(value, "too_old"),
-        unreadable_backup: flag(value, "unreadable_backup"),
-        damage_found: flag(value, "damage_found"),
-        held_files: number(value, "held_files"),
-        held_until_ms: time(value, "held_until_ms"),
-        ..Destination::default()
+/// The core's own words for how a device stands, as the fixture spells them.
+fn reach(name: &str) -> wire::DestinationReach {
+    match name {
+        "" => wire::DestinationReach::Ok,
+        "moved" => wire::DestinationReach::Moved,
+        "frozen" => wire::DestinationReach::Frozen,
+        "gateway_old" => wire::DestinationReach::GatewayOld,
+        "repairing" => wire::DestinationReach::Repairing,
+        other => panic!("the fixture names a reach this test does not know: {other}"),
     }
 }
 
+/// A device as the core's status says it (the fixture uses the wire's field names), read the way
+/// the screens read it: through `Reading::from_wire`, so the mapping is under test too.
+fn wire_device(value: &Value) -> wire::Destination {
+    let count = |key: &str| u32::try_from(number(value, key)).expect("a small count");
+    wire::Destination {
+        gateway_id: format!("id-{}", text(value, "label")),
+        label: text(value, "label"),
+        last_ack_ms: time(value, "last_ack_ms").unwrap_or(0),
+        reach_state: reach(&text(value, "reach_state")) as i32,
+        manifest_unreadable: flag(value, "manifest_unreadable"),
+        held_count: count("held_count"),
+        held_purge_at_ms: time(value, "held_purge_at_ms").unwrap_or(0),
+        held_undoable: count("held_undoable"),
+        sample_checked: count("sample_checked"),
+        sample_of: count("sample_of"),
+        ..wire::Destination::default()
+    }
+}
+
+fn device(value: &Value) -> Destination {
+    let status = wire::BackupStatusResponse {
+        destinations: vec![wire_device(value)],
+        ..wire::BackupStatusResponse::default()
+    };
+    Reading::from_wire(&status).destinations.remove(0)
+}
+
 fn reading(value: &Value) -> Reading {
-    Reading {
+    let status = wire::BackupStatusResponse {
         destinations: value["devices"]
             .as_array()
-            .map(|devices| devices.iter().map(device).collect())
+            .map(|devices| devices.iter().map(wire_device).collect())
             .unwrap_or_default(),
-        last_ack_ms: time(value, "last_ack_ms"),
+        acked_at_ms: time(value, "last_ack_ms"),
         content_total: number(value, "content_total"),
         content_confirmed: number(value, "content_confirmed"),
+        ..wire::BackupStatusResponse::default()
+    };
+    Reading {
+        // A DAMAGED VAULT IS THE OPEN ERROR, not a status field: the shell sets this flag.
         damaged: flag(value, "damaged"),
-        ..Reading::default()
+        ..Reading::from_wire(&status)
     }
 }
 
