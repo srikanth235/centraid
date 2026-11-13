@@ -37,15 +37,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use super::naming::{Digest, Name};
 
-/// The most names one `exists` or `delete` call carries: the protocol's cap.
-pub const NAMES_PER_CALL: usize = 1000;
-
-/// The most entries one `list` page carries: the protocol's cap.
-pub const LIST_PAGE: usize = 1000;
-
-/// The most bytes one `put_many` sends or one `get_many` answers, every
-/// part's frame header included: the protocol's bundle cap, 256 MiB.
-pub const BUNDLE_BYTES: u64 = 256 * 1024 * 1024;
+pub use super::generated_limits::{BUNDLE_BYTES, LIST_PAGE, NAMES_PER_CALL};
 
 /// What one part adds to a bundle beside its bytes: its frame header, the
 /// name and the digest in hex and the length as eight bytes.
@@ -575,8 +567,7 @@ pub fn delete_all(store: &dyn Store, names: &[Name]) -> Result<Deleted, StoreErr
 
 // ─── MemoryStore ────────────────────────────────────────────────────────────
 
-/// How long a tombstone keeps its bytes before a purge drops them.
-pub const TOMBSTONE_GRACE_MS: u64 = 7 * 24 * 60 * 60 * 1000;
+pub use super::generated_limits::TOMBSTONE_GRACE_MS;
 
 struct Held {
     bytes: Vec<u8>,

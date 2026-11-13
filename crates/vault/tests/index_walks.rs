@@ -32,9 +32,7 @@ fn a_guests_address_finds_its_person_by_the_contact_point_index() {
     walks(
         &plan(
             &scratch,
-            "SELECT p.person_id FROM contact_point p JOIN entity e ON e.id = p.person_id
-              WHERE p.kind = 'email' AND p.normalized = ?1 AND e.deleted_at IS NULL
-              ORDER BY p.person_id LIMIT 1",
+            centraid_vault::commands::event::PERSON_OF_EMAIL,
             &["a@example.com"],
         ),
         "contact_point_by_value",

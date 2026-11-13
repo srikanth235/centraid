@@ -611,17 +611,18 @@ pub(crate) fn attendees_items(guests: &Json) -> std::collections::BTreeMap<Strin
     out
 }
 
+/// The read [`person_of_email`] makes: a seek into `contact_point_by_value`, planned as the product
+/// makes it by `index_walks.rs` rather than copied there (#1191, L3).
+pub const PERSON_OF_EMAIL: &str =
+    "SELECT p.person_id FROM contact_point p JOIN entity e ON e.id = p.person_id
+              WHERE p.kind = 'email' AND p.normalized = ?1 AND e.deleted_at IS NULL
+              ORDER BY p.person_id LIMIT 1";
+
 /// The live person an email is, by an exact match with one of their email points.
 fn person_of_email(connection: &Connection, email: &str) -> Result<Option<String>> {
     let key = crate::commands::contact_point::reach_key("email", email);
     Ok(connection
-        .query_row(
-            "SELECT p.person_id FROM contact_point p JOIN entity e ON e.id = p.person_id
-              WHERE p.kind = 'email' AND p.normalized = ?1 AND e.deleted_at IS NULL
-              ORDER BY p.person_id LIMIT 1",
-            [&key],
-            |row| row.get(0),
-        )
+        .query_row(PERSON_OF_EMAIL, [&key], |row| row.get(0))
         .optional()?)
 }
 

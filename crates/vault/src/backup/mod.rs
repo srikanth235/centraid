@@ -41,6 +41,7 @@
 pub mod directory;
 pub mod drill;
 pub mod files;
+pub mod generated_limits;
 pub mod holdings;
 pub mod mover;
 pub mod naming;

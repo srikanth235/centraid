@@ -32,6 +32,7 @@ mod dev_paths;
 mod doc_links;
 mod gate;
 mod ledger;
+mod lists;
 mod model_pin;
 mod native_parity;
 mod native_parity_register;
@@ -102,6 +103,13 @@ enum Command {
     /// custom property the sheet does not have. The gate's `design` step is
     /// that check.
     Design {
+        /// Compare instead of write.
+        #[arg(long)]
+        check: bool,
+    },
+    /// Write the lists the gateway and the phone must agree on (#1191, L1): the phone's mirrors of
+    /// the gateway's limits, generated from `crates/gateway/src/rules/limits.rs`. `--check` compares.
+    Lists {
         /// Compare instead of write.
         #[arg(long)]
         check: bool,
@@ -299,6 +307,13 @@ fn main() -> ExitCode {
         },
         Command::Rules => rules::print_report(&root),
         Command::ScreensCatalog { check } => match screens_catalog::run(&root, check) {
+            Ok(()) => true,
+            Err(error) => {
+                eprintln!("xtask: {error:#}");
+                false
+            }
+        },
+        Command::Lists { check } => match lists::run(&root, check) {
             Ok(()) => true,
             Err(error) => {
                 eprintln!("xtask: {error:#}");

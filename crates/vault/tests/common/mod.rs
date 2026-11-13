@@ -6,6 +6,8 @@
 //! per-binary way to say so. The alternative is six copies of the same setup.
 #![allow(dead_code)]
 
+pub mod edge_shapes;
+
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 

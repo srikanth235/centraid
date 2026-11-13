@@ -59,7 +59,7 @@ pub const GROUPS: [(&str, &str, &str); 6] = [
 ///
 /// The FTS5 shadow tables of `search` are not here (they are an implementation
 /// of it); every other table must be.
-pub const TABLES: [(&str, &str, &str); 47] = [
+pub const TABLES: &[(&str, &str, &str)] = &[
     (
         "kernel",
         "entity",
@@ -422,7 +422,7 @@ pub fn render_schema_section() -> Result<String> {
                 }
             }
             for (_, table, _) in TABLES {
-                if !live.iter().any(|name| name.as_str() == table) {
+                if !live.iter().any(|name| name.as_str() == *table) {
                     return Err(VaultError::Invariant {
                         context: format!(
                             "ontology_doc::TABLES names `{table}`, which the founded file does not hold"
