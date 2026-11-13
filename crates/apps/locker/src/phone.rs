@@ -88,7 +88,7 @@ pub fn trashed_statement() -> PageQuery {
         "locker.phone.trashed",
         "id, updated_at",
         "entity",
-        PageOrder::desc("updated_at", "id"),
+        PageOrder::desc("deleted_at", "id"),
     )
     .filter(
         "kind = ? AND deleted_at IS NOT NULL",
