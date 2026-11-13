@@ -6,7 +6,8 @@ mod common;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use centraid_vault::pagesource::{PinError, PinnedPages, live_pins};
+use centraid_vault::backup::naming::{Name, keys_from_root, name};
+use centraid_vault::pagesource::{PinError, PinnedPages, live_pins, walk};
 use common::{Scratch, insert_note, plant_canary};
 use rusqlite::{Connection, OpenFlags};
 
@@ -377,4 +378,126 @@ fn a_gateway_call_under_a_live_pin_is_caught() {
     };
     let _pinned = PinnedPages::begin(&path_of(&scratch)).expect("pins");
     gateway.exists();
+}
+
+fn names_of(walked: &centraid_vault::pagesource::Walked) -> Vec<Name> {
+    walked.ranges.iter().map(|range| range.name).collect()
+}
+
+#[test]
+fn a_walk_hands_back_only_the_ranges_that_changed() {
+    let scratch = Scratch::founded("walk").expect("a vault");
+    grow(&scratch.vault, 60, "walk");
+    let path = path_of(&scratch);
+    let keys = keys_from_root(&[7; 32]);
+
+    // A first pass has no previous head: every range is sealed, one at a time.
+    let mut sealed_first = Vec::new();
+    let first = walk(&path, &keys, &|_| None, &mut |read, bytes| {
+        assert_eq!(live_pins(), 1, "the sealer runs under the pin");
+        assert_eq!(bytes.len() as u64, read.len);
+        assert_eq!(
+            name(
+                &keys,
+                &centraid_vault::backup::naming::PlaintextHash::of(bytes),
+                0
+            ),
+            read.name
+        );
+        sealed_first.push(read.i);
+        Ok(())
+    })
+    .expect("walks");
+    assert_eq!(live_pins(), 0, "the pin ended before walk returned");
+    assert_eq!(sealed_first.len(), first.ranges.len());
+    assert!(first.ranges.len() > 3);
+    assert_eq!(
+        first.db_len,
+        first.ranges.iter().map(|r| r.len).sum::<u64>()
+    );
+    assert!(first.census.contains_key("entity"));
+    assert!(first.writes > 0);
+
+    // The vault unchanged: nothing is sealed, and the same db_hash comes back.
+    let previous = names_of(&first);
+    let again = walk(
+        &path,
+        &keys,
+        &|i| previous.get(i as usize).copied(),
+        &mut |_, _| panic!("an unchanged vault seals nothing"),
+    )
+    .expect("walks");
+    assert_eq!(again.db_hash, first.db_hash);
+    assert!(again.ranges.iter().all(|r| !r.changed));
+
+    // One commit: only the ranges it touched are handed to the sealer.
+    insert_note(&scratch.vault, "one more").expect("commits");
+    let mut changed = Vec::new();
+    let after = walk(
+        &path,
+        &keys,
+        &|i| previous.get(i as usize).copied(),
+        &mut |read, _| {
+            changed.push(read.i);
+            Ok(())
+        },
+    )
+    .expect("walks");
+    assert!(!changed.is_empty() && changed.len() < after.ranges.len());
+    assert_eq!(
+        changed,
+        after
+            .ranges
+            .iter()
+            .filter(|r| r.changed)
+            .map(|r| r.i)
+            .collect::<Vec<_>>()
+    );
+    assert_ne!(after.db_hash, first.db_hash);
+    assert!(after.writes > first.writes);
+}
+
+#[test]
+fn a_walk_that_fails_in_the_sealer_releases_the_pin() {
+    let scratch = Scratch::founded("walkfail").expect("a vault");
+    grow(&scratch.vault, 30, "f");
+    let keys = keys_from_root(&[7; 32]);
+    let failed = walk(&path_of(&scratch), &keys, &|_| None, &mut |read, _| {
+        if read.i == 1 {
+            Err(centraid_vault::backup::PlaneError::Invariant {
+                context: "the spool is full".to_owned(),
+            })
+        } else {
+            Ok(())
+        }
+    });
+    assert!(failed.is_err());
+    assert_eq!(live_pins(), 0);
+}
+
+#[test]
+fn a_walk_over_a_damaged_vault_signs_nothing() {
+    let scratch = Scratch::founded("walkdmg").expect("a vault");
+    grow(&scratch.vault, 20, "d");
+    let path = path_of(&scratch);
+    Connection::open(&path)
+        .expect("opens")
+        .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+            row.get::<_, i64>(0)
+        })
+        .expect("checkpoints");
+    let mut bytes = std::fs::read(&path).expect("reads");
+    let leaf = (1..bytes.len() / 4096)
+        .find(|p| bytes[p * 4096] == 0x0d)
+        .expect("a leaf");
+    bytes[leaf * 4096 + 3] = 0xff;
+    bytes[leaf * 4096 + 4] = 0xff;
+    std::fs::write(&path, &bytes).expect("damages");
+    let keys = keys_from_root(&[7; 32]);
+    let walked = walk(&path, &keys, &|_| None, &mut |_, _| Ok(()));
+    assert!(
+        walked.is_err(),
+        "quick_check refuses the pass on the same pin"
+    );
+    assert_eq!(live_pins(), 0);
 }

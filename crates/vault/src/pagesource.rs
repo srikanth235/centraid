@@ -33,6 +33,8 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
+use crate::backup::naming::{BackupKeys, Name, PlaintextHash, name};
+
 use rusqlite::{Connection, OpenFlags};
 
 use crate::backup::{Result, invariant};
@@ -252,6 +254,27 @@ impl PinnedPages {
             .query_row("PRAGMA user_version", [], |row| row.get(0))?)
     }
 
+    /// `vault.writes` and `vault.written_at` at the pin; a file with no vault row has run nothing.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn history(&self) -> Result<(u64, Option<u64>)> {
+        use rusqlite::OptionalExtension as _;
+        let row: Option<(i64, Option<String>)> = self
+            .connection
+            .query_row("SELECT writes, written_at FROM vault", [], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .optional()?;
+        let (writes, at) = row.unwrap_or((0, None));
+        Ok((
+            u64::try_from(writes).unwrap_or(0),
+            at.as_deref()
+                .and_then(crate::clock::parse_iso_ms)
+                .and_then(|at| u64::try_from(at).ok()),
+        ))
+    }
+
     /// Rows per table a member has rows in, counted at the pin.
     ///
     /// # Errors
@@ -277,4 +300,101 @@ impl PinnedPages {
         self.connection.execute_batch("ROLLBACK")?;
         Ok(())
     }
+}
+
+// ─── one pass under one pin ─────────────────────────────────────────────────
+
+/// One range of the vault as the pass named it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RangeRead {
+    /// The range's index: its offset is `i * 64 KiB`.
+    pub i: u32,
+    /// 64 KiB, or the short last range.
+    pub len: u64,
+    /// BLAKE3 of the range's bytes.
+    pub h: PlaintextHash,
+    /// `name(h, 0)`: the name the range is stored under.
+    pub name: Name,
+    /// Whether the previous head had a different name (or none) at this index. A changed
+    /// range is the only kind handed to the sealer.
+    pub changed: bool,
+}
+
+/// What one pass learned about the vault at its moment.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Walked {
+    pub page_size: u64,
+    /// The vault's length at the pin.
+    pub db_len: u64,
+    /// BLAKE3 over every page in order.
+    pub db_hash: PlaintextHash,
+    pub user_version: i64,
+    /// `vault.writes` at the pin.
+    pub writes: u64,
+    /// `vault.written_at` as milliseconds on the vault's clock; `None` for a vault nothing has
+    /// been written to.
+    pub written_at_ms: Option<u64>,
+    /// Rows per table.
+    pub census: BTreeMap<String, i64>,
+    /// Every range, in order: the manifest's ranges.
+    pub ranges: Vec<RangeRead>,
+}
+
+/// **The whole read of a snapshot, under one pin.** Walks the vault's ranges in order; names each
+/// as the mover does (`name(keys, BLAKE3(range), 0)`); compares the name with
+/// `previous(i)`, the previous head's manifest entry at that index; and calls `seal` with the
+/// range's bytes **only for a range that changed**, so an unchanged vault costs a hash per range
+/// and a first snapshot seals everything, one range in memory at a time. Then it counts the
+/// census, reads `user_version` and the write counter, and runs `quick_check`, all on the same
+/// pin, and ends the pin before it returns.
+///
+/// `seal` runs under the pin, so it may read, hash and write the spool but must not talk to a
+/// gateway: nothing it is given can reach one, and a caller asserts [`live_pins`] is zero before
+/// any gateway call. An error from `seal` ends the pass and the pin.
+///
+/// # Errors
+/// What [`PinnedPages::begin`] refuses, a range that does not read, `seal`'s own error, a damaged
+/// vault (`VaultError::Damaged`: no head may be signed over it), or SQLite's refusal. In every
+/// case the pin is released first.
+pub fn walk(
+    path: &Path,
+    keys: &BackupKeys,
+    previous: &dyn Fn(u32) -> Option<Name>,
+    seal: &mut dyn FnMut(&RangeRead, &[u8]) -> Result<()>,
+) -> Result<Walked> {
+    let mut pinned = PinnedPages::begin(path)?;
+    let mut ranges = Vec::new();
+    let db_hash = pinned.hash_with(&mut |index, bytes| {
+        let i = u32::try_from(index).map_err(|_| invariant("too many ranges"))?;
+        let h = PlaintextHash::of(bytes);
+        let named = name(keys, &h, 0);
+        let read = RangeRead {
+            i,
+            len: bytes.len() as u64,
+            h,
+            name: named,
+            changed: previous(i) != Some(named),
+        };
+        if read.changed {
+            seal(&read, bytes)?;
+        }
+        ranges.push(read);
+        Ok(())
+    })?;
+    let census = pinned.census()?;
+    let user_version = pinned.user_version()?;
+    let (writes, written_at_ms) = pinned.history()?;
+    pinned.quick_check()?;
+    let (page_size, db_len) = (pinned.page_size(), pinned.len());
+    pinned.end()?;
+    Ok(Walked {
+        page_size,
+        db_len,
+        db_hash: PlaintextHash::from_bytes(db_hash),
+        user_version,
+        writes,
+        written_at_ms,
+        census,
+        ranges,
+    })
 }
