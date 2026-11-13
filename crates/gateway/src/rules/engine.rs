@@ -42,8 +42,8 @@ use crate::rules::state::{
 };
 use crate::rules::wire::{
     ClaimView, DeleteAnswer, DeleteRequest, HeadView, HeldEntry, HeldKind, Info, NameRefusal,
-    NonceAnswer, ObjectEntry, PairKind, PairRequest, Paired, SetHead, SnapshotView, UndoRequest,
-    Undone,
+    NameState, NonceAnswer, ObjectEntry, PairKind, PairRequest, Paired, SetHead, SnapshotView,
+    UndoRequest, Undone,
 };
 
 /// What a request may do.
@@ -707,6 +707,7 @@ impl<S: State> Gateway<S> {
         token: &Token,
         request: &DeleteRequest,
         now_ms: i64,
+        mut remove: impl FnMut(&Name) -> Result<(), Fault>,
     ) -> Result<DeleteAnswer, Fault> {
         let gateway = self.id;
         self.state.atomically(|state| {
@@ -728,16 +729,26 @@ impl<S: State> Gateway<S> {
             let mut answer = DeleteAnswer::default();
             for name in distinct(&request.names) {
                 if head == Some(name) {
-                    answer.refused.push(NameRefusal {
-                        name,
-                        code: Code::HeadInUse,
-                    });
+                    answer
+                        .refused
+                        .push(NameRefusal::code(name, Code::HeadInUse));
                     continue;
                 }
                 let Some(object) = state.object(vault, &name)? else {
                     answer.deleted.push(name);
                     continue;
                 };
+                // A DAMAGED OBJECT IS NOT HELD, IT IS FREED (#1191, decision
+                // 30): its bytes are already bad, so an undo would restore
+                // nothing, and the name stays taken until it is freed. Only
+                // the vault key's signature gets here. A damaged manifest a
+                // snapshot row still names takes the held path below.
+                if object.damaged_at_ms.is_some() && state.snapshot(vault, &name)?.is_none() {
+                    remove(&name)?;
+                    state.remove_object(vault, &name)?;
+                    answer.freed.push(name);
+                    continue;
+                }
                 if object.hold.is_none() {
                     state.set_hold(
                         vault,
@@ -1295,14 +1306,26 @@ fn put_one<S: State>(
             return if row.digest == arrival.digest {
                 Ok(PutOutcome::AlreadyStored(row.entry()))
             } else {
-                Err(Refusal::NameTaken { digest: row.digest }.into())
+                Err(Refusal::NameTaken {
+                    digest: row.digest,
+                    state: NameState::Live,
+                }
+                .into())
             };
         }
         // HELD OR DAMAGED (R3): only the bytes the row records come back. A
         // writer token that swaps garbage over a held manifest, or over a
         // damaged part, is refused and nothing changes.
         if row.digest != arrival.digest {
-            return Err(Refusal::NameTaken { digest: row.digest }.into());
+            return Err(Refusal::NameTaken {
+                digest: row.digest,
+                state: if row.damaged_at_ms.is_some() {
+                    NameState::Damaged
+                } else {
+                    NameState::Held
+                },
+            }
+            .into());
         }
         if row.damaged_at_ms.is_none() {
             // Held, and its file is not known to be damaged: the name is

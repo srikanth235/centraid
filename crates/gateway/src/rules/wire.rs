@@ -10,7 +10,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::rules::code::Code;
+use crate::rules::code::{Code, Refusal};
 use crate::rules::ids::{Digest, GatewayId, Name, Nonce, Secret, Signature, Token, VaultId};
 
 /// The header an object's digest travels in, both ways: `blake3=<64 hex>`.
@@ -259,6 +259,54 @@ pub struct ObjectEntry {
 pub struct NameRefusal {
     pub name: Name,
     pub code: Code,
+    /// With `NAME_TAKEN`: the digest the gateway recorded (additive).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub digest: Option<Digest>,
+    /// With `NAME_TAKEN`: why the name is not free (additive).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<NameState>,
+}
+
+impl NameRefusal {
+    /// A refusal with only a code.
+    #[must_use]
+    pub const fn code(name: Name, code: Code) -> Self {
+        Self {
+            name,
+            code,
+            digest: None,
+            state: None,
+        }
+    }
+
+    /// What one frame's or name's refusal says, `NAME_TAKEN` companions
+    /// included.
+    #[must_use]
+    pub fn of(name: Name, refusal: &Refusal) -> Self {
+        let (digest, state) = match refusal {
+            Refusal::NameTaken { digest, state } => (Some(*digest), Some(*state)),
+            _ => (None, None),
+        };
+        Self {
+            name,
+            code: refusal.code(),
+            digest,
+            state,
+        }
+    }
+}
+
+/// Why a name a `PUT` wanted is not free.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NameState {
+    /// Stored and live under another digest.
+    Live,
+    /// Held for deletion (a signed delete is waiting out its week).
+    Held,
+    /// The gateway found its file missing or rotten. Only a signed delete
+    /// frees the name.
+    Damaged,
 }
 
 /// What `POST bundle` answers: each frame exactly as a `PUT` of that frame
@@ -275,23 +323,30 @@ pub struct BundleAnswer {
 }
 
 impl BundleAnswer {
-    /// Every name the gateway now holds a sealing of, in the order the
-    /// answer lists them: `stored`, `already`, and each `NAME_TAKEN`. A name
-    /// is a function of the plaintext, so another digest under it is the
-    /// same bytes sealed again (#1080, the root's ruling A15). These are the
-    /// names a phone may record as acknowledged.
+    /// Every name the gateway now holds this frame's bytes under: `stored`
+    /// and `already`. A `NAME_TAKEN` is not here (see [`Self::taken`]).
     #[must_use]
     pub fn acknowledged(&self) -> Vec<Name> {
-        self.stored
+        self.stored.iter().chain(&self.already).copied().collect()
+    }
+
+    /// Every frame refused `NAME_TAKEN`: `(name, recorded digest, state)`.
+    /// **Not acknowledgements.** A phone compares the digest with the one it
+    /// sent: equal is the same bytes, held; another digest on a live name is
+    /// a name it must not count as stored, and on a damaged name it is the
+    /// cue for a signed delete.
+    #[must_use]
+    pub fn taken(&self) -> Vec<(Name, Digest, NameState)> {
+        self.refused
             .iter()
-            .chain(&self.already)
-            .copied()
-            .chain(
-                self.refused
-                    .iter()
-                    .filter(|refusal| refusal.code == Code::NameTaken)
-                    .map(|refusal| refusal.name),
-            )
+            .filter(|refusal| refusal.code == Code::NameTaken)
+            .filter_map(|refusal| {
+                Some((
+                    refusal.name,
+                    refusal.digest?,
+                    refusal.state.unwrap_or(NameState::Live),
+                ))
+            })
             .collect()
     }
 }
@@ -302,6 +357,11 @@ pub struct DeleteAnswer {
     /// Held now, held before, or never stored: either way, deleted.
     /// Deleting is idempotent (#1080, the root's ruling A15).
     pub deleted: Vec<Name>,
+    /// Damaged objects the delete removed at once, row and file, with no hold:
+    /// the bytes were already bad and an undo would restore nothing. The names
+    /// are free (additive; an older gateway never says).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub freed: Vec<Name>,
     /// Only `HEAD_IN_USE`: the head's own manifest.
     pub refused: Vec<NameRefusal>,
 }

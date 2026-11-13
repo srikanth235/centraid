@@ -279,7 +279,10 @@ impl Target for WireTarget {
         {
             Put::Stored(entry) => Ok(PutAnswer::Stored(entry)),
             Put::AlreadyStored(entry) => Ok(PutAnswer::AlreadyStored(entry)),
-            Put::NameTaken { held } => Err(Failure::Refused(Refusal::NameTaken { digest: held })),
+            Put::NameTaken { held, state, .. } => Err(Failure::Refused(Refusal::NameTaken {
+                digest: held,
+                state,
+            })),
         }
     }
 
@@ -451,6 +454,7 @@ named_over_the_wire!(
     a_forged_foreign_expired_or_replayed_nonce_is_refused,
     a_claim_keeps_the_superseded_writers_tombstone_among_a_hundred_readers,
     a_put_of_garbage_over_a_held_or_damaged_name_is_refused,
+    a_signed_delete_frees_a_damaged_name_and_a_token_alone_cannot,
     the_extremes_of_every_number_are_refused_without_a_fault,
     a_claim_or_read_grant_for_another_gateway_or_vault_moves_nothing,
 );

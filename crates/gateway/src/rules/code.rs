@@ -29,7 +29,7 @@ use core::fmt;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::rules::ids::{Digest, Name};
-use crate::rules::wire::{ClaimView, HeadView};
+use crate::rules::wire::{ClaimView, HeadView, NameState};
 
 /// The closed set of answers that are not a success.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -210,6 +210,9 @@ pub enum Refusal {
     /// The digest the name is already held with.
     NameTaken {
         digest: Digest,
+        /// Why the name is not free (additive; an older gateway says nothing,
+        /// which reads as live).
+        state: NameState,
     },
     /// The byte limit that was crossed.
     TooLarge {
@@ -306,6 +309,7 @@ impl Refusal {
             },
             Code::NameTaken => Self::NameTaken {
                 digest: body.digest?,
+                state: body.state.unwrap_or(NameState::Live),
             },
             Code::TooLarge => Self::TooLarge { limit: body.limit? },
             Code::TooMany => Self::TooMany { limit: body.limit? },
@@ -359,6 +363,9 @@ pub struct RefusalBody {
     pub name: Option<Name>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub digest: Option<Digest>,
+    /// With `NAME_TAKEN`: whether the name is live, held for deletion or damaged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<NameState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -407,6 +414,7 @@ impl RefusalBody {
             retry_after_ms: None,
             skew_ms: None,
             claim: None,
+            state: None,
         }
     }
 
@@ -433,7 +441,10 @@ impl RefusalBody {
             }
             Refusal::NotFound { name } => body.name = name,
             Refusal::DigestMismatch { computed } => body.digest = Some(computed),
-            Refusal::NameTaken { digest } => body.digest = Some(digest),
+            Refusal::NameTaken { digest, state } => {
+                body.digest = Some(digest);
+                body.state = Some(state);
+            }
             Refusal::TooLarge { limit } | Refusal::TooMany { limit } => body.limit = Some(limit),
             Refusal::HeadInUse { name } => body.name = Some(name),
             Refusal::BadRange { size } => body.size = Some(size),
@@ -464,6 +475,33 @@ impl RefusalBody {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A gateway that never says why a name is taken (the field is
+    /// additive) reads as a live name; one that does is read as it says.
+    #[test]
+    fn a_name_taken_without_a_state_reads_as_live() {
+        let digest = Digest::of(b"held");
+        let old = serde_json::json!({"code": "NAME_TAKEN", "time_ms": 1, "digest": digest});
+        let body: RefusalBody = serde_json::from_value(old).expect("an older body");
+        assert_eq!(
+            Refusal::from_body(&body),
+            Some(Refusal::NameTaken {
+                digest,
+                state: NameState::Live
+            })
+        );
+        let new = serde_json::json!({
+            "code": "NAME_TAKEN", "time_ms": 1, "digest": digest, "state": "damaged"
+        });
+        let body: RefusalBody = serde_json::from_value(new).expect("a body");
+        assert_eq!(
+            Refusal::from_body(&body),
+            Some(Refusal::NameTaken {
+                digest,
+                state: NameState::Damaged
+            })
+        );
+    }
 
     fn head() -> HeadView {
         HeadView {
@@ -530,6 +568,7 @@ mod tests {
             },
             Refusal::NameTaken {
                 digest: Digest::of(b"y"),
+                state: NameState::Damaged,
             },
             Refusal::TooLarge { limit: 10 },
             Refusal::TooMany { limit: 1_000 },

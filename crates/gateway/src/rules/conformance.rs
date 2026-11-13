@@ -47,8 +47,8 @@ use crate::rules::signing::{
 };
 use crate::rules::wire::{
     BundleAnswer, ClaimBody, DeleteAnswer, DeleteRequest, HeadView, HeldEntry, HeldKind, Info,
-    NonceAnswer, ObjectEntry, PairKind, PairRequest, Paired, ReadBody, SecretBody, SetHead,
-    SnapshotView, UndoRequest, Undone,
+    NameRefusal, NameState, NonceAnswer, ObjectEntry, PairKind, PairRequest, Paired, ReadBody,
+    SecretBody, SetHead, SnapshotView, UndoRequest, Undone,
 };
 
 /// One case's verdict.
@@ -259,7 +259,7 @@ pub trait Target {
 
 /// Every case, by name, in the order [`run`] runs them. A target's test
 /// asserts its report names exactly these, so a dropped case is a failure.
-pub const CASES: [&str; 63] = [
+pub const CASES: [&str; 64] = [
     "info/answers-before-anything-is-paired",
     "pair/a-secret-admits-one-new-vault-once",
     "pair/a-known-vault-is-refused-and-the-secret-is-not-spent",
@@ -323,6 +323,7 @@ pub const CASES: [&str; 63] = [
     "takeover/a-claim-keeps-the-superseded-writers-tombstone",
     "signed/the-extremes-of-every-number-are-refused-cleanly",
     "pair/a-claim-or-a-read-grant-made-for-another-gateway-or-vault-moves-nothing",
+    "store/a-signed-delete-frees-a-damaged-name-and-a-token-alone-cannot",
 ];
 
 /// **The names tests.md gives, and the case each runs.** `tests/conformance.rs`
@@ -440,6 +441,10 @@ pub const NAMED: &[(&str, &str)] = &[
     (
         "a_claim_keeps_the_superseded_writers_tombstone_among_a_hundred_readers",
         "takeover/a-claim-keeps-the-superseded-writers-tombstone",
+    ),
+    (
+        "a_signed_delete_frees_a_damaged_name_and_a_token_alone_cannot",
+        "store/a-signed-delete-frees-a-damaged-name-and-a-token-alone-cannot",
     ),
     (
         "the_extremes_of_every_number_are_refused_without_a_fault",
@@ -657,6 +662,9 @@ async fn run_named<T: Target>(target: &mut T, only: Option<&str>) -> Report {
     }
     if only.is_none_or(|case| case == CASES[62]) {
         report.record(CASES[62], foreign_claim_or_read_moves_nothing(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[63]) {
+        report.record(CASES[63], signed_delete_frees_damaged(target).await);
     }
     report
 }
@@ -1273,6 +1281,7 @@ async fn write_once<T: Target>(target: &mut T) -> Outcome {
         taken
             == Refusal::NameTaken {
                 digest: Digest::of(&first.1),
+                state: NameState::Live,
             },
         || format!("NAME_TAKEN must carry the held digest: {taken:?}"),
     )?;
@@ -1540,7 +1549,13 @@ async fn bundle<T: Target>(target: &mut T) -> Outcome {
         || format!("refused {refused_codes:?}"),
     )?;
     ensure(
-        answer.acknowledged() == vec![good.0, taken.0, taken.0],
+        answer.acknowledged() == vec![good.0, taken.0]
+            && answer
+                .taken()
+                .iter()
+                .map(|(name, _, _)| *name)
+                .collect::<Vec<_>>()
+                == vec![taken.0],
         || format!("acknowledged {:?}", answer.acknowledged()),
     )?;
     let back = ok(target.get(&phone.token, &vault, &good.0, None).await, "get")?;
@@ -1991,6 +2006,7 @@ async fn name_taken<T: Target>(target: &mut T) -> Outcome {
         refusal
             == Refusal::NameTaken {
                 digest: Digest::of(&held.1),
+                state: NameState::Live,
             },
         || format!("NAME_TAKEN must carry the held digest: {refusal:?}"),
     )?;
@@ -2004,10 +2020,11 @@ async fn name_taken<T: Target>(target: &mut T) -> Outcome {
         "the same name under another digest, bundled",
     )?;
     ensure(
-        answer.acknowledged() == vec![held.0]
+        answer.acknowledged().is_empty()
+            && answer.taken() == vec![(held.0, Digest::of(&held.1), NameState::Live)]
             && answer.refused.len() == 1
             && answer.refused[0].code == Code::NameTaken,
-        || format!("a bundled NAME_TAKEN is refused and acknowledged: {answer:?}"),
+        || format!("a bundled NAME_TAKEN is refused, typed, and not acknowledged: {answer:?}"),
     )?;
     let back = ok(target.get(&phone.token, &vault, &held.0, None).await, "get")?;
     ensure(back == held.1, || {
@@ -3752,6 +3769,7 @@ async fn put_over_held_must_match<T: Target>(target: &mut T) -> Outcome {
         refusal
             == Refusal::NameTaken {
                 digest: Digest::of(&old.1),
+                state: NameState::Held,
             },
         || format!("{refusal:?}"),
     )?;
@@ -4122,4 +4140,183 @@ async fn foreign_claim_or_read_moves_nothing<T: Target>(target: &mut T) -> Outco
         "the writer still writes",
     )?;
     Ok(())
+}
+
+/// Decision 30: a signed delete that names an object the gateway has marked
+/// damaged removes its row and file at once (no hold: an undo would restore
+/// nothing), the name is free, and a re-sealed `PUT` is a normal first write.
+/// A caller with only a token cannot free it. Reported apart from the held
+/// names in the answer's `freed`; the head's manifest still refuses.
+async fn signed_delete_frees_damaged<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let gateway = target.gateway_id();
+    let (manifest, _) = headed(target, &phone, &vault, "frees manifest", None, 1).await?;
+    let live = object("frees live");
+    let rotten = object("frees rotten");
+    store(target, &phone, &vault, &live).await?;
+    store(target, &phone, &vault, &rotten).await?;
+    target.corrupt(&vault, &rotten.0).await?;
+    target.scrub().await?;
+    let resealed = {
+        let mut bytes = rotten.1.clone();
+        bytes.extend_from_slice(b" sealed again");
+        bytes
+    };
+    let taken = refused(
+        target
+            .put(
+                &phone.token,
+                &vault,
+                &rotten.0,
+                &Digest::of(&resealed),
+                &resealed,
+            )
+            .await,
+        Code::NameTaken,
+        "a re-sealed copy over a damaged name",
+    )?;
+    ensure(
+        matches!(
+            taken,
+            Refusal::NameTaken {
+                state: NameState::Damaged,
+                ..
+            }
+        ),
+        || format!("NAME_TAKEN must say the name is damaged: {taken:?}"),
+    )?;
+
+    // A token alone: no signature, a signature for other names, another key.
+    let generation = phone.standing() + 1;
+    for (what, signature) in [
+        ("an empty signature", Signature::from_bytes([0; 64])),
+        (
+            "a signature over other names",
+            sign_delete(&key, &gateway, 1, generation, &[live.0]),
+        ),
+        (
+            "another key's signature",
+            sign_delete(&identity(9), &gateway, 1, generation, &[rotten.0]),
+        ),
+    ] {
+        refused(
+            target
+                .delete(
+                    &phone.token,
+                    &vault,
+                    &DeleteRequest {
+                        names: vec![rotten.0],
+                        generation,
+                        signature,
+                    },
+                )
+                .await,
+            Code::Unauthorized,
+            what,
+        )?;
+    }
+    refused(
+        target
+            .put(
+                &phone.token,
+                &vault,
+                &rotten.0,
+                &Digest::of(&resealed),
+                &resealed,
+            )
+            .await,
+        Code::NameTaken,
+        "the name after the refused deletes",
+    )?;
+
+    // A frozen vault refuses even a signed one.
+    target.freeze(&vault).await?;
+    refused(
+        target
+            .delete(&phone.token, &vault, &phone.delete(&[rotten.0]))
+            .await,
+        Code::Frozen,
+        "a signed delete of a damaged name on a frozen vault",
+    )?;
+    target.unfreeze(&vault).await?;
+    refused(
+        target
+            .put(
+                &phone.token,
+                &vault,
+                &rotten.0,
+                &Digest::of(&resealed),
+                &resealed,
+            )
+            .await,
+        Code::NameTaken,
+        "the name after the frozen refusal",
+    )?;
+
+    // A mix: the live name is held, the damaged one freed, the head's
+    // manifest refused.
+    let answer = ok(
+        target
+            .delete(
+                &phone.token,
+                &vault,
+                &phone.delete(&[live.0, rotten.0, manifest.0]),
+            )
+            .await,
+        "a signed delete of a mix",
+    )?;
+    ensure(answer.deleted == vec![live.0], || {
+        format!("only the live name is held: {answer:?}")
+    })?;
+    ensure(answer.freed == vec![rotten.0], || {
+        format!("the damaged name is freed, apart: {answer:?}")
+    })?;
+    ensure(
+        answer.refused == vec![NameRefusal::code(manifest.0, Code::HeadInUse)],
+        || format!("the head's manifest stands: {answer:?}"),
+    )?;
+    let held = ok(target.held(&phone.token, &vault, None, 10).await, "held")?;
+    ensure(
+        held.iter().map(|entry| entry.name).collect::<Vec<_>>() == vec![live.0],
+        || format!("a freed name is not held: {held:?}"),
+    )?;
+
+    // The name is free: a re-sealed copy is a first write.
+    ok(
+        target
+            .put(
+                &phone.token,
+                &vault,
+                &rotten.0,
+                &Digest::of(&resealed),
+                &resealed,
+            )
+            .await,
+        "a re-sealed copy over a freed name",
+    )?;
+    ensure(
+        ok(
+            target.get(&phone.token, &vault, &rotten.0, None).await,
+            "get",
+        )? == resealed,
+        || "the re-sealed bytes are not what is stored".to_owned(),
+    )?;
+    // Undo brings back what was held, and never a damaged name.
+    let undone = ok(
+        target.undo(&phone.token, &vault, &phone.undo(None)).await,
+        "an undo",
+    )?;
+    ensure(undone.undone == 1, || {
+        format!("only the live hold: {undone:?}")
+    })?;
+    ensure(
+        ok(
+            target.get(&phone.token, &vault, &rotten.0, None).await,
+            "get",
+        )? == resealed,
+        || "an undo changed the freed name".to_owned(),
+    )
 }

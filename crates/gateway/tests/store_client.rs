@@ -35,7 +35,7 @@ use centraid_gateway::rules::code::Code;
 use centraid_gateway::rules::ids::{Digest, Name, Token, VaultId};
 #[cfg(target_os = "linux")]
 use centraid_gateway::rules::limits::MAX_BUNDLE_BYTES;
-use centraid_gateway::rules::wire::BundleAnswer;
+use centraid_gateway::rules::wire::{BundleAnswer, NameState};
 use centraid_gateway::server::harness::pair_secret;
 use centraid_gateway::server::harness::{Spawned, spawn};
 use futures::StreamExt as _;
@@ -74,7 +74,7 @@ fn part(seed: &str, len: usize) -> (Name, Vec<u8>) {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn every_put_answer_the_client_returns_is_an_acknowledgement() {
+async fn a_put_answer_is_an_acknowledgement_only_for_the_phones_own_bytes() {
     let dir = tempfile::tempdir().expect("a temp dir");
     let gateway = spawn(dir.path()).await.expect("spawned");
     let (vault, phone, _) = paired(&gateway, 1).await;
@@ -99,7 +99,18 @@ async fn every_put_answer_the_client_returns_is_an_acknowledgement() {
         .put(&vault, &name, &Digest::of(&resealed), resealed.clone())
         .await
         .expect("NAME_TAKEN is an acknowledgement, not an error");
-    assert_eq!(taken, Put::NameTaken { held: digest });
+    assert_eq!(
+        taken,
+        Put::NameTaken {
+            held: digest,
+            mine: Digest::of(&resealed),
+            state: NameState::Live,
+        }
+    );
+    assert!(
+        !taken.acknowledged(),
+        "another digest under a name is not an acknowledgement (decision 30)"
+    );
     assert_eq!(
         phone.get(&vault, &name, None).await.expect("reads"),
         sealed,
@@ -130,7 +141,12 @@ async fn every_put_answer_the_client_returns_is_an_acknowledgement() {
             .collect::<Vec<_>>(),
         vec![(name, Code::NameTaken)]
     );
-    assert_eq!(answer.acknowledged(), vec![fresh, name, name]);
+    assert_eq!(answer.acknowledged(), vec![fresh, name]);
+    assert_eq!(
+        answer.taken(),
+        vec![(name, digest, NameState::Live)],
+        "the refused frame is typed, with the digest the gateway holds"
+    );
     gateway.shutdown().await;
 }
 

@@ -79,8 +79,8 @@ use crate::rules::range::ByteRange;
 use crate::rules::signing::{HeadFields, verify_claim, verify_head};
 use crate::rules::wire::{
     BundleAnswer, CODE_HEADER, DIGEST_HEADER, DeleteAnswer, DeleteRequest, HeadView, HeldEntry,
-    Info, Missing, Names, NonceAnswer, ObjectEntry, PairRequest, Paired, Revoked, SetHead,
-    SnapshotView, UndoRequest, Undone,
+    Info, Missing, NameState, Names, NonceAnswer, ObjectEntry, PairRequest, Paired, Revoked,
+    SetHead, SnapshotView, UndoRequest, Undone,
 };
 
 /// How long one address gets to accept a TCP connection.
@@ -210,14 +210,32 @@ pub enum Put {
     Stored(ObjectEntry),
     /// `200`: held already with this digest; nothing moved.
     AlreadyStored(ObjectEntry),
-    /// `409 NAME_TAKEN`: held already under another digest. A name is a
-    /// function of the plaintext and sealing is salted, so this is the same
-    /// bytes sealed again — an acknowledgement, not a refusal (#1080, the
-    /// root's ruling A15).
+    /// `409 NAME_TAKEN`: the name is not free. **An acknowledgement only if
+    /// `held == mine`** ([`Put::acknowledged`]); otherwise the gateway
+    /// holds other bytes under this name and the phone must not count this
+    /// one as stored (#1191, decision 30). A damaged name is freed by a
+    /// signed delete and then written again; a held or live one waits.
     NameTaken {
         /// The digest the gateway holds.
         held: Digest,
+        /// The digest this `PUT` sent.
+        mine: Digest,
+        /// Why the name is not free.
+        state: NameState,
     },
+}
+
+impl Put {
+    /// Whether the gateway now holds *these* bytes under the name: stored,
+    /// already stored, or a `NAME_TAKEN` whose recorded digest is the one
+    /// this `PUT` sent. Any other `NAME_TAKEN` is **not** an acknowledgement.
+    #[must_use]
+    pub fn acknowledged(&self) -> bool {
+        match self {
+            Self::Stored(_) | Self::AlreadyStored(_) => true,
+            Self::NameTaken { held, mine, .. } => held == mine,
+        }
+    }
 }
 
 /// Where a bundled part's bytes come from.
@@ -753,9 +771,14 @@ impl Client {
             Ok(_) => Err(ClientError::Protocol(format!(
                 "a PUT answered {status}, which is neither 201 nor 200"
             ))),
-            Err(ClientError::Refused(Refusal::NameTaken { digest })) => {
-                Ok(Put::NameTaken { held: digest })
-            }
+            Err(ClientError::Refused(Refusal::NameTaken {
+                digest: held,
+                state,
+            })) => Ok(Put::NameTaken {
+                held,
+                mine: *digest,
+                state,
+            }),
             Err(error) => Err(error),
         }
     }

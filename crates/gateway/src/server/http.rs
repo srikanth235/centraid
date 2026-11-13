@@ -764,10 +764,9 @@ async fn advance(
                 return Ok(());
             };
             match staged {
-                None => staging.oversize.push(NameRefusal {
-                    name: header.name,
-                    code: Code::TooLarge,
-                }),
+                None => staging
+                    .oversize
+                    .push(NameRefusal::code(header.name, Code::TooLarge)),
                 Some(staged) => staging.frames.push((header, Some(staged.finish().await?))),
             }
         }
@@ -829,10 +828,7 @@ async fn admit_frames(
         match outcome {
             Ok(PutOutcome::Stored(_)) => answer.stored.push(arrival.name),
             Ok(PutOutcome::AlreadyStored(_)) => answer.already.push(arrival.name),
-            Err(refusal) => answer.refused.push(NameRefusal {
-                name: arrival.name,
-                code: refusal.code(),
-            }),
+            Err(refusal) => answer.refused.push(NameRefusal::of(arrival.name, &refusal)),
         }
     }
     Ok(answer)
@@ -978,8 +974,11 @@ async fn delete(
         Err(refusal) => return refused(&refusal, shared.now()),
     };
     let now = shared.now();
+    let worker = std::sync::Arc::clone(&shared);
     let outcome = blocking(&shared, move |gateway| {
-        gateway.delete(&vault, &token, &request, now)
+        gateway.delete(&vault, &token, &request, now, |name| {
+            worker.store().remove(&vault, name)
+        })
     })
     .await;
     answer(&shared, StatusCode::OK, outcome)

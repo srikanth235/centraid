@@ -862,10 +862,7 @@ impl Target for MemoryTarget {
             match outcome {
                 Ok(PutOutcome::Stored(_)) => answer.stored.push(frame.name),
                 Ok(PutOutcome::AlreadyStored(_)) => answer.already.push(frame.name),
-                Err(refusal) => answer.refused.push(NameRefusal {
-                    name: frame.name,
-                    code: refusal.code(),
-                }),
+                Err(refusal) => answer.refused.push(NameRefusal::of(frame.name, &refusal)),
             }
         }
         Ok(answer)
@@ -908,8 +905,12 @@ impl Target for MemoryTarget {
         vault: &VaultId,
         request: &DeleteRequest,
     ) -> Result<DeleteAnswer, Failure> {
-        self.gateway
-            .delete(vault, token, request, self.now_ms)
+        let Self { gateway, bytes, .. } = self;
+        gateway
+            .delete(vault, token, request, self.now_ms, |name| {
+                bytes.remove(&(*vault, *name));
+                Ok(())
+            })
             .map_err(failure)
     }
 
