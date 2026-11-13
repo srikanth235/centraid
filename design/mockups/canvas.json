@@ -3145,6 +3145,14 @@
       "x": 7520,
       "y": 24440
     },
+    "BackupVaultDamagedOpen.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "5 · Vault damaged at launch (#1191)",
+      "w": 390,
+      "x": 7520,
+      "y": 27260
+    },
     "BackupChecked.dc.html": {
       "h": 844,
       "page": "light",
@@ -4014,6 +4022,7 @@
     "BackupHeld.dc.html",
     "BackupDeviceNotes.dc.html",
     "BackupVaultDamaged.dc.html",
+    "BackupVaultDamagedOpen.dc.html",
     "BackupChecked.dc.html",
     "RestoreAsk.dc.html"
   ],

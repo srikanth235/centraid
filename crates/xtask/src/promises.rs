@@ -3257,6 +3257,10 @@ pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 9] = [
                 "crates/screens/tests/backup_page.rs",
                 "no_sentence_says_what_the_member_is_never_told",
             ),
+            (
+                "crates/screens/tests/words_enter.rs",
+                "a_restore_that_cannot_prove_the_newest_asks_before_it_claims",
+            ),
         ],
     ),
 ];

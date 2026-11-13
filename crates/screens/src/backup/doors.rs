@@ -9,10 +9,16 @@ use centraid_core::screens::VaultRequest;
 use prost::Message;
 
 const FORGET: &str = "backup.forget:";
+const UNDO: &str = "backup.undo:";
 
 /// The tag of a forget, naming the gateway so the answer finds its label.
 pub(super) fn forget_tag(gateway_id: &str) -> String {
     format!("{FORGET}{gateway_id}")
+}
+
+/// The tag of an undo, naming the gateway so the answer finds its label.
+pub(super) fn undo_tag(gateway_id: &str) -> String {
+    format!("{UNDO}{gateway_id}")
 }
 
 /// What a door came back with.
@@ -25,6 +31,12 @@ pub(super) enum Done {
         forgotten: bool,
         revoked: bool,
     },
+    /// The deletes a gateway was holding were lifted (`restored` names), or the door did not
+    /// answer (`None`): the signed undo reached nobody, so nothing is claimed.
+    Undid {
+        gateway_id: String,
+        restored: Option<u32>,
+    },
 }
 
 /// The request that forgets `gateway_id`.
@@ -34,19 +46,35 @@ pub(super) fn forget_request(gateway_id: &str) -> VaultRequest {
     })
 }
 
+/// The request that lifts every delete `gateway_id` is holding for this vault.
+pub(super) fn undo_request(gateway_id: &str) -> VaultRequest {
+    VaultRequest::UndoHeld(wire::UndoHeldRequest {
+        gateway_id: gateway_id.to_owned(),
+    })
+}
+
 /// What a finished job means: the tag it was asked under and the bytes it came
 /// back with (an encoded `VaultCalled`). `None` for a tag this screen did not
 /// ask.
 pub(super) fn done(tag: &str, bytes: &[u8]) -> Option<Done> {
-    let gateway_id = tag.strip_prefix(FORGET)?;
-    let answer = wire::VaultCalled::decode(bytes)
+    let response = wire::VaultCalled::decode(bytes)
         .ok()
         .filter(|called| called.error.is_none())
-        .and_then(|called| wire::Response::decode(called.response.as_slice()).ok())
-        .and_then(|response| match response.kind {
-            Some(wire::response::Kind::ForgetDestination(answer)) => Some(answer),
-            _ => None,
+        .and_then(|called| wire::Response::decode(called.response.as_slice()).ok());
+    if let Some(gateway_id) = tag.strip_prefix(UNDO) {
+        return Some(Done::Undid {
+            gateway_id: gateway_id.to_owned(),
+            restored: response.and_then(|response| match response.kind {
+                Some(wire::response::Kind::UndoHeld(answer)) => Some(answer.restored),
+                _ => None,
+            }),
         });
+    }
+    let gateway_id = tag.strip_prefix(FORGET)?;
+    let answer = response.and_then(|response| match response.kind {
+        Some(wire::response::Kind::ForgetDestination(answer)) => Some(answer),
+        _ => None,
+    });
     Some(Done::Forgot {
         gateway_id: gateway_id.to_owned(),
         // NO ANSWER (no core, or a refusal) IS NOT FORGOTTEN.

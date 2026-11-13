@@ -130,6 +130,9 @@ impl Phone {
                         if request.use_older {
                             log.push("use_older".to_owned());
                         }
+                        if request.confirm_unproven {
+                            log.push("confirm_unproven".to_owned());
+                        }
                         let seed = request.seed.as_ref().map(|seed| door::to_hex(seed));
                         let prefix = seed.as_deref().map(|s| s[..4].to_owned());
                         log.push(match &prefix {
@@ -736,4 +739,31 @@ fn an_older_backup_is_an_offer_and_the_yes_asks_for_it() {
     };
     assert!(matches!(restored, Restored::Done { .. }));
     assert!(phone.log.iter().any(|line| line == "use_older"));
+}
+
+/// **#1191, E8.** A newest backup the restore cannot prove is the newest comes back as an ask,
+/// with nothing kept; only the restore the member says yes to sets `confirm_unproven`.
+#[test]
+fn an_unproven_newest_is_an_ask_and_the_yes_goes_ahead() {
+    let mut phone = Phone::new();
+    phone.answer = Some(RestoreAnswer {
+        unproven: vec![door::UnprovenAt {
+            index: 0,
+            taken_at_ms: 1_000,
+            label: "Office NAS".to_owned(),
+        }],
+        ..RestoreAnswer::default()
+    });
+    let Restored::Unproven(newest) = phone.restore(words_a(), "code") else {
+        panic!("an ask came back");
+    };
+    assert_eq!(newest.len(), 1);
+    assert!(!phone.log.iter().any(|line| line == "confirm_unproven"));
+    phone.answer = Some(answer(vec![at("/v/a/vault.db", 0, 0)]));
+    let restored = match phone.run(Job::restore_unproven(words_a(), "code")) {
+        Out::Restored(restored) => restored,
+        other => panic!("restore answered {other:?}"),
+    };
+    assert!(matches!(restored, Restored::Done { .. }));
+    assert!(phone.log.iter().any(|line| line == "confirm_unproven"));
 }

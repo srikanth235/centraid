@@ -59,6 +59,8 @@ catalog! {
     plain backup_forget = ("Forget", "Forget");
     plain backup_forget_failed = ("Couldn't forget {name}. Try again.", "Couldn't forget {name}. Try again.");
     plain backup_forgotten_not_revoked = ("Forgot {name}, but couldn't tell it. It may still accept this phone until you remove this phone on {name}.", "Forgot {name}, but couldn't tell it. It may still accept this phone until you remove this phone on {name}.");
+    plain backup_undone = ("Old files on {name} are back.", "Old files on {name} are back.");
+    plain backup_undo_failed = ("Couldn't undo on {name}. Try again.", "Couldn't undo on {name}. Try again.");
     plain backup_forgotten_revoked = ("Forgot {name}. It now refuses this phone.", "Forgot {name}. It now refuses this phone.");
     plain backup_include_videos = ("Include videos", "Include videos");
     plain backup_key_heading = ("Recovery key", "Recovery key");

@@ -3,22 +3,146 @@
   "zone": "UTC",
   "now_ms": 1794560400000,
   "devices": [
-    { "name": "current", "device": { "label": "Office NAS" }, "standing": "Up to date", "notes": [], "undo": false },
-    { "name": "another_phone_took_over", "device": { "label": "Office NAS", "moved": true }, "standing": "Another phone took over", "notes": [], "undo": false },
-    { "name": "paused_by_its_operator", "device": { "label": "Office NAS", "paused": true }, "standing": "Paused by whoever runs it", "notes": [], "undo": false },
-    { "name": "too_old", "device": { "label": "Office NAS", "too_old": true }, "standing": "Needs an update", "notes": [], "undo": false },
-    { "name": "an_old_backup_cannot_be_read", "device": { "label": "Office NAS", "unreadable_backup": true }, "standing": "Up to date", "notes": ["One old backup can't be read"], "undo": false },
-    { "name": "a_damaged_piece_is_sent_again", "device": { "label": "Office NAS", "damage_found": true }, "standing": "Up to date", "notes": ["A stored piece was damaged. Sending it again."], "undo": false },
-    { "name": "three_deletes_held", "device": { "label": "Office NAS", "held_files": 3, "held_until_ms": 1795176000000 }, "standing": "Up to date", "notes": ["3 old files go Friday 20 November"], "undo": true },
-    { "name": "one_delete_held", "device": { "label": "Office NAS", "held_files": 1, "held_until_ms": 1795176000000 }, "standing": "Up to date", "notes": ["1 old file goes Friday 20 November"], "undo": true },
-    { "name": "held_on_a_paused_device_says_kept_and_no_date_and_cannot_be_undone_from_here", "device": { "label": "Office NAS", "paused": true, "held_files": 2 }, "standing": "Paused by whoever runs it", "notes": ["2 old files kept while it is paused"], "undo": false },
-    { "name": "a_held_count_with_no_date_says_nothing", "device": { "label": "Office NAS", "held_files": 2 }, "standing": "Up to date", "notes": [], "undo": false },
-    { "name": "all_three_notes_in_order", "device": { "label": "Office NAS", "unreadable_backup": true, "damage_found": true, "held_files": 3, "held_until_ms": 1795176000000 }, "standing": "Up to date", "notes": ["One old backup can't be read", "A stored piece was damaged. Sending it again.", "3 old files go Friday 20 November"], "undo": true }
+    {
+      "name": "current",
+      "device": {
+        "label": "Office NAS"
+      },
+      "standing": "Up to date",
+      "notes": [],
+      "undo": false
+    },
+    {
+      "name": "another_phone_took_over",
+      "device": {
+        "label": "Office NAS",
+        "reach_state": "moved"
+      },
+      "standing": "Another phone took over",
+      "notes": [],
+      "undo": false
+    },
+    {
+      "name": "paused_by_its_operator",
+      "device": {
+        "label": "Office NAS",
+        "reach_state": "frozen"
+      },
+      "standing": "Paused by whoever runs it",
+      "notes": [],
+      "undo": false
+    },
+    {
+      "name": "too_old",
+      "device": {
+        "label": "Office NAS",
+        "reach_state": "gateway_old"
+      },
+      "standing": "Needs an update",
+      "notes": [],
+      "undo": false
+    },
+    {
+      "name": "an_old_backup_cannot_be_read",
+      "device": {
+        "label": "Office NAS",
+        "manifest_unreadable": true
+      },
+      "standing": "Up to date",
+      "notes": ["One old backup can't be read"],
+      "undo": false
+    },
+    {
+      "name": "a_damaged_piece_is_sent_again",
+      "device": {
+        "label": "Office NAS",
+        "reach_state": "repairing"
+      },
+      "standing": "Up to date",
+      "notes": ["A stored piece was damaged. Sending it again."],
+      "undo": false
+    },
+    {
+      "name": "three_deletes_held",
+      "device": {
+        "label": "Office NAS",
+        "held_count": 3,
+        "held_undoable": 3,
+        "held_purge_at_ms": 1795176000000
+      },
+      "standing": "Up to date",
+      "notes": ["3 old files go Friday 20 November"],
+      "undo": true
+    },
+    {
+      "name": "one_delete_held",
+      "device": {
+        "label": "Office NAS",
+        "held_count": 1,
+        "held_undoable": 1,
+        "held_purge_at_ms": 1795176000000
+      },
+      "standing": "Up to date",
+      "notes": ["1 old file goes Friday 20 November"],
+      "undo": true
+    },
+    {
+      "name": "held_on_a_paused_device_says_kept_and_no_date_and_cannot_be_undone_from_here",
+      "device": {
+        "label": "Office NAS",
+        "reach_state": "frozen",
+        "held_count": 2,
+        "held_undoable": 2
+      },
+      "standing": "Paused by whoever runs it",
+      "notes": ["2 old files kept while it is paused"],
+      "undo": false
+    },
+    {
+      "name": "a_held_count_with_no_date_says_nothing",
+      "device": {
+        "label": "Office NAS",
+        "held_count": 2,
+        "held_undoable": 2
+      },
+      "standing": "Up to date",
+      "notes": [],
+      "undo": false
+    },
+    {
+      "name": "all_three_notes_in_order",
+      "device": {
+        "label": "Office NAS",
+        "reach_state": "repairing",
+        "manifest_unreadable": true,
+        "held_count": 3,
+        "held_undoable": 3,
+        "held_purge_at_ms": 1795176000000
+      },
+      "standing": "Up to date",
+      "notes": [
+        "One old backup can't be read",
+        "A stored piece was damaged. Sending it again.",
+        "3 old files go Friday 20 November"
+      ],
+      "undo": true
+    }
   ],
   "lines": [
     {
       "name": "a_damaged_vault_is_not_backed_up_however_recent_the_last_backup",
-      "reading": { "damaged": true, "last_ack_ms": 1794560280000, "content_total": 10, "content_confirmed": 10, "devices": [{ "label": "Office NAS", "last_ack_ms": 1794560280000 }] },
+      "reading": {
+        "damaged": true,
+        "last_ack_ms": 1794560280000,
+        "content_total": 10,
+        "content_confirmed": 10,
+        "devices": [
+          {
+            "label": "Office NAS",
+            "last_ack_ms": 1794560280000
+          }
+        ]
+      },
       "sentence": "This phone's vault is damaged. No new backup is made.",
       "detail": "The backups already on your backup devices are untouched.",
       "status": "Vault damaged",
@@ -26,32 +150,102 @@
     },
     {
       "name": "a_paused_device_is_named",
-      "reading": { "last_ack_ms": 1794560280000, "content_total": 10, "content_confirmed": 10, "devices": [{ "label": "Mac mini", "last_ack_ms": 1794560280000 }, { "label": "Office NAS", "paused": true, "last_ack_ms": 1794560280000 }] },
+      "reading": {
+        "last_ack_ms": 1794560280000,
+        "content_total": 10,
+        "content_confirmed": 10,
+        "devices": [
+          {
+            "label": "Mac mini",
+            "last_ack_ms": 1794560280000
+          },
+          {
+            "label": "Office NAS",
+            "last_ack_ms": 1794560280000,
+            "reach_state": "frozen"
+          }
+        ]
+      },
       "sentence": "Office NAS is paused",
       "reason": "Office NAS is paused by whoever runs it. Centraid asks again at the next backup.",
       "tone": "attention"
     },
     {
       "name": "a_device_that_is_too_old_is_named",
-      "reading": { "last_ack_ms": 1794560280000, "content_total": 10, "content_confirmed": 10, "devices": [{ "label": "Mac mini", "last_ack_ms": 1794560280000 }, { "label": "Office NAS", "too_old": true, "last_ack_ms": 1794560280000 }] },
+      "reading": {
+        "last_ack_ms": 1794560280000,
+        "content_total": 10,
+        "content_confirmed": 10,
+        "devices": [
+          {
+            "label": "Mac mini",
+            "last_ack_ms": 1794560280000
+          },
+          {
+            "label": "Office NAS",
+            "last_ack_ms": 1794560280000,
+            "reach_state": "gateway_old"
+          }
+        ]
+      },
       "sentence": "Office NAS needs an update",
       "reason": "Office NAS runs an older version. Update it, then pair again.",
       "tone": "attention"
     },
     {
       "name": "one_device_that_took_over_is_named_even_when_the_phone_is_not_yet_marked_moved",
-      "reading": { "last_ack_ms": 1794560280000, "content_total": 10, "content_confirmed": 10, "devices": [{ "label": "Mac mini", "last_ack_ms": 1794560280000 }, { "label": "Office NAS", "moved": true, "last_ack_ms": 1794560280000 }] },
+      "reading": {
+        "last_ack_ms": 1794560280000,
+        "content_total": 10,
+        "content_confirmed": 10,
+        "devices": [
+          {
+            "label": "Mac mini",
+            "last_ack_ms": 1794560280000
+          },
+          {
+            "label": "Office NAS",
+            "last_ack_ms": 1794560280000,
+            "reach_state": "moved"
+          }
+        ]
+      },
       "sentence": "Another phone took over Office NAS",
       "reason": "Not you? Ask whoever runs your backup device to pause it.",
       "tone": "attention"
     }
   ],
   "rate": [
-    { "name": "the_usual_sample", "read": 64, "stored": 1216, "sentence": "Each check reads 64 of the 1,216 stored pieces, chosen at random. On average a piece is read once in 19 checks." },
-    { "name": "a_metered_link_states_the_smaller_sample", "read": 8, "stored": 1216, "sentence": "Each check reads 8 of the 1,216 stored pieces, chosen at random. On average a piece is read once in 152 checks." },
-    { "name": "a_small_vault_is_read_whole", "read": 64, "stored": 40, "sentence": "Each check reads all 40 stored pieces." },
-    { "name": "before_a_check_ran_nothing_is_said", "read": 0, "stored": 1216, "sentence": null },
-    { "name": "with_nothing_stored_nothing_is_said", "read": 8, "stored": 0, "sentence": null }
+    {
+      "name": "the_usual_sample",
+      "read": 64,
+      "stored": 1216,
+      "sentence": "Each check reads 64 of the 1,216 stored pieces, chosen at random. On average a piece is read once in 19 checks."
+    },
+    {
+      "name": "a_metered_link_states_the_smaller_sample",
+      "read": 8,
+      "stored": 1216,
+      "sentence": "Each check reads 8 of the 1,216 stored pieces, chosen at random. On average a piece is read once in 152 checks."
+    },
+    {
+      "name": "a_small_vault_is_read_whole",
+      "read": 64,
+      "stored": 40,
+      "sentence": "Each check reads all 40 stored pieces."
+    },
+    {
+      "name": "before_a_check_ran_nothing_is_said",
+      "read": 0,
+      "stored": 1216,
+      "sentence": null
+    },
+    {
+      "name": "with_nothing_stored_nothing_is_said",
+      "read": 8,
+      "stored": 0,
+      "sentence": null
+    }
   ],
   "restore_ask": [
     {

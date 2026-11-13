@@ -428,6 +428,25 @@ impl Backup {
         Vec::new()
     }
 
+    /// Lift the deletes a device is holding. ONLY A DEVICE THE ROW OFFERS IT FOR is asked: the
+    /// signed undo is a write, so a paused or moved device cannot take it.
+    fn undo(&mut self, gateway_id: &str, ctx: &Ctx) -> Vec<wire::Effect> {
+        if self.frozen()
+            || !self
+                .destinations()
+                .iter()
+                .any(|d| d.gateway_id == gateway_id && states::can_undo(d))
+        {
+            return Vec::new();
+        }
+        self.notice = Notice::None;
+        ctx.vault_async(
+            &doors::undo_tag(gateway_id),
+            doors::undo_request(gateway_id),
+        );
+        Vec::new()
+    }
+
     fn set_key_sync(&mut self, on: bool, ctx: &Ctx) -> Vec<wire::Effect> {
         let key = self.key(ctx);
         // ONLY A MOVE THE SCREEN OFFERS: a key held, a keychain to move it to, and
@@ -464,7 +483,7 @@ impl Backup {
             Some(B::ForgetDestination(forget)) => self.forget(&forget.gateway_id, ctx),
             // UNDO IS THE CORE'S: the row offers it only once the reading says the phone holds
             // deletes there (#1191), and the signed undo is the core's door, not built yet.
-            Some(B::UndoHeld(_)) => Vec::new(),
+            Some(B::UndoHeld(undo)) => self.undo(&undo.gateway_id, ctx),
             Some(B::SetKeySync(set)) => self.set_key_sync(set.on, ctx),
             Some(B::KeyPromptAnswered(_)) => {
                 self.key_prompt_answered = true;
@@ -526,6 +545,21 @@ impl Backup {
                     words::backup_forgotten_revoked(locale)
                 } else {
                     words::backup_forgotten_not_revoked(locale)
+                };
+                self.notice = Notice::Said(fill(&sentence, &[("name", &name)]));
+            }
+            // NOTHING RESTORED IS NOT A SUCCESS: the holds had already gone or the door did not
+            // answer, and the member is told so.
+            Done::Undid {
+                gateway_id,
+                restored,
+            } => {
+                let locale = ctx.locale();
+                let name = self.label_of(locale, &gateway_id);
+                let sentence = if restored.is_some_and(|n| n > 0) {
+                    words::backup_undone(locale)
+                } else {
+                    words::backup_undo_failed(locale)
                 };
                 self.notice = Notice::Said(fill(&sentence, &[("name", &name)]));
             }

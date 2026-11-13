@@ -64,6 +64,8 @@ pub struct Destination {
     /// device's clock (E6). Zero and `None` with none held.
     pub held_files: u64,
     pub held_until_ms: Option<i64>,
+    /// How many of those the member may undo (every hold is signed by the vault key, so all).
+    pub held_undoable: u64,
 }
 
 /// Where one backup device stands, best first: the order is the ranking, so the greatest is the worst (#1188, NB1).
@@ -202,9 +204,17 @@ impl Reading {
                         .iter()
                         .map(|w| (w.app_id.clone(), w.files))
                         .collect(),
-                    // THE WIRE DOES NOT CARRY THESE YET (#1191, B16): the core's reading gains them
-                    // with the device-state tables (B14). Until then none is claimed.
-                    ..Destination::default()
+                    // HOW IT STANDS, in the core's one word (#1191, B16). Each of these is
+                    // a device's own state and stops only that device's pass.
+                    moved: destination.reach_state == wire::DestinationReach::Moved as i32,
+                    paused: destination.reach_state == wire::DestinationReach::Frozen as i32,
+                    too_old: destination.reach_state == wire::DestinationReach::GatewayOld as i32,
+                    damage_found: destination.reach_state
+                        == wire::DestinationReach::Repairing as i32,
+                    unreadable_backup: destination.manifest_unreadable,
+                    held_files: u64::from(destination.held_count),
+                    held_until_ms: Some(destination.held_purge_at_ms).filter(|at| *at > 0),
+                    held_undoable: u64::from(destination.held_undoable),
                 })
                 .collect(),
             last_snapshot_ms: status.last_snapshot_ms,
@@ -222,10 +232,24 @@ impl Reading {
             confirmed_bytes: status.confirmed_bytes,
             left_out_items: status.left_out_items,
             left_out_bytes: status.left_out_bytes,
+            // A DAMAGED VAULT IS NOT IN THE STATUS: it is the open error `VAULT_DAMAGED`, and the
+            // vault does not open, so no reading is made of it.
             damaged: false,
-            sample: None,
+            // THE LAST READ-BACK: 0 of 0 is "none has run".
+            sample: weakest_sample(&status.destinations),
         }
     }
+}
+
+/// What the last read-back read, as `(pieces read, pieces stored)`: the device whose pieces get
+/// read least often, because that is the rate the sentence must not overstate. `None` when no
+/// device has had a read-back in this core's life (the wire says 0 of 0).
+fn weakest_sample(destinations: &[wire::Destination]) -> Option<(u64, u64)> {
+    destinations
+        .iter()
+        .filter(|d| d.sample_checked > 0 && d.sample_of > 0)
+        .map(|d| (u64::from(d.sample_checked), u64::from(d.sample_of)))
+        .max_by_key(|(read, stored)| stored.div_ceil(*read))
 }
 
 /// The reading and this phone's clock when it was taken.
