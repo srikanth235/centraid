@@ -2,6 +2,22 @@
 
 Held-out gold, English-only synthetic data and spend rules are in [safety.md](./safety.md). Read [`crates/datagen/README.md`](../../../crates/datagen/README.md) for the stages. Where it disagrees with the code on defaults (world counts, mix targets, mix shares), the code wins: [`settings.rs`](../../../crates/datagen/src/settings.rs), [`mix.rs`](../../../crates/datagen/src/mix.rs), [`main.rs`](../../../crates/datagen/src/main.rs).
 
+## Keep in mind
+
+For any change that reaches the fine-tune data, including one made elsewhere (vault, apps, tools).
+
+- A change to a tool's arguments or result, or to the kinds, fields or verbs Chat can use, changes what the data should contain. Kinds, fields and verbs move the catalog hash and argument changes move the tool hash, so `data-pin` sees them. A change to what a tool _returns_ moves no hash and the gate stays green; only `datagen drift` on the pinned version shows it.
+- After such a change, run `datagen drift` on the pinned version before merge and report its summary lines (the contract, shape, behaviour and coverage counts, and the level) to the owner.
+- When `data-pin` fails, the rule is working. Never edit the pin's own hashes. Run drift, mark the pin `stale` with the level drift reports, `since` and `at` (the bullet on the pin under [Render and the version](#render-and-the-version)), and tell the owner.
+- The mix balances cells of (tool, kind, verb or op) and the outcome, action, reference and session shares. Fields are not a balanced dimension: the sampler picks a few fields per kind by hand (`create` in `sample.rs`), so nothing makes create and edit set every field the tools can set. This is a known limit of the generator.
+- Drift's kind coverage counts only calls that carry a `kind` argument naming the kind, so a kind reached another way is not counted.
+- Chat is meant to create Locker secrets, so create and edit intents for Locker, money and measurement fields are gaps to fill in the data, not exclusions. Today a Locker create sets a name and a type and no secret field, and `reveal` is not drawn.
+- That fits "Locker is presence only" and [safety.md](./safety.md): a stored sealed value never reaches the model or the data; a secret the member types into Chat is the one secret the model may see. A typed secret in a training request is a synthetic value, never a stored one. The writer is told never to write a secret and `messages::no_sealed` refuses a prompt holding a placeholder, so those intents are not generated yet.
+- An offline rebuild of a version needs its packed LLM cache (in the held-out repo only) and the base model's `tokenizer.json`. Without both it is not possible, and a cold build makes paid LLM calls: check [safety.md](./safety.md).
+- Drift needs only a fetched version's manifest, train and val, `worlds/` and `contract/`. A version built before the contract block needs `datagen restamp` first. `restamp` proves the tool catalogue against the records but takes the rest of the prompt hash from the checkout.
+- Versions go only to `srikanth235/centraid-assist-data` and `srikanth235/centraid-assist-heldout`. `srikanth235/centraid-native-data` is retired and never published to. A tag is never overwritten, and readers pin a tag.
+- Build and publish a new version only on the owner's go-ahead.
+
 ## What it is
 
 Rust, driving the `centraid-assist` runtime as a library. Python stays only for the trainer ([training.md](./training.md)). Each stage is a pure function of its input, its seed and the LLM cache.
