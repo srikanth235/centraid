@@ -831,18 +831,21 @@ fn read_decorations(
     if !whole || task_ids.is_empty() {
         return Ok(decorations);
     }
-    let edges = by_ids(
-        "reminders.board.edges",
-        "edge",
-        "from_id, rel, to_id",
-        "from_id",
-    )
-    .within(
-        WIDE,
-        door,
-        task_ids,
-        Some(("rel IN (?, ?)", vec![text("about"), text("tagged")])),
-    )?;
+    // One read a relation: a task about and tagged with the same thing holds two edges of the
+    // same pair, and the walk's key is the pair, so the relations are not read together.
+    let mut edges = Vec::new();
+    for rel in ["about", "tagged"] {
+        edges.extend(
+            Read {
+                name: "reminders.board.edges",
+                table: "edge",
+                select: "from_id, rel, to_id",
+                order: ("from_id", "to_id"),
+                column: "from_id",
+            }
+            .within(WIDE, door, task_ids, Some(("rel = ?", vec![text(rel)])))?,
+        );
+    }
     let far: BTreeMap<String, Row> = by_ids(
         "reminders.board.far",
         "entity",

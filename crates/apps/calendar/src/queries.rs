@@ -389,12 +389,16 @@ pub(crate) fn decorate(door: &dyn PageDoor, events: &mut [EventRow]) -> KitResul
         return Ok(());
     }
     let owner = me(door)?;
-    let invited = by_ids(
-        "calendar.events.guests",
-        "edge",
-        "from_id, to_id, state",
-        "from_id",
-    )
+    // An event's guests are many rows of one id: the walk is keyed on the pair, which an
+    // attendee edge holds once, so a page that ends inside one event's guests resumes after the
+    // last guest it gave and no guest is lost.
+    let invited = Read {
+        name: "calendar.events.guests",
+        table: "edge",
+        select: "from_id, to_id, state",
+        order: ("from_id", "to_id"),
+        column: "from_id",
+    }
     .within(WIDE, door, &ids, Some(("rel = ?", vec![text("attendee")])))?;
     let people = ids_of(&invited, "to_id");
     let names = names_of(door, &people)?;
@@ -433,13 +437,16 @@ pub(crate) fn decorate(door: &dyn PageDoor, events: &mut [EventRow]) -> KitResul
     let mut attached = centraid_apps_kit::attached::of(door, &ids)?;
     let mut alerts: BTreeMap<String, Vec<i64>> = BTreeMap::new();
     // An alert is a row of its own (#1191, V8), read beside the window the same way the guests are.
-    for row in by_ids(
-        "calendar.events.reminders",
-        "reminder",
-        "entity_id, offset_min",
-        "entity_id",
-    )
-    .within(WIDE, door, &ids, None)?
+    // The key of an alert is the event and its minutes; walked on both, an event with more alerts
+    // than a page holds keeps all of them.
+    for row in (Read {
+        name: "calendar.events.reminders",
+        table: "reminder",
+        select: "entity_id, offset_min",
+        order: ("entity_id", "offset_min"),
+        column: "entity_id",
+    })
+    .within_integer_key(WIDE, door, &ids, None)?
     {
         if let (Some(event), Some(minutes)) = (
             text_of(&row, "entity_id"),
@@ -523,17 +530,22 @@ pub(crate) fn read_exceptions(
             )
         })
         .collect();
-    Ok(by_ids(
-        "calendar.events.occurrences",
-        "occurrence",
-        "series_id, original_start, scope, cancelled, starts, ends, timing, zone, title, \
-         description, url, place_id",
-        "series_id",
-    )
-    .within(WIDE, door, &ids, None)?
-    .iter()
-    .map(|row| exception_of(row, &timing))
-    .collect())
+    // A day's key is the series, the day and its scope. The walk keys on the first two, so each
+    // scope is read on its own and the pair is unique within a read.
+    let mut stored = Vec::new();
+    for scope in ["occurrence", "future"] {
+        let rows = Read {
+            name: "calendar.events.occurrences",
+            table: "occurrence",
+            select: "series_id, original_start, scope, cancelled, starts, ends, timing, zone, \
+                     title, description, url, place_id",
+            order: ("series_id", "original_start"),
+            column: "series_id",
+        }
+        .within(WIDE, door, &ids, Some(("scope = ?", vec![text(scope)])))?;
+        stored.extend(rows.iter().map(|row| exception_of(row, &timing)));
+    }
+    Ok(stored)
 }
 
 pub(crate) fn exception_of(row: &Row, timing: &BTreeMap<&str, &str>) -> StoredExceptionRow {
@@ -1106,3 +1118,7 @@ pub fn load_parties(door: &dyn PageDoor) -> KitResult<(PartiesData, Option<Denia
     });
     Ok((PartiesData { parties, me: owner }, None))
 }
+
+#[cfg(test)]
+#[path = "occurrence_reads_test.rs"]
+mod occurrence_reads_test;

@@ -116,19 +116,27 @@ impl GraphSource for DoorSource<'_> {
     type Error = crate::error::KitError;
 
     fn edges(&self, end: End, ids: &[String], rels: &[&str]) -> KitResult<Vec<EdgeRow>> {
-        let (clause, bind) = rel_clause(rels);
         let (name, order, column) = match end {
             End::To => ("graph.in", ("to_id", "from_id"), "to_id"),
             End::From => ("graph.out", ("from_id", "to_id"), "from_id"),
         };
-        let rows = Lookup {
-            name,
-            table: "edge",
-            select: "from_id, to_id, rel, anchor, wikilink",
-            order,
-            column,
+        // One read a relation. The walk's key is the pair of ends, which an edge of one relation
+        // holds once; across relations the pair repeats, and a page that ended inside the repeats
+        // would drop the rest.
+        let mut rows = Vec::new();
+        for rel in rels {
+            let (clause, bind) = rel_clause(&[*rel]);
+            rows.extend(
+                Lookup {
+                    name,
+                    table: "edge",
+                    select: "from_id, to_id, rel, anchor, wikilink",
+                    order,
+                    column,
+                }
+                .read(self.door, self.bound, ids, Some((clause, bind)))?,
+            );
         }
-        .read(self.door, self.bound, ids, Some((clause, bind)))?;
         Ok(rows
             .iter()
             .filter_map(|row| {

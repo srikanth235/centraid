@@ -1221,10 +1221,12 @@ pub(crate) fn dates(door: &dyn PageDoor, people: &[&PersonRow]) -> KitResult<Vec
         name: "people.dates.reminders",
         table: "reminder",
         select: "entity_id, offset_min",
-        order: ("entity_id", "entity_id"),
+        // The key of an alert is the event and its minutes: walked on both, no alert of a date
+        // is lost where a page ends inside one event's alerts.
+        order: ("entity_id", "offset_min"),
         column: "entity_id",
     }
-    .among(WIDE, door, &yearly_ids, None)?
+    .among_integer_key(WIDE, door, &yearly_ids, None)?
     .iter()
     .filter_map(|row| text_of(row, "entity_id"))
     .collect();

@@ -234,3 +234,61 @@ fn the_door_and_the_connection_are_two_sources_of_one_reading() {
         })
         .expect("reads");
 }
+
+/// Two relations between the same pair are two edges of one `(from, to)`. A page that ends
+/// between them used to lose the second, so the relations are read one at a time.
+#[test]
+fn a_page_that_ends_between_two_relations_of_one_pair_loses_neither() {
+    let f = fixture();
+    // `first` is about `maya` and links to `trashed` already; it is now about `other` and links
+    // to `other` as well: four edges out, two of them the same pair.
+    let other = f.world.id(
+        "note.create",
+        json!({"title": "Other", "body": "x", "notebook_id": f.book}),
+    );
+    for rel in ["about", "links"] {
+        f.world.id(
+            "edge.add",
+            json!({"from": f.first, "rel": rel, "to": other}),
+        );
+    }
+    // The pages end where the tie is: the third row out is the first of the pair, and the one
+    // row in is half of it.
+    let (narrow_out, narrow_in) = (FanOutBound::new(3, 4), FanOutBound::new(1, 4));
+    let (out, back) = read(&f, |door| {
+        (
+            graph::outgoing(
+                door,
+                narrow_out,
+                std::slice::from_ref(&f.first),
+                "note",
+                &["about", "links"],
+            )
+            .expect("reads"),
+            graph::incoming(door, narrow_in, &other, "note", &["about", "links"]).expect("reads"),
+        )
+    });
+    let edges = |joins: &[Joined]| {
+        let mut found: Vec<Joined> = joins
+            .iter()
+            .filter(|join| join.via == Via::Edge)
+            .cloned()
+            .collect();
+        found.sort();
+        found
+    };
+    let mut expected = vec![
+        joined(&f.first, &f.maya, "about", Via::Edge),
+        joined(&f.first, &f.trashed, "links", Via::Edge),
+        joined(&f.first, &other, "about", Via::Edge),
+        joined(&f.first, &other, "links", Via::Edge),
+    ];
+    expected.sort();
+    assert_eq!(edges(&out), expected, "every edge out, none twice");
+    let mut expected = vec![
+        joined(&f.first, &other, "about", Via::Edge),
+        joined(&f.first, &other, "links", Via::Edge),
+    ];
+    expected.sort();
+    assert_eq!(edges(&back), expected, "every edge in, none twice");
+}
