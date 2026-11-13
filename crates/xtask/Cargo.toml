@@ -33,7 +33,7 @@ centraid-design = { path = "../design" }
 # for the gate tool, and that is the correct place to pay it.
 sha2 = { workspace = true }
 # `design/tokens.toml` is read by the dark-mockup generator (#1173); toml is already in the lockfile.
-toml = "0.9"
+toml = "1.1"
 # The app icon's PNGs (`design_icon.rs`, #1173). Already in the lock through
 # `image`; this is the encoder alone, so the gate rasterises in Rust and needs no
 # system tool.
