@@ -166,7 +166,14 @@ pub(crate) fn rev_after(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Option<i64
     if expected_rev(ctx).is_none() {
         return Ok(None);
     }
-    Ok(Some(crate::history::head_after(ctx.connection(), id)?))
+    let (cause, quiet) = ctx.settling_as();
+    Ok(Some(crate::history::head_after(
+        ctx.connection(),
+        id,
+        &ctx.now,
+        &cause,
+        quiet,
+    )?))
 }
 
 /// A guarded save's answer: `answer` with `rev` added when the save named an `expected_rev`.
@@ -695,6 +702,8 @@ fn purge(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     // What nothing names any more is released with it: its bytes, and a
     // thumbnail only it had.
     let released = crate::blob::collect(ctx.connection())?;
+    // And what it said leaves the search index's pages, not only its rows.
+    crate::index::compact(ctx.connection())?;
     Ok(serde_json::json!({ "purged": purged, "released": released }))
 }
 
@@ -750,6 +759,15 @@ fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         .get("defer_collect")
         .and_then(serde_json::Value::as_bool)
         .unwrap_or(false);
+    // A pass that empties only what is overdue trusts the clock only within bounds of the vault's
+    // last commit (#1191, V19): otherwise nothing is overdue.
+    if due_only
+        && !crate::time::recurrence::parse_instant_ms(&ctx.now).map_or(Ok(true), |now_ms| {
+            crate::clock::is_credible(ctx.connection(), now_ms)
+        })?
+    {
+        return Ok(serde_json::json!({ "purged": 0, "released": [], "more": false }));
+    }
     let kind = ctx.optional_str("kind");
     let with_kind = ctx.optional_str("with_kind");
     let having = ctx.optional_str("having");
@@ -814,6 +832,11 @@ fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     } else {
         crate::blob::collect(ctx.connection())?
     };
+    // A pass in batches merges the search indexes once at its end too
+    // ([`crate::Vault::compact_search`]); a pass in one command merges here.
+    if !defer_collect && !purged.is_empty() {
+        crate::index::compact(ctx.connection())?;
+    }
     Ok(serde_json::json!({ "purged": purged.len(), "released": released, "more": more }))
 }
 

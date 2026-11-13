@@ -293,6 +293,9 @@ pub fn sentence_for_code(code: ErrorCode) -> &'static str {
         C::UpgradeRequired => "This vault needs a newer Centraid.",
         C::NotYetAvailable => "Not available yet.",
         C::Internal => "Something went wrong. Restart Centraid.",
+        // The Backup screens' words for a damaged vault are lane B's (B16); until then the
+        // generic sentence.
+        C::VaultDamaged => "Something went wrong. Restart Centraid.",
         C::BackupFromNewerBuild => "A newer Centraid made this backup. Update Centraid.",
         C::BackupUnreadable => "This version of Centraid can't open this backup.",
 
@@ -324,6 +327,7 @@ fn vault_code(error: &centraid_vault::VaultError) -> ErrorCode {
     match error {
         V::RebootstrapRequired { .. } => ErrorCode::RebootstrapRequired,
         V::DowngradeRefused { .. } => ErrorCode::DowngradeRefused,
+        V::Damaged { .. } => ErrorCode::VaultDamaged,
         V::NotImplemented { .. } => ErrorCode::NotYetAvailable,
         V::InvalidInput { .. }
         | V::InvalidCursor { .. }

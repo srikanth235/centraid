@@ -109,6 +109,19 @@ impl<'conn> CommitTx<'conn> {
         self.pending.borrow_mut().quiet = quiet;
     }
 
+    /// What the history will be told when this commit settles: the cause it is kept under and
+    /// whether the commit is a quiet save. A handler that answers the revision its save leaves
+    /// asks the history with the same two facts ([`crate::history::head_after`]).
+    pub(crate) fn settling_as(&self) -> (String, bool) {
+        let pending = self.pending.borrow();
+        let cause = if pending.producer.is_empty() {
+            "unnamed".to_owned()
+        } else {
+            pending.producer.clone()
+        };
+        (cause, pending.quiet)
+    }
+
     /// Stamp an entity as changed: `updated_at`, and a place on the
     /// list the search index is rebuilt from at commit. Once per commit per
     /// entity; a second call only keeps it on the list.

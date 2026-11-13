@@ -416,13 +416,7 @@ fn a_transfer_is_two_lines_pointing_at_each_other_and_a_void_ends_it() {
     // A void is final, ends the transfer on both halves, and cannot be filed.
     let voided = world.ok("txn.void", json!({ "id": out }));
     assert_eq!(voided["transfers_ended"], 2);
-    assert_eq!(
-        world.count(
-            "SELECT COUNT(*) FROM transfer",
-            &[]
-        ),
-        0
-    );
+    assert_eq!(world.count("SELECT COUNT(*) FROM transfer", &[]), 0);
     assert!(
         world
             .refused(

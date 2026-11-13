@@ -187,7 +187,7 @@ pub const TABLES: &[(&str, Role)] = &[
         Role::Child {
             host: "*",
             via: "from_id",
-            filter: Some("rel = 'links' AND wikilink = 0 AND anchor IS NULL"),
+            filter: Some("rel = 'links' AND wikilink IS NULL AND anchor IS NULL"),
             alias: "link_out",
             key: &["to_id"],
         },
@@ -200,7 +200,7 @@ pub const TABLES: &[(&str, Role)] = &[
             host: "*",
             via: "to_id",
             filter: Some(
-                "rel = 'links' AND wikilink = 0 AND anchor IS NULL AND NOT EXISTS \
+                "rel = 'links' AND wikilink IS NULL AND anchor IS NULL AND NOT EXISTS \
                  (SELECT 1 FROM entity f WHERE f.id = from_id AND f.kind = 'locker_item')",
             ),
             alias: "link_in",

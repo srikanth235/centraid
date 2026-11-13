@@ -38,6 +38,14 @@ impl World {
             .unwrap_or_else(|error| panic!("`{name}`: {error}"))
     }
 
+    /// `days` go by, the member opening and writing on the day before the next launch: the
+    /// launch pass trusts the clock only within a week of the vault's last write (V19).
+    fn later(&self, days: i64) {
+        self.scratch.clock.advance_ms((days - 1) * DAY_MS);
+        self.ok("note.create", json!({ "title": "in use", "body": "x" }));
+        self.scratch.clock.advance_ms(DAY_MS);
+    }
+
     fn ok(&self, name: &str, input: Value) -> Value {
         let outcome = self.run(name, input);
         assert_eq!(
@@ -131,7 +139,7 @@ fn an_overdue_row_is_restorable_until_the_pass_runs_and_gone_after_it() {
 
     // Trashed again and left past its date, the launch pass empties it.
     w.ok("entity.trash", json!({ "id": id }));
-    w.scratch.clock.advance_ms(45 * DAY_MS);
+    w.later(45);
     let emptied = w
         .scratch
         .vault
@@ -153,7 +161,7 @@ fn the_launch_pass_is_bounded_and_says_when_more_is_overdue() {
         let (id, _) = w.document(&format!("Doc {n}"), &format!("doc {n}"));
         w.ok("entity.trash", json!({ "id": id }));
     }
-    w.scratch.clock.advance_ms(31 * DAY_MS);
+    w.later(31);
     let first = w.scratch.vault.empty_overdue_trash(&w.registry, 2).unwrap();
     assert_eq!((first.purged, first.more), (2, true));
     let second = w.scratch.vault.empty_overdue_trash(&w.registry, 2).unwrap();
@@ -174,7 +182,7 @@ fn the_pass_collects_what_it_released_after_its_last_batch_in_pieces() {
         w.ok("entity.trash", json!({ "id": id }));
         blobs.push(blob);
     }
-    w.scratch.clock.advance_ms(31 * DAY_MS);
+    w.later(31);
     let vault = &w.scratch.vault;
     // Batches of two purge and keep the bytes (the third is still to come) ...
     let first = vault
@@ -224,7 +232,7 @@ fn a_row_still_inside_its_window_is_not_taken_by_the_pass() {
     let w = World::new();
     let (id, _) = w.document("Recent", "recent");
     w.ok("entity.trash", json!({ "id": id }));
-    w.scratch.clock.advance_ms(29 * DAY_MS);
+    w.later(29);
     let emptied = w
         .scratch
         .vault

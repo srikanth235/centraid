@@ -1693,7 +1693,7 @@ enum Reach {
 /// declaration, so adding a text column fails here until it is placed.
 ///
 /// `edge.anchor` has no row: it is JSON, so the declaration marks it structural.
-/// A note's `[[title]]` is the flag `edge.wikilink`, the words of which sit in `note.body`, which
+/// A note's `[[title]]` is `edge.wikilink`, the words of which sit in `note.body`, which
 /// is `Own`; `a_note_is_found_by_the_words_of_its_link` holds that.
 const CENSUS: &[(&str, &str, Reach)] = &[
     ("entity", "title", Reach::Own),
@@ -1927,12 +1927,19 @@ const CENSUS: &[(&str, &str, Reach)] = &[
     (
         "source",
         "stated_title",
-        Reach::Not("what a phone store called the record: a copy of `stated`, whose live title is the entity's own"),
+        Reach::Not(
+            "what a phone store called the record: a copy of `stated`, whose live title is the entity's own",
+        ),
     ),
     (
         "origin",
         "fills",
         Reach::Not("an entity id: the home a follow filled"),
+    ),
+    (
+        "edge",
+        "wikilink",
+        Reach::Not("the title in a note's `[[words]]`: a copy of `note.body`, which is indexed"),
     ),
     (
         "origin",
@@ -2427,7 +2434,7 @@ fn a_note_is_found_by_the_words_of_its_link() {
     );
     let anchors: i64 = read(vault, |c| {
         Ok(c.query_row(
-            "SELECT count(*) FROM edge WHERE from_id = 'src' AND rel = 'links' AND wikilink = 1",
+            "SELECT count(*) FROM edge WHERE from_id = 'src' AND rel = 'links' AND wikilink IS NOT NULL",
             [],
             |r| r.get(0),
         )?)

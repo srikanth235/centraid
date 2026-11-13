@@ -581,7 +581,11 @@ fn pre_transfer(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 /// holds the pair, the lower id first, so either half finds its partner.
 fn link_transfer(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let (one, other) = (ctx.required_str("id")?, ctx.required_str("other_id")?);
-    let (a, b) = if one < other { (one, other) } else { (other, one) };
+    let (a, b) = if one < other {
+        (one, other)
+    } else {
+        (other, one)
+    };
     let linked = ctx.connection().execute(
         "INSERT INTO transfer (a, b) VALUES (?1, ?2) ON CONFLICT (a) DO NOTHING",
         [a, b],

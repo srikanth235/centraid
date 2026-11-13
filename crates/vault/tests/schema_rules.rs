@@ -50,12 +50,19 @@ impl World {
     }
 
     fn id(&self, name: &str, input: Value) -> String {
-        self.ok(name, input)["id"].as_str().expect("an id").to_owned()
+        self.ok(name, input)["id"]
+            .as_str()
+            .expect("an id")
+            .to_owned()
     }
 
     fn refused(&self, name: &str, input: Value) -> String {
         let outcome = self.run(name, input);
-        assert_eq!(outcome.status, CommandStatus::Failed, "{name} was not refused");
+        assert_eq!(
+            outcome.status,
+            CommandStatus::Failed,
+            "{name} was not refused"
+        );
         outcome.reason.expect("a sentence")
     }
 
@@ -108,17 +115,30 @@ impl World {
 #[test]
 fn a_container_never_nests_in_a_loop() {
     let w = World::new();
-    let a = w.id("container.create", json!({ "kind": "folder", "title": "A" }));
-    let b = w.id("container.create", json!({ "kind": "folder", "title": "B", "parent": a }));
-    let c = w.id("container.create", json!({ "kind": "folder", "title": "C", "parent": b }));
+    let a = w.id(
+        "container.create",
+        json!({ "kind": "folder", "title": "A" }),
+    );
+    let b = w.id(
+        "container.create",
+        json!({ "kind": "folder", "title": "B", "parent": a }),
+    );
+    let c = w.id(
+        "container.create",
+        json!({ "kind": "folder", "title": "C", "parent": b }),
+    );
     // The command refuses with its sentence.
     assert!(
         w.refused("container.move", json!({ "id": a, "parent": c }))
             .contains("cannot go inside itself")
     );
     // The database refuses the same move, and a container as its own parent.
-    w.db_refuses(&format!("UPDATE container SET parent_id = '{c}' WHERE id = '{a}'"));
-    w.db_refuses(&format!("UPDATE container SET parent_id = '{a}' WHERE id = '{a}'"));
+    w.db_refuses(&format!(
+        "UPDATE container SET parent_id = '{c}' WHERE id = '{a}'"
+    ));
+    w.db_refuses(&format!(
+        "UPDATE container SET parent_id = '{a}' WHERE id = '{a}'"
+    ));
     assert_eq!(
         w.text(&format!("SELECT parent_id FROM container WHERE id = '{a}'")),
         None
@@ -129,7 +149,9 @@ fn a_container_never_nests_in_a_loop() {
 fn a_concept_never_nests_in_a_loop_or_under_another_kind() {
     let w = World::new();
     // Seeded categories: `category:food` is the parent of `category:food.dining`.
-    w.db_refuses("UPDATE concept SET parent_id = 'category:food.dining' WHERE id = 'category:food'");
+    w.db_refuses(
+        "UPDATE concept SET parent_id = 'category:food.dining' WHERE id = 'category:food'",
+    );
     w.db_refuses("UPDATE concept SET parent_id = id WHERE id = 'category:food'");
     // A concept's parent is of its own kind.
     w.db_refuses("UPDATE concept SET parent_id = 'workout_kind:run' WHERE id = 'category:fees'");
@@ -142,7 +164,9 @@ fn a_concept_never_nests_in_a_loop_or_under_another_kind() {
 fn a_task_is_never_its_own_series() {
     let w = World::new();
     let task = w.id("task.add", json!({ "title": "Water the plants" }));
-    w.db_refuses(&format!("UPDATE task SET series_id = id WHERE id = '{task}'"));
+    w.db_refuses(&format!(
+        "UPDATE task SET series_id = id WHERE id = '{task}'"
+    ));
     // The command still names the series by the head's id, which only the successor carries.
     let repeating = w.id(
         "task.add",
@@ -151,7 +175,9 @@ fn a_task_is_never_its_own_series() {
     let done = w.ok("task.complete", json!({ "id": repeating }));
     assert_eq!(done["series_id"], repeating.as_str());
     assert_eq!(
-        w.text(&format!("SELECT series_id FROM task WHERE id = '{repeating}'")),
+        w.text(&format!(
+            "SELECT series_id FROM task WHERE id = '{repeating}'"
+        )),
         None
     );
 }
@@ -219,16 +245,28 @@ fn a_workout_is_the_measures_of_a_workout_kind_activity_only() {
 }
 
 #[test]
-fn a_container_colour_is_a_key_of_the_palette() {
+fn a_container_colour_is_a_palette_key_or_a_wheel_hue_and_a_command_keeps_each_to_its_kind() {
     let w = World::new();
     w.entity("list-1", Kind::List);
-    w.db_refuses("INSERT INTO container (id, kind, color) VALUES ('list-1', 'list', 'var(--c-rose)')");
+    for bad in ["chartreuse", "#ff0000", "var(--c-puce)", ""] {
+        w.db_refuses(&format!(
+            "INSERT INTO container (id, kind, color) VALUES ('list-1', 'list', '{bad}')"
+        ));
+    }
     w.raw("INSERT INTO container (id, kind, color) VALUES ('list-1', 'list', 'petrol')")
         .expect("a palette key");
-    assert!(
-        w.refused("container.create", json!({ "kind": "list", "title": "L", "color": "chartreuse" }))
+    w.raw("UPDATE container SET color = 'var(--c-teal)' WHERE id = 'list-1'")
+        .expect("a wheel hue, the shell's naming of a phone calendar's colour");
+    // The command refuses what a list may not wear, with its sentence.
+    for bad in ["chartreuse", "var(--c-rose)"] {
+        assert!(
+            w.refused(
+                "container.create",
+                json!({ "kind": "list", "title": "L", "color": bad })
+            )
             .contains("not one of the list colours")
-    );
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -268,17 +306,35 @@ fn an_instant_is_the_clocks_one_form() {
 fn a_task_due_is_a_date_a_wall_clock_or_an_instant_and_never_a_space() {
     let w = World::new();
     let task = w.id("task.add", json!({ "title": "T", "due": "2026-03-02" }));
-    for bad in ["2026-03-02 09:00", "2026-03-02T09", "2026-03-02T09:00:00+01:00", "soon"] {
-        w.db_refuses(&format!("UPDATE task SET due = '{bad}' WHERE id = '{task}'"));
+    for bad in [
+        "2026-03-02 09:00",
+        "2026-03-02T09",
+        "2026-03-02T09:00:00+01:00",
+        "soon",
+    ] {
+        w.db_refuses(&format!(
+            "UPDATE task SET due = '{bad}' WHERE id = '{task}'"
+        ));
     }
-    for good in ["2026-03-02", "2026-03-02T09:00", "2026-03-02T09:00:00", "2026-03-02T09:00:00.000Z"] {
-        w.raw(&format!("UPDATE task SET due = '{good}' WHERE id = '{task}'"))
-            .unwrap_or_else(|why| panic!("{good} is a due: {why}"));
+    for good in [
+        "2026-03-02",
+        "2026-03-02T09:00",
+        "2026-03-02T09:00:00",
+        "2026-03-02T09:00:00.000Z",
+    ] {
+        w.raw(&format!(
+            "UPDATE task SET due = '{good}' WHERE id = '{task}'"
+        ))
+        .unwrap_or_else(|why| panic!("{good} is a due: {why}"));
     }
     // A command takes an instant in any spelling and holds it in the clock's one form.
-    let other = w.id("task.add", json!({ "title": "U", "due": "2026-03-02T09:00:00Z" }));
+    let other = w.id(
+        "task.add",
+        json!({ "title": "U", "due": "2026-03-02T09:00:00Z" }),
+    );
     assert_eq!(
-        w.text(&format!("SELECT due FROM task WHERE id = '{other}'")).as_deref(),
+        w.text(&format!("SELECT due FROM task WHERE id = '{other}'"))
+            .as_deref(),
         Some("2026-03-02T09:00:00.000Z")
     );
 }
@@ -294,24 +350,50 @@ fn an_event_time_reads_under_its_timing() {
         )
     };
     // Zoned: an instant, and a zone.
-    w.db_refuses(&insert("zoned", "'Europe/Paris'", "2026-03-02T10:00:00", "NULL"));
+    w.db_refuses(&insert(
+        "zoned",
+        "'Europe/Paris'",
+        "2026-03-02T10:00:00",
+        "NULL",
+    ));
     w.db_refuses(&insert("zoned", "'Europe/Paris'", "2026-03-02", "NULL"));
     w.db_refuses(&insert("zoned", "NULL", "2026-03-02T10:00:00.000Z", "NULL"));
     // All-day: a date.
     w.db_refuses(&insert("all-day", "NULL", "2026-03-02T10:00", "NULL"));
-    w.db_refuses(&insert("all-day", "NULL", "2026-03-02", "'2026-03-03T10:00'"));
+    w.db_refuses(&insert(
+        "all-day",
+        "NULL",
+        "2026-03-02",
+        "'2026-03-03T10:00'",
+    ));
     // Floating: a wall clock, no zone designator.
-    w.db_refuses(&insert("floating", "NULL", "2026-03-02T10:00:00.000Z", "NULL"));
+    w.db_refuses(&insert(
+        "floating",
+        "NULL",
+        "2026-03-02T10:00:00.000Z",
+        "NULL",
+    ));
     w.db_refuses(&insert("floating", "NULL", "2026-03-02", "NULL"));
     w.db_refuses(&insert("floating", "NULL", "2026-03-02 10:00", "NULL"));
     // And each is taken in its own shape.
-    w.raw(&insert("floating", "NULL", "2026-03-02T10:00", "'2026-03-02T11:00:00'"))
-        .expect("floating");
+    w.raw(&insert(
+        "floating",
+        "NULL",
+        "2026-03-02T10:00",
+        "'2026-03-02T11:00:00'",
+    ))
+    .expect("floating");
     w.raw("DELETE FROM event WHERE id = 'ev'").expect("clears");
-    w.raw(&insert("all-day", "NULL", "2026-03-02", "'2026-03-03'")).expect("all-day");
+    w.raw(&insert("all-day", "NULL", "2026-03-02", "'2026-03-03'"))
+        .expect("all-day");
     w.raw("DELETE FROM event WHERE id = 'ev'").expect("clears");
-    w.raw(&insert("zoned", "'Europe/Paris'", "2026-03-02T09:00:00.000Z", "'2026-03-02T10:00:00.000Z'"))
-        .expect("zoned");
+    w.raw(&insert(
+        "zoned",
+        "'Europe/Paris'",
+        "2026-03-02T09:00:00.000Z",
+        "'2026-03-02T10:00:00.000Z'",
+    ))
+    .expect("zoned");
 }
 
 #[test]
@@ -332,7 +414,8 @@ fn an_occurrence_time_reads_under_its_own_timing_or_the_series() {
     w.db_refuses(&occurrence("2026-03-09", "2026-03-09T10:00", "'all-day'"));
     w.db_refuses(&occurrence("2026-03-09", "2026-03-09", "'floating'"));
     w.db_refuses(&occurrence("garbage", "2026-03-09", "NULL"));
-    w.raw(&occurrence("2026-03-09", "2026-03-10", "NULL")).expect("a moved day");
+    w.raw(&occurrence("2026-03-09", "2026-03-10", "NULL"))
+        .expect("a moved day");
 }
 
 #[test]
@@ -355,7 +438,8 @@ fn an_activity_a_photo_and_a_message_hold_instants() {
          VALUES ('ph', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'image/jpeg', 'photo', '2026-03-01 10:00:00')",
     );
     w.entity("th", Kind::Thread);
-    w.raw("INSERT INTO thread (id) VALUES ('th')").expect("a thread");
+    w.raw("INSERT INTO thread (id) VALUES ('th')")
+        .expect("a thread");
     w.db_refuses(
         "INSERT INTO message (thread_id, ordinal, role, text, outcome, created_at, updated_at)
          VALUES ('th', 0, 'user', 'hi', 'sent', '2026-03-01T09:00:00.000Z', 'later')",
@@ -369,17 +453,36 @@ fn an_activity_a_photo_and_a_message_hold_instants() {
 #[test]
 fn a_task_in_a_section_can_be_reordered_after_its_section_moved() {
     let w = World::new();
-    let one = w.id("container.create", json!({ "kind": "project", "title": "One" }));
-    let two = w.id("container.create", json!({ "kind": "project", "title": "Two" }));
-    let section = w.id("container.create", json!({ "kind": "section", "title": "S", "parent": one }));
-    let first = w.id("task.add", json!({ "title": "a", "project_id": one, "section_id": section }));
-    let second = w.id("task.add", json!({ "title": "b", "project_id": one, "section_id": section }));
+    let one = w.id(
+        "container.create",
+        json!({ "kind": "project", "title": "One" }),
+    );
+    let two = w.id(
+        "container.create",
+        json!({ "kind": "project", "title": "Two" }),
+    );
+    let section = w.id(
+        "container.create",
+        json!({ "kind": "section", "title": "S", "parent": one }),
+    );
+    let first = w.id(
+        "task.add",
+        json!({ "title": "a", "project_id": one, "section_id": section }),
+    );
+    let second = w.id(
+        "task.add",
+        json!({ "title": "b", "project_id": one, "section_id": section }),
+    );
     // Any writer that moves the section takes its tasks with it (the database does, so a move that
     // is not the command's leaves no task pointing at the old project).
-    w.raw(&format!("UPDATE container SET parent_id = '{two}' WHERE id = '{section}'"))
-        .expect("the section moves");
+    w.raw(&format!(
+        "UPDATE container SET parent_id = '{two}' WHERE id = '{section}'"
+    ))
+    .expect("the section moves");
     assert_eq!(
-        w.count(&format!("SELECT COUNT(*) FROM task WHERE section_id = '{section}' AND project_id = '{two}'")),
+        w.count(&format!(
+            "SELECT COUNT(*) FROM task WHERE section_id = '{section}' AND project_id = '{two}'"
+        )),
         2,
         "every task of the section followed it"
     );
@@ -390,7 +493,9 @@ fn a_task_in_a_section_can_be_reordered_after_its_section_moved() {
     let back = w.ok("container.move", json!({ "id": section, "parent": one }));
     assert_eq!(back["id"], section.as_str());
     assert_eq!(
-        w.count(&format!("SELECT COUNT(*) FROM task WHERE section_id = '{section}' AND project_id = '{one}'")),
+        w.count(&format!(
+            "SELECT COUNT(*) FROM task WHERE section_id = '{section}' AND project_id = '{one}'"
+        )),
         2
     );
 }
@@ -403,10 +508,15 @@ fn a_task_in_a_section_can_be_reordered_after_its_section_moved() {
 fn a_line_is_in_one_transfer_and_never_paired_with_itself() {
     let w = World::new();
     for (id, account) in [("a1", "acct1"), ("a2", "acct2"), ("a3", "acct1")] {
-        if w.count(&format!("SELECT COUNT(*) FROM account WHERE id = '{account}'")) == 0 {
+        if w.count(&format!(
+            "SELECT COUNT(*) FROM account WHERE id = '{account}'"
+        )) == 0
+        {
             w.entity(account, Kind::Account);
-            w.raw(&format!("INSERT INTO account (id, type, currency) VALUES ('{account}', 'checking', 'USD')"))
-                .expect("an account");
+            w.raw(&format!(
+                "INSERT INTO account (id, type, currency) VALUES ('{account}', 'checking', 'USD')"
+            ))
+            .expect("an account");
         }
         w.entity(id, Kind::Txn);
         w.raw(&format!(
@@ -418,7 +528,8 @@ fn a_line_is_in_one_transfer_and_never_paired_with_itself() {
     }
     w.db_refuses("INSERT INTO transfer (a, b) VALUES ('a1', 'a1')");
     w.db_refuses("INSERT INTO transfer (a, b) VALUES ('a2', 'a1')");
-    w.raw("INSERT INTO transfer (a, b) VALUES ('a1', 'a2')").expect("a pair");
+    w.raw("INSERT INTO transfer (a, b) VALUES ('a1', 'a2')")
+        .expect("a pair");
     // Neither half joins another pair, on whichever side it would sit.
     w.db_refuses("INSERT INTO transfer (a, b) VALUES ('a1', 'a3')");
     w.db_refuses("INSERT INTO transfer (a, b) VALUES ('a3', 'a2')");

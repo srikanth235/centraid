@@ -73,15 +73,15 @@ CREATE TABLE edge (
   position   REAL,
   state      TEXT CHECK (state IS NULL OR state IN ('needs-action','accepted','declined','tentative')),
   anchor     TEXT CHECK (anchor IS NULL OR json_valid(anchor)),
-  -- A link a note's `[[title]]` compiled (the note owns it and recompiles it), not one the member made.
-  wikilink   INTEGER NOT NULL DEFAULT 0 CHECK (wikilink IN (0,1)),
+  -- The `[[title]]` words of the note that compiled this link (the note owns it and recompiles it
+  -- on every save); NULL for a link the member made.
+  wikilink   TEXT CHECK (wikilink IS NULL OR (rel = 'links' AND length(trim(wikilink)) > 0)),
   created_at TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at),
   CHECK (from_id <> to_id),
   CHECK ((label_id IS NOT NULL) = (rel = 'related')),
   CHECK (state IS NULL OR rel = 'attendee'),
   CHECK (position IS NULL OR rel = 'contains'),
-  CHECK (anchor IS NULL OR rel IN ('about','links')),
-  CHECK (wikilink = 0 OR rel = 'links')
+  CHECK (anchor IS NULL OR rel IN ('about','links'))
 ) STRICT;
 CREATE UNIQUE INDEX edge_key ON edge(from_id, rel, to_id, ifnull(label_id, ''));
 CREATE INDEX edge_to    ON edge(to_id, rel, from_id);
@@ -142,10 +142,9 @@ CREATE TABLE container (
   -- A list's or a project's colour is a key of the design palette (`LIST_COLORS`); a calendar a phone
   -- paints wears a hue of the party wheel (`var(--c-<hue>)`), which the shell names from the phone's colour.
   color     TEXT CHECK (color IS NULL OR color IN
-              ('blue','mustard','violet','petrol','indigo','graphite','raspberry','orchid')
-              OR (kind = 'calendar' AND color IN
-              ('var(--c-rose)','var(--c-amber)','var(--c-ochre)','var(--c-forest)',
-               'var(--c-teal)','var(--c-slate)','var(--c-indigo)','var(--c-violet)'))),
+              ('blue','mustard','violet','petrol','indigo','graphite','raspberry','orchid',
+               'var(--c-rose)','var(--c-amber)','var(--c-ochre)','var(--c-forest)',
+               'var(--c-teal)','var(--c-slate)','var(--c-indigo)','var(--c-violet)')),
   -- A key of `design/icons.toml`; the command boundary says which keys a list or calendar may wear.
   icon      TEXT CHECK (icon IS NULL OR length(trim(icon)) > 0),
   cover     TEXT REFERENCES blob(hash),

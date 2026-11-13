@@ -89,6 +89,20 @@ fn pre_variant(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     })
 }
 
+/// The file a variant of `blob` holds now (zero or one hash): what a write or a drop may release.
+fn replaced_file(ctx: &CommandCtx<'_, '_>, blob: &str, variant: &str) -> Result<Vec<String>> {
+    use rusqlite::OptionalExtension as _;
+    let held: Option<Option<String>> = ctx
+        .connection()
+        .query_row(
+            "SELECT out FROM derivative WHERE blob = ?1 AND variant = ?2",
+            [blob, variant],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(held.flatten().into_iter().collect())
+}
+
 fn write(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let hash = ctx.required_str("blob")?;
     let out = ctx
@@ -105,6 +119,8 @@ fn write(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
                 ctx.optional_str("media_type").unwrap_or_default(),
             )
         });
+    // The file the variant held before this write is the one it may release.
+    let replaced = replaced_file(ctx, hash, ctx.required_str("variant")?)?;
     blob::write_derivative(
         ctx.connection(),
         &ctx.now,
@@ -118,13 +134,15 @@ fn write(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     for owner in blob::owners_of_blob(ctx.connection(), hash)? {
         ctx.mark_for_index(&owner);
     }
-    // A variant holds one file: the one it replaced is named by nothing now.
-    let released = blob::collect(ctx.connection())?;
+    // A variant holds one file: the one it replaced is named by nothing now. Only that one is
+    // asked about; the library is not walked for a thumbnail.
+    let released = blob::collect_hashes(ctx.connection(), &replaced)?;
     Ok(serde_json::json!({ "blob": hash, "released": released }))
 }
 
 fn drop_derivative(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let hash = ctx.required_str("blob")?;
+    let replaced = replaced_file(ctx, hash, ctx.required_str("variant")?)?;
     let removed = ctx.connection().execute(
         "DELETE FROM derivative WHERE blob = ?1 AND variant = ?2",
         [hash, ctx.required_str("variant")?],
@@ -133,7 +151,7 @@ fn drop_derivative(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         ctx.mark_for_index(&owner);
     }
     // The file the dropped variant held is named by nothing now.
-    let released = blob::collect(ctx.connection())?;
+    let released = blob::collect_hashes(ctx.connection(), &replaced)?;
     Ok(serde_json::json!({ "removed": removed > 0, "released": released }))
 }
 

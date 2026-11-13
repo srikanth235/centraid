@@ -293,7 +293,12 @@ fn the_scenario_seeds_whole_and_every_revamped_screen_has_its_data() {
     // (four halves), the newest left for the member.
     assert_eq!(scenario.count("txn", "id", "", vec![]), 91);
     assert_eq!(
-        scenario.count("txn", "id", "EXISTS (SELECT 1 FROM transfer WHERE a = txn.id OR b = txn.id)", vec![]),
+        scenario.count(
+            "txn",
+            "id",
+            "EXISTS (SELECT 1 FROM transfer WHERE a = txn.id OR b = txn.id)",
+            vec![]
+        ),
         4
     );
     assert!(

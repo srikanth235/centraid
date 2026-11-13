@@ -245,7 +245,6 @@ pub type Shape = fn(&CommandCtx<'_, '_>, &mut Map<String, Json>) -> std::result:
 /// See [`SystemMap::settle`].
 pub type Settle = fn(&CommandCtx<'_, '_>, &str) -> Result<()>;
 
-
 /// The name a system gives a record: `stated.title`, kept in a column of its own so a read of it
 /// parses no JSON.
 fn stated_title(stated: &Json) -> Option<&str> {
@@ -813,13 +812,10 @@ fn upsert_origin(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<OriginRow>
     };
     let (mut fills, device) = read()?;
     if let Some(founds) = map.founds {
-        let color = origin
-            .get("color")
-            .and_then(Json::as_str)
-            .filter(|color| {
-                container::LIST_COLORS.contains(color)
-                    || container::PHONE_CALENDAR_COLORS.contains(color)
-            });
+        let color = origin.get("color").and_then(Json::as_str).filter(|color| {
+            container::LIST_COLORS.contains(color)
+                || container::PHONE_CALENDAR_COLORS.contains(color)
+        });
         let made = founds(
             ctx,
             &Home {

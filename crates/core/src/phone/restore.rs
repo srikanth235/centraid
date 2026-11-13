@@ -1235,3 +1235,57 @@ mod error_tests {
         assert!(!early.sentence().contains("Restart"));
     }
 }
+
+#[cfg(test)]
+mod held_tests {
+    use super::*;
+    use centraid_vault::commands::Registry;
+    use centraid_vault::{Command, CommandStatus, Principal};
+
+    /// A founded vault file with `notes` notes written, closed so its WAL is folded in.
+    fn vault_with(path: &Path, notes: usize) {
+        let vault = Vault::create(path).expect("founds");
+        vault.found("Home", "Ada").expect("founds");
+        let registry = Registry::with_system_commands().expect("a registry");
+        for index in 0..notes {
+            let outcome = vault
+                .execute(
+                    &registry,
+                    &Principal::owner("phone"),
+                    &Command::new(
+                        "note.create",
+                        serde_json::json!({ "title": format!("note {index}"), "body": "words" }),
+                    ),
+                )
+                .expect("runs");
+            assert_eq!(outcome.status, CommandStatus::Executed);
+        }
+        vault.close().expect("closes");
+    }
+
+    /// **A damaged held copy is never kept over a restore** (#1191, V21). The held copy has more
+    /// writes than the restored file, so it is "newer"; with one of its pages really damaged it
+    /// does not open, and it is not.
+    #[test]
+    fn a_held_copy_with_a_damaged_page_is_not_newer() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let (held, restored) = (dir.path().join("held.db"), dir.path().join("restored.db"));
+        vault_with(&held, 3);
+        vault_with(&restored, 0);
+        assert!(
+            held_is_newer(&held, &restored),
+            "the intact held copy is ahead"
+        );
+
+        let mut bytes = std::fs::read(&held).expect("reads");
+        let page = usize::try_from(centraid_vault::file::PAGE_SIZE).expect("a size");
+        for byte in &mut bytes[4 * page..5 * page] {
+            *byte = 0xA5;
+        }
+        std::fs::write(&held, bytes).expect("writes");
+        assert!(
+            !held_is_newer(&held, &restored),
+            "a damaged held copy answers not newer"
+        );
+    }
+}

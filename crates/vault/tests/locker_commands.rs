@@ -825,7 +825,13 @@ fn trash_is_reversible_and_a_lapsed_window_waits_for_the_launch_pass() {
     world.scratch.clock.advance_ms(31 * 86_400_000);
     world.ok("entity.restore", serde_json::json!({ "id": "item-1" }));
     world.ok("entity.trash", serde_json::json!({ "id": "item-1" }));
-    world.scratch.clock.advance_ms(31 * 86_400_000);
+    // The member keeps using the app (the launch pass trusts the clock within a week of the last write).
+    world.scratch.clock.advance_ms(30 * 86_400_000);
+    world.ok(
+        "container.create",
+        serde_json::json!({ "kind": "folder", "title": "In use" }),
+    );
+    world.scratch.clock.advance_ms(86_400_000);
     let emptied = world
         .scratch
         .vault

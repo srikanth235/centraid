@@ -84,7 +84,10 @@ fn number(text: &str) -> Option<i64> {
 /// the only spelling an instant column accepts; a date or a wall clock is returned as it came.
 #[must_use]
 pub fn canonical(value: &str) -> String {
-    match (classify(value), crate::time::recurrence::parse_instant_ms(value)) {
+    match (
+        classify(value),
+        crate::time::recurrence::parse_instant_ms(value),
+    ) {
         (Some(Kind::Instant), Some(millis)) => crate::clock::format_iso_ms(millis),
         _ => value.to_owned(),
     }

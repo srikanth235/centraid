@@ -151,6 +151,11 @@ pub struct CommandCtx<'tx, 'conn> {
 }
 
 impl<'conn> CommandCtx<'_, 'conn> {
+    /// The cause and quietness this commit's history will settle under.
+    pub(crate) fn settling_as(&self) -> (String, bool) {
+        self.tx.settling_as()
+    }
+
     /// The connection this command writes through — the guard's, so the
     /// commit carries every write.
     #[must_use]
