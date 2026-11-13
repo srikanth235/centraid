@@ -192,7 +192,7 @@ fn no_sentence_says_what_the_member_is_never_told() {
     let mut every = Vec::new();
     for case in cases(&fixture, "devices") {
         every.push(text(case, "standing"));
-        every.extend(case["notes"].as_array().unwrap().iter().map(|n| text_of(n)));
+        every.extend(case["notes"].as_array().unwrap().iter().map(text_of));
     }
     for key in ["lines", "rate", "restore_ask"] {
         for case in cases(&fixture, key) {
