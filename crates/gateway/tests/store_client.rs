@@ -22,7 +22,8 @@ use std::path::Path;
 use std::sync::Arc;
 #[cfg(target_os = "linux")]
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::time::{Duration, Instant};
+#[cfg(target_os = "linux")]
+use std::time::Duration;
 
 use bytes::Bytes;
 use centraid_gateway::client::tls::{Trust, client_config};
@@ -135,9 +136,9 @@ async fn every_put_answer_the_client_returns_is_an_acknowledgement() {
 
 /// THE GATEWAY STAGES A BUNDLE FRAME AS IT ARRIVES AND ADMITS THE BUNDLE IN
 /// ONE TRANSACTION (#1191, B7, E14). The body is fed by hand: the first frame
-/// whole and the second frame's header, then nothing until the first frame is
-/// seen staged on disk — a gateway that held the body in memory would stage
-/// nothing yet, and this would time out. **Nothing is admitted while the body
+/// whole and the second frame's header, then nothing until the gateway
+/// reports the first frame staged (an event, not a look at the clock): a gateway
+/// that held the body in memory would report nothing yet. **Nothing is admitted while the body
 /// is open**: the rows of a bundle land together or not at all, so another
 /// connection still sees both names missing until the last frame is in.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -179,6 +180,14 @@ async fn a_bundle_frame_is_staged_on_arrival_and_admitted_with_the_rest() {
         serde_json::from_slice::<BundleAnswer>(&bytes.to_bytes()).expect("a bundle answer")
     });
 
+    let (staged_tx, staged_rx) = std::sync::mpsc::channel::<u64>();
+    gateway
+        .shared()
+        .store()
+        .knobs()
+        .on_staged(Some(std::sync::Arc::new(move |size| {
+            let _ = staged_tx.send(size);
+        })));
     let send = |bytes: &[u8]| {
         feed.unbounded_send(Bytes::copy_from_slice(bytes))
             .expect("the body is still open");
@@ -195,23 +204,11 @@ async fn a_bundle_frame_is_staged_on_arrival_and_admitted_with_the_rest() {
         second_bytes.len() as u64,
     ));
 
-    let incoming = gateway.data_dir().join("incoming");
-    let staged = || -> Vec<u64> {
-        std::fs::read_dir(&incoming)
-            .expect("the staging area")
-            .flatten()
-            .filter_map(|entry| entry.metadata().ok().map(|meta| meta.len()))
-            .collect()
-    };
-    let deadline = Instant::now() + Duration::from_secs(20);
-    while !staged().contains(&(64 * 1024)) {
-        assert!(
-            Instant::now() < deadline,
-            "the first frame was not staged while the body was still open: {:?}",
-            staged()
-        );
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
+    let staged = tokio::task::spawn_blocking(move || staged_rx.recv())
+        .await
+        .expect("the waiter")
+        .expect("the first frame is staged while the body is still open");
+    assert_eq!(staged, 64 * 1024);
     let missing = phone
         .exists(&vault, &[first, second])
         .await

@@ -259,7 +259,7 @@ pub trait Target {
 
 /// Every case, by name, in the order [`run`] runs them. A target's test
 /// asserts its report names exactly these, so a dropped case is a failure.
-pub const CASES: [&str; 61] = [
+pub const CASES: [&str; 63] = [
     "info/answers-before-anything-is-paired",
     "pair/a-secret-admits-one-new-vault-once",
     "pair/a-known-vault-is-refused-and-the-secret-is-not-spent",
@@ -321,6 +321,8 @@ pub const CASES: [&str; 61] = [
     "nonce/a-nonce-is-checked",
     "store/a-put-over-a-held-or-damaged-name-must-match-its-digest",
     "takeover/a-claim-keeps-the-superseded-writers-tombstone",
+    "signed/the-extremes-of-every-number-are-refused-cleanly",
+    "pair/a-claim-or-a-read-grant-made-for-another-gateway-or-vault-moves-nothing",
 ];
 
 /// **The names tests.md gives, and the case each runs.** `tests/conformance.rs`
@@ -438,6 +440,14 @@ pub const NAMED: &[(&str, &str)] = &[
     (
         "a_claim_keeps_the_superseded_writers_tombstone_among_a_hundred_readers",
         "takeover/a-claim-keeps-the-superseded-writers-tombstone",
+    ),
+    (
+        "the_extremes_of_every_number_are_refused_without_a_fault",
+        "signed/the-extremes-of-every-number-are-refused-cleanly",
+    ),
+    (
+        "a_claim_or_read_grant_for_another_gateway_or_vault_moves_nothing",
+        "pair/a-claim-or-a-read-grant-made-for-another-gateway-or-vault-moves-nothing",
     ),
     (
         "a_forged_foreign_expired_or_replayed_nonce_is_refused",
@@ -641,6 +651,12 @@ async fn run_named<T: Target>(target: &mut T, only: Option<&str>) -> Report {
     }
     if only.is_none_or(|case| case == CASES[60]) {
         report.record(CASES[60], claim_keeps_the_writers_tombstone(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[61]) {
+        report.record(CASES[61], extremes_are_refused_cleanly(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[62]) {
+        report.record(CASES[62], foreign_claim_or_read_moves_nothing(target).await);
     }
     report
 }
@@ -3895,4 +3911,215 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
         && haystack
             .windows(needle.len())
             .any(|window| window == needle)
+}
+
+/// The numbers a hostile or broken phone can put in a signed record, signed
+/// correctly so only the rules (not the signature) can refuse them: every one
+/// is answered with a closed refusal, never `INTERNAL`, never a transport
+/// break, and moves nothing. A `u64` the store keeps in a signed 64-bit
+/// column is exactly where a number past `i64::MAX` would otherwise break.
+async fn extremes_are_refused_cleanly<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let gateway = target.gateway_id();
+    let (one, head) = headed(target, &phone, &vault, "extremes one", None, 1).await?;
+    let two = object("extremes two");
+    store(target, &phone, &vault, &two).await?;
+    let past_i64 = u64::try_from(i64::MAX).unwrap_or(u64::MAX) + 1;
+    let standing = phone.standing();
+    let live = phone.standing() + 1;
+
+    // Generation and writes, on a head, a delete and an undo.
+    for extreme in [u64::MAX, past_i64] {
+        refused(
+            target
+                .set_head(
+                    &phone.token,
+                    &vault,
+                    &phone.head_at(two.0, Some(one.0), 2, extreme),
+                )
+                .await,
+            Code::OutOfOrder,
+            &format!("a head at generation {extreme}"),
+        )?;
+        refused(
+            target
+                .set_head(
+                    &phone.token,
+                    &vault,
+                    &phone.head_gw(two.0, Some(one.0), 2, live, extreme),
+                )
+                .await,
+            Code::OutOfOrder,
+            &format!("a head with {extreme} writes"),
+        )?;
+        let names = [one.0];
+        refused(
+            target
+                .delete(
+                    &phone.token,
+                    &vault,
+                    &DeleteRequest {
+                        names: names.to_vec(),
+                        generation: extreme,
+                        signature: sign_delete(&key, &gateway, 1, extreme, &names),
+                    },
+                )
+                .await,
+            Code::OutOfOrder,
+            &format!("a delete at generation {extreme}"),
+        )?;
+        refused(
+            target
+                .undo(
+                    &phone.token,
+                    &vault,
+                    &UndoRequest {
+                        names: None,
+                        generation: extreme,
+                        signature: sign_undo(&key, &gateway, 1, extreme, None),
+                    },
+                )
+                .await,
+            Code::OutOfOrder,
+            &format!("an undo at generation {extreme}"),
+        )?;
+        // The epoch a head is signed under is the token's, never the
+        // request's: a head signed under an epoch that is not the caller's
+        // does not verify.
+        let fields = HeadFields {
+            epoch: extreme,
+            generation: live,
+            writes: live,
+            taken_at_ms: 2,
+            manifest: two.0,
+            prev: Some(one.0),
+        };
+        let wrong_epoch = SetHead {
+            name: two.0,
+            prev: Some(one.0),
+            taken_at_ms: 2,
+            generation: live,
+            writes: live,
+            signature: sign_head(&key, &gateway, &fields),
+        };
+        refused(
+            target.set_head(&phone.token, &vault, &wrong_epoch).await,
+            Code::Unauthorized,
+            &format!("a head signed under epoch {extreme}"),
+        )?;
+        refused(
+            pair_claim(target, &key, extreme, Some(one.0)).await,
+            Code::EpochConflict,
+            &format!("a claim to epoch {extreme}"),
+        )?;
+    }
+    // A moment past the clock's reach is refused as such, the other end of
+    // time is simply long ago.
+    refused(
+        target
+            .set_head(
+                &phone.token,
+                &vault,
+                &phone.head_at(two.0, Some(one.0), i64::MAX, live),
+            )
+            .await,
+        Code::ClockAhead,
+        "a snapshot taken at i64::MAX",
+    )?;
+
+    // Nothing above moved anything, and the writer still writes.
+    let after = ok(target.head(&phone.token, &vault).await, "the head")?;
+    ensure(after == head, || {
+        format!("a refused number moved the head: {head:?} then {after:?}")
+    })?;
+    ensure(phone.standing() == standing, || {
+        "the case consumed a generation".to_owned()
+    })?;
+    let epochs = target.token_epochs(&vault).await?;
+    ensure(epochs == vec![1], || {
+        format!("a claim moved tokens: {epochs:?}")
+    })?;
+    ok(
+        target
+            .set_head(
+                &phone.token,
+                &vault,
+                &phone.head_at(two.0, Some(one.0), i64::MIN, live),
+            )
+            .await,
+        "a head taken long ago, at the next generation",
+    )?;
+    Ok(())
+}
+
+/// A claim and a read grant are made for one gateway and one vault. Signed
+/// for another gateway, or by another vault's key over this vault's name,
+/// each is refused `UNAUTHORIZED`, and the refusal moves nothing: no token is
+/// added or removed, no tombstone written, the head stands, and the writer
+/// goes on writing. (A signature that did bind would end the writer's epoch.)
+async fn foreign_claim_or_read_moves_nothing<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let gateway = target.gateway_id();
+    let elsewhere = GatewayId::from_bytes([0xee; 16]);
+    let (manifest, head) = headed(target, &phone, &vault, "foreign one", None, 1).await?;
+    let epochs = target.token_epochs(&vault).await?;
+    let revoked = target.revoked_count(&vault).await?;
+
+    let mut attempts = Vec::new();
+    // For another gateway.
+    attempts.push((
+        "a claim signed for another gateway",
+        ok(
+            claim_request(target, &key, &elsewhere, 2, Some(manifest.0)).await,
+            "a request",
+        )?,
+    ));
+    attempts.push((
+        "a read grant signed for another gateway",
+        ok(read_request(target, &key, &elsewhere).await, "a request")?,
+    ));
+    // For another vault: this vault's name, another vault's key.
+    let stranger = identity(9);
+    let mut claim = ok(
+        claim_request(target, &stranger, &gateway, 2, Some(manifest.0)).await,
+        "a request",
+    )?;
+    claim.vault_id = vault;
+    attempts.push(("a claim signed by another vault's key", claim));
+    let mut read = ok(read_request(target, &stranger, &gateway).await, "a request")?;
+    read.vault_id = vault;
+    attempts.push(("a read grant signed by another vault's key", read));
+    for (what, request) in attempts {
+        refused(target.pair(&request).await, Code::Unauthorized, what)?;
+    }
+
+    let now = ok(target.head(&phone.token, &vault).await, "the head")?;
+    ensure(now == head, || {
+        format!("the head moved: {head:?} then {now:?}")
+    })?;
+    ensure(target.token_epochs(&vault).await? == epochs, || {
+        "a refused pairing changed the tokens".to_owned()
+    })?;
+    ensure(target.revoked_count(&vault).await? == revoked, || {
+        "a refused claim wrote a tombstone".to_owned()
+    })?;
+    let next = object("foreign two");
+    store(target, &phone, &vault, &next).await?;
+    ok(
+        target
+            .set_head(
+                &phone.token,
+                &vault,
+                &phone.head(next.0, Some(manifest.0), 2),
+            )
+            .await,
+        "the writer still writes",
+    )?;
+    Ok(())
 }

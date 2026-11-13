@@ -18,6 +18,9 @@ use crate::server::store::StageError;
 /// place by a commit, before its row is written.
 pub type RenameHook = Arc<dyn Fn(usize) + Send + Sync>;
 
+/// Called with the size of each upload the moment it has been staged.
+pub type StagedHook = Arc<dyn Fn(u64) + Send + Sync>;
+
 /// The knobs of one gateway.
 #[derive(Default)]
 pub struct Knobs {
@@ -32,6 +35,7 @@ pub struct Knobs {
     fail_at: AtomicU64,
     after_rename: Mutex<Option<RenameHook>>,
     before_unlink: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
+    on_staged: Mutex<Option<StagedHook>>,
 }
 
 impl core::fmt::Debug for Knobs {
@@ -85,6 +89,22 @@ impl Knobs {
     pub fn on_orphan_unlink(&self, hook: Option<Arc<dyn Fn() + Send + Sync>>) {
         if let Ok(mut held) = self.before_unlink.lock() {
             *held = hook;
+        }
+    }
+
+    /// Run `hook` with the size of every upload the moment it has been fully
+    /// staged (written, synced, hashed), before it is admitted; `None` takes
+    /// it away. A test waits on this instead of looking at the clock.
+    pub fn on_staged(&self, hook: Option<StagedHook>) {
+        if let Ok(mut held) = self.on_staged.lock() {
+            *held = hook;
+        }
+    }
+
+    pub(crate) fn staged(&self, size: u64) {
+        let hook = self.on_staged.lock().ok().and_then(|held| held.clone());
+        if let Some(hook) = hook {
+            hook(size);
         }
     }
 

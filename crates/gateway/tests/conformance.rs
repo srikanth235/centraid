@@ -299,6 +299,8 @@ named_in_memory!(
     a_forged_foreign_expired_or_replayed_nonce_is_refused,
     a_claim_keeps_the_superseded_writers_tombstone_among_a_hundred_readers,
     a_put_of_garbage_over_a_held_or_damaged_name_is_refused,
+    the_extremes_of_every_number_are_refused_without_a_fault,
+    a_claim_or_read_grant_for_another_gateway_or_vault_moves_nothing,
 );
 
 /// Every name in `NAMED` has a test above.

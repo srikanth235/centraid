@@ -133,8 +133,8 @@ pub fn failed_at(every: Duration, now_ms: i64) -> i64 {
     now_ms.saturating_sub(every.saturating_sub(retry).max(0))
 }
 
-/// The hourly sweep: re-base the holds if the gap since `last_purge_ms` is
-/// past fourteen days, purge every hold past its week (a frozen vault's
+/// The hourly sweep: shift every hold by the whole gap since `last_purge_ms`
+/// if it is past three sweep intervals, purge every hold past its week (a frozen vault's
 /// excepted), prune what has expired — nonces, old pairing secrets, old
 /// revoked-token tombstones — and remove orphan files. Blocking: run it off
 /// the runtime. Answers how many objects it purged.

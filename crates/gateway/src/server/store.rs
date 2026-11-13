@@ -215,6 +215,8 @@ impl ObjectStore {
             hasher: blake3::Hasher::new(),
             size: 0,
             limit,
+            #[cfg(feature = "test-harness")]
+            knobs: Arc::clone(&self.knobs),
         })
     }
 
@@ -314,6 +316,8 @@ pub struct Staged {
     hasher: blake3::Hasher,
     size: u64,
     limit: u64,
+    #[cfg(feature = "test-harness")]
+    knobs: Arc<crate::server::knobs::Knobs>,
 }
 
 impl Staged {
@@ -341,6 +345,8 @@ impl Staged {
         self.file.flush().await?;
         self.file.get_mut().sync_all().await?;
         let path = self.path.take().unwrap_or_default();
+        #[cfg(feature = "test-harness")]
+        self.knobs.staged(self.size);
         Ok(StagedFile {
             path,
             digest: Digest::from_hash(&self.hasher.finalize()),
