@@ -98,3 +98,56 @@ fn a_task_with_more_tags_than_a_page_holds_keeps_every_one() {
     assert_eq!(board.tags.len(), PAGE + 1, "every chip");
     assert_eq!(root.references.len(), 1, "and what it is about");
 }
+
+/// Two top-level tasks, the first holding `first` subtasks and the second `second`: the board's
+/// children read walks them `(parent_id, id)` a page at a time. Returns what each root came back
+/// with, in the board's order of roots by their own title.
+fn subtask_counts(first: usize, second: usize) -> Vec<(String, usize, usize)> {
+    let world = World::new();
+    let one = world.id("task.add", json!({ "title": "One" }));
+    let two = world.id("task.add", json!({ "title": "Two" }));
+    for (parent, count) in [(&one, first), (&two, second)] {
+        for at in 0..count {
+            world.ok(
+                "task.add",
+                json!({ "title": format!("sub-{at:04}"), "parent_id": parent }),
+            );
+        }
+    }
+    let board = world.board(None);
+    let mut found: Vec<(String, usize, usize)> = board
+        .open
+        .iter()
+        .map(|root| {
+            let ids: std::collections::BTreeSet<&str> = root
+                .children
+                .iter()
+                .map(|child| child.task_id.as_str())
+                .collect();
+            (root.title.clone(), root.children.len(), ids.len())
+        })
+        .collect();
+    found.sort();
+    found
+}
+
+#[test]
+fn a_task_with_more_subtasks_than_a_page_holds_keeps_every_one_once() {
+    // The first page of 500 ends inside One's subtasks; the second holds the rest and Two's.
+    assert_eq!(
+        subtask_counts(PAGE + 2, 3),
+        vec![
+            ("One".to_owned(), PAGE + 2, PAGE + 2),
+            ("Two".to_owned(), 3, 3)
+        ]
+    );
+}
+
+#[test]
+fn a_page_boundary_between_two_parents_keeps_every_subtask_once() {
+    // One's subtasks fill the first page exactly; Two's begin the second.
+    assert_eq!(
+        subtask_counts(PAGE, 3),
+        vec![("One".to_owned(), PAGE, PAGE), ("Two".to_owned(), 3, 3)]
+    );
+}

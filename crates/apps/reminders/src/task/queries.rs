@@ -347,6 +347,22 @@ fn live_tasks(
     Ok(tasks_of(&entities, &rows))
 }
 
+/// The live subtasks of `ids`, whole. A subtask's `parent_id` is nullable (a top-level task has
+/// none), and the read bounds it to `parent_id IN (ids)`, which no NULL satisfies, so the walk
+/// orders on `(parent_id, id)`: a key unique per subtask, whose page may end inside one parent's.
+fn live_children(door: &dyn PageDoor, ids: &[String]) -> KitResult<Vec<TaskRow>> {
+    let rows = Read {
+        name: "reminders.board.children",
+        table: "task",
+        select: TASK_COLUMNS,
+        order: ("parent_id", "id"),
+        column: "parent_id",
+    }
+    .within_pinned(WIDE, door, ids, None)?;
+    let entities = live_entities(door, "reminders.entities", &ids_of(&rows, "id"))?;
+    Ok(tasks_of(&entities, &rows))
+}
+
 /// THE OPEN WINDOW: the newest tasks by creation, a page of entities at a time,
 /// until `window` of them are open. Returns the rows and whether more open work
 /// may exist beyond them (the walk's own cursor, never a guess from a count).
@@ -1106,7 +1122,7 @@ pub fn load_board(
         .filter(|task| task.parent_task_id.is_none())
         .map(|task| task.task_id.clone())
         .collect();
-    for task in live_tasks(door, "reminders.board.children", "parent_id", &top_level)? {
+    for task in live_children(door, &top_level)? {
         by_id.insert(task.task_id.clone(), task);
     }
     let rows: Vec<TaskRow> = by_id.into_values().collect();
@@ -1429,7 +1445,7 @@ pub fn load_task(
         else {
             return Ok(None);
         };
-        let children = live_tasks(door, "reminders.board.children", "parent_id", &ids)?;
+        let children = live_children(door, &ids)?;
         let parent = match task.parent_task_id.clone() {
             Some(parent_id) => live_tasks(door, "reminders.task.parent", "id", &[parent_id])?
                 .into_iter()

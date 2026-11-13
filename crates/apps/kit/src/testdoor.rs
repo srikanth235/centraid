@@ -130,7 +130,24 @@ impl PageDoor for TestDoor<'_> {
         // column is sound; it is the continuation that is not, and the boundary
         // `page_cursor_boundary` refuses catches the other half.
         if request.after.is_some() {
-            self.refuse_nullable_sort(query, &shape)?;
+            if query.order.sort_pinned {
+                // The declaration is checked, not trusted: the read's own predicate must bound
+                // the sort column to a list, which no NULL satisfies.
+                let pinned = format!("{} IN (", query.order.sort_column);
+                if !query
+                    .r#where
+                    .as_deref()
+                    .is_some_and(|own| own.contains(&pinned))
+                {
+                    return Err(KitError::NullableSortKey {
+                        query: query.name.clone(),
+                        column: query.order.sort_column.clone(),
+                        detail: "the order says its sort column is pinned and the predicate does not bound it to a list",
+                    });
+                }
+            } else {
+                self.refuse_nullable_sort(query, &shape)?;
+            }
         }
         // A held-bytes page: a test door holds no byte store, so the path is NULL
         // and the original is not held; the original's hash is the row's `blob`.

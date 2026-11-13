@@ -58,6 +58,12 @@ pub struct PageOrder {
     /// door compares it back as a number. Only an order that says so may carry an integer there;
     /// every other order still refuses one ([`KitError::CursorPkNotText`]).
     pub pk_integer: bool,
+    /// The sort column is NULLABLE in the schema, and the read's own predicate pins it to a
+    /// bound list (`sort_column IN (?, ?, ...)`), which no NULL satisfies: every row the read can
+    /// return has a key, so a keyset over it drops nothing. Only [`Self::pinned_to_bound_list`]
+    /// sets it, and a door that can read the schema checks the predicate says so; every other
+    /// nullable sort key is still refused ([`KitError::NullableSortKey`]).
+    pub sort_pinned: bool,
 }
 
 impl PageOrder {
@@ -67,6 +73,7 @@ impl PageOrder {
             pk_column: pk_column.to_owned(),
             descending: false,
             pk_integer: false,
+            sort_pinned: false,
         }
     }
 
@@ -76,6 +83,7 @@ impl PageOrder {
             pk_column: pk_column.to_owned(),
             descending: true,
             pk_integer: false,
+            sort_pinned: false,
         }
     }
 
@@ -86,6 +94,17 @@ impl PageOrder {
         Self {
             pk_integer: true,
             ..Self::asc(sort_column, pk_column)
+        }
+    }
+
+    /// This order, declared to walk a sort column the read's own predicate pins to a bound list
+    /// (`sort_column IN (...)`), so a nullable column is sound as a key. The door refuses the
+    /// declaration when the predicate does not say so.
+    #[must_use]
+    pub fn pinned_to_bound_list(self) -> Self {
+        Self {
+            sort_pinned: true,
+            ..self
         }
     }
 

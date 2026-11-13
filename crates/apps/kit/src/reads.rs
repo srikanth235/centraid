@@ -249,6 +249,34 @@ impl Read {
         self.within_ordered(self.order_of(true), bound, door, ids, extra)
     }
 
+    /// [`Self::within`] for a read whose first order column IS the bounded `column`, and is
+    /// NULLABLE in the schema (a subtask's `parent_id`): `column IN (ids)` can never return a
+    /// NULL, so the keyset over `(column, second)` is sound where the kit would otherwise refuse
+    /// a nullable key. Declared per read, never inferred, and only on this path: the table walk
+    /// of [`Self::among`] past [`AMONG_LIMIT`] holds no such predicate, so it has no twin.
+    pub fn within_pinned(
+        &self,
+        bound: FanOutBound,
+        door: &dyn PageDoor,
+        ids: &[String],
+        extra: Option<(&str, Vec<PageBindValue>)>,
+    ) -> KitResult<Vec<Row>> {
+        if self.order.0 != self.column {
+            return Err(KitError::NullableSortKey {
+                query: self.name.to_owned(),
+                column: self.order.0.to_owned(),
+                detail: "a pinned order leads with the column the ids bound",
+            });
+        }
+        self.within_ordered(
+            self.order_of(false).pinned_to_bound_list(),
+            bound,
+            door,
+            ids,
+            extra,
+        )
+    }
+
     fn within_ordered(
         &self,
         order: crate::statement::PageOrder,
@@ -613,6 +641,100 @@ mod tests {
             .within(FanOutBound::new(2, 20), &door, &ids, None)
             .expect("the walk reads to its end");
         assert_eq!(rows.len(), 2, "two of the five arrive");
+    }
+
+    /// `task(id, parent_id)` with a NULLABLE `parent_id`: `p1` holds three subtasks, `p2` two,
+    /// and two top-level rows hold none.
+    fn subtasks() -> rusqlite::Connection {
+        let connection = rusqlite::Connection::open_in_memory().expect("a database opens");
+        connection
+            .execute_batch(
+                "CREATE TABLE task (id TEXT PRIMARY KEY NOT NULL, parent_id TEXT) STRICT;
+                 INSERT INTO task VALUES
+                   ('p1', NULL), ('p2', NULL),
+                   ('a1', 'p1'), ('a2', 'p1'), ('a3', 'p1'), ('b1', 'p2'), ('b2', 'p2');",
+            )
+            .expect("the table is made");
+        connection
+    }
+
+    const SUBTASKS: Read = Read {
+        name: "kit.test.subtasks",
+        table: "task",
+        select: "id, parent_id",
+        order: ("parent_id", "id"),
+        column: "parent_id",
+    };
+
+    fn ids_walked(rows: &[Row]) -> Vec<(String, String)> {
+        rows.iter()
+            .map(|row| {
+                (
+                    crate::row::text_of(row, "parent_id").expect("a parent"),
+                    crate::row::text_of(row, "id").expect("an id"),
+                )
+            })
+            .collect()
+    }
+
+    /// A nullable key OUTSIDE the declared case is still refused: the same read through the
+    /// plain `within` is not pinned, and its second page says why.
+    #[test]
+    fn a_nullable_sort_key_not_declared_pinned_is_still_refused() {
+        let connection = subtasks();
+        let door = crate::testdoor::TestDoor::new(&connection);
+        let ids = vec!["p1".to_owned(), "p2".to_owned()];
+        let outcome = SUBTASKS.within(FanOutBound::new(2, 20), &door, &ids, None);
+        assert!(
+            matches!(outcome, Err(KitError::NullableSortKey { ref column, .. }) if column == "parent_id"),
+            "{outcome:?}"
+        );
+        // A statement that declares the pin without bounding the column is refused too.
+        let lying = PageQuery::new(
+            "kit.test.lying",
+            "id, parent_id",
+            "task",
+            crate::statement::PageOrder::asc("parent_id", "id").pinned_to_bound_list(),
+        )
+        .filter("id <> ?", vec![PageBindValue::Text("zz".to_owned())]);
+        let first = door.page(&lying, &PageRequest::first(3));
+        let outcome = door.page(&lying, &PageRequest::after(3, first.unwrap().next.unwrap()));
+        assert!(
+            matches!(outcome, Err(KitError::NullableSortKey { .. })),
+            "{outcome:?}"
+        );
+        // And a pinned read leads with the column its ids bound.
+        let misordered = Read {
+            order: ("id", "id"),
+            ..SUBTASKS
+        };
+        assert!(matches!(
+            misordered.within_pinned(FanOutBound::new(2, 20), &door, &ids, None),
+            Err(KitError::NullableSortKey { .. })
+        ));
+    }
+
+    /// The declared case pages whole: a page ends inside one parent's rows and between two
+    /// parents, nothing is dropped or repeated, and the NULL parents are never returned.
+    #[test]
+    fn a_pinned_nullable_key_pages_through_every_parents_rows() {
+        let connection = subtasks();
+        let ids = vec!["p1".to_owned(), "p2".to_owned()];
+        let expected: Vec<(String, String)> = [("p1", "a1"), ("p1", "a2"), ("p1", "a3")]
+            .into_iter()
+            .chain([("p2", "b1"), ("p2", "b2")])
+            .map(|(parent, id)| (parent.to_owned(), id.to_owned()))
+            .collect();
+        for page_size in [1, 2, 3, 4, 5] {
+            let door = Counting {
+                inner: crate::testdoor::TestDoor::new(&connection),
+                pages: std::cell::Cell::new(0),
+            };
+            let rows = SUBTASKS
+                .within_pinned(FanOutBound::new(page_size, 20), &door, &ids, None)
+                .expect("the walk reads to its end");
+            assert_eq!(ids_walked(&rows), expected, "page size {page_size}");
+        }
     }
 
     #[test]
