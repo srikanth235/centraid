@@ -76,7 +76,10 @@ pub fn backlog_old(reading: &Reading, now_ms: i64, running: bool) -> bool {
 /// line. A vault that moved and one with no device are the callers' own cases.
 #[must_use]
 pub fn warns(reading: &Reading, now_ms: i64, running: bool) -> bool {
-    if reading.destinations.is_empty() || reading.destinations.iter().all(|d| d.pair_again) {
+    if reading.damaged
+        || reading.destinations.is_empty()
+        || reading.destinations.iter().all(|d| d.pair_again)
+    {
         return true;
     }
     let Some(acked) = reading.last_ack_ms else {
@@ -120,6 +123,19 @@ pub fn line(
     let Some(reading) = reading else {
         return wire::BackupLine::default();
     };
+    // A DAMAGED VAULT IS NOT BACKED UP, however recent the last backup: the quick check found it
+    // before a head could be signed, so nothing new is made and the restore door is offered
+    // (#1191, V21, B16).
+    if reading.damaged {
+        return finish(wire::BackupLine {
+            confirmed: reading.content_confirmed,
+            sentence: words::backup_line_damaged(locale),
+            status: words::backup_status_damaged(locale),
+            detail: detail(locale, reading),
+            tone: Tone::Urgent as i32,
+            ..Default::default()
+        });
+    }
     let waiting = waiting_rows(locale, reading);
     if reading.destinations.is_empty() {
         return finish(wire::BackupLine {
@@ -238,6 +254,9 @@ fn name_the_one_behind(
         Footing::Full => words_home::device_full(locale),
         Footing::TooLarge => words_home::device_too_large(locale),
         Footing::Refusing => words_home::device_refusing(locale),
+        Footing::Paused => words_home::device_paused(locale),
+        Footing::TooOld => words_home::device_too_old(locale),
+        Footing::Moved => words_home::device_moved(locale),
         _ => words_home::device_behind(locale),
     };
     // The headline and the status both name it; what the others hold is `last_good`.
@@ -281,6 +300,15 @@ pub fn behind_reason(locale: Locale, zone: &str, reading: &Reading, now_ms: i64)
     let name = device_name(locale, worst);
     Some(match worst.footing() {
         Footing::RolledBack => words_home::device_older_reason(locale),
+        Footing::Paused => fill(
+            &words_home::device_paused_reason(locale),
+            &[("name", &name)],
+        ),
+        Footing::TooOld => fill(
+            &words_home::device_too_old_reason(locale),
+            &[("name", &name)],
+        ),
+        Footing::Moved => words_home::device_moved_reason(locale),
         Footing::Full => fill(&words_home::device_full_reason(locale), &[("name", &name)]),
         Footing::TooLarge => fill(
             &words_home::device_too_large_reason(locale),

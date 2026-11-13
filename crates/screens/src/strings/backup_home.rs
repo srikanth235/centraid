@@ -64,6 +64,23 @@ catalog! {
     plain row_too_large = ("Refused a file as too large", "Refused a file as too large");
     plain row_refusing = ("Refusing the backup", "Refusing the backup");
     plain row_older = ("Older backup than this phone sent", "Older backup than this phone sent");
+    // WHAT A BACKUP DEVICE SAYS ABOUT ITSELF WHEN IT IS NOT A PLAIN "BEHIND" (#1191, B16): another
+    // phone took over there, whoever runs it paused it, it runs an older version, one old backup
+    // on it can't be read, a stored piece was found damaged, and files this phone deleted there
+    // that it holds for a week (the date is the device's).
+    plain row_moved = ("Another phone took over", "Another phone took over");
+    plain row_paused = ("Paused by whoever runs it", "Paused by whoever runs it");
+    plain row_too_old = ("Needs an update", "Needs an update");
+    plain row_unreadable = ("One old backup can't be read", "One old backup can't be read");
+    plain row_damage_resent = ("A stored piece was damaged. Sending it again.", "A stored piece was damaged. Sending it again.");
+    counted row_held = ("{count} old file goes {date}", "{count} old files go {date}");
+    plain row_undo_action = ("Undo", "Undo");
+    plain device_moved = ("Another phone took over {name}", "Another phone took over {name}");
+    plain device_paused = ("{name} is paused", "{name} is paused");
+    plain device_too_old = ("{name} needs an update", "{name} needs an update");
+    plain device_paused_reason = ("{name} is paused by whoever runs it. Centraid asks again at the next backup.", "{name} is paused by whoever runs it. Centraid asks again at the next backup.");
+    plain device_too_old_reason = ("{name} runs an older version. Update it, then pair again.", "{name} runs an older version. Update it, then pair again.");
+    plain device_moved_reason = ("Not you? Ask whoever runs your backup device to pause it.", "Not you? Ask whoever runs your backup device to pause it.");
 
     // THE ONE-TIME PROMPT after the first confirmed backup (#1188, NB5): "recovery key", never
     // "words"; no checkbox.

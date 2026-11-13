@@ -74,6 +74,8 @@ catalog! {
     plain backup_line_done = ("Backed up {when}.", "Backed up {when}.");
     plain backup_line_frozen = ("Moved to another phone. Read-only here.", "Moved to another phone. Read-only here.");
     plain backup_line_never = ("Not backed up yet.", "Not backed up yet.");
+    plain backup_line_damaged = ("This phone's vault is damaged. No new backup is made.", "This phone's vault is damaged. No new backup is made.");
+    plain backup_status_damaged = ("Vault damaged", "Vault damaged");
     plain backup_line_pair_again = ("Your backup device doesn't know this phone. Pair it again.", "Your backup device doesn't know this phone. Pair it again.");
     plain backup_line_records = ("Records backed up {when}.", "Records backed up {when}.");
     plain backup_line_unpaired = ("Not backed up. Pair a backup device.", "Not backed up. Pair a backup device.");

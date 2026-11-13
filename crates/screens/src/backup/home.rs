@@ -31,9 +31,9 @@ use wire::screen_event::Kind as E;
 use super::claim::bytes;
 use super::doors::{self, Done};
 use super::key::KeyCustody;
-use super::reading::{self, Destination, Footing, Standing};
+use super::reading::{self, Destination, Standing};
 use super::rule::{self, TransferRule};
-use super::{apps, line, routes};
+use super::{apps, line, routes, states};
 use crate::custody::secrets::{self, SeedWrite, VaultSecrets};
 use crate::kit::read::{Note, Page, Reading};
 use crate::pairing::discovery::Rediscovery;
@@ -194,7 +194,10 @@ impl Backup {
     /// Back up now needs a gateway to back up to, a vault that has not moved, and
     /// no run already going.
     fn can_back_up_now(&self) -> bool {
-        !self.backing_up_now && !self.destinations().is_empty() && !self.frozen()
+        !self.backing_up_now
+            && !self.destinations().is_empty()
+            && !self.frozen()
+            && !self.reading().is_some_and(|reading| reading.damaged)
     }
 
     fn label_of(&self, locale: Locale, gateway_id: &str) -> String {
@@ -572,28 +575,10 @@ impl Backup {
             .collect()
     }
 
-    /// How a device stands, for its row.
-    fn standing_words(locale: Locale, destination: &Destination) -> String {
-        match destination.footing() {
-            Footing::Current => backup_home::row_up_to_date(locale),
-            Footing::Full => backup_home::row_full(locale),
-            Footing::TooLarge => backup_home::row_too_large(locale),
-            Footing::Refusing => backup_home::row_refusing(locale),
-            Footing::RolledBack => backup_home::row_older(locale),
-            Footing::Behind => match destination.behind_files {
-                0 => backup_home::row_catching_up(locale),
-                1 => backup_home::row_behind_one(locale),
-                n => fill(
-                    &backup_home::row_behind_many(locale),
-                    &[("n", &line::grouped(n))],
-                ),
-            },
-        }
-    }
-
     fn destination_row(
         &self,
         locale: Locale,
+        zone: &str,
         destination: &Destination,
     ) -> wire::BackupDestinationRow {
         let label = if destination.label.trim().is_empty() {
@@ -626,7 +611,7 @@ impl Backup {
         // HOW IT STANDS LEADS, then what it holds (#1144): a row that said nothing would read as
         // health by absence, so every device says its state, "Up to date" included (#1188, NB1).
         let held = [
-            Some(Self::standing_words(locale, destination)),
+            Some(states::standing_words(locale, destination)),
             (destination.held_bytes != 0).then(|| {
                 fill(
                     &words::backup_held(locale),
@@ -638,6 +623,12 @@ impl Backup {
         .flatten()
         .collect::<Vec<_>>()
         .join(" \u{b7} ");
+        // THE NOTES under it, one to a line: an old backup that cannot be read, a piece sent
+        // again, deletes held for a week (#1191, B16).
+        let held = std::iter::once(held)
+            .chain(states::notes(locale, zone, destination))
+            .collect::<Vec<_>>()
+            .join("\n");
         // WHEN THIS GATEWAY LAST ACKNOWLEDGED A BACKUP, apart from when it was reached: a device
         // can answer every hour and hold nothing newer than last week (#1188).
         let backed_up = destination.last_ack_ms.map_or_else(
@@ -851,6 +842,9 @@ impl Backup {
                 line::behind_last_good(locale, reading, now),
                 line::behind_reason(locale, ctx.zone(), reading, now).unwrap_or_default(),
             ),
+            // ANOTHER PHONE TOOK OVER: what the member can do about a takeover that was not theirs
+            // (#1191, A). The person at the backup device has the last word.
+            (_, Some(_)) => (String::new(), backup_home::device_moved_reason(locale)),
             _ => (String::new(), String::new()),
         };
         let key_summary = if key_heading.is_empty() {
@@ -887,7 +881,7 @@ impl Backup {
             },
             destinations: destinations
                 .iter()
-                .map(|destination| self.destination_row(locale, destination))
+                .map(|destination| self.destination_row(locale, ctx.zone(), destination))
                 .collect(),
             add_destination: (!add_label.is_empty()).then(routes::add_destination),
             add_destination_label: add_label,

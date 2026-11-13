@@ -8,6 +8,11 @@ catalog! {
     plain check_intro = ("Opens each backup in a spare copy and reads a sample of its files. Your vault isn't touched.", "Opens each backup in a spare copy and reads a sample of its files. Your vault isn't touched.");
     plain check_heading_result = ("Result", "Result");
     plain check_heading_running = ("Checking", "Checking");
+    // HOW THE BACKUP IS CHECKED, at a stated rate (#1191, E10): what was read and what opened,
+    // never "verified". `{s}` is the pieces the last check read, `{n}` the pieces stored and `{m}`
+    // how many checks it takes to read each about once.
+    plain check_rate_body = ("Each check reads {s} of {n} stored pieces, chosen at random. Every piece gets read about once in {m} checks.", "Each check reads {s} of {n} stored pieces, chosen at random. Every piece gets read about once in {m} checks.");
+    plain check_rate_all_body = ("Each check reads all {n} stored pieces.", "Each check reads all {n} stored pieces.");
 
     // WHAT A BACKUP THAT WAS CHECKED SAYS. `{when}` is the backup's own date, in the member's
     // zone: "Tuesday 10 November, 21:40".
