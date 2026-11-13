@@ -59,7 +59,7 @@ pub const GROUPS: [(&str, &str, &str); 6] = [
 ///
 /// The FTS5 shadow tables of `search` are not here (they are an implementation
 /// of it); every other table must be.
-pub const TABLES: [(&str, &str, &str); 45] = [
+pub const TABLES: [(&str, &str, &str); 46] = [
     (
         "kernel",
         "entity",
@@ -197,6 +197,11 @@ pub const TABLES: [(&str, &str, &str); 45] = [
     ),
     (
         "kinds",
+        "transfer",
+        "Two lines that are the two halves of one movement of the member's own money: one row, the lower line first.",
+    ),
+    (
+        "kinds",
         "budget",
         "What a category may spend in a month, and whether the unspent carries.",
     ),
@@ -238,7 +243,7 @@ pub const TABLES: [(&str, &str, &str); 45] = [
     (
         "bytes",
         "blob",
-        "The vault's claim on content: its hash and size. Every hash anywhere is a foreign key into this table.",
+        "The vault's claim on content: its hash and size, numbered in the order the claims were made. Every hash anywhere is a foreign key into this table.",
     ),
     (
         "bytes",

@@ -412,7 +412,9 @@ struct Line {
 fn line(connection: &Connection, id: &str) -> Result<Option<Line>> {
     Ok(connection
         .query_row(
-            "SELECT t.account_id, t.currency, t.amount_minor, t.status, t.transfer_id
+            "SELECT t.account_id, t.currency, t.amount_minor, t.status,
+                    (SELECT CASE WHEN x.a = t.id THEN x.b ELSE x.a END FROM transfer x
+                      WHERE x.a = t.id OR x.b = t.id)
                FROM txn t JOIN entity e ON e.id = t.id
               WHERE t.id = ?1 AND e.deleted_at IS NULL",
             [id],
@@ -502,14 +504,14 @@ fn categorize(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
 fn end_transfer(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<usize> {
     let touched: Vec<String> = ctx
         .connection()
-        .prepare_cached(
-            "SELECT id FROM txn WHERE id = ?1 AND transfer_id IS NOT NULL OR transfer_id = ?1",
-        )?
+        .prepare_cached("SELECT a FROM transfer WHERE a = ?1 OR b = ?1 UNION ALL SELECT b FROM transfer WHERE a = ?1 OR b = ?1")?
         .query_map([id], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?;
-    for member in &touched {
+    if !touched.is_empty() {
         ctx.connection()
-            .execute("UPDATE txn SET transfer_id = NULL WHERE id = ?1", [member])?;
+            .execute("DELETE FROM transfer WHERE a = ?1 OR b = ?1", [id])?;
+    }
+    for member in &touched {
         ctx.touch(member)?;
     }
     Ok(touched.len())
@@ -575,20 +577,18 @@ fn pre_transfer(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     ))
 }
 
-/// Two lines are the two halves of one movement of the member's own money; each
-/// points at the other, so either half finds its partner.
+/// Two lines are the two halves of one movement of the member's own money: one `transfer` row
+/// holds the pair, the lower id first, so either half finds its partner.
 fn link_transfer(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let (a, b) = (ctx.required_str("id")?, ctx.required_str("other_id")?);
-    let mut linked = false;
-    for (from, to) in [(a, b), (b, a)] {
-        if ctx.connection().execute(
-            "UPDATE txn SET transfer_id = ?2 WHERE id = ?1 AND transfer_id IS NOT ?2",
-            [from, to],
-        )? > 0
-        {
-            ctx.touch(from)?;
-            linked = true;
-        }
+    let (one, other) = (ctx.required_str("id")?, ctx.required_str("other_id")?);
+    let (a, b) = if one < other { (one, other) } else { (other, one) };
+    let linked = ctx.connection().execute(
+        "INSERT INTO transfer (a, b) VALUES (?1, ?2) ON CONFLICT (a) DO NOTHING",
+        [a, b],
+    )? > 0;
+    if linked {
+        ctx.touch(a)?;
+        ctx.touch(b)?;
     }
     Ok(json!({ "linked": linked }))
 }
@@ -599,8 +599,7 @@ fn unlink_transfer(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let other: Option<String> = ctx
         .connection()
         .query_row(
-            "SELECT COALESCE(transfer_id, (SELECT id FROM txn WHERE transfer_id = ?1 LIMIT 1))
-               FROM txn WHERE id = ?1",
+            "SELECT CASE WHEN a = ?1 THEN b ELSE a END FROM transfer WHERE a = ?1 OR b = ?1",
             [id],
             |row| row.get(0),
         )

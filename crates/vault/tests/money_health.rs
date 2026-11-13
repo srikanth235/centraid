@@ -390,7 +390,10 @@ fn a_transfer_is_two_lines_pointing_at_each_other_and_a_void_ends_it() {
     world.ok("txn.link_transfer", json!({ "id": out, "other_id": into }));
     let paired = |a: &str, b: &str| {
         world
-            .text("SELECT transfer_id FROM txn WHERE id = ?1", &[a])
+            .text(
+                "SELECT CASE WHEN a = ?1 THEN b ELSE a END FROM transfer WHERE a = ?1 OR b = ?1",
+                &[a],
+            )
             .as_deref()
             == Some(b)
     };
@@ -415,7 +418,7 @@ fn a_transfer_is_two_lines_pointing_at_each_other_and_a_void_ends_it() {
     assert_eq!(voided["transfers_ended"], 2);
     assert_eq!(
         world.count(
-            "SELECT COUNT(*) FROM txn WHERE transfer_id IS NOT NULL",
+            "SELECT COUNT(*) FROM transfer",
             &[]
         ),
         0

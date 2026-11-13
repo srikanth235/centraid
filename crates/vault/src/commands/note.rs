@@ -20,8 +20,8 @@
 //! A `[[title]]` in a body is compiled into a `links` edge from the note to
 //! every live thing that title names, in the same commit that changed the
 //! words, so a backlink is a read of an edge and never a scan of bodies. The
-//! compile owns the edges it writes and no others: its edges carry the anchor
-//! `{"wikilink": "<title>"}`, which is how it tells them from a link the member
+//! compile owns the edges it writes and no others: its edges carry the
+//! `wikilink` flag, which is how it tells them from a link the member
 //! made by hand (`edge.add` with a text range), and a hand link to the same
 //! thing stands in for the compiled one. A title that names nothing compiles to
 //! nothing and nothing re-resolves it later; a title that names several things
@@ -296,8 +296,7 @@ pub fn wikilink_titles(body: &str) -> Vec<String> {
 fn compile_wikilinks(ctx: &CommandCtx<'_, '_>, note: &str, body: &str) -> Result<()> {
     let connection = ctx.connection();
     connection.execute(
-        "DELETE FROM edge WHERE from_id = ?1 AND rel = 'links'
-            AND json_extract(anchor, '$.wikilink') IS NOT NULL",
+        "DELETE FROM edge WHERE from_id = ?1 AND rel = 'links' AND wikilink = 1",
         [note],
     )?;
     let linkable = LINKABLE
@@ -328,14 +327,9 @@ fn compile_wikilinks(ctx: &CommandCtx<'_, '_>, note: &str, body: &str) -> Result
             }
             if linked.insert(target.clone()) {
                 connection.execute(
-                    "INSERT OR IGNORE INTO edge (from_id, rel, to_id, anchor, created_at)
-                     VALUES (?1, 'links', ?2, ?3, ?4)",
-                    rusqlite::params![
-                        note,
-                        target,
-                        serde_json::json!({ "wikilink": title }).to_string(),
-                        ctx.now
-                    ],
+                    "INSERT OR IGNORE INTO edge (from_id, rel, to_id, wikilink, created_at)
+                     VALUES (?1, 'links', ?2, 1, ?3)",
+                    rusqlite::params![note, target, ctx.now],
                 )?;
             }
         }

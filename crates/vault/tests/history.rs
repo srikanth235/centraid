@@ -1633,7 +1633,7 @@ fn a_link_that_was_written_in_a_notes_words_is_not_state_the_words_are() {
     let _ = target;
     assert!(
         keys(&w.state(&note), "link_out", "to_id").is_empty(),
-        "a wikilink carries an anchor and is recompiled from the words"
+        "a wikilink is flagged and is recompiled from the words"
     );
 }
 

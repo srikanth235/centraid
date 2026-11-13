@@ -447,6 +447,7 @@ fn delete_rules_cascade_only_where_a_row_cannot_outlive_its_parent() {
             ("message", "thread"),
             ("message_attachment", "message"),
             ("occurrence", "event"),
+            ("transfer", "txn"),
             ("workout", "activity"),
         ]
         .into();
@@ -1455,6 +1456,7 @@ fn the_founded_file_holds_the_spec_s_tables_and_nothing_else() {
         "photo",
         "account",
         "txn",
+        "transfer",
         "budget",
         "checkpoint",
         "rule",
@@ -1691,9 +1693,8 @@ enum Reach {
 /// declaration, so adding a text column fails here until it is placed.
 ///
 /// `edge.anchor` has no row: it is JSON, so the declaration marks it structural.
-/// It is only ever a note's `{"wikilink": title}`, the words of a `[[title]]`
-/// that sit in `note.body`, which is `Own`; `a_note_is_found_by_the_words_of_its_link`
-/// holds that.
+/// A note's `[[title]]` is the flag `edge.wikilink`, the words of which sit in `note.body`, which
+/// is `Own`; `a_note_is_found_by_the_words_of_its_link` holds that.
 const CENSUS: &[(&str, &str, Reach)] = &[
     ("entity", "title", Reach::Own),
     (
@@ -1705,11 +1706,6 @@ const CENSUS: &[(&str, &str, Reach)] = &[
         "search_owed",
         "after",
         Reach::Not("a cursor in id order over what a label feeds, not prose"),
-    ),
-    (
-        "alert",
-        "fire_key",
-        Reach::Not("a time key for the index, not prose"),
     ),
     ("person", "nickname", Reach::Own),
     ("person", "role", Reach::Own),
@@ -1799,7 +1795,6 @@ const CENSUS: &[(&str, &str, Reach)] = &[
         "key",
         Reach::Not("the folded form of the title, which is indexed in what it labels"),
     ),
-    ("container", "color", Reach::Not("a colour token")),
     ("container", "icon", Reach::Not("an icon key")),
     (
         "vault",
@@ -1829,15 +1824,6 @@ const CENSUS: &[(&str, &str, Reach)] = &[
     ("budget", "currency", Reach::Not("an ISO code")),
     ("budget", "month", Reach::Not("a month")),
     ("vault", "currency", Reach::Not("an ISO code")),
-    ("activity", "starts", Reach::Not("an instant")),
-    ("activity", "ends", Reach::Not("an instant")),
-    ("event", "starts", Reach::Not("an instant")),
-    ("event", "ends", Reach::Not("an instant")),
-    ("occurrence", "original_start", Reach::Not("an instant")),
-    ("occurrence", "starts", Reach::Not("an instant")),
-    ("occurrence", "ends", Reach::Not("an instant")),
-    ("action_key", "at", Reach::Not("an instant")),
-    ("revision", "at", Reach::Not("an instant")),
     (
         "revision",
         "cause",
@@ -1938,6 +1924,21 @@ const CENSUS: &[(&str, &str, Reach)] = &[
     ),
     ("edge_shape", "rel", Reach::Not("a closed vocabulary")),
     ("source", "system", Reach::Not("a closed vocabulary")),
+    (
+        "source",
+        "stated_title",
+        Reach::Not("what a phone store called the record: a copy of `stated`, whose live title is the entity's own"),
+    ),
+    (
+        "origin",
+        "fills",
+        Reach::Not("an entity id: the home a follow filled"),
+    ),
+    (
+        "origin",
+        "cursor",
+        Reach::Not("a platform's change token, opaque to the vault"),
+    ),
 ];
 
 /// The text of one column's own definition inside a `CREATE TABLE`: the piece
@@ -1991,6 +1992,7 @@ fn is_structural(connection: &Connection, table: &str, column: &str) -> bool {
         || sql.contains(&format!("json_valid({column})"))
         || sql.contains(&format!("date({column})"))
         || sql.contains(&format!("datetime({column})"))
+        || sql.contains(&format!(", {column}) IS {column}"))
         || sql.contains(&format!("length({column}) = 64"))
 }
 
@@ -2425,12 +2427,12 @@ fn a_note_is_found_by_the_words_of_its_link() {
     );
     let anchors: i64 = read(vault, |c| {
         Ok(c.query_row(
-            "SELECT count(*) FROM edge WHERE from_id = 'src' AND rel = 'links' AND anchor IS NOT NULL",
+            "SELECT count(*) FROM edge WHERE from_id = 'src' AND rel = 'links' AND wikilink = 1",
             [],
             |r| r.get(0),
         )?)
     });
-    assert_eq!(anchors, 1, "the link compiled to an edge with an anchor");
+    assert_eq!(anchors, 1, "the link compiled to a flagged edge");
     is_found(vault, "src", "harbour", "a note's link words");
 }
 
@@ -2542,7 +2544,7 @@ fn a_month_across_accounts_reads_the_day_index() {
         let plan: Vec<String> = connection
             .prepare(
                 "EXPLAIN QUERY PLAN
-                 SELECT id, account_id, posted_on, amount_minor, currency, status, category_id, transfer_id
+                 SELECT id, account_id, posted_on, amount_minor, currency, status, category_id
                    FROM txn WHERE posted_on >= ?1 AND posted_on < ?2
                   ORDER BY posted_on DESC, id DESC LIMIT 51",
             )?

@@ -3,7 +3,7 @@
 //!
 //! A phone's store (the camera roll, the health store) is read from a position the platform
 //! mints: a Photos change token, a HealthKit anchor, a Health Connect changes token. The vault
-//! keeps it in `origin.config` (`{"cursor": ...}`) beside `origin.device_id`, the install that
+//! keeps it in `origin.cursor` beside `origin.device_id`, the install that
 //! wrote it. **A cursor is the word of one phone**: a platform's token means something on the
 //! device that minted it only, so a read from another device is told nothing ([`read`] answers
 //! none) and does a complete read; the first batch it commits takes the origin over.
@@ -36,7 +36,7 @@ pub fn read(
 ) -> Result<Option<String>> {
     let row: Option<(Option<String>, Option<String>)> = connection
         .query_row(
-            "SELECT device_id, json_extract(config, '$.cursor') FROM origin
+            "SELECT device_id, cursor FROM origin
               WHERE system = ?1 AND ref = ?2 AND retired_at IS NULL",
             [system, reference],
             |row| Ok((row.get(0)?, row.get(1)?)),
@@ -79,14 +79,14 @@ pub fn advance(
         return Ok(());
     }
     let changed = connection.execute(
-        "UPDATE origin SET device_id = ?3, config = json_set(COALESCE(config, '{}'), '$.cursor', ?4)
+        "UPDATE origin SET device_id = ?3, cursor = ?4
           WHERE system = ?1 AND ref = ?2",
         rusqlite::params![system, reference, device, cursor],
     )?;
     if changed == 0 {
         connection.execute(
-            "INSERT INTO origin (id, system, ref, label, device_id, config, created_at)
-             VALUES (?1, ?2, ?3, ?3, ?4, json_object('cursor', ?5), ?6)",
+            "INSERT INTO origin (id, system, ref, label, device_id, cursor, created_at)
+             VALUES (?1, ?2, ?3, ?3, ?4, ?5, ?6)",
             rusqlite::params![ctx.next_id(), system, reference, device, cursor, ctx.now],
         )?;
     }

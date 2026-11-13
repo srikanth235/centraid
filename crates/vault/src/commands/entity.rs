@@ -278,7 +278,6 @@ const DETACH: &[(Kind, &str, &str, &str)] = &[
     (Kind::Place, "photo", "place_id = NULL", "place_id"),
     (Kind::Task, "task", "parent_id = NULL", "parent_id"),
     (Kind::Task, "task", "series_id = NULL", "series_id"),
-    (Kind::Txn, "txn", "transfer_id = NULL", "transfer_id"),
     (Kind::Photo, "photo", "edited_from = NULL", "edited_from"),
 ];
 
@@ -315,7 +314,7 @@ pub const PURGE_RULES: &[(&str, &str, PurgeRule)] = &[
     ("event", "place_id", PurgeRule::Detach),
     ("note", "notebook_id,notebook_kind", PurgeRule::Detach),
     ("occurrence", "place_id", PurgeRule::Detach),
-    ("origin", "fills", PurgeRule::Forget),
+    ("origin", "fills,fills_kind", PurgeRule::Forget),
     ("photo", "place_id", PurgeRule::Detach),
     ("photo", "edited_from", PurgeRule::Detach),
     ("task", "section_id,section_kind", PurgeRule::Detach),
@@ -324,7 +323,6 @@ pub const PURGE_RULES: &[(&str, &str, PurgeRule)] = &[
     ("task", "series_id", PurgeRule::Detach),
     ("txn", "category_id,category_kind", PurgeRule::Detach),
     ("txn", "account_id,currency", PurgeRule::Purge),
-    ("txn", "transfer_id", PurgeRule::Detach),
     ("vault", "self_id,self_kind", PurgeRule::Refuse),
 ];
 

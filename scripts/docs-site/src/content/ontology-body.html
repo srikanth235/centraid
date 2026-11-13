@@ -30,7 +30,7 @@
     <div class="hero-kv">
       <div><b data-count="kinds">26</b>kinds</div>
       <div><b data-count="relations">9</b>edge relations</div>
-      <div><b data-count="tables">45</b>tables</div>
+      <div><b data-count="tables">46</b>tables</div>
       <div><b>1</b>file, on the phone</div>
       <div><b>0</b>silos</div>
     </div>
@@ -133,6 +133,7 @@
 <div class="colrow"><span class="cn">position</span><span class="ct">real</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">state</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">anchor</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">wikilink</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 0</span></div>
 <div class="colrow"><span class="cn">created_at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
 <div class="tbl rv in" data-group="kernel" data-table="edge_shape"><header><h4>edge_shape</h4><p class="tp">Which kinds each relation may join; a trigger refuses any other pair.</p></header>
@@ -395,7 +396,11 @@
 <div class="colrow"><span class="cn">status</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 'posted'</span></div>
 <div class="colrow"><span class="cn">category_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ entity.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">category_kind</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ entity.kind</span><span class="cnote">generated</span></div>
-<div class="colrow"><span class="cn">transfer_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ txn.id</span><span class="cnote"></span></div>
+</div></div>
+<div class="tbl rv in" data-group="kinds" data-table="transfer"><header><h4>transfer</h4><p class="tp">Two lines that are the two halves of one movement of the member's own money: one row, the lower line first.</p></header>
+<div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
+<div class="colrow"><span class="cn">a</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ txn.id</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">b</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ txn.id</span><span class="cnote"></span></div>
 </div></div>
 <div class="tbl rv in" data-group="kinds" data-table="budget"><header><h4>budget</h4><p class="tp">What a category may spend in a month, and whether the unspent carries.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
@@ -432,6 +437,7 @@
 <div class="tbl rv in" data-group="kinds" data-table="workout"><header><h4>workout</h4><p class="tp">The figures of an activity that was a workout: moving time, distance, energy, heart rate and climb.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ activity.id</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">type_kind</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ activity.type_kind</span><span class="cnote">generated</span></div>
 <div class="colrow"><span class="cn">recorded_by</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">moving_s</span><span class="ct">integer</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">distance_m</span><span class="ct">real</span><span></span><span class="cref"></span><span class="cnote"></span></div>
@@ -463,16 +469,17 @@
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">thread_id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ message.thread_id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">ordinal</span><span class="ct">integer</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ message.ordinal</span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">position</span><span class="ct">integer</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">position</span><span class="ct">real</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">form</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">label</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">entity_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ entity.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">thumb</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ blob.hash</span><span class="cnote"></span></div>
 </div></div>
 <div class="schemahdr" data-group="bytes"><span class="sid">bytes</span><h3>bytes</h3><p class="sdesc">A blob is the vault's claim on content; a derivative is what was made from it.</p></div>
-<div class="tbl rv in" data-group="bytes" data-table="blob"><header><h4>blob</h4><p class="tp">The vault's claim on content: its hash and size. Every hash anywhere is a foreign key into this table.</p></header>
+<div class="tbl rv in" data-group="bytes" data-table="blob"><header><h4>blob</h4><p class="tp">The vault's claim on content: its hash and size, numbered in the order the claims were made. Every hash anywhere is a foreign key into this table.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
-<div class="colrow"><span class="cn">hash</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">seq</span><span class="ct">integer</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">hash</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">size</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
 <div class="tbl rv in" data-group="bytes" data-table="derivative"><header><h4>derivative</h4><p class="tp">What was made from a blob: a thumbnail, preview, poster, text, caption, perceptual hash or thumbhash.</p></header>
@@ -493,6 +500,8 @@
 <div class="colrow"><span class="cn">label</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">device_id</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">fills</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ entity.id</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">fills_kind</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ entity.kind</span><span class="cnote">generated</span></div>
+<div class="colrow"><span class="cn">cursor</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">config</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">created_at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">retired_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
@@ -507,6 +516,7 @@
 <div class="colrow"><span class="cn">entity_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ entity.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">entity_kind</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ entity.kind</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">stated</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">stated_title</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">seen_at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">gone_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
@@ -588,7 +598,7 @@
 <div class="colrow"><span class="cn">failed_unlocks</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 0</span></div>
 <div class="colrow"><span class="cn">failed_unlock_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
-<p class="note" data-tables="45" data-columns="335">45 tables and 335 columns, read off a vault this build founded.</p>
+<p class="note" data-tables="46" data-columns="342">46 tables and 342 columns, read off a vault this build founded.</p>
 <!-- schema:end -->
     </div>
     <div class="physcard rv">

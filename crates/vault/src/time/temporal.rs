@@ -80,6 +80,16 @@ fn number(text: &str) -> Option<i64> {
     text.parse().ok()
 }
 
+/// `value` with an instant in the clock's one form (`YYYY-MM-DDTHH:MM:SS.mmmZ`, UTC), which is
+/// the only spelling an instant column accepts; a date or a wall clock is returned as it came.
+#[must_use]
+pub fn canonical(value: &str) -> String {
+    match (classify(value), crate::time::recurrence::parse_instant_ms(value)) {
+        (Some(Kind::Instant), Some(millis)) => crate::clock::format_iso_ms(millis),
+        _ => value.to_owned(),
+    }
+}
+
 /// Which of the four readings `value` carries, or `None` when it carries none.
 ///
 /// **The one place a temporal string is judged**; every entry point calls it

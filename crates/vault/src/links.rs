@@ -205,7 +205,7 @@ pub fn linked(connection: &Connection, id: &str) -> Result<Vec<Linked>> {
     for (statement, locker_ok) in [
         (
             "SELECT e.id, e.kind, e.title, w.id IS NOT NULL, e.id = (SELECT self_id FROM vault),
-                    json_extract(g.anchor, '$.wikilink') IS NOT NULL
+                    g.wikilink = 1
                FROM edge g
                JOIN entity e ON e.id = g.to_id
                LEFT JOIN workout w ON w.id = e.id
@@ -215,7 +215,7 @@ pub fn linked(connection: &Connection, id: &str) -> Result<Vec<Linked>> {
         ),
         (
             "SELECT e.id, e.kind, e.title, w.id IS NOT NULL, e.id = (SELECT self_id FROM vault),
-                    json_extract(g.anchor, '$.wikilink') IS NOT NULL
+                    g.wikilink = 1
                FROM edge g
                JOIN entity e ON e.id = g.from_id
                LEFT JOIN workout w ON w.id = e.id

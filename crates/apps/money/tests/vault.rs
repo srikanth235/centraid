@@ -162,7 +162,11 @@ fn categories_rules_plans_checkpoints_and_transfers_read_back_as_the_commands_wr
             links.value[0].from_txn.clone(),
             links.value[0].to_txn.clone()
         ),
-        (world.line("csv:out01"), world.line("csv:in001"))
+        {
+            // The pair is one row, the lower id first.
+            let (out, into) = (world.line("csv:out01"), world.line("csv:in001"));
+            if out < into { (out, into) } else { (into, out) }
+        }
     );
 
     let beans = world.ok(

@@ -17,8 +17,8 @@
 //!
 //! A link a member pasted on an event, an occurrence or a task is findable by
 //! its words (`zoom` finds `https://zoom.us/j/123`), like a Locker item's.
-//! What a note's links say (`edge.anchor`, `{"wikilink": title}`) is a copy of
-//! words in `note.body`, which is indexed, so the anchor adds nothing.
+//! What a note's links say (`edge.wikilink`, a flag) is a copy of
+//! words in `note.body`, which is indexed, so the flag adds nothing.
 //!
 //! **Earlier versions are searched too** (#1185: every field a member typed is
 //! findable, and note history has no exemption). The words of a kept version
