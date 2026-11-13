@@ -64,6 +64,42 @@ fn founding_path(path: &Path) -> PathBuf {
     path.with_file_name(name)
 }
 
+/// The paths this process is founding right now. An `open` of the same path must not remove the
+/// side file a founding on another thread is still building.
+static FOUNDING_NOW: std::sync::Mutex<Vec<PathBuf>> = std::sync::Mutex::new(Vec::new());
+
+/// Held for the length of one founding; dropping it says the founding is over (done or failed).
+struct Founding(PathBuf);
+
+impl Founding {
+    fn begin(path: &Path) -> Self {
+        FOUNDING_NOW
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(path.to_path_buf());
+        Self(path.to_path_buf())
+    }
+
+    fn is_under_way(path: &Path) -> bool {
+        FOUNDING_NOW
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .iter()
+            .any(|held| held == path)
+    }
+}
+
+impl Drop for Founding {
+    fn drop(&mut self) {
+        let mut held = FOUNDING_NOW
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(at) = held.iter().position(|path| *path == self.0) {
+            held.swap_remove(at);
+        }
+    }
+}
+
 /// Remove a founding's file and the sidecars SQLite made for it. Best effort: none may exist.
 fn remove_founding_leftovers(side: &Path) {
     for suffix in ["", "-wal", "-shm", "-journal"] {
@@ -216,41 +252,57 @@ impl Vault {
             });
         }
         let side = founding_path(&path);
+        let _founding = Founding::begin(&path);
         remove_founding_leftovers(&side);
-        {
-            let connection = Connection::open(&side)?;
-            // THE HEADER PRAGMAS, AND ONLY HERE. `page_size` and `auto_vacuum` are
-            // both recorded in the file header and both are silently ignored once a
-            // page exists — and `journal_mode = wal` writes one. Founding is the
-            // only moment either can be stated, which is why they are not in
-            // [`Self::apply_pragmas`] with the rest: a pragma that can only be set
-            // once must not sit in a function every open calls, where its failure
-            // to take would look like success.
-            connection.pragma_update(None, "page_size", PAGE_SIZE)?;
-            // NO AUTO-VACUUM, AND `VACUUM` NEVER RUNS (#1029 §1, #1080). A vacuum
-            // renumbers pages, and a backup snapshot is the file cut into 64 KiB
-            // ranges named by their bytes: every range would read as changed, no
-            // name would match one the gateway holds, and the next backup would be
-            // a full copy of the vault. The space a vacuum reclaims is worth less
-            // than that.
-            connection.pragma_update(None, "auto_vacuum", "NONE")?;
-            Self::apply_pragmas(&connection)?;
-            connection.pragma_update(None, "application_id", APPLICATION_ID)?;
-            // OFF for the ladder: the baseline's tables point at each other (the
-            // vault row at its owner, a kind row at its entity), SQLite resolves a
-            // foreign key's target lazily, and the seeds are written in the order
-            // that reads best rather than the order that satisfies a check.
-            connection.pragma_update(None, "foreign_keys", "OFF")?;
-            crate::migrations::run_from(&connection, 0)?;
-            // Everything in the one file: no `-wal` is left to rename away from it.
-            connection.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))?;
-            connection
-                .close()
-                .map_err(|(_, error)| VaultError::from(error))?;
+        // A founding that fails (the disk is full, say) leaves no side file behind; one that is
+        // killed leaves it for the next founding or open to remove.
+        let laid = (|| -> Result<()> {
+            {
+                let connection = Connection::open(&side)?;
+                // THE HEADER PRAGMAS, AND ONLY HERE. `page_size` and `auto_vacuum` are
+                // both recorded in the file header and both are silently ignored once a
+                // page exists — and `journal_mode = wal` writes one. Founding is the
+                // only moment either can be stated, which is why they are not in
+                // [`Self::apply_pragmas`] with the rest: a pragma that can only be set
+                // once must not sit in a function every open calls, where its failure
+                // to take would look like success.
+                connection.pragma_update(None, "page_size", PAGE_SIZE)?;
+                // NO AUTO-VACUUM, AND `VACUUM` NEVER RUNS (#1029 §1, #1080). A vacuum
+                // renumbers pages, and a backup snapshot is the file cut into 64 KiB
+                // ranges named by their bytes: every range would read as changed, no
+                // name would match one the gateway holds, and the next backup would be
+                // a full copy of the vault. The space a vacuum reclaims is worth less
+                // than that.
+                connection.pragma_update(None, "auto_vacuum", "NONE")?;
+                Self::apply_pragmas(&connection)?;
+                connection.pragma_update(None, "application_id", APPLICATION_ID)?;
+                // OFF for the ladder: the baseline's tables point at each other (the
+                // vault row at its owner, a kind row at its entity), SQLite resolves a
+                // foreign key's target lazily, and the seeds are written in the order
+                // that reads best rather than the order that satisfies a check.
+                connection.pragma_update(None, "foreign_keys", "OFF")?;
+                crate::migrations::run_from(&connection, 0)?;
+                crate::stage::reached(crate::stage::Stage::FoundingLaidDown)?;
+                // Everything in the one file: no `-wal` is left to rename away from it.
+                connection.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))?;
+                connection
+                    .close()
+                    .map_err(|(_, error)| VaultError::from(error))?;
+            }
+            crate::stage::reached(crate::stage::Stage::FoundingCheckpointed)?;
+            sync_file(&side)?;
+            crate::stage::reached(crate::stage::Stage::FoundingFlushed)?;
+            std::fs::rename(&side, &path)?;
+            crate::stage::reached(crate::stage::Stage::FoundingRenamed)?;
+            sync_directory(&path)?;
+            Ok(())
+        })();
+        if let Err(error) = laid {
+            if !path.exists() {
+                remove_founding_leftovers(&side);
+            }
+            return Err(error);
         }
-        sync_file(&side)?;
-        std::fs::rename(&side, &path)?;
-        sync_directory(&path)?;
         let connection = Connection::open(&path)?;
         Self::apply_pragmas(&connection)?;
         connection.pragma_update(None, "foreign_keys", "ON")?;
@@ -274,7 +326,9 @@ impl Vault {
         ids: Box<dyn Ids>,
     ) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
-        remove_founding_leftovers(&founding_path(&path));
+        if !Founding::is_under_way(&path) {
+            remove_founding_leftovers(&founding_path(&path));
+        }
         if !path.exists() {
             return Err(VaultError::Missing { path });
         }

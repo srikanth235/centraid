@@ -123,6 +123,10 @@ CREATE TRIGGER concept_parent_shares_its_kind BEFORE INSERT ON concept
 CREATE TRIGGER concept_parent_shares_its_kind_on_move BEFORE UPDATE OF parent_id ON concept
   WHEN new.parent_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM concept p WHERE p.id = new.parent_id AND p.kind = new.kind)
   BEGIN SELECT RAISE(ABORT, 'a concept''s parent is of its own kind'); END;
+CREATE TRIGGER concept_kind_follows_its_parent BEFORE UPDATE OF kind ON concept
+  WHEN (new.parent_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM concept p WHERE p.id = new.parent_id AND p.kind = new.kind))
+    OR EXISTS (SELECT 1 FROM concept c WHERE c.parent_id = new.id AND c.kind <> new.kind)
+  BEGIN SELECT RAISE(ABORT, 'a concept''s parent is of its own kind'); END;
 CREATE TRIGGER concept_hierarchy_is_acyclic BEFORE UPDATE OF parent_id ON concept
   WHEN new.parent_id IS NOT NULL
   BEGIN
@@ -511,7 +515,7 @@ CREATE TABLE occurrence (
   CHECK ((date(original_start) IS original_start OR (strftime('%Y-%m-%dT%H:%M', original_start) IS original_start OR strftime('%Y-%m-%dT%H:%M:%S', original_start) IS original_start OR strftime('%Y-%m-%dT%H:%M:%f', original_start) IS original_start) OR strftime('%Y-%m-%dT%H:%M:%fZ', original_start) IS original_start)),
   CHECK (starts IS NULL OR CASE timing WHEN 'zoned' THEN strftime('%Y-%m-%dT%H:%M:%fZ', starts) IS starts WHEN 'floating' THEN (strftime('%Y-%m-%dT%H:%M', starts) IS starts OR strftime('%Y-%m-%dT%H:%M:%S', starts) IS starts OR strftime('%Y-%m-%dT%H:%M:%f', starts) IS starts) WHEN 'all-day' THEN date(starts) IS starts ELSE (date(starts) IS starts OR (strftime('%Y-%m-%dT%H:%M', starts) IS starts OR strftime('%Y-%m-%dT%H:%M:%S', starts) IS starts OR strftime('%Y-%m-%dT%H:%M:%f', starts) IS starts) OR strftime('%Y-%m-%dT%H:%M:%fZ', starts) IS starts) END),
   CHECK (ends IS NULL OR CASE timing WHEN 'zoned' THEN strftime('%Y-%m-%dT%H:%M:%fZ', ends) IS ends WHEN 'floating' THEN (strftime('%Y-%m-%dT%H:%M', ends) IS ends OR strftime('%Y-%m-%dT%H:%M:%S', ends) IS ends OR strftime('%Y-%m-%dT%H:%M:%f', ends) IS ends) WHEN 'all-day' THEN date(ends) IS ends ELSE (date(ends) IS ends OR (strftime('%Y-%m-%dT%H:%M', ends) IS ends OR strftime('%Y-%m-%dT%H:%M:%S', ends) IS ends OR strftime('%Y-%m-%dT%H:%M:%f', ends) IS ends) OR strftime('%Y-%m-%dT%H:%M:%fZ', ends) IS ends) END)
-) STRICT, WITHOUT ROWID;
+) STRICT;
 CREATE INDEX occurrence_by_place ON occurrence(place_id) WHERE place_id IS NOT NULL;
 
 CREATE TABLE task (
@@ -706,6 +710,9 @@ CREATE TABLE transfer (
 ) STRICT;
 CREATE TRIGGER transfer_halves_are_in_one_pair BEFORE INSERT ON transfer
   WHEN EXISTS (SELECT 1 FROM transfer WHERE b = new.a OR a = new.b)
+  BEGIN SELECT RAISE(ABORT, 'a line is in at most one transfer'); END;
+CREATE TRIGGER transfer_halves_are_in_one_pair_on_update BEFORE UPDATE OF a, b ON transfer
+  WHEN EXISTS (SELECT 1 FROM transfer WHERE rowid <> old.rowid AND (b = new.a OR a = new.b))
   BEGIN SELECT RAISE(ABORT, 'a line is in at most one transfer'); END;
 
 CREATE TABLE budget (

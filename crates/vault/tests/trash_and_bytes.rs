@@ -13,6 +13,34 @@ use serde_json::{Value, json};
 
 const DAY_MS: i64 = 86_400_000;
 
+/// A clock far from the vault's last write lapses nothing for the backup either: the bytes of a
+/// trashed item that is still restorable are listed, however far the clock says its purge date
+/// is behind it (#1191, V19).
+#[test]
+fn a_clock_far_ahead_leaves_every_trashed_blob_in_the_backup() {
+    let w = World::new();
+    let (trashed, blob) = w.document("Trashed", "trashed bytes");
+    w.ok("entity.trash", json!({ "id": trashed }));
+    let listed = |w: &World| -> Vec<String> {
+        centraid_vault::backup::files::content_files(&w.scratch.vault)
+            .expect("lists")
+            .into_iter()
+            .map(|file| file.h.to_hex())
+            .collect()
+    };
+    // One day ahead: inside the window and inside the bound.
+    w.scratch.clock.advance_ms(DAY_MS);
+    assert!(listed(&w).contains(&blob));
+    // A year ahead: the row reads as long lapsed, but the clock is not believed.
+    w.scratch.clock.advance_ms(365 * DAY_MS);
+    assert!(
+        listed(&w).contains(&blob),
+        "a clock a year ahead lapsed a trashed blob out of the backup"
+    );
+    // Restoring is allowed under that clock.
+    w.ok("entity.restore", json!({ "id": trashed }));
+}
+
 struct World {
     scratch: common::Scratch,
     registry: Registry,
@@ -511,7 +539,7 @@ fn the_backup_lists_no_blob_only_a_lapsed_entity_names() {
     w.ok("entity.trash", json!({ "id": lapsing }));
     w.scratch.clock.advance_ms(20 * DAY_MS);
     w.ok("entity.trash", json!({ "id": trashed }));
-    w.scratch.clock.advance_ms(15 * DAY_MS);
+    w.later(15);
     // `lapsing` is 35 days in the trash, `trashed` 15, `kept` live.
     let listed: Vec<String> = centraid_vault::backup::files::content_files(&w.scratch.vault)
         .expect("lists")

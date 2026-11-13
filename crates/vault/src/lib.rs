@@ -49,6 +49,7 @@ pub mod pagesource;
 pub mod plans;
 pub mod portable;
 pub mod roster;
+pub mod stage;
 pub mod task_counts;
 pub mod testdoor;
 pub mod tidy;

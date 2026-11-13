@@ -175,5 +175,41 @@ fn a_clock_behind_the_last_commit_purges_nothing_either() {
     w.scratch.clock.advance_days(16);
     assert_eq!(w.pass(), 1);
     assert_eq!(w.trashed(), 0);
-    assert_eq!(CLOCK_BOUND_DAYS, 7);
+}
+
+/// The exact edge of the bound, read straight off `is_credible`: seven days from the vault's last
+/// write is believed, seven days and a millisecond is not, in either direction.
+#[test]
+fn the_bound_is_seven_days_to_the_millisecond_in_both_directions() {
+    let w = World::new("bound-edge");
+    w.run("note.create", json!({"title": "n", "body": "x"}));
+    let written = w
+        .scratch
+        .vault
+        .read(|connection| {
+            let text: String =
+                connection.query_row("SELECT written_at FROM vault", [], |row| row.get(0))?;
+            Ok(text)
+        })
+        .expect("reads written_at");
+    let written_ms =
+        centraid_vault::time::recurrence::parse_instant_ms(&written).expect("an instant");
+    let credible = |now: i64| {
+        w.scratch
+            .vault
+            .read(|connection| Ok(centraid_vault::clock::is_credible(connection, now)?))
+            .expect("asks")
+    };
+    let bound = CLOCK_BOUND_DAYS * 86_400_000;
+    assert!(credible(written_ms), "the moment of the write");
+    assert!(credible(written_ms + bound), "seven days on");
+    assert!(
+        !credible(written_ms + bound + 1),
+        "seven days and a millisecond on"
+    );
+    assert!(credible(written_ms - bound), "seven days behind");
+    assert!(
+        !credible(written_ms - bound - 1),
+        "seven days and a millisecond behind"
+    );
 }

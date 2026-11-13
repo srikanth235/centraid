@@ -122,3 +122,97 @@ fn a_full_disk_at_the_log_insert_rolls_the_whole_commit_back() {
         recovered.rows
     );
 }
+
+// ---------------------------------------------------------------------------------------------
+// Founding and migration (#1191, M6): the disk fills at a named stage; the vault is absent or
+// whole, and the error is typed.
+// ---------------------------------------------------------------------------------------------
+
+use centraid_vault::stage::{self, Stage};
+use centraid_vault::{Vault, VaultError};
+
+fn full_at_the_flush(stage: Stage) -> std::io::Result<()> {
+    if stage == Stage::FoundingCheckpointed {
+        return Err(std::io::Error::from(std::io::ErrorKind::StorageFull));
+    }
+    Ok(())
+}
+
+fn full_in_a_rung(stage: Stage) -> std::io::Result<()> {
+    if stage == Stage::RungWritten {
+        return Err(std::io::Error::from(std::io::ErrorKind::StorageFull));
+    }
+    Ok(())
+}
+
+#[test]
+fn a_full_disk_while_founding_leaves_no_vault_and_no_side_file_and_says_so() {
+    let dir = centraid_ontology::scratch::scratch_dir().join("full-founding");
+    std::fs::create_dir_all(&dir).expect("a directory");
+    let path = dir.join("vault.db");
+    stage::set_hook(Some(full_at_the_flush));
+    let outcome = Vault::create(&path);
+    stage::set_hook(None);
+    match outcome {
+        Err(VaultError::DiskFull { .. }) => {}
+        Err(other) => panic!("expected DiskFull, got {other}"),
+        Ok(_) => panic!("a founding that hit a full disk succeeded"),
+    }
+    assert!(!path.exists(), "no vault is left at the path");
+    let leftovers: Vec<_> = std::fs::read_dir(&dir)
+        .expect("lists")
+        .map(|entry| entry.expect("an entry").file_name())
+        .collect();
+    assert!(
+        leftovers.is_empty(),
+        "nothing is left behind: {leftovers:?}"
+    );
+    // Once there is room it founds, and opens.
+    Vault::create(&path)
+        .expect("founds again")
+        .close()
+        .expect("closes");
+    Vault::open(&path).expect("opens").close().expect("closes");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_full_disk_in_a_migration_at_open_changes_nothing_and_the_file_opens_when_there_is_room() {
+    let dir = centraid_ontology::scratch::scratch_dir().join("full-migration");
+    std::fs::create_dir_all(&dir).expect("a directory");
+    let path = dir.join("vault.db");
+    {
+        // A file below the head of the ladder: tagged, empty, at rung 0.
+        let lower = centraid_vault::rusqlite::Connection::open(&path).expect("a file");
+        lower
+            .pragma_update(
+                None,
+                "application_id",
+                centraid_vault::format::APPLICATION_ID,
+            )
+            .expect("tagged");
+        lower
+            .pragma_update(None, "journal_mode", "wal")
+            .expect("wal");
+    }
+    stage::set_hook(Some(full_in_a_rung));
+    let outcome = Vault::open(&path);
+    stage::set_hook(None);
+    match outcome {
+        Err(VaultError::DiskFull { .. }) => {}
+        Err(other) => panic!("expected DiskFull, got {other}"),
+        Ok(_) => panic!("a migration that hit a full disk succeeded"),
+    }
+    let tables: i64 = {
+        let connection = centraid_vault::rusqlite::Connection::open(&path).expect("reads");
+        connection
+            .query_row("SELECT COUNT(*) FROM sqlite_schema", [], |row| row.get(0))
+            .expect("counts")
+    };
+    assert_eq!(tables, 0, "the rung that failed wrote nothing");
+    Vault::open(&path)
+        .expect("with room, the same file migrates and opens")
+        .close()
+        .expect("closes");
+    let _ = std::fs::remove_dir_all(&dir);
+}
