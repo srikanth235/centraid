@@ -703,14 +703,17 @@ pub fn head_of(path: &Path, id: &str) -> Name {
 /// A snapshot's manifest, read out of the gateway's store and opened under the test keys.
 pub fn manifest_at(gateway: &Gateway, name: &Name) -> centraid_vault::backup::snapshot::Manifest {
     let store = gateway.spawned.shared().store();
-    let file = store.path(
-        &vault_id(),
-        &centraid_gateway::rules::ids::Name::from_bytes(*name.as_bytes()),
-    );
-    let sealed = std::fs::read(file).expect("the manifest is stored");
-    let json = centraid_media::sealed::open_whole(&keys().backup, name, &sealed)
-        .expect("the manifest opens");
-    centraid_vault::backup::snapshot::Manifest::from_json(&json).expect("a manifest")
+    let keys = keys();
+    centraid_vault::backup::snapshot::Manifest::read(&keys.backup, name, &mut |part| {
+        let file = store.path(
+            &vault_id(),
+            &centraid_gateway::rules::ids::Name::from_bytes(*part.as_bytes()),
+        );
+        std::fs::read(file).map_err(|error| {
+            centraid_vault::backup::store::StoreError::Unreachable(error.to_string())
+        })
+    })
+    .expect("the manifest opens")
 }
 
 /// Everything every gateway is owed.

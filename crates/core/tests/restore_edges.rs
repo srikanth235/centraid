@@ -864,7 +864,7 @@ fn after_a_restore_only_what_is_new_is_sent() {
             &path,
             &state(&path).gateways().expect("reads")[0].gateway_id,
         );
-        let mut names = manifest_at(&gateway, &newest).range_names();
+        let mut names = manifest_at(&gateway, &newest).part_names();
         names.insert(newest);
         names
     };

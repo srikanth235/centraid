@@ -71,6 +71,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use centraid_api_proto::core_v1 as wire;
+use centraid_media::sealed::ChunkDigest;
 use centraid_media::sealed::{self, PartSealer};
 use centraid_vault::backup::files::{ContentFile, content_files};
 use centraid_vault::backup::mover::{self, Stop};
@@ -1320,7 +1321,7 @@ fn known_ranges(
     state: &DeviceState,
     keyring: &Keyring,
     stores: &[&GatewayStore],
-) -> Vec<Option<Name>> {
+) -> Vec<Option<(Name, Vec<ChunkDigest>)>> {
     let mut newest: Option<(u64, &GatewayStore, Name)> = None;
     for store in stores {
         let Ok(Some(row)) = state.gateway(store.gateway_id()) else {
@@ -1349,7 +1350,7 @@ fn known_ranges(
     manifest
         .ranges
         .iter()
-        .map(|range| (!gone.contains(&range.name)).then_some(range.name))
+        .map(|range| (!gone.contains(&range.name)).then(|| (range.name, range.d.clone())))
         .collect()
 }
 
@@ -1391,7 +1392,7 @@ fn take_snapshot(
         &|i| {
             known
                 .get(usize::try_from(i).unwrap_or(usize::MAX))
-                .copied()
+                .cloned()
                 .flatten()
         },
         &mut sealer,
@@ -1434,7 +1435,7 @@ fn take_snapshot(
     .map_err(plane_error)?;
     // WHAT THE NEWER SNAPSHOT SUPERSEDES IS NOT SENT: a gateway still behind is brought to
     // the new snapshot, never walked through the old ones.
-    let mut keep = taken.manifest.range_names();
+    let mut keep = taken.manifest.part_names();
     keep.insert(taken.manifest_name);
     for (gateway, _) in &plans {
         let stale: Vec<Name> = state
@@ -1442,8 +1443,10 @@ fn take_snapshot(
             .map_err(plane_error)?
             .into_iter()
             .filter(|row| {
-                matches!(row.kind, OutboxKind::Range | OutboxKind::Manifest)
-                    && !keep.contains(&row.name)
+                matches!(
+                    row.kind,
+                    OutboxKind::Range | OutboxKind::Leaf | OutboxKind::Manifest
+                ) && !keep.contains(&row.name)
             })
             .map(|row| row.name)
             .collect();
@@ -1549,13 +1552,12 @@ fn settle_newest(
 
 /// A kept snapshot's manifest, fetched from the gateway and opened.
 fn manifest_of(store: &GatewayStore, keys: &BackupKeys, name: &Name) -> Result<Manifest> {
-    let mut sealed_bytes = Vec::new();
-    store.get(name, &mut sealed_bytes).map_err(store_error)?;
-    let json =
-        sealed::open_whole(keys, name, &sealed_bytes).map_err(|error| CoreError::Invariant {
-            context: format!("a kept snapshot's manifest would not open: {error}"),
-        })?;
-    Manifest::from_json(&json).map_err(plane_error)
+    snapshot::read_manifest(store, keys, name).map_err(|error| match error {
+        centraid_vault::backup::PlaneError::Store(error) => store_error(error),
+        other => CoreError::Invariant {
+            context: format!("a kept snapshot's manifest would not open: {other}"),
+        },
+    })
 }
 
 /// **Retention, then the dropped snapshots' own parts** (#1080, "Retention"): keep 7 daily, 4
@@ -1602,7 +1604,7 @@ fn retain(
     for name in &decided.keep {
         live.insert(*name);
         match manifest_of(store, keys, name) {
-            Ok(manifest) => live.extend(manifest.range_names()),
+            Ok(manifest) => live.extend(manifest.part_names()),
             Err(error @ CoreError::Unavailable { .. }) => return Err(error),
             Err(error) => {
                 tracing::warn!(
@@ -1625,7 +1627,7 @@ fn retain(
     if let Some(name) = abandoned {
         promptly.insert(name);
         match manifest_of(store, keys, &name) {
-            Ok(manifest) => promptly.extend(manifest.range_names()),
+            Ok(manifest) => promptly.extend(manifest.part_names()),
             Err(error @ CoreError::Unavailable { .. }) => return Err(error),
             Err(_) => {}
         }
@@ -1633,7 +1635,7 @@ fn retain(
     for name in &decided.drop {
         promptly.insert(*name);
         match manifest_of(store, keys, name) {
-            Ok(manifest) => promptly.extend(manifest.range_names()),
+            Ok(manifest) => promptly.extend(manifest.part_names()),
             Err(error @ CoreError::Unavailable { .. }) => return Err(error),
             Err(error) => tracing::warn!(
                 %error,

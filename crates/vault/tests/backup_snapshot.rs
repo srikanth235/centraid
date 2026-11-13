@@ -286,7 +286,22 @@ impl Store for Swapped<'_> {
 fn forge(store: &MemoryStore, snapshot: &Snapshot, edit: impl FnOnce(&mut Manifest)) -> Name {
     let mut manifest = snapshot.manifest.clone();
     edit(&mut manifest);
-    let json = manifest.to_json().expect("serialises");
+    let parts = manifest.to_parts(&keys()).expect("serialises");
+    for leaf in &parts.leaves {
+        if store.exists(&[leaf.name]).expect("asks").is_empty() {
+            continue;
+        }
+        let bytes = sealed::seal_part(&keys(), 0, &leaf.json, true).expect("seals");
+        store
+            .put(
+                &leaf.name,
+                &Digest::of(&bytes),
+                bytes.len() as u64,
+                &mut bytes.as_slice(),
+            )
+            .expect("stores the leaf");
+    }
+    let json = parts.root_json;
     let name = sealed::name(&keys(), &PlaintextHash::of(&json), 0);
     let bytes = sealed::seal_part(&keys(), 0, &json, true).expect("seals");
     store

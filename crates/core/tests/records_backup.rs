@@ -537,8 +537,8 @@ fn a_snapshot_cut_short_before_its_head_is_finished_by_the_next_pass() {
     let (_, manifest) = head_manifest(&path, &gateway);
     let held = gateway.held(&vault_id());
     let superseded: Vec<Name> = previous_manifest
-        .range_names()
-        .difference(&manifest.range_names())
+        .part_names()
+        .difference(&manifest.part_names())
         .filter(|name| held.contains(name))
         .copied()
         .collect();
@@ -614,7 +614,7 @@ fn many_snapshots_keep_the_gateway_bounded() {
         assert!(drained.acked_at_ms.is_some(), "round {round}: {drained:?}");
     }
     let (head, manifest) = head_manifest(&path, &gateway);
-    let mut kept = manifest.range_names();
+    let mut kept = manifest.part_names();
     kept.insert(head);
     let held = gateway.held(&vault_id());
     let extra: Vec<&Name> = held.difference(&kept).collect();
@@ -807,4 +807,53 @@ fn an_undo_lifts_the_holds_and_the_next_retention_pass_does_not_delete_them_agai
         "a name the Undo restored is not held again: {:?}",
         after.intersection(&before).collect::<Vec<_>>()
     );
+}
+
+/// **THE MANIFEST IS A TREE (E9, B9).** Every leaf the head's root lists is held, and a snapshot
+/// after one small write adds one new root, at most one new leaf (a founded vault is one leaf),
+/// and the ranges that changed: no leaf is sent twice and the chunk digests ride the leaf.
+#[test]
+fn the_head_is_a_root_and_leaves_and_a_write_adds_one_root_and_one_leaf() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = phone(dir.path());
+    pair(&phone, &gateway);
+    run(
+        &phone,
+        "note.create",
+        &json!({ "title": "One", "body": "first", "format": "plain" }),
+        "one",
+    );
+    drain(&phone, at_home());
+    let (head, first) = head_manifest(&path, &gateway);
+    let held = gateway.held(&vault_id());
+    assert!(!first.leaf_names().is_empty());
+    for leaf in first.leaf_names() {
+        assert!(held.contains(&leaf), "the gateway holds {leaf}");
+    }
+    assert!(
+        first.ranges.iter().all(|range| range.d.len() == 1),
+        "every range carries its chunk digest"
+    );
+    run(
+        &phone,
+        "note.create",
+        &json!({ "title": "Two", "body": "second", "format": "plain" }),
+        "two",
+    );
+    drain(&phone, at_home());
+    let (next, second) = head_manifest(&path, &gateway);
+    assert_ne!(head, next);
+    let now = gateway.held(&vault_id());
+    let new_leaves = second
+        .leaf_names()
+        .into_iter()
+        .filter(|leaf| !held.contains(leaf))
+        .count();
+    assert!(
+        new_leaves <= first.leaf_names().len(),
+        "one write rewrites at most the leaves it touches: {new_leaves}"
+    );
+    assert!(now.contains(&next));
 }

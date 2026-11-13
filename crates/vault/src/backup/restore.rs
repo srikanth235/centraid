@@ -269,11 +269,12 @@ fn rebuild(
 ) -> Result<(Manifest, Vec<Check>), RestoreError> {
     let mut checks = Vec::new();
 
-    let manifest_bytes = fetch(store, head_name)?;
-    let json = sealed::open_whole(keys, head_name, &manifest_bytes)
-        .map_err(|error| RestoreError::Manifest(error.to_string()))?;
-    let manifest =
-        Manifest::from_json(&json).map_err(|error| RestoreError::Manifest(error.to_string()))?;
+    let manifest = Manifest::read(keys, head_name, &mut |part| fetch(store, part)).map_err(
+        |error| match error {
+            PlaneError::Store(error) => RestoreError::from(error),
+            other => RestoreError::Manifest(other.to_string()),
+        },
+    )?;
     checks.push(Check {
         name: "manifest",
         detail: format!(
@@ -545,6 +546,17 @@ mod tests {
                     &Digest::of(&sealed_bytes),
                     sealed_bytes.len() as u64,
                     &mut &sealed_bytes[..],
+                )
+                .unwrap();
+        }
+        for leaf in &taken.leaves {
+            let sealed_leaf = sealed::seal_part(&keys, 0, &leaf.json, true).unwrap();
+            store
+                .put(
+                    &leaf.name,
+                    &Digest::of(&sealed_leaf),
+                    sealed_leaf.len() as u64,
+                    &mut &sealed_leaf[..],
                 )
                 .unwrap();
         }

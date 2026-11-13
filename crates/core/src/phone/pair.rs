@@ -69,7 +69,7 @@ use centraid_gateway::rules::wire::{
     ClaimBody, PairKind, PairRequest, Paired, ReadBody, SecretBody,
 };
 use centraid_vault::backup::naming::Name as PlaneName;
-use centraid_vault::backup::snapshot::{History, Manifest};
+use centraid_vault::backup::snapshot::{History, Root};
 use centraid_vault::backup::state::Gateway;
 
 use super::{Keyring, Plane, now_ms, plane_error, wire_destination};
@@ -285,9 +285,9 @@ fn head_is_ahead(
     let name = PlaneName::from_bytes(*head.name.as_bytes());
     let opened = centraid_media::sealed::open_whole(&keyring.backup, &name, &sealed_bytes)
         .map_err(|error| error.to_string())
-        .and_then(|json| Manifest::from_json(&json).map_err(|error| error.to_string()));
+        .and_then(|json| Root::from_json(&json).map_err(|error| error.to_string()));
     match opened {
-        Ok(manifest) => Ok(manifest.writes > own.writes),
+        Ok(root) => Ok(root.writes > own.writes),
         Err(reason) => {
             tracing::warn!(%reason, "the gateway's head would not open; a claim cannot be judged against it");
             Ok(false)
