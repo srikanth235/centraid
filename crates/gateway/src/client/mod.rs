@@ -74,11 +74,12 @@ use crate::client::tls::{Trust, client_config, is_untrusted};
 use crate::rules::bundle::{Decoder, Frame, HEADER_LEN, Step, header as frame_header};
 use crate::rules::code::{Code, Refusal, RefusalBody};
 use crate::rules::ids::{Digest, Name, Pin, Token, VaultId};
-use crate::rules::limits::{MAX_BUNDLE_BYTES, MAX_OBJECT_BYTES, REQUIRED_PROTOCOL};
+use crate::rules::limits::{LIST_LIMIT, MAX_BUNDLE_BYTES, MAX_OBJECT_BYTES, REQUIRED_PROTOCOL};
 use crate::rules::range::ByteRange;
 use crate::rules::wire::{
-    BundleAnswer, CODE_HEADER, DIGEST_HEADER, DeleteAnswer, HeadView, Info, Missing, Names,
-    ObjectEntry, PairRequest, Paired, Revoked, SetHead, SnapshotView,
+    BundleAnswer, CODE_HEADER, DIGEST_HEADER, DeleteAnswer, DeleteRequest, HeadView, HeldEntry,
+    Info, Missing, Names, NonceAnswer, ObjectEntry, PairRequest, Paired, Revoked, SetHead,
+    SnapshotView, UndoRequest, Undone,
 };
 
 /// How long one address gets to accept a TCP connection.
@@ -543,7 +544,7 @@ impl Client {
     pub async fn head_state(&self, vault: &VaultId) -> Result<HeadState, ClientError> {
         match self.head(vault).await {
             Ok(head) => Ok(HeadState {
-                epoch: head.epoch,
+                epoch: head.writer_epoch,
                 head: Some(head),
             }),
             Err(ClientError::Refused(Refusal::NoHead { epoch })) => {
@@ -567,13 +568,64 @@ impl Client {
             .await
     }
 
-    /// `GET snapshots`.
+    /// `GET snapshots?after=&limit=`: one page, by name. The phone sorts by
+    /// `taken_at_ms`.
     ///
     /// # Errors
     ///
     /// [`ClientError`].
-    pub async fn snapshots(&self, vault: &VaultId) -> Result<Vec<SnapshotView>, ClientError> {
-        self.call(Method::GET, &route(vault, "snapshots"), None::<&()>, true)
+    pub async fn snapshots(
+        &self,
+        vault: &VaultId,
+        after: Option<&Name>,
+        limit: usize,
+    ) -> Result<Vec<SnapshotView>, ClientError> {
+        let path = page_path(&route(vault, "snapshots"), after, limit);
+        self.call(Method::GET, &path, None::<&()>, true).await
+    }
+
+    /// Every snapshot, paged by name and then sorted by `taken_at_ms`.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError`].
+    pub async fn snapshots_all(&self, vault: &VaultId) -> Result<Vec<SnapshotView>, ClientError> {
+        let mut all: Vec<SnapshotView> = Vec::new();
+        loop {
+            let after = all.last().map(|last| last.name);
+            let page = self.snapshots(vault, after.as_ref(), LIST_LIMIT).await?;
+            let done = page.len() < LIST_LIMIT;
+            all.extend(page);
+            if done {
+                all.sort_by_key(|snapshot| (snapshot.taken_at_ms, snapshot.name));
+                return Ok(all);
+            }
+        }
+    }
+
+    /// `GET held?after=&limit=`: what the vault key has asked to delete and
+    /// the gateway holds for a week.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError`].
+    pub async fn held(
+        &self,
+        vault: &VaultId,
+        after: Option<&Name>,
+        limit: usize,
+    ) -> Result<Vec<HeldEntry>, ClientError> {
+        let path = page_path(&route(vault, "held"), after, limit);
+        self.call(Method::GET, &path, None::<&()>, true).await
+    }
+
+    /// `POST /v3/nonce`: a nonce for one pair request. No token, no vault.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError`]; `BUSY` as a refusal carrying when to ask again.
+    pub async fn nonce(&self) -> Result<NonceAnswer, ClientError> {
+        self.call(Method::POST, "/v3/nonce", None::<&()>, false)
             .await
     }
 
@@ -722,6 +774,16 @@ impl Client {
         let response = self.send(request).await?;
         let status = response.status();
         if !status.is_success() {
+            // A `HEAD` answer has no body, so a `MOVED` arrives without the
+            // signed claim it must carry. Ask a route that can say it.
+            let moved = response
+                .headers()
+                .get(CODE_HEADER)
+                .and_then(|value| value.to_str().ok())
+                == Some(Code::Moved.as_str());
+            if moved && let Err(error) = self.head(vault).await {
+                return Err(error);
+            }
             return Err(refusal_of(status, response.headers(), &[]));
         }
         let headers = response.headers();
@@ -898,14 +960,12 @@ impl Client {
         after: Option<&Name>,
         limit: usize,
     ) -> Result<Vec<ObjectEntry>, ClientError> {
-        let mut path = format!("{}?limit={limit}", route(vault, "objects"));
-        if let Some(after) = after {
-            path.push_str(&format!("&after={after}"));
-        }
+        let path = page_path(&route(vault, "objects"), after, limit);
         self.call(Method::GET, &path, None::<&()>, true).await
     }
 
-    /// `POST delete`.
+    /// `POST delete`: the vault key's signed request to hold `names` for a
+    /// week.
     ///
     /// # Errors
     ///
@@ -913,17 +973,24 @@ impl Client {
     pub async fn delete(
         &self,
         vault: &VaultId,
-        names: &[Name],
+        request: &DeleteRequest,
     ) -> Result<DeleteAnswer, ClientError> {
-        self.call(
-            Method::POST,
-            &route(vault, "delete"),
-            Some(&Names {
-                names: names.to_vec(),
-            }),
-            true,
-        )
-        .await
+        self.call(Method::POST, &route(vault, "delete"), Some(request), true)
+            .await
+    }
+
+    /// `POST undo`: the vault key's signed request to lift holds.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError`].
+    pub async fn undo(
+        &self,
+        vault: &VaultId,
+        request: &UndoRequest,
+    ) -> Result<Undone, ClientError> {
+        self.call(Method::POST, &route(vault, "undo"), Some(request), true)
+            .await
     }
 
     /// `POST revoke`: this client's token revokes itself, and every route
@@ -1224,6 +1291,15 @@ fn handshake(v3: Result<Info, ClientError>, older: Option<u32>) -> Result<Info, 
     }
 }
 
+/// `route?limit=&after=`.
+fn page_path(route: &str, after: Option<&Name>, limit: usize) -> String {
+    let mut path = format!("{route}?limit={limit}");
+    if let Some(after) = after {
+        path.push_str(&format!("&after={after}"));
+    }
+    path
+}
+
 fn route(vault: &VaultId, tail: &str) -> String {
     format!("/v3/v/{vault}/{tail}")
 }
@@ -1359,16 +1435,7 @@ fn refusal_of(status: StatusCode, headers: &hyper::HeaderMap, body: &[u8]) -> Cl
         .ok()
         .or_else(|| {
             let code = Code::parse(headers.get(CODE_HEADER)?.to_str().ok()?)?;
-            Some(RefusalBody {
-                code,
-                time_ms: 0,
-                epoch: None,
-                head: None,
-                name: None,
-                digest: None,
-                limit: None,
-                size: None,
-            })
+            Some(RefusalBody::bare(code, 0))
         });
     match parsed {
         // Every code has one status (`Code::status`); a refusal under another

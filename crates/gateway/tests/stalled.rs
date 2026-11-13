@@ -14,24 +14,21 @@ use std::time::Duration;
 
 use centraid_gateway::client::{Client, ClientError, Limits, Stop};
 use centraid_gateway::rules::ids::{Token, VaultId};
-use centraid_gateway::rules::wire::{PairKind, PairRequest};
+
+use centraid_gateway::server::harness::pair_secret;
 use centraid_gateway::server::harness::{Spawned, spawn};
 
 async fn paired(gateway: &Spawned) -> (VaultId, Client) {
     let identity = ed25519_dalek::SigningKey::from_bytes(&[7; 32]);
     let vault = VaultId::from_bytes(identity.verifying_key().to_bytes());
-    let paired = gateway
-        .first_contact()
-        .pair(&PairRequest {
-            vault_id: vault,
-            label: "a phone".to_owned(),
-            kind: PairKind::Secret,
-            secret: Some(gateway.mint_pairing_secret()),
-            claim: None,
-            read: None,
-        })
-        .await
-        .expect("pairs");
+    let paired = pair_secret(
+        &gateway.first_contact(),
+        &identity,
+        "a phone".to_owned(),
+        gateway.mint_pairing_secret(),
+    )
+    .await
+    .expect("pairs");
     let token: Token = paired.token;
     (vault, gateway.client(token))
 }

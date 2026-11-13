@@ -21,14 +21,8 @@ fn v2_data_dir() -> tempfile::TempDir {
         .pragma_update(None, "journal_mode", "WAL")
         .expect("wal");
     connection
-        .execute_batch(include_str!("fixtures/v2_state_schema.sql"))
-        .expect("the v2 schema");
-    connection
-        .execute(
-            "INSERT INTO vault (vault, writer_epoch, paired_at_ms) VALUES (zeroblob(32), 1, 5)",
-            [],
-        )
-        .expect("a vault a phone paired");
+        .execute_batch(include_str!("fixtures/v2_state_fixture.sql"))
+        .expect("the v2 schema and a vault a phone paired");
     drop(connection);
     dir
 }
@@ -122,7 +116,7 @@ fn another_programs_database_is_refused_like_an_older_gateways() {
     let file = dir.path().join("state.db");
     let connection = rusqlite::Connection::open(&file).expect("opens");
     connection
-        .execute_batch("CREATE TABLE notes (body TEXT); PRAGMA application_id = 1234;")
+        .execute_batch(include_str!("fixtures/another_program.sql"))
         .expect("another program's file");
     drop(connection);
     assert!(matches!(

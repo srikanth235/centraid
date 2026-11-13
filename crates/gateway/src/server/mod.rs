@@ -30,6 +30,7 @@
 //! | [`serve`] | the one bind and accept loop, and the in-process Bonjour advertisement |
 //! | [`bonjour`] | who advertises: the system's `dns-sd` on macOS, [`serve`]'s advertisement elsewhere |
 //! | [`sweeps`] | purge hourly, scrub quarterly |
+//! | [`operator`] | `freeze`, `unfreeze`, `undo`, `purge-now`, `delete-vault`: the member's last word |
 //! | [`harness`] | a real gateway on an ephemeral port, for tests in any crate |
 //! | [`addrs`] | the addresses the pairing QR lists |
 //! | [`report`] | what the terminal says: the payload, the safety number, `pairings` |
@@ -37,8 +38,10 @@
 
 pub mod addrs;
 pub mod bonjour;
+#[cfg(feature = "test-harness")]
 pub mod harness;
 pub mod http;
+pub mod operator;
 pub mod qr;
 pub mod report;
 pub mod serve;
@@ -56,7 +59,7 @@ use std::sync::{Arc, Mutex};
 use rand::TryRngCore as _;
 
 use crate::rules::engine::Gateway;
-use crate::rules::ids::{GatewayId, Secret, Token, VaultId};
+use crate::rules::ids::{GatewayId, Nonce, Secret, Token, VaultId};
 use crate::rules::limits::SECRET_TTL_MS;
 use crate::rules::payload::{PAYLOAD_VERSION, PairPayload};
 use crate::rules::state::{Fault, StoreFault};
@@ -313,6 +316,15 @@ impl Shared {
     /// A store fault if the generator cannot be read.
     pub fn fresh_token(&self) -> Result<Token, Fault> {
         Ok(Token::from_bytes(os_random::<32>()?))
+    }
+
+    /// A fresh nonce, from the OS.
+    ///
+    /// # Errors
+    ///
+    /// A store fault if the generator cannot be read.
+    pub fn fresh_nonce(&self) -> Result<Nonce, Fault> {
+        Ok(Nonce::from_bytes(os_random::<16>()?))
     }
 
     pub(crate) fn announce(&self, event: &Event) {

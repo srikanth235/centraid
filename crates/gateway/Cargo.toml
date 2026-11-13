@@ -44,6 +44,18 @@ required-features = ["server"]
 name = "data_dir"
 required-features = ["server"]
 
+[[test]]
+name = "operator"
+required-features = ["server"]
+
+[[test]]
+name = "plans"
+required-features = ["server"]
+
+[[test]]
+name = "bundle_commit"
+required-features = ["server"]
+
 # TWO FEATURES, SO THE PHONE LINKS NO SERVER (#1080). `rules` is always built
 # and reaches no runtime, no socket, no file and no clock; `client` adds the
 # pinned HTTPS client a phone links; `server` adds the gateway a member runs.
@@ -62,6 +74,10 @@ client = [
   "dep:tokio",
   "dep:tokio-rustls",
 ]
+# The test harness: a real gateway on an ephemeral port for tests in any
+# crate. OFF BY DEFAULT and out of the release gateway; `cargo xtask rules`
+# fails if the binary could link it (#1191, E14).
+test-harness = ["server"]
 server = [
   "client",
   "dep:anyhow",
@@ -139,5 +155,8 @@ tracing = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, optional = true }
 
 [dev-dependencies]
+# This crate's own tests spawn the harness; enabling its feature here keeps it
+# out of every build that is not a test.
+centraid-gateway = { path = ".", features = ["test-harness"] }
 tempfile.workspace = true
 x509-parser.workspace = true

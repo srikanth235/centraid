@@ -27,7 +27,7 @@ use crate::rules::ids::{GatewayId, Name, Pin, Secret, Token, VaultId};
 use crate::rules::payload::PairPayload;
 use crate::rules::state::{Fault, StoreFault};
 use crate::server::serve::{Cable, TlsListener, bind, run};
-use crate::server::sweeps::{purge_once, scrub_once};
+use crate::server::sweeps::scrub_once;
 use crate::server::{Announcer, Handle, OpenError, Shared, system_now_ms};
 
 /// A gateway serving on `127.0.0.1`, and the handles a test needs.
@@ -122,6 +122,9 @@ async fn serve_on(
     let listener = TlsListener::cabled(listener, config, Arc::clone(&cable))
         .map_err(|error| OpenError::Io("the bound socket".to_owned(), error))?;
     let addr = listener.local();
+    // The purge sweep's clock starts when the gateway does, as `serve`'s does.
+    crate::server::sweeps::Finished::load_or_start(data_dir, shared.now())
+        .map_err(|error| OpenError::Io(data_dir.display().to_string(), error))?;
     let (stop, stopped) = oneshot::channel::<()>();
     let task = tokio::spawn(run(listener, Arc::clone(&shared), async {
         let _ = stopped.await;
@@ -207,14 +210,15 @@ impl Spawned {
         &self.shared
     }
 
-    /// Run the purge sweep now.
+    /// Run the purge sweep now, as `serve` does: re-basing across a long
+    /// gap, purging, pruning, and recording when it finished.
     ///
     /// # Errors
     ///
     /// A store fault.
     pub async fn purge_now(&self) -> Result<u64, Fault> {
         let shared = Arc::clone(&self.shared);
-        tokio::task::spawn_blocking(move || purge_once(&shared))
+        tokio::task::spawn_blocking(move || crate::server::operator::sweep(&shared))
             .await
             .map_err(|error| StoreFault::new(error.to_string()))?
     }
@@ -298,4 +302,78 @@ impl Drop for Spawned {
             task.abort();
         }
     }
+}
+
+/// Pair by secret the way a phone does: draw a nonce, sign the secret and the
+/// nonce with the vault identity key, send it. For tests in any crate.
+///
+/// # Errors
+///
+/// Whatever the gateway refuses with.
+pub async fn pair_secret(
+    client: &Client,
+    identity: &ed25519_dalek::SigningKey,
+    label: impl AsRef<str>,
+    secret: Secret,
+) -> Result<crate::rules::wire::Paired, crate::client::ClientError> {
+    use crate::rules::wire::{PairKind, PairRequest, SecretBody};
+    let info = client.info().await?;
+    let nonce = client.nonce().await?.nonce;
+    client
+        .pair(&PairRequest {
+            vault_id: VaultId::from_bytes(identity.verifying_key().to_bytes()),
+            label: label.as_ref().to_owned(),
+            kind: PairKind::Secret,
+            nonce,
+            secret: Some(SecretBody {
+                secret,
+                signature: crate::rules::signing::sign_pair(
+                    identity,
+                    &info.gateway_id,
+                    &secret,
+                    &nonce,
+                ),
+            }),
+            claim: None,
+            read: None,
+        })
+        .await
+}
+
+/// Claim `epoch` of the vault the way a restoring phone does, seeing `head`.
+///
+/// # Errors
+///
+/// Whatever the gateway refuses with.
+pub async fn pair_claim(
+    client: &Client,
+    identity: &ed25519_dalek::SigningKey,
+    label: impl AsRef<str>,
+    epoch: u64,
+    head_seen: Option<Name>,
+) -> Result<crate::rules::wire::Paired, crate::client::ClientError> {
+    use crate::rules::wire::{ClaimBody, PairKind, PairRequest};
+    let info = client.info().await?;
+    let nonce = client.nonce().await?.nonce;
+    client
+        .pair(&PairRequest {
+            vault_id: VaultId::from_bytes(identity.verifying_key().to_bytes()),
+            label: label.as_ref().to_owned(),
+            kind: PairKind::Claim,
+            nonce,
+            secret: None,
+            claim: Some(ClaimBody {
+                epoch,
+                head_seen,
+                signature: crate::rules::signing::sign_claim(
+                    identity,
+                    &info.gateway_id,
+                    epoch,
+                    head_seen.as_ref(),
+                    &nonce,
+                ),
+            }),
+            read: None,
+        })
+        .await
 }

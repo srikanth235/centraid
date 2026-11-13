@@ -1,1 +1,2 @@
-SELECT name, taken_at_ms, set_at_ms FROM head WHERE vault = ?1
+SELECT name, prev, taken_at_ms, epoch, generation, writes, set_at_ms, signature
+FROM head WHERE vault = ?1

@@ -34,7 +34,8 @@ use centraid_gateway::rules::code::Code;
 use centraid_gateway::rules::ids::{Digest, Name, Token, VaultId};
 #[cfg(target_os = "linux")]
 use centraid_gateway::rules::limits::MAX_BUNDLE_BYTES;
-use centraid_gateway::rules::wire::{BundleAnswer, PairKind, PairRequest};
+use centraid_gateway::rules::wire::BundleAnswer;
+use centraid_gateway::server::harness::pair_secret;
 use centraid_gateway::server::harness::{Spawned, spawn};
 use futures::StreamExt as _;
 use http_body_util::{BodyExt as _, StreamBody};
@@ -47,17 +48,14 @@ async fn paired(gateway: &Spawned, seed: u8) -> (VaultId, Client, Token) {
     let identity = ed25519_dalek::SigningKey::from_bytes(&[seed; 32]);
     let vault = VaultId::from_bytes(identity.verifying_key().to_bytes());
     let phone = gateway.first_contact();
-    let paired = phone
-        .pair(&PairRequest {
-            vault_id: vault,
-            label: "a phone".to_owned(),
-            kind: PairKind::Secret,
-            secret: Some(gateway.mint_pairing_secret()),
-            claim: None,
-            read: None,
-        })
-        .await
-        .expect("pairs");
+    let paired = pair_secret(
+        &phone,
+        &identity,
+        "a phone".to_owned(),
+        gateway.mint_pairing_secret(),
+    )
+    .await
+    .expect("pairs");
     (vault, gateway.client(paired.token), paired.token)
 }
 
@@ -135,13 +133,15 @@ async fn every_put_answer_the_client_returns_is_an_acknowledgement() {
     gateway.shutdown().await;
 }
 
-/// THE GATEWAY ADMITS A BUNDLE FRAME AS IT ARRIVES. The body is fed by hand:
-/// the first frame whole and the second frame's header, then nothing until
-/// another connection sees the first frame held. A gateway that read the
-/// body whole before admitting anything would hold nothing yet, and this
-/// would time out.
+/// THE GATEWAY STAGES A BUNDLE FRAME AS IT ARRIVES AND ADMITS THE BUNDLE IN
+/// ONE TRANSACTION (#1191, B7, E14). The body is fed by hand: the first frame
+/// whole and the second frame's header, then nothing until the first frame is
+/// seen staged on disk — a gateway that held the body in memory would stage
+/// nothing yet, and this would time out. **Nothing is admitted while the body
+/// is open**: the rows of a bundle land together or not at all, so another
+/// connection still sees both names missing until the last frame is in.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_bundle_frame_is_held_before_the_rest_of_its_body_is_sent() {
+async fn a_bundle_frame_is_staged_on_arrival_and_admitted_with_the_rest() {
     let dir = tempfile::tempdir().expect("a temp dir");
     let gateway = spawn(dir.path()).await.expect("spawned");
     let (vault, phone, token) = paired(&gateway, 2).await;
@@ -195,26 +195,42 @@ async fn a_bundle_frame_is_held_before_the_rest_of_its_body_is_sent() {
         second_bytes.len() as u64,
     ));
 
+    let incoming = gateway.data_dir().join("incoming");
+    let staged = || -> Vec<u64> {
+        std::fs::read_dir(&incoming)
+            .expect("the staging area")
+            .flatten()
+            .filter_map(|entry| entry.metadata().ok().map(|meta| meta.len()))
+            .collect()
+    };
     let deadline = Instant::now() + Duration::from_secs(20);
-    loop {
-        let missing = phone
-            .exists(&vault, &[first, second])
-            .await
-            .expect("exists");
-        if missing == vec![second] {
-            break;
-        }
+    while !staged().contains(&(64 * 1024)) {
         assert!(
             Instant::now() < deadline,
-            "the first frame was not held while the body was still open: missing {missing:?}"
+            "the first frame was not staged while the body was still open: {:?}",
+            staged()
         );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
+    let missing = phone
+        .exists(&vault, &[first, second])
+        .await
+        .expect("exists");
+    assert_eq!(
+        missing,
+        vec![first, second],
+        "nothing is admitted until the whole bundle is in"
+    );
 
     send(&second_bytes);
     feed.close_channel();
     let answer = answered.await.expect("the request task");
     assert_eq!(answer.stored, vec![first, second]);
+    let missing = phone
+        .exists(&vault, &[first, second])
+        .await
+        .expect("exists");
+    assert!(missing.is_empty(), "both held once the bundle is in");
     gateway.shutdown().await;
 }
 

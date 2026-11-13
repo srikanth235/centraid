@@ -18,8 +18,8 @@
 //! decision is still made by the rules inside it.
 
 use crate::rules::code::Refusal;
-use crate::rules::ids::{Digest, Name, SecretHash, TokenHash, VaultId};
-use crate::rules::wire::{ObjectEntry, PairKind, SnapshotView};
+use crate::rules::ids::{Digest, Name, Nonce, SecretHash, Signature, TokenHash, VaultId};
+use crate::rules::wire::{ObjectEntry, PairKind};
 
 /// Something went wrong inside the adapter's storage. Not a refusal: the
 /// gateway answers `INTERNAL` and the phone retries. The text is for the
@@ -56,6 +56,30 @@ pub struct VaultRecord {
     pub paired_at_ms: i64,
     /// When a claim last moved the writer.
     pub moved_at_ms: Option<i64>,
+    /// The generation of the last accepted signed record (head, delete or
+    /// undo). One counter, never falling inside an epoch; a claim resets it
+    /// to 0 (E3).
+    pub generation: u64,
+    /// The `writes` of the last accepted head; a claim resets it to 0.
+    pub writes: u64,
+    /// When the operator froze the vault, if it is frozen (E6).
+    pub frozen_at_ms: Option<i64>,
+}
+
+impl VaultRecord {
+    /// A vault just admitted by a pairing secret, at writer epoch 1.
+    #[must_use]
+    pub const fn founded(vault: VaultId, now_ms: i64) -> Self {
+        Self {
+            vault,
+            writer_epoch: 1,
+            paired_at_ms: now_ms,
+            moved_at_ms: None,
+            generation: 0,
+            writes: 0,
+            frozen_at_ms: None,
+        }
+    }
 }
 
 /// One token, as the gateway keeps it: its hash and what it may do.
@@ -68,6 +92,28 @@ pub struct TokenRecord {
     pub kind: PairKind,
     pub label: String,
     pub created_at_ms: i64,
+}
+
+/// What a claim left of a token it revoked: its hash, so the old phone still
+/// hears "moved" (E5). Never the token.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RevokedToken {
+    pub hash: TokenHash,
+    pub vault: VaultId,
+    pub epoch: u64,
+    pub revoked_at_ms: i64,
+}
+
+/// The last claim a vault accepted, kept signed so every `MOVED` can carry it
+/// (E4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClaimRecord {
+    pub vault: VaultId,
+    pub epoch: u64,
+    pub head_seen: Option<Name>,
+    pub nonce: Nonce,
+    pub signature: Signature,
+    pub claimed_at_ms: i64,
 }
 
 /// One pairing secret, as the gateway keeps it.
@@ -88,20 +134,44 @@ impl SecretRecord {
     }
 }
 
-/// The head, as the gateway keeps it. The writer epoch is the vault's and is
-/// joined in when the head is answered.
+/// The head, as the phone signed it and the gateway stores it: served
+/// unchanged, so a restoring phone verifies the signature before it believes
+/// a field (E2). The writer epoch is the vault's and is joined in when the
+/// head is answered.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HeadRecord {
     pub name: Name,
+    pub prev: Option<Name>,
     pub taken_at_ms: i64,
+    /// The writer epoch the phone held when it signed.
+    pub epoch: u64,
+    pub generation: u64,
+    pub writes: u64,
     pub set_at_ms: i64,
+    pub signature: Signature,
 }
 
-/// A tombstone: deleted, with its bytes kept until the grace ends.
+/// A delete the vault's key signed, held for a week (E6): the bytes stay and
+/// are served until `purge_after_ms`, and an undo or a takeover lifts it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Tombstone {
+pub struct Hold {
     pub at_ms: i64,
     pub purge_after_ms: i64,
+}
+
+/// One signed head ever accepted that is still kept: a copy of the record,
+/// with the hold of its manifest when that is held (E2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SnapshotRecord {
+    pub name: Name,
+    pub taken_at_ms: i64,
+    pub registered_at_ms: i64,
+    pub epoch: u64,
+    pub generation: u64,
+    pub writes: u64,
+    pub prev: Option<Name>,
+    pub signature: Signature,
+    pub hold: Option<Hold>,
 }
 
 /// One object in the index.
@@ -112,20 +182,20 @@ pub struct ObjectRecord {
     pub size: u64,
     /// The gateway's own receipt time.
     pub stored_at_ms: i64,
-    pub tombstone: Option<Tombstone>,
+    pub hold: Option<Hold>,
     /// When a scrub last found the bytes corrupt or gone. Cleared when a scrub
     /// finds them whole or a `PUT` replaces them.
     pub damaged_at_ms: Option<i64>,
 }
 
 impl ObjectRecord {
-    /// **HELD**: not tombstoned and not damaged. What `exists` and
-    /// write-once answer about: a name that is tombstoned or damaged is one
-    /// the phone must send again, and a `PUT` of it is admitted whatever its
-    /// digest.
+    /// **LIVE**: not held for deletion and not damaged. What `exists` and
+    /// write-once answer about: a name that is held or damaged is one the
+    /// phone must send again, and a `PUT` of it replaces the bytes whatever
+    /// its digest.
     #[must_use]
-    pub const fn is_held(&self) -> bool {
-        self.tombstone.is_none() && self.damaged_at_ms.is_none()
+    pub const fn is_live(&self) -> bool {
+        self.hold.is_none() && self.damaged_at_ms.is_none()
     }
 
     /// What `PUT` and `GET objects` say about it.
@@ -141,7 +211,8 @@ impl ObjectRecord {
 }
 
 /// The gateway's state. Every method is one read or one write; the rules
-/// compose them inside [`State::atomically`].
+/// compose them inside [`State::atomically`]. **Every listing is a seek**:
+/// it takes the last row's key and a limit, never an offset (E14).
 pub trait State {
     /// Run `op` so that either every write it makes lands or none does. An
     /// `Err` from `op` — a refusal included — undoes its writes.
@@ -166,12 +237,20 @@ pub trait State {
     /// A store fault.
     fn put_vault(&mut self, record: &VaultRecord) -> Result<(), StoreFault>;
 
-    /// Every vault, ordered by id.
+    /// Up to `limit` vaults after `after`, ordered by id.
     ///
     /// # Errors
     ///
     /// A store fault.
-    fn vaults(&self) -> Result<Vec<VaultRecord>, StoreFault>;
+    fn vaults(&self, after: Option<&VaultId>, limit: usize)
+    -> Result<Vec<VaultRecord>, StoreFault>;
+
+    /// Forget a vault and, with it, anything of it still stored.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    fn remove_vault(&mut self, vault: &VaultId) -> Result<(), StoreFault>;
 
     /// One token by its hash.
     ///
@@ -195,12 +274,96 @@ pub trait State {
     /// A store fault.
     fn remove_token(&mut self, hash: &TokenHash) -> Result<bool, StoreFault>;
 
-    /// Every token, ordered by vault then creation.
+    /// Up to `limit` of a vault's tokens after `(created_at_ms, hash)`,
+    /// ordered by creation then hash.
     ///
     /// # Errors
     ///
     /// A store fault.
-    fn tokens(&self) -> Result<Vec<TokenRecord>, StoreFault>;
+    fn tokens_of(
+        &self,
+        vault: &VaultId,
+        after: Option<(i64, &TokenHash)>,
+        limit: usize,
+    ) -> Result<Vec<TokenRecord>, StoreFault>;
+
+    /// Remove and return every token of a vault: a claim's first step.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    fn take_tokens(&mut self, vault: &VaultId) -> Result<Vec<TokenRecord>, StoreFault>;
+
+    /// A revoked token's tombstone, or `None`.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    fn revoked_token(&self, hash: &TokenHash) -> Result<Option<RevokedToken>, StoreFault>;
+
+    /// Record a tombstone.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    fn put_revoked(&mut self, record: &RevokedToken) -> Result<(), StoreFault>;
+
+    /// Keep only the newest `keep` tombstones of a vault.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    fn trim_revoked(&mut self, vault: &VaultId, keep: u64) -> Result<(), StoreFault>;
+
+    /// Drop tombstones revoked at or before `before_ms`; how many.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    fn prune_revoked(&mut self, before_ms: i64) -> Result<u64, StoreFault>;
+
+    /// The last claim a vault accepted.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    fn claim(&self, vault: &VaultId) -> Result<Option<ClaimRecord>, StoreFault>;
+
+    /// Store a vault's last claim, replacing the one before.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    fn put_claim(&mut self, record: &ClaimRecord) -> Result<(), StoreFault>;
+
+    /// Remember a nonce issued at `issued_at_ms`.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    fn put_nonce(&mut self, nonce: &Nonce, issued_at_ms: i64) -> Result<(), StoreFault>;
+
+    /// Spend a nonce: answers whether it was held and issued after
+    /// `not_before_ms`. A nonce found is gone either way.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    fn take_nonce(&mut self, nonce: &Nonce, not_before_ms: i64) -> Result<bool, StoreFault>;
+
+    /// How many nonces were issued after `not_before_ms` and are unspent.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    fn live_nonces(&self, not_before_ms: i64) -> Result<u64, StoreFault>;
+
+    /// Drop nonces issued at or before `before_ms`; how many.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    fn prune_nonces(&mut self, before_ms: i64) -> Result<u64, StoreFault>;
 
     /// One pairing secret by its hash.
     ///
@@ -216,12 +379,49 @@ pub trait State {
     /// A store fault.
     fn put_secret(&mut self, record: &SecretRecord) -> Result<(), StoreFault>;
 
-    /// Every pairing secret, ordered by creation.
+    /// Up to `limit` secrets after `(created_at_ms, hash)`, by creation.
     ///
     /// # Errors
     ///
     /// A store fault.
-    fn secrets(&self) -> Result<Vec<SecretRecord>, StoreFault>;
+    fn secrets(
+        &self,
+        after: Option<(i64, &SecretHash)>,
+        limit: usize,
+    ) -> Result<Vec<SecretRecord>, StoreFault>;
+
+    /// How many secrets are unspent and unexpired at `now_ms`.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    fn live_secrets(&self, now_ms: i64) -> Result<u64, StoreFault>;
+
+    /// The oldest unspent, unexpired secret.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    fn oldest_live_secret(&self, now_ms: i64) -> Result<Option<SecretRecord>, StoreFault>;
+
+    /// Forget a secret.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    fn remove_secret(&mut self, hash: &SecretHash) -> Result<(), StoreFault>;
+
+    /// Drop secrets used at or before `used_before_ms` and unused ones that
+    /// expired at or before `expired_before_ms`; how many.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    fn prune_secrets(
+        &mut self,
+        used_before_ms: i64,
+        expired_before_ms: i64,
+    ) -> Result<u64, StoreFault>;
 
     /// A vault's head, or `None`.
     ///
@@ -230,26 +430,42 @@ pub trait State {
     /// A store fault.
     fn head(&self, vault: &VaultId) -> Result<Option<HeadRecord>, StoreFault>;
 
-    /// Set a vault's head.
+    /// Set a vault's head. Its snapshot row must exist.
     ///
     /// # Errors
     ///
     /// A store fault.
     fn put_head(&mut self, vault: &VaultId, head: &HeadRecord) -> Result<(), StoreFault>;
 
-    /// A vault's registered snapshots, ordered by `taken_at_ms` then name.
+    /// One registered snapshot.
     ///
     /// # Errors
     ///
     /// A store fault.
-    fn snapshots(&self, vault: &VaultId) -> Result<Vec<SnapshotView>, StoreFault>;
+    fn snapshot(&self, vault: &VaultId, name: &Name) -> Result<Option<SnapshotRecord>, StoreFault>;
+
+    /// Up to `limit` of a vault's snapshots after `after`, ordered by name.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    fn snapshots(
+        &self,
+        vault: &VaultId,
+        after: Option<&Name>,
+        limit: usize,
+    ) -> Result<Vec<SnapshotRecord>, StoreFault>;
 
     /// Register a snapshot; one already registered keeps its first record.
     ///
     /// # Errors
     ///
     /// A store fault.
-    fn put_snapshot(&mut self, vault: &VaultId, snapshot: &SnapshotView) -> Result<(), StoreFault>;
+    fn put_snapshot(
+        &mut self,
+        vault: &VaultId,
+        snapshot: &SnapshotRecord,
+    ) -> Result<(), StoreFault>;
 
     /// Deregister a snapshot, if it is registered.
     ///
@@ -257,6 +473,13 @@ pub trait State {
     ///
     /// A store fault.
     fn remove_snapshot(&mut self, vault: &VaultId, name: &Name) -> Result<(), StoreFault>;
+
+    /// Forget a vault's head and every snapshot row: `delete-vault`'s step.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    fn remove_heads_and_snapshots(&mut self, vault: &VaultId) -> Result<(), StoreFault>;
 
     /// One object, in any state, or `None`.
     ///
@@ -279,13 +502,51 @@ pub trait State {
     /// A store fault.
     fn remove_object(&mut self, vault: &VaultId, name: &Name) -> Result<(), StoreFault>;
 
-    /// Up to `limit` objects that are not tombstoned, named after `after`,
-    /// ordered by name.
+    /// Set or lift the hold of a name, on its object row and on its snapshot
+    /// row when it has one.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    fn set_hold(
+        &mut self,
+        vault: &VaultId,
+        name: &Name,
+        hold: Option<Hold>,
+    ) -> Result<(), StoreFault>;
+
+    /// Up to `limit` objects that are not held, named after `after`, ordered
+    /// by name.
     ///
     /// # Errors
     ///
     /// A store fault.
     fn live_objects(
+        &self,
+        vault: &VaultId,
+        after: Option<&Name>,
+        limit: usize,
+    ) -> Result<Vec<ObjectRecord>, StoreFault>;
+
+    /// Up to `limit` held objects of a vault after `after`, by name.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    fn held_objects(
+        &self,
+        vault: &VaultId,
+        after: Option<&Name>,
+        limit: usize,
+    ) -> Result<Vec<ObjectRecord>, StoreFault>;
+
+    /// Up to `limit` objects of a vault in any state after `after`, by name:
+    /// `delete-vault`'s page.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    fn vault_objects(
         &self,
         vault: &VaultId,
         after: Option<&Name>,
@@ -304,10 +565,44 @@ pub trait State {
         limit: usize,
     ) -> Result<Vec<(VaultId, ObjectRecord)>, StoreFault>;
 
-    /// Up to `limit` tombstones whose grace ended at or before `now_ms`.
+    /// Up to `limit` holds due at or before `now_ms`, after the cursor
+    /// `(purge_after_ms, vault, name)`, in that order.
     ///
     /// # Errors
     ///
     /// A store fault.
-    fn purgeable(&self, now_ms: i64, limit: usize) -> Result<Vec<(VaultId, Name)>, StoreFault>;
+    fn purgeable(
+        &self,
+        after: Option<(i64, &VaultId, &Name)>,
+        now_ms: i64,
+        limit: usize,
+    ) -> Result<Vec<(i64, VaultId, Name)>, StoreFault>;
+
+    /// Lift every hold of a vault; how many objects were held.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    fn clear_holds(&mut self, vault: &VaultId) -> Result<u64, StoreFault>;
+
+    /// Move every hold of a vault `delta_ms` later.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    fn shift_holds(&mut self, vault: &VaultId, delta_ms: i64) -> Result<(), StoreFault>;
+
+    /// Make every hold of a vault due at `due_ms`; how many.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    fn make_holds_due(&mut self, vault: &VaultId, due_ms: i64) -> Result<u64, StoreFault>;
+
+    /// Re-base every hold of every vault to `purge_after_ms`.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    fn rebase_holds(&mut self, purge_after_ms: i64) -> Result<(), StoreFault>;
 }

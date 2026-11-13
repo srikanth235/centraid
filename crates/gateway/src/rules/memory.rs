@@ -11,15 +11,18 @@ use std::collections::BTreeMap;
 use crate::rules::bundle::Frame;
 use crate::rules::code::Refusal;
 use crate::rules::conformance::{Failure, PutAnswer, ScrubCounts, Target};
-use crate::rules::engine::{Access, Arrival, Finding, Gateway, PutOutcome, examine};
-use crate::rules::ids::{Digest, GatewayId, Name, Secret, SecretHash, Token, TokenHash, VaultId};
+use crate::rules::engine::{Arrival, Finding, Gateway, Operated, PutOutcome, examine};
+use crate::rules::ids::{
+    Digest, GatewayId, Name, Nonce, Secret, SecretHash, Token, TokenHash, VaultId,
+};
 use crate::rules::range::{ByteRange, resolve};
 use crate::rules::state::{
-    Fault, HeadRecord, ObjectRecord, SecretRecord, State, StoreFault, TokenRecord, VaultRecord,
+    ClaimRecord, Fault, HeadRecord, Hold, ObjectRecord, RevokedToken, SecretRecord, SnapshotRecord,
+    State, StoreFault, TokenRecord, VaultRecord,
 };
 use crate::rules::wire::{
-    BundleAnswer, DeleteAnswer, HeadView, Info, NameRefusal, ObjectEntry, PairRequest, Paired,
-    SetHead, SnapshotView,
+    BundleAnswer, DeleteAnswer, DeleteRequest, HeadView, HeldEntry, Info, NameRefusal, NonceAnswer,
+    ObjectEntry, PairRequest, Paired, SetHead, SnapshotView, UndoRequest, Undone,
 };
 
 /// [`State`] over ordered maps.
@@ -27,10 +30,54 @@ use crate::rules::wire::{
 pub struct MemoryState {
     vaults: BTreeMap<VaultId, VaultRecord>,
     tokens: BTreeMap<TokenHash, TokenRecord>,
+    revoked: BTreeMap<TokenHash, RevokedToken>,
+    claims: BTreeMap<VaultId, ClaimRecord>,
+    nonces: BTreeMap<Nonce, i64>,
     secrets: BTreeMap<SecretHash, SecretRecord>,
     heads: BTreeMap<VaultId, HeadRecord>,
-    snapshots: BTreeMap<(VaultId, Name), SnapshotView>,
+    snapshots: BTreeMap<(VaultId, Name), SnapshotRecord>,
     objects: BTreeMap<(VaultId, Name), ObjectRecord>,
+}
+
+impl MemoryState {
+    /// The epochs of a vault's tokens, for the suite's probes.
+    #[must_use]
+    pub fn token_epochs(&self, vault: &VaultId) -> Vec<u64> {
+        self.tokens
+            .values()
+            .filter(|token| token.vault == *vault)
+            .map(|token| token.epoch)
+            .collect()
+    }
+
+    /// How many revoked-token tombstones a vault keeps.
+    #[must_use]
+    pub fn revoked_count(&self, vault: &VaultId) -> u64 {
+        self.revoked
+            .values()
+            .filter(|revoked| revoked.vault == *vault)
+            .count() as u64
+    }
+
+    /// The nonce table's rows as bytes, for the suite's probes.
+    #[must_use]
+    pub fn nonce_rows(&self) -> Vec<Vec<u8>> {
+        self.nonces
+            .iter()
+            .map(|(nonce, at)| {
+                let mut row = nonce.as_bytes().to_vec();
+                row.extend_from_slice(&at.to_be_bytes());
+                row
+            })
+            .collect()
+    }
+
+    fn held_rows(&self, vault: &VaultId) -> impl Iterator<Item = &ObjectRecord> {
+        self.objects
+            .range((*vault, Name::from_bytes([0; 32]))..)
+            .take_while(move |((owner, _), _)| owner == vault)
+            .map(|(_, record)| record)
+    }
 }
 
 impl State for MemoryState {
@@ -55,8 +102,29 @@ impl State for MemoryState {
         Ok(())
     }
 
-    fn vaults(&self) -> Result<Vec<VaultRecord>, StoreFault> {
-        Ok(self.vaults.values().copied().collect())
+    fn vaults(
+        &self,
+        after: Option<&VaultId>,
+        limit: usize,
+    ) -> Result<Vec<VaultRecord>, StoreFault> {
+        Ok(self
+            .vaults
+            .values()
+            .filter(|record| after.is_none_or(|after| record.vault > *after))
+            .take(limit)
+            .copied()
+            .collect())
+    }
+
+    fn remove_vault(&mut self, vault: &VaultId) -> Result<(), StoreFault> {
+        self.vaults.remove(vault);
+        self.tokens.retain(|_, token| token.vault != *vault);
+        self.revoked.retain(|_, token| token.vault != *vault);
+        self.claims.remove(vault);
+        self.heads.remove(vault);
+        self.snapshots.retain(|(owner, _), _| owner != vault);
+        self.objects.retain(|(owner, _), _| owner != vault);
+        Ok(())
     }
 
     fn token(&self, hash: &TokenHash) -> Result<Option<TokenRecord>, StoreFault> {
@@ -72,10 +140,104 @@ impl State for MemoryState {
         Ok(self.tokens.remove(hash).is_some())
     }
 
-    fn tokens(&self) -> Result<Vec<TokenRecord>, StoreFault> {
-        let mut tokens: Vec<TokenRecord> = self.tokens.values().cloned().collect();
-        tokens.sort_by_key(|token| (token.vault, token.created_at_ms, token.hash));
+    fn tokens_of(
+        &self,
+        vault: &VaultId,
+        after: Option<(i64, &TokenHash)>,
+        limit: usize,
+    ) -> Result<Vec<TokenRecord>, StoreFault> {
+        let mut tokens: Vec<TokenRecord> = self
+            .tokens
+            .values()
+            .filter(|token| token.vault == *vault)
+            .filter(|token| {
+                after.is_none_or(|(at, hash)| (token.created_at_ms, token.hash) > (at, *hash))
+            })
+            .cloned()
+            .collect();
+        tokens.sort_by_key(|token| (token.created_at_ms, token.hash));
+        tokens.truncate(limit);
         Ok(tokens)
+    }
+
+    fn take_tokens(&mut self, vault: &VaultId) -> Result<Vec<TokenRecord>, StoreFault> {
+        let mut taken: Vec<TokenRecord> = self
+            .tokens
+            .values()
+            .filter(|token| token.vault == *vault)
+            .cloned()
+            .collect();
+        taken.sort_by_key(|token| (token.created_at_ms, token.hash));
+        self.tokens.retain(|_, token| token.vault != *vault);
+        Ok(taken)
+    }
+
+    fn revoked_token(&self, hash: &TokenHash) -> Result<Option<RevokedToken>, StoreFault> {
+        Ok(self.revoked.get(hash).copied())
+    }
+
+    fn put_revoked(&mut self, record: &RevokedToken) -> Result<(), StoreFault> {
+        self.revoked.insert(record.hash, *record);
+        Ok(())
+    }
+
+    fn trim_revoked(&mut self, vault: &VaultId, keep: u64) -> Result<(), StoreFault> {
+        let mut mine: Vec<(i64, TokenHash)> = self
+            .revoked
+            .values()
+            .filter(|revoked| revoked.vault == *vault)
+            .map(|revoked| (revoked.revoked_at_ms, revoked.hash))
+            .collect();
+        mine.sort_unstable_by(|left, right| right.cmp(left));
+        for (_, hash) in mine
+            .into_iter()
+            .skip(usize::try_from(keep).unwrap_or(usize::MAX))
+        {
+            self.revoked.remove(&hash);
+        }
+        Ok(())
+    }
+
+    fn prune_revoked(&mut self, before_ms: i64) -> Result<u64, StoreFault> {
+        let before = self.revoked.len();
+        self.revoked
+            .retain(|_, revoked| revoked.revoked_at_ms > before_ms);
+        Ok((before - self.revoked.len()) as u64)
+    }
+
+    fn claim(&self, vault: &VaultId) -> Result<Option<ClaimRecord>, StoreFault> {
+        Ok(self.claims.get(vault).copied())
+    }
+
+    fn put_claim(&mut self, record: &ClaimRecord) -> Result<(), StoreFault> {
+        self.claims.insert(record.vault, *record);
+        Ok(())
+    }
+
+    fn put_nonce(&mut self, nonce: &Nonce, issued_at_ms: i64) -> Result<(), StoreFault> {
+        self.nonces.insert(*nonce, issued_at_ms);
+        Ok(())
+    }
+
+    fn take_nonce(&mut self, nonce: &Nonce, not_before_ms: i64) -> Result<bool, StoreFault> {
+        Ok(self
+            .nonces
+            .remove(nonce)
+            .is_some_and(|issued| issued > not_before_ms))
+    }
+
+    fn live_nonces(&self, not_before_ms: i64) -> Result<u64, StoreFault> {
+        Ok(self
+            .nonces
+            .values()
+            .filter(|issued| **issued > not_before_ms)
+            .count() as u64)
+    }
+
+    fn prune_nonces(&mut self, before_ms: i64) -> Result<u64, StoreFault> {
+        let before = self.nonces.len();
+        self.nonces.retain(|_, issued| *issued > before_ms);
+        Ok((before - self.nonces.len()) as u64)
     }
 
     fn secret(&self, hash: &SecretHash) -> Result<Option<SecretRecord>, StoreFault> {
@@ -87,10 +249,57 @@ impl State for MemoryState {
         Ok(())
     }
 
-    fn secrets(&self) -> Result<Vec<SecretRecord>, StoreFault> {
-        let mut secrets: Vec<SecretRecord> = self.secrets.values().copied().collect();
+    fn secrets(
+        &self,
+        after: Option<(i64, &SecretHash)>,
+        limit: usize,
+    ) -> Result<Vec<SecretRecord>, StoreFault> {
+        let mut secrets: Vec<SecretRecord> = self
+            .secrets
+            .values()
+            .filter(|secret| {
+                after.is_none_or(|(at, hash)| (secret.created_at_ms, secret.hash) > (at, *hash))
+            })
+            .copied()
+            .collect();
         secrets.sort_by_key(|secret| (secret.created_at_ms, secret.hash));
+        secrets.truncate(limit);
         Ok(secrets)
+    }
+
+    fn live_secrets(&self, now_ms: i64) -> Result<u64, StoreFault> {
+        Ok(self
+            .secrets
+            .values()
+            .filter(|secret| secret.is_live(now_ms))
+            .count() as u64)
+    }
+
+    fn oldest_live_secret(&self, now_ms: i64) -> Result<Option<SecretRecord>, StoreFault> {
+        Ok(self
+            .secrets
+            .values()
+            .filter(|secret| secret.is_live(now_ms))
+            .min_by_key(|secret| (secret.created_at_ms, secret.hash))
+            .copied())
+    }
+
+    fn remove_secret(&mut self, hash: &SecretHash) -> Result<(), StoreFault> {
+        self.secrets.remove(hash);
+        Ok(())
+    }
+
+    fn prune_secrets(
+        &mut self,
+        used_before_ms: i64,
+        expired_before_ms: i64,
+    ) -> Result<u64, StoreFault> {
+        let before = self.secrets.len();
+        self.secrets.retain(|_, secret| match secret.used_at_ms {
+            Some(used) => used > used_before_ms,
+            None => secret.expires_at_ms > expired_before_ms,
+        });
+        Ok((before - self.secrets.len()) as u64)
     }
 
     fn head(&self, vault: &VaultId) -> Result<Option<HeadRecord>, StoreFault> {
@@ -102,26 +311,53 @@ impl State for MemoryState {
         Ok(())
     }
 
-    fn snapshots(&self, vault: &VaultId) -> Result<Vec<SnapshotView>, StoreFault> {
-        let mut snapshots: Vec<SnapshotView> = self
-            .snapshots
-            .iter()
-            .filter(|((owner, _), _)| owner == vault)
-            .map(|(_, snapshot)| *snapshot)
-            .collect();
-        snapshots.sort_by_key(|snapshot| (snapshot.taken_at_ms, snapshot.name));
-        Ok(snapshots)
+    fn snapshot(&self, vault: &VaultId, name: &Name) -> Result<Option<SnapshotRecord>, StoreFault> {
+        Ok(self.snapshots.get(&(*vault, *name)).copied())
     }
 
-    fn put_snapshot(&mut self, vault: &VaultId, snapshot: &SnapshotView) -> Result<(), StoreFault> {
-        self.snapshots
-            .entry((*vault, snapshot.name))
-            .or_insert(*snapshot);
+    fn snapshots(
+        &self,
+        vault: &VaultId,
+        after: Option<&Name>,
+        limit: usize,
+    ) -> Result<Vec<SnapshotRecord>, StoreFault> {
+        Ok(self
+            .snapshots
+            .range((*vault, Name::from_bytes([0; 32]))..)
+            .take_while(|((owner, _), _)| owner == vault)
+            .filter(|((_, name), _)| after.is_none_or(|after| name > after))
+            .take(limit)
+            .map(|(_, snapshot)| *snapshot)
+            .collect())
+    }
+
+    fn put_snapshot(
+        &mut self,
+        vault: &VaultId,
+        snapshot: &SnapshotRecord,
+    ) -> Result<(), StoreFault> {
+        let registered = self
+            .snapshots
+            .get(&(*vault, snapshot.name))
+            .map(|held| held.registered_at_ms);
+        let mut record = *snapshot;
+        if let Some(registered) = registered {
+            record.registered_at_ms = registered;
+        }
+        self.snapshots.insert((*vault, snapshot.name), record);
         Ok(())
     }
 
     fn remove_snapshot(&mut self, vault: &VaultId, name: &Name) -> Result<(), StoreFault> {
         self.snapshots.remove(&(*vault, *name));
+        Ok(())
+    }
+
+    fn remove_heads_and_snapshots(&mut self, vault: &VaultId) -> Result<(), StoreFault> {
+        self.heads.remove(vault);
+        self.snapshots.retain(|(owner, _), _| owner != vault);
+        self.claims.remove(vault);
+        self.revoked.retain(|_, token| token.vault != *vault);
         Ok(())
     }
 
@@ -139,6 +375,21 @@ impl State for MemoryState {
         Ok(())
     }
 
+    fn set_hold(
+        &mut self,
+        vault: &VaultId,
+        name: &Name,
+        hold: Option<Hold>,
+    ) -> Result<(), StoreFault> {
+        if let Some(object) = self.objects.get_mut(&(*vault, *name)) {
+            object.hold = hold;
+        }
+        if let Some(snapshot) = self.snapshots.get_mut(&(*vault, *name)) {
+            snapshot.hold = hold;
+        }
+        Ok(())
+    }
+
     fn live_objects(
         &self,
         vault: &VaultId,
@@ -146,14 +397,42 @@ impl State for MemoryState {
         limit: usize,
     ) -> Result<Vec<ObjectRecord>, StoreFault> {
         Ok(self
-            .objects
-            .range((*vault, Name::from_bytes([0; 32]))..)
-            .take_while(|((owner, _), _)| owner == vault)
-            .filter(|((_, name), record)| {
-                after.is_none_or(|after| name > after) && record.tombstone.is_none()
+            .held_rows(vault)
+            .filter(|record| {
+                after.is_none_or(|after| record.name > *after) && record.hold.is_none()
             })
             .take(limit)
-            .map(|(_, record)| *record)
+            .copied()
+            .collect())
+    }
+
+    fn held_objects(
+        &self,
+        vault: &VaultId,
+        after: Option<&Name>,
+        limit: usize,
+    ) -> Result<Vec<ObjectRecord>, StoreFault> {
+        Ok(self
+            .held_rows(vault)
+            .filter(|record| {
+                after.is_none_or(|after| record.name > *after) && record.hold.is_some()
+            })
+            .take(limit)
+            .copied()
+            .collect())
+    }
+
+    fn vault_objects(
+        &self,
+        vault: &VaultId,
+        after: Option<&Name>,
+        limit: usize,
+    ) -> Result<Vec<ObjectRecord>, StoreFault> {
+        Ok(self
+            .held_rows(vault)
+            .filter(|record| after.is_none_or(|after| record.name > *after))
+            .take(limit)
+            .copied()
             .collect())
     }
 
@@ -171,18 +450,96 @@ impl State for MemoryState {
             .collect())
     }
 
-    fn purgeable(&self, now_ms: i64, limit: usize) -> Result<Vec<(VaultId, Name)>, StoreFault> {
-        Ok(self
+    fn purgeable(
+        &self,
+        after: Option<(i64, &VaultId, &Name)>,
+        now_ms: i64,
+        limit: usize,
+    ) -> Result<Vec<(i64, VaultId, Name)>, StoreFault> {
+        let mut due: Vec<(i64, VaultId, Name)> = self
             .objects
             .iter()
-            .filter(|(_, record)| {
+            .filter_map(|((vault, name), record)| {
                 record
-                    .tombstone
-                    .is_some_and(|tombstone| tombstone.purge_after_ms <= now_ms)
+                    .hold
+                    .filter(|hold| hold.purge_after_ms <= now_ms)
+                    .map(|hold| (hold.purge_after_ms, *vault, *name))
             })
-            .take(limit)
-            .map(|((vault, name), _)| (*vault, *name))
-            .collect())
+            .filter(|(at, vault, name)| {
+                after.is_none_or(|(a, v, n)| (*at, *vault, *name) > (a, *v, *n))
+            })
+            .collect();
+        due.sort_unstable();
+        due.truncate(limit);
+        Ok(due)
+    }
+
+    fn clear_holds(&mut self, vault: &VaultId) -> Result<u64, StoreFault> {
+        let mut cleared = 0;
+        for ((owner, _), object) in &mut self.objects {
+            if owner == vault && object.hold.take().is_some() {
+                cleared += 1;
+            }
+        }
+        for ((owner, _), snapshot) in &mut self.snapshots {
+            if owner == vault {
+                snapshot.hold = None;
+            }
+        }
+        Ok(cleared)
+    }
+
+    fn shift_holds(&mut self, vault: &VaultId, delta_ms: i64) -> Result<(), StoreFault> {
+        let shift = |hold: &mut Option<Hold>| {
+            if let Some(hold) = hold {
+                hold.purge_after_ms = hold.purge_after_ms.saturating_add(delta_ms);
+            }
+        };
+        for ((owner, _), object) in &mut self.objects {
+            if owner == vault {
+                shift(&mut object.hold);
+            }
+        }
+        for ((owner, _), snapshot) in &mut self.snapshots {
+            if owner == vault {
+                shift(&mut snapshot.hold);
+            }
+        }
+        Ok(())
+    }
+
+    fn make_holds_due(&mut self, vault: &VaultId, due_ms: i64) -> Result<u64, StoreFault> {
+        let mut made = 0;
+        for ((owner, _), object) in &mut self.objects {
+            if owner == vault
+                && let Some(hold) = &mut object.hold
+            {
+                hold.purge_after_ms = due_ms;
+                made += 1;
+            }
+        }
+        for ((owner, _), snapshot) in &mut self.snapshots {
+            if owner == vault
+                && let Some(hold) = &mut snapshot.hold
+            {
+                hold.purge_after_ms = due_ms;
+            }
+        }
+        Ok(made)
+    }
+
+    fn rebase_holds(&mut self, purge_after_ms: i64) -> Result<(), StoreFault> {
+        for object in self.objects.values_mut() {
+            if let Some(hold) = &mut object.hold {
+                hold.purge_after_ms = purge_after_ms;
+            }
+        }
+        for snapshot in self.snapshots.values_mut() {
+            if let Some(hold) = &mut snapshot.hold {
+                hold.purge_after_ms = purge_after_ms;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -193,6 +550,8 @@ pub struct MemoryTarget {
     bytes: BTreeMap<(VaultId, Name), Vec<u8>>,
     now_ms: i64,
     draws: u64,
+    /// When the purge sweep last ran, as `sweeps.json` records it.
+    last_purge_ms: i64,
 }
 
 /// 2026-01-01T00:00:00Z: the reference clock starts somewhere real.
@@ -213,6 +572,7 @@ impl MemoryTarget {
             bytes: BTreeMap::new(),
             now_ms: START_MS,
             draws: 0,
+            last_purge_ms: START_MS,
         }
     }
 
@@ -299,27 +659,39 @@ impl Target for MemoryTarget {
 
     async fn purge(&mut self) -> Result<u64, String> {
         let mut purged = 0;
-        let due = self
-            .gateway
-            .purgeable(self.now_ms, usize::MAX)
+        let now = self.now_ms;
+        self.gateway
+            .rebase_holds(self.last_purge_ms, now)
             .map_err(|fault| fault.to_string())?;
-        for (vault, name) in due {
-            let Self {
-                gateway,
-                bytes,
-                now_ms,
-                ..
-            } = self;
-            if gateway
-                .purge(&vault, &name, *now_ms, || {
-                    bytes.remove(&(vault, name));
-                    Ok(())
-                })
-                .map_err(|fault| fault.to_string())?
-            {
-                purged += 1;
+        let mut cursor: Option<(i64, VaultId, Name)> = None;
+        loop {
+            let due = self
+                .gateway
+                .purgeable(
+                    cursor.as_ref().map(|(at, vault, name)| (*at, vault, name)),
+                    now,
+                    64,
+                )
+                .map_err(|fault| fault.to_string())?;
+            let Some(last) = due.last().copied() else {
+                break;
+            };
+            cursor = Some(last);
+            for (_, vault, name) in due {
+                let Self { gateway, bytes, .. } = self;
+                if gateway
+                    .purge(&vault, &name, now, || {
+                        bytes.remove(&(vault, name));
+                        Ok(())
+                    })
+                    .map_err(|fault| fault.to_string())?
+                {
+                    purged += 1;
+                }
             }
         }
+        self.gateway.prune(now).map_err(|fault| fault.to_string())?;
+        self.last_purge_ms = now;
         Ok(purged)
     }
 
@@ -398,8 +770,12 @@ impl Target for MemoryTarget {
         &mut self,
         token: &Token,
         vault: &VaultId,
+        after: Option<&Name>,
+        limit: usize,
     ) -> Result<Vec<SnapshotView>, Failure> {
-        self.gateway.snapshots(vault, token).map_err(failure)
+        self.gateway
+            .snapshots(vault, token, after, limit)
+            .map_err(failure)
     }
 
     async fn exists(
@@ -463,19 +839,37 @@ impl Target for MemoryTarget {
         vault: &VaultId,
         frames: &[Frame],
     ) -> Result<BundleAnswer, Failure> {
-        self.gateway
-            .authorize(vault, token, Access::Write)
+        let arrivals: Vec<Arrival> = frames
+            .iter()
+            .map(|frame| Arrival {
+                name: frame.name,
+                declared: frame.digest,
+                digest: Digest::of(&frame.bytes),
+                size: frame.bytes.len() as u64,
+            })
+            .collect();
+        let Self {
+            gateway,
+            bytes,
+            now_ms,
+            ..
+        } = self;
+        let outcomes = gateway
+            .put_bundle(vault, token, &arrivals, *now_ms, |index| {
+                let frame = &frames[index];
+                bytes.insert((*vault, frame.name), frame.bytes.clone());
+                Ok(())
+            })
             .map_err(failure)?;
         let mut answer = BundleAnswer::default();
-        for frame in frames {
-            match self.put_one(token, vault, &frame.name, &frame.digest, &frame.bytes) {
+        for (frame, outcome) in frames.iter().zip(outcomes) {
+            match outcome {
                 Ok(PutOutcome::Stored(_)) => answer.stored.push(frame.name),
                 Ok(PutOutcome::AlreadyStored(_)) => answer.already.push(frame.name),
-                Err(Fault::Refused(refusal)) => answer.refused.push(NameRefusal {
+                Err(refusal) => answer.refused.push(NameRefusal {
                     name: frame.name,
                     code: refusal.code(),
                 }),
-                Err(Fault::Store(store)) => return Err(Failure::Broken(store.to_string())),
             }
         }
         Ok(answer)
@@ -516,11 +910,94 @@ impl Target for MemoryTarget {
         &mut self,
         token: &Token,
         vault: &VaultId,
-        names: &[Name],
+        request: &DeleteRequest,
     ) -> Result<DeleteAnswer, Failure> {
         self.gateway
-            .delete(vault, token, names, self.now_ms)
+            .delete(vault, token, request, self.now_ms)
             .map_err(failure)
+    }
+
+    async fn undo(
+        &mut self,
+        token: &Token,
+        vault: &VaultId,
+        request: &UndoRequest,
+    ) -> Result<Undone, Failure> {
+        self.gateway.undo(vault, token, request).map_err(failure)
+    }
+
+    async fn held(
+        &mut self,
+        token: &Token,
+        vault: &VaultId,
+        after: Option<&Name>,
+        limit: usize,
+    ) -> Result<Vec<HeldEntry>, Failure> {
+        self.gateway
+            .held(vault, token, after, limit)
+            .map_err(failure)
+    }
+
+    async fn nonce(&mut self) -> Result<NonceAnswer, Failure> {
+        let draw = self.draw();
+        let nonce =
+            Nonce::from_slice(&draw[..16]).ok_or_else(|| Failure::Broken("a draw".into()))?;
+        self.gateway
+            .issue_nonce(&nonce, self.now_ms)
+            .map_err(failure)
+    }
+
+    async fn freeze(&mut self, vault: &VaultId) -> Result<(), String> {
+        match self
+            .gateway
+            .freeze(vault, self.now_ms)
+            .map_err(|fault| fault.to_string())?
+        {
+            Operated::Done(()) => Ok(()),
+            other => Err(format!("freeze: {other:?}")),
+        }
+    }
+
+    async fn unfreeze(&mut self, vault: &VaultId) -> Result<i64, String> {
+        match self
+            .gateway
+            .unfreeze(vault, self.now_ms)
+            .map_err(|fault| fault.to_string())?
+        {
+            Operated::Done(lasted) => Ok(lasted),
+            other => Err(format!("unfreeze: {other:?}")),
+        }
+    }
+
+    async fn operator_undo(&mut self, vault: &VaultId) -> Result<u64, String> {
+        match self
+            .gateway
+            .operator_undo(vault)
+            .map_err(|fault| fault.to_string())?
+        {
+            Operated::Done(count) => Ok(count),
+            other => Err(format!("undo: {other:?}")),
+        }
+    }
+
+    async fn token_epochs(&mut self, vault: &VaultId) -> Result<Vec<u64>, String> {
+        Ok(self.gateway.state.token_epochs(vault))
+    }
+
+    async fn revoked_count(&mut self, vault: &VaultId) -> Result<u64, String> {
+        Ok(self.gateway.state.revoked_count(vault))
+    }
+
+    async fn secret_count(&mut self) -> Result<u64, String> {
+        Ok(self
+            .gateway
+            .secrets()
+            .map_err(|fault| fault.to_string())?
+            .len() as u64)
+    }
+
+    async fn nonce_rows(&mut self) -> Result<Vec<Vec<u8>>, String> {
+        Ok(self.gateway.state.nonce_rows())
     }
 
     async fn revoke(&mut self, token: &Token, vault: &VaultId) -> Result<(), Failure> {

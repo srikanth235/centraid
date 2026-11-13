@@ -61,6 +61,15 @@ pub struct ObjectStore {
     commits: Arc<std::sync::Mutex<Vec<u64>>>,
 }
 
+/// One file under `objects/`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StoredFile {
+    pub vault: VaultId,
+    pub name: Name,
+    /// When it was last written, in milliseconds since the Unix epoch.
+    pub modified_ms: i64,
+}
+
 /// Why staging stopped.
 #[derive(Debug)]
 pub enum StageError {
@@ -190,6 +199,54 @@ impl ObjectStore {
             }
         }
         Ok(cleared)
+    }
+
+    /// Every file under `objects/`, with when it was last written: the
+    /// orphan sweep's one listing. Names that are not a vault and a name in
+    /// hex are not objects and are skipped.
+    ///
+    /// # Errors
+    ///
+    /// If `objects/` cannot be read.
+    pub fn files(&self) -> std::io::Result<Vec<StoredFile>> {
+        let mut found = Vec::new();
+        for vault_dir in std::fs::read_dir(&self.objects)?.flatten() {
+            let Some(vault) = vault_dir
+                .file_name()
+                .to_str()
+                .and_then(|name| name.parse::<VaultId>().ok())
+            else {
+                continue;
+            };
+            for fan in std::fs::read_dir(vault_dir.path())?.flatten() {
+                if !fan.path().is_dir() {
+                    continue;
+                }
+                for file in std::fs::read_dir(fan.path())?.flatten() {
+                    let Some(name) = file
+                        .file_name()
+                        .to_str()
+                        .and_then(|name| name.parse::<Name>().ok())
+                    else {
+                        continue;
+                    };
+                    let modified_ms = file
+                        .metadata()
+                        .and_then(|meta| meta.modified())
+                        .ok()
+                        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map_or(0, |elapsed| {
+                            i64::try_from(elapsed.as_millis()).unwrap_or(i64::MAX)
+                        });
+                    found.push(StoredFile {
+                        vault,
+                        name,
+                        modified_ms,
+                    });
+                }
+            }
+        }
+        Ok(found)
     }
 
     /// Where one object lives.

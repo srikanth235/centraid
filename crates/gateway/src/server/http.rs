@@ -64,10 +64,10 @@ use crate::rules::limits::{
     LIST_LIMIT, MAX_BUNDLE_BYTES, MAX_JSON_BYTES, MAX_NAMES, MAX_OBJECT_BYTES,
 };
 use crate::rules::range::resolve;
-use crate::rules::state::{Fault, ObjectRecord, State as _};
+use crate::rules::state::{Fault, ObjectRecord, State as _, StoreFault};
 use crate::rules::wire::{
-    BundleAnswer, CODE_HEADER, DIGEST_HEADER, Missing, NameRefusal, Names, PairRequest, Revoked,
-    SetHead,
+    BundleAnswer, CODE_HEADER, DIGEST_HEADER, DeleteRequest, Missing, NameRefusal, Names,
+    PairRequest, Revoked, SetHead, UndoRequest,
 };
 use crate::server::state::SqliteState;
 use crate::server::store::{ObjectStore, Staged, StagedFile};
@@ -86,7 +86,7 @@ fn mark_if_gone(
     let Some(record) = gateway.state.object(vault, name)? else {
         return Ok(false);
     };
-    if !record.is_held() || store.path(vault, name).is_file() {
+    if !record.is_live() || store.path(vault, name).is_file() {
         return Ok(false);
     }
     gateway.record_scrub(vault, &record, Finding::Missing, now_ms)?;
@@ -97,6 +97,7 @@ fn mark_if_gone(
 pub fn router(shared: Handle) -> Router {
     Router::new()
         .route("/v3/info", get(info))
+        .route("/v3/nonce", post(nonce))
         .route("/v3/pair", post(pair))
         .route("/v3/v/{vault}/head", get(get_head).put(put_head))
         .route("/v3/v/{vault}/snapshots", get(snapshots))
@@ -108,7 +109,9 @@ pub fn router(shared: Handle) -> Router {
         .route("/v3/v/{vault}/bundle", post(bundle))
         .route("/v3/v/{vault}/fetch", post(fetch))
         .route("/v3/v/{vault}/objects", get(objects))
+        .route("/v3/v/{vault}/held", get(held))
         .route("/v3/v/{vault}/delete", post(delete))
+        .route("/v3/v/{vault}/undo", post(undo))
         .route("/v3/v/{vault}/revoke", post(revoke))
         .fallback(no_route)
         .method_not_allowed_fallback(wrong_method)
@@ -228,6 +231,15 @@ async fn info(State(shared): State<Handle>) -> Response {
     )
 }
 
+/// `POST nonce`: no auth, no body, and no vault. The nonce is drawn here,
+/// from the OS; the rules hold no randomness.
+async fn nonce(State(shared): State<Handle>) -> Response {
+    let now = shared.now();
+    let drawn = shared.fresh_nonce();
+    let outcome = drawn.and_then(|nonce| shared.rules(|gateway| gateway.issue_nonce(&nonce, now)));
+    answer(&shared, StatusCode::OK, outcome)
+}
+
 async fn pair(State(shared): State<Handle>, body: Body) -> Response {
     let request: PairRequest = match read_json(body).await {
         Ok(request) => request,
@@ -289,12 +301,14 @@ async fn put_head(
 async fn snapshots(
     State(shared): State<Handle>,
     path: Result<Path<String>, PathRejection>,
+    query: Result<Query<Page>, QueryRejection>,
     headers: HeaderMap,
 ) -> Response {
     let outcome = (|| {
         let vault = vault_of(path)?;
         let token = bearer(&headers)?;
-        shared.rules(|gateway| gateway.snapshots(&vault, &token))
+        let (after, limit) = page_of(query)?;
+        shared.rules(|gateway| gateway.snapshots(&vault, &token, after.as_ref(), limit))
     })();
     answer(&shared, StatusCode::OK, outcome)
 }
@@ -627,15 +641,38 @@ async fn bundle(
     answer(&shared, StatusCode::OK, outcome)
 }
 
+/// Stage every frame of the body, then let the rules admit them **in one
+/// transaction**. A body that turns out malformed or over the cap stops the
+/// staging, the frames complete before it are still admitted — each was
+/// verified on its own — and the refusal is what is answered.
 async fn receive_bundle(
     shared: &Shared,
     vault: &VaultId,
     token: &Token,
     stream: &mut BodyDataStream,
 ) -> Result<BundleAnswer, Fault> {
+    let mut staging = Staging::default();
+    let read = stage_frames(shared, stream, &mut staging).await;
+    let answer = admit_frames(shared, vault, token, staging);
+    read?;
+    answer
+}
+
+/// The frames of one bundle, staged and not yet admitted.
+#[derive(Default)]
+struct Staging {
+    frames: Vec<(FrameHeader, Option<StagedFile>)>,
+    /// Frames over the object cap, read past and refused on their own.
+    oversize: Vec<NameRefusal>,
+}
+
+async fn stage_frames(
+    shared: &Shared,
+    stream: &mut BodyDataStream,
+    staging: &mut Staging,
+) -> Result<(), Fault> {
     let mut decoder = Decoder::new();
-    let mut answer = BundleAnswer::default();
-    let mut frame: Option<(FrameHeader, Option<Staged>)> = None;
+    let mut current: Option<(FrameHeader, Option<Staged>)> = None;
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|_| Refusal::BadRequest)?;
         let mut rest: &[u8] = &chunk;
@@ -644,23 +681,21 @@ async fn receive_bundle(
             rest = &rest[used..];
             match step {
                 None => break,
-                Some(step) => advance(shared, vault, token, &mut frame, &mut answer, step).await?,
+                Some(step) => advance(shared, staging, &mut current, step).await?,
             }
         }
     }
     while let (Some(step), _) = decoder.step(&[])? {
-        advance(shared, vault, token, &mut frame, &mut answer, step).await?;
+        advance(shared, staging, &mut current, step).await?;
     }
     decoder.finish()?;
-    Ok(answer)
+    Ok(())
 }
 
 async fn advance(
     shared: &Shared,
-    vault: &VaultId,
-    token: &Token,
-    frame: &mut Option<(FrameHeader, Option<Staged>)>,
-    answer: &mut BundleAnswer,
+    staging: &mut Staging,
+    current: &mut Option<(FrameHeader, Option<Staged>)>,
     step: Step<'_>,
 ) -> Result<(), Fault> {
     match step {
@@ -672,51 +707,86 @@ async fn advance(
             } else {
                 Some(shared.store().stage(header.len).await?)
             };
-            *frame = Some((header, staged));
+            *current = Some((header, staged));
         }
         Step::Body(bytes) => {
-            if let Some((_, Some(staged))) = frame {
+            if let Some((_, Some(staged))) = current {
                 staged.write(bytes).await?;
             }
         }
         Step::End => {
-            let Some((header, staged)) = frame.take() else {
+            let Some((header, staged)) = current.take() else {
                 return Ok(());
             };
-            let Some(staged) = staged else {
-                answer.refused.push(NameRefusal {
+            match staged {
+                None => staging.oversize.push(NameRefusal {
                     name: header.name,
                     code: Code::TooLarge,
-                });
-                return Ok(());
-            };
-            let file = staged.finish().await?;
-            let arrival = Arrival {
-                name: header.name,
-                declared: header.digest,
-                digest: file.digest,
-                size: file.size,
-            };
-            let now = shared.now();
-            let store = shared.store();
-            let outcome = shared.rules(|gateway| {
-                mark_if_gone(gateway, store, vault, &header.name, now)?;
-                gateway.put(vault, token, &arrival, now, || {
-                    store.commit(file, vault, &header.name)
-                })
-            });
-            match outcome {
-                Ok(PutOutcome::Stored(_)) => answer.stored.push(header.name),
-                Ok(PutOutcome::AlreadyStored(_)) => answer.already.push(header.name),
-                Err(Fault::Refused(refusal)) => answer.refused.push(NameRefusal {
-                    name: header.name,
-                    code: refusal.code(),
                 }),
-                Err(fault @ Fault::Store(_)) => return Err(fault),
+                Some(staged) => staging.frames.push((header, Some(staged.finish().await?))),
             }
         }
     }
     Ok(())
+}
+
+/// Judge and admit every staged frame as one step. A frame whose name the
+/// index holds but whose file is gone is marked first, as `PUT` does.
+fn admit_frames(
+    shared: &Shared,
+    vault: &VaultId,
+    token: &Token,
+    mut staging: Staging,
+) -> Result<BundleAnswer, Fault> {
+    let mut answer = BundleAnswer {
+        refused: std::mem::take(&mut staging.oversize),
+        ..BundleAnswer::default()
+    };
+    if staging.frames.is_empty() {
+        return Ok(answer);
+    }
+    let now = shared.now();
+    let store = shared.store();
+    let arrivals: Vec<Arrival> = staging
+        .frames
+        .iter()
+        .map(|(header, file)| {
+            let file = file.as_ref();
+            Arrival {
+                name: header.name,
+                declared: header.digest,
+                digest: file.map_or(header.digest, |file| file.digest),
+                size: file.map_or(0, |file| file.size),
+            }
+        })
+        .collect();
+    let mut files: Vec<Option<StagedFile>> = staging
+        .frames
+        .iter_mut()
+        .map(|(_, file)| file.take())
+        .collect();
+    let outcomes = shared.rules(|gateway| {
+        for arrival in &arrivals {
+            mark_if_gone(gateway, store, vault, &arrival.name, now)?;
+        }
+        gateway.put_bundle(vault, token, &arrivals, now, |index| {
+            let file = files[index]
+                .take()
+                .ok_or_else(|| StoreFault::new("a bundle frame committed twice"))?;
+            store.commit(file, vault, &arrivals[index].name)
+        })
+    })?;
+    for (arrival, outcome) in arrivals.iter().zip(outcomes) {
+        match outcome {
+            Ok(PutOutcome::Stored(_)) => answer.stored.push(arrival.name),
+            Ok(PutOutcome::AlreadyStored(_)) => answer.already.push(arrival.name),
+            Err(refusal) => answer.refused.push(NameRefusal {
+                name: arrival.name,
+                code: refusal.code(),
+            }),
+        }
+    }
+    Ok(answer)
 }
 
 /// `POST fetch`: the rules plan which objects, in which order; the answer
@@ -782,11 +852,20 @@ fn fetch_stream(
         .flatten()
 }
 
-/// `GET objects?after=&limit=`.
+/// `?after=&limit=` of a listing.
 #[derive(Debug, serde::Deserialize)]
 struct Page {
     after: Option<String>,
     limit: Option<usize>,
+}
+
+fn page_of(query: Result<Query<Page>, QueryRejection>) -> Result<(Option<Name>, usize), Refusal> {
+    let Query(page) = query.map_err(|_| Refusal::BadRequest)?;
+    let after = page
+        .after
+        .map(|after| after.parse::<Name>().map_err(|_| Refusal::BadRequest))
+        .transpose()?;
+    Ok((after, page.limit.unwrap_or(LIST_LIMIT)))
 }
 
 async fn objects(
@@ -798,13 +877,25 @@ async fn objects(
     let outcome = (|| {
         let vault = vault_of(path)?;
         let token = bearer(&headers)?;
-        let Query(page) = query.map_err(|_| Refusal::BadRequest)?;
-        let after = page
-            .after
-            .map(|after| after.parse::<Name>().map_err(|_| Refusal::BadRequest))
-            .transpose()?;
-        let limit = page.limit.unwrap_or(LIST_LIMIT);
+        let (after, limit) = page_of(query)?;
         shared.rules(|gateway| gateway.objects(&vault, &token, after.as_ref(), limit))
+    })();
+    answer(&shared, StatusCode::OK, outcome)
+}
+
+/// `GET held?after=&limit=`: what the vault key has asked to delete and the
+/// gateway is holding for a week.
+async fn held(
+    State(shared): State<Handle>,
+    path: Result<Path<String>, PathRejection>,
+    query: Result<Query<Page>, QueryRejection>,
+    headers: HeaderMap,
+) -> Response {
+    let outcome = (|| {
+        let vault = vault_of(path)?;
+        let token = bearer(&headers)?;
+        let (after, limit) = page_of(query)?;
+        shared.rules(|gateway| gateway.held(&vault, &token, after.as_ref(), limit))
     })();
     answer(&shared, StatusCode::OK, outcome)
 }
@@ -820,15 +911,37 @@ async fn delete(
         Ok(parsed) => parsed,
         Err(refusal) => return refused(&refusal, shared.now()),
     };
-    let names: Names = match read_json(body).await {
-        Ok(names) => names,
+    let request: DeleteRequest = match read_json(body).await {
+        Ok(request) => request,
         Err(refusal) => return refused(&refusal, shared.now()),
     };
     let now = shared.now();
     answer(
         &shared,
         StatusCode::OK,
-        shared.rules(|gateway| gateway.delete(&vault, &token, &names.names, now)),
+        shared.rules(|gateway| gateway.delete(&vault, &token, &request, now)),
+    )
+}
+
+async fn undo(
+    State(shared): State<Handle>,
+    path: Result<Path<String>, PathRejection>,
+    headers: HeaderMap,
+    body: Body,
+) -> Response {
+    let parsed = (|| Ok::<_, Refusal>((vault_of(path)?, bearer(&headers)?)))();
+    let (vault, token) = match parsed {
+        Ok(parsed) => parsed,
+        Err(refusal) => return refused(&refusal, shared.now()),
+    };
+    let request: UndoRequest = match read_json(body).await {
+        Ok(request) => request,
+        Err(refusal) => return refused(&refusal, shared.now()),
+    };
+    answer(
+        &shared,
+        StatusCode::OK,
+        shared.rules(|gateway| gateway.undo(&vault, &token, &request)),
     )
 }
 
@@ -898,7 +1011,19 @@ mod tests {
     /// `HEAD` can read.
     #[test]
     fn a_refusal_names_its_code_in_a_header_and_its_status() {
-        let response = refused(&Refusal::Moved { epoch: 3 }, 1);
+        let claim = crate::rules::wire::ClaimView {
+            epoch: 3,
+            head_seen: None,
+            nonce: crate::rules::ids::Nonce::from_bytes([1; 16]),
+            signature: crate::rules::ids::Signature::from_bytes([2; 64]),
+        };
+        let response = refused(
+            &Refusal::Moved {
+                epoch: 3,
+                claim: Box::new(claim),
+            },
+            1,
+        );
         assert_eq!(response.status(), StatusCode::CONFLICT);
         assert_eq!(
             response

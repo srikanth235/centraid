@@ -63,3 +63,5 @@ CREATE TABLE IF NOT EXISTS object (
 
 CREATE INDEX IF NOT EXISTS object_by_purge ON object (purge_after_ms)
   WHERE purge_after_ms IS NOT NULL;
+
+INSERT INTO vault (vault, writer_epoch, paired_at_ms) VALUES (zeroblob(32), 1, 5);

@@ -52,3 +52,44 @@ pub const MAX_LABEL_BYTES: usize = 128;
 /// The largest JSON request body any route accepts: 1 MiB, declared rather
 /// than inherited from a framework. The biggest legitimate one is 1,000 names.
 pub const MAX_JSON_BYTES: usize = 1024 * 1024;
+
+/// THE MOST A SIGNED RECORD'S GENERATION MAY JUMP past the standing one: 256.
+/// Gaps come only from signed requests whose answers were lost; the bound
+/// keeps one forged-looking value from locking the real phone out (E3).
+pub const MAX_GENERATION_JUMP: u64 = 256;
+
+/// HOW LONG A NONCE IS GOOD FOR: five minutes, and one use (E5).
+pub const NONCE_TTL_MS: i64 = 300_000;
+
+/// The most live nonces a gateway keeps; the next issue is `BUSY` (E5).
+pub const MAX_LIVE_NONCES: u64 = 4_096;
+
+/// What `BUSY` tells the phone to wait before it asks for a nonce again.
+pub const BUSY_RETRY_MS: u64 = 60_000;
+
+/// HOW LONG A REVOKED TOKEN STILL HEARS "MOVED": 365 days (E5).
+pub const REVOKED_TOKEN_KEEP_MS: i64 = 365 * DAY_MS;
+
+/// The most revoked-token tombstones a vault keeps; the oldest go first (E5).
+pub const MAX_REVOKED_PER_VAULT: u64 = 64;
+
+/// A gap between purge sweeps longer than this re-bases every hold to a full
+/// week from now, so a sleeping gateway or a clock that jumped never ends a
+/// hold early (E6): fourteen days.
+pub const PURGE_GAP_REBASE_MS: i64 = 14 * DAY_MS;
+
+/// The most unused, unexpired pairing secrets at once; minting one more drops
+/// the oldest (E14).
+pub const MAX_LIVE_SECRETS: u64 = 64;
+
+/// How long a spent or expired pairing secret is kept before the sweep
+/// prunes it: seven days (E14).
+pub const SECRET_KEEP_MS: i64 = 7 * DAY_MS;
+
+/// A head whose `taken_at_ms` is further ahead than this of the gateway's
+/// clock is refused `CLOCK_AHEAD` (E14).
+pub const MAX_CLOCK_AHEAD_MS: i64 = 300_000;
+
+/// A file in `objects/` with no row is an orphan only once it is this old, so
+/// a bundle in flight is never taken for one: an hour (E14).
+pub const ORPHAN_MIN_AGE_MS: i64 = 3_600_000;

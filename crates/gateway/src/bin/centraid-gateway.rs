@@ -5,6 +5,7 @@
 //! centraid-gateway serve    --data-dir ~/centraid-gateway [--bind 0.0.0.0:8443] [--no-mdns]
 //! centraid-gateway pair     --data-dir ~/centraid-gateway [--port 8443]
 //! centraid-gateway pairings --data-dir ~/centraid-gateway [revoke <token id>]
+//! centraid-gateway vault    <id8> freeze|unfreeze|undo|purge-now --yes|delete-vault --yes --data-dir ~/centraid-gateway
 //! centraid-gateway scrub    --data-dir ~/centraid-gateway
 //! centraid-gateway health   --data-dir ~/centraid-gateway [--addr 127.0.0.1:8443] [--pin <hex>]
 //! centraid-gateway install  --data-dir ~/centraid-gateway [--bind 0.0.0.0:8443] [--dry-run]
@@ -24,6 +25,7 @@ use anyhow::Context as _;
 use centraid_gateway::client::Client;
 use centraid_gateway::rules::ids::Pin;
 use centraid_gateway::server::bonjour::{self, Announcement};
+use centraid_gateway::server::operator::{self, Verb};
 use centraid_gateway::server::serve::TlsListener;
 use centraid_gateway::server::service::{DEFAULT_LABEL, Platform, UnitSpec};
 use centraid_gateway::server::sweeps::{Schedule, scrub_once};
@@ -74,6 +76,18 @@ enum Command {
         #[command(subcommand)]
         action: Option<PairingsAction>,
     },
+    /// The member's last word over one vault: freeze, unfreeze, undo, purge
+    /// held deletes now, or delete a frozen vault. Local and unsigned, through
+    /// the same rules a phone's request goes through.
+    Vault {
+        /// The first 8 hex characters of the vault's id, as `pairings` lists it.
+        id: String,
+        #[command(subcommand)]
+        verb: VaultVerb,
+        /// Global so it may follow the verb, as the other commands' do.
+        #[arg(long, env = "CENTRAID_GATEWAY_DATA_DIR", global = true)]
+        data_dir: Option<PathBuf>,
+    },
     /// Re-hash every stored object now. No key is involved.
     Scrub {
         #[arg(long, env = "CENTRAID_GATEWAY_DATA_DIR")]
@@ -107,6 +121,29 @@ enum Command {
 }
 
 #[derive(Subcommand, Debug)]
+enum VaultVerb {
+    /// Refuse every write to the vault and stop purging it, until `unfreeze`.
+    /// Reads, nonces and read grants still answer.
+    Freeze,
+    /// Lift the freeze; every held delete gains the time it was frozen.
+    Unfreeze,
+    /// Lift every held delete of the vault, no signature. Works while frozen.
+    Undo,
+    /// Make every held delete of the vault final now. Needs an unfrozen vault.
+    PurgeNow {
+        /// Yes, make them final.
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Remove a frozen vault and every object of it for good.
+    DeleteVault {
+        /// Yes, remove it.
+        #[arg(long)]
+        yes: bool,
+    },
+}
+
+#[derive(Subcommand, Debug)]
 enum PairingsAction {
     /// Revoke one token, for a phone that is lost and cannot revoke itself:
     /// every route answers it `UNAUTHORIZED` from now on.
@@ -133,6 +170,11 @@ async fn main() -> anyhow::Result<()> {
             data_dir,
             action: Some(PairingsAction::Revoke { id }),
         } => revoke(&data_dir, &id),
+        Command::Vault { id, verb, data_dir } => vault(
+            &data_dir.context("give --data-dir, or set CENTRAID_GATEWAY_DATA_DIR")?,
+            &id,
+            &verb,
+        ),
         Command::Scrub { data_dir } => scrub(&data_dir),
         Command::Health {
             data_dir,
@@ -350,6 +392,36 @@ fn revoke(data_dir: &Path, id: &str) -> anyhow::Result<()> {
     println!("The phone holding it is refused on every route from now on.");
     Ok(())
 }
+
+/// `vault <id8> <verb>`.
+fn vault(data_dir: &Path, id: &str, verb: &VaultVerb) -> anyhow::Result<()> {
+    let shared = open(data_dir)?;
+    let (verb, yes) = match verb {
+        VaultVerb::Freeze => (Verb::Freeze, false),
+        VaultVerb::Unfreeze => (Verb::Unfreeze, false),
+        VaultVerb::Undo => (Verb::Undo, false),
+        VaultVerb::PurgeNow { yes } => (Verb::PurgeNow, *yes),
+        VaultVerb::DeleteVault { yes } => (Verb::DeleteVault, *yes),
+    };
+    let outcome =
+        operator::resolve(&shared, id).and_then(|vault| operator::run(&shared, &vault, verb, yes));
+    match outcome {
+        Ok(lines) => {
+            for line in lines {
+                println!("{line}");
+            }
+            Ok(())
+        }
+        Err(refused) => {
+            eprintln!("{refused}");
+            std::process::exit(EXIT_REFUSED_VERB);
+        }
+    }
+}
+
+/// The exit code of an operator verb the vault's state or a missing `--yes`
+/// forbids.
+const EXIT_REFUSED_VERB: i32 = 3;
 
 /// `scrub`.
 fn scrub(data_dir: &Path) -> anyhow::Result<()> {

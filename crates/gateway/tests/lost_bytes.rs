@@ -11,7 +11,8 @@
 
 use centraid_gateway::client::{Client, Part, Put, Source};
 use centraid_gateway::rules::ids::{Digest, Name, VaultId};
-use centraid_gateway::rules::wire::{PairKind, PairRequest};
+
+use centraid_gateway::server::harness::pair_secret;
 use centraid_gateway::server::harness::{Spawned, spawn};
 
 /// A vault paired with `gateway`, and the client holding its token.
@@ -19,17 +20,14 @@ async fn paired(gateway: &Spawned, seed: u8) -> (VaultId, Client) {
     let identity = ed25519_dalek::SigningKey::from_bytes(&[seed; 32]);
     let vault = VaultId::from_bytes(identity.verifying_key().to_bytes());
     let phone = gateway.first_contact();
-    let paired = phone
-        .pair(&PairRequest {
-            vault_id: vault,
-            label: "a phone".to_owned(),
-            kind: PairKind::Secret,
-            secret: Some(gateway.mint_pairing_secret()),
-            claim: None,
-            read: None,
-        })
-        .await
-        .expect("pairs");
+    let paired = pair_secret(
+        &phone,
+        &identity,
+        "a phone".to_owned(),
+        gateway.mint_pairing_secret(),
+    )
+    .await
+    .expect("pairs");
     (vault, gateway.client(paired.token))
 }
 

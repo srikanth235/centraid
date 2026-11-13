@@ -26,20 +26,29 @@
 //! 3. **That the bytes are durable.** A crash between the store's rename and
 //!    its row is the adapter's to survive, by ordering.
 
+use std::cell::Cell;
 use std::fmt::Debug;
+use std::ops::Deref;
 
 use ed25519_dalek::SigningKey;
 
 use crate::rules::bundle::Frame;
-use crate::rules::claim::{sign_claim, sign_read};
 use crate::rules::code::{Code, Refusal};
 pub use crate::rules::engine::ScrubCounts;
-use crate::rules::ids::{Digest, GatewayId, Name, Secret, Token, VaultId};
-use crate::rules::limits::{GRACE_MS, MAX_NAMES, MAX_OBJECT_BYTES, PROTOCOL, SECRET_TTL_MS};
+use crate::rules::ids::{Digest, GatewayId, Name, Nonce, Secret, Signature, Token, VaultId};
+use crate::rules::limits::{
+    GRACE_MS, LIST_LIMIT, MAX_CLOCK_AHEAD_MS, MAX_GENERATION_JUMP, MAX_LIVE_NONCES,
+    MAX_LIVE_SECRETS, MAX_NAMES, MAX_OBJECT_BYTES, MAX_REVOKED_PER_VAULT, NONCE_TTL_MS, PROTOCOL,
+    PURGE_GAP_REBASE_MS, REVOKED_TOKEN_KEEP_MS, SECRET_TTL_MS,
+};
 use crate::rules::range::ByteRange;
+use crate::rules::signing::{
+    HeadFields, sign_claim, sign_delete, sign_head, sign_pair, sign_read, sign_undo,
+};
 use crate::rules::wire::{
-    BundleAnswer, ClaimBody, DeleteAnswer, HeadView, Info, ObjectEntry, PairKind, PairRequest,
-    Paired, ReadBody, SetHead, SnapshotView,
+    BundleAnswer, ClaimBody, DeleteAnswer, DeleteRequest, HeadView, HeldEntry, HeldKind, Info,
+    NonceAnswer, ObjectEntry, PairKind, PairRequest, Paired, ReadBody, SecretBody, SetHead,
+    SnapshotView, UndoRequest, Undone,
 };
 
 /// One case's verdict.
@@ -140,6 +149,20 @@ pub trait Target {
     async fn scrub(&mut self) -> Result<ScrubCounts, String>;
     /// Flip one bit of a stored object's bytes, behind the protocol's back.
     async fn corrupt(&mut self, vault: &VaultId, name: &Name) -> Result<(), String>;
+    /// The operator's `freeze`.
+    async fn freeze(&mut self, vault: &VaultId) -> Result<(), String>;
+    /// The operator's `unfreeze`: how long the vault had been frozen.
+    async fn unfreeze(&mut self, vault: &VaultId) -> Result<i64, String>;
+    /// The operator's `undo`: how many holds it lifted.
+    async fn operator_undo(&mut self, vault: &VaultId) -> Result<u64, String>;
+    /// The epochs of every token a vault has: what a takeover leaves.
+    async fn token_epochs(&mut self, vault: &VaultId) -> Result<Vec<u64>, String>;
+    /// How many revoked-token tombstones a vault keeps.
+    async fn revoked_count(&mut self, vault: &VaultId) -> Result<u64, String>;
+    /// How many pairing secrets the gateway keeps, in any state.
+    async fn secret_count(&mut self) -> Result<u64, String>;
+    /// The nonce table's rows as bytes.
+    async fn nonce_rows(&mut self) -> Result<Vec<Vec<u8>>, String>;
     /// **Every byte the gateway keeps at rest**, file names included: the
     /// canary's window.
     async fn at_rest(&mut self) -> Result<Vec<u8>, String>;
@@ -153,11 +176,24 @@ pub trait Target {
         vault: &VaultId,
         request: &SetHead,
     ) -> Result<HeadView, Failure>;
+    /// `GET snapshots`: one page, by name.
     async fn snapshots(
         &mut self,
         token: &Token,
         vault: &VaultId,
+        after: Option<&Name>,
+        limit: usize,
     ) -> Result<Vec<SnapshotView>, Failure>;
+    /// `GET held`: one page, by name.
+    async fn held(
+        &mut self,
+        token: &Token,
+        vault: &VaultId,
+        after: Option<&Name>,
+        limit: usize,
+    ) -> Result<Vec<HeldEntry>, Failure>;
+    /// `POST nonce`.
+    async fn nonce(&mut self) -> Result<NonceAnswer, Failure>;
     async fn exists(
         &mut self,
         token: &Token,
@@ -209,15 +245,21 @@ pub trait Target {
         &mut self,
         token: &Token,
         vault: &VaultId,
-        names: &[Name],
+        request: &DeleteRequest,
     ) -> Result<DeleteAnswer, Failure>;
+    async fn undo(
+        &mut self,
+        token: &Token,
+        vault: &VaultId,
+        request: &UndoRequest,
+    ) -> Result<Undone, Failure>;
     /// `POST /v3/v/{vault}/revoke`: the calling token revokes itself.
     async fn revoke(&mut self, token: &Token, vault: &VaultId) -> Result<(), Failure>;
 }
 
 /// Every case, by name, in the order [`run`] runs them. A target's test
 /// asserts its report names exactly these, so a dropped case is a failure.
-pub const CASES: [&str; 31] = [
+pub const CASES: [&str; 58] = [
     "info/answers-before-anything-is-paired",
     "pair/a-secret-admits-one-new-vault-once",
     "pair/a-known-vault-is-refused-and-the-secret-is-not-spent",
@@ -249,43 +291,333 @@ pub const CASES: [&str; 31] = [
     "canary/no-plaintext-plaintext-hash-or-key-is-at-rest",
     "canary/no-token-or-pairing-secret-is-at-rest",
     "auth/a-revoked-token-is-unauthorized-everywhere",
+    "signed/head-needs-the-vault-signature",
+    "signed/a-head-never-falls-within-an-epoch",
+    "signed/generation-jumps-are-bounded",
+    "signed/a-claim-may-reset-the-generation",
+    "takeover/a-claim-revokes-every-older-token",
+    "takeover/moved-carries-a-claim-bound-to-the-gateway",
+    "takeover/revoked-token-tombstones",
+    "takeover/a-claim-cancels-held-deletes",
+    "delete/delete-needs-the-vault-signature",
+    "delete/a-delete-is-held",
+    "delete/a-delete-replay-is-refused",
+    "delete/head-and-snapshot-keep-their-manifest",
+    "delete/an-undo-lifts-holds",
+    "pair/pair-by-secret-needs-the-vault-signature",
+    "pair/pair-signature-binds-its-fields",
+    "nonce/a-nonce-is-single-use",
+    "nonce/a-claim-cannot-be-replayed",
+    "nonce/a-nonce-expires",
+    "nonce/nonces-are-bounded",
+    "nonce/canary-nonce",
+    "head/taken-at-is-bounded",
+    "pair/secrets-are-bounded",
+    "operator/a-frozen-vault-refuses-writes-and-answers-reads",
+    "operator/unfreeze-gives-back-the-time-it-was-frozen",
+    "operator/operator-undo-restores-every-hold",
+    "operator/a-long-gap-rebases-every-hold",
+    "canary/canary-directory",
 ];
+
+/// **The names tests.md gives, and the case each runs.** `tests/conformance.rs`
+/// and `tests/conformance_wire.rs` each make one `#[test]` per row, so the
+/// attacker tests are found by their names and run over the rules in memory
+/// and over the wire.
+pub const NAMED: &[(&str, &str)] = &[
+    (
+        "a_token_without_the_vault_key_cannot_set_a_head",
+        "signed/head-needs-the-vault-signature",
+    ),
+    (
+        "an_old_signed_head_replayed_is_out_of_order",
+        "signed/a-head-never-falls-within-an-epoch",
+    ),
+    (
+        "a_generation_jump_beyond_the_bound_is_refused",
+        "signed/generation-jumps-are-bounded",
+    ),
+    (
+        "a_claim_resets_the_generation_and_the_next_head_is_accepted",
+        "signed/a-claim-may-reset-the-generation",
+    ),
+    (
+        "a_head_names_a_held_manifest_only",
+        "store/a-head-naming-a-manifest-not-held-is-not-found",
+    ),
+    (
+        "a_takeover_leaves_no_live_older_token",
+        "takeover/a-claim-revokes-every-older-token",
+    ),
+    (
+        "a_moved_claim_is_bound_to_its_gateway",
+        "takeover/moved-carries-a-claim-bound-to-the-gateway",
+    ),
+    (
+        "a_revoked_token_hears_moved_until_the_tombstone_is_pruned",
+        "takeover/revoked-token-tombstones",
+    ),
+    (
+        "a_takeover_cancels_held_deletes",
+        "takeover/a-claim-cancels-held-deletes",
+    ),
+    (
+        "a_delete_needs_the_vault_signature",
+        "delete/delete-needs-the-vault-signature",
+    ),
+    (
+        "a_signed_delete_is_held_seven_days_and_stays_listed",
+        "delete/a-delete-is-held",
+    ),
+    (
+        "a_replayed_delete_is_out_of_order",
+        "delete/a-delete-replay-is-refused",
+    ),
+    (
+        "a_head_cannot_be_deleted_and_a_snapshot_row_keeps_its_object",
+        "delete/head-and-snapshot-keep-their-manifest",
+    ),
+    ("an_undo_lifts_a_hold", "delete/an-undo-lifts-holds"),
+    (
+        "a_photographer_cannot_squat_the_members_vault",
+        "pair/pair-by-secret-needs-the-vault-signature",
+    ),
+    (
+        "a_pair_signature_is_bound_to_nonce_secret_and_gateway",
+        "pair/pair-signature-binds-its-fields",
+    ),
+    (
+        "a_replayed_read_grant_is_refused",
+        "nonce/a-nonce-is-single-use",
+    ),
+    (
+        "a_replayed_claim_after_a_revoke_is_refused",
+        "nonce/a-claim-cannot-be-replayed",
+    ),
+    (
+        "an_expired_nonce_is_refused_and_pruned",
+        "nonce/a-nonce-expires",
+    ),
+    ("nonce_storage_is_bounded", "nonce/nonces-are-bounded"),
+    ("the_nonce_route_names_no_vault", "nonce/canary-nonce"),
+    (
+        "a_head_from_the_future_is_refused",
+        "head/taken-at-is-bounded",
+    ),
+    (
+        "pairing_secrets_are_pruned_and_bounded",
+        "pair/secrets-are-bounded",
+    ),
+    (
+        "a_frozen_vault_refuses_writes_and_answers_reads",
+        "operator/a-frozen-vault-refuses-writes-and-answers-reads",
+    ),
+    (
+        "unfreeze_gives_back_the_time_it_was_frozen",
+        "operator/unfreeze-gives-back-the-time-it-was-frozen",
+    ),
+    (
+        "operator_undo_restores_every_hold",
+        "operator/operator-undo-restores-every-hold",
+    ),
+    (
+        "a_long_gap_rebases_every_hold",
+        "operator/a-long-gap-rebases-every-hold",
+    ),
+    (
+        "a_directory_does_not_link_vaults",
+        "canary/canary-directory",
+    ),
+];
+
+/// Run one case by its name, or `None` for a name that is not a case.
+pub async fn run_one<T: Target>(target: &mut T, case: &str) -> Option<Case> {
+    let whole = run_named(target, Some(case)).await;
+    whole.cases.into_iter().find(|found| found.name == case)
+}
 
 /// Run every case. The result is a [`Report`], never a panic, so one run
 /// names every failure.
 pub async fn run<T: Target>(target: &mut T) -> Report {
+    run_named(target, None).await
+}
+
+async fn run_named<T: Target>(target: &mut T, only: Option<&str>) -> Report {
     let mut report = Report::default();
-    report.record(CASES[0], info(target).await);
-    report.record(CASES[1], secret_admits_once(target).await);
-    report.record(CASES[2], known_vault(target).await);
-    report.record(CASES[3], dead_secret(target).await);
-    report.record(CASES[4], malformed_pairing(target).await);
-    report.record(CASES[5], tenancy(target).await);
-    report.record(CASES[6], write_once(target).await);
-    report.record(CASES[7], digest_mismatch(target).await);
-    report.record(CASES[8], too_large(target).await);
-    report.record(CASES[9], exists(target).await);
-    report.record(CASES[10], get(target).await);
-    report.record(CASES[11], listing(target).await);
-    report.record(CASES[12], bundle(target).await);
-    report.record(CASES[13], fetch(target).await);
-    report.record(CASES[14], head(target).await);
-    report.record(CASES[15], grace(target).await);
-    report.record(CASES[16], head_in_use(target).await);
-    report.record(CASES[17], exists_skips_tombstones(target).await);
-    report.record(CASES[18], put_revives_tombstone(target).await);
-    report.record(CASES[19], head_needs_held_manifest(target).await);
-    report.record(CASES[20], delete_absent(target).await);
-    report.record(CASES[21], listing_skips_tombstones(target).await);
-    report.record(CASES[22], name_taken(target).await);
-    report.record(CASES[23], scrub(target).await);
-    report.record(CASES[24], claim_refusals(target).await);
-    report.record(CASES[25], read_grant(target).await);
-    report.record(CASES[26], fence(target).await);
-    report.record(CASES[27], stale_claim(target).await);
-    report.record(CASES[28], blindness_canary(target).await);
-    report.record(CASES[29], credential_canary(target).await);
-    report.record(CASES[30], revoked(target).await);
+    if only.is_none_or(|case| case == CASES[0]) {
+        report.record(CASES[0], info(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[1]) {
+        report.record(CASES[1], secret_admits_once(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[2]) {
+        report.record(CASES[2], known_vault(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[3]) {
+        report.record(CASES[3], dead_secret(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[4]) {
+        report.record(CASES[4], malformed_pairing(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[5]) {
+        report.record(CASES[5], tenancy(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[6]) {
+        report.record(CASES[6], write_once(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[7]) {
+        report.record(CASES[7], digest_mismatch(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[8]) {
+        report.record(CASES[8], too_large(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[9]) {
+        report.record(CASES[9], exists(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[10]) {
+        report.record(CASES[10], get(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[11]) {
+        report.record(CASES[11], listing(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[12]) {
+        report.record(CASES[12], bundle(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[13]) {
+        report.record(CASES[13], fetch(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[14]) {
+        report.record(CASES[14], head(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[15]) {
+        report.record(CASES[15], grace(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[16]) {
+        report.record(CASES[16], head_in_use(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[17]) {
+        report.record(CASES[17], exists_skips_tombstones(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[18]) {
+        report.record(CASES[18], put_revives_tombstone(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[19]) {
+        report.record(CASES[19], head_needs_held_manifest(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[20]) {
+        report.record(CASES[20], delete_absent(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[21]) {
+        report.record(CASES[21], listing_skips_tombstones(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[22]) {
+        report.record(CASES[22], name_taken(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[23]) {
+        report.record(CASES[23], scrub(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[24]) {
+        report.record(CASES[24], claim_refusals(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[25]) {
+        report.record(CASES[25], read_grant(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[26]) {
+        report.record(CASES[26], fence(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[27]) {
+        report.record(CASES[27], stale_claim(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[28]) {
+        report.record(CASES[28], blindness_canary(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[29]) {
+        report.record(CASES[29], credential_canary(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[30]) {
+        report.record(CASES[30], revoked(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[31]) {
+        report.record(CASES[31], head_needs_signature(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[32]) {
+        report.record(CASES[32], head_never_falls(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[33]) {
+        report.record(CASES[33], generation_bound(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[34]) {
+        report.record(CASES[34], claim_resets_generation(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[35]) {
+        report.record(CASES[35], claim_revokes_every_older_token(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[36]) {
+        report.record(CASES[36], moved_claim_is_bound(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[37]) {
+        report.record(CASES[37], revoked_tombstones(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[38]) {
+        report.record(CASES[38], claim_cancels_holds(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[39]) {
+        report.record(CASES[39], delete_needs_signature(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[40]) {
+        report.record(CASES[40], delete_is_held(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[41]) {
+        report.record(CASES[41], delete_replay(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[42]) {
+        report.record(CASES[42], head_and_snapshot_keep_manifest(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[43]) {
+        report.record(CASES[43], undo_lifts_holds(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[44]) {
+        report.record(CASES[44], pair_needs_signature(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[45]) {
+        report.record(CASES[45], pair_signature_binds(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[46]) {
+        report.record(CASES[46], nonce_single_use(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[47]) {
+        report.record(CASES[47], claim_not_replayable(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[48]) {
+        report.record(CASES[48], nonce_expires(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[49]) {
+        report.record(CASES[49], nonces_bounded(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[50]) {
+        report.record(CASES[50], canary_nonce(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[51]) {
+        report.record(CASES[51], taken_at_bounded(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[52]) {
+        report.record(CASES[52], secrets_bounded(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[53]) {
+        report.record(CASES[53], frozen_vault(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[54]) {
+        report.record(CASES[54], unfreeze_gives_time_back(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[55]) {
+        report.record(CASES[55], operator_undo_all(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[56]) {
+        report.record(CASES[56], long_gap_rebases(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[57]) {
+        report.record(CASES[57], canary_directory(target).await);
+    }
     report
 }
 
@@ -316,7 +648,7 @@ async fn revoked<T: Target>(target: &mut T) -> Outcome {
     let blob = object("revoked");
     store(target, &phone, &vault, &blob).await?;
     let reader = ok(
-        target.pair(&read_request(&one, &target.gateway_id())).await,
+        pair_read(target, &one).await,
         "a read grant beside the phone",
     )?;
     refused(
@@ -389,57 +721,245 @@ fn object(seed: &str) -> (Name, Vec<u8>) {
     (name, bytes)
 }
 
-fn secret_request(key: &SigningKey, secret: Secret) -> PairRequest {
-    PairRequest {
-        vault_id: vault_of(key),
-        label: "phone".to_owned(),
-        kind: PairKind::Secret,
-        secret: Some(secret),
-        claim: None,
-        read: None,
+/// A paired phone as the suite plays it: the token the gateway minted, the
+/// vault key it signs with, and the counter every signed record advances.
+struct Phone {
+    paired: Paired,
+    key: SigningKey,
+    gateway: GatewayId,
+    generation: Cell<u64>,
+}
+
+impl Deref for Phone {
+    type Target = Paired;
+
+    fn deref(&self) -> &Paired {
+        &self.paired
     }
 }
 
-fn claim_request(
+impl Phone {
+    fn new(paired: Paired, key: &SigningKey, gateway: GatewayId) -> Self {
+        Self {
+            paired,
+            key: key.clone(),
+            gateway,
+            generation: Cell::new(0),
+        }
+    }
+
+    /// The generation the next signed record will carry.
+    fn standing(&self) -> u64 {
+        self.generation.get()
+    }
+
+    fn next(&self) -> u64 {
+        self.generation.set(self.generation.get() + 1);
+        self.generation.get()
+    }
+
+    /// A signed head at the next generation; `writes` follows it.
+    fn head(&self, name: Name, prev: Option<Name>, taken_at_ms: i64) -> SetHead {
+        self.head_at(name, prev, taken_at_ms, self.next())
+    }
+
+    fn head_at(
+        &self,
+        name: Name,
+        prev: Option<Name>,
+        taken_at_ms: i64,
+        generation: u64,
+    ) -> SetHead {
+        self.head_gw(name, prev, taken_at_ms, generation, generation)
+    }
+
+    fn head_gw(
+        &self,
+        name: Name,
+        prev: Option<Name>,
+        taken_at_ms: i64,
+        generation: u64,
+        writes: u64,
+    ) -> SetHead {
+        let fields = HeadFields {
+            epoch: self.paired.epoch,
+            generation,
+            writes,
+            taken_at_ms,
+            manifest: name,
+            prev,
+        };
+        SetHead {
+            name,
+            prev,
+            taken_at_ms,
+            generation,
+            writes,
+            signature: sign_head(&self.key, &self.gateway, &fields),
+        }
+    }
+
+    /// A signed delete at the next generation.
+    fn delete(&self, names: &[Name]) -> DeleteRequest {
+        let generation = self.next();
+        DeleteRequest {
+            names: names.to_vec(),
+            generation,
+            signature: sign_delete(
+                &self.key,
+                &self.gateway,
+                self.paired.epoch,
+                generation,
+                names,
+            ),
+        }
+    }
+
+    /// A signed undo at the next generation.
+    fn undo(&self, names: Option<&[Name]>) -> UndoRequest {
+        let generation = self.next();
+        UndoRequest {
+            names: names.map(<[Name]>::to_vec),
+            generation,
+            signature: sign_undo(
+                &self.key,
+                &self.gateway,
+                self.paired.epoch,
+                generation,
+                names,
+            ),
+        }
+    }
+}
+
+/// A nonce from the gateway, as a phone asks for one before it pairs.
+async fn fresh_nonce<T: Target>(target: &mut T) -> Result<Nonce, Failure> {
+    Ok(target.nonce().await?.nonce)
+}
+
+/// A pairing by secret, signed by `key` with a fresh nonce, as built (not
+/// yet sent).
+async fn secret_request<T: Target>(
+    target: &mut T,
+    key: &SigningKey,
+    secret: Secret,
+) -> Result<PairRequest, Failure> {
+    let nonce = fresh_nonce(target).await?;
+    Ok(PairRequest {
+        vault_id: vault_of(key),
+        label: "phone".to_owned(),
+        kind: PairKind::Secret,
+        nonce,
+        secret: Some(SecretBody {
+            secret,
+            signature: sign_pair(key, &target.gateway_id(), &secret, &nonce),
+        }),
+        claim: None,
+        read: None,
+    })
+}
+
+async fn claim_request<T: Target>(
+    target: &mut T,
     key: &SigningKey,
     gateway: &GatewayId,
     epoch: u64,
     head_seen: Option<Name>,
-) -> PairRequest {
-    PairRequest {
+) -> Result<PairRequest, Failure> {
+    let nonce = fresh_nonce(target).await?;
+    Ok(PairRequest {
         vault_id: vault_of(key),
         label: "restored phone".to_owned(),
         kind: PairKind::Claim,
+        nonce,
         secret: None,
         claim: Some(ClaimBody {
             epoch,
             head_seen,
-            signature: sign_claim(key, gateway, epoch, head_seen.as_ref()),
+            signature: sign_claim(key, gateway, epoch, head_seen.as_ref(), &nonce),
         }),
         read: None,
-    }
+    })
 }
 
-fn read_request(key: &SigningKey, gateway: &GatewayId) -> PairRequest {
-    PairRequest {
+async fn read_request<T: Target>(
+    target: &mut T,
+    key: &SigningKey,
+    gateway: &GatewayId,
+) -> Result<PairRequest, Failure> {
+    let nonce = fresh_nonce(target).await?;
+    Ok(PairRequest {
         vault_id: vault_of(key),
         label: "restoring phone".to_owned(),
         kind: PairKind::Read,
+        nonce,
         secret: None,
         claim: None,
         read: Some(ReadBody {
-            signature: sign_read(key, gateway),
+            signature: sign_read(key, gateway, &nonce),
         }),
+    })
+}
+
+/// Pair by secret, the way a phone does: nonce, signature, request.
+async fn pair_secret<T: Target>(
+    target: &mut T,
+    key: &SigningKey,
+    secret: Secret,
+) -> Result<Paired, Failure> {
+    let request = secret_request(target, key, secret).await?;
+    target.pair(&request).await
+}
+
+/// Claim `epoch` as `key`'s vault, the way a phone does.
+async fn pair_claim<T: Target>(
+    target: &mut T,
+    key: &SigningKey,
+    epoch: u64,
+    head_seen: Option<Name>,
+) -> Result<Paired, Failure> {
+    let gateway = target.gateway_id();
+    let request = claim_request(target, key, &gateway, epoch, head_seen).await?;
+    target.pair(&request).await
+}
+
+/// A read grant, the way a restoring phone asks.
+async fn pair_read<T: Target>(target: &mut T, key: &SigningKey) -> Result<Paired, Failure> {
+    let gateway = target.gateway_id();
+    let request = read_request(target, key, &gateway).await?;
+    target.pair(&request).await
+}
+
+/// Every snapshot of a vault, paged by name.
+async fn snapshots_all<T: Target>(
+    target: &mut T,
+    token: &Token,
+    vault: &VaultId,
+) -> Result<Vec<SnapshotView>, Failure> {
+    let mut out: Vec<SnapshotView> = Vec::new();
+    loop {
+        let after = out.last().map(|last| last.name);
+        let page = target
+            .snapshots(token, vault, after.as_ref(), LIST_LIMIT)
+            .await?;
+        let done = page.len() < LIST_LIMIT;
+        out.extend(page);
+        if done {
+            out.sort_by_key(|snapshot| (snapshot.taken_at_ms, snapshot.name));
+            return Ok(out);
+        }
     }
 }
 
 /// Pair `key`'s vault with a fresh secret.
-async fn paired<T: Target>(target: &mut T, key: &SigningKey) -> Result<Paired, String> {
+async fn paired<T: Target>(target: &mut T, key: &SigningKey) -> Result<Phone, String> {
     let secret = target.mint_secret().await?;
-    ok(
-        target.pair(&secret_request(key, secret)).await,
+    let gateway = target.gateway_id();
+    let paired = ok(
+        pair_secret(target, key, secret).await,
         "pairing with a fresh secret",
-    )
+    )?;
+    Ok(Phone::new(paired, key, gateway))
 }
 
 /// Store one object, expecting new bytes.
@@ -509,16 +1029,13 @@ async fn secret_admits_once<T: Target>(target: &mut T) -> Outcome {
     target.reset().await?;
     let key = identity(1);
     let secret = target.mint_secret().await?;
-    let first = ok(
-        target.pair(&secret_request(&key, secret)).await,
-        "first use",
-    )?;
+    let first = ok(pair_secret(target, &key, secret).await, "first use")?;
     ensure(
         first.epoch == 1 && first.gateway_id == target.gateway_id(),
         || format!("a secret pairing answered {first:?}"),
     )?;
     refused(
-        target.pair(&secret_request(&identity(2), secret)).await,
+        pair_secret(target, &identity(2), secret).await,
         Code::Unauthorized,
         "a spent secret, for another vault",
     )?;
@@ -538,12 +1055,12 @@ async fn known_vault<T: Target>(target: &mut T) -> Outcome {
     paired(target, &key).await?;
     let secret = target.mint_secret().await?;
     refused(
-        target.pair(&secret_request(&key, secret)).await,
+        pair_secret(target, &key, secret).await,
         Code::VaultKnown,
         "a secret for a vault already paired",
     )?;
     let other = ok(
-        target.pair(&secret_request(&identity(2), secret)).await,
+        pair_secret(target, &identity(2), secret).await,
         "the refused secret, for a new vault",
     )?;
     ensure(other.epoch == 1, || format!("{other:?}"))
@@ -554,17 +1071,12 @@ async fn dead_secret<T: Target>(target: &mut T) -> Outcome {
     let secret = target.mint_secret().await?;
     target.advance(SECRET_TTL_MS).await;
     refused(
-        target.pair(&secret_request(&identity(1), secret)).await,
+        pair_secret(target, &identity(1), secret).await,
         Code::Unauthorized,
         "a secret a day old",
     )?;
     refused(
-        target
-            .pair(&secret_request(
-                &identity(1),
-                Secret::from_bytes([0x77; 16]),
-            ))
-            .await,
+        pair_secret(target, &identity(1), Secret::from_bytes([0x77; 16])).await,
         Code::Unauthorized,
         "a secret nobody minted",
     )?;
@@ -575,7 +1087,11 @@ async fn malformed_pairing<T: Target>(target: &mut T) -> Outcome {
     target.reset().await?;
     let key = identity(1);
     let secret = target.mint_secret().await?;
-    let good = secret_request(&key, secret);
+    let good = ok(secret_request(target, &key, secret).await, "a request")?;
+    let reading = ok(
+        read_request(target, &key, &target.gateway_id()).await,
+        "a read",
+    )?;
     let cases = [
         (
             "a vault id that is not a key",
@@ -594,7 +1110,7 @@ async fn malformed_pairing<T: Target>(target: &mut T) -> Outcome {
         (
             "a secret pairing that also carries a read grant",
             PairRequest {
-                read: read_request(&key, &target.gateway_id()).read,
+                read: reading.read,
                 ..good.clone()
             },
         ),
@@ -616,7 +1132,7 @@ async fn malformed_pairing<T: Target>(target: &mut T) -> Outcome {
     for (what, request) in cases {
         refused(target.pair(&request).await, Code::BadRequest, what)?;
     }
-    // None of those spent the secret.
+    // None of those spent the secret or the nonce.
     ok(
         target.pair(&good).await,
         "the good request after the bad ones",
@@ -1014,24 +1530,19 @@ async fn head<T: Target>(target: &mut T) -> Outcome {
     let (first, second) = (object("manifest one"), object("manifest two"));
     store(target, &phone, &vault, &first).await?;
     store(target, &phone, &vault, &second).await?;
-    let set = |name: Name, prev: Option<Name>, taken_at_ms: i64| SetHead {
-        name,
-        prev,
-        taken_at_ms,
-    };
     let one = ok(
         target
-            .set_head(&phone.token, &vault, &set(first.0, None, 100))
+            .set_head(&phone.token, &vault, &phone.head(first.0, None, 100))
             .await,
         "the first head",
     )?;
     ensure(
-        one.name == first.0 && one.epoch == 1 && one.taken_at_ms == 100,
+        one.name == first.0 && one.epoch == 1 && one.taken_at_ms == 100 && one.writer_epoch == 1,
         || format!("{one:?}"),
     )?;
     let conflict = refused(
         target
-            .set_head(&phone.token, &vault, &set(second.0, None, 200))
+            .set_head(&phone.token, &vault, &phone.head(second.0, None, 200))
             .await,
         Code::HeadConflict,
         "a writer that never saw the head",
@@ -1040,34 +1551,38 @@ async fn head<T: Target>(target: &mut T) -> Outcome {
         conflict
             == Refusal::HeadConflict {
                 epoch: 1,
-                head: Some(one),
+                head: Some(Box::new(one)),
             },
         || format!("HEAD_CONFLICT must carry the head as it stands: {conflict:?}"),
     )?;
+    let request = phone.head(second.0, Some(first.0), 200);
     let two = ok(
-        target
-            .set_head(&phone.token, &vault, &set(second.0, Some(first.0), 200))
-            .await,
+        target.set_head(&phone.token, &vault, &request).await,
         "the second head",
     )?;
     let retried = ok(
-        target
-            .set_head(&phone.token, &vault, &set(second.0, Some(first.0), 200))
-            .await,
+        target.set_head(&phone.token, &vault, &request).await,
         "the second head, retried after a lost answer",
     )?;
     ensure(retried == two, || format!("{retried:?} != {two:?}"))?;
     let unheld = object("never uploaded").0;
     refused(
         target
-            .set_head(&phone.token, &vault, &set(unheld, Some(second.0), 300))
+            .set_head(
+                &phone.token,
+                &vault,
+                &phone.head(unheld, Some(second.0), 300),
+            )
             .await,
         Code::NotFound,
         "a head naming a manifest the gateway does not hold",
     )?;
     let now = ok(target.head(&phone.token, &vault).await, "the head")?;
     ensure(now == two, || format!("{now:?}"))?;
-    let snapshots = ok(target.snapshots(&phone.token, &vault).await, "snapshots")?;
+    let snapshots = ok(
+        snapshots_all(target, &phone.token, &vault).await,
+        "snapshots",
+    )?;
     let registered: Vec<(Name, i64)> = snapshots
         .iter()
         .map(|snapshot| (snapshot.name, snapshot.taken_at_ms))
@@ -1088,36 +1603,38 @@ async fn grace<T: Target>(target: &mut T) -> Outcome {
     for (name, prev) in [(old.0, None), (new.0, Some(old.0))] {
         ok(
             target
-                .set_head(
-                    &phone.token,
-                    &vault,
-                    &SetHead {
-                        name,
-                        prev,
-                        taken_at_ms: 1,
-                    },
-                )
+                .set_head(&phone.token, &vault, &phone.head(name, prev, 1))
                 .await,
             "a head",
         )?;
     }
     let absent = object("absent").0;
     let answer = ok(
-        target.delete(&phone.token, &vault, &[old.0, absent]).await,
+        target
+            .delete(&phone.token, &vault, &phone.delete(&[old.0, absent]))
+            .await,
         "delete",
     )?;
     ensure(
         answer.deleted == vec![old.0, absent] && answer.refused.is_empty(),
         || format!("{answer:?}"),
     )?;
-    let snapshots = ok(target.snapshots(&phone.token, &vault).await, "snapshots")?;
+    let snapshots = ok(
+        snapshots_all(target, &phone.token, &vault).await,
+        "snapshots",
+    )?;
     ensure(
         snapshots
             .iter()
-            .map(|snapshot| snapshot.name)
+            .map(|snapshot| (snapshot.name, snapshot.held_at_ms.is_some()))
             .collect::<Vec<_>>()
-            == vec![new.0],
-        || format!("a tombstoned manifest is still registered: {snapshots:?}"),
+            == vec![(old.0, true), (new.0, false)]
+            || snapshots
+                .iter()
+                .map(|snapshot| (snapshot.name, snapshot.held_at_ms.is_some()))
+                .collect::<Vec<_>>()
+                == vec![(new.0, false), (old.0, true)],
+        || format!("a held manifest stays registered, marked held: {snapshots:?}"),
     )?;
     let missing = ok(
         target.exists(&phone.token, &vault, &[old.0]).await,
@@ -1134,7 +1651,12 @@ async fn grace<T: Target>(target: &mut T) -> Outcome {
     ensure(during == old.1, || {
         "the grace must keep the bytes".to_owned()
     })?;
-    let again = ok(target.delete(&phone.token, &vault, &[old.0]).await, "again")?;
+    let again = ok(
+        target
+            .delete(&phone.token, &vault, &phone.delete(&[old.0]))
+            .await,
+        "again",
+    )?;
     ensure(again.deleted == vec![old.0], || format!("{again:?}"))?;
     let early = target.purge().await?;
     ensure(early == 0, || format!("purged {early} inside the grace"))?;
@@ -1158,20 +1680,14 @@ async fn head_in_use<T: Target>(target: &mut T) -> Outcome {
     store(target, &phone, &vault, &manifest).await?;
     ok(
         target
-            .set_head(
-                &phone.token,
-                &vault,
-                &SetHead {
-                    name: manifest.0,
-                    prev: None,
-                    taken_at_ms: 1,
-                },
-            )
+            .set_head(&phone.token, &vault, &phone.head(manifest.0, None, 1))
             .await,
         "the head",
     )?;
     let answer = ok(
-        target.delete(&phone.token, &vault, &[manifest.0]).await,
+        target
+            .delete(&phone.token, &vault, &phone.delete(&[manifest.0]))
+            .await,
         "delete",
     )?;
     ensure(
@@ -1183,7 +1699,9 @@ async fn head_in_use<T: Target>(target: &mut T) -> Outcome {
     let range = object("a range");
     store(target, &phone, &vault, &range).await?;
     ok(
-        target.delete(&phone.token, &vault, &[range.0]).await,
+        target
+            .delete(&phone.token, &vault, &phone.delete(&[range.0]))
+            .await,
         "delete",
     )?;
     let resealed = object("the same range, sealed again").1;
@@ -1211,14 +1729,19 @@ async fn head_in_use<T: Target>(target: &mut T) -> Outcome {
     })
 }
 
-/// Tombstone `names` and expect every one deleted.
+/// Hold `names` for deletion and expect every one deleted.
 async fn tombstone<T: Target>(
     target: &mut T,
-    phone: &Paired,
+    phone: &Phone,
     vault: &VaultId,
     names: &[Name],
 ) -> Outcome {
-    let answer = ok(target.delete(&phone.token, vault, names).await, "delete")?;
+    let answer = ok(
+        target
+            .delete(&phone.token, vault, &phone.delete(names))
+            .await,
+        "delete",
+    )?;
     ensure(answer.deleted == names && answer.refused.is_empty(), || {
         format!("deleting {names:?} answered {answer:?}")
     })
@@ -1307,15 +1830,7 @@ async fn head_needs_held_manifest<T: Target>(target: &mut T) -> Outcome {
     store(target, &phone, &vault, &dropped).await?;
     let head = ok(
         target
-            .set_head(
-                &phone.token,
-                &vault,
-                &SetHead {
-                    name: first.0,
-                    prev: None,
-                    taken_at_ms: 1,
-                },
-            )
+            .set_head(&phone.token, &vault, &phone.head(first.0, None, 1))
             .await,
         "the head",
     )?;
@@ -1326,15 +1841,7 @@ async fn head_needs_held_manifest<T: Target>(target: &mut T) -> Outcome {
     ] {
         let refusal = refused(
             target
-                .set_head(
-                    &phone.token,
-                    &vault,
-                    &SetHead {
-                        name,
-                        prev: Some(first.0),
-                        taken_at_ms: 2,
-                    },
-                )
+                .set_head(&phone.token, &vault, &phone.head(name, Some(first.0), 2))
                 .await,
             Code::NotFound,
             what,
@@ -1518,23 +2025,29 @@ async fn claim_refusals<T: Target>(target: &mut T) -> Outcome {
     let phone = paired(target, &key).await?;
     let vault = vault_of(&key);
     let gateway = target.gateway_id();
-    let mut forged = claim_request(&key, &gateway, 2, None);
+    let mut forged = ok(
+        claim_request(target, &key, &gateway, 2, None).await,
+        "a claim",
+    )?;
     if let Some(claim) = forged.claim.as_mut() {
-        claim.signature = sign_claim(&identity(9), &gateway, 2, None);
+        claim.signature = sign_claim(&identity(9), &gateway, 2, None, &forged.nonce);
     }
     refused(
         target.pair(&forged).await,
         Code::Unauthorized,
         "a claim signed by another key",
     )?;
-    let elsewhere = claim_request(&key, &GatewayId::from_bytes([0xee; 16]), 2, None);
+    let elsewhere = ok(
+        claim_request(target, &key, &GatewayId::from_bytes([0xee; 16]), 2, None).await,
+        "a claim",
+    )?;
     refused(
         target.pair(&elsewhere).await,
         Code::Unauthorized,
         "a claim signed for another gateway",
     )?;
     let skipped = refused(
-        target.pair(&claim_request(&key, &gateway, 3, None)).await,
+        pair_claim(target, &key, 3, None).await,
         Code::EpochConflict,
         "a claim two epochs ahead",
     )?;
@@ -1547,9 +2060,7 @@ async fn claim_refusals<T: Target>(target: &mut T) -> Outcome {
         || format!("EPOCH_CONFLICT must carry the epoch and the head: {skipped:?}"),
     )?;
     refused(
-        target
-            .pair(&claim_request(&identity(5), &gateway, 2, None))
-            .await,
+        pair_claim(target, &identity(5), 2, None).await,
         Code::Unauthorized,
         "a claim for a vault this gateway never paired",
     )?;
@@ -1565,78 +2076,65 @@ async fn read_grant<T: Target>(target: &mut T) -> Outcome {
     let gateway = target.gateway_id();
     let manifest = object("read manifest");
     store(target, &phone, &vault, &manifest).await?;
-    let set = SetHead {
-        name: manifest.0,
-        prev: None,
-        taken_at_ms: 5,
-    };
     ok(
-        target.set_head(&phone.token, &vault, &set).await,
+        target
+            .set_head(&phone.token, &vault, &phone.head(manifest.0, None, 5))
+            .await,
         "the head",
     )?;
-    let mut forged = read_request(&key, &gateway);
+    let mut forged = ok(read_request(target, &key, &gateway).await, "a read")?;
     forged.read = Some(ReadBody {
-        signature: sign_read(&identity(9), &gateway),
+        signature: sign_read(&identity(9), &gateway, &forged.nonce),
     });
     refused(
         target.pair(&forged).await,
         Code::Unauthorized,
         "a read grant by another key",
     )?;
-    let reader = ok(
-        target.pair(&read_request(&key, &gateway)).await,
-        "a read grant",
-    )?;
+    let reader = ok(pair_read(target, &key).await, "a read grant")?;
     ensure(reader.epoch == 0, || {
         format!("a read grant is epoch 0: {reader:?}")
     })?;
     let seen = ok(target.head(&reader.token, &vault).await, "reading the head")?;
-    ensure(seen.name == manifest.0 && seen.epoch == 1, || {
-        format!("{seen:?}")
-    })?;
+    ensure(
+        seen.name == manifest.0 && seen.epoch == 1 && seen.writer_epoch == 1,
+        || format!("{seen:?}"),
+    )?;
     let bytes = ok(
         target.get(&reader.token, &vault, &manifest.0, None).await,
         "reading the manifest",
     )?;
     ensure(bytes == manifest.1, || "the manifest differs".to_owned())?;
     let blob = object("a write");
-    let moved = Refusal::Moved { epoch: 1 };
-    for (what, answer) in [
-        (
-            "a put",
-            refused(
-                target
-                    .put(
-                        &reader.token,
-                        &vault,
-                        &blob.0,
-                        &Digest::of(&blob.1),
-                        &blob.1,
-                    )
-                    .await,
-                Code::Moved,
-                "a read token's put",
-            )?,
-        ),
-        (
-            "a head",
-            refused(
-                target.set_head(&reader.token, &vault, &set).await,
-                Code::Moved,
-                "a read token's head",
-            )?,
-        ),
-        (
-            "a delete",
-            refused(
-                target.delete(&reader.token, &vault, &[manifest.0]).await,
-                Code::Moved,
-                "a read token's delete",
-            )?,
-        ),
-    ] {
-        ensure(answer == moved, || format!("{what}: {answer:?}"))?;
-    }
+    let reading = Phone::new(reader, &key, gateway);
+    // A read token was never a writer: it is a stranger to every write.
+    refused(
+        target
+            .put(
+                &reading.token,
+                &vault,
+                &blob.0,
+                &Digest::of(&blob.1),
+                &blob.1,
+            )
+            .await,
+        Code::Unauthorized,
+        "a read token's put",
+    )?;
+    refused(
+        target
+            .set_head(&reading.token, &vault, &reading.head(manifest.0, None, 5))
+            .await,
+        Code::Unauthorized,
+        "a read token's head",
+    )?;
+    refused(
+        target
+            .delete(&reading.token, &vault, &reading.delete(&[manifest.0]))
+            .await,
+        Code::Unauthorized,
+        "a read token's delete",
+    )?;
     store(target, &phone, &vault, &object("the writer still writes")).await
 }
 
@@ -1644,33 +2142,23 @@ async fn fence<T: Target>(target: &mut T) -> Outcome {
     target.reset().await?;
     let key = identity(1);
     let vault = vault_of(&key);
-    let gateway = target.gateway_id();
     let first = paired(target, &key).await?;
     let manifest = object("fence manifest");
     store(target, &first, &vault, &manifest).await?;
     ok(
         target
-            .set_head(
-                &first.token,
-                &vault,
-                &SetHead {
-                    name: manifest.0,
-                    prev: None,
-                    taken_at_ms: 10,
-                },
-            )
+            .set_head(&first.token, &vault, &first.head(manifest.0, None, 10))
             .await,
         "phone one's head",
     )?;
     let second = ok(
-        target
-            .pair(&claim_request(&key, &gateway, 2, Some(manifest.0)))
-            .await,
+        pair_claim(target, &key, 2, Some(manifest.0)).await,
         "phone two's claim",
     )?;
     ensure(second.epoch == 2, || format!("{second:?}"))?;
-    let moved = Refusal::Moved { epoch: 2 };
+    let second = Phone::new(second, &key, target.gateway_id());
     let next = object("phone one's next manifest");
+    // The old token is gone: every route says MOVED, carrying the claim.
     let put = refused(
         target
             .put(&first.token, &vault, &next.0, &Digest::of(&next.1), &next.1)
@@ -1683,46 +2171,40 @@ async fn fence<T: Target>(target: &mut T) -> Outcome {
             .set_head(
                 &first.token,
                 &vault,
-                &SetHead {
-                    name: manifest.0,
-                    prev: Some(manifest.0),
-                    taken_at_ms: 11,
-                },
+                &first.head(next.0, Some(manifest.0), 11),
             )
             .await,
         Code::Moved,
         "phone one's head",
     )?;
     let delete = refused(
-        target.delete(&first.token, &vault, &[manifest.0]).await,
+        target
+            .delete(&first.token, &vault, &first.delete(&[manifest.0]))
+            .await,
         Code::Moved,
         "phone one's delete",
     )?;
-    ensure(put == moved && head == moved && delete == moved, || {
-        format!("MOVED must carry the epoch that superseded it: {put:?} {head:?} {delete:?}")
-    })?;
-    let frozen = ok(target.head(&first.token, &vault).await, "phone one's read")?;
-    ensure(frozen.name == manifest.0 && frozen.epoch == 2, || {
-        format!("a superseded phone reads the head at the new epoch: {frozen:?}")
-    })?;
-    let bytes = ok(
-        target.get(&first.token, &vault, &manifest.0, None).await,
-        "phone one's get",
+    let read = refused(
+        target.head(&first.token, &vault).await,
+        Code::Moved,
+        "phone one's read",
     )?;
-    ensure(bytes == manifest.1, || {
-        "phone one read other bytes".to_owned()
-    })?;
+    for answer in [put, head, delete, read] {
+        let Refusal::Moved { epoch, ref claim } = answer else {
+            return Err(format!("not MOVED: {answer:?}"));
+        };
+        ensure(
+            epoch == 2 && claim.epoch == 2 && claim.head_seen == Some(manifest.0),
+            || format!("MOVED must carry the epoch and the claim that superseded it: {answer:?}"),
+        )?;
+    }
     store(target, &second, &vault, &next).await?;
     ok(
         target
             .set_head(
                 &second.token,
                 &vault,
-                &SetHead {
-                    name: next.0,
-                    prev: Some(manifest.0),
-                    taken_at_ms: 12,
-                },
+                &second.head(next.0, Some(manifest.0), 12),
             )
             .await,
         "phone two's head",
@@ -1734,49 +2216,26 @@ async fn stale_claim<T: Target>(target: &mut T) -> Outcome {
     target.reset().await?;
     let key = identity(1);
     let vault = vault_of(&key);
-    let gateway = target.gateway_id();
     let first = paired(target, &key).await?;
     let (old, new) = (object("stale old"), object("stale new"));
     store(target, &first, &vault, &old).await?;
     ok(
         target
-            .set_head(
-                &first.token,
-                &vault,
-                &SetHead {
-                    name: old.0,
-                    prev: None,
-                    taken_at_ms: 1,
-                },
-            )
+            .set_head(&first.token, &vault, &first.head(old.0, None, 1))
             .await,
         "the old head",
     )?;
-    let second = ok(
-        target
-            .pair(&claim_request(&key, &gateway, 2, Some(old.0)))
-            .await,
-        "the claim",
-    )?;
+    let second = ok(pair_claim(target, &key, 2, Some(old.0)).await, "the claim")?;
+    let second = Phone::new(second, &key, target.gateway_id());
     store(target, &second, &vault, &new).await?;
     let current = ok(
         target
-            .set_head(
-                &second.token,
-                &vault,
-                &SetHead {
-                    name: new.0,
-                    prev: Some(old.0),
-                    taken_at_ms: 2,
-                },
-            )
+            .set_head(&second.token, &vault, &second.head(new.0, Some(old.0), 2))
             .await,
         "the new head",
     )?;
     let stale = refused(
-        target
-            .pair(&claim_request(&key, &gateway, 3, Some(old.0)))
-            .await,
+        pair_claim(target, &key, 3, Some(old.0)).await,
         Code::HeadConflict,
         "a claim that checked a head that has moved",
     )?;
@@ -1784,15 +2243,13 @@ async fn stale_claim<T: Target>(target: &mut T) -> Outcome {
         stale
             == Refusal::HeadConflict {
                 epoch: 2,
-                head: Some(current),
+                head: Some(Box::new(current)),
             },
         || format!("HEAD_CONFLICT must carry the head as it stands: {stale:?}"),
     )?;
     store(target, &second, &vault, &object("the writer is unmoved")).await?;
     let third = ok(
-        target
-            .pair(&claim_request(&key, &gateway, 3, Some(new.0)))
-            .await,
+        pair_claim(target, &key, 3, Some(new.0)).await,
         "the claim at the head as it stands",
     )?;
     ensure(third.epoch == 3, || format!("{third:?}"))
@@ -1850,20 +2307,14 @@ async fn blindness_canary<T: Target>(target: &mut T) -> Outcome {
     ensure(answer.refused.is_empty(), || format!("{answer:?}"))?;
     ok(
         target
-            .set_head(
-                &phone.token,
-                &vault,
-                &SetHead {
-                    name: stored[0].0,
-                    prev: None,
-                    taken_at_ms: 1,
-                },
-            )
+            .set_head(&phone.token, &vault, &phone.head(stored[0].0, None, 1))
             .await,
         "the head",
     )?;
     ok(
-        target.delete(&phone.token, &vault, &[stored[2].0]).await,
+        target
+            .delete(&phone.token, &vault, &phone.delete(&[stored[2].0]))
+            .await,
         "delete",
     )?;
 
@@ -1882,6 +2333,1185 @@ async fn blindness_canary<T: Target>(target: &mut T) -> Outcome {
         stored.iter().all(|(_, sealed)| contains(&at_rest, sealed)),
         || "the sealed objects are not in the canary's window at all".to_owned(),
     )
+}
+
+// ─── the signed protocol (#1191) ─────────────────────────────────────────────
+
+/// Store `label` and make it the head after `prev`, as the phone would.
+async fn headed<T: Target>(
+    target: &mut T,
+    phone: &Phone,
+    vault: &VaultId,
+    label: &str,
+    prev: Option<Name>,
+    taken_at_ms: i64,
+) -> Result<((Name, Vec<u8>), HeadView), String> {
+    let manifest = object(label);
+    store(target, phone, vault, &manifest).await?;
+    let head = ok(
+        target
+            .set_head(
+                &phone.token,
+                vault,
+                &phone.head(manifest.0, prev, taken_at_ms),
+            )
+            .await,
+        "a head",
+    )?;
+    Ok((manifest, head))
+}
+
+fn moved_with(refusal: &Refusal, epoch: u64) -> Outcome {
+    match refusal {
+        Refusal::Moved {
+            epoch: found,
+            claim,
+        } if *found == epoch && claim.epoch == epoch => Ok(()),
+        other => Err(format!(
+            "expected MOVED at epoch {epoch} with its claim: {other:?}"
+        )),
+    }
+}
+
+/// E2: a token without the vault key cannot set a head.
+async fn head_needs_signature<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let gateway = target.gateway_id();
+    let manifest = object("signed manifest");
+    store(target, &phone, &vault, &manifest).await?;
+    let good = phone.head(manifest.0, None, 100);
+    let mut by_stranger = good;
+    by_stranger.signature = sign_head(
+        &identity(9),
+        &gateway,
+        &HeadFields {
+            epoch: 1,
+            generation: good.generation,
+            writes: good.writes,
+            taken_at_ms: 100,
+            manifest: manifest.0,
+            prev: None,
+        },
+    );
+    let mut moved_after_signing = good;
+    moved_after_signing.taken_at_ms = 999;
+    let mut blank = good;
+    blank.signature = Signature::from_bytes([0; 64]);
+    for (what, request) in [
+        ("a head signed by another key", by_stranger),
+        ("a head edited after it was signed", moved_after_signing),
+        ("a head with an empty signature", blank),
+    ] {
+        refused(
+            target.set_head(&phone.token, &vault, &request).await,
+            Code::Unauthorized,
+            what,
+        )?;
+    }
+    refused(
+        target.head(&phone.token, &vault).await,
+        Code::NoHead,
+        "the head after the refusals",
+    )?;
+    ok(
+        target.set_head(&phone.token, &vault, &good).await,
+        "the signed head",
+    )?;
+    Ok(())
+}
+
+/// E3: an old signed head replayed is out of order; a head never falls.
+async fn head_never_falls<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let first = object("first");
+    let second = object("second");
+    store(target, &phone, &vault, &first).await?;
+    store(target, &phone, &vault, &second).await?;
+    let old = phone.head(first.0, None, 1);
+    ok(
+        target.set_head(&phone.token, &vault, &old).await,
+        "the first head",
+    )?;
+    let current = ok(
+        target
+            .set_head(
+                &phone.token,
+                &vault,
+                &phone.head(second.0, Some(first.0), 2),
+            )
+            .await,
+        "the second head",
+    )?;
+    let replay = refused(
+        target.set_head(&phone.token, &vault, &old).await,
+        Code::OutOfOrder,
+        "the old signed head replayed",
+    )?;
+    ensure(
+        replay
+            == Refusal::OutOfOrder {
+                epoch: 1,
+                generation: current.generation,
+                writes: current.writes,
+            },
+        || format!("OUT_OF_ORDER must carry the standing counters: {replay:?}"),
+    )?;
+    // A newer generation whose writes fall is refused too (E3 rule 4).
+    let falling = phone.head_gw(second.0, Some(second.0), 3, current.generation + 1, 0);
+    refused(
+        target.set_head(&phone.token, &vault, &falling).await,
+        Code::OutOfOrder,
+        "a head whose writes fall",
+    )?;
+    let now = ok(target.head(&phone.token, &vault).await, "the head")?;
+    ensure(now == current, || {
+        format!("a refused head moved it: {now:?}")
+    })
+}
+
+/// E3: the generation may jump 256 and no more.
+async fn generation_bound<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let (one, _) = headed(target, &phone, &vault, "bound one", None, 1).await?;
+    let two = object("bound two");
+    store(target, &phone, &vault, &two).await?;
+    let current = phone.standing();
+    refused(
+        target
+            .set_head(
+                &phone.token,
+                &vault,
+                &phone.head_at(two.0, Some(one.0), 2, current + MAX_GENERATION_JUMP + 1),
+            )
+            .await,
+        Code::OutOfOrder,
+        "a generation 257 ahead",
+    )?;
+    ok(
+        target
+            .set_head(
+                &phone.token,
+                &vault,
+                &phone.head_at(two.0, Some(one.0), 2, current + MAX_GENERATION_JUMP),
+            )
+            .await,
+        "a generation 256 ahead",
+    )?;
+    Ok(())
+}
+
+/// E3: a claim resets the counters; the first head of the new epoch is at
+/// generation 1 to 256.
+async fn claim_resets_generation<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let first = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let gateway = target.gateway_id();
+    let manifest = object("before the claim");
+    store(target, &first, &vault, &manifest).await?;
+    ok(
+        target
+            .set_head(
+                &first.token,
+                &vault,
+                &first.head_at(manifest.0, None, 1, 40),
+            )
+            .await,
+        "a head at generation 40",
+    )?;
+    let second = ok(
+        pair_claim(target, &key, 2, Some(manifest.0)).await,
+        "the claim",
+    )?;
+    let second = Phone::new(second, &key, gateway);
+    let next = object("after the claim");
+    store(target, &second, &vault, &next).await?;
+    for generation in [0, MAX_GENERATION_JUMP + 1] {
+        refused(
+            target
+                .set_head(
+                    &second.token,
+                    &vault,
+                    &second.head_at(next.0, Some(manifest.0), 2, generation),
+                )
+                .await,
+            Code::OutOfOrder,
+            "a generation outside 1..=256 after a claim",
+        )?;
+    }
+    ok(
+        target
+            .set_head(
+                &second.token,
+                &vault,
+                &second.head_at(next.0, Some(manifest.0), 2, 1),
+            )
+            .await,
+        "generation 1 after a claim",
+    )?;
+    Ok(())
+}
+
+/// E5: a takeover leaves no live older token.
+async fn claim_revokes_every_older_token<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let gateway = target.gateway_id();
+    let (manifest, _) = headed(target, &phone, &vault, "before takeover", None, 1).await?;
+    let reader = ok(pair_read(target, &key).await, "a read grant")?;
+    let second = ok(
+        pair_claim(target, &key, 2, Some(manifest.0)).await,
+        "the claim",
+    )?;
+    let second = Phone::new(second, &key, gateway);
+    let epochs = target.token_epochs(&vault).await?;
+    ensure(epochs == vec![2], || {
+        format!("tokens below the new epoch are still held: {epochs:?}")
+    })?;
+    ensure(target.revoked_count(&vault).await? == 2, || {
+        "each revoked token leaves a tombstone".to_owned()
+    })?;
+    let blob = object("late");
+    let old_phone = Phone::new(phone.paired, &key, gateway);
+    for (who, token) in [
+        ("the writer", old_phone.token),
+        ("the reader", reader.token),
+    ] {
+        let mut answers = vec![
+            refused(target.head(&token, &vault).await, Code::Moved, "head")?,
+            refused(
+                target.snapshots(&token, &vault, None, 10).await,
+                Code::Moved,
+                "snapshots",
+            )?,
+            refused(
+                target.exists(&token, &vault, &[manifest.0]).await,
+                Code::Moved,
+                "exists",
+            )?,
+            refused(
+                target.objects(&token, &vault, None, 10).await,
+                Code::Moved,
+                "objects",
+            )?,
+            refused(
+                target.held(&token, &vault, None, 10).await,
+                Code::Moved,
+                "held",
+            )?,
+            refused(
+                target.get(&token, &vault, &manifest.0, None).await,
+                Code::Moved,
+                "get",
+            )?,
+            refused(
+                target.stat(&token, &vault, &manifest.0).await,
+                Code::Moved,
+                "stat",
+            )?,
+            refused(
+                target.fetch(&token, &vault, &[manifest.0]).await,
+                Code::Moved,
+                "fetch",
+            )?,
+            refused(
+                target
+                    .put(&token, &vault, &blob.0, &Digest::of(&blob.1), &blob.1)
+                    .await,
+                Code::Moved,
+                "put",
+            )?,
+            refused(target.revoke(&token, &vault).await, Code::Moved, "revoke")?,
+        ];
+        answers.push(refused(
+            target
+                .bundle(&token, &vault, &[Frame::of(blob.0, blob.1.clone())])
+                .await,
+            Code::Moved,
+            "bundle",
+        )?);
+        answers.push(refused(
+            target
+                .set_head(&token, &vault, &old_phone.head(manifest.0, None, 3))
+                .await,
+            Code::Moved,
+            "set head",
+        )?);
+        answers.push(refused(
+            target
+                .delete(&token, &vault, &old_phone.delete(&[manifest.0]))
+                .await,
+            Code::Moved,
+            "delete",
+        )?);
+        answers.push(refused(
+            target.undo(&token, &vault, &old_phone.undo(None)).await,
+            Code::Moved,
+            "undo",
+        )?);
+        for answer in &answers {
+            moved_with(answer, 2).map_err(|detail| format!("{who}: {detail}"))?;
+        }
+    }
+    store(target, &second, &vault, &blob).await
+}
+
+/// E4: a `MOVED` carries a claim bound to this gateway, which the old phone
+/// verifies against its own vault key.
+async fn moved_claim_is_bound<T: Target>(target: &mut T) -> Outcome {
+    use crate::rules::signing::verify_claim;
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let gateway = target.gateway_id();
+    let (manifest, _) = headed(target, &phone, &vault, "claimed over", None, 1).await?;
+    ok(
+        pair_claim(target, &key, 2, Some(manifest.0)).await,
+        "the claim",
+    )?;
+    let Refusal::Moved { claim, .. } = refused(
+        target.head(&phone.token, &vault).await,
+        Code::Moved,
+        "the old phone's read",
+    )?
+    else {
+        return Err("not MOVED".to_owned());
+    };
+    ensure(
+        verify_claim(
+            &gateway,
+            &vault,
+            claim.epoch,
+            claim.head_seen.as_ref(),
+            &claim.nonce,
+            &claim.signature,
+        ),
+        || "the carried claim does not verify at this gateway".to_owned(),
+    )?;
+    ensure(
+        !verify_claim(
+            &GatewayId::from_bytes([0xee; 16]),
+            &vault,
+            claim.epoch,
+            claim.head_seen.as_ref(),
+            &claim.nonce,
+            &claim.signature,
+        ),
+        || "the claim verifies at another gateway".to_owned(),
+    )
+}
+
+/// E5: a revoked token hears `MOVED` while its tombstone is kept, at most 64
+/// of them, and `UNAUTHORIZED` after.
+async fn revoked_tombstones<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let (manifest, _) = headed(target, &phone, &vault, "tombstones", None, 1).await?;
+    let mut tokens = vec![phone.token];
+    for _ in 0..(MAX_REVOKED_PER_VAULT + 6) {
+        tokens.push(ok(pair_read(target, &key).await, "a read grant")?.token);
+    }
+    ok(
+        pair_claim(target, &key, 2, Some(manifest.0)).await,
+        "the claim",
+    )?;
+    ensure(
+        target.revoked_count(&vault).await? == MAX_REVOKED_PER_VAULT,
+        || "a vault keeps at most 64 tombstones".to_owned(),
+    )?;
+    let mut heard_moved = 0;
+    for token in &tokens {
+        match target.head(token, &vault).await {
+            Err(Failure::Refused(Refusal::Moved { .. })) => heard_moved += 1,
+            Err(Failure::Refused(Refusal::Unauthorized)) => {}
+            other => return Err(format!("a revoked token heard {other:?}")),
+        }
+    }
+    ensure(heard_moved == MAX_REVOKED_PER_VAULT, || {
+        format!("{heard_moved} tokens heard MOVED")
+    })?;
+    target.advance(REVOKED_TOKEN_KEEP_MS).await;
+    target.purge().await?;
+    ensure(target.revoked_count(&vault).await? == 0, || {
+        "the sweep keeps tombstones past their year".to_owned()
+    })?;
+    for token in &tokens {
+        refused(
+            target.head(token, &vault).await,
+            Code::Unauthorized,
+            "a revoked token after its tombstone is pruned",
+        )?;
+    }
+    Ok(())
+}
+
+/// E5 step 3: a takeover lifts every held delete.
+async fn claim_cancels_holds<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let gateway = target.gateway_id();
+    let (old, _) = headed(target, &phone, &vault, "old manifest", None, 1).await?;
+    let (new, _) = headed(target, &phone, &vault, "new manifest", Some(old.0), 2).await?;
+    let part = object("a part");
+    store(target, &phone, &vault, &part).await?;
+    tombstone(target, &phone, &vault, &[old.0, part.0]).await?;
+    let held = ok(target.held(&phone.token, &vault, None, 10).await, "held")?;
+    ensure(held.len() == 2, || format!("{held:?}"))?;
+    let second = ok(pair_claim(target, &key, 2, Some(new.0)).await, "the claim")?;
+    let held = ok(target.held(&second.token, &vault, None, 10).await, "held")?;
+    ensure(held.is_empty(), || {
+        format!("a takeover must lift every hold: {held:?}")
+    })?;
+    let missing = ok(
+        target.exists(&second.token, &vault, &[old.0, part.0]).await,
+        "exists",
+    )?;
+    ensure(missing.is_empty(), || {
+        format!("the names are live again: {missing:?}")
+    })?;
+    let snapshots = ok(
+        snapshots_all(target, &second.token, &vault).await,
+        "snapshots",
+    )?;
+    ensure(
+        snapshots
+            .iter()
+            .all(|snapshot| snapshot.held_at_ms.is_none()),
+        || format!("a snapshot is still held: {snapshots:?}"),
+    )?;
+    let _ = gateway;
+    target.advance(GRACE_MS + 1).await;
+    ensure(target.purge().await? == 0, || {
+        "a lifted hold purged".to_owned()
+    })
+}
+
+/// E6: a delete needs the vault key.
+async fn delete_needs_signature<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let gateway = target.gateway_id();
+    let part = object("a part");
+    let other = object("another part");
+    store(target, &phone, &vault, &part).await?;
+    let generation = phone.standing() + 1;
+    let by_stranger = DeleteRequest {
+        names: vec![part.0],
+        generation,
+        signature: sign_delete(&identity(9), &gateway, 1, generation, &[part.0]),
+    };
+    let for_other_names = DeleteRequest {
+        names: vec![part.0],
+        generation,
+        signature: sign_delete(&key, &gateway, 1, generation, &[other.0]),
+    };
+    let unsigned = DeleteRequest {
+        names: vec![part.0],
+        generation,
+        signature: Signature::from_bytes([0; 64]),
+    };
+    for (what, request) in [
+        ("a delete signed by another key", by_stranger),
+        ("a signature over other names", for_other_names),
+        ("an empty signature", unsigned),
+    ] {
+        refused(
+            target.delete(&phone.token, &vault, &request).await,
+            Code::Unauthorized,
+            what,
+        )?;
+    }
+    let held = ok(target.held(&phone.token, &vault, None, 10).await, "held")?;
+    ensure(held.is_empty(), || {
+        format!("a refused delete held: {held:?}")
+    })
+}
+
+/// E6: a signed delete is held for seven days and stays listed.
+async fn delete_is_held<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let (old, _) = headed(target, &phone, &vault, "an old manifest", None, 1).await?;
+    let (new, _) = headed(target, &phone, &vault, "the new manifest", Some(old.0), 2).await?;
+    let part = object("a part");
+    store(target, &phone, &vault, &part).await?;
+    tombstone(target, &phone, &vault, &[old.0, part.0]).await?;
+    for (name, bytes) in [&old, &part] {
+        let served = ok(target.get(&phone.token, &vault, name, None).await, "get")?;
+        ensure(&served == bytes, || {
+            "a held object is not served".to_owned()
+        })?;
+    }
+    let fetched = ok(
+        target.fetch(&phone.token, &vault, &[old.0, part.0]).await,
+        "fetch",
+    )?;
+    ensure(fetched.len() == 2, || {
+        "fetch leaves a held object out".to_owned()
+    })?;
+    let missing = ok(
+        target.exists(&phone.token, &vault, &[old.0, part.0]).await,
+        "exists",
+    )?;
+    ensure(missing.len() == 2, || {
+        "a held name reads as live".to_owned()
+    })?;
+    let held = ok(target.held(&phone.token, &vault, None, 10).await, "held")?;
+    ensure(held.len() == 2, || format!("{held:?}"))?;
+    for entry in &held {
+        ensure(entry.purge_after_ms == entry.held_at_ms + GRACE_MS, || {
+            format!("a hold is seven days: {entry:?}")
+        })?;
+        let kind = if entry.name == old.0 {
+            HeldKind::Snapshot
+        } else {
+            HeldKind::Object
+        };
+        ensure(entry.kind == kind, || format!("{entry:?}"))?;
+    }
+    let snapshots = ok(
+        snapshots_all(target, &phone.token, &vault).await,
+        "snapshots",
+    )?;
+    ensure(
+        snapshots.iter().map(|s| s.name).collect::<Vec<_>>() == vec![old.0, new.0]
+            && snapshots[0].held_at_ms.is_some()
+            && snapshots[0].purge_after_ms.is_some()
+            && snapshots[1].held_at_ms.is_none(),
+        || format!("a held snapshot stays listed, with its dates: {snapshots:?}"),
+    )?;
+    let listed = ok(target.objects(&phone.token, &vault, None, 10).await, "list")?;
+    ensure(
+        listed
+            .iter()
+            .all(|entry| entry.name != old.0 && entry.name != part.0),
+        || "a held object is listed live".to_owned(),
+    )?;
+    // A tick is a minute: a wire gateway's clock runs between two calls.
+    target.advance(GRACE_MS - 60_000).await;
+    ensure(target.purge().await? == 0, || {
+        "purged a minute before the deadline".to_owned()
+    })?;
+    target.advance(120_000).await;
+    let purged = target.purge().await?;
+    ensure(purged == 2, || {
+        format!("purged {purged} after the deadline")
+    })?;
+    let snapshots = ok(
+        snapshots_all(target, &phone.token, &vault).await,
+        "snapshots",
+    )?;
+    ensure(snapshots.len() == 1, || {
+        format!("a purged snapshot is still listed: {snapshots:?}")
+    })
+}
+
+/// E6: a recorded delete, replayed, is out of order.
+async fn delete_replay<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let part = object("a part");
+    store(target, &phone, &vault, &part).await?;
+    let recorded = phone.delete(&[part.0]);
+    ok(
+        target.delete(&phone.token, &vault, &recorded).await,
+        "the delete",
+    )?;
+    store(target, &phone, &vault, &part).await?;
+    refused(
+        target.delete(&phone.token, &vault, &recorded).await,
+        Code::OutOfOrder,
+        "the recorded delete replayed",
+    )?;
+    let missing = ok(
+        target.exists(&phone.token, &vault, &[part.0]).await,
+        "exists",
+    )?;
+    ensure(missing.is_empty(), || {
+        "a replay held a live name".to_owned()
+    })
+}
+
+/// E2, E6: the head cannot be deleted; a held snapshot keeps its manifest.
+async fn head_and_snapshot_keep_manifest<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let (old, _) = headed(target, &phone, &vault, "older", None, 1).await?;
+    let (new, _) = headed(target, &phone, &vault, "newer", Some(old.0), 2).await?;
+    let answer = ok(
+        target
+            .delete(&phone.token, &vault, &phone.delete(&[new.0, old.0]))
+            .await,
+        "delete",
+    )?;
+    ensure(
+        answer.deleted == vec![old.0]
+            && answer.refused.len() == 1
+            && answer.refused[0].name == new.0
+            && answer.refused[0].code == Code::HeadInUse,
+        || format!("{answer:?}"),
+    )?;
+    let served = ok(target.get(&phone.token, &vault, &old.0, None).await, "get")?;
+    ensure(served == old.1, || {
+        "a held snapshot's manifest is not served".to_owned()
+    })?;
+    let head = ok(target.head(&phone.token, &vault).await, "head")?;
+    ensure(head.name == new.0, || "the head moved".to_owned())
+}
+
+/// E6: a signed undo lifts holds; an undo of everything has null names.
+async fn undo_lifts_holds<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let (a, b) = (object("part a"), object("part b"));
+    store(target, &phone, &vault, &a).await?;
+    store(target, &phone, &vault, &b).await?;
+    tombstone(target, &phone, &vault, &[a.0, b.0]).await?;
+    let mut forged = phone.undo(Some(&[a.0]));
+    forged.signature = Signature::from_bytes([0; 64]);
+    refused(
+        target.undo(&phone.token, &vault, &forged).await,
+        Code::Unauthorized,
+        "an unsigned undo",
+    )?;
+    let one = ok(
+        target
+            .undo(&phone.token, &vault, &phone.undo(Some(&[a.0])))
+            .await,
+        "an undo of one name",
+    )?;
+    ensure(one.undone == 1, || format!("{one:?}"))?;
+    let missing = ok(
+        target.exists(&phone.token, &vault, &[a.0, b.0]).await,
+        "exists",
+    )?;
+    ensure(missing == vec![b.0], || format!("{missing:?}"))?;
+    let recorded = phone.undo(None);
+    let rest = ok(
+        target.undo(&phone.token, &vault, &recorded).await,
+        "an undo of everything",
+    )?;
+    ensure(rest.undone == 1, || format!("{rest:?}"))?;
+    refused(
+        target.undo(&phone.token, &vault, &recorded).await,
+        Code::OutOfOrder,
+        "an undo replayed",
+    )?;
+    let held = ok(target.held(&phone.token, &vault, None, 10).await, "held")?;
+    ensure(held.is_empty(), || format!("{held:?}"))
+}
+
+/// E7: pairing by secret needs the vault key.
+async fn pair_needs_signature<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let member = identity(1);
+    let photographer = identity(9);
+    let secret = target.mint_secret().await?;
+    let gateway = target.gateway_id();
+    // The attacker has the QR's secret and the member's vault id.
+    let nonce = fresh_nonce(target).await.map_err(|f| format!("{f:?}"))?;
+    let squat = PairRequest {
+        vault_id: vault_of(&member),
+        label: "photographer".to_owned(),
+        kind: PairKind::Secret,
+        nonce,
+        secret: Some(SecretBody {
+            secret,
+            signature: sign_pair(&photographer, &gateway, &secret, &nonce),
+        }),
+        claim: None,
+        read: None,
+    };
+    refused(
+        target.pair(&squat).await,
+        Code::Unauthorized,
+        "a pairing signed by another key",
+    )?;
+    // The secret is not spent and the vault was not created.
+    ok(
+        pair_secret(target, &member, secret).await,
+        "the member's own pairing with the same secret",
+    )?;
+    Ok(())
+}
+
+/// E7: the pairing signature binds the secret, the gateway and the nonce.
+async fn pair_signature_binds<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let gateway = target.gateway_id();
+    let (one, two) = (target.mint_secret().await?, target.mint_secret().await?);
+    let nonce = fresh_nonce(target).await.map_err(|f| format!("{f:?}"))?;
+    let request = |secret: Secret, signed_secret: Secret, signed_gateway: &GatewayId| PairRequest {
+        vault_id: vault_of(&key),
+        label: "phone".to_owned(),
+        kind: PairKind::Secret,
+        nonce,
+        secret: Some(SecretBody {
+            secret,
+            signature: sign_pair(&key, signed_gateway, &signed_secret, &nonce),
+        }),
+        claim: None,
+        read: None,
+    };
+    refused(
+        target.pair(&request(two, one, &gateway)).await,
+        Code::Unauthorized,
+        "a signature made for another secret",
+    )?;
+    // That refusal spent the nonce; a fresh one for each remaining try.
+    let nonce2 = fresh_nonce(target).await.map_err(|f| format!("{f:?}"))?;
+    let elsewhere = PairRequest {
+        nonce: nonce2,
+        secret: Some(SecretBody {
+            secret: two,
+            signature: sign_pair(&key, &GatewayId::from_bytes([0xee; 16]), &two, &nonce2),
+        }),
+        ..request(two, two, &gateway)
+    };
+    refused(
+        target.pair(&elsewhere).await,
+        Code::Unauthorized,
+        "a signature made for another gateway",
+    )?;
+    let good = ok(pair_secret(target, &key, one).await, "the good pairing")?;
+    ensure(good.epoch == 1, || format!("{good:?}"))?;
+    // A spent nonce, re-signed over a fresh secret, is still spent.
+    let spent = PairRequest {
+        vault_id: vault_of(&identity(2)),
+        nonce: nonce2,
+        secret: Some(SecretBody {
+            secret: two,
+            signature: sign_pair(&identity(2), &gateway, &two, &nonce2),
+        }),
+        ..request(two, two, &gateway)
+    };
+    refused(
+        target.pair(&spent).await,
+        Code::Unauthorized,
+        "a spent nonce",
+    )?;
+    ok(
+        pair_secret(target, &identity(2), two).await,
+        "the secret none of the refusals spent",
+    )?;
+    Ok(())
+}
+
+/// E5: a nonce is good for one pair request.
+async fn nonce_single_use<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    paired(target, &key).await?;
+    let gateway = target.gateway_id();
+    let grant = ok(read_request(target, &key, &gateway).await, "a read")?;
+    ok(target.pair(&grant).await, "the read grant")?;
+    refused(
+        target.pair(&grant).await,
+        Code::Unauthorized,
+        "the recorded read grant, replayed",
+    )?;
+    Ok(())
+}
+
+/// E5: a claim cannot be replayed after a revoke.
+async fn claim_not_replayable<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let gateway = target.gateway_id();
+    let (manifest, _) = headed(target, &phone, &vault, "claimed", None, 1).await?;
+    let claim = ok(
+        claim_request(target, &key, &gateway, 2, Some(manifest.0)).await,
+        "a claim",
+    )?;
+    let second = ok(target.pair(&claim).await, "the claim")?;
+    ok(target.revoke(&second.token, &vault).await, "the revoke")?;
+    refused(
+        target.pair(&claim).await,
+        Code::Unauthorized,
+        "the claim bytes replayed",
+    )?;
+    ensure(target.token_epochs(&vault).await?.is_empty(), || {
+        "a replayed claim minted a token".to_owned()
+    })
+}
+
+/// E5: a nonce lives five minutes and the sweep prunes the rest.
+async fn nonce_expires<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    paired(target, &key).await?;
+    let gateway = target.gateway_id();
+    let grant = ok(read_request(target, &key, &gateway).await, "a read")?;
+    target.advance(NONCE_TTL_MS).await;
+    refused(
+        target.pair(&grant).await,
+        Code::Unauthorized,
+        "a nonce past its time",
+    )?;
+    ok(target.nonce().await, "another nonce")?;
+    target.advance(NONCE_TTL_MS).await;
+    target.purge().await?;
+    let rows = target.nonce_rows().await?;
+    ensure(rows.is_empty(), || {
+        format!("{} expired nonces survive the sweep", rows.len())
+    })
+}
+
+/// E5: at 4096 live nonces the next issue is `BUSY`.
+async fn nonces_bounded<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    for _ in 0..MAX_LIVE_NONCES {
+        ok(target.nonce().await, "a nonce under the cap")?;
+    }
+    let busy = refused(target.nonce().await, Code::Busy, "a nonce at the cap")?;
+    ensure(
+        busy == Refusal::Busy {
+            retry_after_ms: 60_000,
+        },
+        || format!("{busy:?}"),
+    )?;
+    target.advance(NONCE_TTL_MS).await;
+    ok(target.nonce().await, "a nonce after the old ones expire")?;
+    Ok(())
+}
+
+/// E5: the nonce route names no vault.
+async fn canary_nonce<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    ok(target.nonce().await, "a nonce")?;
+    ok(target.nonce().await, "a nonce")?;
+    let rows = target.nonce_rows().await?;
+    ensure(!rows.is_empty(), || "no nonce rows to look at".to_owned())?;
+    for row in &rows {
+        ensure(row.len() == 16 + 8, || {
+            "a nonce row holds more than a nonce and a time".to_owned()
+        })?;
+        ensure(
+            !contains(row, vault.as_bytes()) && !contains(row, phone.token.as_bytes()),
+            || "a nonce row names a vault".to_owned(),
+        )?;
+    }
+    Ok(())
+}
+
+/// E14: a head dated more than five minutes ahead of the gateway is refused.
+async fn taken_at_bounded<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    // A clock that runs between two calls moves the edge by a few ms; the
+    // margins here are seconds.
+    let now = ok(target.info().await, "info")?.time_ms;
+    let (first, second) = (object("on time"), object("from the future"));
+    store(target, &phone, &vault, &first).await?;
+    store(target, &phone, &vault, &second).await?;
+    ok(
+        target
+            .set_head(
+                &phone.token,
+                &vault,
+                &phone.head(first.0, None, now + MAX_CLOCK_AHEAD_MS - 5_000),
+            )
+            .await,
+        "a head just inside the bound",
+    )?;
+    let refusal = refused(
+        target
+            .set_head(
+                &phone.token,
+                &vault,
+                &phone.head(second.0, Some(first.0), now + MAX_CLOCK_AHEAD_MS + 5_000),
+            )
+            .await,
+        Code::ClockAhead,
+        "a head just past the bound",
+    )?;
+    match refusal {
+        Refusal::ClockAhead { skew_ms } if skew_ms > MAX_CLOCK_AHEAD_MS => Ok(()),
+        other => Err(format!("CLOCK_AHEAD must carry the skew: {other:?}")),
+    }
+}
+
+/// E14: at most 64 live pairing secrets; one more drops the oldest.
+async fn secrets_bounded<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let mut secrets = Vec::new();
+    for _ in 0..=MAX_LIVE_SECRETS {
+        secrets.push(target.mint_secret().await?);
+        target.advance(1).await;
+    }
+    refused(
+        pair_secret(target, &identity(1), secrets[0]).await,
+        Code::Unauthorized,
+        "the oldest secret, dropped by the 65th",
+    )?;
+    ok(
+        pair_secret(target, &identity(2), secrets[1]).await,
+        "the second oldest, still live",
+    )?;
+    // Spent and expired secrets are pruned a week later.
+    target.advance(SECRET_TTL_MS + 7 * 86_400_000).await;
+    target.purge().await?;
+    ensure(target.secret_count().await? == 0, || {
+        "old secrets survive the sweep".to_owned()
+    })
+}
+
+/// E6: a frozen vault refuses writes and answers reads.
+async fn frozen_vault<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let gateway = target.gateway_id();
+    let (old, _) = headed(target, &phone, &vault, "frozen old", None, 1).await?;
+    let (new, _) = headed(target, &phone, &vault, "frozen new", Some(old.0), 2).await?;
+    let part = object("frozen part");
+    store(target, &phone, &vault, &part).await?;
+    tombstone(target, &phone, &vault, &[part.0]).await?;
+    let reader = ok(pair_read(target, &key).await, "a read grant")?;
+    let frozen_at = ok(target.info().await, "info")?.time_ms;
+    target.freeze(&vault).await?;
+    let mut answers = Vec::new();
+    let blob = object("write while frozen");
+    answers.push(refused(
+        target
+            .put(&phone.token, &vault, &blob.0, &Digest::of(&blob.1), &blob.1)
+            .await,
+        Code::Frozen,
+        "put",
+    )?);
+    answers.push(refused(
+        target
+            .bundle(&phone.token, &vault, &[Frame::of(blob.0, blob.1.clone())])
+            .await,
+        Code::Frozen,
+        "bundle",
+    )?);
+    answers.push(refused(
+        target
+            .set_head(&phone.token, &vault, &phone.head(old.0, Some(new.0), 3))
+            .await,
+        Code::Frozen,
+        "set head",
+    )?);
+    answers.push(refused(
+        target
+            .delete(&phone.token, &vault, &phone.delete(&[old.0]))
+            .await,
+        Code::Frozen,
+        "delete",
+    )?);
+    answers.push(refused(
+        target.undo(&phone.token, &vault, &phone.undo(None)).await,
+        Code::Frozen,
+        "undo",
+    )?);
+    answers.push(refused(
+        pair_claim(target, &key, 2, Some(new.0)).await,
+        Code::Frozen,
+        "claim",
+    )?);
+    let again = target.mint_secret().await?;
+    answers.push(refused(
+        pair_secret(target, &key, again).await,
+        Code::Frozen,
+        "pairing by secret",
+    )?);
+    for answer in answers {
+        match answer {
+            Refusal::Frozen { since_ms } if since_ms >= frozen_at => {}
+            other => return Err(format!("FROZEN must carry since_ms: {other:?}")),
+        }
+    }
+    // Reads, nonces and read grants answer.
+    ok(target.head(&phone.token, &vault).await, "head")?;
+    ok(
+        target.snapshots(&phone.token, &vault, None, 10).await,
+        "snapshots",
+    )?;
+    ok(target.held(&phone.token, &vault, None, 10).await, "held")?;
+    ok(
+        target.exists(&phone.token, &vault, &[part.0]).await,
+        "exists",
+    )?;
+    ok(
+        target.objects(&phone.token, &vault, None, 10).await,
+        "objects",
+    )?;
+    ok(target.get(&phone.token, &vault, &part.0, None).await, "get")?;
+    ok(target.fetch(&phone.token, &vault, &[part.0]).await, "fetch")?;
+    ok(target.nonce().await, "nonce")?;
+    ok(pair_read(target, &key).await, "a read grant")?;
+    let _ = gateway;
+    // The purge skips the vault, however late.
+    target.advance(GRACE_MS + 1).await;
+    ensure(target.purge().await? == 0, || {
+        "a frozen vault was purged".to_owned()
+    })?;
+    ok(
+        target.revoke(&reader.token, &vault).await,
+        "revoke, excepted",
+    )?;
+    Ok(())
+}
+
+/// E6: unfreezing gives back the time the vault was frozen.
+async fn unfreeze_gives_time_back<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let part = object("frozen part");
+    store(target, &phone, &vault, &part).await?;
+    tombstone(target, &phone, &vault, &[part.0]).await?;
+    let before = ok(target.held(&phone.token, &vault, None, 10).await, "held")?;
+    target.freeze(&vault).await?;
+    target.advance(3 * 86_400_000).await;
+    let lasted = target.unfreeze(&vault).await?;
+    ensure(lasted >= 3 * 86_400_000, || format!("lasted {lasted}"))?;
+    let after = ok(target.held(&phone.token, &vault, None, 10).await, "held")?;
+    ensure(
+        after[0].purge_after_ms - before[0].purge_after_ms == lasted,
+        || format!("every hold rises by exactly the frozen time: {before:?} {after:?}"),
+    )?;
+    store(target, &phone, &vault, &object("writes again")).await
+}
+
+/// E6: the operator's undo lifts every hold, and the head stays.
+async fn operator_undo_all<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let (old, _) = headed(target, &phone, &vault, "undo old", None, 1).await?;
+    let (new, head) = headed(target, &phone, &vault, "undo new", Some(old.0), 2).await?;
+    let part = object("undo part");
+    store(target, &phone, &vault, &part).await?;
+    tombstone(target, &phone, &vault, &[old.0, part.0]).await?;
+    target.freeze(&vault).await?;
+    ensure(target.operator_undo(&vault).await? == 2, || {
+        "two holds".to_owned()
+    })?;
+    target.unfreeze(&vault).await?;
+    let missing = ok(
+        target
+            .exists(&phone.token, &vault, &[old.0, part.0, new.0])
+            .await,
+        "exists",
+    )?;
+    ensure(missing.is_empty(), || format!("{missing:?}"))?;
+    let now = ok(target.head(&phone.token, &vault).await, "head")?;
+    ensure(now == head, || {
+        "the operator's undo moved the head".to_owned()
+    })
+}
+
+/// E6: a gap longer than fourteen days between purge sweeps re-bases holds.
+async fn long_gap_rebases<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let part = object("held through a gap");
+    store(target, &phone, &vault, &part).await?;
+    tombstone(target, &phone, &vault, &[part.0]).await?;
+    target.advance(365 * 86_400_000).await;
+    let before = ok(target.info().await, "info")?.time_ms;
+    ensure(target.purge().await? == 0, || {
+        "a hold ended early across a long gap".to_owned()
+    })?;
+    let after = ok(target.info().await, "info")?.time_ms;
+    let held = ok(target.held(&phone.token, &vault, None, 10).await, "held")?;
+    ensure(
+        held.len() == 1
+            && held[0].purge_after_ms >= before + GRACE_MS
+            && held[0].purge_after_ms <= after + GRACE_MS,
+        || format!("re-based to a full week from the sweep: {held:?}"),
+    )?;
+    target.advance(PURGE_GAP_REBASE_MS.min(GRACE_MS + 1)).await;
+    ensure(target.purge().await? == 1, || {
+        "the hold must end a week after the re-base".to_owned()
+    })
+}
+
+/// E8: a directory object is sealed like any part; the gateway adds nothing.
+async fn canary_directory<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let (one, two) = (identity(1), identity(2));
+    let (a, b) = (paired(target, &one).await?, paired(target, &two).await?);
+    let (va, vb) = (vault_of(&one), vault_of(&two));
+    let address = b"10.0.0.7:8443";
+    let directory = |tag: u8| {
+        let key = blake3::derive_key("centraid gateway canary directory", &[tag]);
+        let plaintext = [
+            &b"{\"v\":1,\"gateways\":[{\"addrs\":[\""[..],
+            address,
+            b"\"]}]}",
+        ]
+        .concat();
+        (key, plaintext)
+    };
+    let mut names = Vec::new();
+    for (phone, vault, tag) in [(&a, &va, 1_u8), (&b, &vb, 2_u8)] {
+        let (key, plaintext) = directory(tag);
+        let name = Name::from_bytes(blake3::derive_key(
+            "centraid gateway canary directory name",
+            &[tag],
+        ));
+        store(
+            target,
+            phone,
+            vault,
+            &(name, stand_in_seal(&key, &plaintext)),
+        )
+        .await?;
+        names.push(name);
+    }
+    ensure(names[0] != names[1], || {
+        "two vaults share a directory name".to_owned()
+    })?;
+    let at_rest = target.at_rest().await?;
+    ensure(!contains(&at_rest, address), || {
+        "a gateway address is at rest in the clear".to_owned()
+    })?;
+    ensure(!contains(&at_rest, hex::encode(address).as_bytes()), || {
+        "a gateway address is at rest as hex".to_owned()
+    })
 }
 
 /// A stand-in for a sealed part: a keyed XOF stream over the plaintext and a
@@ -1908,7 +3538,7 @@ async fn credential_canary<T: Target>(target: &mut T) -> Outcome {
     target.reset().await?;
     let key = identity(1);
     let secret = target.mint_secret().await?;
-    let phone = ok(target.pair(&secret_request(&key, secret)).await, "pairing")?;
+    let phone = ok(pair_secret(target, &key, secret).await, "pairing")?;
     let at_rest = target.at_rest().await?;
     for (label, raw) in [
         ("the token", phone.token.as_bytes().to_vec()),

@@ -208,6 +208,15 @@ hex_id!(
 );
 
 hex_id!(
+    /// A NONCE: 16 bytes the adapter drew for `POST /v3/nonce`. Good for one
+    /// pair request and a few minutes; signed into every claim, read grant
+    /// and pairing. It names no vault (#1191, E5).
+    Nonce,
+    16,
+    public
+);
+
+hex_id!(
     /// An Ed25519 signature by a vault's identity key, 128 hex characters.
     Signature,
     64,
