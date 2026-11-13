@@ -11,8 +11,8 @@ catalog! {
     // HOW THE BACKUP IS CHECKED, at a stated rate (#1191, E10): what was read and what opened,
     // never "verified", and only the average (a random draw promises no coverage). `{s}` is the pieces the last check read, `{n}` the pieces stored and `{m}`
     // how many checks it takes to read each about once.
-    plain check_rate_body = ("Each time I check, I read {s} of the {n} stored pieces, chosen at random. On average a piece is read once in {m} checks.", "Each time I check, I read {s} of the {n} stored pieces, chosen at random. On average a piece is read once in {m} checks.");
-    plain check_rate_all_body = ("I read all {n} stored pieces.", "I read all {n} stored pieces.");
+    plain check_rate_body = ("Each check reads {s} of the {n} stored pieces, chosen at random. On average a piece is read once in {m} checks.", "Each check reads {s} of the {n} stored pieces, chosen at random. On average a piece is read once in {m} checks.");
+    plain check_rate_all_body = ("Each check reads all {n} stored pieces.", "Each check reads all {n} stored pieces.");
 
     // WHAT A BACKUP THAT WAS CHECKED SAYS. `{when}` is the backup's own date, in the member's
     // zone: "Tuesday 10 November, 21:40".

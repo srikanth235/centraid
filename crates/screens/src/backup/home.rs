@@ -462,6 +462,9 @@ impl Backup {
                 self.run(Job::Rule(rule))
             }
             Some(B::ForgetDestination(forget)) => self.forget(&forget.gateway_id, ctx),
+            // UNDO IS THE CORE'S: the row offers it only once the reading says the phone holds
+            // deletes there (#1191), and the signed undo is the core's door, not built yet.
+            Some(B::UndoHeld(_)) => Vec::new(),
             Some(B::SetKeySync(set)) => self.set_key_sync(set.on, ctx),
             Some(B::KeyPromptAnswered(_)) => {
                 self.key_prompt_answered = true;
@@ -623,12 +626,13 @@ impl Backup {
         .flatten()
         .collect::<Vec<_>>()
         .join(" \u{b7} ");
-        // THE NOTES under it, one to a line: an old backup that cannot be read, a piece sent
-        // again, deletes held for a week (#1191, B16).
-        let held = std::iter::once(held)
-            .chain(states::notes(locale, zone, destination))
-            .collect::<Vec<_>>()
-            .join("\n");
+        // THE NOTES under it, a field of their own: an old backup that cannot be read, a piece
+        // sent again, deletes held for a week (#1191, B16).
+        let undo_label = if states::can_undo(destination) {
+            backup_home::row_undo_action(locale)
+        } else {
+            String::new()
+        };
         // WHEN THIS GATEWAY LAST ACKNOWLEDGED A BACKUP, apart from when it was reached: a device
         // can answer every hour and hold nothing newer than last week (#1188).
         let backed_up = destination.last_ack_ms.map_or_else(
@@ -640,8 +644,10 @@ impl Backup {
                 )
             },
         );
+        let notes = states::notes(locale, zone, destination);
         let accessibility_label = [label.as_str(), &held, &backed_up, &detail]
             .into_iter()
+            .chain(notes.iter().map(String::as_str))
             .filter(|part| !part.is_empty())
             .collect::<Vec<_>>()
             .join(". ");
@@ -652,6 +658,8 @@ impl Backup {
             detail,
             held,
             backed_up,
+            notes,
+            undo_label,
         }
     }
 
@@ -954,6 +962,11 @@ impl Backup {
             } else {
                 self.check_status(locale, now)
             },
+            check_rate: self
+                .reading()
+                .and_then(|reading| reading.sample)
+                .and_then(|(read, stored)| states::rate_sentence(locale, read, stored))
+                .unwrap_or_default(),
             check_warning: self
                 .check_kept
                 .is_some_and(|kept| kept.kind == rule::CheckKind::Problem),
