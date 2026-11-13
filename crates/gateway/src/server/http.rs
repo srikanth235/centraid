@@ -1,4 +1,4 @@
-//! axum over the rules: the routes of protocol v2 (#1080).
+//! axum over the rules: the routes of protocol v3 (#1080).
 //!
 //! **Every answer comes out of [`crate::rules`].** A handler parses what
 //! arrived, hands it to [`Shared::rules`], and renders what came back; the one
@@ -96,20 +96,20 @@ fn mark_if_gone(
 /// The routes.
 pub fn router(shared: Handle) -> Router {
     Router::new()
-        .route("/v2/info", get(info))
-        .route("/v2/pair", post(pair))
-        .route("/v2/v/{vault}/head", get(get_head).put(put_head))
-        .route("/v2/v/{vault}/snapshots", get(snapshots))
-        .route("/v2/v/{vault}/exists", post(exists))
+        .route("/v3/info", get(info))
+        .route("/v3/pair", post(pair))
+        .route("/v3/v/{vault}/head", get(get_head).put(put_head))
+        .route("/v3/v/{vault}/snapshots", get(snapshots))
+        .route("/v3/v/{vault}/exists", post(exists))
         .route(
-            "/v2/v/{vault}/o/{name}",
+            "/v3/v/{vault}/o/{name}",
             put(put_object).get(get_object).head(head_object),
         )
-        .route("/v2/v/{vault}/bundle", post(bundle))
-        .route("/v2/v/{vault}/fetch", post(fetch))
-        .route("/v2/v/{vault}/objects", get(objects))
-        .route("/v2/v/{vault}/delete", post(delete))
-        .route("/v2/v/{vault}/revoke", post(revoke))
+        .route("/v3/v/{vault}/bundle", post(bundle))
+        .route("/v3/v/{vault}/fetch", post(fetch))
+        .route("/v3/v/{vault}/objects", get(objects))
+        .route("/v3/v/{vault}/delete", post(delete))
+        .route("/v3/v/{vault}/revoke", post(revoke))
         .fallback(no_route)
         .method_not_allowed_fallback(wrong_method)
         .with_state(shared)

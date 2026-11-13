@@ -20,7 +20,7 @@ pub const DIGEST_HEADER: &str = "content-digest";
 /// `HEAD` — which has no body — still says which refusal it is.
 pub const CODE_HEADER: &str = "centraid-code";
 
-/// `GET /v2/info`.
+/// `GET /v3/info`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Info {
     pub gateway_id: GatewayId,
@@ -76,7 +76,7 @@ pub struct ReadBody {
     pub signature: Signature,
 }
 
-/// `POST /v2/pair`.
+/// `POST /v3/pair`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PairRequest {
     pub vault_id: VaultId,
@@ -92,7 +92,7 @@ pub struct PairRequest {
     pub read: Option<ReadBody>,
 }
 
-/// What `POST /v2/pair` answers. **The only time the token exists outside the
+/// What `POST /v3/pair` answers. **The only time the token exists outside the
 /// phone**: the gateway keeps its BLAKE3 and cannot print it again.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Paired {
@@ -117,7 +117,7 @@ pub struct HeadView {
     pub set_at_ms: i64,
 }
 
-/// `PUT /v2/v/{vault}/head`.
+/// `PUT /v3/v/{vault}/head`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SetHead {
     pub name: Name,

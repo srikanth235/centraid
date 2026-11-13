@@ -29,8 +29,8 @@ use centraid_gateway::server::service::{DEFAULT_LABEL, Platform, UnitSpec};
 use centraid_gateway::server::sweeps::{Schedule, scrub_once};
 use centraid_gateway::server::tls::Identity;
 use centraid_gateway::server::{
-    DEFAULT_PORT, Shared, addrs, last_bound, record_bound, report, serve, service, sweeps,
-    system_clock,
+    DEFAULT_PORT, OpenError, Shared, addrs, last_bound, record_bound, report, serve, service,
+    sweeps, system_clock,
 };
 use clap::{Parser, Subcommand};
 
@@ -69,7 +69,7 @@ enum Command {
     /// List the paired vaults, their safety numbers and their tokens; or
     /// revoke one token by the id the list prints.
     Pairings {
-        #[arg(long, env = "CENTRAID_GATEWAY_DATA_DIR", global = true)]
+        #[arg(long, env = "CENTRAID_GATEWAY_DATA_DIR")]
         data_dir: PathBuf,
         #[command(subcommand)]
         action: Option<PairingsAction>,
@@ -148,10 +148,21 @@ async fn main() -> anyhow::Result<()> {
     }
 }
 
+/// Open the gateway in `data_dir`. A data folder an earlier gateway made, or
+/// a newer one, is not an error to debug: its sentence is printed and the
+/// process exits with code 2, the file as it was (#1191, E13).
 fn open(data_dir: &Path) -> anyhow::Result<Shared> {
-    Shared::open(data_dir, system_clock())
-        .with_context(|| format!("opening the gateway in {}", data_dir.display()))
+    match Shared::open(data_dir, system_clock()) {
+        Err(OpenError::Refused(sentence)) => {
+            eprintln!("{sentence}");
+            std::process::exit(EXIT_REFUSED);
+        }
+        other => other.with_context(|| format!("opening the gateway in {}", data_dir.display())),
+    }
 }
+
+/// The exit code of a data folder this gateway will not open.
+const EXIT_REFUSED: i32 = 2;
 
 /// `serve`.
 async fn run(data_dir: &Path, bind: &str, no_mdns: bool) -> anyhow::Result<()> {

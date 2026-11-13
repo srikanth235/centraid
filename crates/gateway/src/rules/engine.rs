@@ -146,7 +146,7 @@ impl<S: State> Gateway<S> {
         self.id
     }
 
-    /// `GET /v2/info`. Answers before anything is paired.
+    /// `GET /v3/info`. Answers before anything is paired.
     #[must_use]
     pub const fn info(&self, now_ms: i64) -> Info {
         Info {
@@ -175,7 +175,7 @@ impl<S: State> Gateway<S> {
         })
     }
 
-    /// `POST /v2/pair`. `token` is the fresh token the adapter drew; it is
+    /// `POST /v3/pair`. `token` is the fresh token the adapter drew; it is
     /// handed back only if the pairing succeeds.
     ///
     /// The checks run shape, then credential, then state: a malformed request
@@ -232,7 +232,7 @@ impl<S: State> Gateway<S> {
         authorize(&self.state, vault, token, access)
     }
 
-    /// `GET /v2/v/{vault}/head`.
+    /// `GET /v3/v/{vault}/head`.
     ///
     /// # Errors
     ///
@@ -245,7 +245,7 @@ impl<S: State> Gateway<S> {
         Ok(view(&head, caller.writer_epoch))
     }
 
-    /// `PUT /v2/v/{vault}/head`: compare-and-set on `prev`, and register the
+    /// `PUT /v3/v/{vault}/head`: compare-and-set on `prev`, and register the
     /// snapshot.
     ///
     /// Asking for the head that already stands succeeds unchanged, so a retry
@@ -303,7 +303,7 @@ impl<S: State> Gateway<S> {
         })
     }
 
-    /// `GET /v2/v/{vault}/snapshots`.
+    /// `GET /v3/v/{vault}/snapshots`.
     ///
     /// # Errors
     ///
@@ -313,7 +313,7 @@ impl<S: State> Gateway<S> {
         Ok(self.state.snapshots(vault)?)
     }
 
-    /// `POST /v2/v/{vault}/exists`: the names this gateway does not hold. A
+    /// `POST /v3/v/{vault}/exists`: the names this gateway does not hold. A
     /// tombstoned or damaged name is not held — the phone must send it again.
     ///
     /// # Errors
@@ -340,7 +340,7 @@ impl<S: State> Gateway<S> {
         Ok(missing)
     }
 
-    /// `PUT /v2/v/{vault}/o/{name}`, and one frame of a bundle.
+    /// `PUT /v3/v/{vault}/o/{name}`, and one frame of a bundle.
     ///
     /// **Write-once by name and digest.** A held name with this digest is
     /// `AlreadyStored` and nothing moves; a held name with another digest is
@@ -402,7 +402,7 @@ impl<S: State> Gateway<S> {
         })
     }
 
-    /// `GET` and `HEAD /v2/v/{vault}/o/{name}`: the object to serve.
+    /// `GET` and `HEAD /v3/v/{vault}/o/{name}`: the object to serve.
     ///
     /// A tombstoned object is still served until the purge takes its bytes:
     /// that is what the grace is for — a restore that began from a snapshot
@@ -427,7 +427,7 @@ impl<S: State> Gateway<S> {
             .ok_or(Refusal::NotFound { name: Some(*name) })?)
     }
 
-    /// `GET /v2/v/{vault}/objects?after=&limit=`: one page of what is not
+    /// `GET /v3/v/{vault}/objects?after=&limit=`: one page of what is not
     /// tombstoned, sorted by name. `limit` above [`LIST_LIMIT`] is clamped.
     ///
     /// # Errors
@@ -452,7 +452,7 @@ impl<S: State> Gateway<S> {
             .collect())
     }
 
-    /// `POST /v2/v/{vault}/fetch`: the objects to stream back, in the order
+    /// `POST /v3/v/{vault}/fetch`: the objects to stream back, in the order
     /// asked, each once. A name [`Self::object`] would not serve is left out
     /// — the phone sees which came back — and the whole answer must fit one
     /// bundle.
@@ -491,7 +491,7 @@ impl<S: State> Gateway<S> {
         Ok(plan)
     }
 
-    /// `POST /v2/v/{vault}/delete`: tombstone each name with a grace of
+    /// `POST /v3/v/{vault}/delete`: tombstone each name with a grace of
     /// [`GRACE_MS`]. The head's manifest is refused `HEAD_IN_USE`; a
     /// tombstoned manifest deregisters its snapshot; a name already
     /// tombstoned is deleted again without moving its grace; a name the
@@ -638,7 +638,7 @@ impl<S: State> Gateway<S> {
         Ok(self.state.secrets()?)
     }
 
-    /// `POST /v2/v/{vault}/revoke`: the calling token revokes ITSELF.
+    /// `POST /v3/v/{vault}/revoke`: the calling token revokes ITSELF.
     ///
     /// A phone that forgets a gateway, or a member who forgets one on the
     /// phone, ends the token's life at the gateway too: a forgotten pairing

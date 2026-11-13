@@ -436,7 +436,8 @@ impl Advertisement {
     pub fn start(gateway_id: GatewayId, host: &str, port: u16) -> Result<Self, mdns_sd::Error> {
         let daemon = mdns_sd::ServiceDaemon::new()?;
         let id = gateway_id.hex();
-        let properties = [("gw", id.as_str()), ("v", "2")];
+        let protocol = crate::rules::limits::PROTOCOL.to_string();
+        let properties = [("gw", id.as_str()), ("v", protocol.as_str())];
         let service = mdns_sd::ServiceInfo::new(
             SERVICE_TYPE,
             &format!("centraid-gateway-{}", &id[..8]),

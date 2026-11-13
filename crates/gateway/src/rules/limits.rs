@@ -5,8 +5,14 @@
 //! for a reason nobody can read in a log. The server and the client import
 //! these; neither has its own.
 
-/// The protocol version `GET /v2/info` answers.
-pub const PROTOCOL: u32 = 2;
+/// The protocol version `GET /v3/info` answers. Protocol 3 moved every route
+/// from `/v2/` to `/v3/`; a gateway serves one protocol and no other (#1191,
+/// E13).
+pub const PROTOCOL: u32 = 3;
+
+/// The lowest protocol a phone will talk to. A gateway below it is told to
+/// update, never spoken to in its own older dialect.
+pub const REQUIRED_PROTOCOL: u32 = 3;
 
 /// One day, in milliseconds.
 pub const DAY_MS: i64 = 86_400_000;

@@ -92,7 +92,7 @@ async fn a_phone_pairs_from_the_text_of_a_qr_and_hands_off_an_upload() {
     let rest = handoff.url.strip_prefix("https://").expect("https");
     let (authority, path) = rest.split_at(rest.find('/').expect("a path"));
     assert_eq!(authority, gateway.addr.to_string());
-    assert_eq!(path, format!("/v2/v/{vault}/o/{name}"));
+    assert_eq!(path, format!("/v3/v/{vault}/o/{name}"));
 
     let socket = tokio::net::TcpStream::connect(authority)
         .await

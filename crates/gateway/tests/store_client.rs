@@ -165,7 +165,7 @@ async fn a_bundle_frame_is_held_before_the_rest_of_its_body_is_sent() {
         StreamBody::new(fed.map(|bytes| Ok::<_, std::io::Error>(hyper::body::Frame::data(bytes))));
     let request = hyper::Request::builder()
         .method("POST")
-        .uri(format!("/v2/v/{vault}/bundle"))
+        .uri(format!("/v3/v/{vault}/bundle"))
         .header("host", gateway.addr.to_string())
         .header("authorization", format!("Bearer {token}"))
         .header("content-length", length)

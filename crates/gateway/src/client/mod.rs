@@ -1,7 +1,7 @@
 //! THE PHONE'S CLIENT (#1080).
 //!
 //! HTTP/1.1 over TLS over TCP to one gateway, trusting exactly one
-//! certificate ([`tls`]). Every route of protocol v2 is a method here; the
+//! certificate ([`tls`]). Every route of protocol v3 is a method here; the
 //! bodies and refusals are [`crate::rules`]' own types, so the client reads
 //! back exactly what the server rendered.
 //!
@@ -74,7 +74,7 @@ use crate::client::tls::{Trust, client_config, is_untrusted};
 use crate::rules::bundle::{Decoder, Frame, HEADER_LEN, Step, header as frame_header};
 use crate::rules::code::{Code, Refusal, RefusalBody};
 use crate::rules::ids::{Digest, Name, Pin, Token, VaultId};
-use crate::rules::limits::{MAX_BUNDLE_BYTES, MAX_OBJECT_BYTES};
+use crate::rules::limits::{MAX_BUNDLE_BYTES, MAX_OBJECT_BYTES, REQUIRED_PROTOCOL};
 use crate::rules::range::ByteRange;
 use crate::rules::wire::{
     BundleAnswer, CODE_HEADER, DIGEST_HEADER, DeleteAnswer, HeadView, Info, Missing, Names,
@@ -155,6 +155,16 @@ pub enum ClientError {
     /// gateway holds, or the bytes on the way, are damaged.
     #[error("the gateway's copy is damaged: {0}")]
     Damaged(String),
+    /// The gateway speaks an older protocol than this phone requires: the
+    /// member updates the gateway and pairs again. There is no fallback to
+    /// the older dialect (#1191, E13).
+    #[error("the gateway runs protocol {found}, and this phone needs {required}")]
+    GatewayTooOld {
+        /// What the gateway answered.
+        found: u32,
+        /// [`REQUIRED_PROTOCOL`].
+        required: u32,
+    },
     /// A route that needs a token, on a client that has none.
     #[error("this client has no token")]
     NoToken,
@@ -228,7 +238,7 @@ pub struct Part {
 /// its own trust challenge.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Handoff {
-    /// `https://<preferred address>/v2/v/<vault>/o/<name>`.
+    /// `https://<preferred address>/v3/v/<vault>/o/<name>`.
     pub url: String,
     /// `PUT`.
     pub method: String,
@@ -478,23 +488,37 @@ impl Client {
 
     // ─── the routes ──────────────────────────────────────────────────────────
 
-    /// `GET /v2/info`. Needs no token.
+    /// `GET /v3/info`. Needs no token. **The handshake**: a gateway that
+    /// answers with a protocol below [`REQUIRED_PROTOCOL`], or that does not
+    /// know `/v3/info` but answers `/v2/info`, is refused as
+    /// [`ClientError::GatewayTooOld`]; the older dialect is never spoken.
     ///
     /// # Errors
     ///
-    /// [`ClientError`].
+    /// [`ClientError`], [`ClientError::GatewayTooOld`] included.
     pub async fn info(&self) -> Result<Info, ClientError> {
-        self.call(Method::GET, "/v2/info", None::<&()>, false).await
+        let answer: Result<Info, ClientError> =
+            self.call(Method::GET, "/v3/info", None::<&()>, false).await;
+        if let Err(ClientError::Refused(Refusal::NotFound { .. } | Refusal::BadRequest)) = &answer {
+            // A gateway that has never heard of `/v3/info`: an older one, or
+            // not a gateway at all.
+            let older: Option<Info> = self
+                .call(Method::GET, "/v2/info", None::<&()>, false)
+                .await
+                .ok();
+            return handshake(answer, older.map(|info| info.protocol));
+        }
+        handshake(answer, None)
     }
 
-    /// `POST /v2/pair`. On success the client keeps the token.
+    /// `POST /v3/pair`. On success the client keeps the token.
     ///
     /// # Errors
     ///
     /// [`ClientError`].
     pub async fn pair(&self, request: &PairRequest) -> Result<Paired, ClientError> {
         let paired: Paired = self
-            .call(Method::POST, "/v2/pair", Some(request), false)
+            .call(Method::POST, "/v3/pair", Some(request), false)
             .await?;
         self.set_token(paired.token);
         Ok(paired)
@@ -1180,12 +1204,32 @@ impl Client {
     }
 }
 
+/// What the handshake decides, as a pure function of the two answers: the
+/// `/v3/info` answer, and the protocol an `/v2/info` answered with, when it
+/// was asked.
+fn handshake(v3: Result<Info, ClientError>, older: Option<u32>) -> Result<Info, ClientError> {
+    match (v3, older) {
+        (Ok(info), _) if info.protocol < REQUIRED_PROTOCOL => Err(ClientError::GatewayTooOld {
+            found: info.protocol,
+            required: REQUIRED_PROTOCOL,
+        }),
+        (
+            Err(ClientError::Refused(Refusal::NotFound { .. } | Refusal::BadRequest)),
+            Some(found),
+        ) => Err(ClientError::GatewayTooOld {
+            found,
+            required: REQUIRED_PROTOCOL,
+        }),
+        (answer, _) => answer,
+    }
+}
+
 fn route(vault: &VaultId, tail: &str) -> String {
-    format!("/v2/v/{vault}/{tail}")
+    format!("/v3/v/{vault}/{tail}")
 }
 
 fn object_route(vault: &VaultId, name: &Name) -> String {
-    format!("/v2/v/{vault}/o/{name}")
+    format!("/v3/v/{vault}/o/{name}")
 }
 
 /// Exactly `length` bytes of the file at `path`, opened on first poll and
@@ -1345,5 +1389,48 @@ fn refusal_of(status: StatusCode, headers: &hyper::HeaderMap, body: &[u8]) -> Cl
             ClientError::Refused,
         ),
         None => ClientError::Protocol(format!("status {status} without a refusal")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::rules::ids::GatewayId;
+
+    fn info(protocol: u32) -> Info {
+        Info {
+            gateway_id: GatewayId::from_bytes([1; 16]),
+            protocol,
+            time_ms: 0,
+        }
+    }
+
+    /// A GATEWAY BELOW PROTOCOL 3 IS REFUSED, TYPED, whichever way it says so:
+    /// it answers `/v3/info` with a lower protocol, or it does not know
+    /// `/v3/info` and answers `/v2/info`. There is no fallback to speak v2.
+    #[test]
+    fn an_older_gateway_is_too_old_and_never_spoken_to() {
+        assert!(matches!(
+            handshake(Ok(info(2)), None),
+            Err(ClientError::GatewayTooOld {
+                found: 2,
+                required: REQUIRED_PROTOCOL
+            })
+        ));
+        assert!(matches!(
+            handshake(
+                Err(ClientError::Refused(Refusal::NotFound { name: None })),
+                Some(2)
+            ),
+            Err(ClientError::GatewayTooOld { found: 2, .. })
+        ));
+        assert!(matches!(
+            handshake(
+                Err(ClientError::Refused(Refusal::NotFound { name: None })),
+                None
+            ),
+            Err(ClientError::Refused(Refusal::NotFound { .. }))
+        ));
+        assert!(handshake(Ok(info(REQUIRED_PROTOCOL)), None).is_ok());
     }
 }

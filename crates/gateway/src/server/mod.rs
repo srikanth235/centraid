@@ -11,7 +11,7 @@
 //! | Path | What |
 //! | --- | --- |
 //! | `tls.key`, `tls.crt`, `gateway.id` | the identity, minted together at first `serve`, mode 0600 ([`tls`]) |
-//! | `state.db` (with `-wal`, `-shm`) | vaults, hashed tokens and secrets, heads, snapshots, the object index ([`state`]) |
+//! | `state.db` (with `-wal`, `-shm`) | vaults, hashed tokens and secrets, heads, snapshots, the object index; `application_id` `CGW3` and a `user_version` ladder ([`state`]) |
 //! | `objects/<vault>/<nn>/<name>` | one sealed object per file ([`store`]) |
 //! | `incoming/` | uploads being staged; emptied at start |
 //! | `serve.json` | the address `serve` last bound, which `pair` and `health` read |
@@ -61,7 +61,7 @@ use crate::rules::limits::SECRET_TTL_MS;
 use crate::rules::payload::{PAYLOAD_VERSION, PairPayload};
 use crate::rules::state::{Fault, StoreFault};
 use crate::rules::wire::PairKind;
-use crate::server::state::{STATE_FILE, SqliteState};
+use crate::server::state::{OpenStateError, STATE_FILE, SqliteState};
 use crate::server::store::ObjectStore;
 use crate::server::tls::{Identity, IdentityError};
 
@@ -147,6 +147,10 @@ pub enum OpenError {
     Identity(#[from] IdentityError),
     #[error(transparent)]
     State(#[from] StoreFault),
+    /// The data folder is an earlier gateway's, or a newer one's, and was
+    /// left as it was. The text is the sentence to print; the binary exits 2.
+    #[error("{0}")]
+    Refused(String),
     #[error("{0}: {1}")]
     Io(String, std::io::Error),
     #[error("the TLS configuration: {0}")]
@@ -206,7 +210,10 @@ impl Shared {
         // with the certificate, from the OS.
         let fresh_id = GatewayId::from_bytes(os_random::<16>()?);
         let identity = Identity::load_or_mint(data_dir, || fresh_id)?;
-        let state = SqliteState::open(&data_dir.join(STATE_FILE))?;
+        let state = SqliteState::open(&data_dir.join(STATE_FILE)).map_err(|error| match error {
+            OpenStateError::Refused(sentence) => OpenError::Refused(sentence),
+            OpenStateError::Fault(fault) => OpenError::State(fault),
+        })?;
         let store = ObjectStore::open(data_dir)
             .map_err(|error| OpenError::Io(data_dir.display().to_string(), error))?;
         Ok(Self {

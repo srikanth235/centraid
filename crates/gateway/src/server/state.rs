@@ -38,14 +38,44 @@ pub struct SqliteState {
 /// The state file inside a data directory.
 pub const STATE_FILE: &str = "state.db";
 
+/// `PRAGMA application_id` of a gateway's `state.db`: `CGW3`, so no other
+/// SQLite file, and no gateway of an earlier protocol, is mistaken for one
+/// (#1191, E13).
+pub const APPLICATION_ID: i32 = 0x4347_5733;
+
+/// What `serve` and `pairings` say, with exit code 2, to a data folder an
+/// earlier gateway made. The words are the owner's (decision 8).
+pub const OLDER_DATA_DIRECTORY: &str = "This data folder was made by an earlier version of the gateway, and this version cannot open it. Nothing was changed. Move the folder aside and start again; every phone will need to pair again.";
+
+/// Why a state file would not open.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum OpenStateError {
+    /// The file is not one this build may open, and was left exactly as it
+    /// was. The text is the sentence to print.
+    #[error("{0}")]
+    Refused(String),
+    /// The store failed.
+    #[error(transparent)]
+    Fault(#[from] StoreFault),
+}
+
 impl SqliteState {
-    /// Open or create the state file and apply the schema.
+    /// Open or create the state file, found it at rung 1 or apply the rungs
+    /// it lacks.
+    ///
+    /// A file this build must not open — an earlier gateway's, another
+    /// program's, or one from a newer rung — is **refused before anything
+    /// writes to it**: it is inspected through a read-only connection, so its
+    /// bytes are the bytes they were.
     ///
     /// # Errors
     ///
-    /// A store fault if the file cannot be opened or the schema applied.
-    pub fn open(path: &Path) -> Result<Self, StoreFault> {
-        Self::prepared(Connection::open(path).map_err(fault)?)
+    /// [`OpenStateError::Refused`] with the sentence to say, or a store fault.
+    pub fn open(path: &Path) -> Result<Self, OpenStateError> {
+        if path.is_file() {
+            inspect(path)?;
+        }
+        Ok(Self::prepared(Connection::open(path).map_err(fault)?)?)
     }
 
     /// The same state in memory, for a test that wants no file.
@@ -75,9 +105,75 @@ impl SqliteState {
         connection
             .busy_timeout(std::time::Duration::from_secs(10))
             .map_err(fault)?;
-        connection.execute_batch(sql::SCHEMA).map_err(fault)?;
+        climb(&connection)?;
         Ok(Self { connection })
     }
+}
+
+/// What the file holds, read without writing: `(application_id,
+/// user_version, tables)`.
+fn inspect(path: &Path) -> Result<(), OpenStateError> {
+    let connection = Connection::open_with_flags(
+        path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .map_err(fault)?;
+    let application: i32 = connection
+        .pragma_query_value(None, "application_id", |row| row.get(0))
+        .map_err(fault)?;
+    let version: i64 = connection
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .map_err(fault)?;
+    let tables: i64 = connection
+        .query_row("SELECT count(*) FROM sqlite_master", [], |row| row.get(0))
+        .map_err(fault)?;
+    let rungs = i64::try_from(sql::LADDER.len()).unwrap_or(i64::MAX);
+    if application == 0 && version == 0 && tables == 0 {
+        // Founded by nobody yet: an empty file a crash or a `touch` left.
+        return Ok(());
+    }
+    if application != APPLICATION_ID {
+        return Err(OpenStateError::Refused(OLDER_DATA_DIRECTORY.to_owned()));
+    }
+    if version > rungs {
+        return Err(OpenStateError::Refused(format!(
+            "This gateway's data was written by a newer version of the gateway (rung {version}); this one reads rung {rungs}. Update the gateway; nothing was changed."
+        )));
+    }
+    Ok(())
+}
+
+/// Apply every rung the file lacks, each in its own transaction, founding the
+/// file (its `application_id`) with the first.
+fn climb(connection: &Connection) -> Result<(), StoreFault> {
+    let version: usize = connection
+        .pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
+        .map_err(fault)
+        .and_then(|value| {
+            usize::try_from(value).map_err(|_| StoreFault::new("a negative user_version"))
+        })?;
+    for (index, rung) in sql::LADDER.iter().enumerate().skip(version) {
+        connection.execute_batch(sql::BEGIN).map_err(fault)?;
+        let applied = (|| {
+            connection.execute_batch(rung)?;
+            if index == 0 {
+                connection.pragma_update(None, "application_id", APPLICATION_ID)?;
+            }
+            connection.pragma_update(
+                None,
+                "user_version",
+                i64::try_from(index + 1).unwrap_or(i64::MAX),
+            )
+        })();
+        match applied {
+            Ok(()) => connection.execute_batch(sql::COMMIT).map_err(fault)?,
+            Err(error) => {
+                let _ = connection.execute_batch(sql::ROLLBACK);
+                return Err(fault(error));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn fault(error: rusqlite::Error) -> StoreFault {

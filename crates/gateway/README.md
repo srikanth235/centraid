@@ -1,4 +1,4 @@
-# `crates/gateway` — the gateway, protocol v2
+# `crates/gateway` — the gateway, protocol v3
 
 A Centraid gateway is a **blind store a phone backs its vault up to, directly** ([#1080](https://github.com/srikanth235/centraid/issues/1080)). The phone is the vault and the only writer; the gateway is a laptop, a NAS or a small VPS that keeps sealed objects it cannot open, under names it cannot invert, and answers a handful of HTTPS routes. This crate is the whole of it: the protocol's rules, the gateway a member runs, and the client a phone links.
 
@@ -16,19 +16,19 @@ HTTPS with HTTP/1.1, straight from the phone to the gateway. JSON for small bodi
 
 | Route | Auth | What |
 | --- | --- | --- |
-| `GET /v2/info` | none | `{gateway_id, protocol: 2, time_ms}` |
-| `POST /v2/pair` | none | `{vault_id, label, kind, secret?, claim?, read?}` → `{token, epoch, gateway_id}` (see [Pairing](#pairing)) |
-| `GET /v2/v/{vault}/head` | bearer | `{name, taken_at_ms, epoch, set_at_ms}`, or `NO_HEAD` carrying the writer epoch |
-| `PUT /v2/v/{vault}/head` | bearer, write | `{name, prev, taken_at_ms}`: compare-and-set on `prev`; registers the snapshot; `HEAD_CONFLICT` carries the head as it stands; the manifest must be held (`NOT_FOUND`); setting the head that already stands answers it again |
-| `GET /v2/v/{vault}/snapshots` | bearer | `[{name, taken_at_ms, registered_at_ms}]` |
-| `POST /v2/v/{vault}/exists` | bearer | `{names}` (at most 1000) → `{missing}`: the names not held |
-| `PUT /v2/v/{vault}/o/{name}` | bearer, write | raw body with `Content-Length` and `Content-Digest: blake3=<hex>` → `201` stored or `200` already held with this digest, as `{name, size, digest, stored_at_ms}` |
-| `GET` and `HEAD /v2/v/{vault}/o/{name}` | bearer | the bytes, or one `Range` of them (`206`); a whole answer and a `HEAD` carry the size and `Content-Digest` |
-| `POST /v2/v/{vault}/bundle` | bearer, write | frames `name (64 hex) ‖ digest (64 hex) ‖ u64be len ‖ bytes`, at most 256 MiB → `{stored, already, refused: [{name, code}]}`, each frame answered as its own `PUT` would be |
-| `POST /v2/v/{vault}/fetch` | bearer | `{names}` → the held objects in the same framing, in the order asked |
-| `GET /v2/v/{vault}/objects?after=&limit=` | bearer | `[{name, size, digest, stored_at_ms}]` sorted by name, at most 1000 a page |
-| `POST /v2/v/{vault}/delete` | bearer, write | `{names}` → `{deleted, refused}`: tombstones with a 7-day grace; the head's manifest is refused `HEAD_IN_USE` |
-| `POST /v2/v/{vault}/revoke` | bearer | no body → `{revoked: true}`: the calling token is forgotten and is `UNAUTHORIZED` on every route after; any token of the vault may revoke itself |
+| `GET /v3/info` | none | `{gateway_id, protocol: 3, time_ms}` |
+| `POST /v3/pair` | none | `{vault_id, label, kind, secret?, claim?, read?}` → `{token, epoch, gateway_id}` (see [Pairing](#pairing)) |
+| `GET /v3/v/{vault}/head` | bearer | `{name, taken_at_ms, epoch, set_at_ms}`, or `NO_HEAD` carrying the writer epoch |
+| `PUT /v3/v/{vault}/head` | bearer, write | `{name, prev, taken_at_ms}`: compare-and-set on `prev`; registers the snapshot; `HEAD_CONFLICT` carries the head as it stands; the manifest must be held (`NOT_FOUND`); setting the head that already stands answers it again |
+| `GET /v3/v/{vault}/snapshots` | bearer | `[{name, taken_at_ms, registered_at_ms}]` |
+| `POST /v3/v/{vault}/exists` | bearer | `{names}` (at most 1000) → `{missing}`: the names not held |
+| `PUT /v3/v/{vault}/o/{name}` | bearer, write | raw body with `Content-Length` and `Content-Digest: blake3=<hex>` → `201` stored or `200` already held with this digest, as `{name, size, digest, stored_at_ms}` |
+| `GET` and `HEAD /v3/v/{vault}/o/{name}` | bearer | the bytes, or one `Range` of them (`206`); a whole answer and a `HEAD` carry the size and `Content-Digest` |
+| `POST /v3/v/{vault}/bundle` | bearer, write | frames `name (64 hex) ‖ digest (64 hex) ‖ u64be len ‖ bytes`, at most 256 MiB → `{stored, already, refused: [{name, code}]}`, each frame answered as its own `PUT` would be |
+| `POST /v3/v/{vault}/fetch` | bearer | `{names}` → the held objects in the same framing, in the order asked |
+| `GET /v3/v/{vault}/objects?after=&limit=` | bearer | `[{name, size, digest, stored_at_ms}]` sorted by name, at most 1000 a page |
+| `POST /v3/v/{vault}/delete` | bearer, write | `{names}` → `{deleted, refused}`: tombstones with a 7-day grace; the head's manifest is refused `HEAD_IN_USE` |
+| `POST /v3/v/{vault}/revoke` | bearer | no body → `{revoked: true}`: the calling token is forgotten and is `UNAUTHORIZED` on every route after; any token of the vault may revoke itself |
 
 **Auth.** `Authorization: Bearer <token>`: 32 random bytes in hex, minted at `pair`; the gateway keeps only their BLAKE3. The vault in the path must be the token's. A stranger, a token for another vault and an unknown vault get the same `UNAUTHORIZED`, so none is an oracle. A write with a token below the vault's writer epoch is refused `MOVED` with the epoch that superseded it; reads still answer, so a superseded phone can freeze read-only.
 
@@ -84,7 +84,7 @@ Everything a gateway has is one directory of plain files. Copying it anywhere co
 | Path | What |
 | --- | --- |
 | `tls.key`, `tls.crt`, `gateway.id` | the identity, minted together at the first `serve`, mode 0600 |
-| `state.db` (and its `-wal`, `-shm`) | SQLite: vaults, BLAKE3 of tokens and pairing secrets, heads, snapshot history, the object index |
+| `state.db` (and its `-wal`, `-shm`) | SQLite: vaults, BLAKE3 of tokens and pairing secrets, heads, snapshot history, the object index. `application_id` `CGW3`, `user_version` = the number of ladder rungs (`src/server/sql/ladder/`). An older gateway's folder, or another program's file, is refused with the sentence below, exit code 2, the file untouched; a newer rung is refused too. Nothing is migrated |
 | `objects/<vault>/<nn>/<name>` | one sealed object per file |
 | `incoming/` | uploads being staged; emptied when `serve` starts |
 | `serve.json` | the address `serve` last bound, which `pair` and `health` read |
@@ -92,6 +92,8 @@ Everything a gateway has is one directory of plain files. Copying it anywhere co
 | `logs/` | macOS only: the launchd agent's output |
 
 **What a stolen copy yields.** Ciphertext; object names, which are keyed hashes nobody can invert; digests of the ciphertext; sizes; times — paired, stored, deleted, heads set, snapshots taken; device labels; the vault identity **public** keys and writer epochs. No plaintext, no plaintext hash and no key that opens anything has a column or a file to arrive in, and the suite's canary scans every byte of the directory, file names included, for each. Tokens and pairing secrets are there only as BLAKE3 of 32 and 16 random bytes, so none can be replayed. The directory does hold **the gateway's TLS key**: a thief who can also answer at the gateway's address can impersonate it to its phones — and receive more ciphertext, or lose what they send. After a theft, mint a new identity (move the three identity files aside and `serve`) and pair each phone again.
+
+**An older data folder.** `serve` and `pairings` print "This data folder was made by an earlier version of the gateway, and this version cannot open it. Nothing was changed. Move the folder aside and start again; every phone will need to pair again." and exit with code 2. A phone whose gateway answers below protocol 3 gets `GatewayTooOld` and the member is told to update the gateway; there is no v2 fallback.
 
 ## The sweeps
 
@@ -113,11 +115,11 @@ centraid-gateway install  --data-dir DIR [--bind 0.0.0.0:8443] [--dry-run] [--la
 
 `--data-dir` and `--bind` also read `CENTRAID_GATEWAY_DATA_DIR` and `CENTRAID_GATEWAY_BIND`.
 
-- **`serve`** runs with no vault. On an empty directory it mints the identity, listens, and prints the gateway id, the pin and the first pairing QR; nothing is stored until a phone pairs. It advertises `_centraid-gateway._tcp` on the LAN (TXT `gw`, `v=2`) unless told `--no-mdns`, runs the sweeps, and stops on Ctrl-C or `SIGTERM`.
+- **`serve`** runs with no vault. On an empty directory it mints the identity, listens, and prints the gateway id, the pin and the first pairing QR; nothing is stored until a phone pairs. It advertises `_centraid-gateway._tcp` on the LAN (TXT `gw`, `v=3`) unless told `--no-mdns`, runs the sweeps, and stops on Ctrl-C or `SIGTERM`.
 - **`pair`** prints a fresh payload and QR beside a running `serve`, listing this machine's addresses on the port `serve` bound.
 - **`pairings`** lists each vault: its writer epoch, safety number, head and tokens — each with its id, the first 12 hex characters of its BLAKE3 — and how many pairing secrets wait, were spent or expired. **`pairings revoke <token id>`** forgets one token, for a phone that is lost and cannot revoke itself.
 - **`scrub`** runs the scrub now.
-- **`health`** asks a running gateway for `GET /v2/info`, trusting the certificate in the data directory and dialling where its `serve` listens, or another gateway's `--addr` and `--pin`. It exits non-zero when the gateway is down or not the pinned one.
+- **`health`** asks a running gateway for `GET /v3/info`, trusting the certificate in the data directory and dialling where its `serve` listens, or another gateway's `--addr` and `--pin`. It exits non-zero when the gateway is down or not the pinned one.
 - **`install`** writes a **user** systemd unit or a launchd agent and never enables it; `--dry-run` prints it and touches nothing. The systemd unit hides the home directory and binds back only the data directory and the binary, so a data directory under `~` works; `install` creates a missing data directory, mode 0700, first.
 
 The container image is [`deploy/gateway/Dockerfile`](../../deploy/gateway/Dockerfile); run it with `--network host`, so the QR names addresses a phone can dial and Bonjour reaches the LAN.

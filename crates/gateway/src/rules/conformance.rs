@@ -211,7 +211,7 @@ pub trait Target {
         vault: &VaultId,
         names: &[Name],
     ) -> Result<DeleteAnswer, Failure>;
-    /// `POST /v2/v/{vault}/revoke`: the calling token revokes itself.
+    /// `POST /v3/v/{vault}/revoke`: the calling token revokes itself.
     async fn revoke(&mut self, token: &Token, vault: &VaultId) -> Result<(), Failure>;
 }
 

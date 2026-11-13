@@ -14,11 +14,10 @@ macro_rules! statement {
     };
 }
 
-statement!(
-    /// The whole schema.
-    SCHEMA,
-    "schema.sql"
-);
+/// THE SCHEMA LADDER: one file per rung, applied in order, each in its own
+/// transaction, and `PRAGMA user_version` is the number of rungs applied. A
+/// rung is never edited once a release has shipped it (#1191, E13).
+pub const LADDER: &[&str] = &[include_str!("sql/ladder/001_founding.sql")];
 statement!(
     /// The write lock first, so an operation's reads and writes are one step.
     BEGIN,
