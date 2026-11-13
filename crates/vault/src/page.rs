@@ -614,17 +614,13 @@ fn served_clauses(page: &KeysetPage) -> Result<Vec<String>> {
     Ok(clauses)
 }
 
-/// Every sealed column of Locker's tables: the five cells of `locker_item`,
-/// `locker_item_field.value_sealed` and `locker_item_passkey.private_key`.
-const SEALED_COLUMNS: [&str; 7] = [
-    "password",
-    "otp_seed",
-    "card_number",
-    "cvv",
-    "content",
-    "value_sealed",
-    "private_key",
-];
+/// Whether `word` names a sealed column of Locker's tables: read off the one list the custody module
+/// keeps (`LOCKER_ENCRYPTED_COLUMNS`), so a column sealed there is guarded here without a second edit.
+fn is_sealed_column(word: &str) -> bool {
+    crate::custody::locker_key::LOCKER_ENCRYPTED_COLUMNS
+        .iter()
+        .any(|(_, _, columns)| columns.contains(&word))
+}
 
 /// THE SEALED-COLUMN GUARD, which holds for every read that is not Locker's own.
 ///
@@ -637,7 +633,7 @@ const SEALED_COLUMNS: [&str; 7] = [
 fn withholds_sealed_value(page: &KeysetPage) -> bool {
     let names_sealed = |text: &str| {
         text.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
-            .any(|word| SEALED_COLUMNS.contains(&word.to_ascii_lowercase().as_str()))
+            .any(|word| is_sealed_column(&word.to_ascii_lowercase()))
     };
     let is_presence = |column: &str| {
         let words: Vec<&str> = column.split_whitespace().collect();

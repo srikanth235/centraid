@@ -710,3 +710,47 @@ fn codes_from_the_helper_are_clean() {
     assert!(report.findings.is_empty(), "{}", findings(&report));
     assert!(matches!(report.state, RuleState::Applied(2)));
 }
+
+// ---- sqlite-page-flag ----
+
+#[test]
+fn a_script_that_replaces_the_page_flag_is_caught() {
+    let root = fixture_dir("sqlite-flag-red");
+    write(
+        &root,
+        ".cargo/config.toml",
+        "[env]\nLIBSQLITE3_FLAGS = \"-DSQLITE_ENABLE_DBSTAT_VTAB\"\n",
+    );
+    write(
+        &root,
+        ".github/workflows/build.yml",
+        "      env:\n        LIBSQLITE3_FLAGS: -DSQLITE_ENABLE_FTS5\n",
+    );
+    write(
+        &root,
+        "mobile/scripts/core.sh",
+        "export LIBSQLITE3_FLAGS=\"-DSQLITE_ENABLE_DBPAGE_VTAB -DSQLITE_ENABLE_FTS5\"\n",
+    );
+    let report = sqlite_page_flag(&root);
+    let text = findings(&report);
+    assert_eq!(report.findings.len(), 2, "{text}");
+    assert!(text.contains(".cargo/config.toml"), "{text}");
+    assert!(text.contains(".github/workflows/build.yml:2"), "{text}");
+}
+
+#[test]
+fn the_page_flag_set_everywhere_it_is_set_is_clean() {
+    let root = fixture_dir("sqlite-flag-clean");
+    write(
+        &root,
+        ".cargo/config.toml",
+        "[env]\nLIBSQLITE3_FLAGS = \"-DSQLITE_ENABLE_DBPAGE_VTAB\"\n",
+    );
+    write(
+        &root,
+        "mobile/scripts/core.sh",
+        "export LIBSQLITE3_FLAGS=\"-DSQLITE_ENABLE_DBPAGE_VTAB -DSQLITE_ENABLE_FTS5\"\n",
+    );
+    let report = sqlite_page_flag(&root);
+    assert!(report.findings.is_empty(), "{}", findings(&report));
+}

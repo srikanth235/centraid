@@ -6,7 +6,7 @@
 #       [--adapter FILE | --adapter-url URL --adapter-sha256 HASH] [--grammar off|handles|full] [--tools sig|s2|...]
 #
 # - The base model is the stock GGUF pinned in crates/assist/model.json (url and sha256): never a choice here.
-# - `--tag` is the data version's tag in the private dataset `srikanth235/centraid-native-data`, and `--val-blake3` the hash of
+# - `--tag` is the data version's tag in the private dataset `srikanth235/centraid-assist-data`, and `--val-blake3` the hash of
 #   `data/val.jsonl.zst` that tag's manifest.json records (`jq '.files["data/val.jsonl.zst"].blake3' manifest.json`). The
 #   kernel refuses a manifest or a file that does not carry it.
 # - No `--adapter*` flag is the baseline: the stock model alone.
@@ -52,7 +52,7 @@ kit = {
     "commit": os.environ["COMMIT"],
     "model": {"url": current["url"], "sha256": current["sha256"]},
     "adapter": json.loads(os.environ["ADAPTER"]),
-    "data": {"repo": "srikanth235/centraid-native-data", "tag": os.environ["TAG"], "split": "val", "blake3": os.environ["VAL"]},
+    "data": {"repo": "srikanth235/centraid-assist-data", "tag": os.environ["TAG"], "split": "val", "blake3": os.environ["VAL"]},
     "tools": os.environ["TOOLS"] or current["tools_mode"],
     "shards": 2,
 }

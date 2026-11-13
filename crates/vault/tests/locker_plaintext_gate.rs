@@ -16,7 +16,7 @@
 //! A real founded vault with real sealed cells, sealed here with a key that is
 //! never written anywhere, and then: `keyset_page` over every sealed table,
 //! the `locker.*` command surface including `export` and the two derivations,
-//! the pre-migration snapshot, the backup snapshot's parts (sealed **and**
+//! the backup snapshot's parts (sealed **and**
 //! opened), and the vault file with its WAL and SHM. Every answer is searched for every planted
 //! plaintext as a raw byte run, because a structured payload could carry one
 //! without spelling it.
@@ -128,11 +128,21 @@ impl Sealed {
                      VALUES ('key-1', '2026-01-01T00:00:00.000Z')",
                     [],
                 )?;
-                for (item_id, title, username, brand) in [
-                    ("item-1", "The bank", "plainuser-xylophone9", None),
+                // A login, and a card (a type owns its own columns, and the file refuses the rest).
+                for (item_id, title, kind, name_column, name, brand) in [
+                    (
+                        "item-1",
+                        "The bank",
+                        "login",
+                        "username",
+                        "plainuser-xylophone9",
+                        None,
+                    ),
                     (
                         "item-2",
                         "The card",
+                        "card",
+                        "memo",
                         "plainname-quokka7",
                         Some("plainbrand-zeppelin3"),
                     ),
@@ -140,19 +150,21 @@ impl Sealed {
                     // A Locker item is an entity first; its kind row joins it.
                     tx.insert_entity(item_id, Kind::LockerItem, title, "2026-01-01T00:00:00.000Z")?;
                     connection.execute(
-                        "INSERT INTO locker_item (id, type, username, brand, key_id)
-                         VALUES (?1, 'login', ?2, ?3, 'key-1')",
-                        rusqlite::params![item_id, username, brand],
+                        &format!(
+                            "INSERT INTO locker_item (id, type, {name_column}, brand, key_id)
+                             VALUES (?1, ?2, ?3, ?4, 'key-1')"
+                        ),
+                        rusqlite::params![item_id, kind, name, brand],
                     )?;
                 }
                 connection.execute(
-                    "INSERT INTO locker_item_alias (alias, item_id, created_at)
+                    "INSERT INTO locker_item_alias (id, item_id, created_at)
                      VALUES ('plainalias-narwhal5', 'item-1', '2026-01-01T00:00:00.000Z')",
                     [],
                 )?;
                 connection.execute(
                     "INSERT INTO locker_item_field
-                       (field_id, item_id, section, label, kind, created_at, updated_at, key_id)
+                       (id, item_id, section, label, kind, created_at, updated_at, key_id)
                      VALUES ('field-1', 'item-1', '', 'Recovery code', 'sealed',
                              '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 'key-1')",
                     [],
@@ -161,7 +173,7 @@ impl Sealed {
                 // schema requires a sealed value and forbids a plain one).
                 connection.execute(
                     "INSERT INTO locker_item_field
-                       (field_id, item_id, section, label, kind, value_sealed, created_at,
+                       (id, item_id, section, label, kind, value_sealed, created_at,
                         updated_at, key_id)
                      VALUES ('field-2', 'item-1', '', 'Backup code', 'otp', 'lk1:placeholder',
                              '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 'key-1')",
@@ -523,49 +535,50 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
             .expect("the readers answer");
     }
 
-    // ---- 3. THE SNAPSHOT ---------------------------------------------------
-    let snapshot_dir = sealed_vault.scratch.dir().join("snapshot");
-    let snapshot = centraid_vault::build_snapshot(&sealed_vault.scratch.vault, &snapshot_dir)
-        .expect("a snapshot is built");
-    // The artefact is gzipped, so the raw file is searched AND the inflated
-    // bytes are: a compressed plaintext is still a plaintext, and a scan that
-    // only read the gzip would pass on a vault that shipped one.
-    let bytes = std::fs::read(snapshot_dir.join(&snapshot.name)).expect("the snapshot reads");
-    carries_no_secret("the snapshot (compressed)", &bytes);
-    carries_no_secret("the snapshot (inflated)", &inflate(&bytes));
-
     // ---- 4. THE BACKUP SNAPSHOT, SEALED AND OPENED (#1080) ---------------
     //
-    // A backup is the file copied page for page, cut into 64 KiB ranges, each
+    // A backup is the file read page for page, cut into 64 KiB ranges, each
     // sealed as a `centraid-sealed/2` part, plus one sealed manifest. The scan
     // reads every sealed part — which would pass vacuously if the sealing were
     // ever removed — AND every opened one: a range that leaked a Locker secret
     // into the plaintext it seals is a leak the moment its key is lost.
     {
-        use centraid_vault::backup::ledger::Ledger;
         use centraid_vault::backup::naming::keys_from_root;
         use centraid_vault::backup::snapshot::{self, APP};
         use centraid_vault::backup::spool::{SPOOL_CEILING_BYTES, Spool};
-        use centraid_vault::backup::store::MemoryStore;
+        use centraid_vault::backup::state::DeviceState;
+        use centraid_vault::backup::store::{MemoryStore, Store as _};
 
         let vault = &sealed_vault.scratch.vault;
         let keys = keys_from_root(&[0x5a; 32]);
-        let ledger = Ledger::open(Ledger::path_for(vault.path())).expect("a ledger");
+        let state = DeviceState::open_beside(vault.path()).expect("a device state");
         let spool = Spool::open(Spool::dir_for(vault.path())).expect("a spool");
         let taken = snapshot::take(
             vault,
             &keys,
-            &sealed_vault.scratch.dir().join("backup-scratch"),
+            &spool,
+            SPOOL_CEILING_BYTES,
             &"5a".repeat(32),
             APP,
         )
         .expect("a snapshot is taken");
-        let plan = snapshot::plan(&taken, &MemoryStore::new("laptop")).expect("plans");
+        let laptop = MemoryStore::new("laptop");
+        let plan = snapshot::plan(&taken, &laptop).expect("plans");
+        state
+            .put_gateway(&centraid_vault::backup::state::Gateway::paired(
+                laptop.gateway_id().to_owned(),
+                Vec::new(),
+                Vec::new(),
+                "The laptop".to_owned(),
+                1,
+                1,
+            ))
+            .expect("pairs");
         let spooled = snapshot::spool(
             &taken,
-            &plan,
+            &[(laptop.gateway_id().to_owned(), plan)],
             &spool,
-            &ledger,
+            &state,
             &keys,
             SPOOL_CEILING_BYTES,
             1,
@@ -582,7 +595,6 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
                 centraid_media::sealed::open_whole(&keys, name, &sealed).expect("the part opens");
             carries_no_secret("an opened snapshot part", &plain);
         }
-        taken.discard().expect("the scratch copy goes");
     }
 
     // ---- 5. THE VAULT FILE ITSELF ----------------------------------------
@@ -596,17 +608,6 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
             carries_no_secret(sidecar, &bytes);
         }
     }
-}
-
-/// Inflate a gzipped artefact, so a compressed plaintext cannot hide from the
-/// byte scan.
-fn inflate(bytes: &[u8]) -> Vec<u8> {
-    use std::io::Read as _;
-    let mut out = Vec::new();
-    flate2::read::GzDecoder::new(bytes)
-        .read_to_end(&mut out)
-        .expect("the artefact inflates");
-    out
 }
 
 /// A LOCKER WRITE THAT CARRIES PLAINTEXT IS REFUSED, NEVER STORED PLAIN.
@@ -723,11 +724,11 @@ fn an_otp_custom_field_is_sealed_and_never_plain_in_a_row_a_revision_or_the_inde
     }
     // The schema itself refuses a plain seed, and an `otp` field with no sealed one.
     for statement in [
-        "INSERT INTO locker_item_field (field_id, item_id, label, kind, value_text, created_at)
+        "INSERT INTO locker_item_field (id, item_id, label, kind, value_text, created_at)
          VALUES ('plain-otp', 'item-1', 'x', 'otp', 'PLAIN', '2026-01-01T00:00:00.000Z')",
-        "INSERT INTO locker_item_field (field_id, item_id, label, kind, value_text, value_sealed, created_at)
+        "INSERT INTO locker_item_field (id, item_id, label, kind, value_text, value_sealed, created_at)
          VALUES ('both-otp', 'item-1', 'x', 'otp', 'PLAIN', 'lk1:x', '2026-01-01T00:00:00.000Z')",
-        "INSERT INTO locker_item_field (field_id, item_id, label, kind, created_at)
+        "INSERT INTO locker_item_field (id, item_id, label, kind, created_at)
          VALUES ('empty-otp', 'item-1', 'x', 'otp', '2026-01-01T00:00:00.000Z')",
     ] {
         let refused = vault.scratch.vault.commit(|tx| {
@@ -769,7 +770,7 @@ fn an_otp_custom_field_is_sealed_and_never_plain_in_a_row_a_revision_or_the_inde
         .read(|connection| {
             let kind_and_plain: (String, Option<String>, Option<String>) = connection.query_row(
                 "SELECT kind, value_text, value_sealed FROM locker_item_field
-                  WHERE field_id = 'field-otp'",
+                  WHERE id = 'field-otp'",
                 [],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )?;

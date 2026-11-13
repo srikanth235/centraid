@@ -71,9 +71,21 @@ internal object SecretStores {
         return SyncedSecretsStatus(synchronizing = cloud, restores_after_setup = false)
     }
 
+    /** [bytes] as text, or null when they are not valid UTF-8. */
+    internal fun strictUtf8(bytes: ByteArray): String? = try {
+        Charsets.UTF_8.newDecoder()
+            .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+            .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+            .decode(java.nio.ByteBuffer.wrap(bytes)).toString()
+    } catch (error: java.nio.charset.CharacterCodingException) {
+        null
+    }
+
     private suspend fun perform(context: Context, op: SecretOp): SecretAnswer {
         val synced = op.store == SecretStore.SECRET_STORE_SYNCED
-        val value = op.value_.utf8()
+        // A SET WHOSE BYTES ARE NOT UTF-8 IS REFUSED, NEVER REPLACED: the stores keep text, and a lossy
+        // decode would hand the core back a different secret than it stored.
+        val value = strictUtf8(op.value_.toByteArray()) ?: return SecretAnswer(ok = false)
         return when (op.op) {
             SecretOp.Op.OP_GET -> {
                 val held = if (synced) syncedGet(context, op.key) else deviceGet(context, op.key)

@@ -11,7 +11,7 @@ from unittest import mock
 from adapter_train import config, hf
 from test_config import job
 
-REF = "hf://datasets/srikanth235/centraid-native-data@v0.2"
+REF = "hf://datasets/srikanth235/centraid-assist-data@v0.2"
 
 
 def layout(root: Path, manifest=None):
@@ -54,7 +54,7 @@ class SecretTokenTest(unittest.TestCase):
 class SubsetTest(unittest.TestCase):
     def test_a_named_subset_replaces_the_train_file_and_nothing_else(self):
         self.assertEqual(hf.train_path(), "data/train.jsonl.zst")
-        self.assertEqual(hf.train_path("train-1000"), "data/train-1000.jsonl.zst")
+        self.assertEqual(hf.train_path("train-1000"), "data/subsets/train-1000.jsonl.zst")
 
     def test_the_test_split_and_odd_names_are_never_a_subset(self):
         for bad in ("test", "noise", "val", "train", "../test", "a/b", "", "x" * 80, "-x"):
@@ -65,7 +65,8 @@ class SubsetTest(unittest.TestCase):
         tmp = Path(tempfile.mkdtemp(prefix="hf-sub-"))
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         repo = layout(tmp / "repo")
-        (repo / "data" / "train-1000.jsonl.zst").write_bytes(b"rows of 1000\n")
+        (repo / "data" / "subsets").mkdir()
+        (repo / "data" / "subsets" / "train-1000.jsonl.zst").write_bytes(b"rows of 1000\n")
         asked = []
         inner = hf.local_fetch(repo)
 
@@ -74,8 +75,8 @@ class SubsetTest(unittest.TestCase):
             inner(r, rev, path, dest)
 
         got = hf.fetch_version(REF, tmp / "d", subset="train-1000", fetch=fetch)
-        self.assertEqual(asked, ["manifest.json", "data/train-1000.jsonl.zst", "data/val.jsonl.zst"])
-        self.assertEqual(got["source"]["files"], {"train": "data/train-1000.jsonl.zst", "val": "data/val.jsonl.zst"})
+        self.assertEqual(asked, ["manifest.json", "data/subsets/train-1000.jsonl.zst", "data/val.jsonl.zst"])
+        self.assertEqual(got["source"]["files"], {"train": "data/subsets/train-1000.jsonl.zst", "val": "data/val.jsonl.zst"})
         self.assertEqual(got["paths"]["train"].read_bytes(), b"rows of 1000\n")
 
     def test_a_subset_goes_in_the_job_file_with_hf_only(self):
@@ -106,7 +107,7 @@ class HfTest(unittest.TestCase):
         return got, asked
 
     def test_a_reference_is_a_repo_at_a_pinned_revision(self):
-        self.assertEqual(hf.parse(REF), ("srikanth235/centraid-native-data", "v0.2"))
+        self.assertEqual(hf.parse(REF), ("srikanth235/centraid-assist-data", "v0.2"))
         self.assertEqual(hf.parse("hf://datasets/o/r@" + "a" * 40)[1], "a" * 40)
 
     def test_a_moving_branch_or_a_malformed_reference_is_refused(self):
@@ -132,7 +133,7 @@ class HfTest(unittest.TestCase):
     def test_the_source_keeps_the_repo_revision_and_the_manifest_with_its_hash(self):
         got, _ = self.asked()
         src = got["source"]
-        self.assertEqual((src["repo"], src["revision"]), ("srikanth235/centraid-native-data", "v0.2"))
+        self.assertEqual((src["repo"], src["revision"]), ("srikanth235/centraid-assist-data", "v0.2"))
         self.assertEqual(src["manifest"]["files"]["data/train.jsonl.zst"]["blake3"], "ab")
         self.assertEqual(src["manifest_sha256"], __import__("hashlib").sha256((self.repo / "manifest.json").read_bytes()).hexdigest())
         json.dumps(src)  # it goes into the run record

@@ -445,6 +445,14 @@ private fun BackupPage(
                                     modifier = Modifier.testTag("backup-check-status"),
                                 )
                             }
+                            if (model.check_rate.isNotEmpty()) {
+                                Text(
+                                    model.check_rate,
+                                    style = centraidType("annotLabel"),
+                                    color = Surface.meta,
+                                    modifier = Modifier.testTag("backup-check-rate"),
+                                )
+                            }
                         }
                         CentraidIcon(iconKey = "ChevronRight", tint = Surface.meta, size = 16.dp)
                     }
@@ -592,6 +600,17 @@ private fun Destinations(model: BackupHomeData, onEvent: (BackupHomeEvent) -> Un
                 if (row.held.isNotEmpty()) Sentence(row.held)
                 if (row.backed_up.isNotEmpty()) Sentence(row.backed_up)
                 if (row.detail.isNotEmpty()) Sentence(row.detail)
+                row.notes.forEach { note -> Sentence(note) }
+            }
+            // UNDO, only while this phone has deletes held there (#1191).
+            if (row.undo_label.isNotEmpty()) {
+                OutlineButton(
+                    label = row.undo_label,
+                    testTag = "backup-undo-" + row.gateway_id,
+                    modifier = Modifier.semantics { contentDescription = row.undo_label + " " + row.label },
+                ) {
+                    onEvent(BackupHomeEvent(undo_held = BackupHomeEvent.UndoHeld(gateway_id = row.gateway_id)))
+                }
             }
             // FORGET IS PLAIN AND VISIBLE, and needs no confirmation: it forgets this phone's pairing and
             // nothing the backup device holds, and pairing again undoes it.

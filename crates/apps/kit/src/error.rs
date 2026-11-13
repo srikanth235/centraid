@@ -21,6 +21,11 @@ pub enum KitError {
     #[error("page cursor: {column} must be a string, got {found}")]
     CursorPkNotText { column: String, found: String },
 
+    /// An order that declares an integer tiebreak ([`crate::PageOrder::asc_integer_pk`]) met a
+    /// cell that is not an integer.
+    #[error("page cursor: {column} must be an integer, got {found}")]
+    CursorPkNotInteger { column: String, found: String },
+
     /// `pageCursorOf`: the order's columns must be in the projection. v0 reads
     /// `undefined` here and stringifies it; the port refuses instead.
     #[error("page cursor: {column} is not in the projection of {query}")]

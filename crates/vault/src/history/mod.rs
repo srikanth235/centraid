@@ -94,7 +94,7 @@ pub use restore::{Restored, Scope, restore_changes, restore_version};
 pub use shape::{
     CONTENT, Cell, OMITTED, Part, RELATIONS_OUTSIDE, Role, Shape, TABLES, is_sealed, shape,
 };
-pub use write::{DAY, Kept, keep_overlay, overlay_refusal};
+pub use write::{ALERTS, DAY, Kept, keep_overlay, overlay_refusal};
 
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::Value as Json;
@@ -186,7 +186,7 @@ pub const SESSION_CAP_MS: i64 = 60 * 60 * 1000;
 /// (the same cause says so), the command is not the history's own, no secret was sealed anew,
 /// the last commit of the session was at most [`SESSION_IDLE_MS`] ago and its first at most
 /// [`SESSION_CAP_MS`] ago. A fold moves the version's `touched_at` and nothing else.
-fn folds(
+pub(crate) fn folds(
     connection: &Connection,
     id: &str,
     before: &str,

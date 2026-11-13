@@ -67,10 +67,10 @@ pub(crate) struct Ctx<'a> {
 /// # Errors
 /// The ledger's refusal.
 pub(crate) fn moved_epoch(plane: &Plane) -> Result<Option<u64>> {
-    if !plane.ledger_path().exists() {
+    if !plane.state_path().exists() {
         return Ok(None);
     }
-    Ok(crate::phone::moved(&plane.ledger()?)?.map(|(_, epoch)| epoch))
+    Ok(crate::phone::moved(&plane.state()?)?.map(|(_, epoch)| epoch))
 }
 
 /// The refusal a frozen vault answers every write with.

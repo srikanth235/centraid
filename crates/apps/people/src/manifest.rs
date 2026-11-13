@@ -107,7 +107,7 @@ mod tests {
     fn it_declares_eleven_reads_and_one_act_scope_per_command() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("People declares its reach");
-        assert_eq!(vault.scopes.len(), 45);
+        assert_eq!(vault.scopes.len(), 46);
         let mut declared: Vec<(&str, &str)> = vault
             .scopes
             .iter()
@@ -133,7 +133,7 @@ mod tests {
                 scope.table.as_deref().expect("a read names a table")
             })
             .collect();
-        assert_eq!(reads.len(), 15);
+        assert_eq!(reads.len(), 16);
         // NOTHING WIDER and nothing revealed: no whole-schema grant, and
         // `reveal` is Locker's alone.
         assert!(

@@ -1,4 +1,4 @@
-//! `Range` on `GET /v2/v/{vault}/o/{name}` (#1080).
+//! `Range` on `GET /v3/v/{vault}/o/{name}` (#1080).
 //!
 //! One byte range per request, which is what resuming a download needs. The
 //! reading follows RFC 9110 §14: a `Range` the gateway does not understand —

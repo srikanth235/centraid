@@ -70,8 +70,8 @@ pub struct NewEvent<'a> {
     pub rule: Option<&'a str>,
     /// The calendar it is on; the vault's own when none is named.
     pub calendar_id: Option<&'a str>,
-    /// Minutes before it starts, a JSON array.
-    pub reminders: Option<&'a str>,
+    /// Minutes before it starts; a minute once.
+    pub reminders: &'a [i64],
     pub description: Option<&'a str>,
     pub place_id: Option<&'a str>,
     pub url: Option<&'a str>,
@@ -95,8 +95,8 @@ pub fn found(ctx: &CommandCtx<'_, '_>, event: &NewEvent<'_>) -> Result<String> {
     };
     ctx.connection().execute(
         "INSERT INTO event (id, starts, ends, timing, zone, rule, rule_supported, status, busy,
-                            calendar_id, place_id, url, reminders, description, travel_min)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                            calendar_id, place_id, url, description, travel_min)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
         rusqlite::params![
             id,
             event.starts,
@@ -110,12 +110,41 @@ pub fn found(ctx: &CommandCtx<'_, '_>, event: &NewEvent<'_>) -> Result<String> {
             event.calendar_id.unwrap_or(DEFAULT_CALENDAR_ID),
             event.place_id,
             event.url,
-            event.reminders,
             event.description,
             event.travel_min,
         ],
     )?;
+    set_reminders(ctx.connection(), &id, event.reminders)?;
     Ok(id)
+}
+
+/// The alerts an event holds, minutes before it starts, smallest first: the set the vault compares
+/// and merges on. A reader that shows them goes through `alerts::longest_first`.
+pub(crate) fn reminders_held(connection: &Connection, id: &str) -> Result<Vec<i64>> {
+    connection
+        .prepare_cached("SELECT offset_min FROM reminder WHERE entity_id = ?1 ORDER BY offset_min")?
+        .query_map([id], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()
+        .map_err(Into::into)
+}
+
+/// Make the event's alerts exactly `wanted` (a minute once). Returns whether anything changed.
+pub(crate) fn set_reminders(connection: &Connection, id: &str, wanted: &[i64]) -> Result<bool> {
+    let wanted: BTreeSet<i64> = wanted.iter().copied().collect();
+    let held: BTreeSet<i64> = reminders_held(connection, id)?.into_iter().collect();
+    for gone in held.difference(&wanted) {
+        connection.execute(
+            "DELETE FROM reminder WHERE entity_id = ?1 AND offset_min = ?2",
+            rusqlite::params![id, gone],
+        )?;
+    }
+    for added in wanted.difference(&held) {
+        connection.execute(
+            "INSERT INTO reminder (entity_id, offset_min) VALUES (?1, ?2)",
+            rusqlite::params![id, added],
+        )?;
+    }
+    Ok(wanted != held)
 }
 
 /// The vocabulary of `event.timing`, held equal to the CHECK by a test.
@@ -353,7 +382,7 @@ fn day_times(
 /// and the row it leaves compare equal.
 pub(crate) fn shape(fields: &mut serde_json::Map<String, Json>) -> std::result::Result<(), String> {
     if let Some(alerts) = fields.get("reminders") {
-        let alerts = alerts_text(alerts)?;
+        let alerts = alerts_canon(alerts)?;
         fields.insert("reminders".to_owned(), alerts);
     }
     if !["starts", "ends", "timing", "zone"]
@@ -384,7 +413,7 @@ pub(crate) fn shape_overlay(
     id: &str,
     overlay: &mut serde_json::Map<String, Json>,
 ) -> std::result::Result<(), String> {
-    const OWN: [&str; 5] = ["starts", "ends", "timing", "zone", "reminders"];
+    const OWN: [&str; 4] = ["starts", "ends", "timing", "zone"];
     let mut stated = serde_json::Map::new();
     for name in OWN {
         if let Some(value) = overlay.remove(&format!("event.{name}")) {
@@ -437,12 +466,22 @@ fn day_row(
     }))
 }
 
-/// The alerts a source states (minutes before it starts), in the one text the `reminders` column
-/// holds: a JSON array in the order stated, a minute once. No alert is `null`.
-fn alerts_text(alerts: &Json) -> std::result::Result<Json, String> {
+/// The alerts a source states (minutes before it starts) in the one form the statement keeps: a
+/// JSON array, each minute once, smallest first. No alert is `null`.
+fn alerts_canon(alerts: &Json) -> std::result::Result<Json, String> {
+    let list = alerts_of(alerts)?;
+    Ok(if list.is_empty() {
+        Json::Null
+    } else {
+        json!(list)
+    })
+}
+
+/// The minutes a statement of alerts names, each once, smallest first.
+fn alerts_of(alerts: &Json) -> std::result::Result<Vec<i64>, String> {
     let list: Vec<i64> = match alerts {
-        Json::Null => return Ok(Json::Null),
-        // Already the column's own text (a statement read back).
+        Json::Null => Vec::new(),
+        // A statement read back from text.
         Json::String(text) => match serde_json::from_str::<Json>(text) {
             Ok(Json::Array(list)) => list.iter().filter_map(Json::as_i64).collect(),
             _ => return Err("reminders are minutes before the start".to_owned()),
@@ -458,16 +497,59 @@ fn alerts_text(alerts: &Json) -> std::result::Result<Json, String> {
             .collect::<std::result::Result<_, _>>()?,
         _ => return Err("reminders are minutes before the start".to_owned()),
     };
-    let mut seen = BTreeSet::new();
-    let list: Vec<i64> = list
+    Ok(list
         .into_iter()
-        .filter(|minutes| seen.insert(*minutes))
-        .collect();
-    Ok(if list.is_empty() {
+        .collect::<BTreeSet<i64>>()
+        .into_iter()
+        .collect())
+}
+
+/// The alerts the vault holds, in the form a source states them (`null` for none).
+pub(crate) fn reminders_read(connection: &Connection, id: &str) -> Result<Json> {
+    let held = reminders_held(connection, id)?;
+    Ok(if held.is_empty() {
         Json::Null
     } else {
-        Json::String(json!(list).to_string())
+        json!(held)
     })
+}
+
+pub(crate) fn reminders_canon(statement: &Json) -> Json {
+    alerts_canon(statement).unwrap_or_else(|_| statement.clone())
+}
+
+/// A three-way merge of the alerts, judged whole: the source's new word replaces the vault's when
+/// the member never changed them (they are what its last word implied).
+pub(crate) fn reminders_merge(
+    ctx: &CommandCtx<'_, '_>,
+    id: &str,
+    stated: Option<&Json>,
+    new: &Json,
+) -> Result<bool> {
+    let connection = ctx.connection();
+    let held = reminders_held(connection, id)?;
+    let wanted = alerts_of(new).unwrap_or_default();
+    if wanted == held {
+        return Ok(false);
+    }
+    let ours = match stated {
+        Some(said) => alerts_of(said).unwrap_or_default() == held,
+        None => held.is_empty(),
+    };
+    if !ours {
+        return Ok(false);
+    }
+    set_reminders(connection, id, &wanted)
+}
+
+/// Put the alerts back to what the source last stated.
+pub(crate) fn reminders_take(
+    ctx: &CommandCtx<'_, '_>,
+    id: &str,
+    _item: Option<&str>,
+    stated: &Json,
+) -> Result<bool> {
+    set_reminders(ctx.connection(), id, &alerts_of(stated).unwrap_or_default())
 }
 
 // ---------------------------------------------------------------------------
@@ -530,17 +612,18 @@ pub(crate) fn attendees_items(guests: &Json) -> std::collections::BTreeMap<Strin
     out
 }
 
+/// The read [`person_of_email`] makes: a seek into `contact_point_by_value`, planned as the product
+/// makes it by `index_walks.rs` rather than copied there (#1191, L3).
+pub const PERSON_OF_EMAIL: &str =
+    "SELECT p.person_id FROM contact_point p JOIN entity e ON e.id = p.person_id
+              WHERE p.kind = 'email' AND p.normalized = ?1 AND e.deleted_at IS NULL
+              ORDER BY p.person_id LIMIT 1";
+
 /// The live person an email is, by an exact match with one of their email points.
 fn person_of_email(connection: &Connection, email: &str) -> Result<Option<String>> {
     let key = crate::commands::contact_point::reach_key("email", email);
     Ok(connection
-        .query_row(
-            "SELECT p.person_id FROM contact_point p JOIN entity e ON e.id = p.person_id
-              WHERE p.kind = 'email' AND p.normalized = ?1 AND e.deleted_at IS NULL
-              ORDER BY p.person_id LIMIT 1",
-            [&key],
-            |row| row.get(0),
-        )
+        .query_row(PERSON_OF_EMAIL, [&key], |row| row.get(0))
         .optional()?)
 }
 
@@ -1217,11 +1300,12 @@ fn invalid(name: &str, detail: String) -> VaultError {
     }
 }
 
-fn reminders_of(ctx: &CommandCtx<'_, '_>) -> Option<String> {
+fn reminders_of(ctx: &CommandCtx<'_, '_>) -> Vec<i64> {
     ctx.input
         .get("reminders")
-        .filter(|minutes| minutes.as_array().is_some_and(|list| !list.is_empty()))
-        .map(Json::to_string)
+        .and_then(Json::as_array)
+        .map(|list| list.iter().filter_map(Json::as_i64).collect())
+        .unwrap_or_default()
 }
 
 /// Make the event's guests exactly `wanted`: a guest already invited keeps their
@@ -1272,7 +1356,7 @@ fn propose(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             zone: times.zone.as_deref(),
             rule: ctx.optional_str("rule").map(rrule::canonicalize).as_deref(),
             calendar_id: ctx.optional_str("calendar_id"),
-            reminders: reminders.as_deref(),
+            reminders: &reminders,
             description: ctx.optional_str("description"),
             place_id: ctx.optional_str("place_id"),
             url: ctx.optional_str("url"),
@@ -1316,10 +1400,7 @@ fn write_event(ctx: &CommandCtx<'_, '_>, id: &str, after: &Times) -> Result<()> 
         }
     }
     if ctx.input.get("reminders").is_some() {
-        connection.execute(
-            "UPDATE event SET reminders = ?2 WHERE id = ?1",
-            rusqlite::params![id, reminders_of(ctx)],
-        )?;
+        set_reminders(connection, id, &reminders_of(ctx))?;
     }
     if let Some(rule) = ctx.input.get("rule") {
         let rule = rule.as_str().map(rrule::canonicalize);
@@ -1850,7 +1931,7 @@ const PROPOSE_SCHEMA: &str = r#"{
     "travel_min": { "type": ["integer", "null"], "minimum": 0,
       "description": "Minutes of travel to allow before it starts." },
     "reminders": { "type": ["array", "null"], "items": { "type": "integer", "minimum": 0 },
-      "description": "Minutes before it starts, one per alert: the first and a second." },
+      "description": "Minutes before it starts, one per alert (at most two in the editor). Held as a set and read longest lead first." },
     "attendees": { "type": "array", "items": { "type": "string", "minLength": 1 } },
     "status": { "type": "string", "enum": ["confirmed", "tentative", "cancelled"] },
     "busy": { "type": "boolean" }

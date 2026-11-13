@@ -170,17 +170,23 @@ enum Command {
     },
     /// Publish a built data version to a Hugging Face dataset repo, one revision per version. A DRY RUN unless `--upload`:
     /// it checks the version (file hashes, a clean build, publishable, no sealed placeholder), lists every file with
-    /// its size and hash and uploads nothing. A real upload needs `--upload`, `--repo` and `HF_TOKEN` in the
+    /// its size and hash and uploads nothing (with `--repo` and `HF_TOKEN` it also reads the repo's tree and lists the
+    /// paths the commit would remove: a version's tree is exactly its files). A real upload needs `--upload`, `--repo` and `HF_TOKEN` in the
     /// environment; the repo is private unless `--public`, the revision is the version's name, and an existing
     /// revision is never overwritten.
     Publish {
         /// A data version (`datagen build --out`).
         #[arg(long = "in")]
         input: PathBuf,
-        /// The dataset repo, as owner/name. For this project: srikanth235/centraid-native-data.
+        /// The data repo, as owner/name: train, val, noise, their worlds, the contract and the reports. For this project:
+        /// srikanth235/centraid-assist-data.
         #[arg(long)]
         repo: Option<String>,
-        /// Really upload (needs `--repo` and `HF_TOKEN`).
+        /// The held-out repo, as owner/name: the test split, its worlds and the LLM cache. For this project:
+        /// srikanth235/centraid-assist-heldout. It must be the one the manifest points to; a real upload needs it.
+        #[arg(long)]
+        heldout_repo: Option<String>,
+        /// Really upload (needs `--repo`, `--heldout-repo` and `HF_TOKEN`).
         #[arg(long)]
         upload: bool,
         /// Make the repo public when it is created. Private by default.
@@ -189,6 +195,29 @@ enum Command {
         /// The Python that runs `huggingface_hub` for the upload.
         #[arg(long, default_value = "python3")]
         python: String,
+    },
+    /// Give a data version built before the contract block existed its `contract` block and `heldout` pointer in
+    /// `manifest.json` and write `contract/`. It changes no data file and does not read the test split. It first PROVES the
+    /// contract against the data: every record of train and val must hold the tools block this checkout's runtime serves
+    /// for the manifest's tools mode, or nothing is changed and the counts are printed.
+    Restamp {
+        /// A data version (`datagen build --out`).
+        #[arg(long = "in")]
+        input: PathBuf,
+        /// The held-out repo to point at, as owner/name.
+        #[arg(long, default_value = publish::HELDOUT_REPO)]
+        heldout_repo: String,
+    },
+    /// Has the tool contract moved under a data version, and by how much? Replays the reference calls of train and val
+    /// (never test) through the CURRENT tools and reports, in counts: whether the contract's hashes are the same, which
+    /// calls no longer validate (shape), which run but give another result (behaviour), which tools, arguments and kinds
+    /// of the current catalogue the data hardly shows (coverage), and the level: wording (re-render from the cache),
+    /// shape or behaviour (regenerate those sessions) or coverage (new intents). The version needs a contract block
+    /// (`datagen restamp` gives one). Its worlds may be flat under `worlds/` or in `worlds/<split>/`.
+    Drift {
+        /// A data version, built or fetched from the data repo.
+        #[arg(long = "in")]
+        input: PathBuf,
     },
     /// Write the byte-level TEST tokenizer to a file, for a rehearsal build that needs no model and no download. A
     /// version rendered with it is marked not publishable.
@@ -755,23 +784,64 @@ fn main() -> Result<()> {
         Command::Publish {
             input,
             repo,
+            heldout_repo,
             upload,
             public,
             python,
         } => {
             let named = repo.as_deref().unwrap_or(publish::EXAMPLE_REPO);
-            let publication = publish::prepare(&input, named)?;
+            let publication = publish::prepare(&input, named, heldout_repo.as_deref())?;
             if upload {
                 let repo = repo.context("--upload needs --repo owner/name")?;
+                heldout_repo.context("--upload needs --heldout-repo owner/name")?;
                 let token = publish::token_from_env()?;
                 let done = publish::upload(&publication, &repo, !public, &python, &token)?;
                 println!("{done}");
             } else {
+                // a read-only listing of the repo's tree, when it can be had, so the removals are shown
+                let remote = match (repo.as_deref(), publish::token_from_env()) {
+                    (Some(r), Ok(token)) => Some((
+                        publish::list_remote(r, &python, &token)?,
+                        publish::list_remote(&publication.heldout_repo, &python, &token)?,
+                    )),
+                    _ => None,
+                };
                 print!(
                     "{}",
-                    publish::dry_run(&publication, repo.as_deref(), !public)
+                    publish::dry_run(
+                        &publication,
+                        repo.as_deref(),
+                        !public,
+                        remote.as_ref().map(|(d, h)| (d, h))
+                    )
                 );
             }
+        }
+        Command::Restamp {
+            input,
+            heldout_repo,
+        } => {
+            let (contract, proofs) = centraid_datagen::contract::restamp(&input, &heldout_repo)?;
+            for p in &proofs {
+                println!(
+                    "proved: {} of {} {} records hold the `{}` tools block",
+                    p.with_block, p.records, p.split, contract.tools_mode
+                );
+            }
+            println!(
+                "stamped {}: tools_hash {}, prompt_hash {}, catalog_hash {}, tokenizer {}; held-out repo {heldout_repo}",
+                input.join("manifest.json").display(),
+                contract.tools_hash,
+                contract.prompt_hash,
+                contract.catalog_hash,
+                contract.tokenizer_blake3
+            );
+            println!(
+                "no data file was changed; the test split was not opened (only train and val were read)"
+            );
+        }
+        Command::Drift { input } => {
+            print!("{}", centraid_datagen::drift::report(&input)?.text());
         }
         Command::TestTokenizer { out } => {
             std::fs::write(&out, centraid_datagen::render::byte_level_tokenizer_json())?;

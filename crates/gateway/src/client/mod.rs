@@ -1,7 +1,7 @@
 //! THE PHONE'S CLIENT (#1080).
 //!
 //! HTTP/1.1 over TLS over TCP to one gateway, trusting exactly one
-//! certificate ([`tls`]). Every route of protocol v2 is a method here; the
+//! certificate ([`tls`]). Every route of protocol v3 is a method here; the
 //! bodies and refusals are [`crate::rules`]' own types, so the client reads
 //! back exactly what the server rendered.
 //!
@@ -73,12 +73,14 @@ use tokio_rustls::rustls::pki_types::ServerName;
 use crate::client::tls::{Trust, client_config, is_untrusted};
 use crate::rules::bundle::{Decoder, Frame, HEADER_LEN, Step, header as frame_header};
 use crate::rules::code::{Code, Refusal, RefusalBody};
-use crate::rules::ids::{Digest, Name, Pin, Token, VaultId};
-use crate::rules::limits::{MAX_BUNDLE_BYTES, MAX_OBJECT_BYTES};
+use crate::rules::ids::{Digest, GatewayId, Name, Pin, Token, VaultId};
+use crate::rules::limits::{LIST_LIMIT, MAX_BUNDLE_BYTES, MAX_OBJECT_BYTES, REQUIRED_PROTOCOL};
 use crate::rules::range::ByteRange;
+use crate::rules::signing::{HeadFields, verify_claim, verify_head};
 use crate::rules::wire::{
-    BundleAnswer, CODE_HEADER, DIGEST_HEADER, DeleteAnswer, HeadView, Info, Missing, Names,
-    ObjectEntry, PairRequest, Paired, Revoked, SetHead, SnapshotView,
+    BundleAnswer, CODE_HEADER, DIGEST_HEADER, DeleteAnswer, DeleteRequest, HeadView, HeldEntry,
+    Info, Missing, NameState, Names, NonceAnswer, ObjectEntry, PairRequest, Paired, Revoked,
+    SetHead, SnapshotView, UndoRequest, Undone,
 };
 
 /// How long one address gets to accept a TCP connection.
@@ -155,6 +157,21 @@ pub enum ClientError {
     /// gateway holds, or the bytes on the way, are damaged.
     #[error("the gateway's copy is damaged: {0}")]
     Damaged(String),
+    /// The gateway speaks an older protocol than this phone requires: the
+    /// member updates the gateway and pairs again. There is no fallback to
+    /// the older dialect (#1191, E13).
+    #[error("the gateway runs protocol {found}, and this phone needs {required}")]
+    GatewayTooOld {
+        /// What the gateway answered.
+        found: u32,
+        /// [`REQUIRED_PROTOCOL`].
+        required: u32,
+    },
+    /// An answer's signature does not verify against the vault's key and the
+    /// gateway's id the phone knows: a gateway that lies, or the wrong one.
+    /// Names what failed.
+    #[error("{0} is not signed by this vault for this gateway")]
+    Unverified(&'static str),
     /// A route that needs a token, on a client that has none.
     #[error("this client has no token")]
     NoToken,
@@ -184,23 +201,42 @@ pub struct HeadState {
     pub head: Option<HeadView>,
 }
 
-/// What the gateway answered a `PUT` with. **Every variant is an
-/// acknowledgement**: the gateway holds a sealing of these bytes under this
-/// name, durably. Anything else is a [`ClientError`].
+/// What the gateway answered a `PUT` with. `Stored` and `AlreadyStored` are
+/// acknowledgements: the gateway holds these bytes under this name, durably.
+/// `NameTaken` is one only when the digest it holds is the one sent
+/// ([`Put::acknowledged`], decision 30). Anything else is a [`ClientError`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Put {
     /// `201`: new bytes, now held.
     Stored(ObjectEntry),
     /// `200`: held already with this digest; nothing moved.
     AlreadyStored(ObjectEntry),
-    /// `409 NAME_TAKEN`: held already under another digest. A name is a
-    /// function of the plaintext and sealing is salted, so this is the same
-    /// bytes sealed again — an acknowledgement, not a refusal (#1080, the
-    /// root's ruling A15).
+    /// `409 NAME_TAKEN`: the name is not free. **An acknowledgement only if
+    /// `held == mine`** ([`Put::acknowledged`]); otherwise the gateway
+    /// holds other bytes under this name and the phone must not count this
+    /// one as stored (#1191, decision 30). A damaged name is freed by a
+    /// signed delete and then written again; a held or live one waits.
     NameTaken {
         /// The digest the gateway holds.
         held: Digest,
+        /// The digest this `PUT` sent.
+        mine: Digest,
+        /// Why the name is not free.
+        state: NameState,
     },
+}
+
+impl Put {
+    /// Whether the gateway now holds *these* bytes under the name: stored,
+    /// already stored, or a `NAME_TAKEN` whose recorded digest is the one
+    /// this `PUT` sent. Any other `NAME_TAKEN` is **not** an acknowledgement.
+    #[must_use]
+    pub fn acknowledged(&self) -> bool {
+        match self {
+            Self::Stored(_) | Self::AlreadyStored(_) => true,
+            Self::NameTaken { held, mine, .. } => held == mine,
+        }
+    }
 }
 
 /// Where a bundled part's bytes come from.
@@ -228,7 +264,7 @@ pub struct Part {
 /// its own trust challenge.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Handoff {
-    /// `https://<preferred address>/v2/v/<vault>/o/<name>`.
+    /// `https://<preferred address>/v3/v/<vault>/o/<name>`.
     pub url: String,
     /// `PUT`.
     pub method: String,
@@ -478,23 +514,37 @@ impl Client {
 
     // ─── the routes ──────────────────────────────────────────────────────────
 
-    /// `GET /v2/info`. Needs no token.
+    /// `GET /v3/info`. Needs no token. **The handshake**: a gateway that
+    /// answers with a protocol below [`REQUIRED_PROTOCOL`], or that does not
+    /// know `/v3/info` but answers `/v2/info`, is refused as
+    /// [`ClientError::GatewayTooOld`]; the older dialect is never spoken.
     ///
     /// # Errors
     ///
-    /// [`ClientError`].
+    /// [`ClientError`], [`ClientError::GatewayTooOld`] included.
     pub async fn info(&self) -> Result<Info, ClientError> {
-        self.call(Method::GET, "/v2/info", None::<&()>, false).await
+        let answer: Result<Info, ClientError> =
+            self.call(Method::GET, "/v3/info", None::<&()>, false).await;
+        if let Err(ClientError::Refused(Refusal::NotFound { .. } | Refusal::BadRequest)) = &answer {
+            // A gateway that has never heard of `/v3/info`: an older one, or
+            // not a gateway at all.
+            let older: Option<Info> = self
+                .call(Method::GET, "/v2/info", None::<&()>, false)
+                .await
+                .ok();
+            return handshake(answer, older.map(|info| info.protocol));
+        }
+        handshake(answer, None)
     }
 
-    /// `POST /v2/pair`. On success the client keeps the token.
+    /// `POST /v3/pair`. On success the client keeps the token.
     ///
     /// # Errors
     ///
     /// [`ClientError`].
     pub async fn pair(&self, request: &PairRequest) -> Result<Paired, ClientError> {
         let paired: Paired = self
-            .call(Method::POST, "/v2/pair", Some(request), false)
+            .call(Method::POST, "/v3/pair", Some(request), false)
             .await?;
         self.set_token(paired.token);
         Ok(paired)
@@ -511,22 +561,57 @@ impl Client {
     }
 
     /// `GET head`, with `NO_HEAD` folded into an answer: what a restore reads
-    /// before it claims one past the epoch.
+    /// before it claims one past the epoch. **The epoch is verified, never
+    /// taken on the gateway's word**: the head's signature and the standing
+    /// claim's are checked against `vault` (the identity public key) and
+    /// `gateway` (the id the phone learned at pairing, not one this answer
+    /// names), and the writer epoch is the greater of the two verified epochs
+    /// — or 1, the pairing's, when the vault has neither. An unsigned number
+    /// in the answer, `NO_HEAD`'s included, is not read.
     ///
     /// # Errors
     ///
-    /// [`ClientError`].
-    pub async fn head_state(&self, vault: &VaultId) -> Result<HeadState, ClientError> {
-        match self.head(vault).await {
-            Ok(head) => Ok(HeadState {
+    /// [`ClientError`]; [`ClientError::Unverified`] when the head or the claim
+    /// is not signed by this vault for this gateway.
+    pub async fn head_state(
+        &self,
+        vault: &VaultId,
+        gateway: &GatewayId,
+    ) -> Result<HeadState, ClientError> {
+        let (head, claim) = match self.head(vault).await {
+            Ok(head) => (Some(head), head.claim),
+            Err(ClientError::Refused(Refusal::NoHead { claim, .. })) => (None, claim.map(|c| *c)),
+            Err(error) => return Err(error),
+        };
+        let mut epoch = 1;
+        if let Some(head) = &head {
+            let fields = HeadFields {
                 epoch: head.epoch,
-                head: Some(head),
-            }),
-            Err(ClientError::Refused(Refusal::NoHead { epoch })) => {
-                Ok(HeadState { epoch, head: None })
+                generation: head.generation,
+                writes: head.writes,
+                taken_at_ms: head.taken_at_ms,
+                manifest: head.name,
+                prev: head.prev,
+            };
+            if !verify_head(gateway, vault, &fields, &head.signature) {
+                return Err(ClientError::Unverified("the head"));
             }
-            Err(error) => Err(error),
+            epoch = epoch.max(head.epoch);
         }
+        if let Some(claim) = &claim {
+            if !verify_claim(
+                gateway,
+                vault,
+                claim.epoch,
+                claim.head_seen.as_ref(),
+                &claim.nonce,
+                &claim.signature,
+            ) {
+                return Err(ClientError::Unverified("the standing claim"));
+            }
+            epoch = epoch.max(claim.epoch);
+        }
+        Ok(HeadState { epoch, head })
     }
 
     /// `PUT head`: compare-and-set on `prev`.
@@ -543,13 +628,64 @@ impl Client {
             .await
     }
 
-    /// `GET snapshots`.
+    /// `GET snapshots?after=&limit=`: one page, by name. The phone sorts by
+    /// `taken_at_ms`.
     ///
     /// # Errors
     ///
     /// [`ClientError`].
-    pub async fn snapshots(&self, vault: &VaultId) -> Result<Vec<SnapshotView>, ClientError> {
-        self.call(Method::GET, &route(vault, "snapshots"), None::<&()>, true)
+    pub async fn snapshots(
+        &self,
+        vault: &VaultId,
+        after: Option<&Name>,
+        limit: usize,
+    ) -> Result<Vec<SnapshotView>, ClientError> {
+        let path = page_path(&route(vault, "snapshots"), after, limit);
+        self.call(Method::GET, &path, None::<&()>, true).await
+    }
+
+    /// Every snapshot, paged by name and then sorted by `taken_at_ms`.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError`].
+    pub async fn snapshots_all(&self, vault: &VaultId) -> Result<Vec<SnapshotView>, ClientError> {
+        let mut all: Vec<SnapshotView> = Vec::new();
+        loop {
+            let after = all.last().map(|last| last.name);
+            let page = self.snapshots(vault, after.as_ref(), LIST_LIMIT).await?;
+            let done = page.len() < LIST_LIMIT;
+            all.extend(page);
+            if done {
+                all.sort_by_key(|snapshot| (snapshot.taken_at_ms, snapshot.name));
+                return Ok(all);
+            }
+        }
+    }
+
+    /// `GET held?after=&limit=`: what the vault key has asked to delete and
+    /// the gateway holds for a week.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError`].
+    pub async fn held(
+        &self,
+        vault: &VaultId,
+        after: Option<&Name>,
+        limit: usize,
+    ) -> Result<Vec<HeldEntry>, ClientError> {
+        let path = page_path(&route(vault, "held"), after, limit);
+        self.call(Method::GET, &path, None::<&()>, true).await
+    }
+
+    /// `POST /v3/nonce`: a nonce for one pair request. No token, no vault.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError`]; `BUSY` as a refusal carrying when to ask again.
+    pub async fn nonce(&self) -> Result<NonceAnswer, ClientError> {
+        self.call(Method::POST, "/v3/nonce", None::<&()>, false)
             .await
     }
 
@@ -636,9 +772,14 @@ impl Client {
             Ok(_) => Err(ClientError::Protocol(format!(
                 "a PUT answered {status}, which is neither 201 nor 200"
             ))),
-            Err(ClientError::Refused(Refusal::NameTaken { digest })) => {
-                Ok(Put::NameTaken { held: digest })
-            }
+            Err(ClientError::Refused(Refusal::NameTaken {
+                digest: held,
+                state,
+            })) => Ok(Put::NameTaken {
+                held,
+                mine: *digest,
+                state,
+            }),
             Err(error) => Err(error),
         }
     }
@@ -698,6 +839,16 @@ impl Client {
         let response = self.send(request).await?;
         let status = response.status();
         if !status.is_success() {
+            // A `HEAD` answer has no body, so a `MOVED` arrives without the
+            // signed claim it must carry. Ask a route that can say it.
+            let moved = response
+                .headers()
+                .get(CODE_HEADER)
+                .and_then(|value| value.to_str().ok())
+                == Some(Code::Moved.as_str());
+            if moved && let Err(error) = self.head(vault).await {
+                return Err(error);
+            }
             return Err(refusal_of(status, response.headers(), &[]));
         }
         let headers = response.headers();
@@ -874,14 +1025,12 @@ impl Client {
         after: Option<&Name>,
         limit: usize,
     ) -> Result<Vec<ObjectEntry>, ClientError> {
-        let mut path = format!("{}?limit={limit}", route(vault, "objects"));
-        if let Some(after) = after {
-            path.push_str(&format!("&after={after}"));
-        }
+        let path = page_path(&route(vault, "objects"), after, limit);
         self.call(Method::GET, &path, None::<&()>, true).await
     }
 
-    /// `POST delete`.
+    /// `POST delete`: the vault key's signed request to hold `names` for a
+    /// week.
     ///
     /// # Errors
     ///
@@ -889,17 +1038,39 @@ impl Client {
     pub async fn delete(
         &self,
         vault: &VaultId,
-        names: &[Name],
+        request: &DeleteRequest,
     ) -> Result<DeleteAnswer, ClientError> {
-        self.call(
-            Method::POST,
-            &route(vault, "delete"),
-            Some(&Names {
-                names: names.to_vec(),
-            }),
-            true,
-        )
-        .await
+        self.call(Method::POST, &route(vault, "delete"), Some(request), true)
+            .await
+    }
+
+    /// `POST check`: the vault key's signed request that the gateway hash one stored object
+    /// against its recorded digest (decision 34).
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError`].
+    pub async fn check(
+        &self,
+        vault: &VaultId,
+        request: &crate::rules::wire::CheckRequest,
+    ) -> Result<crate::rules::wire::Checked, ClientError> {
+        self.call(Method::POST, &route(vault, "check"), Some(request), true)
+            .await
+    }
+
+    /// `POST undo`: the vault key's signed request to lift holds.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError`].
+    pub async fn undo(
+        &self,
+        vault: &VaultId,
+        request: &UndoRequest,
+    ) -> Result<Undone, ClientError> {
+        self.call(Method::POST, &route(vault, "undo"), Some(request), true)
+            .await
     }
 
     /// `POST revoke`: this client's token revokes itself, and every route
@@ -1180,12 +1351,41 @@ impl Client {
     }
 }
 
+/// What the handshake decides, as a pure function of the two answers: the
+/// `/v3/info` answer, and the protocol an `/v2/info` answered with, when it
+/// was asked.
+fn handshake(v3: Result<Info, ClientError>, older: Option<u32>) -> Result<Info, ClientError> {
+    match (v3, older) {
+        (Ok(info), _) if info.protocol < REQUIRED_PROTOCOL => Err(ClientError::GatewayTooOld {
+            found: info.protocol,
+            required: REQUIRED_PROTOCOL,
+        }),
+        (
+            Err(ClientError::Refused(Refusal::NotFound { .. } | Refusal::BadRequest)),
+            Some(found),
+        ) => Err(ClientError::GatewayTooOld {
+            found,
+            required: REQUIRED_PROTOCOL,
+        }),
+        (answer, _) => answer,
+    }
+}
+
+/// `route?limit=&after=`.
+fn page_path(route: &str, after: Option<&Name>, limit: usize) -> String {
+    let mut path = format!("{route}?limit={limit}");
+    if let Some(after) = after {
+        path.push_str(&format!("&after={after}"));
+    }
+    path
+}
+
 fn route(vault: &VaultId, tail: &str) -> String {
-    format!("/v2/v/{vault}/{tail}")
+    format!("/v3/v/{vault}/{tail}")
 }
 
 fn object_route(vault: &VaultId, name: &Name) -> String {
-    format!("/v2/v/{vault}/o/{name}")
+    format!("/v3/v/{vault}/o/{name}")
 }
 
 /// Exactly `length` bytes of the file at `path`, opened on first poll and
@@ -1315,16 +1515,7 @@ fn refusal_of(status: StatusCode, headers: &hyper::HeaderMap, body: &[u8]) -> Cl
         .ok()
         .or_else(|| {
             let code = Code::parse(headers.get(CODE_HEADER)?.to_str().ok()?)?;
-            Some(RefusalBody {
-                code,
-                time_ms: 0,
-                epoch: None,
-                head: None,
-                name: None,
-                digest: None,
-                limit: None,
-                size: None,
-            })
+            Some(RefusalBody::bare(code, 0))
         });
     match parsed {
         // Every code has one status (`Code::status`); a refusal under another
@@ -1345,5 +1536,48 @@ fn refusal_of(status: StatusCode, headers: &hyper::HeaderMap, body: &[u8]) -> Cl
             ClientError::Refused,
         ),
         None => ClientError::Protocol(format!("status {status} without a refusal")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::rules::ids::GatewayId;
+
+    fn info(protocol: u32) -> Info {
+        Info {
+            gateway_id: GatewayId::from_bytes([1; 16]),
+            protocol,
+            time_ms: 0,
+        }
+    }
+
+    /// A GATEWAY BELOW PROTOCOL 3 IS REFUSED, TYPED, whichever way it says so:
+    /// it answers `/v3/info` with a lower protocol, or it does not know
+    /// `/v3/info` and answers `/v2/info`. There is no fallback to speak v2.
+    #[test]
+    fn an_older_gateway_is_too_old_and_never_spoken_to() {
+        assert!(matches!(
+            handshake(Ok(info(2)), None),
+            Err(ClientError::GatewayTooOld {
+                found: 2,
+                required: REQUIRED_PROTOCOL
+            })
+        ));
+        assert!(matches!(
+            handshake(
+                Err(ClientError::Refused(Refusal::NotFound { name: None })),
+                Some(2)
+            ),
+            Err(ClientError::GatewayTooOld { found: 2, .. })
+        ));
+        assert!(matches!(
+            handshake(
+                Err(ClientError::Refused(Refusal::NotFound { name: None })),
+                None
+            ),
+            Err(ClientError::Refused(Refusal::NotFound { .. }))
+        ));
+        assert!(handshake(Ok(info(REQUIRED_PROTOCOL)), None).is_ok());
     }
 }

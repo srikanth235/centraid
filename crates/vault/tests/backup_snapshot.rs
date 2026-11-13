@@ -6,18 +6,17 @@ mod common;
 
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
-use std::path::Path;
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
 use centraid_media::sealed;
 use centraid_vault::Vault;
-use centraid_vault::backup::ledger::{Destination, Ledger};
 use centraid_vault::backup::mover::{Stop, move_queue};
 use centraid_vault::backup::naming::{BackupKeys, Digest, Name, PlaintextHash, keys_from_root};
 use centraid_vault::backup::restore::{RestoreError, fetch_and_assemble, restore_head};
 use centraid_vault::backup::snapshot::{self, APP, Manifest, Settled, Snapshot};
 use centraid_vault::backup::spool::{SPOOL_CEILING_BYTES, Spool};
+use centraid_vault::backup::state::{DeviceState, Gateway};
 use centraid_vault::backup::store::{
     Deleted, Head, MemoryStore, ObjectEntry, Put, SnapshotEntry, Store, StoreError,
     TOMBSTONE_GRACE_MS,
@@ -30,43 +29,40 @@ fn keys() -> BackupKeys {
     keys_from_root(&[0x42; 32])
 }
 
-fn pair(ledger: &Ledger, store: &MemoryStore) {
-    ledger
-        .put_destination(&Destination {
-            gateway_id: store.gateway_id().to_owned(),
-            addrs: vec!["192.168.1.20:7443".to_owned()],
-            cert_der: vec![0x30],
-            token: "0".repeat(64),
-            epoch: store.epoch(),
-            label: "The laptop".to_owned(),
-            paired_at_ms: 1,
-            last_seen_ms: None,
-            last_ack_ms: None,
-        })
+fn pair(state: &DeviceState, store: &MemoryStore) {
+    state
+        .put_gateway(&Gateway::paired(
+            store.gateway_id().to_owned(),
+            vec!["192.168.1.20:7443".to_owned()],
+            vec![0x30],
+            "The laptop".to_owned(),
+            store.epoch(),
+            1,
+        ))
         .expect("pairs");
 }
 
 /// Take, plan, spool, move and settle one snapshot; return it.
-fn back_up(vault: &Vault, dir: &Path, store: &MemoryStore) -> Snapshot {
+fn back_up(vault: &Vault, store: &MemoryStore) -> Snapshot {
     let keys = keys();
-    let ledger = Ledger::open(Ledger::path_for(vault.path())).expect("a ledger");
-    pair(&ledger, store);
+    let state = DeviceState::open_beside(vault.path()).expect("a device state");
+    pair(&state, store);
     let spool = Spool::open(Spool::dir_for(vault.path())).expect("a spool");
     let snapshot =
-        snapshot::take(vault, &keys, &dir.join("scratch"), VAULT_ID, APP).expect("takes");
+        snapshot::take(vault, &keys, &spool, SPOOL_CEILING_BYTES, VAULT_ID, APP).expect("takes");
     let plan = snapshot::plan(&snapshot, store).expect("plans");
     snapshot::spool(
         &snapshot,
-        &plan,
+        &[(store.gateway_id().to_owned(), plan)],
         &spool,
-        &ledger,
+        &state,
         &keys,
         SPOOL_CEILING_BYTES,
         1,
     )
     .expect("spools");
     let moved = move_queue(
-        &ledger,
+        &state,
         &spool,
         store,
         Instant::now() + Duration::from_secs(120),
@@ -74,15 +70,7 @@ fn back_up(vault: &Vault, dir: &Path, store: &MemoryStore) -> Snapshot {
     )
     .expect("moves");
     assert_eq!(moved.stopped, Stop::Empty);
-    match snapshot::settle(
-        &ledger,
-        store,
-        &snapshot.manifest_name,
-        &snapshot.manifest,
-        &SystemClock,
-    )
-    .expect("settles")
-    {
+    match snapshot::settle(&state, store, &SystemClock).expect("settles") {
         Settled::HeadSet(head) => assert_eq!(head.name, snapshot.manifest_name),
         other => panic!("the head did not move: {other:?}"),
     }
@@ -120,7 +108,7 @@ fn a_founded_vault_round_trips_through_a_snapshot_and_a_restore() {
         common::insert_note(&scratch.vault, &format!("note {index}")).expect("writes");
     }
     let store = MemoryStore::new("laptop");
-    let snapshot = back_up(&scratch.vault, scratch.dir(), &store);
+    let snapshot = back_up(&scratch.vault, &store);
     let before = dump(&scratch.vault, &snapshot.manifest.census);
 
     let restored_path = scratch.join("restored.db");
@@ -144,7 +132,10 @@ fn a_founded_vault_round_trips_through_a_snapshot_and_a_restore() {
 
     // The store holds ciphertext only: no plaintext range and no plaintext
     // hash of one is readable in any object.
-    let copy = std::fs::read(&snapshot.path).expect("the scratch copy");
+    let mut pinned =
+        centraid_vault::pagesource::PinnedPages::begin(scratch.vault.path()).expect("a pin");
+    let copy = pinned.range(0).expect("the first range").to_vec();
+    pinned.end().expect("ends");
     for (_, sealed) in store.contents() {
         for range in &snapshot.ranges {
             assert!(
@@ -158,11 +149,11 @@ fn a_founded_vault_round_trips_through_a_snapshot_and_a_restore() {
 }
 
 /// **The online backup under a writer trying to commit (R-1080-B6).** A
-/// vault shared across threads is behind a `Mutex`, so `commit` and `copy`
-/// take turns. Each round the writer is released at the moment the copy holds
-/// the vault, so every copy runs while a commit is being attempted; each
-/// commit writes two parties, so a copy that caught half a transaction would
-/// hold an even count beside the owner — and every copy holds exactly the
+/// vault shared across threads is behind a `Mutex`, so `commit` and the walk
+/// take turns. Each round the writer is released at the moment the walk holds
+/// the vault, so every walk runs while a commit is being attempted; each
+/// commit writes two parties, so a snapshot that caught half a transaction would
+/// hold an even count beside the owner — and every snapshot holds exactly the
 /// commits made before it.
 #[test]
 fn a_snapshot_taken_while_another_thread_commits_is_exactly_a_committed_state() {
@@ -204,30 +195,21 @@ fn a_snapshot_taken_while_another_thread_commits_is_exactly_a_committed_state() 
 
     let keys = keys();
     for round in 0..ROUNDS {
-        let copied = {
+        let described = {
             let vault = shared.lock().expect("the vault");
             go.send(()).expect("releases the writer");
             // The writer is now blocked on the lock, mid-attempt, for the
-            // whole copy.
+            // whole walk.
             std::thread::sleep(Duration::from_millis(5));
-            snapshot::copy(&vault, &dir.path().join(format!("s{round}"))).expect("copies")
+            let spool = Spool::open(dir.path().join(format!("s{round}"))).expect("a spool");
+            snapshot::take(&vault, &keys, &spool, u64::MAX, VAULT_ID, APP).expect("takes")
         };
-        let described = snapshot::describe(&copied, &keys, VAULT_ID, APP).expect("describes");
         let parties = described.manifest.census["person"];
         assert_eq!(
             parties,
             i64::try_from(1 + 2 * PER_ROUND * round).expect("fits"),
             "snapshot {round} is not exactly the commits made before it"
         );
-        let connection = rusqlite::Connection::open_with_flags(
-            &copied.path,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-        )
-        .expect("opens");
-        let integrity: String = connection
-            .query_row("PRAGMA integrity_check", [], |row| row.get(0))
-            .expect("checks");
-        assert_eq!(integrity, "ok");
         bursts.recv().expect("the writer's burst");
     }
     writer.join().expect("the writer finishes");
@@ -273,8 +255,9 @@ impl Store for Swapped<'_> {
         name: &Name,
         prev: Option<&Name>,
         taken_at_ms: u64,
+        writes: u64,
     ) -> Result<Head, StoreError> {
-        self.inner.set_head(name, prev, taken_at_ms)
+        self.inner.set_head(name, prev, taken_at_ms, writes)
     }
     fn snapshots(&self) -> Result<Vec<SnapshotEntry>, StoreError> {
         self.inner.snapshots()
@@ -285,6 +268,16 @@ impl Store for Swapped<'_> {
     fn delete(&self, names: &[Name]) -> Result<Deleted, StoreError> {
         self.inner.delete(names)
     }
+    fn held(
+        &self,
+        after: Option<&Name>,
+        limit: usize,
+    ) -> Result<Vec<centraid_vault::backup::store::HeldEntry>, StoreError> {
+        self.inner.held(after, limit)
+    }
+    fn undo(&self, names: Option<&[Name]>) -> Result<u64, StoreError> {
+        self.inner.undo(names)
+    }
 }
 
 /// Upload a manifest edited by `edit`, sealed with the vault's own keys, and
@@ -293,7 +286,22 @@ impl Store for Swapped<'_> {
 fn forge(store: &MemoryStore, snapshot: &Snapshot, edit: impl FnOnce(&mut Manifest)) -> Name {
     let mut manifest = snapshot.manifest.clone();
     edit(&mut manifest);
-    let json = manifest.to_json().expect("serialises");
+    let parts = manifest.to_parts(&keys()).expect("serialises");
+    for leaf in &parts.leaves {
+        if store.exists(&[leaf.name]).expect("asks").is_empty() {
+            continue;
+        }
+        let bytes = sealed::seal_part(&keys(), 0, &leaf.json, true).expect("seals");
+        store
+            .put(
+                &leaf.name,
+                &Digest::of(&bytes),
+                bytes.len() as u64,
+                &mut bytes.as_slice(),
+            )
+            .expect("stores the leaf");
+    }
+    let json = parts.root_json;
     let name = sealed::name(&keys(), &PlaintextHash::of(&json), 0);
     let bytes = sealed::seal_part(&keys(), 0, &json, true).expect("seals");
     store
@@ -305,7 +313,12 @@ fn forge(store: &MemoryStore, snapshot: &Snapshot, edit: impl FnOnce(&mut Manife
         )
         .expect("stores");
     store
-        .set_head(&name, Some(&snapshot.manifest_name), manifest.taken_at_ms)
+        .set_head(
+            &name,
+            Some(&snapshot.manifest_name),
+            manifest.taken_at_ms,
+            0,
+        )
         .expect("moves the head");
     name
 }
@@ -315,7 +328,7 @@ fn a_restore_refuses_every_file_that_is_not_the_snapshots_and_leaves_nothing() {
     let scratch = common::Scratch::founded("backup-refusals").expect("a vault");
     common::insert_note(&scratch.vault, "a note").expect("writes");
     let store = MemoryStore::new("laptop");
-    let snapshot = back_up(&scratch.vault, scratch.dir(), &store);
+    let snapshot = back_up(&scratch.vault, &store);
     let keys = keys();
     let out = scratch.join("restored.db");
 
@@ -362,7 +375,7 @@ fn a_restore_refuses_every_file_that_is_not_the_snapshots_and_leaves_nothing() {
         other => panic!("the census did not refuse: {other:?}"),
     }
     store
-        .set_head(&snapshot.manifest_name, Some(&counted), 1)
+        .set_head(&snapshot.manifest_name, Some(&counted), 1, 0)
         .expect("moves back");
     forge(&store, &snapshot, |manifest| {
         manifest.db_hash = PlaintextHash::of(b"another file");
@@ -382,7 +395,7 @@ fn a_restore_refuses_every_file_that_is_not_the_snapshots_and_leaves_nothing() {
     // missing, and named; and a restore never writes over a file.
     let fresh = MemoryStore::new("other");
     fresh.set_clock_ms(1_000);
-    let _ = back_up(&scratch.vault, &scratch.join("again"), &fresh);
+    let _ = back_up(&scratch.vault, &fresh);
     fresh
         .delete(&[snapshot.ranges[0].name])
         .expect("tombstones");
@@ -427,7 +440,7 @@ fn a_restore_refuses_a_file_of_an_earlier_model_or_another_schema_and_leaves_not
             })
             .unwrap_or_else(|error| panic!("{what}: {error}"));
         let store = MemoryStore::new("laptop");
-        let _ = back_up(&scratch.vault, scratch.dir(), &store);
+        let _ = back_up(&scratch.vault, &store);
         let out = scratch.join("restored.db");
         let said = restore_head(&store, &keys, &out)
             .expect_err(what)
@@ -436,4 +449,52 @@ fn a_restore_refuses_a_file_of_an_earlier_model_or_another_schema_and_leaves_not
         assert!(!out.exists(), "{what}: a refused restore leaves nothing");
         assert!(!scratch.join("restored.db.partial").exists(), "{what}");
     }
+}
+
+/// **The quick check runs before the head is signed (V21, #1191 B11).** A vault with a
+/// damaged page is refused by the snapshot itself, before a manifest exists, so nothing is
+/// sealed into a head and the gateway's head stays where it was.
+#[test]
+fn the_quick_check_runs_before_the_head_is_signed() {
+    let scratch = common::Scratch::founded("backup-damaged").expect("a vault");
+    for index in 0..40 {
+        common::insert_note(&scratch.vault, &format!("note {index}")).expect("writes");
+    }
+    let store = MemoryStore::new("laptop");
+    let good = back_up(&scratch.vault, &store);
+    let head = store.head().expect("reads").expect("a head");
+    assert_eq!(head.name, good.manifest_name);
+
+    // Fold the WAL into the file, then damage a table leaf in it: a cell count no page holds.
+    let path = scratch.vault.path().to_path_buf();
+    rusqlite::Connection::open(&path)
+        .expect("opens")
+        .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+            row.get::<_, i64>(0)
+        })
+        .expect("checkpoints");
+    let mut bytes = std::fs::read(&path).expect("reads");
+    let leaf = (1..bytes.len() / 4096)
+        .find(|page| bytes[page * 4096] == 0x0d)
+        .expect("a table leaf");
+    bytes[leaf * 4096 + 3] = 0xff;
+    bytes[leaf * 4096 + 4] = 0xff;
+    std::fs::write(&path, &bytes).expect("damages");
+
+    let spool = Spool::open(scratch.join("damaged.spool")).expect("a spool");
+    let refused = snapshot::take(
+        &scratch.vault,
+        &keys(),
+        &spool,
+        SPOOL_CEILING_BYTES,
+        VAULT_ID,
+        APP,
+    );
+    assert!(refused.is_err(), "a damaged vault is not snapshotted");
+    assert_eq!(centraid_vault::pagesource::live_pins(), 0, "the pin ended");
+    assert_eq!(
+        store.head().expect("reads").expect("a head").name,
+        good.manifest_name,
+        "the head did not move"
+    );
 }

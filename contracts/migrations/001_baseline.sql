@@ -20,12 +20,12 @@ CREATE TABLE vault (
   self_kind  TEXT GENERATED ALWAYS AS ('person') VIRTUAL,
   currency   TEXT NOT NULL CHECK (length(currency) = 3 AND currency = upper(currency)),
   zone       TEXT,
-  created_at TEXT NOT NULL,
+  created_at TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at),
   -- How many commits changed something a screen reads, and when the last did, on the vault's
   -- clock: a takeover compares the counter to tell which copy is ahead (#1146). Bumped by the
   -- commit guard, once per such commit; nothing else writes them.
   writes     INTEGER NOT NULL DEFAULT 0 CHECK (writes >= 0),
-  written_at TEXT,
+  written_at TEXT CHECK (written_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', written_at) IS written_at),
   FOREIGN KEY (self_id, self_kind) REFERENCES entity(id, kind) DEFERRABLE INITIALLY DEFERRED
 ) STRICT;
 
@@ -39,10 +39,10 @@ CREATE TABLE entity (
                'notebook','folder','album','list','project','section','area','calendar',
                'locker_item')),
   title      TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  deleted_at TEXT,
-  purge_at   TEXT,
+  created_at TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at),
+  updated_at TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', updated_at) IS updated_at),
+  deleted_at TEXT CHECK (deleted_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', deleted_at) IS deleted_at),
+  purge_at   TEXT CHECK (purge_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', purge_at) IS purge_at),
   CHECK ((deleted_at IS NULL) = (purge_at IS NULL)),
   UNIQUE (id, kind)
 ) STRICT;
@@ -73,7 +73,10 @@ CREATE TABLE edge (
   position   REAL,
   state      TEXT CHECK (state IS NULL OR state IN ('needs-action','accepted','declined','tentative')),
   anchor     TEXT CHECK (anchor IS NULL OR json_valid(anchor)),
-  created_at TEXT NOT NULL,
+  -- The `[[title]]` words of the note that compiled this link (the note owns it and recompiles it
+  -- on every save); NULL for a link the member made.
+  wikilink   TEXT CHECK (wikilink IS NULL OR (rel = 'links' AND length(trim(wikilink)) > 0)),
+  created_at TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at),
   CHECK (from_id <> to_id),
   CHECK ((label_id IS NOT NULL) = (rel = 'related')),
   CHECK (state IS NULL OR rel = 'attendee'),
@@ -106,7 +109,7 @@ CREATE TABLE concept (
   id        TEXT PRIMARY KEY,
   kind      TEXT NOT NULL CHECK (kind IN ('tag','flag','category','workout_kind','activity_kind','relation')),
   key       TEXT NOT NULL,
-  parent_id TEXT REFERENCES concept(id),
+  parent_id TEXT REFERENCES concept(id) CHECK (parent_id IS NULL OR parent_id <> id),
   -- A label's colour: one key of the design palette ([list] in design/tokens.toml). Tags only.
   color     TEXT CHECK (color IS NULL OR (kind = 'tag' AND color IN
               ('blue','mustard','violet','petrol','indigo','graphite','raspberry','orchid'))),
@@ -114,12 +117,38 @@ CREATE TABLE concept (
   UNIQUE (kind, key)
 ) STRICT;
 CREATE INDEX concept_by_parent ON concept(parent_id) WHERE parent_id IS NOT NULL;
+CREATE TRIGGER concept_parent_shares_its_kind BEFORE INSERT ON concept
+  WHEN new.parent_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM concept p WHERE p.id = new.parent_id AND p.kind = new.kind)
+  BEGIN SELECT RAISE(ABORT, 'a concept''s parent is of its own kind'); END;
+CREATE TRIGGER concept_parent_shares_its_kind_on_move BEFORE UPDATE OF parent_id ON concept
+  WHEN new.parent_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM concept p WHERE p.id = new.parent_id AND p.kind = new.kind)
+  BEGIN SELECT RAISE(ABORT, 'a concept''s parent is of its own kind'); END;
+CREATE TRIGGER concept_kind_follows_its_parent BEFORE UPDATE OF kind ON concept
+  WHEN (new.parent_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM concept p WHERE p.id = new.parent_id AND p.kind = new.kind))
+    OR EXISTS (SELECT 1 FROM concept c WHERE c.parent_id = new.id AND c.kind <> new.kind)
+  BEGIN SELECT RAISE(ABORT, 'a concept''s parent is of its own kind'); END;
+CREATE TRIGGER concept_hierarchy_is_acyclic BEFORE UPDATE OF parent_id ON concept
+  WHEN new.parent_id IS NOT NULL
+  BEGIN
+    SELECT RAISE(ABORT, 'that parent is already below this concept: a hierarchy has no loops')
+     WHERE EXISTS (
+       WITH RECURSIVE ancestors(id) AS (
+         SELECT new.parent_id
+         UNION
+         SELECT c.parent_id FROM concept c JOIN ancestors a ON c.id = a.id WHERE c.parent_id IS NOT NULL)
+       SELECT 1 FROM ancestors WHERE id = new.id);
+  END;
 
 CREATE TABLE container (
   id        TEXT PRIMARY KEY,
   kind      TEXT NOT NULL CHECK (kind IN ('notebook','folder','album','list','project','section','area','calendar')),
-  parent_id TEXT REFERENCES container(id),
-  color     TEXT,
+  parent_id TEXT REFERENCES container(id) CHECK (parent_id IS NULL OR parent_id <> id),
+  -- A list's or a project's colour is a key of the design palette (`LIST_COLORS`); a calendar a phone
+  -- paints wears a hue of the party wheel (`var(--c-<hue>)`), which the shell names from the phone's colour.
+  color     TEXT CHECK (color IS NULL OR color IN
+              ('blue','mustard','violet','petrol','indigo','graphite','raspberry','orchid',
+               'var(--c-rose)','var(--c-amber)','var(--c-ochre)','var(--c-forest)',
+               'var(--c-teal)','var(--c-slate)','var(--c-indigo)','var(--c-violet)')),
   -- A key of `design/icons.toml`; the command boundary says which keys a list or calendar may wear.
   icon      TEXT CHECK (icon IS NULL OR length(trim(icon)) > 0),
   cover     TEXT REFERENCES blob(hash),
@@ -142,15 +171,36 @@ CREATE TRIGGER container_parent_shape_on_move BEFORE UPDATE OF parent_id ON cont
     OR (new.kind = 'section' AND p.kind = 'project')
     OR (new.kind = 'project' AND p.kind = 'area')))
   BEGIN SELECT RAISE(ABORT, 'a container nests only in its own kind, a section in a project, a project in an area'); END;
+CREATE TRIGGER container_hierarchy_is_acyclic BEFORE UPDATE OF parent_id ON container
+  WHEN new.parent_id IS NOT NULL
+  BEGIN
+    SELECT RAISE(ABORT, 'that parent is already inside this container: containers do not nest in a loop')
+     WHERE EXISTS (
+       WITH RECURSIVE ancestors(id) AS (
+         SELECT new.parent_id
+         UNION
+         SELECT c.parent_id FROM container c JOIN ancestors a ON c.id = a.id WHERE c.parent_id IS NOT NULL)
+       SELECT 1 FROM ancestors WHERE id = new.id);
+  END;
+-- A section moved to another project takes its tasks with it: a task names its project and its
+-- section, and the two always agree (`task_section_is_in_its_project_*`). The move command touches
+-- the tasks it moved; the database keeps them consistent for any writer.
+CREATE TRIGGER container_section_takes_its_tasks AFTER UPDATE OF parent_id ON container
+  WHEN new.kind = 'section' AND new.parent_id IS NOT old.parent_id
+  BEGIN UPDATE task SET project_id = new.parent_id WHERE section_id = new.id AND project_id IS NOT new.parent_id; END;
 
 -- ---------------------------------------------------------------------------------------------
 -- Bytes: a blob is the vault's claim on bytes the content store names by the same hash.
 -- ---------------------------------------------------------------------------------------------
 
+-- `seq` numbers the claims in the order they were made: assigned at insert, never reused (a
+-- collected blob's number is not given again), so a reader can keep "the last blob I saw" and ask
+-- for the ones after it (`crates/vault/src/backup/blobs.rs`).
 CREATE TABLE blob (
-  hash TEXT PRIMARY KEY CHECK (length(hash) = 64 AND hash NOT GLOB '*[^0-9a-f]*'),
+  seq  INTEGER PRIMARY KEY AUTOINCREMENT,
+  hash TEXT NOT NULL UNIQUE CHECK (length(hash) = 64 AND hash NOT GLOB '*[^0-9a-f]*'),
   size INTEGER NOT NULL CHECK (size >= 0)
-) STRICT, WITHOUT ROWID;
+) STRICT;
 
 CREATE TABLE derivative (
   blob       TEXT NOT NULL REFERENCES blob(hash) ON DELETE CASCADE,
@@ -158,12 +208,12 @@ CREATE TABLE derivative (
   out        TEXT REFERENCES blob(hash),
   media_type TEXT,
   text       TEXT,
-  created_at TEXT NOT NULL,
+  created_at TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at),
   PRIMARY KEY (blob, variant),
   CHECK ((variant IN ('thumb','preview','poster')) = (out IS NOT NULL)),
   CHECK ((out IS NULL) = (media_type IS NULL)),
   CHECK ((out IS NULL) = (text IS NOT NULL))
-) STRICT, WITHOUT ROWID;
+) STRICT;
 CREATE INDEX derivative_by_out ON derivative(out) WHERE out IS NOT NULL;
 
 -- ---------------------------------------------------------------------------------------------
@@ -180,19 +230,31 @@ CREATE TABLE origin (
   ref        TEXT NOT NULL CHECK (length(trim(ref)) > 0),
   label      TEXT NOT NULL CHECK (length(trim(label)) > 0),
   device_id  TEXT,
-  fills      TEXT REFERENCES entity(id),
+  -- The home a follow filled, of the kind its system makes (a calendar's calendar, a folder's folder,
+  -- the phone's reminders' project, a statement's account); the contacts and health stores fill none.
+  fills      TEXT,
+  fills_kind TEXT GENERATED ALWAYS AS (CASE
+               WHEN system IN ('calendar') THEN 'calendar'
+               WHEN system IN ('files') THEN 'folder'
+               WHEN system IN ('phone_reminders') THEN 'project'
+               WHEN system IN ('statement') THEN 'account' END) VIRTUAL,
+  -- Where the last pass of a followed store stopped (its change token): what the next one resumes
+  -- from. Cleared when the follow stops.
+  cursor     TEXT,
   config     TEXT CHECK (config IS NULL OR json_valid(config)),
-  created_at TEXT NOT NULL,
+  created_at TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at),
   -- Stop following RETIRES a store's origin instead of deleting it: it keeps its `fills` (the
   -- calendar, folder or project it filled) and its sources, so following the same `ref` again
   -- finds them and neither makes the home twice nor adds each record twice. A retired origin is
   -- followed by nobody: every read of what a phone follows leaves it out.
-  retired_at TEXT,
+  retired_at TEXT CHECK (retired_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', retired_at) IS retired_at),
   UNIQUE (system, ref),
   UNIQUE (id, system),
   CHECK (retired_at IS NULL OR system IN ('contacts','calendar','files','health','phone_reminders')),
   -- A statement is an account's, not a phone's store (#1146).
-  CHECK (system <> 'statement' OR device_id IS NULL)
+  CHECK (system <> 'statement' OR device_id IS NULL),
+  CHECK (fills IS NULL OR fills_kind IS NOT NULL),
+  FOREIGN KEY (fills, fills_kind) REFERENCES entity(id, kind)
 ) STRICT;
 -- One statement origin per account, whatever ref an import names (#1146).
 CREATE UNIQUE INDEX origin_one_statement_per_account ON origin(fills) WHERE system = 'statement';
@@ -206,10 +268,12 @@ CREATE TABLE source (
   entity_id   TEXT,
   entity_kind TEXT,
   stated      TEXT NOT NULL CHECK (json_valid(stated)),
-  seen_at     TEXT NOT NULL,
+  -- What the system calls the record, lifted out of `stated` for the reads that list it.
+  stated_title TEXT,
+  seen_at     TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', seen_at) IS seen_at),
   -- When the follower trashed the row because its record left a complete read: the trash it may
   -- undo if the record returns and the member has not touched the row since (#1146).
-  gone_at     TEXT,
+  gone_at     TEXT CHECK (gone_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', gone_at) IS gone_at),
   FOREIGN KEY (origin_id, system) REFERENCES origin(id, system),
   FOREIGN KEY (entity_id, entity_kind) REFERENCES entity(id, kind) ON DELETE SET NULL,
   CHECK ((entity_id IS NULL) = (entity_kind IS NULL)),
@@ -221,6 +285,8 @@ CREATE TABLE source (
 ) STRICT;
 CREATE UNIQUE INDEX source_key    ON source(origin_id, external_id, ifnull(device_id, ''));
 CREATE UNIQUE INDEX source_entity ON source(entity_id) WHERE entity_id IS NOT NULL;
+-- A system's lines, newest seen first (the last statement import).
+CREATE INDEX source_by_seen ON source(system, seen_at, id);
 CREATE TRIGGER source_tombstone_is_final BEFORE UPDATE OF entity_id ON source
   WHEN old.entity_id IS NULL AND new.entity_id IS NOT NULL
   BEGIN SELECT RAISE(ABORT, 'a purged row''s source never takes a row again'); END;
@@ -240,7 +306,7 @@ CREATE TRIGGER source_tombstone_is_final BEFORE UPDATE OF entity_id ON source
 CREATE TABLE revision (
   entity_id  TEXT NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
   seq        INTEGER NOT NULL CHECK (seq >= 1),
-  at         TEXT NOT NULL,
+  at         TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', at) IS at),
   cause      TEXT NOT NULL DEFAULT '',
   state      TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(state)),
   body       TEXT,
@@ -251,11 +317,11 @@ CREATE TABLE revision (
   -- of the same command by the same actor within ten idle minutes, and within an hour of `at`,
   -- writes no version: this one already holds the state before the session began.
   autosave   INTEGER NOT NULL DEFAULT 0 CHECK (autosave IN (0, 1)),
-  touched_at TEXT,
+  touched_at TEXT CHECK (touched_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', touched_at) IS touched_at),
   CHECK (body IS NULL OR blob IS NULL),
   CHECK ((blob IS NULL) = (media_type IS NULL)),
   PRIMARY KEY (entity_id, seq)
-) STRICT, WITHOUT ROWID;
+) STRICT;
 -- Dropping a blob's last holder looks for the revisions that name it; most revisions are text.
 CREATE INDEX revision_by_blob ON revision(blob) WHERE blob IS NOT NULL;
 -- Only `touched_at` moves, when a quiet save folds into the version's session; what it holds never.
@@ -275,7 +341,7 @@ CREATE TRIGGER revision_is_kept BEFORE DELETE ON revision
 CREATE TABLE action_key (
   key   TEXT PRIMARY KEY,
   asked TEXT NOT NULL,
-  at    TEXT NOT NULL
+  at    TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', at) IS at)
 ) STRICT, WITHOUT ROWID;
 CREATE INDEX action_key_by_at ON action_key(at);
 
@@ -338,7 +404,7 @@ CREATE TABLE alert (
   entity_id  TEXT NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
   offset_min INTEGER NOT NULL CHECK (offset_min >= 0),
   timing     TEXT NOT NULL CHECK (timing IN ('fixed','floating')),
-  fire_key   TEXT NOT NULL,
+  fire_key   TEXT NOT NULL CHECK (CASE timing WHEN 'fixed' THEN strftime('%Y-%m-%dT%H:%M:%fZ', fire_key) IS fire_key ELSE strftime('%Y-%m-%dT%H:%M', fire_key) IS fire_key END),
   repeats    INTEGER NOT NULL DEFAULT 0 CHECK (repeats IN (0,1)),
   PRIMARY KEY (entity_id, offset_min)
 ) STRICT, WITHOUT ROWID;
@@ -378,6 +444,8 @@ CREATE TABLE contact_point (
   position   REAL NOT NULL,
   UNIQUE (person_id, kind, normalized)
 ) STRICT;
+-- A guest's address finds the person who has it (`person_of_email`): by kind and the normalized value.
+CREATE INDEX contact_point_by_value ON contact_point(kind, normalized, person_id);
 CREATE UNIQUE INDEX contact_point_preferred ON contact_point(person_id, kind) WHERE preferred = 1;
 
 CREATE TABLE place (
@@ -407,17 +475,29 @@ CREATE TABLE event (
   calendar_kind  TEXT GENERATED ALWAYS AS ('calendar') VIRTUAL,
   place_id       TEXT REFERENCES place(id),
   url            TEXT,
-  reminders      TEXT CHECK (reminders IS NULL OR json_valid(reminders)),
   -- Minutes of travel the member allows before it starts.
   travel_min     INTEGER CHECK (travel_min IS NULL OR travel_min >= 0),
   description    TEXT,
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
   FOREIGN KEY (calendar_id, calendar_kind) REFERENCES entity(id, kind),
-  CHECK (timing <> 'zoned' OR (zone IS NOT NULL AND substr(starts, -1) = 'Z'))
+  CHECK (timing <> 'zoned' OR zone IS NOT NULL),
+  -- `starts` and `ends` read under `timing`: a zoned time is an instant, a floating one a wall
+  -- clock, an all-day one a date.
+  CHECK (CASE timing WHEN 'zoned' THEN strftime('%Y-%m-%dT%H:%M:%fZ', starts) IS starts WHEN 'floating' THEN (strftime('%Y-%m-%dT%H:%M', starts) IS starts OR strftime('%Y-%m-%dT%H:%M:%S', starts) IS starts OR strftime('%Y-%m-%dT%H:%M:%f', starts) IS starts) ELSE date(starts) IS starts END),
+  CHECK (ends IS NULL OR CASE timing WHEN 'zoned' THEN strftime('%Y-%m-%dT%H:%M:%fZ', ends) IS ends WHEN 'floating' THEN (strftime('%Y-%m-%dT%H:%M', ends) IS ends OR strftime('%Y-%m-%dT%H:%M:%S', ends) IS ends OR strftime('%Y-%m-%dT%H:%M:%f', ends) IS ends) ELSE date(ends) IS ends END)
 ) STRICT;
 CREATE INDEX event_by_start    ON event(starts, id);
 CREATE INDEX event_by_calendar ON event(calendar_id);
+-- The series, in start order: the expander's read of every repeating event.
+CREATE INDEX event_by_rule ON event(starts, id) WHERE rule IS NOT NULL;
 CREATE INDEX event_by_place    ON event(place_id) WHERE place_id IS NOT NULL;
+
+-- The alerts of an event, minutes before it starts: one row each, a minute once (#1191, V8).
+CREATE TABLE reminder (
+  entity_id  TEXT NOT NULL REFERENCES event(id) ON DELETE CASCADE,
+  offset_min INTEGER NOT NULL CHECK (offset_min >= 0),
+  PRIMARY KEY (entity_id, offset_min)
+) STRICT;
 
 CREATE TABLE occurrence (
   series_id      TEXT NOT NULL REFERENCES event(id) ON DELETE CASCADE,
@@ -437,8 +517,11 @@ CREATE TABLE occurrence (
   -- This day's own link and place; NULL is the series'. Guests and reminders stay the series' (#1146).
   url            TEXT,
   place_id       TEXT REFERENCES place(id),
-  PRIMARY KEY (series_id, original_start, scope)
-) STRICT, WITHOUT ROWID;
+  PRIMARY KEY (series_id, original_start, scope),
+  CHECK ((date(original_start) IS original_start OR (strftime('%Y-%m-%dT%H:%M', original_start) IS original_start OR strftime('%Y-%m-%dT%H:%M:%S', original_start) IS original_start OR strftime('%Y-%m-%dT%H:%M:%f', original_start) IS original_start) OR strftime('%Y-%m-%dT%H:%M:%fZ', original_start) IS original_start)),
+  CHECK (starts IS NULL OR CASE timing WHEN 'zoned' THEN strftime('%Y-%m-%dT%H:%M:%fZ', starts) IS starts WHEN 'floating' THEN (strftime('%Y-%m-%dT%H:%M', starts) IS starts OR strftime('%Y-%m-%dT%H:%M:%S', starts) IS starts OR strftime('%Y-%m-%dT%H:%M:%f', starts) IS starts) WHEN 'all-day' THEN date(starts) IS starts ELSE (date(starts) IS starts OR (strftime('%Y-%m-%dT%H:%M', starts) IS starts OR strftime('%Y-%m-%dT%H:%M:%S', starts) IS starts OR strftime('%Y-%m-%dT%H:%M:%f', starts) IS starts) OR strftime('%Y-%m-%dT%H:%M:%fZ', starts) IS starts) END),
+  CHECK (ends IS NULL OR CASE timing WHEN 'zoned' THEN strftime('%Y-%m-%dT%H:%M:%fZ', ends) IS ends WHEN 'floating' THEN (strftime('%Y-%m-%dT%H:%M', ends) IS ends OR strftime('%Y-%m-%dT%H:%M:%S', ends) IS ends OR strftime('%Y-%m-%dT%H:%M:%f', ends) IS ends) WHEN 'all-day' THEN date(ends) IS ends ELSE (date(ends) IS ends OR (strftime('%Y-%m-%dT%H:%M', ends) IS ends OR strftime('%Y-%m-%dT%H:%M:%S', ends) IS ends OR strftime('%Y-%m-%dT%H:%M:%f', ends) IS ends) OR strftime('%Y-%m-%dT%H:%M:%fZ', ends) IS ends) END)
+) STRICT;
 CREATE INDEX occurrence_by_place ON occurrence(place_id) WHERE place_id IS NOT NULL;
 
 CREATE TABLE task (
@@ -446,17 +529,17 @@ CREATE TABLE task (
   kind              TEXT GENERATED ALWAYS AS ('task') VIRTUAL,
   status            TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','done','cancelled')),
   priority          INTEGER NOT NULL DEFAULT 0 CHECK (priority BETWEEN 0 AND 9),
-  due               TEXT CHECK (due IS NULL OR (datetime(due) IS NOT NULL AND date(substr(due, 1, 10)) = substr(due, 1, 10))),
-  done_at           TEXT CHECK ((status = 'done') = (done_at IS NOT NULL)),
+  due               TEXT CHECK (due IS NULL OR date(due) IS due OR (strftime('%Y-%m-%dT%H:%M', due) IS due OR strftime('%Y-%m-%dT%H:%M:%S', due) IS due OR strftime('%Y-%m-%dT%H:%M:%f', due) IS due) OR strftime('%Y-%m-%dT%H:%M:%fZ', due) IS due),
+  done_at           TEXT CHECK ((status = 'done') = (done_at IS NOT NULL) AND (done_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', done_at) IS done_at)),
   rule              TEXT,
   anchor            TEXT NOT NULL DEFAULT 'scheduled' CHECK (anchor IN ('scheduled','completion')),
   zone              TEXT,
-  series_id         TEXT REFERENCES task(id),
+  series_id         TEXT REFERENCES task(id) CHECK (series_id IS NULL OR series_id <> id),
   remind_before_min INTEGER CHECK (remind_before_min IS NULL OR remind_before_min >= 0),
   -- A SNOOZE MOVES THE ALERT, NOT THE DUE (#1188, NA5): the UTC instant the member asked to be
   -- reminded again. While it is set it is the task's one alert (`alerts::refresh`); an edit of the
   -- due, the lead or the rule clears it, and so does finishing the task.
-  snoozed_until     TEXT CHECK (snoozed_until IS NULL OR (datetime(snoozed_until) IS NOT NULL AND length(snoozed_until) > 10)),
+  snoozed_until     TEXT CHECK (snoozed_until IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', snoozed_until) IS snoozed_until),
   url               TEXT CHECK (url IS NULL OR length(trim(url)) > 0),
   effort_min        INTEGER CHECK (effort_min IS NULL OR effort_min > 0),
   parent_id         TEXT REFERENCES task(id) CHECK (parent_id IS NULL OR parent_id <> id),
@@ -493,7 +576,7 @@ CREATE TRIGGER task_section_is_in_its_project_on_insert BEFORE INSERT ON task
   WHEN new.section_id IS NOT NULL
    AND (SELECT parent_id FROM container WHERE id = new.section_id) IS NOT new.project_id
   BEGIN SELECT RAISE(ABORT, 'that section belongs to a different project'); END;
-CREATE TRIGGER task_section_is_in_its_project_on_update BEFORE UPDATE ON task
+CREATE TRIGGER task_section_is_in_its_project_on_update BEFORE UPDATE OF section_id, project_id ON task
   WHEN new.section_id IS NOT NULL
    AND (SELECT parent_id FROM container WHERE id = new.section_id) IS NOT new.project_id
   BEGIN SELECT RAISE(ABORT, 'that section belongs to a different project'); END;
@@ -503,24 +586,28 @@ CREATE TABLE activity (
   kind      TEXT GENERATED ALWAYS AS ('activity') VIRTUAL,
   type_id   TEXT NOT NULL,
   type_kind TEXT NOT NULL CHECK (type_kind IN ('activity_kind','workout_kind')),
-  starts    TEXT NOT NULL,
-  ends      TEXT CHECK (ends IS NULL OR ends >= starts),
+  starts    TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', starts) IS starts),
+  ends      TEXT CHECK ((ends IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', ends) IS ends) AND ends >= starts),
   place_id  TEXT REFERENCES place(id),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
-  FOREIGN KEY (type_id, type_kind) REFERENCES entity(id, kind)
+  FOREIGN KEY (type_id, type_kind) REFERENCES entity(id, kind),
+  UNIQUE (id, type_kind)
 ) STRICT;
 CREATE INDEX activity_by_start ON activity(starts, id);
 CREATE INDEX activity_by_type  ON activity(type_id);
 CREATE INDEX activity_by_place ON activity(place_id) WHERE place_id IS NOT NULL;
 
 CREATE TABLE workout (
-  id          TEXT PRIMARY KEY REFERENCES activity(id) ON DELETE CASCADE,
+  id          TEXT PRIMARY KEY,
+  -- A workout is the measures of an activity of a workout kind, and of no other.
+  type_kind   TEXT GENERATED ALWAYS AS ('workout_kind') VIRTUAL,
   recorded_by TEXT,
   moving_s    INTEGER CHECK (moving_s IS NULL OR moving_s > 0),
   distance_m  REAL CHECK (distance_m IS NULL OR distance_m >= 0),
   energy_kcal REAL CHECK (energy_kcal IS NULL OR energy_kcal >= 0),
   heart_bpm   INTEGER CHECK (heart_bpm IS NULL OR heart_bpm > 0),
-  climb_m     REAL CHECK (climb_m IS NULL OR climb_m >= 0)
+  climb_m     REAL CHECK (climb_m IS NULL OR climb_m >= 0),
+  FOREIGN KEY (id, type_kind) REFERENCES activity(id, type_kind) ON DELETE CASCADE
 ) STRICT;
 
 CREATE TABLE measurement (
@@ -562,7 +649,7 @@ CREATE TABLE photo (
   blob        TEXT NOT NULL UNIQUE REFERENCES blob(hash),
   media_type  TEXT NOT NULL,
   form        TEXT NOT NULL CHECK (form IN ('photo','video','scan')),
-  taken_at    TEXT,
+  taken_at    TEXT CHECK (taken_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', taken_at) IS taken_at),
   offset_min  INTEGER CHECK (offset_min IS NULL OR offset_min BETWEEN -1080 AND 1080),
   width       INTEGER CHECK (width IS NULL OR width > 0),
   height      INTEGER CHECK (height IS NULL OR height > 0),
@@ -604,7 +691,6 @@ CREATE TABLE txn (
   status        TEXT NOT NULL DEFAULT 'posted' CHECK (status IN ('pending','posted','void')),
   category_id   TEXT,
   category_kind TEXT GENERATED ALWAYS AS ('category') VIRTUAL,
-  transfer_id   TEXT REFERENCES txn(id),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
   FOREIGN KEY (account_id, currency) REFERENCES account(id, currency),
   FOREIGN KEY (category_id, category_kind) REFERENCES entity(id, kind)
@@ -614,22 +700,39 @@ CREATE INDEX txn_by_account_day ON txn(account_id, posted_on, id);
 -- table and sorts (`a_month_across_accounts_reads_the_day_index`).
 CREATE INDEX txn_by_day         ON txn(posted_on, id);
 CREATE INDEX txn_by_category    ON txn(category_id) WHERE category_id IS NOT NULL;
-CREATE INDEX txn_by_transfer    ON txn(transfer_id) WHERE transfer_id IS NOT NULL;
 CREATE TRIGGER txn_line_is_fixed BEFORE UPDATE OF account_id, currency, posted_on, amount_minor ON txn
   BEGIN SELECT RAISE(ABORT, 'a statement line is never edited'); END;
 CREATE TRIGGER txn_void_is_final BEFORE UPDATE OF status ON txn WHEN old.status = 'void'
   BEGIN SELECT RAISE(ABORT, 'a voided line stays void'); END;
+
+-- Two lines that are the two halves of one movement of the member's own money. The lower id is
+-- `a`, so a pair is one row whichever half is asked about; a line is in at most one pair (it is
+-- the key of one side and may not be on the other). The money in the pair is the command's to
+-- check (one out, one in, one currency); the pair goes with either line.
+CREATE TABLE transfer (
+  a TEXT PRIMARY KEY REFERENCES txn(id) ON DELETE CASCADE,
+  b TEXT NOT NULL UNIQUE REFERENCES txn(id) ON DELETE CASCADE,
+  CHECK (a < b)
+) STRICT;
+CREATE TRIGGER transfer_halves_are_in_one_pair BEFORE INSERT ON transfer
+  WHEN EXISTS (SELECT 1 FROM transfer WHERE b = new.a OR a = new.b)
+  BEGIN SELECT RAISE(ABORT, 'a line is in at most one transfer'); END;
+CREATE TRIGGER transfer_halves_are_in_one_pair_on_update BEFORE UPDATE OF a, b ON transfer
+  WHEN EXISTS (SELECT 1 FROM transfer WHERE rowid <> old.rowid AND (b = new.a OR a = new.b))
+  BEGIN SELECT RAISE(ABORT, 'a line is in at most one transfer'); END;
 
 CREATE TABLE budget (
   category_id   TEXT NOT NULL,
   category_kind TEXT GENERATED ALWAYS AS ('category') VIRTUAL,
   month         TEXT NOT NULL CHECK (date(month || '-01') = month || '-01'),
   amount_minor  INTEGER NOT NULL CHECK (amount_minor >= 0),
-  currency      TEXT NOT NULL CHECK (length(currency) = 3),
+  currency      TEXT NOT NULL CHECK (currency GLOB '[A-Z][A-Z][A-Z]'),
   carry         INTEGER NOT NULL DEFAULT 0 CHECK (carry IN (0,1)),
   PRIMARY KEY (category_id, month),
   FOREIGN KEY (category_id, category_kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT, WITHOUT ROWID;
+-- One month across every category (the month's budget screen).
+CREATE INDEX budget_by_month ON budget(month, category_id);
 
 CREATE TABLE checkpoint (
   account_id    TEXT NOT NULL REFERENCES account(id) ON DELETE CASCADE,
@@ -647,7 +750,7 @@ CREATE TABLE rule (
   category_id   TEXT NOT NULL,
   category_kind TEXT GENERATED ALWAYS AS ('category') VIRTUAL,
   position      REAL NOT NULL,
-  created_at    TEXT NOT NULL,
+  created_at    TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at),
   FOREIGN KEY (category_id, category_kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX rule_by_category ON rule(category_id);
@@ -674,8 +777,8 @@ CREATE TABLE message (
   notice     TEXT CHECK (notice IS NULL OR notice IN ('doc_truncated')),
   record     TEXT CHECK (record IS NULL OR json_valid(record)),
   cards      TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(cards)),
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
+  created_at TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at),
+  updated_at TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', updated_at) IS updated_at),
   PRIMARY KEY (thread_id, ordinal),
   CHECK ((role = 'user') = (outcome = 'sent')),
   CHECK ((outcome = 'refused') = (refusal IS NOT NULL)),
@@ -696,7 +799,7 @@ CREATE TRIGGER message_outcome_settles_once BEFORE UPDATE OF outcome ON message
 CREATE TABLE message_attachment (
   thread_id TEXT NOT NULL,
   ordinal   INTEGER NOT NULL,
-  position  INTEGER NOT NULL CHECK (position >= 0),
+  position  REAL NOT NULL CHECK (position >= 0),
   form      TEXT NOT NULL CHECK (form IN ('photo','document','image')),
   label     TEXT NOT NULL,
   entity_id TEXT REFERENCES entity(id) ON DELETE SET NULL,
@@ -724,82 +827,72 @@ CREATE TABLE locker_item (
     'login','card','note','identity','wifi','password',
     'ssh_key','api_credential','passport','bank_account','driving_licence',
     'software_licence','crypto_wallet','membership','document')),
-  username     TEXT,
-  password     TEXT,
-  url          TEXT,
-  otp_seed     TEXT,
-  notes        TEXT,
-  cardholder   TEXT,
-  card_number  TEXT,
-  expiry       TEXT,
-  cvv          TEXT,
-  brand        TEXT,
-  content      TEXT,
-  fullname     TEXT,
-  email        TEXT,
-  phone        TEXT,
-  address      TEXT,
-  network      TEXT,
+  -- A type owns the typed columns it names (`type_fields` in commands/locker.rs) and no others: the
+  -- command nulls the rest on write, and the database refuses a row that keeps one.
+  username     TEXT CHECK (username IS NULL OR type = 'login'),
+  password     TEXT CHECK (password IS NULL OR type IN ('login','wifi','password')),
+  url          TEXT CHECK (url IS NULL OR type = 'login'),
+  otp_seed     TEXT CHECK (otp_seed IS NULL OR type = 'login'),
+  notes        TEXT CHECK (notes IS NULL OR type NOT IN ('card','note','identity','wifi','password')),
+  cardholder   TEXT CHECK (cardholder IS NULL OR type = 'card'),
+  card_number  TEXT CHECK (card_number IS NULL OR type = 'card'),
+  expiry       TEXT CHECK (expiry IS NULL OR type = 'card'),
+  cvv          TEXT CHECK (cvv IS NULL OR type = 'card'),
+  brand        TEXT CHECK (brand IS NULL OR type = 'card'),
+  content      TEXT CHECK (content IS NULL OR type = 'note'),
+  fullname     TEXT CHECK (fullname IS NULL OR type = 'identity'),
+  email        TEXT CHECK (email IS NULL OR type = 'identity'),
+  phone        TEXT CHECK (phone IS NULL OR type = 'identity'),
+  address      TEXT CHECK (address IS NULL OR type = 'identity'),
+  network      TEXT CHECK (network IS NULL OR type = 'wifi'),
   compromised  INTEGER NOT NULL DEFAULT 0 CHECK (compromised IN (0,1)),
-  password_set_at TEXT,
+  password_set_at TEXT CHECK (password_set_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', password_set_at) IS password_set_at),
   memo         TEXT,
-  key_id       TEXT,
+  -- The generation of the Locker key the item's sealed cells were sealed under.
+  key_id       TEXT REFERENCES locker_key(key_id) DEFERRABLE INITIALLY DEFERRED,
   -- When the core last opened one of this item's sealed cells (#1146). A use is not an edit:
   -- stamping it does not move the entity's `updated_at`, and makes no revision.
-  last_used_at TEXT,
+  last_used_at TEXT CHECK (last_used_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', last_used_at) IS last_used_at),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT;
-CREATE INDEX locker_item_type_idx ON locker_item(type);
+CREATE INDEX locker_item_by_key ON locker_item(key_id) WHERE key_id IS NOT NULL;
 
 CREATE TABLE locker_item_address (
-  address_id   TEXT PRIMARY KEY,
+  id           TEXT PRIMARY KEY,
   item_id      TEXT NOT NULL REFERENCES locker_item(id) ON DELETE CASCADE,
   url          TEXT NOT NULL,
-  position     INTEGER NOT NULL DEFAULT 0,
-  created_at   TEXT NOT NULL
+  position     REAL NOT NULL DEFAULT 0,
+  created_at   TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at)
 ) STRICT;
-CREATE INDEX locker_item_address_item_idx ON locker_item_address(item_id, position);
+CREATE INDEX locker_item_address_by_item ON locker_item_address(item_id, position);
 
 CREATE TABLE locker_item_alias (
-  alias      TEXT PRIMARY KEY,
+  id         TEXT PRIMARY KEY,
   item_id    TEXT NOT NULL REFERENCES locker_item(id) ON DELETE CASCADE,
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  created_at TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at)
 ) STRICT;
-CREATE INDEX locker_item_alias_item_idx ON locker_item_alias(item_id);
+CREATE INDEX locker_item_alias_by_item ON locker_item_alias(item_id);
 
 CREATE TABLE locker_item_field (
-  field_id     TEXT PRIMARY KEY,
+  id           TEXT PRIMARY KEY,
   item_id      TEXT NOT NULL REFERENCES locker_item(id) ON DELETE CASCADE,
   section      TEXT NOT NULL DEFAULT '',
   label        TEXT NOT NULL,
   kind         TEXT NOT NULL CHECK (kind IN ('text','sealed','url','date','otp')),
   value_text   TEXT,
   value_sealed TEXT,
-  position     INTEGER NOT NULL DEFAULT 0,
-  created_at   TEXT NOT NULL,
-  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  -- `row_version` is the recursion guard of this table's `touch_updated_at` trigger (it fires only
-  -- while the version is unchanged, and its own UPDATE moves it). Nothing compares it; it is not an
-  -- entity version (#1146, R-1146-0-2).
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1), key_id TEXT,
+  position     REAL NOT NULL DEFAULT 0,
+  created_at   TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at),
+  updated_at   TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', updated_at) IS updated_at),
+  key_id       TEXT REFERENCES locker_key(key_id) DEFERRABLE INITIALLY DEFERRED,
   -- A one-time-code seed is a secret like a `sealed` value: `otp` keeps its kind so the page shows
   -- a rolling code, but its value lives only as `lk1:` ciphertext, never in the plain column.
   CHECK (kind IN ('sealed', 'otp') OR value_sealed IS NULL),
   CHECK (kind NOT IN ('sealed', 'otp') OR value_text IS NULL),
   CHECK (kind <> 'otp' OR value_sealed IS NOT NULL)
 ) STRICT;
-CREATE INDEX locker_item_field_item_idx ON locker_item_field(item_id, section, position);
-CREATE TRIGGER locker_item_field_touch_updated_at
-AFTER UPDATE ON locker_item_field
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE locker_item_field
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE field_id = NEW.field_id;
-END;
+CREATE INDEX locker_item_field_by_item ON locker_item_field(item_id, section, position);
+CREATE INDEX locker_item_field_by_key ON locker_item_field(key_id) WHERE key_id IS NOT NULL;
 
 CREATE TABLE locker_item_passkey (
   item_id       TEXT PRIMARY KEY REFERENCES locker_item(id) ON DELETE CASCADE,
@@ -809,36 +902,23 @@ CREATE TABLE locker_item_passkey (
   credential_id TEXT,
   algorithm     TEXT,
   private_key   TEXT,
-  created_at    TEXT NOT NULL,
-  updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  -- `row_version` is the recursion guard of this table's `touch_updated_at` trigger (it fires only
-  -- while the version is unchanged, and its own UPDATE moves it). Nothing compares it; it is not an
-  -- entity version (#1146, R-1146-0-2).
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1), key_id TEXT
+  created_at    TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at),
+  updated_at    TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', updated_at) IS updated_at),
+  key_id        TEXT REFERENCES locker_key(key_id) DEFERRABLE INITIALLY DEFERRED
 ) STRICT;
-CREATE INDEX locker_item_passkey_rp_idx ON locker_item_passkey(rp_id);
-CREATE TRIGGER locker_item_passkey_touch_updated_at
-AFTER UPDATE ON locker_item_passkey
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE locker_item_passkey
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE item_id = NEW.item_id;
-END;
+CREATE INDEX locker_item_passkey_by_key ON locker_item_passkey(key_id) WHERE key_id IS NOT NULL;
 
+-- The Locker's one key row: the id of the generation its sealed cells are sealed under, never
+-- material. A singleton like `vault`: the row is `id = 1`, so a second row is refused.
 CREATE TABLE locker_key (
-  key_id     TEXT PRIMARY KEY,
-  created_at TEXT NOT NULL,
+  id         INTEGER PRIMARY KEY CHECK (id = 1),
+  key_id     TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at),
   -- Unlocks the phone refused since the last one it allowed, and when the latest was (#1146).
-  -- The Locker has one key row, so this is the Locker's whole record of them; a successful unlock
-  -- resets the count and leaves the time.
+  -- A successful unlock resets the count and leaves the time.
   failed_unlocks  INTEGER NOT NULL DEFAULT 0 CHECK (failed_unlocks >= 0),
-  failed_unlock_at TEXT
+  failed_unlock_at TEXT CHECK (failed_unlock_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', failed_unlock_at) IS failed_unlock_at)
 ) STRICT;
-CREATE UNIQUE INDEX locker_key_one_generation ON locker_key((1));
 
 -- ---------------------------------------------------------------------------------------------
 -- Seeds: the rows founding writes, under fixed ids `<kind>:<key>`.

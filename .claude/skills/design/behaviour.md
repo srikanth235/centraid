@@ -51,6 +51,8 @@ Calendar follows Apple's: a dated reminder is a row of its day, and the day is w
 | Overdue in Reminders | the Today list opens with an Overdue section at the top, its Catch up verb leading to the Catch up page; the Catch up page stays where it is | a separate "You were away" notice: Apple has none, so there is none |
 | The Reminders home | the smart lists, My Lists, the Inbox's count (the true total of open reminders in it, never the board window's), and the filter funnel, which stays | a count that stops at 100 |
 
+An event's alerts are shown **longest lead first** (owner, 2026-11-13): the first alert is the one that fires first (1440 then 60; 30 then 10), the editor's Reminder holds the longer lead and Second reminder the shorter, whatever order the member typed them. The order typed is not kept; the vault holds a set.
+
 ## Status line
 
 State is reported on **one status line** and never a toast. It is a single persistent line docked at the foot of the place directly above its band, or at the foot of a pushed page, sheet or editor, which draw no band. It is a sentence in the small style (the refusal tone when refused), updated in place: no stacking, no overlay, no auto-dismiss animation, no dot, at most one inline text action. The shell's import line takes the same seat: progress, then outcome, one action, and a close key once the work is done. No badge counts, red dots, bounces or parallax.

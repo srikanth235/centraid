@@ -10,8 +10,8 @@ engine vendors can ship (`SHIPPABLE`): the adapter is useless if it cannot be wr
       "lora": {"rank": 16, "alpha": 32, "dropout": 0.0, "targets": [...]},          # targets optional: DEFAULT_TARGETS
       "data": {"train": "s3://b/train.jsonl.zst", "val": "s3://b/val.jsonl.zst"},   # optional "train_sha256", "val_sha256"
       # or a data version on the private Hugging Face dataset, pinned (never a branch; train and val only, never test):
-      "data": {"hf": "hf://datasets/srikanth235/centraid-native-data@v0.2"},          # token: HF_TOKEN (or HF_TOKEN_SECRET_ID on AWS), never here
-      "data": {"hf": "...@v0.2", "subset": "NAME"},                                   # a nested train subset: data/NAME.jsonl.zst instead of train
+      "data": {"hf": "hf://datasets/srikanth235/centraid-assist-data@v0.2"},          # token: HF_TOKEN (or HF_TOKEN_SECRET_ID on AWS), never here
+      "data": {"hf": "...@v0.2", "subset": "NAME"},                                   # a nested train subset: data/subsets/NAME.jsonl.zst instead of train
       "checkpoints": "s3://b/run/checkpoints",                                        # a path, s3:// or gs:// prefix
       "outputs": "s3://b/run/outputs",
       "train": {"seed": 0, "lr": 2e-4, "bs": 8, "steps": 1000, ...}

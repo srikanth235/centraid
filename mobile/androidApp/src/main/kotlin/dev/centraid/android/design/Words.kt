@@ -30,6 +30,10 @@ public object KitWords {
     public const val SELECT: String = "Select"
     public const val SHOW_MORE: String = "Show more"
     public const val UNFLAG: String = "Unflag"
+    public const val VAULT_DAMAGED_TITLE: String = "Vault damaged"
+    public const val VAULT_DAMAGED_LINE: String = "This phone's vault is damaged. No new backup is made."
+    public const val VAULT_DAMAGED_SAFE: String = "The backups already on your backup devices are untouched."
+    public const val VAULT_DAMAGED_RESTORE: String = "Restore my vaults"
 
     /** A pushed page's back control, spoken: "Back to People"; "Back" with no parent. */
     public fun backTo(parent: String): String =

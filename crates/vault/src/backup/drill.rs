@@ -5,13 +5,14 @@
 //!    many ranges of real rows and the full-text index.
 //! 2. Snapshot, ask, spool, move, settle: the head names it.
 //! 3. Back up every content item by name, sealed in one pass, and prove the
-//!    ledger confirms every name its hash implies.
+//!    gateway holds every name its hash implies.
 //! 4. Fifty more commits; snapshot again, and prove only the ranges that
-//!    changed were sealed and the store grew by exactly those plus a manifest.
+//!    changed were sealed and the store grew by exactly those plus the leaves
+//!    they sit in and a manifest.
 //! 5. Retention keeps the newest; garbage collection deletes exactly the
 //!    ranges only the dropped snapshot named.
-//! 6. Destroy the vault, its WAL and SHM, the spool, the ledger and the
-//!    scratch: what is left is the store, which is ciphertext, and the key.
+//! 6. Destroy the vault, its WAL and SHM, the device state and the
+//!    spool: what is left is the store, which is ciphertext, and the key.
 //! 7. Restore from the head; open the file through the ladder; prove its
 //!    census, its `db_hash` and a dump of every row equal the lost vault's,
 //!    and that a file fetched by name verifies against its hash.
@@ -28,13 +29,13 @@ use std::time::{Duration, Instant};
 use centraid_media::sealed::{self, Assembler, FileSealer};
 
 use super::PlaneError;
-use super::ledger::{Destination, Ledger, PartKind, Queued};
 use super::mover::{Stop, move_queue};
 use super::naming::{BackupKeys, Name, PlaintextHash, content_hashes, keys_from_root, names_of};
 use super::restore::{Check, RestoreError, restore_head};
 use super::retention::{garbage, keep, live_names};
 use super::snapshot::{self, APP, Settled, Snapshot};
 use super::spool::{SPOOL_CEILING_BYTES, Spool};
+use super::state::{DeviceState, Gateway, Outbox, OutboxKind};
 use super::store::{self, MemoryStore, Store, StoreError};
 use crate::clock::{Clock, SystemClock};
 use crate::error::VaultError;
@@ -195,18 +196,17 @@ pub fn dump(vault: &Vault) -> Result<BTreeMap<String, Vec<String>>, DrillError> 
 fn back_up(
     vault: &Vault,
     keys: &BackupKeys,
-    scratch: &Path,
-    ledger: &Ledger,
+    state: &DeviceState,
     spool: &Spool,
     store: &dyn Store,
 ) -> Result<(Snapshot, snapshot::Plan), DrillError> {
-    let taken = snapshot::take(vault, keys, scratch, VAULT_ID, APP)?;
+    let taken = snapshot::take(vault, keys, spool, SPOOL_CEILING_BYTES, VAULT_ID, APP)?;
     let plan = snapshot::plan(&taken, store)?;
     let spooled = snapshot::spool(
         &taken,
-        &plan,
+        &[(store.gateway_id().to_owned(), plan.clone())],
         spool,
-        ledger,
+        state,
         keys,
         SPOOL_CEILING_BYTES,
         now_ms(),
@@ -214,17 +214,11 @@ fn back_up(
     if !spooled.deferred.is_empty() {
         return Err(fail("the spool deferred parts under the drill's budget"));
     }
-    let moved = move_queue(ledger, spool, store, deadline(), &SystemClock)?;
+    let moved = move_queue(state, spool, store, deadline(), &SystemClock)?;
     if moved.stopped != Stop::Empty {
         return Err(fail(format!("the move stopped early: {:?}", moved.stopped)));
     }
-    match snapshot::settle(
-        ledger,
-        store,
-        &taken.manifest_name,
-        &taken.manifest,
-        &SystemClock,
-    )? {
+    match snapshot::settle(state, store, &SystemClock)? {
         Settled::HeadSet(head) if head.name == taken.manifest_name => {}
         other => return Err(fail(format!("the head did not move: {other:?}"))),
     }
@@ -236,7 +230,7 @@ fn back_up(
 fn back_up_content(
     vault: &Vault,
     keys: &BackupKeys,
-    ledger: &Ledger,
+    state: &DeviceState,
     spool: &Spool,
     store: &dyn Store,
     bodies: &[(String, String)],
@@ -256,36 +250,33 @@ fn back_up_content(
         }
         for part in &sealed.parts {
             let path = spool.adopt(&part.path, &part.name)?;
-            ledger.enqueue(&Queued {
-                name: part.name,
-                part_path: path,
-                size: part.len,
-                digest: part.digest,
-                kind: PartKind::Original,
-                media_type: Some("text/plain".to_owned()),
-                created_ms: now_ms(),
-                handed_off_ms: None,
-                attempts: 0,
-                last_error: None,
-            })?;
+            let mut row = Outbox::sealed(
+                store.gateway_id(),
+                part.name,
+                OutboxKind::Blob,
+                path,
+                part.len,
+                part.digest,
+                now_ms(),
+            );
+            row.hash = Some(sealed.h);
+            row.media_type = Some("text/plain".to_owned());
+            state.put_outbox(&row)?;
             parts += 1;
         }
     }
-    let moved = move_queue(ledger, spool, store, deadline(), &SystemClock)?;
+    let moved = move_queue(state, spool, store, deadline(), &SystemClock)?;
     if moved.stopped != Stop::Empty {
         return Err(fail(format!(
             "the content move stopped early: {:?}",
             moved.stopped
         )));
     }
-    let confirmed = ledger.confirmed_names(store.gateway_id())?;
     for (h, len) in content_hashes(vault)? {
-        if names_of(keys, &h, len)
-            .iter()
-            .any(|name| !confirmed.contains(name))
-        {
+        let names = names_of(keys, &h, len);
+        if !store::missing(store, &names)?.is_empty() {
             return Err(fail(format!(
-                "content {h} has a name the ledger never confirmed"
+                "content {h} has a name the gateway does not hold"
             )));
         }
     }
@@ -308,23 +299,19 @@ pub fn run(dir: &Path) -> Result<DrillReport, DrillError> {
     vault.found("The Drill Household", "Ada")?;
     let first_written = write_documents(&vault, 0, FIRST_NOTES, FIRST_BODY_BYTES)?;
 
-    let ledger = Ledger::open(Ledger::path_for(&vault_path))?;
-    ledger.put_destination(&Destination {
-        gateway_id: store.gateway_id().to_owned(),
-        addrs: vec!["127.0.0.1:7443".to_owned()],
-        cert_der: Vec::new(),
-        token: "0".repeat(64),
-        epoch: store.epoch(),
-        label: "The drill's gateway".to_owned(),
-        paired_at_ms: now_ms(),
-        last_seen_ms: None,
-        last_ack_ms: None,
-    })?;
+    let state = DeviceState::open_beside(&vault_path)?;
+    state.put_gateway(&Gateway::paired(
+        store.gateway_id().to_owned(),
+        vec!["127.0.0.1:7443".to_owned()],
+        Vec::new(),
+        "The drill's gateway".to_owned(),
+        store.epoch(),
+        now_ms(),
+    ))?;
     let spool = Spool::open(Spool::dir_for(&vault_path))?;
-    let scratch = dir.join("live").join("scratch");
 
     // ---- 2. the first snapshot ---------------------------------------------
-    let (first, first_plan) = back_up(&vault, &keys, &scratch, &ledger, &spool, &store)?;
+    let (first, first_plan) = back_up(&vault, &keys, &state, &spool, &store)?;
     if first_plan.missing_ranges.len() != first.manifest.range_names().len() {
         return Err(fail(
             "an empty store already held part of the first snapshot",
@@ -333,7 +320,7 @@ pub fn run(dir: &Path) -> Result<DrillReport, DrillError> {
 
     // ---- 3. the content, by name -------------------------------------------
     let (content_files, content_parts) =
-        back_up_content(&vault, &keys, &ledger, &spool, &store, &first_written)?;
+        back_up_content(&vault, &keys, &state, &spool, &store, &first_written)?;
 
     // ---- 4. more commits, and only what changed ----------------------------
     write_documents(&vault, FIRST_NOTES, SECOND_NOTES, 200)?;
@@ -341,7 +328,7 @@ pub fn run(dir: &Path) -> Result<DrillReport, DrillError> {
         .iter()
         .map(|entry| entry.name)
         .collect();
-    let (second, second_plan) = back_up(&vault, &keys, &scratch, &ledger, &spool, &store)?;
+    let (second, second_plan) = back_up(&vault, &keys, &state, &spool, &store)?;
     let after: BTreeSet<Name> = store::list_all(&store)?
         .iter()
         .map(|entry| entry.name)
@@ -360,10 +347,11 @@ pub fn run(dir: &Path) -> Result<DrillReport, DrillError> {
         .filter_map(|index| second.ranges.get(usize::try_from(*index).ok()?))
         .map(|range| range.name)
         .collect();
+    expected.extend(second_plan.missing_leaves.iter().copied());
     expected.insert(second.manifest_name);
     if grown != expected {
         return Err(fail(format!(
-            "the store grew by {} names; the missing ranges and the manifest are {}",
+            "the store grew by {} names; the missing ranges, leaves and the manifest are {}",
             grown.len(),
             expected.len()
         )));
@@ -373,7 +361,7 @@ pub fn run(dir: &Path) -> Result<DrillReport, DrillError> {
     // Two snapshots a few seconds apart share a day, so retention keeps the
     // newest alone — unless the drill straddled midnight UTC, when it keeps
     // both and there is nothing to collect. Either way the garbage must be
-    // exactly the ranges only a dropped snapshot named.
+    // exactly the parts only a dropped snapshot named.
     let decided = keep(&store.snapshots()?, now_ms());
     if decided.keep.first() != Some(&second.manifest_name) {
         return Err(fail(format!(
@@ -381,24 +369,20 @@ pub fn run(dir: &Path) -> Result<DrillReport, DrillError> {
         )));
     }
     store::delete_all(&store, &decided.drop)?;
-    for name in &decided.drop {
-        ledger.forget_snapshot(name)?;
-    }
     let taken = [&first, &second];
     let names_kept_by = |kept: bool| -> BTreeSet<Name> {
         taken
             .iter()
             .filter(|snapshot| decided.keep.contains(&snapshot.manifest_name) == kept)
-            .flat_map(|snapshot| snapshot.manifest.range_names())
+            .flat_map(|snapshot| snapshot.manifest.part_names())
             .collect()
     };
     let mut live_ranges = names_kept_by(true);
-    let only_dropped: BTreeSet<Name> = names_kept_by(false)
-        .difference(&live_ranges)
-        .copied()
-        .collect();
     live_ranges.extend(decided.keep.iter().copied());
     let live = live_names(&keys, live_ranges, content_hashes(&vault)?);
+    // WHAT ONLY A DROPPED SNAPSHOT NAMED: its ranges and leaves, less everything a kept snapshot or
+    // the vault's own content still needs.
+    let only_dropped: BTreeSet<Name> = names_kept_by(false).difference(&live).copied().collect();
     let listed: Vec<Name> = store::list_all(&store)?
         .iter()
         .map(|entry| entry.name)
@@ -422,10 +406,8 @@ pub fn run(dir: &Path) -> Result<DrillReport, DrillError> {
     let census = second.manifest.census.clone();
     let (ranges_first, ranges_second) = (first.ranges.len(), second.ranges.len());
     let head = second.manifest_name;
-    first.discard()?;
-    second.discard()?;
     vault.close()?;
-    drop(ledger);
+    drop(state);
     std::fs::remove_dir_all(dir.join("live"))?;
     if vault_path.exists() || Spool::dir_for(&vault_path).exists() {
         return Err(fail("the device's state survived its own deletion"));
@@ -472,7 +454,7 @@ pub fn run(dir: &Path) -> Result<DrillReport, DrillError> {
 
     // ---- 8. the takeover fences the old writer -----------------------------
     let _successor = store.claim();
-    match store.set_head(&head, Some(&head), 0) {
+    match store.set_head(&head, Some(&head), 0, 0) {
         Err(StoreError::Moved { .. }) => {}
         other => return Err(fail(format!("the old writer was not fenced: {other:?}"))),
     }

@@ -45,10 +45,11 @@ pub mod model;
 pub mod ontology_doc;
 pub mod originals;
 pub mod page;
+pub mod pagesource;
 pub mod plans;
 pub mod portable;
 pub mod roster;
-pub mod snapshot;
+pub mod stage;
 pub mod task_counts;
 pub mod testdoor;
 pub mod tidy;
@@ -73,9 +74,8 @@ pub use commands::{
     Command, CommandDefinition, CommandOutcome, CommandStatus, Idempotency, Registry, Risk,
 };
 pub use error::{IntentRefusal, RebootstrapReason, Result, VaultError};
-pub use file::Vault;
+pub use file::{Vault, durability_pragmas};
 pub use format::{APPLICATION_ID, SCHEMA_DIGEST};
 pub use log::{ChangeCensus, CommitResult, CommitTx};
 pub use migrations::head_version;
-pub use snapshot::{Fault, SnapshotHead, Step, build_snapshot};
 pub use value::{RowImage, Value};

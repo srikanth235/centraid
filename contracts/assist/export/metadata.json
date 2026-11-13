@@ -6950,8 +6950,8 @@
         {
           "name": "transfer",
           "source": {
-            "column": "transfer_id",
-            "table": "txn"
+            "column": "b",
+            "table": "transfer"
           },
           "type": "text",
           "unit": null,
@@ -7492,13 +7492,13 @@
     "task.id",
     "task.priority",
     "task.status",
+    "transfer.b",
     "txn.account_id",
     "txn.amount_minor",
     "txn.category_id",
     "txn.id",
     "txn.posted_on",
     "txn.status",
-    "txn.transfer_id",
     "workout.climb_m",
     "workout.distance_m",
     "workout.energy_kcal",

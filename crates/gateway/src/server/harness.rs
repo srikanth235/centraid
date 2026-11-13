@@ -27,7 +27,7 @@ use crate::rules::ids::{GatewayId, Name, Pin, Secret, Token, VaultId};
 use crate::rules::payload::PairPayload;
 use crate::rules::state::{Fault, StoreFault};
 use crate::server::serve::{Cable, TlsListener, bind, run};
-use crate::server::sweeps::{purge_once, scrub_once};
+use crate::server::sweeps::scrub_once;
 use crate::server::{Announcer, Handle, OpenError, Shared, system_now_ms};
 
 /// A gateway serving on `127.0.0.1`, and the handles a test needs.
@@ -42,7 +42,7 @@ pub struct Spawned {
     /// Its id: what a claim is signed to.
     pub gateway_id: GatewayId,
     shared: Handle,
-    offset: Arc<AtomicI64>,
+    clock: Arc<AtomicI64>,
     cable: Arc<Cable>,
     stop: Option<oneshot::Sender<()>>,
     task: Option<JoinHandle<std::io::Result<()>>>,
@@ -90,10 +90,12 @@ async fn serve_on(
     address: &str,
     again: bool,
 ) -> Result<Spawned, OpenError> {
-    let offset = Arc::new(AtomicI64::new(0));
-    let clock_offset = Arc::clone(&offset);
-    let clock =
-        Arc::new(move || system_now_ms().saturating_add(clock_offset.load(Ordering::SeqCst)));
+    // THE GATEWAY'S CLOCK IS THE TEST'S: it starts at the wall clock's reading
+    // and then moves only when the test moves it, so no assertion depends on
+    // time running between two calls.
+    let time = Arc::new(AtomicI64::new(system_now_ms()));
+    let reading = Arc::clone(&time);
+    let clock = Arc::new(move || reading.load(Ordering::SeqCst));
     let opened = Shared::open(data_dir, clock)?;
     let shared = Arc::new(match announcer {
         Some(announcer) => opened.with_announcer(announcer),
@@ -122,6 +124,9 @@ async fn serve_on(
     let listener = TlsListener::cabled(listener, config, Arc::clone(&cable))
         .map_err(|error| OpenError::Io("the bound socket".to_owned(), error))?;
     let addr = listener.local();
+    // The purge sweep's clock starts when the gateway does, as `serve`'s does.
+    crate::server::sweeps::Finished::load_or_start(data_dir, shared.now())
+        .map_err(|error| OpenError::Io(data_dir.display().to_string(), error))?;
     let (stop, stopped) = oneshot::channel::<()>();
     let task = tokio::spawn(run(listener, Arc::clone(&shared), async {
         let _ = stopped.await;
@@ -132,7 +137,7 @@ async fn serve_on(
         cert_der: shared.identity().cert_der().to_vec(),
         gateway_id: shared.identity().gateway_id(),
         shared,
-        offset,
+        clock: time,
         cable,
         stop: Some(stop),
         task: Some(task),
@@ -184,7 +189,12 @@ impl Spawned {
 
     /// Move the gateway's clock `ms` forward.
     pub fn advance_clock(&self, ms: i64) {
-        self.offset.fetch_add(ms, Ordering::SeqCst);
+        self.clock.fetch_add(ms, Ordering::SeqCst);
+    }
+
+    /// Set the gateway's clock to `ms` since the Unix epoch.
+    pub fn set_clock(&self, ms: i64) {
+        self.clock.store(ms, Ordering::SeqCst);
     }
 
     /// The cable every connection to this gateway runs through: cut it, or
@@ -207,14 +217,15 @@ impl Spawned {
         &self.shared
     }
 
-    /// Run the purge sweep now.
+    /// Run the purge sweep now, as `serve` does: re-basing across a long
+    /// gap, purging, pruning, and recording when it finished.
     ///
     /// # Errors
     ///
     /// A store fault.
     pub async fn purge_now(&self) -> Result<u64, Fault> {
         let shared = Arc::clone(&self.shared);
-        tokio::task::spawn_blocking(move || purge_once(&shared))
+        tokio::task::spawn_blocking(move || crate::server::operator::sweep(&shared))
             .await
             .map_err(|error| StoreFault::new(error.to_string()))?
     }
@@ -243,30 +254,33 @@ impl Spawned {
     /// Make the gateway's disk read as full — every upload is refused
     /// `DISK_FULL` — or as having room again.
     pub fn fill_disk(&self, full: bool) {
-        self.shared.store().pretend_full(full);
+        self.shared.store().knobs().pretend_full(full);
     }
 
     /// `(calls, names)` this gateway has been asked by `exists` since it started.
     #[must_use]
     pub fn exists_asked(&self) -> (u64, u64) {
-        self.shared.store().exists_asked()
+        self.shared.store().knobs().exists_asked()
     }
 
     /// When each object this gateway committed was committed, from a counter every gateway in
     /// the process shares: two gateways' lists show whether they were fed in turn.
     #[must_use]
     pub fn commit_order(&self) -> Vec<u64> {
-        self.shared.store().commit_order()
+        self.shared.store().knobs().commit_order()
     }
 
     /// Make every upload be refused `TOO_LARGE`, or accepted again.
     pub fn refuse_as_too_large(&self, refusing: bool) {
-        self.shared.store().pretend_too_large(refusing);
+        self.shared.store().knobs().pretend_too_large(refusing);
     }
 
     /// Make `exists` answer that everything is held, whatever the disk holds, or answer honestly.
     pub fn lie_about_exists(&self, lying: bool) {
-        self.shared.store().pretend_to_hold_everything(lying);
+        self.shared
+            .store()
+            .knobs()
+            .pretend_to_hold_everything(lying);
     }
 
     /// Delete a stored object from disk, leaving the index as it was: a gateway that lost a file.
@@ -298,4 +312,78 @@ impl Drop for Spawned {
             task.abort();
         }
     }
+}
+
+/// Pair by secret the way a phone does: draw a nonce, sign the secret and the
+/// nonce with the vault identity key, send it. For tests in any crate.
+///
+/// # Errors
+///
+/// Whatever the gateway refuses with.
+pub async fn pair_secret(
+    client: &Client,
+    identity: &ed25519_dalek::SigningKey,
+    label: impl AsRef<str>,
+    secret: Secret,
+) -> Result<crate::rules::wire::Paired, crate::client::ClientError> {
+    use crate::rules::wire::{PairKind, PairRequest, SecretBody};
+    let info = client.info().await?;
+    let nonce = client.nonce().await?.nonce;
+    client
+        .pair(&PairRequest {
+            vault_id: VaultId::from_bytes(identity.verifying_key().to_bytes()),
+            label: label.as_ref().to_owned(),
+            kind: PairKind::Secret,
+            nonce,
+            secret: Some(SecretBody {
+                secret,
+                signature: crate::rules::signing::sign_pair(
+                    identity,
+                    &info.gateway_id,
+                    &secret,
+                    &nonce,
+                ),
+            }),
+            claim: None,
+            read: None,
+        })
+        .await
+}
+
+/// Claim `epoch` of the vault the way a restoring phone does, seeing `head`.
+///
+/// # Errors
+///
+/// Whatever the gateway refuses with.
+pub async fn pair_claim(
+    client: &Client,
+    identity: &ed25519_dalek::SigningKey,
+    label: impl AsRef<str>,
+    epoch: u64,
+    head_seen: Option<Name>,
+) -> Result<crate::rules::wire::Paired, crate::client::ClientError> {
+    use crate::rules::wire::{ClaimBody, PairKind, PairRequest};
+    let info = client.info().await?;
+    let nonce = client.nonce().await?.nonce;
+    client
+        .pair(&PairRequest {
+            vault_id: VaultId::from_bytes(identity.verifying_key().to_bytes()),
+            label: label.as_ref().to_owned(),
+            kind: PairKind::Claim,
+            nonce,
+            secret: None,
+            claim: Some(ClaimBody {
+                epoch,
+                head_seen,
+                signature: crate::rules::signing::sign_claim(
+                    identity,
+                    &info.gateway_id,
+                    epoch,
+                    head_seen.as_ref(),
+                    &nonce,
+                ),
+            }),
+            read: None,
+        })
+        .await
 }

@@ -238,7 +238,7 @@ fn a_completed_reminder_is_founded_done_with_its_completion_time() {
     );
     assert_eq!(
         w.one::<String>("SELECT done_at FROM task WHERE id = ?1", &[&id]),
-        "2026-01-04T18:00:00Z"
+        "2026-01-04T18:00:00.000Z"
     );
     let sentence = w.refused(
         "task.add",
@@ -474,7 +474,7 @@ fn an_event_carries_travel_a_place_availability_a_zone_and_two_alerts() {
             .vault
             .read(|c| {
                 Ok(c.query_row(
-                    "SELECT travel_min, place_id, busy, timing, zone, reminders FROM event WHERE id = ?1",
+                    "SELECT travel_min, place_id, busy, timing, zone, (SELECT group_concat(offset_min) FROM (SELECT offset_min FROM reminder WHERE entity_id = ?1 ORDER BY offset_min)) FROM event WHERE id = ?1",
                     [&id],
                     |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
                 )?)
@@ -490,9 +490,8 @@ fn an_event_carries_travel_a_place_availability_a_zone_and_two_alerts() {
         ("zoned", Some("Europe/Paris"))
     );
     assert_eq!(
-        serde_json::from_str::<Value>(&alerts).expect("json"),
-        json!([30, 5]),
-        "the first and the second alert"
+        alerts, "5,30",
+        "the first and the second alert, smallest first"
     );
     w.ok(
         "event.edit",
@@ -500,10 +499,7 @@ fn an_event_carries_travel_a_place_availability_a_zone_and_two_alerts() {
     );
     let (travel, _, busy, _, _, alerts) = read(&w);
     assert_eq!((travel, busy), (Some(40), 1));
-    assert_eq!(
-        serde_json::from_str::<Value>(&alerts).expect("json"),
-        json!([60, 10])
-    );
+    assert_eq!(alerts, "10,60");
     w.ok(
         "event.edit",
         json!({ "id": id, "travel_min": null, "place_id": null }),

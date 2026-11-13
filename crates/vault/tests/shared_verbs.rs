@@ -304,7 +304,7 @@ fn what_cannot_outlive_its_holder_is_purged_with_it() {
     w.txn("t2", "acct", 900, None);
     w.commit(|tx| {
         tx.connection()
-            .execute("UPDATE txn SET transfer_id = 't1' WHERE id = 't2'", [])?;
+            .execute("INSERT INTO transfer (a, b) VALUES ('t1', 't2')", [])?;
         Ok(())
     });
     let project = w.container("project", "Move house", None);
@@ -407,7 +407,7 @@ fn a_purge_refuses_with_a_sentence_when_something_would_lose_its_meaning() {
     w.commit(|tx| {
         tx.insert_entity("act", Kind::Activity, "Run", AT)?;
         tx.connection().execute(
-            "INSERT INTO activity (id, type_id, type_kind, starts) VALUES ('act', 'workout_kind:run', 'workout_kind', '2026-03-01T07:00:00Z')",
+            "INSERT INTO activity (id, type_id, type_kind, starts) VALUES ('act', 'workout_kind:run', 'workout_kind', '2026-03-01T07:00:00.000Z')",
             [],
         )?;
         Ok(())

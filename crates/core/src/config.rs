@@ -88,6 +88,11 @@ pub struct CoreConfig {
     /// builds opens every vault under [`ShelfConfig::dir`] and the shell's calls
     /// reach whichever is in front. `None` is an ordinary single-vault core.
     pub shelf: Option<ShelfConfig>,
+    /// Open NO vault at `path`, whether or not a file is there, and never read it (decision 35):
+    /// the handle a shell asks for after `centraid_open` answered `VAULT_DAMAGED`, so a restore
+    /// can run over the damaged file without touching it. The core holds no vault; the restore
+    /// door replaces only that vault, by an atomic rename, after its snapshot checked.
+    pub without_vault: bool,
 }
 
 /// The directory a shelf holds its vaults in, and the one debug hook it takes.
@@ -134,7 +139,15 @@ impl CoreConfig {
             seed: None,
             spool_ceiling: None,
             shelf: None,
+            without_vault: false,
         }
+    }
+
+    /// A core that opens no vault at its path and never reads the file there (decision 35).
+    #[must_use]
+    pub fn without_vault(mut self) -> Self {
+        self.without_vault = true;
+        self
     }
 
     /// A core that is the door to the directory of vaults `shelf` names: it

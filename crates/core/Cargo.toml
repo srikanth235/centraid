@@ -74,7 +74,10 @@ centraid-blobs = { path = "../blobs" }
 # identity key signs a claim, and its root key is what every part is sealed
 # and named under.
 centraid-identity = { path = "../identity" }
-# THE PHONE'S HALF OF THE GATEWAY PROTOCOL v2 (#1080): the pinned HTTPS client
+# THE VAULT IDENTITY KEY'S TYPE, which signs every head, delete, undo, claim
+# and pairing (#1191, E1). Already linked through `centraid-identity`.
+ed25519-dalek.workspace = true
+# THE PHONE'S HALF OF THE GATEWAY PROTOCOL v3 (#1080, #1191): the pinned HTTPS client
 # and the rules' own vocabulary — the pairing payload's parser, the claim's
 # preimage, the refusal codes — so a phone and a gateway cannot disagree about
 # either. The client feature alone: a phone links no listener, no SQLite of the
@@ -121,7 +124,7 @@ serde_json.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
 # A REAL GATEWAY ON A REAL SOCKET for the phone's flows (#1080): the gateway
 # crate's own test harness, the whole server, spawned on 127.0.0.1:0.
-centraid-gateway = { path = "../gateway" }
+centraid-gateway = { path = "../gateway", features = ["test-harness"] }
 # THE HARNESS'S DOOR for the chat's native runtime (#1088): the read-equality
 # test opens a copy of a vault seeded with the example scenario through it and
 # asks the core's door the same questions.

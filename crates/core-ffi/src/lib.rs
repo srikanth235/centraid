@@ -71,6 +71,10 @@ pub const CENTRAID_PANICKED: i32 = -4;
 /// error** — it is negative only because every non-`OK` code is, and a caller
 /// that treats it as a failure will restart the core once a second.
 pub const CENTRAID_TIMEOUT: i32 = -5;
+/// `centraid_open` found the vault file damaged (a failed `quick_check`, or a page SQLite cannot
+/// read). Only `open` returns it. The file is untouched and no handle is written; the shell offers
+/// a restore. Added after the first five, so every other code keeps its value.
+pub const CENTRAID_VAULT_DAMAGED: i32 = -6;
 
 /// Open a core over a vault file.
 ///
@@ -498,6 +502,12 @@ fn code_for(error: &CoreError) -> i32 {
 /// `CONTRACT.md` governs the table); the reason is in the log line the core
 /// already emits.
 fn code_for_open(error: &CoreError) -> i32 {
+    if matches!(
+        error,
+        CoreError::Vault(centraid_vault::VaultError::Damaged { .. })
+    ) {
+        return CENTRAID_VAULT_DAMAGED;
+    }
     match code_for(error) {
         CENTRAID_OK => CENTRAID_BAD_ARGUMENT,
         code => code,

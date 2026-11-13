@@ -1,0 +1,138 @@
+{
+  "cases": [
+    {
+      "chunkDigests": [
+        "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262"
+      ],
+      "compressed": false,
+      "input": "empty",
+      "plaintextLen": 0,
+      "sealedLen": 74
+    },
+    {
+      "chunkDigests": [
+        "dcf5b9a7b68d91d66f8942a20d164d6bab419ad6ba3ac6da62c81c604f70b1b2"
+      ],
+      "compressed": true,
+      "input": "empty",
+      "plaintextLen": 0,
+      "sealedLen": 83
+    },
+    {
+      "chunkDigests": [
+        "041d91d0882463121bb19c94f29e5016b14ee2a67f1c085808c0c08159b62d53"
+      ],
+      "compressed": false,
+      "input": "short, compressible",
+      "plaintextLen": 100,
+      "sealedLen": 174
+    },
+    {
+      "chunkDigests": [
+        "b20bd3e2aa865288a4e10d77300116daf0edb08445257da753d633cab5e9fdea"
+      ],
+      "compressed": true,
+      "input": "short, compressible",
+      "plaintextLen": 100,
+      "sealedLen": 128
+    },
+    {
+      "chunkDigests": [
+        "9f07617d81f276f4978bc1dc06a5b92d490939864c563a220159f31eee680fd1"
+      ],
+      "compressed": false,
+      "input": "short, incompressible",
+      "plaintextLen": 100,
+      "sealedLen": 174
+    },
+    {
+      "chunkDigests": [
+        "46523f39259b263329b0eb92f3347cc155542cfd0424c365fa8e460cd2c5a7de"
+      ],
+      "compressed": true,
+      "input": "short, incompressible",
+      "plaintextLen": 100,
+      "sealedLen": 183
+    },
+    {
+      "chunkDigests": [
+        "f7d02a735f46af107ff63412c0d7614d7f840dbd227a1dd9545d6a682248ec28"
+      ],
+      "compressed": false,
+      "input": "one chunk exactly, compressible",
+      "plaintextLen": 4194304,
+      "sealedLen": 4194378
+    },
+    {
+      "chunkDigests": [
+        "928b99e879e49451b13fbbcb7cf91a4a2fbef5e3f89e85aa7772f7d1e70e50ee"
+      ],
+      "compressed": true,
+      "input": "one chunk exactly, compressible",
+      "plaintextLen": 4194304,
+      "sealedLen": 504
+    },
+    {
+      "chunkDigests": [
+        "91fed827d8194058b2da2bfd077c2efac1d770d606299c13043b8ee5ae897cb9"
+      ],
+      "compressed": false,
+      "input": "one chunk exactly, incompressible",
+      "plaintextLen": 4194304,
+      "sealedLen": 4194378
+    },
+    {
+      "chunkDigests": [
+        "2d0a681fcd51dd7d4c5dc35abc5682a09de9662fd62a6c4db25968a48e0b48d0",
+        "893d729ea3f7911998c9963b54a41e68957c27235f1a23b531bff4f078a9ce0a"
+      ],
+      "compressed": true,
+      "input": "one chunk exactly, incompressible",
+      "plaintextLen": 4194304,
+      "sealedLen": 4194527
+    },
+    {
+      "chunkDigests": [
+        "f7d02a735f46af107ff63412c0d7614d7f840dbd227a1dd9545d6a682248ec28",
+        "a162ae617d7a7fe949d71d1c30097b7bfab6836bd6cc51c6f511b1860efd4250",
+        "6d34673da76d5688a85dbfaa2510b55c276e740c39e8aeab6adc97b3bf96f016"
+      ],
+      "compressed": false,
+      "input": "multi-chunk, compressible",
+      "plaintextLen": 8388708,
+      "sealedLen": 8388870
+    },
+    {
+      "chunkDigests": [
+        "aff2667484684d7c26e6ab607592ff272c2fb0b87f1e9b068d2cca3ee104d158"
+      ],
+      "compressed": true,
+      "input": "multi-chunk, compressible",
+      "plaintextLen": 8388708,
+      "sealedLen": 895
+    },
+    {
+      "chunkDigests": [
+        "91fed827d8194058b2da2bfd077c2efac1d770d606299c13043b8ee5ae897cb9",
+        "8fd1256e671c24720cf7e5a731fcf463a4a6d35729a02b7cd88cc549241ce491",
+        "c3472bafd0d3790fc114af58b51d0284f09d85714ce4583a758ab27e464c2c43"
+      ],
+      "compressed": false,
+      "input": "multi-chunk, incompressible",
+      "plaintextLen": 8388708,
+      "sealedLen": 8388870
+    },
+    {
+      "chunkDigests": [
+        "2d0a681fcd51dd7d4c5dc35abc5682a09de9662fd62a6c4db25968a48e0b48d0",
+        "db42653ed09753e920fc581edccde2091e88b0a032fc755445e73f3fadc1a47c",
+        "6a71ae119d7e2f61049cff9cf6d8973d046f5e1d5d0173eab4948fb7c187d756"
+      ],
+      "compressed": true,
+      "input": "multi-chunk, incompressible",
+      "plaintextLen": 8388708,
+      "sealedLen": 8389071
+    }
+  ],
+  "format": "centraid-sealed/2"
+}

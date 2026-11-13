@@ -109,6 +109,19 @@ impl<'conn> CommitTx<'conn> {
         self.pending.borrow_mut().quiet = quiet;
     }
 
+    /// What the history will be told when this commit settles: the cause it is kept under and
+    /// whether the commit is a quiet save. A handler that answers the revision its save leaves
+    /// asks the history with the same two facts ([`crate::history::head_after`]).
+    pub(crate) fn settling_as(&self) -> (String, bool) {
+        let pending = self.pending.borrow();
+        let cause = if pending.producer.is_empty() {
+            "unnamed".to_owned()
+        } else {
+            pending.producer.clone()
+        };
+        (cause, pending.quiet)
+    }
+
     /// Stamp an entity as changed: `updated_at`, and a place on the
     /// list the search index is rebuilt from at commit. Once per commit per
     /// entity; a second call only keeps it on the list.
@@ -299,9 +312,23 @@ impl Vault {
 
         match outcome {
             Ok(value) => {
-                self.connection()
-                    .execute_batch("COMMIT")
-                    .map_err(|error| VaultError::from_sqlite("committing", error))?;
+                if let Err(error) = crate::stage::reached(crate::stage::Stage::BeforeCommit) {
+                    let _ = self.connection().execute_batch("ROLLBACK");
+                    let _ = hook.take(&census);
+                    return Err(error);
+                }
+                if let Err(error) = self.connection().execute_batch("COMMIT") {
+                    // A COMMIT CAN FAIL AND LEAVE THE TRANSACTION OPEN: a deferred foreign key
+                    // (the Locker's `key_id`) is checked at COMMIT, and SQLite then keeps the
+                    // transaction for the caller to fix or roll back. Nothing here can fix it, so it
+                    // is rolled back; left open, the next commit would fail on "cannot start a
+                    // transaction within a transaction" and the vault would write nothing again.
+                    let _ = self.connection().execute_batch("ROLLBACK");
+                    let _ = hook.take(&census);
+                    return Err(VaultError::from_sqlite("committing", error));
+                }
+                // The commit is durable; a fault test may stop the process here.
+                let _ = crate::stage::reached(crate::stage::Stage::Committed);
                 // READ AFTER THE COMMIT, and cleared only then. A census read
                 // before it would be a screen redrawn from a transaction that
                 // could still roll back.

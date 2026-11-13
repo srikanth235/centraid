@@ -13,7 +13,6 @@ use std::panic::AssertUnwindSafe;
 use std::path::PathBuf;
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_vault::backup::snapshot::Manifest;
 use serde_json::json;
 
 use common::*;
@@ -52,6 +51,7 @@ fn a_restore_killed_before_its_claim_is_finished_by_the_next_one() {
             &wire::RestoreRequest {
                 phrase: WORDS.to_owned(),
                 payload: gateway.payload(),
+                confirm_unproven: true,
                 ..wire::RestoreRequest::default()
             },
             runtime.handle(),
@@ -209,6 +209,7 @@ fn words_that_are_not_the_members_change_nothing() {
             wire::request::Kind::Restore(wire::RestoreRequest {
                 phrase: phrase.to_owned(),
                 payload: gateway.payload(),
+                confirm_unproven: true,
                 ..wire::RestoreRequest::default()
             }),
         )
@@ -299,17 +300,8 @@ fn damage_on_the_gateway_is_refused_before_any_claim() {
         .gateway_id;
     note(&old, "Before", "a note the damage must not cost");
     drain(&old, at_home());
-    let book = ledger(&old_path);
-    let head = book.head(&id).expect("reads").expect("a head");
-    let taken = book
-        .snapshots()
-        .expect("reads")
-        .into_iter()
-        .find(|snapshot| snapshot.name == head)
-        .expect("the head");
-    let manifest =
-        centraid_vault::backup::snapshot::Manifest::from_json(taken.manifest_json.as_bytes())
-            .expect("a manifest");
+    let head = head_of(&old_path, &id);
+    let manifest = manifest_at(&gateway, &head);
     let range = manifest.ranges[manifest.ranges.len() / 2].name;
     let store = gateway.spawned.shared().store();
     let file_of = |name: centraid_vault::backup::naming::Name| {
@@ -453,6 +445,7 @@ fn a_gateway_that_dies_after_the_claim_leaves_the_restored_vault() {
         &wire::RestoreRequest {
             phrase: WORDS.to_owned(),
             payload: gateway.payload(),
+            confirm_unproven: true,
             ..wire::RestoreRequest::default()
         },
         runtime.handle(),
@@ -461,6 +454,7 @@ fn a_gateway_that_dies_after_the_claim_leaves_the_restored_vault() {
         &mut |_| gateway.cable().cut_after_answers(8 * 1024),
     )
     .unwrap_or_else(|error| panic!("the claim landed and the vault is kept: {error}"));
+    keep_restored(&restored);
     assert_eq!(restored.vaults.len(), 1, "{restored:?}");
     assert_eq!(gateway.writer(&vault_id()).0, 2, "one claim");
     let path = PathBuf::from(&restored.vaults[0].path);
@@ -807,7 +801,7 @@ fn a_phone_that_lost_its_ledger_takes_its_vault_over() {
     note(&phone, "Before", "written before the ledger was lost");
     drain(&phone, at_home());
     drop(phone);
-    let lost = centraid_vault::backup::ledger::Ledger::path_for(&path);
+    let lost = centraid_vault::backup::state::DeviceState::path_for(&path);
     for suffix in ["", "-wal", "-shm"] {
         let mut file = lost.clone().into_os_string();
         file.push(suffix);
@@ -864,18 +858,20 @@ fn after_a_restore_only_what_is_new_is_sent() {
     // THE PASS THAT MOVED THE PHOTOGRAPH ALSO TOOK THE SNAPSHOT ITS ROW NEEDS
     // (R-1080-C15): its new ranges and manifest are the only other parts.
     assert_eq!(
-        next.confirmed_parts - snapshot_parts_after(&path, &before),
+        next.confirmed_parts - snapshot_parts_after(&gateway, &phone, &before),
         1,
         "the new photograph alone, besides the snapshot: {next:?}"
     );
     let snapshot_names = {
-        let book = ledger(&path);
-        let snapshots = book.snapshots().expect("reads");
-        let newest = snapshots.last().expect("a snapshot");
-        let mut names = Manifest::from_json(newest.manifest_json.as_bytes())
-            .expect("a manifest")
-            .range_names();
-        names.insert(newest.name);
+        let newest = head_of(
+            &path,
+            &state(&path).gateways().expect("reads")[0].gateway_id,
+        );
+        // THE SNAPSHOT'S OWN PARTS: its ranges and leaves, not the blobs its rows name.
+        let manifest = manifest_at(&gateway, &newest);
+        let mut names = manifest.range_names();
+        names.extend(manifest.leaf_names());
+        names.insert(newest);
         names
     };
     let added: Vec<_> = gateway
@@ -1051,7 +1047,7 @@ fn a_restored_phones_walk_is_told_which_derivatives_the_vault_already_holds() {
 /// The three files that are a phone's backup ledger, removed: its record of
 /// every gateway, its token and every acknowledgement.
 fn lose_the_ledger(path: &std::path::Path) {
-    let lost = centraid_vault::backup::ledger::Ledger::path_for(path);
+    let lost = centraid_vault::backup::state::DeviceState::path_for(path);
     for suffix in ["", "-wal", "-shm"] {
         let mut file = lost.clone().into_os_string();
         file.push(suffix);
@@ -1159,9 +1155,9 @@ fn restoring_onto_a_phone_that_holds_an_older_copy_replaces_it_and_freezes_nothi
     let backup = tempfile::tempdir().expect("a directory");
     let older = backup.path().join("vault.db");
     std::fs::copy(&held, &older).expect("the copy");
-    let older_ledger = centraid_vault::backup::ledger::Ledger::path_for(&older);
+    let older_ledger = centraid_vault::backup::state::DeviceState::path_for(&older);
     std::fs::copy(
-        centraid_vault::backup::ledger::Ledger::path_for(&held),
+        centraid_vault::backup::state::DeviceState::path_for(&held),
         &older_ledger,
     )
     .expect("the ledger");
@@ -1183,7 +1179,7 @@ fn restoring_onto_a_phone_that_holds_an_older_copy_replaces_it_and_freezes_nothi
     std::fs::copy(&older, &held).expect("the older copy is back");
     std::fs::copy(
         &older_ledger,
-        centraid_vault::backup::ledger::Ledger::path_for(&held),
+        centraid_vault::backup::state::DeviceState::path_for(&held),
     )
     .expect("its ledger");
     assert_ne!(rows(&held), newer_rows, "the held copy is the older one");
@@ -1271,11 +1267,11 @@ fn an_older_backup_is_offered_when_the_newest_will_not_open() {
         .gateway_id;
     note(&old, "First", "kept in the older backup");
     drain(&old, at_home());
-    let older = ledger(&old_path).head(&id).expect("reads").expect("a head");
+    let older = head_of(&old_path, &id);
     clock.advance_days(2);
     note(&old, "Second", "only in the newest backup");
     drain(&old, at_home());
-    let newest = ledger(&old_path).head(&id).expect("reads").expect("a head");
+    let newest = head_of(&old_path, &id);
     assert_ne!(older, newest, "two backups");
 
     let store = gateway.spawned.shared().store();
@@ -1309,6 +1305,7 @@ fn an_older_backup_is_offered_when_the_newest_will_not_open() {
             phrase: WORDS.to_owned(),
             payload: gateway.payload(),
             use_older: true,
+            confirm_unproven: true,
             ..wire::RestoreRequest::default()
         }),
     )
@@ -1387,6 +1384,7 @@ fn a_claim_that_landed_is_never_forgotten_when_adopting_fails() {
         &wire::RestoreRequest {
             phrase: WORDS.to_owned(),
             payload: gateway.payload(),
+            confirm_unproven: true,
             ..wire::RestoreRequest::default()
         },
         runtime.handle(),
@@ -1394,8 +1392,9 @@ fn a_claim_that_landed_is_never_forgotten_when_adopting_fails() {
         &mut |_| {
             // THE CLAIM LANDED; the ledger's place is taken by a directory, so adopting fails.
             let file = laid_down(new_dir.path()).expect("the checked file is laid down");
-            let ledger =
-                centraid_vault::backup::ledger::Ledger::path_for(&file.with_file_name("vault.db"));
+            let ledger = centraid_vault::backup::state::DeviceState::path_for(
+                &file.with_file_name("vault.db"),
+            );
             std::fs::create_dir_all(&ledger).expect("a directory where the ledger goes");
             broken = Some(ledger);
         },
@@ -1424,6 +1423,7 @@ fn a_claim_that_landed_is_never_forgotten_when_adopting_fails() {
             phrase: WORDS.to_owned(),
             payload: gateway.payload(),
             indices: first.unclaimed.iter().map(|vault| vault.index).collect(),
+            confirm_unproven: true,
             ..wire::RestoreRequest::default()
         },
         runtime.handle(),

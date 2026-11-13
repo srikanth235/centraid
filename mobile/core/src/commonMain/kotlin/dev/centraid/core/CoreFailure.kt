@@ -103,6 +103,14 @@ public sealed interface CoreFailure {
         override val sentence: String = "Centraid's engine is missing. Reinstall it."
     }
 
+    /**
+     * `centraid_open` found the vault file damaged. The file is untouched; the shell offers a
+     * restore. The sentence is the generic one until the member-facing words are written.
+     */
+    public data object VaultDamaged : CoreFailure {
+        override val sentence: String = "Something went wrong. Restart Centraid."
+    }
+
     /** A status code this build does not define. See [CoreStatus.of]. */
     public data class UnknownStatus(val code: Int) : CoreFailure {
         override val sentence: String = "Unrecognized reply. Update Centraid."

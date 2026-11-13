@@ -95,12 +95,25 @@ fn month(taken_at_ms: u64) -> i64 {
 pub fn keep(entries: &[SnapshotEntry], now_ms: u64) -> Keep {
     let judged_at = |entry: &SnapshotEntry| entry.taken_at_ms.min(now_ms);
     let mut ordered: Vec<&SnapshotEntry> = entries.iter().collect();
+    // THE SIGNED ORDER COMES FIRST: (epoch, generation) is what the vault key signed into each
+    // head, so it says which snapshot is newer where two share a millisecond or a phone's clock
+    // lied. Time, then registration, then name only break a tie among snapshots whose destination
+    // does not say (0, 0).
     ordered.sort_by(|left, right| {
-        (judged_at(right), right.registered_at_ms, right.name).cmp(&(
-            judged_at(left),
-            left.registered_at_ms,
-            left.name,
-        ))
+        (
+            right.epoch,
+            right.generation,
+            judged_at(right),
+            right.registered_at_ms,
+            right.name,
+        )
+            .cmp(&(
+                left.epoch,
+                left.generation,
+                judged_at(left),
+                left.registered_at_ms,
+                left.name,
+            ))
     });
 
     let mut kept: BTreeSet<Name> = BTreeSet::new();
@@ -152,39 +165,6 @@ pub fn live_names(
     live
 }
 
-/// **A FILE LEAVES THE DESTINATION WHEN NO KEPT SNAPSHOT COULD NAME IT**
-/// (#1080, the sweep's F5). A snapshot names the files its rows name, and a
-/// restore of one needs their bytes, so the 7/4/6 history protects records
-/// only if the files they name stay. The phone cannot open every kept
-/// snapshot to read its rows — each is the whole vault — so it keeps the one
-/// fact it has: when it first saw the name unlive, `first_unlive_ms`. A name
-/// that was live in a kept snapshot (taken at or before `first_unlive_ms`, the
-/// name having been live then) is held while the oldest kept snapshot is no
-/// newer than that moment; once every kept snapshot was taken after it, none
-/// can name the file and it is garbage.
-///
-/// Conservative by design: a name that no snapshot ever named waits the same
-/// time, and a name first seen late waits longer. It never collects a name a
-/// kept snapshot may name. `oldest_kept_ms` is `None` only for no kept
-/// snapshot at all, which collects nothing.
-#[must_use]
-pub fn collectable(first_unlive_ms: u64, oldest_kept_ms: Option<u64>) -> bool {
-    oldest_kept_ms.is_some_and(|oldest| oldest > first_unlive_ms)
-}
-
-/// [`collectable`] over every kept snapshot's `taken_at_ms`, with the clock it is judged on.
-///
-/// **DOUBT NEVER DELETES.** While any kept snapshot is dated after `now_ms`, nothing is
-/// collectable: that snapshot's real take time is unknown (its phone's clock was set ahead), so
-/// it may name a file that left the vault after it was really taken, and the oldest date alone
-/// cannot say. It heals itself — once the clock passes the date, or [`keep`] (which clamps the
-/// date) drops that snapshot, the rule is [`collectable`]'s again.
-#[must_use]
-pub fn collectable_among(first_unlive_ms: u64, kept_taken_ms: &[u64], now_ms: u64) -> bool {
-    kept_taken_ms.iter().all(|taken| *taken <= now_ms)
-        && collectable(first_unlive_ms, kept_taken_ms.iter().copied().min())
-}
-
 /// What a destination lists beyond the live set.
 #[must_use]
 pub fn garbage(listed: impl IntoIterator<Item = Name>, live: &BTreeSet<Name>) -> Vec<Name> {
@@ -215,6 +195,10 @@ mod tests {
             name: name_at(taken_at_ms),
             taken_at_ms,
             registered_at_ms: taken_at_ms,
+            epoch: 0,
+            generation: 0,
+            held_at_ms: None,
+            purge_after_ms: None,
         }
     }
 
@@ -313,6 +297,32 @@ mod tests {
         );
     }
 
+    /// **THE SIGNED ORDER DECIDES** (#1191): two snapshots that share a millisecond and a
+    /// registration are told apart by the generation the vault key signed, never by name, so the
+    /// head is kept whichever way their names fall.
+    #[test]
+    fn the_signed_generation_orders_snapshots_before_time_or_name() {
+        for (low, high) in [(1_u8, 2_u8), (2, 1)] {
+            let older = SnapshotEntry {
+                name: Name::from_bytes([low; 32]),
+                generation: 5,
+                ..entry(NOW_MS)
+            };
+            let head = SnapshotEntry {
+                name: Name::from_bytes([high; 32]),
+                generation: 6,
+                ..entry(NOW_MS)
+            };
+            let decided = keep(&[older, head], NOW_MS);
+            assert_eq!(decided.keep.first(), Some(&head.name), "the head leads");
+            assert_eq!(
+                decided.drop,
+                vec![older.name],
+                "the same day drops the older"
+            );
+        }
+    }
+
     #[test]
     fn the_newest_is_always_kept() {
         let only = [entry(NOW_MS - 400 * DAY_MS)];
@@ -329,11 +339,19 @@ mod tests {
             name: name_at(NOW_MS + 30 * DAY_MS),
             taken_at_ms: NOW_MS + 30 * DAY_MS,
             registered_at_ms: NOW_MS - 2 * HOUR_MS,
+            epoch: 0,
+            generation: 0,
+            held_at_ms: None,
+            purge_after_ms: None,
         };
         let head = SnapshotEntry {
             name: name_at(NOW_MS),
             taken_at_ms: NOW_MS,
             registered_at_ms: NOW_MS,
+            epoch: 0,
+            generation: 0,
+            held_at_ms: None,
+            purge_after_ms: None,
         };
         let mut entries: Vec<SnapshotEntry> =
             (1..20).map(|day| entry(NOW_MS - day * DAY_MS)).collect();
@@ -369,70 +387,5 @@ mod tests {
         let mut expected = vec![dropped_manifest, dropped_range];
         expected.sort();
         assert_eq!(garbage(listed, &live), expected);
-    }
-
-    /// **A FILE WAITS UNTIL NO KEPT SNAPSHOT COULD NAME IT** (the sweep's F5).
-    /// A name first seen unlive at `G` is held while the oldest kept snapshot
-    /// is no newer than `G`: a snapshot taken at or before it may have named
-    /// the file, and a restore of that snapshot needs its bytes.
-    #[test]
-    fn a_file_is_collectable_only_once_every_kept_snapshot_postdates_its_leaving() {
-        let left = at(2026, 10, 1, 12);
-        // The oldest kept snapshot was taken before the file left: it may name it.
-        assert!(!collectable(left, Some(at(2026, 9, 28, 9))));
-        // Taken at the very moment, or without a kept snapshot to judge: not yet.
-        assert!(!collectable(left, Some(left)));
-        assert!(!collectable(left, None));
-        // Every kept snapshot is newer than the moment the file left: none names it.
-        assert!(collectable(left, Some(left + 1)));
-        assert!(collectable(left, Some(at(2026, 10, 2, 9))));
-    }
-
-    /// The window a deleted file keeps, over the real schedule: hourly
-    /// snapshots for 400 days, a file that left 100 days ago. The monthly
-    /// history still holds snapshots from before it left, so it is kept; one
-    /// that left 200 days ago predates every kept snapshot and goes.
-    #[test]
-    fn a_deleted_file_is_kept_as_long_as_the_history_that_names_it() {
-        let hour = HOUR_MS;
-        let leaves = NOW_MS - 100 * DAY_MS;
-        let entries: Vec<SnapshotEntry> = (0..400 * 24).map(|h| entry(NOW_MS - h * hour)).collect();
-        let decided = keep(&entries, NOW_MS);
-        let oldest = decided
-            .keep
-            .iter()
-            .filter_map(|name| entries.iter().find(|entry| entry.name == *name))
-            .map(|entry| entry.taken_at_ms)
-            .min();
-        assert!(
-            oldest.is_some_and(|oldest| oldest < leaves),
-            "the monthly history reaches back past the day it left"
-        );
-        assert!(
-            !collectable(leaves, oldest),
-            "so a snapshot that may name it is still kept"
-        );
-        // The same file, left 200 days ago: older than every kept snapshot.
-        assert!(collectable(NOW_MS - 200 * DAY_MS, oldest));
-    }
-
-    /// **A FUTURE-DATED KEPT SNAPSHOT HOLDS EVERY COLLECTION BACK,** and the same data with a
-    /// sane date is collected as before.
-    #[test]
-    fn a_future_dated_kept_snapshot_collects_nothing_until_it_heals() {
-        let left = NOW_MS - 10 * DAY_MS;
-        let sane = [NOW_MS - DAY_MS, NOW_MS - 2 * DAY_MS];
-        assert!(collectable_among(left, &sane, NOW_MS), "as before");
-        // The oldest is sane but a newer kept one is dated ahead: still nothing.
-        let ahead = [NOW_MS - DAY_MS, NOW_MS + 400 * DAY_MS];
-        assert!(!collectable_among(left, &ahead, NOW_MS));
-        // The oldest itself is in the future: it would read as "newer than the leaving".
-        assert!(!collectable_among(left, &[NOW_MS + DAY_MS], NOW_MS));
-        // The clock passes the date: collectable again.
-        assert!(collectable_among(left, &ahead, NOW_MS + 401 * DAY_MS));
-        assert!(
-            !collectable_among(left, &[], NOW_MS),
-            "no kept snapshot collects nothing"
-        );
     }
 }

@@ -39,7 +39,7 @@ base64.workspace = true
 # gateway. `image` writes the real JPEG the core derives its tiers from;
 # `blake3` checks a restored original against its hash.
 blake3.workspace = true
-centraid-gateway = { path = "../gateway" }
+centraid-gateway = { path = "../gateway", features = ["test-harness"] }
 image.workspace = true
 centraid-ontology = { path = "../ontology" }
 hex.workspace = true

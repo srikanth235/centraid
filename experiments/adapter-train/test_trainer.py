@@ -197,7 +197,7 @@ class RunTest(Base):
         (repo / "manifest.json").write_text('{"version": "v0.2"}')
         asked = []
         inner = hf.local_fetch(repo)
-        job = config.parse({**self.job().raw, "data": {"hf": "hf://datasets/srikanth235/centraid-native-data@v0.2"},
+        job = config.parse({**self.job().raw, "data": {"hf": "hf://datasets/srikanth235/centraid-assist-data@v0.2"},
                             "train": {**self.job().raw["train"], "steps": 2}})
         res = self.go(job, "wh", hf_fetch=lambda r, v, p, d: (asked.append(p), inner(r, v, p, d))[1])
         self.assertTrue(res["done"])
@@ -205,7 +205,7 @@ class RunTest(Base):
         rec = json.loads((Path(job.outputs) / "run.json").read_text())
         self.assertEqual(rec["data_source"]["revision"], "v0.2")
         self.assertEqual(rec["data_source"]["manifest"], {"version": "v0.2"})
-        self.assertEqual(rec["data"]["train"]["uri"], "hf://datasets/srikanth235/centraid-native-data@v0.2#data/train.jsonl.zst")
+        self.assertEqual(rec["data"]["train"]["uri"], "hf://datasets/srikanth235/centraid-assist-data@v0.2#data/train.jsonl.zst")
         self.assertEqual(len(rec["data_source"]["manifest_sha256"]), 64)
 
     def test_a_zst_data_file_is_read_as_it_is(self):

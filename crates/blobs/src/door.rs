@@ -13,7 +13,7 @@
 //! row, which names an original the operating system's library holds and the
 //! phone never copied (#1080 ruling 6) — an identifier only the shell can
 //! resolve. With no file and no row the bytes are nowhere on this device. The
-//! ledger is the backup plane's, `<stem>.backup.db`, shared with the core that
+//! ledger is the backup plane's, `<stem>.state.db`, shared with the core that
 //! writes it; this door only reads it.
 //!
 //! ## What it does NOT do
@@ -27,8 +27,8 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use centraid_vault::backup::ledger::{Ledger, LocalSource};
 use centraid_vault::backup::naming::PlaintextHash;
+use centraid_vault::backup::state::{DeviceState, LocalSource};
 use centraid_vault::bytes::{BlobError, BlobStore, Located, Result};
 
 use crate::hash::ContentHash;
@@ -38,7 +38,7 @@ use crate::store::{ByteStore, StoreError};
 #[derive(Clone)]
 pub struct ContentBytes {
     store: ByteStore,
-    ledger: Option<Arc<Mutex<Ledger>>>,
+    ledger: Option<Arc<Mutex<DeviceState>>>,
 }
 
 impl std::fmt::Debug for ContentBytes {
@@ -65,7 +65,7 @@ impl ContentBytes {
     /// The same door, answering for the operating system's library through
     /// the ledger's `local_bytes`. See the module header.
     #[must_use]
-    pub fn with_ledger(self, ledger: Arc<Mutex<Ledger>>) -> Self {
+    pub fn with_state(self, ledger: Arc<Mutex<DeviceState>>) -> Self {
         Self {
             ledger: Some(ledger),
             ..self
@@ -80,7 +80,7 @@ impl ContentBytes {
 
     /// The ledger this door reads, when one is attached.
     #[must_use]
-    pub const fn ledger(&self) -> Option<&Arc<Mutex<Ledger>>> {
+    pub const fn state(&self) -> Option<&Arc<Mutex<DeviceState>>> {
         self.ledger.as_ref()
     }
 
@@ -196,15 +196,15 @@ impl BlobStore for ContentBytes {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use centraid_vault::backup::ledger::LocalBytes;
+    use centraid_vault::backup::state::LocalBytes;
 
-    fn door(dir: &tempfile::TempDir) -> (ContentBytes, Arc<Mutex<Ledger>>) {
+    fn door(dir: &tempfile::TempDir) -> (ContentBytes, Arc<Mutex<DeviceState>>) {
         let store = ByteStore::open(dir.path().join("vault.bytes")).expect("the store opens");
         let ledger = Arc::new(Mutex::new(
-            Ledger::open(Ledger::path_for(&dir.path().join("vault.db"))).expect("the ledger opens"),
+            DeviceState::open_beside(&dir.path().join("vault.db")).expect("the device state opens"),
         ));
         (
-            ContentBytes::new(store).with_ledger(Arc::clone(&ledger)),
+            ContentBytes::new(store).with_state(Arc::clone(&ledger)),
             ledger,
         )
     }
@@ -246,7 +246,6 @@ mod tests {
             hash: PlaintextHash::from_bytes(*original.as_bytes()),
             source: LocalSource::Os,
             os_ref: Some("library-item-1".to_owned()),
-            verified_ms: Some(1),
             edited: false,
         };
         ledger
@@ -283,7 +282,6 @@ mod tests {
                 hash: PlaintextHash::from_bytes(*evicted.as_bytes()),
                 source: LocalSource::Store,
                 os_ref: None,
-                verified_ms: None,
                 edited: false,
             })
             .expect("records");

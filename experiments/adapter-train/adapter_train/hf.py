@@ -1,10 +1,11 @@
 """A data version on the private Hugging Face dataset repo, pinned to a revision: `hf://datasets/<owner>/<repo>@<revision>`.
 
-    hf://datasets/srikanth235/centraid-native-data@v0.2
+    hf://datasets/srikanth235/centraid-assist-data@v0.2
 
-One revision per data version (`cargo run -p centraid-datagen -- build --version vN`, published by its own command). The layout is the
-datagen one: `manifest.json` and `data/{train,val,test,noise}.jsonl.zst`. **ONLY `train` AND `val` ARE EVER REQUESTED.** The test split is
-never fetched, however the job file is written (`FILES` has no other keys, and a test asserts the fetcher is never asked for it).
+One tag per data version (`cargo run -p centraid-datagen -- build --version vN`, published by its own command). The data repo holds
+`manifest.json`, `contract/`, `data/{train,val,noise}.jsonl.zst`, `data/subsets/train-<n>.jsonl.zst`, `worlds/{train,val}/` and `reports/`.
+The test split and the LLM cache live in a second, held-out repo this module never names. **ONLY `train` AND `val` ARE EVER REQUESTED.**
+The test split is not in this repo and is never fetched (`FILES` has no other keys, and a test asserts the fetcher is never asked for it).
 
 The revision is pinned: a moving branch (`main`, `master`, `HEAD`) is refused. The token is read from `HF_TOKEN` (the platform's secret
 mechanism) inside `https_fetch` and nowhere else; it is never in the job file, a log line, an exception message or the run record.
@@ -49,12 +50,12 @@ def parse(ref: str) -> tuple[str, str]:
 
 def train_path(subset: str | None = None) -> str:
     """The repo path of the training file: `data/train.jsonl.zst`, or a named nested subset (a learning curve's 1,000 or 2,500 sessions) at
-    `data/<subset>.jsonl.zst`. THE ONE PLACE the subset layout is written down; Part H's published names go in the job file, not here."""
+    `data/subsets/<subset>.jsonl.zst`. THE ONE PLACE the subset layout is written down; Part H's published names go in the job file, not here."""
     if subset is None:
         return FILES["train"]
     if not SUBSET.match(subset) or subset in FORBIDDEN_SUBSETS:
         raise ConfigError("data.subset %r is not a train subset name (letters, digits, '.', '_', '-'; not train, val, test or noise)" % (subset,))
-    return "data/%s.jsonl.zst" % subset
+    return "data/subsets/%s.jsonl.zst" % subset
 
 
 def token(env=None, secrets_client=None) -> str:

@@ -271,8 +271,19 @@ pub struct EdgeRow {
     pub to: String,
     /// The edge's `rel`.
     pub rel: String,
-    /// The edge's anchor, as the text of its JSON (a link written in a note's words carries one).
+    /// The edge's selector, as the text of its JSON: `{"wikilink": "<title>"}` for a link a note's
+    /// `[[title]]` compiled to (built from the edge's `wikilink` column), else the anchor the
+    /// member's own link carries. See [`selector_of`].
     pub anchor: Option<String>,
+}
+
+/// The selector an edge ships: the title of a wikilink as `{"wikilink": title}`, else the anchor.
+#[must_use]
+pub fn selector_of(anchor: Option<String>, wikilink: Option<&str>) -> Option<String> {
+    match wikilink {
+        Some(title) => Some(serde_json::json!({ "wikilink": title }).to_string()),
+        None => anchor,
+    }
 }
 
 /// One join, read: the id at each end and how it is stored.
@@ -418,7 +429,7 @@ impl GraphSource for ConnectionSource<'_> {
             End::To => ("to_id", "from_id"),
         };
         let mut statement = self.0.prepare(&format!(
-            "SELECT from_id, to_id, rel, anchor FROM edge
+            "SELECT from_id, to_id, rel, anchor, wikilink FROM edge
               WHERE {own} IN ({}) AND rel IN ({})
               ORDER BY {other}, rel",
             marks(ids.len()),
@@ -430,7 +441,7 @@ impl GraphSource for ConnectionSource<'_> {
                 from: row.get(0)?,
                 to: row.get(1)?,
                 rel: row.get(2)?,
-                anchor: row.get(3)?,
+                anchor: selector_of(row.get(3)?, row.get::<_, Option<String>>(4)?.as_deref()),
             })
         })?;
         Ok(rows.collect::<std::result::Result<_, _>>()?)

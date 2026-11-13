@@ -19,7 +19,7 @@ use std::collections::HashMap;
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_core::CoreError;
-use centraid_vault::backup::ledger::{Destination, Ledger};
+use centraid_vault::backup::state::{DeviceState, Gateway};
 use common::chat::{Sample, sample};
 
 /// Arguments by name.
@@ -463,21 +463,18 @@ fn a_frozen_vault_refuses_every_write_and_names_the_check() {
     assert_eq!(landed.status, wire::ActStatus::Executed as i32);
 
     // ANOTHER PHONE TOOK THE VAULT: the ledger a pass heard it in remembers it.
-    let ledger = Ledger::open(Ledger::path_for(&sample.dir().join("vault.db"))).expect("ledger");
+    let ledger = DeviceState::open_beside(&sample.dir().join("vault.db")).expect("state");
     ledger
-        .put_destination(&Destination {
-            gateway_id: "gateway-1".to_owned(),
-            addrs: vec!["127.0.0.1:1".to_owned()],
-            cert_der: vec![1],
-            token: "t".to_owned(),
-            epoch: 1,
-            label: "home".to_owned(),
-            paired_at_ms: 1,
-            last_seen_ms: None,
-            last_ack_ms: None,
-        })
-        .expect("a destination");
-    ledger.set_moved("gateway-1", 2).expect("moved");
+        .put_gateway(&Gateway::paired(
+            "gateway-1".to_owned(),
+            vec!["127.0.0.1:1".to_owned()],
+            vec![1],
+            "home".to_owned(),
+            1,
+            1,
+        ))
+        .expect("a gateway");
+    ledger.set_moved("gateway-1", 2, 1).expect("moved");
 
     let refused = act_with(
         &sample,

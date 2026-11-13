@@ -1,272 +1,321 @@
-//! The heavy read-back: one confirmed part above the everyday sample's cap, read from a
-//! gateway and opened, so an original is verified too (#1188).
+//! The phone's read-back: a keyed random sample of the sealed chunks a gateway says it holds,
+//! read by `Range`, opened and compared with the digest the manifest recorded, so a gateway that
+//! lost or damaged a chunk is found by the next pass and not by a restore (#1188, B4; #1191, E10,
+//! B13).
 //!
-//! The everyday sample reads three small parts whole into memory
-//! ([`super::ledger::SAMPLE_MAX_BYTES`]), which can never reach a photograph's original: a
-//! `NAME_TAKEN` answer counts as an acknowledgement, so without this a gateway that lost or
-//! damaged an original would be believed forever. Each pass reads back ONE large part per
-//! gateway: the one that gateway was **least recently read back for** (never read back first),
-//! so over the passes every original comes up. The part is **streamed**: the gateway's bytes go
-//! to a temporary file in the spool (a `.partial`, which [`Spool::open`] sweeps if a crash
-//! leaves it) and are opened from there chunk by chunk, so no more than one 4 MiB chunk is ever
-//! in memory, however large the part.
+//! **THE DRAW IS KEYED AND COUNTED.** The population is the newest head snapshot's chunks in tree
+//! order (the ranges, then the blob parts, skipping any part whose digests are not known). Sample
+//! `k` of a pass is `blake3::keyed_hash(sample_key, counter ‖ k)` mod the population, where
+//! `sample_key` is derived from `K_backup` and `counter` is the gateway row's
+//! [`super::state::DeviceState::next_sample_counter`]: never a clock, and nothing the gateway can
+//! see, so it cannot keep only the chunks that will be read. A pass reads [`SAMPLE_CHUNKS`]
+//! chunks, or [`SAMPLE_CHUNKS_METERED`] of at most [`METERED_CHUNK_MAX`] on a metered link, and
+//! stops early at [`SAMPLE_BYTES`] of ciphertext.
 //!
-//! A part that is no longer held, or no longer opens, is **unconfirmed**, so the next pass
-//! seals and sends it again, and the outcome says so for the pass to count. The caller owns the
-//! member's transfer rule: this reads a whole part over the link, so it is never asked of a
-//! metered one.
+//! A chunk that is gone, will not open or opens to other bytes than the manifest recorded is
+//! [`Sampled::wrong`] (by its part); the caller deals with the part. The gateway's silence is
+//! [`Sampled::unanswered`] and records nothing.
 
-use std::fs::File;
-use std::io::{self, BufReader, Write};
+use std::collections::BTreeSet;
 
-use super::ledger::Ledger;
-use centraid_media::sealed;
+use centraid_media::sealed::{self, ChunkDigest};
 
-use super::Result;
 use super::naming::{BackupKeys, Name};
-use super::spool::{Spool, sealed_bound};
+use super::snapshot::Manifest;
 use super::store::{Store, StoreError};
 
-/// What one heavy read-back found.
-#[derive(Debug)]
-pub enum ReadBack {
-    /// The gateway holds no confirmed part above the cap.
-    Nothing,
-    /// The part was read back and opened.
-    Held(Name),
-    /// The part is gone or damaged at the gateway: it is unconfirmed, to be sent again.
-    Wrong(Name),
-    /// The gateway did not answer the read; nothing was recorded.
-    Unanswered(StoreError),
+/// How many chunks a pass reads back from each gateway.
+pub const SAMPLE_CHUNKS: usize = 64;
+
+/// How many on a metered link.
+pub const SAMPLE_CHUNKS_METERED: usize = 8;
+
+/// The ciphertext a pass stops at.
+pub const SAMPLE_BYTES: u64 = 64 << 20;
+
+/// The most a chunk may weigh on a metered link.
+pub const METERED_CHUNK_MAX: u64 = 1 << 20;
+
+/// What the sample key derives under.
+const SAMPLE_CONTEXT: &str = "centraid backup v2 sample";
+
+/// One sealed chunk of one part, as the manifest records it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Piece {
+    pub name: Name,
+    pub index: u32,
+    /// How many chunks the part has.
+    pub count: u32,
+    pub digest: ChunkDigest,
+    /// The most ciphertext the chunk can weigh.
+    pub weight: u64,
 }
 
-/// A sink that stops taking bytes past what any part may seal to.
-struct Bounded {
-    file: File,
-    left: u64,
-    /// The gateway sent more than any part can seal to.
-    overflowed: bool,
-}
-
-impl Write for Bounded {
-    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        if bytes.len() as u64 > self.left {
-            self.overflowed = true;
-            return Err(io::Error::other("a part larger than any part can seal to"));
+/// Every chunk of the manifest's parts whose digests are known, in tree order.
+#[must_use]
+pub fn population(manifest: &Manifest) -> Vec<Piece> {
+    let overhead = (sealed::CHUNK_FRAME_BYTES + sealed::TAG_BYTES) as u64;
+    let mut out = Vec::new();
+    let mut push = |name: Name, digests: &[ChunkDigest], plain: u64| {
+        let count = u32::try_from(digests.len()).unwrap_or(u32::MAX);
+        for (index, digest) in (0_u32..).zip(digests) {
+            let payload = if index + 1 < count {
+                sealed::CHUNK_BYTES as u64
+            } else {
+                // A compressed chunk can be a little longer than its plaintext.
+                (plain - u64::from(index) * sealed::CHUNK_BYTES as u64) + 64
+            };
+            out.push(Piece {
+                name,
+                index,
+                count,
+                digest: *digest,
+                weight: payload.min(sealed::CHUNK_BYTES as u64 + 64) + overhead,
+            });
         }
-        self.left -= bytes.len() as u64;
-        self.file.write(bytes)
+    };
+    for range in &manifest.ranges {
+        if !range.d.is_empty() {
+            push(range.name, &range.d, range.len);
+        }
     }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.file.flush()
+    for blob in &manifest.blobs {
+        for part in &blob.parts {
+            if let (Some(digests), Ok(plain)) = (&part.d, sealed::part_len(blob.len, part.i))
+                && !digests.is_empty()
+            {
+                push(part.name, digests, plain);
+            }
+        }
     }
+    out
 }
 
-/// Removes the temporary file however the read ends.
-struct Temp(std::path::PathBuf);
-
-impl Drop for Temp {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.0);
-    }
+/// What one gateway's sample found.
+#[derive(Debug, Default)]
+pub struct Sampled {
+    /// Chunks read and opened.
+    pub checked: usize,
+    /// Ciphertext bytes read.
+    pub bytes: u64,
+    /// How many sampled chunks of each wrong part were wrong (a part may be drawn more than once).
+    pub wrong_chunks: std::collections::BTreeMap<Name, usize>,
+    /// Parts with a chunk gone, damaged or not the bytes the manifest recorded.
+    pub wrong: Vec<Name>,
+    /// Of those, the ones the gateway itself says are damaged: a signed delete frees them at once
+    /// (decision 30).
+    pub freeable: Vec<Name>,
+    /// The gateway stopped answering part-way; the chunks read before it are counted.
+    pub unanswered: Option<StoreError>,
 }
 
-/// Read back the confirmed part above the cap that `store` was least recently read back for.
-///
-/// # Errors
-/// The ledger's or the filesystem's refusal; the gateway's silence is [`ReadBack::Unanswered`].
-pub fn read_back_large(
-    ledger: &Ledger,
-    spool: &Spool,
+/// The key every draw is made under.
+fn sample_key(keys: &BackupKeys) -> [u8; 32] {
+    blake3::derive_key(SAMPLE_CONTEXT, keys.k_backup())
+}
+
+/// Draw `k` of the pass `counter`: a position in a population of `of`.
+#[must_use]
+pub fn draw_one(keys: &BackupKeys, counter: u64, k: u64, of: usize) -> usize {
+    let mut input = [0_u8; 16];
+    input[..8].copy_from_slice(&counter.to_be_bytes());
+    input[8..].copy_from_slice(&k.to_be_bytes());
+    let hash = blake3::keyed_hash(&sample_key(keys), &input);
+    let mut word = [0_u8; 8];
+    word.copy_from_slice(&hash.as_bytes()[..8]);
+    usize::try_from(u64::from_be_bytes(word) % u64::try_from(of.max(1)).unwrap_or(1)).unwrap_or(0)
+}
+
+/// Read back up to `count` chunks of `pieces` from `store`, drawn by `counter`, and check each
+/// against its digest. `metered` skips a chunk heavier than [`METERED_CHUNK_MAX`].
+pub fn sample(
     store: &dyn Store,
     keys: &BackupKeys,
-    now_ms: u64,
-) -> Result<ReadBack> {
-    let gateway = store.gateway_id();
-    let Some((name, _size)) = ledger.oldest_verified_large(gateway)? else {
-        return Ok(ReadBack::Nothing);
-    };
-    let temp = Temp(spool.temp_path("verify", 0));
-    let mut sink = Bounded {
-        file: File::create(&temp.0)?,
-        left: sealed_bound(sealed::PART_BYTES),
-        overflowed: false,
-    };
-    match store.get(&name, &mut sink) {
-        Ok(_) => {}
-        Err(StoreError::Missing(_) | StoreError::Damaged(_)) => {
-            ledger.unconfirm(&name, gateway)?;
-            return Ok(ReadBack::Wrong(name));
-        }
-        // MORE BYTES THAN ANY PART SEALS TO is a copy that is not ours, however it arrived.
-        Err(_) if sink.overflowed => {
-            ledger.unconfirm(&name, gateway)?;
-            return Ok(ReadBack::Wrong(name));
-        }
-        Err(error) => return Ok(ReadBack::Unanswered(error)),
+    pieces: &[Piece],
+    counter: u64,
+    count: usize,
+    metered: bool,
+) -> Sampled {
+    let mut out = Sampled::default();
+    if pieces.is_empty() {
+        return out;
     }
-    sink.file.sync_all()?;
-    drop(sink);
-    let opened = sealed::open_part_to(keys, BufReader::new(File::open(&temp.0)?), &mut io::sink());
-    if opened.is_err() {
-        ledger.unconfirm(&name, gateway)?;
-        return Ok(ReadBack::Wrong(name));
+    let mut drawn: BTreeSet<usize> = BTreeSet::new();
+    let mut wrong: BTreeSet<Name> = BTreeSet::new();
+    let count_wrong = |out: &mut Sampled, name: Name| {
+        *out.wrong_chunks.entry(name).or_insert(0) += 1;
+    };
+    let attempts = (count as u64)
+        .saturating_mul(16)
+        .max(pieces.len() as u64)
+        .min(count as u64 * 64);
+    for k in 0..attempts {
+        if out.checked >= count || out.bytes >= SAMPLE_BYTES || drawn.len() >= pieces.len() {
+            break;
+        }
+        let at = draw_one(keys, counter, k, pieces.len());
+        if !drawn.insert(at) {
+            continue;
+        }
+        let piece = &pieces[at];
+        if metered && piece.weight > METERED_CHUNK_MAX {
+            continue;
+        }
+        match read_piece(store, keys, piece) {
+            Ok((read, true)) => {
+                out.checked += 1;
+                out.bytes += read;
+            }
+            Ok((read, false)) => {
+                out.checked += 1;
+                out.bytes += read;
+                wrong.insert(piece.name);
+                count_wrong(&mut out, piece.name);
+            }
+            Err(StoreError::Missing(_)) => {
+                out.checked += 1;
+                wrong.insert(piece.name);
+                count_wrong(&mut out, piece.name);
+            }
+            Err(StoreError::Damaged(_)) => {
+                out.checked += 1;
+                wrong.insert(piece.name);
+                count_wrong(&mut out, piece.name);
+                if !out.freeable.contains(&piece.name) {
+                    out.freeable.push(piece.name);
+                }
+            }
+            Err(StoreError::Io(error)) if error.kind() == std::io::ErrorKind::InvalidData => {
+                out.checked += 1;
+                wrong.insert(piece.name);
+                count_wrong(&mut out, piece.name);
+            }
+            Err(error) => {
+                out.unanswered = Some(error);
+                break;
+            }
+        }
     }
-    ledger.mark_verified(&name, gateway, now_ms)?;
-    Ok(ReadBack::Held(name))
+    out.wrong = wrong.into_iter().collect();
+    out
+}
+
+/// Read one chunk and the part's header, open and compare: the ciphertext bytes read, and whether
+/// the chunk is the one the manifest recorded.
+fn read_piece(
+    store: &dyn Store,
+    keys: &BackupKeys,
+    piece: &Piece,
+) -> Result<(u64, bool), StoreError> {
+    let mut header = Vec::new();
+    store.get_range(
+        &piece.name,
+        0,
+        Some(sealed::HEADER_BYTES as u64),
+        &mut header,
+    )?;
+    let (offset, len) = sealed::chunk_read(piece.index, piece.count);
+    let mut frame = Vec::new();
+    store.get_range(&piece.name, offset, len, &mut frame)?;
+    let read = (header.len() + frame.len()) as u64;
+    let Ok(header) = <[u8; sealed::HEADER_BYTES]>::try_from(header.as_slice()) else {
+        return Ok((read, false));
+    };
+    let last = piece.index + 1 == piece.count;
+    let right =
+        sealed::verify_chunk(keys, &header, piece.index, last, &frame, &piece.digest).is_ok();
+    Ok((read, right))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backup::ledger::Destination;
-    use crate::backup::naming::{Digest, PlaintextHash, name};
+    use crate::backup::naming::{PlaintextHash, name};
     use crate::backup::store::MemoryStore;
 
-    struct Rig {
-        _dir: tempfile::TempDir,
-        ledger: Ledger,
-        spool: Spool,
-        store: MemoryStore,
-        keys: BackupKeys,
+    fn keys() -> BackupKeys {
+        BackupKeys::from_root(&[5; 32])
     }
 
-    fn rig() -> Rig {
-        let dir = tempfile::tempdir().expect("a directory");
-        let ledger = Ledger::open(dir.path().join("v.backup.db")).expect("a ledger");
-        ledger
-            .put_destination(&Destination {
-                gateway_id: "gw".to_owned(),
-                addrs: Vec::new(),
-                cert_der: Vec::new(),
-                token: "t".to_owned(),
-                epoch: 1,
-                label: "laptop".to_owned(),
-                paired_at_ms: 0,
-                last_seen_ms: None,
-                last_ack_ms: None,
-            })
-            .expect("pairs");
-        Rig {
-            spool: Spool::open(dir.path().join("v.spool")).expect("a spool"),
-            _dir: dir,
-            ledger,
-            store: MemoryStore::new("gw"),
-            keys: BackupKeys::from_root(&[5; 32]),
+    /// Seal `plaintext` as a whole part, hold it at `store` under its name, and list its chunk.
+    fn hold(store: &MemoryStore, keys: &BackupKeys, plaintext: &[u8]) -> Piece {
+        let part = name(keys, &PlaintextHash::of(plaintext), 0);
+        let (sealed, digests) = sealed::seal_part_digests(keys, 0, plaintext, true).expect("seals");
+        let digest = crate::backup::naming::Digest::of(&sealed);
+        store
+            .put(&part, &digest, sealed.len() as u64, &mut sealed.as_slice())
+            .expect("holds");
+        Piece {
+            name: part,
+            index: 0,
+            count: 1,
+            digest: digests[0],
+            weight: 1 << 16,
         }
     }
 
-    /// `len` bytes that do not compress, so the sealed part is above the sample's cap.
-    fn noise(seed: u8, len: usize) -> Vec<u8> {
-        let mut bytes = vec![0_u8; len];
-        blake3::Hasher::new()
-            .update(&[seed])
-            .finalize_xof()
-            .fill(&mut bytes);
-        bytes
-    }
-
-    /// Seal part `index` of the file hashed `h` over `plaintext`, hold it at the gateway and
-    /// confirm it in the ledger. Answers its name.
-    fn hold(rig: &Rig, h: &PlaintextHash, index: u32, plaintext: &[u8]) -> Name {
-        let sealed = sealed::seal_part(&rig.keys, index, plaintext, false).expect("seals");
-        let part = name(&rig.keys, h, index);
-        rig.store
-            .put(
-                &part,
-                &Digest::of(&sealed),
-                sealed.len() as u64,
-                &mut &sealed[..],
-            )
-            .expect("held");
-        rig.ledger
-            .confirm(&part, "gw", 1, sealed.len() as u64)
-            .expect("confirms");
-        part
-    }
-
-    fn read(rig: &Rig, now_ms: u64) -> ReadBack {
-        read_back_large(&rig.ledger, &rig.spool, &rig.store, &rig.keys, now_ms).expect("reads back")
+    /// The draw is a pure function of the key, the counter, `k` and the size.
+    #[test]
+    fn the_draw_is_deterministic_and_moves_with_the_counter_and_the_key() {
+        let keys = keys();
+        let one: Vec<usize> = (0..10).map(|k| draw_one(&keys, 1, k, 1000)).collect();
+        assert_eq!(
+            one,
+            (0..10)
+                .map(|k| draw_one(&keys, 1, k, 1000))
+                .collect::<Vec<_>>()
+        );
+        assert_ne!(
+            one,
+            (0..10)
+                .map(|k| draw_one(&keys, 2, k, 1000))
+                .collect::<Vec<_>>()
+        );
+        let other = BackupKeys::from_root(&[6; 32]);
+        assert_ne!(
+            one,
+            (0..10)
+                .map(|k| draw_one(&other, 1, k, 1000))
+                .collect::<Vec<_>>()
+        );
+        assert!(one.iter().all(|at| *at < 1000));
     }
 
     #[test]
-    fn nothing_above_the_cap_is_nothing_to_read_back() {
-        let rig = rig();
-        hold(&rig, &PlaintextHash::of(b"small"), 0, &noise(1, 4_096));
-        assert!(matches!(read(&rig, 10), ReadBack::Nothing));
+    fn a_gone_chunk_is_wrong_and_a_held_one_opens() {
+        let keys = keys();
+        let store = MemoryStore::new("gw");
+        let held = hold(&store, &keys, b"held bytes");
+        let mut gone = hold(&MemoryStore::new("elsewhere"), &keys, b"gone bytes");
+        gone.name = name(&keys, &PlaintextHash::of(b"gone bytes"), 0);
+        let found = sample(&store, &keys, &[held, gone], 0, 2, false);
+        assert_eq!(found.checked, 2);
+        assert_eq!(found.wrong, vec![gone.name]);
+        assert!(found.unanswered.is_none());
     }
 
-    /// **A MULTI-PART ORIGINAL IS COVERED PART BY PART, LEAST RECENTLY VERIFIED FIRST:** three
-    /// passes read three different parts, and the fourth comes back to the first.
+    /// Bytes under a name that open but are not the chunk the manifest recorded.
     #[test]
-    fn every_part_of_a_multi_part_original_comes_up_in_turn() {
-        let rig = rig();
-        let h = PlaintextHash::of(b"a long film");
-        let parts: Vec<Name> = (0..3)
-            .map(|index| hold(&rig, &h, index, &noise(index as u8, 1_500_000)))
-            .collect();
-        let mut seen = Vec::new();
-        for pass in 0..3_u64 {
-            match read(&rig, 100 + pass) {
-                ReadBack::Held(name) => seen.push(name),
-                other => panic!("pass {pass}: {other:?}"),
-            }
-        }
-        let mut sorted = seen.clone();
-        sorted.sort();
-        sorted.dedup();
-        assert_eq!(sorted.len(), 3, "three passes, three different parts");
-        assert!(parts.iter().all(|part| seen.contains(part)));
-        match read(&rig, 200) {
-            ReadBack::Held(name) => assert_eq!(name, seen[0], "back to the least recent"),
-            other => panic!("{other:?}"),
-        }
-        assert!(
-            rig.spool.dir().read_dir().expect("lists").next().is_none(),
-            "no temp file left"
+    fn a_chunk_that_opens_to_something_else_is_wrong() {
+        let keys = keys();
+        let store = MemoryStore::new("gw");
+        let mut piece = hold(&store, &keys, b"what the manifest recorded");
+        piece.digest = ChunkDigest::of(b"something else");
+        assert_eq!(
+            sample(&store, &keys, &[piece], 0, 1, false).wrong,
+            vec![piece.name]
         );
     }
 
-    /// A part the gateway lost, or whose bytes no longer open, is unconfirmed so it is sent
-    /// again.
+    /// A metered link reads nothing heavier than a megabyte.
     #[test]
-    fn a_lost_or_damaged_part_is_unconfirmed() {
-        let rig = rig();
-        let lost = hold(&rig, &PlaintextHash::of(b"lost"), 0, &noise(1, 1_200_000));
-        rig.store.set_clock_ms(1_000);
-        rig.store.delete(&[lost]).expect("the gateway deleted it");
-        rig.store
-            .set_clock_ms(1_000 + crate::backup::store::TOMBSTONE_GRACE_MS);
-        rig.store.purge();
-        match read(&rig, 10) {
-            ReadBack::Wrong(name) => assert_eq!(name, lost),
-            other => panic!("{other:?}"),
-        }
-        assert!(!rig.ledger.is_confirmed(&lost, "gw").expect("asks"));
-
-        let h = PlaintextHash::of(b"damaged");
-        let mut sealed =
-            sealed::seal_part(&rig.keys, 0, &noise(2, 1_200_000), false).expect("seals");
-        let middle = sealed.len() / 2;
-        sealed[middle] ^= 0xff;
-        let damaged = name(&rig.keys, &h, 0);
-        rig.store
-            .put(
-                &damaged,
-                &Digest::of(&sealed),
-                sealed.len() as u64,
-                &mut &sealed[..],
-            )
-            .expect("held");
-        rig.ledger
-            .confirm(&damaged, "gw", 1, sealed.len() as u64)
-            .expect("confirms");
-        match read(&rig, 11) {
-            ReadBack::Wrong(name) => assert_eq!(name, damaged),
-            other => panic!("{other:?}"),
-        }
-        assert!(!rig.ledger.is_confirmed(&damaged, "gw").expect("asks"));
-        assert!(matches!(read(&rig, 12), ReadBack::Nothing));
+    fn a_metered_link_skips_a_heavy_chunk() {
+        let keys = keys();
+        let store = MemoryStore::new("gw");
+        let mut piece = hold(&store, &keys, b"light");
+        piece.weight = 5 << 20;
+        let found = sample(&store, &keys, &[piece], 0, 1, true);
+        assert_eq!(found.checked, 0);
+        assert_eq!(sample(&store, &keys, &[piece], 0, 1, false).checked, 1);
     }
 }

@@ -53,6 +53,13 @@ typedef struct Handle Handle;
  */
 #define CENTRAID_TIMEOUT -5
 
+/**
+ * `centraid_open` found the vault file damaged (a failed `quick_check`, or a page SQLite cannot
+ * read). Only `open` returns it. The file is untouched and no handle is written; the shell offers
+ * a restore. Added after the first five, so every other code keeps its value.
+ */
+#define CENTRAID_VAULT_DAMAGED -6
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus

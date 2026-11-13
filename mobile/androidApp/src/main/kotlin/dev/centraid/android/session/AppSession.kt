@@ -8,6 +8,7 @@ import android.util.Log
 import dev.centraid.android.backup.LinkFacts
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreConfiguration
+import dev.centraid.core.CoreFailure
 import dev.centraid.core.CoreOutcome
 import dev.centraid.core.Screens
 import java.util.Locale
@@ -82,6 +83,42 @@ internal object AppSession {
     /** The open session, or null: what composition draws from. Never opens. */
     val current: StateFlow<Open?> = state.asStateFlow()
 
+    private val damagedFlag = MutableStateFlow(false)
+
+    /**
+     * The vault file is damaged (`CENTRAID_VAULT_DAMAGED` at open): no core exists, so composition
+     * draws `VaultDamagedScreen` in place of bare paper. Set by the open that failed; a later
+     * successful open clears it.
+     */
+    val damaged: StateFlow<Boolean> = damagedFlag.asStateFlow()
+
+    private val reopenCount = MutableStateFlow(0)
+
+    /** Bumped by [reopenForRestore]; the activity opens again each time it moves. */
+    val reopens: StateFlow<Int> = reopenCount.asStateFlow()
+
+    @Volatile private var restoreDamagedNext = false
+
+    private val restoreAskedFlag = MutableStateFlow(false)
+
+    /** A restore reopen succeeded and Home has yet to be told to enter the restore entry. */
+    val restoreAsked: StateFlow<Boolean> = restoreAskedFlag.asStateFlow()
+
+    /** Home was told; the ask is spent. */
+    fun restoreAskTold() {
+        restoreAskedFlag.value = false
+    }
+
+    /**
+     * REOPEN FOR RESTORE: the single place the core's `restoreDamaged` key is sent. The damaged
+     * screen's button calls it; the activity opens again over the same path with the key, and on
+     * success Home enters the Rust restore entry. If the open fails again the damaged screen stays.
+     */
+    fun reopenForRestore() {
+        restoreDamagedNext = true
+        reopenCount.value += 1
+    }
+
     /**
      * The session, opened on first use; null when the core would not open (said in the log, and
      * the screen stays on its ground). [devSeedHex] is a debug build's demo seed, read only by the
@@ -137,7 +174,13 @@ internal object AppSession {
     }
 
     private suspend fun open(context: Context, devSeedHex: String?): Open? {
-        val configuration = CoreConfiguration.shelf(context.filesDir.absolutePath, devSeedHex)
+        val restoring = restoreDamagedNext
+        restoreDamagedNext = false
+        val configuration = CoreConfiguration.shelf(
+            context.filesDir.absolutePath,
+            devSeedHex,
+            restoreDamaged = restoring,
+        )
         val core = when (
             val opened = CentraidCore.open(
                 configuration,
@@ -149,9 +192,12 @@ internal object AppSession {
             is CoreOutcome.Answered -> opened.value
             is CoreOutcome.Failed -> {
                 Log.w("Centraid", "the core did not open: ${opened.failure}")
+                damagedFlag.value = opened.failure is CoreFailure.VaultDamaged
                 return null
             }
         }
+        damagedFlag.value = false
+        if (restoring) restoreAskedFlag.value = true
         core.startReader()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val screens = Screens(core, scope)

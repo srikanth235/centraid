@@ -13,11 +13,12 @@ use centraid_gateway::client::{Client, ClientError, Destination, Put};
 use centraid_gateway::rules::bundle::Frame;
 use centraid_gateway::rules::code::Refusal;
 use centraid_gateway::rules::conformance::{self, CASES, Failure, PutAnswer, ScrubCounts, Target};
+use centraid_gateway::rules::engine::Operated;
 use centraid_gateway::rules::ids::{Digest, GatewayId, Name, Secret, Token, VaultId};
 use centraid_gateway::rules::range::ByteRange;
 use centraid_gateway::rules::wire::{
-    BundleAnswer, DeleteAnswer, HeadView, Info, ObjectEntry, PairRequest, Paired, SetHead,
-    SnapshotView,
+    BundleAnswer, DeleteAnswer, DeleteRequest, HeadView, HeldEntry, Info, NonceAnswer, ObjectEntry,
+    PairRequest, Paired, SetHead, SnapshotView, UndoRequest, Undone,
 };
 use centraid_gateway::server::harness::{Spawned, spawn};
 
@@ -125,6 +126,70 @@ impl Target for WireTarget {
             .map_err(|error| error.to_string())
     }
 
+    async fn freeze(&mut self, vault: &VaultId) -> Result<(), String> {
+        let shared = self.spawned().shared();
+        let now = shared.now();
+        match shared
+            .rules(|gateway| gateway.freeze(vault, now))
+            .map_err(|fault| fault.to_string())?
+        {
+            Operated::Done(()) => Ok(()),
+            other => Err(format!("freeze: {other:?}")),
+        }
+    }
+
+    async fn unfreeze(&mut self, vault: &VaultId) -> Result<i64, String> {
+        let shared = self.spawned().shared();
+        let now = shared.now();
+        match shared
+            .rules(|gateway| gateway.unfreeze(vault, now))
+            .map_err(|fault| fault.to_string())?
+        {
+            Operated::Done(lasted) => Ok(lasted),
+            other => Err(format!("unfreeze: {other:?}")),
+        }
+    }
+
+    async fn operator_undo(&mut self, vault: &VaultId) -> Result<u64, String> {
+        match self
+            .spawned()
+            .shared()
+            .rules(|gateway| gateway.operator_undo(vault))
+            .map_err(|fault| fault.to_string())?
+        {
+            Operated::Done(count) => Ok(count),
+            other => Err(format!("undo: {other:?}")),
+        }
+    }
+
+    async fn token_epochs(&mut self, vault: &VaultId) -> Result<Vec<u64>, String> {
+        self.spawned()
+            .shared()
+            .rules(|gateway| Ok(gateway.state.token_epochs(vault)?))
+            .map_err(|fault| fault.to_string())
+    }
+
+    async fn revoked_count(&mut self, vault: &VaultId) -> Result<u64, String> {
+        self.spawned()
+            .shared()
+            .rules(|gateway| Ok(gateway.state.revoked_count(vault)?))
+            .map_err(|fault| fault.to_string())
+    }
+
+    async fn secret_count(&mut self) -> Result<u64, String> {
+        self.spawned()
+            .shared()
+            .rules(|gateway| Ok(gateway.secrets()?.len() as u64))
+            .map_err(|fault| fault.to_string())
+    }
+
+    async fn nonce_rows(&mut self) -> Result<Vec<Vec<u8>>, String> {
+        self.spawned()
+            .shared()
+            .rules(|gateway| Ok(gateway.state.nonce_rows()?))
+            .map_err(|fault| fault.to_string())
+    }
+
     async fn at_rest(&mut self) -> Result<Vec<u8>, String> {
         Ok(every_byte(self.spawned().data_dir()))
     }
@@ -157,8 +222,30 @@ impl Target for WireTarget {
         &mut self,
         token: &Token,
         vault: &VaultId,
+        after: Option<&Name>,
+        limit: usize,
     ) -> Result<Vec<SnapshotView>, Failure> {
-        self.phone(token).snapshots(vault).await.map_err(failure)
+        self.phone(token)
+            .snapshots(vault, after, limit)
+            .await
+            .map_err(failure)
+    }
+
+    async fn held(
+        &mut self,
+        token: &Token,
+        vault: &VaultId,
+        after: Option<&Name>,
+        limit: usize,
+    ) -> Result<Vec<HeldEntry>, Failure> {
+        self.phone(token)
+            .held(vault, after, limit)
+            .await
+            .map_err(failure)
+    }
+
+    async fn nonce(&mut self) -> Result<NonceAnswer, Failure> {
+        self.stranger().nonce().await.map_err(failure)
     }
 
     async fn exists(
@@ -192,7 +279,10 @@ impl Target for WireTarget {
         {
             Put::Stored(entry) => Ok(PutAnswer::Stored(entry)),
             Put::AlreadyStored(entry) => Ok(PutAnswer::AlreadyStored(entry)),
-            Put::NameTaken { held } => Err(Failure::Refused(Refusal::NameTaken { digest: held })),
+            Put::NameTaken { held, state, .. } => Err(Failure::Refused(Refusal::NameTaken {
+                digest: held,
+                state,
+            })),
         }
     }
 
@@ -257,10 +347,22 @@ impl Target for WireTarget {
         &mut self,
         token: &Token,
         vault: &VaultId,
-        names: &[Name],
+        request: &DeleteRequest,
     ) -> Result<DeleteAnswer, Failure> {
         self.phone(token)
-            .delete(vault, names)
+            .delete(vault, request)
+            .await
+            .map_err(failure)
+    }
+
+    async fn undo(
+        &mut self,
+        token: &Token,
+        vault: &VaultId,
+        request: &UndoRequest,
+    ) -> Result<Undone, Failure> {
+        self.phone(token)
+            .undo(vault, request)
             .await
             .map_err(failure)
     }
@@ -290,4 +392,81 @@ async fn the_real_gateway_passes_every_case_through_the_real_client() {
     let names: Vec<&str> = report.cases.iter().map(|case| case.name).collect();
     assert_eq!(names, CASES, "the report must name every case, in order");
     assert!(report.is_green(), "\n{}", report.render());
+}
+
+/// One of tests.md's attacker tests, by its name: the case it names, over a
+/// fresh real gateway through the real client.
+async fn named(test: &str) {
+    let case = conformance::NAMED
+        .iter()
+        .find(|(name, _)| *name == test)
+        .unwrap_or_else(|| panic!("{test} is not in NAMED"))
+        .1;
+    let mut target = WireTarget {
+        root: tempfile::tempdir().expect("a temp dir"),
+        generation: 0,
+        spawned: None,
+    };
+    let found = conformance::run_one(&mut target, case)
+        .await
+        .unwrap_or_else(|| panic!("{case} is not a case"));
+    assert!(found.passed, "{test} ({case}): {}", found.detail);
+}
+
+macro_rules! named_over_the_wire {
+    ($($name:ident),+ $(,)?) => {$(
+        #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+        async fn $name() {
+            named(stringify!($name)).await;
+        }
+    )+};
+}
+
+named_over_the_wire!(
+    a_token_without_the_vault_key_cannot_set_a_head,
+    an_old_signed_head_replayed_is_out_of_order,
+    a_generation_jump_beyond_the_bound_is_refused,
+    a_claim_resets_the_generation_and_the_next_head_is_accepted,
+    a_head_names_a_held_manifest_only,
+    a_takeover_leaves_no_live_older_token,
+    a_moved_claim_is_bound_to_its_gateway,
+    a_revoked_token_hears_moved_until_the_tombstone_is_pruned,
+    a_takeover_cancels_held_deletes,
+    a_delete_needs_the_vault_signature,
+    a_signed_delete_is_held_seven_days_and_stays_listed,
+    a_replayed_delete_is_out_of_order,
+    a_head_cannot_be_deleted_and_a_snapshot_row_keeps_its_object,
+    an_undo_lifts_a_hold,
+    a_photographer_cannot_squat_the_members_vault,
+    a_pair_signature_is_bound_to_nonce_secret_and_gateway,
+    a_replayed_read_grant_is_refused,
+    a_replayed_claim_after_a_revoke_is_refused,
+    an_expired_nonce_is_refused_and_pruned,
+    nonce_storage_is_bounded,
+    the_nonce_route_names_no_vault,
+    a_head_from_the_future_is_refused,
+    pairing_secrets_are_pruned_and_bounded,
+    a_frozen_vault_refuses_writes_and_answers_reads,
+    unfreeze_gives_back_the_time_it_was_frozen,
+    operator_undo_restores_every_hold,
+    a_gap_between_sweeps_is_not_counted_against_a_hold,
+    the_nonce_route_writes_nothing_and_a_claim_still_works,
+    a_forged_foreign_expired_or_replayed_nonce_is_refused,
+    a_claim_keeps_the_superseded_writers_tombstone_among_a_hundred_readers,
+    a_put_of_garbage_over_a_held_or_damaged_name_is_refused,
+    a_signed_delete_frees_a_damaged_name_and_a_token_alone_cannot,
+    the_extremes_of_every_number_are_refused_without_a_fault,
+    a_claim_or_read_grant_for_another_gateway_or_vault_moves_nothing,
+);
+
+/// Every name in `NAMED` has a test above.
+#[test]
+fn every_named_test_is_here() {
+    let source = include_str!("conformance_wire.rs");
+    for (name, _) in conformance::NAMED {
+        assert!(
+            source.contains(&format!("    {name},")),
+            "{name} has no test over the wire"
+        );
+    }
 }

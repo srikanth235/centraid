@@ -3,3 +3,10 @@
 # `nightly.yml` and the Nix dev shell all spell it the same way.
 [alias]
 xtask = "run --quiet --package xtask --"
+
+# THE SNAPSHOT READS THE VAULT'S PAGES THROUGH `sqlite_dbpage` (#1191 B11), which the bundled SQLite compiles only with
+# this flag, and `libsqlite3-sys` appends whatever `LIBSQLITE3_FLAGS` holds. `[env]` reaches every build run from the
+# repo root, the mobile scripts' `cargo build` included. A test reads `PRAGMA compile_options` and fails without it, and
+# `cargo xtask rules` fails a workflow or script that sets this variable without it (it would replace this value).
+[env]
+LIBSQLITE3_FLAGS = "-DSQLITE_ENABLE_DBPAGE_VTAB"

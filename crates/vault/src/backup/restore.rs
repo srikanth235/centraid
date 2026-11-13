@@ -269,11 +269,12 @@ fn rebuild(
 ) -> Result<(Manifest, Vec<Check>), RestoreError> {
     let mut checks = Vec::new();
 
-    let manifest_bytes = fetch(store, head_name)?;
-    let json = sealed::open_whole(keys, head_name, &manifest_bytes)
-        .map_err(|error| RestoreError::Manifest(error.to_string()))?;
-    let manifest =
-        Manifest::from_json(&json).map_err(|error| RestoreError::Manifest(error.to_string()))?;
+    let manifest = Manifest::read(keys, head_name, &mut |part| fetch(store, part)).map_err(
+        |error| match error {
+            PlaneError::Store(error) => RestoreError::from(error),
+            other => RestoreError::Manifest(other.to_string()),
+        },
+    )?;
     checks.push(Check {
         name: "manifest",
         detail: format!(
@@ -532,20 +533,30 @@ mod tests {
         let keys = keys_from_root(&ROOT);
         let vault = crate::file::Vault::create(dir.join("vault.db")).unwrap();
         vault.found("The Household", "Ada").unwrap();
-        let taken = snapshot::take(&vault, &keys, &dir.join("scratch"), VAULT, "test").unwrap();
+        let spool = crate::backup::spool::Spool::open(dir.join("vault.spool")).unwrap();
+        let taken = snapshot::take(&vault, &keys, &spool, u64::MAX, VAULT, "test").unwrap();
         let store = MemoryStore::new("gw");
-        let mut file = File::open(&taken.path).unwrap();
         for range in &taken.ranges {
-            let mut buffer = vec![0_u8; usize::try_from(range.len).unwrap()];
-            file.seek(SeekFrom::Start(range.offset)).unwrap();
-            file.read_exact(&mut buffer).unwrap();
-            let sealed_bytes = sealed::seal_part(&keys, 0, &buffer, true).unwrap();
+            let mut sealed_bytes = Vec::new();
+            std::io::Read::read_to_end(&mut spool.read(&range.name).unwrap(), &mut sealed_bytes)
+                .unwrap();
             store
                 .put(
                     &range.name,
                     &Digest::of(&sealed_bytes),
                     sealed_bytes.len() as u64,
                     &mut &sealed_bytes[..],
+                )
+                .unwrap();
+        }
+        for leaf in &taken.leaves {
+            let sealed_leaf = sealed::seal_part(&keys, 0, &leaf.json, true).unwrap();
+            store
+                .put(
+                    &leaf.name,
+                    &Digest::of(&sealed_leaf),
+                    sealed_leaf.len() as u64,
+                    &mut &sealed_leaf[..],
                 )
                 .unwrap();
         }
@@ -559,7 +570,12 @@ mod tests {
             )
             .unwrap();
         store
-            .set_head(&taken.manifest_name, None, taken.manifest.taken_at_ms)
+            .set_head(
+                &taken.manifest_name,
+                None,
+                taken.manifest.taken_at_ms,
+                taken.manifest.writes,
+            )
             .unwrap();
         (store, keys)
     }

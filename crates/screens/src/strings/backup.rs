@@ -59,6 +59,8 @@ catalog! {
     plain backup_forget = ("Forget", "Forget");
     plain backup_forget_failed = ("Couldn't forget {name}. Try again.", "Couldn't forget {name}. Try again.");
     plain backup_forgotten_not_revoked = ("Forgot {name}, but couldn't tell it. It may still accept this phone until you remove this phone on {name}.", "Forgot {name}, but couldn't tell it. It may still accept this phone until you remove this phone on {name}.");
+    plain backup_undone = ("Old files on {name} are back.", "Old files on {name} are back.");
+    plain backup_undo_failed = ("Couldn't undo on {name}. Try again.", "Couldn't undo on {name}. Try again.");
     plain backup_forgotten_revoked = ("Forgot {name}. It now refuses this phone.", "Forgot {name}. It now refuses this phone.");
     plain backup_include_videos = ("Include videos", "Include videos");
     plain backup_key_heading = ("Recovery key", "Recovery key");
@@ -74,6 +76,9 @@ catalog! {
     plain backup_line_done = ("Backed up {when}.", "Backed up {when}.");
     plain backup_line_frozen = ("Moved to another phone. Read-only here.", "Moved to another phone. Read-only here.");
     plain backup_line_never = ("Not backed up yet.", "Not backed up yet.");
+    plain backup_line_damaged = ("This phone's vault is damaged. No new backup is made.", "This phone's vault is damaged. No new backup is made.");
+    plain backup_detail_damaged = ("The backups already on your backup devices are untouched.", "The backups already on your backup devices are untouched.");
+    plain backup_status_damaged = ("Vault damaged", "Vault damaged");
     plain backup_line_pair_again = ("Your backup device doesn't know this phone. Pair it again.", "Your backup device doesn't know this phone. Pair it again.");
     plain backup_line_records = ("Records backed up {when}.", "Records backed up {when}.");
     plain backup_line_unpaired = ("Not backed up. Pair a backup device.", "Not backed up. Pair a backup device.");

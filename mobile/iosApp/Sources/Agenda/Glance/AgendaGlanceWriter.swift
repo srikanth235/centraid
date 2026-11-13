@@ -30,12 +30,18 @@ enum AgendaGlanceWriter {
     /// so the effect answers `EffectFailed`; a failure is never swallowed.
     static func keep(_ glance: Centraid_Core_V1_AgendaGlance) throws {
         guard let directory = AgendaGlanceSnapshot.containerURL() else { throw Failure.noContainer }
-        let file = directory.appendingPathComponent(AgendaGlanceSnapshot.fileName)
+        var file = directory.appendingPathComponent(AgendaGlanceSnapshot.fileName)
         do {
             try glance.document.write(
                 to: file,
                 options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
             )
+            // `.atomic` replaces the file, and a replaced file is a new one: the exclusion from the
+            // iCloud backup is set after every write, not once (the widget rebuilds it on the next
+            // change, so nothing is lost by leaving it out).
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            try file.setResourceValues(values)
         } catch {
             throw Failure.write(String(describing: error))
         }

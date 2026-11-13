@@ -447,6 +447,8 @@ fn delete_rules_cascade_only_where_a_row_cannot_outlive_its_parent() {
             ("message", "thread"),
             ("message_attachment", "message"),
             ("occurrence", "event"),
+            ("reminder", "event"),
+            ("transfer", "txn"),
             ("workout", "activity"),
         ]
         .into();
@@ -571,139 +573,7 @@ fn every_column_that_rents_a_blob_says_whose_the_bytes_are() {
 // 5. Edges join only the kinds edge_shape names
 // ---------------------------------------------------------------------------
 
-/// The shapes `edge_shape` is seeded with, written out once more so the table,
-/// the trigger and the spec are three witnesses of one list.
-const SHAPES: [(&str, &str, &str); 129] = [
-    ("contains", "album", "photo"),
-    ("contains", "list", "person"),
-    ("tagged", "*", "tag"),
-    ("tagged", "*", "flag"),
-    ("about", "note", "*"),
-    ("about", "task", "*"),
-    ("about", "event", "*"),
-    ("attached", "*", "document"),
-    ("attached", "*", "photo"),
-    ("attendee", "event", "person"),
-    ("with", "activity", "person"),
-    ("related", "person", "person"),
-    ("with", "txn", "person"),
-    ("about", "document", "person"),
-    ("depicts", "photo", "person"),
-    ("about", "locker_item", "account"),
-    ("about", "locker_item", "place"),
-    ("about", "locker_item", "person"),
-    ("with", "locker_item", "person"),
-    ("links", "person", "person"),
-    ("links", "person", "place"),
-    ("links", "person", "event"),
-    ("links", "person", "task"),
-    ("links", "person", "activity"),
-    ("links", "person", "note"),
-    ("links", "person", "document"),
-    ("links", "person", "photo"),
-    ("links", "person", "account"),
-    ("links", "person", "txn"),
-    ("links", "place", "person"),
-    ("links", "place", "place"),
-    ("links", "place", "event"),
-    ("links", "place", "task"),
-    ("links", "place", "activity"),
-    ("links", "place", "note"),
-    ("links", "place", "document"),
-    ("links", "place", "photo"),
-    ("links", "place", "account"),
-    ("links", "place", "txn"),
-    ("links", "event", "person"),
-    ("links", "event", "place"),
-    ("links", "event", "event"),
-    ("links", "event", "task"),
-    ("links", "event", "activity"),
-    ("links", "event", "note"),
-    ("links", "event", "document"),
-    ("links", "event", "photo"),
-    ("links", "event", "account"),
-    ("links", "event", "txn"),
-    ("links", "task", "person"),
-    ("links", "task", "place"),
-    ("links", "task", "event"),
-    ("links", "task", "task"),
-    ("links", "task", "activity"),
-    ("links", "task", "note"),
-    ("links", "task", "document"),
-    ("links", "task", "photo"),
-    ("links", "task", "account"),
-    ("links", "task", "txn"),
-    ("links", "activity", "person"),
-    ("links", "activity", "place"),
-    ("links", "activity", "event"),
-    ("links", "activity", "task"),
-    ("links", "activity", "activity"),
-    ("links", "activity", "note"),
-    ("links", "activity", "document"),
-    ("links", "activity", "photo"),
-    ("links", "activity", "account"),
-    ("links", "activity", "txn"),
-    ("links", "note", "person"),
-    ("links", "note", "place"),
-    ("links", "note", "event"),
-    ("links", "note", "task"),
-    ("links", "note", "activity"),
-    ("links", "note", "note"),
-    ("links", "note", "document"),
-    ("links", "note", "photo"),
-    ("links", "note", "account"),
-    ("links", "note", "txn"),
-    ("links", "document", "person"),
-    ("links", "document", "place"),
-    ("links", "document", "event"),
-    ("links", "document", "task"),
-    ("links", "document", "activity"),
-    ("links", "document", "note"),
-    ("links", "document", "document"),
-    ("links", "document", "photo"),
-    ("links", "document", "account"),
-    ("links", "document", "txn"),
-    ("links", "photo", "person"),
-    ("links", "photo", "place"),
-    ("links", "photo", "event"),
-    ("links", "photo", "task"),
-    ("links", "photo", "activity"),
-    ("links", "photo", "note"),
-    ("links", "photo", "document"),
-    ("links", "photo", "photo"),
-    ("links", "photo", "account"),
-    ("links", "photo", "txn"),
-    ("links", "account", "person"),
-    ("links", "account", "place"),
-    ("links", "account", "event"),
-    ("links", "account", "task"),
-    ("links", "account", "activity"),
-    ("links", "account", "note"),
-    ("links", "account", "document"),
-    ("links", "account", "photo"),
-    ("links", "account", "account"),
-    ("links", "account", "txn"),
-    ("links", "txn", "person"),
-    ("links", "txn", "place"),
-    ("links", "txn", "event"),
-    ("links", "txn", "task"),
-    ("links", "txn", "activity"),
-    ("links", "txn", "note"),
-    ("links", "txn", "document"),
-    ("links", "txn", "photo"),
-    ("links", "txn", "account"),
-    ("links", "txn", "txn"),
-    ("links", "locker_item", "person"),
-    ("links", "locker_item", "place"),
-    ("links", "locker_item", "event"),
-    ("links", "locker_item", "task"),
-    ("links", "locker_item", "activity"),
-    ("links", "locker_item", "note"),
-    ("links", "locker_item", "document"),
-    ("links", "locker_item", "photo"),
-    ("links", "locker_item", "account"),
-    ("links", "locker_item", "txn"),
-];
+use common::edge_shapes::SHAPES;
 
 fn shape_allows(rel: &str, from: &str, to: &str) -> bool {
     SHAPES
@@ -1455,12 +1325,14 @@ fn the_founded_file_holds_the_spec_s_tables_and_nothing_else() {
         "photo",
         "account",
         "txn",
+        "transfer",
         "budget",
         "checkpoint",
         "rule",
         "thread",
         "message",
         "message_attachment",
+        "reminder",
         // Locker, which is not an entity kind
         "locker_item",
         "locker_item_address",
@@ -1691,9 +1563,8 @@ enum Reach {
 /// declaration, so adding a text column fails here until it is placed.
 ///
 /// `edge.anchor` has no row: it is JSON, so the declaration marks it structural.
-/// It is only ever a note's `{"wikilink": title}`, the words of a `[[title]]`
-/// that sit in `note.body`, which is `Own`; `a_note_is_found_by_the_words_of_its_link`
-/// holds that.
+/// A note's `[[title]]` is `edge.wikilink`, the words of which sit in `note.body`, which
+/// is `Own`; `a_note_is_found_by_the_words_of_its_link` holds that.
 const CENSUS: &[(&str, &str, Reach)] = &[
     ("entity", "title", Reach::Own),
     (
@@ -1705,11 +1576,6 @@ const CENSUS: &[(&str, &str, Reach)] = &[
         "search_owed",
         "after",
         Reach::Not("a cursor in id order over what a label feeds, not prose"),
-    ),
-    (
-        "alert",
-        "fire_key",
-        Reach::Not("a time key for the index, not prose"),
     ),
     ("person", "nickname", Reach::Own),
     ("person", "role", Reach::Own),
@@ -1799,7 +1665,6 @@ const CENSUS: &[(&str, &str, Reach)] = &[
         "key",
         Reach::Not("the folded form of the title, which is indexed in what it labels"),
     ),
-    ("container", "color", Reach::Not("a colour token")),
     ("container", "icon", Reach::Not("an icon key")),
     (
         "vault",
@@ -1829,15 +1694,6 @@ const CENSUS: &[(&str, &str, Reach)] = &[
     ("budget", "currency", Reach::Not("an ISO code")),
     ("budget", "month", Reach::Not("a month")),
     ("vault", "currency", Reach::Not("an ISO code")),
-    ("activity", "starts", Reach::Not("an instant")),
-    ("activity", "ends", Reach::Not("an instant")),
-    ("event", "starts", Reach::Not("an instant")),
-    ("event", "ends", Reach::Not("an instant")),
-    ("occurrence", "original_start", Reach::Not("an instant")),
-    ("occurrence", "starts", Reach::Not("an instant")),
-    ("occurrence", "ends", Reach::Not("an instant")),
-    ("action_key", "at", Reach::Not("an instant")),
-    ("revision", "at", Reach::Not("an instant")),
     (
         "revision",
         "cause",
@@ -1854,7 +1710,6 @@ const CENSUS: &[(&str, &str, Reach)] = &[
     ("locker_item", "brand", Reach::Own),
     ("locker_item", "memo", Reach::Own),
     ("locker_item_address", "url", Reach::Own),
-    ("locker_item_alias", "alias", Reach::Own),
     (
         "locker_item",
         "password",
@@ -1938,6 +1793,28 @@ const CENSUS: &[(&str, &str, Reach)] = &[
     ),
     ("edge_shape", "rel", Reach::Not("a closed vocabulary")),
     ("source", "system", Reach::Not("a closed vocabulary")),
+    (
+        "source",
+        "stated_title",
+        Reach::Not(
+            "what a phone store called the record: a copy of `stated`, whose live title is the entity's own",
+        ),
+    ),
+    (
+        "origin",
+        "fills",
+        Reach::Not("an entity id: the home a follow filled"),
+    ),
+    (
+        "edge",
+        "wikilink",
+        Reach::Not("the title in a note's `[[words]]`: a copy of `note.body`, which is indexed"),
+    ),
+    (
+        "origin",
+        "cursor",
+        Reach::Not("a platform's change token, opaque to the vault"),
+    ),
 ];
 
 /// The text of one column's own definition inside a `CREATE TABLE`: the piece
@@ -1991,6 +1868,11 @@ fn is_structural(connection: &Connection, table: &str, column: &str) -> bool {
         || sql.contains(&format!("json_valid({column})"))
         || sql.contains(&format!("date({column})"))
         || sql.contains(&format!("datetime({column})"))
+        // A time column: its CHECK reads it back through `strftime` in one of the time shapes
+        // (a prose column cannot pass for one by a looser `, col) IS col`).
+        || ["%Y-%m-%dT%H:%M:%fZ", "%Y-%m-%dT%H:%M:%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M"]
+            .iter()
+            .any(|shape| sql.contains(&format!("strftime('{shape}', {column}) IS {column}")))
         || sql.contains(&format!("length({column}) = 64"))
 }
 
@@ -2425,12 +2307,12 @@ fn a_note_is_found_by_the_words_of_its_link() {
     );
     let anchors: i64 = read(vault, |c| {
         Ok(c.query_row(
-            "SELECT count(*) FROM edge WHERE from_id = 'src' AND rel = 'links' AND anchor IS NOT NULL",
+            "SELECT count(*) FROM edge WHERE from_id = 'src' AND rel = 'links' AND wikilink IS NOT NULL",
             [],
             |r| r.get(0),
         )?)
     });
-    assert_eq!(anchors, 1, "the link compiled to an edge with an anchor");
+    assert_eq!(anchors, 1, "the link compiled to a flagged edge");
     is_found(vault, "src", "harbour", "a note's link words");
 }
 
@@ -2542,7 +2424,7 @@ fn a_month_across_accounts_reads_the_day_index() {
         let plan: Vec<String> = connection
             .prepare(
                 "EXPLAIN QUERY PLAN
-                 SELECT id, account_id, posted_on, amount_minor, currency, status, category_id, transfer_id
+                 SELECT id, account_id, posted_on, amount_minor, currency, status, category_id
                    FROM txn WHERE posted_on >= ?1 AND posted_on < ?2
                   ORDER BY posted_on DESC, id DESC LIMIT 51",
             )?

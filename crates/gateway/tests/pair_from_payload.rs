@@ -15,7 +15,9 @@ use centraid_gateway::client::{Client, ClientError};
 use centraid_gateway::rules::code::Refusal;
 use centraid_gateway::rules::ids::{Digest, Name, VaultId};
 use centraid_gateway::rules::payload::PairPayload;
-use centraid_gateway::rules::wire::{PairKind, PairRequest};
+
+use centraid_gateway::rules::wire::PairKind;
+use centraid_gateway::server::harness::pair_secret;
 use centraid_gateway::server::harness::spawn;
 use http_body_util::{BodyExt as _, Full};
 use hyper_util::rt::TokioIo;
@@ -39,15 +41,7 @@ async fn a_phone_pairs_from_the_text_of_a_qr_and_hands_off_an_upload() {
 
     let identity = ed25519_dalek::SigningKey::from_bytes(&[3; 32]);
     let vault = VaultId::from_bytes(identity.verifying_key().to_bytes());
-    let paired = phone
-        .pair(&PairRequest {
-            vault_id: vault,
-            label: "Ada's phone".to_owned(),
-            kind: PairKind::Secret,
-            secret: Some(payload.secret),
-            claim: None,
-            read: None,
-        })
+    let paired = pair_secret(&phone, &identity, "Ada's phone".to_owned(), payload.secret)
         .await
         .expect("pairs");
     assert_eq!((paired.epoch, paired.gateway_id), (1, payload.gw));
@@ -59,25 +53,18 @@ async fn a_phone_pairs_from_the_text_of_a_qr_and_hands_off_an_upload() {
     assert_eq!(destination.cert_der, gateway.cert_der);
     assert_eq!(destination.token, paired.token);
     let later = Client::new(&destination);
-    let state = later.head_state(&vault).await.expect("reads");
+    let state = later.head_state(&vault, &payload.gw).await.expect("reads");
     assert_eq!((state.epoch, state.head), (1, None));
 
     // The same secret, again: spent.
     assert!(matches!(
-        Client::first_contact(payload.addrs.clone(), payload.pin)
-            .pair(&PairRequest {
-                vault_id: VaultId::from_bytes(
-                    ed25519_dalek::SigningKey::from_bytes(&[4; 32])
-                        .verifying_key()
-                        .to_bytes()
-                ),
-                label: String::new(),
-                kind: PairKind::Secret,
-                secret: Some(payload.secret),
-                claim: None,
-                read: None,
-            })
-            .await,
+        pair_secret(
+            &Client::first_contact(payload.addrs.clone(), payload.pin),
+            &ed25519_dalek::SigningKey::from_bytes(&[4; 32]),
+            "",
+            payload.secret
+        )
+        .await,
         Err(ClientError::Refused(Refusal::Unauthorized))
     ));
 
@@ -92,7 +79,7 @@ async fn a_phone_pairs_from_the_text_of_a_qr_and_hands_off_an_upload() {
     let rest = handoff.url.strip_prefix("https://").expect("https");
     let (authority, path) = rest.split_at(rest.find('/').expect("a path"));
     assert_eq!(authority, gateway.addr.to_string());
-    assert_eq!(path, format!("/v2/v/{vault}/o/{name}"));
+    assert_eq!(path, format!("/v3/v/{vault}/o/{name}"));
 
     let socket = tokio::net::TcpStream::connect(authority)
         .await
@@ -161,17 +148,14 @@ async fn a_landed_pairing_is_announced_with_its_safety_line() {
     let payload = gateway.payload();
     let identity = ed25519_dalek::SigningKey::from_bytes(&[5; 32]);
     let vault = VaultId::from_bytes(identity.verifying_key().to_bytes());
-    Client::first_contact(payload.addrs.clone(), payload.pin)
-        .pair(&PairRequest {
-            vault_id: vault,
-            label: "Ada's phone".to_owned(),
-            kind: PairKind::Secret,
-            secret: Some(payload.secret),
-            claim: None,
-            read: None,
-        })
-        .await
-        .expect("pairs");
+    pair_secret(
+        &Client::first_contact(payload.addrs.clone(), payload.pin),
+        &identity,
+        "Ada's phone",
+        payload.secret,
+    )
+    .await
+    .expect("pairs");
     let events = heard.lock().expect("the ear").clone();
     assert_eq!(
         events,
@@ -184,5 +168,60 @@ async fn a_landed_pairing_is_announced_with_its_safety_line() {
     );
     let lines = report::event_lines(&events[0], &gateway.pin);
     assert_eq!(lines[1], report::safety_line(&vault, &gateway.pin));
+    gateway.shutdown().await;
+}
+
+/// THE DOCUMENTED RESIDUAL (#1191, E7, decision 25): a photographer who has the
+/// QR and pairs THEIR OWN vault first spends the member's code. It is visible,
+/// not prevented: the member's own pairing is refused `UNAUTHORIZED`, and the
+/// gateway's console printed the stranger's safety number as it landed.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_photographer_pairing_their_own_vault_is_visible() {
+    use std::sync::{Arc, Mutex};
+
+    use centraid_gateway::server::harness::spawn_with;
+    use centraid_gateway::server::{Event, report};
+
+    let heard: Arc<Mutex<Vec<Event>>> = Arc::default();
+    let ear = Arc::clone(&heard);
+    let dir = tempfile::tempdir().expect("a temp dir");
+    let gateway = spawn_with(
+        dir.path(),
+        Some(Arc::new(move |event: &Event| {
+            ear.lock().expect("the ear").push(event.clone());
+        })),
+    )
+    .await
+    .expect("spawned");
+    let payload = gateway.payload();
+    let phone = || Client::first_contact(payload.addrs.clone(), payload.pin);
+    let photographer = ed25519_dalek::SigningKey::from_bytes(&[8; 32]);
+    let member = ed25519_dalek::SigningKey::from_bytes(&[9; 32]);
+
+    pair_secret(&phone(), &photographer, "photographer", payload.secret)
+        .await
+        .expect("the photographer pairs their own vault");
+    assert!(
+        matches!(
+            pair_secret(&phone(), &member, "member", payload.secret).await,
+            Err(ClientError::Refused(Refusal::Unauthorized))
+        ),
+        "the member's own pairing is refused: the code is spent"
+    );
+
+    let strangers_vault = VaultId::from_bytes(photographer.verifying_key().to_bytes());
+    let events = heard.lock().expect("the ear").clone();
+    assert_eq!(
+        events,
+        vec![Event::Paired {
+            vault: strangers_vault,
+            kind: PairKind::Secret,
+            epoch: 1,
+            label: "photographer".to_owned(),
+        }],
+        "the console heard the stranger pair"
+    );
+    let lines = report::event_lines(&events[0], &gateway.pin);
+    assert!(lines[1].starts_with("safety    "), "{lines:?}");
     gateway.shutdown().await;
 }

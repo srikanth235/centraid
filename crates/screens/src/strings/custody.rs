@@ -44,6 +44,11 @@ catalog! {
     plain rekey_title = ("Enter your recovery key", "Enter your recovery key");
     plain restore_body = ("Type your recovery key and paste a pairing code from your backup device.", "Type your recovery key and paste a pairing code from your backup device.");
     plain offer_title = ("Newest backup won't open", "Newest backup won't open");
+    // A RESTORE THAT CANNOT PROVE IT HAS THE NEWEST BACKUP (#1191, E8): one backup device, or one
+    // that listed another it could not reach. The phone claims only after the member says yes.
+    plain ask_title = ("Restore this backup?", "Restore this backup?");
+    plain ask_body = ("The newest backup found is from {date}, on {label}. A newer one may be on a backup device that didn't answer. Restore this one?", "The newest backup found is from {date}, on {label}. A newer one may be on a backup device that didn't answer. Restore this one?");
+    plain ask_restore_action = ("Restore this one", "Restore this one");
     plain offer_body = ("The one from {date} does. It is {older}, so anything since is not in it. Another backup device may hold a newer one.", "The one from {date} does. It is {older}, so anything since is not in it. Another backup device may hold a newer one.");
     plain offer_action = ("Restore {date}", "Restore {date}");
     plain offer_another = ("Scan another QR code", "Scan another QR code");

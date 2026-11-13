@@ -825,7 +825,13 @@ fn trash_is_reversible_and_a_lapsed_window_waits_for_the_launch_pass() {
     world.scratch.clock.advance_ms(31 * 86_400_000);
     world.ok("entity.restore", serde_json::json!({ "id": "item-1" }));
     world.ok("entity.trash", serde_json::json!({ "id": "item-1" }));
-    world.scratch.clock.advance_ms(31 * 86_400_000);
+    // The member keeps using the app (the launch pass trusts the clock within a week of the last write).
+    world.scratch.clock.advance_ms(30 * 86_400_000);
+    world.ok(
+        "container.create",
+        serde_json::json!({ "kind": "folder", "title": "In use" }),
+    );
+    world.scratch.clock.advance_ms(86_400_000);
     let emptied = world
         .scratch
         .vault
@@ -1060,7 +1066,7 @@ fn an_alias_is_unique_among_live_items_and_clearable() {
     );
     assert_eq!(
         world.one::<String>(
-            "SELECT item_id FROM locker_item_alias WHERE alias = ?1",
+            "SELECT item_id FROM locker_item_alias WHERE id = ?1",
             &["bank"]
         ),
         "item-1"
@@ -1181,7 +1187,7 @@ fn a_new_sealed_field_must_carry_the_id_it_was_sealed_against() {
     );
     assert_eq!(
         world.one::<String>(
-            "SELECT key_id FROM locker_item_field WHERE field_id = ?1",
+            "SELECT key_id FROM locker_item_field WHERE id = ?1",
             &["field-1"]
         ),
         "key-1"
@@ -1212,7 +1218,7 @@ fn a_new_sealed_field_must_carry_the_id_it_was_sealed_against() {
     );
     assert_eq!(
         world.one::<String>(
-            "SELECT value_sealed FROM locker_item_field WHERE field_id = ?1",
+            "SELECT value_sealed FROM locker_item_field WHERE id = ?1",
             &["field-1"]
         ),
         ciphertext("field-1")
@@ -1224,7 +1230,7 @@ fn a_new_sealed_field_must_carry_the_id_it_was_sealed_against() {
     );
     assert_eq!(
         world.one::<i64>(
-            "SELECT COUNT(*) FROM locker_item_field WHERE field_id = ?1",
+            "SELECT COUNT(*) FROM locker_item_field WHERE id = ?1",
             &["field-1"]
         ),
         0

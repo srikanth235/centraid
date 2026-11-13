@@ -31,9 +31,9 @@ use wire::screen_event::Kind as E;
 use super::claim::bytes;
 use super::doors::{self, Done};
 use super::key::KeyCustody;
-use super::reading::{self, Destination, Footing, Standing};
+use super::reading::{self, Destination, Standing};
 use super::rule::{self, TransferRule};
-use super::{apps, line, routes};
+use super::{apps, line, routes, states};
 use crate::custody::secrets::{self, SeedWrite, VaultSecrets};
 use crate::kit::read::{Note, Page, Reading};
 use crate::pairing::discovery::Rediscovery;
@@ -194,7 +194,10 @@ impl Backup {
     /// Back up now needs a gateway to back up to, a vault that has not moved, and
     /// no run already going.
     fn can_back_up_now(&self) -> bool {
-        !self.backing_up_now && !self.destinations().is_empty() && !self.frozen()
+        !self.backing_up_now
+            && !self.destinations().is_empty()
+            && !self.frozen()
+            && !self.reading().is_some_and(|reading| reading.damaged)
     }
 
     fn label_of(&self, locale: Locale, gateway_id: &str) -> String {
@@ -425,6 +428,25 @@ impl Backup {
         Vec::new()
     }
 
+    /// Lift the deletes a device is holding. ONLY A DEVICE THE ROW OFFERS IT FOR is asked: the
+    /// signed undo is a write, so a paused or moved device cannot take it.
+    fn undo(&mut self, gateway_id: &str, ctx: &Ctx) -> Vec<wire::Effect> {
+        if self.frozen()
+            || !self
+                .destinations()
+                .iter()
+                .any(|d| d.gateway_id == gateway_id && states::can_undo(d))
+        {
+            return Vec::new();
+        }
+        self.notice = Notice::None;
+        ctx.vault_async(
+            &doors::undo_tag(gateway_id),
+            doors::undo_request(gateway_id),
+        );
+        Vec::new()
+    }
+
     fn set_key_sync(&mut self, on: bool, ctx: &Ctx) -> Vec<wire::Effect> {
         let key = self.key(ctx);
         // ONLY A MOVE THE SCREEN OFFERS: a key held, a keychain to move it to, and
@@ -459,6 +481,9 @@ impl Backup {
                 self.run(Job::Rule(rule))
             }
             Some(B::ForgetDestination(forget)) => self.forget(&forget.gateway_id, ctx),
+            // UNDO IS THE CORE'S: the row offers it only once the reading says the phone holds
+            // deletes there (#1191), and the signed undo is the core's door, not built yet.
+            Some(B::UndoHeld(undo)) => self.undo(&undo.gateway_id, ctx),
             Some(B::SetKeySync(set)) => self.set_key_sync(set.on, ctx),
             Some(B::KeyPromptAnswered(_)) => {
                 self.key_prompt_answered = true;
@@ -523,6 +548,21 @@ impl Backup {
                 };
                 self.notice = Notice::Said(fill(&sentence, &[("name", &name)]));
             }
+            // NOTHING RESTORED IS NOT A SUCCESS: the holds had already gone or the door did not
+            // answer, and the member is told so.
+            Done::Undid {
+                gateway_id,
+                restored,
+            } => {
+                let locale = ctx.locale();
+                let name = self.label_of(locale, &gateway_id);
+                let sentence = if restored.is_some_and(|n| n > 0) {
+                    words::backup_undone(locale)
+                } else {
+                    words::backup_undo_failed(locale)
+                };
+                self.notice = Notice::Said(fill(&sentence, &[("name", &name)]));
+            }
         }
         self.read(ctx);
     }
@@ -572,28 +612,10 @@ impl Backup {
             .collect()
     }
 
-    /// How a device stands, for its row.
-    fn standing_words(locale: Locale, destination: &Destination) -> String {
-        match destination.footing() {
-            Footing::Current => backup_home::row_up_to_date(locale),
-            Footing::Full => backup_home::row_full(locale),
-            Footing::TooLarge => backup_home::row_too_large(locale),
-            Footing::Refusing => backup_home::row_refusing(locale),
-            Footing::RolledBack => backup_home::row_older(locale),
-            Footing::Behind => match destination.behind_files {
-                0 => backup_home::row_catching_up(locale),
-                1 => backup_home::row_behind_one(locale),
-                n => fill(
-                    &backup_home::row_behind_many(locale),
-                    &[("n", &line::grouped(n))],
-                ),
-            },
-        }
-    }
-
     fn destination_row(
         &self,
         locale: Locale,
+        zone: &str,
         destination: &Destination,
     ) -> wire::BackupDestinationRow {
         let label = if destination.label.trim().is_empty() {
@@ -626,7 +648,7 @@ impl Backup {
         // HOW IT STANDS LEADS, then what it holds (#1144): a row that said nothing would read as
         // health by absence, so every device says its state, "Up to date" included (#1188, NB1).
         let held = [
-            Some(Self::standing_words(locale, destination)),
+            Some(states::standing_words(locale, destination)),
             (destination.held_bytes != 0).then(|| {
                 fill(
                     &words::backup_held(locale),
@@ -638,6 +660,13 @@ impl Backup {
         .flatten()
         .collect::<Vec<_>>()
         .join(" \u{b7} ");
+        // THE NOTES under it, a field of their own: an old backup that cannot be read, a piece
+        // sent again, deletes held for a week (#1191, B16).
+        let undo_label = if states::can_undo(destination) {
+            backup_home::row_undo_action(locale)
+        } else {
+            String::new()
+        };
         // WHEN THIS GATEWAY LAST ACKNOWLEDGED A BACKUP, apart from when it was reached: a device
         // can answer every hour and hold nothing newer than last week (#1188).
         let backed_up = destination.last_ack_ms.map_or_else(
@@ -649,8 +678,10 @@ impl Backup {
                 )
             },
         );
+        let notes = states::notes(locale, zone, destination);
         let accessibility_label = [label.as_str(), &held, &backed_up, &detail]
             .into_iter()
+            .chain(notes.iter().map(String::as_str))
             .filter(|part| !part.is_empty())
             .collect::<Vec<_>>()
             .join(". ");
@@ -661,6 +692,8 @@ impl Backup {
             detail,
             held,
             backed_up,
+            notes,
+            undo_label,
         }
     }
 
@@ -851,6 +884,9 @@ impl Backup {
                 line::behind_last_good(locale, reading, now),
                 line::behind_reason(locale, ctx.zone(), reading, now).unwrap_or_default(),
             ),
+            // ANOTHER PHONE TOOK OVER: what the member can do about a takeover that was not theirs
+            // (#1191, A). The person at the backup device has the last word.
+            (_, Some(_)) => (String::new(), backup_home::device_moved_reason(locale)),
             _ => (String::new(), String::new()),
         };
         let key_summary = if key_heading.is_empty() {
@@ -887,7 +923,7 @@ impl Backup {
             },
             destinations: destinations
                 .iter()
-                .map(|destination| self.destination_row(locale, destination))
+                .map(|destination| self.destination_row(locale, ctx.zone(), destination))
                 .collect(),
             add_destination: (!add_label.is_empty()).then(routes::add_destination),
             add_destination_label: add_label,
@@ -960,6 +996,11 @@ impl Backup {
             } else {
                 self.check_status(locale, now)
             },
+            check_rate: self
+                .reading()
+                .and_then(|reading| reading.sample)
+                .and_then(|(read, stored)| states::rate_sentence(locale, read, stored))
+                .unwrap_or_default(),
             check_warning: self
                 .check_kept
                 .is_some_and(|kept| kept.kind == rule::CheckKind::Problem),

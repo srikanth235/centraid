@@ -65,6 +65,11 @@ final class ShellModel: ObservableObject {
 
     /// THE SCREEN RUNTIME'S STORE, once the core is open. Every view draws from it.
     @Published private(set) var screens: ScreenStore?
+    /// THE VAULT FILE IS DAMAGED (`CENTRAID_VAULT_DAMAGED` at open): no core exists, so the root
+    /// draws `VaultDamagedView` in place of bare paper. Set once, at launch.
+    @Published private(set) var vaultDamaged = false
+    /// A restore reopen succeeded and Home has yet to be told to enter the restore entry.
+    private var restoreAsked = false
     /// The instance Rust opened for each Rust entry on `path`, by entry token.
     @Published private(set) var rustInstances: [Int: UInt64] = [:]
     private var rustOpening: Set<Int> = []
@@ -121,6 +126,30 @@ final class ShellModel: ObservableObject {
         importLinePutAway = line.summary
     }
 
+    /// REOPEN FOR RESTORE: the single place the core's `restoreDamaged` key is sent. The damaged
+    /// screen's button calls it: open again over the same shelf with the key, and on success attach
+    /// the core and let Home enter the Rust restore entry. If the open fails again the damaged
+    /// screen stays.
+    func reopenForRestore() {
+        let directory = Self.vaultDirectory
+        var configuration = Core.Configuration(shelf: directory, devSeed: Self.devSeedHex)
+        configuration.restoreDamaged = true
+        Task.detached(priority: .userInitiated) {
+            do {
+                let core = try Core.open(configuration)
+                VaultFileProtection.secure(directory: directory)
+                await MainActor.run {
+                    let model = ShellModel.shared
+                    model.restoreAsked = true
+                    model.vaultDamaged = false
+                    model.attach(core)
+                }
+            } catch {
+                NSLog("centraid: the reopen for restore did not open: %@", String(describing: error))
+            }
+        }
+    }
+
     /// THE LINK AND THE CHARGER, reported to the pass scheduler (`PassFacts.swift`).
     private let links = LinkReporter()
     private var enteredBackground: NotificationObservation?
@@ -142,6 +171,9 @@ final class ShellModel: ObservableObject {
                 let core = try Core.open(configuration)
                 VaultFileProtection.secure(directory: directory)
                 await MainActor.run { ShellModel.shared.attach(core) }
+            } catch Core.Failure.vaultDamaged {
+                NSLog("centraid: the vault is damaged")
+                await MainActor.run { ShellModel.shared.vaultDamaged = true }
             } catch {
                 // The screen stays on its ground; nothing here can word it.
                 NSLog("centraid: the core did not open: %@", String(describing: error))
@@ -221,7 +253,13 @@ final class ShellModel: ObservableObject {
             }
             if self?.preferredScheme != held { self?.preferredScheme = held }
         }
-        store.onHomeAppeared = { [weak self] in self?.tellPhoneScheme() }
+        store.onHomeAppeared = { [weak self] in
+            self?.tellPhoneScheme()
+            if self?.restoreAsked == true {
+                self?.restoreAsked = false
+                self?.screens?.sendHome(.restore(.init()))
+            }
+        }
         store.onClosed = { [weak self] instances in self?.rustClosed(instances) }
         store.onContactsLimited = { [weak self] in self?.contactAccessPickerShown = true }
         store.linkReading = { [weak self] in self?.links.reading ?? Centraid_Core_V1_LinkReading() }

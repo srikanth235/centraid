@@ -90,9 +90,9 @@ use centraid_gateway::rules::payload::PairPayload;
 use centraid_vault::Vault;
 use centraid_vault::backup::PlaneError;
 use centraid_vault::backup::files::{ContentFile, content_files};
-use centraid_vault::backup::ledger::Destination;
 use centraid_vault::backup::naming::Name;
 use centraid_vault::backup::restore::{RestoreError, Restored, fetch_and_assemble};
+use centraid_vault::backup::state::Gateway;
 use centraid_vault::backup::store::StoreError;
 
 use super::link::GatewayStore;
@@ -164,6 +164,7 @@ pub fn run_observed(
         before_claim,
         &mut |_| {},
         None,
+        None,
     )
 }
 
@@ -186,6 +187,7 @@ pub fn run_hooked(
         before_claim,
         after_claim,
         None,
+        None,
     )
 }
 
@@ -202,7 +204,49 @@ pub(crate) fn run_cancellable(
         &mut |_| {},
         &mut |_| {},
         Some(cancellation),
+        None,
     )
+}
+
+/// **RESTORE OVER A VAULT THAT FAILED TO OPEN AS DAMAGED** (#1191, decision 35): the core that
+/// runs it holds no vault and never opened `damaged`. The restore replaces only that vault's
+/// file, by an atomic rename and only after its snapshot checked; until then `damaged` is
+/// byte-for-byte untouched, and so is every healthy vault the phone holds.
+///
+/// # Errors
+/// As [`run`].
+pub(crate) fn run_over_damaged(
+    damaged: &Path,
+    request: &wire::RestoreRequest,
+    runtime: &tokio::runtime::Handle,
+    cancellation: Option<crate::handle::Cancellation>,
+    before_claim: &mut dyn FnMut(u32),
+) -> Result<wire::RestoreResponse> {
+    let dir = damaged.parent().unwrap_or_else(|| Path::new("."));
+    let root = dir.parent().unwrap_or_else(|| Path::new("."));
+    run_controlled(
+        &root.join(crate::config::FRONT_FILE),
+        request,
+        runtime,
+        before_claim,
+        &mut |_| {},
+        cancellation,
+        Some(dir),
+    )
+}
+
+/// [`run_over_damaged`] for a test that drives the window before a claim.
+///
+/// # Errors
+/// As [`run`].
+#[doc(hidden)]
+pub fn run_over_damaged_observed(
+    damaged: &Path,
+    request: &wire::RestoreRequest,
+    runtime: &tokio::runtime::Handle,
+    before_claim: &mut dyn FnMut(u32),
+) -> Result<wire::RestoreResponse> {
+    run_over_damaged(damaged, request, runtime, None, before_claim)
 }
 
 fn run_controlled(
@@ -212,6 +256,7 @@ fn run_controlled(
     before_claim: &mut dyn FnMut(u32),
     after_claim: &mut dyn FnMut(u32),
     cancellation: Option<crate::handle::Cancellation>,
+    only: Option<&Path>,
 ) -> Result<wire::RestoreResponse> {
     if let Some(stop) = &cancellation {
         stop.check()?;
@@ -246,6 +291,9 @@ fn run_controlled(
         runtime,
         cancellation,
         use_older: request.use_older,
+        only,
+        minted: std::cell::RefCell::new(Vec::new()),
+        left: std::cell::RefCell::new(Vec::new()),
     };
 
     // FIRST, EVERY VAULT IS FETCHED, LAID DOWN AND CHECKED — and no writer
@@ -268,6 +316,13 @@ fn run_controlled(
             // the gateway holds a head for it too, the restore replaces the
             // copy (the module header, "the same phone").
             let held = vault_dir(&root, &keyring).join(HELD).exists();
+            // OVER A DAMAGED VAULT, ONLY THAT ONE IS LOOKED AT: a healthy vault this phone holds
+            // is a hit for the gap and is never touched (decision 35).
+            if let Some(only) = scan.only
+                && vault_dir(&root, &keyring) != only
+            {
+                return Ok(held);
+            }
             let vault_id = keyring.vault_hex();
             scan.check(keyring, &root, index)
                 .map(|checked| match checked {
@@ -334,6 +389,27 @@ fn run_controlled(
             gap_scanned,
             unclaimed: Vec::new(),
             older_offers: offers,
+            tokens: Vec::new(),
+            unproven_newest: Vec::new(),
+        });
+    }
+
+    // A RESTORE THAT CANNOT PROVE IT HOLDS THE NEWEST CLAIMS NOTHING (E8): the member is told
+    // which backup it found and decides. A second restore with `confirm_unproven` goes ahead
+    // with the greatest head it could verify.
+    let unproven: Vec<wire::UnprovenNewest> = staged
+        .iter()
+        .filter_map(|one| one.unproven.clone())
+        .collect();
+    if !unproven.is_empty() && !request.confirm_unproven {
+        staged.iter().for_each(Staged::forget);
+        return Ok(wire::RestoreResponse {
+            vaults: Vec::new(),
+            gap_scanned,
+            unclaimed: Vec::new(),
+            older_offers: Vec::new(),
+            tokens: Vec::new(),
+            unproven_newest: unproven,
         });
     }
 
@@ -372,6 +448,7 @@ fn run_controlled(
             }
         }
     }
+    unclaimed.extend(scan.left.take());
     if vaults.is_empty()
         && left_alone == 0
         && let Some(error) = first_refusal
@@ -386,6 +463,8 @@ fn run_controlled(
         // keeps, so the response carries no device secret (field 3 reserved).
         unclaimed,
         older_offers: Vec::new(),
+        tokens: scan.minted.take(),
+        unproven_newest: Vec::new(),
     })
 }
 
@@ -437,6 +516,13 @@ struct Scan<'a> {
     cancellation: Option<crate::handle::Cancellation>,
     /// The member said yes to an older backup (`RestoreRequest.use_older`).
     use_older: bool,
+    /// Set when the restore is over a vault that failed to open as damaged (decision 35): the one
+    /// vault directory it may replace. Every other vault is left exactly as it is.
+    only: Option<&'a Path>,
+    /// The tokens this restore's claims minted, for the shell to keep (#1191, E12).
+    minted: std::cell::RefCell<Vec<wire::GatewayToken>>,
+    /// Listed gateways a restored vault could not be claimed at, for the answer (E8).
+    left: std::cell::RefCell<Vec<wire::UnclaimedVault>>,
 }
 
 /// What looking at one index came to.
@@ -544,6 +630,37 @@ struct Staged {
     /// The client, under the read grant until the claim lands.
     store: GatewayStore,
     restored: Restored,
+    /// The gateway this backup was read from, and how to reach it again: the claim, the pairing
+    /// row and the safety number are its (E8: not always the gateway the member scanned).
+    gateway: centraid_gateway::rules::ids::GatewayId,
+    addrs: Vec<String>,
+    cert_der: Vec<u8>,
+    pin: centraid_gateway::rules::ids::Pin,
+    label: String,
+    /// The head's signed order: `(epoch, generation, writes)`.
+    order: (u64, u64, u64),
+    /// Set when this restore cannot prove it holds the newest backup (E8).
+    unproven: Option<wire::UnprovenNewest>,
+    /// Every OTHER gateway the directory lists that answered with a verified head: claimed too
+    /// once this one is, each naming the head it checked (E8).
+    others: Vec<Heard>,
+    /// Listed gateways that did not answer: left unclaimed and reported.
+    unreached: Vec<String>,
+}
+
+/// A listed gateway that answered: how to reach it and the verified head it showed.
+struct Heard {
+    payload: centraid_gateway::rules::payload::PairPayload,
+    client: Client,
+    cert_der: Vec<u8>,
+    /// The writer epoch it reported; a claim is one above.
+    epoch: u64,
+    head: WireName,
+    taken_at_ms: i64,
+    writes: u64,
+    /// The head's signed order, `(epoch, generation, writes)`.
+    order: (u64, u64, u64),
+    label: String,
 }
 
 impl Staged {
@@ -601,6 +718,169 @@ impl Scan<'_> {
     /// miss: a vault the gateway does not hold, or holds with no head yet —
     /// paired, never backed up, which is nothing to lay down.
     fn check(&self, keyring: Keyring, root: &Path, index: u32) -> Result<Checked> {
+        match self.check_one(keyring, root, index)? {
+            Checked::Staged(staged) => self.across(*staged, root, index),
+            other => Ok(other),
+        }
+    }
+
+    /// **THE NEWEST BACKUP ACROSS THE MEMBER'S GATEWAYS** (E8). The backup laid down came from the
+    /// gateway the member scanned; its manifest names the sealed directory of every gateway the
+    /// vault is backed up to. Each other listed gateway is asked for its head, verified as any
+    /// head is; the greatest `(epoch, generation, writes)` is the backup to restore, and a
+    /// greater one elsewhere replaces the one laid down. A restore that cannot prove it holds the
+    /// newest (the directory lists only the gateway scanned, cannot be read, or lists a gateway
+    /// that did not answer) says so in `unproven`, and the caller claims nothing until the member
+    /// said yes.
+    fn across(&self, mut staged: Staged, root: &Path, index: u32) -> Result<Checked> {
+        let unproven = |staged: &Staged| wire::UnprovenNewest {
+            index,
+            vault_id: staged.keyring.vault_hex(),
+            taken_at_ms: staged
+                .restored
+                .manifest
+                .taken_at_ms
+                .try_into()
+                .unwrap_or(i64::MAX),
+            label: staged.label.clone(),
+        };
+        let listed = self.directory_of(&staged);
+        let Some(directory) = listed else {
+            staged.unproven = Some(unproven(&staged));
+            return Ok(Checked::Staged(Box::new(staged)));
+        };
+        let mine = staged.gateway.hex();
+        // THE GATEWAY SCANNED IS ONE THAT ANSWERED, with the head it showed.
+        let mut heard: Vec<Heard> = vec![Heard {
+            payload: self.payload.clone(),
+            client: staged.store.client().sibling(),
+            cert_der: staged.cert_der.clone(),
+            epoch: staged.epoch,
+            head: staged.head,
+            taken_at_ms: staged
+                .restored
+                .manifest
+                .taken_at_ms
+                .try_into()
+                .unwrap_or(i64::MAX),
+            writes: staged.order.2,
+            order: staged.order,
+            label: staged.label.clone(),
+        }];
+        let mut unreached: Vec<String> = Vec::new();
+        for entry in directory
+            .gateways
+            .iter()
+            .filter(|entry| entry.gateway_id != mine)
+        {
+            self.checkpoint()?;
+            match self.look_at(entry, &staged.keyring) {
+                None => unreached.push(if entry.label.is_empty() {
+                    entry.gateway_id.clone()
+                } else {
+                    entry.label.clone()
+                }),
+                // ANSWERED, HOLDING NO HEAD OF THIS VAULT: nothing to claim there.
+                Some(None) => {}
+                Some(Some(seen)) => heard.push(seen),
+            }
+        }
+        let proven = unreached.is_empty() && directory.gateways.len() > 1;
+        // THE GREATEST HEAD, the scanned gateway's winning ties.
+        let best = (0..heard.len())
+            .max_by_key(|at| (heard[*at].order, std::cmp::Reverse(*at)))
+            .unwrap_or(0);
+        let chosen = heard.remove(best);
+        let mut finished = if chosen.payload.gw == staged.gateway {
+            staged
+        } else {
+            // A GREATER HEAD ELSEWHERE IS THE BACKUP: lay it down instead.
+            staged.forget();
+            let keyring = staged.keyring;
+            let there = Scan {
+                open: self.open,
+                payload: &chosen.payload,
+                cert_der: &chosen.cert_der,
+                client: &chosen.client,
+                runtime: self.runtime,
+                cancellation: self.cancellation.clone(),
+                use_older: self.use_older,
+                only: self.only,
+                minted: std::cell::RefCell::new(Vec::new()),
+                left: std::cell::RefCell::new(Vec::new()),
+            };
+            match there.check_one(keyring, root, index)? {
+                Checked::Staged(other) => *other,
+                other => return Ok(other),
+            }
+        };
+        if !proven {
+            finished.unproven = Some(unproven(&finished));
+        }
+        finished.others = heard;
+        finished.unreached = unreached;
+        Ok(Checked::Staged(Box::new(finished)))
+    }
+
+    /// The directory the staged backup's manifest names, read from the gateway it came from.
+    /// `None` when there is none, or it will not read.
+    fn directory_of(
+        &self,
+        staged: &Staged,
+    ) -> Option<centraid_vault::backup::directory::Directory> {
+        use centraid_vault::backup::store::Store as _;
+        let named = staged.restored.manifest.directory?;
+        let mut bytes = Vec::new();
+        staged.store.get(&named, &mut bytes).ok()?;
+        let plain =
+            centraid_media::sealed::open_whole(&staged.keyring.backup, &named, &bytes).ok()?;
+        centraid_vault::backup::directory::Directory::from_json(&plain).ok()
+    }
+
+    /// One listed gateway: dialled by the address and pin the directory gives, asked for a read
+    /// grant and its head. `None` when it did not answer; `Some(None)` when it answered and holds
+    /// no head for this vault; otherwise the verified head it showed.
+    fn look_at(
+        &self,
+        entry: &centraid_vault::backup::directory::Entry,
+        keyring: &Keyring,
+    ) -> Option<Option<Heard>> {
+        let payload = centraid_gateway::rules::payload::PairPayload {
+            v: centraid_gateway::rules::payload::PAYLOAD_VERSION,
+            gw: entry.gateway_id.parse().ok()?,
+            addrs: entry.addrs.clone(),
+            pin: entry.pin.parse().ok()?,
+            secret: centraid_gateway::rules::ids::Secret::from_bytes([0; 16]),
+            exp_ms: 0,
+        };
+        let client = pair::first_contact(&payload, self.runtime).ok()?;
+        let sibling = client.sibling();
+        let grant = pair::read_grant(&sibling, keyring, &payload.gw, self.runtime).ok()?;
+        let Some(grant) = grant else {
+            return Some(None);
+        };
+        sibling.set_token(grant.token);
+        let state = self
+            .runtime
+            .block_on(sibling.head_state(&keyring.vault_id(), &payload.gw))
+            .ok()?;
+        let Some(head) = state.head else {
+            return Some(None);
+        };
+        Some(Some(Heard {
+            cert_der: client.cert_der().unwrap_or_default(),
+            client,
+            epoch: state.epoch,
+            head: head.name,
+            taken_at_ms: head.taken_at_ms,
+            writes: head.writes,
+            order: (head.epoch, head.generation, head.writes),
+            label: entry.label.clone(),
+            payload,
+        }))
+    }
+
+    fn check_one(&self, keyring: Keyring, root: &Path, index: u32) -> Result<Checked> {
         let client = self.client();
         let Some(grant) = pair::read_grant(&client, &keyring, &self.payload.gw, self.runtime)?
         else {
@@ -609,7 +889,7 @@ impl Scan<'_> {
         client.set_token(grant.token);
         let state = self
             .runtime
-            .block_on(client.head_state(&keyring.vault_id()))
+            .block_on(client.head_state(&keyring.vault_id(), &self.payload.gw))
             .map_err(pair::pairing_error)?;
         let Some(head) = state.head else {
             return Ok(Checked::Miss);
@@ -620,12 +900,16 @@ impl Scan<'_> {
             context: format!("making {}: {error}", dir.display()),
         })?;
         let file = dir.join(RESTORING);
+        // A READ GRANT WRITES NOTHING: the store signs nothing until the
+        // claim makes it this phone's, at the claim's epoch.
         let mut store = GatewayStore::over(
             client,
-            keyring.vault_id(),
+            keyring.vault.identity.signing(),
             self.payload.gw.hex(),
+            state.epoch,
+            0,
             self.runtime,
-        );
+        )?;
         store.set_cancellation(self.cancellation.clone());
         let mut older = None;
         let laid = match lay_down(&store, &keyring, &head.name, &file, index) {
@@ -659,7 +943,12 @@ impl Scan<'_> {
                 // THE SAME PHONE: a copy this phone holds is replaced only when it is the older
                 // one. One that ran writes the head lacks is the newer, and it is left alone.
                 let held = dir.join(HELD);
-                if held != self.open && held.exists() && held_is_newer(&held, &file) {
+                // A DAMAGED COPY IS NEVER OPENED to be compared: it is the one being replaced.
+                if self.only.is_none()
+                    && held != self.open
+                    && held.exists()
+                    && held_is_newer(&held, &file)
+                {
                     discard(&file);
                     return Ok(Checked::HeldIsNewer);
                 }
@@ -674,6 +963,15 @@ impl Scan<'_> {
                     made,
                     store,
                     restored,
+                    gateway: self.payload.gw,
+                    addrs: self.payload.addrs.clone(),
+                    cert_der: self.cert_der.to_vec(),
+                    pin: self.payload.pin,
+                    label: pair::label_of(self.payload),
+                    order: (head.epoch, head.generation, head.writes),
+                    unproven: None,
+                    others: Vec::new(),
+                    unreached: Vec::new(),
                 })))
             }
             Err(error) => {
@@ -749,7 +1047,7 @@ impl Scan<'_> {
             match pair::try_claim(
                 staged.store.client(),
                 &staged.keyring,
-                &self.payload.gw,
+                &staged.gateway,
                 staged.epoch.saturating_add(1),
                 Some(staged.head),
                 self.runtime,
@@ -758,10 +1056,20 @@ impl Scan<'_> {
             {
                 ClaimAnswer::Claimed(paired) => {
                     after_claim(staged.index);
+                    // THIS PHONE WRITES THERE NOW, at the claim's epoch and from
+                    // generation zero (E3), under the token the claim minted.
+                    staged.store.claimed(paired.token, paired.epoch);
+                    self.minted.borrow_mut().push(wire::GatewayToken {
+                        vault_id: staged.keyring.vault_hex(),
+                        gateway_id: paired.gateway_id.hex(),
+                        token: paired.token.hex(),
+                    });
                     // Once writer authority moved, finish keeping the vault and
                     // its token before honoring a stop at the next vault.
                     staged.store.set_cancellation(None);
-                    return self.adopt_retrying(staged, &paired);
+                    let restored = self.adopt_retrying(staged, &paired)?;
+                    self.claim_others(staged);
+                    return Ok(restored);
                 }
                 ClaimAnswer::Conflict { epoch, head } => {
                     staged.epoch = epoch;
@@ -777,11 +1085,25 @@ impl Scan<'_> {
                         // THE HEAD MOVED BETWEEN THE CHECK AND THE CLAIM: the
                         // old phone backed up in that window, and nothing
                         // moved. Lay the new head down and check it first.
-                        let view = self
+                        // VERIFIED, as every head this phone acts on (E2).
+                        let state = self
                             .runtime
-                            .block_on(staged.store.client().head(&staged.keyring.vault_id()))
+                            .block_on(
+                                staged
+                                    .store
+                                    .client()
+                                    .head_state(&staged.keyring.vault_id(), &staged.gateway),
+                            )
                             .map_err(pair::pairing_error)
                             .map_err(ClaimFailure::Claim)?;
+                        let Some(view) = state.head else {
+                            return Err(ClaimFailure::Claim(CoreError::Invariant {
+                                context: format!(
+                                    "the gateway's head for index {} went back to none",
+                                    staged.index
+                                ),
+                            }));
+                        };
                         staged.restored = lay_down(
                             &staged.store,
                             &staged.keyring,
@@ -793,7 +1115,7 @@ impl Scan<'_> {
                         staged.head = view.name;
                         staged.older = None;
                         staged.head_set_ms = view.set_at_ms;
-                        staged.epoch = view.epoch;
+                        staged.epoch = state.epoch;
                     }
                 }
             }
@@ -808,6 +1130,76 @@ impl Scan<'_> {
 
     /// Adopt a vault whose claim landed, once more if the first try fails: the old phone is
     /// frozen already, so giving up costs the member a second restore.
+    /// **CLAIM AT EVERY OTHER GATEWAY THE DIRECTORY LISTS THAT ANSWERED** (E8), each naming the
+    /// head this phone checked there, and keep each as a gateway of the restored vault. One that
+    /// did not answer, or whose head moved under the claim, is left unclaimed and reported; the
+    /// next pass deals with it.
+    fn claim_others(&self, staged: &Staged) {
+        let kept = staged.file.with_file_name(HELD);
+        let report = |label: &str, why: &str| {
+            self.left.borrow_mut().push(wire::UnclaimedVault {
+                index: staged.index,
+                vault_id: staged.keyring.vault_hex(),
+                reason: format!("{label}: {why}"),
+                claimed: false,
+            });
+        };
+        for label in &staged.unreached {
+            report(label, "did not answer, so it was not claimed");
+        }
+        let Ok(ledger) = Plane::of(&kept).state() else {
+            return;
+        };
+        for other in &staged.others {
+            let name = if other.label.is_empty() {
+                other.payload.gw.hex()
+            } else {
+                other.label.clone()
+            };
+            match pair::try_claim(
+                &other.client,
+                &staged.keyring,
+                &other.payload.gw,
+                other.epoch.saturating_add(1),
+                Some(other.head),
+                self.runtime,
+            ) {
+                Ok(ClaimAnswer::Claimed(paired)) => {
+                    self.minted.borrow_mut().push(wire::GatewayToken {
+                        vault_id: staged.keyring.vault_hex(),
+                        gateway_id: paired.gateway_id.hex(),
+                        token: paired.token.hex(),
+                    });
+                    let now = now_ms();
+                    let mut row = Gateway::paired(
+                        other.payload.gw.hex(),
+                        other.payload.addrs.clone(),
+                        other.cert_der.clone(),
+                        pair::label_of(&other.payload),
+                        paired.epoch,
+                        now,
+                    );
+                    row.seen_ms = Some(now);
+                    // THE HEAD IT HOLDS IS WHERE THE NEXT HEAD CONTINUES FROM; the pass sends
+                    // what that gateway lacks of the newest snapshot.
+                    row.head = Some(Name::from_bytes(*other.head.as_bytes()));
+                    row.head_ms = Some(u64::try_from(other.taken_at_ms).unwrap_or(0));
+                    row.writes = other.writes;
+                    if ledger.put_gateway(&row).is_err() {
+                        report(&name, "was claimed but not kept");
+                    }
+                }
+                Ok(ClaimAnswer::Conflict { .. }) => {
+                    report(
+                        &name,
+                        "its head moved while it was claimed, so it was not claimed",
+                    );
+                }
+                Err(error) => report(&name, &format!("was not claimed: {error}")),
+            }
+        }
+    }
+
     fn adopt_retrying(
         &self,
         staged: &Staged,
@@ -868,6 +1260,7 @@ impl Scan<'_> {
                     &Name::from_bytes(*older.as_bytes()),
                     Some(&Name::from_bytes(*staged.head.as_bytes())),
                     u64::try_from(*taken).unwrap_or(0),
+                    staged.restored.manifest.writes,
                 )
                 .map_err(|error| CoreError::Unavailable {
                     reason: format!(
@@ -876,51 +1269,34 @@ impl Scan<'_> {
                 })?;
         }
         let plane = Plane::of(kept);
-        let ledger = plane.ledger()?;
-        ledger.reset().map_err(plane_error)?;
-        // THE SAME PHONE: a copy this one held is an older copy of this vault,
-        // and its marker of a move, if it ever had one, is not the truth of the
-        // vault restored over it.
-        ledger.clear_moved(&gateway_id).map_err(plane_error)?;
+        let ledger = plane.state()?;
+        // THE SAME PHONE: a copy this one held is an older copy of this vault. What it owed is
+        // not what the vault restored over it owes, so the outbox is emptied, and this gateway's
+        // row starts over below (its moved mark, if it ever had one, is not the truth of the
+        // vault restored over it).
+        ledger.reset_for_restore(&[]).map_err(plane_error)?;
         let now = now_ms();
-        ledger
-            .put_destination(&Destination {
-                gateway_id: gateway_id.clone(),
-                addrs: self.payload.addrs.clone(),
-                cert_der: self.cert_der.to_vec(),
-                token: paired.token.hex(),
-                epoch: paired.epoch,
-                label: pair::label_of(self.payload),
-                paired_at_ms: now,
-                last_seen_ms: Some(now),
-                last_ack_ms: None,
-            })
-            .map_err(plane_error)?;
-        // THE HEAD THIS PHONE NOW CONTINUES, as a snapshot it set: the first
-        // pass's compare-and-set names it, and retention reads its manifest.
+        // THE HEAD THIS PHONE NOW CONTINUES, as a snapshot it set: the first pass's
+        // compare-and-set names it, and settle sees nothing owed.
         let manifest = &staged.restored.manifest;
         let name = staged.restored.manifest_name;
-        let json = manifest.to_json().map_err(plane_error)?;
-        let json = String::from_utf8(json).map_err(|_| CoreError::Invariant {
-            context: "the restored manifest is not UTF-8".to_owned(),
-        })?;
-        ledger
-            .record_snapshot(&name, manifest.taken_at_ms, &json)
-            .map_err(plane_error)?;
-        ledger.ack_snapshot(&name, now).map_err(plane_error)?;
-        ledger.set_head(&gateway_id, &name).map_err(plane_error)?;
-        ledger
-            .set_head_acked(&gateway_id, u64::try_from(staged.head_set_ms).unwrap_or(0))
-            .map_err(plane_error)?;
-        let mut held: Vec<(Name, u64)> = manifest
-            .ranges
-            .iter()
-            .map(|range| (range.name, range.len))
-            .collect();
-        held.push((name, json.len() as u64));
-        ledger
-            .confirm_many(&held, &gateway_id, now)
-            .map_err(plane_error)?;
+        let mut row = Gateway::paired(
+            gateway_id.clone(),
+            staged.addrs.clone(),
+            staged.cert_der.clone(),
+            staged.label.clone(),
+            paired.epoch,
+            now,
+        );
+        row.seen_ms = Some(now);
+        row.ack_ms = Some(u64::try_from(staged.head_set_ms).unwrap_or(0));
+        row.head = Some(name);
+        row.head_ms = Some(manifest.taken_at_ms);
+        row.writes = manifest.writes;
+        row.snapshot = Some(name);
+        row.snapshot_ms = Some(manifest.taken_at_ms);
+        row.snapshot_writes = manifest.writes;
+        ledger.put_gateway(&row).map_err(plane_error)?;
 
         // THE FILE FIRST: it takes the name `vault.db`, so a failure fetching the grid below can
         // never lose the vault itself.
@@ -937,7 +1313,7 @@ impl Scan<'_> {
             index: staged.index,
             path: kept.to_string_lossy().into_owned(),
             rows: manifest.census.values().sum(),
-            safety_number: pair::safety_number(&staged.keyring, &self.payload.pin),
+            safety_number: pair::safety_number(&staged.keyring, &staged.pin),
             derivatives_landed: landed,
             derivatives_total: total,
         })
@@ -1061,6 +1437,7 @@ mod cancellation_tests {
                 &old,
                 wire::request::Kind::Drain(wire::DrainRequest {
                     wants_snapshot: true,
+                    rule: wire::TransferRule::WifiOnly as i32,
                     ..wire::DrainRequest::default()
                 }),
             );
@@ -1076,6 +1453,7 @@ mod cancellation_tests {
                 phrase: WORDS.to_owned(),
                 payload: gateway.payload().to_json(),
                 indices: vec![0, 1],
+                confirm_unproven: true,
                 ..wire::RestoreRequest::default()
             };
             let mut before = |index| {
@@ -1095,6 +1473,7 @@ mod cancellation_tests {
                 &mut before,
                 &mut after,
                 Some(cancellation),
+                None,
             );
             let pairings = gateway
                 .shared()
@@ -1119,9 +1498,9 @@ mod cancellation_tests {
                 let vault = Vault::open(&file).expect("the adopted vault opens");
                 vault.close().expect("closes");
                 let destinations = Plane::of(&file)
-                    .ledger()
+                    .state()
                     .expect("ledger")
-                    .destinations()
+                    .gateways()
                     .expect("destinations");
                 assert_eq!(
                     destinations.len(),
@@ -1233,5 +1612,59 @@ mod error_tests {
             "This version of Centraid can't open this backup."
         );
         assert!(!early.sentence().contains("Restart"));
+    }
+}
+
+#[cfg(test)]
+mod held_tests {
+    use super::*;
+    use centraid_vault::commands::Registry;
+    use centraid_vault::{Command, CommandStatus, Principal};
+
+    /// A founded vault file with `notes` notes written, closed so its WAL is folded in.
+    fn vault_with(path: &Path, notes: usize) {
+        let vault = Vault::create(path).expect("founds");
+        vault.found("Home", "Ada").expect("founds");
+        let registry = Registry::with_system_commands().expect("a registry");
+        for index in 0..notes {
+            let outcome = vault
+                .execute(
+                    &registry,
+                    &Principal::owner("phone"),
+                    &Command::new(
+                        "note.create",
+                        serde_json::json!({ "title": format!("note {index}"), "body": "words" }),
+                    ),
+                )
+                .expect("runs");
+            assert_eq!(outcome.status, CommandStatus::Executed);
+        }
+        vault.close().expect("closes");
+    }
+
+    /// **A damaged held copy is never kept over a restore** (#1191, V21). The held copy has more
+    /// writes than the restored file, so it is "newer"; with one of its pages really damaged it
+    /// does not open, and it is not.
+    #[test]
+    fn a_restore_prefers_a_healthy_backup_over_a_damaged_local_copy() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let (held, restored) = (dir.path().join("held.db"), dir.path().join("restored.db"));
+        vault_with(&held, 3);
+        vault_with(&restored, 0);
+        assert!(
+            held_is_newer(&held, &restored),
+            "the intact held copy is ahead"
+        );
+
+        let mut bytes = std::fs::read(&held).expect("reads");
+        let page = usize::try_from(centraid_vault::file::PAGE_SIZE).expect("a size");
+        for byte in &mut bytes[4 * page..5 * page] {
+            *byte = 0xA5;
+        }
+        std::fs::write(&held, bytes).expect("writes");
+        assert!(
+            !held_is_newer(&held, &restored),
+            "a damaged held copy answers not newer"
+        );
     }
 }

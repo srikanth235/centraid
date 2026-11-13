@@ -22,6 +22,9 @@ actor Core {
         case closed
         case poisoned(diagnosticID: String)
         case malformed(String)
+        /// `centraid_open` answered `CENTRAID_VAULT_DAMAGED`: the vault file is untouched and no
+        /// handle exists. The shell draws the launch screen for it (`VaultDamagedView`).
+        case vaultDamaged
         case refused(Centraid_Core_V1_Error)
     }
 
@@ -36,6 +39,10 @@ actor Core {
         var devSeed: String?
         var uiThreadName = "main"
         var expectedIdentity: String?
+        /// Sent only after an open answered `VAULT_DAMAGED`: the core opens the same shelf without
+        /// reading the damaged file so the Rust restore entry can run. Older cores ignore it; nil is
+        /// left out of the JSON.
+        var restoreDamaged: Bool?
     }
 
     /// The handle pointer, carried across queues. The core serialises its own
@@ -83,6 +90,7 @@ actor Core {
             centraid_open(
                 bytes.bindMemory(to: UInt8.self).baseAddress, json.count, &handle)
         }
+        if status == CENTRAID_VAULT_DAMAGED { throw Failure.vaultDamaged }
         guard status == CENTRAID_OK, let handle else {
             throw Failure.malformed("centraid_open answered \(status)")
         }

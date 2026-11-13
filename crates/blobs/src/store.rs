@@ -398,9 +398,17 @@ impl ByteStore {
     /// Move a finished write to its name.
     fn settle(&self, incoming: &Path, hash: ContentHash, bytes: u64) -> Result<Stored> {
         let path = self.path_for(hash);
-        if self.path_of(hash)?.is_some() {
+        let held = self.path_of(hash)?;
+        // A FILE AT THE NAME IS THE BLOB ONLY IF ITS BYTES ARE ITS NAME'S (#1191, V20). Bit rot
+        // or a torn write leaves a file that the name still claims; the bytes arriving now ARE the
+        // name's by construction, so a bad held file is replaced by them instead of kept.
+        let held_is_whole = match &held {
+            Some(held) => holds_its_name(held, hash)?,
+            None => false,
+        };
+        if held_is_whole {
             // THE SAME BYTES TWICE ARE ONE BLOB. The file already at the name
-            // is these bytes by construction, so the copy is dropped rather
+            // is these bytes, verified, so the copy is dropped rather
             // than renamed over it.
             fs::remove_file(incoming).map_err(io_at(incoming))?;
             // STAGED AGAIN IS STAGED NOW. The launch sweep of files no row
@@ -418,6 +426,10 @@ impl ByteStore {
                 path,
                 already_held: true,
             });
+        }
+        if held.is_some() {
+            // The rotten file goes first: a rename over it is not allowed everywhere.
+            fs::remove_file(&path).map_err(io_at(&path))?;
         }
         fs::rename(incoming, &path).map_err(io_at(&path))?;
         sync_directory(&self.root)?;
@@ -581,6 +593,14 @@ struct Entry {
 
 /// A name for an incoming file no other write in this or another process can
 /// share: the process, a counter, and the moment.
+/// Whether the file at `path` hashes to `hash`: one streamed read of it.
+fn holds_its_name(path: &Path, hash: ContentHash) -> Result<bool> {
+    let mut file = fs::File::open(path).map_err(io_at(path))?;
+    let mut hasher = blake3::Hasher::new();
+    io::copy(&mut file, &mut hasher).map_err(io_at(path))?;
+    Ok(ContentHash::from_bytes(*hasher.finalize().as_bytes()) == hash)
+}
+
 fn incoming_name() -> String {
     static NEXT: AtomicU64 = AtomicU64::new(0);
     let nanos = SystemTime::now()
@@ -755,6 +775,27 @@ mod tests {
             store.read(stored.hash),
             Err(StoreError::Io { .. })
         ));
+    }
+
+    /// **A ROTTED BLOB IS HEALED ON RE-ADD** (#1191, V20). A held file whose bytes are not its
+    /// name's is replaced when the same bytes are staged again, and the read after is good.
+    #[test]
+    fn a_rotted_file_is_replaced_when_the_same_bytes_are_added_again() {
+        let (_dir, store) = store();
+        let original = b"a photograph that will rot".to_vec();
+        let stored = store.put_bytes(&original).expect("it lands");
+        fs::write(&stored.path, b"a photograph that has rotted").expect("rots");
+        assert!(matches!(
+            store.read(stored.hash),
+            Err(StoreError::Corrupt { .. })
+        ));
+        let again = store
+            .put_bytes(&original)
+            .expect("the original is added again");
+        assert!(!again.already_held, "the bad file was not kept");
+        assert_eq!(store.read(stored.hash).expect("good bytes"), original);
+        // And an intact file is still the same blob, not rewritten.
+        assert!(store.put_bytes(&original).expect("again").already_held);
     }
 
     /// A crashed write older than an hour is cleared at open; a fresh one is a

@@ -445,6 +445,103 @@ fn keep(found: &mut Vec<SourceStatement>, line: usize, sql: String) {
     }
 }
 
+/// The index names a plan step reads through (`USING INDEX x`, `USING COVERING INDEX x`).
+#[must_use]
+pub fn indexes_in(plans: &[String]) -> std::collections::BTreeSet<String> {
+    let mut used = std::collections::BTreeSet::new();
+    for step in plans {
+        for marker in ["USING COVERING INDEX ", "USING INDEX "] {
+            if let Some(at) = step.find(marker) {
+                let name = step[at + marker.len()..]
+                    .split(|c: char| c.is_whitespace() || c == '(')
+                    .next()
+                    .unwrap_or("");
+                used.insert(name.to_owned());
+            }
+        }
+    }
+    used
+}
+
+impl Vault {
+    /// The vault's own indexes that no plan in `plans` reads through and that are not the
+    /// child-side index of a foreign key (#1191, V6).
+    ///
+    /// # Errors
+    /// SQLite's refusal to read the schema.
+    pub fn unread_indexes(&self, plans: &[String]) -> Result<Vec<String>> {
+        let used = indexes_in(plans);
+        self.read(|connection| {
+            let mut indexes = connection.prepare(
+                "SELECT name, tbl_name FROM sqlite_schema
+                  WHERE type = 'index' AND sql IS NOT NULL AND name NOT LIKE 'sqlite_%'
+                  ORDER BY name",
+            )?;
+            let listed: Vec<(String, String)> = indexes
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+                .collect::<std::result::Result<_, _>>()?;
+            let mut unread = Vec::new();
+            for (name, table) in listed {
+                if used.contains(&name) || serves_a_foreign_key(connection, &name, &table)? {
+                    continue;
+                }
+                unread.push(format!("{table}.{name}"));
+            }
+            Ok(unread)
+        })
+    }
+}
+
+/// Is `index` an index whose leading columns are a foreign key's child columns of `table` (whole,
+/// or partial on `<column> IS NOT NULL`)? A partial index serves the key when its predicate is the
+/// one a lookup by the key implies.
+fn serves_a_foreign_key(
+    connection: &rusqlite::Connection,
+    index: &str,
+    table: &str,
+) -> Result<bool> {
+    let sql: String = connection.query_row(
+        "SELECT sql FROM sqlite_schema WHERE name = ?1",
+        [index],
+        |row| row.get(0),
+    )?;
+    let predicate = sql
+        .split_once(" WHERE ")
+        .map(|(_, predicate)| predicate.trim().to_owned());
+    let columns: Vec<String> = connection
+        .prepare(&format!(
+            "SELECT name FROM pragma_index_info('{index}') ORDER BY seqno"
+        ))?
+        .query_map([], |row| row.get(0))?
+        .collect::<std::result::Result<_, _>>()?;
+    let mut keys: std::collections::BTreeMap<i64, Vec<(i64, String)>> = Default::default();
+    let mut foreign = connection.prepare(&format!(
+        "SELECT id, seq, \"from\" FROM pragma_foreign_key_list('{table}')"
+    ))?;
+    for row in foreign.query_map([], |row| {
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, i64>(1)?,
+            row.get::<_, String>(2)?,
+        ))
+    })? {
+        let (id, seq, from) = row?;
+        keys.entry(id).or_default().push((seq, from));
+    }
+    Ok(keys.values().any(|key| {
+        let mut key = key.clone();
+        key.sort();
+        key.len() <= columns.len()
+            && key
+                .iter()
+                .zip(&columns)
+                .all(|((_, from), column)| from == column)
+            && predicate
+                .as_ref()
+                .is_none_or(|predicate| *predicate == format!("{} IS NOT NULL", columns[0]))
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

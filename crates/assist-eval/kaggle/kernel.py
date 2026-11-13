@@ -118,7 +118,7 @@ def fetch_val(data):
     open(val, "w").write(text)
     worlds = sorted({json.loads(line)["world"] for line in text.splitlines() if line.strip()})
     for world in worlds:
-        fetch(f"{base}/worlds/{world}.json", os.path.join(DATA, "worlds", f"{world}.json"), token)
+        fetch(f"{base}/worlds/val/{world}.json", os.path.join(DATA, "worlds", f"{world}.json"), token)
     say("val sessions", sum(1 for line in text.splitlines() if line.strip()), "worlds", len(worlds))
     return val, os.path.join(DATA, "worlds")
 

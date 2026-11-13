@@ -446,7 +446,7 @@ fn completed_reminders_come_in_as_done_tasks_only_with_the_toggle_on() {
     assert_eq!(finished.status, "done");
     assert_eq!(
         finished.completed_at.as_deref(),
-        Some("2026-10-01T08:00:00Z")
+        Some("2026-10-01T08:00:00.000Z")
     );
     assert_eq!(find(&all, "Still open").status, "open");
 }

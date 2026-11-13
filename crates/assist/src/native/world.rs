@@ -967,7 +967,7 @@ impl World {
         let floor = first.to_string();
         let rows = door.table_where(
             "txn",
-            "id, account_id, currency, posted_on, amount_minor, status, category_id, transfer_id",
+            "id, account_id, currency, posted_on, amount_minor, status, category_id",
             "posted_on",
             "id",
             "posted_on >= ?",
@@ -1003,6 +1003,25 @@ impl World {
                 }
             }
         }
+        // The other half of each transfer: one `transfer` row names the pair, the lower id first.
+        let mut partners: BTreeMap<String, String> = BTreeMap::new();
+        for chunk in ids.chunks(DECORATION_CHUNK) {
+            let marks = vec!["?"; chunk.len()].join(", ");
+            let both: Vec<String> = chunk.iter().chain(chunk).cloned().collect();
+            for pair in door.table_where(
+                "transfer",
+                "a, b",
+                "a",
+                "a",
+                &format!("a IN ({marks}) OR b IN ({marks})"),
+                &both,
+            )? {
+                if let (Some(a), Some(b)) = (text(&pair, "a"), text(&pair, "b")) {
+                    partners.insert(a.clone(), b.clone());
+                    partners.insert(b, a);
+                }
+            }
+        }
         for transaction in &rows {
             let id = text(transaction, "id").unwrap_or_default();
             let Some(entity) = named.get(&id).filter(|e| text(e, "deleted_at").is_none()) else {
@@ -1034,7 +1053,7 @@ impl World {
             put(
                 &mut fields,
                 "transfer",
-                nonempty(text(transaction, "transfer_id")),
+                nonempty(partners.get(&id).cloned()),
             );
             let status = match text(transaction, "status").as_deref() {
                 Some("void") => "void",

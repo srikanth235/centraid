@@ -1,0 +1,14 @@
+{
+  "repo": "srikanth235/centraid-assist-data",
+  "heldout_repo": "srikanth235/centraid-assist-heldout",
+  "version": "v0.3",
+  "tools_mode": "sig",
+  "tools_hash": "c4a759dfe93337fc3f925ed7a7768030cf3658076a4224639b0860bccbd6fc4b",
+  "prompt_hash": "ca0109ece366ccec53e3147dc96e443a7056c751b8c58775624a028162cbb96a",
+  "catalog_hash": "487261c0f8548972e20267601cb0b672a6fd7d29c8f77e5fd01133a0fdce81dd",
+  "tokenizer_blake3": "3fd498e7fff0650ca4cf62dccd4e0844ed5ad2f1abcee9adfda013fef06c4220",
+  "stale": {
+    "since": "create and edit cover 13 kinds and almost only `name`; no money, measurement or Locker fields. Chat is meant to create Locker secrets, so those are gaps to fill, not exclusions",
+    "level": "coverage"
+  }
+}

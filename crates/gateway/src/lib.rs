@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-//! THE GATEWAY PROTOCOL v2 (#1080).
+//! THE GATEWAY PROTOCOL v3 (#1080, #1191).
 //!
 //! A gateway is any machine the member controls that runs `centraid-gateway`:
 //! the laptop at home, a VPS, a NAS. The phone opens a TLS connection straight

@@ -159,7 +159,12 @@ aes-gcm = "0.11"
 chacha20poly1305 = "0.11"
 ryu-js = "1.0.3"
 tempfile = "3"
-zstd = "0.14"
+# PINNED EXACTLY (#1191 B9). The manifest records one BLAKE3 per sealed chunk of the bytes AS THEY OPEN, which for a compressed
+# part are zstd output, and a manifest is immutable. A part sealed again later (a new gateway, a damaged piece sent again)
+# must reproduce those bytes, or read-back would call it damaged forever. So the zstd crate is not a routine bump:
+# `contracts/crypto/chunk-digest-vectors.json` (`crates/media/tests/chunk_digest_vectors.rs`) fails when the output moves,
+# and a change that moves it is a format change that regenerates the vectors and says so.
+zstd = "=0.14.3"
 # THE DATA PIPELINE'S TOKENIZER (#1171 M4) is `crates/datagen/src/bpe.rs`, a byte-level BPE of our own that reads the chat
 # model's `tokenizer.json`. Its pre-tokenizer regex has a lookahead (`\s+(?!\S)`), which `regex` cannot do; `fancy-regex`
 # was already in the lock through `jsonschema`. (The `tokenizers` crate pulled in `paste`, RUSTSEC-2024-0436.)

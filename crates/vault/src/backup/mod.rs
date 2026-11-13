@@ -16,17 +16,17 @@
 //! | [`holdings`] | what the vault holds by kind, for the Backup screen's per-app rows |
 //! | [`snapshot`] | the page-identical copy, its ranges and manifest; plan, spool, settle |
 //! | [`store`] | the [`store::Store`] trait one destination answers, and [`store::MemoryStore`] |
-//! | [`ledger`] | `<stem>.backup.db`: destinations, the queue, confirmations, snapshots |
+//! | [`state`] | `<stem>.state.db`: the paired gateways, each one's outbox, where bytes are on the device |
 //! | [`spool`] | `<stem>.spool/`: sealed parts waiting to move, under a byte budget |
 //! | [`mover`] | the `PUT`s, the confirmations they earn, and the reconcile against `exists` |
-//! | [`verify`] | the heavy read-back: one confirmed original per gateway per pass, streamed and opened |
+//! | [`verify`] | the read-back: a keyed random sample of what a gateway holds, read and opened |
 //! | [`retention`] | which snapshots to keep, and which names are garbage |
 //! | [`restore`] | the file rebuilt from a destination, and every check that it is the snapshot's |
 //! | [`drill`] | back up, lose everything, restore, and prove it is the vault that was lost |
 //!
 //! ## WHAT IS DEVICE-LOCAL AND DERIVED
 //!
-//! The ledger and the spool live beside the vault file and are never inside
+//! The device state and the spool live beside the vault file and are never inside
 //! it: a snapshot of the vault therefore never carries the state of its own
 //! upload. Both are rebuilt from the gateway's answers — `exists` for what is
 //! held, `snapshots` for what is registered — so losing them costs a
@@ -38,16 +38,18 @@
 //! socket; the gateway client and the phone's drain and media pipeline are
 //! built over it (`crates/core/src/phone`).
 
+pub mod directory;
 pub mod drill;
 pub mod files;
+pub mod generated_limits;
 pub mod holdings;
-pub mod ledger;
 pub mod mover;
 pub mod naming;
 pub mod restore;
 pub mod retention;
 pub mod snapshot;
 pub mod spool;
+pub mod state;
 pub mod store;
 pub mod verify;
 
@@ -56,7 +58,7 @@ use crate::error::VaultError;
 /// Everything the plane refuses.
 #[derive(Debug, thiserror::Error)]
 pub enum PlaneError {
-    /// SQLite (the vault's or the ledger's) or the filesystem, with a full
+    /// SQLite (the vault's or the device state's) or the filesystem, with a full
     /// disk classified as [`VaultError::DiskFull`].
     #[error(transparent)]
     Vault(#[from] VaultError),

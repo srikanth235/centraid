@@ -11,7 +11,8 @@
 
 use centraid_gateway::client::{Client, Part, Put, Source};
 use centraid_gateway::rules::ids::{Digest, Name, VaultId};
-use centraid_gateway::rules::wire::{PairKind, PairRequest};
+
+use centraid_gateway::server::harness::pair_secret;
 use centraid_gateway::server::harness::{Spawned, spawn};
 
 /// A vault paired with `gateway`, and the client holding its token.
@@ -19,17 +20,14 @@ async fn paired(gateway: &Spawned, seed: u8) -> (VaultId, Client) {
     let identity = ed25519_dalek::SigningKey::from_bytes(&[seed; 32]);
     let vault = VaultId::from_bytes(identity.verifying_key().to_bytes());
     let phone = gateway.first_contact();
-    let paired = phone
-        .pair(&PairRequest {
-            vault_id: vault,
-            label: "a phone".to_owned(),
-            kind: PairKind::Secret,
-            secret: Some(gateway.mint_pairing_secret()),
-            claim: None,
-            read: None,
-        })
-        .await
-        .expect("pairs");
+    let paired = pair_secret(
+        &phone,
+        &identity,
+        "a phone".to_owned(),
+        gateway.mint_pairing_secret(),
+    )
+    .await
+    .expect("pairs");
     (vault, gateway.client(paired.token))
 }
 
@@ -66,14 +64,24 @@ async fn a_name_whose_file_is_gone_reads_missing_and_a_put_brings_it_back() {
     let missing = client.exists(&vault, &[kept, lost]).await.expect("answers");
     assert_eq!(missing, vec![lost], "a name with no bytes is not held");
 
-    // A PUT BRINGS IT BACK, under the sealing the phone has now.
+    // A PUT BRINGS IT BACK — with the bytes the row records (#1191, R3). A
+    // sealing the phone makes afresh has another digest, and a gateway that
+    // took any bytes over a name it holds a row for would let a writer token
+    // swap garbage in: it is NAME_TAKEN, and nothing changes.
     let again = sealed("lost, sealed again");
     let answer = client
         .put(&vault, &lost, &Digest::of(&again), again.clone())
         .await
         .expect("answers");
+    assert!(matches!(answer, Put::NameTaken { .. }), "{answer:?}");
+    assert!(!file.exists(), "and no file was written");
+    let original = sealed("lost");
+    let answer = client
+        .put(&vault, &lost, &Digest::of(&original), original.clone())
+        .await
+        .expect("answers");
     assert!(matches!(answer, Put::Stored(_)), "{answer:?}");
-    assert_eq!(std::fs::read(&file).expect("the bytes are back"), again);
+    assert_eq!(std::fs::read(&file).expect("the bytes are back"), original);
     assert!(
         client
             .exists(&vault, &[lost])

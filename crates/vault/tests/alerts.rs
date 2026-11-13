@@ -163,7 +163,7 @@ fn a_snooze_is_the_tasks_one_row_and_the_due_stays() {
         .vault
         .read(|c| Ok(c.query_row("SELECT due FROM task WHERE id = ?1", [&id], |r| r.get(0))?))
         .expect("due");
-    assert_eq!(due, "2026-03-01T09:00:00Z", "the due is never moved");
+    assert_eq!(due, "2026-03-01T09:00:00.000Z", "the due is never moved");
     // Ending it by hand puts the reminder back.
     w.ok("task.edit", json!({ "id": id, "snoozed_until": null }));
     assert_eq!(w.rows()[0].fire_key, "2026-03-01T08:45:00.000Z");

@@ -7,7 +7,7 @@
   },
   "scanFloorRows": 1000,
   "pages": {
-    "allowed": 6,
+    "allowed": 4,
     "entries": [
       {
         "home": "docs.folders",
@@ -22,31 +22,18 @@
         "reason": "kind = 'workout_kind': a few dozen kinds, sorted by id"
       },
       {
-        "home": "locker.phone.trashed",
-        "reason": "the Locker trash: a row leaves it at purge_at, so what is sorted is the trash and not the kind"
-      },
-      {
-        "home": "money.links.transfer",
-        "reason": "linked transfers only (the partial index txn_by_transfer): two rows per transfer the member recorded, tens a year"
-      },
-      {
         "home": "money.transactions.trashed",
         "reason": "the trash: a row leaves it at purge_at, so what is sorted is the trash and not the ledger"
       }
     ]
   },
   "statements": {
-    "allowed": 5,
+    "allowed": 4,
     "entries": [
       {
         "home": "crates/vault/src/backup/files.rs",
         "statement": "SELECT b.hash, b.size, (SELECT variant FROM derivative",
         "reason": "the backup pass lists every content item once: O(N) by definition and off the request path"
-      },
-      {
-        "home": "crates/vault/src/backup/naming.rs",
-        "statement": "SELECT hash, size FROM blob ORDER BY hash",
-        "reason": "the backup pass names every blob, in the primary key's order"
       },
       {
         "home": "crates/vault/src/index.rs",

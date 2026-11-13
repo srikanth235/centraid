@@ -245,6 +245,12 @@ pub type Shape = fn(&CommandCtx<'_, '_>, &mut Map<String, Json>) -> std::result:
 /// See [`SystemMap::settle`].
 pub type Settle = fn(&CommandCtx<'_, '_>, &str) -> Result<()>;
 
+/// The name a system gives a record: `stated.title`, kept in a column of its own so a read of it
+/// parses no JSON.
+fn stated_title(stated: &Json) -> Option<&str> {
+    stated.get("title").and_then(Json::as_str)
+}
+
 fn as_stated(_: &CommandCtx<'_, '_>, _: &mut Map<String, Json>) -> std::result::Result<(), String> {
     Ok(())
 }
@@ -452,8 +458,6 @@ pub const SYSTEMS: &[SystemMap] = &[
             "zone",
             "rule",
             "busy",
-            // The alerts, minutes before, as the event's own JSON ([`event::shape`]).
-            "reminders",
         ],
         fixed: &[],
         children: &[
@@ -469,6 +473,16 @@ pub const SYSTEMS: &[SystemMap] = &[
             },
             // The guests the phone states: a guest whose email is a person's is that person's
             // `attendee` edge; the rest stay in the statement and are read from it.
+            // The alerts, minutes before, judged whole ([`event::shape`] states them as an array).
+            Child {
+                name: "reminders",
+                read: event::reminders_read,
+                canon: event::reminders_canon,
+                merge: event::reminders_merge,
+                items: None,
+                take: event::reminders_take,
+                stamp: None,
+            },
             Child {
                 name: "attendees",
                 read: event::attendees_read,
@@ -773,8 +787,8 @@ fn upsert_origin(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<OriginRow>
                 // A cursor is the word of the install that wrote it: an origin another install takes
                 // over (`device_id` changes) keeps none of the last one's (#1183).
                 "UPDATE origin SET label = ?2, fills = COALESCE(?4, fills),
-                        config = CASE WHEN device_id IS ?3 THEN COALESCE(?5, config)
-                                      ELSE json_remove(COALESCE(?5, config), '$.cursor') END,
+                        config = COALESCE(?5, config),
+                        cursor = CASE WHEN device_id IS ?3 THEN cursor END,
                         device_id = ?3, retired_at = NULL
                   WHERE id = ?1",
                 rusqlite::params![id, label, device, fills, config],
@@ -806,10 +820,10 @@ fn upsert_origin(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<OriginRow>
     };
     let (mut fills, device) = read()?;
     if let Some(founds) = map.founds {
-        let color = origin
-            .get("color")
-            .and_then(Json::as_str)
-            .filter(|color| !color.trim().is_empty());
+        let color = origin.get("color").and_then(Json::as_str).filter(|color| {
+            container::LIST_COLORS.contains(color)
+                || container::PHONE_CALENDAR_COLORS.contains(color)
+        });
         let made = founds(
             ctx,
             &Home {
@@ -889,6 +903,16 @@ fn records_of(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<(Vec<Record>,
         if (map.shape)(ctx, &mut fields).is_err() {
             refused.push((record.external_id, record.device_id));
             continue;
+        }
+        // An instant is held in the clock's one form whatever the phone spelled, so what the
+        // row holds and what the source stated stay equal (an event's times are settled by
+        // its shape).
+        if map.kind != Kind::Event {
+            for name in ["due", "done_at", "starts", "ends", "taken_at"] {
+                if let Some(Json::String(text)) = fields.get_mut(name) {
+                    *text = crate::time::temporal::canonical(text);
+                }
+            }
         }
         // What a record may state is what the vault holds, not what a phone
         // spelled: the check follows the shape.
@@ -1089,10 +1113,16 @@ fn link(
             context: "a source never names the vault's owner".to_owned(),
         });
     }
+    let stated = Json::Object(statement_fields(
+        ctx.connection(),
+        map,
+        None,
+        &record.fields,
+    )?);
     ctx.connection().execute(
         "INSERT INTO source (id, origin_id, system, external_id, device_id, entity_id, entity_kind,
-                             stated, seen_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                             stated, stated_title, seen_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         rusqlite::params![
             ctx.next_id(),
             origin.id,
@@ -1101,13 +1131,8 @@ fn link(
             record.device_id,
             entity_id,
             map.kind.as_str(),
-            Json::Object(statement_fields(
-                ctx.connection(),
-                map,
-                None,
-                &record.fields
-            )?)
-            .to_string(),
+            stated.to_string(),
+            stated_title(&stated),
             ctx.now
         ],
     )?;
@@ -1456,13 +1481,15 @@ fn merge_record(
             // The row this record is was purged: the tombstone now answers to
             // this phone's id, and the row stays purged.
             connection.execute(
-                "UPDATE source SET external_id = ?2, device_id = ?3, stated = ?4, seen_at = ?5
+                "UPDATE source SET external_id = ?2, device_id = ?3, stated = ?4, stated_title = ?5,
+                        seen_at = ?6
                   WHERE id = ?1",
                 rusqlite::params![
                     tombstone,
                     record.external_id,
                     record.device_id,
                     Json::Object(record.fields.clone()).to_string(),
+                    record.fields.get("title").and_then(Json::as_str),
                     ctx.now
                 ],
             )?;
@@ -1528,8 +1555,14 @@ fn merge_record(
     let statement = Json::Object(statement);
     if statement != stated || gone_at.is_some() {
         connection.execute(
-            "UPDATE source SET stated = ?2, seen_at = ?3, gone_at = NULL WHERE id = ?1",
-            rusqlite::params![source_id, statement.to_string(), ctx.now],
+            "UPDATE source SET stated = ?2, stated_title = ?3, seen_at = ?4, gone_at = NULL
+              WHERE id = ?1",
+            rusqlite::params![
+                source_id,
+                statement.to_string(),
+                stated_title(&statement),
+                ctx.now
+            ],
         )?;
     } else {
         spoke_of(ctx, map, &source_id)?;
@@ -1950,7 +1983,7 @@ fn stop(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         return Ok(serde_json::json!({ "stopped": false, "forgotten": 0 }));
     };
     connection.execute(
-        "UPDATE origin SET retired_at = ?2, config = json_remove(COALESCE(config, '{}'), '$.cursor')
+        "UPDATE origin SET retired_at = ?2, cursor = NULL
           WHERE id = ?1",
         rusqlite::params![origin, ctx.now],
     )?;

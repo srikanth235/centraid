@@ -170,7 +170,7 @@ pub fn kept_event(
     if draft.reminder_key != base.reminder_key
         || draft.second_reminder_key != base.second_reminder_key
     {
-        kept.push(("event.reminders".to_owned(), alerts_of(draft).into()));
+        kept.push(("reminder".to_owned(), alerts_of(draft).into()));
     }
     if guests_changed(draft, base) {
         let mut everyone = owner_ids.to_vec();

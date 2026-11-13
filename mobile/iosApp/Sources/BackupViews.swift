@@ -326,10 +326,18 @@ struct BackupHomeView: View {
                     if !row.held.isEmpty { sentence(row.held) }
                     if !row.backedUp.isEmpty { sentence(row.backedUp) }
                     if !row.detail.isEmpty { sentence(row.detail) }
+                    ForEach(Array(row.notes.enumerated()), id: \.offset) { _, note in sentence(note) }
                 }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(row.accessibilityLabel.isEmpty ? row.label : row.accessibilityLabel)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                // UNDO, only while this phone has deletes held there (#1191).
+                if !row.undoLabel.isEmpty {
+                    KitLink(label: row.undoLabel, dense: true, identifier: "backup-undo-\(row.gatewayID)") {
+                        send(event { $0.undoHeld = .with { $0.gatewayID = row.gatewayID } })
+                    }
+                    .accessibilityLabel("\(row.undoLabel) \(row.label)")
+                }
                 // FORGET IS PLAIN AND VISIBLE, and needs no confirmation: it forgets this phone's
                 // pairing and nothing the backup device holds, and pairing again undoes it.
                 if !model.forgetLabel.isEmpty {
@@ -489,6 +497,12 @@ struct BackupHomeView: View {
                                         .kitType(.meta)
                                         .foregroundStyle(model.checkWarning ? StateColor.amber.text : Surface.meta)
                                         .accessibilityIdentifier("backup-check-status")
+                                }
+                                if !model.checkRate.isEmpty {
+                                    Text(model.checkRate)
+                                        .kitType(.meta)
+                                        .foregroundStyle(Surface.meta)
+                                        .accessibilityIdentifier("backup-check-rate")
                                 }
                             }
                             Spacer(minLength: 0)

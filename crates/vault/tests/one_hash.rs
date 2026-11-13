@@ -128,6 +128,47 @@ const SHA256_ALLOWED: &[(&str, &str)] = &[
          reason as `assist/src/record.rs`",
     ),
     (
+        "assist/src/adapter.rs",
+        "an adapter names the SHA-256 of the base model file it was trained against \
+         (`base_sha256`) and its own published digest, and both are compared with the \
+         record's; same reason as `assist/src/record.rs`. It hashes nothing inside a vault",
+    ),
+    (
+        "assist/src/host.rs",
+        "its tests build a model record and an adapter, whose digests are the published \
+         files' SHA-256; same reason as `assist/src/record.rs`",
+    ),
+    (
+        "assist-eval/src/report.rs",
+        "an evaluation report states which model and adapter files it scored by their \
+         published SHA-256; same reason as `assist/src/record.rs`",
+    ),
+    (
+        "assist-eval/src/bin/assist-eval.rs",
+        "computes the SHA-256 of the model and adapter files it scores, for the report; \
+         same reason as `assist/src/record.rs`. It hashes nothing inside a vault",
+    ),
+    (
+        "core/tests/assist_adapter_switch.rs",
+        "tests the adapter switch with a model record and an adapter, whose digests are \
+         the published files' SHA-256; same reason as `assist/src/record.rs`",
+    ),
+    (
+        "screens/tests/chat_model.rs",
+        "tests the chat's model download, whose digest is the published file's SHA-256; \
+         same reason as `screens/src/chat/asset.rs`",
+    ),
+    (
+        "screens/tests/chat_adapter_reload.rs",
+        "tests the chat reloading an adapter, whose digests are the published files' \
+         SHA-256; same reason as `assist/src/record.rs`",
+    ),
+    (
+        "xtask/src/dev_paths.rs",
+        "names the environment variable a developer sets to the published SHA-256 of a \
+         local model file; same reason as `assist/src/record.rs`",
+    ),
+    (
         "xtask/src/main.rs",
         "documents the `model-pin` command, which writes the published model file's \
          SHA-256 (the digest its publisher states) into the record; same reason as \

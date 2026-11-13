@@ -86,7 +86,16 @@ Test: `a_configuration_defaults_to_founding_and_an_explicit_choice_wins` (`src/m
 
 `seed` is the **64-byte BIP-39 seed** the 24 words derive (`centraid_identity::phrase::Seed`), and `index` is the derivation index this vault was minted at. Together they derive every key the backup plane uses ([#1080](https://github.com/srikanth235/centraid/issues/1080)): the backup keys every part is sealed and named under (`K_backup` and `K_name`, from the vault's root key), and the vault's identity key, which signs a claim. Sealing, naming and claiming are impossible without them.
 
-_Why the shell holds it and this library does not:_ a secret belongs in the platform's secure store, and this one most of all. The scrypt-wrapped recovery kit was deleted under [#1029](https://github.com/srikanth235/centraid/issues/1029) §5 with one sentence — "a file that carries keys is a file that can be copied" — and a core that invented a key file beside the vault it protects would put the one unrecoverable secret in a place no shell asked for and no backup excludes. It belongs in the iOS Keychain or the Android Keystore, and it is borrowed for the length of `centraid_open` like every other input (clause 2). The backup ledger beside the vault (`<stem>.backup.db`) holds gateway tokens and pinned certificates, never a key.
+_Why the shell holds it and this library does not:_ a secret belongs in the platform's secure store, and this one most of all. The scrypt-wrapped recovery kit was deleted under [#1029](https://github.com/srikanth235/centraid/issues/1029) §5 with one sentence — "a file that carries keys is a file that can be copied" — and a core that invented a key file beside the vault it protects would put the one unrecoverable secret in a place no shell asked for and no backup excludes. It belongs in the iOS Keychain or the Android Keystore, and it is borrowed for the length of `centraid_open` like every other input (clause 2). The backup ledger beside the vault (`<stem>.backup.db`) holds pinned certificates and gateway rows, never a key and never a token.
+
+**A gateway token crosses the same way, through the device secret store, and the core writes it nowhere** (#1191 B15, `contracts/backup/decisions.md` E12). There is no open-configuration key for it: the core asks the shell through `SecretBatch` (store `DEVICE` only, never `SYNCED`), under the key `gateway-token.<vault_id hex>.<gateway_id hex>`, value the token as 64 lowercase hex characters (the vault id is 64 hex, the gateway id 32), never empty (an empty set deletes).
+
+- **Open:** one `OP_LIST` with the prefix `gateway-token.<vault_id hex>.`; the tokens live in memory only. A gateway row with no entry (or a refused list) is `pair_again`; a listed key with no row is deleted.
+- **Pair, claim, takeover, restore:** `OP_SET` with the minted token; the `gateway` row is written only after the answer is `ok`.
+- **Forget a gateway:** `OP_DELETE` of its key. **Forget a vault:** delete every key with the vault's prefix.
+- iOS keeps it as a Keychain generic password, `AfterFirstUnlockThisDeviceOnly`, not synchronizable. Android seals it under a non-exportable Keystore key in preferences Auto Backup and device transfer exclude.
+
+Tests: `BackupTokenStoreTests` (iOS), `BackupTokenStoreSpec` (Android).
 
 **Absent is not an error.** A core opened without it reads and writes its vault perfectly well and refuses every door that seals, names or signs — `drain`, `handoff`, `settle`, `reconcile`, `fetch_original`, `releasable` — with `ERROR_CODE_PEER_UNREACHABLE` and a sentence naming the seed, and `pair_phone` too. That is a state a shell draws ("unlock to back up"), because a member who has not unlocked their phone has not lost anything.
 
@@ -151,6 +160,8 @@ _Why this is a clause:_ a page read is one table, and Agenda's `upcoming` joins 
 
 **A denial is an answer and never an `Error`**: `denied` is an arm of `AppQueryResponse`, because a screen draws the ask. What a read cannot answer at all is the `Error` body: a search `limit` of zero is `BAD_ARGUMENT` with `ERROR_CODE_INVALID_REQUEST` (clause 4's rule for a page with no limit), as is a `tz` the bundled zone database does not know or an empty one on a vault whose settings name none — never an answer in UTC — and a read that reaches its own stated ceiling is `OK` with `ERROR_CODE_READ_BOUND_REACHED` — never a short answer that reads as a whole one.
 
+**A damaged vault is its own code** (#1191): SQLite calling a page malformed, a file that is no database, or `PRAGMA quick_check` at open failing is `VaultError::Damaged` and `ERROR_CODE_VAULT_DAMAGED` (27), never `INTERNAL`. The vault is not opened, written to or backed up; the way back is a restore. Until the Backup screens have their own words for it (lane B), the shell shows the generic sentence.
+
 Test: `the_app_queries_round_trip_through_call` (and, below the ABI, `crates/core/src/app_query.rs`)
 
 ## 4f. The 24 words are a request kind, and need no vault
@@ -160,6 +171,8 @@ Test: `the_app_queries_round_trip_through_call` (and, below the ABI, `crates/cor
 `seed` over words that are not a phrase is `BAD_ARGUMENT` with an `ERROR_CODE_INVALID_REQUEST` body whose detail names a count or bip39's own reason, **never a word**; `phrase` is not a command and writes no receipt. The words and the seed cross only between this library and its own shell on the same device, to be shown once and to be stored in the synchronised secure store (clause 4b).
 
 Test: `the_words_are_minted_judged_and_seeded_over_a_core_with_no_vault` (and, below the ABI, `crates/core/src/phone/phrase.rs`)
+
+**A restore over a vault that failed to open as damaged** (#1191, decision 35). After `centraid_open` answers `VAULT_DAMAGED` (-6) a shell may open the same path again with the additive key `"restoreDamaged": true` (an older core ignores it, clause 4a). The handle it gets holds **no vault**: it neither opens nor reads the file at `path`, which stays byte-for-byte untouched. On that handle the existing `restore` request (the words and a gateway's pairing code) runs unchanged, with one difference: it replaces **only that vault's file** (`<shelf>/<id>/vault.db`), by an atomic rename, and only after that vault's snapshot was fetched and checked; a healthy vault the phone holds is never touched. A restore that is cancelled or fails leaves the damaged file as it was, so the next launch answers `VAULT_DAMAGED` again and the same screen. There is no second shelf directory. Tests: `a_damaged_vault_is_restored_over_through_a_handle_that_holds_no_vault` and `a_restore_that_dies_before_its_claim_leaves_the_damaged_file_as_it_was` (`crates/core/tests/restore_damaged.rs`), and `restore_damaged_opens_no_vault_at_the_path` (`src/marshal.rs`).
 
 ## 4g. The backup plane's doors beside the pass are request kinds
 
@@ -247,6 +260,8 @@ _Why:_ unwinding into C is undefined behaviour. And the poison is not belt-and-b
 The **first** panic is the one filed. A later one is a symptom of running on poisoned state, and overwriting would lose the cause.
 
 A panic in `centraid_open` returns `PANICKED` and hands back **no handle**: there is nothing to poison, and a handle the caller never received cannot be restarted.
+
+**A damaged vault is its own status.** `centraid_open` returns `VAULT_DAMAGED` (-6) when the vault file fails its quick check or has a page SQLite cannot read, writes no handle and leaves the file untouched, so a shell can offer a restore instead of dead-ending on `BAD_ARGUMENT` (-1). Only `open` returns it; `call` carries the same fact as `ERROR_CODE_VAULT_DAMAGED`. The table grew by one code at the end and every other code keeps its value. Test: `a_damaged_vault_at_open_is_vault_damaged_through_the_abi`.
 
 **The fault door.** A shell that cannot make this library panic cannot test its own handling of it. The `debug-fault` cargo feature makes an `act` on app `debug`, action `panic` (`DEBUG_FAULT_APP`, `DEBUG_FAULT_ACTION`) panic inside `Handle::call`; it rides an existing request rather than a sixth symbol, because clause 10 says five symbols and means it, and a shell that needed a sixth to test the fifth would have a sixth in production. It is absent from every release profile, exports nothing, and a default build answers that act as one on an app it does not carry ([#1020](https://github.com/srikanth235/centraid/issues/1020) wave 3, lane E finding 4).
 

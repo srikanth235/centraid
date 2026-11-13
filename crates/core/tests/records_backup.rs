@@ -46,20 +46,11 @@ fn calendar_and_owner(phone: &Handle) -> (String, String) {
 }
 
 /// The manifest of the head this phone set at its gateway.
-fn head_manifest(path: &Path) -> (Name, Manifest) {
-    let book = ledger(path);
-    let id = book.destinations().expect("reads")[0].gateway_id.clone();
-    let head = book.head(&id).expect("reads").expect("a head");
-    let taken = book
-        .snapshots()
-        .expect("reads")
-        .into_iter()
-        .find(|snapshot| snapshot.name == head)
-        .expect("this phone took its head");
-    (
-        head,
-        Manifest::from_json(taken.manifest_json.as_bytes()).expect("a manifest"),
-    )
+fn head_manifest(path: &Path, gateway: &Gateway) -> (Name, Manifest) {
+    let book = state(path);
+    let id = book.gateways().expect("reads")[0].gateway_id.clone();
+    let head = head_of(path, &id);
+    (head, manifest_at(gateway, &head))
 }
 
 /// **EVERY APP'S RECORDS COME BACK ROW FOR ROW** (#1080, S1). Notes, tasks,
@@ -240,7 +231,7 @@ fn records_written_after_the_last_snapshot_wait_for_the_next() {
             })
             .expect("counts")
     };
-    let headed = |path: &Path| head_manifest(path).1.census.get("note").copied();
+    let headed = |path: &Path| head_manifest(path, &gateway).1.census.get("note").copied();
     run(
         &phone,
         "note.create",
@@ -289,19 +280,11 @@ fn records_written_after_the_last_snapshot_wait_for_the_next() {
         &json!({ "title": "Third", "body": "an hour later", "format": "plain" }),
         "third",
     );
-    let book = ledger(&path);
-    for snapshot in book.snapshots().expect("reads") {
-        book.forget_snapshot(&snapshot.name).expect("forgets");
-        book.record_snapshot(
-            &snapshot.name,
-            snapshot.taken_at_ms - 3_700_000,
-            &snapshot.manifest_json,
-        )
-        .expect("an hour passes");
-        if let Some(acked) = snapshot.acked_ms {
-            book.ack_snapshot(&snapshot.name, acked)
-                .expect("acknowledged");
-        }
+    let book = state(&path);
+    for mut row in book.gateways().expect("reads") {
+        row.head_ms = row.head_ms.map(|at| at - 3_700_000);
+        row.snapshot_ms = row.snapshot_ms.map(|at| at - 3_700_000);
+        book.put_gateway(&row).expect("an hour passes");
     }
     let hourly = drain(&phone, quietly());
     assert!(
@@ -324,7 +307,7 @@ fn a_snapshot_asked_for_while_the_gateway_sleeps_is_taken_when_it_wakes() {
     let path = dir.path().join("vault.db");
     let phone = phone(dir.path());
     pair(&phone, &gateway);
-    let headed = |path: &Path| head_manifest(path).1.census.get("note").copied();
+    let headed = |path: &Path, gw: &Gateway| head_manifest(path, gw).1.census.get("note").copied();
     run(
         &phone,
         "note.create",
@@ -332,7 +315,7 @@ fn a_snapshot_asked_for_while_the_gateway_sleeps_is_taken_when_it_wakes() {
         "first",
     );
     drain(&phone, at_home());
-    assert_eq!(headed(&path), Some(1));
+    assert_eq!(headed(&path, &gateway), Some(1));
 
     // A NOTE, THEN THE APP LEAVES THE SCREEN WITH THE LAPTOP ASLEEP.
     run(
@@ -348,17 +331,17 @@ fn a_snapshot_asked_for_while_the_gateway_sleeps_is_taken_when_it_wakes() {
         wire::DrainStop::Unreachable as i32,
         "{away:?}"
     );
-    assert_eq!(headed(&path), Some(1));
+    assert_eq!(headed(&path, &gateway), Some(1));
 
     // AWAKE: THE WORKER'S PASS, WHICH ASKS FOR NO SNAPSHOT, TAKES THE OWED ONE.
-    let _awake = gateway.restart();
+    let awake = gateway.restart();
     let window = drain(&phone, quietly());
     assert!(
         window.acked_at_ms.is_some(),
         "the owed snapshot: {window:?}"
     );
     assert_eq!(
-        headed(&path),
+        headed(&path, &awake),
         Some(2),
         "a restore now brings back both notes"
     );
@@ -462,42 +445,36 @@ fn what_is_in_the_wal_is_in_the_snapshot() {
 /// through the plane exactly as a pass does — and no `settle`.
 fn moved_and_not_settled(phone: &Handle, path: &Path) -> Name {
     let keyring = keys();
-    let book = ledger(path);
-    let destination = book.destinations().expect("reads").remove(0);
+    let book = state(path);
+    let destination = book.gateways().expect("reads").remove(0);
+    let token = phone.plane().tokens()[&destination.gateway_id];
     let runtime = runtime();
-    let store = centraid_core::phone::link::GatewayStore::for_destination(
+    let store = centraid_core::phone::link::GatewayStore::for_gateway(
         &destination,
-        keyring.vault_id(),
+        token,
+        keyring.vault.identity.signing(),
         runtime.handle(),
     )
     .expect("a store");
-    let scratch = path.with_extension("scratch");
-    let copied = phone
-        .with_vault(|vault| {
-            Ok(centraid_vault::backup::snapshot::copy(vault, &scratch).expect("copies"))
-        })
-        .expect("the vault");
-    let taken = centraid_vault::backup::snapshot::describe(
-        &copied,
-        &keyring.backup,
-        &keyring.vault_hex(),
-        "a pass the phone did not live to finish",
-    )
-    .expect("describes");
-    let planned = centraid_vault::backup::snapshot::plan(&taken, &store).expect("plans");
-    centraid_vault::backup::snapshot::confirm_held(
-        &taken,
-        &planned,
-        &book,
-        &destination.gateway_id,
-        1,
-    )
-    .expect("confirms");
     let spool = centraid_vault::backup::spool::Spool::open(path.with_extension("spool"))
         .expect("the spool");
+    let taken = phone
+        .with_vault(|vault| {
+            Ok(centraid_vault::backup::snapshot::take(
+                vault,
+                &keyring.backup,
+                &spool,
+                u64::MAX,
+                &keyring.vault_hex(),
+                "a pass the phone did not live to finish",
+            )
+            .expect("takes"))
+        })
+        .expect("the vault");
+    let planned = centraid_vault::backup::snapshot::plan(&taken, &store).expect("plans");
     centraid_vault::backup::snapshot::spool(
         &taken,
-        &planned,
+        &[(destination.gateway_id.clone(), planned)],
         &spool,
         &book,
         &keyring.backup,
@@ -514,7 +491,6 @@ fn moved_and_not_settled(phone: &Handle, path: &Path) -> Name {
     )
     .expect("moves");
     assert_eq!(moved.stopped, centraid_vault::backup::mover::Stop::Empty);
-    let _ = std::fs::remove_dir_all(&scratch);
     taken.manifest_name
 }
 
@@ -536,7 +512,7 @@ fn a_snapshot_cut_short_before_its_head_is_finished_by_the_next_pass() {
         "headed",
     );
     drain(&phone, at_home());
-    let (previous, previous_manifest) = head_manifest(&path);
+    let (previous, previous_manifest) = head_manifest(&path, &gateway);
     run(
         &phone,
         "note.create",
@@ -558,11 +534,11 @@ fn a_snapshot_cut_short_before_its_head_is_finished_by_the_next_pass() {
         "the cut snapshot is finished: {drained:?}"
     );
     assert_eq!(gateway.writer(&vault_id()).1, Some(cut), "and is the head");
-    let (_, manifest) = head_manifest(&path);
+    let (_, manifest) = head_manifest(&path, &gateway);
     let held = gateway.held(&vault_id());
     let superseded: Vec<Name> = previous_manifest
-        .range_names()
-        .difference(&manifest.range_names())
+        .part_names()
+        .difference(&manifest.part_names())
         .filter(|name| held.contains(name))
         .copied()
         .collect();
@@ -637,8 +613,8 @@ fn many_snapshots_keep_the_gateway_bounded() {
         let drained = drain(&phone, at_home());
         assert!(drained.acked_at_ms.is_some(), "round {round}: {drained:?}");
     }
-    let (head, manifest) = head_manifest(&path);
-    let mut kept = manifest.range_names();
+    let (head, manifest) = head_manifest(&path, &gateway);
+    let mut kept = manifest.part_names();
     kept.insert(head);
     let held = gateway.held(&vault_id());
     let extra: Vec<&Name> = held.difference(&kept).collect();
@@ -651,11 +627,16 @@ fn many_snapshots_keep_the_gateway_bounded() {
     assert!(objects > held.len(), "what was dropped is tombstoned");
 
     // PAST THE GRACE, THE PURGE TAKES THE BYTES.
-    gateway.spawned.advance_clock(8 * 24 * 60 * 60 * 1000);
-    let purged = gateway
-        .runtime
-        .block_on(gateway.spawned.purge_now())
-        .expect("purges");
+    // A HOLD COUNTS ONLY THE TIME THE GATEWAY WAS WATCHING (#1191, E14): the clock moves an
+    // hour at a time and the sweep runs after each, as a running gateway's does.
+    let mut purged = 0_u64;
+    for _ in 0..(8 * 24) {
+        gateway.spawned.advance_clock(60 * 60 * 1000);
+        purged += gateway
+            .runtime
+            .block_on(gateway.spawned.purge_now())
+            .expect("purges");
+    }
     assert_eq!(purged as usize, objects - held.len());
     assert_eq!(gateway.objects(&vault_id()).len(), held.len());
     let new_dir = tempfile::tempdir().expect("a directory");
@@ -751,4 +732,128 @@ fn a_file_is_backed_up_once_its_bytes_and_its_row_are() {
         1,
         "the still is offered now"
     );
+}
+
+/// **AN UNDO IS NOT UNDONE BY THE NEXT RETENTION PASS** (#1191, E6; B16). Each head on a day
+/// drops the one before it, and the gateway holds those deletes for a week. The status names the
+/// holds; the member's Undo lifts them, signed by the vault key; and the next snapshots, whose
+/// retention would drop the same ones, do not sign a delete for a name the Undo restored.
+#[test]
+fn an_undo_lifts_the_holds_and_the_next_retention_pass_does_not_delete_them_again() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    let id = pair(&phone, &gateway)
+        .destination
+        .expect("a destination")
+        .gateway_id;
+    for round in 0..4 {
+        run(
+            &phone,
+            "note.create",
+            &json!({ "title": format!("Round {round}"), "body": "x".repeat(4_000), "format": "plain" }),
+            &format!("round-{round}"),
+        );
+        let drained = drain(&phone, at_home());
+        assert!(drained.acked_at_ms.is_some(), "round {round}: {drained:?}");
+    }
+    // A PASS LEARNS WHAT THE GATEWAY IS HOLDING, and the status carries it.
+    drain(&phone, quietly());
+    let held_names = || -> std::collections::BTreeSet<Name> {
+        gateway
+            .objects(&vault_id())
+            .iter()
+            .filter(|record| record.hold.is_some())
+            .map(|record| Name::from_bytes(*record.name.as_bytes()))
+            .collect()
+    };
+    let before = held_names();
+    assert!(!before.is_empty(), "retention dropped snapshots");
+    let backed = status(&phone);
+    let row = backed
+        .destinations
+        .iter()
+        .find(|row| row.gateway_id == id)
+        .expect("paired");
+    assert_eq!(row.held_count as usize, before.len(), "{row:?}");
+    assert_eq!(row.held_undoable, row.held_count);
+    assert!(row.held_purge_at_ms > 0, "{row:?}");
+
+    // THE MEMBER'S UNDO.
+    let wire::response::Kind::UndoHeld(undone) = ask(
+        &phone,
+        wire::request::Kind::UndoHeld(wire::UndoHeldRequest {
+            gateway_id: id.clone(),
+        }),
+    ) else {
+        panic!("an undo answers");
+    };
+    assert_eq!(undone.restored as usize, before.len());
+    assert!(held_names().is_empty(), "nothing is held now");
+
+    // THE NEXT SNAPSHOTS' RETENTION WOULD DROP THE SAME ONES AGAIN: it does not.
+    for round in 4..6 {
+        run(
+            &phone,
+            "note.create",
+            &json!({ "title": format!("Round {round}"), "body": "x".repeat(4_000), "format": "plain" }),
+            &format!("round-{round}"),
+        );
+        drain(&phone, at_home());
+    }
+    let after = held_names();
+    assert!(
+        after.is_disjoint(&before),
+        "a name the Undo restored is not held again: {:?}",
+        after.intersection(&before).collect::<Vec<_>>()
+    );
+}
+
+/// **THE MANIFEST IS A TREE (E9, B9).** Every leaf the head's root lists is held, and a snapshot
+/// after one small write adds one new root, at most one new leaf (a founded vault is one leaf),
+/// and the ranges that changed: no leaf is sent twice and the chunk digests ride the leaf.
+#[test]
+fn the_head_is_a_root_and_leaves_and_a_write_adds_one_root_and_one_leaf() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = phone(dir.path());
+    pair(&phone, &gateway);
+    run(
+        &phone,
+        "note.create",
+        &json!({ "title": "One", "body": "first", "format": "plain" }),
+        "one",
+    );
+    drain(&phone, at_home());
+    let (head, first) = head_manifest(&path, &gateway);
+    let held = gateway.held(&vault_id());
+    assert!(!first.leaf_names().is_empty());
+    for leaf in first.leaf_names() {
+        assert!(held.contains(&leaf), "the gateway holds {leaf}");
+    }
+    assert!(
+        first.ranges.iter().all(|range| range.d.len() == 1),
+        "every range carries its chunk digest"
+    );
+    run(
+        &phone,
+        "note.create",
+        &json!({ "title": "Two", "body": "second", "format": "plain" }),
+        "two",
+    );
+    drain(&phone, at_home());
+    let (next, second) = head_manifest(&path, &gateway);
+    assert_ne!(head, next);
+    let now = gateway.held(&vault_id());
+    let new_leaves = second
+        .leaf_names()
+        .into_iter()
+        .filter(|leaf| !held.contains(leaf))
+        .count();
+    assert!(
+        new_leaves <= first.leaf_names().len(),
+        "one write rewrites at most the leaves it touches: {new_leaves}"
+    );
+    assert!(now.contains(&next));
 }

@@ -10,25 +10,22 @@
 use centraid_gateway::client::{Client, ClientError};
 use centraid_gateway::rules::Refusal;
 use centraid_gateway::rules::ids::{Digest, Name, Token, VaultId};
-use centraid_gateway::rules::wire::{PairKind, PairRequest};
+
+use centraid_gateway::server::harness::pair_secret;
 use centraid_gateway::server::harness::{Spawned, spawn};
 use centraid_gateway::server::report;
 
 async fn paired(gateway: &Spawned, seed: u8) -> (VaultId, Client, Token) {
     let identity = ed25519_dalek::SigningKey::from_bytes(&[seed; 32]);
     let vault = VaultId::from_bytes(identity.verifying_key().to_bytes());
-    let paired = gateway
-        .first_contact()
-        .pair(&PairRequest {
-            vault_id: vault,
-            label: "a phone".to_owned(),
-            kind: PairKind::Secret,
-            secret: Some(gateway.mint_pairing_secret()),
-            claim: None,
-            read: None,
-        })
-        .await
-        .expect("pairs");
+    let paired = pair_secret(
+        &gateway.first_contact(),
+        &identity,
+        "a phone".to_owned(),
+        gateway.mint_pairing_secret(),
+    )
+    .await
+    .expect("pairs");
     (vault, gateway.client(paired.token), paired.token)
 }
 
@@ -127,4 +124,37 @@ async fn the_operator_revokes_a_lost_phone_by_the_id_pairings_prints() {
     kept.objects(&other, None, 10)
         .await
         .expect("another vault's phone is untouched");
+}
+
+/// A TOKEN REVOKED ON PURPOSE IS UNAUTHORIZED, NOT MOVED (#1191, E5): no claim
+/// backs it, so it leaves no tombstone and hears nothing about a takeover.
+/// Both ways to revoke: the phone's `POST revoke` and the operator's
+/// `pairings revoke`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_token_revoked_on_purpose_is_unauthorised_not_moved() {
+    let dir = tempfile::tempdir().expect("a temp dir");
+    let gateway = spawn(dir.path()).await.expect("spawned");
+    let (vault, own, _) = paired(&gateway, 6).await;
+    own.revoke(&vault).await.expect("revokes itself");
+    unauthorized(own.objects(&vault, None, 10).await, "after its own revoke");
+
+    let (other_vault, lost, token) = paired(&gateway, 7).await;
+    let hash = token.hash();
+    assert!(
+        gateway
+            .shared()
+            .rules(|rules| rules.revoke_hash(&hash))
+            .expect("revokes")
+    );
+    unauthorized(
+        lost.objects(&other_vault, None, 10).await,
+        "after the operator's revoke",
+    );
+    for vault in [vault, other_vault] {
+        let tombstones = gateway
+            .shared()
+            .rules(|rules| Ok(rules.state.revoked_count(&vault)?))
+            .expect("counts");
+        assert_eq!(tombstones, 0, "a revoke on purpose leaves no tombstone");
+    }
 }

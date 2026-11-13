@@ -1,26 +1,34 @@
-//! `datagen publish`: a built data version to a Hugging Face dataset repo, one revision per version.
+//! `datagen publish`: a built data version to two Hugging Face dataset repos, one tag per version in each.
 //!
 //! The command checks first and uploads last. [`prepare`] reads the version's manifest, re-hashes every file the manifest
 //! lists, and refuses a version that is not fit to leave the machine (a file that does not match its hash, a build from a
-//! dirty tree, a version not marked publishable, a file that holds a sealed placeholder). It lays the files out as the
-//! trainer fetches them and writes the dataset card. A dry run prints that layout and stops; it is the default.
+//! dirty tree, a version not marked publishable, a file that holds a sealed placeholder, a manifest without a contract
+//! or contract files that do not hash to it). It splits the files between the two repos and writes the cards. A dry run
+//! prints both sets and stops; it is the default.
 //!
-//! Rust does the checking, the layout, the card and the dry run, because those are what can be tested offline. The one
-//! network step, the commit to the repo, is done by `huggingface_hub` (the Hub's commit and large-file protocol is not
-//! reimplemented here): [`upload`] hands it the staged tree. The token is read from `HF_TOKEN` in the environment, passed
-//! on to that one child through its environment and nowhere else, and never printed, written or put on a command line.
+//! Rust does the checking, the layout, the cards, the plan and the dry run, because those are what can be tested
+//! offline. The network steps, a read-only listing and the commit, are done by `huggingface_hub` (the Hub's commit and
+//! large-file protocol is not reimplemented here): [`list_remote`] and [`upload`] hand it the staged trees. The token is
+//! read from `HF_TOKEN` in the environment, passed on to those children through their environment and nowhere else, and
+//! never printed, written or put on a command line.
 //!
-//! The layout (`train` and `val` apart from `test`, so a fetch of the two named files cannot pull the test split):
+//! The data repo (`--repo`, what the trainer fetches) and the held-out repo (`--heldout-repo`, evaluation only):
 //!
 //! ```text
-//! manifest.json            README.md (the dataset card)
-//! data/train.jsonl.zst     data/val.jsonl.zst     data/noise.jsonl.zst     data/train-1000.jsonl.zst ...
-//! worlds/<train and val worlds>.json               build/<reports>
-//! test/test.jsonl.zst      test/worlds/<test worlds>.json
+//! data repo                                         held-out repo
+//! README.md  manifest.json                          README.md  manifest.json (the same bytes)
+//! contract/{tools.json,system.txt,hashes.json}      test/test.jsonl.zst
+//! data/{train,val,noise}.jsonl.zst                  worlds/test/<test worlds>.json
+//! data/subsets/train-<n>.jsonl.zst                  cache/llm-cache.jsonl.zst   (names test sessions)
+//! worlds/train/*.json  worlds/val/*.json
+//! reports/<the build's text and JSON reports>
 //! ```
 //!
-//! A version never overwrites an earlier one: it is committed to a branch of its own and then tagged with its name, the
-//! tag is the revision, and a tag or branch that already exists is refused before anything is sent.
+//! Nothing of test or the cache is in the data repo's set. A version is one commit on `main` and one tag with its name in
+//! each repo, `main` always the latest version's tree; a version never overwrites an earlier one, a tag that already
+//! exists in either repo is refused before anything is sent, and the held-out repo is committed first so a data tag
+//! never exists without its held-out one. A version's tree is exactly its set: the commit also deletes every other path
+//! of `main`'s tree ([`plan`]), except the repo's plumbing, [`KEPT`].
 
 use std::fmt::Write as _;
 use std::io::Read;
@@ -30,11 +38,27 @@ use std::process::{Command, Stdio};
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
+use crate::contract::{self, Contract};
+use crate::version;
+
 /// The environment variable the token is read from.
 pub const TOKEN_ENV: &str = "HF_TOKEN";
 
-/// The repo the owner named for this project's data; the example in `--help` and the runbook.
-pub const EXAMPLE_REPO: &str = "srikanth235/centraid-native-data";
+/// The data repo the owner named: what the trainer fetches; the example in `--help` and the runbook.
+pub const DATA_REPO: &str = "srikanth235/centraid-assist-data";
+
+/// The held-out repo the owner named: the test split, its worlds and the LLM cache. Evaluation only.
+pub const HELDOUT_REPO: &str = "srikanth235/centraid-assist-heldout";
+
+/// The data repo, as the examples name it.
+pub const EXAMPLE_REPO: &str = DATA_REPO;
+
+/// Which of the two repos a file goes to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Repo {
+    Data,
+    Heldout,
+}
 
 /// What a staged file is made of.
 #[derive(Debug, Clone)]
@@ -43,35 +67,64 @@ pub enum Source {
     Text(String),
 }
 
-/// One file of the upload: where it goes, what it is and its size and hash.
+/// One file of the upload: which repo and where it goes, what it is and its size and hash.
 #[derive(Debug, Clone)]
 pub struct Staged {
+    pub repo: Repo,
     pub remote: String,
     pub source: Source,
     pub bytes: u64,
     pub blake3: String,
 }
 
-/// A version ready to go: the manifest's name for it and every file, the dataset card included.
+/// A version ready to go: the manifest's name for it, every file of both repos, the cards included, and the held-out
+/// repo's name.
 #[derive(Debug, Clone)]
 pub struct Publication {
     pub version: String,
+    pub heldout_repo: String,
     pub files: Vec<Staged>,
 }
 
-/// Where a file of the version goes in the repo.
-fn remote_path(rel: &str) -> String {
+impl Publication {
+    /// The paths of the publish set of `repo`, sorted.
+    #[must_use]
+    pub fn set(&self, repo: Repo) -> Vec<String> {
+        let mut paths: Vec<String> = self
+            .files
+            .iter()
+            .filter(|f| f.repo == repo)
+            .map(|f| f.remote.clone())
+            .collect();
+        paths.sort();
+        paths
+    }
+}
+
+/// Which repo, and where in it, a file of the built version goes.
+fn remote_path(rel: &str) -> (Repo, String) {
     if rel == "data/test.jsonl.zst" {
-        return "test/test.jsonl.zst".to_owned();
+        return (Repo::Heldout, "test/test.jsonl.zst".to_owned());
+    }
+    if rel == "build/llm-cache.jsonl.zst" {
+        return (Repo::Heldout, "cache/llm-cache.jsonl.zst".to_owned());
     }
     if let Some(name) = rel.strip_prefix("worlds/") {
         return if name.starts_with("test-") {
-            format!("test/worlds/{name}")
+            (Repo::Heldout, format!("worlds/test/{name}"))
+        } else if name.starts_with("val-") {
+            (Repo::Data, format!("worlds/val/{name}"))
         } else {
-            format!("worlds/{name}")
+            (Repo::Data, format!("worlds/train/{name}"))
         };
     }
-    rel.to_owned()
+    if let Some(name) = rel.strip_prefix("data/train-") {
+        return (Repo::Data, format!("data/subsets/train-{name}"));
+    }
+    if let Some(name) = rel.strip_prefix("build/") {
+        return (Repo::Data, format!("reports/{name}"));
+    }
+    (Repo::Data, rel.to_owned())
 }
 
 fn hash_file(path: &Path) -> Result<(u64, String)> {
@@ -126,7 +179,7 @@ fn pct(v: f64) -> String {
 
 /// The dataset card: what the data is, how it was made, what it holds and what it does not, from the manifest alone.
 #[must_use]
-pub fn card(manifest: &Value, repo: &str) -> String {
+pub fn card(manifest: &Value, repo: &str, heldout: &str) -> String {
     let text = |p: &Value| p.as_str().unwrap_or("unknown").to_owned();
     let version = text(&manifest["version"]);
     let mut out = String::new();
@@ -175,7 +228,18 @@ pub fn card(manifest: &Value, repo: &str) -> String {
     let _ = writeln!(out, "\n## Layout\n");
     let _ = writeln!(
         out,
-        "Revision `{version}` of `{repo}`. `manifest.json` lists every data file with its size and blake3.\n\n- `data/train.jsonl.zst`, `data/val.jsonl.zst`: the splits to train and validate on; `data/noise.jsonl.zst` is val with heavy typos.\n- nested train subsets for a learning curve: `data/train-<n>.jsonl.zst` (each is a subset of the next one and of train)\n- `test/`: the test split and its worlds, apart from everything else. **Never train on it.** (In `manifest.json` its file is listed as `data/test.jsonl.zst`; here it is `test/test.jsonl.zst`.)\n- `worlds/`: the worlds the sessions name; `build/`: the reports of the build.\n"
+        "Revision `{version}` of `{repo}`; the same tag in `{heldout}`. `manifest.json` lists every data file with its size and blake3.\n\n- `data/train.jsonl.zst`, `data/val.jsonl.zst`: the splits to train and validate on; `data/noise.jsonl.zst` is val with heavy typos.\n- nested train subsets for a learning curve: `data/subsets/train-<n>.jsonl.zst` (each is a subset of the next one and of train)\n- `worlds/train/`, `worlds/val/`: the worlds the sessions name; `reports/`: the reports of the build.\n- `contract/`: the tool contract the data was rendered for (below).\n- **The test split is not here.** It, its worlds and the packed LLM cache are in the held-out repo `{heldout}` at the same tag (`test/test.jsonl.zst`, `worlds/test/`, `cache/llm-cache.jsonl.zst`), for evaluation only. **Never train on it.** (In `manifest.json` its file is listed as `data/test.jsonl.zst`.)\n"
+    );
+    let _ = writeln!(out, "## Contract\n");
+    let c = &manifest["contract"];
+    let _ = writeln!(
+        out,
+        "The records were rendered with the runtime's tools block in mode `{}`. `contract/tools.json` is the tool catalogue and `contract/system.txt` the static prompt, exactly as the runtime hashes them; `contract/hashes.json` holds the hashes. When the runtime's tools no longer hash to these, this version is for a contract the app no longer serves.\n\n- tools_hash: `{}`\n- prompt_hash: `{}`\n- catalog_hash: `{}`\n- tokenizer blake3: `{}`\n",
+        text(&c["tools_mode"]),
+        text(&c["tools_hash"]),
+        text(&c["prompt_hash"]),
+        text(&c["catalog_hash"]),
+        text(&c["tokenizer_blake3"]),
     );
     let _ = writeln!(out, "## Realised shares against their targets\n");
     for split in manifest["splits"].as_array().into_iter().flatten() {
@@ -222,13 +286,50 @@ pub fn card(manifest: &Value, repo: &str) -> String {
     out
 }
 
-/// Check a built version and lay it out for the repo.
+/// The card of the held-out repo: what it is for and what must never be done with it.
+#[must_use]
+pub fn heldout_card(version: &str, repo: &str, data_repo: &str) -> String {
+    format!(
+        "---\nlanguage:\n- en\nlicense: other\npretty_name: Centraid held-out data {version}\ntags:\n- synthetic\n---\n\n# Centraid held-out data {version}\n\n**For evaluation only. Never train on it.** The test split of data version `{version}` of `{data_repo}`, kept in a repo of its own so a fetch of the training data cannot pull it.\n\n- `test/test.jsonl.zst`, `worlds/test/`: the test split and the worlds it names.\n- `cache/llm-cache.jsonl.zst`: the packed writer and reader cache of the build. It holds the text of test sessions, which is why it is here; it is what lets a rebuild run offline.\n- `manifest.json`: the same file as in the data repo, so a revision of `{repo}` names its data.\n"
+    )
+}
+
+/// Stage one file of the built version under its place in the repo it goes to.
+fn stage_file(files: &mut Vec<Staged>, rel: &str, path: PathBuf) -> Result<()> {
+    let (bytes, blake3) = hash_file(&path)?;
+    let (repo, remote) = remote_path(rel);
+    files.push(Staged {
+        repo,
+        remote,
+        source: Source::File(path),
+        bytes,
+        blake3,
+    });
+    Ok(())
+}
+
+/// Stage a text under `remote` of `repo`.
+fn stage_text(files: &mut Vec<Staged>, repo: Repo, remote: &str, text: String) {
+    files.push(Staged {
+        repo,
+        remote: remote.to_owned(),
+        bytes: text.len() as u64,
+        blake3: blake3::hash(text.as_bytes()).to_hex().to_string(),
+        source: Source::Text(text),
+    });
+}
+
+/// Check a built version and lay it out for the two repos. `repo` names the data repo; `heldout` the held-out one, which
+/// is the manifest's own pointer when not given and must be that pointer when given.
 ///
 /// # Errors
 ///
 /// Every reason the version must not be published, listed together: no manifest, a file that does not match its hash,
-/// a build from a dirty tree, a version not marked publishable, a file that holds a sealed placeholder.
-pub fn prepare(dir: &Path, repo: &str) -> Result<Publication> {
+/// a build from a dirty tree, a version not marked publishable, a file that holds a sealed placeholder, no contract
+/// block in the manifest or contract files that do not hash to it, a held-out repo other than the manifest's pointer,
+/// no packed LLM cache.
+#[allow(clippy::too_many_lines)]
+pub fn prepare(dir: &Path, repo: &str, heldout: Option<&str>) -> Result<Publication> {
     let manifest_path = dir.join("manifest.json");
     let manifest_text = std::fs::read_to_string(&manifest_path)
         .with_context(|| format!("no manifest.json in {}", dir.display()))?;
@@ -253,6 +354,44 @@ pub fn prepare(dir: &Path, repo: &str) -> Result<Publication> {
         problems.push(format!("the version is not marked publishable: {why}"));
     }
 
+    // the contract: the block, its files, and the pointer to the held-out repo
+    match Contract::of_manifest(&manifest) {
+        None => problems.push(
+            "the manifest has no contract block: run `datagen restamp --in <version dir>` (a version built before the block existed) or rebuild".to_owned(),
+        ),
+        Some(contract) => {
+            problems.extend(contract::file_problems(dir, &contract));
+            if manifest["catalog_hash"].as_str() != Some(contract.catalog_hash.as_str()) {
+                problems.push("the contract's catalog_hash is not the manifest's".to_owned());
+            }
+            if manifest["tokenizer"]["blake3"].as_str() != Some(contract.tokenizer_blake3.as_str())
+            {
+                problems.push("the contract's tokenizer hash is not the manifest's".to_owned());
+            }
+            for rel in [contract::TOOLS, contract::SYSTEM, contract::HASHES] {
+                // a file that cannot be read is already reported by `file_problems`
+                let _ = stage_file(&mut files, rel, dir.join(rel));
+            }
+        }
+    }
+    let pointer = manifest["heldout"]["repo"]
+        .as_str()
+        .filter(|r| !r.is_empty());
+    let heldout_repo = match (pointer, heldout) {
+        (Some(p), Some(h)) if p != h => {
+            problems.push(format!(
+                "the manifest points to the held-out repo `{p}`, not `{h}`: rebuild or restamp it"
+            ));
+            h.to_owned()
+        }
+        (Some(p), _) => p.to_owned(),
+        (None, h) => {
+            problems
+                .push("the manifest has no `heldout` pointer: run `datagen restamp`".to_owned());
+            h.unwrap_or(HELDOUT_REPO).to_owned()
+        }
+    };
+
     let listed = manifest["files"].as_object().cloned().unwrap_or_default();
     if listed.is_empty() {
         problems.push("the manifest lists no files".to_owned());
@@ -268,8 +407,10 @@ pub fn prepare(dir: &Path, repo: &str) -> Result<Publication> {
                         entry["blake3"]
                     ));
                 }
+                let (to, remote) = remote_path(rel);
                 files.push(Staged {
-                    remote: remote_path(rel),
+                    repo: to,
+                    remote,
                     source: Source::File(path),
                     bytes,
                     blake3: hash,
@@ -277,12 +418,16 @@ pub fn prepare(dir: &Path, repo: &str) -> Result<Publication> {
             }
         }
     }
-    files.push(Staged {
-        remote: "manifest.json".to_owned(),
-        bytes: manifest_text.len() as u64,
-        blake3: blake3::hash(manifest_text.as_bytes()).to_hex().to_string(),
-        source: Source::File(manifest_path),
-    });
+    // the manifest goes to both repos, byte for byte
+    for to in [Repo::Data, Repo::Heldout] {
+        files.push(Staged {
+            repo: to,
+            remote: "manifest.json".to_owned(),
+            bytes: manifest_text.len() as u64,
+            blake3: blake3::hash(manifest_text.as_bytes()).to_hex().to_string(),
+            source: Source::File(manifest_path.clone()),
+        });
+    }
     // the worlds and the build's reports: not in the manifest's list, hashed here
     for (sub, ext_ok) in [("worlds", &["json"][..]), ("build", &["txt", "json"][..])] {
         let Ok(read) = std::fs::read_dir(dir.join(sub)) else {
@@ -302,14 +447,23 @@ pub fn prepare(dir: &Path, repo: &str) -> Result<Publication> {
                 "{sub}/{}",
                 path.file_name().unwrap_or_default().to_string_lossy()
             );
-            let (bytes, hash) = hash_file(&path)?;
-            files.push(Staged {
-                remote: remote_path(&rel),
-                source: Source::File(path),
-                bytes,
-                blake3: hash,
-            });
+            stage_file(&mut files, &rel, path)?;
         }
+    }
+    // the packed LLM cache: it names test sessions, so it goes to the held-out repo, and it must go, so a rebuild is offline
+    let cache = dir.join(version::BUILD).join(version::PACKED_CACHE);
+    if cache.is_file() {
+        stage_file(
+            &mut files,
+            &format!("{}/{}", version::BUILD, version::PACKED_CACHE),
+            cache,
+        )?;
+    } else {
+        problems.push(format!(
+            "{}/{}: the packed LLM cache is missing, and a rebuild would need the network without it",
+            version::BUILD,
+            version::PACKED_CACHE
+        ));
     }
     for f in &files {
         if let Source::File(p) = &f.source
@@ -318,65 +472,197 @@ pub fn prepare(dir: &Path, repo: &str) -> Result<Publication> {
             problems.push(format!("{}: holds a sealed placeholder", f.remote));
         }
     }
-    let card_text = card(&manifest, repo);
-    files.push(Staged {
-        remote: "README.md".to_owned(),
-        bytes: card_text.len() as u64,
-        blake3: blake3::hash(card_text.as_bytes()).to_hex().to_string(),
-        source: Source::Text(card_text),
-    });
-    files.sort_by(|a, b| a.remote.cmp(&b.remote));
+    let card_text = card(&manifest, repo, &heldout_repo);
+    stage_text(&mut files, Repo::Data, "README.md", card_text);
+    stage_text(
+        &mut files,
+        Repo::Heldout,
+        "README.md",
+        heldout_card(&version, &heldout_repo, repo),
+    );
+    files.sort_by(|a, b| (a.repo, &a.remote).cmp(&(b.repo, &b.remote)));
+    // nothing of test or the cache may be in the data repo's set
+    for f in files.iter().filter(|f| f.repo == Repo::Data) {
+        if f.remote.contains("test")
+            && (f.remote.starts_with("data/") || f.remote.starts_with("worlds/"))
+            || f.remote.starts_with("test/")
+            || f.remote.starts_with("cache/")
+        {
+            problems.push(format!(
+                "{}: test material in the data repo's set",
+                f.remote
+            ));
+        }
+    }
     if !problems.is_empty() {
         bail!(
             "{version} is not fit to publish:\n  - {}",
             problems.join("\n  - ")
         );
     }
-    Ok(Publication { version, files })
+    Ok(Publication {
+        version,
+        heldout_repo,
+        files,
+    })
 }
 
-/// The dry run: every file with its size and hash, and what a real upload would do. Nothing is sent.
+/// Repo plumbing that is not part of any version and is never deleted: the LFS rules the Hub needs to store the data.
+pub const KEPT: [&str; 1] = [".gitattributes"];
+
+/// What the one commit of a publish does to one repo's tree.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Plan {
+    /// Every path of the publish set: added when the repo lacks it, replaced when it has it.
+    pub puts: Vec<String>,
+    /// Every path of the remote tree that is not in the publish set and not plumbing, sorted: removed in the commit.
+    pub deletes: Vec<String>,
+}
+
+/// The commit a publish makes to one repo, from its publish set and the paths its base tree holds. A pure function:
+/// the result holds the whole publish set to put and every other remote path to delete, except [`KEPT`].
 #[must_use]
-pub fn dry_run(p: &Publication, repo: Option<&str>, private: bool) -> String {
+pub fn plan(publish_set: &[String], remote: &[String]) -> Plan {
+    let wanted: std::collections::BTreeSet<&str> = publish_set.iter().map(String::as_str).collect();
+    let mut deletes: Vec<String> = remote
+        .iter()
+        .filter(|r| !wanted.contains(r.as_str()) && !KEPT.contains(&r.as_str()))
+        .cloned()
+        .collect();
+    deletes.sort();
+    deletes.dedup();
+    Plan {
+        puts: wanted.into_iter().map(str::to_owned).collect(),
+        deletes,
+    }
+}
+
+/// What a repo holds now: the paths of `main`'s tree and the names of its tags.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Remote {
+    pub files: Vec<String>,
+    pub tags: Vec<String>,
+}
+
+/// Every reason the upload must not start, from what the two repos hold: the version's tag exists in one of them.
+#[must_use]
+pub fn tag_problems(version: &str, data: &Remote, heldout: &Remote) -> Vec<String> {
+    [("data", data), ("held-out", heldout)]
+        .into_iter()
+        .filter(|(_, r)| r.tags.iter().any(|t| t == version))
+        .map(|(which, _)| {
+            format!("the tag `{version}` already exists in the {which} repo: a version is never overwritten")
+        })
+        .collect()
+}
+
+/// The dry run: every file of both repos with its size and hash, and what a real upload would do. Nothing is sent.
+/// `remote` is the two repos' current state, data then held-out, when they were read (a read-only listing), and then the
+/// paths each commit would remove are listed.
+#[must_use]
+pub fn dry_run(
+    p: &Publication,
+    repo: Option<&str>,
+    private: bool,
+    remote: Option<(&Remote, &Remote)>,
+) -> String {
     let mut out = String::new();
     let _ = writeln!(
         out,
-        "dry run: nothing is uploaded. revision `{}`{}, {}",
+        "dry run: nothing is uploaded. version `{}`, one commit and one tag in each of two repos, {}",
         p.version,
-        repo.map_or_else(String::new, |r| format!(" of dataset repo `{r}`")),
         if private { "private" } else { "PUBLIC" }
     );
-    let total: u64 = p.files.iter().map(|f| f.bytes).sum();
-    for f in &p.files {
-        let _ = writeln!(out, "  {:>12}  {}  {}", f.bytes, f.blake3, f.remote);
+    for (to, name, seen) in [
+        (Repo::Data, repo.unwrap_or(DATA_REPO), remote.map(|r| r.0)),
+        (Repo::Heldout, p.heldout_repo.as_str(), remote.map(|r| r.1)),
+    ] {
+        let mine: Vec<&Staged> = p.files.iter().filter(|f| f.repo == to).collect();
+        let total: u64 = mine.iter().map(|f| f.bytes).sum();
+        let _ = writeln!(
+            out,
+            "\n{} repo `{name}`:",
+            if to == Repo::Data { "data" } else { "held-out" }
+        );
+        for f in &mine {
+            let _ = writeln!(out, "  {:>12}  {}  {}", f.bytes, f.blake3, f.remote);
+        }
+        let _ = writeln!(out, "  {total:>12}  total in {} files", mine.len());
+        match seen {
+            Some(tree) => {
+                let planned = plan(&p.set(to), &tree.files);
+                let _ = writeln!(
+                    out,
+                    "  the tree is exactly these files; {} path(s) of the repo's tree would be removed in the commit (kept: {}):",
+                    planned.deletes.len(),
+                    KEPT.join(", ")
+                );
+                for d in &planned.deletes {
+                    let _ = writeln!(out, "    remove  {d}");
+                }
+                if tree.tags.contains(&p.version) {
+                    let _ = writeln!(
+                        out,
+                        "  WOULD BE REFUSED: the tag `{}` already exists here: a version is never overwritten",
+                        p.version
+                    );
+                }
+            }
+            None => {
+                let _ = writeln!(
+                    out,
+                    "  paths of the repo's tree outside this list would be removed in the commit; they are listed when the dry run is given --repo and {TOKEN_ENV} (a read-only listing)"
+                );
+            }
+        }
     }
-    let _ = writeln!(out, "  {total:>12}  total in {} files", p.files.len());
     let _ = writeln!(
         out,
-        "to upload: datagen publish --in <version dir> --repo {} --upload   (HF_TOKEN in the environment)",
-        repo.unwrap_or(EXAMPLE_REPO)
+        "\nto upload: datagen publish --in <version dir> --repo {} --heldout-repo {} --upload   (HF_TOKEN in the environment)",
+        repo.unwrap_or(DATA_REPO),
+        p.heldout_repo
     );
     out
 }
 
-/// The transport: `huggingface_hub`, run by `python3` with this script on its standard input. It reads the token from
-/// `HF_TOKEN` itself; the arguments are the repo, the version, the staged directory and `private` or `public`.
-const TRANSPORT: &str = r#"
-import sys
+/// The read-only transport: `huggingface_hub` lists the files of the repo's `main` and its tags, printed as a JSON
+/// object `{"files": [...], "tags": [...]}` (both empty for a repo that does not exist yet). The argument is the repo.
+const LIST_TRANSPORT: &str = r#"
+import json, sys
 from huggingface_hub import HfApi
-repo, version, folder, visibility = sys.argv[1:5]
+from huggingface_hub.utils import RepositoryNotFoundError, RevisionNotFoundError
+api = HfApi()
+try:
+    files = sorted(api.list_repo_files(sys.argv[1], repo_type="dataset", revision="main"))
+    tags = sorted(t.name for t in api.list_repo_refs(sys.argv[1], repo_type="dataset").tags)
+except (RepositoryNotFoundError, RevisionNotFoundError):
+    files, tags = [], []
+print(json.dumps({"files": files, "tags": tags}))
+"#;
+
+/// The write transport: `huggingface_hub`, run by `python3` with this script on its standard input. It reads the token
+/// from `HF_TOKEN` itself; the arguments are the repo, the version, the staged directory, `private` or `public` and a
+/// JSON file listing the paths to delete. One commit on `main` puts every staged file and deletes those paths, so the
+/// tree, and the tag's, is the publish set. `create_commit` on `main` is atomic, so there is no branch to stage on: if
+/// the tag step then fails, `main` holds the tree without a tag, which no reader pins, and a rerun plans from it.
+const TRANSPORT: &str = r#"
+import json, os, sys
+from huggingface_hub import CommitOperationAdd, CommitOperationDelete, HfApi
+repo, version, folder, visibility, deletes_file = sys.argv[1:6]
+deletes = json.load(open(deletes_file))
 api = HfApi()
 api.create_repo(repo, repo_type="dataset", private=(visibility == "private"), exist_ok=True)
-refs = api.list_repo_refs(repo, repo_type="dataset")
-taken = {t.name for t in refs.tags} | {b.name for b in refs.branches}
-branch = "incoming-" + version
-if version in taken or branch in taken:
-    sys.exit("revision %s already exists in %s: a version is never overwritten" % (version, repo))
-api.create_branch(repo, branch=branch, repo_type="dataset")
-info = api.upload_folder(repo_id=repo, repo_type="dataset", folder_path=folder, revision=branch,
+if version in {t.name for t in api.list_repo_refs(repo, repo_type="dataset").tags}:
+    sys.exit("tag %s already exists in %s: a version is never overwritten" % (version, repo))
+ops = []
+for root, _, names in os.walk(folder):
+    for name in names:
+        path = os.path.join(root, name)
+        ops.append(CommitOperationAdd(path_in_repo=os.path.relpath(path, folder).replace(os.sep, "/"), path_or_fileobj=path))
+ops += [CommitOperationDelete(path_in_repo=d) for d in deletes]
+info = api.create_commit(repo_id=repo, repo_type="dataset", operations=ops, revision="main",
                          commit_message="data version " + version)
 api.create_tag(repo, tag=version, revision=info.oid, repo_type="dataset")
-api.delete_branch(repo, branch=branch, repo_type="dataset")
 print("published %s@%s" % (repo, version))
 "#;
 
@@ -388,6 +674,7 @@ pub fn transport_command(
     version: &str,
     folder: &Path,
     private: bool,
+    deletes_file: &Path,
 ) -> (Vec<String>, &'static str) {
     (
         vec![
@@ -397,18 +684,84 @@ pub fn transport_command(
             version.to_owned(),
             folder.display().to_string(),
             if private { "private" } else { "public" }.to_owned(),
+            deletes_file.display().to_string(),
         ],
         TRANSPORT,
     )
 }
 
-/// Write the staged tree under `staging` in the repo's layout.
+/// Run `python` with `script` on its standard input and `args`, the token in its environment only.
+fn run_python(python: &str, args: &[String], script: &str, token: &str) -> Result<String> {
+    let mut child = Command::new(python)
+        .arg("-")
+        .args(args)
+        // the token reaches the one child through its environment, never through an argument or the script
+        .env(TOKEN_ENV, token)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .with_context(|| format!("starting {python}"))?;
+    {
+        use std::io::Write as _;
+        child
+            .stdin
+            .take()
+            .context("no stdin")?
+            .write_all(script.as_bytes())?;
+    }
+    let out = child.wait_with_output()?;
+    if !out.status.success() {
+        let err = String::from_utf8_lossy(&out.stderr).replace(token, "<token>");
+        bail!("the transport failed ({}): {}", out.status, err.trim());
+    }
+    Ok(String::from_utf8_lossy(&out.stdout)
+        .replace(token, "<token>")
+        .trim()
+        .to_owned())
+}
+
+fn check_repo_name(repo: &str) -> Result<()> {
+    if repo.trim().is_empty() || !repo.contains('/') {
+        bail!("a repo takes an owner/name, for example {DATA_REPO}");
+    }
+    Ok(())
+}
+
+/// What the repo holds now: `main`'s tree and its tags, a read-only listing, no commit.
+///
+/// # Errors
+///
+/// A repo that is not owner/name, or the listing failed. The token is never in the message.
+pub fn list_remote(repo: &str, python: &str, token: &str) -> Result<Remote> {
+    check_repo_name(repo)?;
+    let text = run_python(python, &[repo.to_owned()], LIST_TRANSPORT, token)?;
+    let v: Value = serde_json::from_str(&text)
+        .context("the listing of the repo is not a JSON object of files and tags")?;
+    let names = |k: &str| -> Result<Vec<String>> {
+        v[k].as_array()
+            .context("the listing of the repo lacks a list")?
+            .iter()
+            .map(|n| {
+                n.as_str()
+                    .map(str::to_owned)
+                    .context("a name in the listing is not text")
+            })
+            .collect()
+    };
+    Ok(Remote {
+        files: names("files")?,
+        tags: names("tags")?,
+    })
+}
+
+/// Write the staged tree of `repo` under `staging` in the repo's layout.
 ///
 /// # Errors
 ///
 /// If a file cannot be copied.
-pub fn stage(p: &Publication, staging: &Path) -> Result<()> {
-    for f in &p.files {
+pub fn stage(p: &Publication, repo: Repo, staging: &Path) -> Result<()> {
+    for f in p.files.iter().filter(|f| f.repo == repo) {
         let to = staging.join(&f.remote);
         if let Some(parent) = to.parent() {
             std::fs::create_dir_all(parent)?;
@@ -435,11 +788,12 @@ pub fn token_from_env() -> Result<String> {
     }
 }
 
-/// A real upload of `p` to `repo` with `token` (from [`token_from_env`]).
+/// A real upload of `p`: one commit and one tag with the version's name in the held-out repo and then in `repo` (the data
+/// repo), with `token` (from [`token_from_env`]). Both repos are read first and nothing is sent if the tag exists in either.
 ///
 /// # Errors
 ///
-/// A repo that is not owner/name, or the transport failed. The token is never in the message.
+/// A repo that is not owner/name, a tag that already exists, or the transport failed. The token is never in the message.
 pub fn upload(
     p: &Publication,
     repo: &str,
@@ -447,36 +801,35 @@ pub fn upload(
     python: &str,
     token: &str,
 ) -> Result<String> {
-    if repo.trim().is_empty() || !repo.contains('/') {
-        bail!("--repo takes an owner/name, for example {EXAMPLE_REPO}");
+    check_repo_name(repo)?;
+    check_repo_name(&p.heldout_repo)?;
+    let data_remote = list_remote(repo, python, token)?;
+    let heldout_remote = list_remote(&p.heldout_repo, python, token)?;
+    let problems = tag_problems(&p.version, &data_remote, &heldout_remote);
+    if !problems.is_empty() {
+        bail!("nothing was sent: {}", problems.join("; "));
     }
-    let staging = tempfile::tempdir()?;
-    stage(p, staging.path())?;
-    let (args, script) = transport_command(python, repo, &p.version, staging.path(), private);
-    let mut child = Command::new(&args[0])
-        .args(&args[1..])
-        // the token reaches the one child through its environment, never through an argument or the script
-        .env(TOKEN_ENV, token)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .with_context(|| format!("starting {}", args[0]))?;
-    {
-        use std::io::Write as _;
-        child
-            .stdin
-            .take()
-            .context("no stdin")?
-            .write_all(script.as_bytes())?;
+    let mut said = Vec::new();
+    for (to, name, remote) in [
+        (Repo::Heldout, p.heldout_repo.as_str(), &heldout_remote),
+        (Repo::Data, repo, &data_remote),
+    ] {
+        let planned = plan(&p.set(to), &remote.files);
+        let staging = tempfile::tempdir()?;
+        stage(p, to, staging.path())?;
+        // outside the staged tree, so it is not uploaded
+        let aside = tempfile::tempdir()?;
+        let deletes_file = aside.path().join("deletes.json");
+        std::fs::write(&deletes_file, serde_json::to_vec(&planned.deletes)?)?;
+        let (args, script) = transport_command(
+            python,
+            name,
+            &p.version,
+            staging.path(),
+            private,
+            &deletes_file,
+        );
+        said.push(run_python(python, &args[2..], script, token)?);
     }
-    let out = child.wait_with_output()?;
-    if !out.status.success() {
-        let err = String::from_utf8_lossy(&out.stderr).replace(token, "<token>");
-        bail!("the upload failed ({}): {}", out.status, err.trim());
-    }
-    Ok(String::from_utf8_lossy(&out.stdout)
-        .replace(token, "<token>")
-        .trim()
-        .to_owned())
+    Ok(said.join("\n"))
 }

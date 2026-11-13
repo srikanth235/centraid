@@ -26,11 +26,14 @@ pub const WORDS_SOURCE: &str = "crates/screens/src/strings/shared.rs";
 
 /// A word the kit shares with one screen's own catalogue is read from there,
 /// as `<module>::<key>`, rather than spelled twice in Rust.
-pub const OTHER_SOURCES: [(&str, &str); 1] = [("home", "crates/screens/src/strings/home.rs")];
+pub const OTHER_SOURCES: [(&str, &str); 2] = [
+    ("home", "crates/screens/src/strings/home.rs"),
+    ("backup", "crates/screens/src/strings/backup.rs"),
+];
 
 /// Member name to the Rust key. Exactly the words a native kit view reads; a
 /// word nothing native draws stays Rust's alone.
-const CONSTANTS: [(&str, &str); 21] = [
+const CONSTANTS: [(&str, &str); 25] = [
     ("BACK", "back"),
     ("BAND_CURRENT", "home::band_current_spoken"),
     ("BAND_HOME", "kit_band_home"),
@@ -52,6 +55,12 @@ const CONSTANTS: [(&str, &str); 21] = [
     ("SELECT", "kit_select"),
     ("SHOW_MORE", "kit_show_more"),
     ("UNFLAG", "kit_unflag"),
+    // THE LAUNCH SCREEN FOR A DAMAGED VAULT (#1191): no core is open, so no Rust screen can carry
+    // these words. They are the Backup screen's own sentences, said once.
+    ("VAULT_DAMAGED_TITLE", "backup::backup_status_damaged"),
+    ("VAULT_DAMAGED_LINE", "backup::backup_line_damaged"),
+    ("VAULT_DAMAGED_SAFE", "backup::backup_detail_damaged"),
+    ("VAULT_DAMAGED_RESTORE", "home::restore_first_action"),
 ];
 
 /// The two templates the kit fills, each with its one slot.
@@ -361,7 +370,18 @@ mod tests {
     use super::*;
 
     fn others(home: &str) -> BTreeMap<String, String> {
-        BTreeMap::from([("home".to_owned(), home.to_owned())])
+        // THE BACKUP CATALOGUE carries every word the constants read from it.
+        let mut backup = String::from("catalog! {\n");
+        for (_, key) in CONSTANTS {
+            if let Some(key) = key.strip_prefix("backup::") {
+                backup.push_str(&format!("    plain {key} = (\"w\", \"w\");\n"));
+            }
+        }
+        backup.push_str("}\n");
+        BTreeMap::from([
+            ("home".to_owned(), home.to_owned()),
+            ("backup".to_owned(), backup),
+        ])
     }
 
     #[test]
@@ -405,7 +425,7 @@ mod tests {
         }
         shared.push_str("    plain back_to = (\"Back\", \"Back\");\n");
         shared.push_str("    plain search_corrected = (\"{corrected}\", \"{corrected}\");\n}\n");
-        let home = "catalog! {\n    plain band_current_spoken = (\"here\", \"here\");\n}\n";
+        let home = "catalog! {\n    plain band_current_spoken = (\"here\", \"here\");\n    plain restore_first_action = (\"Restore\", \"Restore\");\n}\n";
         let error = resolve(&shared, &others(home)).expect_err("no {parent}");
         assert!(error.to_string().contains("{parent}"), "{error}");
     }

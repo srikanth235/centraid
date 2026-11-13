@@ -31,6 +31,19 @@ pub const LIST_COLORS: [&str; 8] = [
     "orchid",
 ];
 
+/// The party-wheel hues a followed phone calendar wears (`var(--c-<hue>)`), the shell's naming of
+/// the phone's colour. A calendar the member makes wears a [`LIST_COLORS`] key.
+pub const PHONE_CALENDAR_COLORS: [&str; 8] = [
+    "var(--c-rose)",
+    "var(--c-amber)",
+    "var(--c-ochre)",
+    "var(--c-forest)",
+    "var(--c-teal)",
+    "var(--c-slate)",
+    "var(--c-indigo)",
+    "var(--c-violet)",
+];
+
 /// The icons a list or a calendar may wear: keys of `design/icons.toml`, curated to the ones that
 /// read as a place to put things. A test holds every key in the file.
 pub const LIST_ICONS: [&str; 32] = [
