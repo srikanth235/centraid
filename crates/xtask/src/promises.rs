@@ -3258,6 +3258,10 @@ pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 9] = [
                 "no_sentence_says_what_the_member_is_never_told",
             ),
             (
+                "crates/screens/tests/backup_page.rs",
+                "a_vault_damaged_at_launch_says_the_same_words_on_both_shells",
+            ),
+            (
                 "crates/screens/tests/words_enter.rs",
                 "a_restore_that_cannot_prove_the_newest_asks_before_it_claims",
             ),

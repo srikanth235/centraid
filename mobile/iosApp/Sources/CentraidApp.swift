@@ -122,6 +122,8 @@ private struct ShellRoot: View {
     var body: some View {
         if let store = shell.screens {
             StoreRoot(shell: shell, store: store)
+        } else if shell.vaultDamaged {
+            VaultDamagedView()
         } else {
             BarePaper()
         }
