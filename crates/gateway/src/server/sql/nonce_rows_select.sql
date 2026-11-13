@@ -1,1 +1,1 @@
-SELECT nonce, issued_at_ms FROM nonce ORDER BY nonce
+SELECT * FROM nonce_spent ORDER BY issued_at_ms, nonce

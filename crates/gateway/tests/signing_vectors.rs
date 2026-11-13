@@ -24,7 +24,7 @@ fn vectors() -> Value {
     let key = ed25519_dalek::SigningKey::from_bytes(&[0x42; 32]);
     let vault = VaultId::from_bytes(key.verifying_key().to_bytes());
     let gateway = GatewayId::from_bytes([0x11; 16]);
-    let nonce = Nonce::from_bytes([0x77; 16]);
+    let nonce = Nonce::from_bytes([0x77; 40]);
     let secret = Secret::from_bytes([0x88; 16]);
     let manifest = Name::from_bytes([0x33; 32]);
     let prev = Name::from_bytes([0x34; 32]);

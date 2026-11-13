@@ -294,8 +294,9 @@ named_in_memory!(
     a_frozen_vault_refuses_writes_and_answers_reads,
     unfreeze_gives_back_the_time_it_was_frozen,
     operator_undo_restores_every_hold,
-    a_long_gap_rebases_every_hold,
-    a_directory_does_not_link_vaults,
+    a_gap_between_sweeps_is_not_counted_against_a_hold,
+    the_nonce_route_writes_nothing_and_a_claim_still_works,
+    a_forged_foreign_expired_or_replayed_nonce_is_refused,
 );
 
 /// Every name in `NAMED` has a test above.

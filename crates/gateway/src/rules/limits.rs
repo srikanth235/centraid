@@ -73,10 +73,14 @@ pub const REVOKED_TOKEN_KEEP_MS: i64 = 365 * DAY_MS;
 /// The most revoked-token tombstones a vault keeps; the oldest go first (E5).
 pub const MAX_REVOKED_PER_VAULT: u64 = 64;
 
-/// A gap between purge sweeps longer than this re-bases every hold to a full
-/// week from now, so a sleeping gateway or a clock that jumped never ends a
-/// hold early (E6): fourteen days.
-pub const PURGE_GAP_REBASE_MS: i64 = 14 * DAY_MS;
+/// The purge sweep's interval: an hour.
+pub const PURGE_INTERVAL_MS: i64 = 3_600_000;
+
+/// A gap since the last purge sweep of more than this many intervals is time
+/// the gateway was not watching — a clock step, a night asleep, a spoofed
+/// time — and every hold is moved later by the whole gap before anything is
+/// purged, so a hold counts only watched time (#1191, R1). Three.
+pub const PURGE_GAP_INTERVALS: i64 = 3;
 
 /// The most unused, unexpired pairing secrets at once; minting one more drops
 /// the oldest (E14).

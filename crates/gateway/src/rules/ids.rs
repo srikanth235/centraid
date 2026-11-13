@@ -208,11 +208,12 @@ hex_id!(
 );
 
 hex_id!(
-    /// A NONCE: 16 bytes the adapter drew for `POST /v3/nonce`. Good for one
-    /// pair request and a few minutes; signed into every claim, read grant
-    /// and pairing. It names no vault (#1191, E5).
+    /// A NONCE: 40 bytes the gateway can recognise as its own without having
+    /// kept it (`random ‖ issued_at ‖ mac`, see [`crate::rules::nonce`]). Good
+    /// for one pair request and a few minutes; signed into every claim, read
+    /// grant and pairing. It names no vault (#1191, E5, R2).
     Nonce,
-    16,
+    40,
     public
 );
 

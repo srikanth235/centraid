@@ -29,7 +29,7 @@ fn genuine(key: &ed25519_dalek::SigningKey, gateway: &GatewayId) -> HeadView {
         manifest,
         prev: Some(Name::from_bytes([4; 32])),
     };
-    let nonce = Nonce::from_bytes([6; 16]);
+    let nonce = Nonce::from_bytes([6; 40]);
     HeadView {
         name: manifest,
         prev: fields.prev,
@@ -118,7 +118,7 @@ async fn a_gateway_that_lies_in_any_field_is_not_believed() {
             "claim nonce",
             Box::new(|h| {
                 if let Some(c) = h.claim.as_mut() {
-                    c.nonce = Nonce::from_bytes([0; 16])
+                    c.nonce = Nonce::from_bytes([0; 40])
                 }
             }),
         ),

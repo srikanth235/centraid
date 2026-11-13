@@ -37,9 +37,9 @@ use crate::rules::code::{Code, Refusal};
 pub use crate::rules::engine::ScrubCounts;
 use crate::rules::ids::{Digest, GatewayId, Name, Nonce, Secret, Signature, Token, VaultId};
 use crate::rules::limits::{
-    GRACE_MS, LIST_LIMIT, MAX_CLOCK_AHEAD_MS, MAX_GENERATION_JUMP, MAX_LIVE_NONCES,
+    DAY_MS, GRACE_MS, LIST_LIMIT, MAX_CLOCK_AHEAD_MS, MAX_GENERATION_JUMP, MAX_LIVE_NONCES,
     MAX_LIVE_SECRETS, MAX_NAMES, MAX_OBJECT_BYTES, MAX_REVOKED_PER_VAULT, NONCE_TTL_MS, PROTOCOL,
-    REVOKED_TOKEN_KEEP_MS, SECRET_TTL_MS,
+    PURGE_GAP_INTERVALS, PURGE_INTERVAL_MS, REVOKED_TOKEN_KEEP_MS, SECRET_TTL_MS,
 };
 use crate::rules::range::ByteRange;
 use crate::rules::signing::{
@@ -259,7 +259,7 @@ pub trait Target {
 
 /// Every case, by name, in the order [`run`] runs them. A target's test
 /// asserts its report names exactly these, so a dropped case is a failure.
-pub const CASES: [&str; 58] = [
+pub const CASES: [&str; 59] = [
     "info/answers-before-anything-is-paired",
     "pair/a-secret-admits-one-new-vault-once",
     "pair/a-known-vault-is-refused-and-the-secret-is-not-spent",
@@ -316,8 +316,9 @@ pub const CASES: [&str; 58] = [
     "operator/a-frozen-vault-refuses-writes-and-answers-reads",
     "operator/unfreeze-gives-back-the-time-it-was-frozen",
     "operator/operator-undo-restores-every-hold",
-    "operator/a-long-gap-rebases-every-hold",
-    "canary/canary-directory",
+    "operator/a-gap-between-sweeps-is-not-counted",
+    "nonce/the-nonce-route-writes-nothing",
+    "nonce/a-nonce-is-checked",
 ];
 
 /// **The names tests.md gives, and the case each runs.** `tests/conformance.rs`
@@ -421,12 +422,16 @@ pub const NAMED: &[(&str, &str)] = &[
         "operator/operator-undo-restores-every-hold",
     ),
     (
-        "a_long_gap_rebases_every_hold",
-        "operator/a-long-gap-rebases-every-hold",
+        "a_gap_between_sweeps_is_not_counted_against_a_hold",
+        "operator/a-gap-between-sweeps-is-not-counted",
     ),
     (
-        "a_directory_does_not_link_vaults",
-        "canary/canary-directory",
+        "the_nonce_route_writes_nothing_and_a_claim_still_works",
+        "nonce/the-nonce-route-writes-nothing",
+    ),
+    (
+        "a_forged_foreign_expired_or_replayed_nonce_is_refused",
+        "nonce/a-nonce-is-checked",
     ),
 ];
 
@@ -613,10 +618,13 @@ async fn run_named<T: Target>(target: &mut T, only: Option<&str>) -> Report {
         report.record(CASES[55], operator_undo_all(target).await);
     }
     if only.is_none_or(|case| case == CASES[56]) {
-        report.record(CASES[56], long_gap_rebases(target).await);
+        report.record(CASES[56], gap_not_counted(target).await);
     }
     if only.is_none_or(|case| case == CASES[57]) {
-        report.record(CASES[57], canary_directory(target).await);
+        report.record(CASES[57], nonce_route_writes_nothing(target).await);
+    }
+    if only.is_none_or(|case| case == CASES[58]) {
+        report.record(CASES[58], nonce_is_checked(target).await);
     }
     report
 }
@@ -1012,6 +1020,23 @@ fn not_a_key() -> VaultId {
         })
         .find(|vault| vault.verifying_key().is_none())
         .unwrap_or_else(|| VaultId::from_bytes([0xff; 32]))
+}
+
+/// Let the gateway watch `ms` of its clock: the clock moves an hour at a time
+/// and the sweep runs after each, as a running gateway's does. A hold counts
+/// only the time a sweep was there to see (#1191, R1), so a test that means
+/// "a week passed" lets the gateway watch it. Answers how many objects the
+/// sweeps purged, in all.
+async fn watch<T: Target>(target: &mut T, ms: i64) -> Result<u64, String> {
+    let mut purged = 0;
+    let mut left = ms;
+    while left > 0 {
+        let step = left.min(PURGE_INTERVAL_MS);
+        target.advance(step).await;
+        purged += target.purge().await?;
+        left -= step;
+    }
+    Ok(purged)
 }
 
 // ─── cases ───────────────────────────────────────────────────────────────────
@@ -1665,8 +1690,7 @@ async fn grace<T: Target>(target: &mut T) -> Outcome {
     ensure(again.deleted == vec![old.0], || format!("{again:?}"))?;
     let early = target.purge().await?;
     ensure(early == 0, || format!("purged {early} inside the grace"))?;
-    target.advance(GRACE_MS).await;
-    let late = target.purge().await?;
+    let late = watch(target, GRACE_MS).await?;
     ensure(late == 1, || format!("purged {late} after the grace"))?;
     refused(
         target.get(&phone.token, &vault, &old.0, None).await,
@@ -1811,8 +1835,7 @@ async fn put_revives_tombstone<T: Target>(target: &mut T) -> Outcome {
     )?;
     // The tombstone is gone, not shadowed: the purge after its grace leaves
     // the new bytes alone.
-    target.advance(GRACE_MS).await;
-    let purged = target.purge().await?;
+    let purged = watch(target, GRACE_MS).await?;
     ensure(purged == 0, || {
         format!("the purge took {purged} object(s) a PUT had brought back")
     })?;
@@ -1870,8 +1893,7 @@ async fn delete_absent<T: Target>(target: &mut T) -> Outcome {
     store(target, &phone, &vault, &purged).await?;
     tombstone(target, &phone, &vault, &[purged.0]).await?;
     tombstone(target, &phone, &vault, &[purged.0]).await?;
-    target.advance(GRACE_MS).await;
-    let swept = target.purge().await?;
+    let swept = watch(target, GRACE_MS).await?;
     ensure(swept == 1, || format!("purged {swept}"))?;
     // A phone retrying a delete whose answer it lost: never refused.
     tombstone(target, &phone, &vault, &[purged.0, never]).await
@@ -2810,8 +2832,7 @@ async fn claim_cancels_holds<T: Target>(target: &mut T) -> Outcome {
         || format!("a snapshot is still held: {snapshots:?}"),
     )?;
     let _ = gateway;
-    target.advance(GRACE_MS + 1).await;
-    ensure(target.purge().await? == 0, || {
+    ensure(watch(target, GRACE_MS + 1).await? == 0, || {
         "a lifted hold purged".to_owned()
     })
 }
@@ -2922,12 +2943,10 @@ async fn delete_is_held<T: Target>(target: &mut T) -> Outcome {
         || "a held object is listed live".to_owned(),
     )?;
     // The gateway's clock moves only when told, so the edge is exact.
-    target.advance(GRACE_MS - 1).await;
-    ensure(target.purge().await? == 0, || {
+    ensure(watch(target, GRACE_MS - 1).await? == 0, || {
         "purged one tick before the deadline".to_owned()
     })?;
-    target.advance(2).await;
-    let purged = target.purge().await?;
+    let purged = watch(target, 2).await?;
     ensure(purged == 2, || {
         format!("purged {purged} after the deadline")
     })?;
@@ -3099,7 +3118,7 @@ async fn pair_signature_binds<T: Target>(target: &mut T) -> Outcome {
         Code::Unauthorized,
         "a signature made for another secret",
     )?;
-    // That refusal spent the nonce; a fresh one for each remaining try.
+    // That refusal left the nonce unspent (R2); a fresh one for each try.
     let nonce2 = fresh_nonce(target).await.map_err(|f| format!("{f:?}"))?;
     let elsewhere = PairRequest {
         nonce: nonce2,
@@ -3114,15 +3133,24 @@ async fn pair_signature_binds<T: Target>(target: &mut T) -> Outcome {
         Code::Unauthorized,
         "a signature made for another gateway",
     )?;
-    let good = ok(pair_secret(target, &key, one).await, "the good pairing")?;
+    let nonce3 = fresh_nonce(target).await.map_err(|f| format!("{f:?}"))?;
+    let good = PairRequest {
+        nonce: nonce3,
+        secret: Some(SecretBody {
+            secret: one,
+            signature: sign_pair(&key, &gateway, &one, &nonce3),
+        }),
+        ..request(one, one, &gateway)
+    };
+    let good = ok(target.pair(&good).await, "the good pairing")?;
     ensure(good.epoch == 1, || format!("{good:?}"))?;
-    // A spent nonce, re-signed over a fresh secret, is still spent.
+    // A spent nonce, signed afresh over another secret, is still spent.
     let spent = PairRequest {
         vault_id: vault_of(&identity(2)),
-        nonce: nonce2,
+        nonce: nonce3,
         secret: Some(SecretBody {
             secret: two,
-            signature: sign_pair(&identity(2), &gateway, &two, &nonce2),
+            signature: sign_pair(&identity(2), &gateway, &two, &nonce3),
         }),
         ..request(two, two, &gateway)
     };
@@ -3178,7 +3206,7 @@ async fn claim_not_replayable<T: Target>(target: &mut T) -> Outcome {
     })
 }
 
-/// E5: a nonce lives five minutes and the sweep prunes the rest.
+/// E5, R2: a nonce lives five minutes; the sweep prunes the spent ones.
 async fn nonce_expires<T: Target>(target: &mut T) -> Outcome {
     target.reset().await?;
     let key = identity(1);
@@ -3191,7 +3219,16 @@ async fn nonce_expires<T: Target>(target: &mut T) -> Outcome {
         Code::Unauthorized,
         "a nonce past its time",
     )?;
-    ok(target.nonce().await, "another nonce")?;
+    // A nonce that was spent leaves one row until its time is out and the
+    // sweep has run (the pairing's own is one already).
+    let before = target.nonce_rows().await?.len();
+    ok(
+        pair_read(target, &key).await,
+        "a read grant on a fresh nonce",
+    )?;
+    ensure(target.nonce_rows().await?.len() == before + 1, || {
+        "a spent nonce leaves one row".to_owned()
+    })?;
     target.advance(NONCE_TTL_MS).await;
     target.purge().await?;
     let rows = target.nonce_rows().await?;
@@ -3200,11 +3237,16 @@ async fn nonce_expires<T: Target>(target: &mut T) -> Outcome {
     })
 }
 
-/// E5: at 4096 live nonces the next issue is `BUSY`.
+/// E5, R2: at 4096 nonces spent in the last five minutes the next issue is
+/// `BUSY`. Only a valid signature spends one, so the cap is reached by 4096
+/// read grants and not by asking.
 async fn nonces_bounded<T: Target>(target: &mut T) -> Outcome {
     target.reset().await?;
-    for _ in 0..MAX_LIVE_NONCES {
-        ok(target.nonce().await, "a nonce under the cap")?;
+    let key = identity(1);
+    paired(target, &key).await?;
+    // The pairing spent one already.
+    for _ in 1..MAX_LIVE_NONCES {
+        ok(pair_read(target, &key).await, "a read grant under the cap")?;
     }
     let busy = refused(target.nonce().await, Code::Busy, "a nonce at the cap")?;
     ensure(
@@ -3218,24 +3260,132 @@ async fn nonces_bounded<T: Target>(target: &mut T) -> Outcome {
     Ok(())
 }
 
-/// E5: the nonce route names no vault.
+/// R2: the nonce route writes nothing, however often it is asked; and a
+/// legitimate claim afterwards succeeds.
+async fn nonce_route_writes_nothing<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let (manifest, _) = headed(target, &phone, &vault, "before the flood", None, 1).await?;
+    let before = target.nonce_rows().await?.len();
+    for _ in 0..10_000 {
+        ok(target.nonce().await, "an unauthenticated nonce")?;
+    }
+    let rows = target.nonce_rows().await?;
+    ensure(rows.len() == before, || {
+        format!("the nonce route wrote {} rows", rows.len() - before)
+    })?;
+    ok(
+        pair_claim(target, &key, 2, Some(manifest.0)).await,
+        "a legitimate claim after the flood",
+    )?;
+    Ok(())
+}
+
+/// R2: a forged, foreign, expired or replayed nonce is `UNAUTHORIZED`; and a
+/// request signed by the wrong key leaves the nonce unspent — which gains an
+/// attacker nothing, because what makes a request good is the vault key's
+/// signature over that nonce, which they cannot make.
+async fn nonce_is_checked<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    paired(target, &key).await?;
+    let gateway = target.gateway_id();
+    let signed_read = |nonce: Nonce, by: &SigningKey| PairRequest {
+        vault_id: vault_of(&key),
+        label: "restoring phone".to_owned(),
+        kind: PairKind::Read,
+        nonce,
+        secret: None,
+        claim: None,
+        read: Some(ReadBody {
+            signature: sign_read(by, &gateway, &nonce),
+        }),
+    };
+    let baseline = target.nonce_rows().await?.len();
+    let honest = ok(target.nonce().await, "a nonce")?.nonce;
+    // A forged MAC, a forged time.
+    for byte in [24, 39, 20] {
+        let mut bytes = *honest.as_bytes();
+        bytes[byte] ^= 1;
+        refused(
+            target
+                .pair(&signed_read(Nonce::from_bytes(bytes), &key))
+                .await,
+            Code::Unauthorized,
+            "a nonce with a forged byte",
+        )?;
+    }
+    // Another gateway's: a nonce minted under another key.
+    let now = ok(target.info().await, "info")?.time_ms;
+    let foreign = crate::rules::nonce::mint(&[0x99; 32], &gateway, [3; 16], now);
+    refused(
+        target.pair(&signed_read(foreign, &key)).await,
+        Code::Unauthorized,
+        "a nonce from another gateway",
+    )?;
+    // The wrong key's signature does not spend the nonce ...
+    refused(
+        target.pair(&signed_read(honest, &identity(9))).await,
+        Code::Unauthorized,
+        "a wrong-key signature",
+    )?;
+    ensure(target.nonce_rows().await?.len() == baseline, || {
+        "a wrong-key signature spent a nonce".to_owned()
+    })?;
+    // ... so the honest phone's own request on it still works, once.
+    ok(
+        target.pair(&signed_read(honest, &key)).await,
+        "the honest request on the same nonce",
+    )?;
+    refused(
+        target.pair(&signed_read(honest, &key)).await,
+        Code::Unauthorized,
+        "the same nonce again",
+    )?;
+    // Expired.
+    let old = ok(target.nonce().await, "a nonce")?.nonce;
+    target.advance(NONCE_TTL_MS).await;
+    refused(
+        target.pair(&signed_read(old, &key)).await,
+        Code::Unauthorized,
+        "an expired nonce",
+    )?;
+    Ok(())
+}
+
+/// R2: the spent-nonce table holds nothing that names a vault — every column
+/// of every row is looked at.
 async fn canary_nonce<T: Target>(target: &mut T) -> Outcome {
     target.reset().await?;
     let key = identity(1);
     let phone = paired(target, &key).await?;
     let vault = vault_of(&key);
-    ok(target.nonce().await, "a nonce")?;
-    ok(target.nonce().await, "a nonce")?;
+    let (manifest, _) = headed(target, &phone, &vault, "a vault with a name", None, 1).await?;
+    ok(pair_read(target, &key).await, "a read grant")?;
+    ok(
+        pair_claim(target, &key, 2, Some(manifest.0)).await,
+        "a claim",
+    )?;
     let rows = target.nonce_rows().await?;
-    ensure(!rows.is_empty(), || "no nonce rows to look at".to_owned())?;
+    ensure(rows.len() == 3, || {
+        format!(
+            "three spent nonces (pairing, grant, claim), three rows: {}",
+            rows.len()
+        )
+    })?;
     for row in &rows {
-        ensure(row.len() == 16 + 8, || {
-            "a nonce row holds more than a nonce and a time".to_owned()
-        })?;
         ensure(
             !contains(row, vault.as_bytes()) && !contains(row, phone.token.as_bytes()),
-            || "a nonce row names a vault".to_owned(),
+            || "a nonce row names a vault or a token".to_owned(),
         )?;
+        ensure(row.len() == 16 + 8, || {
+            format!(
+                "a nonce row holds more than an id and a time: {} bytes",
+                row.len()
+            )
+        })?;
     }
     Ok(())
 }
@@ -3391,8 +3541,7 @@ async fn frozen_vault<T: Target>(target: &mut T) -> Outcome {
     ok(pair_read(target, &key).await, "a read grant")?;
     let _ = gateway;
     // The purge skips the vault, however late.
-    target.advance(GRACE_MS + 1).await;
-    ensure(target.purge().await? == 0, || {
+    ensure(watch(target, GRACE_MS + 1).await? == 0, || {
         "a frozen vault was purged".to_owned()
     })?;
     ok(
@@ -3453,8 +3602,11 @@ async fn operator_undo_all<T: Target>(target: &mut T) -> Outcome {
     })
 }
 
-/// E6: a gap longer than fourteen days between purge sweeps re-bases holds.
-async fn long_gap_rebases<T: Target>(target: &mut T) -> Outcome {
+/// One held part, and how it stands: a fresh gateway, one phone, one name
+/// held for deletion at the clock's reading.
+async fn one_hold<T: Target>(
+    target: &mut T,
+) -> Result<(Phone, VaultId, crate::rules::wire::HeldEntry), String> {
     target.reset().await?;
     let key = identity(1);
     let phone = paired(target, &key).await?;
@@ -3462,64 +3614,74 @@ async fn long_gap_rebases<T: Target>(target: &mut T) -> Outcome {
     let part = object("held through a gap");
     store(target, &phone, &vault, &part).await?;
     tombstone(target, &phone, &vault, &[part.0]).await?;
-    target.advance(365 * 86_400_000).await;
-    let now = ok(target.info().await, "info")?.time_ms;
-    ensure(target.purge().await? == 0, || {
-        "a hold ended early across a long gap".to_owned()
-    })?;
     let held = ok(target.held(&phone.token, &vault, None, 10).await, "held")?;
-    ensure(
-        held.len() == 1 && held[0].purge_after_ms == now + GRACE_MS,
-        || format!("re-based to a full week from the sweep: {held:?}"),
-    )?;
-    target.advance(GRACE_MS + 1).await;
-    ensure(target.purge().await? == 1, || {
-        "the hold must end a week after the re-base".to_owned()
-    })
+    ensure(held.len() == 1, || format!("{held:?}"))?;
+    Ok((phone, vault, held[0]))
 }
 
-/// E8: a directory object is sealed like any part; the gateway adds nothing.
-async fn canary_directory<T: Target>(target: &mut T) -> Outcome {
-    target.reset().await?;
-    let (one, two) = (identity(1), identity(2));
-    let (a, b) = (paired(target, &one).await?, paired(target, &two).await?);
-    let (va, vb) = (vault_of(&one), vault_of(&two));
-    let address = b"10.0.0.7:8443";
-    let directory = |tag: u8| {
-        let key = blake3::derive_key("centraid gateway canary directory", &[tag]);
-        let plaintext = [
-            &b"{\"v\":1,\"gateways\":[{\"addrs\":[\""[..],
-            address,
-            b"\"]}]}",
-        ]
-        .concat();
-        (key, plaintext)
-    };
-    let mut names = Vec::new();
-    for (phone, vault, tag) in [(&a, &va, 1_u8), (&b, &vb, 2_u8)] {
-        let (key, plaintext) = directory(tag);
-        let name = Name::from_bytes(blake3::derive_key(
-            "centraid gateway canary directory name",
-            &[tag],
-        ));
-        store(
-            target,
-            phone,
-            vault,
-            &(name, stand_in_seal(&key, &plaintext)),
-        )
-        .await?;
-        names.push(name);
-    }
-    ensure(names[0] != names[1], || {
-        "two vaults share a directory name".to_owned()
+/// E6, as amended (#1191, R1): a hold counts only the time the gateway was
+/// watching. A gap of more than three sweep intervals since the last sweep —
+/// a clock step, a night asleep, a spoofed time — moves every hold later by
+/// the whole gap before anything is purged, so it never ends a hold early.
+async fn gap_not_counted<T: Target>(target: &mut T) -> Outcome {
+    // Eight days: under the old fourteen-day threshold, so the hold was purged
+    // at once. Now nothing is purged and the hold moved by exactly the gap.
+    let (phone, vault, before) = one_hold(target).await?;
+    let jump = 8 * DAY_MS;
+    target.advance(jump).await;
+    ensure(target.purge().await? == 0, || {
+        "a hold was purged across an eight-day gap".to_owned()
     })?;
-    let at_rest = target.at_rest().await?;
-    ensure(!contains(&at_rest, address), || {
-        "a gateway address is at rest in the clear".to_owned()
+    let after = ok(target.held(&phone.token, &vault, None, 10).await, "held")?;
+    ensure(
+        after[0].purge_after_ms == before.purge_after_ms + jump,
+        || format!("shifted by exactly the jump: {before:?} {after:?}"),
+    )?;
+
+    // Exactly three intervals counts; one millisecond more does not.
+    let (phone, vault, before) = one_hold(target).await?;
+    target
+        .advance(PURGE_GAP_INTERVALS * PURGE_INTERVAL_MS)
+        .await;
+    target.purge().await?;
+    let after = ok(target.held(&phone.token, &vault, None, 10).await, "held")?;
+    ensure(after[0].purge_after_ms == before.purge_after_ms, || {
+        format!("three intervals are watched time: {before:?} {after:?}")
     })?;
-    ensure(!contains(&at_rest, hex::encode(address).as_bytes()), || {
-        "a gateway address is at rest as hex".to_owned()
+    let (phone, vault, before) = one_hold(target).await?;
+    let gap = PURGE_GAP_INTERVALS * PURGE_INTERVAL_MS + 1;
+    target.advance(gap).await;
+    target.purge().await?;
+    let after = ok(target.held(&phone.token, &vault, None, 10).await, "held")?;
+    ensure(
+        after[0].purge_after_ms == before.purge_after_ms + gap,
+        || format!("three intervals and a millisecond are not: {before:?} {after:?}"),
+    )?;
+
+    // A year: the hold still has its full remaining week.
+    let (phone, vault, _) = one_hold(target).await?;
+    target.advance(365 * DAY_MS).await;
+    let now = ok(target.info().await, "info")?.time_ms;
+    ensure(target.purge().await? == 0, || {
+        "a hold ended across a year".to_owned()
+    })?;
+    let after = ok(target.held(&phone.token, &vault, None, 10).await, "held")?;
+    ensure(after[0].purge_after_ms == now + GRACE_MS, || {
+        format!("a full remaining week after a year: {after:?}")
+    })?;
+    ensure(watch(target, GRACE_MS + 1).await? == 1, || {
+        "and then it ends".to_owned()
+    })?;
+
+    // A clock stepped back purges nothing and shortens nothing.
+    let (phone, vault, before) = one_hold(target).await?;
+    target.advance(-DAY_MS).await;
+    ensure(target.purge().await? == 0, || {
+        "a backwards clock purged".to_owned()
+    })?;
+    let after = ok(target.held(&phone.token, &vault, None, 10).await, "held")?;
+    ensure(after[0].purge_after_ms == before.purge_after_ms, || {
+        format!("a backwards clock moved a hold: {before:?} {after:?}")
     })
 }
 

@@ -12,9 +12,7 @@ use crate::rules::bundle::Frame;
 use crate::rules::code::Refusal;
 use crate::rules::conformance::{Failure, PutAnswer, ScrubCounts, Target};
 use crate::rules::engine::{Arrival, Finding, Gateway, Operated, PutOutcome, examine};
-use crate::rules::ids::{
-    Digest, GatewayId, Name, Nonce, Secret, SecretHash, Token, TokenHash, VaultId,
-};
+use crate::rules::ids::{Digest, GatewayId, Name, Secret, SecretHash, Token, TokenHash, VaultId};
 use crate::rules::range::{ByteRange, resolve};
 use crate::rules::state::{
     ClaimRecord, Fault, HeadRecord, Hold, ObjectRecord, RevokedToken, SecretRecord, SnapshotRecord,
@@ -32,7 +30,7 @@ pub struct MemoryState {
     tokens: BTreeMap<TokenHash, TokenRecord>,
     revoked: BTreeMap<TokenHash, RevokedToken>,
     claims: BTreeMap<VaultId, ClaimRecord>,
-    nonces: BTreeMap<Nonce, i64>,
+    nonces: BTreeMap<[u8; 16], i64>,
     secrets: BTreeMap<SecretHash, SecretRecord>,
     heads: BTreeMap<VaultId, HeadRecord>,
     snapshots: BTreeMap<(VaultId, Name), SnapshotRecord>,
@@ -65,7 +63,7 @@ impl MemoryState {
         self.nonces
             .iter()
             .map(|(nonce, at)| {
-                let mut row = nonce.as_bytes().to_vec();
+                let mut row = nonce.to_vec();
                 row.extend_from_slice(&at.to_be_bytes());
                 row
             })
@@ -214,16 +212,8 @@ impl State for MemoryState {
         Ok(())
     }
 
-    fn put_nonce(&mut self, nonce: &Nonce, issued_at_ms: i64) -> Result<(), StoreFault> {
-        self.nonces.insert(*nonce, issued_at_ms);
-        Ok(())
-    }
-
-    fn take_nonce(&mut self, nonce: &Nonce, not_before_ms: i64) -> Result<bool, StoreFault> {
-        Ok(self
-            .nonces
-            .remove(nonce)
-            .is_some_and(|issued| issued > not_before_ms))
+    fn spend_nonce(&mut self, id: &[u8; 16], issued_at_ms: i64) -> Result<bool, StoreFault> {
+        Ok(self.nonces.insert(*id, issued_at_ms).is_none())
     }
 
     fn live_nonces(&self, not_before_ms: i64) -> Result<u64, StoreFault> {
@@ -528,15 +518,15 @@ impl State for MemoryState {
         Ok(made)
     }
 
-    fn rebase_holds(&mut self, purge_after_ms: i64) -> Result<(), StoreFault> {
+    fn shift_all_holds(&mut self, delta_ms: i64) -> Result<(), StoreFault> {
         for object in self.objects.values_mut() {
             if let Some(hold) = &mut object.hold {
-                hold.purge_after_ms = purge_after_ms;
+                hold.purge_after_ms = hold.purge_after_ms.saturating_add(delta_ms);
             }
         }
         for snapshot in self.snapshots.values_mut() {
             if let Some(hold) = &mut snapshot.hold {
-                hold.purge_after_ms = purge_after_ms;
+                hold.purge_after_ms = hold.purge_after_ms.saturating_add(delta_ms);
             }
         }
         Ok(())
@@ -568,7 +558,11 @@ impl MemoryTarget {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            gateway: Gateway::new(MemoryState::default(), GatewayId::from_bytes([0x6a; 16])),
+            gateway: Gateway::new(
+                MemoryState::default(),
+                GatewayId::from_bytes([0x6a; 16]),
+                [0x4e; 32],
+            ),
             bytes: BTreeMap::new(),
             now_ms: START_MS,
             draws: 0,
@@ -661,7 +655,7 @@ impl Target for MemoryTarget {
         let mut purged = 0;
         let now = self.now_ms;
         self.gateway
-            .rebase_holds(self.last_purge_ms, now)
+            .account_for_gap(self.last_purge_ms, now)
             .map_err(|fault| fault.to_string())?;
         let mut cursor: Option<(i64, VaultId, Name)> = None;
         loop {
@@ -940,10 +934,10 @@ impl Target for MemoryTarget {
 
     async fn nonce(&mut self) -> Result<NonceAnswer, Failure> {
         let draw = self.draw();
-        let nonce =
-            Nonce::from_slice(&draw[..16]).ok_or_else(|| Failure::Broken("a draw".into()))?;
+        let mut random = [0_u8; 16];
+        random.copy_from_slice(&draw[..16]);
         self.gateway
-            .issue_nonce(&nonce, self.now_ms)
+            .issue_nonce(random, self.now_ms)
             .map_err(failure)
     }
 

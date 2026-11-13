@@ -29,6 +29,7 @@
 //! | [`code`] | the closed refusal codes and the one refusal body |
 //! | [`wire`] | every request and answer body |
 //! | [`signing`] | every record the vault key signs: claim, read grant, head, delete, undo, pairing |
+//! | [`nonce`] | the stateless nonce: a MAC the gateway checks, a table only a valid signature writes |
 //! | [`payload`] | the pairing QR's text |
 //! | [`bundle`] | the many-objects framing, both ways |
 //! | [`range`] | one `Range` per `GET` |
@@ -44,6 +45,7 @@ pub mod engine;
 pub mod ids;
 pub mod limits;
 pub mod memory;
+pub mod nonce;
 pub mod payload;
 pub mod range;
 pub mod signing;

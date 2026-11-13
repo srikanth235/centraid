@@ -483,7 +483,7 @@ mod tests {
         ClaimView {
             epoch: 4,
             head_seen: Some(Name::from_bytes([8; 32])),
-            nonce: crate::rules::ids::Nonce::from_bytes([6; 16]),
+            nonce: crate::rules::ids::Nonce::from_bytes([6; 40]),
             signature: crate::rules::ids::Signature::from_bytes([5; 64]),
         }
     }

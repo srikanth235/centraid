@@ -231,12 +231,12 @@ async fn info(State(shared): State<Handle>) -> Response {
     )
 }
 
-/// `POST nonce`: no auth, no body, and no vault. The nonce is drawn here,
-/// from the OS; the rules hold no randomness.
+/// `POST nonce`: no auth, no body, no vault, and **no write**. The random part
+/// is drawn here, from the OS; the rules MAC it under the gateway's key.
 async fn nonce(State(shared): State<Handle>) -> Response {
     let now = shared.now();
-    let drawn = shared.fresh_nonce();
-    let outcome = drawn.and_then(|nonce| shared.rules(|gateway| gateway.issue_nonce(&nonce, now)));
+    let drawn = shared.fresh_nonce_id();
+    let outcome = drawn.and_then(|random| shared.rules(|gateway| gateway.issue_nonce(random, now)));
     answer(&shared, StatusCode::OK, outcome)
 }
 
@@ -1019,7 +1019,7 @@ mod tests {
         let claim = crate::rules::wire::ClaimView {
             epoch: 3,
             head_seen: None,
-            nonce: crate::rules::ids::Nonce::from_bytes([1; 16]),
+            nonce: crate::rules::ids::Nonce::from_bytes([1; 40]),
             signature: crate::rules::ids::Signature::from_bytes([2; 64]),
         };
         let response = refused(

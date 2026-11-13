@@ -25,13 +25,14 @@
 use std::collections::BTreeSet;
 
 use crate::rules::code::{Code, Refusal};
-use crate::rules::ids::{Digest, GatewayId, Name, Nonce, Secret, Token, TokenHash, VaultId};
+use crate::rules::ids::{Digest, GatewayId, Name, Secret, Token, TokenHash, VaultId};
 use crate::rules::limits::{
     BUSY_RETRY_MS, GRACE_MS, LIST_LIMIT, MAX_BUNDLE_BYTES, MAX_CLOCK_AHEAD_MS, MAX_GENERATION_JUMP,
     MAX_LABEL_BYTES, MAX_LIVE_NONCES, MAX_LIVE_SECRETS, MAX_NAMES, MAX_OBJECT_BYTES,
-    MAX_REVOKED_PER_VAULT, NONCE_TTL_MS, ORPHAN_MIN_AGE_MS, PROTOCOL, PURGE_GAP_REBASE_MS,
-    REVOKED_TOKEN_KEEP_MS, SECRET_KEEP_MS, SECRET_TTL_MS,
+    MAX_REVOKED_PER_VAULT, NONCE_TTL_MS, ORPHAN_MIN_AGE_MS, PROTOCOL, PURGE_GAP_INTERVALS,
+    PURGE_INTERVAL_MS, REVOKED_TOKEN_KEEP_MS, SECRET_KEEP_MS, SECRET_TTL_MS,
 };
+use crate::rules::nonce;
 use crate::rules::signing::{
     HeadFields, READ_EPOCH, verify_claim, verify_delete, verify_head, verify_pair, verify_undo,
 };
@@ -170,12 +171,19 @@ pub struct Pairing {
 pub struct Gateway<S> {
     pub state: S,
     id: GatewayId,
+    /// The key nonces are MAC'd under: gateway-local, kept with the identity,
+    /// handed to the rules as an argument like a clock.
+    nonce_key: [u8; 32],
 }
 
 impl<S: State> Gateway<S> {
     /// The rules over `state`, for the gateway whose id is `id`.
-    pub const fn new(state: S, id: GatewayId) -> Self {
-        Self { state, id }
+    pub const fn new(state: S, id: GatewayId, nonce_key: [u8; 32]) -> Self {
+        Self {
+            state,
+            id,
+            nonce_key,
+        }
     }
 
     /// This gateway's id.
@@ -220,40 +228,37 @@ impl<S: State> Gateway<S> {
         })
     }
 
-    /// `POST /v3/nonce`: remember a nonce the adapter drew. Expired ones are
-    /// pruned first; at [`MAX_LIVE_NONCES`] live the answer is `BUSY`. The
-    /// route names no vault, so a gateway learns nothing of who is about to
-    /// restore.
+    /// `POST /v3/nonce`: a nonce for `random`, **written nowhere** (R2): the
+    /// gateway recognises it later by its MAC. The only state it reads is the
+    /// spent table's live size, and at [`MAX_LIVE_NONCES`] spent in the last
+    /// five minutes the answer is `BUSY`. The route names no vault, so a
+    /// gateway learns nothing of who is about to restore.
     ///
     /// # Errors
     ///
     /// `BUSY`, or a store fault.
-    pub fn issue_nonce(&mut self, nonce: &Nonce, now_ms: i64) -> Result<NonceAnswer, Fault> {
+    pub fn issue_nonce(&self, random: [u8; 16], now_ms: i64) -> Result<NonceAnswer, Fault> {
         let not_before = now_ms.saturating_sub(NONCE_TTL_MS);
-        let nonce = *nonce;
-        self.state.atomically(|state| {
-            state.prune_nonces(not_before)?;
-            if state.live_nonces(not_before)? >= MAX_LIVE_NONCES {
-                return Err(Refusal::Busy {
-                    retry_after_ms: BUSY_RETRY_MS,
-                }
-                .into());
+        if self.state.live_nonces(not_before)? >= MAX_LIVE_NONCES {
+            return Err(Refusal::Busy {
+                retry_after_ms: BUSY_RETRY_MS,
             }
-            state.put_nonce(&nonce, now_ms)?;
-            Ok(NonceAnswer {
-                nonce,
-                ttl_ms: NONCE_TTL_MS,
-            })
+            .into());
+        }
+        Ok(NonceAnswer {
+            nonce: nonce::mint(&self.nonce_key, &self.id, random, now_ms),
+            ttl_ms: NONCE_TTL_MS,
         })
     }
 
     /// `POST /v3/pair`. `token` is the fresh token the adapter drew; it is
     /// handed back only if the pairing succeeds.
     ///
-    /// The checks run shape, then nonce, then credential, then state: a
-    /// malformed request is `BAD_REQUEST` whoever sent it; **the nonce is
-    /// spent next, in a step of its own, so a refusal below does not give it
-    /// back**; a wrong secret or signature is `UNAUTHORIZED` before anything
+    /// The checks run shape, then the nonce's MAC and age, then the credential
+    /// (the live secret, the vault, the signature over the nonce), and only
+    /// then **the nonce is spent, in a step of its own, so a refusal below
+    /// does not give it back**; a malformed request is `BAD_REQUEST` whoever
+    /// sent it; a wrong secret or signature is `UNAUTHORIZED` before anything
     /// about the vault is revealed; only a caller who proved something learns
     /// `VAULT_KNOWN`, `FROZEN`, the epoch or the head.
     ///
@@ -284,14 +289,19 @@ impl<S: State> Gateway<S> {
             return Err(Refusal::BadRequest.into());
         }
         let gateway = self.id;
-        let not_before = now_ms.saturating_sub(NONCE_TTL_MS);
-        let nonce = request.nonce;
-        let fresh = self
-            .state
-            .atomically(|state| Ok(state.take_nonce(&nonce, not_before)?))?;
-        if !fresh {
-            return Err(Refusal::Unauthorized.into());
-        }
+        // The nonce must be this gateway's own and young: a pure check.
+        let opened = nonce::open(&self.nonce_key, &gateway, &request.nonce, now_ms)
+            .ok_or(Refusal::Unauthorized)?;
+        // Authenticate, then spend the nonce, in a step of its own: only a
+        // request that proved something writes a row, and a refusal below
+        // does not give the nonce back.
+        self.state.atomically(|state| {
+            authenticate(state, gateway, request, now_ms)?;
+            if !state.spend_nonce(&opened.id, opened.issued_at_ms)? {
+                return Err(Refusal::Unauthorized.into());
+            }
+            Ok(())
+        })?;
         self.state.atomically(|state| match request.kind {
             PairKind::Secret => pair_by_secret(state, gateway, request, token, now_ms),
             PairKind::Claim => pair_by_claim(state, gateway, request, token, now_ms),
@@ -815,21 +825,25 @@ impl<S: State> Gateway<S> {
         Ok(self.state.purgeable(after, now_ms, limit)?)
     }
 
-    /// Whether the purge must re-base every hold first: the gap since the
-    /// last purge sweep is past [`PURGE_GAP_REBASE_MS`]. A gateway that slept
-    /// for a month and one whose clock jumped a year are the same case, and
-    /// both give the member the full week again. Answers whether it did.
+    /// **A hold counts only the time the gateway was watching** (#1191, R1).
+    /// If more than [`PURGE_GAP_INTERVALS`] purge intervals passed since the
+    /// last sweep — a clock step, a night asleep, a spoofed time — the whole
+    /// gap is time nobody saw, and every hold moves later by it, in one
+    /// transaction, before anything is purged. The same operation as
+    /// `unfreeze`. A gap within three intervals, or a clock that stepped
+    /// back, moves nothing: holds are never shortened. Answers the shift.
     ///
     /// # Errors
     ///
     /// A store fault.
-    pub fn rebase_holds(&mut self, last_purge_ms: i64, now_ms: i64) -> Result<bool, Fault> {
-        if now_ms.saturating_sub(last_purge_ms) <= PURGE_GAP_REBASE_MS {
-            return Ok(false);
+    pub fn account_for_gap(&mut self, last_purge_ms: i64, now_ms: i64) -> Result<i64, Fault> {
+        let gap = now_ms.saturating_sub(last_purge_ms);
+        if gap <= PURGE_GAP_INTERVALS * PURGE_INTERVAL_MS {
+            return Ok(0);
         }
         self.state.atomically(|state| {
-            state.rebase_holds(now_ms.saturating_add(GRACE_MS))?;
-            Ok(true)
+            state.shift_all_holds(gap)?;
+            Ok(gap)
         })
     }
 
@@ -1348,6 +1362,62 @@ fn authorize<S: State>(
     })
 }
 
+/// Prove the request is the vault key holder's, before anything is written:
+/// the secret is live and the signature over it and the nonce verifies (a
+/// pairing by secret); the vault is known and the signature over the claim or
+/// the grant verifies. `UNAUTHORIZED` for any failure.
+fn authenticate<S: State>(
+    state: &S,
+    gateway: GatewayId,
+    request: &PairRequest,
+    now_ms: i64,
+) -> Result<(), Fault> {
+    let verified = match request.kind {
+        PairKind::Secret => {
+            let body = request.secret.ok_or(Refusal::BadRequest)?;
+            state
+                .secret(&body.secret.hash())?
+                .is_some_and(|record| record.is_live(now_ms))
+                && verify_pair(
+                    &gateway,
+                    &request.vault_id,
+                    &body.secret,
+                    &request.nonce,
+                    &body.signature,
+                )
+        }
+        PairKind::Claim => {
+            let claim = request.claim.ok_or(Refusal::BadRequest)?;
+            state.vault(&request.vault_id)?.is_some()
+                && verify_claim(
+                    &gateway,
+                    &request.vault_id,
+                    claim.epoch,
+                    claim.head_seen.as_ref(),
+                    &request.nonce,
+                    &claim.signature,
+                )
+        }
+        PairKind::Read => {
+            let read = request.read.ok_or(Refusal::BadRequest)?;
+            state.vault(&request.vault_id)?.is_some()
+                && verify_claim(
+                    &gateway,
+                    &request.vault_id,
+                    READ_EPOCH,
+                    None,
+                    &request.nonce,
+                    &read.signature,
+                )
+        }
+    };
+    if verified {
+        Ok(())
+    } else {
+        Err(Refusal::Unauthorized.into())
+    }
+}
+
 /// A secret admits a vault the gateway has never seen, at epoch 1, **to a
 /// phone that proves it holds the vault key**: the nonce is spent (by the
 /// caller), then the secret is checked, then the signature over the secret's
@@ -1366,15 +1436,6 @@ fn pair_by_secret<S: State>(
         .secret(&body.secret.hash())?
         .filter(|record| record.is_live(now_ms))
         .ok_or(Refusal::Unauthorized)?;
-    if !verify_pair(
-        &gateway,
-        &request.vault_id,
-        &body.secret,
-        &request.nonce,
-        &body.signature,
-    ) {
-        return Err(Refusal::Unauthorized.into());
-    }
     if let Some(known) = state.vault(&request.vault_id)? {
         return Err(match known.frozen_at_ms {
             Some(since_ms) => Refusal::Frozen { since_ms },
@@ -1407,16 +1468,6 @@ fn pair_by_claim<S: State>(
     let mut vault = state
         .vault(&request.vault_id)?
         .ok_or(Refusal::Unauthorized)?;
-    if !verify_claim(
-        &gateway,
-        &request.vault_id,
-        claim.epoch,
-        claim.head_seen.as_ref(),
-        &request.nonce,
-        &claim.signature,
-    ) {
-        return Err(Refusal::Unauthorized.into());
-    }
     if let Some(since_ms) = vault.frozen_at_ms {
         return Err(Refusal::Frozen { since_ms }.into());
     }
@@ -1472,20 +1523,9 @@ fn grant_read<S: State>(
     token: &Token,
     now_ms: i64,
 ) -> Result<Paired, Fault> {
-    let read = request.read.ok_or(Refusal::BadRequest)?;
     state
         .vault(&request.vault_id)?
         .ok_or(Refusal::Unauthorized)?;
-    if !verify_claim(
-        &gateway,
-        &request.vault_id,
-        READ_EPOCH,
-        None,
-        &request.nonce,
-        &read.signature,
-    ) {
-        return Err(Refusal::Unauthorized.into());
-    }
     mint(state, gateway, request, token, READ_EPOCH, now_ms)
 }
 

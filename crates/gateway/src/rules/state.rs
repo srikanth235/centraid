@@ -336,29 +336,23 @@ pub trait State {
     /// A store fault.
     fn put_claim(&mut self, record: &ClaimRecord) -> Result<(), StoreFault>;
 
-    /// Remember a nonce issued at `issued_at_ms`.
+    /// Record a nonce as spent: `true` the first time, `false` if it was
+    /// already (a replay). Only a request that proved it holds the vault key
+    /// reaches this.
     ///
     /// # Errors
     ///
     /// A store fault.
-    fn put_nonce(&mut self, nonce: &Nonce, issued_at_ms: i64) -> Result<(), StoreFault>;
+    fn spend_nonce(&mut self, id: &[u8; 16], issued_at_ms: i64) -> Result<bool, StoreFault>;
 
-    /// Spend a nonce: answers whether it was held and issued after
-    /// `not_before_ms`. A nonce found is gone either way.
-    ///
-    /// # Errors
-    ///
-    /// A store fault.
-    fn take_nonce(&mut self, nonce: &Nonce, not_before_ms: i64) -> Result<bool, StoreFault>;
-
-    /// How many nonces were issued after `not_before_ms` and are unspent.
+    /// How many spent nonces were issued after `not_before_ms`.
     ///
     /// # Errors
     ///
     /// A store fault.
     fn live_nonces(&self, not_before_ms: i64) -> Result<u64, StoreFault>;
 
-    /// Drop nonces issued at or before `before_ms`; how many.
+    /// Drop spent nonces issued at or before `before_ms`; how many.
     ///
     /// # Errors
     ///
@@ -599,10 +593,10 @@ pub trait State {
     /// A store fault.
     fn make_holds_due(&mut self, vault: &VaultId, due_ms: i64) -> Result<u64, StoreFault>;
 
-    /// Re-base every hold of every vault to `purge_after_ms`.
+    /// Move every hold of every vault `delta_ms` later.
     ///
     /// # Errors
     ///
     /// A store fault.
-    fn rebase_holds(&mut self, purge_after_ms: i64) -> Result<(), StoreFault>;
+    fn shift_all_holds(&mut self, delta_ms: i64) -> Result<(), StoreFault>;
 }

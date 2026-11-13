@@ -19,7 +19,7 @@
 
 use std::path::Path;
 
-use rusqlite::{Connection, OptionalExtension as _, Row, params};
+use rusqlite::{Connection, Row, params};
 
 use crate::rules::ids::{Digest, Name, Nonce, SecretHash, Signature, TokenHash, VaultId};
 use crate::rules::state::{
@@ -374,8 +374,19 @@ impl SqliteState {
     /// A store fault.
     pub fn nonce_rows(&self) -> Result<Vec<Vec<u8>>, StoreFault> {
         rows(&self.connection, sql::NONCE_ROWS_SELECT, [], |row| {
-            let mut bytes: Vec<u8> = row.get(0).map_err(fault)?;
-            bytes.extend_from_slice(&row.get::<_, i64>(1).map_err(fault)?.to_be_bytes());
+            // Every column of the row, whatever the table grows: a column
+            // that named a vault would show here.
+            let mut bytes = Vec::new();
+            for index in 0..row.as_ref().column_count() {
+                match row.get_ref(index).map_err(fault)? {
+                    rusqlite::types::ValueRef::Blob(blob) => bytes.extend_from_slice(blob),
+                    rusqlite::types::ValueRef::Text(text) => bytes.extend_from_slice(text),
+                    rusqlite::types::ValueRef::Integer(number) => {
+                        bytes.extend_from_slice(&number.to_be_bytes());
+                    }
+                    _ => {}
+                }
+            }
             Ok(bytes)
         })
     }
@@ -615,22 +626,8 @@ impl State for SqliteState {
         Ok(())
     }
 
-    fn put_nonce(&mut self, nonce: &Nonce, issued_at_ms: i64) -> Result<(), StoreFault> {
-        self.run(sql::NONCE_INSERT, params![nonce.as_bytes(), issued_at_ms])?;
-        Ok(())
-    }
-
-    fn take_nonce(&mut self, nonce: &Nonce, not_before_ms: i64) -> Result<bool, StoreFault> {
-        let issued: Option<i64> = self
-            .connection
-            .prepare_cached(sql::NONCE_TAKE)
-            .and_then(|mut prepared| {
-                prepared
-                    .query_row(params![nonce.as_bytes()], |row| row.get(0))
-                    .optional()
-            })
-            .map_err(fault)?;
-        Ok(issued.is_some_and(|issued| issued > not_before_ms))
+    fn spend_nonce(&mut self, id: &[u8; 16], issued_at_ms: i64) -> Result<bool, StoreFault> {
+        Ok(self.run(sql::NONCE_SPEND, params![id.as_slice(), issued_at_ms])? > 0)
     }
 
     fn live_nonces(&self, not_before_ms: i64) -> Result<u64, StoreFault> {
@@ -996,9 +993,9 @@ impl State for SqliteState {
         Ok(made as u64)
     }
 
-    fn rebase_holds(&mut self, purge_after_ms: i64) -> Result<(), StoreFault> {
-        self.run(sql::HOLDS_REBASE_OBJECTS, params![purge_after_ms])?;
-        self.run(sql::HOLDS_REBASE_SNAPSHOTS, params![purge_after_ms])?;
+    fn shift_all_holds(&mut self, delta_ms: i64) -> Result<(), StoreFault> {
+        self.run(sql::HOLDS_SHIFT_ALL_OBJECTS, params![delta_ms])?;
+        self.run(sql::HOLDS_SHIFT_ALL_SNAPSHOTS, params![delta_ms])?;
         Ok(())
     }
 }
@@ -1100,11 +1097,14 @@ mod tests {
     #[test]
     fn the_rules_run_over_sqlite() {
         let gateway_id = GatewayId::from_bytes([3; 16]);
-        let mut gateway = Gateway::new(SqliteState::in_memory().expect("opens"), gateway_id);
+        let mut gateway = Gateway::new(
+            SqliteState::in_memory().expect("opens"),
+            gateway_id,
+            [9; 32],
+        );
         let secret = crate::rules::ids::Secret::from_bytes([4; 16]);
         gateway.mint_secret(&secret, 0).expect("mints");
-        let nonce = Nonce::from_bytes([7; 16]);
-        gateway.issue_nonce(&nonce, 0).expect("issues");
+        let nonce = gateway.issue_nonce([7; 16], 0).expect("issues").nonce;
         let key = ed25519_dalek::SigningKey::from_bytes(&[5; 32]);
         let request = crate::rules::wire::PairRequest {
             vault_id: VaultId::from_bytes(key.verifying_key().to_bytes()),

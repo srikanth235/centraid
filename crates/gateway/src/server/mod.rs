@@ -11,6 +11,7 @@
 //! | Path | What |
 //! | --- | --- |
 //! | `tls.key`, `tls.crt`, `gateway.id` | the identity, minted together at first `serve`, mode 0600 ([`tls`]) |
+//! | `nonce.key` | the key nonces are MAC'd under, minted with the identity, mode 0600; never leaves |
 //! | `state.db` (with `-wal`, `-shm`) | vaults, hashed tokens and secrets, heads, snapshots, the object index; `application_id` `CGW3` and a `user_version` ladder ([`state`]) |
 //! | `objects/<vault>/<nn>/<name>` | one sealed object per file ([`store`]) |
 //! | `incoming/` | uploads being staged; emptied at start |
@@ -61,7 +62,7 @@ use std::sync::{Arc, Mutex};
 use rand::TryRngCore as _;
 
 use crate::rules::engine::Gateway;
-use crate::rules::ids::{GatewayId, Nonce, Secret, Token, VaultId};
+use crate::rules::ids::{GatewayId, Secret, Token, VaultId};
 use crate::rules::limits::SECRET_TTL_MS;
 use crate::rules::payload::{PAYLOAD_VERSION, PairPayload};
 use crate::rules::state::{Fault, StoreFault};
@@ -215,6 +216,30 @@ pub fn os_random<const N: usize>() -> Result<[u8; N], StoreFault> {
     Ok(bytes)
 }
 
+/// The file the nonce MAC key lives in, beside the identity, mode 0600. It
+/// never leaves the machine and is in no answer.
+pub const NONCE_KEY_FILE: &str = "nonce.key";
+
+fn load_or_mint_nonce_key(data_dir: &Path) -> Result<[u8; 32], OpenError> {
+    let path = data_dir.join(NONCE_KEY_FILE);
+    if let Ok(bytes) = std::fs::read(&path)
+        && let Ok(key) = <[u8; 32]>::try_from(bytes.as_slice())
+    {
+        return Ok(key);
+    }
+    let key = os_random::<32>()?;
+    let io = |error| OpenError::Io(path.display().to_string(), error);
+    let staged = data_dir.join(format!("{NONCE_KEY_FILE}.tmp"));
+    std::fs::write(&staged, key).map_err(io)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(&staged, std::fs::Permissions::from_mode(0o600)).map_err(io)?;
+    }
+    std::fs::rename(&staged, &path).map_err(io)?;
+    Ok(key)
+}
+
 impl Shared {
     /// Open the gateway whose data directory this is, minting its identity
     /// at first use.
@@ -225,18 +250,23 @@ impl Shared {
     pub fn open(data_dir: &Path, clock: Clock) -> Result<Self, OpenError> {
         std::fs::create_dir_all(data_dir)
             .map_err(|error| OpenError::Io(data_dir.display().to_string(), error))?;
-        // Drawn on every open and used only on the first: the id is minted
-        // with the certificate, from the OS.
-        let fresh_id = GatewayId::from_bytes(os_random::<16>()?);
-        let identity = Identity::load_or_mint(data_dir, || fresh_id)?;
+        // THE STATE IS OPENED FIRST. A data folder an earlier gateway made, or
+        // a newer one, or another program's file, is refused before anything
+        // else is written: no identity is minted beside it, no directory made
+        // (#1191, R7), so the folder is exactly as the member left it.
         let state = SqliteState::open(&data_dir.join(STATE_FILE)).map_err(|error| match error {
             OpenStateError::Refused(sentence) => OpenError::Refused(sentence),
             OpenStateError::Fault(fault) => OpenError::State(fault),
         })?;
+        // Drawn on every open and used only on the first: the id is minted
+        // with the certificate, from the OS.
+        let fresh_id = GatewayId::from_bytes(os_random::<16>()?);
+        let identity = Identity::load_or_mint(data_dir, || fresh_id)?;
+        let nonce_key = load_or_mint_nonce_key(data_dir)?;
         let store = ObjectStore::open(data_dir)
             .map_err(|error| OpenError::Io(data_dir.display().to_string(), error))?;
         Ok(Self {
-            gateway: Mutex::new(Gateway::new(state, identity.gateway_id())),
+            gateway: Mutex::new(Gateway::new(state, identity.gateway_id(), nonce_key)),
             store,
             identity,
             clock,
@@ -356,8 +386,8 @@ impl Shared {
     /// # Errors
     ///
     /// A store fault if the generator cannot be read.
-    pub fn fresh_nonce(&self) -> Result<Nonce, Fault> {
-        Ok(Nonce::from_bytes(os_random::<16>()?))
+    pub fn fresh_nonce_id(&self) -> Result<[u8; 16], Fault> {
+        Ok(os_random::<16>()?)
     }
 
     pub(crate) fn announce(&self, event: &Event) {

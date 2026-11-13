@@ -375,7 +375,7 @@ mod tests {
     }
 
     fn nonce() -> Nonce {
-        Nonce::from_bytes([0x77; 16])
+        Nonce::from_bytes([0x77; 40])
     }
 
     fn head() -> HeadFields {
@@ -406,8 +406,8 @@ mod tests {
         expected.extend_from_slice(&2_u64.to_be_bytes());
         expected.extend_from_slice(&32_u32.to_be_bytes());
         expected.extend_from_slice(&[0x33; 32]);
-        expected.extend_from_slice(&16_u32.to_be_bytes());
-        expected.extend_from_slice(&[0x77; 16]);
+        expected.extend_from_slice(&40_u32.to_be_bytes());
+        expected.extend_from_slice(&[0x77; 40]);
         assert_eq!(with_head, expected);
         let without = claim_preimage(&gateway(), &v, 2, None, &nonce());
         assert_eq!(without.len(), expected.len() - 32);
@@ -546,7 +546,7 @@ mod tests {
             &vault(),
             3,
             Some(&head),
-            &Nonce::from_bytes([1; 16]),
+            &Nonce::from_bytes([1; 40]),
             &signature
         ));
         let read = sign_read(&identity(), &gateway(), &nonce());
@@ -598,7 +598,7 @@ mod tests {
             &gateway(),
             &vault(),
             &secret,
-            &Nonce::from_bytes([2; 16]),
+            &Nonce::from_bytes([2; 40]),
             &signature
         ));
     }

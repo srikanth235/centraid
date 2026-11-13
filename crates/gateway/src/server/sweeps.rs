@@ -146,8 +146,12 @@ pub fn failed_at(every: Duration, now_ms: i64) -> i64 {
 /// over a failing disk.
 pub fn purge_once(shared: &Shared, last_purge_ms: i64) -> Result<u64, Fault> {
     let now = shared.now();
-    if shared.rules(|gateway| gateway.rebase_holds(last_purge_ms, now))? {
-        tracing::info!("a long gap since the last purge: every hold re-based to a full week");
+    let unwatched = shared.rules(|gateway| gateway.account_for_gap(last_purge_ms, now))?;
+    if unwatched > 0 {
+        tracing::info!(
+            minutes = unwatched / 60_000,
+            "the gateway was not watching: every hold moved later by that time"
+        );
     }
     let mut purged = 0;
     let mut cursor: Option<(i64, VaultId, Name)> = None;

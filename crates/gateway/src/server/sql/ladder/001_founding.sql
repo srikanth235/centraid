@@ -47,16 +47,19 @@ CREATE TABLE claim (
   vault         BLOB    PRIMARY KEY REFERENCES vault (vault) ON DELETE CASCADE,
   epoch         INTEGER NOT NULL CHECK (epoch >= 2),
   head_seen     BLOB    CHECK (head_seen IS NULL OR length(head_seen) = 32),
-  nonce         BLOB    NOT NULL CHECK (length(nonce) = 16),
+  nonce         BLOB    NOT NULL CHECK (length(nonce) = 40),
   signature     BLOB    NOT NULL CHECK (length(signature) = 64),
   claimed_at_ms INTEGER NOT NULL
 ) STRICT;
 
--- A nonce names no vault: it is issued before anyone says who is asking.
-CREATE TABLE nonce (
+-- A nonce is stateless (R2): POST nonce writes nothing, and a row exists only
+-- for a nonce a request with a valid signature spent. It names no vault.
+CREATE TABLE nonce_spent (
   nonce         BLOB    PRIMARY KEY CHECK (length(nonce) = 16),
   issued_at_ms  INTEGER NOT NULL
 ) STRICT;
+
+CREATE INDEX nonce_spent_by_time ON nonce_spent (issued_at_ms);
 
 CREATE TABLE pairing_secret (
   secret_hash   BLOB    PRIMARY KEY CHECK (length(secret_hash) = 32),

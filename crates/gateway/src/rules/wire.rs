@@ -325,7 +325,7 @@ mod tests {
             vault_id: VaultId::from_bytes([1; 32]),
             label: "Ada's phone".to_owned(),
             kind: PairKind::Secret,
-            nonce: Nonce::from_bytes([3; 16]),
+            nonce: Nonce::from_bytes([3; 40]),
             secret: Some(SecretBody {
                 secret: Secret::from_bytes([2; 16]),
                 signature: Signature::from_bytes([4; 64]),

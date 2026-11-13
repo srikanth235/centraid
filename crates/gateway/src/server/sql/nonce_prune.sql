@@ -1,1 +1,1 @@
-DELETE FROM nonce WHERE issued_at_ms <= ?1
+DELETE FROM nonce_spent WHERE issued_at_ms <= ?1
