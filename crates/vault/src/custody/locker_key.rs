@@ -68,7 +68,7 @@ pub const LOCKER_ENCRYPTED_COLUMNS: &[(&str, &str, &[&str])] = &[
         "id",
         &["password", "otp_seed", "card_number", "cvv", "content"],
     ),
-    ("locker_item_field", "field_id", &["value_sealed"]),
+    ("locker_item_field", "id", &["value_sealed"]),
     ("locker_item_passkey", "item_id", &["private_key"]),
 ];
 
@@ -490,7 +490,7 @@ impl crate::file::Vault {
                     .and_then(serde_json::Value::as_array)
                     .into_iter()
                     .flatten()
-                    .find(|row| text(row, "field_id").as_deref() == Some(field_id));
+                    .find(|row| text(row, "id").as_deref() == Some(field_id));
                 match field {
                     Some(field) if text(field, "kind").as_deref() == Some("sealed") => {
                         (field.clone(), "value_sealed")
@@ -522,7 +522,7 @@ impl crate::file::Vault {
                 "SELECT f.value_sealed, f.key_id
                    FROM locker_item_field f
                    JOIN entity i ON i.id = f.item_id
-                  WHERE f.field_id = ?1 AND f.item_id = ?2
+                  WHERE f.id = ?1 AND f.item_id = ?2
                     AND f.kind = ?3 AND i.deleted_at IS NULL",
             )?;
             let mut rows = statement.query([field_id, item_id, kind])?;

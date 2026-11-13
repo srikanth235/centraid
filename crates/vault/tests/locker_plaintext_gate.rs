@@ -158,13 +158,13 @@ impl Sealed {
                     )?;
                 }
                 connection.execute(
-                    "INSERT INTO locker_item_alias (alias, item_id, created_at)
+                    "INSERT INTO locker_item_alias (id, item_id, created_at)
                      VALUES ('plainalias-narwhal5', 'item-1', '2026-01-01T00:00:00.000Z')",
                     [],
                 )?;
                 connection.execute(
                     "INSERT INTO locker_item_field
-                       (field_id, item_id, section, label, kind, created_at, updated_at, key_id)
+                       (id, item_id, section, label, kind, created_at, updated_at, key_id)
                      VALUES ('field-1', 'item-1', '', 'Recovery code', 'sealed',
                              '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 'key-1')",
                     [],
@@ -173,7 +173,7 @@ impl Sealed {
                 // schema requires a sealed value and forbids a plain one).
                 connection.execute(
                     "INSERT INTO locker_item_field
-                       (field_id, item_id, section, label, kind, value_sealed, created_at,
+                       (id, item_id, section, label, kind, value_sealed, created_at,
                         updated_at, key_id)
                      VALUES ('field-2', 'item-1', '', 'Backup code', 'otp', 'lk1:placeholder',
                              '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 'key-1')",
@@ -724,11 +724,11 @@ fn an_otp_custom_field_is_sealed_and_never_plain_in_a_row_a_revision_or_the_inde
     }
     // The schema itself refuses a plain seed, and an `otp` field with no sealed one.
     for statement in [
-        "INSERT INTO locker_item_field (field_id, item_id, label, kind, value_text, created_at)
+        "INSERT INTO locker_item_field (id, item_id, label, kind, value_text, created_at)
          VALUES ('plain-otp', 'item-1', 'x', 'otp', 'PLAIN', '2026-01-01T00:00:00.000Z')",
-        "INSERT INTO locker_item_field (field_id, item_id, label, kind, value_text, value_sealed, created_at)
+        "INSERT INTO locker_item_field (id, item_id, label, kind, value_text, value_sealed, created_at)
          VALUES ('both-otp', 'item-1', 'x', 'otp', 'PLAIN', 'lk1:x', '2026-01-01T00:00:00.000Z')",
-        "INSERT INTO locker_item_field (field_id, item_id, label, kind, created_at)
+        "INSERT INTO locker_item_field (id, item_id, label, kind, created_at)
          VALUES ('empty-otp', 'item-1', 'x', 'otp', '2026-01-01T00:00:00.000Z')",
     ] {
         let refused = vault.scratch.vault.commit(|tx| {
@@ -770,7 +770,7 @@ fn an_otp_custom_field_is_sealed_and_never_plain_in_a_row_a_revision_or_the_inde
         .read(|connection| {
             let kind_and_plain: (String, Option<String>, Option<String>) = connection.query_row(
                 "SELECT kind, value_text, value_sealed FROM locker_item_field
-                  WHERE field_id = 'field-otp'",
+                  WHERE id = 'field-otp'",
                 [],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )?;

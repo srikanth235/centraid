@@ -1840,7 +1840,6 @@ const CENSUS: &[(&str, &str, Reach)] = &[
     ("locker_item", "brand", Reach::Own),
     ("locker_item", "memo", Reach::Own),
     ("locker_item_address", "url", Reach::Own),
-    ("locker_item_alias", "alias", Reach::Own),
     (
         "locker_item",
         "password",

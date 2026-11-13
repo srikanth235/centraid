@@ -202,9 +202,9 @@ fn read_chunked(
 pub fn aliases_statement() -> PageQuery {
     PageQuery::new(
         "locker.phone.aliases",
-        "alias, item_id",
+        "id AS alias, item_id",
         "locker_item_alias",
-        PageOrder::asc("alias", "alias"),
+        PageOrder::asc("id", "id"),
     )
 }
 
@@ -225,10 +225,10 @@ pub fn presence_statement(item_id: &str) -> PageQuery {
 pub fn fields_statement(item_id: &str) -> PageQuery {
     by_item(
         "locker.phone.fields",
-        "field_id, item_id, section, label, kind, value_text, \
+        "id AS field_id, item_id, section, label, kind, value_text, \
          value_sealed IS NOT NULL AS has_sealed, position",
         "locker_item_field",
-        "field_id",
+        "id",
         item_id,
     )
 }
@@ -238,9 +238,9 @@ pub fn fields_statement(item_id: &str) -> PageQuery {
 pub fn addresses_statement(item_id: &str) -> PageQuery {
     by_item(
         "locker.phone.addresses",
-        "address_id, item_id, url, position",
+        "id AS address_id, item_id, url, position",
         "locker_item_address",
-        "address_id",
+        "id",
         item_id,
     )
 }

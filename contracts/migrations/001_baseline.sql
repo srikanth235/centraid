@@ -852,7 +852,7 @@ CREATE TABLE locker_item (
 CREATE INDEX locker_item_by_key ON locker_item(key_id) WHERE key_id IS NOT NULL;
 
 CREATE TABLE locker_item_address (
-  address_id   TEXT PRIMARY KEY,
+  id           TEXT PRIMARY KEY,
   item_id      TEXT NOT NULL REFERENCES locker_item(id) ON DELETE CASCADE,
   url          TEXT NOT NULL,
   position     REAL NOT NULL DEFAULT 0,
@@ -861,14 +861,14 @@ CREATE TABLE locker_item_address (
 CREATE INDEX locker_item_address_by_item ON locker_item_address(item_id, position);
 
 CREATE TABLE locker_item_alias (
-  alias      TEXT PRIMARY KEY,
+  id         TEXT PRIMARY KEY,
   item_id    TEXT NOT NULL REFERENCES locker_item(id) ON DELETE CASCADE,
   created_at TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at)
 ) STRICT;
 CREATE INDEX locker_item_alias_by_item ON locker_item_alias(item_id);
 
 CREATE TABLE locker_item_field (
-  field_id     TEXT PRIMARY KEY,
+  id           TEXT PRIMARY KEY,
   item_id      TEXT NOT NULL REFERENCES locker_item(id) ON DELETE CASCADE,
   section      TEXT NOT NULL DEFAULT '',
   label        TEXT NOT NULL,

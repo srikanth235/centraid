@@ -1066,7 +1066,7 @@ fn an_alias_is_unique_among_live_items_and_clearable() {
     );
     assert_eq!(
         world.one::<String>(
-            "SELECT item_id FROM locker_item_alias WHERE alias = ?1",
+            "SELECT item_id FROM locker_item_alias WHERE id = ?1",
             &["bank"]
         ),
         "item-1"
@@ -1187,7 +1187,7 @@ fn a_new_sealed_field_must_carry_the_id_it_was_sealed_against() {
     );
     assert_eq!(
         world.one::<String>(
-            "SELECT key_id FROM locker_item_field WHERE field_id = ?1",
+            "SELECT key_id FROM locker_item_field WHERE id = ?1",
             &["field-1"]
         ),
         "key-1"
@@ -1218,7 +1218,7 @@ fn a_new_sealed_field_must_carry_the_id_it_was_sealed_against() {
     );
     assert_eq!(
         world.one::<String>(
-            "SELECT value_sealed FROM locker_item_field WHERE field_id = ?1",
+            "SELECT value_sealed FROM locker_item_field WHERE id = ?1",
             &["field-1"]
         ),
         ciphertext("field-1")
@@ -1230,7 +1230,7 @@ fn a_new_sealed_field_must_carry_the_id_it_was_sealed_against() {
     );
     assert_eq!(
         world.one::<i64>(
-            "SELECT COUNT(*) FROM locker_item_field WHERE field_id = ?1",
+            "SELECT COUNT(*) FROM locker_item_field WHERE id = ?1",
             &["field-1"]
         ),
         0
