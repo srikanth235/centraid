@@ -64,4 +64,11 @@ class BackupTokenStoreSpec {
         assertTrue(legacy.contains("<exclude domain=\"sharedpref\""))
         assertFalse(legacy.contains("<include"))
     }
+
+    @Test
+    fun aValueThatIsNotUtf8IsRefusedNotCorrupted() {
+        assertEquals(null, SecretStores.strictUtf8(byteArrayOf(0x74, 0xC3.toByte(), 0x28)))
+        assertEquals(null, SecretStores.strictUtf8(byteArrayOf(0xFF.toByte(), 0xFE.toByte())))
+        assertEquals(token, SecretStores.strictUtf8(token.encodeToByteArray()))
+    }
 }
