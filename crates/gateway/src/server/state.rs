@@ -724,10 +724,8 @@ impl State for SqliteState {
         used_before_ms: i64,
         expired_before_ms: i64,
     ) -> Result<u64, StoreFault> {
-        Ok(self.run(
-            sql::SECRETS_PRUNE,
-            params![used_before_ms, expired_before_ms],
-        )? as u64)
+        Ok((self.run(sql::SECRETS_PRUNE_USED, params![used_before_ms])?
+            + self.run(sql::SECRETS_PRUNE_EXPIRED, params![expired_before_ms])?) as u64)
     }
 
     fn head(&self, vault: &VaultId) -> Result<Option<HeadRecord>, StoreFault> {

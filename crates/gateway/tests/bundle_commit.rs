@@ -316,3 +316,85 @@ async fn a_rolled_back_bundle_leaves_a_damaged_name_consistent() {
     );
     gateway.shutdown().await;
 }
+
+/// R5: THE ORPHAN SWEEP'S LOOK AND ITS UNLINK ARE ONE STEP. An old file with
+/// no row is about to be removed; at that very point (inside the step, after
+/// the look at the index, before the unlink) a `PUT` of the same name is
+/// started on another thread. It cannot run until the step ends — the sweep
+/// holds the gateway's one lock across both — so its file is stored after the
+/// unlink, not under it: the name is live, with its bytes on disk.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_put_of_the_same_name_cannot_lose_its_file_to_the_orphan_sweep() {
+    let dir = tempfile::tempdir().expect("a temp dir");
+    let gateway = spawn(dir.path()).await.expect("spawned");
+    let key = ed25519_dalek::SigningKey::from_bytes(&[31; 32]);
+    let paired = pair_secret(
+        &gateway.first_contact(),
+        &key,
+        "a phone",
+        gateway.mint_pairing_secret(),
+    )
+    .await
+    .expect("pairs");
+    let vault = VaultId::from_bytes(key.verifying_key().to_bytes());
+    let racing = frame("a name an orphan file holds");
+
+    // An orphan file, old enough.
+    let path = gateway.shared().store().path(&vault, &racing.name);
+    std::fs::create_dir_all(path.parent().expect("a parent")).expect("a fan-out dir");
+    std::fs::write(&path, b"what a crash left").expect("an orphan");
+    std::fs::File::options()
+        .write(true)
+        .open(&path)
+        .expect("opens")
+        .set_modified(std::time::SystemTime::now() - Duration::from_secs(2 * 3600))
+        .expect("ages");
+
+    let runtime = tokio::runtime::Handle::current();
+    let destination = centraid_gateway::client::Destination {
+        addrs: vec![gateway.addr.to_string()],
+        cert_der: gateway.cert_der.clone(),
+        token: paired.token,
+    };
+    let putting: Arc<std::sync::Mutex<Option<std::thread::JoinHandle<()>>>> = Arc::default();
+    let (slot, frame_put) = (Arc::clone(&putting), racing.clone());
+    gateway
+        .shared()
+        .store()
+        .knobs()
+        .on_orphan_unlink(Some(Arc::new(move || {
+            let (runtime, destination, frame) =
+                (runtime.clone(), destination.clone(), frame_put.clone());
+            let handle = std::thread::spawn(move || {
+                runtime.block_on(async {
+                    centraid_gateway::client::Client::new(&destination)
+                        .put(&vault, &frame.name, &frame.digest, frame.bytes.clone())
+                        .await
+                        .expect("the PUT is admitted, after the step");
+                });
+            });
+            *slot.lock().expect("slot") = Some(handle);
+        })));
+    assert_eq!(orphans_once(gateway.shared()).expect("sweeps"), 1);
+    gateway.shared().store().knobs().on_orphan_unlink(None);
+    let handle = putting
+        .lock()
+        .expect("slot")
+        .take()
+        .expect("the PUT started");
+    tokio::task::spawn_blocking(move || handle.join().expect("joins"))
+        .await
+        .expect("joined");
+
+    assert_eq!(std::fs::read(&path).expect("its file"), racing.bytes);
+    let phone = gateway.client(paired.token);
+    assert!(
+        phone
+            .exists(&vault, &[racing.name])
+            .await
+            .expect("exists")
+            .is_empty(),
+        "the name is live"
+    );
+    gateway.shutdown().await;
+}

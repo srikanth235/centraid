@@ -904,24 +904,34 @@ impl<S: State> Gateway<S> {
         })
     }
 
-    /// Is this file in `objects/` an orphan the sweep may remove: no row for
-    /// it, and older than [`ORPHAN_MIN_AGE_MS`] by the gateway's clock, so a
-    /// bundle in flight is never taken for one?
+    /// Remove an orphan: a file in `objects/` with no row, older than
+    /// [`ORPHAN_MIN_AGE_MS`] by the gateway's clock. **The check and the
+    /// removal are one step** — `remove` runs inside the same transaction as
+    /// the look at the index, and the adapter holds its one lock across both —
+    /// so a `PUT` of the same name cannot slip in between and lose its file
+    /// (#1191, R5). Answers whether it removed.
     ///
     /// # Errors
     ///
-    /// A store fault.
-    pub fn is_orphan(
-        &self,
+    /// Whatever `remove` returns, or a store fault.
+    pub fn remove_orphan(
+        &mut self,
         vault: &VaultId,
         name: &Name,
         modified_ms: i64,
         now_ms: i64,
+        remove: impl FnOnce() -> Result<(), Fault>,
     ) -> Result<bool, Fault> {
         if now_ms.saturating_sub(modified_ms) <= ORPHAN_MIN_AGE_MS {
             return Ok(false);
         }
-        Ok(self.state.object(vault, name)?.is_none())
+        self.state.atomically(|state| {
+            if state.object(vault, name)?.is_some() {
+                return Ok(false);
+            }
+            remove()?;
+            Ok(true)
+        })
     }
 
     /// One page of every object, for the scrub.

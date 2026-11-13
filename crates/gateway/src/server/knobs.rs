@@ -31,6 +31,7 @@ pub struct Knobs {
     attempts: AtomicU64,
     fail_at: AtomicU64,
     after_rename: Mutex<Option<RenameHook>>,
+    before_unlink: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
 
 impl core::fmt::Debug for Knobs {
@@ -76,6 +77,21 @@ impl Knobs {
     pub fn after_rename(&self, hook: Option<RenameHook>) {
         if let Ok(mut held) = self.after_rename.lock() {
             *held = hook;
+        }
+    }
+
+    /// Run `hook` inside the orphan sweep's one step, after it has looked at
+    /// the index and before it unlinks; `None` takes it away.
+    pub fn on_orphan_unlink(&self, hook: Option<Arc<dyn Fn() + Send + Sync>>) {
+        if let Ok(mut held) = self.before_unlink.lock() {
+            *held = hook;
+        }
+    }
+
+    pub(crate) fn before_orphan_unlink(&self) {
+        let hook = self.before_unlink.lock().ok().and_then(|held| held.clone());
+        if let Some(hook) = hook {
+            hook();
         }
     }
 

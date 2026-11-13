@@ -49,7 +49,8 @@ statement!(SECRET_UPSERT, "secret_upsert.sql");
 statement!(SECRETS_LIVE_COUNT, "secrets_live_count.sql");
 statement!(SECRET_OLDEST_LIVE, "secret_oldest_live.sql");
 statement!(SECRET_DELETE, "secret_delete.sql");
-statement!(SECRETS_PRUNE, "secrets_prune.sql");
+statement!(SECRETS_PRUNE_USED, "secrets_prune_used.sql");
+statement!(SECRETS_PRUNE_EXPIRED, "secrets_prune_expired.sql");
 statement!(HEAD_SELECT, "head_select.sql");
 statement!(HEAD_UPSERT, "head_upsert.sql");
 statement!(HEAD_DELETE, "head_delete.sql");
@@ -83,19 +84,94 @@ statement!(TOKEN_EPOCHS_SELECT, "token_epochs_select.sql");
 statement!(REVOKED_COUNT, "revoked_count.sql");
 statement!(TABLES_COUNT, "tables_count.sql");
 
-/// **EVERY LISTING THE GATEWAY RUNS**, by name (the one-row `secret_oldest_live` walks the
-/// partial index of unspent secrets, at most 64 live and a few days' expired, and is no page): each pages by the key of its
-/// last row and walks an index to its first. `tests/plans.rs`
-/// (`every_listing_seeks`) asks SQLite for each plan and fails on a scan, a
-/// sort or an offset (#1191, E14).
-pub const LISTINGS: &[(&str, &str)] = &[
-    ("vaults_select", VAULTS_SELECT),
-    ("tokens_of_select", TOKENS_OF_SELECT),
-    ("secrets_select", SECRETS_SELECT),
-    ("snapshots_select", SNAPSHOTS_SELECT),
-    ("objects_live_select", OBJECTS_LIVE_SELECT),
-    ("objects_held_select", OBJECTS_HELD_SELECT),
-    ("objects_vault_select", OBJECTS_VAULT_SELECT),
-    ("objects_all_select", OBJECTS_ALL_SELECT),
-    ("purgeable_select", PURGEABLE_SELECT),
+/// **EVERY STATEMENT THAT PAGES, FILTERS OR SWEEPS**, by name, with the index
+/// it must walk when that matters. Each listing pages by the key of its last
+/// row and walks an index to its first; each update or delete that filters on
+/// a state (held, spent, expired, revoked) has a partial index for it.
+/// `tests/plans.rs` (`every_listing_seeks`) asks SQLite for each plan and
+/// fails on a scan, a sort or an offset, and on a statement that does not use
+/// the index named for it (#1191, E14, R4).
+pub const LISTINGS: &[(&str, &str, Option<&str>)] = &[
+    ("vaults_select", VAULTS_SELECT, None),
+    ("tokens_of_select", TOKENS_OF_SELECT, None),
+    ("tokens_of_delete", TOKENS_OF_DELETE, None),
+    ("secrets_select", SECRETS_SELECT, None),
+    (
+        "secret_oldest_live",
+        SECRET_OLDEST_LIVE,
+        Some("pairing_secret_unspent"),
+    ),
+    (
+        "secrets_live_count",
+        SECRETS_LIVE_COUNT,
+        Some("pairing_secret_unspent"),
+    ),
+    (
+        "secrets_prune_used",
+        SECRETS_PRUNE_USED,
+        Some("pairing_secret_spent"),
+    ),
+    (
+        "secrets_prune_expired",
+        SECRETS_PRUNE_EXPIRED,
+        Some("pairing_secret_unspent"),
+    ),
+    ("snapshots_select", SNAPSHOTS_SELECT, None),
+    ("objects_live_select", OBJECTS_LIVE_SELECT, None),
+    (
+        "objects_held_select",
+        OBJECTS_HELD_SELECT,
+        Some("object_held"),
+    ),
+    ("objects_vault_select", OBJECTS_VAULT_SELECT, None),
+    ("objects_all_select", OBJECTS_ALL_SELECT, None),
+    (
+        "purgeable_select",
+        PURGEABLE_SELECT,
+        Some("object_by_purge"),
+    ),
+    (
+        "holds_clear_objects",
+        HOLDS_CLEAR_OBJECTS,
+        Some("object_held"),
+    ),
+    (
+        "holds_clear_snapshots",
+        HOLDS_CLEAR_SNAPSHOTS,
+        Some("snapshot_held"),
+    ),
+    (
+        "holds_shift_objects",
+        HOLDS_SHIFT_OBJECTS,
+        Some("object_held"),
+    ),
+    (
+        "holds_shift_snapshots",
+        HOLDS_SHIFT_SNAPSHOTS,
+        Some("snapshot_held"),
+    ),
+    ("holds_due_objects", HOLDS_DUE_OBJECTS, Some("object_held")),
+    (
+        "holds_due_snapshots",
+        HOLDS_DUE_SNAPSHOTS,
+        Some("snapshot_held"),
+    ),
+    (
+        "holds_shift_all_objects",
+        HOLDS_SHIFT_ALL_OBJECTS,
+        Some("object_by_purge"),
+    ),
+    (
+        "holds_shift_all_snapshots",
+        HOLDS_SHIFT_ALL_SNAPSHOTS,
+        Some("snapshot_held"),
+    ),
+    (
+        "revoked_prune",
+        REVOKED_PRUNE,
+        Some("revoked_token_by_time"),
+    ),
+    ("revoked_trim", REVOKED_TRIM, Some("revoked_token_by_keep")),
+    ("nonce_count", NONCE_COUNT, Some("nonce_spent_by_time")),
+    ("nonce_prune", NONCE_PRUNE, Some("nonce_spent_by_time")),
 ];

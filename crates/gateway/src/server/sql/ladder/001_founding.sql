@@ -42,6 +42,9 @@ CREATE TABLE revoked_token (
 
 CREATE INDEX revoked_token_by_vault ON revoked_token (vault, revoked_at_ms, token_hash);
 
+-- The prune by age.
+CREATE INDEX revoked_token_by_time ON revoked_token (revoked_at_ms);
+
 -- The trim at a claim keeps the highest epochs first, so a writer's tombstone
 -- (epoch 1 or more) outlives any number of read grants' (epoch 0).
 CREATE INDEX revoked_token_by_keep ON revoked_token (vault, epoch DESC, revoked_at_ms DESC, token_hash DESC);
@@ -76,10 +79,15 @@ CREATE TABLE pairing_secret (
 
 CREATE INDEX pairing_secret_by_creation ON pairing_secret (created_at_ms, secret_hash);
 
--- The unspent secrets only, so "the oldest live one" walks at most the 64
--- live and the few expired-but-not-yet-pruned.
-CREATE INDEX pairing_secret_unspent ON pairing_secret (created_at_ms, secret_hash)
+-- The unspent secrets only, by expiry: "the oldest live one", "how many are
+-- live" and "the expired ones" are each a seek. Order by expiry is order by
+-- creation, the lifetime being fixed.
+CREATE INDEX pairing_secret_unspent ON pairing_secret (expires_at_ms, secret_hash)
   WHERE used_at_ms IS NULL;
+
+-- The spent ones, by when they were spent, for the prune.
+CREATE INDEX pairing_secret_spent ON pairing_secret (used_at_ms)
+  WHERE used_at_ms IS NOT NULL;
 
 CREATE TABLE object (
   vault            BLOB    NOT NULL REFERENCES vault (vault) ON DELETE CASCADE,
@@ -96,6 +104,9 @@ CREATE TABLE object (
 
 CREATE INDEX object_by_purge ON object (purge_after_ms, vault, name)
   WHERE purge_after_ms IS NOT NULL;
+
+-- The held objects of a vault, by name: `held`, undo, unfreeze, purge-now.
+CREATE INDEX object_held ON object (vault, name) WHERE held_at_ms IS NOT NULL;
 
 -- One row per signed head ever accepted that is still kept: a copy of the
 -- record, and the hold of its manifest when that is held.
@@ -115,6 +126,9 @@ CREATE TABLE snapshot (
   FOREIGN KEY (vault, name) REFERENCES object (vault, name),
   CHECK ((held_at_ms IS NULL) = (purge_after_ms IS NULL))
 ) STRICT, WITHOUT ROWID;
+
+-- The held snapshots of a vault.
+CREATE INDEX snapshot_held ON snapshot (vault, name) WHERE held_at_ms IS NOT NULL;
 
 -- The head, as the phone signed it. Keys run head -> snapshot -> object.
 CREATE TABLE head (

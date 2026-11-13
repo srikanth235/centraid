@@ -208,10 +208,14 @@ pub fn orphans_once(shared: &Shared) -> Result<u64, Fault> {
         .files()
         .map_err(|error| StoreFault::new(error.to_string()))?;
     for found in files {
-        if shared
-            .rules(|gateway| gateway.is_orphan(&found.vault, &found.name, found.modified_ms, now))?
-        {
-            shared.store().remove(&found.vault, &found.name)?;
+        let store = shared.store();
+        if shared.rules(|gateway| {
+            gateway.remove_orphan(&found.vault, &found.name, found.modified_ms, now, || {
+                #[cfg(feature = "test-harness")]
+                store.knobs().before_orphan_unlink();
+                store.remove(&found.vault, &found.name)
+            })
+        })? {
             removed += 1;
         }
     }
