@@ -30,6 +30,9 @@ struct VaultDamagedView: View {
                         .font(.system(size: bodySize))
                         .foregroundStyle(Color(CentraidAsset.textInk))
                         .accessibilityIdentifier("vault-damaged-safe")
+                    KitPillButton(label: KitWords.VAULT_DAMAGED_RESTORE, action: reopenForRestore)
+                        .accessibilityIdentifier("vault-damaged-restore")
+                        .padding(.top, 12)
                 }
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
@@ -38,3 +41,7 @@ struct VaultDamagedView: View {
         }
     }
 }
+
+/// REOPEN FOR RESTORE: the single place the core's "open without the damaged vault" key goes.
+/// The core session owns that key (decision 35); until it lands the button does nothing.
+private func reopenForRestore() {}

@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.centraid.android.R
 import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.KitPillButton
 import dev.centraid.android.kit.centraidResource
 import dev.centraid.android.kit.tokenSp
 import dev.centraid.design.KitWords
@@ -60,7 +61,19 @@ internal fun VaultDamagedScreen() {
             fontSize = tokenSp(R.dimen.centraid_text_row),
             textAlign = TextAlign.Center,
         )
+        KitPillButton(
+            label = KitWords.VAULT_DAMAGED_RESTORE,
+            onPress = ::reopenForRestore,
+            modifier = Modifier.padding(top = 12.dp),
+            testTag = "vault-damaged-restore",
+        )
     }
 }
+
+/**
+ * REOPEN FOR RESTORE: the single place the core's "open without the damaged vault" key goes. The
+ * core session owns that key (decision 35); until it lands the button does nothing.
+ */
+private fun reopenForRestore() = Unit
 
 private const val TITLE_SP: Int = 24
