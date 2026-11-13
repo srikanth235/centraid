@@ -185,7 +185,7 @@ To reproduce the CI verification after installing the tools and rebuilding the s
 
 | Platform work | Where |
 | --- | --- |
-| secure stores: the Keychain over `kSecClassGenericPassword` with `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` (a background task reads while locked, and a credential cannot ride an iCloud or encrypted-backup restore onto another device), and the synchronised seed | `SecretStores.swift` |
+| secure stores: the Keychain over `kSecClassGenericPassword` with `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` (a background task reads while locked, and a credential cannot ride an iCloud or encrypted-backup restore onto another device), and the synchronised seed, and each gateway token (`gateway-token.<vault>.<gateway>`, device store only) | `SecretStores.swift` |
 | the link (`NWPathMonitor`) and the charger (`UIDevice` battery monitoring) as the `LinkRead` and `PassFacts` facts | `PassFacts.swift` |
 | the photo library: grant, pages, one resource streamed out of Photos (`requestDataForAssetResource`) into the stage door, tiers rendered from the current edit, the change watch | `PhoneLibrary.swift`, `PhotoEffects.swift`, `StageDoor.swift` |
 | deleting library originals through the system's confirmation | `PhotoLibraryDeleter.swift` |
