@@ -130,12 +130,16 @@ impl Llm for Rehearsal {
                             Some(want) => json!({
                                 "act": want.act,
                                 "kind": want.kind.clone().unwrap_or_else(|| "unknown".into()),
-                                "from": want.period.map(|p| p.0.to_string()).unwrap_or_default(),
-                                "to": want.period.map(|p| p.1.to_string()).unwrap_or_default(),
+                                "from": want.period.map(|p| p.0.to_string())
+                                    .or_else(|| want.open.and_then(|o| o.0).map(|d| d.to_string()))
+                                    .unwrap_or_default(),
+                                "to": want.period.map(|p| p.1.to_string())
+                                    .or_else(|| want.open.and_then(|o| o.1).map(|d| d.to_string()))
+                                    .unwrap_or_default(),
                                 "numbers": want.numbers,
                                 "leans_on": want.leans.map(|l| l.0 + 1),
                                 "decline_reason": want.decline,
-                                "filters": want.filters.iter()
+                                "filters": want.filters.iter().chain(&want.presence)
                                     .map(|(f, v)| json!({"field": f, "value": v}))
                                     .collect::<Vec<_>>(),
                                 "names": want.names,

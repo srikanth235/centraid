@@ -20,7 +20,7 @@ use serde_json::{Value, json};
 
 use crate::catalog::Catalog;
 use crate::intent::{
-    Intent, Lit, Measure, Reference, Scenario, Selector, Target, TurnIntent, Val, VerbArg,
+    Intent, Lit, Measure, Period, Reference, Scenario, Selector, Target, TurnIntent, Val, VerbArg,
 };
 use crate::llm::{Cache, json_of};
 use crate::plan::{Heard, WorldRun};
@@ -129,14 +129,61 @@ pub struct Expected {
     pub typed: Vec<String>,
     /// Every value the turn rules out (`status != open`), lowercased.
     pub excluding: Vec<String>,
+    /// The other kinds a read of a comma list of kinds names beside `kind`: the reader gives one of them.
+    pub also: Vec<String>,
+    /// The ends of a period left open (`since March`): the end that is given, as the reader says it.
+    pub open: Option<(Option<Date>, Option<Date>)>,
+    /// The fields the turn says are blank (`empty`) or filled in (`set`), as `(field, "empty" | "set")`.
+    pub presence: Vec<(String, String)>,
+    /// The turn asks for the others, the rows an earlier turn did not show: the reader may say it leaves them out.
+    pub leaves_out_rows: bool,
+}
+
+/// What a batch asks the reader for beyond what every batch does; a key a batch has no use for is not in its prompt.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Asks {
+    /// A turn types a secret.
+    pub typed: bool,
+    /// A turn says a field is blank or filled in.
+    pub presence: bool,
+}
+
+impl Asks {
+    /// What the batch of `expected` slots asks for.
+    #[must_use]
+    pub fn of<'e>(expected: impl IntoIterator<Item = &'e Expected>) -> Self {
+        let mut asks = Self::default();
+        for e in expected {
+            asks.typed |= !e.typed.is_empty();
+            asks.presence |= !e.presence.is_empty();
+        }
+        asks
+    }
 }
 
 fn filters_of(sel: &Selector, out: &mut Vec<(String, String)>) {
     for f in &sel.filters {
-        if f.cmp == crate::intent::Cmp::Eq
-            && let Lit::Text(t) = &f.value
-        {
-            out.push((f.field.to_lowercase(), t.trim().to_lowercase()));
+        match (&f.cmp, &f.value) {
+            (crate::intent::Cmp::Eq, Lit::Text(t)) => {
+                out.push((f.field.to_lowercase(), t.trim().to_lowercase()));
+            }
+            // each value of a list is a value the message says
+            (crate::intent::Cmp::In, Lit::List(values)) => {
+                for t in values {
+                    out.push((f.field.to_lowercase(), t.trim().to_lowercase()));
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn presence_of(sel: &Selector, out: &mut Vec<(String, String)>) {
+    for f in &sel.filters {
+        match f.cmp {
+            crate::intent::Cmp::IsEmpty => out.push((f.field.to_lowercase(), "empty".to_owned())),
+            crate::intent::Cmp::IsSet => out.push((f.field.to_lowercase(), "set".to_owned())),
+            _ => {}
         }
     }
 }
@@ -177,11 +224,22 @@ fn measure_numbers(m: &Measure, out: &mut Vec<f64>) {
     numbers_of(&m.sel, out);
 }
 
+/// The days the period covers; none for one with an end left open, which [`open_of`] gives.
 fn period_of(sel: &Selector, today: Date) -> Option<(Date, Date)> {
-    if sel.anchor.is_some() {
+    if sel.anchor.is_some() || sel.period.as_ref().is_some_and(Period::is_open) {
         return None;
     }
     sel.period.as_ref()?.range(today)
+}
+
+/// The end of an open period that is given, as `(from, to)` with the other left out.
+fn open_of(sel: &Selector, today: Date) -> Option<(Option<Date>, Option<Date>)> {
+    let period = sel.period.as_ref().filter(|p| p.is_open())?;
+    let (from, to) = period.range(today)?;
+    Some((
+        (from != Date::MIN).then_some(from),
+        (to != Date::MAX).then_some(to),
+    ))
 }
 
 /// The slots of `turn`.
@@ -210,14 +268,24 @@ pub fn expected(catalog: &Catalog, turn: &TurnIntent, today: Date) -> Expected {
         names: Vec::new(),
         typed: Vec::new(),
         excluding: Vec::new(),
+        also: Vec::new(),
+        open: None,
+        presence: Vec::new(),
+        leaves_out_rows: false,
     };
     let (mut filters, mut names, mut excluding) = (Vec::new(), Vec::new(), Vec::new());
+    let (mut presence, mut also) = (Vec::new(), Vec::new());
+    let (mut open, mut leaves_out) = (None, false);
     let said = matches!(turn.reference, Reference::Name);
     let mut selects = |sel: &Selector, numbers: &mut Vec<f64>| {
         numbers_of(sel, numbers);
         filters_of(sel, &mut filters);
         excluded_by(sel, &mut excluding);
+        presence_of(sel, &mut presence);
         names_of(sel, said, &mut names);
+        also.clone_from(&sel.also);
+        open = open_of(sel, today);
+        leaves_out |= sel.exclude.is_some();
         (
             (sel.name.is_none() && sel.text.is_none() && !named).then(|| sel.kind.clone()),
             period_of(sel, today),
@@ -307,6 +375,10 @@ pub fn expected(catalog: &Catalog, turn: &TurnIntent, today: Date) -> Expected {
     e.names = names;
     e.typed = typed;
     e.excluding = excluding;
+    e.also = also;
+    e.open = open;
+    e.presence = presence;
+    e.leaves_out_rows = leaves_out;
     e
 }
 
@@ -318,7 +390,7 @@ pub fn reader_prompt(
     catalog: &Catalog,
     batch: &[(String, Date, Vec<String>)],
     attempt: usize,
-    typed: bool,
+    asks: Asks,
 ) -> String {
     let kinds: Vec<String> = catalog.kinds.iter().map(|k| k.name.clone()).collect();
     let verbs: Vec<String> = catalog.verbs.iter().map(|v| v.name.clone()).collect();
@@ -372,11 +444,16 @@ For EVERY message return an object with:\n\
 - \"filters\": every condition on a fixed-list or text field the message sets, as [{{\"field\": ..., \"value\": ...}}] with the value as the fixed list says it (fixed lists: {lists}); [] if none.\n\
 - \"names\": every person, row or title the message names, as it is written; [] if none.\n\
 - \"excluding\": every value the message rules OUT (\"not\", \"except\", \"without\", \"other than\"); [] if none.\n\
-{typed_line}\n\
+{typed_line}{presence_line}\n\
 Answer with JSON only: {{\"sessions\": [{{\"id\": \"s1\", \"turns\": [{{...}}, ...]}}, ...]}} with one object per message, in order.{retry}\n\
 \n\
 Sessions:\n{sessions}\n",
-        typed_line = if typed {
+        presence_line = if asks.presence {
+            "- A field the message says is blank (\"with no phone\", \"that has nothing in it\") or filled in (\"that have a phone\") is also one of \"filters\", as {\"field\": ..., \"value\": \"empty\"} or {\"field\": ..., \"value\": \"set\"}.\n"
+        } else {
+            ""
+        },
+        typed_line = if asks.typed {
             "- \"typed\": every value the person types in to be stored (a password, a card number, a security code, the text of a secret note), exactly as written; [] if none.\n"
         } else {
             ""
@@ -538,9 +615,26 @@ pub fn slots(catalog: &Catalog, want: &Expected, got: &Read, index: usize) -> Ve
     if let Some(kind) = &want.kind
         && !matches!(got.kind.as_str(), "same" | "unknown")
     {
-        out.push(slot("kind", same_kind(catalog, kind, &got.kind), || {
-            format!("meant {kind}, read back {}", got.kind)
+        // a read of several kinds is read back as any one of them
+        let ok = std::iter::once(kind)
+            .chain(&want.also)
+            .any(|k| same_kind(catalog, k, &got.kind));
+        out.push(slot("kind", ok, || {
+            format!("meant {kind} (or {:?}), read back {}", want.also, got.kind)
         }));
+    }
+    if let Some((from, to)) = want.open {
+        // only the end that is given is compared: the one left open may be read as nothing or as a far day
+        for (given, said) in [(from, &got.from), (to, &got.to)] {
+            if let Some(day) = given {
+                out.push(slot("period", *said == day.to_string(), || {
+                    format!(
+                        "meant an open period at {day}, read back {}..{}",
+                        got.from, got.to
+                    )
+                }));
+            }
+        }
     }
     if let Some((from, to)) = want.period {
         out.push(slot(
@@ -586,6 +680,15 @@ pub fn slots(catalog: &Catalog, want: &Expected, got: &Read, index: usize) -> Ve
             format!("meant {field} = {value}, read back {:?}", got.filters)
         }));
     }
+    for (field, value) in &want.presence {
+        let ok = got
+            .filters
+            .iter()
+            .any(|(f, v)| f == field && (v == value || names_match(value, v)));
+        out.push(slot("filter", ok, || {
+            format!("meant {field} {value}, read back {:?}", got.filters)
+        }));
+    }
     for name in &want.names {
         let ok = got.names.iter().any(|g| names_match(name, g));
         out.push(slot("name", ok, || {
@@ -600,7 +703,7 @@ pub fn slots(catalog: &Catalog, want: &Expected, got: &Read, index: usize) -> Ve
         }));
     }
     if want.act != "decline" {
-        if want.excluding.is_empty() {
+        if want.excluding.is_empty() && !want.leaves_out_rows {
             // no intent rules a value out: a reader that finds an exclusion read something the words did not say
             out.push(slot("exclusion", got.excluding.is_empty(), || {
                 format!("the intent excludes nothing, read back {:?}", got.excluding)
@@ -639,9 +742,9 @@ pub fn read_back(
     catalog: &Catalog,
     batch: &[(String, Date, Vec<String>)],
     attempt: usize,
-    typed: bool,
+    asks: Asks,
 ) -> Result<Vec<Option<Vec<Read>>>> {
-    let prompt = reader_prompt(catalog, batch, attempt, typed);
+    let prompt = reader_prompt(catalog, batch, attempt, asks);
     let answer = cache.complete(&prompt)?;
     let sizes: Vec<usize> = batch.iter().map(|(_, _, m)| m.len()).collect();
     // An answer that cannot be read covers no session: each is asked again, as one it skipped.

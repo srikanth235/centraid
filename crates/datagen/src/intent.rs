@@ -111,16 +111,54 @@ pub enum Dep {
     Carry,
     /// Undoes the turn before's write.
     Undo,
+    /// Asks for the others: the rows of the same kind that the turn before did not show ("what else", "the other ones").
+    Else,
 }
 
 /// A period relative to today, or an explicit span. Weeks run Monday to Sunday.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "unit", rename_all = "snake_case")]
 pub enum Period {
-    Day { rel: i64 },
-    Week { rel: i64 },
-    Month { rel: i64 },
-    Between { from: String, to: String },
+    Day {
+        rel: i64,
+    },
+    Week {
+        rel: i64,
+    },
+    Month {
+        rel: i64,
+    },
+    Between {
+        from: String,
+        to: String,
+    },
+    /// A day of a week, counted in weeks from this one: `{"unit":"week","rel":r,"weekday":d}`, `d` 1..7 Monday..Sunday.
+    Weekday {
+        rel: i64,
+        weekday: i8,
+    },
+    /// A named month: `{"unit":"month","name":n,"rel":r}`. `rel` 0 is this year's, -1 the most recent one that has ended,
+    /// 1 the next one that has not begun.
+    NamedMonth {
+        rel: i64,
+        name: i8,
+    },
+    /// A day at a time of day: `{"unit":"day","rel":r,"time":"HH:MM"}`. A row with a time matches that minute, a row of
+    /// the day with none matches the day.
+    Clock {
+        rel: i64,
+        time: String,
+    },
+    /// One day by its date: `{"date":"YYYY-MM-DD"}`. Only as the end of an open span.
+    Date {
+        date: String,
+    },
+    /// A span with an end left open: `{"from":…}` (since), `{"to":…}` (until) or both. An end is a day, a week or a month
+    /// read as its first day (`from`) or its last (`to`), or a date.
+    Open {
+        from: Option<Box<Period>>,
+        to: Option<Box<Period>>,
+    },
 }
 
 impl Period {
@@ -134,7 +172,109 @@ impl Period {
             Self::Between { from, to } => {
                 format!(r#"{{"from":{{"date":"{from}"}},"to":{{"date":"{to}"}}}}"#)
             }
+            Self::Weekday { rel, weekday } => {
+                format!(r#"{{"unit":"week","rel":{rel},"weekday":{weekday}}}"#)
+            }
+            Self::NamedMonth { rel, name } => {
+                format!(r#"{{"unit":"month","name":{name},"rel":{rel}}}"#)
+            }
+            Self::Clock { rel, time } => {
+                format!(r#"{{"unit":"day","rel":{rel},"time":"{time}"}}"#)
+            }
+            Self::Date { date } => format!(r#"{{"date":"{date}"}}"#),
+            Self::Open { from, to } => {
+                let end = |key: &str, p: &Option<Box<Self>>| {
+                    p.as_ref().map(|p| format!(r#""{key}":{}"#, p.when()))
+                };
+                let ends: Vec<String> = [end("from", from), end("to", to)]
+                    .into_iter()
+                    .flatten()
+                    .collect();
+                format!("{{{}}}", ends.join(","))
+            }
         }
+    }
+
+    /// The period a `when` argument says, with the qualifiers the runtime reads (`weekday`, a month `name`, a `time`, an
+    /// open end): `None` for a form it does not draw. Unlike the serde form, which names a variant by its `unit` and
+    /// ignores what it does not know, this never reads a day of a week as the week.
+    #[must_use]
+    pub fn parse_when(text: &str) -> Option<Self> {
+        Self::from_when(&serde_json::from_str::<serde_json::Value>(text).ok()?)
+    }
+
+    fn from_when(value: &serde_json::Value) -> Option<Self> {
+        let object = value.as_object()?;
+        if object.contains_key("from") || object.contains_key("to") {
+            let end = |key: &str| -> Option<Option<Box<Self>>> {
+                match object.get(key).filter(|v| !v.is_null()) {
+                    None => Some(None),
+                    Some(v) => Self::from_when(v).map(|p| Some(Box::new(p))),
+                }
+            };
+            let (from, to) = (end("from")?, end("to")?);
+            return match (from, to) {
+                (None, None) => None,
+                (Some(a), Some(b)) => match (*a, *b) {
+                    (Self::Date { date: from }, Self::Date { date: to }) => {
+                        Some(Self::Between { from, to })
+                    }
+                    (a, b) => Some(Self::Open {
+                        from: Some(Box::new(a)),
+                        to: Some(Box::new(b)),
+                    }),
+                },
+                (from, to) => Some(Self::Open { from, to }),
+            };
+        }
+        if let Some(date) = object.get("date") {
+            return (object.len() == 1).then(|| Self::Date {
+                date: date.as_str().unwrap_or_default().to_owned(),
+            });
+        }
+        let rel = object.get("rel")?.as_i64()?;
+        let time = object.get("time").and_then(|t| t.as_str());
+        let weekday = object.get("weekday").and_then(serde_json::Value::as_i64);
+        let name = object.get("name").and_then(serde_json::Value::as_i64);
+        match object.get("unit")?.as_str()? {
+            "day" => Some(match time {
+                Some(time) => Self::Clock {
+                    rel,
+                    time: time.to_owned(),
+                },
+                None => Self::Day { rel },
+            }),
+            "week" if time.is_none() => Some(match weekday {
+                Some(day) => Self::Weekday {
+                    rel,
+                    weekday: i8::try_from(day).ok()?,
+                },
+                None => Self::Week { rel },
+            }),
+            "month" if time.is_none() => Some(match name {
+                Some(month) => Self::NamedMonth {
+                    rel,
+                    name: i8::try_from(month).ok()?,
+                },
+                None => Self::Month { rel },
+            }),
+            _ => None,
+        }
+    }
+
+    /// The time of day the period names, when it names one.
+    #[must_use]
+    pub fn clock(&self) -> Option<&str> {
+        match self {
+            Self::Clock { time, .. } => Some(time),
+            _ => None,
+        }
+    }
+
+    /// Whether the period has an end left open.
+    #[must_use]
+    pub fn is_open(&self) -> bool {
+        matches!(self, Self::Open { from, to } if from.is_none() || to.is_none())
     }
 
     /// The days it covers, both ends included.
@@ -160,6 +300,49 @@ impl Period {
                 Some((start, start.last_of_month()))
             }
             Self::Between { from, to } => Some((from.parse().ok()?, to.parse().ok()?)),
+            Self::Weekday { rel, weekday } => {
+                let monday = today
+                    .checked_sub(
+                        jiff::Span::new().days(i64::from(today.weekday().to_monday_zero_offset())),
+                    )
+                    .ok()?;
+                let day = monday
+                    .checked_add(jiff::Span::new().days(rel * 7 + i64::from(*weekday) - 1))
+                    .ok()?;
+                Some((day, day))
+            }
+            Self::NamedMonth { rel, name } => {
+                // the runtime's reading: -1 is the most recent month of that name that has fully ended, 1 the next that
+                // has not begun, 0 this year's; further steps move whole years
+                let (current, year) = (today.month(), i64::from(today.year()));
+                let year = match rel.cmp(&0) {
+                    std::cmp::Ordering::Less => {
+                        (if *name < current { year } else { year - 1 }) + rel + 1
+                    }
+                    std::cmp::Ordering::Greater => {
+                        (if *name > current { year } else { year + 1 }) + rel - 1
+                    }
+                    std::cmp::Ordering::Equal => year,
+                };
+                let first = Date::new(i16::try_from(year).ok()?, *name, 1).ok()?;
+                Some((first, first.last_of_month()))
+            }
+            Self::Clock { rel, .. } => Self::Day { rel: *rel }.range(today),
+            Self::Date { date } => {
+                let day: Date = date.parse().ok()?;
+                Some((day, day))
+            }
+            Self::Open { from, to } => {
+                let start = match from {
+                    Some(p) => p.range(today)?.0,
+                    None => Date::MIN,
+                };
+                let end = match to {
+                    Some(p) => p.range(today)?.1,
+                    None => Date::MAX,
+                };
+                (start <= end).then_some((start, end))
+            }
         }
     }
 }
@@ -174,6 +357,12 @@ pub enum Cmp {
     Le,
     Gt,
     Ge,
+    /// `in ("a", "b")`.
+    In,
+    /// `is empty`.
+    IsEmpty,
+    /// `is set`.
+    IsSet,
 }
 
 impl Cmp {
@@ -186,6 +375,9 @@ impl Cmp {
             Self::Le => "<=",
             Self::Gt => ">",
             Self::Ge => ">=",
+            Self::In => "in",
+            Self::IsEmpty => "is empty",
+            Self::IsSet => "is set",
         }
     }
 }
@@ -196,6 +388,8 @@ pub enum Lit {
     Text(String),
     Num(f64),
     Flag(bool),
+    /// The values of an `in (…)`; none for a condition that takes no value.
+    List(Vec<String>),
 }
 
 impl Lit {
@@ -207,6 +401,14 @@ impl Lit {
             Self::Num(n) => number(*n),
             Self::Flag(true) => "yes".to_owned(),
             Self::Flag(false) => "no".to_owned(),
+            Self::List(values) => format!(
+                "({})",
+                values
+                    .iter()
+                    .map(|v| format!("\"{v}\""))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
         }
     }
 }
@@ -232,6 +434,12 @@ pub struct Filter {
 impl Filter {
     #[must_use]
     pub fn clause(&self) -> String {
+        use crate::intent::Cmp::{In, IsEmpty, IsSet};
+        match self.cmp {
+            IsEmpty | IsSet => return format!("{} {}", self.field, self.cmp.symbol()),
+            In => return format!("{} in {}", self.field, self.value.render()),
+            _ => {}
+        }
         format!(
             "{} {} {}",
             self.field,
@@ -272,6 +480,15 @@ pub struct Selector {
     /// Only rows in the trash (`trashed=true`).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub trashed: bool,
+    /// More kinds, read with `kind` as a comma list (`task, event`): only a name, a period, a limit and the like go with it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub also: Vec<String>,
+    /// The earlier turn whose rows this leaves out (`exclude=@k`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exclude: Option<usize>,
+    /// The one row the selection finds is opened (`find rows=#n`: every fact and link of it).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub open: bool,
 }
 
 impl Selector {
@@ -289,6 +506,9 @@ impl Selector {
             within: None,
             text: None,
             trashed: false,
+            also: Vec::new(),
+            exclude: None,
+            open: false,
         }
     }
 }

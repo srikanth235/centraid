@@ -61,10 +61,66 @@ pub enum Search {
     Trashed,
     /// `where field != value`.
     Not,
+    /// `where field in ("a", "b")`.
+    In,
+    /// `where field is empty`.
+    Empty,
+    /// `where field is set`.
+    Set,
+    /// `rows=#n`: the one row found is opened, every fact and link of it.
+    Rows,
+    /// `exclude=@k`: "what else", the rows the turn before did not show. A turn of its own after one that reads.
+    Exclude,
+    /// `kind` as a comma list, with a period.
+    Kinds,
+    /// `when` with a weekday: `{"unit":"week","rel":r,"weekday":d}`.
+    Weekday,
+    /// `when` with a month by name: `{"unit":"month","name":n,"rel":r}`.
+    MonthName,
+    /// `when` with a time of day: `{"unit":"day","rel":r,"time":"HH:MM"}`.
+    Clock,
+    /// `when` with an end left open: since or until a day.
+    Open,
 }
 
+/// Kinds with a field whose values are a fixed list the world's rows hold, for `in`.
+const ENUM_KINDS: [&str; 5] = ["task", "transaction", "account", "locker item", "workout"];
+
+/// Kinds with a field some rows hold and some do not (a role, an effort, a username, a distance, a duration).
+const PRESENCE_KINDS: [&str; 5] = ["person", "task", "locker item", "workout", "event"];
+
 impl Search {
-    pub const ALL: [Self; 3] = [Self::Text, Self::Trashed, Self::Not];
+    pub const ALL: [Self; 13] = [
+        Self::Text,
+        Self::Trashed,
+        Self::Not,
+        Self::In,
+        Self::Empty,
+        Self::Set,
+        Self::Rows,
+        Self::Exclude,
+        Self::Kinds,
+        Self::Weekday,
+        Self::MonthName,
+        Self::Clock,
+        Self::Open,
+    ];
+
+    /// Can the option be drawn for `kind` at all? A draw that no world of the kind can serve is not scheduled.
+    #[must_use]
+    pub fn serves(self, catalog: &Catalog, kind: &str) -> bool {
+        let dated = catalog
+            .kind(kind)
+            .is_some_and(|k| k.date.is_some() && kind != "budget");
+        match self {
+            Self::Text | Self::Trashed | Self::Rows | Self::Exclude => true,
+            Self::Not => matches!(kind, "task" | "transaction" | "account" | "locker item"),
+            Self::In => ENUM_KINDS.contains(&kind),
+            Self::Empty | Self::Set => PRESENCE_KINDS.contains(&kind),
+            Self::Kinds | Self::Weekday | Self::MonthName | Self::Open => dated,
+            Self::Clock => kind == "event",
+        }
+    }
 }
 
 /// What a draw is aimed at beyond its cell: the supply the mix balances is made here, target first.
@@ -288,6 +344,7 @@ impl<'a> Sampler<'a> {
 
     fn selector_apps(&self, sel: &Selector) -> Vec<String> {
         let mut kinds = vec![sel.kind.as_str()];
+        kinds.extend(sel.also.iter().map(String::as_str));
         for l in [&sel.link, &sel.anchor].into_iter().flatten() {
             kinds.push(l.kind.as_str());
         }
@@ -760,10 +817,36 @@ impl<'a> Sampler<'a> {
         }
     }
 
+    /// `own` as the one condition of a selector narrowed by up to two other facets of `row`, until it selects between one
+    /// row and a screenful.
+    fn narrowed(&self, kind: &str, row: &Row, own: &Filter, rng: &mut Rng) -> Option<Selector> {
+        for extra in 0..3 {
+            let narrowing: Vec<Facet> = self
+                .pick(self.facets(row, rng), extra, rng)
+                .into_iter()
+                .filter(|f| {
+                    matches!(f, Facet::Filter(f) if f.field != own.field)
+                        || matches!(f, Facet::Period(_))
+                })
+                .collect();
+            let mut sel = self.selector(kind, narrowing);
+            sel.filters.push(own.clone());
+            let n = self.facts.select(&sel, None).len();
+            if (1..=ROW_CAP).contains(&n) {
+                return Some(sel);
+            }
+        }
+        None
+    }
+
     /// A read through an option of `find` that a plain draw never uses: a fuzzy search of the names (`text`), the rows in
-    /// the trash (`trashed`), or a fixed-list field that is not a value (`!=`). `None` when the world holds no such row.
+    /// the trash (`trashed`), a fixed-list field that is not a value or is one of some (`!=`, `in`), a field that is
+    /// empty or set, the one row found opened (`rows`), a read of two kinds at once, or a period said with a weekday, a
+    /// month by name, a time of day or an open end. `None` when the world holds no such row. `exclude` is a turn after a
+    /// read, drawn by [`Self::exclusion`].
     fn search_read(&self, kind: &str, search: Search, rng: &mut Rng) -> Option<TurnIntent> {
         let live = self.live_rows(kind);
+        let mut reference = Reference::Select;
         let sel = match search {
             Search::Text => {
                 let row = live.get(rng.below(live.len().max(1)))?;
@@ -801,36 +884,281 @@ impl<'a> Sampler<'a> {
                 let have = row.text(field)?;
                 let other: Vec<&String> = values.iter().filter(|v| *v != have).collect();
                 let value = (*other.get(rng.below(other.len().max(1)))?).clone();
-                let mut best = None;
-                for extra in 0..3 {
-                    let narrowing: Vec<Facet> = self
-                        .pick(self.facets(row, rng), extra, rng)
-                        .into_iter()
-                        .filter(|f| {
-                            matches!(f, Facet::Filter(f) if f.field != field)
-                                || matches!(f, Facet::Period(_))
-                        })
-                        .collect();
-                    let mut sel = self.selector(kind, narrowing);
-                    sel.filters.push(Filter {
-                        field: field.to_owned(),
-                        cmp: Cmp::Ne,
-                        value: Lit::Text(value.clone()),
-                    });
-                    let n = self.facts.select(&sel, None).len();
-                    if (1..=ROW_CAP).contains(&n) {
-                        best = Some(sel);
+                let own = Filter {
+                    field: field.to_owned(),
+                    cmp: Cmp::Ne,
+                    value: Lit::Text(value),
+                };
+                self.narrowed(kind, row, &own, rng)?
+            }
+            Search::In => {
+                let fields: Vec<&crate::catalog::Field> = self
+                    .catalog
+                    .kind(kind)?
+                    .fields
+                    .iter()
+                    .filter(|f| {
+                        !f.values.is_empty() && live.iter().any(|r| r.text(&f.name).is_some())
+                    })
+                    .collect();
+                let field = *fields.get(rng.below(fields.len().max(1)))?;
+                // `open` also reads as the started ones on a status that has them, which the index does not: leave it out
+                let usable: Vec<&String> = field
+                    .values
+                    .iter()
+                    .filter(|v| !(field.name == "status" && *v == "open"))
+                    .collect();
+                let holders: Vec<&&Row> = live
+                    .iter()
+                    .filter(|r| {
+                        r.text(&field.name)
+                            .is_some_and(|v| usable.iter().any(|u| u.eq_ignore_ascii_case(v)))
+                    })
+                    .collect();
+                let row = **holders.get(rng.below(holders.len().max(1)))?;
+                let have = row.text(&field.name)?.to_owned();
+                let mut others: Vec<&String> = usable
+                    .into_iter()
+                    .filter(|v| !v.eq_ignore_ascii_case(&have))
+                    .collect();
+                let mut list = vec![have];
+                for _ in 0..rng.range(1, 2) {
+                    if others.is_empty() {
+                        break;
+                    }
+                    list.push(others.swap_remove(rng.below(others.len())).clone());
+                }
+                if list.len() < 2 {
+                    return None;
+                }
+                for i in (1..list.len()).rev() {
+                    list.swap(i, rng.below(i + 1));
+                }
+                let own = Filter {
+                    field: field.name.clone(),
+                    cmp: Cmp::In,
+                    value: Lit::List(list),
+                };
+                self.narrowed(kind, row, &own, rng)?
+            }
+            Search::Empty | Search::Set => {
+                let set = search == Search::Set;
+                let presence = |field: &str, set: bool| Filter {
+                    field: field.to_owned(),
+                    cmp: if set { Cmp::IsSet } else { Cmp::IsEmpty },
+                    value: Lit::List(Vec::new()),
+                };
+                // fields some of the world's rows hold and some do not
+                let fields: Vec<&str> = self
+                    .catalog
+                    .kind(kind)?
+                    .fields
+                    .iter()
+                    .map(|f| f.name.as_str())
+                    .filter(|f| {
+                        let n = live
+                            .iter()
+                            .filter(|r| self.facts.passes(r, &presence(f, true)))
+                            .count();
+                        n > 0 && n < live.len()
+                    })
+                    .collect();
+                let field = *fields.get(rng.below(fields.len().max(1)))?;
+                let own = presence(field, set);
+                let holders: Vec<&&Row> =
+                    live.iter().filter(|r| self.facts.passes(r, &own)).collect();
+                let row = **holders.get(rng.below(holders.len().max(1)))?;
+                self.narrowed(kind, row, &own, rng)?
+            }
+            Search::Rows => {
+                let row = live.get(rng.below(live.len().max(1)))?;
+                if row.name.is_empty() || self.facts.named(kind, &row.name).len() != 1 {
+                    return None;
+                }
+                let mut sel = Selector::of(kind);
+                sel.name = Some(row.name.clone());
+                sel.open = true;
+                reference = Reference::Name;
+                sel
+            }
+            Search::Exclude => return None,
+            Search::Kinds => {
+                let dated: Vec<&str> = self
+                    .catalog
+                    .kinds
+                    .iter()
+                    .filter(|k| k.date.is_some() && k.name != kind && k.name != "budget")
+                    .map(|k| k.name.as_str())
+                    .collect();
+                let rows: Vec<&&Row> = live.iter().filter(|r| r.date.is_some()).collect();
+                let mut found = None;
+                for _ in 0..12 {
+                    let other = *dated.get(rng.below(dated.len().max(1)))?;
+                    let row = **rows.get(rng.below(rows.len().max(1)))?;
+                    let Some(period) = self.period_for(row, rng) else {
+                        continue;
+                    };
+                    let mut sel = Selector::of(kind);
+                    sel.also = vec![other.to_owned()];
+                    sel.period = Some(period);
+                    let each = |k: &str| {
+                        let mut one = sel.clone();
+                        one.also.clear();
+                        k.clone_into(&mut one.kind);
+                        self.facts.select(&one, None).len()
+                    };
+                    if each(kind) > 0 && each(other) > 0 {
+                        found = Some(sel);
                         break;
                     }
                 }
-                best?
+                found?
+            }
+            Search::Weekday | Search::MonthName | Search::Clock => {
+                let rows: Vec<&&Row> = live
+                    .iter()
+                    .filter(|r| r.date.is_some() && (search != Search::Clock || r.clock.is_some()))
+                    .collect();
+                let row = **rows.get(rng.below(rows.len().max(1)))?;
+                let (day, today) = (row.date?, self.facts.today);
+                let period = match search {
+                    Search::Weekday => {
+                        let monday = |d: jiff::civil::Date| {
+                            d.checked_sub(
+                                jiff::Span::new()
+                                    .days(i64::from(d.weekday().to_monday_zero_offset())),
+                            )
+                            .ok()
+                        };
+                        let weeks =
+                            i64::from(monday(day)?.since(monday(today)?).ok()?.get_days()) / 7;
+                        Period::Weekday {
+                            rel: weeks,
+                            weekday: day.weekday().to_monday_one_offset(),
+                        }
+                    }
+                    Search::MonthName => {
+                        let name = day.month();
+                        let rel = (-3..=3).find(|rel| {
+                            Period::NamedMonth { rel: *rel, name }
+                                .range(today)
+                                .is_some_and(|(a, b)| a <= day && day <= b)
+                        })?;
+                        Period::NamedMonth { rel, name }
+                    }
+                    _ => Period::Clock {
+                        rel: i64::from(day.since(today).ok()?.get_days()),
+                        time: row.clock.clone()?,
+                    },
+                };
+                let mut sel = Selector::of(kind);
+                sel.period = Some(period);
+                if search == Search::MonthName {
+                    // a month holds more rows than a screenful: narrow it as a plain period is
+                    let narrowing: Vec<Facet> = self
+                        .pick(self.facets(row, rng), 1, rng)
+                        .into_iter()
+                        .filter(|f| matches!(f, Facet::Filter(_) | Facet::Link(_)))
+                        .collect();
+                    sel = self.selector_into(sel, narrowing);
+                }
+                sel
+            }
+            Search::Open => {
+                let mut dated: Vec<jiff::civil::Date> =
+                    live.iter().filter_map(|r| r.date).collect();
+                dated.sort();
+                if dated.len() < 2 {
+                    return None;
+                }
+                let today = self.facts.today;
+                let since = rng.chance(0.5);
+                let take = rng.range(1, 6) as usize;
+                let edge = if since {
+                    dated[dated.len().saturating_sub(take)]
+                } else {
+                    dated[(take - 1).min(dated.len() - 1)]
+                };
+                let days = i64::from(edge.since(today).ok()?.get_days());
+                let end = if days.abs() <= 45 {
+                    Period::Day { rel: days }
+                } else {
+                    Period::Date {
+                        date: edge.to_string(),
+                    }
+                };
+                let mut sel = Selector::of(kind);
+                sel.period = Some(if since {
+                    Period::Open {
+                        from: Some(Box::new(end)),
+                        to: None,
+                    }
+                } else {
+                    Period::Open {
+                        from: None,
+                        to: Some(Box::new(end)),
+                    }
+                });
+                sel
             }
         };
         let n = self.facts.select(&sel, None).len();
         if !(1..=ROW_CAP).contains(&n) {
             return None;
         }
-        Some(self.turn(Intent::Read { sel }, Reference::Select, Outcome::Done, None))
+        Some(self.turn(Intent::Read { sel }, reference, Outcome::Done, None))
+    }
+
+    /// "What else": a read of the rows the turn before did not show, as two turns. The first reads rows by a few
+    /// constraints and the second asks again with one constraint fewer and `exclude=@k`, so it holds what the first
+    /// left out. `None` when the world holds no such pair of reads.
+    fn exclusion(&self, kind: &str, rng: &mut Rng) -> Option<Vec<TurnIntent>> {
+        for _ in 0..8 {
+            let c = 1 + rng.below(3);
+            let (first, keys) = self.target_selector(kind, c, rng, ROW_CAP)?;
+            let shown: std::collections::BTreeSet<String> = keys.into_iter().collect();
+            let mut broad = first.clone();
+            // the member drops one constraint: "what else is there?"
+            let mut drops: Vec<u8> = Vec::new();
+            if !broad.filters.is_empty() {
+                drops.push(0);
+            }
+            if broad.period.is_some() {
+                drops.push(1);
+            }
+            if broad.link.is_some() {
+                drops.push(2);
+            }
+            match drops.get(rng.below(drops.len().max(1))) {
+                Some(0) => {
+                    let at = rng.below(broad.filters.len());
+                    broad.filters.remove(at);
+                }
+                Some(1) => broad.period = None,
+                Some(2) => broad.link = None,
+                _ => {}
+            }
+            broad.name = None;
+            broad.exclude = Some(0);
+            let rest = self.facts.select_but(&broad, None, Some(&shown)).len();
+            if (1..=ROW_CAP).contains(&rest) {
+                return Some(vec![
+                    self.turn(
+                        Intent::Read { sel: first },
+                        Reference::Select,
+                        Outcome::Done,
+                        None,
+                    ),
+                    self.turn(
+                        Intent::Read { sel: broad },
+                        Reference::Select,
+                        Outcome::Done,
+                        Some((0, Dep::Else)),
+                    ),
+                ]);
+            }
+        }
+        None
     }
 
     /// A selector that selects nothing: the same constraints under a period nothing falls in, or
@@ -1969,7 +2297,12 @@ impl<'a> Sampler<'a> {
             Period::Week { rel } => Some(Period::Week { rel: rel - 1 }),
             Period::Month { rel } => Some(Period::Month { rel: rel - 1 }),
             Period::Day { rel } => Some(Period::Day { rel: rel - 1 }),
-            Period::Between { .. } => None,
+            Period::Between { .. }
+            | Period::Weekday { .. }
+            | Period::NamedMonth { .. }
+            | Period::Clock { .. }
+            | Period::Date { .. }
+            | Period::Open { .. } => None,
         };
         let mut twin = first.clone();
         let changed = match &mut twin.intent {
@@ -2154,6 +2487,12 @@ impl<'a> Sampler<'a> {
                 turns.push(first);
                 turns.push(edit);
                 extra = 0;
+            }
+            ("find", "read")
+                if aim.search == Some(Search::Exclude) && !self.world.settings.is_empty() =>
+            {
+                turns = self.exclusion(&cell.kind, rng)?;
+                extra = extra.min(1);
             }
             ("do", "undo") => {
                 if !room.undo {
@@ -2460,7 +2799,12 @@ impl<'a> Sampler<'a> {
                         Period::Week { rel } => Period::Week { rel: rel - 1 },
                         Period::Month { rel } => Period::Month { rel: rel - 1 },
                         Period::Day { rel } => Period::Day { rel: rel - 1 },
-                        Period::Between { .. } => continue,
+                        Period::Between { .. }
+                        | Period::Weekday { .. }
+                        | Period::NamedMonth { .. }
+                        | Period::Clock { .. }
+                        | Period::Date { .. }
+                        | Period::Open { .. } => continue,
                     };
                     m.sel.period = Some(moved);
                     let rows = self.facts.select(&m.sel, None);
@@ -2605,8 +2949,9 @@ impl<'a> Sampler<'a> {
                         out: &[std::collections::BTreeSet<String>]|
              -> std::collections::BTreeSet<String> {
                 let within = sel.within.and_then(|w| out.get(w));
+                let exclude = sel.exclude.and_then(|w| out.get(w));
                 self.facts
-                    .select(sel, within)
+                    .select_but(sel, within, exclude)
                     .iter()
                     .map(|r| r.key.clone())
                     .collect()
@@ -2712,6 +3057,7 @@ mod name_tests {
 
     fn row(kind: &str, key: &str, name: &str, trashed: bool) -> Row {
         Row {
+            clock: None,
             kind: kind.into(),
             key: key.into(),
             keyed: true,

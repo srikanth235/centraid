@@ -73,6 +73,46 @@ fn when_phrase(period: &Period, today: Date) -> String {
             if *rel < 0 { "ago" } else { "ahead" },
             a.strftime("%B %Y")
         ),
+        (Period::Weekday { rel, .. }, Some((d, _))) => {
+            let day = d.strftime("%A");
+            match rel {
+                0 => format!("{day} this week"),
+                -1 => format!("{day} last week"),
+                1 => format!("{day} next week"),
+                _ => format!(
+                    "{day} of the week {} weeks {} ({})",
+                    rel.abs(),
+                    if *rel < 0 { "ago" } else { "ahead" },
+                    dates(d, d)
+                ),
+            }
+        }
+        (Period::NamedMonth { rel, .. }, Some((a, _))) => {
+            let month = a.strftime("%B");
+            let year = a.strftime("%B %Y");
+            match rel {
+                0 => format!("{month} of this year ({year})"),
+                -1 => format!("last {month} ({year})"),
+                1 => format!("next {month} ({year})"),
+                _ => format!("{month} ({year})"),
+            }
+        }
+        (Period::Clock { rel, time }, _) => {
+            format!(
+                "{} at {time}",
+                when_phrase(&Period::Day { rel: *rel }, today)
+            )
+        }
+        (Period::Date { .. }, Some((d, _))) => d.strftime("%B %-d, %Y").to_string(),
+        (Period::Open { from, to }, _) => {
+            let end = |p: &Option<Box<Period>>| p.as_ref().map(|p| when_phrase(p, today));
+            match (end(from), end(to)) {
+                (Some(from), None) => format!("on or after {from} (no end date)"),
+                (None, Some(to)) => format!("on or before {to} (no start date)"),
+                (Some(from), Some(to)) => format!("from {from} to {to}"),
+                (None, None) => "a period".to_owned(),
+            }
+        }
         (Period::Between { .. }, Some((a, b))) => {
             format!(
                 "from {} through {}",
@@ -93,6 +133,9 @@ fn cmp_words(filter: &Filter) -> &'static str {
         Cmp::Le => "is at most",
         Cmp::Gt => "is above",
         Cmp::Ge => "is at least",
+        Cmp::In => "is one of",
+        Cmp::IsEmpty => "is empty",
+        Cmp::IsSet => "is set",
     }
 }
 
@@ -117,6 +160,20 @@ impl Briefer<'_> {
     }
 
     fn filter(&self, kind: &str, filter: &Filter) -> String {
+        use crate::intent::Cmp;
+        let field = filter.field.replace('_', " ");
+        match filter.cmp {
+            Cmp::IsEmpty => return format!("{field} is empty (left blank)"),
+            Cmp::IsSet => return format!("{field} is filled in (not blank)"),
+            Cmp::In => {
+                let crate::intent::Lit::List(values) = &filter.value else {
+                    return format!("{field} is one of the listed values");
+                };
+                let values: Vec<String> = values.iter().map(|v| format!("\"{v}\"")).collect();
+                return format!("{field} is {} (any one of them)", values.join(" or "));
+            }
+            _ => {}
+        }
         let value = match &filter.value {
             crate::intent::Lit::Text(t) => format!("\"{t}\""),
             other => other.render(),
@@ -149,6 +206,9 @@ impl Briefer<'_> {
     /// A selector in words; its free text goes into `spans`.
     fn selector(&self, sel: &Selector, spans: &mut Vec<String>, depth_hint: bool) -> String {
         let mut text = format!("the {}", self.plural(&sel.kind));
+        for kind in &sel.also {
+            text += &format!(" and the {}", self.plural(kind));
+        }
         if let Some(name) = &sel.name {
             spans.push(name.clone());
             text += &format!(" named \"{name}\"");
@@ -204,6 +264,12 @@ impl Briefer<'_> {
         }
         if sel.within.is_some() && depth_hint {
             parts.push("narrowed to the rows of an earlier turn".to_owned());
+        }
+        if sel.exclude.is_some() && depth_hint {
+            parts.push(
+                "leaving out the rows the earlier turn showed (the other ones, what else)"
+                    .to_owned(),
+            );
         }
         if !parts.is_empty() {
             text += &format!(" ({})", parts.join("; "));
@@ -321,6 +387,12 @@ impl Briefer<'_> {
         typed: &mut Vec<String>,
     ) -> String {
         match intent {
+            Intent::Read { sel } if sel.open => {
+                format!(
+                    "Ask for everything about {}: all its details and everything it is linked to, not a line in a list.",
+                    self.selector(sel, spans, true)
+                )
+            }
             Intent::Read { sel } => {
                 format!("Show me {}.", self.selector(sel, spans, true))
             }
@@ -473,6 +545,9 @@ fn how_of(turn: &TurnIntent, index: usize) -> String {
                 "carries the earlier question over: it keeps the same kind of ask and changes only what is new (a period, a figure, or the subject)"
             }
             Dep::Undo => "takes back what that turn changed",
+            Dep::Else => {
+                "asks for the others: the same kind of rows that turn did not show (like \"what else is there?\" or \"the other ones\")"
+            }
         };
         out.push(format!(
             "This turn leans on turn {}: it {word}. It must be a very short follow-up that cannot be understood without turn {}: start with \"and\", \"what about\", \"same for\", \"now\" or use it/that/those/the same; say only what is new.",

@@ -333,8 +333,21 @@ fn a_typed_secret_is_a_verbatim_span_of_its_brief_and_a_placeholder_is_still_ref
         today,
         vec![format!("new password {value}")],
     )];
-    assert!(verify::reader_prompt(&catalog, &batch, 0, true).contains("\"typed\""));
-    assert!(!verify::reader_prompt(&catalog, &batch, 0, false).contains("\"typed\""));
+    assert!(
+        verify::reader_prompt(
+            &catalog,
+            &batch,
+            0,
+            verify::Asks {
+                typed: true,
+                presence: false
+            }
+        )
+        .contains("\"typed\"")
+    );
+    assert!(
+        !verify::reader_prompt(&catalog, &batch, 0, verify::Asks::default()).contains("\"typed\"")
+    );
     let read = verify::parse_reads(
         &serde_json::json!({"sessions": [{"id": "s1", "turns": [{"act": "create", "kind": "locker item", "typed": [value.to_uppercase()]}]}]}).to_string(),
         &[1],
@@ -500,77 +513,374 @@ fn no_money_amount_is_live_because_the_runtime_drops_or_refuses_it() {
 
 // ------------------------------------------------------------------ A2: the options of `find`
 
-#[test]
-fn each_option_of_find_a_plain_draw_never_used_is_drawn_solved_and_carried_by_the_call() {
+/// What the brief and the read-back say about the turn that carries an option of `find`.
+struct Said<'a> {
+    /// The turns of the scenario, and the calls the runtime ran for them.
+    scenario: &'a Scenario,
+    catalog: &'a Catalog,
+    today: jiff::civil::Date,
+}
+
+impl Said<'_> {
+    fn brief(&self, turn: usize) -> crate::brief::TurnBrief {
+        Briefer {
+            catalog: self.catalog,
+            today: self.today,
+        }
+        .turn(&self.scenario.turns[turn], turn)
+    }
+
+    fn want(&self, turn: usize) -> verify::Expected {
+        verify::expected(self.catalog, &self.scenario.turns[turn], self.today)
+    }
+}
+
+/// Draw `search` for a read of one of `kinds` in the first of three train worlds that gives one the runtime solves as the
+/// index says, and hand the scenario and the reference calls of the whole session to `check`.
+fn prove(
+    search: Search,
+    kinds: &[&str],
+    check: impl Fn(&Said<'_>, &[(String, Value)]) -> bool,
+    what: &str,
+) {
     let catalog = catalog();
     let grid = Grid::build(&catalog);
-    let world = worlds(Split::Train, 1).remove(0);
-    let scratch = tempfile::tempdir().expect("scratch");
-    let mut run = WorldRun::seed(&world, &catalog, scratch.path()).expect("seeds");
-    for (search, kind, arg) in [
-        (Search::Text, "task", "text"),
-        (Search::Not, "task", "where"),
-        (Search::Trashed, "task", "trashed"),
-    ] {
-        let aim = Aim {
-            search: Some(search),
-            ..Aim::default()
-        };
-        let mut solved = None;
-        'draw: for kind_try in [kind, "note", "person", "event", "document", "photo"] {
-            let cell = Cell::new("find", kind_try, "read");
-            for i in 0..12 {
+    let aim = Aim {
+        search: Some(search),
+        ..Aim::default()
+    };
+    for world in worlds(Split::Train, 3) {
+        let scratch = tempfile::tempdir().expect("scratch");
+        let mut run = WorldRun::seed(&world, &catalog, scratch.path()).expect("seeds");
+        for kind in kinds {
+            let cell = Cell::new("find", kind, "read");
+            for i in 0..16 {
                 let Some(scenario) = drawn(
                     &catalog,
                     &grid,
                     &world,
                     &cell,
                     &aim,
-                    &format!("s:{arg}:{kind_try}:{i}"),
+                    &format!("s:{search:?}:{kind}:{i}"),
                 ) else {
                     continue;
                 };
                 let solution = solve(&mut run, &scenario);
-                if solution.dropped.is_empty() && solution.kept == scenario.turns.len() {
-                    solved = Some((scenario, solution));
-                    break 'draw;
+                if !solution.dropped.is_empty() || solution.kept != scenario.turns.len() {
+                    continue;
+                }
+                let said = Said {
+                    scenario: &scenario,
+                    catalog: &catalog,
+                    today: world.today.parse().expect("a date"),
+                };
+                let made = calls(&solution);
+                if check(&said, &made) {
+                    return;
                 }
             }
         }
-        let (scenario, solution) = solved.unwrap_or_else(|| panic!("no {search:?} read solved"));
-        let found = calls(&solution)
-            .into_iter()
-            .find(|(t, a)| t == "find" && a.get(arg).is_some())
-            .unwrap_or_else(|| panic!("{search:?}: no find carries {arg}: {:?}", calls(&solution)));
-        match search {
-            Search::Text => assert!(found.1["text"].as_str().is_some_and(|t| !t.is_empty())),
-            Search::Not => assert!(
-                found.1["where"]
-                    .as_str()
-                    .unwrap_or_default()
-                    .contains(" != ")
-            ),
-            Search::Trashed => assert_eq!(found.1["trashed"], "true"),
-        }
-        // the brief says it and the reader is asked for what it means
-        let today = world.today.parse().expect("a date");
-        let turn = &scenario.turns[0];
-        let brief = Briefer {
-            catalog: &catalog,
-            today,
-        }
-        .turn(turn, 0);
-        match search {
-            Search::Text => assert!(brief.ask.contains("searching") && !brief.spans.is_empty()),
-            Search::Not => assert!(brief.ask.contains("is not")),
-            Search::Trashed => assert!(brief.ask.contains("in the trash")),
-        }
-        let want = verify::expected(&catalog, turn, today);
-        match search {
-            Search::Text => assert!(!want.names.is_empty()),
-            Search::Not => assert!(!want.excluding.is_empty()),
-            Search::Trashed => {}
-        }
+    }
+    panic!(
+        "no {search:?} read was drawn, solved through the runtime and carried by the call ({what})"
+    );
+}
+
+fn find_with<'a>(made: &'a [(String, Value)], arg: &'a str) -> impl Iterator<Item = &'a Value> {
+    made.iter()
+        .filter(move |(tool, args)| tool == "find" && args.get(arg).is_some())
+        .map(|(_, args)| args)
+}
+
+fn where_of(args: &Value) -> String {
+    args["where"].as_str().unwrap_or_default().to_owned()
+}
+
+fn when_of(args: &Value) -> Value {
+    serde_json::from_str(args["when"].as_str().unwrap_or_default()).unwrap_or(Value::Null)
+}
+
+#[test]
+fn a_text_search_is_drawn_solved_and_carried_by_the_call() {
+    prove(
+        Search::Text,
+        &["task", "note", "person", "event", "document"],
+        |said, made| {
+            find_with(made, "text").any(|a| a["text"].as_str().is_some_and(|t| !t.is_empty()))
+                && said.brief(0).ask.contains("searching")
+                && !said.want(0).names.is_empty()
+        },
+        "text",
+    );
+}
+
+#[test]
+fn a_read_of_the_trash_is_drawn_solved_and_carried_by_the_call() {
+    prove(
+        Search::Trashed,
+        &["task", "note", "person", "event", "document", "photo"],
+        |said, made| {
+            find_with(made, "trashed").any(|a| a["trashed"] == "true")
+                && said.brief(0).ask.contains("in the trash")
+        },
+        "trashed",
+    );
+}
+
+#[test]
+fn a_field_that_is_not_a_value_is_drawn_solved_and_carried_by_the_call() {
+    prove(
+        Search::Not,
+        &["task", "transaction", "account", "locker item"],
+        |said, made| {
+            find_with(made, "where").any(|a| where_of(a).contains(" != "))
+                && said.brief(0).ask.contains("is not")
+                && !said.want(0).excluding.is_empty()
+        },
+        "!=",
+    );
+}
+
+#[test]
+fn a_field_that_is_one_of_some_values_is_drawn_solved_and_carried_by_the_call() {
+    prove(
+        Search::In,
+        &["task", "transaction", "account", "locker item", "workout"],
+        |said, made| {
+            find_with(made, "where").any(|a| {
+                let clause = where_of(a);
+                clause.contains(" in (\"") && clause.matches('"').count() >= 4
+            }) && said.brief(0).ask.contains("any one of them")
+                && said.want(0).filters.len() >= 2
+        },
+        "in",
+    );
+}
+
+#[test]
+fn a_field_that_is_empty_is_drawn_solved_and_carried_by_the_call() {
+    prove(
+        Search::Empty,
+        &["person", "task", "locker item", "workout", "event"],
+        |said, made| {
+            find_with(made, "where").any(|a| where_of(a).contains(" is empty"))
+                && said.brief(0).ask.contains("is empty")
+                && said.want(0).presence.iter().any(|(_, v)| v == "empty")
+        },
+        "is empty",
+    );
+}
+
+#[test]
+fn a_field_that_is_set_is_drawn_solved_and_carried_by_the_call() {
+    prove(
+        Search::Set,
+        &["person", "task", "locker item", "workout", "event"],
+        |said, made| {
+            find_with(made, "where").any(|a| where_of(a).contains(" is set"))
+                && said.brief(0).ask.contains("filled in")
+                && said.want(0).presence.iter().any(|(_, v)| v == "set")
+        },
+        "is set",
+    );
+}
+
+#[test]
+fn a_row_opened_by_its_handle_is_drawn_solved_and_carried_by_the_call() {
+    prove(
+        Search::Rows,
+        &["task", "person", "event", "note", "document", "list"],
+        |said, made| {
+            // a find by name, then the find that opens the row it found
+            find_with(made, "rows").any(|a| a["rows"].as_str().is_some_and(|r| r.starts_with('#')))
+                && find_with(made, "name").next().is_some()
+                && said.brief(0).ask.contains("everything about")
+                && !said.want(0).names.is_empty()
+        },
+        "rows",
+    );
+}
+
+#[test]
+fn the_rows_an_earlier_read_did_not_show_are_drawn_solved_and_carried_by_the_call() {
+    prove(
+        Search::Exclude,
+        &["task", "person", "event", "note", "document", "photo"],
+        |said, made| {
+            find_with(made, "exclude")
+                .any(|a| a["exclude"].as_str().is_some_and(|r| r.starts_with('@')))
+                && said.scenario.turns.len() >= 2
+                && said.scenario.turns[1].dep == Some((0, crate::intent::Dep::Else))
+                && said.brief(1).how.contains("asks for the others")
+                && said.want(1).leaves_out_rows
+        },
+        "exclude",
+    );
+}
+
+#[test]
+fn a_comma_list_of_kinds_is_drawn_solved_and_carried_by_the_call() {
+    prove(
+        Search::Kinds,
+        &["task", "event", "note", "transaction", "document", "photo"],
+        |said, made| {
+            find_with(made, "kind").any(|a| a["kind"].as_str().is_some_and(|k| k.contains(", ")))
+                && find_with(made, "when").next().is_some()
+                && said.brief(0).ask.contains(" and the ")
+                && !said.want(0).also.is_empty()
+                && !said.scenario.turns[0].apps.is_empty()
+        },
+        "a comma list of kinds",
+    );
+}
+
+#[test]
+fn a_weekday_is_drawn_solved_and_carried_by_the_call() {
+    prove(
+        Search::Weekday,
+        &["task", "event", "note", "transaction", "document", "photo"],
+        |said, made| {
+            find_with(made, "when").any(|a| {
+                let when = when_of(a);
+                when["unit"] == "week" && when["weekday"].is_i64()
+            }) && said.want(0).period.is_some_and(|(from, to)| from == to)
+                && [
+                    "Monday",
+                    "Tuesday",
+                    "Wednesday",
+                    "Thursday",
+                    "Friday",
+                    "Saturday",
+                    "Sunday",
+                ]
+                .iter()
+                .any(|day| said.brief(0).ask.contains(day))
+        },
+        "a weekday",
+    );
+}
+
+#[test]
+fn a_month_by_name_is_drawn_solved_and_carried_by_the_call() {
+    prove(
+        Search::MonthName,
+        &["task", "event", "note", "transaction", "document", "photo"],
+        |said, made| {
+            find_with(made, "when").any(|a| {
+                let when = when_of(a);
+                when["unit"] == "month" && when["name"].is_i64()
+            }) && said.want(0).period.is_some_and(|(from, to)| from < to)
+        },
+        "a month by name",
+    );
+}
+
+#[test]
+fn a_time_of_day_is_drawn_solved_and_carried_by_the_call() {
+    prove(
+        Search::Clock,
+        &["event"],
+        |said, made| {
+            find_with(made, "when").any(|a| {
+                let when = when_of(a);
+                when["unit"] == "day" && when["time"].as_str().is_some_and(|t| t.len() == 5)
+            }) && said.want(0).period.is_some_and(|(from, to)| from == to)
+                && said.brief(0).ask.contains(" at ")
+        },
+        "a time of day",
+    );
+}
+
+#[test]
+fn a_period_with_an_open_end_is_drawn_solved_and_carried_by_the_call() {
+    prove(
+        Search::Open,
+        &["task", "event", "note", "transaction", "document", "photo"],
+        |said, made| {
+            find_with(made, "when").any(|a| {
+                let when = when_of(a);
+                when.get("from").is_some() != when.get("to").is_some()
+            }) && said.want(0).open.is_some()
+                && said.want(0).period.is_none()
+                && (said.brief(0).ask.contains("on or after")
+                    || said.brief(0).ask.contains("on or before"))
+        },
+        "an open end",
+    );
+}
+
+#[test]
+fn a_period_says_what_the_runtime_reads_and_never_a_day_of_a_week_as_the_week() {
+    use crate::intent::Period;
+    let today: jiff::civil::Date = "2026-09-16".parse().expect("a Wednesday");
+    let range = |when: &str| {
+        Period::parse_when(when)
+            .expect("a period the sampler draws")
+            .range(today)
+            .map(|(a, b)| (a.to_string(), b.to_string()))
+    };
+    let some = |a: &str, b: &str| Some((a.to_owned(), b.to_owned()));
+    // a day of last week, not the week
+    assert_eq!(
+        range(r#"{"unit":"week","rel":-1,"weekday":5}"#),
+        some("2026-09-11", "2026-09-11")
+    );
+    assert_eq!(
+        range(r#"{"unit":"week","rel":0}"#),
+        some("2026-09-14", "2026-09-20")
+    );
+    // the runtime's named month: the latest one that has ended, the next one that has not begun, this year's
+    assert_eq!(
+        range(r#"{"unit":"month","name":3,"rel":-1}"#),
+        some("2026-03-01", "2026-03-31")
+    );
+    assert_eq!(
+        range(r#"{"unit":"month","name":9,"rel":-1}"#),
+        some("2025-09-01", "2025-09-30")
+    );
+    assert_eq!(
+        range(r#"{"unit":"month","name":2,"rel":1}"#),
+        some("2027-02-01", "2027-02-28")
+    );
+    assert_eq!(
+        range(r#"{"unit":"month","name":11,"rel":0}"#),
+        some("2026-11-01", "2026-11-30")
+    );
+    // a time of day keeps its day, and an end left open is the calendar's own limit
+    assert_eq!(
+        range(r#"{"unit":"day","rel":2,"time":"15:00"}"#),
+        some("2026-09-18", "2026-09-18")
+    );
+    let (from, to) = Period::parse_when(r#"{"from":{"unit":"day","rel":-3}}"#)
+        .expect("open")
+        .range(today)
+        .expect("a range");
+    assert_eq!(from.to_string(), "2026-09-13");
+    assert_eq!(to, jiff::civil::Date::MAX);
+    assert_eq!(
+        range(r#"{"to":{"date":"2026-09-01"}}"#).map(|(a, _)| a),
+        Some(jiff::civil::Date::MIN.to_string())
+    );
+    // and the forms are told apart, never one read as another
+    for (text, period) in [
+        (
+            r#"{"unit":"week","rel":0,"weekday":3}"#,
+            Period::Weekday { rel: 0, weekday: 3 },
+        ),
+        (
+            r#"{"unit":"day","rel":1,"time":"09:30"}"#,
+            Period::Clock {
+                rel: 1,
+                time: "09:30".into(),
+            },
+        ),
+        (
+            r#"{"unit":"month","name":2,"rel":-1}"#,
+            Period::NamedMonth { rel: -1, name: 2 },
+        ),
+    ] {
+        assert_eq!(Period::parse_when(text), Some(period.clone()));
+        assert_eq!(Period::parse_when(&period.when()), Some(period));
     }
 }
 
@@ -705,5 +1015,137 @@ fn the_cells_the_draws_name_are_all_live() {
             aimed.get(kind).copied().unwrap_or(0) > 0,
             "{kind}: {aimed:?}"
         );
+    }
+}
+
+// ------------------------------------------------------------------ the think of each new call
+
+/// The think the renderer writes for `call`, round-tripped through the runtime's compiler, in a session that has shown
+/// the rows `shown` (`#n type "name"` lines) and said `message`, with the `dates:` line `block`.
+fn traced(
+    tool: &str,
+    args: &[(&str, &str)],
+    message: &str,
+    block: &str,
+    shown: &[&str],
+) -> Result<crate::trace::Traced, crate::trace::Failure> {
+    use crate::trace::{RefCall, Setting, show_rows, trace};
+    let mut rows = BTreeMap::new();
+    for line in shown {
+        show_rows(&mut rows, line);
+    }
+    let call = RefCall {
+        tool: tool.to_owned(),
+        args: args
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+            .collect(),
+        bad: false,
+    };
+    let seen = shown.join("\n");
+    trace(
+        &call,
+        &Setting {
+            message,
+            today: "2026-10-12".parse().expect("a date"),
+            intent: "read",
+            block,
+            rows: &rows,
+            earlier_dates: &[],
+            seen: &seen,
+            turn_kind: None,
+            retry: false,
+        },
+    )
+}
+
+#[test]
+fn the_think_of_a_call_with_each_new_option_compiles_back_to_the_call() {
+    // `where` operators
+    for (clause, said) in [
+        (
+            r#"status in ("completed", "cancelled")"#,
+            "tasks that are done or dropped",
+        ),
+        (r#"role is empty"#, "people with no role"),
+        (r#"role is set"#, "people that have a role"),
+    ] {
+        let kind = if clause.starts_with("status") {
+            "task"
+        } else {
+            "person"
+        };
+        let made = traced("find", &[("kind", kind), ("where", clause)], said, "", &[])
+            .unwrap_or_else(|why| panic!("{clause}: {why:?}"));
+        assert_eq!(made.call.tool, "find", "{clause}");
+    }
+    // a comma list of kinds with a period the line reads
+    let made = traced(
+        "find",
+        &[
+            ("kind", "task, event"),
+            ("when", r#"{"unit":"week","rel":0}"#),
+        ],
+        "what is on this week",
+        "dates: this week = 2026-10-12..2026-10-18",
+        &[],
+    )
+    .unwrap_or_else(|why| panic!("kinds: {why:?}"));
+    assert!(
+        made.think.contains("task, event") || made.think.contains("task,event"),
+        "{}",
+        made.think
+    );
+    // opening a row by the number the first find showed, and leaving out the rows an earlier turn showed
+    traced(
+        "find",
+        &[("rows", "#22")],
+        "everything about the dentist",
+        "",
+        &["#22 event \"Dentist\" · Tue 2026-10-13 09:00"],
+    )
+    .unwrap_or_else(|why| panic!("rows: {why:?}"));
+    traced(
+        "find",
+        &[("kind", "task"), ("exclude", "@1")],
+        "what else is there",
+        "",
+        &[],
+    )
+    .unwrap_or_else(|why| panic!("exclude: {why:?}"));
+    // the forms of `when`, each as the member's words are read or, when the line reads none, as the compact date
+    for (when, said, block) in [
+        (
+            r#"{"unit":"week","rel":-1,"weekday":5}"#,
+            "tasks due last friday",
+            "dates: last friday = 2026-10-09",
+        ),
+        (
+            r#"{"unit":"month","name":3,"rel":-1}"#,
+            "events in march",
+            "dates: march = 2026-03-01..2026-03-31 (past) / 2027-03-01..2027-03-31 (upcoming)",
+        ),
+        (
+            r#"{"unit":"day","rel":2,"time":"15:00"}"#,
+            "what is at three on wednesday",
+            "dates: wednesday at three = 2026-10-14 15:00",
+        ),
+        (
+            r#"{"from":{"unit":"day","rel":-3}}"#,
+            "tasks since friday",
+            "dates: since friday = 2026-10-09..",
+        ),
+        (
+            r#"{"to":{"date":"2026-09-01"}}"#,
+            "tasks until september 1",
+            "dates: until september 1 = ..2026-09-01",
+        ),
+    ] {
+        let kind = if when.contains("3,") { "event" } else { "task" };
+        traced("find", &[("kind", kind), ("when", when)], said, block, &[])
+            .unwrap_or_else(|why| panic!("{when}: {why:?}"));
+        // and with no line to read it from
+        traced("find", &[("kind", kind), ("when", when)], said, "", &[])
+            .unwrap_or_else(|why| panic!("{when} (compact): {why:?}"));
     }
 }

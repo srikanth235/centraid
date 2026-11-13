@@ -859,10 +859,8 @@ pub fn run(
                         no_sealed(m)?;
                     }
                 }
-                let typed = batch
-                    .iter()
-                    .any(|i| items[*i].expected.iter().any(|e| !e.typed.is_empty()));
-                verify::read_back(cache, catalog, &jobs, attempt, typed)
+                let asks = verify::Asks::of(batch.iter().flat_map(|i| &items[*i].expected));
+                verify::read_back(cache, catalog, &jobs, attempt, asks)
             });
             for (batch, answer) in batches.iter().zip(answers) {
                 let answer = answer.context("a reader thread panicked")??;

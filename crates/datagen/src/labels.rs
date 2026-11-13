@@ -74,6 +74,7 @@ pub fn impossible(turn: &TurnIntent) -> bool {
 
 fn selector_kinds(sel: &Selector, out: &mut BTreeSet<String>) {
     out.insert(sel.kind.clone());
+    out.extend(sel.also.iter().cloned());
     for link in [&sel.link, &sel.anchor].into_iter().flatten() {
         out.insert(link.kind.clone());
     }

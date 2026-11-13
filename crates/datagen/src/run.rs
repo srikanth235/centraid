@@ -130,7 +130,10 @@ pub fn draws(catalog: &Catalog, grid: &Grid) -> Vec<Draw> {
             }
         }
         if cell.tool == "find" && cell.verb == "read" {
-            for search in Search::ALL {
+            for search in Search::ALL
+                .into_iter()
+                .filter(|search| search.serves(catalog, &cell.kind))
+            {
                 for _ in 0..SEARCH_DRAWS {
                     out.push(Draw {
                         cell: cell.clone(),

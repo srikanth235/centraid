@@ -436,7 +436,11 @@ impl<'a> WorldRun<'a> {
                 linked = Some(at);
             }
         }
-        let mut args: Vec<(&'static str, String)> = vec![("kind", sel.kind.clone())];
+        let kinds = std::iter::once(sel.kind.as_str())
+            .chain(sel.also.iter().map(String::as_str))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let mut args: Vec<(&'static str, String)> = vec![("kind", kinds)];
         if let Some(name) = &sel.name {
             args.push(("name", name.clone()));
         }
@@ -459,6 +463,9 @@ impl<'a> WorldRun<'a> {
         if let Some(turn) = sel.within {
             args.push(("within", format!("§t{turn}")));
         }
+        if let Some(turn) = sel.exclude {
+            args.push(("exclude", format!("§t{turn}")));
+        }
         if let Some((field, desc)) = &sel.order {
             args.push((
                 "order",
@@ -471,6 +478,11 @@ impl<'a> WorldRun<'a> {
         args.extend(extra);
         let at = steps.len();
         steps.push(step(tool, args));
+        if sel.open && tool == "find" {
+            // the row found is then opened (every fact and link of it, which issues no result of its own), and the answer
+            // is still the rows the first find gave
+            steps.push(step("find", vec![("rows", format!("§n{at}"))]));
+        }
         at
     }
 
@@ -478,9 +490,17 @@ impl<'a> WorldRun<'a> {
         sel.within.and_then(|t| left.get(t)).map(|l| &l.keys)
     }
 
+    fn excluded_keys<'l>(&self, sel: &Selector, left: &'l [Left]) -> Option<&'l BTreeSet<String>> {
+        sel.exclude.and_then(|t| left.get(t)).map(|l| &l.keys)
+    }
+
     fn expected(&self, sel: &Selector, left: &[Left]) -> Vec<String> {
         self.facts
-            .select(sel, self.within_keys(sel, left))
+            .select_but(
+                sel,
+                self.within_keys(sel, left),
+                self.excluded_keys(sel, left),
+            )
             .iter()
             .map(|r| r.key.clone())
             .collect()
@@ -763,7 +783,11 @@ impl<'a> WorldRun<'a> {
         m: &Measure,
         left: &[Left],
     ) -> Result<(Vec<Step>, usize, BTreeMap<String, f64>, BTreeSet<String>), (Drop, String)> {
-        let rows = self.facts.select(&m.sel, self.within_keys(&m.sel, left));
+        let rows = self.facts.select_but(
+            &m.sel,
+            self.within_keys(&m.sel, left),
+            self.excluded_keys(&m.sel, left),
+        );
         if rows.is_empty() && m.op != "sum" {
             return Err((Drop::NoTarget, "nothing to fold".to_owned()));
         }
@@ -848,13 +872,15 @@ impl<'a> WorldRun<'a> {
         };
         let mut responses: Vec<Value> = Vec::new();
         let mut handles: Vec<Option<String>> = Vec::new();
+        // the `#n` of the first row each step found, for a call that opens one row
+        let mut numbers: Vec<Option<String>> = Vec::new();
         let mut calls: Vec<Value> = Vec::new();
         for s in &plan.steps {
             let mut args = Map::new();
             for (k, v) in &s.args {
                 args.insert(
                     (*k).to_owned(),
-                    Value::String(resolve_markers(v, &handles, left)),
+                    Value::String(resolve_markers(v, &handles, &numbers, left)),
                 );
             }
             let text = call_xml(s.tool, &args);
@@ -864,6 +890,13 @@ impl<'a> WorldRun<'a> {
                 .or_else(|| response["effect"]["result"].as_str())
                 .map(str::to_owned);
             handles.push(handle.clone());
+            numbers.push(
+                response["effect"]["rows"]
+                    .as_array()
+                    .and_then(|rows| rows.first())
+                    .and_then(|row| row["n"].as_u64())
+                    .map(|n| format!("#{n}")),
+            );
             let failed = response["effect"].get("error").is_some();
             if failed
                 && !s.bad
@@ -1177,21 +1210,31 @@ fn is_money(steps: &[Step]) -> bool {
 fn shift_markers(text: &str, by: usize) -> String {
     let mut out = String::new();
     let mut rest = text;
-    while let Some(at) = rest.find("§s") {
+    // `§s<k>` is the result handle of step k, `§n<k>` the `#n` of the row it found
+    while let Some(at) = rest.find(['§']) {
         out.push_str(&rest[..at]);
-        let tail = &rest[at + "§s".len()..];
-        let digits: String = tail.chars().take_while(char::is_ascii_digit).collect();
-        match digits.parse::<usize>() {
-            Ok(n) => out.push_str(&format!("§s{}", n + by)),
-            Err(_) => out.push_str("§s"),
+        let tail = &rest[at + '§'.len_utf8()..];
+        let kind = tail.chars().next().unwrap_or('s');
+        let digits: String = tail[kind.len_utf8()..]
+            .chars()
+            .take_while(char::is_ascii_digit)
+            .collect();
+        match (kind, digits.parse::<usize>()) {
+            ('s' | 'n', Ok(n)) => out.push_str(&format!("§{kind}{}", n + by)),
+            (_, _) => out.push_str(&format!("§{kind}{digits}")),
         }
-        rest = &tail[digits.len()..];
+        rest = &tail[kind.len_utf8() + digits.len()..];
     }
     out.push_str(rest);
     out
 }
 
-fn resolve_markers(text: &str, handles: &[Option<String>], left: &[Left]) -> String {
+fn resolve_markers(
+    text: &str,
+    handles: &[Option<String>],
+    numbers: &[Option<String>],
+    left: &[Left],
+) -> String {
     let mut out = String::new();
     let mut rest = text;
     while let Some(at) = rest.find('§') {
@@ -1205,6 +1248,7 @@ fn resolve_markers(text: &str, handles: &[Option<String>], left: &[Left]) -> Str
         let n: usize = digits.parse().unwrap_or(0);
         let value = match kind {
             's' => handles.get(n).cloned().flatten(),
+            'n' => numbers.get(n).cloned().flatten(),
             _ => left.get(n).and_then(|l| l.handle.clone()),
         }
         .unwrap_or_else(|| "@0".to_owned());

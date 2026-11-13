@@ -222,8 +222,12 @@ pub fn trace(call: &RefCall, setting: &Setting<'_>) -> Result<Traced, Failure> {
 /// of them: the message says the days (`aug 17 to aug 23`), so the call states the days it said, not a count of weeks from
 /// today the model would have to work out. `None` for any other period, or when the line reads nothing in it.
 fn explicit_period(when: &str, today: Date, dates: Option<&str>) -> Option<String> {
-    let period: Period = serde_json::from_str(when).ok()?;
-    if matches!(period, Period::Between { .. }) {
+    // the period the call says, never a day of a week read as the week; a time of day and an open end are not days
+    let period = Period::parse_when(when)?;
+    if matches!(
+        period,
+        Period::Between { .. } | Period::Clock { .. } | Period::Date { .. } | Period::Open { .. }
+    ) {
         return None;
     }
     let (from, to) = period.range(today)?;

@@ -32,6 +32,8 @@ pub struct Row {
     pub keyed: bool,
     pub name: String,
     pub date: Option<Date>,
+    /// The time of day of the date, `HH:MM`, when the row's date has one (a timed event).
+    pub clock: Option<String>,
     pub fields: BTreeMap<String, F>,
     pub trashed: bool,
 }
@@ -142,6 +144,7 @@ impl Facts {
                 key,
                 name: name.unwrap_or_else(|| s(row, "name").unwrap_or_default().to_owned()),
                 date,
+                clock: None,
                 fields: fields.into_iter().map(|(k, v)| (k.to_owned(), v)).collect(),
                 trashed: row
                     .get("trashed")
@@ -163,6 +166,7 @@ impl Facts {
             keyed: true,
             name: world.persona.me.clone(),
             date: None,
+            clock: None,
             fields: BTreeMap::from([("starred".to_owned(), F::B(false))]),
             trashed: false,
         });
@@ -191,7 +195,14 @@ impl Facts {
                 None => (start.len() > 10).then_some(60.0),
             };
             let fields = add(vec![("duration", n(duration))]);
-            rows.push(put("event", r, day(start), fields, None));
+            let mut row = put("event", r, day(start), fields, None);
+            row.clock = start
+                .get(10..)
+                .map(|rest| rest.trim_start_matches(['T', ' ']))
+                .and_then(|rest| rest.get(..5))
+                .filter(|clock| clock.as_bytes().get(2) == Some(&b':'))
+                .map(str::to_owned);
+            rows.push(row);
             for a in r
                 .get("attendees")
                 .and_then(Value::as_array)
@@ -448,9 +459,21 @@ impl Facts {
         if filter.field == "amount" && row.text("currency").is_some_and(|c| c != self.base) {
             return false;
         }
+        if matches!(filter.cmp, Cmp::IsEmpty | Cmp::IsSet) {
+            // the runtime's presence: a flag that is off, no value and an empty text are all "empty"
+            let present = match row.fields.get(&filter.field) {
+                None | Some(F::B(false)) => false,
+                Some(F::T(text)) => !text.is_empty(),
+                Some(_) => true,
+            };
+            return present == (filter.cmp == Cmp::IsSet);
+        }
         let Some(have) = row.fields.get(&filter.field) else {
             return false;
         };
+        if let (Cmp::In, F::T(a), Lit::List(values)) = (filter.cmp, have, &filter.value) {
+            return values.iter().any(|v| a.eq_ignore_ascii_case(v));
+        }
         match (have, &filter.value) {
             (F::N(a), Lit::Num(b)) => match filter.cmp {
                 Cmp::Eq => (a - b).abs() < 1e-9,
@@ -459,6 +482,7 @@ impl Facts {
                 Cmp::Le => a <= b,
                 Cmp::Gt => a > b,
                 Cmp::Ge => a >= b,
+                Cmp::In | Cmp::IsEmpty | Cmp::IsSet => false,
             },
             // `=` with a plain word on a free-text field reads as contains (the runtime says so)
             (F::T(a), Lit::Text(b))
@@ -488,7 +512,37 @@ impl Facts {
     /// order (date, then name). `within` is the keys of the earlier result it narrows.
     #[must_use]
     pub fn select(&self, sel: &Selector, within: Option<&BTreeSet<String>>) -> Vec<&Row> {
+        self.select_but(sel, within, None)
+    }
+
+    /// [`Self::select`] leaving out the keys of an earlier result (`exclude`). The kinds a selector adds with `also` are
+    /// read the same way and their rows join the first kind's, in the one order.
+    #[must_use]
+    pub fn select_but(
+        &self,
+        sel: &Selector,
+        within: Option<&BTreeSet<String>>,
+        exclude: Option<&BTreeSet<String>>,
+    ) -> Vec<&Row> {
+        if !sel.also.is_empty() {
+            let mut one = sel.clone();
+            one.also.clear();
+            let mut out = self.select_but(&one, within, exclude);
+            for kind in &sel.also {
+                one.kind.clone_from(kind);
+                out.extend(self.select_but(&one, within, exclude));
+            }
+            out.sort_by(|a, b| {
+                (a.date, a.name.to_lowercase(), &a.key).cmp(&(
+                    b.date,
+                    b.name.to_lowercase(),
+                    &b.key,
+                ))
+            });
+            return out;
+        }
         let range = sel.period.as_ref().and_then(|p| p.range(self.today));
+        let clock = sel.period.as_ref().and_then(|p| p.clock());
         let words: Vec<String> = sel
             .text
             .iter()
@@ -506,7 +560,11 @@ impl Facts {
             .filter(|r| sel.filters.iter().all(|f| self.passes(r, f)))
             .filter(|r| match (&sel.period, range) {
                 (None, _) => true,
-                (Some(_), Some((a, b))) => r.date.is_some_and(|d| d >= a && d <= b),
+                // a time of day names the minute of a timed row; a row of the day with no time matches the day
+                (Some(_), Some((a, b))) => {
+                    r.date.is_some_and(|d| d >= a && d <= b)
+                        && clock.is_none_or(|c| r.clock.as_deref().is_none_or(|have| have == c))
+                }
                 (Some(_), None) => false,
             })
             .filter(|r| {
@@ -517,6 +575,7 @@ impl Facts {
                 })
             })
             .filter(|r| within.is_none_or(|set| set.contains(&r.key)))
+            .filter(|r| exclude.is_none_or(|set| !set.contains(&r.key)))
             .collect();
         out.sort_by(|a, b| {
             (a.date, a.name.to_lowercase(), &a.key).cmp(&(b.date, b.name.to_lowercase(), &b.key))
