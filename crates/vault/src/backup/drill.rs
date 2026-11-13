@@ -7,7 +7,8 @@
 //! 3. Back up every content item by name, sealed in one pass, and prove the
 //!    gateway holds every name its hash implies.
 //! 4. Fifty more commits; snapshot again, and prove only the ranges that
-//!    changed were sealed and the store grew by exactly those plus a manifest.
+//!    changed were sealed and the store grew by exactly those plus the leaves
+//!    they sit in and a manifest.
 //! 5. Retention keeps the newest; garbage collection deletes exactly the
 //!    ranges only the dropped snapshot named.
 //! 6. Destroy the vault, its WAL and SHM, the device state and the
@@ -346,10 +347,11 @@ pub fn run(dir: &Path) -> Result<DrillReport, DrillError> {
         .filter_map(|index| second.ranges.get(usize::try_from(*index).ok()?))
         .map(|range| range.name)
         .collect();
+    expected.extend(second_plan.missing_leaves.iter().copied());
     expected.insert(second.manifest_name);
     if grown != expected {
         return Err(fail(format!(
-            "the store grew by {} names; the missing ranges and the manifest are {}",
+            "the store grew by {} names; the missing ranges, leaves and the manifest are {}",
             grown.len(),
             expected.len()
         )));
@@ -359,7 +361,7 @@ pub fn run(dir: &Path) -> Result<DrillReport, DrillError> {
     // Two snapshots a few seconds apart share a day, so retention keeps the
     // newest alone — unless the drill straddled midnight UTC, when it keeps
     // both and there is nothing to collect. Either way the garbage must be
-    // exactly the ranges only a dropped snapshot named.
+    // exactly the parts only a dropped snapshot named.
     let decided = keep(&store.snapshots()?, now_ms());
     if decided.keep.first() != Some(&second.manifest_name) {
         return Err(fail(format!(
@@ -372,16 +374,15 @@ pub fn run(dir: &Path) -> Result<DrillReport, DrillError> {
         taken
             .iter()
             .filter(|snapshot| decided.keep.contains(&snapshot.manifest_name) == kept)
-            .flat_map(|snapshot| snapshot.manifest.range_names())
+            .flat_map(|snapshot| snapshot.manifest.part_names())
             .collect()
     };
     let mut live_ranges = names_kept_by(true);
-    let only_dropped: BTreeSet<Name> = names_kept_by(false)
-        .difference(&live_ranges)
-        .copied()
-        .collect();
     live_ranges.extend(decided.keep.iter().copied());
     let live = live_names(&keys, live_ranges, content_hashes(&vault)?);
+    // WHAT ONLY A DROPPED SNAPSHOT NAMED: its ranges and leaves, less everything a kept snapshot or
+    // the vault's own content still needs.
+    let only_dropped: BTreeSet<Name> = names_kept_by(false).difference(&live).copied().collect();
     let listed: Vec<Name> = store::list_all(&store)?
         .iter()
         .map(|entry| entry.name)

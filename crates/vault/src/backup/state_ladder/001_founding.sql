@@ -1,4 +1,4 @@
--- The device state of a phone's backup (#1191, E11): four tables, STRICT, no
+-- The device state of a phone's backup (#1191, E11): five tables, STRICT, no
 -- key-value table. The gateway token is not here (E12): the shell keeps it.
 
 CREATE TABLE gateway (

@@ -1,7 +1,7 @@
 //! The device state of a phone's backup, in `<stem>.state.db` beside the vault
 //! (#1191, E11, B14). It replaces the ledger.
 //!
-//! Four tables, every one a cache of somebody else's truth and none a
+//! Five tables, every one a cache of somebody else's truth and none a
 //! key-value store:
 //!
 //! | Table | Whose truth |

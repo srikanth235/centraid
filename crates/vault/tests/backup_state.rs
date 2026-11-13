@@ -1,4 +1,4 @@
-//! The device state of a phone's backup (#1191, E11, B14): the four tables,
+//! The device state of a phone's backup (#1191, E11, B14): the five tables,
 //! the ladder, and the reset rules. Counts and rows, never durations.
 
 use centraid_vault::backup::naming::{Digest, Name, PlaintextHash};
@@ -264,7 +264,7 @@ fn the_sample_counter_counts_each_draw_once() {
 }
 
 #[test]
-fn the_state_has_four_tables_an_id_and_a_rung_and_no_token_and_no_key_value_table() {
+fn the_state_has_five_tables_an_id_and_a_rung_and_no_token_and_no_key_value_table() {
     let (dir, state) = open();
     drop(state);
     let connection = Connection::open(dir.path().join("v.state.db")).expect("opens");
@@ -276,7 +276,10 @@ fn the_state_has_four_tables_an_id_and_a_rung_and_no_token_and_no_key_value_tabl
         .collect::<Result<_, _>>()
         .expect("rows");
     tables.sort();
-    assert_eq!(tables, vec!["gateway", "local_bytes", "outbox", "undone"]);
+    assert_eq!(
+        tables,
+        vec!["gateway", "local_bytes", "outbox", "part_digests", "undone"]
+    );
     let id: i64 = connection
         .query_row("PRAGMA application_id", [], |row| row.get(0))
         .expect("id");
