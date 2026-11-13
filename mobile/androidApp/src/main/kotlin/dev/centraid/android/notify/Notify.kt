@@ -40,6 +40,9 @@ import kotlinx.coroutines.withTimeoutOrNull
  */
 internal object Notify {
     const val CHANNEL: String = "agenda-reminders"
+
+    /** The backup warnings' own channel, so switching off reminders does not silence them (and the reverse). */
+    const val BACKUP_CHANNEL: String = "backup-warnings"
     const val EXTRA_ID: String = "dev.centraid.notify.ID"
     const val EXTRA_VERB: String = "dev.centraid.notify.VERB"
 
@@ -95,32 +98,64 @@ internal object Notify {
             else -> 0
         }
         performed?.complete(Unit)
-        return NotificationsScheduled(permission = permission, held = count)
+        // WHAT THE PHONE WILL DO WITH WHAT IS HELD: said back so the editor row can say it.
+        val channel = manager.getNotificationChannelCompat(CHANNEL)
+        val backup = manager.getNotificationChannelCompat(BACKUP_CHANNEL)
+        val alarms = app.getSystemService(AlarmManager::class.java)
+        val canExact = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && alarms?.canScheduleExactAlarms() == true
+        return NotificationsScheduled(
+            permission = permission,
+            held = count,
+            exact_denied = !NotifyPlan.exact(Build.VERSION.SDK_INT, canExact),
+            channel_off = channel != null && channel.importance == NotificationManagerCompat.IMPORTANCE_NONE,
+            channel_shown = channel?.name?.toString().orEmpty(),
+            backup_channel_off = backup != null && backup.importance == NotificationManagerCompat.IMPORTANCE_NONE,
+            backup_channel_shown = backup?.name?.toString().orEmpty(),
+        )
     }
 
     /** Make the OS hold [request]'s set; how many alarms are pending now. */
     private fun hold(app: Context, store: NotifyStore, manager: NotificationManagerCompat, request: ScheduleNotifications): Int {
         val now = System.currentTimeMillis()
-        val plan = NotifyPlan.diff(store.load().all, request.all, now)
+        val recorded = store.load().all
+        val showing = showingIds(manager)
+        val plan = NotifyPlan.reconcile(
+            wanted = request.all,
+            live = request.live_ids,
+            pending = recorded.filter { !it.immediate }.map { it.notification_id },
+            showing = showing,
+            nowMs = now,
+        )
         manager.createNotificationChannel(
             NotificationChannelCompat.Builder(CHANNEL, NotificationManagerCompat.IMPORTANCE_DEFAULT)
                 .setName(request.channel_name)
                 .build(),
         )
-        plan.cancel.forEach { cancel(app, manager, it) }
-        plan.drop.forEach { cancelAlarm(app, it) }
+        manager.createNotificationChannel(
+            NotificationChannelCompat.Builder(BACKUP_CHANNEL, NotificationManagerCompat.IMPORTANCE_DEFAULT)
+                .setName(request.backup_channel_name)
+                .build(),
+        )
+        plan.removePending.forEach { cancelAlarm(app, it) }
+        plan.removeShowing.forEach { cancel(app, manager, it) }
         // THE RECORD FIRST: an alarm that fires the moment it is set finds its words in it.
         val next = ScheduleNotifications(
             all = NotifyPlan.kept(request.all, now),
             categories = request.categories,
             ask_permission = request.ask_permission,
             channel_name = request.channel_name,
+            backup_channel_name = request.backup_channel_name,
+            live_ids = request.live_ids,
         )
         store.save(next)
-        plan.arm.forEach { arm(app, it.notification_id, it.fire_at_ms) }
+        plan.schedule.forEach { arm(app, it.notification_id, it.fire_at_ms) }
         plan.post.forEach { post(app, it, next) }
-        return plan.arm.size
+        return plan.schedule.size
     }
+
+    /** The ids of the notifications this app has on the screen now, asked of the OS and not remembered. */
+    private fun showingIds(manager: NotificationManagerCompat): List<String> =
+        manager.activeNotifications.filter { it.id == SLOT }.mapNotNull { it.tag }
 
     /** An alarm fired: the notification it was set for, worded from the record. */
     fun deliver(context: Context, notificationId: String) {
@@ -130,13 +165,15 @@ internal object Notify {
         post(app, item, record)
     }
 
-    /** After a reboot, a change of the clock or the zone or an update: every recorded timed item again. */
+    /** After a reboot, a change of the clock or the zone or an update: every recorded timed item again; one whose moment passed while the phone was off is said now. */
     fun rearm(context: Context) {
         val app = context.applicationContext
         val store = NotifyStore(app)
         val record = store.load()
         if (record.all.isEmpty() || !NotificationManagerCompat.from(app).areNotificationsEnabled()) return
         val now = System.currentTimeMillis()
+        // ONE THAT ALREADY SOUNDED (its alarm fired before this broadcast) IS NOT SAID AGAIN.
+        val showing = showingIds(NotificationManagerCompat.from(app)).toSet()
         val kept = mutableListOf<PendingNotification>()
         for (item in record.all) {
             if (item.immediate) {
@@ -149,17 +186,36 @@ internal object Notify {
                 arm(app, item.notification_id, at)
                 kept += item.copy(fire_at_ms = at)
             } else {
+                // MISSED WHILE THE PHONE WAS OFF (#1188, NA7): its moment passed with no alarm to
+                // sound it, so it is said now, late. It stays on the screen until Rust says the item
+                // is resolved (the next session's `live_ids`), like any delivered reminder.
                 cancelAlarm(app, item.notification_id)
+                if (item.notification_id !in showing) post(app, item, record)
             }
         }
         store.save(record.copy(all = kept))
     }
 
-    /** A button was pressed (or the notification tapped): tell Rust, as it was handed over. */
+    /**
+     * A button was pressed (or the notification tapped): write it down FIRST, then tell Rust. The press
+     * leaves the outbox only once the core has taken it; a press the process could not deliver is sent
+     * again by [drain] at the next start (#1188, A6).
+     */
     suspend fun answer(context: Context, notificationId: String, verb: Int) {
+        val press = NotifyOutbox(context).add(notificationId, verb)
+        deliverPress(context, press)
+    }
+
+    /** Send every press still in the outbox, once each; called wherever a session is first up. */
+    suspend fun drain(context: Context) {
+        NotifyOutbox(context).pending().forEach { deliverPress(context, it) }
+    }
+
+    private suspend fun deliverPress(context: Context, press: NotifyOutbox.Press) {
         val said = NotificationAnswered(
-            notification_id = notificationId,
-            verb = NotificationVerb.fromValue(verb) ?: NotificationVerb.NOTIFICATION_VERB_UNSPECIFIED,
+            notification_id = press.notificationId,
+            verb = NotificationVerb.fromValue(press.verb) ?: NotificationVerb.NOTIFICATION_VERB_UNSPECIFIED,
+            press_id = press.pressId,
         )
         // HELD UNTIL RUST'S ANSWER IS PERFORMED: the write answers with a new set (the receipt and its
         // Undo, the reminder gone), and letting go of the session first would cancel its performer.
@@ -169,6 +225,8 @@ internal object Notify {
             try {
                 open.screens.shellFact(ShellFact(notification_answered = said))
                 withTimeoutOrNull(ANSWER_GRACE_MS) { done.await() }
+                // THE CORE HAS IT: the press leaves the queue.
+                NotifyOutbox(context).remove(press.pressId)
             } finally {
                 if (performed === done) performed = null
             }
@@ -227,14 +285,18 @@ internal object Notify {
                 .putExtra(EXTRA_VERB, NotificationVerb.NOTIFICATION_VERB_OPEN.value),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val builder = NotificationCompat.Builder(app, CHANNEL)
+        val backupWarning = item.channel_id == "backup"
+        val builder = NotificationCompat.Builder(app, if (backupWarning) BACKUP_CHANNEL else CHANNEL)
             // THE PLATFORM'S OWN REMINDER GLYPH: the app ships no drawable of its own (as `BackupNotices`).
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle(item.title)
             .setContentText(item.body)
             .setWhen(item.fire_at_ms)
-            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setCategory(if (backupWarning) NotificationCompat.CATEGORY_STATUS else NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
+            // WHAT THE LOCK SCREEN SHOWS IS DECIDED IN RUST: with "show details" off the title and body
+            // it sends already say only that something is due, so the notification itself is public.
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setContentIntent(open)
         if (item.thread_id.isNotEmpty()) builder.setGroup(item.thread_id)
         val buttons = record.categories.firstOrNull { it.category_id == item.category_id && item.category_id.isNotEmpty() }
@@ -248,7 +310,11 @@ internal object Notify {
                     .putExtra(EXTRA_VERB, action.verb.value),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
-            builder.addAction(NotificationCompat.Action.Builder(0, action.label, answered).build())
+            // DONE, SNOOZE AND THE REST WORK FROM THE LOCK SCREEN with no unlock (#1188, NA4): a broadcast
+            // that records the press, never an activity. Each is reversible through Undo and history.
+            builder.addAction(
+                NotificationCompat.Action.Builder(0, action.label, answered).setAuthenticationRequired(false).build(),
+            )
         }
         manager.notify(item.notification_id, SLOT, builder.build())
     }

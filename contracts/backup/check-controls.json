@@ -1,0 +1,127 @@
+{
+  "about": "What the Check my backup page draws for a state, and what a tap sends (#1188, B13). A frozen golden: both shells' tests read it (mobile/iosApp/Tests/BackupCheckControlsTests.swift, mobile/androidApp/src/test/kotlin/dev/centraid/android/kit/BackupCheckControlsTest.kt). `shown` is the selector ids top to bottom; `taps` is the event each tappable selector sends; `ink` is how each row's second line is coloured. Words and the bar's fraction are the state's, so they are not here.",
+  "cases": [
+    {
+      "name": "idle, nothing checked yet: the intro and Start",
+      "state": {
+        "heading": "",
+        "running": false,
+        "action": "start",
+        "action_label": "Check my backup",
+        "back_up_now_label": "",
+        "rows": []
+      },
+      "shown": ["backup-check-intro", "backup-check-start"],
+      "taps": { "backup-check-start": "start" },
+      "ink": {}
+    },
+    {
+      "name": "running over two devices: rows, the bar and Stop",
+      "state": {
+        "heading": "Checking",
+        "running": true,
+        "action": "stop",
+        "action_label": "Stop",
+        "back_up_now_label": "",
+        "rows": [
+          { "gateway_id": "mac", "tone": "quiet" },
+          { "gateway_id": "nas", "tone": "quiet" }
+        ]
+      },
+      "shown": [
+        "backup-check-intro",
+        "backup-check-heading",
+        "backup-check-row-mac",
+        "backup-check-row-nas",
+        "backup-check-bar",
+        "backup-check-stop"
+      ],
+      "taps": { "backup-check-stop": "stop" },
+      "ink": { "mac": "quiet", "nas": "quiet" }
+    },
+    {
+      "name": "finished and well: rows, Start again, no bar",
+      "state": {
+        "heading": "Checked just now",
+        "running": false,
+        "action": "start",
+        "action_label": "Check again",
+        "back_up_now_label": "",
+        "rows": [{ "gateway_id": "mac", "tone": "ok" }]
+      },
+      "shown": [
+        "backup-check-intro",
+        "backup-check-heading",
+        "backup-check-row-mac",
+        "backup-check-start"
+      ],
+      "taps": { "backup-check-start": "start" },
+      "ink": { "mac": "ok" }
+    },
+    {
+      "name": "a device that failed: red, and Back up now is offered",
+      "state": {
+        "heading": "Checked just now",
+        "running": false,
+        "action": "start",
+        "action_label": "Check again",
+        "back_up_now_label": "Back up now",
+        "rows": [{ "gateway_id": "nas", "tone": "bad" }]
+      },
+      "shown": [
+        "backup-check-intro",
+        "backup-check-heading",
+        "backup-check-row-nas",
+        "backup-check-start",
+        "backup-check-back-up-now"
+      ],
+      "taps": {
+        "backup-check-start": "start",
+        "backup-check-back-up-now": "back_up_now"
+      },
+      "ink": { "nas": "bad" }
+    },
+    {
+      "name": "the check did not finish: no rows, and Retry starts it again",
+      "state": {
+        "heading": "",
+        "running": false,
+        "action": "start",
+        "action_label": "Retry",
+        "back_up_now_label": "",
+        "rows": []
+      },
+      "shown": ["backup-check-intro", "backup-check-start"],
+      "taps": { "backup-check-start": "start" },
+      "ink": {}
+    },
+    {
+      "name": "an action with no label is not drawn",
+      "state": {
+        "heading": "",
+        "running": false,
+        "action": "start",
+        "action_label": "",
+        "back_up_now_label": "",
+        "rows": []
+      },
+      "shown": ["backup-check-intro"],
+      "taps": {},
+      "ink": {}
+    },
+    {
+      "name": "a bar needs rows to sit under",
+      "state": {
+        "heading": "",
+        "running": true,
+        "action": "stop",
+        "action_label": "Stop",
+        "back_up_now_label": "",
+        "rows": []
+      },
+      "shown": ["backup-check-intro", "backup-check-stop"],
+      "taps": { "backup-check-stop": "stop" },
+      "ink": {}
+    }
+  ]
+}

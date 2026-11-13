@@ -33,5 +33,10 @@ catalog! {
     plain reminders_limited = ("Centraid needs full access to your reminders. Turn it on in Settings.", "Centraid needs full access to your reminders. Turn it on in Settings.");
     plain notifications_not_asked = ("Centraid needs to send notifications to remind you.", "Centraid needs to send notifications to remind you.");
     plain notifications_refused = ("Notifications are off. Turn them on in Settings.", "Notifications are off. Turn them on in Settings.");
+    plain notifications_inexact = ("Alerts may arrive a few minutes late. Allow exact timing in Settings.", "Alerts may arrive a few minutes late. Allow exact timing in Settings.");
+    plain notifications_channel_off = ("{channel} alerts are off. Turn them on in Settings.", "{channel} alerts are off. Turn them on in Settings.");
+    plain notifications_reminders_off = ("Alerts for reminders and events are off. Turn them on in Settings.", "Alerts for reminders and events are off. Turn them on in Settings.");
+    plain notifications_backup_channel_fallback = ("Backup", "Backup");
+    plain notifications_open_settings = ("Open Settings", "Open Settings");
     plain notifications_restricted = ("This phone does not allow notifications.", "This phone does not allow notifications.");
 }

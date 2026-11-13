@@ -48,10 +48,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_apps_kit::reads::{FanOutBound, read_pages};
+use centraid_apps_kit::page::PageRequest;
+use centraid_apps_kit::reads::{FanOutBound, PageDoor as _, read_pages};
 use centraid_apps_kit::row::Row;
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
-use centraid_assist::native::door::Occurrence;
+use centraid_assist::native::door::Inverse;
+use centraid_assist::native::door::{Occurrence, Window, WindowQuery};
 use centraid_assist::native::{Call, Door, Ran};
 use centraid_search::Target;
 use centraid_vault::commands::Registry;
@@ -166,6 +168,71 @@ impl Door for CoreDoor {
         })
     }
 
+    fn count_kind(&self, query: &centraid_vault::page::KindCount<'_>) -> Result<u64, String> {
+        self.with(|vault| {
+            let counted = vault
+                .count_kind(query)
+                .map_err(|error| format!("counting {}: {error}", query.kind))?;
+            Ok(u64::try_from(counted).unwrap_or(0))
+        })
+    }
+
+    fn window(&self, request: &WindowQuery<'_>) -> Result<Window, String> {
+        let WindowQuery {
+            table,
+            columns,
+            sort,
+            pk,
+            predicate,
+            binds,
+            limit,
+            newest_first,
+        } = *request;
+        self.with(|vault| {
+            let door = VaultDoor::new(vault);
+            let mut query = PageQuery::new(
+                &format!("assist.native.{table}"),
+                columns,
+                table,
+                if newest_first {
+                    PageOrder::desc(sort, pk)
+                } else {
+                    PageOrder::asc(sort, pk)
+                },
+            );
+            if !predicate.is_empty() {
+                query = query.filter(
+                    predicate,
+                    binds.iter().cloned().map(PageBindValue::Text).collect(),
+                );
+            }
+            let mut rows: Vec<Row> = Vec::new();
+            let mut after = None;
+            // THE WALK STOPS AT `limit + 1` ROWS: the extra one says more were left, and no page
+            // past it is read, so the cost follows the limit and not the table.
+            while rows.len() <= limit {
+                let want = (limit + 1 - rows.len()).min(PAGE_ROWS);
+                let request = PageRequest {
+                    limit: want,
+                    after: after.clone(),
+                };
+                let page = door.page(&query, &request);
+                if let Some(failure) = door.take_failure() {
+                    return Err(format!("reading {table}: {failure}"));
+                }
+                let page = page.map_err(|error| format!("reading {table}: {error}"))?;
+                rows.extend(page.rows);
+                match page.next {
+                    Some(next) => after = Some(next),
+                    None => break,
+                }
+            }
+            let more = rows.len() > limit;
+            rows.truncate(limit);
+            Ok(Window { rows, more })
+        })
+    }
+
     fn search(&self, entity: &str, text: &str, limit: usize) -> Result<Vec<Target>, String> {
         self.with(|vault| {
             let answered = vault
@@ -198,6 +265,7 @@ impl Door for CoreDoor {
             output: Value::Null,
             reason: Some(WRITES_OFF.to_owned()),
             predicate: Some(WRITES_OFF_PREDICATE.to_owned()),
+            inverse: None,
         })
     }
 
@@ -221,6 +289,7 @@ impl Door for CoreDoor {
                 owner: &self.owner,
                 changes: &changes,
                 plane: &self.plane,
+                actor: Some("assist"),
             };
             // A write no manifest action names yet runs as its bare command, keyed the same.
             if call.action.is_empty() {
@@ -230,7 +299,7 @@ impl Door for CoreDoor {
             }
             .map_err(|error| format!("{}: {error}", call.command))
         })?;
-        Ok(ran_of(&answer))
+        Ok(ran_of(&answer, call.app))
     }
 
     fn events(&self, from_day: &str, to_day: &str, tz: &str) -> Result<Vec<Occurrence>, String> {
@@ -281,13 +350,17 @@ impl Door for CoreDoor {
 /// What the runtime reads of an `act`'s answer. A refusal is a value: the check that failed is the
 /// predicate, except the manifest's own input checks, which are the `schema` the runtime reads a
 /// call the command rejects as.
-fn ran_of(answer: &wire::ActResponse) -> Ran {
+fn ran_of(answer: &wire::ActResponse, app: &str) -> Ran {
     if answer.status == wire::ActStatus::Executed as i32 {
         return Ran {
             ok: true,
             output: serde_json::from_slice(&answer.output).unwrap_or(Value::Null),
             reason: None,
             predicate: None,
+            inverse: answer.inverse.as_ref().map(|inverse| Inverse {
+                app: app.to_owned(),
+                wire: prost::Message::encode_to_vec(inverse),
+            }),
         };
     }
     let check = answer
@@ -306,5 +379,6 @@ fn ran_of(answer: &wire::ActResponse) -> Ran {
             }
             .to_owned(),
         ),
+        inverse: None,
     }
 }

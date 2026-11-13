@@ -161,11 +161,16 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         // NO DESKTOP OR EXTENSION STEPS: the only shell is mobile, and there is
         // no desktop shell and no browser extension (#1029 §6, R-1047-D3).
         step("lockfile", run_lockfile),
-        // `prompt-injection` STOOD HERE (#1029 §1). It ran the #842 corpus
-        // against the ASSISTANT's standing answer when content inside the
-        // member's own data asked it to exceed its grant. `crates/assist` is
-        // deleted and so is `Principal::Agent`, so there is no assistant to
-        // hold an answer and no grant to exceed.
+        // `prompt-injection` WAS RETIRED WITH THE FIRST ASSISTANT (#1029 §1) AND IS BACK (#1188
+        // C2). The first one ran the #842 corpus against a standing answer that could exceed a
+        // grant; there is no grant now. The assistant that stands today (`crates/assist`) has a
+        // different exposure: record text and the member's words enter a prompt the engine
+        // tokenises with special tokens parsed. This step replays the injection corpus through
+        // every path that text takes into a prompt and fails if any adds structure.
+        step("prompt-injection", run_prompt_injection),
+        // THE MODEL RECORD AGAINST THE RUNTIME (#1188 C1): the pinned model's tool-catalogue and
+        // prompt hashes are the ones this build computes, and the pin is a commit.
+        step("model-record", run_model_record),
         // NO SIMULATION STEP: there is one writer, the phone, and nothing to
         // converge (#1029 §1).
         //
@@ -866,6 +871,32 @@ fn run_fault_door(ctx: &Ctx) -> Result<Outcome> {
     )
 }
 
+fn run_prompt_injection(ctx: &Ctx) -> Result<Outcome> {
+    process(
+        ctx,
+        "prompt-injection",
+        "cargo",
+        &["test", "-p", "centraid-assist", "--test", "injection"],
+    )
+}
+
+fn run_model_record(ctx: &Ctx) -> Result<Outcome> {
+    // the release profile ships what it checks: a record whose special-token list was only
+    // declared (not read from the file) cannot ship (#1188 C2)
+    let release = if ctx.profile == crate::Profile::Release {
+        "1"
+    } else {
+        "0"
+    };
+    process_with_env(
+        ctx,
+        "model-record",
+        "cargo",
+        &["test", "-p", "centraid-assist", "--test", "model_record"],
+        &[("CENTRAID_RELEASE_RECORD", release)],
+    )
+}
+
 fn run_rules(ctx: &Ctx) -> Result<Outcome> {
     let reports = rules::all(&ctx.root);
     let findings: usize = reports.iter().map(|report| report.findings.len()).sum();
@@ -1188,11 +1219,28 @@ fn run_ci_policy(ctx: &Ctx) -> Result<Outcome> {
 /// long it takes is information in the timing table, not a verdict (owner
 /// ruling 2026-11-04).
 fn run_release_build(ctx: &Ctx) -> Result<Outcome> {
-    process(
+    let built = process(
         ctx,
         "release-build",
         "cargo",
         &["build", "--workspace", "--release"],
+    )?;
+    if !matches!(built, Outcome::Ok(_)) {
+        return Ok(built);
+    }
+    // THE DEBUG-ONLY LOADERS CANNOT SHIP (#1188): a test that runs only under a release profile
+    // proves nothing here, so the release build's own outputs are searched for their names.
+    let target =
+        std::env::var_os("CARGO_TARGET_DIR").map_or_else(|| ctx.root.join("target"), PathBuf::from);
+    let gaps = crate::dev_paths::source_gaps(&ctx.root);
+    if !gaps.is_empty() {
+        return Ok(Outcome::Failed(gaps.join("; ")));
+    }
+    Ok(
+        match crate::dev_paths::release_verdict(&target.join("release")) {
+            Ok(said) => Outcome::Ok(said),
+            Err(why) => Outcome::Failed(why),
+        },
     )
 }
 

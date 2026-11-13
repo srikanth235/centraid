@@ -23,7 +23,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `home-search-group-<appId>` | Home search | one app's group head: hue dot, the app's name, its count; a task hit is grouped under `agenda` (the app it opens in, #1128, R-1128-7), so there is no `home-search-group-tasks` |
 | `home-search-row-<entity>-<id>` | Home search | one hit (`entity` is the index's, e.g. `schedule.task`); a tap opens it in its app |
 | `search-corrected` | any open search field (every app's search slot, Photos' included, Home search) | the line directly over the field at the foot (under it on Home's search page and the Chats page), "Including results for “…”", drawn only when the core corrected a typo in the term ([#1097](https://github.com/srikanth235/centraid/issues/1097)); absent for an exact answer |
-| `search-ask-about` | Home search, and the search of Notes, People, Docs, Agenda (tasks included), Photos and Money | the Ask row at the foot of the answer, matched or not, "Ask about “…”": switches to the Chat tab, scoped to the app searched from (Home: every app), and sends the question — **iOS only**; Android has no Chat tab, so it draws no row. **Never in Locker's search** ([#1097](https://github.com/srikanth235/centraid/issues/1097), R-1097-29) |
+| `search-ask-about` | Home search, and the search of Notes, People, Docs, Agenda (tasks included), Photos and Money | the Ask row at the foot of the answer, matched or not, "Ask about “…”": switches to the Chat tab, scoped to the app searched from (Home: every app), and sends the question, on both shells. **Never in Locker's search** ([#1097](https://github.com/srikanth235/centraid/issues/1097), R-1097-29) |
 | `search-container-<entity>-<id>` | Home search (inside the app's group, before its rows) and Notes', Agenda's and Docs' own search results | one container whose NAME matched — a notebook or album (`core.collection`), a project (`schedule.project`), or a Docs folder (`core.concept`) ([#1097](https://github.com/srikanth235/centraid/issues/1097)); a tap opens it in its app (the notebook's notes, the project's list, the group's ledger, the folder's page, the album's shelf) |
 | `phone-says-<field>[-<item>]`, `phone-says-take-<field>[-<item>]` | the detail pages of a followed row: People (a person), Agenda (an event), Docs (a document), Health (a workout) | a quiet line where the member's value differs from what the phone says (#1183): Rust's sentence ("Phone says Ada Lovelase") and, beside it, a words-only action ("Use phone’s", "Add back"), `…-take-…`. `<field>` and `<item>` are the line's own take (`PhoneSaysTake.field`, `item_key`), so a list of lines (a person's channels, an event's guests) has one id each. A tap sends `PhoneSaysTaken` with that take unchanged and the line goes on the next read; an absent line draws nothing. One `PhoneSaysLine` per shell (`kit/PhoneSaysLine.kt`, `Kit/PhoneSaysLine.swift`) |
 | `band-search` | every app with search: Notes, People, Docs (a folder page carries it alone at its foot), Agenda (tasks included), Photos, Money, Locker | the round search key at the trailing end of the app's band, the Home circle's twin; one id on both shells and in every app. It opens the search: the field takes the band's place at the foot, over the keyboard (`<app>-search`, with `<app>-search-field` and `<app>-search-close`; Money's page and Docs' folder page use `money-search` and `docs-search`), and the close key brings the band back. Photos' selection bar stands in the band's place and carries no key; an app with no search draws none |
@@ -172,14 +172,16 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `chat-field` | Chat | the composer's text field (ready phase only) |
 | `chat-send` | Chat | Send, which becomes `chat-stop` while a turn runs |
 | `chat-stop` | Chat | Stop, while a turn runs |
-| `chat-download` | Chat | "Download model", in the model step |
-| `chat-model-note` | Chat | the model step's one sentence |
+| `chat-download` | Chat | the model step's primary action: "Download on Wi‑Fi", "Download now" on mobile data, "Check again" when the phone is short of space (a phone short of memory has none) |
+| `chat-download-secondary` | Chat | its quieter second action: "Use mobile data instead", "Wait for Wi‑Fi", "Use mobile data for the rest" |
+| `chat-model-title`, `chat-model-size`, `chat-model-status`, `chat-model-extra` | Chat | the model step's heading ("Not enough space", "Waiting for Wi‑Fi", "Checking this phone"), its size line, its status line and the second sentence (the photo reader's own download) |
+| `chat-model-note` | Chat | the model step's sentence |
 | `chat-empty` | Chat | the empty thread's one line |
 | `chat-suggestion-<n>` | Chat | the n-th suggested question, from 0: a row in the empty thread, a chip in `chat-suggestion-chips` above the composer once the thread has messages |
 | `chat-suggestion-chips` | Chat | the chips' row above the composer in a live thread |
 | `chat-card-<n>` | Chat | the n-th row-card under an answer, from 0 |
 | `chat-pending` | Chat | the lines of the confirm card under an answer that proposes a write, read as one element |
-| `chat-pending-confirm` | Chat | its confirm, worded by its verb ("Add reminder"; "Confirm" when the steps differ) (outlined in `net` when the card asks twice) |
+| `chat-pending-confirm` | Chat | (the same id on both shells) its confirm, worded by its verb ("Add reminder"; "Confirm" when the steps differ) (outlined in `net` when the card asks twice) |
 | `chat-pending-cancel` | Chat | its Cancel |
 | `chat-pending-settled` | Chat | the one clause that says how the card ended ("Done.", "Not done.") |
 | `chat-new` | Chat | the header's round New chat key (the pencil, trailing); drawn only inside a saved chat, never on a fresh conversation |
@@ -212,3 +214,19 @@ Home, its Settings and vault sheets, the Backup screen, the welcome screen and C
 **A CONTAINER'S ID LEAKS ONTO ITS CHILDREN ON iOS.** `.accessibilityIdentifier` on a plain `VStack`/`HStack` is handed down to every child that is not an element of its own, over the child's own id — every Home tile read `home-grid`, and the empty state's buttons read `kit-empty`. A container that carries an id and has selectable children marks itself `.accessibilityElement(children: .contain)` first (`TileGrid`, `KitEmpty`). The Docs band's buttons all still read `docs-band`; no flow selects them yet.
 
 **Run on the iOS simulator (2026-10-13):** `first-launch.yaml`, `onboarding.yaml` and `home.yaml` pass. The two fresh-install flows launch with `permissions: all: deny` — Maestro grants every permission by default, and a made vault imports what it is granted — and need `xcrun simctl keychain <udid> reset` first. `home.yaml` runs on the vault `onboarding.yaml` leaves. `chat.yaml` and Android are not yet run.
+
+### Chat, added with the work of #1188 (one set, both shells)
+
+| Id | Screen | What renders it |
+| --- | --- | --- |
+| `chat-copy` | Chat | Copy, under every message (the member's and the answer's) |
+| `chat-edit`, `chat-edit-banner`, `chat-edit-cancel` | Chat | Edit under the last member message; the banner over the composer while editing and its cancel (the question fills the composer) |
+| `chat-retry` | Chat | Try again, under the last answer (a stopped or failed one too) |
+| `chat-mark` | Chat | "Stopped" or "Did not finish" under an answer that kept its words |
+| `chat-latest` | Chat | the "Latest" key over the thread when it is scrolled up from its foot |
+| `chat-pending-undo-<n>` | Chat | the n-th write's Undo on an applied card, from 0 (a write that cannot be taken back has its "Made by Chat" line and no key) |
+| `chat-dictate`, `chat-listening`, `chat-dictation-off` | Chat | the microphone key (drawn only where the phone recognises speech without a network), the line while it listens, the sentence when the microphone or speech is refused |
+| `chat-table`, `chat-code` | Chat | a table and a fenced block in an answer |
+| `chat-update-step`, `chat-update-title`, `chat-update-line`, `chat-update-status`, `chat-update` | Chat | the update row above the composer: a newer model is ready (its size), its status while it downloads, and Update |
+| `chat-vision-step`, `chat-vision-title`, `chat-vision-line`, `chat-vision-status` | Chat | the photo reader's sheet, its title, its offer line and its status line |
+| `chat-vision-download`, `chat-vision-download-secondary`, `chat-vision-not-now` | Chat | the sheet's three choices: Download on Wi‑Fi, Use mobile data instead, Not now (mobile data only by the second) |

@@ -136,6 +136,7 @@ fn confirm_runs_the_steps_and_shows_what_the_vault_did() {
             text: real,
             steps,
             diff,
+            ..
         } = session.confirm(&id)
         else {
             panic!("{kind} {name}: {shown}");

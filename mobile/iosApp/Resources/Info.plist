@@ -6,6 +6,7 @@
 	<array>
 		<string>dev.centraid.sync-pass</string>
 		<string>dev.centraid.upload-pass</string>
+		<string>dev.centraid.nudge-pass</string>
 	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>

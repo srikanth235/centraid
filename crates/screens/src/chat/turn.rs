@@ -9,13 +9,85 @@ use crate::screen::Ctx;
 use crate::shell::row_routes::{self, RowRef};
 use crate::strings::chat as words;
 
+/// How a question goes to the core.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    /// The member's new question.
+    New,
+    /// The last question again, in place of its answer (Try again).
+    Again,
+    /// An edited question, in place of the last one and its answer.
+    Replace,
+}
+
 impl Chat {
-    pub(super) fn asked_by_member(&mut self, text: &str, ctx: &Ctx) -> Vec<wire::Effect> {
+    pub(super) fn asked_by_member(
+        &mut self,
+        text: &str,
+        token: u64,
+        ctx: &Ctx,
+    ) -> Vec<wire::Effect> {
         let line = text.trim();
         if !self.ready() || self.running || line.is_empty() || self.vision_blocked() {
             return Vec::new();
         }
+        // too long to read: said at once, nothing is sent and the draft stays to be shortened
+        if line.chars().count() > centraid_assist::native_turn::MESSAGE_MAX {
+            self.error = Some(Fail::TooLong);
+            return Vec::new();
+        }
+        // taken: the shell may clear the words it kept as a draft (#1188 C9)
+        if token != 0 {
+            self.accepted_send = token;
+        }
+        if self.editing {
+            return self.edit_sent(line, ctx);
+        }
         self.ask(line, false, ctx)
+    }
+
+    /// The last member message the member may edit: the last of the thread, once its answer is
+    /// over, when the chat is ready and nothing runs and a retry would lose none of its files.
+    pub(super) fn editable(&self) -> Option<usize> {
+        if !self.ready() || self.running || self.retry_loses_an_attachment() {
+            return None;
+        }
+        self.messages.iter().rposition(|message| message.user)
+    }
+
+    /// Edit was tapped on the last member message: the composer takes its words.
+    pub(super) fn edit_started(&mut self) -> Vec<wire::Effect> {
+        if self.editable().is_some() && !self.editing {
+            self.editing = true;
+            self.edit_token += 1;
+        }
+        Vec::new()
+    }
+
+    /// The banner's cancel: the question goes back to being a message, the composer empties.
+    pub(super) fn edit_cancelled(&mut self) -> Vec<wire::Effect> {
+        if self.editing {
+            self.editing = false;
+            self.edit_token += 1;
+        }
+        Vec::new()
+    }
+
+    /// An edited question was sent: it replaces the last member message and the answer to it on
+    /// screen, and the core replaces the turn it saved (`regenerate` with words). A write the
+    /// replaced answer applied stays applied; this undoes nothing.
+    fn edit_sent(&mut self, line: &str, ctx: &Ctx) -> Vec<wire::Effect> {
+        let Some(at) = self.editable() else {
+            self.editing = false;
+            self.edit_token += 1;
+            return Vec::new();
+        };
+        let carried = self.messages[at].attachments.clone();
+        self.messages.truncate(at);
+        self.editing = false;
+        self.edit_token += 1;
+        self.last_sent = carried;
+        self.ask_replacing(line, ctx)
     }
 
     /// A search's Ask row. The chat starts a fresh one when the open chat holds a thread (the
@@ -70,7 +142,12 @@ impl Chat {
         let models_dir = std::mem::take(&mut self.models_dir);
         let vault_name = std::mem::take(&mut self.vault_name);
         let turn = self.turn + 1;
+        let accepted_send = self.accepted_send;
+        // a chat left while an edit was open empties the composer of the question it held
+        let edit_token = self.edit_token + u64::from(self.editing);
         *self = Self {
+            accepted_send,
+            edit_token,
             opened: true,
             scope: scope.to_owned(),
             models_dir,
@@ -78,6 +155,7 @@ impl Chat {
             threads,
             now_ms: self.now_ms,
             turn,
+            reveals: std::mem::take(&mut self.reveals),
             ..Self::default()
         };
         let effects = self.read_status(ctx);
@@ -87,21 +165,33 @@ impl Chat {
 
     /// Append the user's line (unless regenerating) and an empty answer, and send.
     pub(super) fn ask(&mut self, line: &str, regenerate: bool, ctx: &Ctx) -> Vec<wire::Effect> {
+        self.ask_as(line, if regenerate { Mode::Again } else { Mode::New }, ctx)
+    }
+
+    /// An edited question: its line is put to the core as a regenerate, so the turn it replaces
+    /// goes, and it is drawn as a new member message after the ones before it.
+    fn ask_replacing(&mut self, line: &str, ctx: &Ctx) -> Vec<wire::Effect> {
+        self.ask_as(line, Mode::Replace, ctx)
+    }
+
+    fn ask_as(&mut self, line: &str, mode: Mode, ctx: &Ctx) -> Vec<wire::Effect> {
         let turn = self.turn + 1;
         let user = self.next_id;
-        let answer = if regenerate { user } else { user + 1 };
+        let draws_line = mode != Mode::Again;
+        let regenerate = mode != Mode::New;
+        let answer = if draws_line { user + 1 } else { user };
         // A retry asks the last turn's attachments again; a new question takes what waits in the
         // composer, and the composer empties.
-        let carried = if regenerate {
-            self.last_sent.clone()
-        } else {
+        let carried = if mode == Mode::New {
             self.pending.clone()
+        } else {
+            self.last_sent.clone()
         };
         // A card still waiting is superseded by the new question: the core drops it too.
         for message in &mut self.messages {
             message.supersede(ctx);
         }
-        if !regenerate {
+        if draws_line {
             self.messages.push(Msg {
                 id: user,
                 user: true,
@@ -123,7 +213,7 @@ impl Chat {
         self.activity = words::thinking(ctx.locale());
         self.error = None;
         self.asked = Some(line.to_owned());
-        if !regenerate {
+        if mode == Mode::New {
             self.pending.clear();
         }
         self.last_sent = carried.clone();
@@ -186,6 +276,10 @@ impl Chat {
     /// session is told to clear separately (it unbinds the stored thread there), and the turn id
     /// moves on so that whatever an abandoned turn still says is stale.
     pub(super) fn clear_thread(&mut self) {
+        if self.editing {
+            self.editing = false;
+            self.edit_token += 1;
+        }
         self.messages.clear();
         self.suggestions.clear();
         self.running = false;
@@ -356,6 +450,7 @@ impl Chat {
             R::AttachmentUnsupported => Some(Fail::AttachUnsupported),
             R::AttachmentUnreadable => Some(Fail::AttachUnreadable),
             R::AttachmentTooLarge => Some(Fail::AttachTooLarge),
+            R::TooLong => Some(Fail::TooLong),
             _ => Some(Fail::Generic),
         }
     }
@@ -378,7 +473,9 @@ impl Chat {
                 // A turn that failed after parking a write does not offer it: the turn is over.
                 last.supersede(ctx);
                 last.streaming = false;
-                last.stopped = true;
+                // a Stop is "Stopped"; any other failure that kept words is "Did not finish"
+                last.stopped = Self::refusal_fail(reason).is_none();
+                last.failed = !last.stopped;
             }
             Some(last) if !last.user => {
                 self.messages.pop();
@@ -479,8 +576,40 @@ impl Chat {
             } else {
                 settled.line
             };
+            if outcome == O::Applied {
+                held.undo = settled
+                    .undo
+                    .into_iter()
+                    .map(|step| {
+                        if step.action.is_empty() {
+                            return crate::kit::undo::Undo::sealed(words::made_by_chat(locale));
+                        }
+                        crate::kit::undo::Undo::adopt(
+                            locale,
+                            step.app,
+                            wire::ActInverse {
+                                action: step.action,
+                                input: step.input,
+                            },
+                            words::made_by_chat(locale),
+                        )
+                    })
+                    .collect();
+            }
         }
         Vec::new()
+    }
+
+    /// One write's Undo was tapped on an applied card: the kit's door runs the stored inverse (a
+    /// member's own act, `history.undo` naming the version), says "Undone" or the core's refusal
+    /// sentence on that write's line, and the vault's change reaches the other screens through
+    /// the change feed.
+    pub(super) fn undo_tapped(&mut self, id: &str, index: usize, ctx: &Ctx) {
+        if let Some(held) = self.proposal_mut(id, Stage::Applied)
+            && let Some(undo) = held.undo.get_mut(index)
+        {
+            undo.acted(ctx);
+        }
     }
 
     /// The OS owner check answered for a held confirm: opened, the same confirm goes again; not,
@@ -569,6 +698,16 @@ impl Chat {
             title: tapped.title.clone(),
             qualifier: tapped.qualifier.clone(),
         };
+        // A Locker secret is shown on its own card; the card's body opens nothing (#1188).
+        if super::reveal::is_reveal_card(&wire::ChatCard {
+            app: tapped.app.clone(),
+            entity: tapped.entity.clone(),
+            id: tapped.id.clone(),
+            qualifier: tapped.qualifier.clone(),
+            ..wire::ChatCard::default()
+        }) {
+            return Vec::new();
+        }
         // A conversation opens in this chat: no page to push.
         if row.app == "chat" && row.entity == "thread" {
             return self.thread_opened(&row.id, &row.title, ctx);
@@ -666,6 +805,7 @@ impl Msg {
             destructive: parked.destructive,
             stage: Stage::Waiting,
             line: String::new(),
+            undo: Vec::new(),
         });
     }
 }
@@ -702,6 +842,8 @@ pub(super) fn card(card: &wire::AssistCard) -> wire::ChatCard {
         title: card.title.clone(),
         subtitle: card.subtitle.clone(),
         meta: card.meta.clone(),
+        reveal: None,
+        note: String::new(),
     }
 }
 
@@ -714,6 +856,8 @@ pub(super) fn stored_card(card: &wire::ChatStoredCard) -> wire::ChatCard {
         title: card.title.clone(),
         subtitle: card.subtitle.clone(),
         meta: card.meta.clone(),
+        reveal: None,
+        note: String::new(),
     }
 }
 
@@ -722,12 +866,12 @@ pub(super) fn app_name(id: &str) -> String {
     centraid_assist::App::from_id(id).map_or_else(|| id.to_owned(), |app| app.display().to_owned())
 }
 
-/// A Locker card that asks the member for a secret action (`reveal:password`, `code:otp_seed`,
-/// `edit_secret:cvv`, `export:`): it names no row to look for.
+/// A Locker card that asks the member for a secret action that opens a page (`edit_secret:cvv`,
+/// `export:`): it names no row to look for. A reveal or a code is shown on the card itself.
 fn is_member_action(row: &RowRef) -> bool {
     row.app == "locker"
         && row.entity == "locker_item"
-        && ["reveal:", "code:", "edit_secret:", "export:"]
+        && ["edit_secret:", "export:"]
             .iter()
             .any(|word| row.qualifier.starts_with(word))
 }

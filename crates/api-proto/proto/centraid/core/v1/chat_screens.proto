@@ -21,7 +21,9 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
+import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/route.proto";
+import "centraid/core/v1/locker_screens.proto";
 
 message ChatState {
   Phase phase = 1;
@@ -114,6 +116,38 @@ message ChatState {
   string scope_all_label = 56;
   string scope_label = 57;
   repeated ChatScopeOption scopes = 58;
+  // The `Sent.token` of the last question Rust accepted. A shell that kept the typed words
+  // as a draft clears them when this reaches the token it sent; a send Rust refused (a turn
+  // running, no model yet) leaves the draft where it is.
+  uint64 accepted_send = 59;
+  // One sentence over the Chats list when the last rename or delete was not saved; empty
+  // otherwise. The list shows the vault as it is (#1188 C11).
+  string threads_error = 60;
+  // EDIT THE LAST QUESTION. `edit_label` is the key under the last member message
+  // (`ChatMessage.can_edit`). While `editing`, the composer holds that question and a banner says
+  // what sending does; the shell fills the composer with `edit_text` whenever `edit_token`
+  // changes (on starting, and on cancelling, when it is empty).
+  string edit_label = 61;
+  bool editing = 62;
+  string edit_text = 63;
+  uint64 edit_token = 64;
+  string editing_title = 65;
+  string editing_body = 66;
+  string cancel_edit_label = 67;
+  // The key over the composer when the member has scrolled up from the foot of the thread, and
+  // its spoken label.
+  string latest_label = 68;
+  string jump_to_latest_label = 69;
+  // DICTATION, on this phone only (the shells say whether the phone can: the key is not drawn when
+  // it cannot). `dictate_label` is the key's spoken name, `listening_label` the line over the
+  // composer while it listens, `dictation_off_label` the sentence when the microphone or speech is
+  // refused.
+  string dictate_label = 70;
+  string listening_label = 71;
+  string dictation_off_label = 72;
+  // A newer model than the one the chat is using is ready to fetch (the two-model window): a row
+  // above the composer while the older one keeps working. Absent when there is none.
+  ChatModelStep update_step = 73;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;
@@ -171,6 +205,33 @@ message ChatModelStep {
   bool progress_known = 4;
   float progress = 5;
   string status_line = 6;
+  // A heading over the step when its state has one ("Waiting for Wi-Fi", "Not enough space").
+  string title = 7;
+  // What the primary action does, and a second, quieter one beside it (empty when there is none).
+  ChatStepAction action_kind = 8;
+  string secondary_label = 9;
+  ChatStepAction secondary_kind = 10;
+  // A second sentence under the note: the photo reader's own download.
+  string extra_line = 11;
+  // A third, dismissing action ("Not now") and what it asks.
+  string tertiary_label = 12;
+  ChatStepAction tertiary_kind = 13;
+}
+
+// WHAT A TAP ON A STEP'S ACTION ASKS (#1188 download rules): the shell sends it back as
+// `DownloadTapped.choice` and Rust decides what follows.
+enum ChatStepAction {
+  CHAT_STEP_ACTION_UNSPECIFIED = 0;
+  // Fetch it, over Wi-Fi (waiting for Wi-Fi when the phone is on mobile data).
+  CHAT_STEP_ACTION_DOWNLOAD = 1;
+  // Fetch it now, over mobile data too.
+  CHAT_STEP_ACTION_DOWNLOAD_CELLULAR = 2;
+  // Keep to Wi-Fi: the member declined mobile data.
+  CHAT_STEP_ACTION_WAIT_WIFI = 3;
+  // Look at the phone's space and network again.
+  CHAT_STEP_ACTION_CHECK_AGAIN = 4;
+  // Leave it for now: the photo that asked for the reader is taken off the composer.
+  CHAT_STEP_ACTION_NOT_NOW = 5;
 }
 
 message ChatMessage {
@@ -188,6 +249,12 @@ message ChatMessage {
   string note = 9;
   // The write this answer proposes, drawn as a confirm card under the line.
   ChatPending pending = 10;
+  // Edit is offered on this message: the last one the member wrote, once its answer is over.
+  bool can_edit = 11;
+  // "Stopped" or "Did not finish", under an answer whose turn ended before its end, with the
+  // words it had kept; empty otherwise. `mark_failed` draws it in the error ink.
+  string mark = 12;
+  bool mark_failed = 13;
 
   enum Role {
     ROLE_UNSPECIFIED = 0;
@@ -215,6 +282,9 @@ message ChatPending {
   // The app every step belongs to, whose colour draws the card; empty (the shell's
   // own colour) when the steps span apps or the kind is no app's.
   string app = 11;
+  // One for each write an applied card made, in the order they ran: "Made by Chat" with Undo,
+  // then "Undone" or the core's sentence once tapped. One Undo per write; there is no undo-all.
+  repeated StatusLine undo = 12;
 
   enum State {
     STATE_UNSPECIFIED = 0;
@@ -255,6 +325,15 @@ message ChatAttachment {
 
 // A REFERENCE TO ONE REAL ROW. The app's own tile draws it; a shell with none draws
 // the title, subtitle and meta.
+// The next words of the answer being written, and the status line as it now reads. The shell
+// appends `text` to the message `message_id` and sets `ChatState.activity`; every other field of
+// the state, and the message's spoken label, are as they were until the next full view.
+message ChatAppend {
+  uint64 message_id = 1;
+  string text = 2;
+  string activity = 3;
+}
+
 message ChatCard {
   string app = 1;
   string entity = 2;
@@ -263,6 +342,12 @@ message ChatCard {
   string title = 5;
   string subtitle = 6;
   string meta = 7;
+  // A Locker card that offers a reveal or a code (`qualifier` `reveal:<column>`, `code:<column>`):
+  // the sealed row the card shows under its title, shut with Reveal, or revealed with Copy and
+  // Conceal (#1188). The core read the value; the model never did. Absent on every other card.
+  optional LockerFieldRow reveal = 8;
+  // A sentence under the row: a refusal, a copy, "This item is gone." (then there is no row).
+  string note = 9;
 }
 
 message ChatEvent {
@@ -294,6 +379,14 @@ message ChatEvent {
     LibraryPhotoTapped library_photo_tapped = 25;
     DocumentsOpened documents_opened = 26;
     DocumentsClosed documents_closed = 27;
+    // The Undo of one write an applied card made (`index` into `ChatPending.undo`).
+    PendingUndone pending_undone = 28;
+    // Edit on the last member message; Cancel on the banner over the composer.
+    EditStarted edit_started = 29;
+    EditCancelled edit_cancelled = 30;
+    DeviceFacts device_facts = 31;
+    // A verb tapped on a card's sealed row (`reveal`, `copy`, `conceal`, `code`, `copy_code`).
+    RevealVerb reveal_verb = 32;
   }
   reserved 12;
 
@@ -312,9 +405,24 @@ message ChatEvent {
 
   message Sent {
     string text = 1;
+    // The shell's number for this send, nonzero when it holds the text as a draft. Rust
+    // echoes it as `ChatState.accepted_send` once the question is taken, and only then
+    // does the shell clear the draft (#1188 C9). A suggestion's tap sends 0.
+    uint64 token = 2;
+  }
+
+  message RevealVerb {
+    uint64 message_id = 1;
+    // The card's index in the message.
+    uint32 index = 2;
+    string key = 3;
   }
 
   message Stopped {}
+
+  message EditStarted {}
+
+  message EditCancelled {}
 
   message Regenerated {}
 
@@ -328,6 +436,26 @@ message ChatEvent {
   message DownloadTapped {
     // The photo reader's step and not the model's.
     bool vision = 1;
+    // Which of the step's actions was tapped; unspecified is its primary one.
+    ChatStepAction choice = 2;
+    // The update row's Update, not a first download: the chat keeps working on the model it has.
+    bool update = 3;
+  }
+
+  // What the phone is like now, told on every appearance of the chat and when it changes: the
+  // network it is on and the space it has free (0 is unknown). The download rules read it.
+  message DeviceFacts {
+    Network network = 1;
+    uint64 free_bytes = 2;
+    // The phone's memory (0 is unknown): a phone with too little cannot run the model.
+    uint64 memory_bytes = 3;
+
+    enum Network {
+      NETWORK_UNSPECIFIED = 0;
+      NETWORK_WIFI = 1;
+      NETWORK_CELLULAR = 2;
+      NETWORK_OFFLINE = 3;
+    }
   }
 
   message DownloadProgress {
@@ -399,6 +527,11 @@ message ChatEvent {
     string pending_id = 1;
   }
 
+  message PendingUndone {
+    string pending_id = 1;
+    uint32 index = 2;
+  }
+
   message DrawerSearchOpened {}
 
   message DrawerSearchTerm {
@@ -449,6 +582,9 @@ message ModelDownload {
   string sha256 = 4;
   uint64 bytes = 5;
   string models_dir = 6;
+  // The member allowed mobile data for this transfer. Without it the shell fetches over Wi-Fi only
+  // and waits for it when the phone has none.
+  bool allow_cellular = 7;
 }
 
 // Let the member choose ONE image from the photo library (the system picker, which
@@ -456,6 +592,13 @@ message ModelDownload {
 // library holds (HEIC) to JPEG, bounds it to 1024 pixels on the long edge and
 // writes a small thumbnail to a temporary file it sweeps with the chat.
 message PickLibraryPhoto {}
+
+// Delete a model file the chat no longer needs: the new one arrived whole, was verified beside the
+// old and loaded, so the old one goes. A name in the models directory, never a path.
+message DeleteModelFile {
+  string models_dir = 1;
+  string file_name = 2;
+}
 
 message LibraryPhotoPicked {
   // The member dismissed the picker.

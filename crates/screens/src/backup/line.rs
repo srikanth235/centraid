@@ -11,8 +11,8 @@ use centraid_api_proto::core_v1 as wire;
 use wire::backup_line::Tone;
 
 use super::claim::bytes;
-use super::reading::Reading;
-use crate::strings::{Locale, backup as words, fill};
+use super::reading::{Footing, Reading};
+use crate::strings::{Locale, backup as words, backup_home as words_home, fill};
 
 const MINUTE_MS: i64 = 60_000;
 const HOUR_MS: i64 = 60 * MINUTE_MS;
@@ -22,12 +22,16 @@ const DAY_MS: i64 = 24 * HOUR_MS;
 /// attention.
 pub const STALE_MS: i64 = 3 * DAY_MS;
 
+/// How far ahead of this phone's clock an acknowledgement may read before it is not believed:
+/// two clocks differ by seconds, not by hours (#1188, B11).
+pub const CLOCK_TOLERANCE_MS: i64 = 5 * MINUTE_MS;
+
 /// A day: one night shift missed is ordinary, a whole day without an
 /// acknowledgement is not.
 pub const BACKLOG_STOOD_MS: i64 = DAY_MS;
 
 /// Every reason that can hold items, in the order the line lists them.
-const REASONS: [wire::WaitReason; 10] = [
+const REASONS: [wire::WaitReason; 13] = [
     wire::WaitReason::Wifi,
     wire::WaitReason::Charger,
     wire::WaitReason::Gateway,
@@ -37,7 +41,10 @@ const REASONS: [wire::WaitReason; 10] = [
     wire::WaitReason::Ask,
     wire::WaitReason::Untrusted,
     wire::WaitReason::Refused,
+    wire::WaitReason::TooLarge,
+    wire::WaitReason::RefusedOther,
     wire::WaitReason::PairAgain,
+    wire::WaitReason::NoRoom,
 ];
 
 /// No paired backup device has answered within [`STALE_MS`] (or none ever has). One predicate for
@@ -50,14 +57,56 @@ pub fn unreached(reading: &Reading, now_ms: i64) -> bool {
         .any(|d| d.last_seen_ms.is_some_and(|at| now_ms - at <= STALE_MS))
 }
 
+/// THE OLDEST ITEM STILL UNCONFIRMED HAS WAITED LONGER THAN [`STALE_MS`] (#1188): a backlog of
+/// originals warns however recent the records' acknowledgement was. While a pass runs the
+/// backlog is being worked on, so it does not warn. A time ahead of this phone's clock by more
+/// than [`CLOCK_TOLERANCE_MS`] is not believed (a clock set ahead and corrected) and counts as
+/// stood, like an acknowledgement dated in the future.
+#[must_use]
+pub fn backlog_old(reading: &Reading, now_ms: i64, running: bool) -> bool {
+    !running
+        && reading.unconfirmed() > 0
+        && reading
+            .oldest_waiting_ms
+            .is_some_and(|at| now_ms - at > STALE_MS || at - now_ms > CLOCK_TOLERANCE_MS)
+}
+
+/// WHETHER ANYTHING ABOUT THIS BACKUP IS OWED A LOOK: the one reading the line's tone and the
+/// status card's condition are both made from, so the card can never be green beside a warning
+/// line. A vault that moved and one with no device are the callers' own cases.
+#[must_use]
+pub fn warns(reading: &Reading, now_ms: i64, running: bool) -> bool {
+    if reading.destinations.is_empty() || reading.destinations.iter().all(|d| d.pair_again) {
+        return true;
+    }
+    let Some(acked) = reading.last_ack_ms else {
+        return true;
+    };
+    // AN ACKNOWLEDGEMENT DATED IN THE FUTURE is a clock that was set ahead and corrected: it
+    // says nothing of when the backup last ran, so it does not hold the stale warning off
+    // until the real date catches up (#1188, B11).
+    let from_the_future = acked - now_ms > CLOCK_TOLERANCE_MS;
+    // A MACHINE THAT IS NOT THE GATEWAY answered at its address (#1080): the member is owed a
+    // look, however recent the ack.
+    now_ms - acked > STALE_MS
+        || from_the_future
+        || unreached(reading, now_ms)
+        || reading.waiting_for(wire::WaitReason::Untrusted) > 0
+        || reading.destinations.iter().any(|d| d.pair_again)
+        || worst(reading).is_some()
+        || backlog_old(reading, now_ms, running)
+}
+
 /// The line for one vault. `reading` `None` is "the core could not be asked" (a
-/// resting vault): the line is empty and the view draws nothing. `now_ms` is
-/// this phone's clock, for "2 minutes ago" only.
+/// resting vault): the line is empty and the view draws nothing. `running` is whether a pass is
+/// going right now: "Backing up" is said only then. `now_ms` is this phone's clock, for
+/// "2 minutes ago" only.
 #[must_use]
 pub fn line(
     locale: Locale,
     reading: Option<&Reading>,
     frozen: bool,
+    running: bool,
     now_ms: i64,
 ) -> wire::BackupLine {
     if frozen {
@@ -111,39 +160,161 @@ pub fn line(
     };
     let whole = reading.unconfirmed() == 0;
     let when = ago(locale, acked, now_ms);
-    let stale = now_ms - acked > STALE_MS || unreached(reading, now_ms);
-    // A MACHINE THAT IS NOT THE GATEWAY answered at its address (#1080): the
-    // member is owed a look, however recent the ack.
-    let attention = stale
-        || reading.waiting_for(wire::WaitReason::Untrusted) > 0
-        || reading.destinations.iter().any(|d| d.pair_again);
-    finish(wire::BackupLine {
+    let count = grouped(reading.unconfirmed());
+    let stood = backlog_old(reading, now_ms, running);
+    let sentence = if whole {
+        fill(&words::backup_line_done(locale), &[("when", &when)])
+    } else if let Some(oldest) = reading
+        .oldest_waiting_ms
+        .filter(|at| stood && now_ms - *at > STALE_MS)
+        .map(|at| ago(locale, at, now_ms))
+    {
+        fill(
+            &words::backup_line_backlog(locale),
+            &[("count", &count), ("when", &oldest)],
+        )
+    } else {
+        fill(&words::backup_line_records(locale), &[("when", &when)])
+    };
+    // "BACKING UP" IS SAID ONLY WHILE A PASS RUNS; otherwise the status says what a gateway
+    // acknowledged and how many wait, which stays true when nothing is moving.
+    let status = if whole {
+        words::backup_status_done(locale)
+    } else if running {
+        words::backup_status_catching_up(locale)
+    } else {
+        words::backup_status_waiting(locale)
+    };
+    let built = wire::BackupLine {
         confirmed: reading.content_confirmed,
         waiting,
-        sentence: fill(
-            &if whole {
-                words::backup_line_done(locale)
-            } else {
-                words::backup_line_records(locale)
-            },
-            &[("when", &when)],
-        ),
-        status: fill(
-            &if whole {
-                words::backup_status_done(locale)
-            } else {
-                words::backup_status_catching_up(locale)
-            },
-            &[("when", &when)],
-        ),
+        sentence,
+        status: fill(&status, &[("when", &when), ("count", &count)]),
         detail,
-        tone: if attention {
+        tone: if warns(reading, now_ms, running) {
             Tone::Attention
         } else {
             Tone::Quiet
         } as i32,
         ..Default::default()
+    };
+    finish(name_the_one_behind(locale, reading, built))
+}
+
+/// The name the member gave a backup device, or the plain word for one with none.
+#[must_use]
+pub fn device_name(locale: Locale, destination: &super::reading::Destination) -> String {
+    if destination.label.trim().is_empty() {
+        words::backup_unnamed(locale)
+    } else {
+        destination.label.clone()
+    }
+}
+
+/// The device furthest from current (rolled back, then full, then behind), if any is not current.
+#[must_use]
+pub fn worst(reading: &Reading) -> Option<&super::reading::Destination> {
+    reading
+        .destinations
+        .iter()
+        .filter(|d| d.footing() != Footing::Current)
+        .max_by_key(|d| d.footing())
+}
+
+/// NB1: when one backup device is behind, full or holding an older backup, the card says so by
+/// the name the member gave it, and says what the others hold. "Backed up" is never said while
+/// any device owes anything.
+fn name_the_one_behind(
+    locale: Locale,
+    reading: &Reading,
+    mut line: wire::BackupLine,
+) -> wire::BackupLine {
+    let Some(worst) = worst(reading) else {
+        return line;
+    };
+    let name = device_name(locale, worst);
+    let title = match worst.footing() {
+        Footing::RolledBack => words_home::device_older(locale),
+        Footing::Full => words_home::device_full(locale),
+        Footing::TooLarge => words_home::device_too_large(locale),
+        Footing::Refusing => words_home::device_refusing(locale),
+        _ => words_home::device_behind(locale),
+    };
+    // The headline and the status both name it; what the others hold is `last_good`.
+    line.status = fill(&title, &[("name", &name)]);
+    line.sentence = line.status.clone();
+    line.tone = Tone::Attention as i32;
+    line
+}
+
+/// "Backed up to Srikanth's Mac mini 10 minutes ago": what the devices that are current hold, under
+/// the headline that names the one behind. Empty when none is behind or none is current.
+#[must_use]
+pub fn behind_last_good(locale: Locale, reading: &Reading, now_ms: i64) -> String {
+    if worst(reading).is_none() {
+        return String::new();
+    }
+    let current: Vec<&super::reading::Destination> = reading
+        .destinations
+        .iter()
+        .filter(|d| d.footing() == Footing::Current)
+        .collect();
+    let Some(at) = current.iter().filter_map(|d| d.last_ack_ms).max() else {
+        return String::new();
+    };
+    let others = current
+        .iter()
+        .map(|d| device_name(locale, d))
+        .collect::<Vec<_>>()
+        .join(", ");
+    fill(
+        &words_home::device_backed_up_to(locale),
+        &[("others", &others), ("when", &ago(locale, at, now_ms))],
+    )
+}
+
+/// The one sentence under the card for the device that is behind: why, in words a member can act
+/// on. No sentence names a command.
+#[must_use]
+pub fn behind_reason(locale: Locale, zone: &str, reading: &Reading, now_ms: i64) -> Option<String> {
+    let worst = worst(reading)?;
+    let name = device_name(locale, worst);
+    Some(match worst.footing() {
+        Footing::RolledBack => words_home::device_older_reason(locale),
+        Footing::Full => fill(&words_home::device_full_reason(locale), &[("name", &name)]),
+        Footing::TooLarge => fill(
+            &words_home::device_too_large_reason(locale),
+            &[
+                ("name", &name),
+                ("limit", &super::claim::bytes(worst.refused_limit_bytes)),
+            ],
+        ),
+        Footing::Refusing => fill(
+            &words_home::device_refusing_reason(locale),
+            &[("name", &name)],
+        ),
+        _ if worst.reach == wire::WaitReason::PairAgain as i32 => {
+            words::backup_line_pair_again(locale)
+        }
+        _ if worst.reach == wire::WaitReason::Gateway as i32 => match worst.last_seen_ms {
+            Some(at) => fill(
+                &words_home::device_silent_since(locale),
+                &[("name", &name), ("day", &since(locale, zone, at, now_ms))],
+            ),
+            None => fill(&words::backup_unreachable(locale), &[("name", &name)]),
+        },
+        _ => fill(&words_home::device_catching_up(locale), &[("name", &name)]),
     })
+}
+
+/// "Friday" within the week, else "Friday 30 October".
+fn since(locale: Locale, zone: &str, at_ms: i64, now_ms: i64) -> String {
+    let day = super::stale::since_day(locale, zone, at_ms);
+    if now_ms - at_ms < 6 * DAY_MS {
+        day.split(' ').next().unwrap_or_default().to_owned()
+    } else {
+        day
+    }
 }
 
 /// THE LINE'S SECOND CLAUSE, IN BYTES (#1144): "All 5.0 GB from 8 apps is
@@ -278,7 +449,10 @@ fn waiting_words(locale: Locale, reason: wire::WaitReason) -> String {
         R::Ask => words::backup_wait_ask(locale),
         R::Untrusted => words::backup_wait_untrusted(locale),
         R::Refused => words::backup_wait_refused(locale),
+        R::TooLarge => words::backup_wait_too_large(locale),
+        R::RefusedOther => words::backup_wait_refused_other(locale),
         R::PairAgain => words::backup_wait_pair_again(locale),
+        R::NoRoom => words::backup_wait_no_room(locale),
     }
 }
 
@@ -298,7 +472,10 @@ fn row_reason(reason: wire::WaitReason) -> wire::backup_waiting_row::Reason {
         R::Ask => W::Ask,
         R::Untrusted => W::Untrusted,
         R::Refused => W::Refused,
+        R::TooLarge => W::TooLarge,
+        R::RefusedOther => W::RefusedOther,
         R::PairAgain => W::PairAgain,
+        R::NoRoom => W::NoRoom,
     }
 }
 

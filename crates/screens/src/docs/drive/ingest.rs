@@ -282,7 +282,7 @@ impl Ingest {
             status_label,
             progress_permille: u32::try_from(progress).unwrap_or(0),
             // One text action (Try again, on a failure) and a close key on any
-            // settled line (product-intuition/references/design-behaviour.md § Status line); the line never clears itself.
+            // settled line (design/behaviour.md § Status line); the line never clears itself.
             retry_label: if failed {
                 words::retry(locale)
             } else {

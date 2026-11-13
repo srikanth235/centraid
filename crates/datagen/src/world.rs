@@ -180,27 +180,5 @@ impl World {
 /// becomes the deterministic placeholder, in memory only.
 #[must_use]
 pub fn seed_document_of(doc: &Value) -> Value {
-    let mut doc = doc.clone();
-    if let Some(rows) = doc.get_mut("locker").and_then(Value::as_array_mut) {
-        for row in rows {
-            let key = row["key"].as_str().unwrap_or_default().to_owned();
-            let sealed: Vec<String> = row
-                .get("sealed")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-                .filter_map(|field| field.as_str().map(str::to_owned))
-                .collect();
-            if let Some(object) = row.as_object_mut() {
-                object.remove("sealed");
-                for field in sealed {
-                    object.insert(
-                        field.clone(),
-                        Value::String(format!("placeholder:{key}:{field}")),
-                    );
-                }
-            }
-        }
-    }
-    doc
+    centraid_assist_eval::source::seed_document_of(doc)
 }

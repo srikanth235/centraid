@@ -33,6 +33,58 @@ pub struct Destination {
     pub pair_again: bool,
     /// The bytes it acknowledged, as this phone recorded them (#1144).
     pub held_bytes: u64,
+    /// HOW IT STANDS AGAINST THE VAULT (#1188, NB1): files it has not acknowledged whole, and
+    /// the plaintext bytes of those.
+    pub behind_files: u64,
+    pub behind_bytes: u64,
+    /// Its head names no snapshot, or an older one than this phone took.
+    pub records_behind: bool,
+    /// Why it is behind, by the core's `WaitReason` number; zero when it answered.
+    pub reach: i32,
+    /// The size limit it refused a part for, in bytes, when `reach` is "too large"; else 0.
+    pub refused_limit_bytes: u64,
+    /// Its head went backwards: it holds an older backup than this phone sent (B4).
+    pub rolled_back: bool,
+    /// When this phone paired with it, phone clock; `None` when the core did not say.
+    pub paired_at_ms: Option<i64>,
+    /// The originals it still owes, per app: (app id, files).
+    pub waiting_apps: Vec<(String, u64)>,
+}
+
+/// Where one backup device stands, best first: the order is the ranking, so the greatest is the worst (#1188, NB1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Footing {
+    /// Everything this phone sent is held.
+    Current,
+    /// Something it should hold is not there yet (silent, or still catching up).
+    Behind,
+    /// It refused for lack of room.
+    Full,
+    /// It refused a part as over its size limit.
+    TooLarge,
+    /// It refused a write for another reason (a code this build does not know).
+    Refusing,
+    /// It holds an older backup than this phone sent.
+    RolledBack,
+}
+
+impl Destination {
+    #[must_use]
+    pub fn footing(&self) -> Footing {
+        if self.rolled_back {
+            Footing::RolledBack
+        } else if self.reach == wire::WaitReason::Refused as i32 {
+            Footing::Full
+        } else if self.reach == wire::WaitReason::TooLarge as i32 {
+            Footing::TooLarge
+        } else if self.reach == wire::WaitReason::RefusedOther as i32 {
+            Footing::Refusing
+        } else if self.behind_files > 0 || self.records_behind || self.reach != 0 {
+            Footing::Behind
+        } else {
+            Footing::Current
+        }
+    }
 }
 
 /// The ledger's reading of one vault's backup.
@@ -53,6 +105,10 @@ pub struct Reading {
     /// Why the unconfirmed wait, by the core's `WaitReason` number; a reason
     /// with no items is absent.
     pub waiting: BTreeMap<i32, u64>,
+    /// When the oldest item still unconfirmed was first queued, on this phone's clock; `None`
+    /// when nothing waits or the core does not say. The core clamps it to no earlier than the
+    /// first pairing.
+    pub oldest_waiting_ms: Option<i64>,
     /// The vault moved to another phone; this one is read-only.
     pub frozen: bool,
     /// WHAT EACH APP'S BACKUP HOLDS (#1144), in the catalogue's order; empty
@@ -102,6 +158,18 @@ impl Reading {
                     last_ack_ms: Some(destination.last_ack_ms).filter(|at| *at > 0),
                     pair_again: destination.pair_again,
                     held_bytes: destination.held_bytes,
+                    behind_files: destination.behind_files,
+                    behind_bytes: destination.behind_bytes,
+                    records_behind: destination.records_behind,
+                    reach: destination.reach,
+                    refused_limit_bytes: destination.refused_limit_bytes,
+                    rolled_back: destination.rolled_back,
+                    paired_at_ms: Some(destination.paired_at_ms).filter(|at| *at > 0),
+                    waiting_apps: destination
+                        .waiting_apps
+                        .iter()
+                        .map(|w| (w.app_id.clone(), w.files))
+                        .collect(),
                 })
                 .collect(),
             last_snapshot_ms: status.last_snapshot_ms,
@@ -112,6 +180,7 @@ impl Reading {
             pending_bytes: status.pending_bytes,
             spool_bytes: status.spool_bytes,
             waiting,
+            oldest_waiting_ms: status.oldest_waiting_ms.filter(|at| *at > 0),
             frozen: status.frozen,
             apps: status.apps.clone(),
             total_bytes: status.total_bytes,

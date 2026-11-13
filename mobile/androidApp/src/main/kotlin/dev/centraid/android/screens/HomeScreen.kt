@@ -199,7 +199,7 @@ public fun HomeScreen(
                 }
             }
         }
-        // THE IMPORT'S LINE, on the band (product-intuition/references/design-behaviour.md § Status line).
+        // THE IMPORT'S LINE, on the band (design/behaviour.md § Status line).
         LocalShellLine.current?.invoke()
         Band(band, onSelectTab)
     }

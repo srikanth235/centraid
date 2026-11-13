@@ -21,7 +21,7 @@ use crate::native::session::{Outcome, ResultSet, Session};
 use crate::native::world::{Key, Row, Val};
 
 /// The FTS domains and the model kind each answers for.
-const FTS: &[(&str, Kind)] = &[
+pub(crate) const FTS: &[(&str, Kind)] = &[
     ("person", Kind::Person),
     ("note", Kind::Note),
     ("event", Kind::Event),

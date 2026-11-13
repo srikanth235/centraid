@@ -1431,6 +1431,12 @@
           },
           "to": {
             "type": "string"
+          },
+          "alerts": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "description": "Read only the events the alert index names for its next this-many firings (the notification service's read), expanded over from..to."
           }
         },
         "additionalProperties": false

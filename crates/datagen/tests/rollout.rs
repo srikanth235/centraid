@@ -34,6 +34,7 @@ fn version_dir() -> &'static tempfile::TempDir {
             counts: [3, 1, 1],
             per_world: [0; 3],
             cell_limit: Some(40),
+            mistakes: Vec::new(),
         };
         let scratch = tempfile::tempdir().expect("tempdir");
         let generated = run::generate(&config, catalog(), scratch.path()).expect("run");
@@ -55,6 +56,10 @@ fn version_dir() -> &'static tempfile::TempDir {
                 shares: Shares::default(),
                 seed: 1,
                 live: Vec::new(),
+                floor: [0; 3],
+                subsets: Vec::new(),
+                reserved: Vec::new(),
+                reserve: 0,
             },
             &Provenance {
                 version: "test".to_owned(),
@@ -217,7 +222,6 @@ fn the_scripted_model_gives_records_with_a_render_the_trainer_can_read() {
         &Cutting {
             needs: &Needs::default(),
             weighing: Weighing::default(),
-            pairs_per_turn: 2,
         },
         Some(&renderer),
         out.path(),
@@ -243,5 +247,23 @@ fn the_scripted_model_gives_records_with_a_render_the_trainer_can_read() {
         "id", "world", "today", "me", "turns", "weight", "copies", "cells",
     ] {
         assert!(lines[0].get(key).is_some(), "{key}");
+    }
+}
+
+/// A data version's sessions carry the split file they were read from, and a val, test or noise split cannot be cut
+/// into training records (`datagen rollout-records --split val` stops on this check).
+#[test]
+fn a_held_out_split_of_a_data_version_is_refused() {
+    let dir = version_dir();
+    for (split, held) in [("train", false), ("val", true), ("test", true)] {
+        let source = DatagenSource::open_version(dir.path(), &[split]).expect("open");
+        let sessions = source.sessions().expect("sessions");
+        assert!(!sessions.is_empty(), "{split}");
+        assert!(sessions.iter().all(|s| s.split.as_deref() == Some(split)));
+        assert_eq!(
+            records::refuse_held_out(&sessions).is_err(),
+            held,
+            "{split}"
+        );
     }
 }

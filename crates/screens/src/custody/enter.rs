@@ -63,6 +63,21 @@ pub fn build(
     )))
 }
 
+/// WHAT HOME SAYS AFTER A RESTORE THAT CLOSED THIS SCREEN, when something is left to say: a vault
+/// whose claim landed but could not be kept here (the old phone has stopped, restore again, said
+/// in the same words as when nothing came back), else that some previews are still on the backup
+/// device. `None` when the restore left nothing to say.
+fn after_restore(locale: Locale, answer: &door::RestoreAnswer) -> Option<String> {
+    if answer.unclaimed.iter().any(|vault| vault.claimed) {
+        return Some(words::restore_unfinished(locale));
+    }
+    answer
+        .vaults
+        .iter()
+        .any(|vault| vault.derivatives_landed < vault.derivatives_total)
+        .then(|| words::restore_previews_pending(locale))
+}
+
 /// A sentence the screen says about what just happened, kept as the fact so it
 /// is worded in the viewer's locale when drawn.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -72,7 +87,11 @@ enum Notice {
     Unreachable,
     NothingHeld,
     NotTaken,
+    /// A claim landed and the vault could not be kept here: restore again.
+    Unfinished,
     DidNotCheck,
+    CantOpen,
+    NewerBuild,
     Refusal(Refusal),
     RekeyNone,
     PhotoUnread,
@@ -104,6 +123,12 @@ pub struct Enter {
     notice: Notice,
     /// A re-key found nothing to key; the primary control restores instead.
     offer_restore: bool,
+    /// The older backups offered in place of a newest that would not open, while the member
+    /// decides (`Phase::Offer`); empty otherwise.
+    offers: Vec<door::OfferAt>,
+    /// The member's zone and clock, as the last event said, for dating the offer.
+    zone: String,
+    cycle: crate::kit::civil::HourCycle,
     /// A held-seed restore: the name of each vault on its own words it will
     /// also ask for (R-1047-E18).
     held_keys: Vec<String>,
@@ -165,6 +190,9 @@ impl Enter {
             verdict: None,
             notice: Notice::None,
             offer_restore: false,
+            offers: Vec::new(),
+            zone: String::new(),
+            cycle: crate::kit::civil::HourCycle::default(),
             held_keys: Vec::new(),
             gate: OwnerGate::default(),
             going: None,
@@ -202,7 +230,7 @@ impl Enter {
             keeper,
         };
         let progress = self.runner.begin(job, &env);
-        self.progressed(progress)
+        self.progressed(progress, ctx)
     }
 
     fn answered(&mut self, result: &wire::EffectResult, ctx: &Ctx) -> Vec<wire::Effect> {
@@ -215,7 +243,7 @@ impl Enter {
             keeper,
         };
         match self.runner.answered(result, &env) {
-            Some(progress) => self.progressed(progress),
+            Some(progress) => self.progressed(progress, ctx),
             None => Vec::new(),
         }
     }
@@ -230,25 +258,49 @@ impl Enter {
             keeper,
         };
         match self.runner.off_thread(done, &env) {
-            Some(progress) => self.progressed(progress),
+            Some(progress) => self.progressed(progress, ctx),
             None => Vec::new(),
         }
     }
 
-    fn progressed(&mut self, progress: Progress) -> Vec<wire::Effect> {
+    fn progressed(&mut self, progress: Progress, ctx: &Ctx) -> Vec<wire::Effect> {
         if let Some(out) = progress.out {
             // A late answer to a screen that was left changes nothing.
             if !self.finished {
-                self.job_done(out);
+                self.job_done(out, ctx);
             }
         }
         progress.effects
     }
 
-    fn job_done(&mut self, out: Out) {
+    fn job_done(&mut self, out: Out, ctx: &Ctx) {
         match out {
             Out::Done => self.opened(),
-            Out::Restored(outcome) => self.restored(outcome),
+            Out::Restored(outcome) => {
+                // SOME PREVIEWS ARE STILL ON THE BACKUP DEVICE: the vault is kept before they are
+                // fetched, so the line Home draws says they load when opened, never that they are
+                // all here.
+                let said = match &outcome {
+                    Restored::Done { answer, .. } => after_restore(ctx.locale(), answer),
+                    _ => None,
+                };
+                if let Some(status_line) = said {
+                    ctx.post(
+                        crate::shell::HOME,
+                        wire::ScreenEvent {
+                            kind: Some(E::Home(wire::HomeEvent {
+                                kind: Some(wire::home_event::Kind::OutcomeTold(
+                                    wire::home_event::OutcomeTold {
+                                        status_line,
+                                        rename_failed: false,
+                                    },
+                                )),
+                            })),
+                        },
+                    );
+                }
+                self.restored(outcome);
+            }
             Out::Rekeyed(outcome) => self.rekeyed(outcome),
             _ => {}
         }
@@ -313,6 +365,12 @@ impl Enter {
         if self.phase == Phase::Done {
             self.close();
             return Vec::new();
+        }
+        // YES TO THE OLDER BACKUP: the owner check was passed for this restore already.
+        if self.phase == Phase::Offer {
+            let typed = self.cells.clone();
+            self.work();
+            return self.begin(Job::restore_older(typed, &self.endpoint), ctx);
         }
         if !self.entering() {
             return Vec::new();
@@ -412,10 +470,18 @@ impl Enter {
                 self.fresh(Phase::Entering, Purpose::Restore, Origin::Unspecified);
                 self.close();
             }
+            Restored::Offer(offers) => {
+                self.offers = offers;
+                self.phase = Phase::Offer;
+                self.notice = Notice::None;
+            }
             Restored::Unreachable => self.back(Notice::Unreachable),
             Restored::NothingHeld => self.back(Notice::NothingHeld),
             Restored::NotTaken => self.back(Notice::NotTaken),
+            Restored::Unfinished => self.back(Notice::Unfinished),
             Restored::DidNotCheck => self.back(Notice::DidNotCheck),
+            Restored::CantOpen => self.back(Notice::CantOpen),
+            Restored::NewerBuild => self.back(Notice::NewerBuild),
             Restored::Refused(why) => self.back(Notice::Refusal(why)),
         }
     }
@@ -500,6 +566,13 @@ impl Enter {
                 Vec::new()
             }
             Some(K::Primary(_)) => self.primary(ctx),
+            // A DIFFERENT BACKUP DEVICE: back to the scan step, the code field empty.
+            Some(K::Another(_)) if self.phase == Phase::Offer => {
+                self.offers.clear();
+                self.endpoint.clear();
+                self.back(Notice::None);
+                Vec::new()
+            }
             Some(K::Secondary(_) | K::Dismissed(_)) => {
                 self.close();
                 Vec::new()
@@ -541,6 +614,74 @@ impl Enter {
         }
     }
 
+    /// When an offer's backup was taken, in the member's zone and clock.
+    fn when(&self, ms: i64) -> String {
+        let Ok(zone) = centraid_vault::time::FireZone::named(&self.zone) else {
+            return String::new();
+        };
+        let at = zone.zoned_parts(ms);
+        let local = format!(
+            "{:04}-{:02}-{:02}T{:02}:{:02}",
+            at.year, at.month, at.day, at.hour, at.minute
+        );
+        crate::kit::earlier::dated(self.locale, self.cycle, &local)
+    }
+
+    fn offer_body(&self) -> String {
+        let Some(offer) = self.offers.first() else {
+            return String::new();
+        };
+        let days =
+            u64::try_from((offer.newest_taken_at_ms - offer.offered_taken_at_ms) / 86_400_000)
+                .unwrap_or(0);
+        let older = if days < 1 {
+            words::offer_under_a_day(self.locale)
+        } else {
+            words::offer_days_older(self.locale, days)
+        };
+        fill(
+            &words::offer_body(self.locale),
+            &[
+                ("date", &self.when(offer.offered_taken_at_ms)),
+                ("older", &older),
+            ],
+        )
+    }
+
+    fn offer_action(&self) -> String {
+        let Some(offer) = self.offers.first() else {
+            return String::new();
+        };
+        // The day alone: the button is short, and the line above it says the hour.
+        let day = self.when(offer.offered_taken_at_ms);
+        let day = day.split(" · ").next().unwrap_or_default();
+        fill(&words::offer_action(self.locale), &[("date", day)])
+    }
+
+    fn offer_rows(&self) -> Vec<wire::WordsOfferRow> {
+        let Some(offer) = self.offers.first() else {
+            return Vec::new();
+        };
+        vec![
+            wire::WordsOfferRow {
+                title: offer.device.clone(),
+                detail: fill(
+                    &words::offer_wont_open(self.locale),
+                    &[("date", &self.when(offer.newest_taken_at_ms))],
+                ),
+                opens: false,
+            },
+            wire::WordsOfferRow {
+                title: offer.device.clone(),
+                detail: fill(
+                    &words::offer_opens(self.locale),
+                    &[("date", &self.when(offer.offered_taken_at_ms))],
+                ),
+                opens: true,
+            },
+        ]
+    }
+
     fn notice_text(&self) -> String {
         let locale = self.locale;
         match self.notice {
@@ -548,7 +689,10 @@ impl Enter {
             Notice::Unreachable => words::restore_unreachable(locale),
             Notice::NothingHeld => words::restore_nothing_held(locale),
             Notice::NotTaken => words::restore_not_taken(locale),
+            Notice::Unfinished => words::restore_unfinished(locale),
             Notice::DidNotCheck => words::restore_did_not_check(locale),
+            Notice::CantOpen => words::restore_cant_open(locale),
+            Notice::NewerBuild => words::restore_newer_build(locale),
             Notice::Refusal(Refusal::NotAPhrase) => words::not_a_phrase(locale),
             Notice::Refusal(Refusal::DifferentWords) => words::different_words(locale),
             Notice::Refusal(Refusal::StoreRefused) => words::keep_failed(locale),
@@ -610,7 +754,10 @@ impl Enter {
             Vec::new()
         };
         // DONE IS A RE-KEY'S: a restore finishes the screen instead.
-        let title = if done {
+        let offering = phase == Phase::Offer;
+        let title = if offering {
+            words::offer_title(locale)
+        } else if done {
             words::rekeyed_title(locale)
         } else if rekey {
             words::rekey_title(locale)
@@ -619,7 +766,9 @@ impl Enter {
         } else {
             words::restore_title(locale)
         };
-        let body = if done && from_pairing {
+        let body = if offering {
+            self.offer_body()
+        } else if done && from_pairing {
             words::rekeyed_pair_body(locale)
         } else if done {
             words::rekeyed_body(locale)
@@ -638,6 +787,7 @@ impl Enter {
             Phase::Entering if rekey => words::rekey_primary(locale),
             Phase::Entering => words::restore_primary(locale),
             Phase::Done => words::done(locale),
+            Phase::Offer => self.offer_action(),
             _ => String::new(),
         };
         // THE SCAN IS DRAWN WHEREVER THE CODE'S FIELD IS, and only while entering.
@@ -694,11 +844,21 @@ impl Enter {
             primary_enabled: match phase {
                 Phase::Entering if self.restores() && self.endpoint.trim().is_empty() => false,
                 Phase::Entering => held || self.offer_restore || self.valid(),
-                Phase::Done => true,
+                Phase::Done | Phase::Offer => true,
                 _ => false,
             },
             primary_label: primary,
-            secondary_label: if entering {
+            offer_rows: if offering {
+                self.offer_rows()
+            } else {
+                Vec::new()
+            },
+            another_label: if offering {
+                words::offer_another(locale)
+            } else {
+                String::new()
+            },
+            secondary_label: if entering || offering {
                 words::cancel(locale)
             } else {
                 String::new()
@@ -760,6 +920,8 @@ impl Enter {
 impl Screen for Enter {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         self.locale = ctx.locale();
+        self.zone = ctx.zone().to_owned();
+        self.cycle = ctx.hour_cycle();
         self.platform = ctx.platform().to_owned();
         if self.finished {
             return Vec::new();
@@ -808,5 +970,72 @@ impl Screen for Enter {
             kind: Some(wire::view_state::Kind::WordsEnter(self.render())),
             ..wire::ViewState::default()
         }
+    }
+}
+
+#[cfg(test)]
+mod after_restore_tests {
+    use super::*;
+    use crate::custody::door::{RestoreAnswer, RestoredVaultAt, UnclaimedVaultAt};
+
+    fn vault(landed: u32, total: u32) -> RestoredVaultAt {
+        RestoredVaultAt {
+            path: String::new(),
+            index: 0,
+            rows: 1,
+            safety_number: String::new(),
+            own: None,
+            derivatives_landed: landed,
+            derivatives_total: total,
+        }
+    }
+
+    fn unclaimed(claimed: bool) -> UnclaimedVaultAt {
+        UnclaimedVaultAt {
+            index: 1,
+            vault_id: String::new(),
+            own: None,
+            claimed,
+        }
+    }
+
+    #[test]
+    fn a_vault_whose_claim_landed_unfinished_is_said_beside_the_ones_that_came_back() {
+        let answer = RestoreAnswer {
+            vaults: vec![vault(0, 0)],
+            unclaimed: vec![unclaimed(true)],
+            ..RestoreAnswer::default()
+        };
+        let said = after_restore(Locale::En, &answer).expect("something to say");
+        assert_eq!(said, words::restore_unfinished(Locale::En));
+        assert!(!said.to_lowercase().contains("unclaimed"));
+        // The unfinished vault outranks a preview note.
+        let both = RestoreAnswer {
+            vaults: vec![vault(1, 5)],
+            ..answer
+        };
+        assert_eq!(
+            after_restore(Locale::En, &both),
+            Some(words::restore_unfinished(Locale::En))
+        );
+    }
+
+    #[test]
+    fn previews_still_on_the_backup_device_are_said_and_a_whole_restore_says_nothing() {
+        let pending = RestoreAnswer {
+            vaults: vec![vault(3, 12)],
+            ..RestoreAnswer::default()
+        };
+        assert_eq!(
+            after_restore(Locale::En, &pending),
+            Some("Restored. Some previews load when you open them.".to_owned())
+        );
+        let whole = RestoreAnswer {
+            vaults: vec![vault(12, 12), vault(0, 0)],
+            // A claim that did not land leaves the old phone the writer: nothing to finish here.
+            unclaimed: vec![unclaimed(false)],
+            ..RestoreAnswer::default()
+        };
+        assert_eq!(after_restore(Locale::En, &whole), None);
     }
 }

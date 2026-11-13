@@ -528,3 +528,21 @@ fn a_closed_handle_refuses_with_a_typed_error() {
         Err(CoreError::Closed)
     ));
 }
+
+#[test]
+fn an_adapter_file_is_listed_apart_from_the_other_models() {
+    let sample = common::chat::sample();
+    let model = scratch_file("adapter-list", b"weights");
+    let dir = model.parent().unwrap();
+    std::fs::write(dir.join("Old-Q4_0.gguf"), b"old").unwrap();
+    std::fs::write(dir.join("centraid-adapter-aaaaaaaaaaaa.gguf"), b"lora").unwrap();
+    let answer = status(
+        &sample,
+        Ask::Status(wire::AssistStatusRequest {
+            model_path: model.to_string_lossy().into_owned(),
+            ..wire::AssistStatusRequest::default()
+        }),
+    );
+    assert_eq!(answer.other_model_files, ["Old-Q4_0.gguf"]);
+    assert_eq!(answer.adapter_files, ["centraid-adapter-aaaaaaaaaaaa.gguf"]);
+}

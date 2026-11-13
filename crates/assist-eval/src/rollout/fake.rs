@@ -46,6 +46,7 @@ impl Stepper for Scripted {
         Ok(StepOut {
             text,
             think_cut: false,
+            tokens: 0,
         })
     }
 }

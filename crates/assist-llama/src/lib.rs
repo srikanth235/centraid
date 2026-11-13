@@ -8,6 +8,7 @@
 //! | Module | What it owns | Built |
 //! |---|---|---|
 //! | [`generate`] | The generation loop — cancel polling, chunked prefill, images as prefill, stop strings, UTF-8 — over a [`generate::Backend`] a test can fake. | always |
+//! | [`adapter`] | A LoRA adapter file's header, read before llama.cpp is asked to load it, so a file that is not an adapter (or is for another architecture) is refused in words; and a tiny writer for test fixtures. | always |
 //! | [`wire`] | The JSON lines `assist-step` speaks: request, reply, error, ready. | always |
 //! | `engine` | llama.cpp as that backend: weights, an optional vision projector (`mtmd`), a fresh context per generation, the grammar + greedy sampler chain (a sampled generation, `temperature > 0`, draws through `sampling`). | `engine` feature |
 //! | `sampling` | temperature and top-p picking with a seeded generator, for rollouts (#1171); the phone decodes greedily and never calls it. | always |
@@ -51,6 +52,7 @@
 //! With `engine`: `cmake` on `PATH` and a C++17 toolchain (Xcode's, or the
 //! Android NDK's). Without it, nothing beyond Rust.
 
+pub mod adapter;
 #[cfg(feature = "engine")]
 pub mod engine;
 pub mod generate;
@@ -151,10 +153,18 @@ impl Config {
 /// holds that.
 #[cfg(all(feature = "engine", debug_assertions))]
 fn dev_chat_script() -> Option<Arc<dyn centraid_assist::model::Model>> {
-    let path = std::env::var_os("CENTRAID_DEV_CHAT_SCRIPT")?;
+    let path = std::env::var_os("CENTRAID_DEV_CHAT_SCRIPT").or_else(android_dev_script)?;
     let text = std::fs::read_to_string(&path).ok()?;
     let model = centraid_assist::testing::KeyedModel::from_json(&text).ok()?;
     Some(Arc::new(model))
+}
+
+/// An Android debug build cannot be started with an environment variable, so the script is the file
+/// `adb push` leaves in the directory every shell may write. Debug builds only, like the variable.
+#[cfg(all(feature = "engine", debug_assertions))]
+fn android_dev_script() -> Option<std::ffi::OsString> {
+    let path = "/data/local/tmp/centraid-dev-chat-script.json";
+    (cfg!(target_os = "android") && std::path::Path::new(path).is_file()).then(|| path.into())
 }
 
 #[cfg(all(feature = "engine", not(debug_assertions)))]

@@ -133,6 +133,12 @@ enum ErrorCode {
   // An entry point caught a panic. The handle is poisoned and the shell
   // restarts the core deliberately (#1020 Execution model).
   ERROR_CODE_INTERNAL = 63;
+  // A restore was handed a backup a newer build made: update, then restore again (#1188, B2).
+  ERROR_CODE_BACKUP_FROM_NEWER_BUILD = 64;
+  // A restore found no backup on the backup device that this build opens: every snapshot kept
+  // failed a check, or predates the schema this build reads. Nothing was restored or claimed
+  // (#1188, B2, B5).
+  ERROR_CODE_BACKUP_UNREADABLE = 65;
 
   // --- the #1029 gateway (#1029 §3), retired ---
   //

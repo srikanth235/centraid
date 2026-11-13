@@ -136,6 +136,7 @@ pub mod agenda_repeat;
 pub mod agenda_tasks;
 pub mod agenda_todo;
 pub mod backup;
+pub mod backup_check;
 pub mod backup_home;
 pub mod chat;
 pub mod chat_confirm;

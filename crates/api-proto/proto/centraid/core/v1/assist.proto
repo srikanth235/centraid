@@ -105,6 +105,8 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
+import "centraid/core/v1/value.proto";
+
 message AssistRequest {
   // 2 `load` and 3 `unload` answer with `status`'s message at `status`'s
   // number: the answer to all three is "where the model stands now".
@@ -193,6 +195,14 @@ message AssistStatus {
   AssistVisionState vision = 3;
   // The projector file's size, 0 when there is none.
   uint64 projector_bytes = 4;
+  // The names of the other `.gguf` model files in the model's directory (the vision projector
+  // excluded): what an older release left behind. The chat tells the second model of the
+  // two-model window from one older than that.
+  repeated string other_model_files = 5;
+  // The names of the assistant's adapter files in that directory (a `.gguf` the shell kept after
+  // its digest matched). They are part of the assistant, not "other models": the chat keeps the
+  // one this release names and deletes the rest with the leftovers.
+  repeated string adapter_files = 6;
 }
 
 enum AssistVisionState {
@@ -232,8 +242,9 @@ message AssistStarted {
   string scope_app = 3;
 }
 
-// Ask. `regenerate` drops the last turn and asks its question again, and
-// `text` is then ignored; with no earlier question it is
+// Ask. `regenerate` drops the last turn and asks its question again; `text` then
+// replaces that question when it carries words (an Edit of the last message, the
+// answer to it replaced), and is ignored when empty; with no earlier question it is
 // `ERROR_CODE_INVALID_REQUEST`. One turn runs at a time per session: a second
 // send is answered `ASSIST_REFUSAL_REASON_BUSY` rather than queued.
 //
@@ -413,6 +424,9 @@ enum AssistRefusalReason {
   ASSIST_REFUSAL_REASON_ATTACHMENT_UNREADABLE = 10;
   // The attachment is bigger than the chat will take.
   ASSIST_REFUSAL_REASON_ATTACHMENT_TOO_LARGE = 11;
+  // The member's message, or what it needs read, is longer than the chat can read at once. Said in a
+  // sentence of its own; the turn is not saved, so the draft stays to be shortened (#1188 C4).
+  ASSIST_REFUSAL_REASON_TOO_LONG = 12;
 }
 
 message AssistRefusal {
@@ -554,4 +568,16 @@ message AssistSettled {
   // The one line to say, composed by the runtime from the chat's copy
   // ("Done.", "That changed since. Ask again.").
   string line = 4;
+  // What takes each applied write back, in the order the writes ran: one Undo per write, run
+  // by the kit's one Undo door (`history.undo` through an `ActRequest`). Empty unless `outcome`
+  // is applied; a write with no inverse has no entry.
+  repeated AssistUndo undo = 5;
+}
+
+// ONE WRITE'S WAY BACK: the app whose action the inverse is, and the inverse itself, the
+// fields of an `ActInverse` (`action.proto` imports this file's family, so it cannot be named here).
+message AssistUndo {
+  string app = 1;
+  string action = 2;
+  map<string, Value> input = 3;
 }

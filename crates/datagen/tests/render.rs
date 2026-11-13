@@ -6,11 +6,11 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 
 use centraid_assist::native::identity::MODEL;
 use centraid_assist::native::prompt::ToolsMode;
-use centraid_assist_eval::run::{Runner, StepOut, Stepper};
+use centraid_assist_eval::replay;
 use centraid_assist_eval::source::EvalSource;
 use centraid_datagen::Catalog;
 use centraid_datagen::mix::{self, Shares};
@@ -35,6 +35,7 @@ fn input() -> &'static (tempfile::TempDir, PathBuf) {
             counts: [3, 1, 1],
             per_world: [0; 3],
             cell_limit: Some(40),
+            mistakes: Vec::new(),
         };
         let scratch = tempfile::tempdir().expect("tempdir");
         let generated = run::generate(&config, catalog(), scratch.path()).expect("run");
@@ -52,6 +53,10 @@ fn mix_config() -> mix::Config {
         shares: Shares::default(),
         seed: 1,
         live: Vec::new(),
+        floor: [0; 3],
+        subsets: vec![20, 40],
+        reserved: Vec::new(),
+        reserve: 0,
     }
 }
 
@@ -217,92 +222,14 @@ fn a_record_is_the_eval_session_with_a_render_beside_it_and_loads_in_the_eval_un
     }
 }
 
-/// Says each turn's reference calls in turn, reading the turn from the placeholder in the prompt.
-struct Replay {
-    calls: BTreeMap<String, Vec<String>>,
-    said: Mutex<BTreeMap<String, usize>>,
-}
-
-impl Stepper for Replay {
-    fn step(
-        &self,
-        prompt: &str,
-        _dates: Option<&str>,
-        _tools: ToolsMode,
-    ) -> Result<StepOut, String> {
-        let start = prompt.rfind("⟨m3:").ok_or("no placeholder in the prompt")?;
-        let end = start + prompt[start..].find('⟩').ok_or("unclosed placeholder")? + '⟩'.len_utf8();
-        let user = &prompt[start..end];
-        let mut said = self.said.lock().expect("lock");
-        let n = said.entry(user.to_owned()).or_default();
-        let text = self
-            .calls
-            .get(user)
-            .and_then(|c| c.get(*n))
-            .ok_or("more steps than reference calls")?;
-        *n += 1;
-        Ok(StepOut {
-            text: text.clone(),
-            think_cut: false,
-        })
-    }
-}
-
+/// The path a scoring run takes before any model is asked: the reference calls replayed through the runner and judge.
 #[test]
 fn the_reference_calls_of_the_records_replay_to_their_gold_in_the_eval() {
     let (dir, _) = version_dir();
-    let all: Vec<Value> = ["train", "val", "test"]
-        .iter()
-        .flat_map(|split| records(dir.path(), split))
-        .collect();
-    let mut calls = BTreeMap::new();
-    for record in &all {
-        for turn in record["turns"].as_array().expect("turns") {
-            let texts = turn["ref"]
-                .as_array()
-                .expect("ref")
-                .iter()
-                .map(|call| {
-                    let mut text = format!(
-                        "<tool_call>\n<function={}>\n",
-                        call["tool"].as_str().unwrap_or_default()
-                    );
-                    for (k, v) in call["args"].as_object().into_iter().flatten() {
-                        text += &format!(
-                            "<parameter={k}>\n{}\n</parameter>\n",
-                            v.as_str().unwrap_or_default()
-                        );
-                    }
-                    text + "</function>\n</tool_call>"
-                })
-                .collect();
-            calls.insert(turn["user"].as_str().expect("user").to_owned(), texts);
-        }
-    }
-    let replay = Replay {
-        calls,
-        said: Mutex::new(BTreeMap::new()),
-    };
     let source = DatagenSource::open_version(dir.path(), &["train", "val", "test"]).expect("open");
-    let mut runner = Runner::new(&source, &replay).expect("runner");
-    let mut failed = Vec::new();
-    let mut turns = 0;
-    for session in source.sessions().expect("sessions") {
-        let result = runner.run_session(&session).expect("session runs");
-        for turn in &result.turns {
-            turns += 1;
-            if !turn.pass {
-                failed.push(format!("{} {}: {:?}", result.id, turn.user, turn.problems));
-            }
-        }
-    }
-    assert!(turns > 50);
-    assert!(
-        failed.is_empty(),
-        "{} of {turns} turns failed, first: {:?}",
-        failed.len(),
-        failed.iter().take(3).collect::<Vec<_>>()
-    );
+    let sessions = source.sessions().expect("sessions");
+    let report = replay::require(&source, &sessions, ToolsMode::Sig).expect("the version replays");
+    assert!(report.turns > 50);
 }
 
 #[test]
@@ -352,6 +279,11 @@ fn the_manifest_names_the_data_version() {
         assert!(manifest.get(key).is_some(), "{key}");
     }
     assert_eq!(manifest["weights"]["decision"], 2.0);
+    // a version rendered with the test (byte-level) tokenizer is never publishable
+    assert_eq!(manifest["tokenizer"]["test_tokenizer"], true);
+    assert_eq!(manifest["publishable"]["value"], false);
+    let blockers = manifest["publishable"]["blockers"].to_string();
+    assert!(blockers.contains("byte-level"), "{blockers}");
     // the files are what the manifest says
     for (name, file) in manifest["files"].as_object().expect("files") {
         let bytes = std::fs::read(dir.path().join(name)).expect("file");
@@ -489,4 +421,89 @@ fn a_version_is_its_publishable_tree() {
         manifest["llm_cache"]["packed_entries"],
         manifest["llm_cache"]["entries"]
     );
+}
+
+fn ids_of(dir: &std::path::Path, rel: &str) -> std::collections::BTreeSet<String> {
+    let bytes = std::fs::read(dir.join(rel)).expect("file");
+    let text = String::from_utf8(zstd::decode_all(&bytes[..]).expect("zstd")).expect("utf8");
+    text.lines()
+        .map(|l| {
+            let v: Value = serde_json::from_str(l).expect("json");
+            v["id"].as_str().expect("id").to_owned()
+        })
+        .collect()
+}
+
+#[test]
+fn nested_train_subsets_are_files_of_their_own_inside_each_other_and_inside_train() {
+    let (dir, manifest) = version_dir();
+    let train = ids_of(dir.path(), "data/train.jsonl.zst");
+    let (small, large) = (
+        ids_of(dir.path(), "data/train-20.jsonl.zst"),
+        ids_of(dir.path(), "data/train-40.jsonl.zst"),
+    );
+    assert!(!small.is_empty() && small.len() <= 20, "{}", small.len());
+    assert!(large.len() <= 40 && large.len() >= small.len());
+    assert!(
+        small.is_subset(&large),
+        "the smaller subset is inside the larger"
+    );
+    assert!(large.is_subset(&train), "a subset is inside train");
+    for name in ["train-20", "train-40"] {
+        assert_eq!(manifest["subsets"][name]["within"], "train");
+        assert!(manifest["files"][format!("data/{name}.jsonl.zst")].is_object());
+    }
+}
+
+fn tool_names(mode: centraid_assist::native::prompt::ToolsMode) -> Vec<String> {
+    centraid_assist::native::prompt::tools_for(mode)
+        .iter()
+        .map(|t| t["function"]["name"].as_str().expect("name").to_owned())
+        .collect()
+}
+
+#[test]
+fn the_records_carry_the_tools_block_the_model_record_names() {
+    use centraid_assist::native::prompt::ToolsMode;
+    // the record is read from its file here, not from the code that reads it for the build
+    let file = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../assist/model.json"),
+    )
+    .expect("model.json");
+    let record: Value = serde_json::from_str(&file).expect("json");
+    let named = ToolsMode::parse(
+        record["current"]["tools_mode"]
+            .as_str()
+            .expect("tools_mode"),
+    )
+    .expect("a catalogue mode");
+    assert_eq!(
+        centraid_datagen::plan::tools_mode(),
+        named,
+        "datagen takes the tools block from the model record"
+    );
+    let (dir, manifest) = version_dir();
+    assert_eq!(manifest["tools_block"]["mode"], named.name());
+    let bytes = std::fs::read(dir.path().join("data/train.jsonl.zst")).expect("train");
+    let text = String::from_utf8(zstd::decode_all(&bytes[..]).expect("zstd")).expect("utf8");
+    let first: Value = serde_json::from_str(text.lines().next().expect("a record")).expect("json");
+    let rendered = first["render"]["text"].as_str().expect("text");
+    let names = tool_names(named);
+    for name in &names {
+        assert!(
+            rendered.contains(&format!("\"name\": \"{name}\""))
+                || rendered.contains(&format!("\"name\":\"{name}\"")),
+            "the record's system turn lacks the tool `{name}`"
+        );
+    }
+    for other in ToolsMode::ALL.into_iter().filter(|m| *m != named) {
+        for name in tool_names(other).iter().filter(|n| !names.contains(n)) {
+            assert!(
+                !rendered.contains(&format!("\"name\": \"{name}\""))
+                    && !rendered.contains(&format!("\"name\":\"{name}\"")),
+                "the record shows `{name}` of the {} block",
+                other.name()
+            );
+        }
+    }
 }

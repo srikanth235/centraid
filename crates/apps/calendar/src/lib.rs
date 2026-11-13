@@ -68,7 +68,7 @@ pub use manifest::{APP_ID, manifest};
 pub use queries::{
     DayContextData, EVENT_WINDOW_CAP, MAX_RANGE_DAYS, PARTY_CAP, PartiesData, RECURRING_ANCHOR_CAP,
     SEARCH_LIMIT, SearchData, UpcomingData, load_day_context, load_parties, load_search,
-    load_search_term, load_upcoming,
+    load_search_term, load_upcoming, load_upcoming_among,
 };
 pub use trash::{TRASH_ROWS, TrashData, TrashRow, load_trash};
 pub use window::{Occurrence, occurrences};

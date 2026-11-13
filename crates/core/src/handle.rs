@@ -179,6 +179,14 @@ pub struct HandleState {
     /// not queued (`phone.proto`): a background window's call must not sit
     /// behind a foreground pass it cannot see and expire holding nothing.
     draining: AtomicBool,
+    /// Snapshots copied from the vault by this core, and the pages those copies held: counts a
+    /// test states what a pass cost by, never how long it took.
+    copies: AtomicU64,
+    pages_copied: AtomicU64,
+    /// How far a running "Check my backup" has got (#1188, B6).
+    check_progress: crate::phone::check::Progress,
+    /// One check at a time.
+    checking: AtomicBool,
     /// THE FIRST RECONCILE OF THIS CORE'S LIFE HAS RUN (#1080 ruling 7: "on
     /// every launch"). It asks the gateway about every name the ledger
     /// confirms; every later one only about the queue. The first pass that
@@ -348,9 +356,12 @@ impl Core {
         };
         let registry = Arc::new(Registry::with_system_commands()?);
         let launched = std::time::SystemTime::now();
+        let plane = crate::phone::Plane::of(&path).with_ceiling(spool_ceiling);
+        // A SNAPSHOT'S COPY OF THE VAULT A CRASH LEFT IN THE CLEAR goes before anything else runs.
+        plane.sweep_scratch();
         let handle = Handle::new(|me| HandleState {
             me,
-            plane: crate::phone::Plane::of(&path).with_ceiling(spool_ceiling),
+            plane,
             path,
             keys,
             vault: Arc::new(Mutex::new(vault)),
@@ -368,6 +379,10 @@ impl Core {
             bytes: Mutex::new(None),
             runtime: Mutex::new(None),
             draining: AtomicBool::new(false),
+            copies: AtomicU64::new(0),
+            pages_copied: AtomicU64::new(0),
+            check_progress: crate::phone::check::Progress::default(),
+            checking: AtomicBool::new(false),
             reconciled: AtomicBool::new(false),
             owned_bytes: Mutex::new(None),
             locker: Arc::new(Mutex::new(None)),
@@ -943,6 +958,7 @@ impl HandleState {
                     owner: &owner,
                     changes: &changes,
                     plane: &self.plane,
+                    actor: None,
                 },
                 request,
             )
@@ -1333,6 +1349,7 @@ impl HandleState {
             })?,
             invoke_key: invoke_key.to_owned(),
             quiet: false,
+            actor: None,
         };
         let changes = crate::events::ChangeFeed::new(self.events());
         let owner = self.owner();
@@ -1458,11 +1475,14 @@ impl HandleState {
                 self.locker_session(request)?,
             ))),
             // THE PASS (#1080). Not through `with_vault` for its whole length:
-            // the vault is held for the snapshot's copy and the reads a pass
-            // makes, never across the network, so a screen's reads go on while
+            // the vault is held for the reads a pass makes and for the instant
+            // a snapshot's copy begins, never for the copy or across the network, so a screen's reads go on while
             // a backup runs.
             K::Drain(request) => Ok(response(wire::response::Kind::Drain(
                 self.drain(request, cancellation)?,
+            ))),
+            K::CheckBackup(request) => Ok(response(wire::response::Kind::CheckBackup(
+                self.check_backup(request, &cancellation)?,
             ))),
             // PAIRING NEEDS NO VAULT TO BE OPEN: it needs the vault's keys,
             // and keeps the gateway in the ledger beside the file.
@@ -1683,6 +1703,130 @@ impl HandleState {
         self.reconciled.store(true, Ordering::SeqCst);
     }
 
+    /// "Check my backup" (#1188, B6): each paired device's backup opened in a spare copy.
+    /// One at a time; a second ask while one runs answers how far it has got.
+    fn check_backup(
+        &self,
+        request: &wire::CheckBackupRequest,
+        cancellation: &Cancellation,
+    ) -> Result<wire::CheckBackupResponse> {
+        if request.stop {
+            self.check_progress.ask_stop();
+            return Ok(wire::CheckBackupResponse::default());
+        }
+        if request.progress_only {
+            return Ok(wire::CheckBackupResponse {
+                devices: Vec::new(),
+                progress: Some(self.check_progress.read()),
+            });
+        }
+        let keyring = self.keyring()?;
+        if !self.holds_a_replica() {
+            return Err(CoreError::Unpaired);
+        }
+        if self
+            .checking
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return Err(CoreError::InvalidRequest {
+                detail: "a check is already running".to_owned(),
+            });
+        }
+        // A PASS IS WRITING (or is about to): files in flight would read as missing, a false
+        // failure on the one screen that must not lie. So no check starts under a pass; the
+        // order of the two flags (each side sets its own, then reads the other's) means one of
+        // them always sees the other.
+        self.check_progress.reset();
+        if self.draining.load(Ordering::SeqCst) {
+            self.checking.store(false, Ordering::SeqCst);
+            return Ok(self.check_refused(request, wire::device_check::NotRun::BackupRunning));
+        }
+        let answer = self.runtime_handle().and_then(|runtime| {
+            crate::phone::check::run(
+                self,
+                keyring,
+                request,
+                &runtime,
+                cancellation,
+                &self.check_progress,
+            )
+        });
+        self.checking.store(false, Ordering::SeqCst);
+        answer
+    }
+
+    /// Pretend a backup pass is running (or is not), so a test can state what a check does under
+    /// one without racing a real pass. For tests only: nothing in a shell calls it.
+    #[doc(hidden)]
+    pub fn pretend_a_pass_is_running(&self, running: bool) {
+        self.draining.store(running, Ordering::SeqCst);
+    }
+
+    /// Pretend the phone's volume has `bytes` free (`None`: read it again): see
+    /// [`Self::pretend_a_pass_is_running`].
+    #[doc(hidden)]
+    pub fn pretend_free_bytes(&self, bytes: Option<u64>) {
+        self.plane.pretend_free_bytes(bytes);
+    }
+
+    /// Record one vault copy of `pages` pages.
+    pub(crate) fn note_copy(&self, pages: u32) {
+        self.copies.fetch_add(1, Ordering::Relaxed);
+        self.pages_copied
+            .fetch_add(u64::from(pages), Ordering::Relaxed);
+    }
+
+    /// How many copies of the vault this core has taken, and how many pages they held.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn copies_taken(&self) -> (u64, u64) {
+        (
+            self.copies.load(Ordering::Relaxed),
+            self.pages_copied.load(Ordering::Relaxed),
+        )
+    }
+
+    /// Pretend a check is running (or is not): see [`Self::pretend_a_pass_is_running`].
+    #[doc(hidden)]
+    pub fn pretend_a_check_is_running(&self, running: bool) {
+        self.checking.store(running, Ordering::SeqCst);
+    }
+
+    /// Whether the check in hand was asked to stop (a member's Stop, or a pass starting).
+    #[doc(hidden)]
+    #[must_use]
+    pub fn check_was_asked_to_stop(&self) -> bool {
+        self.check_progress.stop_asked()
+    }
+
+    /// Every device the check would have visited, not run for `why`.
+    fn check_refused(
+        &self,
+        request: &wire::CheckBackupRequest,
+        why: wire::device_check::NotRun,
+    ) -> wire::CheckBackupResponse {
+        let devices = self
+            .plane
+            .ledger()
+            .and_then(|ledger| ledger.destinations().map_err(crate::phone::plane_error))
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|d| request.gateway_id.is_empty() || d.gateway_id == request.gateway_id)
+            .map(|d| wire::DeviceCheck {
+                gateway_id: d.gateway_id,
+                label: d.label,
+                verdict: wire::device_check::Verdict::NotRun as i32,
+                not_run: why as i32,
+                ..Default::default()
+            })
+            .collect();
+        wire::CheckBackupResponse {
+            devices,
+            progress: None,
+        }
+    }
+
     /// One pass, one at a time.
     fn drain(
         &self,
@@ -1701,6 +1845,10 @@ impl HandleState {
             return Err(CoreError::InvalidRequest {
                 detail: "a drain is already running".to_owned(),
             });
+        }
+        // A CHECK RUNNING WHEN A PASS STARTS ENDS AS NOT RUN, never as a failure (#1188, B6).
+        if self.checking.load(Ordering::SeqCst) {
+            self.check_progress.ask_stop();
         }
         let runtime = self.runtime_handle();
         let asked = request.asked.then(|| self.plane.ask());
@@ -2038,7 +2186,14 @@ fn request_kind(request: &wire::Request) -> RequestKind {
         // AND A FETCHED ORIGINAL IS AS LONG AS THE ORIGINAL IS (#1080): a
         // film can be gigabytes, and a member who leaves the lightbox has
         // stopped wanting it.
-        Some(K::Drain(_) | K::Restore(_) | K::FetchOriginal(_)) => RequestKind::Unbounded,
+        // A CHECK READS EVERY DEVICE'S BACKUP BACK, as long as the backup is large; asking how
+        // far it has got is one atomic read.
+        Some(K::CheckBackup(request)) if request.progress_only || request.stop => {
+            RequestKind::Bounded
+        }
+        Some(K::Drain(_) | K::Restore(_) | K::FetchOriginal(_) | K::CheckBackup(_)) => {
+            RequestKind::Unbounded
+        }
     }
 }
 
@@ -2784,6 +2939,39 @@ mod tests {
             .handle
             .call(&wire::Request { kind: Some(kind) })
             .map(|answer| answer.kind.expect("an answer has a kind"))
+    }
+
+    /// **A CHECK AND A PASS NEVER OVERLAP AS A FALSE FAILURE (#1188, B6).** Under a running pass no
+    /// check starts (it answers every device "not run: a backup is running"), and a pass that
+    /// starts while a check runs asks the check to stop, so it ends as "not run" and never as a
+    /// failure.
+    #[test]
+    fn a_check_does_not_start_under_a_pass_and_a_pass_stops_a_check() {
+        let scratch = unlocked();
+        scratch.handle.pretend_a_pass_is_running(true);
+        let Ok(wire::response::Kind::CheckBackup(refused)) = ask(
+            &scratch,
+            wire::request::Kind::CheckBackup(wire::CheckBackupRequest::default()),
+        ) else {
+            panic!("a check answers");
+        };
+        assert!(refused.devices.is_empty(), "nothing is paired to check");
+        assert!(
+            !scratch.handle.check_was_asked_to_stop(),
+            "a refused check is not a stopped one"
+        );
+        scratch.handle.pretend_a_pass_is_running(false);
+
+        scratch.handle.pretend_a_check_is_running(true);
+        let _ = ask(
+            &scratch,
+            wire::request::Kind::Drain(wire::DrainRequest::default()),
+        );
+        assert!(
+            scratch.handle.check_was_asked_to_stop(),
+            "a pass that starts ends the check"
+        );
+        scratch.handle.pretend_a_check_is_running(false);
     }
 
     /// THE BACKUP PLANE'S DOORS ANSWER OVER A PHONE THAT IS PAIRED WITH

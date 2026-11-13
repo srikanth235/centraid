@@ -216,6 +216,8 @@ impl Editor {
     fn on_editor_event(&mut self, event: K, ctx: &Ctx) -> Vec<wire::Effect> {
         match event {
             K::Refreshed(_) => self.reload(ctx),
+            // The task editor shows no alert line, so it has no button to press.
+            K::AlertSettings(_) => {}
             K::Title(change) => self.edit(|d| {
                 Some(Draft {
                     title: change.text,

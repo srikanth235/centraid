@@ -1,4 +1,4 @@
-//! The stateless compiler (`think.rs`) over the golden file of the trace contract (`CONTRACT_V3.md`): one think and its call for
+//! The stateless compiler (`think.rs`) over the golden file of the trace contract (`crates/assist/docs/CONTRACT_V3.md`): one think and its call for
 //! every distinct call shape of the train data (`golden_v3.json`, 871 shapes, 69 with a `dates:` line).
 //!
 //! The file is the last of the Python data builders' output (data-v7), kept as the compiler's regression set; the builders are

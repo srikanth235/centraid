@@ -14,6 +14,7 @@ package centraid.core.v1;
 
 import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/route.proto";
+import "centraid/core/v1/notify_screens.proto";
 
 message AgendaHomeState {
   // WHICH LIST, as a parameter (law 2). Search is a mode over it and More is a
@@ -1685,6 +1686,8 @@ message AgendaEditorData {
   // Under the first alert: says no alert will sound when the event is all-day (an alert needs a
   // time). Empty when the event is timed.
   string reminder_note = 57;
+  // "Open Settings", shown under `reminder_note` when it says the phone limits alerts; empty otherwise.
+  string reminder_settings_label = 58;
 }
 
 // THE CUSTOM REPEAT SHEET. Every choice list marks what is picked; the shell
@@ -1803,6 +1806,7 @@ message AgendaEditorEvent {
     CustomCountChanged custom_count = 49;
     CustomApplied custom_applied = 50;
     CustomReplaceTapped custom_replace = 51;
+    AlertSettingsPressed alert_settings = 52;
   }
 
   // The place search field changed: the list narrows.
@@ -2768,6 +2772,8 @@ message TodoField {
   // with `on` or `off`.
   bool toggle = 17;
   bool on = 18;
+  // A button under `note` ("Open Settings"); pressing it sends `AlertSettingsPressed`. Empty for none.
+  string action_label = 19;
 }
 
 message TodoDetailEvent {
@@ -2799,6 +2805,7 @@ message TodoDetailEvent {
     ShareRequested share_requested = 33;
     // The "Linked to" section and its picker (#1185): the kit's `LinkEvent`.
     LinkEvent link = 34;
+    AlertSettingsPressed alert_settings = 35;
   }
 
   message Refreshed {}

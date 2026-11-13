@@ -23,6 +23,22 @@ pub trait ModelLoader: Send + Sync {
     /// # Errors
     /// [`ModelError::Load`] when the file is not a model this engine reads.
     fn load(&self, path: &Path) -> Result<Arc<dyn Model>, ModelError>;
+
+    /// Load the model at `path` with the adapter file at `adapter`, when there is one (#1188 G4).
+    /// The default ignores the adapter, so an engine that has none is unchanged. An engine that
+    /// reads adapters overrides this; a file that is not a valid adapter comes back as
+    /// [`ModelError::AdapterLoad`] and the host then loads the base alone.
+    ///
+    /// # Errors
+    /// [`ModelError::Load`] when the base would not load, [`ModelError::AdapterLoad`] when the adapter would not.
+    fn load_with_adapter(
+        &self,
+        path: &Path,
+        adapter: Option<&Path>,
+    ) -> Result<Arc<dyn Model>, ModelError> {
+        let _ = adapter;
+        self.load(path)
+    }
 }
 
 /// Where the model stands, for the shell's one decision: what to show.
@@ -72,6 +88,10 @@ struct Loaded {
     /// `None` for a model installed directly (a test's fake), which answers for
     /// any path.
     path: Option<PathBuf>,
+    /// The adapter the rule allowed for this model when it was loaded (whether or not the engine
+    /// took it). A model loaded before its adapter arrived is not "ready" once the rule allows
+    /// one: the next load replaces it.
+    adapter: Option<PathBuf>,
     model: Arc<dyn Model>,
 }
 
@@ -103,7 +123,11 @@ impl ModelHost {
     /// Put a model in the slot directly. For tests and for an engine that
     /// loads on its own schedule; it answers for any path.
     pub fn install(&self, model: Arc<dyn Model>) {
-        *locked(&self.loaded) = Some(Loaded { path: None, model });
+        *locked(&self.loaded) = Some(Loaded {
+            path: None,
+            adapter: None,
+            model,
+        });
         *locked(&self.vision) = None;
     }
 
@@ -113,6 +137,14 @@ impl ModelHost {
         locked(&self.loaded)
             .as_ref()
             .map(|loaded| Arc::clone(&loaded.model))
+    }
+
+    /// The file the loaded model was read from, when it was loaded from one.
+    #[must_use]
+    pub fn loaded_path(&self) -> Option<PathBuf> {
+        locked(&self.loaded)
+            .as_ref()
+            .and_then(|loaded| loaded.path.clone())
     }
 
     /// Free the model's memory. A shell does this under memory pressure; the
@@ -178,9 +210,12 @@ impl ModelHost {
             .ok()
             .filter(std::fs::Metadata::is_file)
             .map_or(0, |meta| meta.len());
-        let loaded = locked(&self.loaded)
-            .as_ref()
-            .is_some_and(|loaded| loaded.path.as_deref().is_none_or(|held| held == path));
+        let loaded = locked(&self.loaded).as_ref().is_some_and(|loaded| {
+            loaded
+                .path
+                .as_deref()
+                .is_none_or(|held| held == path && loaded.adapter == wanted_adapter(path))
+        });
         let state = if loaded {
             ModelState::Ready
         } else if self.loading.load(Ordering::SeqCst) {
@@ -226,10 +261,11 @@ impl ModelHost {
             .ok_or_else(|| {
                 ModelError::Load("this build has no engine to read a model with".to_owned())
             })
-            .and_then(|loader| loader.load(path));
+            .and_then(|loader| load_best(&*loader, path));
         let outcome = result.map(|model| {
             *locked(&self.loaded) = Some(Loaded {
                 path: Some(path.to_path_buf()),
+                adapter: wanted_adapter(path),
                 model,
             });
             *locked(&self.vision) = None;
@@ -239,10 +275,37 @@ impl ModelHost {
     }
 }
 
+/// The adapter file the rule allows for the model at `path`: it is in the directory, of the
+/// recorded size, made for this base and this build.
+fn wanted_adapter(path: &Path) -> Option<PathBuf> {
+    let record = crate::record::record();
+    let (dir, file) = path
+        .parent()
+        .zip(path.file_name().and_then(|n| n.to_str()))?;
+    crate::adapter::resolve(&record, dir, file)
+        .used()
+        .then_some(())
+        .and(record.adapter.as_ref())
+        .map(|adapter| dir.join(adapter.local_name()))
+}
+
+/// Load `path` with the adapter the record's rule allows for it, or alone: an adapter that will
+/// not load is not an error a member acts on, so the base is loaded without it and the turn runs
+/// stock.
+fn load_best(loader: &dyn ModelLoader, path: &Path) -> Result<Arc<dyn Model>, ModelError> {
+    match wanted_adapter(path) {
+        Some(adapter) => loader
+            .load_with_adapter(path, Some(&adapter))
+            .or_else(|_| loader.load(path)),
+        None => loader.load(path),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::testing::ScriptedModel;
+    use std::sync::Mutex;
 
     struct Loader(Arc<dyn Model>);
 
@@ -364,5 +427,213 @@ mod tests {
         assert_eq!(host.status(Path::new("anywhere")).state, ModelState::Ready);
         host.unload();
         assert!(host.model().is_none());
+    }
+
+    /// An engine that reads adapters: it records what it was given and refuses a bad adapter.
+    struct Adapting {
+        seen: Mutex<Vec<Option<PathBuf>>>,
+        bad: bool,
+    }
+
+    impl ModelLoader for Adapting {
+        fn load(&self, _: &Path) -> Result<Arc<dyn Model>, ModelError> {
+            self.seen.lock().unwrap().push(None);
+            Ok(Arc::new(ScriptedModel::new(Vec::<String>::new())))
+        }
+
+        fn load_with_adapter(
+            &self,
+            path: &Path,
+            adapter: Option<&Path>,
+        ) -> Result<Arc<dyn Model>, ModelError> {
+            if let Some(adapter) = adapter {
+                self.seen.lock().unwrap().push(Some(adapter.to_path_buf()));
+                if self.bad {
+                    return Err(ModelError::AdapterLoad("not an adapter".to_owned()));
+                }
+                return Ok(Arc::new(ScriptedModel::new(Vec::<String>::new())));
+            }
+            self.load(path)
+        }
+    }
+
+    /// A record whose base is `model.gguf` and whose adapter file (3 bytes) sits beside `base`.
+    fn with_adapter_beside(base: &Path) -> (crate::record::Record, PathBuf) {
+        let mut record = crate::record::record();
+        record.current.file_name = "model.gguf".to_owned();
+        let (tools, prompt) = crate::record::runtime_hashes(
+            crate::native::prompt::ToolsMode::parse(&record.current.tools_mode).unwrap(),
+        );
+        let adapter = crate::record::Adapter {
+            url: String::new(),
+            file_name: "a.gguf".to_owned(),
+            sha256: "ef".repeat(32),
+            bytes: 3,
+            base_sha256: record.current.sha256.clone(),
+            tools_hash: tools,
+            prompt_hash: prompt,
+            score: None,
+        };
+        let file = base.parent().unwrap().join(adapter.local_name());
+        std::fs::write(&file, b"abc").unwrap();
+        record.adapter = Some(adapter);
+        (record, file)
+    }
+
+    #[test]
+    fn the_adapter_is_handed_to_the_engine_when_the_rule_allows_and_not_otherwise() {
+        let base = scratch("adapter-ok", b"base");
+        let (record, file) = with_adapter_beside(&base);
+        let loader = Arc::new(Adapting {
+            seen: Mutex::new(Vec::new()),
+            bad: false,
+        });
+        let host = ModelHost::new();
+        host.set_loader(loader.clone());
+        crate::record::held_for(record.clone(), || host.load(&base).unwrap());
+        assert_eq!(*loader.seen.lock().unwrap(), [Some(file.clone())]);
+        // the file is gone: the base loads alone
+        std::fs::remove_file(&file).unwrap();
+        host.unload();
+        crate::record::held_for(record, || host.load(&base).unwrap());
+        assert_eq!(loader.seen.lock().unwrap().last(), Some(&None));
+    }
+
+    #[test]
+    fn an_adapter_that_will_not_load_leaves_the_base_loaded_alone() {
+        let base = scratch("adapter-bad", b"base");
+        let (record, file) = with_adapter_beside(&base);
+        let loader = Arc::new(Adapting {
+            seen: Mutex::new(Vec::new()),
+            bad: true,
+        });
+        let host = ModelHost::new();
+        host.set_loader(loader.clone());
+        let status = crate::record::held_for(record, || host.load(&base).unwrap());
+        assert_eq!(status.state, ModelState::Ready);
+        assert_eq!(*loader.seen.lock().unwrap(), [Some(file), None]);
+    }
+
+    #[test]
+    fn a_model_loaded_before_its_adapter_arrived_is_loaded_again_with_it() {
+        let base = scratch("adapter-late", b"base");
+        let (record, file) = with_adapter_beside(&base);
+        std::fs::remove_file(&file).unwrap();
+        let loader = Arc::new(Adapting {
+            seen: Mutex::new(Vec::new()),
+            bad: false,
+        });
+        let host = ModelHost::new();
+        host.set_loader(loader.clone());
+        crate::record::held_for(record, || {
+            host.load(&base).unwrap();
+            assert_eq!(host.status(&base).state, ModelState::Ready);
+            // the member fetched the adapter
+            std::fs::write(&file, b"abc").unwrap();
+            assert_eq!(host.status(&base).state, ModelState::Present);
+            host.load(&base).unwrap();
+            assert_eq!(host.status(&base).state, ModelState::Ready);
+        });
+        assert_eq!(
+            *loader.seen.lock().unwrap(),
+            [None, Some(file)],
+            "the second load carried the adapter"
+        );
+    }
+
+    /// A model whose generation blocks until released, so "a turn is running" is a fact the test
+    /// holds with channels and no clock.
+    struct Held {
+        started: Mutex<std::sync::mpsc::Sender<()>>,
+        release: Mutex<std::sync::mpsc::Receiver<()>>,
+        generated: std::sync::atomic::AtomicUsize,
+    }
+
+    impl Model for Held {
+        fn generate(
+            &self,
+            _: &crate::model::GenerateRequest<'_>,
+            _: &mut dyn FnMut(&str) -> crate::model::Control,
+        ) -> Result<crate::model::Generation, ModelError> {
+            self.started.lock().unwrap().send(()).unwrap();
+            let _ = self.release.lock().unwrap().recv();
+            self.generated
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(crate::model::Generation {
+                text: "done".to_owned(),
+                finish: crate::model::Finish::Stop,
+                prompt_tokens: 0,
+                generated_tokens: 1,
+            })
+        }
+    }
+
+    #[test]
+    fn an_adapter_landing_under_a_running_generation_changes_nothing_until_the_next_load() {
+        let base = scratch("adapter-running", b"base");
+        let (record, file) = with_adapter_beside(&base);
+        std::fs::remove_file(&file).unwrap();
+        let (started_tx, started) = std::sync::mpsc::channel();
+        let (release, release_rx) = std::sync::mpsc::channel();
+        let held = Arc::new(Held {
+            started: Mutex::new(started_tx),
+            release: Mutex::new(release_rx),
+            generated: 0.into(),
+        });
+        struct Gate(Arc<Held>, Mutex<Vec<Option<PathBuf>>>);
+        impl ModelLoader for Gate {
+            fn load(&self, path: &Path) -> Result<Arc<dyn Model>, ModelError> {
+                self.load_with_adapter(path, None)
+            }
+            fn load_with_adapter(
+                &self,
+                _: &Path,
+                adapter: Option<&Path>,
+            ) -> Result<Arc<dyn Model>, ModelError> {
+                self.1.lock().unwrap().push(adapter.map(Path::to_path_buf));
+                Ok(Arc::clone(&self.0) as Arc<dyn Model>)
+            }
+        }
+        let loader = Arc::new(Gate(held.clone(), Mutex::new(Vec::new())));
+        let host = Arc::new(ModelHost::new());
+        host.set_loader(loader.clone());
+        crate::record::held_for(record, || {
+            host.load(&base).unwrap();
+            let running = host.model().expect("loaded");
+            let turn = std::thread::spawn(move || {
+                let cancel = crate::model::Cancel::new();
+                running.generate(
+                    &crate::model::GenerateRequest {
+                        prompt: "p",
+                        grammar: None,
+                        max_tokens: 1,
+                        stop: &[],
+                        temperature: 0.0,
+                        cancel: &cancel,
+                        images: &[],
+                    },
+                    &mut |_| crate::model::Control::Continue,
+                )
+            });
+            started.recv().expect("the generation is running");
+            // the adapter lands under it: nothing loads, the generation is untouched
+            std::fs::write(&file, b"abc").unwrap();
+            assert_eq!(loader.1.lock().unwrap().len(), 1, "no reload under a turn");
+            assert_eq!(held.generated.load(std::sync::atomic::Ordering::SeqCst), 0);
+            release.send(()).unwrap();
+            let out = turn.join().unwrap().unwrap();
+            assert_eq!(
+                out.text, "done",
+                "the turn finished on the model it began with"
+            );
+            assert_eq!(loader.1.lock().unwrap().len(), 1, "its end reloads nothing");
+            // the next load carries the adapter, once
+            host.load(&base).unwrap();
+            assert_eq!(
+                *loader.1.lock().unwrap(),
+                [None, Some(file.clone())],
+                "load_with_adapter ran once with Some"
+            );
+        });
     }
 }

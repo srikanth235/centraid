@@ -115,6 +115,9 @@ public object CentraidCatalog {
             NativeIconPath(d = "M4 5h16v4H4z", filled = false, evenOdd = false),
             NativeIconPath(d = "M6 9v10h12V9M9 13h6", filled = false, evenOdd = false),
         ),
+        "ArrowDown" to listOf(
+            NativeIconPath(d = "M12 5v14M6 13l6 6 6-6", filled = false, evenOdd = false),
+        ),
         "ArrowLeft" to listOf(
             NativeIconPath(d = "M19 12H5M12 19l-7-7 7-7", filled = false, evenOdd = false),
         ),
@@ -398,6 +401,10 @@ public object CentraidCatalog {
         ),
         "MessageCircle" to listOf(
             NativeIconPath(d = "M20 11.5a7.5 7.5 0 0 1-8 7.5 8.5 8.5 0 0 1-4-.9L4 20l1.1-3.5A7.5 7.5 0 1 1 20 11.5z", filled = false, evenOdd = false),
+        ),
+        "Mic" to listOf(
+            NativeIconPath(d = "M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z", filled = false, evenOdd = false),
+            NativeIconPath(d = "M5 11a7 7 0 0 0 14 0M12 18v3", filled = false, evenOdd = false),
         ),
         "Monitor" to listOf(
             NativeIconPath(d = "M3 4h18v12H3z", filled = false, evenOdd = false),

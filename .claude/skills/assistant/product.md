@@ -1,0 +1,10 @@
+# The assistant: product rules
+
+- **It runs on the phone, with a model the release pins.** Nothing the member says leaves the device. No cloud model, no "latest" model, no fetched weights outside the pinned asset.
+- **Every write parks behind a confirm card and runs only on the member's tap.** A turn that writes more than once shows the whole chain before anything runs. Relaxing this needs evidence that a class of writes never misfires. A guess must never write.
+- **The model judges; the harness composes.** The model emits intent and referents; the harness grounds names, resolves dates, applies conventions, validates before executing and keeps focus. Reads and errors name their repair. Do not push product rules into prompts or training data when the runtime can hold them once.
+- **It says what it cannot do.** Out of scope gets a short honest decline. It does not invent a state the vault does not have (there is no "in progress" task). Health is off for Chat until the member grants it. What the member logs by hand (a workout, a day's figure) Chat may write and take back; what a health store states it refuses, naming the store (a day a store states is never deleted).
+- **A chat is vault data.** Backed up sealed with the vault, per vault, deletable, permanently and per chat. Deleting a chat leaves nothing of the conversation, card titles or thumbnail behind. Thread titles are the member's first question, trimmed; the model does not write them.
+- **A card is a snapshot with no foreign key.** At the tap the shell asks whether the row is still there and says "This item is gone." when it is not. A turn is one commit; an in-flight turn is lost, never half-kept.
+- **Evaluation is honest.** One model counts, scored by one script on frozen, world-disjoint sets under greedy decoding. A number the box cannot prove is named, not asserted. Do not fit the test set.
+- **Ask-about is the no-match offer.** Every searching app's empty result offers "Ask about “x”" except Locker, which never offers it.

@@ -74,7 +74,7 @@ impl DatagenSource {
         for name in names {
             let path = dir.join(name).join(SESSIONS);
             if let Ok(text) = std::fs::read_to_string(&path) {
-                texts.push(text);
+                texts.push(((*name).to_owned(), text));
             }
         }
         Self::from_texts(dir, &texts)
@@ -94,18 +94,24 @@ impl DatagenSource {
             if let Ok(file) = std::fs::File::open(&path) {
                 let bytes =
                     zstd::stream::decode_all(file).with_context(|| path.display().to_string())?;
-                texts.push(String::from_utf8(bytes)?);
+                texts.push(((*name).to_owned(), String::from_utf8(bytes)?));
             }
         }
         Self::from_texts(dir, &texts)
     }
 
-    fn from_texts(dir: &Path, texts: &[String]) -> Result<Self> {
+    /// `texts` are `(split name, file text)`: each record is marked with the split it was read from, unless it says its own.
+    fn from_texts(dir: &Path, texts: &[(String, String)]) -> Result<Self> {
         let mut records = Vec::new();
         let mut worlds = BTreeMap::new();
-        for text in texts {
+        for (split, text) in texts {
             for line in text.lines().filter(|l| !l.trim().is_empty()) {
-                let record: Value = serde_json::from_str(line)?;
+                let mut record: Value = serde_json::from_str(line)?;
+                if let Some(object) = record.as_object_mut() {
+                    object
+                        .entry("split")
+                        .or_insert_with(|| Value::String(split.clone()));
+                }
                 let id = record["world"].as_str().unwrap_or_default().to_owned();
                 if let std::collections::btree_map::Entry::Vacant(slot) = worlds.entry(id.clone()) {
                     let file = dir.join(WORLDS).join(format!("{id}.json"));

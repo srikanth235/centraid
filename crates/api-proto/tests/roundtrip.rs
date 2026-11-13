@@ -166,6 +166,7 @@ fn an_app_query_and_its_typed_answer_round_trip_with_absence_intact() {
                     from: "2099-06-01T00:00:00.000Z".to_owned(),
                     to: String::new(),
                     tz: "America/New_York".to_owned(),
+                    alerts: 0,
                 },
             )),
         })),

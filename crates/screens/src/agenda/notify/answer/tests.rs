@@ -17,8 +17,12 @@ fn an_id_names_its_vault_and_what_it_is_about() {
         })
     );
     assert_eq!(
-        parse("receipt|v1|77"),
-        Some(Target::Receipt { vault: "v1".into() })
+        parse("receipt|v1|77|t-1|"),
+        Some(Target::Receipt {
+            vault: "v1".into(),
+            task_id: "t-1".into(),
+            undo: None
+        })
     );
     assert_eq!(parse("junk"), None);
     assert_eq!(parse("what|v1|x|y"), None);
@@ -26,34 +30,20 @@ fn an_id_names_its_vault_and_what_it_is_about() {
 }
 
 #[test]
-fn a_snooze_is_an_hour_from_now_on_the_wall_clock() {
+fn a_snooze_is_an_elapsed_hour_as_a_utc_instant() {
     assert_eq!(
-        snooze_due("2026-11-10T08:15", "America/New_York").as_deref(),
-        Some("2026-11-10T09:15")
+        snooze_until("2026-11-10T08:15", "America/New_York").as_deref(),
+        Some("2026-11-10T14:15:00.000Z")
     );
     assert_eq!(
-        snooze_due("2026-11-10T23:30", "Asia/Tokyo").as_deref(),
-        Some("2026-11-11T00:30")
+        snooze_until("2026-11-10T23:30", "Asia/Tokyo").as_deref(),
+        Some("2026-11-10T15:30:00.000Z")
     );
-    assert_eq!(snooze_due("2026-11-10T08:15", "Not/AZone"), None);
-}
-
-#[test]
-fn a_snooze_across_spring_forward_is_an_elapsed_hour() {
-    // 01:30 EST, and the next wall clock is 03:30 EDT: an hour later, not two.
+    assert_eq!(snooze_until("2026-11-10T08:15", "Not/AZone"), None);
+    // 01:30 EST on the spring-forward night: an hour on is 03:30 EDT, which is 07:30Z.
     assert_eq!(
-        snooze_due("2026-03-08T01:30", "America/New_York").as_deref(),
-        Some("2026-03-08T03:30")
-    );
-}
-
-#[test]
-fn a_snooze_inside_the_autumn_overlap_never_lands_in_the_past() {
-    // 01:30 the first time (EDT): an hour on is 01:30 again (EST), which the core
-    // reads as the earlier instant, so the snooze moves on to the next clean clock.
-    assert_eq!(
-        snooze_due("2026-11-01T01:30", "America/New_York").as_deref(),
-        Some("2026-11-01T02:30")
+        snooze_until("2026-03-08T01:30", "America/New_York").as_deref(),
+        Some("2026-03-08T07:30:00.000Z")
     );
 }
 
@@ -84,4 +74,41 @@ fn tomorrow_on_a_dst_day_is_written_as_the_wall_clock_the_core_places() {
     );
     let zone = FireZone::named("America/New_York").unwrap();
     assert!(parse_civil_ms("2026-03-08T02:30", &zone).is_some());
+}
+
+#[test]
+fn a_receipts_undo_travels_in_its_id_so_it_outlives_the_process() {
+    use base64::Engine as _;
+    use prost::Message as _;
+    let undo = wire::ActRequest {
+        app: "history".into(),
+        action: "undo-change".into(),
+        ..Default::default()
+    };
+    let carried = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(undo.encode_to_vec());
+    let Some(Target::Receipt {
+        task_id,
+        undo: bytes,
+        ..
+    }) = parse(&format!("receipt|v1|9|t-7|{carried}"))
+    else {
+        panic!("a receipt");
+    };
+    assert_eq!(task_id, "t-7");
+    assert_eq!(
+        wire::ActRequest::decode(bytes.expect("the undo").as_slice()).expect("decodes"),
+        undo
+    );
+}
+
+#[test]
+fn a_press_with_an_id_is_run_under_a_key_made_from_it_so_a_second_send_is_a_replay() {
+    assert_eq!(
+        key("complete-task", "t-1", "p-9"),
+        key("complete-task", "t-1", "p-9")
+    );
+    assert_ne!(
+        key("complete-task", "t-1", ""),
+        key("complete-task", "t-1", "")
+    );
 }

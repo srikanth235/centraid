@@ -1,11 +1,10 @@
-//! RECORDS FROM ROLLOUTS: RFT records from the passing ones and DPO pairs from a failing and a passing one.
+//! RECORDS FROM ROLLOUTS: RFT records from the passing ones.
 //!
-//! Both are in the data version's record shape (`id, world, today, me, tags, turns[{user, gold, ref, tags}]`, then
+//! The records are in the data version's record shape (`id, world, today, me, tags, turns[{user, gold, ref, tags}]`, then
 //! `render`), so the trainer reads them as it reads `train.jsonl.zst`. What differs from a datagen record is the
 //! turns' assistant side: a datagen turn's `ref` is the reference calls; here `ref` is **the calls the model made**
 //! and `said` is **the messages it wrote** (think and call, as decoded). A renderer renders `said` when a turn has it
-//! and `ref` otherwise. The record is cut after the last turn it holds: an RFT record after its passing prefix, a DPO
-//! record after the turn the pair is about.
+//! and `ref` otherwise. An RFT record is cut after its passing prefix.
 //!
 //! `render` comes from a [`RenderRecord`], the data version's renderer (M4), which this crate cannot link (`datagen`
 //! depends on it): `datagen rollout-records` supplies it and calls [`cut`]. `assist-eval rollout-records` has none, so
@@ -14,10 +13,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 use super::Rollout;
-use crate::args::{ArgClass, Slots, classify, modern};
+use crate::args::ArgClass;
 use crate::gold::{Accept, RefCall, Session};
 
 /// A record rendered: the tokens the trainer reads, the weight of each, and the text they came from.
@@ -74,19 +73,6 @@ pub struct RftRecord {
     pub copies: usize,
     /// The grid cells of the record's turns.
     pub cells: Vec<String>,
-}
-
-/// A DPO pair: the same prompt, a rollout that got the turn right and one that got it wrong.
-#[derive(Debug, Clone, Serialize)]
-pub struct DpoPair {
-    pub id: String,
-    pub chosen: Record,
-    pub rejected: Record,
-    /// The argument classes the two calls differ in (`rows`, `date`, `filters`, `amount`): what decides the pair.
-    pub decides: Vec<String>,
-    pub cell: String,
-    /// Which turn of the session (0-based) the pair is about: the first the rejected rollout failed.
-    pub turn: usize,
 }
 
 fn call_of(value: &Value) -> Option<RefCall> {
@@ -246,18 +232,6 @@ pub struct RecordStats {
     pub rft_duplicates: usize,
     pub rft_records: usize,
     pub rft_lines: usize,
-    /// DPO: failing rollouts with no passing sample of the same turn on the same prompt.
-    pub dpo_no_chosen: usize,
-    /// DPO: a passing sample exists but states every deciding argument as the failing one does.
-    pub dpo_no_deciding_argument: usize,
-    /// DPO: the failing turn chose another act than gold's (a decline for a read, a write for a question): no
-    /// argument decides that, and a pair would teach the act, not the argument.
-    pub dpo_wrong_act: usize,
-    /// DPO: the failing turn has no message of the model's (the runtime ended it).
-    pub dpo_no_message: usize,
-    /// DPO: the same pair from another failing sample.
-    pub dpo_duplicates: usize,
-    pub dpo_pairs: usize,
 }
 
 fn by_session(rollouts: &[Rollout]) -> BTreeMap<&str, Vec<&Rollout>> {
@@ -268,6 +242,27 @@ fn by_session(rollouts: &[Rollout]) -> BTreeMap<&str, Vec<&Rollout>> {
             .push(rollout);
     }
     out
+}
+
+/// Training records are cut from train sessions only. A val, test or noise session in the set is refused, whatever
+/// the command (`assist-eval rollout-records`, `datagen rollout-records`), before anything is written.
+///
+/// # Errors
+/// [`crate::EvalError::Data`] naming the splits and the first sessions.
+pub fn refuse_held_out(sessions: &[Session]) -> Result<(), crate::EvalError> {
+    let held: Vec<&Session> = sessions.iter().filter(|s| s.is_held_out()).collect();
+    if held.is_empty() {
+        return Ok(());
+    }
+    let splits: BTreeSet<&str> = held.iter().filter_map(|s| s.split.as_deref()).collect();
+    let first: Vec<&str> = held.iter().take(3).map(|s| s.id.as_str()).collect();
+    Err(crate::EvalError::Data(format!(
+        "refusing to cut training records from held-out data: {} session(s) of the {} split (first: {}). \
+         Records are cut from the train split only",
+        held.len(),
+        splits.into_iter().collect::<Vec<_>>().join("/"),
+        first.join(", ")
+    )))
 }
 
 /// RFT records: each rollout's passing prefix (every turn before its first failure, or all of them), deduplicated
@@ -337,171 +332,19 @@ pub fn rft_records(
     out
 }
 
-// ------------------------------------------------------------------------------------------------------------- DPO
-
-/// The arguments a turn's calls state, by class and call, normalised to the eight tools, for comparing two turns.
-fn stated(calls: &[Value]) -> BTreeMap<ArgClass, Vec<Slots>> {
-    let mut out: BTreeMap<ArgClass, Vec<Slots>> = BTreeMap::new();
-    for call in calls {
-        let (Some(tool), Some(args)) = (call["tool"].as_str(), call["args"].as_object()) else {
-            continue;
-        };
-        let (_, args): (String, Map<String, Value>) = modern(tool, args);
-        for (class, slots) in classify(&args) {
-            let held = out.entry(class).or_default();
-            if !held.contains(&slots) {
-                held.push(slots);
-            }
-        }
-    }
-    out
-}
-
-/// The classes in which two turns' calls state something different: rows, date, filters or amount. Empty when they
-/// state the same arguments (they differ in the tool, or not in an argument at all).
-#[must_use]
-pub fn deciding(chosen: &[Value], rejected: &[Value]) -> Vec<ArgClass> {
-    let (a, b) = (stated(chosen), stated(rejected));
-    ArgClass::ALL
-        .into_iter()
-        .filter(|class| {
-            let (x, y) = (a.get(class), b.get(class));
-            match (x, y) {
-                (None, None) => false,
-                (Some(x), Some(y)) => {
-                    // the same set of statements, whatever the order the calls came in
-                    !(x.iter().all(|s| y.contains(s)) && y.iter().all(|s| x.contains(s)))
-                }
-                _ => true,
-            }
-        })
-        .collect()
-}
-
-/// DPO pairs, one for each distinct failing turn: the rejected is a rollout's first failing turn, the chosen a passing
-/// sample of the same turn **on the same prompt**, which is to say the two rollouts passed every earlier turn and
-/// said the same messages in them (a different history would be a different prompt). The failing turn must have
-/// chosen the right act (`tool_name_ok`: it looked or wrote as gold does and got an argument wrong), and the pair must differ in a deciding
-/// argument ([`deciding`]); among passing samples the one that differs in the classes the rejected turn got wrong,
-/// then the one with fewest steps, then the lowest sample wins. At most `per_turn` pairs for one (session, turn),
-/// each from a different failing message.
-#[must_use]
-pub fn dpo_pairs(
-    sessions: &[Session],
-    rollouts: &[Rollout],
-    per_turn: usize,
-    stats: &mut RecordStats,
-) -> Vec<DpoPair> {
-    let sessions: BTreeMap<&str, &Session> = sessions.iter().map(|s| (s.id.as_str(), s)).collect();
-    let mut out = Vec::new();
-    for (id, group) in by_session(rollouts) {
-        let Some(session) = sessions.get(id) else {
-            continue;
-        };
-        let mut taken: BTreeMap<usize, Vec<Vec<String>>> = BTreeMap::new();
-        for rejected in &group {
-            let Some(at) = rejected.first_failure() else {
-                continue;
-            };
-            let bad = &rejected.result.turns[at];
-            if bad.said.is_empty() {
-                stats.dpo_no_message += 1;
-                continue;
-            }
-            if !bad.tool_name_ok {
-                stats.dpo_wrong_act += 1;
-                continue;
-            }
-            let prefix = |r: &Rollout| -> Vec<Vec<String>> {
-                r.result.turns[..at]
-                    .iter()
-                    .map(|t| t.said.clone())
-                    .collect()
-            };
-            let (prefix_of_bad, seen) = (prefix(rejected), taken.entry(at).or_default());
-            if seen.iter().any(|said| said == &bad.said) || seen.len() >= per_turn.max(1) {
-                stats.dpo_duplicates += 1;
-                continue;
-            }
-            let same_prompt: Vec<&&Rollout> = group
-                .iter()
-                .filter(|c| {
-                    c.result.turns.len() > at
-                        && c.result.turns[..=at].iter().all(|t| t.run && t.pass)
-                        && !c.result.turns[at].said.is_empty()
-                        && prefix(c) == prefix_of_bad
-                })
-                .collect();
-            if same_prompt.is_empty() {
-                stats.dpo_no_chosen += 1;
-                continue;
-            }
-            let wrong: Vec<ArgClass> = ArgClass::ALL
-                .into_iter()
-                .filter(|c| bad.args.get(c.word()).is_some_and(|v| v == "wrong"))
-                .collect();
-            let best = same_prompt
-                .iter()
-                .filter_map(|c| {
-                    let t = &c.result.turns[at];
-                    let diff = deciding(&t.calls, &bad.calls);
-                    if diff.is_empty() {
-                        return None;
-                    }
-                    let overlap = diff.iter().filter(|d| wrong.contains(d)).count();
-                    Some((std::cmp::Reverse(overlap), t.steps, c.sample, diff))
-                })
-                .min_by_key(|(overlap, steps, sample, _)| (*overlap, *steps, *sample));
-            let Some((_, _, sample, diff)) = best else {
-                stats.dpo_no_deciding_argument += 1;
-                continue;
-            };
-            let chosen = same_prompt
-                .iter()
-                .find(|c| c.sample == sample)
-                .expect("the sample was chosen from this list");
-            seen.push(bad.said.clone());
-            let n = seen.len();
-            out.push(DpoPair {
-                id: format!("{id}@t{at}#{n}"),
-                chosen: record_of(session, chosen, at + 1, format!("{id}@t{at}#{n}:chosen")),
-                rejected: record_of(
-                    session,
-                    rejected,
-                    at + 1,
-                    format!("{id}@t{at}#{n}:rejected"),
-                ),
-                decides: diff.iter().map(|c| c.word().to_owned()).collect(),
-                cell: bad.cell.clone(),
-                turn: at,
-            });
-            stats.dpo_pairs += 1;
-        }
-    }
-    out
-}
-
 /// Render every record in place with `renderer`; a record the renderer refuses is an error naming it, since a
 /// trainer must not meet a half-rendered file.
 ///
 /// # Errors
 /// The id of the record and the renderer's words.
-pub fn render_all(
-    renderer: &dyn RenderRecord,
-    rft: &mut [RftRecord],
-    pairs: &mut [DpoPair],
-) -> Result<(), String> {
+pub fn render_all(renderer: &dyn RenderRecord, rft: &mut [RftRecord]) -> Result<(), String> {
     let one = |record: &mut Record| {
         renderer
             .render(record)
             .map(|rendered| record.render = Some(rendered))
             .map_err(|e| format!("{}: {e}", record.id))
     };
-    rft.iter_mut().try_for_each(|r| one(&mut r.record))?;
-    pairs.iter_mut().try_for_each(|p| {
-        one(&mut p.chosen)?;
-        one(&mut p.rejected)
-    })
+    rft.iter_mut().try_for_each(|r| one(&mut r.record))
 }
 
 /// How [`cut`] turns rollouts into records.
@@ -509,12 +352,10 @@ pub fn render_all(
 pub struct Cutting<'a> {
     pub needs: &'a Needs,
     pub weighing: Weighing,
-    /// At most this many DPO pairs from one turn.
-    pub pairs_per_turn: usize,
 }
 
-/// Cut the RFT records and DPO pairs of `rollouts` over `sessions`, render them with `renderer` when there is one, and
-/// write `rft.jsonl`, `dpo.jsonl` and `stats.json` under `out`.
+/// Cut the RFT records of `rollouts` over `sessions`, render them with `renderer` when there is one, and write
+/// `rft.jsonl` and `stats.json` under `out`.
 ///
 /// # Errors
 /// [`EvalError::Data`] with the id of a record the renderer refuses (nothing is written then), and
@@ -526,11 +367,11 @@ pub fn cut(
     renderer: Option<&dyn RenderRecord>,
     out: &std::path::Path,
 ) -> Result<RecordStats, crate::EvalError> {
+    refuse_held_out(sessions)?;
     let mut stats = RecordStats::default();
     let mut rft = rft_records(sessions, rollouts, how.needs, how.weighing, &mut stats);
-    let mut pairs = dpo_pairs(sessions, rollouts, how.pairs_per_turn, &mut stats);
     if let Some(renderer) = renderer {
-        render_all(renderer, &mut rft, &mut pairs).map_err(crate::EvalError::Data)?;
+        render_all(renderer, &mut rft).map_err(crate::EvalError::Data)?;
     }
     let write = |name: &str, lines: Vec<String>| -> Result<(), crate::EvalError> {
         let path = out.join(name);
@@ -555,13 +396,6 @@ pub fn cut(
         "rft.jsonl",
         rft.iter()
             .map(|r| serde_json::to_string(r).map_err(json))
-            .collect::<Result<_, _>>()?,
-    )?;
-    write(
-        "dpo.jsonl",
-        pairs
-            .iter()
-            .map(|p| serde_json::to_string(p).map_err(json))
             .collect::<Result<_, _>>()?,
     )?;
     write(

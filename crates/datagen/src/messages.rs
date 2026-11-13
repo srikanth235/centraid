@@ -17,7 +17,7 @@
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use jiff::civil::Date;
@@ -34,6 +34,7 @@ use crate::plan::is_placeholder;
 use crate::rng::Rng;
 use crate::settings::Split;
 use crate::source::{SESSIONS, WORLDS};
+use crate::style::{self, Style};
 use crate::typos::{self, Level};
 use crate::verify::{self, Expected};
 
@@ -51,10 +52,15 @@ pub struct Config {
     pub concurrency: usize,
     /// A cache miss is an error, not a call.
     pub offline: bool,
+    /// Write each prompt the cache lacks under `<dir>/{writer,reader}/<split>/` instead of asking, and stop with
+    /// an error saying how many are pending (answer them with `datagen cache-put`, then run again).
+    pub collect: Option<PathBuf>,
     /// At most this many sessions per split, spread evenly over its file.
     pub limit: Option<usize>,
     /// The typo stream's seed.
     pub seed: u64,
+    /// The share of sessions in each style ([`style::ALL`] order).
+    pub style_shares: [f64; 5],
 }
 
 impl Default for Config {
@@ -63,10 +69,60 @@ impl Default for Config {
             batch: BATCH,
             concurrency: 6,
             offline: false,
+            collect: None,
             limit: None,
             seed: 1,
+            style_shares: style::DEFAULT_SHARES,
         }
     }
+}
+
+/// The model that writes and the model that reads back, for each split (train, val, test).
+///
+/// A model that reads back what it wrote agrees with itself, so the build refuses a split whose reader is its writer.
+/// The test split's writer is never train's: the test messages are in a voice the training messages are not.
+pub struct Models<'a> {
+    pub writer: [&'a dyn Llm; 3],
+    pub reader: [&'a dyn Llm; 3],
+}
+
+impl Models<'_> {
+    /// # Errors
+    ///
+    /// A split whose reader is its writer, or a test split written by train's writer.
+    pub fn check(&self) -> Result<()> {
+        for (i, split) in Split::ALL.iter().enumerate() {
+            if self.writer[i].model() == self.reader[i].model() {
+                anyhow::bail!(
+                    "the {} split is read back by its own writer ({}): give it another reader",
+                    split.name(),
+                    self.writer[i].model()
+                );
+            }
+        }
+        if self.writer[0].model() == self.writer[2].model() {
+            anyhow::bail!(
+                "the test split is written by train's writer ({}): the test writer must be another model",
+                self.writer[0].model()
+            );
+        }
+        Ok(())
+    }
+}
+
+/// A pair's id and whether the session is its ask side, read off the record's tags (`pair:askact:<id>`, `askact:ask`).
+fn pair_role(record: &Value) -> Option<(String, bool)> {
+    let tags: Vec<&str> = record["tags"]
+        .as_array()?
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    let id = tags.iter().find_map(|t| t.strip_prefix("pair:askact:"))?;
+    Some((id.to_owned(), tags.contains(&"askact:ask")))
+}
+
+fn split_index(split: &str) -> Option<usize> {
+    Split::ALL.iter().position(|s| s.name() == split)
 }
 
 // ------------------------------------------------------------------ the writer's prompt
@@ -77,6 +133,9 @@ pub struct Job {
     pub id: String,
     pub today: Date,
     pub briefs: Vec<TurnBrief>,
+    pub style: Style,
+    /// The session is in the test split: it is written from the test split's style wording.
+    pub test: bool,
 }
 
 /// The writer's prompt for a batch. Nothing in it comes from a sealed value: a brief is built
@@ -103,6 +162,7 @@ pub fn writer_prompt(jobs: &[&Job], attempt: usize) -> String {
             json!({
                 "id": format!("s{}", i + 1),
                 "today": format!("{} {}", job.today.strftime("%A"), job.today),
+                "style": job.style.instruction(job.test),
                 "turns": turns,
             })
         })
@@ -122,11 +182,13 @@ How people type on a phone:\n\
 - Terse. Fragments are normal (\"overdue tasks\", \"and last month?\", \"mark it done\"). Usually 2 to 12 words, up to 20 for a long ask. No greetings, no \"please\" most of the time, no emoji.\n\
 - Vary the voice from session to session: mostly lowercase and little punctuation, sometimes a full sentence, sometimes a question mark. Do not start every message the same way.\n\
 - A follow-up leans on the turns before it exactly as its \"how\" says: it is short and does not restate what the earlier turns already said.\n\
+- Each session has a \"style\": write every message of that session in it, keeping to the hard rules.\n\
 \n\
 Hard rules:\n\
 - Each message asks EXACTLY what its \"ask\" says: the same rows, conditions, numbers and period. Add nothing, drop nothing.\n\
 - Every string in \"say_verbatim\" must appear in the message exactly as written (letters, spelling and spacing), even if it looks misspelt.\n\
 - Numbers: the exact quantity, never rounded or approximated. A natural unit is fine (45 km for 45000 m, 90 minutes for 5400 s) when it is exactly equal.\n\
+- Money: plain numbers with the currency word the ask uses (\"5000 rupees\", \"5k\", \"$40\"); never the rupee sign, never lakh or crore.\n\
 - Dates: say them the way a person does (\"last week\", \"yesterday\", \"march 3 to 9\", \"in august\"), spelling the words out (\"tomorrow\", never \"tmrw\"). Never write ISO dates like 2026-10-12.\n\
 - When no row is named, make the kind of thing unmistakable (tasks, events, people, notes, documents, photos, transactions, workouts, steps, accounts, locker items), so it cannot be read as another kind. When a row IS named, just say its name the way a person would (\"unstar Vera Haddad\", \"rename Dinner party menu to ...\"); do not add \"the person called\" or \"the task named\".\n\
 - Use plain words for fields (\"heart rate\", \"sleep\", \"due\"), never code names (no \"heart_rate\", no \"sleep_min\") and never tool or system words (\"turn\", \"vault\", \"query\", \"row\").\n\
@@ -197,8 +259,43 @@ fn write_all(cache: &Cache<'_>, jobs: &[Job], cfg: &Config) -> Result<Vec<Option
             }
         }
         todo.retain(|i| done[*i].is_none());
+        // a pending prompt is not a failed answer: ask no retry of it
+        if cache.pending() > 0 {
+            break;
+        }
     }
     Ok(done)
+}
+
+/// One cache per split over the shared directory; collecting ones write their pending prompts apart.
+fn open_caches<'a>(
+    role: &str,
+    models: &[&'a dyn Llm; 3],
+    dir: &Path,
+    cfg: &Config,
+) -> Result<Vec<Cache<'a>>> {
+    models
+        .iter()
+        .enumerate()
+        .map(|(s, l)| {
+            let cache = Cache::open(*l, dir, cfg.offline)?;
+            Ok(match &cfg.collect {
+                Some(c) => cache.collecting(&c.join(role).join(Split::ALL[s].name())),
+                None => cache,
+            })
+        })
+        .collect()
+}
+
+/// A collecting run stops where a stage left prompts pending: what follows would read empty answers.
+fn pending_stop(role: &str, caches: &[Cache<'_>]) -> Result<()> {
+    let n: usize = caches.iter().map(Cache::pending).sum();
+    if n > 0 {
+        anyhow::bail!(
+            "pending: {n} {role} prompts written; answer them, `cache-put` them and run again"
+        );
+    }
+    Ok(())
 }
 
 /// Locker stays presence-only: a prompt never holds a sealed placeholder (`placeholder:<key>:<field>`
@@ -241,6 +338,11 @@ fn check_message(
     }
     if is_placeholder(text) || text.contains("placeholder:") || text.contains('⟨') {
         return bad("hygiene", "a placeholder".to_owned());
+    }
+    let lower = text.to_lowercase();
+    if lower.contains("lakh") || lower.contains("crore") || text.contains('₹') {
+        // the runtime reads a number as written: it does not resolve lakh or crore, so the data must not teach them
+        return bad("hygiene", "lakh, crore or the rupee sign".to_owned());
     }
     if text.contains("20") && has_iso_date(text) {
         return bad("hygiene", "an ISO date".to_owned());
@@ -293,6 +395,11 @@ struct Item {
     today: Date,
     briefs: Vec<TurnBrief>,
     expected: Vec<Expected>,
+    style: Style,
+    /// The model that wrote the session's messages.
+    writer: String,
+    /// The act side of an ask-or-act pair says the ask side's message word for word: the index of the ask side.
+    copies: Option<usize>,
     clean: Vec<String>,
     text: Vec<String>,
     /// Per turn: why it was dropped (a turn after a drop is cut and never judged).
@@ -337,6 +444,19 @@ pub struct CellStat {
 }
 
 #[derive(Debug, Default, Clone, Serialize)]
+pub struct SlotStat {
+    pub asked: usize,
+    pub recovered: usize,
+}
+
+#[derive(Debug, Default, Clone, Serialize)]
+pub struct StyleStat {
+    pub assigned: usize,
+    pub written: usize,
+    pub complying: usize,
+}
+
+#[derive(Debug, Default, Clone, Serialize)]
 pub struct Stats {
     pub sessions_in: usize,
     pub sessions_kept: usize,
@@ -353,8 +473,13 @@ pub struct Stats {
     pub read: usize,
     pub recovered: usize,
     pub recovered_by_slot: BTreeMap<String, usize>,
+    /// For every slot the reader was asked about (act, kind, period, number, leans, decline, filter, name, exclusion):
+    /// how many it was asked and how many it recovered, so the recovery rate is told slot by slot.
+    pub slot_recovery: BTreeMap<String, SlotStat>,
     pub noise_sessions: usize,
     pub noise_kept: usize,
+    /// Per style: sessions given it, sessions a writer wrote, and those whose messages comply with it.
+    pub styles: BTreeMap<String, StyleStat>,
 }
 
 pub struct Report {
@@ -408,11 +533,15 @@ fn worlds_of(dir: &Path, items: &[Item]) -> Result<BTreeMap<String, Value>> {
 pub fn run(
     cfg: &Config,
     catalog: &Catalog,
-    llm: &dyn Llm,
+    models: &Models<'_>,
     input: &Path,
     out: &Path,
 ) -> Result<Report> {
-    let cache = Cache::open(llm, &out.join("llm-cache"), cfg.offline)?;
+    models.check()?;
+    // one cache directory: a key is the model and the prompt, so each split's models keep their own entries
+    let cache_dir = out.join("llm-cache");
+    let writers = open_caches("writer", &models.writer, &cache_dir, cfg)?;
+    let readers = open_caches("reader", &models.reader, &cache_dir, cfg)?;
     let mut items: Vec<Item> = Vec::new();
     for (split, record) in load(input, cfg.limit)? {
         let scenario: Scenario = serde_json::from_value(record["scenario"].clone())
@@ -435,6 +564,10 @@ pub fn run(
             .map(|t| verify::expected(t, today))
             .collect();
         let n = scenario.turns.len();
+        let style = style::assign(&cfg.style_shares, &scenario.id, n, cfg.seed);
+        let writer = split_index(&split)
+            .map(|s| models.writer[s].model().to_owned())
+            .unwrap_or_default();
         items.push(Item {
             split,
             record,
@@ -442,6 +575,9 @@ pub fn run(
             today,
             briefs,
             expected,
+            style,
+            writer,
+            copies: None,
             clean: vec![String::new(); n],
             text: vec![String::new(); n],
             state: vec![None; n],
@@ -452,6 +588,19 @@ pub fn run(
         });
     }
 
+    // ---- ask-or-act pairs: one message, two worlds
+    let mut ask_of: BTreeMap<String, usize> = BTreeMap::new();
+    for (i, item) in items.iter().enumerate() {
+        if let Some((id, true)) = pair_role(&item.record) {
+            ask_of.insert(id, i);
+        }
+    }
+    for item in &mut items {
+        if let Some((id, false)) = pair_role(&item.record) {
+            item.copies = ask_of.get(&id).copied();
+        }
+    }
+
     // ---- stage 4: write
     let jobs: Vec<Job> = items
         .iter()
@@ -459,10 +608,25 @@ pub fn run(
             id: i.scenario.id.clone(),
             today: i.today,
             briefs: i.briefs.clone(),
+            style: i.style,
+            test: i.split == "test",
         })
         .collect();
-    let written = write_all(&cache, &jobs, cfg)?;
+    let mut written: Vec<Option<Vec<String>>> = vec![None; jobs.len()];
+    for (s, cache) in writers.iter().enumerate() {
+        let at: Vec<usize> = (0..jobs.len())
+            .filter(|i| split_index(&items[*i].split) == Some(s) && items[*i].copies.is_none())
+            .collect();
+        let sub: Vec<Job> = at.iter().map(|i| jobs[*i].clone()).collect();
+        for (i, got) in at.iter().zip(write_all(cache, &sub, cfg)?) {
+            written[*i] = got;
+        }
+    }
+    pending_stop("writer", &writers)?;
     for (item, messages) in items.iter_mut().zip(written) {
+        if item.copies.is_some() {
+            continue;
+        }
         let Some(messages) = messages else {
             item.drop_turn(
                 0,
@@ -496,12 +660,48 @@ pub fn run(
     for item in &mut items {
         for t in 0..item.alive() {
             let mut rng = master.fork(&item.scenario.id).fork(&t.to_string());
-            item.text[t] = typos::apply(
-                &item.clean[t],
-                &item.briefs[t].spans,
-                &mut rng,
-                Level::Light,
+            let level = if item.style == Style::Typos {
+                Level::Heavy
+            } else {
+                Level::Light
+            };
+            item.text[t] = typos::apply(&item.clean[t], &item.briefs[t].spans, &mut rng, level);
+        }
+    }
+    for i in 0..items.len() {
+        let Some(a) = items[i].copies else { continue };
+        let (clean, text, alive) = (
+            items[a].clean.clone(),
+            items[a].text.clone(),
+            items[a].alive(),
+        );
+        if alive == 0 {
+            items[i].drop_turn(0, "pair", "its ask side was dropped".to_owned());
+            continue;
+        }
+        for t in 0..alive.min(items[i].state.len()) {
+            let earlier: Vec<&TurnBrief> = items[i].briefs[..t].iter().collect();
+            let checked = check_message(
+                &clean[t],
+                &items[i].briefs[t],
+                items[i].scenario.turns[t].reference,
+                &earlier,
             );
+            match checked {
+                Ok(()) => {
+                    items[i].clean[t].clone_from(&clean[t]);
+                    items[i].text[t].clone_from(&text[t]);
+                    items[i].passed[t].push("check");
+                }
+                Err((reason, detail)) => {
+                    items[i].drop_turn(t, &reason, detail);
+                    break;
+                }
+            }
+        }
+        // the act side holds only the turns its ask side kept
+        for t in alive..items[i].state.len() {
+            items[i].drop_turn(t, "pair", "its ask side was cut here".to_owned());
         }
     }
     let mut noise: Vec<Item> = Vec::new();
@@ -514,6 +714,9 @@ pub fn run(
             today: item.today,
             briefs: item.briefs.clone(),
             expected: item.expected.clone(),
+            style: item.style,
+            writer: item.writer.clone(),
+            copies: None,
             clean: item.clean.clone(),
             text: vec![String::new(); item.text.len()],
             state: item.state.clone(),
@@ -612,44 +815,54 @@ pub fn run(
         .filter(|i| !items[*i].noise && items[*i].alive() > 0)
         .collect();
     let mut reads: BTreeMap<usize, Vec<verify::Read>> = BTreeMap::new();
-    let mut todo = readable.clone();
-    for attempt in 0..ATTEMPTS {
-        if todo.is_empty() {
-            break;
-        }
-        let batches: Vec<Vec<usize>> = todo
-            .chunks(cfg.batch.max(1))
-            .map(<[usize]>::to_vec)
+    for (s, cache) in readers.iter().enumerate() {
+        let mut todo: Vec<usize> = readable
+            .iter()
+            .copied()
+            .filter(|i| split_index(&items[*i].split) == Some(s))
             .collect();
-        let answers = parallel(&batches, cfg.concurrency, |batch| {
-            let jobs: Vec<(String, Date, Vec<String>)> = batch
-                .iter()
-                .map(|i| {
-                    let item = &items[*i];
-                    (
-                        item.scenario.id.clone(),
-                        item.today,
-                        item.text[..item.alive()].to_vec(),
-                    )
-                })
+        for attempt in 0..ATTEMPTS {
+            if todo.is_empty() {
+                break;
+            }
+            let batches: Vec<Vec<usize>> = todo
+                .chunks(cfg.batch.max(1))
+                .map(<[usize]>::to_vec)
                 .collect();
-            for (_, _, messages) in &jobs {
-                for m in messages {
-                    no_sealed(m)?;
+            let answers = parallel(&batches, cfg.concurrency, |batch| {
+                let jobs: Vec<(String, Date, Vec<String>)> = batch
+                    .iter()
+                    .map(|i| {
+                        let item = &items[*i];
+                        (
+                            item.scenario.id.clone(),
+                            item.today,
+                            item.text[..item.alive()].to_vec(),
+                        )
+                    })
+                    .collect();
+                for (_, _, messages) in &jobs {
+                    for m in messages {
+                        no_sealed(m)?;
+                    }
+                }
+                verify::read_back(cache, catalog, &jobs, attempt)
+            });
+            for (batch, answer) in batches.iter().zip(answers) {
+                let answer = answer.context("a reader thread panicked")??;
+                for (i, got) in batch.iter().zip(answer) {
+                    if let Some(got) = got {
+                        reads.insert(*i, got);
+                    }
                 }
             }
-            verify::read_back(&cache, catalog, &jobs, attempt)
-        });
-        for (batch, answer) in batches.iter().zip(answers) {
-            let answer = answer.context("a reader thread panicked")??;
-            for (i, got) in batch.iter().zip(answer) {
-                if let Some(got) = got {
-                    reads.insert(*i, got);
-                }
+            todo.retain(|i| !reads.contains_key(i));
+            if cache.pending() > 0 {
+                break;
             }
         }
-        todo.retain(|i| !reads.contains_key(i));
     }
+    pending_stop("reader", &readers)?;
     for i in readable {
         let item = &mut items[i];
         let Some(got) = reads.remove(&i) else {
@@ -662,6 +875,11 @@ pub fn run(
         };
         for (t, read) in got.iter().enumerate() {
             stats.read += 1;
+            for s in verify::slots(catalog, &item.expected[t], read, t) {
+                let stat = stats.slot_recovery.entry(s.name.to_owned()).or_default();
+                stat.asked += 1;
+                stat.recovered += usize::from(s.ok);
+            }
             match verify::agree(catalog, &item.expected[t], read, t) {
                 Ok(()) => {
                     stats.recovered += 1;
@@ -678,9 +896,36 @@ pub fn run(
 
     stats_of(&mut stats, &items);
     write_out(input, out, &items, &stats, cfg.seed)?;
-    let (calls, hits) = cache.counts();
+    let (mut calls, mut hits) = (0, 0);
+    for cache in writers.iter().chain(&readers) {
+        let (c, h) = cache.counts();
+        calls += c;
+        hits += h;
+    }
     let text = report_text(&stats, &items);
     std::fs::write(out.join("report.txt"), &text)?;
+    let names = |l: &[&dyn Llm; 3]| -> Value {
+        Split::ALL
+            .iter()
+            .zip(l)
+            .map(|(s, l)| (s.name().to_owned(), json!(l.model())))
+            .collect::<serde_json::Map<_, _>>()
+            .into()
+    };
+    std::fs::write(
+        out.join("models.json"),
+        serde_json::to_string_pretty(&json!({
+            "writers": names(&models.writer),
+            "readers": names(&models.reader),
+            "style_shares_target": style::ALL
+                .iter()
+                .zip(cfg.style_shares)
+                .map(|(s, w)| (s.name().to_owned(), json!(w)))
+                .collect::<serde_json::Map<_, _>>(),
+            "styles": stats.styles,
+            "read_back_recovery_by_slot": stats.slot_recovery,
+        }))?,
+    )?;
     Ok(Report {
         stats,
         text,
@@ -698,6 +943,15 @@ fn stats_of(stats: &mut Stats, items: &[Item]) {
             continue;
         }
         stats.sessions_in += 1;
+        let style = stats
+            .styles
+            .entry(item.style.name().to_owned())
+            .or_default();
+        style.assigned += 1;
+        if item.clean.iter().all(|c| !c.is_empty()) {
+            style.written += 1;
+            style.complying += usize::from(style::complies(item.style, &item.clean));
+        }
         stats.turns_in += item.state.len();
         // a turn after the first drop was never judged: cut
         stats.turns_cut += item.state.len() - judged_until;
@@ -762,6 +1016,14 @@ fn write_out(
             }
             if let Some(scenario) = record["scenario"]["turns"].as_array_mut() {
                 scenario.truncate(n);
+            }
+            {
+                let mut tags: Vec<Value> = record["tags"].as_array().cloned().unwrap_or_default();
+                tags.push(json!(format!("style:{}", item.style.name())));
+                if !item.writer.is_empty() {
+                    tags.push(json!(format!("writer:{}", item.writer)));
+                }
+                record["tags"] = Value::Array(tags);
             }
             if n < item.state.len() {
                 let mut tags: Vec<Value> = record["tags"].as_array().cloned().unwrap_or_default();
@@ -896,6 +1158,25 @@ fn report_text(stats: &Stats, items: &[Item]) -> String {
             .collect();
         let _ = writeln!(out, "  disagreements by slot: {}", slots.join(", "));
     }
+    for (name, s) in &stats.styles {
+        let _ = writeln!(
+            out,
+            "  style {name}: {} sessions given it, {} written, {} of them keep to it ({})",
+            s.assigned,
+            s.written,
+            s.complying,
+            pct(s.complying, s.written)
+        );
+    }
+    for (slot, s) in &stats.slot_recovery {
+        let _ = writeln!(
+            out,
+            "  recovery of {slot}: {} / {} ({})",
+            s.recovered,
+            s.asked,
+            pct(s.recovered, s.asked)
+        );
+    }
     let _ = writeln!(
         out,
         "noise split (heavy typos of val): {} sessions, {} kept whole",
@@ -993,9 +1274,13 @@ mod tests {
             id: "x".to_owned(),
             today: "2026-10-12".parse().expect("date"),
             briefs: vec![brief(&["Office wifi"])],
+            style: Style::Dictated,
+            test: false,
         };
         let prompt = writer_prompt(&[&job], 0);
         assert!(prompt.contains("Office wifi"));
+        assert!(prompt.contains(Style::Dictated.instruction(false)));
+        assert!(!prompt.contains(Style::Dictated.instruction(true)));
         assert!(no_sealed(&prompt).is_ok());
         assert!(no_sealed("password is placeholder:k0:password").is_err());
     }

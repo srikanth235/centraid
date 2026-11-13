@@ -82,7 +82,7 @@ enum Theme {
 private struct CentraidTypeModifier: ViewModifier {
     @Environment(\.colorScheme) private var scheme
     /// READ SO THE VIEW RE-RENDERS WHEN THE MEMBER CHANGES THE SYSTEM TEXT SIZE.
-    /// The app root caps it (product-intuition/references/design-behaviour.md § Accessibility); a place the root's cap
+    /// The app root caps it (design/behaviour.md § Accessibility); a place the root's cap
     /// does not reach is capped again by `Theme.resolve`.
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let role: String
@@ -134,7 +134,7 @@ struct CentraidResolvedType {
 }
 
 extension Theme {
-    /// THE LARGEST SYSTEM TEXT SIZE THE SHELL DRAWS (product-intuition/references/design-behaviour.md § Accessibility):
+    /// THE LARGEST SYSTEM TEXT SIZE THE SHELL DRAWS (design/behaviour.md § Accessibility):
     /// every size up to the largest accessibility size (AX5, owner ruling of 8 November). Layouts
     /// reflow from `reflowSize` up; nothing truncates or overlaps.
     ///
@@ -151,7 +151,7 @@ extension Theme {
     /// stacks. The size the LargeText board draws (`xxxLarge`) and every size above it.
     static let reflowSize: DynamicTypeSize = .xxxLarge
 
-    /// THE ROLES THAT HOLD THEIR SIZE AT EVERY SETTING (product-intuition/references/design-behaviour.md § Accessibility).
+    /// THE ROLES THAT HOLD THEIR SIZE AT EVERY SETTING (design/behaviour.md § Accessibility).
     ///
     /// `band` is the only one, and the hold is arithmetic and not preference:
     /// invariant 1 caps a band at five destinations plus More, and those six

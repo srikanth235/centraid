@@ -35,6 +35,8 @@
 
 use std::io::{Read, Write};
 
+use std::sync::Arc;
+
 use centraid_gateway::client::{Client, ClientError, Destination as Pinned, Part, Source};
 use centraid_gateway::rules::code::Refusal as WireRefusal;
 use centraid_gateway::rules::ids::{Digest as WireDigest, Name as WireName, Token, VaultId};
@@ -178,6 +180,13 @@ impl GatewayStore {
     }
 
     pub(crate) fn set_cancellation(&mut self, cancellation: Option<crate::handle::Cancellation>) {
+        // A STOP IS OBSERVED WHILE A CALL WAITS, not only between calls: the client looks at it
+        // every quarter second of a stalled transfer.
+        self.client.set_stop(
+            cancellation.clone().map(|held| {
+                Arc::new(move || held.check().is_err()) as centraid_gateway::client::Stop
+            }),
+        );
         self.cancellation = cancellation;
     }
 
@@ -217,10 +226,12 @@ impl GatewayStore {
     /// pinned one, or answers as another gateway than the one paired.
     pub fn info(&self) -> std::result::Result<Info, StoreError> {
         self.check_transfer()?;
-        let info = self
-            .runtime
-            .block_on(self.client.info())
-            .map_err(store_error)?;
+        self.runtime.block_on(self.probe())
+    }
+
+    /// [`Self::info`] as a future, for a fleet asked all at once.
+    pub(crate) async fn probe(&self) -> std::result::Result<Info, StoreError> {
+        let info = self.client.info().await.map_err(store_error)?;
         if info.gateway_id.hex() != self.gateway_id {
             return Err(StoreError::Untrusted(format!(
                 "the gateway answered as {}, not as the paired {}",
@@ -228,6 +239,19 @@ impl GatewayStore {
             )));
         }
         Ok(info)
+    }
+
+    /// The writer epoch and the head this gateway holds, in one answer: what a pass asks first
+    /// (the epoch is a supersession check; the head is the rollback check).
+    ///
+    /// # Errors
+    /// As [`Self::writer_epoch`].
+    pub fn head_and_epoch(&self) -> std::result::Result<(u64, Option<Head>), StoreError> {
+        self.check_transfer()?;
+        self.runtime
+            .block_on(self.client.head_state(&self.vault))
+            .map(|state| (state.epoch, state.head.as_ref().map(head_of)))
+            .map_err(store_error)
     }
 
     /// The vault's writer epoch at this gateway, as its head answers it — a
@@ -476,10 +500,9 @@ pub enum Unreached {
     Untrusted,
 }
 
-/// The first of `destinations`, in the ledger's order, that answers `info`
-/// as itself. A destination this phone was superseded at is skipped: its
-/// writes are refused and its reads have nothing a pass needs. When none
-/// does, whether any machine answered that is not the pinned gateway.
+/// The first of `destinations`, in the ledger's order, that answers `info` as itself: the
+/// head of [`reach_all`]'s fleet. When none does, whether any machine answered that is not the
+/// pinned gateway.
 ///
 /// # Errors
 /// The ledger's refusal, or a destination row whose token will not read.
@@ -489,13 +512,63 @@ pub fn reach(
     vault: VaultId,
     runtime: &tokio::runtime::Handle,
 ) -> Result<std::result::Result<Reached, Unreached>> {
-    let mut unreached = Unreached::Silent;
-    // A GATEWAY THAT REFUSED THIS PHONE'S TOKEN IS TRIED LAST (the sweep's
-    // F2): another paired gateway that answers carries the pass, and the
-    // refused one is asked again only when nothing else does — so its mark is
-    // spent the moment it accepts the token, and never blocks a second
-    // gateway behind it. The sort is stable, so the ledger's order holds
-    // within each half.
+    let fleet = reach_all(destinations, ledger, vault, runtime)?;
+    let unreached = if fleet.untrusted.is_empty() {
+        Unreached::Silent
+    } else {
+        Unreached::Untrusted
+    };
+    Ok(fleet.reached.into_iter().next().ok_or(unreached))
+}
+
+/// Every paired destination a pass found: those that answered as themselves, and for the rest
+/// whether they were silent or another machine answered. Every paired gateway is fed in a pass
+/// (#1188, B1), so none is skipped for another having answered.
+pub struct Fleet {
+    /// The ledger's order, a gateway that refused this phone's token last.
+    pub reached: Vec<Reached>,
+    pub silent: Vec<String>,
+    pub untrusted: Vec<String>,
+}
+
+/// The one cap on asking a fleet whether it is there: a dead gateway costs this much of a pass
+/// and no more, whatever its addresses and however many gateways are paired.
+pub const REACH_CAP: std::time::Duration = std::time::Duration::from_secs(12);
+
+/// How one gateway answered a probe.
+enum Probe {
+    Answered(i64),
+    Untrusted,
+    Silent,
+}
+
+/// Ask every destination `info` **at once**, under one overall cap ([`REACH_CAP`]): a gateway
+/// that is asleep costs the cap, not a turn in a queue the healthy one waits in. A destination
+/// this phone was superseded at is left out (its writes are refused and its reads have nothing
+/// a pass needs).
+///
+/// # Errors
+/// The ledger's refusal, or a destination row whose token will not read.
+pub fn reach_all(
+    destinations: &[Destination],
+    ledger: &Ledger,
+    vault: VaultId,
+    runtime: &tokio::runtime::Handle,
+) -> Result<Fleet> {
+    reach_all_capped(destinations, ledger, vault, runtime, REACH_CAP)
+}
+
+/// [`reach_all`] under `cap`, for a test that does not wait for the product's.
+///
+/// # Errors
+/// As [`reach_all`].
+pub fn reach_all_capped(
+    destinations: &[Destination],
+    ledger: &Ledger,
+    vault: VaultId,
+    runtime: &tokio::runtime::Handle,
+    cap: std::time::Duration,
+) -> Result<Fleet> {
     let mut ordered: Vec<(bool, &Destination)> = Vec::with_capacity(destinations.len());
     for destination in destinations {
         let refused = ledger
@@ -504,6 +577,7 @@ pub fn reach(
         ordered.push((refused, destination));
     }
     ordered.sort_by_key(|(refused, _)| *refused);
+    let mut asking: Vec<(&Destination, GatewayStore)> = Vec::new();
     for (_, destination) in ordered {
         if ledger
             .moved(&destination.gateway_id)
@@ -512,41 +586,143 @@ pub fn reach(
         {
             continue;
         }
-        let store = GatewayStore::for_destination(destination, vault, runtime)?;
-        match store.info() {
-            Ok(info) => {
+        asking.push((
+            destination,
+            GatewayStore::for_destination(destination, vault, runtime)?,
+        ));
+    }
+    let answers = runtime.block_on(probe_all(
+        asking.iter().map(|(_, store)| store.probe()),
+        cap,
+    ));
+    let mut fleet = Fleet {
+        reached: Vec::new(),
+        silent: Vec::new(),
+        untrusted: Vec::new(),
+    };
+    for ((destination, store), answer) in asking.into_iter().zip(answers) {
+        match answer {
+            Probe::Answered(time_ms) => {
                 ledger
                     .touch_seen(&destination.gateway_id, super::now_ms())
                     .map_err(super::plane_error)?;
-                return Ok(Ok(Reached {
+                fleet.reached.push(Reached {
                     destination: destination.clone(),
                     store,
-                    gateway_ms: info.time_ms,
-                }));
+                    gateway_ms: time_ms,
+                });
             }
-            Err(error @ StoreError::Untrusted(_)) => {
+            Probe::Untrusted => {
                 tracing::warn!(
                     gateway = %destination.gateway_id,
-                    %error,
                     "a machine that is not the pinned gateway answered"
                 );
-                unreached = Unreached::Untrusted;
+                fleet.untrusted.push(destination.gateway_id.clone());
             }
-            Err(error) => {
-                tracing::debug!(
-                    gateway = %destination.gateway_id,
-                    %error,
-                    "a paired gateway did not answer"
-                );
+            Probe::Silent => {
+                tracing::debug!(gateway = %destination.gateway_id, "a paired gateway did not answer");
+                fleet.silent.push(destination.gateway_id.clone());
             }
         }
     }
-    Ok(Err(unreached))
+    Ok(fleet)
+}
+
+/// Run every probe together, each under `cap`, and answer in the order given. A probe that
+/// has not answered when the cap passes is silent.
+async fn probe_all<F>(probes: impl IntoIterator<Item = F>, cap: std::time::Duration) -> Vec<Probe>
+where
+    F: std::future::Future<Output = std::result::Result<Info, StoreError>>,
+{
+    type Running<'a> = std::pin::Pin<Box<dyn std::future::Future<Output = Probe> + 'a>>;
+    let mut running: Vec<(Running<'_>, Option<Probe>)> = probes
+        .into_iter()
+        .map(|probe| {
+            let capped: Running<'_> = Box::pin(async move {
+                match tokio::time::timeout(cap, probe).await {
+                    Ok(Ok(info)) => Probe::Answered(info.time_ms),
+                    Ok(Err(StoreError::Untrusted(_))) => Probe::Untrusted,
+                    Ok(Err(_)) | Err(_) => Probe::Silent,
+                }
+            });
+            (capped, None)
+        })
+        .collect();
+    std::future::poll_fn(|context| {
+        let mut all = true;
+        for (probe, answer) in &mut running {
+            if answer.is_none() {
+                match probe.as_mut().poll(context) {
+                    std::task::Poll::Ready(done) => *answer = Some(done),
+                    std::task::Poll::Pending => all = false,
+                }
+            }
+        }
+        if all {
+            std::task::Poll::Ready(())
+        } else {
+            std::task::Poll::Pending
+        }
+    })
+    .await;
+    running
+        .into_iter()
+        .map(|(_, answer)| answer.unwrap_or(Probe::Silent))
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn answer(time_ms: i64) -> std::result::Result<Info, StoreError> {
+        Ok(Info {
+            gateway_id: centraid_gateway::rules::ids::GatewayId::from_bytes([1; 16]),
+            protocol: 2,
+            time_ms,
+        })
+    }
+
+    /// **A DEAD GATEWAY COSTS A PASS THE CAP, NOT A TURN THE HEALTHY ONES WAIT IN** (#1188,
+    /// item 15). The two healthy probes finish only when both are running at once (a barrier of
+    /// two), so asking one after another can never answer them; the dead one waits for ever and
+    /// is capped. The clock is tokio's paused one: nothing sleeps and no number of seconds is
+    /// asserted.
+    #[tokio::test(start_paused = true)]
+    async fn a_dead_gateway_does_not_hold_the_healthy_ones_behind_it() {
+        let both = std::sync::Arc::new(tokio::sync::Barrier::new(2));
+        let healthy = |time: i64| {
+            let both = std::sync::Arc::clone(&both);
+            async move {
+                both.wait().await;
+                answer(time)
+            }
+        };
+        let dead = std::future::pending::<std::result::Result<Info, StoreError>>();
+        let answers = probe_all(
+            vec![
+                Box::pin(dead)
+                    as std::pin::Pin<
+                        Box<
+                            dyn std::future::Future<Output = std::result::Result<Info, StoreError>>,
+                        >,
+                    >,
+                Box::pin(healthy(10)),
+                Box::pin(healthy(20)),
+            ],
+            REACH_CAP,
+        )
+        .await;
+        let shape: Vec<_> = answers
+            .iter()
+            .map(|probe| match probe {
+                Probe::Answered(time) => format!("answered {time}"),
+                Probe::Untrusted => "untrusted".to_owned(),
+                Probe::Silent => "silent".to_owned(),
+            })
+            .collect();
+        assert_eq!(shape, ["silent", "answered 10", "answered 20"]);
+    }
 
     /// **A WRONG CERTIFICATE AND A DAMAGED COPY ARE NOT AN ABSENT GATEWAY**
     /// (#1080, the audit's finding 5): a phone away from home waits it out,

@@ -284,6 +284,6 @@ pub(super) fn row(locale: Locale, item: &wire::LockerItemRow, parent: &str) -> w
         starred: item.starred,
         chips,
         accessibility_label: spoken,
-        route: Some(super::routes::item(&item.item_id, parent, "")),
+        route: Some(super::routes::item(&item.item_id, parent)),
     }
 }

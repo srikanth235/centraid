@@ -53,6 +53,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.AgendaChoice
+import centraid.core.v1.AlertSettingsPressed
 import centraid.core.v1.AgendaDraft
 import centraid.core.v1.AgendaEditorData
 import centraid.core.v1.AgendaEditorEvent
@@ -276,6 +277,19 @@ private fun EditorBody(state: AgendaEditorState, data: AgendaEditorData, onEvent
                 ) { openSheet(AgendaEditorState.Sheet.SHEET_REMINDER) }
                 // AN ALERT NEEDS A TIME: Rust says when the event has none.
                 if (data.reminder_note.isNotEmpty()) Note(data.reminder_note)
+                // "Open Settings" when the note says the phone limits alerts (#1188, NA1).
+                if (data.reminder_settings_label.isNotEmpty()) {
+                    Text(
+                        data.reminder_settings_label,
+                        style = centraidType("annotLabel"),
+                        color = centraidColor("text"),
+                        modifier = Modifier
+                            .heightIn(min = KitGeometry.ROW_MIN)
+                            .clickable(role = Role.Button) { onEvent(AgendaEditorEvent(alert_settings = AlertSettingsPressed())) }
+                            .padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp)
+                            .testTag("agenda-editor-reminder-settings"),
+                    )
+                }
                 // THE SECOND ALERT is drawn only once the first is set.
                 if (data.show_second_reminder) {
                     AgendaTileChoiceRow(chrome.field_second_alert, data.second_reminder_label, tiles.tileOf("second_reminder"), "agenda-editor-second-reminder") {

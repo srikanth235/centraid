@@ -95,3 +95,63 @@ fn the_camera_roll_and_notifications_answer_with_the_same_states() {
     assert_eq!(State::of_notifications(N::Denied), Some(State::Refused));
     assert_eq!(State::of_notifications(N::Granted), None);
 }
+
+#[test]
+fn alert_facts_say_the_one_line_that_matters_and_nothing_when_all_is_well() {
+    use wire::NotificationPermission as P;
+    let en = Locale::En;
+    let facts = |permission, exact_denied, channel_off| AlertFacts {
+        permission: Some(permission),
+        exact_denied,
+        channel_off,
+        channel: "Reminders".to_owned(),
+        ..AlertFacts::default()
+    };
+    assert_eq!(facts(P::Granted, false, false).line(en), None);
+    assert_eq!(
+        facts(P::Denied, true, true).line(en).as_deref(),
+        Some("Notifications are off. Turn them on in Settings."),
+        "a refusal outranks the limits"
+    );
+    assert_eq!(
+        facts(P::Granted, true, true).line(en).as_deref(),
+        Some("Alerts for reminders and events are off. Turn them on in Settings."),
+    );
+    assert_eq!(
+        facts(P::Granted, true, false).line(en).as_deref(),
+        Some("Alerts may arrive a few minutes late. Allow exact timing in Settings."),
+    );
+    assert_eq!(
+        AlertFacts::default().line(en),
+        None,
+        "unanswered says nothing"
+    );
+}
+
+#[test]
+fn the_backup_channel_has_its_own_sentence_and_the_board_merges_producers() {
+    use wire::NotificationPermission as P;
+    let facts = AlertFacts {
+        permission: Some(P::Granted),
+        channel_off: true,
+        channel: "Reminders".to_owned(),
+        backup_channel_off: false,
+        backup_channel: "Backup".to_owned(),
+        exact_denied: false,
+    };
+    assert_eq!(facts.line_for(Locale::En, Channel::Backup), None);
+    let off = AlertFacts {
+        backup_channel_off: true,
+        channel_off: false,
+        ..facts
+    };
+    assert_eq!(
+        off.line(Locale::En),
+        None,
+        "reminders are not silenced by it"
+    );
+    assert_eq!(
+        off.line_for(Locale::En, Channel::Backup).as_deref(),
+        Some("Backup alerts are off. Turn them on in Settings.")
+    );
+}

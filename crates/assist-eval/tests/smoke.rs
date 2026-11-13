@@ -70,6 +70,7 @@ impl Stepper for Script {
         Ok(StepOut {
             text,
             think_cut: false,
+            tokens: 0,
         })
     }
 }
@@ -386,5 +387,58 @@ fn a_default_runner_shows_the_eight_tools_and_a_chosen_mode_reaches_the_step() {
     assert_eq!(
         *tools.0.lock().expect("lock"),
         vec![ToolsMode::Sig, ToolsMode::S2]
+    );
+}
+
+/// Says its messages in order (the last one again), each costing seven tokens.
+struct Counted(Mutex<Vec<String>>);
+
+impl Stepper for Counted {
+    fn step(&self, _: &str, _: Option<&str>, _: ToolsMode) -> Result<StepOut, String> {
+        let mut said = self.0.lock().expect("lock");
+        let text = if said.len() > 1 {
+            said.remove(0)
+        } else {
+            said[0].clone()
+        };
+        Ok(StepOut {
+            text,
+            think_cut: false,
+            tokens: 7,
+        })
+    }
+}
+
+#[test]
+fn the_report_counts_over_refusals_unreadable_calls_endings_and_tokens() {
+    let source = source(vec![session("S", vec![who_is_neha(), declines()])]);
+    let decline = call("decline", &[("reason", "out_of_scope")]);
+    // turn 1: a message with no call, then a decline where the gold is a read; turn 2: the right decline
+    let script = Counted(Mutex::new(vec![
+        "I think so.".to_owned(),
+        decline.clone(),
+        decline,
+    ]));
+    let results = run_with(&source, &script, ToolsMode::Sig);
+    let report = report::build("fake", "smoke", &results, &[], results.len());
+    let o = &report.overall;
+    // one declined where gold was a read, of the one turn whose gold is neither ask nor decline
+    assert_eq!((o.over_refusal.k, o.over_refusal.n), (1, 1));
+    // three steps, one of them unreadable
+    assert_eq!((o.unparsed_calls.k, o.unparsed_calls.n), (1, 3));
+    assert_eq!(o.malformed_calls.k, 1);
+    // tokens are counted, over the two turns
+    assert_eq!(o.tokens_total, 21);
+    assert!((o.tokens_per_turn - 10.5).abs() < 1e-9);
+    // the wrong turn ended in a decline: an ordinary fail, not a loop, cap or error
+    assert_eq!(o.endings.ordinary_fail, 1);
+    assert_eq!(
+        (o.endings.loop_, o.endings.step_cap, o.endings.error),
+        (0, 0, 0)
+    );
+    let text = report::text(&report);
+    assert!(
+        text.contains("Over-refusal:") && text.contains("Tokens per turn:"),
+        "{text}"
     );
 }

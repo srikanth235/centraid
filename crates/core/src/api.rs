@@ -382,6 +382,9 @@ pub(crate) struct Invocation {
     pub invoke_key: String,
     /// A QUIET SAVE: an editor's autosave, which the screen says it is (`ActRequest.autosave`).
     pub quiet: bool,
+    /// WHO ACTED, when not the member by hand: only the chat's door says (`assist`), and the vault
+    /// records it with the commit so the history can say so. Never read from a request.
+    pub actor: Option<&'static str>,
 }
 
 /// Run a command through D1's gate order, **under the principal the HANDLE
@@ -480,6 +483,10 @@ pub(crate) fn invoke_raw(
         Command::new(&call.name, input).quiet()
     } else {
         Command::new(&call.name, input)
+    };
+    let command = match call.actor {
+        Some(actor) => command.by(actor),
+        None => command,
     };
     let outcome = vault.execute_keyed(registry, principal, &command, keyed)?;
     // AFTER THE COMMIT, because that is when the guard reads its census, and a

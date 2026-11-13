@@ -138,6 +138,7 @@ impl Chat {
     pub fn say(&mut self, text: &str) {
         self.event(C::Sent(wire::chat_event::Sent {
             text: text.to_owned(),
+            ..Default::default()
         }));
         self.perform();
     }

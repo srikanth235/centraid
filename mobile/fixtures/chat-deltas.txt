@@ -1,0 +1,52 @@
+# ONE SET OF CASES FOR EVERY STORE THAT APPLIES A STREAMING ANSWER'S DELTAS (the runtime's own
+# `chat::delta`, ScreenStore.swift, Screens.kt). A case: `name:`, a held view (`revision:`,
+# `activity:`, `messages:` as id=text pairs joined by `;`), then `--- deltas` with one
+# `base|revision|message id|activity|text` per line, then `--- expect` with the view that results.
+# A delta made against another revision is dropped, and the rest of the case goes on without it.
+# Cases are separated by a line of four equals signs.
+name: tokens append in order
+revision: 5
+activity: Thinking
+messages: 1=hi;2=
+--- deltas
+5|6|2||Hello
+6|7|2||, world
+--- expect
+revision: 7
+activity:
+messages: 1=hi;2=Hello, world
+====
+name: the status line follows each delta
+revision: 1
+activity: Thinking
+messages: 1=q;2=
+--- deltas
+1|2|2|Looking in Money|
+2|3|2||Spent
+--- expect
+revision: 3
+activity:
+messages: 1=q;2=Spent
+====
+name: a delta made against another revision is dropped
+revision: 4
+activity:
+messages: 1=q;2=abc
+--- deltas
+3|4|2||zzz
+4|5|2||def
+--- expect
+revision: 5
+activity:
+messages: 1=q;2=abcdef
+====
+name: a message that is not there is dropped
+revision: 2
+activity:
+messages: 1=q
+--- deltas
+2|3|9||lost
+--- expect
+revision: 2
+activity:
+messages: 1=q

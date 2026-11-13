@@ -80,7 +80,7 @@ public fun phoneSaysDrawn(line: PhoneSays?): Boolean =
 public data class PhoneSaysIds(val line: String, val take: String)
 
 public fun phoneSaysIds(take: PhoneSaysTake?): PhoneSaysIds {
-    val key = listOfNotNull(take?.field?.takeIf { it.isNotEmpty() }, take?.item_key?.takeIf { it.isNotEmpty() })
+    val key = listOfNotNull(take?.field_?.takeIf { it.isNotEmpty() }, take?.item_key?.takeIf { it.isNotEmpty() })
         .joinToString("-")
     val suffix = if (key.isEmpty()) "" else "-$key"
     return PhoneSaysIds(line = "phone-says$suffix", take = "phone-says-take$suffix")

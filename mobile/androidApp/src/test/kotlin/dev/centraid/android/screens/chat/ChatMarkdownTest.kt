@@ -16,6 +16,31 @@ class ChatMarkdownTest {
         is ChatMarkdown.Block.Paragraph -> block.text.text
         is ChatMarkdown.Block.Heading -> block.text.text
         is ChatMarkdown.Block.Item -> block.text.text
+        is ChatMarkdown.Block.Table -> block.rows.joinToString(";") { row -> row.joinToString("|") { it.text } }
+        is ChatMarkdown.Block.Code -> block.text
+    }
+
+    /** A block as the shared fixture writes it (`mobile/fixtures/chat-markdown.txt`). */
+    private fun written(block: ChatMarkdown.Block): String = when (block) {
+        is ChatMarkdown.Block.Paragraph -> "p:" + block.text.text
+        is ChatMarkdown.Block.Heading -> "h:" + block.text.text
+        is ChatMarkdown.Block.Item -> "i:" + block.marker + " " + block.text.text
+        is ChatMarkdown.Block.Table -> "t:" + words(block)
+        is ChatMarkdown.Block.Code -> "c:" + block.text.replace("\n", "\\n")
+    }
+
+    @Test
+    fun everyCaseOfTheSharedFixtureReadsTheSameOnBothShells() {
+        val file = java.io.File("../fixtures/chat-markdown.txt")
+        val cases = file.readText().lines().filterNot { it.startsWith("# ") }.joinToString("\n").split("\n====\n")
+        assertTrue("the fixture has cases", cases.size >= 9)
+        for (case in cases) {
+            val name = case.lines().first { it.startsWith("name:") }.removePrefix("name:").trim()
+            val streaming = case.lines().first { it.startsWith("streaming:") }.contains("yes")
+            val input = case.substringAfter("--- input\n").substringBefore("\n--- blocks")
+            val expected = case.substringAfter("--- blocks\n").trimEnd().lines()
+            assertEquals(name, expected, ChatMarkdown.blocks(input, streaming).map(::written))
+        }
     }
 
     @Test

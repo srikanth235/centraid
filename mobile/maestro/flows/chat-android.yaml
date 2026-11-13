@@ -1,0 +1,78 @@
+# Chat on Android: the same band place, the same ids, the same states as `chat.yaml`.
+#
+# `selectors.md` is one set for both shells, so the flow body is the iOS one; only the package
+# differs (`dev.centraid`). The ready branch needs a DEBUG build and the chat script of `chat.yaml`:
+# `adb push script.json /data/local/tmp/centraid-dev-chat-script.json`, then start the app fresh. A
+# debug library reads that file in place of the environment variable (`dev_chat_script` in
+# `crates/assist-llama`); without the file, or in a release library, which has no such path, the
+# ready branch draws as it does for a member with a real model. An owner hand-off like the rest
+# (`maestro/README.md`): written here, run on a device by the owner.
+appId: dev.centraid
+name: chat-android
+---
+- launchApp
+- assertVisible:
+    id: "home-band-chat"
+- tapOn:
+    id: "home-band-chat"
+- assertVisible:
+    id: "chat"
+# The header's second line is "<vault name> · on this phone" (R-CHAT-2): matched as a
+# phrase, because Maestro matches the whole line.
+- assertVisible: ".*on this phone"
+
+# THE MODEL STEP: the size, the note, and the Wi-Fi action with mobile data as the second choice.
+- runFlow:
+    when:
+      visible:
+        id: "chat-download"
+    commands:
+      - assertVisible:
+          id: "chat-model-note"
+      - assertVisible: "It stays on this phone, and nothing you ask leaves it."
+      # Wi-Fi first: the primary action names the network (a non-breaking hyphen in Wi‑Fi).
+      - assertVisible: "Download on Wi.Fi"
+
+# NOT AVAILABLE HERE: a state to draw, not a download problem.
+- runFlow:
+    when:
+      visible: "Chat is not available here."
+    commands:
+      - assertNotVisible:
+          id: "chat-download"
+
+# READY: the one line, three questions, and the composer.
+- runFlow:
+    when:
+      visible:
+        id: "chat-field"
+    commands:
+      - assertVisible:
+          id: "chat-empty"
+      - assertVisible:
+          id: "chat-suggestion-0"
+      - assertVisible:
+          id: "chat-suggestion-2"
+      - assertVisible:
+          id: "chat-send"
+
+# A PROPOSED WRITE, when the build has one on screen (the native plane parks every
+# write behind a card; `SIMCTL_CHILD_CENTRAID_CHAT_PREVIEW=pending` draws one):
+# both buttons are there, and nothing was applied before a tap.
+- runFlow:
+    when:
+      visible:
+        id: "chat-pending"
+    commands:
+      - assertVisible:
+          id: "chat-pending-confirm"
+      - assertVisible:
+          id: "chat-pending-cancel"
+      - assertNotVisible:
+          id: "chat-pending-settled"
+
+# BACK TO HOME: the band's Home place returns the springboard.
+- tapOn:
+    id: "home-band-home"
+- assertVisible:
+    id: "home-grid"

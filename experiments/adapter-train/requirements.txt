@@ -1,0 +1,12 @@
+# The image's Python dependencies. torch comes with the base image (2.8.0, the version the GCP VM trainer uses).
+# UNPINNED BY HASH: the CPU tests' pins (requirements-ci.txt, beside this file) are hashed; this file is the seam to compile
+# the same way (uv pip compile --generate-hashes) before the first real job. transformers is the version the tiny-model tests build against.
+transformers==5.17.0
+peft
+safetensors
+zstandard
+boto3
+google-cloud-storage
+gguf==0.19.0  # reads the phone's Q4_0 GGUF for base.weights: q4_0_dequantised (q4_0.py)
+sentencepiece   # the llama.cpp converter (export step) imports these two; unverified until the image is built
+protobuf

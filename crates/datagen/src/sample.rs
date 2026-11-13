@@ -52,6 +52,12 @@ impl Facet {
     }
 }
 
+/// An opener whose draw of 0..100 is at least this is a repair: the runtime refuses its first call and the model repairs it.
+const REPAIR_FROM: usize = 84;
+
+/// A follow-up that can be a repair is one with this chance (percent).
+const REPAIR_FOLLOW_UP: usize = 14;
+
 pub struct Sampler<'a> {
     pub facts: &'a Facts,
     pub catalog: &'a Catalog,
@@ -497,6 +503,9 @@ impl<'a> Sampler<'a> {
     /// A first turn drawn from `cell`.
     #[must_use]
     pub fn opener(&self, cell: &Cell, rng: &mut Rng) -> Option<TurnIntent> {
+        if self.world.settings.is_empty() {
+            return self.empty_opener(cell, rng);
+        }
         let c = self.constraints(rng);
         let kind = cell.kind.as_str();
         let outcome_roll = rng.below(100);
@@ -514,7 +523,7 @@ impl<'a> Sampler<'a> {
                 {
                     sel = top;
                 }
-                let repair = !empty && outcome_roll >= 92;
+                let repair = !empty && outcome_roll >= REPAIR_FROM;
                 Some(self.turn(
                     Intent::Read { sel },
                     Reference::Select,
@@ -537,7 +546,7 @@ impl<'a> Sampler<'a> {
                         None => empty = false,
                     }
                 }
-                let repair = !empty && outcome_roll >= 93;
+                let repair = !empty && outcome_roll >= REPAIR_FROM;
                 Some(self.turn(
                     Intent::Count { sel },
                     Reference::Select,
@@ -575,7 +584,7 @@ impl<'a> Sampler<'a> {
                 if sel.kind == "budget" {
                     sel.period = None;
                 }
-                let repair = outcome_roll >= 93;
+                let repair = outcome_roll >= REPAIR_FROM;
                 Some(self.turn(
                     Intent::Measure {
                         measure: Measure {
@@ -599,6 +608,40 @@ impl<'a> Sampler<'a> {
             ("edit", _) => self.edit(kind, rng, outcome_roll),
             ("create", _) => self.create(kind, rng, outcome_roll),
             ("ask", _) => self.ask(kind, rng),
+            ("decline", reason) => Some(self.turn(
+                Intent::Decline {
+                    reason: reason.to_owned(),
+                },
+                Reference::Select,
+                Outcome::Decline,
+                None,
+            )),
+            _ => None,
+        }
+    }
+
+    /// The first turn in a new member's empty vault: nothing to draw a row from, so a read or a count finds nothing, a
+    /// create makes the first row, and a decline is a decline. Every other cell has no turn here.
+    fn empty_opener(&self, cell: &Cell, rng: &mut Rng) -> Option<TurnIntent> {
+        let kind = cell.kind.as_str();
+        match (cell.tool.as_str(), cell.verb.as_str()) {
+            ("find", _) if self.empty_reads => Some(self.turn(
+                Intent::Read {
+                    sel: Selector::of(kind),
+                },
+                Reference::Select,
+                Outcome::Empty,
+                None,
+            )),
+            ("compute", "count") => Some(self.turn(
+                Intent::Count {
+                    sel: Selector::of(kind),
+                },
+                Reference::Select,
+                Outcome::Empty,
+                None,
+            )),
+            ("create", _) => self.create(kind, rng, 0),
             ("decline", reason) => Some(self.turn(
                 Intent::Decline {
                     reason: reason.to_owned(),
@@ -861,6 +904,109 @@ impl<'a> Sampler<'a> {
         Some((row.name.clone(), Reference::Name))
     }
 
+    /// Can `verb` be done to `r` now (a task to complete is open, a person to star is not starred)?
+    fn verb_fits(&self, kind: &str, verb: &str, r: &Row) -> bool {
+        match verb {
+            "complete" | "cancel" if kind == "task" => r.text("status") == Some("open"),
+            "reopen" => r.text("status") == Some("completed"),
+            "cancel" => true,
+            "star" => r.fields.get("starred") == Some(&F::B(false)),
+            "unstar" => r.fields.get("starred") == Some(&F::B(true)),
+            "unlink" => self.transfer_leg(&r.key),
+            _ => true,
+        }
+    }
+
+    /// How many rows the sampler's world holds against a normal one (`Settings::scale`).
+    #[must_use]
+    pub fn world_scale(&self) -> f64 {
+        self.world.settings.scale
+    }
+
+    /// The names a kind's live rows answer to as a person says them (a person by first name, anything else by its name),
+    /// each with how many rows it reaches: the material of an ask-or-act pair.
+    #[must_use]
+    pub fn spoken_names(&self, kind: &str) -> std::collections::BTreeMap<String, (String, usize)> {
+        let mut out: std::collections::BTreeMap<String, (String, usize)> =
+            std::collections::BTreeMap::new();
+        for r in self.live_rows(kind) {
+            let said = if kind == "person" {
+                r.name
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or_default()
+                    .to_owned()
+            } else {
+                r.name.clone()
+            };
+            out.entry(fold(&said)).or_insert((said, 0)).1 += 1;
+        }
+        out
+    }
+
+    /// The verbs an ask-or-act pair uses for `kind`: ones that take no argument and that the kind has.
+    #[must_use]
+    pub fn pair_verbs(kind: &str) -> Vec<&'static str> {
+        ["complete", "star", "delete"]
+            .into_iter()
+            .filter(|v| draws(kind, v))
+            .collect()
+    }
+
+    /// Ask side of an ask-or-act pair: `verb` said of a name more than one row answers to.
+    #[must_use]
+    pub fn ask_side(&self, kind: &str, name: &str, verb: &str) -> Option<TurnIntent> {
+        let reached = self.spoken_names(kind).get(&fold(name)).map(|(_, n)| *n)?;
+        (reached >= 2).then(|| {
+            self.turn(
+                Intent::Ask {
+                    kind: kind.to_owned(),
+                    name: name.to_owned(),
+                    verb: Some(verb.to_owned()),
+                },
+                Reference::Name,
+                Outcome::Ask,
+                None,
+            )
+        })
+    }
+
+    /// Act side of an ask-or-act pair: the same words, said of a name exactly one row answers to, so the model acts.
+    #[must_use]
+    pub fn act_side(&self, kind: &str, name: &str, verb: &str) -> Option<TurnIntent> {
+        let rows: Vec<&Row> = self
+            .live_rows(kind)
+            .into_iter()
+            .filter(|r| {
+                let said = if kind == "person" {
+                    r.name.split_whitespace().next().unwrap_or_default()
+                } else {
+                    r.name.as_str()
+                };
+                fold(said) == fold(name)
+            })
+            .collect();
+        let [row] = rows[..] else { return None };
+        if !self.verb_fits(kind, verb, row) {
+            return None;
+        }
+        Some(self.turn(
+            Intent::Write {
+                target: Target::Name {
+                    kind: kind.to_owned(),
+                    name: name.to_owned(),
+                    key: row.key.clone(),
+                    trashed: false,
+                },
+                verb: verb.to_owned(),
+                arg: VerbArg::None,
+            },
+            Reference::Name,
+            Outcome::Done,
+            None,
+        ))
+    }
+
     fn write(&self, kind: &str, verb: &str, rng: &mut Rng, roll: usize) -> Option<TurnIntent> {
         if !draws(kind, verb) {
             return None;
@@ -876,18 +1022,10 @@ impl<'a> Sampler<'a> {
         } else {
             rows
         };
-        let ok = |r: &&Row| -> bool {
-            match verb {
-                "complete" | "cancel" if kind == "task" => r.text("status") == Some("open"),
-                "reopen" => r.text("status") == Some("completed"),
-                "cancel" => true,
-                "star" => r.fields.get("starred") == Some(&F::B(false)),
-                "unstar" => r.fields.get("starred") == Some(&F::B(true)),
-                "unlink" => self.transfer_leg(&r.key),
-                _ => true,
-            }
-        };
-        let pool: Vec<&Row> = pool.into_iter().filter(|r| ok(r)).collect();
+        let pool: Vec<&Row> = pool
+            .into_iter()
+            .filter(|r| self.verb_fits(kind, verb, r))
+            .collect();
         if pool.is_empty() {
             return None;
         }
@@ -949,7 +1087,7 @@ impl<'a> Sampler<'a> {
             }
             _ => VerbArg::None,
         };
-        let repair = roll >= 92;
+        let repair = roll >= REPAIR_FROM;
         Some(self.turn(
             Intent::Write {
                 target,
@@ -1082,7 +1220,7 @@ impl<'a> Sampler<'a> {
         // runtime refuses the edit, names the store, and the turn ends on that refusal (the
         // owner's ruling: refuse edits to synced rows and name the source).
         let synced = matches!(kind, "workout" | "daily figure");
-        let repair = !synced && roll >= 92;
+        let repair = !synced && roll >= REPAIR_FROM;
         Some(self.turn(
             Intent::Edit { target, changes },
             reference,
@@ -1170,7 +1308,7 @@ impl<'a> Sampler<'a> {
             }),
             _ => {}
         }
-        let repair = roll >= 92;
+        let repair = roll >= REPAIR_FROM;
         Some(self.turn(
             Intent::Create {
                 kind: kind.to_owned(),
@@ -1610,6 +1748,21 @@ impl<'a> Sampler<'a> {
                         && t.apps != turns[on].apps
                 })
         });
+        // a follow-up can be a repair too: its first call is one the runtime refuses
+        for turn in turns.iter_mut().skip(1) {
+            let repairable = match &turn.intent {
+                Intent::Read { .. }
+                | Intent::Count { .. }
+                | Intent::Measure { .. }
+                | Intent::Edit { .. }
+                | Intent::Create { .. } => true,
+                Intent::Write { verb, .. } => verb != "undo",
+                _ => false,
+            };
+            if repairable && turn.outcome == Outcome::Done && rng.below(100) < REPAIR_FOLLOW_UP {
+                turn.outcome = Outcome::Repair;
+            }
+        }
         let span = if joins { Span::Across } else { Span::Single };
         Some(Scenario {
             id: id.to_owned(),

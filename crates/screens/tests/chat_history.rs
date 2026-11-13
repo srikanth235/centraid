@@ -755,3 +755,29 @@ fn the_pencil_is_drawn_only_inside_a_saved_chat_and_the_chats_page_closes_on_a_p
     let state = chat.state();
     assert!(!state.drawer_open && state.can_new_chat && state.thread_id == id);
 }
+
+#[test]
+fn a_refused_rename_or_delete_is_a_sentence_and_the_list_shows_the_vault() {
+    let mut chat = with_history(&["first question"]);
+    toggle(&mut chat, true);
+    assert!(chat.state().threads_error.is_empty());
+    // a chat the vault does not hold cannot be renamed or deleted
+    chat.event(C::ThreadRenamed(wire::chat_event::ThreadRenamed {
+        thread_id: "no-such-chat".to_owned(),
+        title: "Other".to_owned(),
+    }));
+    assert_eq!(
+        chat.state().threads_error,
+        "That change was not saved. Try again."
+    );
+    assert_eq!(chat.thread_titles(), ["first question"]);
+    // reopening the page starts clean
+    toggle(&mut chat, false);
+    toggle(&mut chat, true);
+    assert!(chat.state().threads_error.is_empty());
+    chat.event(C::ThreadDeleted(wire::chat_event::ThreadDeleted {
+        thread_id: "no-such-chat".to_owned(),
+    }));
+    assert!(!chat.state().threads_error.is_empty());
+    assert_eq!(chat.thread_titles(), ["first question"]);
+}

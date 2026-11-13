@@ -166,17 +166,21 @@ impl Preview {
     fn data(&self, ctx: &Ctx, record: &wire::EarlierRecord) -> wire::EarlierPreviewData {
         let locale = ctx.locale();
         let cycle = ctx.hour_cycle();
-        let when = |local: &str, system: &str| {
+        let when = |local: &str, system: &str, actor: &str| {
             [
                 earlier::dated(locale, cycle, local),
-                earlier::from(locale, system),
+                earlier::from(locale, system, actor),
             ]
             .into_iter()
             .filter(|part| !part.is_empty())
             .collect::<Vec<_>>()
             .join(" · ")
         };
-        let since = when(&record.since_local, &record.since_store_system);
+        let since = when(
+            &record.since_local,
+            &record.since_store_system,
+            &record.since_made_by,
+        );
         let headline = if since.is_empty() {
             words::preview_as_it_was_undated(locale)
         } else {
@@ -192,7 +196,11 @@ impl Preview {
             })
             .collect();
         let line = self.spec.line(&self.look(ctx, false), &moved);
-        let replaced = when(&record.replaced_local, &record.store_system);
+        let replaced = when(
+            &record.replaced_local,
+            &record.store_system,
+            &record.made_by,
+        );
         let changed = match (replaced.is_empty(), line.trim().is_empty()) {
             (false, false) => fill(
                 &words::preview_changed(locale),

@@ -3,8 +3,8 @@
 # the Chat tab, and the Chats page's own search field finds it again, corrects a slip
 # and says when nothing matches.
 #
-# iOS ONLY: Android has no Chat tab, so Home's search never offers a chat row
-# there (the machine drops the group) and there is no Chats page.
+# BOTH SHELLS draw the Chat tab, the chat row in Home's search and the Chats page. This file is the
+# iOS flow (`dev.centraid.Centraid`); an Android flow for the same path is owed (#1188 C15).
 #
 # THIS FLOW NEEDS A MODEL ON THE PHONE, and it does not relaunch the app. A chat
 # is saved when a turn finishes, and the composer exists only once a model is

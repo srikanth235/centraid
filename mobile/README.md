@@ -13,7 +13,7 @@ mobile/
 
 ## What runs here, and what is a hand-off
 
-The Linux `cargo xtask gate` proves Rust and JVM behavior. The separate `ios` job in `.github/workflows/gate.yml` builds the real Rust simulator archive with llama, generates protobuf sources and both Xcode projects, compiles HealthSeeder in Swift 6 mode, and runs the Centraid app’s XCTest bundle in Swift 6 mode on a hosted macOS simulator. It uploads compiler logs and `.xcresult` bundles even on failure. Simulator results do not establish physical-device behavior or performance; the remaining hand-offs are below.
+The Linux `cargo xtask gate` proves Rust and JVM behavior. The separate `ios` job in `.github/workflows/gate.yml` builds the real Rust simulator archive with llama, generates protobuf sources and both Xcode projects, compiles HealthSeeder in Swift 6 mode, and runs the Centraid app’s XCTest bundle in Swift 6 mode on a hosted macOS simulator. It uploads compiler logs and `.xcresult` bundles even on failure. The separate `android` job in the same workflow compiles the Compose shell's Kotlin against the Android SDK (`:androidApp:compileDebugKotlin`, no native core) and runs the fixture tests both shells read (`contracts/backup/check-controls.json`); it does not package or run the app. Simulator results do not establish physical-device behavior or performance; the remaining hand-offs are below.
 
 | Provable on this machine (JVM and Rust) | An owner hand-off |
 | --- | --- |
@@ -88,7 +88,7 @@ mobile/scripts/android-core.sh                                   # the Rust core
 cd mobile && ./gradlew -Pcentraid.android=true :androidApp:assembleDebug
 ```
 
-Without the flag, `:androidApp` **is not in the build at all** and `mobile/settings.gradle.kts` says so once, on every configuration. With the flag and no `ANDROID_HOME`, it refuses with the sentence that names this section. It never skips silently. The `.so` in `jniLibs` is a copied file: nothing in Gradle knows it is stale (`.claude/skills/mobile-verify/SKILL.md`).
+Without the flag, `:androidApp` **is not in the build at all** and `mobile/settings.gradle.kts` says so once, on every configuration. With the flag and no `ANDROID_HOME`, it refuses with the sentence that names this section. It never skips silently. The `.so` in `jniLibs` is a copied file: nothing in Gradle knows it is stale (`.claude/skills/land/mobile.md`).
 
 **A JDK 21 Gradle can find.** `:core` compiles with `jvmToolchain(21)`, and `:androidApp`'s unit tests run on JDK 21 for the same reason. Gradle looks for one where it is installed system-wide; a Homebrew `openjdk@21` is not there, and the build stops with "Cannot find a Java installation … matching languageVersion=21". Point `JAVA_HOME` at it (`export JAVA_HOME=$(brew --prefix openjdk@21)/libexec/openjdk.jdk/Contents/Home`), which the `mobile-jvm` gate needs as well, or pass `-Dorg.gradle.java.installations.paths=<that path>` to `./gradlew`.
 
@@ -110,7 +110,7 @@ Everything on iOS needs a macOS host. In order:
 ```sh
 # 0. THE RUST CORE, FIRST AND EVERY TIME IT CHANGES. The app links this archive
 #    by PATH (iosApp/project.yml), so nothing but this step builds it, and a
-#    stale one links with no error at all — see .claude/skills/mobile-verify/SKILL.md,
+#    stale one links with no error at all — see .claude/skills/land/mobile.md,
 #    written after a byte door that compiled on every layer and ran as the
 #    version from five hours earlier.
 #    The core carries llama.cpp (the on-device chat's engine) when it is built
@@ -158,7 +158,7 @@ cd mobile/iosApp && xcodebuild -project Centraid.xcodeproj -scheme Centraid \
 
 | You changed | Re-run | Why it is silent otherwise |
 | --- | --- | --- |
-| anything under `crates/` the core links — a screen, a command, a query, a proto | 0 | the app links the Rust archive by path; a stale slice answers the old arm and nothing says so (`.claude/skills/mobile-verify/SKILL.md`) |
+| anything under `crates/` the core links — a screen, a command, a query, a proto | 0 | the app links the Rust archive by path; a stale slice answers the old arm and nothing says so (`.claude/skills/land/mobile.md`) |
 | `crates/api-proto/proto/**` — an edited message | 0; nothing for Swift | Xcode's pre-build phase regenerates `Sources/Generated` when a `.proto` is newer than its output |
 | a NEW `crates/api-proto/proto/**/*.proto` file | 2 | the phase's input and output lists are written by `xcodegen generate`; a proto the project does not list is a type Swift does not have |
 | a new `Sources/**.swift` file | 2 | the target globs a directory, and the project is generated |
@@ -239,7 +239,7 @@ Above `:core`, Android's `dev.centraid.core.Screens` holds the screen runtime's 
 | the Wire types | `crates/api-proto/proto`, by Gradle's `generateCommonMainProtos` | `buf lint` / `buf breaking`; the task is a build input, so a stale tree is not possible |
 | `iosApp/Sources/Generated/**` (the SwiftProtobuf types) | `mobile/scripts/generate-swift-protos.sh`: Xcode's pre-build phase, and `xcodegen generate`'s `preGenCommand` | none needed: the phase re-runs when a `.proto` changes, and `Sources/Generated` is gitignored |
 
-One generator (Rust, no formatter after it), N committed artifacts, one check that fails on drift. A hand-maintained Kotlin colour table would be a fourth lowering with no drift gate — and so would a hand-maintained app catalogue, icon set or kit word, which is why the generator carries them rather than eight app names and 139 silhouettes being typed into two languages. A view's other copy is the Rust `ViewState`'s: the words live in `crates/screens/src/strings`, and `lint:copy` holds them to the [wording rules](../.claude/skills/product-intuition/references/design-behaviour.md#wording).
+One generator (Rust, no formatter after it), N committed artifacts, one check that fails on drift. A hand-maintained Kotlin colour table would be a fourth lowering with no drift gate — and so would a hand-maintained app catalogue, icon set or kit word, which is why the generator carries them rather than eight app names and 139 silhouettes being typed into two languages. A view's other copy is the Rust `ViewState`'s: the words live in `crates/screens/src/strings`, and `lint:copy` holds them to the [wording rules](../.claude/skills/design/wording.md).
 
 ## The shells, and what they hold
 
@@ -297,7 +297,7 @@ The screens are Rust's (`words.make`, `words.enter`, `words.show`, `pair.laptop`
 The core answers a byte-door request with a **path**, never bytes: the platform opens the file, so decoding and caching stay where they belong (`ContentImage` on both shells). Two things will waste an afternoon if you do not know them:
 
 - **`UIImage(contentsOfFile:)` leans on the path extension.** A content-addressed file is named by its digest and has none, so that initializer returns nil for every photograph in the store — silently. `UIImage(data:)` sniffs the bytes, and is the only thing that can be right when the name is a hash.
-- **The Rust archive is linked by path** and nothing rebuilds it. See `.claude/skills/mobile-verify/SKILL.md` and step 0 above.
+- **The Rust archive is linked by path** and nothing rebuilds it. See `.claude/skills/land/mobile.md` and step 0 above.
 
 A cell stays a placeholder when the door says the bytes are not here, when it refuses to call them embeddable (`image/svg+xml` is executed by a renderer in the embedding page's origin), or when they are **not a still image** — a video's thumbnail is its poster derivative, and handing a mosaic an MP4 draws a blank that reads as a failed render.
 
@@ -305,18 +305,26 @@ A cell stays a placeholder when the door says the bytes are not here, when it re
 
 The pass service in Rust decides when a pass runs, over what, and what the Backup screen and Home's line say. The shells carry the platform's half:
 
-- **Windows.** Rust sends the windows it wants (`ScheduleWindows`) and the shell maps each onto the OS, then reports `ShellFact.window` when one opens and answers `PassWindowDone`. iOS asks for the refresh window (`dev.centraid.sync-pass`) and a processing window that needs external power and a network (`dev.centraid.upload-pass`), and resubmits after every pass because a `BGTaskRequest` is one-shot. Android enqueues WorkManager work (`backup/PassWork.kt`): a periodic window on Wi-Fi unless the rule lets photographs cross cellular, an hourly night shift on a charger and Wi-Fi, and a one-off nudge under the rule's floor.
+- **Windows.** Rust sends the windows it wants (`ScheduleWindows`) and the shell maps each onto the OS, then reports `ShellFact.window` when one opens and answers `PassWindowDone`. iOS gives each window its own identifier (iOS keeps one pending request per identifier): the refresh window (`dev.centraid.sync-pass`), the night shift as a processing window that needs external power and a network (`dev.centraid.upload-pass`), and the one-off nudge as a processing window with a network and no charger (`dev.centraid.nudge-pass`), and resubmits after every pass because a `BGTaskRequest` is one-shot. Android enqueues WorkManager work (`backup/PassWork.kt`): a periodic window on Wi-Fi unless the rule lets photographs cross cellular, an hourly night shift on a charger and Wi-Fi, and a one-off nudge under the rule's floor.
 - **The mover on iOS.** The pass service hands parts to the shell as `UploadsOp`; the shell installs its background `URLSession` (`BackgroundUploads.swift`, TLS pinned to the paired gateway certificates) and reports each finished task as `UploadSettled` / `UploadsDrained`. A changed rule cancels every task the OS holds, because each keeps the cellular flag it was handed off under. Android moves bytes in-process and has no twin of this file.
 - **Back up now** is a run the platform keeps alive (Android's user-initiated job or a `dataSync` service, `backup/BackupNow.kt`; iOS's awake screen); a second press while a run goes starts nothing. The battery sentence is Rust's; whether battery saving applies is the shell's to read and report.
 - **The way back and free-up-space.** The download arrow on a grid cell or the lightbox is Rust's `fetch_original`; freeing space runs Rust's census/releasable/released flow and asks the shell only `LibraryDelete` (`PhotoLibraryDeleter.swift`, `backup/MediaStoreDeleter.kt`).
 
 ## Notifications: reminders and alerts (#1173)
 
-The `reminders.notify` service in Rust (`crates/screens/src/agenda/notify`) decides which task reminders and event alerts the phone holds (the next 48 within two weeks, soonest first; iOS keeps at most 64 pending), when each fires and what each says. It sends the WHOLE set as `ScheduleNotifications` whenever it changes (an edit, a completion, a delete, a vault switch, the zone or the locale). A shell decides nothing:
+The `reminders.notify` service in Rust (`crates/screens/src/agenda/notify`) decides which task reminders and event alerts the phone holds (the next 48 within 90 days, soonest first, the last slot kept for a "reminders are paused" notice when the horizon is reached; iOS keeps at most 64 pending), when each fires and what each says. It sends the WHOLE set as `ScheduleNotifications` whenever it changes (an edit, a completion, a delete, a vault switch, the zone or the locale). A shell decides nothing:
 
-- **The diff.** The shell removes whatever it holds (pending and delivered) that is not in the set, and adds or replaces the rest. iOS reads what `UNUserNotificationCenter` holds and builds a calendar trigger from `fire_local` in `zone` (`Notifications.swift`). Android keeps its own record of the set in a private preferences file and arms one `AlarmManager` alarm per item (`notify/Notify.kt`). The alarm is exact when the platform grants `SCHEDULE_EXACT_ALARM` and inexact otherwise. A receiver posts each notification through `NotificationManager` on one channel named by Rust, and a boot, time or zone receiver re-arms from the record.
+- **The diff.** The shell removes whatever it holds (pending and delivered) that is not in the set, and adds or replaces the rest. iOS reads what `UNUserNotificationCenter` holds and builds a calendar trigger from `fire_local` in `zone` (`Notifications.swift`). Android keeps its own record of the set in a private preferences file and arms one `AlarmManager` alarm per item (`notify/Notify.kt`). The alarm is exact when the platform grants `SCHEDULE_EXACT_ALARM` and inexact otherwise. A receiver posts each notification through `NotificationManager` on one channel named by Rust, and a boot, time or zone receiver re-arms from the record and says at once any reminder whose moment passed while the phone was off. A background window (`ShellFact.window`) makes the service speak the set again, which tops up the 90 days.
 - **Permission** is asked only when the set first holds something that would fire (`ask_permission`); refused is quiet: nothing is held and nothing is said. Each answer reports the permission and the count (`NotificationsScheduled`).
-- **The buttons.** Mark as done, Snooze 1 hour and Tomorrow, and a tap, come back as `ShellFact.notification_answered` with the id and the verb as received. Rust writes (`complete-task`, `edit-task`) and answers with a new set carrying a short receipt that offers Undo. The shell holds the app awake (iOS's delegate, Android's `goAsync`) until that set is performed. A repeating task offers Mark as done only, and an event offers no buttons; a tap opens it.
+- **The buttons.** Mark as done, Snooze 1 hour and Tomorrow, and a tap, come back as `ShellFact.notification_answered` with the id and the verb as received. The buttons work from the lock screen with no unlock (iOS: no `.authenticationRequired`; Android: `setAuthenticationRequired(false)`). A snooze moves only the alert (`task.snoozed_until`), never the due. Rust writes (`complete-task`, `edit-task`) and answers with a new set carrying a short receipt that offers Undo. The shell holds the app awake (iOS's delegate, Android's `goAsync`) until that set is performed. A repeating task offers Mark as done only, and an event offers no buttons; a tap opens it.
+
+### Notification device checks still owed (#1188)
+
+Nothing here runs a simulator or a device; each of these is unproven until someone does it.
+
+- **Android:** an exact-alarm reminder sounds on time with the screen off; the lock screen shows Done and Snooze and each works without unlocking; with "show details" off the lock screen says only that a reminder or an event is due; power the phone off across a reminder's moment and the boot says it late, once; change the zone and the clock and see the set re-armed; switch the Reminders channel off and see the editor row say so with an Open Settings button that opens the app's notification settings.
+- **iOS:** a locked-phone Done and Snooze press records without unlocking and without the app opening; the Open Settings button opens the app's Settings page; with the preview setting off the lock screen shows no titles; a zone change under a running app re-arms.
+- **Both:** the 90-day horizon's paused notice appears when a day-91 reminder exists and a background window refills the set; a snoozed task keeps its due date and sounds again an hour later, and Undo brings the original reminder back.
 
 ## Android, end to end
 

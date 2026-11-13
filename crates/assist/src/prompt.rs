@@ -180,6 +180,12 @@ pub(crate) fn message(role: &str, content: &str) -> String {
     format!("<|im_start|>{role}\n{content}{END_OF_TURN}\n")
 }
 
+/// A message whose content is the member's or a record's text, never the template's: it is made
+/// unable to spell a special token first (#1188 C2).
+pub(crate) fn data_message(role: &str, content: &str) -> String {
+    message(role, &crate::escape::vault_text(content))
+}
+
 /// WHERE THE MODEL BEGINS: the assistant's turn, opened with an EMPTY thinking
 /// block.
 ///
@@ -221,15 +227,15 @@ pub fn chat_prompt(history: &[Turn], user: &str) -> String {
         .collect();
     let mut out = message("system", CHAT_SYSTEM);
     for turn in &shown[shown.len().saturating_sub(HISTORY_TURNS)..] {
-        out.push_str(&message("user", &turn.user));
+        out.push_str(&data_message("user", &turn.user));
         let said = match &turn.record {
             Recorded::Tool { answer, .. } => answer.as_str(),
             Recorded::Answer(text) | Recorded::Attachment(text) => text.as_str(),
             Recorded::NoTool => continue,
         };
-        out.push_str(&message("assistant", said));
+        out.push_str(&data_message("assistant", said));
     }
-    out.push_str(&message("user", &question(user)));
+    out.push_str(&data_message("user", &question(user)));
     out.push_str(ASSISTANT_TURN);
     out
 }

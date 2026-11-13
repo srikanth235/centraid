@@ -145,6 +145,16 @@ pub enum CoreError {
 
     #[error("core invariant: {context}")]
     Invariant { context: String },
+
+    /// A restore was handed a backup that a newer build made: update, then restore again.
+    #[error(
+        "the backup was made by a newer build (schema {found}; this build reads up to {supported})"
+    )]
+    BackupFromNewerBuild { found: i64, supported: i64 },
+
+    /// A restore found no backup that opens: every snapshot failed a check. Nothing was claimed.
+    #[error("no backup on the device opens: {detail}")]
+    BackupUnreadable { detail: String },
 }
 
 impl CoreError {
@@ -155,6 +165,8 @@ impl CoreError {
             // A closed or poisoned handle is INTERNAL from the shell's side:
             // the remedy is the same, which is to restart the core.
             Self::Closed | Self::Poisoned { .. } | Self::Invariant { .. } => ErrorCode::Internal,
+            Self::BackupFromNewerBuild { .. } => ErrorCode::BackupFromNewerBuild,
+            Self::BackupUnreadable { .. } => ErrorCode::BackupUnreadable,
             // THE VERSION WINDOW, not `Internal`. "This app and that core are
             // not the same build" is the same remedy as "these two are too far
             // apart to talk" — update the one the diagnostics screen names —
@@ -281,6 +293,8 @@ pub fn sentence_for_code(code: ErrorCode) -> &'static str {
         C::UpgradeRequired => "This vault needs a newer Centraid.",
         C::NotYetAvailable => "Not available yet.",
         C::Internal => "Something went wrong. Restart Centraid.",
+        C::BackupFromNewerBuild => "A newer Centraid made this backup. Update Centraid.",
+        C::BackupUnreadable => "This version of Centraid can't open this backup.",
 
         // --- the gateway (#1029 §3) ---
         //
@@ -457,7 +471,7 @@ mod tests {
 
     /// Every code the enum carries, so the sweep above cannot miss one: a new
     /// code with no sentence is a code whose refusal renders as nothing.
-    const EVERY_CODE: [ErrorCode; 21] = [
+    const EVERY_CODE: [ErrorCode; 23] = [
         ErrorCode::Unspecified,
         ErrorCode::Unauthorized,
         ErrorCode::VersionWindow,
@@ -479,5 +493,7 @@ mod tests {
         ErrorCode::UpgradeRequired,
         ErrorCode::NotYetAvailable,
         ErrorCode::Internal,
+        ErrorCode::BackupFromNewerBuild,
+        ErrorCode::BackupUnreadable,
     ];
 }

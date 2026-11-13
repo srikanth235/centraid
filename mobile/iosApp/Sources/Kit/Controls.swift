@@ -1,6 +1,6 @@
 import SwiftUI
 
-// THE CONTROLS (product-intuition/references/design-behaviour.md § Controls).
+// THE CONTROLS (design/behaviour.md § Controls).
 //
 // Chrome is the platform's; content is the kit's. The navigation bar draws its
 // own back, title and trailing verb; everything under it is one of these, so

@@ -61,6 +61,9 @@ pub enum Refusal {
     /// The attachment is bigger than the chat will take.
     #[error("the attachment is too large")]
     AttachmentTooLarge,
+    /// The message, or what answering it needs read, is more than the chat can read at once.
+    #[error("that is too long for the chat to read at once")]
+    TooLong,
 }
 
 /// What the model is reading before it answers: shown while a long prefill
@@ -367,9 +370,9 @@ impl Plane<'_> {
         self.model
             .generate(request, on_token)
             .map_err(|error| match error {
-                ModelError::Load(detail) | ModelError::Generate(detail) => {
-                    Refusal::ModelFailed(detail)
-                }
+                ModelError::Load(detail)
+                | ModelError::AdapterLoad(detail)
+                | ModelError::Generate(detail) => Refusal::ModelFailed(detail),
                 ModelError::NoVision => Refusal::VisionAbsent,
                 other @ ModelError::ContextExceeded { .. } => {
                     Refusal::ModelFailed(other.to_string())

@@ -1,6 +1,6 @@
 name: trainer
 
-# The trainer's CPU tests (`experiments/toolchat/native/run_tests.py`: train/, artefacts.py), none skipped. Python is the GPU trainer
+# The adapter trainer's CPU tests (`experiments/adapter-train/run_tests.py`), none skipped. Python is the GPU trainer
 # and nothing else (#1171), so this is not part of the pull-request gate: `gate.yml` is the only workflow that listens on
 # `pull_request`, and it has no Python job. Here the suite runs on `main` when a file of the trainer changes, and on demand.
 # Inputs are pinned by content: hashed pip requirements. No network beyond pip, no model weights, no secret.
@@ -9,7 +9,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "experiments/toolchat/native/**"
+      - "experiments/adapter-train/**"
       - ".github/workflows/trainer.yml"
   workflow_dispatch:
 
@@ -28,12 +28,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          # The minor the training image runs (train/vm/run_job.sh).
+          # The minor the CPU test pins were compiled for (requirements-ci.in); the training image's own Python comes with its base image.
           python-version: "3.11"
       - run: >-
-          python -m pip install --require-hashes --only-binary=:all: --no-deps -r experiments/toolchat/native/requirements-ci.txt
-      - name: Run the trainer's tests
+          python -m pip install --require-hashes --only-binary=:all: --no-deps -r experiments/adapter-train/requirements-ci.txt
+      - name: Run the adapter trainer's tests
         env:
           HF_HUB_OFFLINE: "1"
           PYTHONDONTWRITEBYTECODE: "1"
-        run: python experiments/toolchat/native/run_tests.py --jobs 2
+        run: python experiments/adapter-train/run_tests.py

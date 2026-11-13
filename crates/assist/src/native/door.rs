@@ -79,6 +79,18 @@ pub struct Ran {
     pub output: Value,
     pub reason: Option<String>,
     pub predicate: Option<String>,
+    /// What takes the write back, when the act has an inverse (`ActResponse.inverse`): the card's
+    /// Undo runs it through the one door every screen's Undo uses.
+    pub inverse: Option<Inverse>,
+}
+
+/// What takes an executed write back: the app whose action it is, and the core's own encoded
+/// `ActInverse`, carried opaque (this crate does not speak the wire; the core wrote it and the
+/// screen's one Undo door reads it back). An empty one is a write the core cannot take back.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Inverse {
+    pub app: String,
+    pub wire: Vec<u8>,
 }
 
 /// WHAT A WRITE IS: the manifest action chat runs, with the command it invokes. `action` is empty
@@ -102,6 +114,28 @@ impl Call {
             command,
         }
     }
+}
+
+/// What [`Door::window`] reads: the newest (or oldest) `limit` rows of `table` under `predicate`,
+/// in order of `sort` then `pk`.
+#[derive(Debug, Clone, Copy)]
+pub struct WindowQuery<'a> {
+    pub table: &'a str,
+    pub columns: &'a str,
+    pub sort: &'a str,
+    pub pk: &'a str,
+    pub predicate: &'a str,
+    pub binds: &'a [String],
+    pub limit: usize,
+    pub newest_first: bool,
+}
+
+/// The rows [`Door::window`] reached, and whether the table held more.
+#[derive(Debug, Clone, Default)]
+pub struct Window {
+    pub rows: Vec<Row>,
+    /// Rows older than these were left unread.
+    pub more: bool,
 }
 
 /// A live vault, as the runtime sees it. See the module docs for what each implementation
@@ -129,6 +163,40 @@ pub trait Door: Send {
     ) -> Result<Vec<Row>, String> {
         let _ = (table, columns, sort, pk, predicate, binds);
         Err("this door reads no filtered table".to_owned())
+    }
+
+    /// The newest rows of one table under `predicate` (the oldest when `newest_first` is false), at
+    /// most `limit`, in order of `sort` (then `pk`), and whether more were left behind (#1188, C3). The read is a keyset walk
+    /// that stops after `limit + 1` rows: the cost is the limit, whatever the table holds. The
+    /// default reads the whole filtered table and keeps the newest, which only a harness over a
+    /// small vault should rely on; the phone's door overrides it.
+    fn window(&self, query: &WindowQuery<'_>) -> Result<Window, String> {
+        let mut rows = self.table_where(
+            query.table,
+            query.columns,
+            query.sort,
+            query.pk,
+            query.predicate,
+            query.binds,
+        )?;
+        rows.sort_by(|a, b| {
+            let key = |row: &Row| (text(row, query.sort), text(row, query.pk));
+            if query.newest_first {
+                key(b).cmp(&key(a))
+            } else {
+                key(a).cmp(&key(b))
+            }
+        });
+        let more = rows.len() > query.limit;
+        rows.truncate(query.limit);
+        Ok(Window { rows, more })
+    }
+
+    /// How many entities of one kind the store holds (see `Vault::count_kind`), counted by the
+    /// store and never by walking its pages (#1188, C3). A door with no store to ask says so.
+    fn count_kind(&self, query: &centraid_vault::page::KindCount<'_>) -> Result<u64, String> {
+        let _ = query;
+        Err("this door counts nothing".to_owned())
     }
 
     /// Every occurrence of an event that occupies a civil day of `from_day..=to_day`

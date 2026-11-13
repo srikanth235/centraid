@@ -1,0 +1,24 @@
+name: Install the gate's external tools
+description: >-
+  cargo-deny, cargo-nextest, actionlint and buf at the pins below. The ONE place these versions are stated: `gate.yml`'s lanes and `nightly.yml`'s `gate` job both use this action, so a bump is one edit. Under CI a missing tool FAILS its step rather than skipping, so a broken install reds the lane. Requires the Rust toolchain on PATH (the `setup` action with `rust: "true"` first).
+
+runs:
+  using: composite
+  steps:
+    # Release binaries, nextest checked against its SHA-256.
+    - shell: bash
+      env:
+        NEXTEST_VERSION: 0.9.144
+        NEXTEST_SHA256: 8a4f726272b0a1c499bd87ca3978bfbb1a8c20bb08ccf075b9996e2081bd1e1e
+        ACTIONLINT_VERSION: 1.7.12
+        BUF_VERSION: 1.61.0
+      run: |
+        set -euo pipefail
+        command -v cargo-deny >/dev/null || cargo install cargo-deny --locked
+        nextest="cargo-nextest-${NEXTEST_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+        curl -sSfL "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-${NEXTEST_VERSION}/${nextest}" -o "${RUNNER_TEMP}/${nextest}"
+        echo "${NEXTEST_SHA256}  ${RUNNER_TEMP}/${nextest}" | sha256sum -c -
+        tar -xzf "${RUNNER_TEMP}/${nextest}" -C /usr/local/bin cargo-nextest
+        curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" | tar -xz -C /usr/local/bin actionlint
+        curl -sSfL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64" -o /usr/local/bin/buf
+        chmod +x /usr/local/bin/buf

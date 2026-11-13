@@ -4,7 +4,7 @@
 //! Counted over each rollout's turns up to and including its first failure ([`Rollout::clean`]): a later turn is
 //! downstream of the failure and says nothing about its own cell. A rate is `passes / samples`; beside it a cell
 //! says how many distinct turns it holds, how many some sample solved (`solved`, pass@k) and how many were solved by
-//! one sample and failed by another (`mixed`): those are the turns a DPO pair can be cut from.
+//! one sample and failed by another (`mixed`): those are the turns a model is unsteady on.
 
 use std::collections::{BTreeMap, BTreeSet};
 

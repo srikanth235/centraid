@@ -385,7 +385,7 @@ struct DocsDriveView: View {
         )
     }
 
-    /// THE INGEST'S LINE (product-intuition/references/design-behaviour.md § Status line: one line, at most one text action, never
+    /// THE INGEST'S LINE (design/behaviour.md § Status line: one line, at most one text action, never
     /// clears itself): its words, a determinate bar while bytes move, Try again
     /// on a failure, and the close key once there is something to put away.
     @ViewBuilder

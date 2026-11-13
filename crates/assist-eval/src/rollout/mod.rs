@@ -6,7 +6,7 @@
 //! | --- | --- |
 //! | this one | [`Sampling`], one [`Rollout`] (a session's result for one sample), [`run_rollouts`], and [`fake`], a scripted model |
 //! | [`report`] | pass rates per grid cell, tag, constraint count and argument class; [`report::compare`] of two reports |
-//! | [`records`] | RFT records (passing rollouts, weighted toward what the model still fails) and DPO pairs |
+//! | [`records`] | RFT records (passing rollouts, weighted toward what the model still fails) |
 //!
 //! A rollout is a whole session run free: the model's own calls make the history its later turns see, as on the phone.
 //! A turn after a failed one is therefore downstream of the failure, and the reports count a rollout's turns only up

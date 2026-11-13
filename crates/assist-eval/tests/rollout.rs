@@ -1,5 +1,5 @@
 //! ROLLOUTS WITH NO MODEL: a scripted model plays several samples of a small session through the real runtime; the
-//! report, the RFT records and the DPO pairs are checked on what it said. No weights, no network, no clocks.
+//! report and the RFT records are checked on what it said. No weights, no network, no clocks.
 
 use centraid_assist::native::prompt::ToolsMode;
 use centraid_assist_eval::gold::Session;
@@ -201,60 +201,6 @@ fn rft_keeps_passing_prefixes_once_and_weighs_toward_what_fails() {
 }
 
 #[test]
-fn dpo_pairs_a_failing_turn_with_a_passing_one_on_the_same_prompt_and_a_deciding_argument() {
-    let rollouts = sampled();
-    let mut stats = RecordStats::default();
-    let pairs = records::dpo_pairs(&[session()], &rollouts, 2, &mut stats);
-    // sample 1 (wrong person) pairs with sample 0 on turn 1; sample 3 declined, which no argument decides
-    assert_eq!(pairs.len(), 1, "{stats:?}");
-    let pair = &pairs[0];
-    assert_eq!(
-        (pair.turn, pair.decides.as_slice()),
-        (1, ["rows".to_owned()].as_slice())
-    );
-    assert_eq!(pair.cell, "answer/person");
-    assert_eq!(pair.chosen.turns.len(), 2);
-    assert_eq!(pair.chosen.turns[0].user, pair.rejected.turns[0].user);
-    assert_eq!(pair.chosen.turns[0].said, pair.rejected.turns[0].said);
-    assert_ne!(pair.chosen.turns[1].said, pair.rejected.turns[1].said);
-    assert_eq!(stats.dpo_wrong_act, 1);
-    assert_eq!(stats.dpo_pairs, 1);
-}
-
-#[test]
-fn a_different_history_is_a_different_prompt_and_makes_no_pair() {
-    let mut rollouts = sampled();
-    // the passing samples said something else on turn one: their turn two was written for another prompt
-    for r in rollouts.iter_mut().filter(|r| r.result.pass()) {
-        r.result.turns[0]
-            .said
-            .push("<think>\nintent: other\n</think>".to_owned());
-    }
-    let mut stats = RecordStats::default();
-    let pairs = records::dpo_pairs(&[session()], &rollouts, 2, &mut stats);
-    assert!(pairs.is_empty());
-    assert_eq!(stats.dpo_no_chosen, 1);
-}
-
-#[test]
-fn deciding_arguments_are_the_classes_the_calls_differ_in() {
-    let call = |args: Value| vec![json!({"tool": "find", "args": args})];
-    let a = call(
-        json!({"kind": "event", "when": "{\"unit\":\"week\",\"rel\":0}", "where": "status = open"}),
-    );
-    let b = call(
-        json!({"kind": "event", "when": "{\"unit\":\"week\",\"rel\":1}", "where": "status = open"}),
-    );
-    let words: Vec<&str> = records::deciding(&a, &b).iter().map(|c| c.word()).collect();
-    assert_eq!(words, ["date"]);
-    assert!(records::deciding(&a, &a).is_empty());
-    let c = call(json!({"kind": "transaction", "where": "amount > 20"}));
-    let d = call(json!({"kind": "transaction", "where": "amount > 50"}));
-    let words: Vec<&str> = records::deciding(&c, &d).iter().map(|c| c.word()).collect();
-    assert_eq!(words, ["amount"]);
-}
-
-#[test]
 fn a_renderer_fills_the_render_of_every_record() {
     struct Count;
     impl records::RenderRecord for Count {
@@ -275,24 +221,60 @@ fn a_renderer_fills_the_render_of_every_record() {
         Weighing::default(),
         &mut stats,
     );
-    let mut pairs = records::dpo_pairs(&[session()], &rollouts, 2, &mut stats);
     assert!(
         serde_json::to_value(&rft[0])
             .unwrap()
             .get("render")
             .is_none()
     );
-    records::render_all(&Count, &mut rft, &mut pairs).unwrap();
-    let line = serde_json::to_value(&pairs[0]).unwrap();
-    assert_eq!(line["chosen"]["render"]["input_ids"], json!([2]));
-    assert!(
-        line["rejected"]["render"]["text"]
-            .as_str()
-            .unwrap()
-            .ends_with("rejected")
+    records::render_all(&Count, &mut rft).unwrap();
+    assert_eq!(
+        serde_json::to_value(&rft[0]).unwrap()["render"]["input_ids"],
+        json!([2])
     );
     assert_eq!(
         serde_json::to_value(&rft[0]).unwrap()["render"]["weights"],
         json!([1.0])
     );
+}
+
+/// Records are cut from the train split only: val, test and noise are refused, before anything is written.
+#[test]
+fn records_are_never_cut_from_a_held_out_split() {
+    let rollouts = sampled();
+    let needs = Needs::default();
+    for (split, refused) in [
+        (Some("val"), true),
+        (Some("test"), true),
+        (Some("noise"), true),
+        (Some("train"), false),
+        (None, false),
+    ] {
+        let mut held = session();
+        held.split = split.map(str::to_owned);
+        let dir = tempfile::tempdir().expect("tempdir");
+        let out = dir.path().join("records");
+        let result = records::cut(
+            &[held],
+            &rollouts,
+            &records::Cutting {
+                needs: &needs,
+                weighing: Weighing::default(),
+            },
+            None,
+            &out,
+        );
+        match (refused, result) {
+            (true, Err(error)) => {
+                let text = error.to_string();
+                assert!(
+                    text.contains("held-out") && text.contains(split.unwrap()),
+                    "{text}"
+                );
+                assert!(!out.exists(), "nothing is written for {split:?}");
+            }
+            (false, Ok(_)) => assert!(out.join("rft.jsonl").exists()),
+            (refused, other) => panic!("{split:?}: refused={refused}, got {other:?}"),
+        }
+    }
 }

@@ -1,8 +1,8 @@
-//! A BACKGROUND FOLLOW PASS RE-ARMS THE REMINDERS (#1185): the app is in the
+//! A BACKGROUND FOLLOW PASS LEAVES THE PHONE'S OWN ALERT ALONE (#1185, #1188 NA2): the app is in the
 //! background and the member opens nothing. The phone's calendar changes, the
 //! follow pass Calendar's home hosts reads it and writes an event that has an
-//! alert, and the notification service, which hears every commit, speaks a new
-//! set to the shell. Counted on what the set holds, never on time. The runtime runs the
+//! alert, and the notification service, which hears every commit, still holds no
+//! notification for it: the phone's calendar sounds it. Counted on what the set holds, never on time. The runtime runs the
 //! follow coordinator, as the app does: it hears the OS, reads the habit, then the phone.
 
 mod reminders_support;
@@ -65,7 +65,7 @@ fn is_read(kind: &wire::effect::Kind) -> bool {
 }
 
 #[test]
-fn a_background_follow_pass_that_brings_in_an_alerted_event_re_arms_the_notifications() {
+fn a_background_follow_pass_that_brings_in_an_alerted_event_leaves_the_phones_own_alert_alone() {
     let runtime = centraid_screens::Runtime::new(
         agenda::registry().merge(centraid_screens::follow::registry()),
         vec![(
@@ -174,14 +174,14 @@ fn a_background_follow_pass_that_brings_in_an_alerted_event_re_arms_the_notifica
     // The commit the pass made reaches the service; nothing else was done by the member.
     d.pump(Duration::from_millis(500));
 
+    // ONE ALERT PER REAL THING (#1188, NA2): the phone's own calendar sounds this alert, as it
+    // stated it, so the pass leaves Centraid holding no notification for the event.
     let spoken = sets(&d);
-    assert_eq!(spoken.len(), 1, "the pass re-armed once: {spoken:?}");
-    let held: Vec<&wire::PendingNotification> = spoken[0]
-        .all
-        .iter()
-        .filter(|n| n.notification_id.starts_with("event|"))
-        .collect();
-    assert_eq!(held.len(), 1, "{:?}", spoken[0].all);
-    assert_eq!(held[0].title, "Offsite");
-    assert!(held[0].fire_local.starts_with(&tomorrow), "{held:?}");
+    assert!(
+        spoken
+            .iter()
+            .flat_map(|set| set.all.iter())
+            .all(|n| !n.notification_id.starts_with("event|")),
+        "the phone alerts for it: {spoken:?}"
+    );
 }

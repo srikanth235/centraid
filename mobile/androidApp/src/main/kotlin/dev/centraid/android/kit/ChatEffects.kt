@@ -7,6 +7,7 @@ import android.graphics.Matrix
 import android.media.ExifInterface
 import android.net.Uri
 import centraid.core.v1.ChatEvent
+import centraid.core.v1.DeleteModelFile
 import centraid.core.v1.EffectDone
 import centraid.core.v1.EffectFailed
 import centraid.core.v1.EffectRequest
@@ -24,6 +25,7 @@ import kotlinx.coroutines.withContext
 import okio.ByteString.Companion.toByteString
 import java.io.ByteArrayOutputStream
 import java.io.File
+import dev.centraid.android.screens.chat.ChatDeviceFacts
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
@@ -47,15 +49,43 @@ internal object ChatEffects {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val running = ConcurrentHashMap<String, Boolean>()
 
+    /** Whether the member allowed mobile data for the transfer into each file (#1188 download rules). */
+    private val allowed = ConcurrentHashMap<String, Boolean>()
+
     private const val SEND_EDGE = 1024
     private const val THUMB_EDGE = 160
 
+    /**
+     * The model file the new one replaced: a name in the models folder, nothing else. The new file
+     * was fetched, verified and loaded before Rust asks, and a name that is not a plain file name
+     * deletes nothing.
+     */
+    fun deleteModelFile(asked: DeleteModelFile): EffectResult {
+        val name = asked.file_name
+        if (name.isEmpty() || name.contains('/') || name.contains("..")) return EffectResult(done = EffectDone())
+        File(asked.models_dir, name).delete()
+        return EffectResult(done = EffectDone())
+    }
+
     /** Start the download Rust asked for; answers at once. */
-    fun download(screens: Screens, request: EffectRequest, asked: ModelDownload): EffectResult {
+    fun download(context: Context, screens: Screens, request: EffectRequest, asked: ModelDownload): EffectResult {
         val target = File(asked.models_dir, asked.file_name)
+        // Mobile data was allowed for the rest of a transfer that was waiting for Wi-Fi: the one
+        // that is going reads the new word at its next step and carries on from where it is.
+        allowed[target.path] = asked.allow_cellular
         if (running.putIfAbsent(target.path, true) != null) return EffectResult(done = EffectDone())
         scope.launch {
-            val ok = runCatching { fetch(screens, request.instance, asked, target) }.getOrDefault(false)
+            var ok = false
+            while (true) {
+                try {
+                    ok = fetch(context, screens, request.instance, asked, target)
+                    break
+                } catch (held: HeldForWifi) {
+                    continue
+                } catch (failed: Exception) {
+                    break
+                }
+            }
             running.remove(target.path)
             report(screens, request.instance) {
                 ChatEvent(download_finished = ChatEvent.DownloadFinished(ok = ok, vision = asked.vision))
@@ -68,10 +98,35 @@ internal object ChatEffects {
         screens.send(instance, ScreenEvent(chat = event()))
     }
 
+    /** The transfer let go of its connection because the phone moved to mobile data. */
+    private class HeldForWifi : Exception()
+
+    private fun blocked(context: Context, target: File): Boolean =
+        allowed[target.path] != true &&
+            ChatDeviceFacts.network(context) == centraid.core.v1.ChatEvent.DeviceFacts.Network.NETWORK_CELLULAR
+
     /** Moves the bytes (resuming a `.part` file), hashes them, and renames on a match. */
-    private suspend fun fetch(screens: Screens, instance: Long, asked: ModelDownload, target: File): Boolean {
+    private suspend fun fetch(context: Context, screens: Screens, instance: Long, asked: ModelDownload, target: File): Boolean {
         target.parentFile?.mkdirs()
+        // WI-FI FIRST: without the member's word for mobile data the transfer waits for Wi-Fi, and a
+        // partial file is kept to carry on from.
+        suspend fun waitForWifi() {
+            while (blocked(context, target)) kotlinx.coroutines.delay(5_000)
+        }
         val part = File(target.path + ".part")
+        // A CRASH BETWEEN THE LAST BYTE AND THE RENAME leaves a whole file under the part name: asking
+        // for bytes past its end is refused for ever, so a file that is already the one Rust named is
+        // kept at once, and any other partial file that is no shorter than the whole is cleared.
+        if (part.exists() && part.length() > 0) {
+            if (part.length() >= asked.bytes) {
+                if (sha256(part) == asked.sha256) {
+                    target.delete()
+                    return part.renameTo(target)
+                }
+                part.delete()
+            }
+        }
+        waitForWifi()
         val have = if (part.exists()) part.length() else 0L
         val connection = (URL(asked.url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 30_000
@@ -90,6 +145,9 @@ internal object ChatEffects {
                     while (true) {
                         val read = input.read(buffer)
                         if (read < 0) break
+                        // Mobile data without the member's word: let go of the connection, wait for Wi-Fi
+                        // and take the file up again from the bytes already kept.
+                        if (blocked(context, target)) throw HeldForWifi()
                         output.write(buffer, 0, read)
                         done += read
                         // About a hundred reports, not one per buffer.
@@ -190,6 +248,20 @@ internal object ChatEffects {
             ),
         )
     }
+
+    /**
+     * Remove the thumbnails in `cacheDir/chat-attach` that no chat on screen holds (#1188 C11): a
+     * deleted chat's, a closed one's, and any a crash left. `keep` is every `thumbnail_path` the
+     * state draws. A file written in the last minute stays: its path may be on its way to Rust.
+     */
+    fun sweepThumbnails(context: Context, keep: Set<String>, now: Long = System.currentTimeMillis()) {
+        val directory = File(context.cacheDir, "chat-attach")
+        directory.listFiles()?.forEach { file ->
+            if (file.path !in keep && now - file.lastModified() > FRESH_MS) file.delete()
+        }
+    }
+
+    private const val FRESH_MS = 60_000L
 
     private fun rotated(bitmap: Bitmap, orientation: Int): Bitmap {
         val matrix = Matrix()

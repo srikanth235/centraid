@@ -118,9 +118,17 @@ final class ChatModel: ObservableObject {
         ChatModelDownloader.shared.reportRunning()
     }
 
-    func sendText(_ text: String) { send(.sent(.with { $0.text = text })) }
+    func sendText(_ text: String, token: UInt64 = 0) {
+        send(.sent(.with {
+            $0.text = text
+            $0.token = token
+        }))
+    }
     func stop() { send(.stopped(.init())) }
     func regenerate() { send(.regenerated(.init())) }
+    /// Edit on the last member message, and the banner's cancel: Rust holds the editing state.
+    func edit() { send(.editStarted(.init())) }
+    func cancelEdit() { send(.editCancelled(.init())) }
 
     func newChat() {
         send(.newChat(.init()))
@@ -168,17 +176,56 @@ final class ChatModel: ObservableObject {
         }))
     }
 
+    /// A verb on a Locker card's sealed row; Rust decides what it does (the owner check, the value).
+    func revealVerb(message: UInt64, index: Int, key: String) {
+        send(.revealVerb(.with {
+            $0.messageID = message
+            $0.index = UInt32(index)
+            $0.key = key
+        }))
+    }
+
     func copy(_ messageID: UInt64) { send(.copied(.with { $0.messageID = messageID })) }
-    func downloadTapped() { send(.download(.with { $0.vision = false })) }
+    func downloadTapped(_ choice: Centraid_Core_V1_ChatStepAction = .unspecified) {
+        tellDevice()
+        send(.download(.with {
+            $0.vision = false
+            $0.choice = choice
+        }))
+    }
+
+    /// The network and the free space, as the phone has them now: the download rules read them.
+    func tellDevice() {
+        send(.deviceFacts(.with {
+            $0.network = ChatDeviceWatcher.shared.network
+            $0.freeBytes = ChatDeviceWatcher.shared.freeBytes
+            $0.memoryBytes = ProcessInfo.processInfo.physicalMemory
+        }))
+    }
 
     // MARK: A proposed write
 
     func confirmPending(_ id: String) { send(.pendingConfirmed(.with { $0.pendingID = id })) }
     func cancelPending(_ id: String) { send(.pendingCancelled(.with { $0.pendingID = id })) }
+    /// One write's Undo on an applied card (the kit's door runs it in the core).
+    func undoPending(_ id: String, index: Int) {
+        send(.pendingUndone(.with { $0.pendingID = id; $0.index = UInt32(index) }))
+    }
 
     // MARK: Attachments
 
-    func visionDownloadTapped() { send(.download(.with { $0.vision = true })) }
+    func visionDownloadTapped(_ choice: Centraid_Core_V1_ChatStepAction = .unspecified) {
+        tellDevice()
+        send(.download(.with {
+            $0.vision = true
+            $0.choice = choice
+        }))
+    }
+    /// The update row's Update: the newer model is fetched beside the one in use.
+    func updateTapped() {
+        tellDevice()
+        send(.download(.with { $0.update = true }))
+    }
     func removeAttachment(_ id: UInt64) { send(.attachmentRemoved(.with { $0.id = id })) }
     func libraryPhotoTapped() { send(.libraryPhotoTapped(.init())) }
     func openDocuments() { send(.documentsOpened(.init())) }

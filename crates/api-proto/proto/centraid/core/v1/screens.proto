@@ -146,6 +146,22 @@ message ScreenUpdate {
   // Instances closed by this update (popped off a stack): a shell frees their
   // view models.
   repeated uint64 closed = 4;
+  // Small changes to views the shell already holds, applied in order after `views`. A delta whose
+  // `base` is not the held view's revision is dropped: the next full view repairs it.
+  repeated ViewDelta deltas = 5;
+}
+
+// WHAT CHANGED IN A VIEW, when that is a few words: a streaming answer's next tokens are sent
+// alone, not with the whole chat (#1188 C14).
+message ViewDelta {
+  uint64 instance = 1;
+  // The revision of the view this applies to.
+  uint64 base = 2;
+  // The revision the view has once it is applied.
+  uint64 revision = 3;
+  oneof kind {
+    ChatAppend chat_append = 10;
+  }
 }
 
 message ScreenResponse {
@@ -329,6 +345,7 @@ message ScreenEvent {
     EarlierPreviewEvent earlier_preview = 905;
     // ---- backup (1450-1499, lane H2) ----
     BackupHomeEvent backup_home = 1450;
+    BackupCheckEvent backup_check = 1451;
     // ---- passes (1500-1599): passes_screens.proto ----
     // RUNTIME-ORIGINATED from `ScreenRequest.shell_fact`.
     ShellFact shell_fact = 1500;
@@ -462,6 +479,7 @@ message ViewState {
     EarlierPreviewView earlier_preview = 904;
     // ---- backup (1450-1499, lane H2) ----
     BackupHomeState backup_home = 1450;
+    BackupCheckState backup_check = 1451;
     // ---- the shell (1000-1999): chat (1600-1699) ----
     ChatState chat = 1600;
     // ---- the shell: phone imports (1700-1899) ----
@@ -523,6 +541,7 @@ message Effect {
     // ---- agenda (100-199): notifications (#1173, `notify_screens.proto`) ----
     // Make the OS hold exactly this set of reminders and alerts.
     ScheduleNotifications schedule_notifications = 120;
+    OpenNotificationSettings open_notification_settings = 121;
     // ---- docs (200-299): files ----
     // ---- agenda (100-199): outside the app ----
     // Keep the widgets' snapshot: write the document to the shared container,
@@ -557,6 +576,7 @@ message Effect {
     // ---- the shell (1000-1999): chat (1600-1699) ----
     ModelDownload model_download = 1600;
     PickLibraryPhoto pick_library_photo = 1601;
+    DeleteModelFile delete_model_file = 1602;
     // ---- the shell: phone imports (1700-1899) ----
     LibraryPermission library_permission = 1700;
     RollPage roll_page = 1701;

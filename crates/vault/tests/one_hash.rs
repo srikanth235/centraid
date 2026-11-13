@@ -117,6 +117,29 @@ const SHA256_ALLOWED: &[(&str, &str)] = &[
          the file that arrived; same reason as `asset.rs`",
     ),
     (
+        "assist/src/record.rs",
+        "the model record states each model file's SHA-256 because that is what its \
+         publisher states for it (Hugging Face's LFS object id): someone else's value, \
+         checked against the bytes that arrived. It names nothing inside a vault",
+    ),
+    (
+        "assist/tests/model_record.rs",
+        "tests the model record, whose digest is the published file's SHA-256; same \
+         reason as `assist/src/record.rs`",
+    ),
+    (
+        "xtask/src/main.rs",
+        "documents the `model-pin` command, which writes the published model file's \
+         SHA-256 (the digest its publisher states) into the record; same reason as \
+         `assist/src/record.rs`",
+    ),
+    (
+        "xtask/src/model_pin.rs",
+        "`cargo xtask model-pin` computes the SHA-256 of the model file you name for \
+         the record, the digest the publisher states for it; same reason as \
+         `assist/src/record.rs`. It hashes nothing inside a vault",
+    ),
+    (
         "xtask/src/artifact.rs",
         "`cargo xtask artifact-key` hashes the tree into a GitHub Actions cache \
          key. It names nothing inside a vault and GitHub's cache is not ours",

@@ -19,6 +19,7 @@
 //! | [`ledger`] | `<stem>.backup.db`: destinations, the queue, confirmations, snapshots |
 //! | [`spool`] | `<stem>.spool/`: sealed parts waiting to move, under a byte budget |
 //! | [`mover`] | the `PUT`s, the confirmations they earn, and the reconcile against `exists` |
+//! | [`verify`] | the heavy read-back: one confirmed original per gateway per pass, streamed and opened |
 //! | [`retention`] | which snapshots to keep, and which names are garbage |
 //! | [`restore`] | the file rebuilt from a destination, and every check that it is the snapshot's |
 //! | [`drill`] | back up, lose everything, restore, and prove it is the vault that was lost |
@@ -48,6 +49,7 @@ pub mod retention;
 pub mod snapshot;
 pub mod spool;
 pub mod store;
+pub mod verify;
 
 use crate::error::VaultError;
 

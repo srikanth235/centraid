@@ -1,22 +1,22 @@
-//! `assist-eval rollout …`: sample k decodes over a set, report them, compare two reports, cut RFT/DPO records.
+//! `assist-eval rollout …`: sample k decodes over a set, report them, compare two reports, cut RFT records.
 //!
 //! ```text
 //! assist-eval rollout         (--model GGUF | --stub) --set SET.jsonl [--worlds DIR]… --out PREFIX [--k 4] [--temperature 0.6]
-//!                             [--top-p 0.95] [--seed N] [--grammar off|handles|full] [--tools sig|s2|…] [--limit N] [--only ID,ID]
+//!                             [--top-p 0.95] [--seed N] [--grammar off|handles|full (default: the phone's)] [--tools sig|s2|…] [--limit N] [--only ID,ID]
 //!                             [--shard K/N] [--resume] [--threads N] [--gpu-layers N] [--label TEXT]
 //! assist-eval rollout-report  --rollouts PREFIX.rollouts.jsonl… --out PREFIX [--label TEXT]
 //! assist-eval rollout-compare BEFORE.rollout.json AFTER.rollout.json [--out FILE.json]
 //! assist-eval rollout-records --rollouts PREFIX.rollouts.jsonl… --set SET.jsonl [--worlds DIR]… --out DIR
-//!                             [--needs REPORT.json] [--min-samples 5] [--max-copies 4] [--pairs-per-turn 2]
+//!                             [--needs REPORT.json] [--min-samples 5] [--max-copies 4]
 //!                             (unrendered; `datagen rollout-records` writes the same files with `render`)
 //! ```
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use super::tools_of;
 use anyhow::{Context, Result, bail};
 use centraid_assist::native::grammar::GrammarMode;
-use centraid_assist::native::prompt::ToolsMode;
 use centraid_assist_eval::EvalError;
 use centraid_assist_eval::rollout::records::{self, Cutting, Needs, Weighing};
 use centraid_assist_eval::rollout::report::{self, RolloutReport};
@@ -50,7 +50,6 @@ struct Flags {
     label: Option<String>,
     min_samples: Option<usize>,
     max_copies: Option<usize>,
-    pairs_per_turn: Option<usize>,
 }
 
 fn flags(argv: &[String]) -> Result<Flags> {
@@ -113,13 +112,6 @@ fn flags(argv: &[String]) -> Result<Flags> {
             "--max-copies" => {
                 out.max_copies = Some(value("--max-copies")?.parse().context("--max-copies N")?)
             }
-            "--pairs-per-turn" => {
-                out.pairs_per_turn = Some(
-                    value("--pairs-per-turn")?
-                        .parse()
-                        .context("--pairs-per-turn N")?,
-                )
-            }
             other if !other.starts_with("--") => out.positional.push(other.into()),
             other => bail!("unknown argument {other}"),
         }
@@ -127,17 +119,7 @@ fn flags(argv: &[String]) -> Result<Flags> {
     Ok(out)
 }
 
-fn tools_of(word: &str) -> Result<ToolsMode> {
-    Ok(match word {
-        "s2" => ToolsMode::S2,
-        "sig" => ToolsMode::Sig,
-        "compact" => ToolsMode::Compact,
-        "full" => ToolsMode::Full,
-        other => bail!("--tools takes s2, sig, compact or full, not {other}"),
-    })
-}
-
-fn grammar_of(word: &str) -> Result<GrammarMode> {
+pub(super) fn grammar_of(word: &str) -> Result<GrammarMode> {
     Ok(match word {
         "off" => GrammarMode::Off,
         "handles" => GrammarMode::Handles,
@@ -153,13 +135,9 @@ fn with_ext(prefix: &Path, ext: &str) -> PathBuf {
     PathBuf::from(name)
 }
 
-fn source(f: &Flags, native: &Path) -> Result<impl EvalSource> {
-    let set = f.set.clone().context("give --set SET.jsonl")?;
-    let worlds = if f.worlds.is_empty() {
-        vec![native.join("data/v7/worlds")]
-    } else {
-        f.worlds.clone()
-    };
+fn source(f: &Flags) -> Result<impl EvalSource> {
+    let (set, worlds) = centraid_assist_eval::source::require_set(f.set.clone(), f.worlds.clone())
+        .map_err(anyhow::Error::msg)?;
     Ok(WithoutInProgress::new(WithoutTally::new(JsonlSource::new(
         set, worlds,
     ))))
@@ -211,10 +189,15 @@ pub fn run(command: &str, argv: &[String]) -> Result<()> {
 }
 
 fn sample(f: &Flags) -> Result<()> {
-    let native = PathBuf::from("experiments/toolchat/native");
-    let source = source(f, &native)?;
-    let tools = tools_of(f.tools.as_deref().unwrap_or("sig"))?;
-    let grammar = grammar_of(f.grammar.as_deref().unwrap_or("full"))?;
+    let source = source(f)?;
+    let tools = match f.tools.as_deref() {
+        Some(word) => tools_of(word)?,
+        None => centraid_assist::native_turn::phone_options().tools,
+    };
+    let grammar = match f.grammar.as_deref() {
+        Some(word) => grammar_of(word)?,
+        None => centraid_assist::native_turn::phone_options().grammar,
+    };
     let sampling = Sampling {
         k: f.k.unwrap_or(4),
         temperature: f.temperature.unwrap_or(0.6),
@@ -258,6 +241,7 @@ fn sample(f: &Flags) -> Result<()> {
                 f.gpu_layers,
                 sampling.top_p,
                 sampling.seed,
+                None,
             )?;
             let name = path
                 .file_name()
@@ -342,8 +326,7 @@ fn sample(f: &Flags) -> Result<()> {
 }
 
 fn cut_records(f: &Flags) -> Result<()> {
-    let native = PathBuf::from("experiments/toolchat/native");
-    let source = source(f, &native)?;
+    let source = source(f)?;
     let out = f.out.clone().context("give --out DIR")?;
     let rollouts = read_rollouts(&f.rollouts)?;
     let sessions = source.sessions()?;
@@ -360,7 +343,6 @@ fn cut_records(f: &Flags) -> Result<()> {
                 max_copies: f.max_copies.unwrap_or(4),
                 ..Weighing::default()
             },
-            pairs_per_turn: f.pairs_per_turn.unwrap_or(2),
         },
         None,
         &out,

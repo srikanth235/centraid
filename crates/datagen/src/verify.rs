@@ -120,6 +120,29 @@ pub struct Expected {
     /// The earlier turn (0-based) it leans on.
     pub leans: Option<(usize, crate::intent::Dep)>,
     pub decline: Option<String>,
+    /// Every fixed-list or text value the turn filters on, as `(field, value)` lowercased: `status = open`.
+    pub filters: Vec<(String, String)>,
+    /// The names the words carry: a named row, a row a selection is linked to or reads a period off.
+    pub names: Vec<String>,
+}
+
+fn filters_of(sel: &Selector, out: &mut Vec<(String, String)>) {
+    for f in &sel.filters {
+        if f.cmp == crate::intent::Cmp::Eq
+            && let Lit::Text(t) = &f.value
+        {
+            out.push((f.field.to_lowercase(), t.trim().to_lowercase()));
+        }
+    }
+}
+
+fn names_of(sel: &Selector, spoken: bool, out: &mut Vec<String>) {
+    if spoken && let Some(n) = &sel.name {
+        out.push(n.clone());
+    }
+    for l in [&sel.link, &sel.anchor].into_iter().flatten() {
+        out.push(l.name.clone());
+    }
 }
 
 fn numbers_of(sel: &Selector, out: &mut Vec<f64>) {
@@ -165,9 +188,15 @@ pub fn expected(turn: &TurnIntent, today: Date) -> Expected {
             None
         },
         decline: None,
+        filters: Vec::new(),
+        names: Vec::new(),
     };
-    let selects = |sel: &Selector, numbers: &mut Vec<f64>| {
+    let (mut filters, mut names) = (Vec::new(), Vec::new());
+    let said = matches!(turn.reference, Reference::Name);
+    let mut selects = |sel: &Selector, numbers: &mut Vec<f64>| {
         numbers_of(sel, numbers);
+        filters_of(sel, &mut filters);
+        names_of(sel, said, &mut names);
         (
             (sel.name.is_none() && !named).then(|| sel.kind.clone()),
             period_of(sel, today),
@@ -190,11 +219,17 @@ pub fn expected(turn: &TurnIntent, today: Date) -> Expected {
             "compare".clone_into(&mut e.act);
             measure_numbers(a, &mut numbers);
             measure_numbers(b, &mut numbers);
+            for m in [a, b] {
+                filters_of(&m.sel, &mut filters);
+                names_of(&m.sel, said, &mut names);
+            }
         }
         Intent::Write { target, verb, arg } => {
             e.act.clone_from(verb);
-            if let Target::Select { sel } = target {
-                (e.kind, e.period) = selects(sel, &mut numbers);
+            match target {
+                Target::Select { sel } => (e.kind, e.period) = selects(sel, &mut numbers),
+                Target::Name { name, .. } if said => names.push(name.clone()),
+                _ => {}
             }
             if let VerbArg::When(_) = arg {
                 // the new date is read as a slot of its own by the grounding of dates
@@ -202,8 +237,10 @@ pub fn expected(turn: &TurnIntent, today: Date) -> Expected {
         }
         Intent::Edit { target, changes } => {
             "edit".clone_into(&mut e.act);
-            if let Target::Select { sel } = target {
-                (e.kind, e.period) = selects(sel, &mut numbers);
+            match target {
+                Target::Select { sel } => (e.kind, e.period) = selects(sel, &mut numbers),
+                Target::Name { name, .. } if said => names.push(name.clone()),
+                _ => {}
             }
             for c in changes {
                 if let Val::Num(n) = c.value {
@@ -230,6 +267,8 @@ pub fn expected(turn: &TurnIntent, today: Date) -> Expected {
         }
     }
     e.numbers = numbers;
+    e.filters = filters;
+    e.names = names;
     e
 }
 
@@ -253,6 +292,16 @@ pub fn reader_prompt(
                     .as_ref()
                     .map(|u| format!("{} {} = {u}", k.name, f.name))
             })
+        })
+        .collect();
+    let lists: Vec<String> = catalog
+        .kinds
+        .iter()
+        .flat_map(|k| {
+            k.fields
+                .iter()
+                .filter(|f| !f.values.is_empty())
+                .map(|f| format!("{} {} = {}", k.name, f.name, f.values.join(" | ")))
         })
         .collect();
     let sessions: Vec<Value> = batch
@@ -281,6 +330,9 @@ For EVERY message return an object with:\n\
 - \"numbers\": every number given as a limit, threshold or new value, converted to the base unit of the field it applies to (units: {units}); money in plain currency units; a list of numbers, [] if none.\n\
 - \"leans_on\": the 1-based number of the earlier message this one needs to be understood (it uses it, it, them, that, \"and last month?\"), or null if it stands alone.\n\
 - \"decline_reason\": only when act is decline: out_of_scope, unbounded_destruction, fabricated_secret or not_found; else null.\n\
+- \"filters\": every condition on a fixed-list or text field the message sets, as [{{\"field\": ..., \"value\": ...}}] with the value as the fixed list says it (fixed lists: {lists}); [] if none.\n\
+- \"names\": every person, row or title the message names, as it is written; [] if none.\n\
+- \"excluding\": every value the message rules OUT (\"not\", \"except\", \"without\", \"other than\"); [] if none.\n\
 \n\
 Answer with JSON only: {{\"sessions\": [{{\"id\": \"s1\", \"turns\": [{{...}}, ...]}}, ...]}} with one object per message, in order.{retry}\n\
 \n\
@@ -288,6 +340,7 @@ Sessions:\n{sessions}\n",
         verbs = verbs.join(", "),
         kinds = kinds.join(", "),
         units = units.join("; "),
+        lists = lists.join("; "),
         sessions = serde_json::to_string_pretty(&sessions).unwrap_or_default(),
     )
 }
@@ -302,6 +355,17 @@ pub struct Read {
     pub numbers: Vec<f64>,
     pub leans_on: Option<usize>,
     pub decline_reason: Option<String>,
+    pub filters: Vec<(String, String)>,
+    pub names: Vec<String>,
+    pub excluding: Vec<String>,
+}
+
+fn strings(v: &Value) -> Vec<String> {
+    v.as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|n| n.as_str().map(|t| t.trim().to_lowercase()))
+        .collect()
 }
 
 fn read_of(v: &Value) -> Option<Read> {
@@ -322,6 +386,24 @@ fn read_of(v: &Value) -> Option<Read> {
             .or_else(|| v["leans_on"].as_str()?.parse().ok())
             .and_then(|n| usize::try_from(n).ok()),
         decline_reason: v["decline_reason"].as_str().map(str::to_lowercase),
+        filters: v["filters"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|f| {
+                Some((
+                    f["field"].as_str()?.trim().to_lowercase(),
+                    f["value"]
+                        .as_str()
+                        .map(str::to_owned)
+                        .or_else(|| Some(f["value"].to_string()))?
+                        .trim()
+                        .to_lowercase(),
+                ))
+            })
+            .collect(),
+        names: strings(&v["names"]),
+        excluding: strings(&v["excluding"]),
     })
 }
 
@@ -370,38 +452,62 @@ fn near(a: f64, b: f64) -> bool {
     (a.abs() - b.abs()).abs() <= 1e-6 * a.abs().max(b.abs()).max(1.0)
 }
 
-/// Do the reader's slots agree with the turn's?
-///
-/// # Errors
-///
-/// The first slot that disagrees, as `(slot, detail)`.
-pub fn agree(catalog: &Catalog, want: &Expected, got: &Read, index: usize) -> Result<(), Why> {
+/// One slot the reader was asked about, and whether it recovered what the intent carries.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Slot {
+    pub name: &'static str,
+    pub ok: bool,
+    pub detail: String,
+}
+
+fn slot(name: &'static str, ok: bool, detail: impl FnOnce() -> String) -> Slot {
+    Slot {
+        name,
+        ok,
+        detail: if ok { String::new() } else { detail() },
+    }
+}
+
+fn names_match(want: &str, got: &str) -> bool {
+    let (w, g) = (want.to_lowercase(), got.to_lowercase());
+    g.contains(&w) || w.contains(&g)
+}
+
+/// Every slot the turn asks the reader about, with what the reader said: the act always, and the kind, the period, the
+/// numbers, the earlier turn it leans on, the decline reason, every filter the intent carries (fixed-list values and
+/// text), every name the words carry and the exclusions (the intent has none, so the reader must name none) when the
+/// intent has them.
+#[must_use]
+pub fn slots(catalog: &Catalog, want: &Expected, got: &Read, index: usize) -> Vec<Slot> {
+    let mut out = Vec::new();
     let act_ok = got.act == want.act
         || (want.act == "recall" && got.act == "read")
         || (want.act == "read" && got.act == "recall")
         // a person who is not in the vault is asked about like any other: only the runtime knows
         || (want.decline.as_deref() == Some("not_found") && got.act == "read");
-    if !act_ok {
-        return Err(("act", format!("meant {}, read back {}", want.act, got.act)));
-    }
+    out.push(slot("act", act_ok, || {
+        format!("meant {}, read back {}", want.act, got.act)
+    }));
     if let Some(kind) = &want.kind
         && !matches!(got.kind.as_str(), "same" | "unknown")
-        && !same_kind(catalog, kind, &got.kind)
     {
-        return Err(("kind", format!("meant {kind}, read back {}", got.kind)));
+        out.push(slot("kind", same_kind(catalog, kind, &got.kind), || {
+            format!("meant {kind}, read back {}", got.kind)
+        }));
     }
-    if let Some((from, to)) = want.period
-        && (got.from != from.to_string() || got.to != to.to_string())
-    {
-        return Err((
+    if let Some((from, to)) = want.period {
+        out.push(slot(
             "period",
-            format!("meant {from}..{to}, read back {}..{}", got.from, got.to),
+            got.from == from.to_string() && got.to == to.to_string(),
+            || format!("meant {from}..{to}, read back {}..{}", got.from, got.to),
         ));
     }
     for n in &want.numbers {
-        if !got.numbers.iter().any(|g| near(*n, *g)) {
-            return Err(("number", format!("meant {n}, read back {:?}", got.numbers)));
-        }
+        out.push(slot(
+            "number",
+            got.numbers.iter().any(|g| near(*n, *g)),
+            || format!("meant {n}, read back {:?}", got.numbers),
+        ));
     }
     if let Some((from, dep)) = want.leans {
         let ok = match got.leans_on {
@@ -410,24 +516,54 @@ pub fn agree(catalog: &Catalog, want: &Expected, got: &Read, index: usize) -> Re
                 n == from + 1 || (matches!(dep, crate::intent::Dep::Handle) && n >= 1 && n <= index)
             }
         };
-        if !ok {
-            return Err((
-                "leans",
-                format!("meant turn {}, read back {:?}", from + 1, got.leans_on),
-            ));
-        }
+        out.push(slot("leans", ok, || {
+            format!("meant turn {}, read back {:?}", from + 1, got.leans_on)
+        }));
     }
     if let Some(reason) = &want.decline
         // a not-found person read as an ordinary lookup has no reason to compare
         && !(reason == "not_found" && got.act == "read")
     {
-        let got = got.decline_reason.as_deref().unwrap_or("");
-        let ok = got == reason || (reason == "not_found" && got == "out_of_scope");
-        if !ok {
-            return Err(("decline", format!("meant {reason}, read back {got}")));
-        }
+        let said = got.decline_reason.as_deref().unwrap_or("");
+        let ok = said == reason || (reason == "not_found" && said == "out_of_scope");
+        out.push(slot("decline", ok, || {
+            format!("meant {reason}, read back {said}")
+        }));
     }
-    Ok(())
+    for (field, value) in &want.filters {
+        let ok = got
+            .filters
+            .iter()
+            .any(|(f, v)| f == field && (v == value || names_match(value, v)));
+        out.push(slot("filter", ok, || {
+            format!("meant {field} = {value}, read back {:?}", got.filters)
+        }));
+    }
+    for name in &want.names {
+        let ok = got.names.iter().any(|g| names_match(name, g));
+        out.push(slot("name", ok, || {
+            format!("meant `{name}`, read back {:?}", got.names)
+        }));
+    }
+    if want.act != "decline" {
+        // no intent rules a value out: a reader that finds an exclusion read something the words did not say
+        out.push(slot("exclusion", got.excluding.is_empty(), || {
+            format!("the intent excludes nothing, read back {:?}", got.excluding)
+        }));
+    }
+    out
+}
+
+/// Do the reader's slots agree with the turn's?
+///
+/// # Errors
+///
+/// The first slot that disagrees, as `(slot, detail)`.
+pub fn agree(catalog: &Catalog, want: &Expected, got: &Read, index: usize) -> Result<(), Why> {
+    match slots(catalog, want, got, index).into_iter().find(|s| !s.ok) {
+        None => Ok(()),
+        Some(s) => Err((s.name, s.detail)),
+    }
 }
 
 /// One read-back call over a batch. `Err` is the cache's or the model's failure; a session the

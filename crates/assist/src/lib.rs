@@ -10,7 +10,7 @@
 //!
 //! | Module | What it owns |
 //! |---|---|
-//! | [`native`] | The tool runtime: eight flat tools over a vault, one metadata table, the date evaluator, observations and the system prompt (`experiments/toolchat/native/SPEC.md`). |
+//! | [`native`] | The tool runtime: eight flat tools over a vault, one metadata table, the date evaluator, observations and the system prompt (`crates/assist/docs/SPEC.md`). |
 //! | [`native_turn`] | The turn loop (#1088): the model drives [`native`] one call per message; the chat's own cards, a line composed from the effect, and the free reply when a question is out of scope. |
 //! | [`app`] | The seven apps a card can name and a chat can be scoped to (Tasks are Agenda's, #1128). |
 //! | [`result`] | The result card: a reference to a real row. |
@@ -35,13 +35,16 @@
 //! A write the model makes parks behind a confirm card (R-1088-2); nothing in
 //! this crate writes until the member taps it.
 
+pub mod adapter;
 pub mod app;
 pub mod attach;
+pub mod escape;
 pub mod host;
 pub mod model;
 pub mod native;
 pub mod native_turn;
 pub mod prompt;
+pub mod record;
 pub mod result;
 pub mod suggest;
 pub mod testing;
@@ -50,6 +53,6 @@ pub mod turn;
 pub use app::App;
 pub use attach::{Attachments, ImageData, Notice, TextDoc};
 pub use host::{ModelHost, ModelLoader, ModelState, ModelStatus, VisionState, VisionStatus};
-pub use model::{Cancel, Model};
+pub use model::{AdapterUse, Cancel, Model, Switched};
 pub use result::Card;
 pub use turn::{Answered, Event, Plane, Reading, Refusal, Session};

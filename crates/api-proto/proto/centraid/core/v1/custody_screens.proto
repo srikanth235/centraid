@@ -185,13 +185,30 @@ message WordsEnterState {
   // What the pairing-code field says while it is empty ("Pairing code"); the
   // longer `endpoint_label` sits above it.
   string endpoint_placeholder = 28;
+  // OFFER: the newest backup would not open and an older one does (#1188, B5). Rows say which
+  // backup device and what each backup came to; `primary_label` restores the older one,
+  // `another_label` goes back to the scan step for a different backup device. Nothing is
+  // claimed until the member picks the first.
+  repeated WordsOfferRow offer_rows = 29;
+  string another_label = 30;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;
     PHASE_ENTERING = 1;
     PHASE_WORKING = 2;
     PHASE_DONE = 3;
+    // The restore found an older backup to offer in place of the newest (#1188, B5).
+    PHASE_OFFER = 4;
   }
+}
+
+message WordsOfferRow {
+  // The backup device.
+  string title = 1;
+  // What that backup came to, as one sentence with its date.
+  string detail = 2;
+  // Whether it opens: drawn with a check or a cross.
+  bool opens = 3;
 }
 
 message WordEntry {
@@ -236,8 +253,12 @@ message WordsEnterEvent {
     WordsScanCapability capability = 10;
     // The sheet was swiped away: the words are dropped.
     WordsDismissed dismissed = 11;
+    // OFFER's second control: try a different backup device (back to the scan step).
+    WordsAnother another = 12;
   }
 }
+
+message WordsAnother {}
 
 message WordsWordTyped {
   uint32 position = 1;

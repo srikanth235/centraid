@@ -2424,6 +2424,678 @@
       "w": 1200,
       "x": 3840,
       "y": 0
+    },
+    "ChatDownload.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · download",
+      "w": 390,
+      "x": 0,
+      "y": 32000
+    },
+    "ChatDownloadDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · download · dark",
+      "w": 390,
+      "x": 0,
+      "y": 32000
+    },
+    "ChatCellular.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · mobile data choice",
+      "w": 390,
+      "x": 470,
+      "y": 32000
+    },
+    "ChatCellularDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · mobile data choice · dark",
+      "w": 390,
+      "x": 470,
+      "y": 32000
+    },
+    "ChatDownloading.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · downloading",
+      "w": 390,
+      "x": 940,
+      "y": 32000
+    },
+    "ChatDownloadingDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · downloading · dark",
+      "w": 390,
+      "x": 940,
+      "y": 32000
+    },
+    "ChatWaitingWifi.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · waiting for Wi‑Fi",
+      "w": 390,
+      "x": 1410,
+      "y": 32000
+    },
+    "ChatWaitingWifiDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · waiting for Wi‑Fi · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 32000
+    },
+    "ChatLowStorage.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · low storage",
+      "w": 390,
+      "x": 1880,
+      "y": 32000
+    },
+    "ChatLowStorageDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · low storage · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 32000
+    },
+    "ChatUnavailable.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · unavailable (reasons: memory, processor, no engine in this build)",
+      "w": 390,
+      "x": 2350,
+      "y": 32000
+    },
+    "ChatUnavailableDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · unavailable (reasons: memory, processor, no engine in this build) · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 32000
+    },
+    "ChatChecking.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · checking",
+      "w": 390,
+      "x": 2820,
+      "y": 32000
+    },
+    "ChatCheckingDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · checking · dark",
+      "w": 390,
+      "x": 2820,
+      "y": 32000
+    },
+    "ChatModelUpdate.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · model update row (empty chat only)",
+      "w": 390,
+      "x": 3290,
+      "y": 32000
+    },
+    "ChatModelUpdateDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · model update row (empty chat only) · dark",
+      "w": 390,
+      "x": 3290,
+      "y": 32000
+    },
+    "ChatUpdateNeeded.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · update needed",
+      "w": 390,
+      "x": 0,
+      "y": 33100
+    },
+    "ChatUpdateNeededDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · update needed · dark",
+      "w": 390,
+      "x": 0,
+      "y": 33100
+    },
+    "ChatStreaming.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · streaming, jump to latest",
+      "w": 390,
+      "x": 470,
+      "y": 33100
+    },
+    "ChatStreamingDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · streaming, jump to latest · dark",
+      "w": 390,
+      "x": 470,
+      "y": 33100
+    },
+    "ChatStoppedFailed.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · stopped and failed",
+      "w": 390,
+      "x": 940,
+      "y": 33100
+    },
+    "ChatStoppedFailedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · stopped and failed · dark",
+      "w": 390,
+      "x": 940,
+      "y": 33100
+    },
+    "ChatCards.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · cards: proposed, done with Undo, undone, Undo refused",
+      "w": 390,
+      "x": 1410,
+      "y": 33100
+    },
+    "ChatCardsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · cards: proposed, done with Undo, undone, Undo refused · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 33100
+    },
+    "ChatMessageActions.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · message actions (Copy on every message, Edit on the last member message, Try again on the last answer)",
+      "w": 390,
+      "x": 1880,
+      "y": 33100
+    },
+    "ChatMessageActionsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · message actions (Copy on every message, Edit on the last member message, Try again on the last answer) · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 33100
+    },
+    "ChatEditResend.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · edit and send again",
+      "w": 390,
+      "x": 2350,
+      "y": 33100
+    },
+    "ChatEditResendDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · edit and send again · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 33100
+    },
+    "ChatRichText.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · lists, tables, code",
+      "w": 390,
+      "x": 2820,
+      "y": 33100
+    },
+    "ChatRichTextDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · lists, tables, code · dark",
+      "w": 390,
+      "x": 2820,
+      "y": 33100
+    },
+    "ChatDictation.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · dictation (the button is absent, not disabled, where on-device recognition cannot be guaranteed)",
+      "w": 390,
+      "x": 3290,
+      "y": 33100
+    },
+    "ChatDictationDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · dictation (the button is absent, not disabled, where on-device recognition cannot be guaranteed) · dark",
+      "w": 390,
+      "x": 3290,
+      "y": 33100
+    },
+    "ChatsSearch.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chats · search results",
+      "w": 390,
+      "x": 0,
+      "y": 34200
+    },
+    "ChatsSearchDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chats · search results · dark",
+      "w": 390,
+      "x": 0,
+      "y": 34200
+    },
+    "ChatsSearchNone.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chats · search found nothing",
+      "w": 390,
+      "x": 470,
+      "y": 34200
+    },
+    "ChatsSearchNoneDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chats · search found nothing · dark",
+      "w": 390,
+      "x": 470,
+      "y": 34200
+    },
+    "ChatsEmpty.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chats · empty",
+      "w": 390,
+      "x": 940,
+      "y": 34200
+    },
+    "ChatsEmptyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chats · empty · dark",
+      "w": 390,
+      "x": 940,
+      "y": 34200
+    },
+    "ChatsError.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chats · change not saved",
+      "w": 390,
+      "x": 1410,
+      "y": 34200
+    },
+    "ChatsErrorDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chats · change not saved · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 34200
+    },
+    "ChatRename.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · rename sheet",
+      "w": 390,
+      "x": 1880,
+      "y": 34200
+    },
+    "ChatRenameDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · rename sheet · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 34200
+    },
+    "ChatDelete.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · delete sheet",
+      "w": 390,
+      "x": 2350,
+      "y": 34200
+    },
+    "ChatDeleteDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · delete sheet · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 34200
+    },
+    "BackupBehind.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · One backup device behind (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 0
+    },
+    "BackupBehindFull.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · A backup device is full (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 940
+    },
+    "BackupRolledBack.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · A backup device holds an older backup (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 1880
+    },
+    "BackupCheckRunning.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Check my backup, running (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 2820
+    },
+    "BackupCheck.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Check my backup, result (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 3760
+    },
+    "BackupStaleNotice.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Backup is stale: notification (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 4700
+    },
+    "RestoreOlder.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Restore offers an older backup (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 5640
+    },
+    "RecoveryKeyPrompt.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Save your recovery key, after the first backup (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 6580
+    },
+    "ChatPhotoDownload.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · photo reader, asked at the first attach",
+      "w": 390,
+      "x": 3290,
+      "y": 34200
+    },
+    "ChatPhotoDownloadDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · photo reader, asked at the first attach · dark",
+      "w": 390,
+      "x": 3290,
+      "y": 34200
+    },
+    "ChatFoundNothing.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · found nothing",
+      "w": 390,
+      "x": 0,
+      "y": 35300
+    },
+    "ChatFoundNothingDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · found nothing · dark",
+      "w": 390,
+      "x": 0,
+      "y": 35300
+    },
+    "ChatTooLong.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · message too long",
+      "w": 390,
+      "x": 470,
+      "y": 35300
+    },
+    "ChatTooLongDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · message too long · dark",
+      "w": 390,
+      "x": 470,
+      "y": 35300
+    },
+    "ChatCardsMore.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · cards: a chain of changes, stale, gone",
+      "w": 390,
+      "x": 2820,
+      "y": 34200
+    },
+    "ChatCardsMoreDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · cards: a chain of changes, stale, gone · dark",
+      "w": 390,
+      "x": 2820,
+      "y": 34200
+    },
+    "NotifyRefusedRow.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Notifications: refused, on the editor row",
+      "w": 390,
+      "x": 0,
+      "y": 36400
+    },
+    "NotifyDateOnly.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Notifications: a day with no time",
+      "w": 390,
+      "x": 470,
+      "y": 36400
+    },
+    "NotifyShowDetails.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Notifications: show details",
+      "w": 390,
+      "x": 940,
+      "y": 36400
+    },
+    "NotifyPaused.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Notifications: paused until opened",
+      "w": 390,
+      "x": 1410,
+      "y": 36400
+    },
+    "NotifyRefusedRowDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Notifications: refused, on the editor row · dark",
+      "w": 390,
+      "x": 0,
+      "y": 36400
+    },
+    "NotifyDateOnlyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Notifications: a day with no time · dark",
+      "w": 390,
+      "x": 470,
+      "y": 36400
+    },
+    "NotifyShowDetailsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Notifications: show details · dark",
+      "w": 390,
+      "x": 940,
+      "y": 36400
+    },
+    "NotifyPausedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Notifications: paused until opened · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 36400
+    },
+    "BackupCheckNotRun.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Check my backup, not checked (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 7520
+    },
+    "RestoreNone.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Restore, no backup will open (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 8460
+    },
+    "BackupNotifyAsk.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Backup, notification ask after pairing (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 9400
+    },
+    "BackupNotifyOff.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Backup, notifications off (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 10340
+    },
+    "RestoreNewer.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Restore, a newer Centraid made the backup (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 11280
+    },
+    "BackupPhoneFull.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · This phone is too full to back up (#1188)",
+      "w": 390,
+      "x": 8000,
+      "y": 940
+    },
+    "BackupWaiting.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Backup, records backed up, items waiting (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 12220
+    },
+    "BackupBacklog.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Backup, a backlog that waited too long (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 13160
+    },
+    "BackupCheckKept.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Check my backup, last result kept (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 14100
+    },
+    "BackupCheckFailed.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Check my backup, the check did not finish (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 15040
+    },
+    "RestoreWorking.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Restore, looking for the backup (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 15980
+    },
+    "BackupTooLarge.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Backup, a device refused a file as too large (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 16920
+    },
+    "BackupRefusing.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Backup, a device is refusing the backup (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 17860
+    },
+    "RestoreUnfinished.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Restore, a claim landed but the vault could not be kept (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 18800
+    },
+    "ChatReveal.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · card reveal: shut, revealed, a code, gone, check cancelled",
+      "w": 390,
+      "x": 3290,
+      "y": 34200
+    },
+    "ChatRevealDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · card reveal: shut, revealed, a code, gone, check cancelled · dark",
+      "w": 390,
+      "x": 3290,
+      "y": 34200
     }
   },
   "createdOnFiles": {
@@ -3187,7 +3859,91 @@
     "PhotosPlacesMap.dc.html",
     "PhotosPlacesMapDark.dc.html",
     "MoneyImportDone.dc.html",
-    "MoneyImportDoneDark.dc.html"
+    "MoneyImportDoneDark.dc.html",
+    "ChatDownload.dc.html",
+    "ChatDownloadDark.dc.html",
+    "ChatCellular.dc.html",
+    "ChatCellularDark.dc.html",
+    "ChatDownloading.dc.html",
+    "ChatDownloadingDark.dc.html",
+    "ChatWaitingWifi.dc.html",
+    "ChatWaitingWifiDark.dc.html",
+    "ChatLowStorage.dc.html",
+    "ChatLowStorageDark.dc.html",
+    "ChatUnavailable.dc.html",
+    "ChatUnavailableDark.dc.html",
+    "ChatChecking.dc.html",
+    "ChatCheckingDark.dc.html",
+    "ChatModelUpdate.dc.html",
+    "ChatModelUpdateDark.dc.html",
+    "ChatUpdateNeeded.dc.html",
+    "ChatUpdateNeededDark.dc.html",
+    "ChatStreaming.dc.html",
+    "ChatStreamingDark.dc.html",
+    "ChatStoppedFailed.dc.html",
+    "ChatStoppedFailedDark.dc.html",
+    "ChatCards.dc.html",
+    "ChatCardsDark.dc.html",
+    "ChatMessageActions.dc.html",
+    "ChatMessageActionsDark.dc.html",
+    "ChatEditResend.dc.html",
+    "ChatEditResendDark.dc.html",
+    "ChatRichText.dc.html",
+    "ChatRichTextDark.dc.html",
+    "ChatDictation.dc.html",
+    "ChatDictationDark.dc.html",
+    "ChatsSearch.dc.html",
+    "ChatsSearchDark.dc.html",
+    "ChatsSearchNone.dc.html",
+    "ChatsSearchNoneDark.dc.html",
+    "ChatsEmpty.dc.html",
+    "ChatsEmptyDark.dc.html",
+    "ChatsError.dc.html",
+    "ChatsErrorDark.dc.html",
+    "ChatRename.dc.html",
+    "ChatRenameDark.dc.html",
+    "ChatDelete.dc.html",
+    "ChatDeleteDark.dc.html",
+    "BackupBehind.dc.html",
+    "BackupBehindFull.dc.html",
+    "BackupPhoneFull.dc.html",
+    "BackupRolledBack.dc.html",
+    "BackupCheckRunning.dc.html",
+    "BackupCheck.dc.html",
+    "BackupStaleNotice.dc.html",
+    "RestoreOlder.dc.html",
+    "RecoveryKeyPrompt.dc.html",
+    "ChatPhotoDownload.dc.html",
+    "ChatPhotoDownloadDark.dc.html",
+    "ChatFoundNothing.dc.html",
+    "ChatFoundNothingDark.dc.html",
+    "ChatTooLong.dc.html",
+    "ChatTooLongDark.dc.html",
+    "ChatCardsMore.dc.html",
+    "ChatCardsMoreDark.dc.html",
+    "ChatReveal.dc.html",
+    "ChatRevealDark.dc.html",
+    "NotifyRefusedRow.dc.html",
+    "NotifyDateOnly.dc.html",
+    "NotifyShowDetails.dc.html",
+    "NotifyPaused.dc.html",
+    "NotifyRefusedRowDark.dc.html",
+    "NotifyDateOnlyDark.dc.html",
+    "NotifyShowDetailsDark.dc.html",
+    "NotifyPausedDark.dc.html",
+    "BackupCheckNotRun.dc.html",
+    "RestoreNone.dc.html",
+    "BackupNotifyAsk.dc.html",
+    "BackupNotifyOff.dc.html",
+    "RestoreNewer.dc.html",
+    "BackupWaiting.dc.html",
+    "BackupBacklog.dc.html",
+    "BackupCheckKept.dc.html",
+    "BackupCheckFailed.dc.html",
+    "RestoreWorking.dc.html",
+    "BackupTooLarge.dc.html",
+    "BackupRefusing.dc.html",
+    "RestoreUnfinished.dc.html"
   ],
   "pages": [
     {

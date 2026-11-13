@@ -580,7 +580,9 @@ pub fn prompt(session: &mut Session) -> Value {
     let mut system = format!(
         "today: {} {today}\nme: {}\n\nkinds:\n{}",
         crate::native::dates::weekday_name(today),
-        session.me_name,
+        // VAULT TEXT IS DATA (#1188 C2): a name enters the prompt escaped; the world keeps the
+        // member's words, and so do the cards
+        crate::escape::vault_text(&session.me_name),
         kind_card_for(session.flags.tools, &session.world.currency).join("\n")
     );
     if session.flags.directory {
@@ -596,7 +598,7 @@ pub fn prompt(session: &mut Session) -> Value {
                     let name = session
                         .world
                         .row(key)
-                        .map(|row| row.name.clone())
+                        .map(|row| crate::escape::vault_text(&row.name))
                         .unwrap_or_default();
                     format!("{name} (#{number})")
                 })

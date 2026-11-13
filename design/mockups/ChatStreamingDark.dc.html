@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chat streaming (dark)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #0E0D0C; font-family: Geist, system-ui, sans-serif; color: #F2EFEA;">
+  <div style="display: flex; align-items: center; gap: 10px; padding: 56px 20px 8px;">
+    <div style="flex-grow: 1; text-align: center;">
+      <div style="font-size: 16px; font-weight: 600;">Spending this month</div>
+      <div style="font-size: 12px; color: #A39E95;">My vault · on this phone</div>
+    </div>
+    <button aria-label="Chats" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 22px; border: 1px solid #3A3733; background: rgba(44,42,39,0.85); display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg></button>
+    <button aria-label="New chat" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 22px; border: 1px solid #3A3733; background: rgba(44,42,39,0.85); display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg></button>
+  </div>  <div style="padding: 10px 16px 0; display: flex; flex-direction: column; gap: 12px;">
+    <div style="align-self: flex-end; max-width: 75%; background: #3A3733; color: #FFFFFF; padding: 10px 14px; border-radius: 20px 20px 6px 20px; font-size: 16px;">What did I spend on eating out this month?</div>
+    <div style="max-width: 92%; font-size: 16px; line-height: 1.45;">You spent 412.60 USD on eating out in 14 purchases. The largest were Café Lume (86.40 USD), Noma Bar (74.00 USD) and</div>
+  </div>
+  <div style="position: absolute; left: 0; right: 0; bottom: 124px; display: flex; justify-content: center;">
+    <button aria-label="Jump to latest" style="height: 40px; padding: 0 16px 0 12px; border-radius: 20px; border: 1px solid #3A3733; background: #1F1E1C; box-shadow: 0 4px 14px rgba(0,0,0,0.5); display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>Latest</button>
+  </div><div style="position: absolute; left: 20px; right: 20px; bottom: 92px; font-size: 13px; color: #A39E95;">Looking in Money…</div>  <div style="position: absolute; left: 16px; right: 16px; bottom: 24px; min-height: 56px; border-radius: 28px; border: 1px solid rgba(44,42,39,0.72); background: rgba(44,42,39,0.82); box-shadow: 0 6px 20px rgba(0,0,0,0.5); display: flex; align-items: center; gap: 6px; padding: 6px;">
+    <button aria-label="Attach" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 22px; border: none; background: #2A2826; display: flex; align-items: center; justify-content: center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+    <span style="flex-grow: 1; font-size: 16px; color: #75716A; padding-left: 4px;">Ask your vault</span>
+    
+    <button aria-label="Chat scope: All apps" style="height: 32px; padding: 0 10px; border-radius: 16px; border: 1px solid #3A3733; background: #1F1E1C; font-size: 13px; font-weight: 600;">All apps</button>
+    <button aria-label="Stop" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 22px; border: none; background: #1C1B19; display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

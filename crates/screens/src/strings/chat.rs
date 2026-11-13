@@ -27,7 +27,16 @@ catalog! {
     plain confirm = ("Confirm", "Confirm");
     plain copied = ("Copied", "Copied");
     plain copy = ("Copy", "Copy");
+    plain jump_to_latest = ("Jump to latest", "Jump to latest");
+    plain latest = ("Latest", "Latest");
+    plain dictate = ("Dictate", "Dictate");
+    plain dictation_off = (
+        "Dictation is off. Allow the microphone and speech in Settings.",
+        "Dictation is off. Allow the microphone and speech in Settings."
+    );
+    plain listening = ("Listening on this phone", "Listening on this phone");
     plain current_chat = ("Open chat", "Open chat");
+    plain cancel_edit = ("Cancel editing", "Cancel editing");
     plain delete = ("Delete", "Delete");
     plain delete_all = ("Delete all chats", "Delete all chats");
     plain delete_all_body = (
@@ -40,12 +49,37 @@ catalog! {
         "Its messages are removed from this vault. This cannot be undone."
     );
     plain delete_title = ("Delete this chat?", "Delete this chat?");
-    plain download_action = ("Download model", "Download model");
-    plain download_failed = ("Download stopped. Retry.", "Download stopped. Retry.");
-    plain download_note = (
-        "This is the only time Centraid fetches anything.",
-        "This is the only time Centraid fetches anything."
+    plain checking_body = (
+        "Looking at memory and free space for the model.",
+        "Looking at memory and free space for the model."
     );
+    plain checking_title = ("Checking this phone", "Checking this phone");
+    plain check_again = ("Check again", "Check again");
+    plain download_action = ("Download on Wi‑Fi", "Download on Wi‑Fi");
+    plain download_now = ("Download now", "Download now");
+    plain download_failed = ("Download stopped. Try again.", "Download stopped. Try again.");
+    plain download_note = (
+        "It stays on this phone, and nothing you ask leaves it.",
+        "It stays on this phone, and nothing you ask leaves it."
+    );
+    plain download_photo_note = (
+        "Photos need another {size} download, asked when you attach one.",
+        "Photos need another {size} download, asked when you attach one."
+    );
+    plain downloading_note = (
+        "If the download stops, it carries on from here.",
+        "If the download stops, it carries on from here."
+    );
+    plain low_space_body = (
+        "The model needs {need} and this phone has {free} free. Free up {short}, then check again.",
+        "The model needs {need} and this phone has {free} free. Free up {short}, then check again."
+    );
+    plain low_space_title = ("Not enough space", "Not enough space");
+    plain mobile_data_body = (
+        "The model is {size}. Downloading it now uses that much of your mobile data.",
+        "The model is {size}. Downloading it now uses that much of your mobile data."
+    );
+    plain mobile_data_title = ("Use mobile data?", "Use mobile data?");
     plain download_progress = ("Downloading {percent}", "Downloading {percent}");
     plain download_progress_unknown = ("Downloading", "Downloading");
     plain drawer_label = ("Chats", "Chats");
@@ -58,12 +92,20 @@ catalog! {
         "Chat reads photos and text documents.",
         "Chat reads photos and text documents."
     );
-    plain error_generic = ("Chat could not answer. Retry.", "Chat could not answer. Retry.");
-    plain error_model = ("The model stopped. Retry.", "The model stopped. Retry.");
+    plain error_generic = ("Chat could not answer. Try again.", "Chat could not answer. Try again.");
+    plain error_model = ("The model stopped. Try again.", "The model stopped. Try again.");
     plain error_no_tool = ("Nothing in your vault answers that.", "Nothing in your vault answers that.");
-    plain error_read = ("Chat could not read your vault. Retry.", "Chat could not read your vault. Retry.");
+    plain error_read = ("Chat could not read your vault. Try again.", "Chat could not read your vault. Try again.");
+    plain error_too_long = (
+        "That is too long for Chat to read at once. Shorten it and try again.",
+        "That is too long for Chat to read at once. Shorten it and try again."
+    );
+    plain error_thread_write = (
+        "That change was not saved. Try again.",
+        "That change was not saved. Try again."
+    );
     plain error_thread_gone = ("This chat is gone.", "This chat is gone.");
-    plain error_vision = ("The photo reader is not loaded. Retry.", "The photo reader is not loaded. Retry.");
+    plain error_vision = ("The photo reader is not loaded. Try again.", "The photo reader is not loaded. Try again.");
     plain loading = ("Loading model", "Loading model");
     plain load_failed = (
         "The model would not load. Download it again.",
@@ -76,8 +118,15 @@ catalog! {
     plain note_doc_truncated = ("Read the first part of the document.", "Read the first part of the document.");
     plain not_now = ("Not now", "Not now");
     plain not_done = ("Not done.", "Not done.");
+    plain made_by_chat = ("Made by Chat", "Made by Chat");
     plain reading_document = ("Reading the document", "Reading the document");
     plain reading_photo = ("Reading the photo", "Reading the photo");
+    plain edit = ("Edit", "Edit");
+    plain editing_body = (
+        "Chat’s answer to it is replaced when you send.",
+        "Chat’s answer to it is replaced when you send."
+    );
+    plain editing_title = ("Editing your question", "Editing your question");
     plain proposal_title = ("Proposed change", "Proposed change");
     plain remove_attachment = ("Remove", "Remove");
     plain rename = ("Rename", "Rename");
@@ -87,8 +136,29 @@ catalog! {
     plain scope_all = ("All apps", "All apps");
     plain scope_label = ("Chat scope", "Chat scope");
     plain send = ("Send", "Send");
+    plain update_title = ("A newer model is ready", "A newer model is ready");
+    plain update_action = ("Update", "Update");
+    plain update_needed_title = ("Chat needs a newer model", "Chat needs a newer model");
+    plain update_needed_body = (
+        "This version can’t use the model on this phone any more. The new one is {size}; the old one goes once it arrives.",
+        "This version can’t use the model on this phone any more. The new one is {size}; the old one goes once it arrives."
+    );
+    plain photo_reader_body = (
+        "Reading a photo needs a second download of {size}. It stays on this phone, and the photo never leaves it.",
+        "Reading a photo needs a second download of {size}. It stays on this phone, and the photo never leaves it."
+    );
+    plain photo_reader_title = ("Download the photo reader?", "Download the photo reader?");
+    plain use_mobile_data = ("Use mobile data instead", "Use mobile data instead");
+    plain use_mobile_data_rest = ("Use mobile data for the rest", "Use mobile data for the rest");
+    plain wait_wifi = ("Wait for Wi‑Fi", "Wait for Wi‑Fi");
+    plain waiting_wifi = ("Waiting for Wi‑Fi", "Waiting for Wi‑Fi");
+    plain waiting_wifi_note = (
+        "The download carries on by itself when this phone joins Wi‑Fi.",
+        "The download carries on by itself when this phone joins Wi‑Fi."
+    );
     plain size_line = ("{size} download", "{size} download");
     plain stop = ("Stop", "Stop");
+    plain did_not_finish = ("Did not finish", "Did not finish");
     plain stopped = ("Stopped", "Stopped");
     plain subtitle = ("On this phone", "On this phone");
     plain subtitle_vault = ("{vault} · on this phone", "{vault} · on this phone");
@@ -98,6 +168,11 @@ catalog! {
     plain unlock_reason = ("Unlock Locker to confirm this change", "Unlock Locker to confirm this change");
     plain unlock_subtitle = ("Confirm it is you", "Confirm it is you");
     plain unlock_title = ("Unlock Locker", "Unlock Locker");
+    plain unavailable_memory = (
+        "It needs 4 GB of memory and this phone has {have}.",
+        "It needs 4 GB of memory and this phone has {have}."
+    );
+    plain unavailable_title = ("Chat can’t run on this phone", "Chat can’t run on this phone");
     plain unavailable = ("Chat is not available here.", "Chat is not available here.");
     plain vision_action = ("Download", "Download");
     plain vision_line = ("Reading photos needs a {size} download", "Reading photos needs a {size} download");

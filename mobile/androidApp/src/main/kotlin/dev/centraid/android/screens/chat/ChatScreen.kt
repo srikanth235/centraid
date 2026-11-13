@@ -8,6 +8,7 @@ import dev.centraid.android.kit.KitText
 import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.StateColor
 import dev.centraid.android.kit.Surface
+import dev.centraid.design.CentraidScale
 import dev.centraid.android.kit.kitTextStyle
 import androidx.compose.foundation.border
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -41,9 +42,15 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.foundation.gestures.scrollBy
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,6 +67,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role
@@ -71,6 +79,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import centraid.core.v1.ChatAttachment
 import centraid.core.v1.ChatCard
+import dev.centraid.android.screens.locker.LockerFieldView
 import centraid.core.v1.ChatDocumentSheet
 import centraid.core.v1.ChatEvent
 import centraid.core.v1.ChatMessage
@@ -102,6 +111,41 @@ import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
 /**
+ * The composer's words and the send waiting on Rust's answer. [text] is what the field shows;
+ * [sending] numbers a send and remembers its words; [settle] clears the field once Rust echoes the
+ * number (`ChatState.accepted_send`), and only if the member has not typed on since.
+ */
+internal class ChatDraft(text: String = "", var token: Long = 0, var sentText: String = "") {
+    var text by mutableStateOf(text)
+
+    fun sending(words: String): Long {
+        token += 1
+        sentText = words
+        return token
+    }
+
+    fun settle(accepted: Long) {
+        if (token != 0L && accepted == token) {
+            if (text.trim() == sentText) text = ""
+            token = 0
+            sentText = ""
+        }
+    }
+
+    companion object {
+        val Saver = listSaver<ChatDraft, Any>(
+            save = { listOf(it.text, it.token, it.sentText) },
+            restore = { ChatDraft(it[0] as String, it[1] as Long, it[2] as String) },
+        )
+    }
+}
+
+/** The one draft of the process: the tab can leave composition and come back to the same words. */
+internal object ChatDrafts {
+    var current: ChatDraft = ChatDraft()
+}
+
+/**
  * THE CHAT TAB (#1135, lane I), drawn from Rust's `ChatState`. Android's twin of iOS's `ChatView`:
  * a header (the chat's title and where it runs, the Chats key and, inside a saved chat, New
  * chat's pencil), the thread or the model's step, the composer, and the Chats page of past chats
@@ -120,7 +164,61 @@ internal fun ChatScreen(
     onScope: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var draft by remember { mutableStateOf("") }
+    // THE DRAFT SURVIVES ROTATION, A TAB SWITCH AND PROCESS DEATH, and clears only when Rust
+    // takes the send (#1188 C9): `ChatDrafts` outlives the composition, the saver outlives the
+    // process, and `accepted_send` is Rust's word that the words were taken.
+    val kept = rememberSaveable(saver = ChatDraft.Saver) { ChatDrafts.current }
+    SideEffect { ChatDrafts.current = kept }
+    var draft by kept::text
+    // THE THUMBNAILS A DELETED OR LEFT CHAT LEFT BEHIND go when no chat on screen holds them.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val held = state.pending.map { it.thumbnail_path } +
+        state.messages.flatMap { message -> message.attachments.map { it.thumbnail_path } }
+    LaunchedEffect(state.thread_id, state.messages.size, state.pending.size, state.threads.size) {
+        val keep = held.filter { it.isNotEmpty() }.toSet()
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            dev.centraid.android.kit.ChatEffects.sweepThumbnails(context, keep)
+        }
+    }
+    LaunchedEffect(state.accepted_send) { kept.settle(state.accepted_send) }
+    // A TURN THAT IS RUNNING WHEN THE APP GOES AWAY is stopped (it keeps its words and says "Stopped")
+    // once the app has been out of sight for a minute with it still running, instead of being killed
+    // with the answer lost (#1188 C10). Coming back in time cancels it.
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    var away by remember { mutableStateOf(false) }
+    androidx.compose.runtime.DisposableEffect(lifecycle) {
+        val watcher = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) away = true
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_START) away = false
+        }
+        lifecycle.addObserver(watcher)
+        onDispose { lifecycle.removeObserver(watcher) }
+    }
+    LaunchedEffect(away, state.streaming) {
+        if (away && state.streaming) {
+            kotlinx.coroutines.delay(60_000)
+            onEvent(ChatEvent(stopped = ChatEvent.Stopped()))
+        }
+    }
+    // THE DOWNLOAD RULES READ THE PHONE: its network and free space are told when the chat appears
+    // and whenever the network changes.
+    androidx.compose.runtime.DisposableEffect(context) {
+        onEvent(ChatDeviceFacts.event(context))
+        val manager = context.getSystemService(android.net.ConnectivityManager::class.java)
+        val callback = object : android.net.ConnectivityManager.NetworkCallback() {
+            override fun onCapabilitiesChanged(network: android.net.Network, capabilities: android.net.NetworkCapabilities) {
+                onEvent(ChatDeviceFacts.event(context))
+            }
+            override fun onLost(network: android.net.Network) {
+                onEvent(ChatDeviceFacts.event(context))
+            }
+        }
+        runCatching { manager?.registerDefaultNetworkCallback(callback) }
+        onDispose { runCatching { manager?.unregisterNetworkCallback(callback) } }
+    }
+    // EDIT FILLS THE COMPOSER: whenever Rust moves the token, the field holds what it says (the last
+    // question on starting, nothing on cancelling). Token 0 is a chat that has never edited.
+    LaunchedEffect(state.edit_token) { if (state.edit_token != 0L) draft = state.edit_text }
     // The message whose Copy was just pressed: its button says `copied_label` for a moment.
     var copied by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(copied) {
@@ -157,7 +255,8 @@ internal fun ChatScreen(
                 if (state.messages.isNotEmpty() && state.suggestions.isNotEmpty()) {
                     SuggestionChips(state.suggestions) { onEvent(ChatEvent(sent = ChatEvent.Sent(text = it))) }
                 }
-                state.vision_step?.let { VisionBanner(it, onDownload = { onEvent(ChatEvent(download = ChatEvent.DownloadTapped(vision = true))) }) }
+                state.update_step?.let { UpdateRow(it, onUpdate = { onEvent(ChatDeviceFacts.event(context)); onEvent(ChatEvent(download = ChatEvent.DownloadTapped(update = true))) }) }
+                state.vision_step?.let { VisionBanner(it, onChoose = { choice -> onEvent(ChatDeviceFacts.event(context)); onEvent(ChatEvent(download = ChatEvent.DownloadTapped(vision = true, choice = choice))) }) }
                 ChatComposer(
                     state,
                     draft = draft,
@@ -165,8 +264,8 @@ internal fun ChatScreen(
                     onSend = {
                         val text = draft.trim()
                         if (text.isNotEmpty()) {
-                            draft = ""
-                            onEvent(ChatEvent(sent = ChatEvent.Sent(text = text)))
+                            // the words stay in the field until Rust says it took them
+                            onEvent(ChatEvent(sent = ChatEvent.Sent(text = text, token = kept.sending(text))))
                         }
                     },
                     onEvent = onEvent,
@@ -381,16 +480,50 @@ private fun ChatThread(
 ) {
     val list = rememberLazyListState()
     val last = state.messages.lastOrNull()
-    // FOLLOW THE ANSWER as it is written: the foot of the thread stays in view.
-    LaunchedEffect(state.messages.size, last?.text?.length, last?.cards?.size) {
-        if (state.messages.isNotEmpty()) list.scrollToItem(state.messages.size - 1)
+    // FOLLOW THE ANSWER as it is written, while the member is at the foot of the thread. Scrolling
+    // up stops the following and offers LATEST (ChatStreaming.dc.html); a tap on it returns to the
+    // foot and follows again. A new message is the member's own act, so it always goes to the foot.
+    var pinned by remember { mutableStateOf(true) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val atFoot by remember {
+        derivedStateOf {
+            val info = list.layoutInfo
+            val tail = info.visibleItemsInfo.lastOrNull()
+            tail == null || (tail.index == info.totalItemsCount - 1 && tail.offset + tail.size <= info.viewportEndOffset)
+        }
+    }
+    LaunchedEffect(list.isScrollInProgress) {
+        if (!list.isScrollInProgress) pinned = atFoot
+    }
+    suspend fun toFoot() {
+        if (state.messages.isNotEmpty()) {
+            list.scrollToItem(state.messages.size - 1)
+            list.scrollBy(1_000_000f)
+        }
+    }
+    LaunchedEffect(state.messages.size) {
+        pinned = true
+        toFoot()
+    }
+    // SCREEN READERS HEAR THE WORK: the status line is a polite live region, and the finished answer
+    // is read once when streaming ends, never token by token.
+    var spokenAnswer by remember { mutableStateOf("") }
+    LaunchedEffect(state.streaming) {
+        if (state.streaming) {
+            spokenAnswer = ""
+        } else {
+            spokenAnswer = state.messages.lastOrNull { it.role == ChatMessage.Role.ROLE_ASSISTANT }?.accessibility_label.orEmpty()
+        }
+    }
+    LaunchedEffect(last?.text?.length, last?.cards?.size, state.activity) {
+        if (pinned) toFoot()
     }
     if (state.messages.isEmpty()) {
         Column(
             Modifier.fillMaxSize().padding(KitGeometry.GUTTER),
             verticalArrangement = Arrangement.Center,
         ) {
-            Text(state.empty_line, style = centraidType("body"), color = centraidColor("textSoft"))
+            Text(state.empty_line, style = centraidType("body"), color = centraidColor("textSoft"), modifier = Modifier.testTag("chat-empty"))
             Spacer(Modifier.size(12.dp))
             state.suggestions.forEachIndexed { index, suggestion ->
                 Row(
@@ -412,6 +545,7 @@ private fun ChatThread(
         }
         return
     }
+    Box(Modifier.fillMaxSize()) {
     LazyColumn(
         state = list,
         modifier = Modifier.fillMaxSize().testTag("chat-thread"),
@@ -434,7 +568,9 @@ private fun ChatThread(
                     state.activity,
                     style = centraidType("mono"),
                     color = centraidColor("textFaint"),
-                    modifier = Modifier.testTag("chat-activity"),
+                    modifier = Modifier
+                        .semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite }
+                        .testTag("chat-activity"),
                 )
             }
         }
@@ -451,6 +587,43 @@ private fun ChatThread(
                 )
             }
         }
+    }
+    if (spokenAnswer.isNotEmpty()) {
+        Box(
+            Modifier
+                .size(1.dp)
+                .semantics {
+                    liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite
+                    contentDescription = spokenAnswer
+                },
+        )
+    }
+    if (!pinned && state.messages.isNotEmpty()) {
+        Row(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 8.dp)
+                .heightIn(min = KitGeometry.ROW_MIN)
+                .clip(CircleShape)
+                .background(centraidColor("bgElev"))
+                .border(KitGeometry.HAIRLINE, centraidColor("lineStrong"), CircleShape)
+                .clickable {
+                    pinned = true
+                    scope.launch { toFoot() }
+                }
+                .padding(start = 12.dp, end = 16.dp)
+                .semantics {
+                    contentDescription = state.jump_to_latest_label
+                    role = Role.Button
+                }
+                .testTag("chat-latest"),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            CentraidIcon("ArrowDown", tint = centraidColor("text"), size = 16.dp)
+            Text(state.latest_label, style = centraidType("body"), color = centraidColor("text"), fontWeight = FontWeight.SemiBold)
+        }
+    }
     }
 }
 
@@ -494,9 +667,9 @@ private fun MessageRow(
 ) {
     if (message.role == ChatMessage.Role.ROLE_USER) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Column(Modifier.widthIn(max = 320.dp), horizontalAlignment = Alignment.End) {
             Column(
                 Modifier
-                    .widthIn(max = 320.dp)
                     .clearAndSetSemantics { contentDescription = message.accessibility_label }
                     .testTag("chat-message-user"),
                 horizontalAlignment = Alignment.End,
@@ -516,6 +689,23 @@ private fun MessageRow(
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                 )
             }
+            // COPY, AND EDIT ON THE LAST ONE: quiet keys under the pill.
+            if (message.text.isNotEmpty() || message.can_edit) {
+                Row {
+                    if (message.text.isNotEmpty()) {
+                        ActionButton(if (copied) "Check" else "Copy", if (copied) state.copied_label.ifEmpty { state.copy_label } else state.copy_label, "chat-copy") {
+                            onCopied()
+                            onEvent(ChatEvent(copied = ChatEvent.Copied(message_id = message.id)))
+                        }
+                    }
+                    if (message.can_edit) {
+                        ActionButton("Pencil", state.edit_label, "chat-edit") {
+                            onEvent(ChatEvent(edit_started = ChatEvent.EditStarted()))
+                        }
+                    }
+                }
+            }
+            }
         }
         return
     }
@@ -525,7 +715,22 @@ private fun MessageRow(
             MarkdownText(message.text, message.streaming, message.accessibility_label)
         }
         message.cards.forEachIndexed { index, card ->
-            CardRow(card, appName = state.scopes.firstOrNull { it.app == card.app }?.name.orEmpty()) { onEvent(ChatEvent(card_tapped = ChatEvent.CardTapped(message_id = message.id, index = index))) }
+            CardRow(card, index, appName = state.scopes.firstOrNull { it.app == card.app }?.name.orEmpty()) { onEvent(ChatEvent(card_tapped = ChatEvent.CardTapped(message_id = message.id, index = index))) }
+            // A LOCKER SECRET SHOWN ON THE CARD (#1188): Rust's sealed row, drawn as Locker draws it.
+            // The value is Rust's to show and to drop; this only sends the verb.
+            card.reveal?.let { row ->
+                LockerFieldView(row) { key ->
+                    onEvent(ChatEvent(reveal_verb = ChatEvent.RevealVerb(message_id = message.id, index = index, key = key)))
+                }
+            }
+            if (card.note.isNotEmpty()) {
+                Text(
+                    card.note,
+                    color = centraidResource(R.color.centraid_text_meta),
+                    fontSize = tokenSp(R.dimen.centraid_text_meta),
+                    modifier = Modifier.padding(horizontal = 14.dp).testTag("chat-card-note-$index"),
+                )
+            }
         }
         val pending = message.pending
         if (pending != null && !message.streaming) {
@@ -533,10 +738,20 @@ private fun MessageRow(
                 pending,
                 onConfirm = { onEvent(ChatEvent(pending_confirmed = ChatEvent.PendingConfirmed(pending_id = pending.pending_id))) },
                 onCancel = { onEvent(ChatEvent(pending_cancelled = ChatEvent.PendingCancelled(pending_id = pending.pending_id))) },
+                onUndo = { index -> onEvent(ChatEvent(pending_undone = ChatEvent.PendingUndone(pending_id = pending.pending_id, index = index))) },
             )
         }
         if (message.note.isNotEmpty()) {
             Text(message.note, style = centraidType("mono"), color = centraidColor("textFaint"), modifier = Modifier.testTag("chat-note"))
+        }
+        // STOPPED OR DID NOT FINISH: the words it kept stay, with one quiet line under them.
+        if (message.mark.isNotEmpty()) {
+            Text(
+                message.mark,
+                color = centraidResource(if (message.mark_failed) R.color.centraid_state_red_text else R.color.centraid_text_meta),
+                fontSize = tokenSp(R.dimen.centraid_text_meta),
+                modifier = Modifier.testTag("chat-mark"),
+            )
         }
         if (!message.streaming && (message.text.isNotEmpty() || message.cards.isNotEmpty())) {
             Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
@@ -546,6 +761,7 @@ private fun MessageRow(
                         onEvent(ChatEvent(copied = ChatEvent.Copied(message_id = message.id)))
                     }
                 }
+                // a stopped or failed answer keeps its words and a Try again (#1188 design 5)
                 if (isLast && state.can_retry && state.error.isEmpty()) {
                     ActionButton("Refresh", state.retry_label, "chat-retry") {
                         onEvent(ChatEvent(regenerated = ChatEvent.Regenerated()))
@@ -572,6 +788,49 @@ private fun MarkdownText(text: String, streaming: Boolean, spoken: String) {
                     Text(block.marker, style = centraidType("body"), color = centraidColor("textSoft"), modifier = Modifier.widthIn(min = 16.dp))
                     Text(block.text, style = centraidType("body"), color = centraidColor("text"), modifier = Modifier.weight(1f))
                 }
+                // A TABLE, as the board has it: a header row on the raised ground, a hairline over each row.
+                is ChatMarkdown.Block.Table -> Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(CentraidScale.cardRadius.dp))
+                        .border(KitGeometry.HAIRLINE, centraidColor("line"), RoundedCornerShape(CentraidScale.cardRadius.dp))
+                        .testTag("chat-table"),
+                ) {
+                    block.rows.forEachIndexed { rowAt, row ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .then(if (rowAt == 0) Modifier.background(centraidColor("bgElev")) else Modifier)
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            row.forEachIndexed { cellAt, cell ->
+                                Text(
+                                    cell,
+                                    style = centraidType("small"),
+                                    fontWeight = if (rowAt == 0) FontWeight.SemiBold else null,
+                                    color = centraidColor("text"),
+                                    textAlign = if (cellAt == 0) androidx.compose.ui.text.style.TextAlign.Start else androidx.compose.ui.text.style.TextAlign.End,
+                                    modifier = Modifier.weight(if (cellAt == 0) 2f else 1f),
+                                )
+                            }
+                        }
+                    }
+                }
+                // CODE, as it was written: the monospace face on the raised ground, scrolling sideways.
+                is ChatMarkdown.Block.Code -> Text(
+                    block.text,
+                    style = centraidType("mono"),
+                    color = centraidColor("text"),
+                    softWrap = false,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(CentraidScale.cardRadius.dp))
+                        .background(centraidColor("bgElev"))
+                        .horizontalScroll(androidx.compose.foundation.rememberScrollState())
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                        .testTag("chat-code"),
+                )
             }
         }
     }
@@ -583,7 +842,7 @@ private fun MarkdownText(text: String, streaming: Boolean, spoken: String) {
  * under it, and the app's name in the app's colour at the right.
  */
 @Composable
-private fun CardRow(card: ChatCard, appName: String, onOpen: () -> Unit) {
+private fun CardRow(card: ChatCard, index: Int, appName: String, onOpen: () -> Unit) {
     val shape = RoundedCornerShape(dimensionResource(R.dimen.centraid_radius_card))
     Row(
         Modifier
@@ -599,7 +858,7 @@ private fun CardRow(card: ChatCard, appName: String, onOpen: () -> Unit) {
                 contentDescription = listOf(card.title, card.subtitle, card.meta, appName).filter { it.isNotEmpty() }.joinToString(", ")
                 role = Role.Button
             }
-            .testTag("chat-card"),
+            .testTag("chat-card-$index"),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -661,7 +920,7 @@ private fun CardRow(card: ChatCard, appName: String, onOpen: () -> Unit) {
  * Rust holds the write until `PendingConfirmed`, and this card only sends the event.
  */
 @Composable
-private fun PendingCard(pending: ChatPending, onConfirm: () -> Unit, onCancel: () -> Unit) {
+private fun PendingCard(pending: ChatPending, onConfirm: () -> Unit, onCancel: () -> Unit, onUndo: (Int) -> Unit) {
     val shape = RoundedCornerShape(dimensionResource(R.dimen.centraid_radius_card))
     val asking = pending.state == ChatPending.State.STATE_WAITING || pending.state == ChatPending.State.STATE_WORKING
     val working = pending.state == ChatPending.State.STATE_WORKING
@@ -688,7 +947,15 @@ private fun PendingCard(pending: ChatPending, onConfirm: () -> Unit, onCancel: (
             )
             pending.steps.forEach { step ->
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Box(Modifier.size(20.dp).border(1.6.dp, centraidColor("textFaint"), CircleShape))
+                    // Not yet done is an empty ring; once the core has done it, the board's green disc with its check.
+                    if (pending.state == ChatPending.State.STATE_APPLIED) {
+                        Box(
+                            Modifier.size(20.dp).clip(CircleShape).background(centraidResource(R.color.centraid_state_green)),
+                            contentAlignment = Alignment.Center,
+                        ) { CentraidIcon(iconKey = "Check", tint = Color.White, size = 13.dp) }
+                    } else {
+                        Box(Modifier.size(20.dp).border(1.6.dp, centraidColor("textFaint"), CircleShape))
+                    }
                     // THE ROW'S NAME, then its second line ("Reminders · today, 10:45"); a step the
                     // core did not name by title keeps its composed sentence.
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -717,7 +984,7 @@ private fun PendingCard(pending: ChatPending, onConfirm: () -> Unit, onCancel: (
                             .background(centraidResource(if (pending.destructive) R.color.centraid_state_red else R.color.centraid_shell))
                             .clickable(enabled = !working, onClick = onConfirm)
                             .semantics { role = Role.Button }
-                            .testTag("chat-confirm"),
+                            .testTag("chat-pending-confirm"),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(pending.confirm_label, color = Color.White, fontSize = tokenSp(R.dimen.centraid_text_row), fontWeight = FontWeight.SemiBold)
@@ -730,14 +997,41 @@ private fun PendingCard(pending: ChatPending, onConfirm: () -> Unit, onCancel: (
                             .border(1.dp, centraidResource(R.color.centraid_surface_border), CircleShape)
                             .clickable(enabled = !working, onClick = onCancel)
                             .semantics { role = Role.Button }
-                            .testTag("chat-cancel"),
+                            .testTag("chat-pending-cancel"),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(pending.cancel_label, color = centraidResource(R.color.centraid_text_ink), fontSize = tokenSp(R.dimen.centraid_text_row), fontWeight = FontWeight.SemiBold)
                     }
                 }
             } else if (pending.settled_line.isNotEmpty()) {
-                Text(pending.settled_line, color = centraidResource(R.color.centraid_text_meta), fontSize = tokenSp(R.dimen.centraid_text_meta), modifier = Modifier.testTag("chat-settled"))
+                Text(pending.settled_line, color = centraidResource(R.color.centraid_text_meta), fontSize = tokenSp(R.dimen.centraid_text_meta), modifier = Modifier.testTag("chat-pending-settled"))
+            }
+            // ONE LINE FOR EACH WRITE THE CARD MADE: "Made by Chat" with Undo, then "Undone" or the
+            // core's sentence (and no key once it was refused or taken).
+            pending.undo.forEachIndexed { index, line ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        line.sentence,
+                        modifier = Modifier.weight(1f),
+                        color = centraidResource(if (line.refused) R.color.centraid_state_red_text else R.color.centraid_text_meta),
+                        fontSize = tokenSp(R.dimen.centraid_text_meta),
+                    )
+                    if (line.action_label.isNotEmpty()) {
+                        Box(
+                            Modifier
+                                .heightIn(min = KitGeometry.ROW_MIN)
+                                .clip(CircleShape)
+                                .border(1.dp, centraidResource(R.color.centraid_surface_border), CircleShape)
+                                .clickable { onUndo(index) }
+                                .padding(horizontal = 14.dp)
+                                .semantics { role = Role.Button }
+                                .testTag("chat-pending-undo-$index"),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(line.action_label, color = centraidResource(R.color.centraid_text_ink), fontSize = tokenSp(R.dimen.centraid_text_row), fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
             }
         }
     }
@@ -757,10 +1051,58 @@ private fun ChatComposer(
 ) {
     var attachMenu by remember { mutableStateOf(false) }
     val shape = CircleShape
+    // DICTATION, ON THIS PHONE ONLY: the key is drawn only where the recogniser works offline.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val dictation = remember { ChatDictation(context) }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { dictation.stop() } }
+    LaunchedEffect(state.streaming) { if (state.streaming) dictation.stop() }
+    var dictationBase by remember { mutableStateOf("") }
+    val listen = { dictation.start { heard -> onDraft(if (dictationBase.isEmpty()) heard else "$dictationBase $heard") } }
+    val askMicrophone = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { granted -> if (granted) listen() else dictation.refuse() }
     Column(
         Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        // THE EDIT BANNER, over the composer: what is being edited and what sending does, with a
+        // cancel (ChatEditResend.dc.html).
+        if (state.editing) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(dimensionResource(R.dimen.centraid_radius_card)))
+                    .background(centraidColor("bgElev"))
+                    .padding(start = 14.dp)
+                    .testTag("chat-edit-banner"),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(state.editing_title, color = centraidColor("text"), fontSize = tokenSp(R.dimen.centraid_text_meta), fontWeight = FontWeight.SemiBold)
+                    Text(state.editing_body, color = centraidResource(R.color.centraid_text_meta), fontSize = tokenSp(R.dimen.centraid_text_meta))
+                }
+                ActionButton("X", state.cancel_edit_label, "chat-edit-cancel") {
+                    onEvent(ChatEvent(edit_cancelled = ChatEvent.EditCancelled()))
+                }
+            }
+        }
+        // WHILE IT LISTENS the composer says so, and says plainly when the microphone or speech is
+        // refused (ChatDictation.dc.html).
+        if (dictation.phase == ChatDictation.Phase.Listening) {
+            Text(
+                state.listening_label,
+                color = centraidResource(R.color.centraid_text_meta),
+                fontSize = tokenSp(R.dimen.centraid_text_meta),
+                modifier = Modifier.padding(horizontal = 8.dp).testTag("chat-listening"),
+            )
+        } else if (dictation.phase == ChatDictation.Phase.Refused) {
+            Text(
+                state.dictation_off_label,
+                color = centraidResource(R.color.centraid_state_red_text),
+                fontSize = tokenSp(R.dimen.centraid_text_meta),
+                modifier = Modifier.padding(horizontal = 8.dp).testTag("chat-dictation-off"),
+            )
+        }
         if (state.pending.isNotEmpty()) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 state.pending.forEach { chip ->
@@ -822,8 +1164,27 @@ private fun ChatComposer(
                     cursorBrush = SolidColor(centraidColor("text")),
                     maxLines = 6,
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                    modifier = Modifier.fillMaxWidth().testTag("chat-composer").semantics { contentDescription = state.composer_placeholder },
+                    modifier = Modifier.fillMaxWidth().testTag("chat-field").semantics { contentDescription = state.composer_placeholder },
                 )
+            }
+            if (dictation.available && !state.streaming) {
+                val listening = dictation.phase == ChatDictation.Phase.Listening
+                KeyButton(
+                    if (listening) "Stop" else "Mic",
+                    if (listening) state.stop_label else state.dictate_label,
+                    "chat-dictate",
+                ) {
+                    if (listening) {
+                        dictation.stop()
+                    } else {
+                        dictationBase = draft.trim()
+                        val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+                            context,
+                            android.Manifest.permission.RECORD_AUDIO,
+                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                        if (granted) listen() else askMicrophone.launch(android.Manifest.permission.RECORD_AUDIO)
+                    }
+                }
             }
             if (state.scopes.isNotEmpty()) ScopePill(state, onScope)
             if (state.streaming) {
@@ -911,7 +1272,7 @@ private fun AttachmentChip(chip: ChatAttachment, removeLabel: String, onRemove: 
             .clip(shape)
             .border(KitGeometry.HAIRLINE, centraidColor("lineStrong"), shape)
             .padding(end = 4.dp)
-            .testTag("chat-chip"),
+            .testTag("chat-attachment"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(36.dp).background(centraidColor("skel")), contentAlignment = Alignment.Center) {
@@ -944,7 +1305,7 @@ private fun AttachmentChip(chip: ChatAttachment, removeLabel: String, onRemove: 
                     .size(32.dp)
                     .clip(CircleShape)
                     .clickable(onClick = onRemove)
-                    .testTag("chat-chip-remove")
+                    .testTag("chat-attachment-remove")
                     .semantics { contentDescription = removeLabel; role = Role.Button },
                 contentAlignment = Alignment.Center,
             ) { CentraidIcon("X", tint = centraidColor("textSoft"), size = 14.dp) }
@@ -957,6 +1318,7 @@ private fun AttachmentChip(chip: ChatAttachment, removeLabel: String, onRemove: 
 @Composable
 private fun ChatModelStepView(state: ChatState, onEvent: (ChatEvent) -> Unit) {
     val step = state.model_step ?: return
+    val context = androidx.compose.ui.platform.LocalContext.current
     val shape = RoundedCornerShape(KitGeometry.RADIUS)
     Column(
         Modifier.fillMaxSize().padding(KitGeometry.GUTTER),
@@ -972,21 +1334,46 @@ private fun ChatModelStepView(state: ChatState, onEvent: (ChatEvent) -> Unit) {
                 .testTag("chat-model-step"),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            if (step.title.isNotEmpty()) {
+                Text(step.title, style = centraidType("smallStrong"), color = centraidColor("text"), modifier = Modifier.testTag("chat-model-title"))
+            }
             if (step.size_line.isNotEmpty()) {
-                Text(step.size_line, style = centraidType("smallStrong"), color = centraidColor("text"))
+                Text(step.size_line, style = centraidType("smallStrong"), color = centraidColor("text"), modifier = Modifier.testTag("chat-model-size"))
             }
             if (step.note_line.isNotEmpty()) {
-                Text(step.note_line, style = centraidType("small"), color = centraidColor("textSoft"))
+                Text(step.note_line, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.testTag("chat-model-note"))
+            }
+            if (step.extra_line.isNotEmpty()) {
+                Text(step.extra_line, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.testTag("chat-model-extra"))
             }
             if (state.phase == ChatState.Phase.PHASE_DOWNLOADING && step.progress_known) {
                 KitProgressBar(step.progress, fill = centraidResource(R.color.centraid_shell))
             }
             if (step.status_line.isNotEmpty()) {
-                Text(step.status_line, style = centraidType("small"), color = centraidColor("textSoft"))
+                Text(step.status_line, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.testTag("chat-model-status"))
             }
             if (step.action_label.isNotEmpty()) {
                 DownloadButton(step.action_label, testTag = "chat-download") {
-                    onEvent(ChatEvent(download = ChatEvent.DownloadTapped(vision = false)))
+                    onEvent(ChatDeviceFacts.event(context))
+                    onEvent(ChatEvent(download = ChatEvent.DownloadTapped(vision = false, choice = step.action_kind)))
+                }
+            }
+            if (step.secondary_label.isNotEmpty()) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = KitGeometry.ROW_MIN)
+                        .clip(CircleShape)
+                        .border(KitGeometry.HAIRLINE, centraidColor("lineStrong"), CircleShape)
+                        .clickable {
+                            onEvent(ChatDeviceFacts.event(context))
+                            onEvent(ChatEvent(download = ChatEvent.DownloadTapped(vision = false, choice = step.secondary_kind)))
+                        }
+                        .semantics { role = Role.Button }
+                        .testTag("chat-download-secondary"),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(step.secondary_label, color = centraidColor("text"), fontSize = tokenSp(R.dimen.centraid_text_row), fontWeight = FontWeight.SemiBold)
                 }
             }
             if (state.error.isNotEmpty()) {
@@ -1014,25 +1401,84 @@ private fun DownloadButton(label: String, testTag: String, onPress: () -> Unit) 
     }
 }
 
+/** THE UPDATE ROW (ChatModelUpdate.dc.html): a newer model is ready while the older one keeps answering. */
 @Composable
-private fun VisionBanner(step: ChatModelStep, onDownload: () -> Unit) {
+private fun UpdateRow(step: ChatModelStep, onUpdate: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)
             .background(centraidColor("bgSunken"))
             .padding(12.dp)
-            .testTag("chat-vision"),
+            .testTag("chat-update-step"),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        if (step.size_line.isNotEmpty()) Text(step.size_line, style = centraidType("small"), color = centraidColor("textSoft"))
-        if (step.progress_known) KitProgressBar(step.progress, fill = centraidResource(R.color.centraid_shell))
+        Text(step.title, style = centraidType("smallStrong"), color = centraidColor("text"), modifier = Modifier.testTag("chat-update-title"))
+        if (step.size_line.isNotEmpty()) {
+            Text(step.size_line, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.testTag("chat-update-line"))
+        }
         if (step.status_line.isNotEmpty()) {
-            Text(step.status_line, style = centraidType("small"), color = centraidColor("textSoft"))
+            Text(step.status_line, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.testTag("chat-update-status"))
         }
+        if (step.progress_known) KitProgressBar(step.progress, fill = centraidResource(R.color.centraid_shell))
+        if (step.action_label.isNotEmpty()) DownloadButton(step.action_label, testTag = "chat-update", onPress = onUpdate)
+    }
+}
+
+@Composable
+private fun VisionBanner(step: ChatModelStep, onChoose: (centraid.core.v1.ChatStepAction) -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)
+            .background(centraidColor("bgSunken"))
+            .padding(12.dp)
+            .testTag("chat-vision-step"),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
         if (step.action_label.isNotEmpty()) {
-            DownloadButton(step.action_label, testTag = "chat-vision-download", onPress = onDownload)
+            // THE PHOTO READER'S SHEET (ChatPhotoDownload.dc.html): what it is, Wi-Fi first, mobile data
+            // an explicit second choice, and Not now.
+            Text(step.title, style = centraidType("smallStrong"), color = centraidColor("text"))
+            Text(step.note_line, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.testTag("chat-vision-line"))
+            if (step.status_line.isNotEmpty()) {
+                Text(step.status_line, style = centraidType("small"), color = centraidColor("net"), modifier = Modifier.testTag("chat-vision-status"))
+            }
+            DownloadButton(step.action_label, testTag = "chat-vision-download", onPress = { onChoose(step.action_kind) })
+            if (step.secondary_label.isNotEmpty()) {
+                SecondaryStepButton(step.secondary_label, "chat-vision-download-secondary") { onChoose(step.secondary_kind) }
+            }
+            if (step.tertiary_label.isNotEmpty()) {
+                SecondaryStepButton(step.tertiary_label, "chat-vision-not-now", outlined = false) { onChoose(step.tertiary_kind) }
+            }
+        } else {
+            if (step.title.isNotEmpty()) Text(step.title, style = centraidType("smallStrong"), color = centraidColor("text"))
+            if (step.progress_known) KitProgressBar(step.progress, fill = centraidResource(R.color.centraid_shell))
+            if (step.status_line.isNotEmpty()) {
+                Text(step.status_line, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.testTag("chat-vision-status"))
+            }
+            if (step.secondary_label.isNotEmpty()) {
+                SecondaryStepButton(step.secondary_label, "chat-vision-download-secondary") { onChoose(step.secondary_kind) }
+            }
         }
+    }
+}
+
+/** A step's quieter action: an outlined pill (or plain words for "Not now"), never a second filled element. */
+@Composable
+private fun SecondaryStepButton(label: String, testTag: String, outlined: Boolean = true, onPress: () -> Unit) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = KitGeometry.ROW_MIN)
+            .clip(CircleShape)
+            .then(if (outlined) Modifier.border(KitGeometry.HAIRLINE, centraidColor("lineStrong"), CircleShape) else Modifier)
+            .clickable(onClick = onPress)
+            .semantics { role = Role.Button }
+            .testTag(testTag),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, color = centraidColor(if (outlined) "text" else "textSoft"), fontSize = tokenSp(R.dimen.centraid_text_row), fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -1115,6 +1561,15 @@ private fun ChatsPage(
             color = Surface.ink,
             modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp).semantics { heading() },
         )
+        if (state.threads_error.isNotEmpty()) {
+            // A rename or delete the vault refused: the list below is the vault as it is.
+            Text(
+                state.threads_error,
+                style = kitTextStyle(KitType.Meta),
+                color = StateColor.Red.text,
+                modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp).testTag("chat-chats-error"),
+            )
+        }
         LazyColumn(Modifier.weight(1f)) {
             if (state.threads.isEmpty() && state.threads_empty_line.isNotEmpty()) {
                 item(key = "empty") {

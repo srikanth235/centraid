@@ -12,7 +12,7 @@
 # it to the Swift module `CentraidCoreC`.
 #
 # RE-RUN THIS EVERY TIME `crates/core` CHANGES: the archive is a built file and
-# nothing in Xcode knows it is stale (.claude/skills/mobile-verify/SKILL.md).
+# nothing in Xcode knows it is stale (.claude/skills/land/mobile.md).
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

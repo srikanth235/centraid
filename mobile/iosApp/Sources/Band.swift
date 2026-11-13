@@ -115,7 +115,7 @@ private struct BandTab: View {
     }
 }
 
-/// AN APP'S BAND — the `AppPlace` room's band (product-intuition/references/design-behaviour.md § Rooms),
+/// AN APP'S BAND — the `AppPlace` room's band (design/behaviour.md § Rooms),
 /// copied from v0's (`apps/mobile/src/apps/photos/PhotosBand.tsx`,
 /// `kit/band/BandCapsule.tsx`, `kit/band-surface.ts`).
 ///
@@ -447,7 +447,7 @@ private struct AppBandTab: View {
 
 /// THE BAND'S PRESS: `bgPress` under the finger, on the pill rung like the
 /// plate it sits in, eased on the state-change curve. A ground and not a
-/// scale, a dim or an opacity — product-intuition/references/design-behaviour.md § Controls refuses all three — so the tab stays
+/// scale, a dim or an opacity — design/behaviour.md § Controls refuses all three — so the tab stays
 /// exactly where it was and only its floor answers.
 private struct BandPress: ButtonStyle {
     /// How far the pressed ground stands in from the tab's top and bottom, so

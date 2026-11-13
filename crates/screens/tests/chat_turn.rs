@@ -75,6 +75,7 @@ fn a_turn_settles_once_and_what_arrives_after_it_changes_nothing() {
     let mut chat = ready();
     chat.event(C::Sent(wire::chat_event::Sent {
         text: "tasks?".to_owned(),
+        ..Default::default()
     }));
     // While the turn runs the thread already shows the question and a streaming answer.
     assert!(chat.state().streaming);
@@ -109,6 +110,7 @@ fn an_event_for_another_turn_or_session_is_not_heard() {
     let mut chat = ready();
     chat.event(C::Sent(wire::chat_event::Sent {
         text: "tasks?".to_owned(),
+        ..Default::default()
     }));
     let session = {
         // The running turn is 1 on the chat's session; an event for turn 99 is stale.
@@ -142,9 +144,11 @@ fn a_blank_message_a_message_while_one_runs_and_a_message_before_ready_are_not_s
     assert!(chat.state().messages.is_empty());
     chat.event(C::Sent(wire::chat_event::Sent {
         text: "first".to_owned(),
+        ..Default::default()
     }));
     chat.event(C::Sent(wire::chat_event::Sent {
         text: "second".to_owned(),
+        ..Default::default()
     }));
     assert_eq!(chat.state().messages.len(), 2, "one turn runs at a time");
     chat.perform();
@@ -163,7 +167,7 @@ fn a_decline_is_a_composed_line_and_an_exhausted_model_is_the_generic_failure() 
     let mut chat = Chat::ready(std::sync::Arc::new(ScriptedModel::empty()));
     chat.say("anything");
     let state = chat.state();
-    assert_eq!(state.error, "The model stopped. Retry.");
+    assert_eq!(state.error, "The model stopped. Try again.");
     assert_eq!(
         state.messages.len(),
         1,
@@ -180,6 +184,7 @@ fn stopping_keeps_the_part_that_was_drawn_says_nothing_and_offers_retry() {
     let mut chat = Chat::ready(model);
     chat.event(C::Sent(wire::chat_event::Sent {
         text: "tasks?".to_owned(),
+        ..Default::default()
     }));
     // The member taps Stop while the send is still running; here the model fires the token.
     chat.perform();
@@ -191,6 +196,17 @@ fn stopping_keeps_the_part_that_was_drawn_says_nothing_and_offers_retry() {
     );
     assert!(!state.streaming);
     assert!(state.can_retry);
+    // what was drawn stays, under one quiet line (ChatStoppedFailed.dc.html)
+    if let Some(answer) = state
+        .messages
+        .iter()
+        .find(|m| m.role == wire::chat_message::Role::Assistant as i32)
+    {
+        assert_eq!(
+            (answer.mark.as_str(), answer.mark_failed),
+            ("Stopped", false)
+        );
+    }
 }
 
 #[test]
@@ -340,7 +356,7 @@ fn a_write_the_model_parks_is_a_card_in_the_cores_words_and_writes_nothing_until
 }
 
 #[test]
-fn confirm_runs_the_card_once_and_draws_the_cores_line_with_no_undo() {
+fn confirm_runs_the_card_once_and_draws_the_cores_line_with_an_undo_for_the_write() {
     let mut chat = proposing();
     let id = card(&chat).pending_id;
     chat.event(C::PendingConfirmed(wire::chat_event::PendingConfirmed {
@@ -355,6 +371,101 @@ fn confirm_runs_the_card_once_and_draws_the_cores_line_with_no_undo() {
         pending_id: id,
     }));
     assert_eq!(card(&chat).state(), State::Applied);
+    // ONE UNDO FOR THE ONE WRITE, said as the board has it
+    let pending = card(&chat);
+    assert_eq!(pending.undo.len(), 1);
+    assert_eq!(pending.undo[0].sentence, "Made by Chat");
+    assert_eq!(pending.undo[0].action_label, "Undo");
+}
+
+fn undo(chat: &mut Chat, index: u32) {
+    let id = card(chat).pending_id;
+    chat.event(C::PendingUndone(wire::chat_event::PendingUndone {
+        pending_id: id,
+        index,
+    }));
+}
+
+#[test]
+fn undo_on_the_applied_card_takes_the_write_back_once_through_the_kits_door() {
+    let mut chat = proposing();
+    let id = card(&chat).pending_id;
+    chat.event(C::PendingConfirmed(wire::chat_event::PendingConfirmed {
+        pending_id: id,
+    }));
+    assert_eq!(task_status(&chat, DRY_CLEANING), "done");
+    undo(&mut chat, 0);
+    assert_eq!(task_status(&chat, DRY_CLEANING), "open");
+    let line = &card(&chat).undo[0];
+    assert_eq!(
+        (line.sentence.as_str(), line.action_label.as_str()),
+        ("Undone", "")
+    );
+    // a second tap has nothing on offer, and an index no write has is not heard
+    undo(&mut chat, 0);
+    undo(&mut chat, 7);
+    assert_eq!(task_status(&chat, DRY_CLEANING), "open");
+    assert_eq!(card(&chat).undo[0].sentence, "Undone");
+}
+
+#[test]
+fn an_undo_after_the_record_changed_again_is_refused_in_the_cores_words_and_the_key_is_gone() {
+    use centraid_assist::native::Door as _;
+    use centraid_assist::native::door::text;
+    // a rename: its inverse names the version it made (`history.undo`), so a later change refuses it
+    let mut chat = Chat::ready(script(&[step(
+        "plan: rename",
+        "act",
+        &[
+            ("verb", "edit"),
+            ("kind", "task"),
+            ("name", DRY_CLEANING),
+            ("args", "name: Collect the dry cleaning"),
+        ],
+    )]));
+    chat.say("rename the dry cleaning task");
+    let id = card(&chat).pending_id;
+    chat.event(C::PendingConfirmed(wire::chat_event::PendingConfirmed {
+        pending_id: id,
+    }));
+    assert_eq!(card(&chat).state(), State::Applied);
+    let task = chat
+        .driver
+        .handle
+        .assist_door()
+        .table_where(
+            "entity",
+            "id, title, created_at",
+            "created_at",
+            "id",
+            "kind = ?",
+            &["task".to_owned()],
+        )
+        .unwrap()
+        .iter()
+        .find(|row| text(row, "title").as_deref() == Some("Collect the dry cleaning"))
+        .and_then(|row| text(row, "id"))
+        .expect("the renamed task");
+    chat.driver
+        .handle
+        .command(
+            "entity.retitle",
+            &serde_json::json!({ "id": task, "title": "Dry cleaning, by hand" }),
+            "by-hand",
+        )
+        .unwrap();
+    undo(&mut chat, 0);
+    let line = &card(&chat).undo[0];
+    assert!(line.refused, "{line:?}");
+    assert!(
+        line.action_label.is_empty(),
+        "no Undo key once it was refused"
+    );
+    assert_eq!(
+        task_status(&chat, "Dry cleaning, by hand"),
+        "open",
+        "the later change stays"
+    );
 }
 
 #[test]
@@ -440,4 +551,163 @@ fn a_card_whose_rows_moved_says_so_and_runs_nothing() {
     let pending = card(&chat);
     assert_eq!(pending.state(), State::Stale);
     assert_eq!(pending.settled_line, "That changed since. Ask again.");
+}
+
+#[test]
+fn a_sent_token_is_echoed_only_when_the_question_is_taken() {
+    let mut chat = ready();
+    // the shell kept the words as a draft and sent them under token 7
+    chat.event(C::Sent(wire::chat_event::Sent {
+        text: "tasks?".to_owned(),
+        token: 7,
+    }));
+    assert_eq!(chat.state().accepted_send, 7);
+    // a second send while the turn runs is refused, so its token is not echoed
+    chat.event(C::Sent(wire::chat_event::Sent {
+        text: "again".to_owned(),
+        token: 8,
+    }));
+    assert_eq!(
+        chat.state().accepted_send,
+        7,
+        "the draft stays for a refused send"
+    );
+    chat.perform();
+    // a blank send is refused too; a suggestion's tap (token 0) never moves the echo
+    chat.event(C::Sent(wire::chat_event::Sent {
+        text: "  ".to_owned(),
+        token: 9,
+    }));
+    assert_eq!(chat.state().accepted_send, 7);
+    // before the model is ready nothing is taken
+    let mut early = Chat::with(None);
+    early.event(C::Sent(wire::chat_event::Sent {
+        text: "early".to_owned(),
+        token: 1,
+    }));
+    assert_eq!(early.state().accepted_send, 0);
+}
+
+#[test]
+fn a_message_too_long_to_read_is_said_at_once_and_the_draft_stays() {
+    let mut chat = ready();
+    let long = "x".repeat(centraid_assist::native_turn::MESSAGE_MAX + 1);
+    chat.event(C::Sent(wire::chat_event::Sent {
+        text: long,
+        token: 5,
+    }));
+    let state = chat.state();
+    assert_eq!(
+        state.error,
+        "That is too long for Chat to read at once. Shorten it and try again."
+    );
+    assert!(state.messages.is_empty(), "nothing was sent");
+    assert_eq!(state.accepted_send, 0, "so the shell keeps the draft");
+}
+
+fn edit_started(chat: &mut Chat) {
+    chat.event(C::EditStarted(wire::chat_event::EditStarted {}));
+}
+
+#[test]
+fn edit_is_offered_on_the_last_member_message_only_and_the_composer_takes_its_words() {
+    let mut chat = proposing();
+    let state = chat.state();
+    let offered: Vec<(bool, i32)> = state
+        .messages
+        .iter()
+        .map(|message| (message.can_edit, message.role))
+        .collect();
+    assert_eq!(
+        offered.iter().filter(|(offer, _)| *offer).count(),
+        1,
+        "one message offers Edit: {offered:?}"
+    );
+    let at = state.messages.iter().position(|m| m.can_edit).unwrap();
+    assert_eq!(
+        state.messages[at].role,
+        wire::chat_message::Role::User as i32
+    );
+    assert_eq!(state.edit_label, "Edit");
+    assert!(!state.editing);
+
+    let before = state.edit_token;
+    edit_started(&mut chat);
+    let state = chat.state();
+    assert!(state.editing);
+    assert_eq!(state.edit_text, state.messages[at].text);
+    assert_ne!(
+        state.edit_token, before,
+        "the shell fills the composer on a new token"
+    );
+    assert_eq!(
+        (state.editing_title.as_str(), state.editing_body.as_str()),
+        (
+            "Editing your question",
+            "Chat’s answer to it is replaced when you send."
+        )
+    );
+    assert!(
+        state.messages.iter().all(|message| !message.can_edit),
+        "no second Edit while one is open"
+    );
+
+    // the banner's cancel: the question is a message again and the composer is told to empty
+    let opened = state.edit_token;
+    chat.event(C::EditCancelled(wire::chat_event::EditCancelled {}));
+    let state = chat.state();
+    assert!(!state.editing && state.edit_text.is_empty());
+    assert_ne!(state.edit_token, opened);
+    assert_eq!(state.messages.len(), 2, "nothing was replaced");
+}
+
+#[test]
+fn sending_an_edit_replaces_the_question_and_its_answer_and_leaves_an_applied_write_applied() {
+    let mut chat = proposing();
+    let id = card(&chat).pending_id;
+    chat.event(C::PendingConfirmed(wire::chat_event::PendingConfirmed {
+        pending_id: id,
+    }));
+    assert_eq!(task_status(&chat, DRY_CLEANING), "done");
+    edit_started(&mut chat);
+    chat.event(C::Sent(wire::chat_event::Sent {
+        text: "what is due this week?".to_owned(),
+        token: 9,
+    }));
+    let state = chat.state();
+    // the question and its answer were replaced, not added to
+    let users: Vec<&str> = state
+        .messages
+        .iter()
+        .filter(|message| message.role == wire::chat_message::Role::User as i32)
+        .map(|message| message.text.as_str())
+        .collect();
+    assert_eq!(users, ["what is due this week?"]);
+    assert_eq!(state.messages.len(), 2);
+    assert!(!state.editing);
+    assert_eq!(state.accepted_send, 9);
+    // THE EARLIER ANSWER'S WRITE IS NOT UNDONE BY BEING REPLACED
+    assert_eq!(task_status(&chat, DRY_CLEANING), "done");
+}
+
+#[test]
+fn the_latest_key_has_its_words_from_the_core() {
+    let chat = proposing();
+    let state = chat.state();
+    assert_eq!(
+        (
+            state.latest_label.as_str(),
+            state.jump_to_latest_label.as_str()
+        ),
+        ("Latest", "Jump to latest")
+    );
+}
+
+#[test]
+fn dictation_has_its_words_from_the_core_and_is_on_this_phone() {
+    let chat = proposing();
+    let state = chat.state();
+    assert_eq!(state.dictate_label, "Dictate");
+    assert_eq!(state.listening_label, "Listening on this phone");
+    assert!(state.dictation_off_label.contains("Settings"));
 }

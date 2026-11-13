@@ -1,5 +1,5 @@
 //! The native tool runtime: the flat tool surface a small on-device model
-//! drives over a vault (`experiments/toolchat/native/SPEC.md`).
+//! drives over a vault (`crates/assist/docs/SPEC.md`).
 //!
 //! Eight tools (`find`, `compute`, `create`, `edit`, `do`, `answer`, `ask`,
 //! `decline`; #1166), one metadata table they are all generated from, a date

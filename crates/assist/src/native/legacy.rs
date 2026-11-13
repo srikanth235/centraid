@@ -1,11 +1,14 @@
-//! THE TOOLS S2 WAS TRAINED ON (#1166). The model shipping today learned `search`, `open` and
-//! `act`; the runtime now has `find` (text and rows included), `create`, `edit` and `do`. A call
+//! THE TOOLS S2 WAS TRAINED ON (#1166). S2, a model shipped before the regroup, learned `search`,
+//! `open` and `act`; the record no longer pins it, but its names stay readable here; the runtime now has `find` (text and rows included), `create`, `edit` and `do`. A call
 //! in the old names is renamed here, at the one place a call enters (`Session::step`), so the
 //! rest of the runtime knows eight tools only. The old `answer` with a selector or an `op` is not
 //! renamed: `answer` still reads it (`Session::answer`), which keeps S2's way of ending a count
 //! working until the data retrains the model on `compute` then `answer`.
 //!
 //! Nothing here is reachable from a model trained on the new tool set: it never writes these names.
+//! It stays because the frozen S2-era calls still use them: `golden_v3.json`, the held-out sets'
+//! reference calls (`assist-eval`'s `args.rs` renames them before comparing) and `--tools s2`. The
+//! stock base under the `sig` record is shown the eight tools and held to them by the grammar.
 
 use serde_json::{Map, Value, json};
 

@@ -26,7 +26,6 @@ use std::collections::BTreeMap;
 
 use centraid_assist::native::meta::{self, Kind};
 use centraid_assist::native::nums;
-use centraid_assist::native::prompt::ToolsMode;
 use centraid_assist::native::think::{
     Call, Context, RowText, TraceMode, compile_think_with, date_to_compact, pick_reason_of,
     where_slot,
@@ -592,9 +591,13 @@ fn dates_slot(
             let mut candidate = slots.clone();
             candidate.when_slot = Some((slot.clone(), Vec::new()));
             let think = candidate.think(setting);
-            if let Ok(compiled) =
-                compile_think_with(&think, Some(line), nums_line, TraceMode::V4, ToolsMode::Sig)
-                && let Some((_, when)) = compiled.args.iter().find(|(key, _)| key == "when")
+            if let Ok(compiled) = compile_think_with(
+                &think,
+                Some(line),
+                nums_line,
+                TraceMode::V4,
+                crate::plan::tools_mode(),
+            ) && let Some((_, when)) = compiled.args.iter().find(|(key, _)| key == "when")
                 && serde_json::from_str::<Value>(when).is_ok_and(|got| &got == expr)
             {
                 return Some((slot, Vec::new()));
@@ -684,8 +687,14 @@ fn check(
     nums_line: Option<&str>,
     kind: Option<Kind>,
 ) -> Result<Call, Failure> {
-    let compiled = compile_think_with(think, dates, nums_line, TraceMode::V4, ToolsMode::Sig)
-        .map_err(|refusal| Failure::Roundtrip(format!("does not compile: {}", refusal.message)))?;
+    let compiled = compile_think_with(
+        think,
+        dates,
+        nums_line,
+        TraceMode::V4,
+        crate::plan::tools_mode(),
+    )
+    .map_err(|refusal| Failure::Roundtrip(format!("does not compile: {}", refusal.message)))?;
     match same(call, &compiled, kind) {
         Ok(()) => Ok(compiled),
         Err(why) => Err(Failure::Roundtrip(why)),
@@ -955,29 +964,34 @@ mod tests {
 
     #[test]
     fn a_write_on_one_row_picks_it_and_a_create_sets_its_fields() {
-        let mut rows = BTreeMap::new();
-        show_rows(&mut rows, "#31 task \"Pay rent\" · open");
-        let mut s = setting("complete pay rent", "", &rows);
-        s.intent = "write";
-        let c = call("do", &[("rows", "#31"), ("verb", "complete")]);
-        let traced = trace(&c, &s).expect("round trip");
-        assert!(traced.think.contains("verb: complete\npick: #31 (name)"));
+        // the regrouped tools' compiler: the build reads the model record's block (`sig`); held here so the test says what it reads
+        let mut record = centraid_assist::record::record();
+        record.current.tools_mode = "sig".to_owned();
+        centraid_assist::record::held_for(record, || {
+            let mut rows = BTreeMap::new();
+            show_rows(&mut rows, "#31 task \"Pay rent\" · open");
+            let mut s = setting("complete pay rent", "", &rows);
+            s.intent = "write";
+            let c = call("do", &[("rows", "#31"), ("verb", "complete")]);
+            let traced = trace(&c, &s).expect("round trip");
+            assert!(traced.think.contains("verb: complete\npick: #31 (name)"));
 
-        let c = call(
-            "create",
-            &[
-                ("args", "name: Sort the receipts\neffort: 30"),
-                ("kind", "task"),
-            ],
-        );
-        let traced = trace(&c, &s).expect("round trip");
-        assert!(
-            traced
-                .think
-                .contains("set: name = Sort the receipts · effort = 30")
-        );
-        // the compiler writes the fields as parameters of their own
-        assert!(traced.call.args.iter().any(|(k, _)| k == "effort"));
+            let c = call(
+                "create",
+                &[
+                    ("args", "name: Sort the receipts\neffort: 30"),
+                    ("kind", "task"),
+                ],
+            );
+            let traced = trace(&c, &s).expect("round trip");
+            assert!(
+                traced
+                    .think
+                    .contains("set: name = Sort the receipts · effort = 30")
+            );
+            // the compiler writes the fields as parameters of their own
+            assert!(traced.call.args.iter().any(|(k, _)| k == "effort"));
+        });
     }
 
     #[test]

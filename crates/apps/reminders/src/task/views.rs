@@ -79,7 +79,13 @@ pub fn place(task: &TaskRow, zone: &FireZone, today: &Civil) -> Placed {
         .map(|child| place(child, zone, today))
         .collect();
     Placed {
-        due: local::place_due(effective_due(task), task.remind_before_min, zone, today),
+        due: local::place_due(
+            effective_due(task),
+            task.remind_before_min,
+            task.snoozed_until.as_deref(),
+            zone,
+            today,
+        ),
         completed_day: task
             .completed_at
             .as_deref()

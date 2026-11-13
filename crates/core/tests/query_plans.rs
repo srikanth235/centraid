@@ -134,6 +134,7 @@ fn requests(word: &str) -> Vec<Q> {
             from: "2025-01-01".to_owned(),
             to: "2025-03-01".to_owned(),
             tz: tz(),
+            alerts: 0,
         }),
         Q::AgendaUpcoming(wire::AgendaUpcomingRequest {
             tz: tz(),
@@ -173,7 +174,11 @@ fn requests(word: &str) -> Vec<Q> {
             tz: tz(),
         }),
         Q::AgendaTaskCatchUp(wire::AgendaTaskCatchUpRequest { tz: tz() }),
-        Q::AgendaTaskReminders(wire::AgendaTaskRemindersRequest { tz: tz(), limit: 0 }),
+        Q::AgendaTaskReminders(wire::AgendaTaskRemindersRequest {
+            tz: tz(),
+            limit: 0,
+            alerts: 0,
+        }),
         Q::AgendaTaskTrash(wire::AgendaTaskTrashRequest { tz: tz() }),
         Q::AgendaTaskSmartCounts(wire::AgendaTaskSmartCountsRequest { tz: tz() }),
         Q::AgendaTaskDueRows(wire::AgendaTaskDueRowsRequest {

@@ -31,6 +31,7 @@ use crate::kit::civil::{self, HourCycle};
 use crate::kit::earlier;
 use crate::kit::follow;
 use crate::kit::links::{self, Kind, Links, Outcome};
+use crate::kit::permission::{AlertFacts, AlertText};
 use crate::kit::quantity::UnitsPref;
 use crate::kit::read::{self, Note, Page, Reading};
 use crate::kit::schedule::custom::{Custom, Done};
@@ -44,7 +45,7 @@ use crate::reminders::routes;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
     Locale, agenda_editor as editor_words, agenda_event as link_words,
-    agenda_notify as notify_words, agenda_repeat as repeat_words, agenda_tasks as card_words,
+    agenda_notify as notify_words, agenda_repeat as repeat_words, agenda_tasks as card_words, fill,
     links as link_label, task as words,
 };
 
@@ -799,6 +800,9 @@ impl Detail {
     fn event(&mut self, event: wire::TodoDetailEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             Some(D::OpenLink(_)) => return self.open_link(),
+            Some(D::AlertSettings(_)) => {
+                return vec![AlertFacts::open_settings()];
+            }
             Some(D::ShareRequested(_)) => {
                 if self.task().is_some() {
                     return self.share.tap(ctx.locale());
@@ -940,7 +944,10 @@ impl Detail {
             Some(D::Confirmed(_)) => self.confirmed(ctx),
             Some(D::Dismissed(_)) => self.asking = Asking::None,
             // The page's asks of the shell are `event`'s.
-            Some(D::OpenLink(_) | D::Attachment(_) | D::ShareRequested(_)) | None => {}
+            Some(
+                D::OpenLink(_) | D::Attachment(_) | D::ShareRequested(_) | D::AlertSettings(_),
+            )
+            | None => {}
         }
     }
 
@@ -1006,6 +1013,7 @@ impl Detail {
         locale: Locale,
         units: UnitsPref,
         cycle: HourCycle,
+        alert: AlertText,
         answer: &Answered,
         task: &wire::AgendaTask,
     ) -> wire::TodoDetailData {
@@ -1048,7 +1056,7 @@ impl Detail {
                 wire::TodoCheck::InProcess => words::started(locale),
                 _ => String::new(),
             },
-            fields: fields(locale, cycle, task, today, &projects, &sections),
+            fields: fields(locale, cycle, alert, task, today, &projects, &sections),
             subtasks_label: if task.children.is_empty() {
                 words::field_subtasks(locale)
             } else {
@@ -1185,6 +1193,7 @@ impl Screen for Detail {
                     locale,
                     ctx.units(),
                     ctx.hour_cycle(),
+                    ctx.alerts().get().text(locale),
                     answer,
                     task,
                 )))
@@ -1324,6 +1333,15 @@ fn reminder_value(
 ) -> String {
     if task.remind_before_min.is_none() {
         words::remind_none(locale)
+    } else if !task.remind_at_local.is_empty() && task.due_time.is_empty() {
+        // A DAY HAS NO MOMENT (#1188, NA6): the alert sounds at the day's own time; the due keeps none.
+        fill(
+            &words::reminder_on_the_day_at(locale),
+            &[(
+                "time",
+                &civil::clock_for(locale, &task.remind_at_local, cycle),
+            )],
+        )
     } else if !task.remind_at_local.is_empty() {
         format!(
             "{} {}",
@@ -1342,6 +1360,7 @@ fn reminder_value(
 fn fields(
     locale: Locale,
     cycle: HourCycle,
+    alert: AlertText,
     task: &wire::AgendaTask,
     today: &str,
     projects: &[wire::AgendaTaskProject],
@@ -1442,9 +1461,17 @@ fn fields(
         note: if !dated {
             words::reminder_needs_due(locale)
         } else if task.due_time.is_empty() {
-            notify_words::no_alert_without_time(locale)
+            notify_words::date_only_task_alert(locale)
+        } else if task.remind_before_min.is_some() {
+            // WHAT THE PHONE SAYS ABOUT ALERTS (#1188, NA1): said once the reminder would sound.
+            alert.line.unwrap_or_else(|| words::reminder_note_a(locale))
         } else {
             words::reminder_note_a(locale)
+        },
+        action_label: if dated && !task.due_time.is_empty() && task.remind_before_min.is_some() {
+            alert.settings
+        } else {
+            String::new()
         },
         choices: reminder_choices,
         enabled: dated,
@@ -1586,7 +1613,7 @@ fn fields(
         value: Some(rows::priority_label(locale, task.priority))
             .filter(|label| !label.is_empty())
             .unwrap_or_else(|| words::priority_none(locale)),
-        // THE LABEL CARRIES IT (product-intuition/references/design-behaviour.md § Wording): "None" is a choice on the
+        // THE LABEL CARRIES IT (design/wording.md § Wording): "None" is a choice on the
         // row, so no note says that priority is optional.
         choices: vec![
             simple(NONE, words::priority_none(locale), level == 0),

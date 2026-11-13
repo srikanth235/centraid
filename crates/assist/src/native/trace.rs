@@ -1,4 +1,4 @@
-//! THE TRACE GUARD (`experiments/toolchat/native/CONTRACT_V3.md` §2 to §4).
+//! THE TRACE GUARD (`crates/assist/docs/CONTRACT_V3.md` §2 to §4).
 //!
 //! A slot-trace `<think>` block is a fixed-order list of slots the model writes before its call:
 //!

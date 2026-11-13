@@ -58,7 +58,7 @@ catalog! {
     plain backup_travel_heading = ("What travels when", "What travels when");
     plain backup_forget = ("Forget", "Forget");
     plain backup_forget_failed = ("Couldn't forget {name}. Try again.", "Couldn't forget {name}. Try again.");
-    plain backup_forgotten_not_revoked = ("Forgot {name}, but it wasn't told. Run “centraid-gateway pairings revoke” there.", "Forgot {name}, but it wasn't told. Run “centraid-gateway pairings revoke” there.");
+    plain backup_forgotten_not_revoked = ("Forgot {name}, but couldn't tell it. It may still accept this phone until you remove this phone on {name}.", "Forgot {name}, but couldn't tell it. It may still accept this phone until you remove this phone on {name}.");
     plain backup_forgotten_revoked = ("Forgot {name}. It now refuses this phone.", "Forgot {name}. It now refuses this phone.");
     plain backup_include_videos = ("Include videos", "Include videos");
     plain backup_key_heading = ("Recovery key", "Recovery key");
@@ -70,6 +70,7 @@ catalog! {
     plain backup_key_sync_on = ("Save my key in {place}", "Save my key in {place}");
     plain backup_line_all = ("All {total} photos and files", "All {total} photos and files");
     plain backup_line_count = ("{confirmed} of {total} photos and files", "{confirmed} of {total} photos and files");
+    plain backup_line_backlog = ("{count} not backed up. The oldest was added {when}.", "{count} not backed up. The oldest was added {when}.");
     plain backup_line_done = ("Backed up {when}.", "Backed up {when}.");
     plain backup_line_frozen = ("Moved to another phone. Read-only here.", "Moved to another phone. Read-only here.");
     plain backup_line_never = ("Not backed up yet.", "Not backed up yet.");
@@ -80,11 +81,14 @@ catalog! {
     plain backup_now_running = ("Backing up…", "Backing up…");
     plain backup_progress = ("Backing up — {size} to go", "Backing up — {size} to go");
     plain backup_refused = ("Your backup device refused the backup. It may be full. Nothing was lost.", "Your backup device refused the backup. It may be full. Nothing was lost.");
+    plain backup_dest_acked = ("Last backup {when}", "Last backup {when}");
+    plain backup_dest_acked_never = ("Not backed up yet", "Not backed up yet");
     plain backup_seen = ("Reached {when}", "Reached {when}");
     plain backup_seen_never = ("Not reached yet", "Not reached yet");
     plain backup_status_catching_up = ("Backing up, last {when}", "Backing up, last {when}");
     plain backup_status_done = ("Backed up {when}", "Backed up {when}");
     plain backup_status_frozen = ("Moved to your other phone", "Moved to your other phone");
+    plain backup_status_waiting = ("Records backed up {when}, {count} waiting", "Records backed up {when}, {count} waiting");
     plain backup_status_never = ("Not backed up yet", "Not backed up yet");
     plain backup_status_pair_again = ("Pair your backup device again", "Pair your backup device again");
     plain backup_status_unpaired = ("Not backed up. Pair a backup device.", "Not backed up. Pair a backup device.");
@@ -96,7 +100,10 @@ catalog! {
     plain backup_wait_gateway = ("{count} waiting for your backup device", "{count} waiting for your backup device");
     plain backup_wait_icloud = ("{count} waiting in iCloud", "{count} waiting in iCloud");
     plain backup_wait_pair_again = ("{count} waiting. Pair your backup device again.", "{count} waiting. Pair your backup device again.");
-    plain backup_wait_refused = ("{count} waiting. Your backup device is full or refusing.", "{count} waiting. Your backup device is full or refusing.");
+    plain backup_wait_no_room = ("{count} waiting. This phone is too full to back up. Free some space.", "{count} waiting. This phone is too full to back up. Free some space.");
+    plain backup_wait_refused = ("{count} waiting. Your backup device is full.", "{count} waiting. Your backup device is full.");
+    plain backup_wait_refused_other = ("{count} waiting. Your backup device is refusing the backup.", "{count} waiting. Your backup device is refusing the backup.");
+    plain backup_wait_too_large = ("{count} waiting. Your backup device refused a file as too large.", "{count} waiting. Your backup device refused a file as too large.");
     plain backup_wait_untrusted = ("{count} waiting. Wrong device answered.", "{count} waiting. Wrong device answered.");
     plain backup_wait_wifi = ("{count} waiting for Wi-Fi", "{count} waiting for Wi-Fi");
     plain backup_wait_window = ("{count} waiting for background time", "{count} waiting for background time");

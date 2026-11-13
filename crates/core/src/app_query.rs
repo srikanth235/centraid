@@ -67,6 +67,7 @@ use centraid_vault::value::Value;
 use crate::error::{CoreError, Result};
 
 // The chat's arm (R-CHAT-1): the thread list, a thread, and a card's row.
+mod alerts;
 pub(crate) mod chat;
 // The shell's import reads (lane I): the folders a vault follows.
 pub(crate) mod imports;
@@ -216,6 +217,17 @@ pub(crate) fn calendar_upcoming(
 ) -> Result<Answer> {
     use wire::app_query_response::Answer as A;
     let zone = zone_of(vault, &asked.tz)?;
+    if asked.alerts > 0 {
+        // THE ALERT INDEX'S READ: only the events that fire next, whatever the vault holds.
+        let ids = alerts::names(vault, &zone, now, asked.alerts)?;
+        let from = non_empty(&asked.from).unwrap_or(now);
+        let to = non_empty(&asked.to).unwrap_or(now);
+        return settle(
+            door,
+            agenda::load_upcoming_among(door, &ids, from, to, &zone),
+            |data| A::AgendaUpcoming(upcoming_to_wire(data, &zone, now)),
+        );
+    }
     settle(
         door,
         agenda::load_upcoming(
@@ -1025,6 +1037,7 @@ mod tests {
                     from: from.to_owned(),
                     to: to.to_owned(),
                     tz: tz.to_owned(),
+                    alerts: 0,
                 },
             ))? {
                 wire::app_query_response::Answer::AgendaUpcoming(upcoming) => Ok(upcoming),

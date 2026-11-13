@@ -22,6 +22,12 @@ internal object ChatMarkdown {
         data class Paragraph(val text: AnnotatedString) : Block
         data class Item(val marker: String, val text: AnnotatedString) : Block
         data class Heading(val text: AnnotatedString) : Block
+
+        /** A table: the first row is the header. Every cell is its inline text. */
+        data class Table(val rows: List<List<AnnotatedString>>) : Block
+
+        /** A fenced block, drawn as it was written in the monospace face; its text is verbatim. */
+        data class Code(val text: String) : Block
     }
 
     fun blocks(text: String, streaming: Boolean = false): List<Block> {
@@ -32,8 +38,35 @@ internal object ChatMarkdown {
             out += Block.Paragraph(inline(paragraph.joinToString("\n"), streaming))
             paragraph.clear()
         }
-        for (raw in text.replace("\r\n", "\n").split("\n")) {
-            val line = raw.trim()
+        val lines = text.replace("\r\n", "\n").split("\n")
+        var at = 0
+        while (at < lines.size) {
+            val line = lines[at].trim()
+            at += 1
+            // A fence runs to its closing fence, or to the end of what has arrived so far.
+            if (line.startsWith("```")) {
+                flush()
+                val body = mutableListOf<String>()
+                while (at < lines.size && !lines[at].trim().startsWith("```")) {
+                    body += lines[at]
+                    at += 1
+                }
+                at += 1
+                out += Block.Code(body.joinToString("\n"))
+                continue
+            }
+            // A table is a row of cells, a rule under it, and the rows that follow.
+            if (line.startsWith("|") && at < lines.size && isRule(lines[at].trim())) {
+                flush()
+                val rows = mutableListOf(cells(line))
+                at += 1
+                while (at < lines.size && lines[at].trim().startsWith("|")) {
+                    rows += cells(lines[at].trim())
+                    at += 1
+                }
+                out += Block.Table(rows.map { row -> row.map { inline(it, streaming) } })
+                continue
+            }
             val item = listItem(line)
             val heading = headingText(line)
             when {
@@ -109,8 +142,18 @@ internal object ChatMarkdown {
             is Block.Paragraph -> block.text.text
             is Block.Heading -> block.text.text
             is Block.Item -> block.marker + " " + block.text.text
+            is Block.Table -> block.rows.joinToString(". ") { row -> row.joinToString(", ") { it.text } }
+            is Block.Code -> block.text
         }
     }
+
+    /** `| --- | :-: |`: only dashes, colons, spaces and bars, with at least one dash. */
+    private fun isRule(line: String): Boolean =
+        line.startsWith("|") && line.contains('-') && line.all { it in "|-: " }
+
+    /** The cells of one row, outer bars dropped. */
+    private fun cells(line: String): List<String> =
+        line.removePrefix("|").removeSuffix("|").split("|").map { it.trim() }
 
     private fun listItem(line: String): Pair<String, String>? {
         if (line.length > 1 && line[0] in "-*+•" && line[1] == ' ') {

@@ -17,8 +17,11 @@ struct ChatAsset: Codable, Hashable {
     let fileName: String
     let sha256: String
     let directory: String
+    /// The member allowed mobile data for this transfer (absent in a task an earlier build made).
+    let allowCellular: Bool?
 
     init(_ download: Centraid_Core_V1_ModelDownload) {
+        allowCellular = download.allowCellular
         vision = download.vision
         url = download.url
         fileName = download.fileName
@@ -123,9 +126,38 @@ final class ChatModelDownloader: NSObject, URLSessionDownloadDelegate, @unchecke
         }
     }
 
+    /// WHICH TRANSFERS MAY USE MOBILE DATA (by `vision`): the member's word, for the transfer that is
+    /// going. Without it a transfer is held (suspended) while the phone is on mobile data and goes on
+    /// by itself when Wi-Fi comes back (#1188 download rules).
+    @MainActor private var cellularAllowed: Set<Bool> = []
+    @MainActor private var watching = false
+
+    /// Hold or let go each transfer by the network now and the member's word.
+    @MainActor func enforce() {
+        let onMobileData = ChatDeviceWatcher.shared.network == .cellular
+        session.getAllTasks { [weak self] tasks in
+            guard let self else { return }
+            DispatchQueue.main.async {
+                for task in tasks {
+                    guard let asset = self.asset(of: task) else { continue }
+                    let allowed = !onMobileData || self.cellularAllowed.contains(asset.vision)
+                    if allowed, task.state == .suspended { task.resume() }
+                    if !allowed, task.state == .running { task.suspend() }
+                }
+            }
+        }
+    }
+
     /// Start the transfer of `asset`, or pick up the one already running.
     @MainActor func start(_ asset: ChatAsset) {
         ChatModelStore.prepareDirectory()
+        if asset.allowCellular == true { cellularAllowed.insert(asset.vision) } else { cellularAllowed.remove(asset.vision) }
+        if !watching {
+            watching = true
+            NotificationCenter.default.addObserver(forName: .chatNetworkChanged, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.enforce() }
+            }
+        }
         let session = session
         session.getAllTasks { [weak self] tasks in
             guard let self else { return }
@@ -133,6 +165,7 @@ final class ChatModelDownloader: NSObject, URLSessionDownloadDelegate, @unchecke
                 self.asset(of: $0)?.vision == asset.vision && ($0.state == .running || $0.state == .suspended)
             }) {
                 running.resume()
+                DispatchQueue.main.async { self.enforce() }
                 return
             }
             guard let url = URL(string: asset.url) else {
@@ -142,6 +175,7 @@ final class ChatModelDownloader: NSObject, URLSessionDownloadDelegate, @unchecke
             let task = session.downloadTask(with: url)
             task.taskDescription = asset.encoded
             task.resume()
+            DispatchQueue.main.async { self.enforce() }
         }
     }
 

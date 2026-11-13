@@ -1,4 +1,4 @@
-//! M7's RFT records and DPO pairs, rendered by M4's renderer.
+//! M7's RFT records, rendered by M4's renderer.
 //!
 //! `assist-eval` cuts the records of a model's rollouts ([`centraid_assist_eval::rollout::records`]) but cannot render
 //! them: this crate depends on it. [`Renderer`] is the [`RenderRecord`] it asks for, so a rollout record carries

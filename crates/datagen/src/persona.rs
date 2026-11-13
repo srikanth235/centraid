@@ -128,7 +128,7 @@ impl Persona {
         };
         let me = format!("{} {}", rng.pick(first), rng.pick(pools::LAST));
         let currency = rng
-            .weighted(&[("USD", 6), ("EUR", 2), ("GBP", 1), ("CAD", 1)])
+            .weighted(&[("USD", 6), ("EUR", 2), ("GBP", 1), ("CAD", 1), ("INR", 3)])
             .to_string();
         Self {
             me,
