@@ -482,6 +482,47 @@ pub fn judge(
 }
 
 impl Drift {
+    /// What a publish refuses: coverage above zero, or any count of shape or behaviour above zero, each in words with its
+    /// counts. Empty when the data fits the contract the runtime serves, as far as drift can tell. A difference of the
+    /// contract's hashes alone (`wording`) is not one: it is re-rendered from the cache.
+    #[must_use]
+    pub fn refusals(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        if !self.gaps.is_empty() {
+            let shown: Vec<String> = self
+                .gaps
+                .iter()
+                .take(5)
+                .map(|g| format!("{} {}: {}", g.of, g.name, g.examples))
+                .collect();
+            out.push(format!(
+                "drift reports coverage {}: {} item(s) of the current catalogue have fewer than {} example(s) in train ({}{})",
+                self.gaps.len(),
+                self.gaps.len(),
+                self.floor,
+                shown.join("; "),
+                if self.gaps.len() > shown.len() { "; ..." } else { "" }
+            ));
+        }
+        if !self.shape.is_empty() {
+            out.push(format!(
+                "drift reports shape {}: {} call kind(s) no longer validate, in {} turn(s)",
+                self.shape.len(),
+                self.shape.len(),
+                self.shape_turns
+            ));
+        }
+        if self.behaviour_turns > 0 || !self.unrunnable.is_empty() {
+            out.push(format!(
+                "drift reports behaviour {}: {} turn(s) run but do not give the recorded result; {} session(s) could not run",
+                self.behaviour_turns + self.unrunnable.len(),
+                self.behaviour_turns,
+                self.unrunnable.len()
+            ));
+        }
+        out
+    }
+
     /// The report, in counts.
     #[must_use]
     pub fn text(&self) -> String {
@@ -556,6 +597,16 @@ impl Drift {
 ///
 /// A manifest without a contract block (run `datagen restamp`), a split that cannot be read, or the runtime failing.
 pub fn report(dir: &Path) -> Result<Drift> {
+    report_at(dir, None)
+}
+
+/// [`report`] with the floor of coverage set by the caller instead of the manifest's train cell floor (at least one): the
+/// publish guard reads the floor the version declares, and a hand-made version that declares none asks for none.
+///
+/// # Errors
+///
+/// As [`report`].
+pub fn report_at(dir: &Path, floor: Option<usize>) -> Result<Drift> {
     let manifest: Value = serde_json::from_str(
         &std::fs::read_to_string(dir.join("manifest.json"))
             .with_context(|| format!("no manifest.json in {}", dir.display()))?,
@@ -587,10 +638,12 @@ pub fn report(dir: &Path) -> Result<Drift> {
     let source = DatagenSource::open_version(dir, &READS)?;
     let sessions = source.sessions()?;
     let replay = centraid_assist_eval::replay::replay(&source, &sessions, mode)?;
-    let floor = manifest["targets"]["cell_floor"]["train"]
-        .as_u64()
-        .map_or(1, |n| usize::try_from(n).unwrap_or(1))
-        .max(1);
+    let floor = floor.unwrap_or_else(|| {
+        manifest["targets"]["cell_floor"]["train"]
+            .as_u64()
+            .map_or(1, |n| usize::try_from(n).unwrap_or(1))
+            .max(1)
+    });
     let kinds: Vec<&str> = Kind::ALL.iter().map(|k| k.name()).collect();
     let mut drift = judge(
         manifest["version"].as_str().unwrap_or("unknown"),

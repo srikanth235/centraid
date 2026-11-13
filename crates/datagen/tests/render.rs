@@ -54,6 +54,7 @@ fn mix_config() -> mix::Config {
         seed: 1,
         live: Vec::new(),
         floor: [0; 3],
+        field_floor: [0; 3],
         subsets: vec![20, 40],
         reserved: Vec::new(),
         reserve: 0,

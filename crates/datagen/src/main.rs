@@ -15,7 +15,7 @@ use centraid_datagen::mix::{self, Shares};
 use centraid_datagen::render::DECISION_WEIGHT;
 use centraid_datagen::version::{self, Provenance, RenderConfig};
 use centraid_datagen::world::{World, WorldSpec, plan, plan_sized};
-use centraid_datagen::{Catalog, Split, handoff, messages, publish, run};
+use centraid_datagen::{Catalog, Split, dryrun, handoff, messages, publish, run};
 use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
 
@@ -165,6 +165,36 @@ enum Command {
         /// Reuse the output of a stage that already has a manifest under `<out>/stages/`.
         #[arg(long)]
         reuse: bool,
+        #[command(flatten)]
+        mix: MixArgs,
+    },
+    /// The dry run of a build: draw and solve the intents of every world through the runtime, then run the mix's selection
+    /// and tally over what was planned. No message, no render, no tokenizer and no model call. Writes `plan.json` and
+    /// `plan.txt` under `--out` and prints: per split the sessions and turns chosen, every share against its target, the
+    /// cells and (kind, field) pairs of train under their floor, what drift's coverage would count as under the floor, the
+    /// prompts the first round would need, and the projected tokens (an estimate). All of it is BEFORE MESSAGE ATTRITION. Counts
+    /// only for val and test. Draws one world at a time, as a build does: a default run takes hours.
+    Plan {
+        #[arg(long)]
+        out: PathBuf,
+        /// The master seed every world and intent is drawn from.
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
+        /// Worlds per split as `train,val,test` (default 48,8,12).
+        #[arg(long, value_delimiter = ',')]
+        counts: Option<Vec<usize>>,
+        /// Sessions to draw per split as `train,val,test`. Default: half as many again as the targets, as `build` draws.
+        #[arg(long, value_delimiter = ',')]
+        sessions: Option<Vec<usize>>,
+        /// Sessions per writer or reader call, which sets the number of prompts a round needs.
+        #[arg(long, default_value_t = messages::BATCH)]
+        batch: usize,
+        /// Tokens a turn comes to, for the projection: the first version's 10.8 million tokens over 8,585 turns. An estimate.
+        #[arg(long, default_value_t = dryrun::TOKENS_PER_TURN)]
+        tokens_per_turn: usize,
+        /// Refused calls from a model's rollouts (`*.rollouts.jsonl`) for the repair turns that read.
+        #[arg(long)]
+        mistakes: Option<PathBuf>,
         #[command(flatten)]
         mix: MixArgs,
     },
@@ -920,6 +950,38 @@ fn main() -> Result<()> {
                 "put {put} answers into {} ({kept} already there)",
                 cache.display()
             );
+        }
+        Command::Plan {
+            out,
+            seed,
+            counts,
+            sessions,
+            batch,
+            tokens_per_turn,
+            mistakes,
+            mix: mix_args,
+        } => {
+            let catalog = Catalog::build()?;
+            let mix_config = mix_args.mix()?;
+            let drawn: [usize; 3] = match sessions.as_deref() {
+                Some([a, b, c]) => [*a, *b, *c],
+                Some(_) => anyhow::bail!("--sessions takes three numbers: train,val,test"),
+                None => mix_config.targets.map(|n| n + n / 2),
+            };
+            let settings = dryrun::Settings {
+                seed,
+                counts: spec_counts(counts.as_deref())?,
+                drawn,
+                mix: mix_config,
+                tokens_per_turn,
+                batch,
+            };
+            let plan = dryrun::plan(&settings, &catalog, load_mistakes(mistakes.as_deref())?)?;
+            std::fs::create_dir_all(&out)?;
+            std::fs::write(out.join("plan.json"), serde_json::to_string_pretty(&plan)?)?;
+            let text = plan.text();
+            std::fs::write(out.join("plan.txt"), &text)?;
+            print!("{text}");
         }
         Command::Handoff { step } => match step {
             HandoffStep::Split { pending, out, per } => {

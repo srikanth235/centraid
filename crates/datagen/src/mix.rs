@@ -1062,6 +1062,75 @@ fn report_of(
     report
 }
 
+/// A live cell or a live (kind, field) pair of train that has fewer turns than its floor.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Under {
+    /// `cell` or `field`.
+    pub of: &'static str,
+    pub name: String,
+    pub realised: usize,
+    pub floor: usize,
+}
+
+impl std::fmt::Display for Under {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} {}: {} of {}",
+            self.of, self.name, self.realised, self.floor
+        )
+    }
+}
+
+/// Every live cell and live (kind, field) pair of train that the mix left under its floor (a floor of 0 asks nothing),
+/// whatever the reason: the input held no more, or the mix left it short.
+#[must_use]
+pub fn under_floor(selection: &Selection, cfg: &Config) -> Vec<Under> {
+    let Some(train) = selection.reports.iter().find(|r| r.split == "train") else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for (of, lines, floor) in [
+        ("cell", &train.cells, cfg.floor[0]),
+        ("field", &train.fields, cfg.field_floor[0]),
+    ] {
+        out.extend(
+            lines
+                .iter()
+                .filter(|line| line.realised < floor)
+                .map(|line| Under {
+                    of,
+                    name: line.cell.clone(),
+                    realised: line.realised,
+                    floor,
+                }),
+        );
+    }
+    out
+}
+
+/// The guard of a build: the version is not made when a live cell or a live (kind, field) pair of train is under its floor.
+///
+/// # Errors
+///
+/// An error naming every cell and pair that is under its floor, with its count and the floor.
+pub fn check_floors(selection: &Selection, cfg: &Config) -> Result<()> {
+    let under = under_floor(selection, cfg);
+    if under.is_empty() {
+        return Ok(());
+    }
+    let cells = under.iter().filter(|u| u.of == "cell").count();
+    bail!(
+        "train is under its floor: {cells} live cell(s) and {} live (kind, field) pair(s) have fewer turns than the floor: {}",
+        under.len() - cells,
+        under
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("; ")
+    )
+}
+
 /// The combinations to reserve for test: rare enough that train and val lose little, present in test so there is something
 /// to hold out, alternating the two families (a kind with a filter field, a kind with a verb and a constraint count), in a
 /// seeded order. At most 10% of the sessions of train and val may carry one.
@@ -1851,6 +1920,77 @@ mod tests {
         assert!(text.contains("create/task/priority") && text.contains("fields (turns"));
         // val and test have no floor, as the cells have none: the pairs are reported against the uniform target
         assert_eq!(report(&selection, "val").fields.len(), 4);
+    }
+
+    #[test]
+    fn a_train_cell_or_pair_under_its_floor_fails_the_build_naming_it_and_all_at_the_floor_passes()
+    {
+        let (mut all, mut cfg) = input();
+        cfg.live_fields = with_fields(&mut all);
+        cfg.field_floor = [30, 0, 0];
+        // the input holds enough of every cell and of the pair that has fewer sessions: all at the floor, nothing is named
+        let selection = mix(&all, &cfg).unwrap();
+        let under = under_floor(&selection, &cfg);
+        // the pairs `with_fields` leaves thin or never sets are under; take them away to have a config at its floor
+        let mut at_floor = cfg.clone();
+        at_floor
+            .live_fields
+            .retain(|f| !under.iter().any(|u| u.of == "field" && &u.name == f));
+        let selection = mix(&all, &at_floor).unwrap();
+        assert!(under_floor(&selection, &at_floor).is_empty());
+        check_floors(&selection, &at_floor).unwrap();
+        // one cell with too little in the input: the error names it with its count and the floor, and only it (the one pair
+        // left is on every session, so thinning the input leaves it at its floor)
+        at_floor.live_fields = vec!["create/task/name".to_owned()];
+        let mut thin = all.clone();
+        let mut left = 5;
+        thin.retain(|f| {
+            f.split != "train" || f.cells.iter().all(|c| c != "create/note/-") || {
+                left -= 1;
+                left >= 0
+            }
+        });
+        let selection = mix(&thin, &at_floor).unwrap();
+        let cell = report(&selection, "train")
+            .cells
+            .iter()
+            .find(|c| c.cell == "create/note/-")
+            .unwrap()
+            .clone();
+        assert!(
+            cell.realised < 30,
+            "the fixture is under the floor: {cell:?}"
+        );
+        let under = under_floor(&selection, &at_floor);
+        assert_eq!(
+            under,
+            vec![Under {
+                of: "cell",
+                name: "create/note/-".to_owned(),
+                realised: cell.realised,
+                floor: 30
+            }]
+        );
+        let error = check_floors(&selection, &at_floor).unwrap_err().to_string();
+        assert!(
+            error.contains(&format!("cell create/note/-: {} of 30", cell.realised)),
+            "{error}"
+        );
+        assert!(error.contains("1 live cell(s) and 0 live (kind, field) pair(s)"));
+        // a pair under its floor is named the same way, beside the cell
+        let mut with_pair = at_floor.clone();
+        with_pair.live_fields.push("edit/person/role".to_owned());
+        let selection = mix(&thin, &with_pair).unwrap();
+        let error = check_floors(&selection, &with_pair)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("field edit/person/role: 0 of 30"), "{error}");
+        assert!(error.contains("cell create/note/-"), "{error}");
+        // no floor asks nothing
+        let mut none = with_pair.clone();
+        none.floor = [0; 3];
+        none.field_floor = [0; 3];
+        check_floors(&mix(&thin, &none).unwrap(), &none).unwrap();
     }
 
     #[test]

@@ -30,6 +30,7 @@ pub mod brief;
 pub mod catalog;
 pub mod contract;
 pub mod drift;
+pub mod dryrun;
 pub mod facts;
 pub mod fields;
 mod generate;

@@ -416,3 +416,67 @@ fn a_call_to_a_tool_the_sig_catalogue_does_not_have_is_a_shape_finding_and_s2_is
         .to_string();
     assert!(why.contains("s2") && why.contains("frozen"), "{why}");
 }
+
+#[test]
+fn a_publish_refuses_coverage_above_zero_and_any_shape_or_behaviour_count_and_says_the_counts() {
+    // nothing moved, or the hashes alone: nothing to refuse
+    let d = judge(same(), &covering(), &Replayed::default(), &["note"]);
+    assert!(d.refusals().is_empty());
+    let mut h = same();
+    h.tools.1 = "t2".into();
+    assert!(
+        judge(h, &covering(), &Replayed::default(), &["note"])
+            .refusals()
+            .is_empty(),
+        "a difference of wording is re-rendered from the cache, not refused"
+    );
+    // coverage: a kind the data never shows
+    let d = judge(
+        same(),
+        &covering(),
+        &Replayed::default(),
+        &["note", "photo"],
+    );
+    let why = d.refusals();
+    assert_eq!(why.len(), 1, "{why:?}");
+    assert!(
+        why[0].contains("coverage 1: 1 item(s)") && why[0].contains("kind photo: 0"),
+        "{why:?}"
+    );
+    // shape: a call that no longer validates
+    let mut sessions = covering();
+    sessions.push(session(
+        "train-3",
+        "train",
+        &[("find", json!({"kind": "note", "order": "newest"}))],
+    ));
+    let why = judge(same(), &sessions, &Replayed::default(), &["note"]).refusals();
+    assert_eq!(why.len(), 1, "{why:?}");
+    assert!(
+        why[0].contains("shape 1: 1 call kind(s) no longer validate, in 1 turn(s)"),
+        "{why:?}"
+    );
+    // behaviour: a turn that runs and gives another result, and a session that cannot run
+    let replayed = Replayed {
+        sessions: 2,
+        turns: 2,
+        failed: vec![("train-1".to_owned(), 1)],
+        unrunnable: vec!["train-2".to_owned()],
+        ..Replayed::default()
+    };
+    let why = judge(same(), &covering(), &replayed, &["note"]).refusals();
+    assert_eq!(why.len(), 1, "{why:?}");
+    assert!(
+        why[0].contains("behaviour 2: 1 turn(s) run but do not give the recorded result; 1 session(s) could not run"),
+        "{why:?}"
+    );
+    // all three at once are three refusals
+    let mut all = sessions;
+    all.extend(covering());
+    assert_eq!(
+        judge(same(), &all, &replayed, &["note", "photo"])
+            .refusals()
+            .len(),
+        3
+    );
+}

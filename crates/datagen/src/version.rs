@@ -543,6 +543,9 @@ pub fn write_version(
     if rehearsal {
         blockers.push("written or read back by a rehearsal model, not a language model");
     }
+    if cfg.floor[0] == 0 || cfg.field_floor[0] == 0 {
+        blockers.push("built with no floor for the cells or the (kind, field) pairs of train");
+    }
     let contract =
         crate::contract::Contract::current(tools, &catalog.hash(), &rendered.tokenizer_hash);
     crate::contract::write_files(out, &contract)?;
@@ -690,5 +693,12 @@ pub fn render_and_mix(
     std::fs::write(out.join(BUILD).join("render.txt"), &text)?;
     drop(rendered);
     let _ = std::fs::remove_file(&spool_path);
+    // the guard: the report is written, then a train that is under its floors is no version
+    if let Err(error) = mix::check_floors(&selection, &mcfg) {
+        anyhow::bail!(
+            "{error}. The mix report is in {}",
+            out.join(BUILD).join("render.txt").display()
+        );
+    }
     Ok(text)
 }

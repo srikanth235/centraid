@@ -374,6 +374,24 @@ pub fn prepare(dir: &Path, repo: &str, heldout: Option<&str>) -> Result<Publicat
             }
         }
     }
+    // the drift guard: a version the runtime has moved under, or that hardly shows what it serves, is not published. It runs
+    // the library drift (train and val, never test) at the floor the version declares for train, and a hand-made version
+    // that declares a floor of 0 asks no coverage.
+    if Contract::of_manifest(&manifest).is_some() {
+        let floor = manifest["targets"]["cell_floor"]["train"]
+            .as_u64()
+            .and_then(|n| usize::try_from(n).ok());
+        match crate::drift::report_at(dir, floor) {
+            Ok(drift) => problems.extend(drift.refusals().into_iter().map(|why| {
+                format!(
+                    "{why}: run `datagen drift --in <version dir>` and regenerate before publishing"
+                )
+            })),
+            Err(error) => {
+                problems.push(format!("drift could not be run on the version: {error:#}"))
+            }
+        }
+    }
     let pointer = manifest["heldout"]["repo"]
         .as_str()
         .filter(|r| !r.is_empty());

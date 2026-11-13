@@ -57,6 +57,7 @@ fn version_dir() -> &'static tempfile::TempDir {
                 seed: 1,
                 live: Vec::new(),
                 floor: [0; 3],
+                field_floor: [0; 3],
                 subsets: Vec::new(),
                 reserved: Vec::new(),
                 reserve: 0,

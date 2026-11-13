@@ -9,11 +9,16 @@ use centraid_datagen::contract::{self, Contract};
 use centraid_datagen::publish::{self, Repo, Source};
 use serde_json::{Value, json};
 
-/// A record whose render text holds the tools block of the sig mode, as a rendered session does.
+/// A record whose render text holds the tools block of the sig mode, as a rendered session does. It is a session drift can
+/// read (a world, a day, a person) with no turns, so the drift guard replays it and finds nothing to disagree with.
 fn record(id: &str) -> String {
     let block = tools_block(&tools_for(ToolsMode::Sig));
-    json!({"id": id, "render": {"text": format!("<|im_start|>system\n{block}\n\ntoday: Monday")}})
-        .to_string()
+    let world = id.split('-').take(2).collect::<Vec<_>>().join("-");
+    json!({
+        "id": id, "world": world, "today": "2026-09-15", "me": "Mina Okafor", "tags": [], "turns": [],
+        "render": {"text": format!("<|im_start|>system\n{block}\n\ntoday: Monday")}
+    })
+    .to_string()
 }
 
 fn zst(lines: &[&str]) -> Vec<u8> {
@@ -54,6 +59,9 @@ fn version(dir: &Path, commit: &str, publishable: bool) {
         "contract": contract.to_json(),
         "heldout": {"repo": publish::HELDOUT_REPO},
         "publishable": {"value": publishable, "blockers": if publishable { json!([]) } else { json!(["rendered with the test (byte-level) tokenizer"]) }},
+        // a hand-made version of one empty session shows no tool, argument or kind: it declares a train floor of 0, which asks
+        // the drift guard for no coverage (the default, with none declared, is the floor of 1 that drift itself uses)
+        "targets": {"cell_floor": {"train": 0}},
         "catalog_hash": "cafe1234",
         "runtime_commit": commit,
         "tokenizer": {"file": "tokenizer.json", "blake3": "ab12"},
@@ -224,6 +232,44 @@ fn a_dirty_tree_build_and_an_unmarked_version_are_refused() {
         why.contains("not marked publishable") && why.contains("byte-level"),
         "{why}"
     );
+}
+
+#[test]
+fn a_version_drift_reports_coverage_on_is_refused_with_the_count_in_a_dry_run_and_an_upload_alike()
+{
+    // the same version declaring no floor of its own: drift's own floor of one example of every tool, argument and kind
+    let dir = good();
+    let mut m: Value = serde_json::from_str(
+        &std::fs::read_to_string(dir.path().join("manifest.json")).expect("m"),
+    )
+    .expect("json");
+    m.as_object_mut().expect("object").remove("targets");
+    std::fs::write(dir.path().join("manifest.json"), m.to_string()).expect("write");
+    let gaps = centraid_datagen::drift::report(dir.path())
+        .expect("drift runs")
+        .gaps
+        .len();
+    assert!(
+        gaps > 0,
+        "a hand-made version shows no tool, argument or kind"
+    );
+    let why = refusal(dir.path());
+    assert!(
+        why.contains(&format!("drift reports coverage {gaps}: {gaps} item(s)")),
+        "{why}"
+    );
+    assert!(why.contains("fewer than 1 example(s) in train"), "{why}");
+    // `prepare` is what the dry run and the upload both take, so neither can go past it
+    let dry = publish::prepare(
+        dir.path(),
+        publish::EXAMPLE_REPO,
+        Some(publish::HELDOUT_REPO),
+    );
+    assert!(dry.is_err());
+    // the fixture's own declared floor of 0 asks no coverage, and the same data then prepares
+    let dir = good();
+    publish::prepare(dir.path(), publish::EXAMPLE_REPO, None)
+        .expect("prepares at a declared floor of 0");
 }
 
 #[test]

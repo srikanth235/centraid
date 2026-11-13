@@ -682,7 +682,7 @@ pub fn normalise(text: &str) -> String {
     out.trim_end().to_owned()
 }
 
-fn features_of(
+pub(crate) fn features_of(
     record: &Value,
     scenario: &Scenario,
     kept: usize,
