@@ -432,6 +432,7 @@ pub(crate) fn decorate(door: &dyn PageDoor, events: &mut [EventRow]) -> KitResul
     )?;
     let mut attached = centraid_apps_kit::attached::of(door, &ids)?;
     let mut alerts: BTreeMap<String, Vec<i64>> = BTreeMap::new();
+    // An alert is a row of its own (#1191, V8), read beside the window the same way the guests are.
     for row in by_ids(
         "calendar.events.reminders",
         "reminder",

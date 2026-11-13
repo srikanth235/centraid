@@ -202,7 +202,7 @@ fn read_chunked(
 pub fn aliases_statement() -> PageQuery {
     PageQuery::new(
         "locker.phone.aliases",
-        "id AS alias, item_id",
+        "id, item_id",
         "locker_item_alias",
         PageOrder::asc("id", "id"),
     )
@@ -225,7 +225,7 @@ pub fn presence_statement(item_id: &str) -> PageQuery {
 pub fn fields_statement(item_id: &str) -> PageQuery {
     by_item(
         "locker.phone.fields",
-        "id AS field_id, item_id, section, label, kind, value_text, \
+        "id, item_id, section, label, kind, value_text, \
          value_sealed IS NOT NULL AS has_sealed, position",
         "locker_item_field",
         "id",
@@ -238,7 +238,7 @@ pub fn fields_statement(item_id: &str) -> PageQuery {
 pub fn addresses_statement(item_id: &str) -> PageQuery {
     by_item(
         "locker.phone.addresses",
-        "id AS address_id, item_id, url, position",
+        "id, item_id, url, position",
         "locker_item_address",
         "id",
         item_id,
@@ -521,7 +521,7 @@ pub fn load_item(door: &dyn PageDoor, item_id: &str) -> KitResult<Option<ItemDat
             .rows
             .iter()
             .map(|row| Address {
-                address_id: text_of(row, "address_id").unwrap_or_default(),
+                address_id: text_of(row, "id").unwrap_or_default(),
                 url: text_of(row, "url").unwrap_or_default(),
                 position: position_of(row),
             })
@@ -870,7 +870,7 @@ pub fn load_export(door: &dyn PageDoor) -> KitResult<Vec<ExportSource>> {
                 .rows
                 .iter()
                 .map(|row| Address {
-                    address_id: text_of(row, "address_id").unwrap_or_default(),
+                    address_id: text_of(row, "id").unwrap_or_default(),
                     url: text_of(row, "url").unwrap_or_default(),
                     position: position_of(row),
                 })
@@ -1059,7 +1059,7 @@ fn fold_items(
         labels.dedup();
     }
     for row in read_window(door, &aliases_statement(), DECORATION_ROWS)?.rows {
-        if let (Some(alias), Some(item)) = (text_of(&row, "alias"), text_of(&row, "item_id")) {
+        if let (Some(alias), Some(item)) = (text_of(&row, "id"), text_of(&row, "item_id")) {
             decorations
                 .aliases
                 .entry(item.clone())
@@ -1145,7 +1145,7 @@ fn field_of(row: &Row) -> PhoneField {
         text_of(row, "value_text")
     };
     PhoneField {
-        field_id: text_of(row, "field_id").unwrap_or_default(),
+        field_id: text_of(row, "id").unwrap_or_default(),
         section: text_of(row, "section").unwrap_or_default(),
         label: text_of(row, "label").unwrap_or_default(),
         present: if sealed {

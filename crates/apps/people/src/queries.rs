@@ -1202,7 +1202,7 @@ pub(crate) fn dates(door: &dyn PageDoor, people: &[&PersonRow]) -> KitResult<Vec
     let yearly = Read {
         name: "people.dates.events",
         table: "event",
-        select: "id, starts, reminders",
+        select: "id, starts",
         order: ("id", "id"),
         column: "id",
     }
@@ -1216,6 +1216,18 @@ pub(crate) fn dates(door: &dyn PageDoor, people: &[&PersonRow]) -> KitResult<Vec
         )),
     )?;
     let yearly_ids: Vec<String> = yearly.iter().filter_map(|row| text_of(row, "id")).collect();
+    // The alerts are rows of their own (#1191, V8): a date reminds when its event has one.
+    let reminding: BTreeSet<String> = Read {
+        name: "people.dates.reminders",
+        table: "reminder",
+        select: "entity_id, offset_min",
+        order: ("entity_id", "entity_id"),
+        column: "entity_id",
+    }
+    .among(WIDE, door, &yearly_ids, None)?
+    .iter()
+    .filter_map(|row| text_of(row, "entity_id"))
+    .collect();
     let titles: BTreeMap<String, String> = Read {
         name: "people.dates.entity",
         table: "entity",
@@ -1245,7 +1257,7 @@ pub(crate) fn dates(door: &dyn PageDoor, people: &[&PersonRow]) -> KitResult<Vec
         let (Some(label), Some(month_day)) = (titles.get(&id), starts.get(5..10)) else {
             continue;
         };
-        let reminder_on = text_of(event, "reminders").is_some_and(|set| set != "[]");
+        let reminder_on = reminding.contains(&id);
         for person in about_by_event.get(&id).into_iter().flatten() {
             found.push(DateRow {
                 person_id: person.clone(),

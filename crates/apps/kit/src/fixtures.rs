@@ -599,15 +599,20 @@ pub fn year3_people(
         let reminded = k < shape.reminded;
         connection
             .execute(
-                "INSERT INTO event (id, starts, timing, rule, calendar_id, reminders)
-                 VALUES (?1, ?2, 'all-day', 'FREQ=YEARLY', 'calendar:default', ?3)",
-                params![
-                    date,
-                    format!("2024-{:02}-{:02}", 1 + k % 12, 1 + k % 28),
-                    reminded.then_some("[0]")
-                ],
+                "INSERT INTO event (id, starts, timing, rule, calendar_id)
+                 VALUES (?1, ?2, 'all-day', 'FREQ=YEARLY', 'calendar:default')",
+                params![date, format!("2024-{:02}-{:02}", 1 + k % 12, 1 + k % 28)],
             )
             .map_err(door)?;
+        if reminded {
+            // An alert is a row of its own (#1191, V8).
+            connection
+                .execute(
+                    "INSERT INTO reminder (entity_id, offset_min) VALUES (?1, 0)",
+                    params![date],
+                )
+                .map_err(door)?;
+        }
         edge.execute(params![date, "about", live(k * 7), None::<f64>, at(k)])
             .map_err(door)?;
         counts.dates += 1;

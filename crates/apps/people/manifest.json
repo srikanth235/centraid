@@ -61,6 +61,11 @@
       },
       {
         "schema": "vault",
+        "table": "reminder",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
         "table": "txn",
         "verbs": "read"
       },
