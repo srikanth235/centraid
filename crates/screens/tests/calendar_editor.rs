@@ -1074,7 +1074,8 @@ fn an_edit_opens_both_alerts_and_changing_only_the_second_writes_both() {
     world.save(page);
     assert_eq!(
         minutes_before(&world.event_row(&id).expect("event")),
-        [30, 1440]
+        // Longest lead first, whichever slot the member typed it in (#1191).
+        [1440, 30]
     );
 }
 
