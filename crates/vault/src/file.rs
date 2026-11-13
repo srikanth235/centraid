@@ -392,6 +392,10 @@ impl Vault {
     /// that only take on an empty file, so they are stated once in
     /// [`Self::create_with`] where the statement can actually succeed.
     fn apply_pragmas(connection: &Connection) -> Result<()> {
+        // DEFENSIVE: `sqlite_dbpage`, which the snapshot reads pages through (#1191 B11), is writable
+        // by design, and a write to it skips every check SQLite makes. This is the one connection
+        // that writes the vault, so a raw page write through it is refused at the engine.
+        connection.set_db_config(rusqlite::config::DbConfig::SQLITE_DBCONFIG_DEFENSIVE, true)?;
         connection.pragma_update(None, "journal_mode", "wal")?;
         connection.pragma_update(None, "synchronous", "FULL")?;
         connection.pragma_update(None, "secure_delete", "ON")?;
