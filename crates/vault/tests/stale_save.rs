@@ -425,7 +425,7 @@ fn the_times_alerts_and_guests_of_a_refused_event_save_are_kept_and_restore_puts
         json!({ "id": id, "fields": {
             "event.starts": "2026-03-03T10:00:00", "event.ends": "2026-03-03T11:30:00",
             "event.timing": "zoned", "event.zone": "Asia/Tokyo",
-            "event.reminders": [30, 60], "attendee": [ben] } }),
+            "reminder": [30, 60], "attendee": [ben] } }),
     );
     assert_eq!(kept["kept"], true);
     assert_eq!(w.versions(&id), 1);
@@ -462,8 +462,8 @@ fn the_times_alerts_and_guests_of_a_refused_event_save_are_kept_and_restore_puts
         Some("Asia/Tokyo")
     );
     assert_eq!(
-        held("SELECT reminders FROM event WHERE id = ?1").as_deref(),
-        Some("[30,60]")
+        held("SELECT group_concat(offset_min) FROM (SELECT offset_min FROM reminder WHERE entity_id = ?1 ORDER BY offset_min)").as_deref(),
+        Some("30,60")
     );
     assert_eq!(
         w.count(

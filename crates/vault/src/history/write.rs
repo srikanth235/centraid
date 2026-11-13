@@ -27,6 +27,10 @@ pub enum Kept {
 /// answer, one added is invited and has not answered.
 pub const GUESTS: &str = "attendee";
 
+/// The overlay's field for an event's alerts: the minutes before it starts, each once. Not a column:
+/// an alert is a row of its own (`reminder`), so the list stands for them all.
+pub const ALERTS: &str = "reminder";
+
 /// The overlay's field for what one day of a series changes: the `occurrence` row the day would
 /// hold (`original_start`, `scope` and its own columns), put over the day's row if it has one. A
 /// day's times, place and words are no field of the event, so the row stands for them all.
@@ -41,6 +45,14 @@ fn refusal(state: &Json, name: &str, value: &Json) -> Option<String> {
             .as_array()
             .is_some_and(|people| people.iter().all(Json::is_string));
         return (!(held && people)).then(|| format!("`{name}` is a list of the people it holds"));
+    }
+    if name == ALERTS {
+        let held = state.get(ALERTS).is_some_and(Json::is_array);
+        let minutes = value
+            .as_array()
+            .is_some_and(|list| list.iter().all(|m| m.as_i64().is_some_and(|m| m >= 0)));
+        return (!(held && minutes))
+            .then(|| format!("`{name}` is a list of minutes before it starts"));
     }
     if name == DAY {
         let held = state.get(DAY).is_some_and(Json::is_array);
@@ -105,6 +117,8 @@ pub fn keep_overlay(
     for (name, value) in overlay {
         if name == GUESTS {
             put_guests(&mut held, value, now);
+        } else if name == ALERTS {
+            put_alerts(&mut held, value);
         } else if name == DAY {
             put_day(&mut held, value);
         } else if let Some((table, column)) = name.split_once('.')
@@ -160,6 +174,22 @@ fn put_guests(held: &mut Json, people: &Json, now: &str) {
             .and_then(Json::as_str)
             .cmp(&b.get("to_id").and_then(Json::as_str))
     });
+}
+
+/// Put `minutes` over the alerts `held` has, each once, smallest first (the order the state keeps).
+fn put_alerts(held: &mut Json, minutes: &Json) {
+    let wanted: std::collections::BTreeSet<i64> = minutes
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Json::as_i64)
+        .collect();
+    if let Some(rows) = held.get_mut(ALERTS).and_then(Json::as_array_mut) {
+        *rows = wanted
+            .into_iter()
+            .map(|minutes| serde_json::json!({ "offset_min": minutes }))
+            .collect();
+    }
 }
 
 /// Put `day` (an `occurrence` row) over the day's row in `held`, or among them when the day has

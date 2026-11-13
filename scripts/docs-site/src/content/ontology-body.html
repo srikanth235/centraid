@@ -30,7 +30,7 @@
     <div class="hero-kv">
       <div><b data-count="kinds">26</b>kinds</div>
       <div><b data-count="relations">9</b>edge relations</div>
-      <div><b data-count="tables">46</b>tables</div>
+      <div><b data-count="tables">47</b>tables</div>
       <div><b>1</b>file, on the phone</div>
       <div><b>0</b>silos</div>
     </div>
@@ -287,9 +287,13 @@
 <div class="colrow"><span class="cn">calendar_kind</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ entity.kind</span><span class="cnote">generated</span></div>
 <div class="colrow"><span class="cn">place_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ place.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">url</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">reminders</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">travel_min</span><span class="ct">integer</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">description</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
+</div></div>
+<div class="tbl rv in" data-group="kinds" data-table="reminder"><header><h4>reminder</h4><p class="tp">One alert of an event: how many minutes before it starts the phone sounds, a minute once.</p></header>
+<div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
+<div class="colrow"><span class="cn">entity_id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ event.id</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">offset_min</span><span class="ct">integer</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
 <div class="tbl rv in" data-group="kinds" data-table="occurrence"><header><h4>occurrence</h4><p class="tp">One day of a series changed on its own, or from then on: an override, a skip or a cancel, keyed by the series-local wall clock.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
@@ -597,7 +601,7 @@
 <div class="colrow"><span class="cn">failed_unlocks</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 0</span></div>
 <div class="colrow"><span class="cn">failed_unlock_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
-<p class="note" data-tables="46" data-columns="341">46 tables and 341 columns, read off a vault this build founded.</p>
+<p class="note" data-tables="47" data-columns="342">47 tables and 342 columns, read off a vault this build founded.</p>
 <!-- schema:end -->
     </div>
     <div class="physcard rv">

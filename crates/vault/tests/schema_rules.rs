@@ -690,3 +690,50 @@ fn a_line_is_in_one_transfer_and_never_paired_with_itself() {
             .contains("another transfer")
     );
 }
+
+/// V8: an event's alerts are rows of their own, not JSON in a column (#1191). The database keeps a
+/// minute once, refuses a negative one and an alert for nothing, and an event's delete takes them.
+#[test]
+fn an_events_alerts_are_rows_the_database_keeps_once_and_ends_with_the_event() {
+    let w = World::new();
+    let event = w.id(
+        "event.propose",
+        json!({ "title": "Sync", "starts": "2026-03-02T09:00", "zone": "Europe/Paris", "reminders": [10, 60, 10] }),
+    );
+    let held = |sql: &str| -> i64 {
+        w.scratch
+            .vault
+            .read(|c| Ok(c.query_row(sql, [&event], |r| r.get(0))?))
+            .expect("a count")
+    };
+    assert_eq!(
+        held("SELECT COUNT(*) FROM reminder WHERE entity_id = ?1"),
+        2,
+        "a minute once"
+    );
+    w.db_refuses_with(
+        &format!("INSERT INTO reminder (entity_id, offset_min) VALUES ('{event}', 10)"),
+        "UNIQUE",
+    );
+    w.db_refuses_with(
+        &format!("INSERT INTO reminder (entity_id, offset_min) VALUES ('{event}', -5)"),
+        "CHECK",
+    );
+    w.db_refuses_with(
+        "INSERT INTO reminder (entity_id, offset_min) VALUES ('no-such-event', 5)",
+        "FOREIGN KEY",
+    );
+    w.ok("event.edit", json!({ "id": event, "reminders": null }));
+    assert_eq!(
+        held("SELECT COUNT(*) FROM reminder WHERE entity_id = ?1"),
+        0
+    );
+    w.ok("event.edit", json!({ "id": event, "reminders": [5] }));
+    w.ok("entity.trash", json!({ "id": event }));
+    w.ok("entity.purge", json!({ "id": event }));
+    assert_eq!(
+        held("SELECT COUNT(*) FROM reminder WHERE entity_id = ?1"),
+        0,
+        "a purged event leaves no alert behind"
+    );
+}

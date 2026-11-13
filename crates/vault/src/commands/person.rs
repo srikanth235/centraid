@@ -640,7 +640,7 @@ fn add_date(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             starts: &starts,
             timing: Semantics::AllDay,
             rule: Some("FREQ=YEARLY"),
-            reminders: reminded.then_some("[0]"),
+            reminders: if reminded { &[0] } else { &[] },
             ..NewEvent::default()
         },
     )?;

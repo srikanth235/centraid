@@ -475,7 +475,6 @@ CREATE TABLE event (
   calendar_kind  TEXT GENERATED ALWAYS AS ('calendar') VIRTUAL,
   place_id       TEXT REFERENCES place(id),
   url            TEXT,
-  reminders      TEXT CHECK (reminders IS NULL OR json_valid(reminders)),
   -- Minutes of travel the member allows before it starts.
   travel_min     INTEGER CHECK (travel_min IS NULL OR travel_min >= 0),
   description    TEXT,
@@ -492,6 +491,13 @@ CREATE INDEX event_by_calendar ON event(calendar_id);
 -- The series, in start order: the expander's read of every repeating event.
 CREATE INDEX event_by_rule ON event(starts, id) WHERE rule IS NOT NULL;
 CREATE INDEX event_by_place    ON event(place_id) WHERE place_id IS NOT NULL;
+
+-- The alerts of an event, minutes before it starts: one row each, a minute once (#1191, V8).
+CREATE TABLE reminder (
+  entity_id  TEXT NOT NULL REFERENCES event(id) ON DELETE CASCADE,
+  offset_min INTEGER NOT NULL CHECK (offset_min >= 0),
+  PRIMARY KEY (entity_id, offset_min)
+) STRICT;
 
 CREATE TABLE occurrence (
   series_id      TEXT NOT NULL REFERENCES event(id) ON DELETE CASCADE,

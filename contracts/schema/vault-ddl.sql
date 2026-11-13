@@ -396,7 +396,6 @@ CREATE TABLE event (
   calendar_kind  TEXT GENERATED ALWAYS AS ('calendar') VIRTUAL,
   place_id       TEXT REFERENCES place(id),
   url            TEXT,
-  reminders      TEXT CHECK (reminders IS NULL OR json_valid(reminders)),
   -- Minutes of travel the member allows before it starts.
   travel_min     INTEGER CHECK (travel_min IS NULL OR travel_min >= 0),
   description    TEXT,
@@ -678,6 +677,13 @@ CREATE TABLE place (
   zone     TEXT,
   CHECK ((lat IS NULL) = (lon IS NULL)),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
+) STRICT;
+
+-- table reminder on reminder
+CREATE TABLE reminder (
+  entity_id  TEXT NOT NULL REFERENCES event(id) ON DELETE CASCADE,
+  offset_min INTEGER NOT NULL CHECK (offset_min >= 0),
+  PRIMARY KEY (entity_id, offset_min)
 ) STRICT;
 
 -- table revision on revision

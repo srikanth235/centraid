@@ -447,6 +447,7 @@ fn delete_rules_cascade_only_where_a_row_cannot_outlive_its_parent() {
             ("message", "thread"),
             ("message_attachment", "message"),
             ("occurrence", "event"),
+            ("reminder", "event"),
             ("transfer", "txn"),
             ("workout", "activity"),
         ]
@@ -1463,6 +1464,7 @@ fn the_founded_file_holds_the_spec_s_tables_and_nothing_else() {
         "thread",
         "message",
         "message_attachment",
+        "reminder",
         // Locker, which is not an entity kind
         "locker_item",
         "locker_item_address",

@@ -214,15 +214,7 @@ fn phone_holds(connection: &Connection, id: &str, kind: &str) -> Result<bool> {
                 })
                 .optional()?
                 .flatten(),
-            connection
-                .query_row("SELECT reminders FROM event WHERE id = ?1", [id], |row| {
-                    row.get::<_, Option<String>>(0)
-                })
-                .optional()?
-                .flatten()
-                .as_deref()
-                .map(offsets_of)
-                .unwrap_or_default(),
+            crate::commands::event::reminders_held(connection, id)?,
         )
     } else {
         AlertNow::Task(
@@ -309,19 +301,12 @@ fn offsets_of(json: &str) -> Vec<i64> {
     found
 }
 
-type EventFields = (
-    String,
-    String,
-    Option<String>,
-    Option<String>,
-    String,
-    Option<String>,
-);
+type EventFields = (String, String, Option<String>, Option<String>, String);
 
 fn event_alerts(connection: &Connection, id: &str, now: i64) -> Result<Vec<Alert>> {
     let fields: Option<EventFields> = connection
         .query_row(
-            "SELECT starts, timing, zone, rule, status, reminders FROM event WHERE id = ?1",
+            "SELECT starts, timing, zone, rule, status FROM event WHERE id = ?1",
             [id],
             |row| {
                 Ok((
@@ -330,12 +315,11 @@ fn event_alerts(connection: &Connection, id: &str, now: i64) -> Result<Vec<Alert
                     row.get(2)?,
                     row.get(3)?,
                     row.get(4)?,
-                    row.get(5)?,
                 ))
             },
         )
         .optional()?;
-    let Some((starts, timing, zone, rule, status, reminders)) = fields else {
+    let Some((starts, timing, zone, rule, status)) = fields else {
         return Ok(Vec::new());
     };
     // A DAY HAS NO MOMENT: an all-day event's alert sounds at 09:00 that day, wherever the member
@@ -354,7 +338,7 @@ fn event_alerts(connection: &Connection, id: &str, now: i64) -> Result<Vec<Alert
     if status == "cancelled" {
         return Ok(Vec::new());
     }
-    let mut offsets = reminders.as_deref().map(offsets_of).unwrap_or_default();
+    let mut offsets = crate::commands::event::reminders_held(connection, id)?;
     if all_day {
         offsets.truncate(1);
     }

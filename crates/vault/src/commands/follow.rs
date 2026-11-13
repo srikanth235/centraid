@@ -458,8 +458,6 @@ pub const SYSTEMS: &[SystemMap] = &[
             "zone",
             "rule",
             "busy",
-            // The alerts, minutes before, as the event's own JSON ([`event::shape`]).
-            "reminders",
         ],
         fixed: &[],
         children: &[
@@ -475,6 +473,16 @@ pub const SYSTEMS: &[SystemMap] = &[
             },
             // The guests the phone states: a guest whose email is a person's is that person's
             // `attendee` edge; the rest stay in the statement and are read from it.
+            // The alerts, minutes before, judged whole ([`event::shape`] states them as an array).
+            Child {
+                name: "reminders",
+                read: event::reminders_read,
+                canon: event::reminders_canon,
+                merge: event::reminders_merge,
+                items: None,
+                take: event::reminders_take,
+                stamp: None,
+            },
             Child {
                 name: "attendees",
                 read: event::attendees_read,

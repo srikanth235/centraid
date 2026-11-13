@@ -59,7 +59,7 @@ pub const GROUPS: [(&str, &str, &str); 6] = [
 ///
 /// The FTS5 shadow tables of `search` are not here (they are an implementation
 /// of it); every other table must be.
-pub const TABLES: [(&str, &str, &str); 46] = [
+pub const TABLES: [(&str, &str, &str); 47] = [
     (
         "kernel",
         "entity",
@@ -154,6 +154,11 @@ pub const TABLES: [(&str, &str, &str); 46] = [
         "kinds",
         "event",
         "Something that happens at a time: zoned, floating or all-day, with its recurrence rule, guests (as edges) and reminders.",
+    ),
+    (
+        "kinds",
+        "reminder",
+        "One alert of an event: how many minutes before it starts the phone sounds, a minute once.",
     ),
     (
         "kinds",

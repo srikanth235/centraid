@@ -84,7 +84,7 @@ pub const WIDE: FanOutBound = FanOutBound::new(500, 64);
 
 const STARRED: &str = "flag:starred";
 const EVENT_COLUMNS: &str = "id, starts, ends, timing, zone, rule, rule_supported, status, \
-     calendar_id, place_id, url, reminders, description, busy, travel_min";
+     calendar_id, place_id, url, description, busy, travel_min";
 const ENTITY_COLUMNS: &str = "id, title, created_at, updated_at";
 
 /// These answers carry no continuation or partial flag, so their stated bounds
@@ -334,9 +334,6 @@ fn live_events(door: &dyn PageDoor, rows: &[Row]) -> KitResult<Vec<EventRow>> {
 }
 
 fn event_of(row: &Row, entity: &Row) -> EventRow {
-    let reminders = text_of(row, "reminders")
-        .and_then(|json| serde_json::from_str::<Vec<i64>>(&json).ok())
-        .unwrap_or_default();
     let zone = text_of(row, "zone");
     EventRow {
         event_id: text_of(row, "id").unwrap_or_default(),
@@ -362,7 +359,7 @@ fn event_of(row: &Row, entity: &Row) -> EventRow {
         updated_at: text_of(entity, "updated_at"),
         calendar_id: text_of(row, "calendar_id"),
         conferencing_uri: text_of(row, "url"),
-        reminders,
+        // The alerts are read beside the row (`decorate`).
         // A row that does not say is busy, as the column's default is.
         busy: row.get("busy").and_then(Cell::integer) != Some(0),
         travel_min: row.get("travel_min").and_then(Cell::integer),
@@ -434,7 +431,25 @@ pub(crate) fn decorate(door: &dyn PageDoor, events: &mut [EventRow]) -> KitResul
             .collect::<Vec<_>>(),
     )?;
     let mut attached = centraid_apps_kit::attached::of(door, &ids)?;
+    let mut alerts: BTreeMap<String, Vec<i64>> = BTreeMap::new();
+    for row in by_ids(
+        "calendar.events.reminders",
+        "reminder",
+        "entity_id, offset_min",
+        "entity_id",
+    )
+    .within(WIDE, door, &ids, None)?
+    {
+        if let (Some(event), Some(minutes)) = (
+            text_of(&row, "entity_id"),
+            row.get("offset_min").and_then(Cell::integer),
+        ) {
+            alerts.entry(event).or_default().push(minutes);
+        }
+    }
     for event in events {
+        event.reminders = alerts.remove(&event.event_id).unwrap_or_default();
+        event.reminders.sort_unstable();
         event.attendees = guests.remove(&event.event_id).unwrap_or_default();
         event.attachments = attached.remove(&event.event_id).unwrap_or_default();
         event.location_name = event

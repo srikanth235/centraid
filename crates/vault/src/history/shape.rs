@@ -73,6 +73,16 @@ pub const TABLES: &[(&str, Role)] = &[
         },
     ),
     (
+        "reminder",
+        Role::Child {
+            host: "event",
+            via: "entity_id",
+            filter: None,
+            alias: "reminder",
+            key: &[],
+        },
+    ),
+    (
         "occurrence",
         Role::Child {
             host: "event",

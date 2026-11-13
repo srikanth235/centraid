@@ -150,8 +150,8 @@ fn a_phones_alerts_land_in_the_events_reminders_as_a_followed_field() {
     )]);
     let event = w.event_of("uid:1");
     assert_eq!(
-        w.one::<String>("SELECT reminders FROM event WHERE id = ?1", &[&event]),
-        "[60,10]"
+        w.one::<String>("SELECT group_concat(offset_min) FROM (SELECT offset_min FROM reminder WHERE entity_id = ?1 ORDER BY offset_min)", &[&event]),
+        "10,60"
     );
     // The member's change to the alerts stands over the phone's next word.
     w.ok("event.edit", json!({ "id": event, "reminders": [5] }));
@@ -161,8 +161,8 @@ fn a_phones_alerts_land_in_the_events_reminders_as_a_followed_field() {
         json!([60, 10, 1440]),
     )]);
     assert_eq!(
-        w.one::<String>("SELECT reminders FROM event WHERE id = ?1", &[&event]),
-        "[5]"
+        w.one::<String>("SELECT group_concat(offset_min) FROM (SELECT offset_min FROM reminder WHERE entity_id = ?1 ORDER BY offset_min)", &[&event]),
+        "5"
     );
     let refused = w.run(
         "follow.calendar",

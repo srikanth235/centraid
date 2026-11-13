@@ -198,7 +198,7 @@ mod tests {
                 scope.table.as_deref().expect("a read names a table")
             })
             .collect();
-        assert_eq!(reads.len(), 13);
+        assert_eq!(reads.len(), 14);
         assert!(
             vault
                 .scopes

@@ -131,7 +131,7 @@ fn an_event_reads_back_travel_availability_two_alerts_and_its_calendars_icon() {
             let row = detail.event.expect("the event");
             assert_eq!(row.travel_min, Some(25));
             assert!(!row.busy, "free");
-            assert_eq!(row.reminders, vec![30, 5], "the first and the second alert");
+            assert_eq!(row.reminders, vec![5, 30], "the alerts, smallest first");
             assert_eq!(row.location_place_id.as_deref(), Some(place.as_str()));
             assert_eq!(
                 row.conferencing_uri.as_deref(),

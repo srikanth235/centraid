@@ -94,7 +94,7 @@ pub use restore::{Restored, Scope, restore_changes, restore_version};
 pub use shape::{
     CONTENT, Cell, OMITTED, Part, RELATIONS_OUTSIDE, Role, Shape, TABLES, is_sealed, shape,
 };
-pub use write::{DAY, Kept, keep_overlay, overlay_refusal};
+pub use write::{ALERTS, DAY, Kept, keep_overlay, overlay_refusal};
 
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::Value as Json;

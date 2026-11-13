@@ -35,7 +35,7 @@ struct Event {
     busy: bool,
     place: Option<String>,
     url: Option<String>,
-    reminders: Option<String>,
+    reminders: Vec<i64>,
     description: Option<String>,
     travel_min: Option<i64>,
     guests: Vec<Guest>,
@@ -259,22 +259,16 @@ fn write_day(writer: &mut Writer, exdates: &[(String, String)], day: &Day<'_>) {
             "X-APPLE-TRAVEL-DURATION;VALUE=DURATION:PT{minutes}M"
         ));
     }
-    if let Some(Json::Array(alerts)) = event
-        .reminders
-        .as_deref()
-        .and_then(|text| serde_json::from_str::<Json>(text).ok())
-    {
-        for minutes in alerts.iter().filter_map(Json::as_i64) {
-            writer.line("BEGIN:VALARM");
-            writer.line("ACTION:DISPLAY");
-            writer.text("DESCRIPTION", day.title);
-            writer.line(&if minutes == 0 {
-                "TRIGGER:PT0S".to_owned()
-            } else {
-                format!("TRIGGER:-PT{minutes}M")
-            });
-            writer.line("END:VALARM");
-        }
+    for minutes in event.reminders.iter().copied() {
+        writer.line("BEGIN:VALARM");
+        writer.line("ACTION:DISPLAY");
+        writer.text("DESCRIPTION", day.title);
+        writer.line(&if minutes == 0 {
+            "TRIGGER:PT0S".to_owned()
+        } else {
+            format!("TRIGGER:-PT{minutes}M")
+        });
+        writer.line("END:VALARM");
     }
     writer.line("END:VEVENT");
 }
@@ -286,7 +280,7 @@ fn events(
 ) -> Result<Vec<Event>> {
     let mut statement = connection.prepare_cached(
         "SELECT e.id, e.title, e.updated_at, v.starts, v.ends, v.timing, v.zone, v.rule, v.status,
-                v.busy, v.place_id, v.url, v.reminders, v.description, v.travel_min
+                v.busy, v.place_id, v.url, v.description, v.travel_min
            FROM event v JOIN entity e ON e.id = v.id
           WHERE e.kind = 'event' AND e.deleted_at IS NULL
             AND (?1 IS NULL OR v.calendar_id = ?1)
@@ -309,9 +303,9 @@ fn events(
                     busy: row.get::<_, i64>(9)? != 0,
                     place: None,
                     url: row.get(11)?,
-                    reminders: row.get(12)?,
-                    description: row.get(13)?,
-                    travel_min: row.get(14)?,
+                    reminders: Vec::new(),
+                    description: row.get(12)?,
+                    travel_min: row.get(13)?,
                     guests: Vec::new(),
                 },
                 row.get::<_, Option<String>>(10)?,
@@ -322,6 +316,7 @@ fn events(
     for (mut event, place) in rows {
         event.place = place.and_then(|id| place_text(connection, &id));
         event.guests = guests(connection, &event.id)?;
+        event.reminders = crate::commands::event::reminders_held(connection, &event.id)?;
         event.stamp =
             ical::compact_utc(&event.stamp).unwrap_or_else(|| "19700101T000000Z".to_owned());
         out.push(event);
