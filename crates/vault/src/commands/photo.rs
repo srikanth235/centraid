@@ -229,7 +229,11 @@ fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
             media_type,
             form,
             ctx.optional_str("taken_at")
-                .map(crate::time::temporal::canonical)
+                .map(|stated| {
+                    // A photo's time is an instant: a stated date or wall clock is read as UTC.
+                    crate::time::recurrence::parse_instant_ms(&stated)
+                        .map_or_else(|| stated.to_owned(), crate::clock::format_iso_ms)
+                })
                 .or(source.taken_at),
             whole(ctx, "offset_min").or(source.offset_min),
             whole(ctx, "width"),
