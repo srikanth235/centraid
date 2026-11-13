@@ -1223,7 +1223,11 @@ fn forgetting_asks_nothing_reaches_only_a_gateway_the_screen_draws_and_says_whet
     assert_eq!(asked(&page), vec!["backup.forget:gw-1"]);
     let answer = |forgotten, revoked| {
         Some(wire::response::Kind::ForgetDestination(
-            wire::ForgetDestinationResponse { forgotten, revoked },
+            wire::ForgetDestinationResponse {
+                forgotten,
+                revoked,
+                forget_token: None,
+            },
         ))
     };
     page.set_status(status(vec![nas()]));

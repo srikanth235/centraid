@@ -121,6 +121,8 @@ fn restore_answer(vaults: &[(&str, u32, i64, &str)], unclaimed: &[u32]) -> wire:
                 })
                 .collect(),
             older_offers: Vec::new(),
+            tokens: Vec::new(),
+            unproven_newest: Vec::new(),
         })),
     };
     wire::OffThreadDone {
@@ -146,6 +148,31 @@ fn restore_offer(newest_ms: i64, offered_ms: i64) -> wire::OffThreadDone {
                 offered_taken_at_ms: offered_ms,
                 device: "Office NAS".to_owned(),
             }],
+            tokens: Vec::new(),
+            unproven_newest: Vec::new(),
+        })),
+    };
+    wire::OffThreadDone {
+        tag: "restore".to_owned(),
+        bytes: wire::VaultCalled {
+            response: response.encode_to_vec(),
+            error: None,
+        }
+        .encode_to_vec(),
+    }
+}
+
+/// A restore that cannot prove the newest backup it found is the newest: nothing claimed.
+fn restore_unproven(taken_ms: i64) -> wire::OffThreadDone {
+    let response = wire::Response {
+        kind: Some(wire::response::Kind::Restore(wire::RestoreResponse {
+            unproven_newest: vec![wire::UnprovenNewest {
+                index: 0,
+                vault_id: "ab".repeat(32),
+                taken_at_ms: taken_ms,
+                label: "Office NAS".to_owned(),
+            }],
+            ..wire::RestoreResponse::default()
         })),
     };
     wire::OffThreadDone {
@@ -500,6 +527,39 @@ fn an_older_backup_is_offered_and_taken_only_on_a_yes() {
     let mut phone = filled(routes::restore(), Some(CODE));
     primary(&mut phone);
     deliver(&mut phone, restore_offer(newest, older));
+    phone.send_enter(K::Primary(wire::WordsPrimary {}));
+    assert_eq!(phone.enter().phase, Phase::Working as i32);
+}
+
+/// **#1191, E8.** A restore that cannot prove it holds the newest backup ASKS before it claims:
+/// the sentence names the date and the backup, claims nothing and says nothing is verified; a
+/// yes sends the restore again.
+#[test]
+fn a_restore_that_cannot_prove_the_newest_asks_before_it_claims() {
+    let taken = 1_794_346_800_000_i64;
+    let mut phone = filled(routes::restore(), Some(CODE));
+    primary(&mut phone);
+    deliver(&mut phone, restore_unproven(taken));
+    let state = phone.enter();
+    assert_eq!(state.phase, Phase::Offer as i32);
+    assert_eq!(state.title, "Restore this backup?");
+    assert!(state.body.contains("on Office NAS"), "{}", state.body);
+    assert!(
+        state
+            .body
+            .contains("A newer one may be on a backup device that didn't answer."),
+        "{}",
+        state.body
+    );
+    assert_eq!(state.primary_label, "Restore this one");
+    assert!(state.primary_enabled);
+    assert!(state.offer_rows.is_empty());
+    for word in ["verified", "latest", "newest backup is"] {
+        assert!(!state.body.contains(word), "{word}: {}", state.body);
+    }
+    assert!(!phone.shell.device.contains_key(secrets::LOCAL_SEED));
+    assert!(phone.keeper.log().is_empty());
+
     phone.send_enter(K::Primary(wire::WordsPrimary {}));
     assert_eq!(phone.enter().phase, Phase::Working as i32);
 }

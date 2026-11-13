@@ -132,6 +132,13 @@ message BackupDestinationRow {
   // hours ago" or "Not backed up yet". The row's `detail` says when it was reached; this says
   // what it holds (#1188).
   string backed_up = 7;
+  // WHAT ELSE IS TRUE OF IT, one sentence each, drawn after `held`, `backed_up` and `detail`
+  // (#1191): an old backup it cannot read, a piece found damaged and sent again, deletes this
+  // phone made there that it holds for a week.
+  repeated string notes = 8;
+  // "Undo": set only while this phone has deletes held there that it may undo. Pressing it sends
+  // `UndoHeld` for this row; the row's notes then lose the held sentence.
+  string undo_label = 9;
 }
 
 // ONE APP'S PART OF THE BACKUP (#1144), finished: "In this backup" draws one
@@ -289,6 +296,9 @@ message BackupHomeData {
   string check_status = 49;
   // Whether that verdict found something wrong, so the row's line is drawn as a warning.
   bool check_warning = 50;
+  // WHAT THE LAST CHECK READ, at the rate it reads at (#1191): "Each check reads 64 of the 1,216
+  // stored pieces ...". Drawn under `check_status`; empty before a check ran.
+  string check_rate = 51;
   // A RUN'S BYTES, for the status card's bar under `progress` ("Backing up — 412
   // MB to go"). Known only while a run is going and the phone can say how many
   // bytes the backup covers; the fraction is what a gateway has acknowledged
@@ -358,6 +368,8 @@ message BackupHomeEvent {
     NotifyNotNow notify_not_now = 10;
     // The platform's own settings page for this app.
     NotifyOpenSettings notify_open_settings = 11;
+    // Undo the deletes this phone made on that backup device and it still holds (#1191).
+    UndoHeld undo_held = 12;
   }
 
   message KeyPromptAnswered {}
@@ -377,6 +389,10 @@ message BackupHomeEvent {
   }
 
   message ForgetDestination {
+    string gateway_id = 1;
+  }
+
+  message UndoHeld {
     string gateway_id = 1;
   }
 

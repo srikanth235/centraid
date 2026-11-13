@@ -29,7 +29,7 @@ use core::fmt;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::rules::ids::{Digest, Name};
-use crate::rules::wire::HeadView;
+use crate::rules::wire::{ClaimView, HeadView, NameState};
 
 /// The closed set of answers that are not a success.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -41,7 +41,8 @@ pub enum Code {
     /// vault, a bad signature, or a spent, expired or unknown pairing secret.
     /// All the same answer, so none of them is an oracle.
     Unauthorized,
-    /// A write with a token whose epoch is below the vault's writer epoch.
+    /// A token a takeover revoked, or one below the vault's writer epoch:
+    /// another phone has taken over. Carries the signed claim that says so.
     Moved,
     /// A pairing secret offered for a vault this gateway already holds.
     VaultKnown,
@@ -67,13 +68,22 @@ pub enum Code {
     HeadInUse,
     /// A `Range` the object cannot satisfy.
     BadRange,
+    /// A signed record that is not newer than the one standing, or jumps
+    /// too far ahead of it (E3).
+    OutOfOrder,
+    /// The operator froze the vault (E6).
+    Frozen,
+    /// The gateway has too many live nonces; ask again later (E5).
+    Busy,
+    /// A head dated further ahead than the gateway's clock allows (E14).
+    ClockAhead,
     /// The gateway's store failed. **Not a refusal**: the phone retries.
     Internal,
 }
 
 impl Code {
     /// Every code, for the tests that hold the table complete.
-    pub const ALL: [Self; 16] = [
+    pub const ALL: [Self; 20] = [
         Self::BadRequest,
         Self::Unauthorized,
         Self::Moved,
@@ -89,6 +99,10 @@ impl Code {
         Self::DiskFull,
         Self::HeadInUse,
         Self::BadRange,
+        Self::OutOfOrder,
+        Self::Frozen,
+        Self::Busy,
+        Self::ClockAhead,
         Self::Internal,
     ];
 
@@ -111,6 +125,10 @@ impl Code {
             Self::DiskFull => "DISK_FULL",
             Self::HeadInUse => "HEAD_IN_USE",
             Self::BadRange => "BAD_RANGE",
+            Self::OutOfOrder => "OUT_OF_ORDER",
+            Self::Frozen => "FROZEN",
+            Self::Busy => "BUSY",
+            Self::ClockAhead => "CLOCK_AHEAD",
             Self::Internal => "INTERNAL",
         }
     }
@@ -126,7 +144,7 @@ impl Code {
     #[must_use]
     pub const fn status(self) -> u16 {
         match self {
-            Self::BadRequest | Self::DigestMismatch => 400,
+            Self::BadRequest | Self::DigestMismatch | Self::ClockAhead => 400,
             Self::Unauthorized => 401,
             Self::NoHead | Self::NotFound => 404,
             Self::Moved
@@ -134,10 +152,13 @@ impl Code {
             | Self::EpochConflict
             | Self::HeadConflict
             | Self::NameTaken
-            | Self::HeadInUse => 409,
+            | Self::HeadInUse
+            | Self::OutOfOrder => 409,
+            Self::Frozen => 423,
             Self::TooLarge | Self::TooMany => 413,
             Self::BadRange => 416,
             Self::Internal => 500,
+            Self::Busy => 503,
             Self::DiskFull => 507,
         }
     }
@@ -149,29 +170,34 @@ impl fmt::Display for Code {
     }
 }
 
-/// A refusal, with the values the phone acts on.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// A refusal, with the values the phone acts on. The two large companions —
+/// a head as the phone signed it and a signed claim — are boxed, so the
+/// `Err` of every rule stays small.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Refusal {
     BadRequest,
     Unauthorized,
-    /// The epoch that superseded this token.
+    /// The epoch that superseded this token, and the signed claim that did
+    /// it, which the phone verifies before it believes it (E4).
     Moved {
         epoch: u64,
+        claim: Box<ClaimView>,
     },
     VaultKnown,
     /// The writer epoch and head as they stand; the claimer re-reads.
     EpochConflict {
         epoch: u64,
-        head: Option<HeadView>,
+        head: Option<Box<HeadView>>,
     },
     /// The writer epoch and head as they stand; the writer re-reads.
     HeadConflict {
         epoch: u64,
-        head: Option<HeadView>,
+        head: Option<Box<HeadView>>,
     },
     /// The writer epoch, so a restoring phone can claim one past it.
     NoHead {
         epoch: u64,
+        claim: Option<Box<ClaimView>>,
     },
     /// The object that is not there, when there is one to name.
     NotFound {
@@ -184,6 +210,9 @@ pub enum Refusal {
     /// The digest the name is already held with.
     NameTaken {
         digest: Digest,
+        /// Why the name is not free (additive; an older gateway says nothing,
+        /// which reads as live).
+        state: NameState,
     },
     /// The byte limit that was crossed.
     TooLarge {
@@ -201,6 +230,24 @@ pub enum Refusal {
     /// The object's size, so the phone can ask for a range that fits.
     BadRange {
         size: u64,
+    },
+    /// The standing record's epoch, generation and writes (E3).
+    OutOfOrder {
+        epoch: u64,
+        generation: u64,
+        writes: u64,
+    },
+    /// Since when the operator has held the vault.
+    Frozen {
+        since_ms: i64,
+    },
+    /// When to ask again.
+    Busy {
+        retry_after_ms: u64,
+    },
+    /// How far ahead of the gateway's clock the head was dated.
+    ClockAhead {
+        skew_ms: i64,
     },
 }
 
@@ -224,6 +271,10 @@ impl Refusal {
             Self::DiskFull => Code::DiskFull,
             Self::HeadInUse { .. } => Code::HeadInUse,
             Self::BadRange { .. } => Code::BadRange,
+            Self::OutOfOrder { .. } => Code::OutOfOrder,
+            Self::Frozen { .. } => Code::Frozen,
+            Self::Busy { .. } => Code::Busy,
+            Self::ClockAhead { .. } => Code::ClockAhead,
         }
     }
 
@@ -235,29 +286,50 @@ impl Refusal {
         Some(match body.code {
             Code::BadRequest => Self::BadRequest,
             Code::Unauthorized => Self::Unauthorized,
-            Code::Moved => Self::Moved { epoch: body.epoch? },
+            Code::Moved => Self::Moved {
+                epoch: body.epoch?,
+                claim: Box::new(body.claim?),
+            },
             Code::VaultKnown => Self::VaultKnown,
             Code::EpochConflict => Self::EpochConflict {
                 epoch: body.epoch?,
-                head: body.head?,
+                head: body.head?.map(Box::new),
             },
             Code::HeadConflict => Self::HeadConflict {
                 epoch: body.epoch?,
-                head: body.head?,
+                head: body.head?.map(Box::new),
             },
-            Code::NoHead => Self::NoHead { epoch: body.epoch? },
+            Code::NoHead => Self::NoHead {
+                epoch: body.epoch?,
+                claim: body.claim.map(Box::new),
+            },
             Code::NotFound => Self::NotFound { name: body.name },
             Code::DigestMismatch => Self::DigestMismatch {
                 computed: body.digest?,
             },
             Code::NameTaken => Self::NameTaken {
                 digest: body.digest?,
+                state: body.state.unwrap_or(NameState::Live),
             },
             Code::TooLarge => Self::TooLarge { limit: body.limit? },
             Code::TooMany => Self::TooMany { limit: body.limit? },
             Code::DiskFull => Self::DiskFull,
             Code::HeadInUse => Self::HeadInUse { name: body.name? },
             Code::BadRange => Self::BadRange { size: body.size? },
+            Code::OutOfOrder => Self::OutOfOrder {
+                epoch: body.epoch?,
+                generation: body.generation?,
+                writes: body.writes?,
+            },
+            Code::Frozen => Self::Frozen {
+                since_ms: body.since_ms?,
+            },
+            Code::Busy => Self::Busy {
+                retry_after_ms: body.retry_after_ms?,
+            },
+            Code::ClockAhead => Self::ClockAhead {
+                skew_ms: body.skew_ms?,
+            },
             Code::Internal => return None,
         })
     }
@@ -291,10 +363,26 @@ pub struct RefusalBody {
     pub name: Option<Name>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub digest: Option<Digest>,
+    /// With `NAME_TAKEN`: whether the name is live, held for deletion or damaged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<NameState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generation: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub writes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub since_ms: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_after_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skew_ms: Option<i64>,
+    /// The signed claim a `MOVED` carries.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claim: Option<ClaimView>,
 }
 
 /// A field that is present deserialises to `Some`, `null` included, so `null`
@@ -308,7 +396,9 @@ where
 }
 
 impl RefusalBody {
-    fn bare(code: Code, time_ms: i64) -> Self {
+    /// A body with a code and the clock, and no companion.
+    #[must_use]
+    pub const fn bare(code: Code, time_ms: i64) -> Self {
         Self {
             code,
             time_ms,
@@ -318,6 +408,13 @@ impl RefusalBody {
             digest: None,
             limit: None,
             size: None,
+            generation: None,
+            writes: None,
+            since_ms: None,
+            retry_after_ms: None,
+            skew_ms: None,
+            claim: None,
+            state: None,
         }
     }
 
@@ -325,22 +422,44 @@ impl RefusalBody {
     #[must_use]
     pub fn of(refusal: &Refusal, time_ms: i64) -> Self {
         let mut body = Self::bare(refusal.code(), time_ms);
-        match *refusal {
+        match refusal.clone() {
             Refusal::BadRequest
             | Refusal::Unauthorized
             | Refusal::VaultKnown
             | Refusal::DiskFull => {}
-            Refusal::Moved { epoch } | Refusal::NoHead { epoch } => body.epoch = Some(epoch),
+            Refusal::Moved { epoch, claim } => {
+                body.epoch = Some(epoch);
+                body.claim = Some(*claim);
+            }
+            Refusal::NoHead { epoch, claim } => {
+                body.epoch = Some(epoch);
+                body.claim = claim.map(|claim| *claim);
+            }
             Refusal::EpochConflict { epoch, head } | Refusal::HeadConflict { epoch, head } => {
                 body.epoch = Some(epoch);
-                body.head = Some(head);
+                body.head = Some(head.map(|head| *head));
             }
             Refusal::NotFound { name } => body.name = name,
             Refusal::DigestMismatch { computed } => body.digest = Some(computed),
-            Refusal::NameTaken { digest } => body.digest = Some(digest),
+            Refusal::NameTaken { digest, state } => {
+                body.digest = Some(digest);
+                body.state = Some(state);
+            }
             Refusal::TooLarge { limit } | Refusal::TooMany { limit } => body.limit = Some(limit),
             Refusal::HeadInUse { name } => body.name = Some(name),
             Refusal::BadRange { size } => body.size = Some(size),
+            Refusal::OutOfOrder {
+                epoch,
+                generation,
+                writes,
+            } => {
+                body.epoch = Some(epoch);
+                body.generation = Some(generation);
+                body.writes = Some(writes);
+            }
+            Refusal::Frozen { since_ms } => body.since_ms = Some(since_ms),
+            Refusal::Busy { retry_after_ms } => body.retry_after_ms = Some(retry_after_ms),
+            Refusal::ClockAhead { skew_ms } => body.skew_ms = Some(skew_ms),
         }
         body
     }
@@ -357,12 +476,53 @@ impl RefusalBody {
 mod tests {
     use super::*;
 
+    /// A gateway that never says why a name is taken (the field is
+    /// additive) reads as a live name; one that does is read as it says.
+    #[test]
+    fn a_name_taken_without_a_state_reads_as_live() {
+        let digest = Digest::of(b"held");
+        let old = serde_json::json!({"code": "NAME_TAKEN", "time_ms": 1, "digest": digest});
+        let body: RefusalBody = serde_json::from_value(old).expect("an older body");
+        assert_eq!(
+            Refusal::from_body(&body),
+            Some(Refusal::NameTaken {
+                digest,
+                state: NameState::Live
+            })
+        );
+        let new = serde_json::json!({
+            "code": "NAME_TAKEN", "time_ms": 1, "digest": digest, "state": "damaged"
+        });
+        let body: RefusalBody = serde_json::from_value(new).expect("a body");
+        assert_eq!(
+            Refusal::from_body(&body),
+            Some(Refusal::NameTaken {
+                digest,
+                state: NameState::Damaged
+            })
+        );
+    }
+
     fn head() -> HeadView {
         HeadView {
             name: Name::from_bytes([9; 32]),
+            prev: None,
             taken_at_ms: 1,
             epoch: 2,
+            claim: None,
+            generation: 4,
+            writes: 5,
             set_at_ms: 3,
+            signature: crate::rules::ids::Signature::from_bytes([7; 64]),
+        }
+    }
+
+    fn claim() -> ClaimView {
+        ClaimView {
+            epoch: 4,
+            head_seen: Some(Name::from_bytes([8; 32])),
+            nonce: crate::rules::ids::Nonce::from_bytes([6; 40]),
+            signature: crate::rules::ids::Signature::from_bytes([5; 64]),
         }
     }
 
@@ -370,11 +530,14 @@ mod tests {
         vec![
             Refusal::BadRequest,
             Refusal::Unauthorized,
-            Refusal::Moved { epoch: 4 },
+            Refusal::Moved {
+                epoch: 4,
+                claim: Box::new(claim()),
+            },
             Refusal::VaultKnown,
             Refusal::EpochConflict {
                 epoch: 4,
-                head: Some(head()),
+                head: Some(Box::new(head())),
             },
             Refusal::EpochConflict {
                 epoch: 1,
@@ -382,13 +545,20 @@ mod tests {
             },
             Refusal::HeadConflict {
                 epoch: 4,
-                head: Some(head()),
+                head: Some(Box::new(head())),
             },
             Refusal::HeadConflict {
                 epoch: 1,
                 head: None,
             },
-            Refusal::NoHead { epoch: 1 },
+            Refusal::NoHead {
+                epoch: 1,
+                claim: None,
+            },
+            Refusal::NoHead {
+                epoch: 3,
+                claim: Some(Box::new(claim())),
+            },
             Refusal::NotFound {
                 name: Some(Name::from_bytes([1; 32])),
             },
@@ -398,6 +568,7 @@ mod tests {
             },
             Refusal::NameTaken {
                 digest: Digest::of(b"y"),
+                state: NameState::Damaged,
             },
             Refusal::TooLarge { limit: 10 },
             Refusal::TooMany { limit: 1_000 },
@@ -406,6 +577,16 @@ mod tests {
                 name: Name::from_bytes([2; 32]),
             },
             Refusal::BadRange { size: 7 },
+            Refusal::OutOfOrder {
+                epoch: 2,
+                generation: 9,
+                writes: 3,
+            },
+            Refusal::Frozen { since_ms: 12 },
+            Refusal::Busy {
+                retry_after_ms: 60_000,
+            },
+            Refusal::ClockAhead { skew_ms: 301_000 },
         ]
     }
 
@@ -470,7 +651,11 @@ mod tests {
     #[test]
     fn moved_is_not_unauthorized() {
         assert_ne!(
-            Refusal::Moved { epoch: 2 }.code(),
+            Refusal::Moved {
+                epoch: 2,
+                claim: Box::new(claim())
+            }
+            .code(),
             Refusal::Unauthorized.code()
         );
     }

@@ -19,10 +19,10 @@ use centraid_api_proto::core_v1 as wire;
 use centraid_blobs::{ByteStore, ContentHash};
 use centraid_media::sealed::{self, Assembler};
 use centraid_vault::backup::files::{ContentFile, content_files};
-use centraid_vault::backup::ledger::LocalSource;
 use centraid_vault::backup::naming::{
     BackupKeys, Name, PlaintextHash, name as part_name, part_count,
 };
+use centraid_vault::backup::state::LocalSource;
 use centraid_vault::backup::store::{
     BUNDLE_BYTES, FRAME_HEADER_BYTES, NAMES_PER_CALL, Store, StoreError,
 };
@@ -282,7 +282,7 @@ pub(crate) fn fetch_original_cancellable(
     {
         return Ok(answer(wire::FetchOutcome::AlreadyHeld, Some(path)));
     }
-    let ledger = handle.plane().ledger()?;
+    let ledger = handle.plane().state()?;
     if ledger
         .local(&h)
         .map_err(plane_error)?
@@ -307,8 +307,18 @@ pub(crate) fn fetch_original_cancellable(
         wire::FetchOutcome::Untrusted => 1,
         _ => 0,
     };
-    for destination in ledger.destinations().map_err(plane_error)? {
-        let mut store = GatewayStore::for_destination(&destination, keyring.vault_id(), runtime)?;
+    let tokens = handle.plane().tokens();
+    for destination in ledger.gateways().map_err(plane_error)? {
+        // A GATEWAY THE SHELL HOLDS NO TOKEN FOR is one to pair again, not one to ask.
+        let Some(token) = tokens.get(&destination.gateway_id) else {
+            continue;
+        };
+        let mut store = GatewayStore::for_gateway(
+            &destination,
+            *token,
+            keyring.vault.identity.signing(),
+            runtime,
+        )?;
         store.set_cancellation(cancellation.clone());
         let assembled = assemble_into(&store, &keyring.backup, &h, file.len, bytes);
         if assembled.is_err() {
@@ -385,6 +395,7 @@ mod cancellation_tests {
             _: &Name,
             _: Option<&Name>,
             _: u64,
+            _: u64,
         ) -> std::result::Result<Head, StoreError> {
             unreachable!("fetch only")
         }
@@ -399,6 +410,17 @@ mod cancellation_tests {
             unreachable!("fetch only")
         }
         fn delete(&self, _: &[Name]) -> std::result::Result<Deleted, StoreError> {
+            unreachable!("fetch only")
+        }
+        fn held(
+            &self,
+            _: Option<&Name>,
+            _: usize,
+        ) -> std::result::Result<Vec<centraid_vault::backup::store::HeldEntry>, StoreError>
+        {
+            unreachable!("fetch only")
+        }
+        fn undo(&self, _: Option<&[Name]>) -> std::result::Result<u64, StoreError> {
             unreachable!("fetch only")
         }
     }

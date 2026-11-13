@@ -3065,7 +3065,7 @@ fn link_missing(root: &Path, app: &str) -> Vec<String> {
 /// **BACKUP** (#1188, Part B). Backup is the vault's, so no app has a row; each promise names the
 /// tests that prove it, and the rule fails when a named test is gone, renamed or `#[ignore]`d.
 /// `(promise, [(file, test)])`.
-pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 8] = [
+pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 9] = [
     (
         "every paired backup device receives every pass",
         &[
@@ -3122,28 +3122,36 @@ pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 8] = [
         ],
     ),
     (
-        "a backup never holds the vault's writer for a copy, and the copy goes once spooled",
+        "a backup never holds the vault's writer and writes no copy of the vault, and a damaged vault is not backed up",
         &[
             (
                 "crates/vault/src/backup/snapshot.rs",
-                "a_commit_between_steps_is_not_blocked_and_is_in_the_next_copy",
+                "no_snapshot_is_taken_inside_a_commit",
+            ),
+            (
+                "crates/vault/tests/backup_snapshot.rs",
+                "a_snapshot_taken_while_another_thread_commits_is_exactly_a_committed_state",
+            ),
+            (
+                "crates/vault/tests/backup_snapshot.rs",
+                "the_quick_check_runs_before_the_head_is_signed",
             ),
             (
                 "crates/core/tests/backup_scratch.rs",
-                "a_commit_lands_between_steps_of_a_copy_a_pass_would_take",
+                "a_pass_writes_no_plaintext_copy_of_the_vault",
+            ),
+            (
+                "crates/core/tests/backup_scratch.rs",
+                "a_damaged_page_stops_a_backup_pass",
             ),
             (
                 "crates/core/tests/backup_scratch.rs",
                 "a_copy_a_crash_left_is_gone_at_the_next_open",
             ),
-            (
-                "crates/core/src/phone/drain.rs",
-                "the_scratch_copy_goes_on_every_way_out_of_a_pass",
-            ),
         ],
     ),
     (
-        "a phone with no room says so, and an unchanged vault is not copied again",
+        "a phone with no room says so, and an unchanged vault is not walked again",
         &[
             (
                 "crates/core/tests/backup_scratch.rs",
@@ -3151,7 +3159,7 @@ pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 8] = [
             ),
             (
                 "crates/core/tests/backup_scratch.rs",
-                "a_second_pass_with_no_write_copies_nothing",
+                "a_second_pass_with_no_write_walks_nothing",
             ),
         ],
     ),
@@ -3219,6 +3227,43 @@ pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 8] = [
             (
                 "crates/screens/src/backup/tests.rs",
                 "a_refusal_is_worded_for_its_own_remedy",
+            ),
+        ],
+    ),
+    (
+        "each backup device says what happened to it, in the fixture's words on both phones: another phone took over, paused by whoever runs it, too old, an old backup it cannot read, a piece sent again, deletes held for a week with Undo; a damaged vault is never called backed up; a check states what it read; a restore that cannot prove the newest backup asks",
+        &[
+            (
+                "crates/screens/tests/backup_page.rs",
+                "each_device_says_how_it_stands_and_what_it_holds_for_a_week",
+            ),
+            (
+                "crates/screens/tests/backup_page.rs",
+                "a_device_that_is_not_simply_behind_is_named_with_its_reason",
+            ),
+            (
+                "crates/screens/tests/backup_page.rs",
+                "a_damaged_vault_says_so_and_is_never_called_backed_up",
+            ),
+            (
+                "crates/screens/tests/backup_page.rs",
+                "the_rate_sentence_states_what_was_read",
+            ),
+            (
+                "crates/screens/tests/backup_page.rs",
+                "the_restore_ask_names_the_date_and_the_device_and_does_not_claim",
+            ),
+            (
+                "crates/screens/tests/backup_page.rs",
+                "no_sentence_says_what_the_member_is_never_told",
+            ),
+            (
+                "crates/screens/tests/backup_page.rs",
+                "a_vault_damaged_at_launch_says_the_same_words_on_both_shells",
+            ),
+            (
+                "crates/screens/tests/words_enter.rs",
+                "a_restore_that_cannot_prove_the_newest_asks_before_it_claims",
             ),
         ],
     ),

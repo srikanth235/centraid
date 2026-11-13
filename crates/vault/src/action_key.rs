@@ -9,7 +9,8 @@
 //! **Both columns are opaque.** The key is a caller's id and `asked` is a digest of the request;
 //! nothing the member typed is stored here, and nothing reads a row to learn a fact about the
 //! model. The commit that writes a key forgets every key older than [`KEEP_DAYS`] days on the
-//! vault's clock, so the table is as long as a month of acts and no longer.
+//! vault's clock, so the table is as long as a month of acts and no longer, unless the clock is
+//! far from the vault's last commit ([`crate::clock::CLOCK_BOUND_DAYS`]), when it forgets none.
 
 use rusqlite::Connection;
 
@@ -49,10 +50,13 @@ pub fn recall(connection: &Connection, key: &str) -> Result<Option<Recalled>> {
 /// both, so the table never outgrows the window by more than the commit in flight.
 pub fn remember(connection: &Connection, mark: &KeyMark<'_>, clock: &dyn Clock) -> Result<()> {
     let now = clock.now_ms();
-    connection.execute(
-        "DELETE FROM action_key WHERE at < ?1",
-        [format_iso_ms(now - KEEP_DAYS * 86_400_000)],
-    )?;
+    // A clock far from the vault's last commit forgets no key: it would read every key as expired.
+    if crate::clock::is_credible(connection, now)? {
+        connection.execute(
+            "DELETE FROM action_key WHERE at < ?1",
+            [format_iso_ms(now - KEEP_DAYS * 86_400_000)],
+        )?;
+    }
     connection.execute(
         "INSERT INTO action_key (key, asked, at) VALUES (?1, ?2, ?3)",
         rusqlite::params![mark.key, mark.asked, format_iso_ms(now)],

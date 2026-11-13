@@ -2,13 +2,15 @@
 
 This is an incomplete audit of the main app and nine mini apps following #1185. The PR is a draft. Native Android/iOS observations, shared regressions and builds are distinct evidence; a passing build does not mean every workflow passed.
 
-The audit started on `96bf41246`. Main subsequently advanced to `c960911b4` through #1190, which substantially changes notifications, backup and chat. The branch now combines that main with the audit fixes. The recorded device observations below describe the earlier audited branch; they are not fresh device evidence for the combined result.
+The audit started on `96bf41246`. The branch now combines main `2286cb1d8` (the #1190 mobile changes and #1193 storage changes) with the audit fixes. The recorded device observations below describe the earlier audited branch; they are not fresh device evidence for the combined result.
 
 ## Reconciliation with main
 
 The merge preserves main's durable notification press queues, original protobuf field numbers, indexed 90-day scheduling, backup channels and producer notices. Audit retention and guarded Undo use the exact `(notification_id, verb, press_id)` acknowledgment. Snooze retains main's behavior: only the alert changes, not the task's due date. Android cache migration recognizes the earlier audit format without resetting app or vault data; successfully posted timed alarms leave the reboot cache so dismissal does not resurrect them. Regression tests cover those transitions and failed persistence.
 
-The combined light/dark design generation completed for 348 files. The first complete Android unit run passed all 150 tests. Final native compilation and required gate results will be recorded after validation finishes. No new device UI/UX pass is claimed by these compilation checks.
+On the previous combined commit `d7d60e70f`, Android passed 150 tests, iOS CI passed 114 tests with a rebuilt simulator core, the real JVM binding passed 45 tests, and the focused Rust notification integration suites passed 33 tests. That commit's full CI gate was cancelled, so no full PR-gate pass is claimed.
+
+The subsequent merge with `2286cb1d8` had one textual conflict, in `canvas.json`. Its resolution retains all 418 boards, including both the audit additions and main's storage/recovery boards. Canonical generation completed for 357 files. Formatting, workspace all-target clippy with warnings denied, all 27 structural rules and the canonical design drift check passed. These were the `clippy`, `rules` and `design` lanes of the PR profile; no complete local PR-profile pass or new device UI/UX pass is claimed. The earlier test totals are not fresh validation of this storage merge.
 
 ## Changes included
 

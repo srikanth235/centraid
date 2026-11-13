@@ -53,6 +53,18 @@ const EXPAND_AT_MOST: usize = 4_000;
 /// How many rows one [`advance`] moves on.
 pub const ADVANCE_BATCH: usize = 200;
 
+/// An event's alerts as the member meets them: the LONGEST lead first, so the first alert is the
+/// one that fires first (1440 then 60; 30 then 10) and the editor's "Reminder" holds the longer
+/// lead. The vault keeps them as a set (`reminder(entity_id, offset_min)`, read ascending by its
+/// key), so the order the member typed them in is not kept. Every reader that hands an event's
+/// alerts on goes through this one function.
+#[must_use]
+pub fn longest_first(mut leads: Vec<i64>) -> Vec<i64> {
+    leads.sort_unstable_by(|a, b| b.cmp(a));
+    leads.dedup();
+    leads
+}
+
 /// The time of a commit, in milliseconds.
 #[must_use]
 pub fn now_ms(now_text: &str) -> i64 {
@@ -214,15 +226,7 @@ fn phone_holds(connection: &Connection, id: &str, kind: &str) -> Result<bool> {
                 })
                 .optional()?
                 .flatten(),
-            connection
-                .query_row("SELECT reminders FROM event WHERE id = ?1", [id], |row| {
-                    row.get::<_, Option<String>>(0)
-                })
-                .optional()?
-                .flatten()
-                .as_deref()
-                .map(offsets_of)
-                .unwrap_or_default(),
+            crate::commands::event::reminders_held(connection, id)?,
         )
     } else {
         AlertNow::Task(
@@ -309,19 +313,12 @@ fn offsets_of(json: &str) -> Vec<i64> {
     found
 }
 
-type EventFields = (
-    String,
-    String,
-    Option<String>,
-    Option<String>,
-    String,
-    Option<String>,
-);
+type EventFields = (String, String, Option<String>, Option<String>, String);
 
 fn event_alerts(connection: &Connection, id: &str, now: i64) -> Result<Vec<Alert>> {
     let fields: Option<EventFields> = connection
         .query_row(
-            "SELECT starts, timing, zone, rule, status, reminders FROM event WHERE id = ?1",
+            "SELECT starts, timing, zone, rule, status FROM event WHERE id = ?1",
             [id],
             |row| {
                 Ok((
@@ -330,12 +327,11 @@ fn event_alerts(connection: &Connection, id: &str, now: i64) -> Result<Vec<Alert
                     row.get(2)?,
                     row.get(3)?,
                     row.get(4)?,
-                    row.get(5)?,
                 ))
             },
         )
         .optional()?;
-    let Some((starts, timing, zone, rule, status, reminders)) = fields else {
+    let Some((starts, timing, zone, rule, status)) = fields else {
         return Ok(Vec::new());
     };
     // A DAY HAS NO MOMENT: an all-day event's alert sounds at 09:00 that day, wherever the member
@@ -354,7 +350,7 @@ fn event_alerts(connection: &Connection, id: &str, now: i64) -> Result<Vec<Alert
     if status == "cancelled" {
         return Ok(Vec::new());
     }
-    let mut offsets = reminders.as_deref().map(offsets_of).unwrap_or_default();
+    let mut offsets = longest_first(crate::commands::event::reminders_held(connection, id)?);
     if all_day {
         offsets.truncate(1);
     }
@@ -750,4 +746,17 @@ pub fn next(
         }
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod order_tests {
+    use super::longest_first;
+
+    #[test]
+    fn alerts_read_longest_lead_first_each_once() {
+        assert_eq!(longest_first(vec![10, 30]), vec![30, 10]);
+        assert_eq!(longest_first(vec![10, 1440, 60, 10]), vec![1440, 60, 10]);
+        assert_eq!(longest_first(vec![60, 1440]), vec![1440, 60]);
+        assert!(longest_first(Vec::new()).is_empty());
+    }
 }

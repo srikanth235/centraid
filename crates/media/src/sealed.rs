@@ -251,6 +251,22 @@ impl PlaintextHash {
     }
 }
 
+/// BLAKE3 of one sealed chunk's payload as it opens: the bytes under the tag
+/// (the compressed bytes when the part is compressed). Never of the
+/// ciphertext, which differs on every seal; a function of the chunk alone, so
+/// one manifest serves every gateway (#1191 B9).
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ChunkDigest([u8; 32]);
+hex32!(ChunkDigest, "a chunk digest");
+
+impl ChunkDigest {
+    /// The BLAKE3 of one opened chunk.
+    #[must_use]
+    pub fn of(payload: &[u8]) -> Self {
+        Self(*blake3::hash(payload).as_bytes())
+    }
+}
+
 /// The transport digest: BLAKE3 of a part's sealed bytes, which the gateway
 /// verifies on `PUT` and stores.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -425,6 +441,8 @@ pub enum SealedError {
     NameMismatch,
     #[error("chunk {index} does not open")]
     ChunkOpen { index: u32 },
+    #[error("chunk {index} opens but is not the chunk the manifest recorded")]
+    ChunkDigest { index: u32 },
     #[error("chunk {index} is framed as {len} bytes, which that chunk cannot be")]
     BadChunkLength { index: u32, len: usize },
     #[error("the part ends without its final chunk")]
@@ -518,6 +536,9 @@ struct Chunker<W> {
     header: [u8; HEADER_BYTES],
     buffer: Vec<u8>,
     index: u32,
+    /// One digest per sealed chunk, taken before the chunk is encrypted in
+    /// place: 32 bytes a chunk, at most sixteen a part.
+    digests: Vec<ChunkDigest>,
 }
 
 impl<W: Write> Chunker<W> {
@@ -534,6 +555,7 @@ impl<W: Write> Chunker<W> {
     }
 
     fn seal_chunk(&mut self, last: bool) -> Result<(), SealedError> {
+        self.digests.push(ChunkDigest::of(&self.buffer));
         let nonce = random::<NONCE_BYTES>()?;
         let length = u32::try_from(self.buffer.len()).map_err(|_| SealedError::Seal)?;
         let tag = self
@@ -553,9 +575,9 @@ impl<W: Write> Chunker<W> {
         Ok(())
     }
 
-    fn finish(mut self) -> Result<Counted<W>, SealedError> {
+    fn finish(mut self) -> Result<(Counted<W>, Vec<ChunkDigest>), SealedError> {
         self.seal_chunk(true)?;
-        Ok(self.out)
+        Ok((self.out, self.digests))
     }
 }
 
@@ -578,13 +600,16 @@ enum Stage<W: Write> {
 }
 
 /// What sealing one part produced.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PartSeal {
     pub header: Header,
     /// BLAKE3 of the sealed bytes: the `Content-Digest` a `PUT` carries.
     pub digest: Digest,
     /// The sealed length: the `Content-Length` a `PUT` carries.
     pub len: u64,
+    /// One [`ChunkDigest`] per sealed chunk, in order: one for a range part,
+    /// up to sixteen for a 64 MiB part, one for an empty part.
+    pub chunk_digests: Vec<ChunkDigest>,
 }
 
 /// Seals one part as its plaintext streams in, holding at most one chunk of
@@ -641,6 +666,7 @@ impl<W: Write> PartSealer<W> {
             header: encoded,
             buffer: Vec::with_capacity(capacity),
             index: 0,
+            digests: Vec::new(),
         };
         // NO PLEDGED SIZE: a frame without a content size is still "zstd of
         // the part's plaintext", and a part `FileSealer` re-seals has, by
@@ -694,7 +720,7 @@ impl<W: Write> PartSealer<W> {
             Stage::Plain(chunker) => chunker,
             Stage::Zstd(encoder) => encoder.finish().map_err(from_io)?,
         };
-        let mut counted = chunker.finish()?;
+        let (mut counted, chunk_digests) = chunker.finish()?;
         counted.flush()?;
         Ok((
             counted.inner,
@@ -702,6 +728,7 @@ impl<W: Write> PartSealer<W> {
                 header: self.header,
                 digest: Digest(*counted.hasher.finalize().as_bytes()),
                 len: counted.written,
+                chunk_digests,
             },
         ))
     }
@@ -737,6 +764,28 @@ pub fn seal_part(
     )?;
     sealer.update(part_plaintext)?;
     Ok(sealer.finish()?.0)
+}
+
+/// Seal one part held in memory and return its chunk digests with it.
+///
+/// # Errors
+/// Whatever [`PartSealer`] refuses.
+pub fn seal_part_digests(
+    keys: &BackupKeys,
+    part_index: u32,
+    part_plaintext: &[u8],
+    compress: bool,
+) -> Result<(Vec<u8>, Vec<ChunkDigest>), SealedError> {
+    let mut sealer = PartSealer::new(
+        keys,
+        part_index,
+        part_plaintext.len() as u64,
+        compress,
+        Vec::new(),
+    )?;
+    sealer.update(part_plaintext)?;
+    let (bytes, seal) = sealer.finish()?;
+    Ok((bytes, seal.chunk_digests))
 }
 
 /// A file held in memory, sealed: `h` and each part's name and bytes.
@@ -782,6 +831,8 @@ pub struct FilePart {
     pub digest: Digest,
     /// The sealed length.
     pub len: u64,
+    /// One digest per sealed chunk of the part as it stands on disk.
+    pub chunk_digests: Vec<ChunkDigest>,
     /// The temp file the part was sealed to; the caller renames it.
     pub path: PathBuf,
 }
@@ -958,6 +1009,7 @@ impl<F: FnMut(u32) -> PathBuf> FileSealer<F> {
                 part_len: u64::from(seal.header.part_len),
                 digest: seal.digest,
                 len: seal.len,
+                chunk_digests: seal.chunk_digests.clone(),
                 path: path.clone(),
             })
             .collect();
@@ -1152,6 +1204,7 @@ impl<F: FnMut(u32) -> PathBuf> WindowSealer<F> {
                 part_len: u64::from(seal.header.part_len),
                 digest: seal.digest,
                 len: seal.len,
+                chunk_digests: seal.chunk_digests.clone(),
                 path: path.clone(),
             })
             .collect();
@@ -1201,7 +1254,7 @@ impl<W: Write> PartSealer<W> {
             Stage::Plain(chunker) => chunker,
             Stage::Zstd(encoder) => encoder.finish().map_err(from_io)?,
         };
-        let mut counted = chunker.finish()?;
+        let (mut counted, chunk_digests) = chunker.finish()?;
         counted.flush()?;
         debug_assert_eq!(self.fed, fed, "the file sealer counts what it fed");
         Ok((
@@ -1210,6 +1263,7 @@ impl<W: Write> PartSealer<W> {
                 header: self.header,
                 digest: Digest(*counted.hasher.finalize().as_bytes()),
                 len: counted.written,
+                chunk_digests,
             },
         ))
     }
@@ -1399,6 +1453,140 @@ fn open_chunks(
         index = index
             .checked_add(1)
             .ok_or(SealedError::BadChunkLength { index, len })?;
+    }
+}
+
+/// Where one chunk's frame sits inside a sealed part.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ChunkSpan {
+    /// Offset of the frame (nonce, length, ciphertext, tag) in the sealed part.
+    pub offset: u64,
+    /// The frame's length.
+    pub len: u64,
+    /// Whether this is the part's final chunk (bound into its AAD).
+    pub last: bool,
+}
+
+const FULL_FRAME_BYTES: u64 = (CHUNK_FRAME_BYTES + CHUNK_BYTES + TAG_BYTES) as u64;
+const MIN_FRAME_BYTES: u64 = (CHUNK_FRAME_BYTES + TAG_BYTES) as u64;
+
+/// How many chunks a sealed part of `sealed_len` bytes holds.
+///
+/// # Errors
+/// [`SealedError::Truncated`] for a length no sealed part has.
+pub fn chunk_count(sealed_len: u64) -> Result<u32, SealedError> {
+    let body = sealed_len
+        .checked_sub(HEADER_BYTES as u64)
+        .filter(|body| *body >= MIN_FRAME_BYTES)
+        .ok_or(SealedError::Truncated { what: "the part" })?;
+    u32::try_from(body.div_ceil(FULL_FRAME_BYTES))
+        .map_err(|_| SealedError::Truncated { what: "the part" })
+}
+
+/// Where chunk `index` sits in a sealed part of `sealed_len` bytes, from the
+/// length alone: every chunk but the last is a full frame (R-1080-B3).
+///
+/// # Errors
+/// [`SealedError::Truncated`] for a length no part has or an index past it.
+pub fn chunk_span(sealed_len: u64, index: u32) -> Result<ChunkSpan, SealedError> {
+    let count = chunk_count(sealed_len)?;
+    if index >= count {
+        return Err(SealedError::Truncated { what: "the part" });
+    }
+    let offset = HEADER_BYTES as u64 + u64::from(index) * FULL_FRAME_BYTES;
+    let last = index + 1 == count;
+    let len = if last {
+        sealed_len - offset
+    } else {
+        FULL_FRAME_BYTES
+    };
+    Ok(ChunkSpan { offset, len, last })
+}
+
+/// Which bytes of a sealed part to read to get chunk `index` of a part of `count` chunks, from
+/// the chunk count alone (the digests a manifest lists say how many): `(offset, len)`, where a
+/// `None` length reads to the end, as the last chunk must (its frame is as long as its payload,
+/// which compression makes unknowable here). Every other chunk is a full frame.
+#[must_use]
+pub fn chunk_read(index: u32, count: u32) -> (u64, Option<u64>) {
+    let offset = HEADER_BYTES as u64 + u64::from(index) * FULL_FRAME_BYTES;
+    if index + 1 >= count {
+        (offset, None)
+    } else {
+        (offset, Some(FULL_FRAME_BYTES))
+    }
+}
+
+/// Open one chunk on its own: its frame, the part's 30-byte header (for the
+/// salt, and bound into the AAD), its position and whether it is last. A chunk
+/// moved to another position, or taken from another part, fails its tag.
+/// Returns the opened payload and its digest; holds one chunk.
+///
+/// # Errors
+/// [`SealedError::Truncated`] for a frame that is not whole,
+/// [`SealedError::BadChunkLength`] for a length the framing forbids,
+/// [`SealedError::ChunkOpen`] when the tag fails.
+pub fn open_chunk(
+    keys: &BackupKeys,
+    header_bytes: &[u8; HEADER_BYTES],
+    index: u32,
+    last: bool,
+    frame: &[u8],
+) -> Result<(Vec<u8>, ChunkDigest), SealedError> {
+    let header = Header::decode(header_bytes)?;
+    if frame.len() < CHUNK_FRAME_BYTES + TAG_BYTES {
+        return Err(SealedError::Truncated {
+            what: "a chunk's frame",
+        });
+    }
+    let mut nonce = [0_u8; NONCE_BYTES];
+    nonce.copy_from_slice(&frame[..NONCE_BYTES]);
+    let len = u32::from_be_bytes([
+        frame[NONCE_BYTES],
+        frame[NONCE_BYTES + 1],
+        frame[NONCE_BYTES + 2],
+        frame[NONCE_BYTES + 3],
+    ]) as usize;
+    if len > CHUNK_BYTES || frame.len() != CHUNK_FRAME_BYTES + len + TAG_BYTES {
+        return Err(SealedError::BadChunkLength { index, len });
+    }
+    if (!last && len != CHUNK_BYTES) || (last && len == 0 && index > 0) {
+        return Err(SealedError::BadChunkLength { index, len });
+    }
+    let mut buffer = frame[CHUNK_FRAME_BYTES..CHUNK_FRAME_BYTES + len].to_vec();
+    let mut tag = [0_u8; TAG_BYTES];
+    tag.copy_from_slice(&frame[CHUNK_FRAME_BYTES + len..]);
+    cipher_for(keys, &header.salt)
+        .decrypt_inout_detached(
+            &XNonce::from(nonce),
+            &chunk_aad(header_bytes, index, last),
+            buffer.as_mut_slice().into(),
+            &Tag::from(tag),
+        )
+        .map_err(|_| SealedError::ChunkOpen { index })?;
+    let digest = ChunkDigest::of(&buffer);
+    Ok((buffer, digest))
+}
+
+/// [`open_chunk`], then compare the opened payload's digest with the one the
+/// manifest recorded.
+///
+/// # Errors
+/// What [`open_chunk`] refuses, and [`SealedError::ChunkDigest`] when a genuine
+/// chunk is not the recorded one.
+pub fn verify_chunk(
+    keys: &BackupKeys,
+    header_bytes: &[u8; HEADER_BYTES],
+    index: u32,
+    last: bool,
+    frame: &[u8],
+    expected: &ChunkDigest,
+) -> Result<(), SealedError> {
+    let (_, digest) = open_chunk(keys, header_bytes, index, last, frame)?;
+    if digest == *expected {
+        Ok(())
+    } else {
+        Err(SealedError::ChunkDigest { index })
     }
 }
 
@@ -2296,5 +2484,216 @@ mod tests {
         assert_eq!(json, format!("\"{name}\""));
         assert_eq!(serde_json::from_str::<Name>(&json).expect("parses"), name);
         assert!(serde_json::from_str::<Name>("\"ABC\"").is_err());
+    }
+
+    // ─── per-chunk digests (#1191 B9) ───────────────────────────────────────
+
+    fn header_of(sealed: &[u8]) -> [u8; HEADER_BYTES] {
+        sealed[..HEADER_BYTES].try_into().expect("a header")
+    }
+
+    fn frame_of(sealed: &[u8], index: u32) -> (&[u8], bool) {
+        let span = chunk_span(sealed.len() as u64, index).expect("span");
+        let start = usize::try_from(span.offset).expect("offset");
+        (
+            &sealed[start..start + usize::try_from(span.len).expect("len")],
+            span.last,
+        )
+    }
+
+    #[test]
+    fn a_chunk_digest_is_the_blake3_of_the_chunk_plaintext() {
+        // Two full chunks and a short last one.
+        let plaintext = noise(2 * CHUNK_BYTES + 100, 1);
+        let (sealed, digests) = seal_part_digests(&keys(), 0, &plaintext, false).expect("seals");
+        assert_eq!(digests.len(), 3);
+        for (index, chunk) in plaintext.chunks(CHUNK_BYTES).enumerate() {
+            assert_eq!(digests[index], ChunkDigest::of(chunk), "chunk {index}");
+        }
+        // The opener reaches the same digest from the stored bytes, one frame
+        // at a time, and the span arithmetic agrees with the framing.
+        assert_eq!(chunk_count(sealed.len() as u64).expect("count"), 3);
+        let header = header_of(&sealed);
+        for index in 0..3_u32 {
+            let (frame, last) = frame_of(&sealed, index);
+            assert_eq!(last, index == 2);
+            verify_chunk(
+                &keys(),
+                &header,
+                index,
+                last,
+                frame,
+                &digests[index as usize],
+            )
+            .expect("verifies");
+        }
+    }
+
+    #[test]
+    fn a_short_part_and_an_empty_part_have_one_digest() {
+        for plaintext in [Vec::new(), noise(10, 2)] {
+            let (sealed, digests) =
+                seal_part_digests(&keys(), 0, &plaintext, false).expect("seals");
+            assert_eq!(digests, vec![ChunkDigest::of(&plaintext)]);
+            let (frame, last) = frame_of(&sealed, 0);
+            assert!(last);
+            verify_chunk(&keys(), &header_of(&sealed), 0, true, frame, &digests[0])
+                .expect("verifies");
+        }
+    }
+
+    #[test]
+    fn a_compressed_part_digests_the_bytes_under_the_tag() {
+        let plaintext = vec![7_u8; 3 * CHUNK_BYTES];
+        let (sealed, digests) = seal_part_digests(&keys(), 0, &plaintext, true).expect("seals");
+        assert_eq!(
+            digests.len(),
+            chunk_count(sealed.len() as u64).expect("count") as usize
+        );
+        for index in 0..digests.len() as u32 {
+            let (frame, last) = frame_of(&sealed, index);
+            let (payload, digest) =
+                open_chunk(&keys(), &header_of(&sealed), index, last, frame).expect("opens");
+            assert_eq!(digest, digests[index as usize]);
+            assert_eq!(digest, ChunkDigest::of(&payload));
+        }
+    }
+
+    #[test]
+    fn the_same_plaintext_sealed_twice_differs_in_ciphertext_not_in_digests() {
+        let plaintext = noise(CHUNK_BYTES + 5, 3);
+        let (first, first_digests) = seal_part_digests(&keys(), 0, &plaintext, false).expect("a");
+        let (second, second_digests) = seal_part_digests(&keys(), 0, &plaintext, false).expect("b");
+        assert_ne!(first, second, "salted and nonced");
+        assert_ne!(Digest::of(&first), Digest::of(&second));
+        assert_eq!(first_digests, second_digests);
+    }
+
+    #[test]
+    fn a_flipped_ciphertext_bit_fails_authentication() {
+        let plaintext = noise(CHUNK_BYTES + 5, 4);
+        let (sealed, digests) = seal_part_digests(&keys(), 0, &plaintext, false).expect("seals");
+        let header = header_of(&sealed);
+        for index in 0..2_u32 {
+            let (frame, last) = frame_of(&sealed, index);
+            // A bit in the ciphertext, the tag and the nonce each.
+            for at in [CHUNK_FRAME_BYTES + 3, frame.len() - 1, 2] {
+                let mut bad = frame.to_vec();
+                bad[at] ^= 1;
+                let refused = verify_chunk(
+                    &keys(),
+                    &header,
+                    index,
+                    last,
+                    &bad,
+                    &digests[index as usize],
+                );
+                assert!(
+                    matches!(refused, Err(SealedError::ChunkOpen { .. })),
+                    "chunk {index} byte {at}: {refused:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_chunk_swapped_for_another_valid_one_is_caught() {
+        let plaintext = noise(2 * CHUNK_BYTES + 5, 5);
+        let (sealed, digests) = seal_part_digests(&keys(), 0, &plaintext, false).expect("seals");
+        let header = header_of(&sealed);
+        let (frame0, _) = frame_of(&sealed, 0);
+        let (frame1, _) = frame_of(&sealed, 1);
+        // Position binding: a genuine chunk presented at another index.
+        assert!(matches!(
+            verify_chunk(&keys(), &header, 1, false, frame0, &digests[1]),
+            Err(SealedError::ChunkOpen { index: 1 })
+        ));
+        assert!(matches!(
+            verify_chunk(&keys(), &header, 0, false, frame1, &digests[0]),
+            Err(SealedError::ChunkOpen { index: 0 })
+        ));
+        // A full chunk claimed as the last, and the reverse.
+        let (frame2, _) = frame_of(&sealed, 2);
+        assert!(verify_chunk(&keys(), &header, 2, false, frame2, &digests[2]).is_err());
+        assert!(verify_chunk(&keys(), &header, 0, true, frame0, &digests[0]).is_err());
+        // Another part's header with this part's chunk: the key differs.
+        let (other, _) = seal_part_digests(&keys(), 0, &plaintext, false).expect("other");
+        assert!(matches!(
+            verify_chunk(&keys(), &header_of(&other), 0, false, frame0, &digests[0]),
+            Err(SealedError::ChunkOpen { .. })
+        ));
+    }
+
+    #[test]
+    fn a_genuine_chunk_of_another_part_under_this_name_fails_the_digest() {
+        // The gateway serves a different, wholly genuine sealed range: header
+        // and frame agree, so it opens, and only the digest says it is not
+        // the one the manifest recorded.
+        let wanted = noise(64 * 1024, 6);
+        let served = noise(64 * 1024, 7);
+        let (_, wanted_digests) = seal_part_digests(&keys(), 0, &wanted, false).expect("wanted");
+        let (sealed, _) = seal_part_digests(&keys(), 0, &served, false).expect("served");
+        let (frame, last) = frame_of(&sealed, 0);
+        assert!(matches!(
+            verify_chunk(
+                &keys(),
+                &header_of(&sealed),
+                0,
+                last,
+                frame,
+                &wanted_digests[0]
+            ),
+            Err(SealedError::ChunkDigest { index: 0 })
+        ));
+    }
+
+    #[test]
+    fn sealing_holds_one_chunk_and_sixteen_digests_at_most() {
+        let mut sealer =
+            PartSealer::new(&keys(), 0, 3 * CHUNK_BYTES as u64, false, Vec::new()).expect("new");
+        let piece = vec![9_u8; 1000];
+        let mut fed = 0;
+        while fed < 3 * CHUNK_BYTES {
+            let take = piece.len().min(3 * CHUNK_BYTES - fed);
+            sealer.update(&piece[..take]).expect("update");
+            fed += take;
+            let Stage::Plain(chunker) = &sealer.stage else {
+                unreachable!("not compressed")
+            };
+            assert!(chunker.buffer.capacity() <= CHUNK_BYTES);
+            assert!(chunker.buffer.len() <= CHUNK_BYTES);
+            assert!(chunker.digests.len() <= 2);
+        }
+        let (_, seal) = sealer.finish().expect("finish");
+        assert_eq!(seal.chunk_digests.len(), 3);
+        assert!(seal.chunk_digests.len() as u64 <= PART_BYTES / CHUNK_BYTES as u64);
+    }
+
+    #[test]
+    fn file_parts_carry_the_digests_of_the_bytes_on_disk_after_a_reseal() {
+        let dir = tempfile::tempdir().expect("dir");
+        let plaintext = noise(CHUNK_BYTES + 77, 8);
+        // Declared length wrong, so the part is re-sealed at its real length.
+        let mut sealer = FileSealer::new(&keys(), false, Some(10), |index| {
+            dir.path().join(format!("part-{index}"))
+        });
+        sealer.update(&plaintext).expect("update");
+        let seal = sealer.finish().expect("finish");
+        let part = &seal.parts[0];
+        let on_disk = std::fs::read(&part.path).expect("read");
+        assert_eq!(part.chunk_digests.len(), 2);
+        for (index, chunk) in plaintext.chunks(CHUNK_BYTES).enumerate() {
+            assert_eq!(part.chunk_digests[index], ChunkDigest::of(chunk));
+            let (frame, last) = frame_of(&on_disk, index as u32);
+            verify_chunk(
+                &keys(),
+                &header_of(&on_disk),
+                index as u32,
+                last,
+                frame,
+                &part.chunk_digests[index],
+            )
+            .expect("verifies");
+        }
     }
 }

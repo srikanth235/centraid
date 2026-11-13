@@ -1439,7 +1439,7 @@ fn money_acts_are_taken_back_by_what_they_replaced_and_state_equals_before() {
         .text(
             "SELECT a.id FROM txn a JOIN txn b ON b.amount_minor = -a.amount_minor
               AND b.account_id <> a.account_id AND b.currency = a.currency
-              AND b.transfer_id IS NULL WHERE a.transfer_id IS NULL AND a.amount_minor < 0
+              AND NOT EXISTS (SELECT 1 FROM transfer WHERE a = b.id OR b = b.id) WHERE NOT EXISTS (SELECT 1 FROM transfer WHERE a = a.id OR b = a.id) AND a.amount_minor < 0
               AND a.status <> 'void' AND b.status <> 'void' LIMIT 1",
         )
         .expect("a line with a matching line on another account");
@@ -1447,7 +1447,7 @@ fn money_acts_are_taken_back_by_what_they_replaced_and_state_equals_before() {
         .text(&format!(
             "SELECT b.id FROM txn a JOIN txn b ON b.amount_minor = -a.amount_minor
               AND b.account_id <> a.account_id AND b.currency = a.currency
-              AND b.transfer_id IS NULL WHERE a.id = '{half}' AND b.status <> 'void' LIMIT 1"
+              AND NOT EXISTS (SELECT 1 FROM transfer WHERE a = b.id OR b = b.id) WHERE a.id = '{half}' AND b.status <> 'void' LIMIT 1"
         ))
         .expect("its other half");
     w.ok(

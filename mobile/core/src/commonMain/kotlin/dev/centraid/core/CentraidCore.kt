@@ -100,6 +100,12 @@ public data class CoreConfiguration(
     public val shelfDir: String? = null,
     /** A debug build's demo seed, for a shelf's launch. Redacted like [vaultSeedHex]. */
     public val devSeedHex: String? = null,
+    /**
+     * REOPEN OVER A DAMAGED VAULT, to restore it (`restoreDamaged` in the open JSON). Sent only
+     * after an open answered `VAULT_DAMAGED`: the core then opens the same shelf without reading
+     * the damaged file, so the Rust restore entry can run. An older core ignores the key.
+     */
+    public val restoreDamaged: Boolean = false,
 ) {
     /**
      * REDACTED: the generated `toString` of a data class prints every field,
@@ -122,6 +128,7 @@ public data class CoreConfiguration(
             append("{\"shelf\":").append(quote(shelfDir))
             devSeedHex?.let { append(",\"devSeed\":").append(quote(it)) }
             append(",\"uiThreadName\":").append(quote(uiThreadName))
+            if (restoreDamaged) append(",\"restoreDamaged\":true")
             append('}')
             return@buildString
         }
@@ -145,12 +152,17 @@ public data class CoreConfiguration(
          * vault under [dir], one directory each, and the handle that comes back is
          * the only one the shell ever holds.
          */
-        public fun shelf(dir: String, devSeedHex: String? = null): CoreConfiguration =
+        public fun shelf(
+            dir: String,
+            devSeedHex: String? = null,
+            restoreDamaged: Boolean = false,
+        ): CoreConfiguration =
             CoreConfiguration(
                 databasePath = "${dir.trimEnd('/')}/$FRONT_FILE",
                 create = false,
                 shelfDir = dir,
                 devSeedHex = devSeedHex,
+                restoreDamaged = restoreDamaged,
             )
     }
 
@@ -443,6 +455,9 @@ public class CentraidCore private constructor(
             )
             CoreStatus.TIMEOUT -> CoreOutcome.Failed(
                 CoreFailure.BadArgument("centraid_call cannot time out; only next_event can"),
+            )
+            CoreStatus.VAULT_DAMAGED -> CoreOutcome.Failed(
+                CoreFailure.BadArgument("centraid_call cannot report a damaged vault; only open can"),
             )
         }
     }

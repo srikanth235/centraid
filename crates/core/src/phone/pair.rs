@@ -51,7 +51,7 @@
 //! is a restore. A head taken after the copy's last write that holds no more of
 //! them is this phone's own, with nothing written since. The files the
 //! newer phone backed up are kept regardless, as long as a kept snapshot names
-//! them (`retention::collectable`).
+//! them (the exact collection in `drain::retain`).
 //!
 //! # THE NUMBER THE MEMBER READS ALOUD (#1029 W15-D5, the root's ruling A17)
 //!
@@ -61,14 +61,16 @@
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_gateway::client::{Client, ClientError};
-use centraid_gateway::rules::claim::{sign_claim, sign_read};
 use centraid_gateway::rules::code::Refusal;
-use centraid_gateway::rules::ids::{GatewayId, Pin, Token};
+use centraid_gateway::rules::ids::{GatewayId, Nonce, Pin, Token};
 use centraid_gateway::rules::payload::{PairPayload, PayloadError};
-use centraid_gateway::rules::wire::{ClaimBody, PairKind, PairRequest, Paired, ReadBody};
-use centraid_vault::backup::ledger::Destination;
+use centraid_gateway::rules::signing::{sign_claim, sign_pair, sign_read};
+use centraid_gateway::rules::wire::{
+    ClaimBody, PairKind, PairRequest, Paired, ReadBody, SecretBody,
+};
 use centraid_vault::backup::naming::Name as PlaneName;
-use centraid_vault::backup::snapshot::{History, Manifest};
+use centraid_vault::backup::snapshot::{History, Root};
+use centraid_vault::backup::state::Gateway;
 
 use super::{Keyring, Plane, now_ms, plane_error, wire_destination};
 use crate::error::{CoreError, Result};
@@ -157,22 +159,34 @@ pub(crate) fn first_contact(
     Ok(client)
 }
 
+/// A single-use nonce from the gateway, which every pairing kind signs (E5):
+/// a recorded request cannot be replayed.
+pub(crate) fn nonce(client: &Client, runtime: &tokio::runtime::Handle) -> Result<Nonce> {
+    Ok(runtime
+        .block_on(client.nonce())
+        .map_err(pairing_error)?
+        .nonce)
+}
+
 /// A read-only grant for this vault: a token at epoch 0 that reads the head
-/// and never writes. `None` for a vault the gateway does not hold.
+/// and never writes, signed over a fresh nonce. `None` for a vault the
+/// gateway does not hold.
 pub(crate) fn read_grant(
     client: &Client,
     keyring: &Keyring,
     gateway: &GatewayId,
     runtime: &tokio::runtime::Handle,
 ) -> Result<Option<Paired>> {
+    let nonce = nonce(client, runtime)?;
     let request = PairRequest {
         vault_id: keyring.vault_id(),
         label: DEVICE_LABEL.to_owned(),
         kind: PairKind::Read,
+        nonce,
         secret: None,
         claim: None,
         read: Some(ReadBody {
-            signature: sign_read(keyring.vault.identity.signing(), gateway),
+            signature: sign_read(keyring.vault.identity.signing(), gateway, &nonce),
         }),
     };
     match runtime.block_on(client.pair(&request)) {
@@ -205,10 +219,12 @@ pub(crate) fn try_claim(
     head_seen: Option<centraid_gateway::rules::ids::Name>,
     runtime: &tokio::runtime::Handle,
 ) -> Result<ClaimAnswer> {
+    let nonce = nonce(client, runtime)?;
     let request = PairRequest {
         vault_id: keyring.vault_id(),
         label: DEVICE_LABEL.to_owned(),
         kind: PairKind::Claim,
+        nonce,
         secret: None,
         claim: Some(ClaimBody {
             epoch,
@@ -218,6 +234,7 @@ pub(crate) fn try_claim(
                 gateway,
                 epoch,
                 head_seen.as_ref(),
+                &nonce,
             ),
         }),
         read: None,
@@ -268,9 +285,9 @@ fn head_is_ahead(
     let name = PlaneName::from_bytes(*head.name.as_bytes());
     let opened = centraid_media::sealed::open_whole(&keyring.backup, &name, &sealed_bytes)
         .map_err(|error| error.to_string())
-        .and_then(|json| Manifest::from_json(&json).map_err(|error| error.to_string()));
+        .and_then(|json| Root::from_json(&json).map_err(|error| error.to_string()));
     match opened {
-        Ok(manifest) => Ok(manifest.writes > own.writes),
+        Ok(root) => Ok(root.writes > own.writes),
         Err(reason) => {
             tracing::warn!(%reason, "the gateway's head would not open; a claim cannot be judged against it");
             Ok(false)
@@ -308,7 +325,7 @@ pub(crate) fn take_over(
     };
     client.set_token(grant.token);
     let state = runtime
-        .block_on(client.head_state(&keyring.vault_id()))
+        .block_on(client.head_state(&keyring.vault_id(), gateway))
         .map_err(pairing_error)?;
     // AN OLDER COPY CLAIMS NOTHING (the sweep's F4): the head is checked
     // against this phone's own copy before any claim is made.
@@ -370,21 +387,34 @@ pub fn pair(
     // A SUPERSEDED PHONE PAIRS NOTHING (the module header's "superseded").
     // Asked of the ledger before anything is dialled, claimed or cleared:
     // clearing this gateway's row below would clear the mark that freezes it.
-    let ledger = plane.ledger()?;
-    if let Some((_, epoch)) = super::moved(&ledger)? {
+    let ledger = plane.state()?;
+    let gateway_hex = payload.gw.hex();
+    // AT THIS GATEWAY (E4): a takeover another gateway proved says nothing of
+    // this one, whose own claim decides.
+    let before = ledger.gateway(&gateway_hex).map_err(plane_error)?;
+    if let Some(epoch) = before.as_ref().and_then(|row| row.moved_epoch) {
         return Err(superseded(epoch));
     }
-    let gateway_hex = payload.gw.hex();
-    let held = ledger
-        .destination(&gateway_hex)
-        .map_err(plane_error)?
-        .map(|destination| destination.epoch);
+    let held = before.map(|row| row.epoch);
     let client = first_contact(&payload, runtime)?;
+    // THE SECRET PROVES NOTHING ALONE (E7): the vault key signs it with the
+    // gateway's id and a fresh nonce, so a photograph of the code cannot
+    // admit somebody else's vault id.
+    let nonce = nonce(&client, runtime)?;
     let secret = PairRequest {
         vault_id: keyring.vault_id(),
         label: DEVICE_LABEL.to_owned(),
         kind: PairKind::Secret,
-        secret: Some(payload.secret),
+        nonce,
+        secret: Some(SecretBody {
+            secret: payload.secret,
+            signature: sign_pair(
+                keyring.vault.identity.signing(),
+                &payload.gw,
+                &payload.secret,
+                &nonce,
+            ),
+        }),
         claim: None,
         read: None,
     };
@@ -395,9 +425,11 @@ pub fn pair(
             match take_over(&client, keyring, &payload.gw, held, own, runtime) {
                 // LEARNED HERE, AS A PASS WOULD HAVE: the phone freezes.
                 Err(CoreError::VaultMoved { current_epoch, .. }) => {
-                    ledger
-                        .set_moved(&gateway_hex, current_epoch)
-                        .map_err(plane_error)?;
+                    if ledger.gateway(&gateway_hex).map_err(plane_error)?.is_some() {
+                        ledger
+                            .set_moved(&gateway_hex, current_epoch, now_ms())
+                            .map_err(plane_error)?;
+                    }
                     return Err(superseded(current_epoch));
                 }
                 taken => taken?,
@@ -411,17 +443,17 @@ pub fn pair(
     let token: Token = paired.token;
     let gateway_id = paired.gateway_id.hex();
     let now = now_ms();
-    let destination = Destination {
-        gateway_id: gateway_id.clone(),
-        addrs: payload.addrs.clone(),
+    let mut destination = Gateway::paired(
+        gateway_id.clone(),
+        payload.addrs.clone(),
         cert_der,
-        token: token.hex(),
-        epoch: paired.epoch,
-        label: label_of(&payload),
-        paired_at_ms: now,
-        last_seen_ms: Some(now),
-        last_ack_ms: None,
-    };
+        label_of(&payload),
+        paired.epoch,
+        now,
+    );
+    destination.seen_ms = Some(now);
+    destination.head =
+        head.map(|head| centraid_vault::backup::naming::Name::from_bytes(*head.as_bytes()));
     // A PAIRING STARTS THIS GATEWAY'S RECORD OVER (#1080, the sweep's B3 and
     // R-1080-C17). Whatever the ledger kept under this gateway's id from an
     // earlier pairing — every acknowledgement, the head this phone last set
@@ -438,21 +470,23 @@ pub fn pair(
     // its meta with it; the head is the one the claim named. Nothing is sent
     // again blindly: a pass asks `exists` about every name before it seals
     // one, which moves no bytes.
-    ledger
-        .remove_destination(&gateway_id)
-        .map_err(plane_error)?;
-    ledger.put_destination(&destination).map_err(plane_error)?;
-    if let Some(head) = head {
-        ledger
-            .set_head(
-                &gateway_id,
-                &centraid_vault::backup::naming::Name::from_bytes(*head.as_bytes()),
-            )
-            .map_err(plane_error)?;
-    }
+    ledger.remove_gateway(&gateway_id).map_err(plane_error)?;
+    ledger.put_gateway(&destination).map_err(plane_error)?;
+    // THE DIRECTORY OF GATEWAYS CHANGED (E8): every gateway owes a snapshot that writes it.
+    ledger.mark_directories_dirty().map_err(plane_error)?;
+    plane.set_tokens({
+        let mut held = plane.tokens();
+        held.insert(gateway_id.clone(), token);
+        held
+    });
     Ok(wire::PairResponse {
         safety_number: safety_number(keyring, &payload.pin),
         destination: Some(wire_destination(&destination)),
+        tokens: vec![wire::GatewayToken {
+            vault_id: keyring.vault_hex(),
+            gateway_id,
+            token: token.hex(),
+        }],
     })
 }
 

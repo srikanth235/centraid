@@ -184,7 +184,7 @@ fn a_rule_renames_the_line_and_never_the_banks_words() {
     assert_eq!(title("csv:c"), "BLUE COFFEE CO");
     let stated = world
         .text(
-            "SELECT json_extract(stated, '$.title') FROM source WHERE external_id = 'csv:a'",
+            "SELECT stated_title FROM source WHERE external_id = 'csv:a'",
             &[],
         )
         .expect("the bank's words");
@@ -234,7 +234,7 @@ fn a_line_imported_after_the_rule_takes_the_payee_and_a_reimport_keeps_a_later_n
     assert_eq!(
         world
             .text(
-                "SELECT json_extract(stated, '$.title') FROM source WHERE external_id = 'csv:a'",
+                "SELECT stated_title FROM source WHERE external_id = 'csv:a'",
                 &[]
             )
             .as_deref(),

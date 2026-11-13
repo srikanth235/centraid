@@ -988,10 +988,12 @@ pub fn year3_search_corpus(
                 } else {
                     (None, None)
                 };
+                // Only a login keeps `notes`; the other types hold their text in typed columns.
                 let notes = (writer.random.upto(3) == 0).then(|| {
                     let words = 6 + writer.random.upto(20);
                     writer.text(words, false)
                 });
+                let notes = notes.filter(|_| kind == "login");
                 connection
                     .execute(
                         "INSERT INTO locker_item (id, type, username, url, notes)

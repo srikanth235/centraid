@@ -86,9 +86,9 @@ pub fn shelves_statement() -> PageQuery {
 pub fn trashed_statement() -> PageQuery {
     PageQuery::new(
         "locker.phone.trashed",
-        "id, updated_at",
+        "id, deleted_at",
         "entity",
-        PageOrder::desc("updated_at", "id"),
+        PageOrder::desc("deleted_at", "id"),
     )
     .filter(
         "kind = ? AND deleted_at IS NOT NULL",
@@ -202,9 +202,9 @@ fn read_chunked(
 pub fn aliases_statement() -> PageQuery {
     PageQuery::new(
         "locker.phone.aliases",
-        "alias, item_id",
+        "id, item_id",
         "locker_item_alias",
-        PageOrder::asc("alias", "alias"),
+        PageOrder::asc("id", "id"),
     )
 }
 
@@ -225,10 +225,10 @@ pub fn presence_statement(item_id: &str) -> PageQuery {
 pub fn fields_statement(item_id: &str) -> PageQuery {
     by_item(
         "locker.phone.fields",
-        "field_id, item_id, section, label, kind, value_text, \
+        "id, item_id, section, label, kind, value_text, \
          value_sealed IS NOT NULL AS has_sealed, position",
         "locker_item_field",
-        "field_id",
+        "id",
         item_id,
     )
 }
@@ -238,9 +238,9 @@ pub fn fields_statement(item_id: &str) -> PageQuery {
 pub fn addresses_statement(item_id: &str) -> PageQuery {
     by_item(
         "locker.phone.addresses",
-        "address_id, item_id, url, position",
+        "id, item_id, url, position",
         "locker_item_address",
-        "address_id",
+        "id",
         item_id,
     )
 }
@@ -521,9 +521,9 @@ pub fn load_item(door: &dyn PageDoor, item_id: &str) -> KitResult<Option<ItemDat
             .rows
             .iter()
             .map(|row| Address {
-                address_id: text_of(row, "address_id").unwrap_or_default(),
+                address_id: text_of(row, "id").unwrap_or_default(),
                 url: text_of(row, "url").unwrap_or_default(),
-                position: integer_of(row, "position"),
+                position: position_of(row),
             })
             .collect();
     addresses.sort_by_key(|address| address.position);
@@ -870,9 +870,9 @@ pub fn load_export(door: &dyn PageDoor) -> KitResult<Vec<ExportSource>> {
                 .rows
                 .iter()
                 .map(|row| Address {
-                    address_id: text_of(row, "address_id").unwrap_or_default(),
+                    address_id: text_of(row, "id").unwrap_or_default(),
                     url: text_of(row, "url").unwrap_or_default(),
-                    position: integer_of(row, "position"),
+                    position: position_of(row),
                 })
                 .collect();
         addresses.sort_by_key(|address| address.position);
@@ -1059,7 +1059,7 @@ fn fold_items(
         labels.dedup();
     }
     for row in read_window(door, &aliases_statement(), DECORATION_ROWS)?.rows {
-        if let (Some(alias), Some(item)) = (text_of(&row, "alias"), text_of(&row, "item_id")) {
+        if let (Some(alias), Some(item)) = (text_of(&row, "id"), text_of(&row, "item_id")) {
             decorations
                 .aliases
                 .entry(item.clone())
@@ -1117,6 +1117,15 @@ fn truthy(row: &Row, column: &str) -> bool {
     }
 }
 
+/// A row's `position`: whole numbers in a REAL column (the vault keeps one type for every
+/// position), read back as the index they are.
+fn position_of(row: &Row) -> i64 {
+    match row.get("position") {
+        Some(Cell::Real(value)) => value.round() as i64,
+        _ => integer_of(row, "position"),
+    }
+}
+
 fn integer_of(row: &Row, column: &str) -> i64 {
     match row.get(column) {
         Some(Cell::Integer(value)) => *value,
@@ -1136,7 +1145,7 @@ fn field_of(row: &Row) -> PhoneField {
         text_of(row, "value_text")
     };
     PhoneField {
-        field_id: text_of(row, "field_id").unwrap_or_default(),
+        field_id: text_of(row, "id").unwrap_or_default(),
         section: text_of(row, "section").unwrap_or_default(),
         label: text_of(row, "label").unwrap_or_default(),
         present: if sealed {
@@ -1147,7 +1156,7 @@ fn field_of(row: &Row) -> PhoneField {
         value,
         sealed,
         kind,
-        position: integer_of(row, "position"),
+        position: position_of(row),
     }
 }
 

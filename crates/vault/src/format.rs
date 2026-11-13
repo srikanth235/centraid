@@ -27,7 +27,7 @@ pub const EARLIER_APPLICATION_ID: i64 = 0x4345_4e31;
 
 /// The digest of the schema this build founds: see [`schema_digest`]. Updated with every change
 /// to the baseline, and held to the founded file by a test.
-pub const SCHEMA_DIGEST: &str = "9a85c54ed484de951eeb2bafc47a9cb9f77ab22f84a2c19412c0b4e69ffdd1ef";
+pub const SCHEMA_DIGEST: &str = "ca48de87ac6e7fcce60254324970b81254bccf984b03b812f2a4379b9d1357ad";
 
 /// BLAKE3, in hex, over the file's `sqlite_schema` rows: type, name, table name and statement,
 /// ordered by name.
@@ -134,7 +134,7 @@ mod tests {
     fn the_two_application_ids_are_distinct_tags() {
         assert_eq!(APPLICATION_ID.to_be_bytes()[4..], *b"CEN2");
         assert_eq!(EARLIER_APPLICATION_ID.to_be_bytes()[4..], *b"CEN1");
-        assert_ne!(APPLICATION_ID, crate::backup::ledger::LEDGER_APPLICATION_ID);
+        assert_ne!(APPLICATION_ID, crate::backup::state::STATE_APPLICATION_ID);
     }
 
     /// THE CONSTANT IS THE FOUNDED FILE'S DIGEST. A change to the baseline moves it; when this

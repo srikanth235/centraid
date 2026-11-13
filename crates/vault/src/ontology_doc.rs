@@ -59,7 +59,7 @@ pub const GROUPS: [(&str, &str, &str); 6] = [
 ///
 /// The FTS5 shadow tables of `search` are not here (they are an implementation
 /// of it); every other table must be.
-pub const TABLES: [(&str, &str, &str); 45] = [
+pub const TABLES: &[(&str, &str, &str)] = &[
     (
         "kernel",
         "entity",
@@ -157,6 +157,11 @@ pub const TABLES: [(&str, &str, &str); 45] = [
     ),
     (
         "kinds",
+        "reminder",
+        "One alert of an event: how many minutes before it starts the phone sounds, a minute once.",
+    ),
+    (
+        "kinds",
         "occurrence",
         "One day of a series changed on its own, or from then on: an override, a skip or a cancel, keyed by the series-local wall clock.",
     ),
@@ -194,6 +199,11 @@ pub const TABLES: [(&str, &str, &str); 45] = [
         "kinds",
         "txn",
         "A line on an account: a signed amount in minor units, the day it posted and its category. It enters by following a statement.",
+    ),
+    (
+        "kinds",
+        "transfer",
+        "Two lines that are the two halves of one movement of the member's own money: one row, the lower line first.",
     ),
     (
         "kinds",
@@ -238,7 +248,7 @@ pub const TABLES: [(&str, &str, &str); 45] = [
     (
         "bytes",
         "blob",
-        "The vault's claim on content: its hash and size. Every hash anywhere is a foreign key into this table.",
+        "The vault's claim on content: its hash and size, numbered in the order the claims were made. Every hash anywhere is a foreign key into this table.",
     ),
     (
         "bytes",
@@ -412,7 +422,7 @@ pub fn render_schema_section() -> Result<String> {
                 }
             }
             for (_, table, _) in TABLES {
-                if !live.iter().any(|name| name.as_str() == table) {
+                if !live.iter().any(|name| name.as_str() == *table) {
                     return Err(VaultError::Invariant {
                         context: format!(
                             "ontology_doc::TABLES names `{table}`, which the founded file does not hold"

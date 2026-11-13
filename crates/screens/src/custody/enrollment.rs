@@ -96,6 +96,8 @@ pub enum Restored {
     DidNotCheck,
     /// The newest backup would not open and an older one does: offered, nothing restored.
     Offer(Vec<door::OfferAt>),
+    /// The restore cannot prove it holds the newest backup: asked, nothing restored (#1191, E8).
+    Unproven(Vec<door::UnprovenAt>),
     /// A vault's claim landed (the old phone is stopped) but keeping it on this phone failed:
     /// nothing was kept, and restoring again finishes it.
     Unfinished,
@@ -118,6 +120,7 @@ impl fmt::Debug for Restored {
             Self::Unfinished => f.write_str("Unfinished"),
             Self::DidNotCheck => f.write_str("DidNotCheck"),
             Self::Offer(offers) => write!(f, "Offer({})", offers.len()),
+            Self::Unproven(newest) => write!(f, "Unproven({})", newest.len()),
             Self::CantOpen => f.write_str("CantOpen"),
             Self::NewerBuild => f.write_str("NewerBuild"),
             Self::Refused(why) => write!(f, "Refused({why:?})"),
@@ -578,18 +581,31 @@ impl Job {
     /// Bring this member's vaults back from `words`.
     #[must_use]
     pub fn restore(words: Vec<String>, payload: &str) -> Self {
-        Self::restoring(words, payload, false)
+        Self::restoring(words, payload, false, false)
     }
 
     /// [`Self::restore`] after the member said yes to the older backup it offered.
     #[must_use]
     pub fn restore_older(words: Vec<String>, payload: &str) -> Self {
-        Self::restoring(words, payload, true)
+        Self::restoring(words, payload, true, false)
     }
 
-    fn restoring(words: Vec<String>, payload: &str, use_older: bool) -> Self {
+    /// [`Self::restore`] after the member said yes to the newest backup found, which the restore
+    /// could not prove is the newest.
+    #[must_use]
+    pub fn restore_unproven(words: Vec<String>, payload: &str) -> Self {
+        Self::restoring(words, payload, false, true)
+    }
+
+    fn restoring(
+        words: Vec<String>,
+        payload: &str,
+        use_older: bool,
+        confirm_unproven: bool,
+    ) -> Self {
         Self(Flow::Restore(Box::new(RestoreJob {
             use_older,
+            confirm_unproven,
             words,
             payload: payload.trim().to_owned(),
             stage: RestoreStage::Start,
@@ -789,6 +805,8 @@ enum RestoreStage {
 struct RestoreJob {
     /// The member took the older backup that was offered.
     use_older: bool,
+    /// The member went ahead without proof of the newest.
+    confirm_unproven: bool,
     words: Vec<String>,
     payload: String,
     stage: RestoreStage,
@@ -828,6 +846,7 @@ impl RestoreJob {
                     self.seed = seed;
                     let mut request = request;
                     request.use_older = self.use_older;
+                    request.confirm_unproven = self.confirm_unproven;
                     self.stage = RestoreStage::Asked;
                     return Step::Ask(Ask::Restore(request));
                 }
@@ -840,6 +859,10 @@ impl RestoreJob {
                     // AN OLDER BACKUP OFFERED claims and restores nothing: the member decides.
                     if answer.vaults.is_empty() && !answer.offers.is_empty() {
                         return done(Restored::Offer(answer.offers));
+                    }
+                    // A NEWEST IT CANNOT PROVE claims and restores nothing either.
+                    if answer.vaults.is_empty() && !answer.unproven.is_empty() {
+                        return done(Restored::Unproven(answer.unproven));
                     }
                     if answer.vaults.is_empty()
                         && answer.unclaimed.iter().any(|vault| vault.claimed)

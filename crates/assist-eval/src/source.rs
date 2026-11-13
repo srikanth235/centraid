@@ -2,8 +2,8 @@
 //! crate will write (#1166, stage 7) is one more implementation, not a change to the runner.
 //!
 //! The source is a JSONL set (one session per line) and the world JSON files its sessions name. A data version's split is
-//! `data/<split>.jsonl.zst` (decompress it) and its `worlds/`; the version comes from the private Hugging Face repository
-//! `srikanth235/centraid-native-data` at a pinned revision. There is no default set and no default worlds: see
+//! `data/<split>.jsonl.zst` (decompress it) and its `worlds/<split>/`; the version comes from the private Hugging Face repository
+//! `srikanth235/centraid-assist-data` at a pinned revision. There is no default set and no default worlds: see
 //! [`require_set`].
 
 use std::collections::BTreeMap;
@@ -94,7 +94,7 @@ pub fn require_set(
     set: Option<PathBuf>,
     worlds: Vec<PathBuf>,
 ) -> Result<(PathBuf, Vec<PathBuf>), String> {
-    const FROM: &str = "a data version of the private Hugging Face dataset srikanth235/centraid-native-data at a pinned revision: data/<split>.jsonl.zst decompressed, and its worlds/ directory";
+    const FROM: &str = "a data version of the private Hugging Face dataset srikanth235/centraid-assist-data at a pinned revision: data/<split>.jsonl.zst decompressed, and its worlds/<split>/ directory";
     let set = set.ok_or_else(|| format!("give --set SET.jsonl ({FROM})"))?;
     if worlds.is_empty() {
         return Err(format!("give --worlds DIR, the set's worlds ({FROM})"));
@@ -176,7 +176,7 @@ impl EvalSource for JsonlSource {
         Err(EvalError::Read {
             path: name.to_owned(),
             message: format!(
-                "no world {name}.json in {}, and the set's worlds are in its data version's `worlds/` directory (pass it with --worlds)",
+                "no world {name}.json in {}, and the set's worlds are in its data version's `worlds/<split>/` directory (pass it with --worlds)",
                 self.worlds
                     .iter()
                     .map(|d| d.display().to_string())
@@ -238,7 +238,7 @@ mod tests {
     fn a_run_names_its_set_and_worlds_there_is_no_default() {
         let none = require_set(None, vec![]).unwrap_err();
         assert!(
-            none.contains("--set") && none.contains("srikanth235/centraid-native-data"),
+            none.contains("--set") && none.contains("srikanth235/centraid-assist-data"),
             "{none}"
         );
         let no_worlds = require_set(Some("val.jsonl".into()), vec![]).unwrap_err();

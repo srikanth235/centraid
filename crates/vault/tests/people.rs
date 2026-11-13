@@ -360,8 +360,8 @@ fn what_is_written_about_a_person_is_a_note_a_task_a_date_or_a_journal_entry() {
         "all-day"
     );
     assert_eq!(
-        w.query::<String>("SELECT reminders FROM event WHERE id = ?1", &[&date]),
-        "[0]"
+        w.query::<String>("SELECT group_concat(offset_min) FROM (SELECT offset_min FROM reminder WHERE entity_id = ?1 ORDER BY offset_min)", &[&date]),
+        "0"
     );
     assert!(
         w.query::<String>("SELECT starts FROM event WHERE id = ?1", &[&date])

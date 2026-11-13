@@ -15,7 +15,8 @@ use std::time::Duration;
 use centraid_api_proto::core_v1 as wire;
 use centraid_core_ffi::{
     CENTRAID_BAD_ARGUMENT, CENTRAID_CLOSED, CENTRAID_OK, CENTRAID_PANICKED, CENTRAID_TIMEOUT,
-    centraid_call, centraid_close, centraid_free, centraid_next_event, centraid_open,
+    CENTRAID_VAULT_DAMAGED, centraid_call, centraid_close, centraid_free, centraid_next_event,
+    centraid_open,
 };
 use prost::Message as _;
 
@@ -882,6 +883,59 @@ fn a_refusal_at_open_is_a_negative_code_no_handle_and_a_line_that_says_why() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A DAMAGED VAULT IS ITS OWN STATUS AT `open`, so a shell can offer a restore.
+///
+/// A real founded vault is checkpointed into its main file and one page of table content is
+/// overwritten; `open` must answer `CENTRAID_VAULT_DAMAGED` (-6), write no handle and leave the file
+/// as it found it. Every other code keeps its value, which the header test and the refusals above
+/// already pin.
+#[test]
+fn a_damaged_vault_at_open_is_vault_damaged_through_the_abi() {
+    let dir = centraid_ontology::scratch::scratch_dir();
+    std::fs::create_dir_all(&dir).expect("the directory is made");
+    let path = dir.join("damaged.db");
+    {
+        let handle =
+            centraid_core::Core::open(centraid_core::CoreConfig::new(&path)).expect("a core opens");
+        handle
+            .with_vault(|vault| Ok(vault.found("Damaged", "Owner")?))
+            .expect("it founds");
+        handle.close();
+    }
+    {
+        centraid_vault::testdoor::checkpoint_into_main_file(&path)
+            .expect("the rows reach the main file");
+    }
+    let mut bytes = std::fs::read(&path).expect("reads");
+    let page = 4096;
+    assert!(
+        bytes.len() > 6 * page,
+        "the founded file has pages to damage"
+    );
+    for byte in &mut bytes[4 * page..5 * page] {
+        *byte = 0xA5;
+    }
+    std::fs::write(&path, &bytes).expect("writes");
+
+    let config = format!(
+        r#"{{"path":{:?},"create":false}}"#,
+        path.display().to_string()
+    );
+    let sentinel = 0x1234_usize as *mut centraid_core::Handle;
+    let mut handle = sentinel;
+    // SAFETY: live config bytes and a live out-pointer.
+    let code = unsafe { centraid_open(config.as_ptr(), config.len(), &raw mut handle) };
+    assert_eq!(code, CENTRAID_VAULT_DAMAGED, "a damaged vault is -6");
+    assert_eq!(CENTRAID_VAULT_DAMAGED, -6);
+    assert!(std::ptr::eq(handle, sentinel), "no handle is written");
+    assert_eq!(
+        std::fs::read(&path).expect("reads again"),
+        bytes,
+        "the damaged file is left as it was"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// `open` NEVER ANSWERS `OK` WITHOUT A HANDLE — over an ordinary refusal, not
 /// a malformed configuration (#1029 W5).
 ///
@@ -919,8 +973,9 @@ fn an_open_that_refuses_an_ordinary_file_never_answers_ok() {
     let mut handle = sentinel;
     // SAFETY: live config bytes and a live out-pointer.
     let code = unsafe { centraid_open(config.as_ptr(), config.len(), &raw mut handle) };
+    // Since the damaged-vault status, a file that is no vault of ours reads as damaged at open.
     assert_eq!(
-        code, CENTRAID_BAD_ARGUMENT,
+        code, CENTRAID_VAULT_DAMAGED,
         "an open that produces no handle answers a negative code"
     );
     assert!(
@@ -1091,6 +1146,7 @@ fn the_phones_four_flows_round_trip_through_call() {
             12,
             wire::request::Kind::Drain(wire::DrainRequest {
                 deadline_ms: 0,
+                rule: wire::TransferRule::WifiOnly as i32,
                 ..wire::DrainRequest::default()
             }),
         ),
@@ -1137,6 +1193,7 @@ fn the_phones_four_flows_round_trip_through_call() {
             14,
             wire::request::Kind::Restore(wire::RestoreRequest {
                 phrase: "abandon abandon abandon".to_owned(),
+                confirm_unproven: true,
                 ..wire::RestoreRequest::default()
             }),
         ),

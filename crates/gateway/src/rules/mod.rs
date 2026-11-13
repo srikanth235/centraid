@@ -28,7 +28,8 @@
 //! | [`limits`] | every number both ends share |
 //! | [`code`] | the closed refusal codes and the one refusal body |
 //! | [`wire`] | every request and answer body |
-//! | [`claim`] | the signed claim preimage, and the read grant |
+//! | [`signing`] | every record the vault key signs: claim, read grant, head, delete, undo, pairing |
+//! | [`nonce`] | the stateless nonce: a MAC the gateway checks, a table only a valid signature writes |
 //! | [`payload`] | the pairing QR's text |
 //! | [`bundle`] | the many-objects framing, both ways |
 //! | [`range`] | one `Range` per `GET` |
@@ -38,18 +39,19 @@
 //! | [`conformance`] | the suite every gateway must pass |
 
 pub mod bundle;
-pub mod claim;
 pub mod code;
 pub mod conformance;
 pub mod engine;
 pub mod ids;
 pub mod limits;
 pub mod memory;
+pub mod nonce;
 pub mod payload;
 pub mod range;
+pub mod signing;
 pub mod state;
 pub mod wire;
 
 pub use code::{Code, Refusal, RefusalBody};
 pub use engine::Gateway;
-pub use ids::{Digest, GatewayId, Name, Pin, Secret, Signature, Token, VaultId};
+pub use ids::{Digest, GatewayId, Name, Nonce, Pin, Secret, Signature, Token, VaultId};

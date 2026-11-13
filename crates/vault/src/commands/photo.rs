@@ -229,7 +229,11 @@ fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
             media_type,
             form,
             ctx.optional_str("taken_at")
-                .map(str::to_owned)
+                .map(|stated| {
+                    // A photo's time is an instant: a stated date or wall clock is read as UTC.
+                    crate::time::recurrence::parse_instant_ms(stated)
+                        .map_or_else(|| stated.to_owned(), crate::clock::format_iso_ms)
+                })
                 .or(source.taken_at),
             whole(ctx, "offset_min").or(source.offset_min),
             whole(ctx, "width"),
@@ -336,7 +340,17 @@ fn edit(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         if let Some(value) = ctx.input.get(column) {
             ctx.connection().execute(
                 &format!("UPDATE photo SET {column} = ?2 WHERE id = ?1"),
-                rusqlite::params![id, crate::commands::follow::to_sql(value)],
+                rusqlite::params![
+                    id,
+                    if column == "taken_at" {
+                        crate::commands::follow::to_sql(&value.as_str().map_or_else(
+                            || value.clone(),
+                            |text| serde_json::Value::from(crate::time::temporal::canonical(text)),
+                        ))
+                    } else {
+                        crate::commands::follow::to_sql(value)
+                    }
+                ],
             )?;
         }
     }

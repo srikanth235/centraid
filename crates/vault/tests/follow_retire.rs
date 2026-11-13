@@ -316,10 +316,7 @@ fn health(w: &World, device: &str, cursor: Option<&str>) -> Value {
 }
 
 fn cursor(w: &World) -> Option<String> {
-    w.one::<Option<String>>(
-        "SELECT json_extract(config, '$.cursor') FROM origin WHERE system = 'health'",
-        &[],
-    )
+    w.one::<Option<String>>("SELECT cursor FROM origin WHERE system = 'health'", &[])
 }
 
 #[test]

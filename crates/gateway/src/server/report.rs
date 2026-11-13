@@ -93,6 +93,12 @@ pub fn pairing_lines(pairing: &Pairing, pin: &Pin) -> Vec<String> {
             .unwrap_or_default()
     )];
     lines.push(format!("  {}", safety_line(&vault.vault, pin)));
+    if let Some(since) = vault.frozen_at_ms {
+        lines.push(format!(
+            "  frozen  since {}: writes are refused and nothing is purged",
+            utc(since)
+        ));
+    }
     match &pairing.head {
         Some(head) => lines.push(format!(
             "  head    {}…  taken {}  set {}",

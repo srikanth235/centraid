@@ -467,6 +467,28 @@ fn an_all_day_event_sounds_at_nine_on_its_day_once() {
     );
 }
 
+/// THE OWNER'S RULING (#1191): an event's first alert is its longest lead, so it is the one that
+/// fires first; an all-day event's one alert stands for that first one.
+#[test]
+fn an_events_alerts_fire_longest_lead_first() {
+    // Whatever order the list arrives in.
+    for leads in [[10, 30], [30, 10]] {
+        let set = run(NY, &[], &[event("e", "2026-11-11T12:00", &leads)]);
+        let fires: Vec<_> = set.iter().map(|n| n.fire_local.as_str()).collect();
+        assert_eq!(fires, ["2026-11-11T11:30", "2026-11-11T11:50"], "{leads:?}");
+    }
+    let mut day = event("h", "2026-11-12T00:00", &[10, 1440]);
+    day.all_day = true;
+    day.local_end = "2026-11-13".to_owned();
+    let set = run(NY, &[], &[day]);
+    assert_eq!(set.len(), 1);
+    assert!(
+        set[0].notification_id.ends_with("|1440"),
+        "the longest lead is the first: {}",
+        set[0].notification_id
+    );
+}
+
 #[test]
 fn with_details_off_a_notification_says_only_that_something_is_due() {
     let t = task("a", "2026-11-11", "09:00", "2026-11-11T09:00");

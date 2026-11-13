@@ -821,8 +821,7 @@ fn a_changed_password_is_kept_sealed_masked_on_read_and_restored_with_the_item()
         .expect("the version held the field");
     assert_eq!(opened("f2", &field.ciphertext.expect("sealed")), PIN_ONE);
     w.ok("history.undo", json!({ "id": id, "seq": versions[0].seq }));
-    let live: String =
-        w.count_text("SELECT value_sealed FROM locker_item_field WHERE field_id = 'f2'");
+    let live: String = w.count_text("SELECT value_sealed FROM locker_item_field WHERE id = 'f2'");
     assert_eq!(
         opened("f2", &live),
         PIN_ONE,
@@ -839,8 +838,7 @@ fn a_changed_password_is_kept_sealed_masked_on_read_and_restored_with_the_item()
     assert_eq!(was["value_sealed"], json!(history::MASK));
     assert!(now.is_null());
     w.ok("history.undo", json!({ "id": id, "seq": versions[0].seq }));
-    let live: String =
-        w.count_text("SELECT value_sealed FROM locker_item_field WHERE field_id = 'f2'");
+    let live: String = w.count_text("SELECT value_sealed FROM locker_item_field WHERE id = 'f2'");
     assert_eq!(opened("f2", &live), PIN_ONE);
 
     // A one-time-code field's seed is kept sealed too, and is never an openable cell.
@@ -862,8 +860,7 @@ fn a_changed_password_is_kept_sealed_masked_on_read_and_restored_with_the_item()
         "a seed is never opened, live or earlier"
     );
     w.ok("history.undo", json!({ "id": id, "seq": versions[0].seq }));
-    let live: String =
-        w.count_text("SELECT value_sealed FROM locker_item_field WHERE field_id = 'f3'");
+    let live: String = w.count_text("SELECT value_sealed FROM locker_item_field WHERE id = 'f3'");
     assert_eq!(
         opened("f3", &live),
         SEED,
@@ -1633,7 +1630,7 @@ fn a_link_that_was_written_in_a_notes_words_is_not_state_the_words_are() {
     let _ = target;
     assert!(
         keys(&w.state(&note), "link_out", "to_id").is_empty(),
-        "a wikilink carries an anchor and is recompiled from the words"
+        "a wikilink is flagged and is recompiled from the words"
     );
 }
 

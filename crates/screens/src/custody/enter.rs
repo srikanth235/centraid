@@ -126,6 +126,9 @@ pub struct Enter {
     /// The older backups offered in place of a newest that would not open, while the member
     /// decides (`Phase::Offer`); empty otherwise.
     offers: Vec<door::OfferAt>,
+    /// The newest backup found when it cannot be proven the newest, while the member decides
+    /// (drawn as `Phase::Offer`, the same ask-and-answer); empty otherwise.
+    unproven: Vec<door::UnprovenAt>,
     /// The member's zone and clock, as the last event said, for dating the offer.
     zone: String,
     cycle: crate::kit::civil::HourCycle,
@@ -191,6 +194,7 @@ impl Enter {
             notice: Notice::None,
             offer_restore: false,
             offers: Vec::new(),
+            unproven: Vec::new(),
             zone: String::new(),
             cycle: crate::kit::civil::HourCycle::default(),
             held_keys: Vec::new(),
@@ -369,8 +373,14 @@ impl Enter {
         // YES TO THE OLDER BACKUP: the owner check was passed for this restore already.
         if self.phase == Phase::Offer {
             let typed = self.cells.clone();
+            let unproven = !self.unproven.is_empty();
             self.work();
-            return self.begin(Job::restore_older(typed, &self.endpoint), ctx);
+            let job = if unproven {
+                Job::restore_unproven(typed, &self.endpoint)
+            } else {
+                Job::restore_older(typed, &self.endpoint)
+            };
+            return self.begin(job, ctx);
         }
         if !self.entering() {
             return Vec::new();
@@ -472,6 +482,13 @@ impl Enter {
             }
             Restored::Offer(offers) => {
                 self.offers = offers;
+                self.unproven.clear();
+                self.phase = Phase::Offer;
+                self.notice = Notice::None;
+            }
+            Restored::Unproven(newest) => {
+                self.unproven = newest;
+                self.offers.clear();
                 self.phase = Phase::Offer;
                 self.notice = Notice::None;
             }
@@ -569,6 +586,7 @@ impl Enter {
             // A DIFFERENT BACKUP DEVICE: back to the scan step, the code field empty.
             Some(K::Another(_)) if self.phase == Phase::Offer => {
                 self.offers.clear();
+                self.unproven.clear();
                 self.endpoint.clear();
                 self.back(Notice::None);
                 Vec::new()
@@ -627,7 +645,23 @@ impl Enter {
         crate::kit::earlier::dated(self.locale, self.cycle, &local)
     }
 
+    /// The ask a restore makes when it cannot prove it holds the newest backup: the date and the
+    /// name of the newest one it found (the first, when several vaults are asked at once).
+    fn unproven_body(&self) -> String {
+        let Some(newest) = self.unproven.first() else {
+            return String::new();
+        };
+        crate::backup::states::restore_ask(
+            self.locale,
+            &self.when(newest.taken_at_ms),
+            &newest.label,
+        )
+    }
+
     fn offer_body(&self) -> String {
+        if !self.unproven.is_empty() {
+            return self.unproven_body();
+        }
         let Some(offer) = self.offers.first() else {
             return String::new();
         };
@@ -755,7 +789,10 @@ impl Enter {
         };
         // DONE IS A RE-KEY'S: a restore finishes the screen instead.
         let offering = phase == Phase::Offer;
-        let title = if offering {
+        let asking = !self.unproven.is_empty();
+        let title = if offering && asking {
+            crate::strings::custody::ask_title(locale)
+        } else if offering {
             words::offer_title(locale)
         } else if done {
             words::rekeyed_title(locale)
@@ -787,6 +824,7 @@ impl Enter {
             Phase::Entering if rekey => words::rekey_primary(locale),
             Phase::Entering => words::restore_primary(locale),
             Phase::Done => words::done(locale),
+            Phase::Offer if asking => crate::strings::custody::ask_restore_action(locale),
             Phase::Offer => self.offer_action(),
             _ => String::new(),
         };

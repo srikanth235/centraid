@@ -195,6 +195,19 @@ pub struct RestoreAnswer {
     /// An older backup offered in place of a newest that will not open (#1188, B5). When set,
     /// nothing was restored or claimed.
     pub offers: Vec<OfferAt>,
+    /// A newest backup the restore could not prove is the newest (#1191, E8). When set, nothing
+    /// was restored or claimed; the member decides.
+    pub unproven: Vec<UnprovenAt>,
+}
+
+/// The newest backup a restore could read for a vault, when it cannot prove it holds the newest.
+#[derive(Clone, PartialEq, Eq)]
+pub struct UnprovenAt {
+    pub index: u32,
+    /// When it was taken, the backup device's record.
+    pub taken_at_ms: i64,
+    /// What the backup is called, as the member sees it.
+    pub label: String,
 }
 
 /// One vault whose newest backup would not open and whose older one does.
@@ -211,10 +224,11 @@ impl fmt::Debug for RestoreAnswer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "RestoreAnswer(vaults={}, unclaimed={}, offers={}, gap_scanned={})",
+            "RestoreAnswer(vaults={}, unclaimed={}, offers={}, unproven={}, gap_scanned={})",
             self.vaults.len(),
             self.unclaimed.len(),
             self.offers.len(),
+            self.unproven.len(),
             self.gap_scanned
         )
     }
@@ -253,6 +267,7 @@ impl RestoreAnswer {
                 })
                 .collect(),
             offers: self.offers.clone(),
+            unproven: self.unproven.clone(),
         }
     }
 
@@ -267,6 +282,7 @@ impl RestoreAnswer {
             gap_scanned: answers.iter().map(|a| a.gap_scanned).sum(),
             unclaimed: answers.iter().flat_map(|a| a.unclaimed.clone()).collect(),
             offers: answers.iter().flat_map(|a| a.offers.clone()).collect(),
+            unproven: answers.iter().flat_map(|a| a.unproven.clone()).collect(),
         }
     }
 }
@@ -332,6 +348,15 @@ pub fn restore_answer(response: &wire::RestoreResponse) -> RestoreAnswer {
                 newest_taken_at_ms: offer.newest_taken_at_ms,
                 offered_taken_at_ms: offer.offered_taken_at_ms,
                 device: offer.device.clone(),
+            })
+            .collect(),
+        unproven: response
+            .unproven_newest
+            .iter()
+            .map(|newest| UnprovenAt {
+                index: newest.index,
+                taken_at_ms: newest.taken_at_ms,
+                label: newest.label.clone(),
             })
             .collect(),
         // A VAULT THAT STAYED WITH THE OLD PHONE (R-1047-R5), by index and id.

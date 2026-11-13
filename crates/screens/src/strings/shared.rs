@@ -122,7 +122,7 @@ catalog! {
     plain trash_noun_transaction = ("transaction", "transaction");
     plain trash_noun_workout = ("workout", "workout");
     plain trash_purge = ("Delete forever", "Delete forever");
-    plain trash_purge_lead = ("It leaves this vault for good.", "It leaves this vault for good.");
+    plain trash_purge_lead = ("Erased from this phone now. Copies on your backup devices go when old backups age out.", "Erased from this phone now. Copies on your backup devices go when old backups age out.");
     plain trash_purge_title = ("Delete this {noun} forever?", "Delete this {noun} forever?");
     plain trash_restore = ("Restore", "Restore");
     plain trash_restored = ("{title} restored", "{title} restored");

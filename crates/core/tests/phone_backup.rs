@@ -244,7 +244,7 @@ fn the_operating_system_moves_a_handed_off_part_and_settle_records_it() {
     assert_eq!(part.vault_id, keys.vault_hex());
     assert!(
         part.url
-            .ends_with(&format!("/v2/v/{}/o/{}", part.vault_id, part.name)),
+            .ends_with(&format!("/v3/v/{}/o/{}", part.vault_id, part.name)),
         "{}",
         part.url
     );
@@ -614,6 +614,7 @@ fn a_library_item_larger_than_the_spool_backs_up_a_window_at_a_time() {
     let mut answers = Vec::new();
     loop {
         let answer = drain(&phone, at_home());
+        eprintln!("DBG {answer:?}");
         assert!(spooled() <= ceiling, "{} bytes spooled", spooled());
         answers.push((answer.need_bytes.len(), answer.confirmed_parts));
         if answer.need_bytes.is_empty() {
@@ -885,6 +886,7 @@ fn a_restore_brings_every_vault_back_and_the_old_phone_freezes() {
     restored_phone
         .open_own_bytes(path.with_extension("bytes"))
         .expect("the store opens");
+    hand_over_tokens(&restored_phone);
     assert!(status(&restored_phone).destinations.len() == 1);
     let next = drain(&restored_phone, at_home());
     assert_eq!(next.stopped, wire::DrainStop::Empty as i32, "{next:?}");
@@ -920,6 +922,7 @@ fn a_restored_phone_confirms_what_the_gateway_holds_even_what_it_may_not_seal() 
     phone
         .open_own_bytes(path.with_extension("bytes"))
         .expect("the store opens");
+    hand_over_tokens(&phone);
     // THE PASS A FINISHED RESTORE RUNS: off the charger, not asked.
     drain(
         &phone,
@@ -952,6 +955,7 @@ fn a_head_set_between_the_check_and_the_claim_is_checked_before_it_is_claimed() 
         &wire::RestoreRequest {
             phrase: WORDS.to_owned(),
             payload: gateway.payload(),
+            confirm_unproven: true,
             ..wire::RestoreRequest::default()
         },
         runtime.handle(),
@@ -1191,14 +1195,15 @@ fn a_machine_that_is_not_the_pinned_gateway_is_untrusted_and_a_damaged_copy_is_d
 
     // UNTRUSTED: another machine answers at the pinned gateway's address.
     let impostor = gateway();
-    let ledger = centraid_vault::backup::ledger::Ledger::open(dir.path().join("vault.backup.db"))
-        .expect("the ledger opens");
+    let ledger =
+        centraid_vault::backup::state::DeviceState::open_beside(&dir.path().join("vault.db"))
+            .expect("the device state opens");
     let mut row = ledger
-        .destination(&id)
+        .gateway(&id)
         .expect("reads")
         .expect("the gateway is paired");
     row.addrs = vec![impostor.spawned.addr.to_string()];
-    ledger.put_destination(&row).expect("writes");
+    ledger.put_gateway(&row).expect("writes");
     let untrusted = fetch();
     assert_eq!(
         untrusted.outcome,

@@ -290,6 +290,27 @@ pub fn purge(connection: &Connection, id: &str) -> Result<()> {
     Ok(())
 }
 
+/// **Merge the search indexes so that what a purge removed leaves their segments.** The indexes
+/// are contentless: deleting a row only marks it, and the words of a purged item stay in the
+/// segment pages (and so in the file, and in a backup) until a merge rewrites them. `optimize`
+/// merges every segment into one and drops the marked rows.
+///
+/// **Bounded by construction:** the work is one merge of each index per *member action* (a
+/// purge, an emptied trash) or per *launch pass* ([`crate::Vault::compact_search`], run once at
+/// the end of a pass that purged something), never per purged item; and it runs only when
+/// something was purged. Its cost is the size of the two indexes, paid once.
+///
+/// # Errors
+/// A database error.
+pub fn compact(connection: &Connection) -> Result<()> {
+    connection.execute("INSERT INTO search(search) VALUES ('optimize')", [])?;
+    connection.execute(
+        "INSERT INTO search_past(search_past) VALUES ('optimize')",
+        [],
+    )?;
+    Ok(())
+}
+
 /// The words of some texts, in the order they first appear, each once.
 fn distinct_words(texts: &[&str]) -> Vec<String> {
     let mut seen = HashSet::new();

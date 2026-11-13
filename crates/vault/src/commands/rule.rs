@@ -398,7 +398,7 @@ fn apply(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         .connection()
         .prepare(
             "SELECT t.id, t.account_id, abs(t.amount_minor), t.category_id,
-                    COALESCE(json_extract(s.stated, '$.title'), e.title), e.title
+                    COALESCE(s.stated_title, e.title), e.title
                FROM txn t JOIN entity e ON e.id = t.id
                LEFT JOIN source s ON s.entity_id = t.id
               WHERE e.deleted_at IS NULL AND t.status <> 'void'

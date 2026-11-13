@@ -29,12 +29,12 @@
 //!
 //! ## `locker_key` carries one id, never material
 //!
-//! `locker_key(key_id PK, created_at)` holds **at most one row**, the vault's
-//! generation, and a unique index on a constant makes a second one
-//! unrepresentable (in the baseline, `contracts/migrations/001_baseline.sql`):
+//! `locker_key(id, key_id, created_at, ..)` holds **at most one row**, the vault's
+//! generation, and a singleton key makes a second one unrepresentable, as the `vault` row is
+//! (in the baseline, `contracts/migrations/001_baseline.sql`):
 //!
 //! ```sql
-//! CREATE UNIQUE INDEX locker_key_one_generation ON locker_key((1))
+//! id INTEGER PRIMARY KEY CHECK (id = 1)
 //! ```
 //!
 //! `K` is the seed's single leaf, so there is no `K′` to rotate to and nothing
@@ -68,7 +68,7 @@ pub const LOCKER_ENCRYPTED_COLUMNS: &[(&str, &str, &[&str])] = &[
         "id",
         &["password", "otp_seed", "card_number", "cvv", "content"],
     ),
-    ("locker_item_field", "field_id", &["value_sealed"]),
+    ("locker_item_field", "id", &["value_sealed"]),
     ("locker_item_passkey", "item_id", &["private_key"]),
 ];
 
@@ -490,7 +490,7 @@ impl crate::file::Vault {
                     .and_then(serde_json::Value::as_array)
                     .into_iter()
                     .flatten()
-                    .find(|row| text(row, "field_id").as_deref() == Some(field_id));
+                    .find(|row| text(row, "id").as_deref() == Some(field_id));
                 match field {
                     Some(field) if text(field, "kind").as_deref() == Some("sealed") => {
                         (field.clone(), "value_sealed")
@@ -522,7 +522,7 @@ impl crate::file::Vault {
                 "SELECT f.value_sealed, f.key_id
                    FROM locker_item_field f
                    JOIN entity i ON i.id = f.item_id
-                  WHERE f.field_id = ?1 AND f.item_id = ?2
+                  WHERE f.id = ?1 AND f.item_id = ?2
                     AND f.kind = ?3 AND i.deleted_at IS NULL",
             )?;
             let mut rows = statement.query([field_id, item_id, kind])?;
@@ -557,7 +557,7 @@ mod tests {
     }
 
     /// A real vault file (the ladder head, which carries the whole Locker plane
-    /// and `locker_key_one_generation`), reopened on a plain writable
+    /// and the singleton `locker_key`), reopened on a plain writable
     /// connection with its generation named.
     fn founded() -> Fixture {
         let dir = tempfile::tempdir().expect("scratch dir");
@@ -571,7 +571,7 @@ mod tests {
         connection
             .execute(
                 "INSERT INTO locker_key (key_id, created_at) \
-                 VALUES ('k-1', '2026-01-01T00:00:00Z')",
+                 VALUES ('k-1', '2026-01-01T00:00:00.000Z')",
                 [],
             )
             .unwrap();
@@ -607,20 +607,21 @@ mod tests {
             .connection
             .execute(
                 "INSERT INTO locker_key (key_id, created_at) \
-                 VALUES ('k-2', '2026-01-02T00:00:00Z')",
+                 VALUES ('k-2', '2026-01-02T00:00:00.000Z')",
                 [],
             )
             .unwrap_err();
         assert!(
-            error.to_string().contains("locker_key_one_generation"),
-            "locker_key_one_generation must refuse a second row: {error}"
+            error
+                .to_string()
+                .contains("CHECK constraint failed: id = 1"),
+            "the singleton key must refuse a second row: {error}"
         );
     }
 
-    /// THE FOUNDED `locker_key` IS ONE ROW AND ONE INDEX (R-1047-D2): the table carries the
-    /// generation's id and nothing that retires one, and the only object on it besides the
-    /// table is the unique index on a constant that makes a second row unrepresentable. The
-    /// guard reads the survivor.
+    /// THE FOUNDED `locker_key` IS ONE ROW (R-1047-D2): the table carries the generation's id
+    /// and nothing that retires one, and its key is the singleton `id = 1` that makes a second row
+    /// unrepresentable. The guard reads the survivor.
     #[test]
     fn the_founded_locker_key_names_one_generation_and_nothing_retires_it() {
         let fixture = founded();
@@ -646,10 +647,16 @@ mod tests {
                 .unwrap(),
             live_locker_key_id(&fixture.connection).unwrap(),
         );
-        assert_eq!(objects, ["locker_key", "locker_key_one_generation"]);
+        assert_eq!(objects, ["locker_key"]);
         assert_eq!(
             columns,
-            ["key_id", "created_at", "failed_unlocks", "failed_unlock_at"],
+            [
+                "id",
+                "key_id",
+                "created_at",
+                "failed_unlocks",
+                "failed_unlock_at"
+            ],
             "no `retired_at`"
         );
         assert_eq!(live.as_deref(), Some("k-1"));

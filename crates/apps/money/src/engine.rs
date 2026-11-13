@@ -958,7 +958,6 @@ mod tests {
             description: id.to_owned(),
             category_concept_id: category.map(str::to_owned),
             external_id: None,
-            transfer_id: None,
             display_name: None,
             display_name_source: None,
             memo: None,

@@ -93,17 +93,45 @@ fn a_damaged_file_fails_the_line_and_is_owed_again() {
             .corrupt(&vault_id(), &wire_name)
             .expect("damages");
     }
-    let confirmed = ledger(&path).confirmed_names(&id).expect("reads").len();
-
+    let walked = state(&path)
+        .gateway(&id)
+        .expect("reads")
+        .expect("paired")
+        .cursor;
+    assert!(walked > 0, "the pass walked the library's claims");
+    // BITS FLIPPED BEHIND THE GATEWAY'S BACK: it serves them as sound, and the phone's reading
+    // finds the files will not open. (Deleting what a gateway holds as sound would only hold it,
+    // decision 30, so the phone says so and leaves the naming to the gateway's scrub.)
     let answer = check(&phone, at_home_check());
     let device = only(&answer);
     assert_eq!(device.verdict, Verdict::DamagedFile as i32, "{device:?}");
     assert!(device.files_damaged > 0);
-    assert!(
-        ledger(&path).confirmed_names(&id).expect("reads").len() < confirmed,
-        "the damaged files are no longer confirmed, so the next pass sends them again"
+    // THE GATEWAY'S OWN SCRUB MARKS WHAT IS DAMAGED: it no longer holds those names, the check
+    // says the files are missing, and the walk starts over so the next pass sends them.
+    gateway
+        .runtime
+        .block_on(gateway.spawned.scrub_now())
+        .expect("the scrub runs");
+    let answer = check(&phone, at_home_check());
+    let device = only(&answer);
+    assert_eq!(device.verdict, Verdict::MissingFiles as i32, "{device:?}");
+    assert_eq!(
+        state(&path)
+            .gateway(&id)
+            .expect("reads")
+            .expect("paired")
+            .cursor,
+        0,
+        "the files are owed again: the blob walk starts over, so the next pass sends them"
     );
     drain(&phone, quietly());
+    let held = gateway.held(&vault_id());
+    assert!(
+        file_names(&phone).iter().all(|name| held.contains(name)),
+        "the next pass sent the damaged files again"
+    );
+    let again = check(&phone, at_home_check());
+    assert_eq!(only(&again).verdict, Verdict::Opens as i32, "{again:?}");
 }
 
 /// **A DEVICE THAT DOES NOT ANSWER, A RULE THAT SAYS WAIT, AND A STOP ARE NOT RUN.**

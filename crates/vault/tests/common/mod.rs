@@ -6,6 +6,8 @@
 //! per-binary way to say so. The alternative is six copies of the same setup.
 #![allow(dead_code)]
 
+pub mod edge_shapes;
+
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -80,7 +82,7 @@ impl Scratch {
         seed: &str,
     ) -> Result<(
         Self,
-        Arc<std::sync::Mutex<centraid_vault::backup::ledger::Ledger>>,
+        Arc<std::sync::Mutex<centraid_vault::backup::state::DeviceState>>,
     )> {
         let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir)?;
@@ -89,12 +91,10 @@ impl Scratch {
         let store = centraid_blobs::ByteStore::open(file.with_extension("bytes"))
             .expect("a content store opens");
         let ledger = Arc::new(std::sync::Mutex::new(
-            centraid_vault::backup::ledger::Ledger::open(
-                centraid_vault::backup::ledger::Ledger::path_for(&file),
-            )
-            .expect("the ledger opens"),
+            centraid_vault::backup::state::DeviceState::open_beside(&file)
+                .expect("the device state opens"),
         ));
-        let blobs = centraid_blobs::ContentBytes::new(store).with_ledger(Arc::clone(&ledger));
+        let blobs = centraid_blobs::ContentBytes::new(store).with_state(Arc::clone(&ledger));
         let vault = Vault::create_with(
             file,
             Box::new(Arc::clone(&clock)),

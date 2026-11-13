@@ -712,8 +712,9 @@ fn the_detail_says_a_second_alert_free_and_travel_only_when_they_are_set() {
     assert_eq!(
         facts(world.event_data(page)),
         [
-            ("Reminder", "1 hour before"),
-            ("Second reminder", "1 day before"),
+            // Typed 1 hour then 1 day: the longer lead is the first alert.
+            ("Reminder", "1 day before"),
+            ("Second reminder", "1 hour before"),
             ("Show as", "Free"),
             ("Travel time", "30 minutes"),
             ("Calendar", calendar.as_str()),

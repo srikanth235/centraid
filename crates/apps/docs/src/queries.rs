@@ -291,6 +291,27 @@ fn ids_of(rows: &[Row], column: &str) -> Vec<String> {
     rows.iter().filter_map(|row| text_of(row, column)).collect()
 }
 
+/// The `rel` edges of the documents `ids` name at the `own` end, read on the pair of ends. A
+/// document holds many tags and is attached to many things, so the walk's key is both ends, which
+/// an edge of one relation holds once: a page that ends inside one document's edges resumes
+/// after the last one it gave.
+fn edge_rows(
+    door: &dyn PageDoor,
+    name: &'static str,
+    (own, other): (&'static str, &'static str),
+    ids: &[String],
+    rel: &str,
+) -> KitResult<Vec<Row>> {
+    Read {
+        name,
+        table: "edge",
+        select: "from_id, to_id",
+        order: (own, other),
+        column: own,
+    }
+    .within(BOUND, door, ids, Some(("rel = ?", text(rel))))
+}
+
 fn read_of(
     door: &dyn PageDoor,
     name: &'static str,
@@ -357,14 +378,12 @@ fn fold(
     .iter()
     .filter_map(|row| Some((text_of(row, "hash")?, integer_or_zero(row, "size"))))
     .collect();
-    let tag_edges = read_of(
+    let tag_edges = edge_rows(
         door,
         "docs.rows.tagged",
-        "edge",
-        "from_id, to_id",
-        "from_id",
+        ("from_id", "to_id"),
         &ids,
-        Some(("rel = ?", text("tagged"))),
+        "tagged",
     )?;
     let mut concept_ids = ids_of(&tag_edges, "to_id");
     concept_ids.sort_unstable();
@@ -413,14 +432,12 @@ fn fold(
         BTreeSet::new()
     } else {
         ids_of(
-            &read_of(
+            &edge_rows(
                 door,
                 "docs.rows.attached",
-                "edge",
-                "from_id, to_id",
-                "to_id",
+                ("to_id", "from_id"),
                 &ids,
-                Some(("rel = ?", text("attached"))),
+                "attached",
             )?,
             "to_id",
         )

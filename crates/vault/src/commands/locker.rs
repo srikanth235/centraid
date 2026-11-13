@@ -380,8 +380,8 @@ fn assert_fresh_id(ctx: &CommandCtx<'_, '_>, name: &str, id: &str) -> Result<()>
     }
     let taken: i64 = ctx.connection().query_row(
         "SELECT (SELECT COUNT(*) FROM entity WHERE id = ?1)
-              + (SELECT COUNT(*) FROM locker_item_field WHERE field_id = ?1)
-              + (SELECT COUNT(*) FROM locker_item_address WHERE address_id = ?1)",
+              + (SELECT COUNT(*) FROM locker_item_field WHERE id = ?1)
+              + (SELECT COUNT(*) FROM locker_item_address WHERE id = ?1)",
         [id],
         |row| row.get(0),
     )?;
@@ -435,7 +435,7 @@ fn set_alias(ctx: &CommandCtx<'_, '_>, item_id: &str, alias: &str) -> Result<()>
         ctx,
         "SELECT COUNT(*) FROM locker_item_alias a
            JOIN entity i ON i.id = a.item_id
-          WHERE a.alias = ?1 AND i.deleted_at IS NULL AND a.item_id <> ?2",
+          WHERE a.id = ?1 AND i.deleted_at IS NULL AND a.item_id <> ?2",
         &[trimmed, item_id],
     )?;
     if clash > 0 {
@@ -450,9 +450,9 @@ fn set_alias(ctx: &CommandCtx<'_, '_>, item_id: &str, alias: &str) -> Result<()>
     // counted one alias more than the file held, the generation carried that
     // number, and a restore refused the vault. An update moves no count.
     ctx.connection().execute(
-        "INSERT INTO locker_item_alias (alias, item_id, created_at)
+        "INSERT INTO locker_item_alias (id, item_id, created_at)
          VALUES (?1, ?2, ?3)
-         ON CONFLICT (alias) DO UPDATE
+         ON CONFLICT (id) DO UPDATE
             SET item_id = excluded.item_id, created_at = excluded.created_at",
         rusqlite::params![trimmed, item_id, ctx.now],
     )?;
@@ -491,7 +491,7 @@ fn write_field(ctx: &CommandCtx<'_, '_>, item_id: &str, write: &FieldWrite<'_>) 
             ctx.connection()
                 .query_row(
                     "SELECT value_sealed, value_text, created_at
-                       FROM locker_item_field WHERE field_id = ?1 AND item_id = ?2",
+                       FROM locker_item_field WHERE id = ?1 AND item_id = ?2",
                     rusqlite::params![field_id, item_id],
                     |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
                 )
@@ -538,10 +538,10 @@ fn write_field(ctx: &CommandCtx<'_, '_>, item_id: &str, write: &FieldWrite<'_>) 
         .map_or_else(|| ctx.now.clone(), |(_, _, created_at)| created_at.clone());
     ctx.connection().execute(
         "INSERT INTO locker_item_field
-           (field_id, item_id, section, label, kind, value_text, value_sealed,
+           (id, item_id, section, label, kind, value_text, value_sealed,
             position, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
-         ON CONFLICT(field_id) DO UPDATE SET
+         ON CONFLICT(id) DO UPDATE SET
            section = excluded.section,
            label = excluded.label,
            kind = excluded.kind,
@@ -604,7 +604,7 @@ fn set_addresses(ctx: &CommandCtx<'_, '_>, item_id: &str, addresses: &[String]) 
         let address_id = ctx.next_id();
         ctx.connection().execute(
             "INSERT INTO locker_item_address
-               (address_id, item_id, url, position, created_at)
+               (id, item_id, url, position, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5)",
             rusqlite::params![address_id, item_id, url, position, ctx.now],
         )?;
@@ -730,7 +730,7 @@ const ALIAS_IS_FREE: CommandCondition = CommandCondition {
             ctx,
             "SELECT COUNT(*) FROM locker_item_alias a
                JOIN entity i ON i.id = a.item_id
-              WHERE a.alias = ?1 AND i.deleted_at IS NULL AND a.item_id <> ?2",
+              WHERE a.id = ?1 AND i.deleted_at IS NULL AND a.item_id <> ?2",
             &[trimmed, item_id],
         )?;
         Ok((clash > 0)
@@ -767,7 +767,7 @@ const FIELD_VALUE_IS_SEALED: CommandCondition = CommandCondition {
                 let existing = count(
                     ctx,
                     "SELECT COUNT(*) FROM locker_item_field
-                      WHERE field_id = ?1 AND item_id = ?2",
+                      WHERE id = ?1 AND item_id = ?2",
                     &[field_id, item_id],
                 )?;
                 if existing > 0 {
@@ -1420,7 +1420,7 @@ fn duplicate_item() -> CommandDefinition {
             let addresses = {
                 let mut statement = ctx.connection().prepare(
                     "SELECT url FROM locker_item_address
-                      WHERE item_id = ?1 ORDER BY position, address_id",
+                      WHERE item_id = ?1 ORDER BY position, id",
                 )?;
                 let rows = statement.query_map([&source_id], |row| row.get::<_, String>(0))?;
                 rows.collect::<rusqlite::Result<Vec<_>>>()?
@@ -1522,7 +1522,7 @@ fn set_field() -> CommandDefinition {
             // every sealed cell's, so the generation guard can check it.
             if sealed_value {
                 ctx.connection().execute(
-                    "UPDATE locker_item_field SET key_id = ?1 WHERE field_id = ?2",
+                    "UPDATE locker_item_field SET key_id = ?1 WHERE id = ?2",
                     rusqlite::params![ctx.optional_str("key_id"), written],
                 )?;
             }
@@ -1553,7 +1553,7 @@ fn remove_field() -> CommandDefinition {
             let item_id = ctx.required_str("item_id")?.to_owned();
             let field_id = ctx.required_str("field_id")?.to_owned();
             ctx.connection().execute(
-                "DELETE FROM locker_item_field WHERE field_id = ?1 AND item_id = ?2",
+                "DELETE FROM locker_item_field WHERE id = ?1 AND item_id = ?2",
                 rusqlite::params![field_id, item_id],
             )?;
             ctx.touch(&item_id)?;
@@ -1836,7 +1836,7 @@ fn totp_code() -> CommandDefinition {
                 let found = count(
                     ctx,
                     "SELECT COUNT(*) FROM locker_item_field f JOIN entity e ON e.id = f.item_id
-                      WHERE f.field_id = ?1 AND f.item_id = ?2 AND f.kind = 'otp'
+                      WHERE f.id = ?1 AND f.item_id = ?2 AND f.kind = 'otp'
                         AND f.value_sealed IS NOT NULL AND e.deleted_at IS NULL",
                     &[field_id, item_id],
                 )?;

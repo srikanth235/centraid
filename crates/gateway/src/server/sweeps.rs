@@ -8,7 +8,7 @@
 //! # TWO CADENCES
 //!
 //! **Purge is hourly** and cheap — an indexed query and an unlink per
-//! tombstone past its grace — so "deleted" means gone on a timescale a member
+//! hold past its week — so "deleted" means gone on a timescale a member
 //! perceives, and the interval never quietly becomes a second grace.
 //!
 //! **Scrub is quarterly**: it reads every stored byte to re-hash it, which on a
@@ -133,35 +133,93 @@ pub fn failed_at(every: Duration, now_ms: i64) -> i64 {
     now_ms.saturating_sub(every.saturating_sub(retry).max(0))
 }
 
-/// Purge every tombstone past its grace. Blocking: run it off the runtime.
+/// The hourly sweep: shift every hold by the whole gap since `last_purge_ms`
+/// if it is past three sweep intervals, purge every hold past its week (a frozen vault's
+/// excepted), prune what has expired — nonces, old pairing secrets, old
+/// revoked-token tombstones — and remove orphan files. Blocking: run it off
+/// the runtime. Answers how many objects it purged.
 ///
 /// # Errors
 ///
 /// A store fault. One fault ends the pass rather than skipping an object: a
 /// pass that walked past what it could not remove would report a clean run
 /// over a failing disk.
-pub fn purge_once(shared: &Shared) -> Result<u64, Fault> {
+pub fn purge_once(shared: &Shared, last_purge_ms: i64) -> Result<u64, Fault> {
+    let now = shared.now();
+    let unwatched = shared.rules(|gateway| gateway.account_for_gap(last_purge_ms, now))?;
+    if unwatched > 0 {
+        tracing::info!(
+            minutes = unwatched / 60_000,
+            "the gateway was not watching: every hold moved later by that time"
+        );
+    }
     let mut purged = 0;
+    let mut cursor: Option<(i64, VaultId, Name)> = None;
     loop {
-        let now = shared.now();
-        let due = shared.rules(|gateway| gateway.purgeable(now, PAGE))?;
-        if due.is_empty() {
-            return Ok(purged);
-        }
-        let mut progressed = false;
-        for (vault, name) in due {
+        let due = shared.rules(|gateway| {
+            gateway.purgeable(
+                cursor.as_ref().map(|(at, vault, name)| (*at, vault, name)),
+                now,
+                PAGE,
+            )
+        })?;
+        let Some(last) = due.last().copied() else {
+            break;
+        };
+        cursor = Some(last);
+        for (_, vault, name) in due {
             let store = shared.store();
             if shared.rules(|gateway| {
                 gateway.purge(&vault, &name, now, || store.remove(&vault, &name))
             })? {
                 purged += 1;
-                progressed = true;
             }
         }
-        if !progressed {
-            return Ok(purged);
+    }
+    let pruned = shared.rules(|gateway| gateway.prune(now))?;
+    let orphans = orphans_once(shared)?;
+    tracing::info!(
+        nonces = pruned.nonces,
+        secrets = pruned.secrets,
+        revoked_tokens = pruned.revoked_tokens,
+        orphans,
+        "housekeeping"
+    );
+    Ok(purged)
+}
+
+/// List `objects/` once and remove every file with no row that is also older
+/// than an hour: what a crash between a bundle's renames and its commit left.
+/// Counts only.
+///
+/// # Errors
+///
+/// A store fault, or a read error other than a missing file.
+pub fn orphans_once(shared: &Shared) -> Result<u64, Fault> {
+    // A commit in this process is between its renames and its rows: its files
+    // have no row yet and are not orphans. Stand aside; the next sweep comes.
+    if shared.commits_in_flight() {
+        return Ok(0);
+    }
+    let now = shared.now();
+    let mut removed = 0;
+    let files = shared
+        .store()
+        .files()
+        .map_err(|error| StoreFault::new(error.to_string()))?;
+    for found in files {
+        let store = shared.store();
+        if shared.rules(|gateway| {
+            gateway.remove_orphan(&found.vault, &found.name, found.modified_ms, now, || {
+                #[cfg(feature = "test-harness")]
+                store.knobs().before_orphan_unlink();
+                store.remove(&found.vault, &found.name)
+            })
+        })? {
+            removed += 1;
         }
     }
+    Ok(removed)
 }
 
 /// Re-hash every stored object against its digest and mark what no longer
@@ -213,20 +271,22 @@ pub async fn run(shared: Handle, schedule: Schedule) {
         tokio::time::sleep(TICK).await;
         if due(schedule.purge_every, finished.purge_ms, shared.now()) {
             let held = shared.clone();
-            finished.purge_ms = match tokio::task::spawn_blocking(move || purge_once(&held)).await {
-                Ok(Ok(purged)) => {
-                    tracing::info!(purged, "purge sweep");
-                    shared.now()
-                }
-                Ok(Err(fault)) => {
-                    tracing::warn!(%fault, "purge sweep failed");
-                    failed_at(schedule.purge_every, shared.now())
-                }
-                Err(error) => {
-                    tracing::warn!(%error, "purge sweep did not finish");
-                    failed_at(schedule.purge_every, shared.now())
-                }
-            };
+            let last_purge = finished.purge_ms;
+            finished.purge_ms =
+                match tokio::task::spawn_blocking(move || purge_once(&held, last_purge)).await {
+                    Ok(Ok(purged)) => {
+                        tracing::info!(purged, "purge sweep");
+                        shared.now()
+                    }
+                    Ok(Err(fault)) => {
+                        tracing::warn!(%fault, "purge sweep failed");
+                        failed_at(schedule.purge_every, shared.now())
+                    }
+                    Err(error) => {
+                        tracing::warn!(%error, "purge sweep did not finish");
+                        failed_at(schedule.purge_every, shared.now())
+                    }
+                };
             record(&shared, &finished);
         }
         if due(schedule.scrub_every, finished.scrub_ms, shared.now()) {

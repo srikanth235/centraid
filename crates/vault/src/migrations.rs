@@ -100,12 +100,17 @@ fn run_rungs(connection: &Connection, ladder: &[Migration], from: i64) -> Result
         let outcome = connection
             .execute_batch(rung.sql)
             .and_then(|()| connection.pragma_update(None, "user_version", rung.version));
-        if let Err(error) = outcome {
-            let _ = connection.execute_batch("ROLLBACK");
-            return Err(VaultError::from_sqlite(
+        let outcome = outcome.map_err(|error| {
+            VaultError::from_sqlite(
                 &format!("migration {} `{}`", rung.version, rung.name),
                 error,
-            ));
+            )
+        });
+        let outcome =
+            outcome.and_then(|()| crate::stage::reached(crate::stage::Stage::RungWritten));
+        if let Err(error) = outcome {
+            let _ = connection.execute_batch("ROLLBACK");
+            return Err(error);
         }
         connection
             .execute_batch("COMMIT")

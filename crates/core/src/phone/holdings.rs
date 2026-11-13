@@ -28,7 +28,7 @@ use centraid_api_proto::core_v1 as wire;
 use centraid_vault::Vault;
 use centraid_vault::backup::files::ContentFile;
 use centraid_vault::backup::holdings::{FileOwner, Holdings, holdings};
-use centraid_vault::backup::ledger::Ledger;
+use centraid_vault::backup::state::DeviceState;
 
 use super::{Outcome, plane_error, records_backed_up_at};
 use crate::catalog::APPS;
@@ -79,12 +79,12 @@ const fn owner_app(owner: FileOwner) -> &'static str {
 /// The ledger's refusal, or a vault that will not read.
 pub(crate) fn read(
     vault: &Vault,
-    ledger: &Ledger,
+    state: &DeviceState,
     files: &[ContentFile],
     outcomes: &[Outcome],
     lagging: &[Vec<String>],
 ) -> Result<Held> {
-    let records_at = records_backed_up_at(ledger)?;
+    let records_at = records_backed_up_at(state)?;
     let since = records_at
         .and_then(|at| i64::try_from(at).ok())
         .map(centraid_vault::clock::format_iso_ms);

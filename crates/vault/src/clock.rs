@@ -51,6 +51,35 @@ impl<T: Ids + ?Sized> Ids for std::sync::Arc<T> {
     }
 }
 
+/// **How far the clock may stand from the vault's last commit** (`vault.written_at`) before a pass
+/// that deletes trusts it (#1191, V19). A phone whose clock jumps years ahead would otherwise read
+/// every trashed row as long overdue and every action key as expired, and a purge cannot be
+/// undone. Past this bound, in either direction, the launch pass of the trash purges nothing and
+/// the commit that writes an action key forgets none; both resume on a pass where the clock is
+/// within the bound (a real commit moves `written_at`).
+pub const CLOCK_BOUND_DAYS: i64 = 7;
+
+/// Whether `now_ms` is within [`CLOCK_BOUND_DAYS`] of the vault's last commit. A vault that has
+/// not committed a change yet (`written_at` unset) has nothing to compare with and trusts the clock.
+///
+/// # Errors
+/// A database error.
+pub fn is_credible(connection: &rusqlite::Connection, now_ms: i64) -> crate::error::Result<bool> {
+    let written: Option<String> = connection
+        .query_row("SELECT written_at FROM vault", [], |row| row.get(0))
+        .or_else(|error| match error {
+            rusqlite::Error::QueryReturnedNoRows => Ok(None),
+            other => Err(other),
+        })?;
+    let Some(written_ms) = written
+        .as_deref()
+        .and_then(crate::time::recurrence::parse_instant_ms)
+    else {
+        return Ok(true);
+    };
+    Ok((now_ms - written_ms).abs() <= CLOCK_BOUND_DAYS * 86_400_000)
+}
+
 /// The host clock.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SystemClock;
@@ -90,6 +119,11 @@ impl FixedClock {
     pub fn advance_ms(&self, millis: i64) {
         self.millis
             .fetch_add(millis.unsigned_abs(), Ordering::Relaxed);
+    }
+
+    /// Set the clock to `millis`, backwards too: a test of a clock that slips.
+    pub fn set_ms(&self, millis: i64) {
+        self.millis.store(millis.unsigned_abs(), Ordering::Relaxed);
     }
 
     /// Move the clock forward by whole days.

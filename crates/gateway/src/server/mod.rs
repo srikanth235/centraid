@@ -11,7 +11,8 @@
 //! | Path | What |
 //! | --- | --- |
 //! | `tls.key`, `tls.crt`, `gateway.id` | the identity, minted together at first `serve`, mode 0600 ([`tls`]) |
-//! | `state.db` (with `-wal`, `-shm`) | vaults, hashed tokens and secrets, heads, snapshots, the object index ([`state`]) |
+//! | `nonce.key` | the key nonces are MAC'd under, minted with the identity, mode 0600; never leaves |
+//! | `state.db` (with `-wal`, `-shm`) | vaults, hashed tokens and secrets, heads, snapshots, the object index; `application_id` `CGW3` and a `user_version` ladder ([`state`]) |
 //! | `objects/<vault>/<nn>/<name>` | one sealed object per file ([`store`]) |
 //! | `incoming/` | uploads being staged; emptied at start |
 //! | `serve.json` | the address `serve` last bound, which `pair` and `health` read |
@@ -30,6 +31,7 @@
 //! | [`serve`] | the one bind and accept loop, and the in-process Bonjour advertisement |
 //! | [`bonjour`] | who advertises: the system's `dns-sd` on macOS, [`serve`]'s advertisement elsewhere |
 //! | [`sweeps`] | purge hourly, scrub quarterly |
+//! | [`operator`] | `freeze`, `unfreeze`, `undo`, `purge-now`, `delete-vault`: the member's last word |
 //! | [`harness`] | a real gateway on an ephemeral port, for tests in any crate |
 //! | [`addrs`] | the addresses the pairing QR lists |
 //! | [`report`] | what the terminal says: the payload, the safety number, `pairings` |
@@ -37,8 +39,12 @@
 
 pub mod addrs;
 pub mod bonjour;
+#[cfg(feature = "test-harness")]
 pub mod harness;
 pub mod http;
+#[cfg(feature = "test-harness")]
+pub mod knobs;
+pub mod operator;
 pub mod qr;
 pub mod report;
 pub mod serve;
@@ -61,7 +67,7 @@ use crate::rules::limits::SECRET_TTL_MS;
 use crate::rules::payload::{PAYLOAD_VERSION, PairPayload};
 use crate::rules::state::{Fault, StoreFault};
 use crate::rules::wire::PairKind;
-use crate::server::state::{STATE_FILE, SqliteState};
+use crate::server::state::{OpenStateError, STATE_FILE, SqliteState};
 use crate::server::store::ObjectStore;
 use crate::server::tls::{Identity, IdentityError};
 
@@ -147,6 +153,10 @@ pub enum OpenError {
     Identity(#[from] IdentityError),
     #[error(transparent)]
     State(#[from] StoreFault),
+    /// The data folder is an earlier gateway's, or a newer one's, and was
+    /// left as it was. The text is the sentence to print; the binary exits 2.
+    #[error("{0}")]
+    Refused(String),
     #[error("{0}: {1}")]
     Io(String, std::io::Error),
     #[error("the TLS configuration: {0}")]
@@ -162,6 +172,20 @@ pub struct Shared {
     clock: Clock,
     data_dir: PathBuf,
     announcer: Option<Announcer>,
+    /// How many commits are between a file's rename and its row, in this
+    /// process: the orphan sweep stands aside while any is.
+    committing: std::sync::atomic::AtomicUsize,
+}
+
+/// A commit between rename and row. While one is alive the orphan sweep
+/// removes nothing.
+#[derive(Debug)]
+pub struct CommitGuard<'a>(&'a std::sync::atomic::AtomicUsize);
+
+impl Drop for CommitGuard<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
 }
 
 impl core::fmt::Debug for Shared {
@@ -192,6 +216,30 @@ pub fn os_random<const N: usize>() -> Result<[u8; N], StoreFault> {
     Ok(bytes)
 }
 
+/// The file the nonce MAC key lives in, beside the identity, mode 0600. It
+/// never leaves the machine and is in no answer.
+pub const NONCE_KEY_FILE: &str = "nonce.key";
+
+fn load_or_mint_nonce_key(data_dir: &Path) -> Result<[u8; 32], OpenError> {
+    let path = data_dir.join(NONCE_KEY_FILE);
+    if let Ok(bytes) = std::fs::read(&path)
+        && let Ok(key) = <[u8; 32]>::try_from(bytes.as_slice())
+    {
+        return Ok(key);
+    }
+    let key = os_random::<32>()?;
+    let io = |error| OpenError::Io(path.display().to_string(), error);
+    let staged = data_dir.join(format!("{NONCE_KEY_FILE}.tmp"));
+    std::fs::write(&staged, key).map_err(io)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(&staged, std::fs::Permissions::from_mode(0o600)).map_err(io)?;
+    }
+    std::fs::rename(&staged, &path).map_err(io)?;
+    Ok(key)
+}
+
 impl Shared {
     /// Open the gateway whose data directory this is, minting its identity
     /// at first use.
@@ -202,20 +250,29 @@ impl Shared {
     pub fn open(data_dir: &Path, clock: Clock) -> Result<Self, OpenError> {
         std::fs::create_dir_all(data_dir)
             .map_err(|error| OpenError::Io(data_dir.display().to_string(), error))?;
+        // THE STATE IS OPENED FIRST. A data folder an earlier gateway made, or
+        // a newer one, or another program's file, is refused before anything
+        // else is written: no identity is minted beside it, no directory made
+        // (#1191, R7), so the folder is exactly as the member left it.
+        let state = SqliteState::open(&data_dir.join(STATE_FILE)).map_err(|error| match error {
+            OpenStateError::Refused(sentence) => OpenError::Refused(sentence),
+            OpenStateError::Fault(fault) => OpenError::State(fault),
+        })?;
         // Drawn on every open and used only on the first: the id is minted
         // with the certificate, from the OS.
         let fresh_id = GatewayId::from_bytes(os_random::<16>()?);
         let identity = Identity::load_or_mint(data_dir, || fresh_id)?;
-        let state = SqliteState::open(&data_dir.join(STATE_FILE))?;
+        let nonce_key = load_or_mint_nonce_key(data_dir)?;
         let store = ObjectStore::open(data_dir)
             .map_err(|error| OpenError::Io(data_dir.display().to_string(), error))?;
         Ok(Self {
-            gateway: Mutex::new(Gateway::new(state, identity.gateway_id())),
+            gateway: Mutex::new(Gateway::new(state, identity.gateway_id(), nonce_key)),
             store,
             identity,
             clock,
             data_dir: data_dir.to_path_buf(),
             announcer: None,
+            committing: std::sync::atomic::AtomicUsize::new(0),
         })
     }
 
@@ -306,6 +363,31 @@ impl Shared {
     /// A store fault if the generator cannot be read.
     pub fn fresh_token(&self) -> Result<Token, Fault> {
         Ok(Token::from_bytes(os_random::<32>()?))
+    }
+
+    /// Mark a commit as begun: held across the renames and the transaction
+    /// that writes their rows, so the orphan sweep cannot take a file a commit
+    /// in this process is about to list. The age check is the second margin,
+    /// for a process that crashed.
+    pub fn commit_guard(&self) -> CommitGuard<'_> {
+        self.committing
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        CommitGuard(&self.committing)
+    }
+
+    /// Whether a commit is between its renames and its rows.
+    #[must_use]
+    pub fn commits_in_flight(&self) -> bool {
+        self.committing.load(std::sync::atomic::Ordering::SeqCst) > 0
+    }
+
+    /// A fresh nonce, from the OS.
+    ///
+    /// # Errors
+    ///
+    /// A store fault if the generator cannot be read.
+    pub fn fresh_nonce_id(&self) -> Result<[u8; 16], Fault> {
+        Ok(os_random::<16>()?)
     }
 
     pub(crate) fn announce(&self, event: &Event) {

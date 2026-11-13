@@ -26,6 +26,11 @@
       },
       {
         "schema": "vault",
+        "table": "reminder",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
         "table": "edge",
         "verbs": "read"
       },

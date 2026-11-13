@@ -19,3 +19,5 @@ A change touches several layers that must agree; tests and gates fail until they
 | Making an app keep trash, earlier versions, export, share or Undo; adding a promise row | [keep-a-promise.md](keep-a-promise.md) |
 | SQL craft | [stack/sqlite](../stack/sqlite/centraid.md) |
 | Proving it and shipping | [land](../land/SKILL.md) |
+
+A change to a tool's arguments or results, or to the kinds, fields or verbs the assistant can use, also changes what the fine-tune data should contain: read the assistant skill's [data page](../assistant/data.md) and run `datagen drift` before merge.

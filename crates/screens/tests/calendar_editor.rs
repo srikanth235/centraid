@@ -1074,7 +1074,8 @@ fn an_edit_opens_both_alerts_and_changing_only_the_second_writes_both() {
     world.save(page);
     assert_eq!(
         minutes_before(&world.event_row(&id).expect("event")),
-        [30, 1440]
+        // Longest lead first, whichever slot the member typed it in (#1191).
+        [1440, 30]
     );
 }
 
@@ -1998,7 +1999,7 @@ fn a_refused_save_keeps_every_field_the_member_changed_as_an_earlier_version() {
     assert_eq!(held("event.travel_min"), 30);
     assert_eq!(held("event.calendar_id"), other_calendar.as_str());
     assert_eq!(held("event.url"), "https://example.test/room");
-    assert_eq!(held("event.reminders"), "[30]");
+    assert_eq!(held("reminder[30]")["offset_min"], 30);
     assert_eq!(held(&format!("attendee[{maya}]"))["to_id"], maya.as_str());
     // The event itself stands as the other surface left it.
     let row = world.event_row(&id).expect("event");

@@ -67,7 +67,7 @@ wait "$registered""#;
 
 /// What follows `dns-sd` on its command line to register this gateway: the
 /// service's name, its type, the default domain, the port, and the TXT record a
-/// phone reads — `gw` (the gateway's id) and `v=2`, the same as the in-process
+/// phone reads — `gw` (the gateway's id) and `v=3`, the same as the in-process
 /// advertisement.
 #[must_use]
 pub fn registration_args(gateway_id: &GatewayId, port: u16) -> Vec<String> {
@@ -79,7 +79,7 @@ pub fn registration_args(gateway_id: &GatewayId, port: u16) -> Vec<String> {
         "local".to_owned(),
         port.to_string(),
         format!("gw={id}"),
-        "v=2".to_owned(),
+        format!("v={}", crate::rules::limits::PROTOCOL),
     ]
 }
 
@@ -246,7 +246,7 @@ mod tests {
                 "local",
                 "8443",
                 "gw=0123456789abcdef0123456789abcdef",
-                "v=2"
+                "v=3"
             ]
         );
     }
@@ -330,7 +330,7 @@ mod tests {
         assert_eq!(
             args,
             "-R centraid-gateway-01234567 _centraid-gateway._tcp local 8443 \
-             gw=0123456789abcdef0123456789abcdef v=2"
+             gw=0123456789abcdef0123456789abcdef v=3"
         );
         assert!(alive(&pid), "registered while the gateway holds it");
 

@@ -26,6 +26,11 @@
       },
       {
         "schema": "vault",
+        "table": "transfer",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
         "table": "budget",
         "verbs": "read"
       },
@@ -2272,7 +2277,7 @@
         {
           "name": "transfer",
           "type": "text",
-          "source": ["txn", "transfer_id"]
+          "source": ["transfer", "b"]
         },
         {
           "name": "status",

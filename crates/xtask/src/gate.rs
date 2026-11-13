@@ -829,7 +829,14 @@ fn run_whole_workspace_tests(ctx: &Ctx) -> Result<Outcome> {
     if !cargo_subcommand_available(&ctx.root, "nextest") {
         return process(ctx, "test", "cargo", &["test", "--workspace"]);
     }
-    let nextest = process(ctx, "test", "cargo", &["nextest", "run", "--workspace"])?;
+    // `--no-fail-fast` (#1191): a red run names every failing test, not only the
+    // first. The step fails exactly as before; a fix round is then one round.
+    let nextest = process(
+        ctx,
+        "test",
+        "cargo",
+        &["nextest", "run", "--workspace", "--no-fail-fast"],
+    )?;
     let Outcome::Ok(nextest) = nextest else {
         return Ok(nextest);
     };

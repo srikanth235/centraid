@@ -603,7 +603,7 @@ fn the_banks_words_stay_in_the_statement_whatever_the_line_is_called_now() {
     // A re-import whose words a rule has already rewritten.
     statement(&w, &account, "ref", None, "Amazon Marketplace");
     assert_eq!(
-        w.one::<String>("SELECT json_extract(stated, '$.title') FROM source", &[]),
+        w.one::<String>("SELECT stated_title FROM source", &[]),
         "AMZN MKTP US*2K4"
     );
     assert_eq!(

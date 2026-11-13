@@ -394,13 +394,14 @@ fn events(inputs: &Inputs, zone: &FireZone, window: &Window) -> Vec<wire::Pendin
                 calendar.name.clone().filter(|name| !name.trim().is_empty())
             })
             .unwrap_or_default();
-        let reminders = if day_alert {
-            &event.reminders[..event.reminders.len().min(1)]
-        } else {
-            &event.reminders[..]
-        };
-        for reminder in reminders {
-            let minutes = reminder.minutes_before;
+        // The first alert is the one that fires first: the longest lead.
+        let mut leads: Vec<i64> = centraid_vault::alerts::longest_first(
+            event.reminders.iter().map(|r| r.minutes_before).collect(),
+        );
+        if day_alert {
+            leads.truncate(1);
+        }
+        for minutes in leads {
             let fire_ms = if day_alert {
                 start_ms
             } else {

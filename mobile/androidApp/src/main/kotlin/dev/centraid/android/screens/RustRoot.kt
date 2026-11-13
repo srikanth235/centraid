@@ -348,6 +348,14 @@ internal class RustRoot(
         }
         val home = view.home
         if (home != null) {
+            // A RESTORE REOPEN of a damaged vault just landed: Home enters the restore entry once.
+            val restoreAsked by AppSession.restoreAsked.collectAsState()
+            LaunchedEffect(restoreAsked) {
+                if (restoreAsked) {
+                    AppSession.restoreAskTold()
+                    runtime.send(top.instance, ScreenEvent(home = HomeEvent(restore = HomeEvent.RestorePressed())))
+                }
+            }
             HomeScreen(
                 state = home,
                 band = navigation?.band,

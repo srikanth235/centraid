@@ -84,10 +84,19 @@ fn a_device_away_past_the_wait_still_restores_the_whole_vault() {
         80_000,
     );
 
+    // SEALED OVER A METERED LINK, where nothing crosses: both gateways owe every part.
+    let sealed = drain(
+        &phone,
+        wire::DrainRequest {
+            metered: true,
+            ..quietly()
+        },
+    );
+    assert_eq!(sealed.confirmed_parts, 0, "{sealed:?}");
     second.cable().cut();
     drain(&phone, at_home());
     assert!(
-        !ledger(&path).queued().expect("reads").is_empty(),
+        !owed(&path, &two).is_empty(),
         "kept for the one that is away"
     );
 
@@ -106,11 +115,12 @@ fn a_device_away_past_the_wait_still_restores_the_whole_vault() {
     second.cable().mend();
     let moved = drain(&phone, at_home());
     assert_eq!(moved.stopped, wire::DrainStop::Empty as i32, "{moved:?}");
-    let book = ledger(&path);
+    let _ = &one;
+    let returned = second.held(&vault_id());
     assert!(
-        book.confirmed_names(&one)
-            .expect("reads")
-            .is_subset(&book.confirmed_names(&two).expect("reads")),
+        file_names(&phone)
+            .iter()
+            .all(|name| returned.contains(name)),
         "the returned device holds everything the other does"
     );
     let backed = status(&phone);
@@ -141,7 +151,8 @@ fn a_spool_at_its_budget_lets_go_without_a_hole() {
 
     second.cable().cut();
     drain(&phone, at_home());
-    let held_by_first = ledger(&path).confirmed_names(&one).expect("reads");
+    let _ = &one;
+    let held_by_first = first.held(&vault_id());
     assert!(!held_by_first.is_empty());
     let behind = status(&phone);
     assert_eq!(behind.content_confirmed, 0, "{behind:?}");

@@ -10,8 +10,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::rules::code::Code;
-use crate::rules::ids::{Digest, GatewayId, Name, Secret, Signature, Token, VaultId};
+use crate::rules::code::{Code, Refusal};
+use crate::rules::ids::{Digest, GatewayId, Name, Nonce, Secret, Signature, Token, VaultId};
 
 /// The header an object's digest travels in, both ways: `blake3=<64 hex>`.
 pub const DIGEST_HEADER: &str = "content-digest";
@@ -20,7 +20,7 @@ pub const DIGEST_HEADER: &str = "content-digest";
 /// `HEAD` — which has no body — still says which refusal it is.
 pub const CODE_HEADER: &str = "centraid-code";
 
-/// `GET /v2/info`.
+/// `GET /v3/info`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Info {
     pub gateway_id: GatewayId,
@@ -66,7 +66,18 @@ pub struct ClaimBody {
     /// The head the claimer fetched and checked; absent on a vault with none.
     #[serde(default)]
     pub head_seen: Option<Name>,
-    /// See [`crate::rules::claim::claim_preimage`].
+    /// See [`crate::rules::signing::claim_preimage`].
+    pub signature: Signature,
+}
+
+/// The last claim a vault accepted, as a `MOVED` carries it: everything the
+/// old phone needs to verify it against its own vault identity key (E4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClaimView {
+    pub epoch: u64,
+    #[serde(default)]
+    pub head_seen: Option<Name>,
+    pub nonce: Nonce,
     pub signature: Signature,
 }
 
@@ -76,7 +87,24 @@ pub struct ReadBody {
     pub signature: Signature,
 }
 
-/// `POST /v2/pair`.
+/// A pairing by secret: the secret from the QR, and the vault key's
+/// signature over its hash and the nonce (E7).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SecretBody {
+    pub secret: Secret,
+    /// See [`crate::rules::signing::pair_preimage`].
+    pub signature: Signature,
+}
+
+/// `POST /v3/nonce`'s answer: a nonce good for one pair request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NonceAnswer {
+    pub nonce: Nonce,
+    pub ttl_ms: i64,
+}
+
+/// `POST /v3/pair`. Every kind carries a nonce from `POST /v3/nonce`, signed
+/// into its preimage and spent by the request, whatever its outcome.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PairRequest {
     pub vault_id: VaultId,
@@ -84,15 +112,16 @@ pub struct PairRequest {
     #[serde(default)]
     pub label: String,
     pub kind: PairKind,
+    pub nonce: Nonce,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub secret: Option<Secret>,
+    pub secret: Option<SecretBody>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claim: Option<ClaimBody>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub read: Option<ReadBody>,
 }
 
-/// What `POST /v2/pair` answers. **The only time the token exists outside the
+/// What `POST /v3/pair` answers. **The only time the token exists outside the
 /// phone**: the gateway keeps its BLAKE3 and cannot print it again.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Paired {
@@ -102,22 +131,38 @@ pub struct Paired {
     pub gateway_id: GatewayId,
 }
 
-/// The head as an answer carries it.
+/// The head as the phone signed it, served unchanged (E2): the phone
+/// verifies the signature, the gateway id and the vault id before it
+/// believes any field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HeadView {
     /// The snapshot manifest's name.
     pub name: Name,
-    /// When the phone took the snapshot, on the phone's clock.
+    /// The head this one replaced, or none.
+    #[serde(default)]
+    pub prev: Option<Name>,
+    /// When the phone took the snapshot, on the phone's clock (signed).
     pub taken_at_ms: i64,
-    /// **The vault's writer epoch as of this answer**, not the epoch that set
-    /// the head: it is the number a restoring phone claims one past, and the
-    /// number a superseded phone freezes on.
+    /// **The writer epoch the phone held when it signed.**
     pub epoch: u64,
-    /// When the gateway moved the head, on the gateway's clock.
+    /// The vault's standing claim, beside the signed head and the same shape
+    /// `MOVED` carries: a restoring phone takes the writer epoch as the
+    /// greater of the verified head's epoch and the verified claim's, and
+    /// acts on neither unverified. `None` while the vault has never been
+    /// claimed.
+    #[serde(default)]
+    pub claim: Option<ClaimView>,
+    /// The signed counter shared by heads, deletes and undos.
+    pub generation: u64,
+    /// The vault's write counter in the snapshot.
+    pub writes: u64,
+    /// When the gateway moved the head, on the gateway's clock (unsigned).
     pub set_at_ms: i64,
+    /// See [`crate::rules::signing::head_preimage`].
+    pub signature: Signature,
 }
 
-/// `PUT /v2/v/{vault}/head`.
+/// `PUT /v3/v/{vault}/head`. The epoch is the token's, not sent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SetHead {
     pub name: Name,
@@ -125,14 +170,100 @@ pub struct SetHead {
     #[serde(default)]
     pub prev: Option<Name>,
     pub taken_at_ms: i64,
+    pub generation: u64,
+    pub writes: u64,
+    pub signature: Signature,
 }
 
-/// One registered snapshot.
+/// One registered snapshot. A snapshot whose manifest is held for deletion
+/// stays listed, with its dates, so a restore can still choose it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SnapshotView {
     pub name: Name,
     pub taken_at_ms: i64,
     pub registered_at_ms: i64,
+    /// The writer epoch and generation the head naming this snapshot was signed at: the signed
+    /// order of snapshots. Absent (0) from a gateway that does not say.
+    #[serde(default)]
+    pub epoch: u64,
+    #[serde(default)]
+    pub generation: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub held_at_ms: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purge_after_ms: Option<i64>,
+}
+
+/// What a held name is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum HeldKind {
+    Object,
+    Snapshot,
+}
+
+/// One entry of `GET held`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HeldEntry {
+    pub name: Name,
+    pub size: u64,
+    pub digest: Digest,
+    pub kind: HeldKind,
+    pub held_at_ms: i64,
+    pub purge_after_ms: i64,
+}
+
+/// `POST /v3/v/{vault}/delete`: the names, and the vault key's signature
+/// over them and the generation (E6).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeleteRequest {
+    pub names: Vec<Name>,
+    pub generation: u64,
+    pub signature: Signature,
+}
+
+/// `POST /v3/v/{vault}/check`: the vault key's signature over one name and the generation
+/// (decision 34). The gateway hashes that stored object against its recorded digest.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CheckRequest {
+    pub name: Name,
+    pub generation: u64,
+    pub signature: Signature,
+}
+
+/// What a check found.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CheckState {
+    /// The stored bytes hash to the recorded digest; nothing changed.
+    Intact,
+    /// They do not (or the file is gone): the name is marked damaged, so a signed delete frees
+    /// it at once.
+    Damaged,
+    /// The gateway holds no object of that name.
+    Missing,
+}
+
+/// What `POST check` answers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Checked {
+    pub state: CheckState,
+}
+
+/// `POST /v3/v/{vault}/undo`: lift the holds of `names`, or of every hold
+/// when `names` is null.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UndoRequest {
+    #[serde(default)]
+    pub names: Option<Vec<Name>>,
+    pub generation: u64,
+    pub signature: Signature,
+}
+
+/// What `POST undo` answers: how many holds were lifted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Undone {
+    pub undone: u64,
 }
 
 /// `{names: [...]}`, the body of `exists`, `fetch` and `delete`.
@@ -162,6 +293,54 @@ pub struct ObjectEntry {
 pub struct NameRefusal {
     pub name: Name,
     pub code: Code,
+    /// With `NAME_TAKEN`: the digest the gateway recorded (additive).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub digest: Option<Digest>,
+    /// With `NAME_TAKEN`: why the name is not free (additive).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<NameState>,
+}
+
+impl NameRefusal {
+    /// A refusal with only a code.
+    #[must_use]
+    pub const fn code(name: Name, code: Code) -> Self {
+        Self {
+            name,
+            code,
+            digest: None,
+            state: None,
+        }
+    }
+
+    /// What one frame's or name's refusal says, `NAME_TAKEN` companions
+    /// included.
+    #[must_use]
+    pub fn of(name: Name, refusal: &Refusal) -> Self {
+        let (digest, state) = match refusal {
+            Refusal::NameTaken { digest, state } => (Some(*digest), Some(*state)),
+            _ => (None, None),
+        };
+        Self {
+            name,
+            code: refusal.code(),
+            digest,
+            state,
+        }
+    }
+}
+
+/// Why a name a `PUT` wanted is not free.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NameState {
+    /// Stored and live under another digest.
+    Live,
+    /// Held for deletion (a signed delete is waiting out its week).
+    Held,
+    /// The gateway found its file missing or rotten. Only a signed delete
+    /// frees the name.
+    Damaged,
 }
 
 /// What `POST bundle` answers: each frame exactly as a `PUT` of that frame
@@ -178,23 +357,30 @@ pub struct BundleAnswer {
 }
 
 impl BundleAnswer {
-    /// Every name the gateway now holds a sealing of, in the order the
-    /// answer lists them: `stored`, `already`, and each `NAME_TAKEN`. A name
-    /// is a function of the plaintext, so another digest under it is the
-    /// same bytes sealed again (#1080, the root's ruling A15). These are the
-    /// names a phone may record as acknowledged.
+    /// Every name the gateway now holds this frame's bytes under: `stored`
+    /// and `already`. A `NAME_TAKEN` is not here (see [`Self::taken`]).
     #[must_use]
     pub fn acknowledged(&self) -> Vec<Name> {
-        self.stored
+        self.stored.iter().chain(&self.already).copied().collect()
+    }
+
+    /// Every frame refused `NAME_TAKEN`: `(name, recorded digest, state)`.
+    /// **Not acknowledgements.** A phone compares the digest with the one it
+    /// sent: equal is the same bytes, held; another digest on a live name is
+    /// a name it must not count as stored, and on a damaged name it is the
+    /// cue for a signed delete.
+    #[must_use]
+    pub fn taken(&self) -> Vec<(Name, Digest, NameState)> {
+        self.refused
             .iter()
-            .chain(&self.already)
-            .copied()
-            .chain(
-                self.refused
-                    .iter()
-                    .filter(|refusal| refusal.code == Code::NameTaken)
-                    .map(|refusal| refusal.name),
-            )
+            .filter(|refusal| refusal.code == Code::NameTaken)
+            .filter_map(|refusal| {
+                Some((
+                    refusal.name,
+                    refusal.digest?,
+                    refusal.state.unwrap_or(NameState::Live),
+                ))
+            })
             .collect()
     }
 }
@@ -202,9 +388,14 @@ impl BundleAnswer {
 /// What `POST delete` answers.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeleteAnswer {
-    /// Tombstoned now, tombstoned before, or never held: either way, deleted.
+    /// Held now, held before, or never stored: either way, deleted.
     /// Deleting is idempotent (#1080, the root's ruling A15).
     pub deleted: Vec<Name>,
+    /// Damaged objects the delete removed at once, row and file, with no hold:
+    /// the bytes were already bad and an undo would restore nothing. The names
+    /// are free (additive; an older gateway never says).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub freed: Vec<Name>,
     /// Only `HEAD_IN_USE`: the head's own manifest.
     pub refused: Vec<NameRefusal>,
 }
@@ -220,15 +411,19 @@ pub struct Revoked {
 mod tests {
     use super::*;
 
-    /// The pair body is the issue's shape: one `kind`, and only its own
-    /// payload field on the wire.
+    /// The pair body is one `kind`, the nonce, and only its own payload field
+    /// on the wire.
     #[test]
     fn a_secret_pairing_serialises_without_the_other_kinds_fields() {
         let request = PairRequest {
             vault_id: VaultId::from_bytes([1; 32]),
             label: "Ada's phone".to_owned(),
             kind: PairKind::Secret,
-            secret: Some(Secret::from_bytes([2; 16])),
+            nonce: Nonce::from_bytes([3; 40]),
+            secret: Some(SecretBody {
+                secret: Secret::from_bytes([2; 16]),
+                signature: Signature::from_bytes([4; 64]),
+            }),
             claim: None,
             read: None,
         };
@@ -246,12 +441,27 @@ mod tests {
     #[test]
     fn a_set_head_without_prev_expects_no_head() {
         let name = Name::from_bytes([3; 32]);
+        let signature = Signature::from_bytes([1; 64]);
         for text in [
-            format!(r#"{{"name":"{name}","taken_at_ms":5}}"#),
-            format!(r#"{{"name":"{name}","prev":null,"taken_at_ms":5}}"#),
+            format!(
+                r#"{{"name":"{name}","taken_at_ms":5,"generation":1,"writes":2,"signature":"{signature}"}}"#
+            ),
+            format!(
+                r#"{{"name":"{name}","prev":null,"taken_at_ms":5,"generation":1,"writes":2,"signature":"{signature}"}}"#
+            ),
         ] {
             let parsed: SetHead = serde_json::from_str(&text).expect("parses");
             assert_eq!(parsed.prev, None, "{text}");
         }
+    }
+
+    /// An undo of every hold writes `names: null`, and a missing `names`
+    /// reads the same.
+    #[test]
+    fn an_undo_of_everything_has_null_names() {
+        let signature = Signature::from_bytes([1; 64]);
+        let text = format!(r#"{{"generation":3,"signature":"{signature}"}}"#);
+        let parsed: UndoRequest = serde_json::from_str(&text).expect("parses");
+        assert_eq!(parsed.names, None);
     }
 }

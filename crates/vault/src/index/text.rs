@@ -17,8 +17,8 @@
 //!
 //! A link a member pasted on an event, an occurrence or a task is findable by
 //! its words (`zoom` finds `https://zoom.us/j/123`), like a Locker item's.
-//! What a note's links say (`edge.anchor`, `{"wikilink": title}`) is a copy of
-//! words in `note.body`, which is indexed, so the anchor adds nothing.
+//! What a note's links say (`edge.wikilink`, the title in the words) is a copy of
+//! words in `note.body`, which is indexed, so the column adds nothing.
 //!
 //! **Earlier versions are searched too** (#1185: every field a member typed is
 //! findable, and note history has no exemption). The words of a kept version
@@ -188,11 +188,11 @@ pub fn text_of(connection: &Connection, id: &str, kind: Kind) -> Result<Option<S
              UNION ALL SELECT phone FROM locker_item WHERE id = ?1
              UNION ALL SELECT brand FROM locker_item WHERE id = ?1
              UNION ALL SELECT memo FROM locker_item WHERE id = ?1
-             UNION ALL SELECT alias FROM (
-                 SELECT alias FROM locker_item_alias WHERE item_id = ?1 ORDER BY alias)
+             UNION ALL SELECT id FROM (
+                 SELECT id FROM locker_item_alias WHERE item_id = ?1 ORDER BY id)
              UNION ALL SELECT url FROM (
                  SELECT url FROM locker_item_address WHERE item_id = ?1
-                  ORDER BY position, address_id)",
+                  ORDER BY position, id)",
             id,
         )?,
         _ => return Ok(None),

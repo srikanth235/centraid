@@ -36,10 +36,17 @@ enum HealthGlanceWriter {
         }
         guard let directory = AgendaGlanceSnapshot.containerURL() else { throw Failure.noContainer }
         do {
+            var file = directory.appendingPathComponent(name)
             try glance.document.write(
-                to: directory.appendingPathComponent(name),
+                to: file,
                 options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
             )
+            // `.atomic` replaces the file, and a replaced file is a new one: the exclusion from the
+            // iCloud backup is set after every write, not once (it is a copy of the member's
+            // health numbers, and the widget rebuilds it on the next change).
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            try file.setResourceValues(values)
         } catch {
             throw Failure.write(String(describing: error))
         }

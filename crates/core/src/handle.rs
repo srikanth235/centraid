@@ -179,10 +179,10 @@ pub struct HandleState {
     /// not queued (`phone.proto`): a background window's call must not sit
     /// behind a foreground pass it cannot see and expire holding nothing.
     draining: AtomicBool,
-    /// Snapshots copied from the vault by this core, and the pages those copies held: counts a
-    /// test states what a pass cost by, never how long it took.
-    copies: AtomicU64,
-    pages_copied: AtomicU64,
+    /// Walks of the vault this core has made, and the ranges they sealed: counts a test states
+    /// what a pass cost by, never how long it took.
+    walks: AtomicU64,
+    ranges_sealed: AtomicU64,
     /// How far a running "Check my backup" has got (#1188, B6).
     check_progress: crate::phone::check::Progress,
     /// One check at a time.
@@ -294,6 +294,7 @@ impl Core {
             seed,
             spool_ceiling,
             shelf: shelf_config,
+            without_vault,
         } = config;
         // BEFORE THE FILE IS TOUCHED. A stale core that opened the vault and
         // then refused would have already run whatever migration its own
@@ -337,7 +338,7 @@ impl Core {
         // of a restore that has not landed — and it draws that rather than
         // being handed a failure. Founding an empty one instead would be a
         // silently empty product over the member's own data.
-        let vault = if !founded && !create {
+        let vault = if without_vault || (!founded && !create) {
             None
         } else {
             Some(Self::open_vault(
@@ -357,7 +358,7 @@ impl Core {
         let registry = Arc::new(Registry::with_system_commands()?);
         let launched = std::time::SystemTime::now();
         let plane = crate::phone::Plane::of(&path).with_ceiling(spool_ceiling);
-        // A SNAPSHOT'S COPY OF THE VAULT A CRASH LEFT IN THE CLEAR goes before anything else runs.
+        // A CHECK'S SCRATCH A CRASH LEFT (and any copy of the vault an earlier build left in the clear) goes first.
         plane.sweep_scratch();
         let handle = Handle::new(|me| HandleState {
             me,
@@ -379,8 +380,8 @@ impl Core {
             bytes: Mutex::new(None),
             runtime: Mutex::new(None),
             draining: AtomicBool::new(false),
-            copies: AtomicU64::new(0),
-            pages_copied: AtomicU64::new(0),
+            walks: AtomicU64::new(0),
+            ranges_sealed: AtomicU64::new(0),
             check_progress: crate::phone::check::Progress::default(),
             checking: AtomicBool::new(false),
             reconciled: AtomicBool::new(false),
@@ -715,10 +716,10 @@ impl HandleState {
                 "the byte store adopted the layout it had before #1080"
             );
         }
-        let ledger_path = centraid_vault::backup::ledger::Ledger::path_for(&self.path);
-        let door = match centraid_vault::backup::ledger::Ledger::open(&ledger_path) {
+        let ledger_path = centraid_vault::backup::state::DeviceState::path_for(&self.path);
+        let door = match centraid_vault::backup::state::DeviceState::open_beside(&self.path) {
             Ok(ledger) => {
-                centraid_blobs::ContentBytes::new(store).with_ledger(Arc::new(Mutex::new(ledger)))
+                centraid_blobs::ContentBytes::new(store).with_state(Arc::new(Mutex::new(ledger)))
             }
             Err(error) => {
                 tracing::warn!(
@@ -1484,6 +1485,17 @@ impl HandleState {
             K::CheckBackup(request) => Ok(response(wire::response::Kind::CheckBackup(
                 self.check_backup(request, &cancellation)?,
             ))),
+            // THE TOKENS THE SHELL KEEPS (#1191, E12): held in memory, written nowhere.
+            K::GatewayTokens(request) => Ok(response(wire::response::Kind::GatewayTokens(
+                crate::phone::gateway_tokens(&self.plane, self.keys.as_ref(), request)?,
+            ))),
+            // THE MEMBER'S UNDO of what a gateway is holding (#1191, E6).
+            K::UndoHeld(request) => {
+                let runtime = self.runtime_handle()?;
+                Ok(response(wire::response::Kind::UndoHeld(
+                    crate::phone::undo_held(&self.plane, self.keyring()?, &runtime, request)?,
+                )))
+            }
             // PAIRING NEEDS NO VAULT TO BE OPEN: it needs the vault's keys,
             // and keeps the gateway in the ledger beside the file.
             K::PairPhone(request) => {
@@ -1514,14 +1526,26 @@ impl HandleState {
             // whole of what it is for (F2).
             K::Restore(request) => {
                 let runtime = self.runtime_handle()?;
-                Ok(response(wire::response::Kind::Restore(
+                // A CORE THAT HOLDS NO VAULT OVER A FILE THAT IS THERE is the handle a shell asked
+                // for after the vault failed to open as damaged (decision 35): the restore may
+                // replace that vault and nothing else. A front core's path is never a file.
+                let over_damaged = !self.holds_a_replica() && self.path.is_file();
+                Ok(response(wire::response::Kind::Restore(if over_damaged {
+                    crate::phone::restore::run_over_damaged(
+                        &self.path,
+                        request,
+                        &runtime,
+                        Some(cancellation),
+                        &mut |_| {},
+                    )?
+                } else {
                     crate::phone::restore::run_cancellable(
                         &self.path,
                         request,
                         &runtime,
                         cancellation,
-                    )?,
-                )))
+                    )?
+                })))
             }
             // A STATUS READ ANSWERS WITH OR WITHOUT A VAULT: the ledger is
             // beside the file, and the content counts need the file.
@@ -1648,9 +1672,13 @@ impl HandleState {
             }
             K::ForgetDestination(request) => {
                 let runtime = self.runtime_handle()?;
-                let vault = self.keys.as_ref().map(crate::phone::Keyring::vault_id);
                 Ok(response(wire::response::Kind::ForgetDestination(
-                    crate::phone::forget_destination(&self.plane, vault, &runtime, request)?,
+                    crate::phone::forget_destination(
+                        &self.plane,
+                        self.keys.as_ref(),
+                        &runtime,
+                        request,
+                    )?,
                 )))
             }
             K::RefreshDestination(request) => {
@@ -1770,20 +1798,20 @@ impl HandleState {
         self.plane.pretend_free_bytes(bytes);
     }
 
-    /// Record one vault copy of `pages` pages.
-    pub(crate) fn note_copy(&self, pages: u32) {
-        self.copies.fetch_add(1, Ordering::Relaxed);
-        self.pages_copied
-            .fetch_add(u64::from(pages), Ordering::Relaxed);
+    /// Record one walk of the vault that sealed `ranges` ranges.
+    pub(crate) fn note_walk(&self, ranges: u64) {
+        self.walks.fetch_add(1, Ordering::Relaxed);
+        self.ranges_sealed.fetch_add(ranges, Ordering::Relaxed);
     }
 
-    /// How many copies of the vault this core has taken, and how many pages they held.
+    /// How many times this core has walked the vault for a snapshot, and how many ranges those
+    /// walks sealed.
     #[doc(hidden)]
     #[must_use]
-    pub fn copies_taken(&self) -> (u64, u64) {
+    pub fn walks_taken(&self) -> (u64, u64) {
         (
-            self.copies.load(Ordering::Relaxed),
-            self.pages_copied.load(Ordering::Relaxed),
+            self.walks.load(Ordering::Relaxed),
+            self.ranges_sealed.load(Ordering::Relaxed),
         )
     }
 
@@ -1808,8 +1836,8 @@ impl HandleState {
     ) -> wire::CheckBackupResponse {
         let devices = self
             .plane
-            .ledger()
-            .and_then(|ledger| ledger.destinations().map_err(crate::phone::plane_error))
+            .state()
+            .and_then(|ledger| ledger.gateways().map_err(crate::phone::plane_error))
             .unwrap_or_default()
             .into_iter()
             .filter(|d| request.gateway_id.is_empty() || d.gateway_id == request.gateway_id)
@@ -1901,8 +1929,8 @@ impl HandleState {
         let store = self.bytes().map(|door| door.store().clone());
         let plane = &self.plane;
         let paired = !plane
-            .ledger()?
-            .destinations()
+            .state()?
+            .gateways()
             .map_err(crate::phone::plane_error)?
             .is_empty();
         let seal = match (&self.keys, paired) {
@@ -1988,7 +2016,7 @@ impl HandleState {
                 sealed,
             } => {
                 let plane = &self.plane;
-                let ledger = plane.ledger()?;
+                let ledger = plane.state()?;
                 let in_store = self.bytes().is_some_and(|door| {
                     door.store()
                         .is_complete(centraid_blobs::ContentHash::from_bytes(*h.as_bytes()))
@@ -2000,11 +2028,10 @@ impl HandleState {
                         .map_err(crate::phone::plane_error)?
                         .is_some();
                 ledger
-                    .put_local(&centraid_vault::backup::ledger::LocalBytes {
+                    .put_local(&centraid_vault::backup::state::LocalBytes {
                         hash: h,
-                        source: centraid_vault::backup::ledger::LocalSource::Os,
+                        source: centraid_vault::backup::state::LocalSource::Os,
                         os_ref: Some(os_ref),
-                        verified_ms: Some(crate::phone::now_ms()),
                         edited,
                     })
                     .map_err(crate::phone::plane_error)?;
@@ -2118,6 +2145,11 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             // anyway — the commit guard is what decides, and it is
             // all-or-nothing.
             | K::Found(_)
+            // HANDING THE CORE ITS GATEWAY TOKENS is one read of the device
+            // state and a map in memory (#1191, E12).
+            | K::GatewayTokens(_)
+            // AN UNDO IS ONE LISTING OF THE HOLDS (200 a page) AND ONE SIGNED REQUEST.
+            | K::UndoHeld(_)
             // PAIRING IS BOUNDED: one payload, one pairing, a claim retried
             // at most three times. It talks to the network, which is not the
             // same question — `Bounded` is "finishes on its own bounded by its
@@ -2345,9 +2377,9 @@ mod tests {
             door.path_of(&id).expect("it answers").is_some(),
             "nothing is inlined, so a grid has a file to open"
         );
-        assert!(door.ledger().is_some(), "the door reads the backup ledger");
+        assert!(door.state().is_some(), "the door reads the backup ledger");
         assert!(
-            scratch.dir.join("vault.backup.db").is_file(),
+            scratch.dir.join("vault.state.db").is_file(),
             "the ledger is beside the vault, where the backup plane keeps it"
         );
     }
@@ -2427,14 +2459,13 @@ mod tests {
             .expect("a blob is named by its hash")
             .to_owned();
         std::fs::remove_file(&path).expect("the store's copy goes");
-        let local = centraid_vault::backup::ledger::LocalBytes {
+        let local = centraid_vault::backup::state::LocalBytes {
             hash: centraid_vault::backup::naming::PlaintextHash::from_hex(&hash).expect("a hash"),
-            source: centraid_vault::backup::ledger::LocalSource::Os,
+            source: centraid_vault::backup::state::LocalSource::Os,
             os_ref: Some("library-item-1".to_owned()),
-            verified_ms: Some(1),
             edited: false,
         };
-        let ledger = door.ledger().expect("the door reads the ledger");
+        let ledger = door.state().expect("the door reads the ledger");
         ledger
             .lock()
             .expect("the ledger")
@@ -3030,9 +3061,13 @@ mod tests {
             panic!("a forget answers");
         };
         assert!(!forgot.forgotten);
+        // A DRAIN CARRIES THE MEMBER'S RULE; a request without one is refused (#1191).
         let Ok(wire::response::Kind::Drain(drained)) = ask(
             &scratch,
-            wire::request::Kind::Drain(wire::DrainRequest::default()),
+            wire::request::Kind::Drain(wire::DrainRequest {
+                rule: wire::TransferRule::WifiOnly as i32,
+                ..wire::DrainRequest::default()
+            }),
         ) else {
             panic!("a drain answers");
         };

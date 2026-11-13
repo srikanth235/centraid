@@ -9,6 +9,7 @@
 //! | [`apps`] | "In this backup": one row per app, what it holds and whether it is backed up |
 //! | [`line`] | the one honest line Home draws too: never more than a gateway acknowledged |
 //! | [`reading`] | the ledger's reading, and the `backup-status` query behind it |
+//! | [`states`] | what a device says about itself when it is not just behind, a check's stated rate, the restore ask |
 //! | [`rule`] | the member's transfer rule and the videos bit, as this phone keeps them |
 //! | [`key`] | where the recovery key is, worded for the platform |
 //! | [`freeze`] | what is only on this phone when the vault moved |
@@ -38,6 +39,7 @@ pub mod line;
 pub mod reading;
 pub mod rule;
 pub mod stale;
+pub mod states;
 
 #[cfg(test)]
 mod tests;

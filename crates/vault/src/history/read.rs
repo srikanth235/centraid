@@ -256,23 +256,39 @@ pub fn head(connection: &Connection, id: &str) -> Result<i64> {
 
 /// What [`head`] will be once the commit in progress settles: the head, plus one when the
 /// commit has changed what a member can see of the entity (the same test [`super::settle`] makes
-/// at the door). A handler answers it as the new revision.
+/// at the door) and keeps a version for it. A QUIET save that folds into the session of the
+/// newest version keeps none, so the head does not move: the same decision `settle` makes
+/// ([`super::folds`]) is made here with the same facts (`now`, `cause`, `quiet`). A handler
+/// answers it as the new revision, and the next save names it.
 ///
 /// # Errors
 /// A database error.
-pub fn head_after(connection: &Connection, id: &str) -> Result<i64> {
-    let now = head(connection, id)?;
-    let changed: bool = connection.query_row(
-        &format!(
-            "SELECT EXISTS (SELECT 1 FROM temp.{SEEN} s
-                             WHERE s.entity_id = ?1 AND s.state IS NOT NULL
-                               AND s.state IS NOT (SELECT v.state FROM temp.{STATE_VIEW} v
-                                                    WHERE v.entity_id = s.entity_id))"
-        ),
-        [id],
-        |row| row.get(0),
-    )?;
-    Ok(now + i64::from(changed))
+pub fn head_after(
+    connection: &Connection,
+    id: &str,
+    now: &str,
+    cause: &str,
+    quiet: bool,
+) -> Result<i64> {
+    let head_now = head(connection, id)?;
+    let changed: Option<(String, String)> = connection
+        .query_row(
+            &format!(
+                "SELECT s.state, v.state FROM temp.{SEEN} s
+                   JOIN temp.{STATE_VIEW} v ON v.entity_id = s.entity_id
+                  WHERE s.entity_id = ?1 AND s.state IS NOT NULL AND s.state IS NOT v.state"
+            ),
+            [id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+    let Some((before, after)) = changed else {
+        return Ok(head_now);
+    };
+    if quiet && super::folds(connection, id, &before, &after, now, cause)? {
+        return Ok(head_now);
+    }
+    Ok(head_now + 1)
 }
 
 /// How many earlier versions an entity holds: what a detail screen's "Earlier versions" entry

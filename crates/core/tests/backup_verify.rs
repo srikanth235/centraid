@@ -62,7 +62,8 @@ fn a_pass_reads_back_a_sample_and_finds_a_part_a_gateway_damaged() {
         .gateway_id;
     note(&phone, "something to back up");
     drain(&phone, at_home());
-    let before = ledger(&path).confirmed_names(&id).expect("reads");
+    let _ = (&path, &id);
+    let before = gateway.held(&vault_id());
     assert!(!before.is_empty());
 
     // EVERY OBJECT THE GATEWAY HOLDS LOSES A BIT, so any sample finds one.
@@ -73,12 +74,30 @@ fn a_pass_reads_back_a_sample_and_finds_a_part_a_gateway_damaged() {
             .corrupt(&vault_id(), &wire_name)
             .expect("damages");
     }
-    drain(&phone, quietly());
-    let after = ledger(&path).confirmed_names(&id).expect("reads");
+    // THE GATEWAY'S OWN SCRUB NAMES WHAT IS DAMAGED, and the read-back finds the names it no
+    // longer serves.
+    gateway
+        .runtime
+        .block_on(gateway.spawned.scrub_now())
+        .expect("the scrub runs");
+    // THE READ-BACK RUNS BEFORE THE PASS WRITES, so the same pass retakes the snapshot: the
+    // damaged names were freed at the gateway (a signed delete frees a damaged name at once) and
+    // sent anew.
+    let mended = drain(&phone, quietly());
     assert!(
-        after.len() < before.len(),
-        "the damaged parts are no longer confirmed: {} of {}",
-        after.len(),
+        mended.acked_at_ms.is_some(),
+        "the pass that found the damage retook the snapshot: {mended:?}"
+    );
+    let again = drain(&phone, quietly());
+    assert!(
+        again.acked_at_ms.is_none() && !phone.plane().snapshot_owed(),
+        "nothing found damaged the second time: {again:?}"
+    );
+    let held = gateway.held(&vault_id());
+    assert!(
+        before.iter().all(|name| held.contains(name)) || held.len() >= before.len(),
+        "what was damaged is held again: {} of {}",
+        held.len(),
         before.len()
     );
 }
@@ -207,19 +226,11 @@ fn a_snapshot_dated_in_the_future_does_not_suppress_the_next_one() {
 
     // THE CLOCK WAS A YEAR AHEAD WHEN THAT SNAPSHOT WAS TAKEN.
     let year = 365 * 24 * 60 * 60 * 1_000_u64;
-    let book = ledger(&path);
-    for snapshot in book.snapshots().expect("reads") {
-        book.forget_snapshot(&snapshot.name).expect("forgets");
-        book.record_snapshot(
-            &snapshot.name,
-            snapshot.taken_at_ms + year,
-            &snapshot.manifest_json,
-        )
-        .expect("re-dates");
-        if let Some(acked) = snapshot.acked_ms {
-            book.ack_snapshot(&snapshot.name, acked)
-                .expect("acknowledged");
-        }
+    let book = state(&path);
+    for mut row in book.gateways().expect("reads") {
+        row.head_ms = row.head_ms.map(|at| at + year);
+        row.snapshot_ms = row.snapshot_ms.map(|at| at + year);
+        book.put_gateway(&row).expect("re-dates");
     }
     let next = drain(&phone, quietly());
     assert!(
@@ -243,8 +254,9 @@ fn a_gateway_that_lies_about_exists_is_found_and_then_refilled() {
         .gateway_id;
     note(&phone, "something to back up");
     drain(&phone, at_home());
-    let before = ledger(&path).confirmed_names(&id).expect("reads").len();
-    assert!(before > 0);
+    let _ = (&path, &id);
+    let before = gateway.held(&vault_id());
+    assert!(!before.is_empty());
 
     gateway.spawned.lie_about_exists(true);
     for name in gateway.held(&vault_id()) {
@@ -254,25 +266,168 @@ fn a_gateway_that_lies_about_exists_is_found_and_then_refilled() {
             .lose(&vault_id(), &wire_name)
             .expect("the file is lost");
     }
+    // THE READ-BACK IS WHAT FINDS IT: `exists` says held, so a plan believes the gateway and
+    // nothing is sealed; the sample reads the bytes and they are not there. The gateway's row says
+    // it must be re-sent, which the honest passes below do.
     drain(&phone, quietly());
-    let after = ledger(&path).confirmed_names(&id).expect("reads").len();
+    let flagged = status(&phone);
+    let row = flagged
+        .destinations
+        .iter()
+        .find(|row| row.gateway_id == id)
+        .expect("paired");
     assert!(
-        after < before,
-        "the read-back found what exists denied: {after} of {before}"
+        row.rolled_back || row.manifest_unreadable,
+        "the gateway is marked as having lost what it said it held: {row:?}"
     );
 
     gateway.spawned.lie_about_exists(false);
-    // EACH PASS READS BACK A SAMPLE, so parts it never sampled are found over later passes and
-    // sent again; a small bound is enough for a handful of parts.
+    // THE NEXT PASSES RETAKE THE SNAPSHOT against an honest gateway: every range is missing, so
+    // every range is sealed and sent again, and the head moves to a manifest the gateway holds.
     for _ in 0..40 {
         drain(&phone, at_home());
-        if ledger(&path).confirmed_names(&id).expect("reads").len() == before {
+        let head = gateway.writer(&vault_id()).1;
+        if head.is_some_and(|head| gateway.held(&vault_id()).contains(&head)) {
             break;
         }
     }
+    let head = gateway.writer(&vault_id()).1.expect("a head");
+    let held = gateway.held(&vault_id());
+    assert!(held.contains(&head), "an honest gateway is refilled");
+    assert!(
+        held.len() >= before.len() - 1,
+        "every range came back: {} of {}",
+        held.len(),
+        before.len()
+    );
+}
+
+fn record_of(
+    gateway: &Gateway,
+    name: &centraid_gateway::rules::ids::Name,
+) -> Option<centraid_gateway::rules::state::ObjectRecord> {
+    gateway
+        .objects(&vault_id())
+        .into_iter()
+        .find(|record| &record.name == name)
+}
+
+/// Back up one photograph and a note, twice, so the head's blobs tree names the photograph's part
+/// with the digests this phone sealed it with; answers the phone, its vault path, the gateway
+/// name of the photograph's only part and the gateway's id.
+fn backed_up_photograph(
+    gateway: &Gateway,
+    dir: &Path,
+) -> (
+    centraid_core::Handle,
+    std::path::PathBuf,
+    centraid_gateway::rules::ids::Name,
+) {
+    let path = dir.join("vault.db");
+    let phone = phone(dir);
+    pair(&phone, gateway);
+    let photo = bytes_of("a photograph the gateway will rot", 70_000);
+    let staged = stage(&phone, owned("image/heic", &photo), &photo);
+    add_asset(&phone, &staged, "photo");
+    drain(&phone, at_home());
+    note(
+        &phone,
+        "a change, so a snapshot that names the photograph is taken",
+    );
+    drain(
+        &phone,
+        wire::DrainRequest {
+            asked: true,
+            ..at_home()
+        },
+    );
+    let object = gateway_name(&staged.content_hash, 0);
+    (phone, path, object)
+}
+
+/// **A ROTTED ORIGINAL NOBODY SCRUBBED IS FOUND BY THE READ-BACK** (#1191, B13, decision 34): the
+/// pass reads a sampled chunk by `Range`, finds it is not the digest the blobs tree recorded, asks
+/// the gateway to check that one name, and, when the gateway agrees, frees it by a signed delete
+/// and sends the part again. No scrub ran.
+#[test]
+fn a_rotted_original_is_found_checked_freed_and_sent_again() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let (phone, _path, object) = backed_up_photograph(&gateway, dir.path());
+    let before = record_of(&gateway, &object).expect("held");
+    gateway
+        .spawned
+        .corrupt(&vault_id(), &object)
+        .expect("the part rots");
+
+    for _ in 0..4 {
+        drain(&phone, quietly());
+    }
+    let counts = gateway
+        .runtime
+        .block_on(gateway.spawned.scrub_now())
+        .expect("the scrub runs");
     assert_eq!(
-        ledger(&path).confirmed_names(&id).expect("reads").len(),
-        before,
-        "an honest gateway is refilled"
+        counts.corrupt, 0,
+        "the part was sent again, sound: {counts:?}"
+    );
+    assert!(
+        record_of(&gateway, &object).is_some_and(|record| record.is_live()),
+        "the photograph's part is live again"
+    );
+    // SEALED AGAIN UNDER A NEW SALT: the bytes differ, so a damaged name that was not freed by a
+    // signed delete (the phone's, or the mover's on NAME_TAKEN) would have refused them forever.
+    let after = record_of(&gateway, &object).expect("held");
+    assert_ne!(
+        after.digest, before.digest,
+        "the re-sealed part is not the one that rotted"
+    );
+}
+
+/// **THE READ-BACK AND THE GATEWAY DISAGREE, AND NOTHING IS DELETED** (decision 34): a digest in the
+/// blobs tree that is not the part's (a phone that recorded the wrong one) reads as wrong, the
+/// gateway hashes the object and says it is intact, and the phone does not delete a sound part.
+#[test]
+fn a_chunk_the_gateway_calls_intact_is_not_deleted() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let (phone, path, object) = backed_up_photograph(&gateway, dir.path());
+    let before = record_of(&gateway, &object).expect("held");
+    // THE PHONE'S RECORD OF THE PART'S DIGESTS IS WRONG from here on.
+    let book = state(&path);
+    book.forget_digests_except(&std::collections::BTreeSet::new())
+        .expect("forgets");
+    book.record_digests(
+        &centraid_vault::backup::naming::Name::from_bytes(*object.as_bytes()),
+        &[centraid_media::sealed::ChunkDigest::of(b"not this part")],
+    )
+    .expect("records");
+    drop(book);
+    note(&phone, "a snapshot that names the wrong digest");
+    for _ in 0..4 {
+        drain(
+            &phone,
+            wire::DrainRequest {
+                asked: true,
+                ..at_home()
+            },
+        );
+    }
+    let after = record_of(&gateway, &object).expect("still held");
+    assert!(
+        after.is_live()
+            && after.digest == before.digest
+            && after.stored_at_ms == before.stored_at_ms,
+        "a part the gateway calls intact is neither deleted nor replaced: {after:?}"
+    );
+    // THE RATE SENTENCE NEVER OVERSTATES: the chunk the read-back could not stand behind is in
+    // `sample_of` and not in `sample_checked`.
+    let status = status(&phone);
+    let row = status.destinations.first().expect("a destination");
+    assert!(
+        row.sample_checked < row.sample_of,
+        "an unverified chunk is drawn but not counted: {} of {}",
+        row.sample_checked,
+        row.sample_of
     );
 }
