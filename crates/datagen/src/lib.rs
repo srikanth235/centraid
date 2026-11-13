@@ -34,6 +34,7 @@ pub mod facts;
 pub mod fields;
 mod generate;
 pub mod grid;
+pub mod handoff;
 pub mod intent;
 pub mod labels;
 pub mod llm;

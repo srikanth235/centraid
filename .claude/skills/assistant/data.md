@@ -67,4 +67,12 @@ Rust, driving the `centraid-assist` runtime as a library. Python stays only for 
 
 ## Run
 
-`cargo run --release -p centraid-datagen -- build --version vN --out DIR --tokenizer tokenizer.json [--offline]`. Others: `catalog`, `worlds`, `intents`, `messages`, `render`, `publish`, `test-tokenizer`, `show`, `unpack-cache`, `rollout-records`, `ambiguity`. Test with `cargo test -p centraid-datagen`. The tests replay every reference call through the eval runner and check a rebuild is byte-identical.
+`cargo run --release -p centraid-datagen -- build --version vN --out DIR --tokenizer tokenizer.json [--offline]`. Others: `catalog`, `worlds`, `intents`, `messages`, `handoff`, `render`, `publish`, `test-tokenizer`, `show`, `unpack-cache`, `cache-put`, `rollout-records`, `ambiguity`. Test with `cargo test -p centraid-datagen`. The tests replay every reference call through the eval runner and check a rebuild is byte-identical.
+
+**Hand-off.** The writer and reader can be subagents instead of `claude -p`:
+
+1. `messages --collect PENDING` (or `build --collect PENDING`) writes each prompt the cache lacks to `PENDING/{writer,reader}/{train,val,test}/<hash>.json` and stops with `pending`. Nothing is asked and nothing cached.
+2. `handoff split --pending PENDING --out ROUND [--per 8]` writes shards of prompt text only: `ROUND/train/<role>-train/shard-NNNN/NNN.prompt.txt` and `ROUND/heldout/<role>-{val,test}/shard-NNNN/NNN.prompt.txt`, and the index (shard and number to hash and model) in `ROUND/index/`, outside both roots. No shard holds a hash or a model name.
+3. A subagent is handed `ROUND/train` or `ROUND/heldout`, never `ROUND`, and writes `NNN.answer.txt` beside each prompt. Whoever writes training data never opens val or test: the writers and readers of the training data are never handed `heldout`, and nobody prints, reads or logs a val or test prompt or answer; counts only.
+4. `handoff join --shards ROUND --cache <messages out>/llm-cache` puts the answers in the cache with `llm::put` under the index's hash and model; it refuses and lists an answer that is missing, empty, holds no JSON object or whose prompt was changed (it no longer hashes to the index's hash), never overwrites an entry, prints counts per role and split (counts only for val and test) and exits non-zero when anything was refused or missing, after putting the good ones.
+5. Repeat 1 to 4 until a run stops with nothing pending (the reader's prompts exist only after the writer's answers), then run once more with `--offline`. The roles of each split stay as `Models::check` has them (the writer of test is not the writer of train, no reader is its split's writer).

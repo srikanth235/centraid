@@ -34,6 +34,7 @@ Stages 0 to 7 are built (the intents, the messages, the render and the mix), plu
 | `rollout` | 11 | M7's rollout records rendered by the M4 renderer (`datagen rollout-records`). |
 | `version` | 6 + 7 | Render all, mix, write a data version (`manifest.json`, `data/`, `worlds/`, `build/`); pack and unpack its LLM cache. |
 | `publish` | 8 | Check a built version and publish it to a Hugging Face dataset repo (a dry run unless told otherwise). |
+| `handoff` | 4 | `datagen handoff split` and `join`: the prompts a collecting run wrote, cut into shards for subagents to answer and put back in the LLM cache ([Hand-off](#handoff)). |
 
 New stages add modules beside these and read `Catalog`; none reads a schema from anywhere else.
 
@@ -163,6 +164,19 @@ A turn that fails a step is dropped with a reason, and the turns after it are cu
 
 **Ask-or-act pairs** (H4): the same message in two worlds, where the name fits one row in one world (the act side) and several in the other (the ask side). They are tagged `pair:askact:<id>` and `askact:ask|act` and kept together in a split like minimal pairs. The writer writes the ask side's message once; the act side says it word for word (after the typos), so the pair differs in the world and nothing else, and is grounded and read back in each world on its own. A pair whose ask side was dropped drops the act side with reason `pair`.
 
+<a id="handoff"></a>### Hand-off: prompts answered by subagents
+
+The writer and the reader need not be `claude -p`. A run can write each prompt the cache lacks to a file, subagents answer them, and the generator reads the answers back from the cache. The loop:
+
+1. **Collect.** `datagen messages --in <intents out> --out <dir> --collect <pending>` (or `build --collect <pending>`) writes each missing prompt to `<pending>/{writer,reader}/{train,val,test}/<hash>.json` as `{model, hash, prompt}` and stops with `pending: N writer prompts written`. It asks no model and caches nothing (a collecting cache answers a miss with an empty string it does not keep). The models of each role and split are the ones of `Models::check`, unchanged: the writer of train and val is one model and of test another, and no reader is its split's writer.
+2. **Split.** `datagen handoff split --pending <pending> --out <round> [--per 8]` cuts the prompts, sorted by hash, into shards: `<round>/train/<role>-train/shard-NNNN/NNN.prompt.txt` for the train split and `<round>/heldout/<role>-{val,test}/shard-NNNN/NNN.prompt.txt` for val and test (`<role>` is `writer` or `reader`). A file holds the prompt text and nothing else. The index, which maps shard and number to hash and model, is `<round>/index/<role>-<split>.json`, outside both roots; no shard folder holds a hash or a model name. It prints counts only, and a round goes into a folder of its own.
+3. **Fill.** A subagent is handed one root, `<round>/train` or `<round>/heldout`, never `<round>`, and writes `NNN.answer.txt` beside each prompt it is given: the JSON the prompt asks for. Whoever writes training data never opens val or test, so the two roots are never given to the same agent, and nobody who writes or reads the training data is handed `heldout`.
+4. **Join.** `datagen handoff join --shards <round> --cache <messages out>/llm-cache` (or `<build out>/stages/messages/llm-cache`) puts each answer in the cache under the index's hash and model. It refuses, lists and does not put an answer that is missing, empty, holds no JSON object, or whose prompt file no longer hashes (`llm::prompt_hash(model, prompt)`) to the index's hash. It prints counts per role and split (put, already there, refused, missing); for val and test counts only, never a word of a prompt or an answer. An entry already in the cache is kept, never overwritten. The exit is non-zero when anything was refused or missing, after the good answers were put.
+5. **Repeat** collect, split, fill and join until a run stops with nothing pending: the reader's prompts exist only once the writer's answers are in, and a session the answer did not cover is asked again in a later batch, so a round holds the next step's prompts.
+6. **Build** with `--offline`: a miss is an error and the version is byte-identical to a rebuild from the same cache.
+
+`datagen cache-put --cache <dir> --answers <file.jsonl>` puts answers given as one JSON line each (`{model, hash, response}`); `handoff join` is the same through `llm::put`.
+
 ## Render and mix (stages 6 and 7)
 
 `datagen render --in <messages out> --out <dir> --tokenizer <tokenizer.json>` renders every session of a messages run and mixes the result into a data version. `datagen build --version vN --out <dir> --tokenizer <tokenizer.json>` runs intents, messages (from the cache; `--offline` makes no call), render and mix, the stages under `<dir>/stages/` (working files, not published) and the version in `<dir>/`. `datagen show --in <dir> --tokenizer <tokenizer.json> [--split train] [--session ID]` prints one record decoded with its mask drawn on it.
@@ -282,6 +296,9 @@ cargo run -p centraid-datagen -- worlds --seed 1 --out out/ [--counts 48,8,12] [
 cargo run -p centraid-datagen -- ambiguity --seed 1 [--counts 48,8,12] [--json]
 cargo run --release -p centraid-datagen -- intents --seed 1 --out out/ [--counts 48,8,12] [--sessions 7500,750,1500 | --per-world N[,N,N]] [--mistakes runs/r1.rollouts.jsonl]
 cargo run --release -p centraid-datagen -- messages --in out/ --out msgs/ [--concurrency 6] [--batch 12] [--limit N] [--offline] [--seed 1] [--writer train=haiku,val=haiku,test=sonnet] [--reader train=sonnet,val=sonnet,test=haiku] [--style-shares .4,.15,.15,.15,.15]
+cargo run --release -p centraid-datagen -- messages --in out/ --out msgs/ --collect pending/   # write the prompts the cache lacks instead of asking a model
+cargo run --release -p centraid-datagen -- handoff split --pending pending/ --out round1/ [--per 8]   # then hand a subagent round1/train or round1/heldout
+cargo run --release -p centraid-datagen -- handoff join --shards round1/ --cache msgs/llm-cache
 cargo run --release -p centraid-datagen -- render --in msgs/ --out v1/ --tokenizer tokenizer.json [--version v1] [--targets 5000,500,1000] [--decision-weight 2] [--render-concurrency 6] [the mix's flags]
 cargo run --release -p centraid-datagen -- build --version v1 --out v1/ --tokenizer tokenizer.json [--seed 1] [--counts 48,8,12] [--sessions 7500,750,1500] [--offline] [--reuse] [--mistakes FILE] [--writer ..] [--reader ..] [the mix's flags]
 cargo run --release -p centraid-datagen -- publish --in v1/ [--repo srikanth235/centraid-assist-data] [--heldout-repo srikanth235/centraid-assist-heldout] [--upload] [--public]

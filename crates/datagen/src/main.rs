@@ -15,7 +15,7 @@ use centraid_datagen::mix::{self, Shares};
 use centraid_datagen::render::DECISION_WEIGHT;
 use centraid_datagen::version::{self, Provenance, RenderConfig};
 use centraid_datagen::world::{World, WorldSpec, plan, plan_sized};
-use centraid_datagen::{Catalog, Split, messages, publish, run};
+use centraid_datagen::{Catalog, Split, handoff, messages, publish, run};
 use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
 
@@ -92,7 +92,7 @@ enum Command {
         #[arg(long)]
         offline: bool,
         /// Instead of calling a model, write each prompt the cache lacks under `<dir>/{writer,reader}/<split>/`
-        /// and stop; answer them elsewhere and put them back with `cache-put`.
+        /// and stop; cut them with `handoff split`, answer them elsewhere and put them back with `handoff join` (or `cache-put`).
         #[arg(long)]
         collect: Option<PathBuf>,
         /// At most this many sessions per split, spread evenly over its file.
@@ -151,7 +151,7 @@ enum Command {
         #[arg(long)]
         offline: bool,
         /// Instead of calling a model, write each prompt the cache lacks under `<dir>/{writer,reader}/<split>/`
-        /// and stop; answer them elsewhere and put them back with `cache-put`.
+        /// and stop; cut them with `handoff split`, answer them elsewhere and put them back with `handoff join` (or `cache-put`).
         #[arg(long)]
         collect: Option<PathBuf>,
         /// At most this many sessions per split go through messages (a trial build).
@@ -262,6 +262,13 @@ enum Command {
         #[arg(long)]
         answers: PathBuf,
     },
+    /// Prompts answered by subagents instead of a model run by this tool: `split` cuts the prompts `messages --collect` (or
+    /// `build --collect`) wrote into shards, `join` puts the answers back in the LLM cache. Run the generator again after
+    /// `join`, until nothing is pending, then once more with `--offline`.
+    Handoff {
+        #[command(subcommand)]
+        step: HandoffStep,
+    },
     /// Cut RFT records from a model's rollouts (`assist-eval rollout`) and render them with the data
     /// version's renderer, so each carries `render {input_ids, weights, text}` as a data-version record does. Writes
     /// `rft.jsonl` and `stats.json` under `--out`.
@@ -299,6 +306,37 @@ enum Command {
         /// Print the per-world records as JSON instead of the table.
         #[arg(long)]
         json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum HandoffStep {
+    /// Cut the pending prompts into shards of `--per` prompts: `<out>/train/<role>-train/shard-NNNN/NNN.prompt.txt` for
+    /// the train split and `<out>/heldout/<role>-{val,test}/...` for the held-out splits, and the index (hash and model of
+    /// each prompt) in `<out>/index/`, outside both roots. Hand a subagent one root, never `<out>`. An answer goes in
+    /// `NNN.answer.txt` beside its prompt. Prints counts only.
+    Split {
+        /// The folder `--collect` wrote, holding `{writer,reader}/{train,val,test}/<hash>.json`.
+        #[arg(long)]
+        pending: PathBuf,
+        /// A folder for this round's shards; it must be empty or new.
+        #[arg(long)]
+        out: PathBuf,
+        /// Prompts in a shard.
+        #[arg(long, default_value_t = handoff::PER_SHARD)]
+        per: usize,
+    },
+    /// Put the `NNN.answer.txt` beside each prompt of the shards into the LLM cache, under the index's hash and model. An
+    /// answer that is missing, empty, holds no JSON object or whose prompt was changed is refused and listed, not put, and
+    /// the command then fails after putting the good ones. An entry already in the cache is kept. Val and test are counted,
+    /// never shown.
+    Join {
+        /// The `--out` of `split`.
+        #[arg(long)]
+        shards: PathBuf,
+        /// The cache directory (`<messages out>/llm-cache`, or `<build out>/stages/messages/llm-cache`).
+        #[arg(long)]
+        cache: PathBuf,
     },
 }
 
@@ -883,6 +921,20 @@ fn main() -> Result<()> {
                 cache.display()
             );
         }
+        Command::Handoff { step } => match step {
+            HandoffStep::Split { pending, out, per } => {
+                print!("{}", handoff::split(&pending, &out, per)?.text());
+            }
+            HandoffStep::Join { shards, cache } => {
+                let joined = handoff::join(&shards, &cache)?;
+                print!("{}", joined.text());
+                if joined.incomplete() {
+                    anyhow::bail!(
+                        "some answers were refused or are missing; the good ones were put. Fix them and join again"
+                    );
+                }
+            }
+        },
         Command::UnpackCache { input, out } => {
             let n = version::unpack_cache(&input, &out)?;
             eprintln!("unpacked {n} cache entries into {}", out.display());

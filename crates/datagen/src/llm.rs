@@ -306,8 +306,17 @@ mod tests {
         assert!(second.complete("other").is_err());
     }
 
+    fn cache_files_under(dir: &Path) -> usize {
+        std::fs::read_dir(dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|shard| std::fs::read_dir(shard.path()).map_or(0, Iterator::count))
+            .sum()
+    }
+
     #[test]
-    fn a_collecting_cache_writes_the_prompt_and_a_put_answer_is_then_a_hit() {
+    fn a_collecting_cache_writes_the_pending_prompt_answers_empty_and_caches_nothing() {
         let dir = tempfile::tempdir().expect("dir");
         let pending = dir.path().join("pending");
         let cache_dir = dir.path().join("cache");
@@ -316,19 +325,55 @@ mod tests {
             .expect("cache")
             .collecting(&pending);
         assert_eq!(cache.complete("hello").expect("empty"), "");
+        // one pending prompt, as {model, hash, prompt} in a file named by its hash
         assert_eq!(cache.pending(), 1);
-        assert_eq!(llm.0.load(Ordering::Relaxed), 0);
         let hash = prompt_hash("echo", "hello");
         let file: serde_json::Value = serde_json::from_str(
             &std::fs::read_to_string(pending.join(format!("{hash}.json"))).expect("pending"),
         )
         .expect("json");
         assert_eq!(file["prompt"], "hello");
+        assert_eq!(file["model"], "echo");
+        assert_eq!(file["hash"], hash.as_str());
+        // the model was never asked, nothing was cached, and asking again is pending again
+        assert_eq!(llm.0.load(Ordering::Relaxed), 0);
+        assert_eq!(cache.counts(), (0, 0));
+        assert_eq!(cache_files_under(&cache_dir), 0);
+        assert_eq!(cache.complete("hello").expect("empty"), "");
+        assert_eq!(cache.pending(), 2);
+        assert_eq!(cache_files_under(&cache_dir), 0);
+        // a collecting cache does not turn an offline cache's miss into a pending prompt
+        let offline = Cache::open(&llm, &cache_dir, true).expect("cache");
+        assert!(offline.complete("hello").is_err());
+    }
+
+    #[test]
+    fn a_put_answer_is_then_a_hit_with_no_call_and_an_entry_is_never_overwritten() {
+        let dir = tempfile::tempdir().expect("dir");
+        let pending = dir.path().join("pending");
+        let cache_dir = dir.path().join("cache");
+        let llm = Echo(AtomicUsize::new(0));
+        let first = Cache::open(&llm, &cache_dir, false)
+            .expect("cache")
+            .collecting(&pending);
+        first.complete("hello").expect("empty");
+        let hash = prompt_hash("echo", "hello");
         assert!(put(&cache_dir, "echo", &hash, "{\"a\": 1}").expect("put"));
         assert!(!put(&cache_dir, "echo", &hash, "other").expect("kept"));
         assert!(put(&cache_dir, "echo", "nothex", "x").is_err());
+        assert_eq!(cache_files_under(&cache_dir), 1);
+        // the same prompt, asked again of a collecting cache, is a hit: no call, nothing new pending
+        let again = Cache::open(&llm, &cache_dir, false)
+            .expect("cache")
+            .collecting(&pending);
+        assert_eq!(again.complete("hello").expect("hit"), "{\"a\": 1}");
+        assert_eq!(again.counts(), (0, 1));
+        assert_eq!(again.pending(), 0);
+        assert_eq!(llm.0.load(Ordering::Relaxed), 0);
+        // and of an offline cache, which is how the last run of a build reads it
         let offline = Cache::open(&llm, &cache_dir, true).expect("cache");
         assert_eq!(offline.complete("hello").expect("hit"), "{\"a\": 1}");
+        assert_eq!(llm.0.load(Ordering::Relaxed), 0);
     }
 
     #[test]
