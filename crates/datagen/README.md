@@ -143,7 +143,7 @@ A turn that fails a step is dropped with a reason, and the turns after it are cu
 
 ### The record contract (what M6 reads)
 
-A data version is this tree. The dataset repository (`srikanth235/centraid-native-data`, private) holds one tag per version (`v0.2`, `v0.3`, ...); readers pin a tag, and a tag is never overwritten. `datagen publish` lays the tree out for the repo (see [Publish](#publish)): train and val at the root as the trainer reads them, the test split apart in `test/`.
+A data version is this tree. It is published as one tag in each of two private dataset repositories, the data repo `srikanth235/centraid-assist-data` and the held-out repo `srikanth235/centraid-assist-heldout` (`v0.2`, `v0.3`, ...); readers pin a tag, and a tag is never overwritten. `datagen publish` lays the tree out for the two repos (see [Publish](#publish)): train, val and noise with their worlds, the contract and the reports in the data repo, the test split, its worlds and the LLM cache apart in the held-out one.
 
 ```text
 manifest.json                 the version: hashes, seeds, targets, per-split counts, files
@@ -154,6 +154,7 @@ build/render-dropped.jsonl    each turn the renderer lost, and why
 build/messages.json, .txt     the manifest and report of the messages run the version came from
 build/models.json            the writers, readers, styles and per-slot recovery of that run
 build/llm-cache.jsonl.zst     that run's LLM cache, packed
+contract/tools.json, system.txt, hashes.json   the tool contract the data was rendered for (see [The contract](#contract))
 ```
 
 `datagen unpack-cache --in <dir>/build/llm-cache.jsonl.zst --out <messages out>/llm-cache` restores the cache byte for byte, so `datagen messages --offline` (or `build --offline --out <dir>` after unpacking into `<dir>/stages/messages/llm-cache`) rebuilds the version with no model calls.
@@ -255,7 +256,8 @@ cargo run --release -p centraid-datagen -- intents --seed 1 --out out/ [--counts
 cargo run --release -p centraid-datagen -- messages --in out/ --out msgs/ [--concurrency 6] [--batch 12] [--limit N] [--offline] [--seed 1] [--writer train=haiku,val=haiku,test=sonnet] [--reader train=sonnet,val=sonnet,test=haiku] [--style-shares .4,.15,.15,.15,.15]
 cargo run --release -p centraid-datagen -- render --in msgs/ --out v1/ --tokenizer tokenizer.json [--version v1] [--targets 5000,500,1000] [--decision-weight 2] [--render-concurrency 6] [the mix's flags]
 cargo run --release -p centraid-datagen -- build --version v1 --out v1/ --tokenizer tokenizer.json [--seed 1] [--counts 48,8,12] [--sessions 7500,750,1500] [--offline] [--reuse] [--mistakes FILE] [--writer ..] [--reader ..] [the mix's flags]
-cargo run --release -p centraid-datagen -- publish --in v1/ [--repo srikanth235/centraid-native-data] [--upload] [--public]
+cargo run --release -p centraid-datagen -- publish --in v1/ [--repo srikanth235/centraid-assist-data] [--heldout-repo srikanth235/centraid-assist-heldout] [--upload] [--public]
+cargo run --release -p centraid-datagen -- restamp --in v1/ [--heldout-repo srikanth235/centraid-assist-heldout]   # a version built before the contract block
 cargo run --release -p centraid-datagen -- rollout-records --in v1/ --rollouts runs/r1.rollouts.jsonl --tokenizer tokenizer.json --out runs/r1-records [--split train] [--needs runs/r1.rollout.json]
 cargo run --release -p centraid-datagen -- unpack-cache --in v1/build/llm-cache.jsonl.zst --out msgs/llm-cache
 cargo run --release -p centraid-datagen -- show --in v1/ --tokenizer tokenizer.json [--split train] [--session ID]
@@ -268,24 +270,33 @@ The mix's flags: `--targets 5000,500,1000`, `--turn-shares .4,.3,.3`, `--two-kin
 
 ## Publish
 
-<a id="publish"></a>`datagen publish --in <version dir>` puts a built version on the Hugging Face dataset repo (`srikanth235/centraid-native-data`, private) as one revision, named by the version (`v0.3`). **It is a dry run unless told otherwise**: it checks the version, lists every file with its size and BLAKE3 and uploads nothing. A real upload needs all three of `--upload`, `--repo owner/name` and `HF_TOKEN` in the environment. The token is read from the environment only, passed to the one child process that does the transfer through its environment, and never printed, written, put on a command line or kept in a message; a failure's text has it cut out.
+<a id="publish"></a>`datagen publish --in <version dir>` puts a built version on two Hugging Face dataset repos as one commit and one tag each, the tag named by the version (`v0.3`): the **data repo** `srikanth235/centraid-assist-data` (`--repo`; what the trainer fetches) and the **held-out repo** `srikanth235/centraid-assist-heldout` (`--heldout-repo`; the test split, its worlds and the LLM cache, for evaluation only). Both are private. **It is a dry run unless told otherwise**: it checks the version, lists every file of both repos with its size and BLAKE3 and uploads nothing. A real upload needs `--upload`, `--repo`, `--heldout-repo` and `HF_TOKEN` in the environment. The token is read from the environment only, passed to the child processes that do the transfer through their environment, and never printed, written, put on a command line or kept in a message; a failure's text has it cut out.
 
-**A version's tree is exactly its publish set** (the paths the dry run lists). The branch starts from `main`, which holds earlier builds, so the one commit puts every file of the set and deletes every path of `main`'s tree that is not in it (`publish::plan`, a pure function of the publish set and the remote listing). The one path kept is `.gitattributes`, the repo's LFS rules; nothing else is plumbing. The dry run prints the paths that would be removed when it is given `--repo` and `HF_TOKEN` (a read-only listing of `main`; without them it says it cannot list them). An existing tag or branch is still never touched.
+It **refuses** (all reasons listed together): a file that does not match its hash in the manifest or is missing; a build from a dirty tree or an unknown commit (`runtime_commit` ends in `-dirty`); a version the manifest does not mark `publishable` (the byte-level test tokenizer, a dirty tree, a rehearsal model: the manifest says which); **any file holding a sealed placeholder** (`placeholder:` or a datagen placeholder; `.zst` files are read decompressed); **a manifest with no `contract` block or no `heldout` pointer, or `contract/` files that do not hash to the block** (see [The contract](#contract)); a `--heldout-repo` other than the manifest's pointer; and a version with no packed LLM cache. The checks run before a token is looked at.
 
-It **refuses** (all reasons listed together): a file that does not match its hash in the manifest or is missing; a build from a dirty tree or an unknown commit (`runtime_commit` ends in `-dirty`); a version the manifest does not mark `publishable` (the byte-level test tokenizer, a dirty tree, a rehearsal model: the manifest says which); and **any file holding a sealed placeholder** (`placeholder:` or a datagen placeholder; `.zst` files are read decompressed). The checks run before a token is looked at.
-
-Layout in the repo (what Part E's trainer fetches: `manifest.json`, `data/train.jsonl.zst`, `data/val.jsonl.zst`, and a nested subset by its name):
+Layout (the data repo is what the trainer fetches: `manifest.json`, `data/train.jsonl.zst`, `data/val.jsonl.zst`, and a nested subset by its name; the held-out repo is separate so a fetch of the data repo cannot pull test):
 
 ```text
-manifest.json   README.md (the dataset card, generated from the manifest)
-data/train.jsonl.zst  data/val.jsonl.zst  data/noise.jsonl.zst  data/train-1000.jsonl.zst  data/train-2500.jsonl.zst
-worlds/<train and val worlds>.json    build/<reports>
-test/test.jsonl.zst   test/worlds/<test worlds>.json     (apart: a fetch of data/ and worlds/ cannot pull it)
+data repo  (--repo)                               held-out repo  (--heldout-repo)
+manifest.json   README.md (the card)              manifest.json (the same bytes)   README.md (evaluation only)
+contract/tools.json  system.txt  hashes.json      test/test.jsonl.zst
+data/train.jsonl.zst  val.jsonl.zst  noise.jsonl.zst   worlds/test/<test worlds>.json
+data/subsets/train-1000.jsonl.zst ...             cache/llm-cache.jsonl.zst   (the packed writer and reader cache)
+worlds/train/*.json  worlds/val/*.json
+reports/<the build's text and JSON reports>
 ```
 
-The manifest is uploaded byte for byte, so it still lists the test file as `data/test.jsonl.zst`; the repo holds it at `test/test.jsonl.zst` (the card says so). The card covers what the data is (synthetic, English, for a LoRA adapter), how it was made, the catalog hash, the runtime commit, the tokenizer, the writers and readers, the realised share of every split against its target with what was not hit, the limits, and that sealed values are absent. Build reports under `build/` are the text and JSON ones; the LLM cache pack, `.jsonl` files (which name test sessions) and the render spool are not uploaded.
+Nothing of test or the cache is in the data repo's set (a test asserts it). The manifest is uploaded byte for byte to both, so it still lists the test file as `data/test.jsonl.zst` and the subsets as `data/train-<n>.jsonl.zst`; the repos hold them at the paths above. The cache names test sessions, which is why it lives with test, and it is uploaded so a rebuild can run offline (`datagen unpack-cache`). The card covers what the data is (synthetic, English, for a LoRA adapter, with the dataset-card `configs` front matter mapping `train` and `validation` to the data files), how it was made, the catalog hash, the runtime commit, the tokenizer, the contract hashes, where test lives, the writers and readers, the realised share of every split against its target with what was not hit, the limits, and that sealed values are absent. Build reports under `build/` are the text and JSON ones, published as `reports/`; the other `.jsonl` files (which name test sessions) and the render spool are not uploaded.
 
-**One revision per version, never overwritten.** The upload commits to a branch `incoming-<version>`, tags the commit `<version>` (the revision) and removes the branch; it refuses before sending anything when the tag or branch already exists, and `main` is not touched, so an earlier version stays where it is. **Why Rust, and Python only for the transfer:** the checking, the layout, the card and the dry run are what must be exact and what can be tested offline, so they are Rust and reuse the manifest; the commit to the Hub (LFS, branches, tags) is `huggingface_hub`'s own protocol and is not re-implemented, so `publish::upload` runs a short script through `python3` (`--python` names another). It needs `pip install huggingface_hub`. The script is the one thing a test cannot run offline: tests hand a stand-in transport the staged tree and check the arguments and the environment, and the first real upload is the owner's.
+**A version's tree is exactly its publish set, in each repo** (the paths the dry run lists). `main` always equals the latest version's tree. The commit puts every file of the set and deletes every path of `main`'s tree that is not in it (`publish::plan`, a pure function of the publish set and the remote listing). The one path kept is `.gitattributes`, the repo's LFS rules; nothing else is plumbing. The dry run prints the paths each commit would remove when it is given `--repo` and `HF_TOKEN` (a read-only listing of both repos; without them it says it cannot list them) and marks a tag that already exists.
+
+**One tag per version, never overwritten.** The upload reads both repos first and refuses, before sending anything, when the tag exists in either. It then makes one commit on `main` of the held-out repo and tags it, then the same in the data repo, so a data tag never exists without its held-out one. There is no staging branch: `create_commit` on `main` is atomic, so a branch adds nothing; if the tag step fails after the commit, `main` holds the tree without a tag, which no reader pins, and a rerun plans from it (if only the held-out tag was made, the rerun is refused by it and the data repo is finished by hand). **Why Rust, and Python only for the transfer:** the checking, the layout, the cards, the plan and the dry run are what must be exact and what can be tested offline, so they are Rust and reuse the manifest; the listing and the commit to the Hub (LFS, tags) are `huggingface_hub`'s own protocol and are not re-implemented, so `publish::list_remote` and `publish::upload` run short scripts through `python3` (`--python` names another). It needs `pip install huggingface_hub`. The scripts are the one thing a test cannot run offline: tests hand a stand-in transport the listings and the staged trees and check the arguments, the deletes and the environment, and the first real upload is the owner's.
+
+### The contract
+
+<a id="contract"></a>A version's records show the model the runtime's tools block, so the version is for the tool contract it was rendered with. The manifest carries `contract` (`tools_mode`, `tools_hash`, `prompt_hash`, `catalog_hash`, `tokenizer_blake3`, written at build time) and `heldout` (`repo`); the version holds the texts the hashes are of: `contract/tools.json` (the tool catalogue exactly as `assist::record::runtime_hashes` hashes it; `tools_hash` is its BLAKE3), `contract/system.txt` (the static prompt it hashes: the identity, the static system turn with its tools block and kind card, the escape rules; `prompt_hash` is its BLAKE3) and `contract/hashes.json` (the block). Publish checks that the files hash to the block.
+
+`datagen restamp --in <version dir> [--heldout-repo owner/name]` gives a version built before the block existed (v0.3) its `contract` block and `heldout` pointer and writes `contract/`. It changes no data file (only `manifest.json` is rewritten) and **does not read the test split**. It **proves the contract against the data first** instead of trusting the checkout: for the manifest's tools mode it builds the tools block this runtime serves and requires it, byte for byte, in the `render.text` of every record of train and val; it refuses with the counts (`val: 1 of 2 records hold the tools block of mode sig`) and changes nothing if any record lacks it. What that proves: the tool catalogue behind `tools_hash` (the block is that catalogue's tools, each written as the catalogue hash writes them, with the call format) is the one the data was rendered with. What it does not prove: the rest of `prompt_hash` (identity, escape rules, the kind card in `USD`) is not in the records in a form that can be compared (a record's card is its world's currency), so those parts are the checkout's. A version already stamped with a different contract is refused.
 
 ## Runbook
 
@@ -311,19 +322,27 @@ The owner's commands, from a clean checkout of this branch (a dirty tree is refu
 
 3. **Check the report.** `data/v0.3/build/render.txt` and `data/v0.3/manifest.json` (`splits[].shares`, `.cells`, `.missed`) give every share against its target, every live cell as `hit`, `supply` or `short`, and what could not be hit and why; `build/messages.txt` gives the recovery rate per slot, the realised styles and the drops by reason; `manifest.json` `publishable` says whether the version may leave (`value: true`). Look at `missed` before anything else: a share the input could not fill is reported there, not faked.
 
-4. **Dry-run the publish** (nothing is sent; it lists every file with size and hash and fails with every reason when the version is not fit):
+4. **Stamp a version built before the contract block existed** (v0.3; a version built now carries it). It proves the tools block against train and val, changes no data file and does not read test:
 
    ```sh
-   cargo run --release -p centraid-datagen -- publish --in data/v0.3 --repo srikanth235/centraid-native-data
+   cargo run --release -p centraid-datagen -- restamp --in data/v0.3
    ```
 
-5. **Publish.** Needs `pip install huggingface_hub` and a write token in `HF_TOKEN` (never in a file or on a command line):
+   It prints one `proved: N of N <split> records hold the `<mode>` tools block` line for train and for val, then `stamped <manifest>: tools_hash …, prompt_hash …, catalog_hash …, tokenizer …; held-out repo …`. On a failed proof it prints the counts and changes nothing.
+
+5. **Dry-run the publish** (nothing is sent; it lists both repos' files with size and hash and fails with every reason when the version is not fit). With `HF_TOKEN` set it also reads both repos (read-only) and lists the paths each commit would remove:
 
    ```sh
-   HF_TOKEN=... cargo run --release -p centraid-datagen -- publish --in data/v0.3 --repo srikanth235/centraid-native-data --upload
+   cargo run --release -p centraid-datagen -- publish --in data/v0.3 --repo srikanth235/centraid-assist-data --heldout-repo srikanth235/centraid-assist-heldout
    ```
 
-   The result is `hf://datasets/srikanth235/centraid-native-data@v0.3`, which the trainer takes as `data.hf` (its subsets as `train-1000` and `train-2500`).
+6. **Publish.** Needs `pip install huggingface_hub` and a write token in `HF_TOKEN` (never in a file or on a command line):
+
+   ```sh
+   HF_TOKEN=... cargo run --release -p centraid-datagen -- publish --in data/v0.3 --repo srikanth235/centraid-assist-data --heldout-repo srikanth235/centraid-assist-heldout --upload
+   ```
+
+   It prints `published <repo>@v0.3` for the held-out repo and then the data repo. The trainer takes `hf://datasets/srikanth235/centraid-assist-data@v0.3` as `data.hf` (its subsets as `train-1000` and `train-2500`, read from `data/subsets/`).
 
 ## Findings and limits
 

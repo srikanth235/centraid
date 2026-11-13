@@ -11,13 +11,13 @@ python -m adapter_train train --config job.json     # job.json is a path, s3:// 
 python -m adapter_train check --config job.json     # validate and print; reads no data, loads no model
 ```
 
-The job file (`adapter_train/config.py` documents every key; unknown keys are refused) names the three storage locations, and they are the only thing that differs between clouds: **data** (`s3://`, `gs://`, a mounted path, or `hf://datasets/srikanth235/centraid-native-data@<data version>`), **checkpoints** and **outputs**.
+The job file (`adapter_train/config.py` documents every key; unknown keys are refused) names the three storage locations, and they are the only thing that differs between clouds: **data** (`s3://`, `gs://`, a mounted path, or `hf://datasets/srikanth235/centraid-assist-data@<data version>`), **checkpoints** and **outputs**.
 
 | piece | what it is |
 | --- | --- |
 | `adapter_train/config.py` | the job file, validated before anything is paid for: the base revision must be a commit hash; the targets must be modules the llama.cpp converter can ship (`q_proj k_proj v_proj o_proj in_proj_qkv in_proj_z out_proj gate_proj up_proj down_proj`; `in_proj_a`/`in_proj_b` only when named); `embed_tokens`, `lm_head` are refused with their reason; there is no key for new tokens or trainable embeddings |
 | `adapter_train/storage.py` | local path, `s3://`, `gs://` behind four calls (`get`, `put`, `keys`, `delete`); `boto3` and `google-cloud-storage` are imported on first use |
-| `adapter_train/hf.py` | the data version on the private Hugging Face dataset, pinned to a revision (a branch is refused). **Only `train` and `val` are ever requested; the test split is never fetched.** `HF_TOKEN` is read from the environment inside the fetcher and nowhere else, and is in no message or record. This one function knows the repo layout (`manifest.json`, `data/{train,val}.jsonl.zst`); when Part H settles it, this is what changes |
+| `adapter_train/hf.py` | the data version on the private Hugging Face dataset, pinned to a revision (a branch is refused). **Only `train` and `val` are ever requested; the test split is never fetched.** `HF_TOKEN` is read from the environment inside the fetcher and nowhere else, and is in no message or record. This one function knows the repo layout (`manifest.json`, `data/{train,val}.jsonl.zst`, `data/subsets/`; the test split is in another repo it never names); this is what changes when the layout does |
 | `adapter_train/checkpoints.py` | `ckpt-NNNNNNNN/` with the marker `COMPLETE` uploaded last; resume takes the newest complete one; older ones are pruned |
 | `adapter_train/trainer.py` | the loop (torch, peft); which records step N reads is a pure function of (seed, N); SIGTERM checkpoints at the next step and exits 0; `base.weights: q4_0_dequantised` loads the phone's Q4_0 weights via `q4_0.py` |
 | `adapter_train/q4_0.py` | the phone's Q4_0 GGUF read back into Hugging Face form: Q4_0/Q8_0 dequantised, the converter's rewrites undone (`ssm_a`, conv1d, norms +1); fails by name on a missing, extra or misshapen tensor |

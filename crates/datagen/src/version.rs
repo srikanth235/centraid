@@ -8,10 +8,13 @@
 //! <out>/build/render-dropped.jsonl        each lost turn and why
 //! <out>/build/messages.json, messages.txt the manifest and report of the messages run it came from
 //! <out>/build/llm-cache.jsonl.zst         that run's LLM cache, packed ([`pack_cache`]; `datagen unpack-cache`)
+//! <out>/contract/{tools.json,system.txt,hashes.json}   the tool contract the data was rendered for ([`crate::contract`])
 //! ```
 //!
-//! Everything above is the published data version; a dataset repository holds exactly this tree at its root, one version
-//! per tag. `datagen build` also keeps its stages under `<out>/stages/`, which are working files and not published.
+//! Everything above is the published data version, published as one tag in each of two dataset repositories
+//! ([`crate::publish`] lays it out): train, val and noise, their worlds, the contract and the reports in the data
+//! repository; test, its worlds and the LLM cache in the held-out one. `datagen build` also keeps its stages under
+//! `<out>/stages/`, which are working files and not published.
 //!
 //! # The record contract (what M6 reads)
 //!
@@ -540,9 +543,14 @@ pub fn write_version(
     if rehearsal {
         blockers.push("written or read back by a rehearsal model, not a language model");
     }
+    let contract =
+        crate::contract::Contract::current(tools, &catalog.hash(), &rendered.tokenizer_hash);
+    crate::contract::write_files(out, &contract)?;
     let manifest = json!({
         "version": provenance.version,
         "tools_block": {"mode": tools.name(), "from": "crates/assist/model.json"},
+        "contract": contract.to_json(),
+        "heldout": {"repo": crate::publish::HELDOUT_REPO},
         "publishable": {"value": blockers.is_empty(), "blockers": blockers},
         "messages": models,
         "stage": "render+mix",

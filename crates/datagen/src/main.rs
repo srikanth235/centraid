@@ -178,10 +178,15 @@ enum Command {
         /// A data version (`datagen build --out`).
         #[arg(long = "in")]
         input: PathBuf,
-        /// The dataset repo, as owner/name. For this project: srikanth235/centraid-native-data.
+        /// The data repo, as owner/name: train, val, noise, their worlds, the contract and the reports. For this project:
+        /// srikanth235/centraid-assist-data.
         #[arg(long)]
         repo: Option<String>,
-        /// Really upload (needs `--repo` and `HF_TOKEN`).
+        /// The held-out repo, as owner/name: the test split, its worlds and the LLM cache. For this project:
+        /// srikanth235/centraid-assist-heldout. It must be the one the manifest points to; a real upload needs it.
+        #[arg(long)]
+        heldout_repo: Option<String>,
+        /// Really upload (needs `--repo`, `--heldout-repo` and `HF_TOKEN`).
         #[arg(long)]
         upload: bool,
         /// Make the repo public when it is created. Private by default.
@@ -190,6 +195,18 @@ enum Command {
         /// The Python that runs `huggingface_hub` for the upload.
         #[arg(long, default_value = "python3")]
         python: String,
+    },
+    /// Give a data version built before the contract block existed its `contract` block and `heldout` pointer in
+    /// `manifest.json` and write `contract/`. It changes no data file and does not read the test split. It first PROVES the
+    /// contract against the data: every record of train and val must hold the tools block this checkout's runtime serves
+    /// for the manifest's tools mode, or nothing is changed and the counts are printed.
+    Restamp {
+        /// A data version (`datagen build --out`).
+        #[arg(long = "in")]
+        input: PathBuf,
+        /// The held-out repo to point at, as owner/name.
+        #[arg(long, default_value = publish::HELDOUT_REPO)]
+        heldout_repo: String,
     },
     /// Write the byte-level TEST tokenizer to a file, for a rehearsal build that needs no model and no download. A
     /// version rendered with it is marked not publishable.
@@ -756,28 +773,58 @@ fn main() -> Result<()> {
         Command::Publish {
             input,
             repo,
+            heldout_repo,
             upload,
             public,
             python,
         } => {
             let named = repo.as_deref().unwrap_or(publish::EXAMPLE_REPO);
-            let publication = publish::prepare(&input, named)?;
+            let publication = publish::prepare(&input, named, heldout_repo.as_deref())?;
             if upload {
                 let repo = repo.context("--upload needs --repo owner/name")?;
+                heldout_repo.context("--upload needs --heldout-repo owner/name")?;
                 let token = publish::token_from_env()?;
                 let done = publish::upload(&publication, &repo, !public, &python, &token)?;
                 println!("{done}");
             } else {
                 // a read-only listing of the repo's tree, when it can be had, so the removals are shown
                 let remote = match (repo.as_deref(), publish::token_from_env()) {
-                    (Some(r), Ok(token)) => Some(publish::list_remote(r, &python, &token)?),
+                    (Some(r), Ok(token)) => Some((
+                        publish::list_remote(r, &python, &token)?,
+                        publish::list_remote(&publication.heldout_repo, &python, &token)?,
+                    )),
                     _ => None,
                 };
                 print!(
                     "{}",
-                    publish::dry_run(&publication, repo.as_deref(), !public, remote.as_deref())
+                    publish::dry_run(
+                        &publication,
+                        repo.as_deref(),
+                        !public,
+                        remote.as_ref().map(|(d, h)| (d, h))
+                    )
                 );
             }
+        }
+        Command::Restamp {
+            input,
+            heldout_repo,
+        } => {
+            let (contract, proofs) = centraid_datagen::contract::restamp(&input, &heldout_repo)?;
+            for p in &proofs {
+                println!(
+                    "proved: {} of {} {} records hold the `{}` tools block",
+                    p.with_block, p.records, p.split, contract.tools_mode
+                );
+            }
+            println!(
+                "stamped {}: tools_hash {}, prompt_hash {}, catalog_hash {}, tokenizer {}; held-out repo {heldout_repo}; no data file changed, the test split was not read",
+                input.join("manifest.json").display(),
+                contract.tools_hash,
+                contract.prompt_hash,
+                contract.catalog_hash,
+                contract.tokenizer_blake3
+            );
         }
         Command::TestTokenizer { out } => {
             std::fs::write(&out, centraid_datagen::render::byte_level_tokenizer_json())?;

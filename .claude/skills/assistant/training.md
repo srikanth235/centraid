@@ -14,7 +14,7 @@ Python is the trainer and nothing else. Data, render, eval and rollouts are Rust
 - `python -m adapter_train train --config job.json`, or `check` to validate without reading data or loading a model. The job file is a path, `s3://` or `gs://` object. Unknown keys are refused.
 - `config.py` validates before anything is paid for. The base revision must be a commit hash.
 - The three storage locations (`data`, `checkpoints`, `outputs`) are all that differs between clouds.
-- Data is `hf://datasets/<owner>/<repo>@<version>`. `hf.py` refuses a moving branch and requests only `train` and `val`. It has no key for `test`, and a test asserts it is never asked. A nested subset adds `data.subset`.
+- Data is `hf://datasets/<owner>/<repo>@<version>` (the data repo; test is in the held-out repo, which `hf.py` never names). `hf.py` refuses a moving branch and requests only `train` and `val`. It has no key for `test`, and a test asserts it is never asked. A nested subset adds `data.subset`.
 - Resume: a reclaim sends SIGTERM, the trainer checkpoints at the next step and exits 0, and the platform restarts it. Which records step N reads is a pure function of (seed, N). A checkpoint for a different job file is refused, so never edit `job.json` to resume.
 - `run.json` in the outputs holds the git commit, the job-file hash, the hash and size of every data file as read, package versions, the seed and the metrics. No clock, host name or absolute path.
 

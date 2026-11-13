@@ -9,7 +9,7 @@ What was and was not checked is in "What is verified" at the end. Read it before
 1. **Quota.** Service Quotas, SageMaker, in us-east-1: _ml.g5.xlarge for spot training job usage_ must be at least 1. New accounts start at 0; the request takes hours to days. Without it the job is refused at submission.
 2. **Bucket** `BUCKET` (private, same region). The job file's three locations live under one prefix, `s3://BUCKET/RUN/`.
 3. **ECR repository** `adapter-train` in us-east-1.
-4. **Hugging Face token**: a read-only token that can read the private dataset `srikanth235/centraid-native-data`. Store it as a Secrets Manager secret (the token is never put in the training request, because SageMaker shows a job's `Environment` in plain):
+4. **Hugging Face token**: a read-only token that can read the private dataset `srikanth235/centraid-assist-data`. Store it as a Secrets Manager secret (the token is never put in the training request, because SageMaker shows a job's `Environment` in plain):
 
    ```bash
    aws secretsmanager create-secret --region us-east-1 --name centraid/hf-token --secret-string "$HF_TOKEN"
@@ -44,7 +44,7 @@ Write `job.json` (every key is documented in `adapter_train/config.py`; unknown 
     "gguf": "s3://BUCKET/RUN/Qwen3.5-0.8B-Q4_0.gguf"
   },
   "lora": { "rank": 16, "alpha": 32 },
-  "data": { "hf": "hf://datasets/srikanth235/centraid-native-data@v0.N" },
+  "data": { "hf": "hf://datasets/srikanth235/centraid-assist-data@v0.N" },
   "checkpoints": "s3://BUCKET/RUN/checkpoints",
   "outputs": "s3://BUCKET/RUN/outputs",
   "train": {
@@ -58,7 +58,7 @@ Write `job.json` (every key is documented in `adapter_train/config.py`; unknown 
 ```
 
 - `weights: "q4_0_dequantised"` fits the adapter to the phone's own Q4_0 weights; the GGUF is the file pinned in `crates/assist/model.json` (563,036,064 bytes, sha256 `57d1997790d1744fba5b40a7317df71ea5e2acee28c47e78f0cce39c0703f8cf`): check it, then upload it. Use `"weights": "hf"` (and no `gguf`) to fit the bf16 weights instead.
-- A learning-curve run on a nested subset adds `"subset": "NAME"` inside `data` (Part H names them; the file is read from `data/NAME.jsonl.zst`).
+- A learning-curve run on a nested subset adds `"subset": "NAME"` inside `data` (Part H names them; the file is read from `data/subsets/NAME.jsonl.zst`).
 - Leave `train.steps` and `checkpoint_every` so that a checkpoint lands well inside a Spot reclaim's two-minute notice: a step is a few seconds on an A10G.
 
 ```bash
@@ -134,7 +134,7 @@ CENTRAID_ASSIST_MODEL=PATH/Qwen3.5-0.8B-Q4_0.gguf cargo test --release -p centra
 ## 7. Parity: does the phone's engine say what the trainer says?
 
 ```bash
-huggingface-cli download srikanth235/centraid-native-data data/val.jsonl.zst --repo-type dataset --revision v0.N --local-dir hfdata
+huggingface-cli download srikanth235/centraid-assist-data data/val.jsonl.zst --repo-type dataset --revision v0.N --local-dir hfdata
 docker run --rm -v $PWD:/w --entrypoint python $IMAGE -m adapter_train.parity prompts --data /w/hfdata/data/val.jsonl.zst --n 20 --out /w/prompts.json
 docker run --rm --gpus all -v $PWD:/w --entrypoint python $IMAGE -m adapter_train.parity trainer \
     --adapter /w/out/adapter --base Qwen/Qwen3.5-0.8B --revision BASE_COMMIT_SHA --gguf /w/Qwen3.5-0.8B-Q4_0.gguf \

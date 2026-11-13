@@ -219,11 +219,12 @@ pub fn parse(text: &str) -> Result<Record, String> {
     serde_json::from_str(text).map_err(|e| e.to_string())
 }
 
-/// The hashes the runtime computes for a catalogue mode: the tool catalogue and the static system
-/// turn (the identity's markers, the tools block, the kind card in `USD`). The vault's own lines
-/// (today, the name, the directory) are data, not template, and are left out.
+/// The texts the runtime hashes for a catalogue mode: the tool catalogue (as Python's `json.dumps` writes it) and the
+/// static prompt, which is the identity, the static system turn (the identity's markers, the tools block, the kind card
+/// in `USD`) and the escape rules. The vault's own lines (today, the name, the directory) are data, not template, and
+/// are left out.
 #[must_use]
-pub fn runtime_hashes(mode: ToolsMode) -> (String, String) {
+pub fn runtime_texts(mode: ToolsMode) -> (String, String) {
     let tools = tools_for(mode);
     let catalogue = py_json(&serde_json::Value::Array(tools.clone()));
     let system = format!(
@@ -239,6 +240,13 @@ pub fn runtime_hashes(mode: ToolsMode) -> (String, String) {
         crate::escape::RULE,
         crate::escape::builtin().join("\n")
     );
+    (catalogue, prompt)
+}
+
+/// The hashes the runtime computes for a catalogue mode: the BLAKE3 of the two texts of [`runtime_texts`].
+#[must_use]
+pub fn runtime_hashes(mode: ToolsMode) -> (String, String) {
+    let (catalogue, prompt) = runtime_texts(mode);
     (
         blake3::hash(catalogue.as_bytes()).to_hex().to_string(),
         blake3::hash(prompt.as_bytes()).to_hex().to_string(),
