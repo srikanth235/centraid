@@ -1484,6 +1484,10 @@ impl HandleState {
             K::CheckBackup(request) => Ok(response(wire::response::Kind::CheckBackup(
                 self.check_backup(request, &cancellation)?,
             ))),
+            // THE TOKENS THE SHELL KEEPS (#1191, E12): held in memory, written nowhere.
+            K::GatewayTokens(request) => Ok(response(wire::response::Kind::GatewayTokens(
+                crate::phone::gateway_tokens(&self.plane, self.keys.as_ref(), request)?,
+            ))),
             // PAIRING NEEDS NO VAULT TO BE OPEN: it needs the vault's keys,
             // and keeps the gateway in the ledger beside the file.
             K::PairPhone(request) => {
@@ -1648,9 +1652,13 @@ impl HandleState {
             }
             K::ForgetDestination(request) => {
                 let runtime = self.runtime_handle()?;
-                let vault = self.keys.as_ref().map(crate::phone::Keyring::vault_id);
                 Ok(response(wire::response::Kind::ForgetDestination(
-                    crate::phone::forget_destination(&self.plane, vault, &runtime, request)?,
+                    crate::phone::forget_destination(
+                        &self.plane,
+                        self.keys.as_ref(),
+                        &runtime,
+                        request,
+                    )?,
                 )))
             }
             K::RefreshDestination(request) => {
@@ -2118,6 +2126,9 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             // anyway — the commit guard is what decides, and it is
             // all-or-nothing.
             | K::Found(_)
+            // HANDING THE CORE ITS GATEWAY TOKENS is one read of the device
+            // state and a map in memory (#1191, E12).
+            | K::GatewayTokens(_)
             // PAIRING IS BOUNDED: one payload, one pairing, a claim retried
             // at most three times. It talks to the network, which is not the
             // same question — `Bounded` is "finishes on its own bounded by its

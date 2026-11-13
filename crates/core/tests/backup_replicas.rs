@@ -381,3 +381,53 @@ fn forgetting_the_only_gateway_leaves_nothing_queued_and_no_stale_state() {
     );
     assert!(!paired.rolled_back, "{paired:?}");
 }
+
+/// **ONE GATEWAY'S PROVEN TAKEOVER STOPS THAT GATEWAY ONLY** (#1191, E4, B3). Another phone
+/// restores from the words through the first gateway and claims there, and only there. This
+/// phone's next pass hears `MOVED` from the first, with a claim the vault key signed above the
+/// epoch it holds: it marks that gateway's row and goes on feeding the second, which still takes
+/// its writes. The status says another phone has taken over.
+#[test]
+fn a_takeover_at_one_gateway_stops_the_pass_there_and_the_other_is_still_fed() {
+    let (first, second) = (gateway(), gateway());
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = phone(dir.path());
+    let (one, two) = (pair_id(&phone, &first), pair_id(&phone, &second));
+    originals(&phone, "before the takeover", 1, 20_000);
+    let drained = drain(&phone, at_home());
+    assert_eq!(
+        drained.stopped,
+        wire::DrainStop::Empty as i32,
+        "{drained:?}"
+    );
+
+    let elsewhere = tempfile::tempdir().expect("a directory");
+    let restored = restore(elsewhere.path(), &first);
+    assert_eq!(restored.vaults.len(), 1, "{restored:?}");
+    assert_eq!(first.writer(&vault_id()).0, 2, "claimed at the first");
+    assert_eq!(second.writer(&vault_id()).0, 1, "and not at the second");
+
+    originals(&phone, "after the takeover", 1, 20_000);
+    let drained = drain(&phone, at_home());
+    assert_ne!(
+        drained.stopped,
+        wire::DrainStop::Empty as i32,
+        "the first gateway refused this phone: {drained:?}"
+    );
+    let book = ledger(&path);
+    assert_eq!(
+        book.moved(&one).expect("reads"),
+        Some(2),
+        "the first is marked"
+    );
+    assert_eq!(book.moved(&two).expect("reads"), None, "the second is not");
+    assert_eq!(
+        book.confirmed_names(&two).expect("reads"),
+        second.held(&vault_id()),
+        "the second took this phone's writes"
+    );
+    let backed = status(&phone);
+    assert!(backed.frozen, "the status says another phone took over");
+    assert_eq!(row(&backed, &two).behind_files, 0, "{backed:?}");
+}

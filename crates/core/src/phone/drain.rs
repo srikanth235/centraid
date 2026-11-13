@@ -683,7 +683,10 @@ pub(crate) fn run_cancellable(
             .map_err(plane_error)?;
     }
     let spool = plane.spool()?;
-    if let Some((_, epoch)) = super::moved(&ledger)? {
+    // SUPERSEDED AT EVERY GATEWAY, there is nowhere left to write (E4). A
+    // gateway that proved a takeover is left out of the pass by itself, and
+    // the others are fed.
+    if let Some(epoch) = super::superseded_everywhere(&ledger)? {
         return Err(CoreError::VaultMoved {
             current_epoch: epoch,
             moved_at_ms: 0,
@@ -700,7 +703,12 @@ pub(crate) fn run_cancellable(
             untrusted: Vec::new(),
         }
     } else {
-        link::reach_all(&destinations, &ledger, keyring.vault_id(), runtime)?
+        link::reach_all(
+            &destinations,
+            &ledger,
+            keyring.vault.identity.signing(),
+            runtime,
+        )?
     };
     if let Some(stop) = &cancellation {
         stop.check()?;
@@ -785,13 +793,21 @@ fn absorb(ledger: &Ledger, pass: &mut Pass, gateway: &Reached, error: CoreError)
             Ok(())
         }
         CoreError::VaultMoved { current_epoch, .. } => {
-            // FROZEN, AND REMEMBERED: the ledger keeps the refusal, so status draws the phone
-            // read-only and every pass refuses at once.
+            // THAT GATEWAY ONLY (#1191, E4): another phone proved, with a claim
+            // the vault key signed above the epoch this phone holds there, that
+            // it writes there now. The mark is on that gateway's row; the pass to
+            // every other gateway goes on, and the status says another phone has
+            // taken over. Only when every paired gateway is moved does a pass
+            // refuse ([`super::superseded_everywhere`]).
             ledger.set_moved(id, current_epoch).map_err(plane_error)?;
-            Err(CoreError::VaultMoved {
-                current_epoch,
-                moved_at_ms: gateway.gateway_ms,
-            })
+            if super::superseded_everywhere(ledger)?.is_some() {
+                return Err(CoreError::VaultMoved {
+                    current_epoch,
+                    moved_at_ms: gateway.gateway_ms,
+                });
+            }
+            pass.stopped = wire::DrainStop::Refused;
+            Ok(())
         }
         CoreError::GatewayRefused { reason } => match refused_by(&reason) {
             // THE GATEWAY ANSWERED, AND ITS ANSWER IS ITS OWN — a full disk, a part over its
@@ -2256,7 +2272,7 @@ pub fn handoff(
         });
     }
     let ledger = plane.ledger()?;
-    if let Some((_, epoch)) = super::moved(&ledger)? {
+    if let Some(epoch) = super::superseded_everywhere(&ledger)? {
         return Err(CoreError::VaultMoved {
             current_epoch: epoch,
             moved_at_ms: 0,
@@ -2306,7 +2322,7 @@ pub fn handoff(
         if !stores.contains_key(&target.gateway_id) {
             stores.insert(
                 target.gateway_id.clone(),
-                GatewayStore::for_destination(target, keyring.vault_id(), runtime)?,
+                GatewayStore::for_destination(target, keyring.vault.identity.signing(), runtime)?,
             );
         }
         let store = &stores[&target.gateway_id];
@@ -2463,11 +2479,17 @@ pub fn reconcile(
         requeued: 0,
         reachable: false,
     };
-    if super::moved(&ledger)?.is_some() {
+    if super::superseded_everywhere(&ledger)?.is_some() {
         return Ok(unreachable);
     }
     let destinations = ledger.destinations().map_err(plane_error)?;
-    let Ok(reached) = link::reach(&destinations, &ledger, keyring.vault_id(), runtime)? else {
+    let Ok(reached) = link::reach(
+        &destinations,
+        &ledger,
+        keyring.vault.identity.signing(),
+        runtime,
+    )?
+    else {
         return Ok(unreachable);
     };
     let reconciled = if full {

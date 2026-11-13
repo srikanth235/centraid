@@ -108,6 +108,7 @@ fn paired_with(label: &str, address: &str, safety: &str) -> wire::VaultCalled {
                     },
                     ..Default::default()
                 }),
+                tokens: Vec::new(),
             })),
         }
         .encode_to_vec(),

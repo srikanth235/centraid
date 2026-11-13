@@ -121,6 +121,7 @@ fn restore_answer(vaults: &[(&str, u32, i64, &str)], unclaimed: &[u32]) -> wire:
                 })
                 .collect(),
             older_offers: Vec::new(),
+            tokens: Vec::new(),
         })),
     };
     wire::OffThreadDone {
@@ -146,6 +147,7 @@ fn restore_offer(newest_ms: i64, offered_ms: i64) -> wire::OffThreadDone {
                 offered_taken_at_ms: offered_ms,
                 device: "Office NAS".to_owned(),
             }],
+            tokens: Vec::new(),
         })),
     };
     wire::OffThreadDone {

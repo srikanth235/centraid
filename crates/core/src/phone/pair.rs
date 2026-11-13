@@ -61,11 +61,13 @@
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_gateway::client::{Client, ClientError};
-use centraid_gateway::rules::claim::{sign_claim, sign_read};
 use centraid_gateway::rules::code::Refusal;
-use centraid_gateway::rules::ids::{GatewayId, Pin, Token};
+use centraid_gateway::rules::ids::{GatewayId, Nonce, Pin, Token};
 use centraid_gateway::rules::payload::{PairPayload, PayloadError};
-use centraid_gateway::rules::wire::{ClaimBody, PairKind, PairRequest, Paired, ReadBody};
+use centraid_gateway::rules::signing::{sign_claim, sign_pair, sign_read};
+use centraid_gateway::rules::wire::{
+    ClaimBody, PairKind, PairRequest, Paired, ReadBody, SecretBody,
+};
 use centraid_vault::backup::ledger::Destination;
 use centraid_vault::backup::naming::Name as PlaneName;
 use centraid_vault::backup::snapshot::{History, Manifest};
@@ -157,22 +159,34 @@ pub(crate) fn first_contact(
     Ok(client)
 }
 
+/// A single-use nonce from the gateway, which every pairing kind signs (E5):
+/// a recorded request cannot be replayed.
+pub(crate) fn nonce(client: &Client, runtime: &tokio::runtime::Handle) -> Result<Nonce> {
+    Ok(runtime
+        .block_on(client.nonce())
+        .map_err(pairing_error)?
+        .nonce)
+}
+
 /// A read-only grant for this vault: a token at epoch 0 that reads the head
-/// and never writes. `None` for a vault the gateway does not hold.
+/// and never writes, signed over a fresh nonce. `None` for a vault the
+/// gateway does not hold.
 pub(crate) fn read_grant(
     client: &Client,
     keyring: &Keyring,
     gateway: &GatewayId,
     runtime: &tokio::runtime::Handle,
 ) -> Result<Option<Paired>> {
+    let nonce = nonce(client, runtime)?;
     let request = PairRequest {
         vault_id: keyring.vault_id(),
         label: DEVICE_LABEL.to_owned(),
         kind: PairKind::Read,
+        nonce,
         secret: None,
         claim: None,
         read: Some(ReadBody {
-            signature: sign_read(keyring.vault.identity.signing(), gateway),
+            signature: sign_read(keyring.vault.identity.signing(), gateway, &nonce),
         }),
     };
     match runtime.block_on(client.pair(&request)) {
@@ -205,10 +219,12 @@ pub(crate) fn try_claim(
     head_seen: Option<centraid_gateway::rules::ids::Name>,
     runtime: &tokio::runtime::Handle,
 ) -> Result<ClaimAnswer> {
+    let nonce = nonce(client, runtime)?;
     let request = PairRequest {
         vault_id: keyring.vault_id(),
         label: DEVICE_LABEL.to_owned(),
         kind: PairKind::Claim,
+        nonce,
         secret: None,
         claim: Some(ClaimBody {
             epoch,
@@ -218,6 +234,7 @@ pub(crate) fn try_claim(
                 gateway,
                 epoch,
                 head_seen.as_ref(),
+                &nonce,
             ),
         }),
         read: None,
@@ -308,7 +325,7 @@ pub(crate) fn take_over(
     };
     client.set_token(grant.token);
     let state = runtime
-        .block_on(client.head_state(&keyring.vault_id()))
+        .block_on(client.head_state(&keyring.vault_id(), gateway))
         .map_err(pairing_error)?;
     // AN OLDER COPY CLAIMS NOTHING (the sweep's F4): the head is checked
     // against this phone's own copy before any claim is made.
@@ -371,20 +388,35 @@ pub fn pair(
     // Asked of the ledger before anything is dialled, claimed or cleared:
     // clearing this gateway's row below would clear the mark that freezes it.
     let ledger = plane.ledger()?;
-    if let Some((_, epoch)) = super::moved(&ledger)? {
+    let gateway_hex = payload.gw.hex();
+    // AT THIS GATEWAY (E4): a takeover another gateway proved says nothing of
+    // this one, whose own claim decides.
+    if let Some(epoch) = ledger.moved(&gateway_hex).map_err(plane_error)? {
         return Err(superseded(epoch));
     }
-    let gateway_hex = payload.gw.hex();
     let held = ledger
         .destination(&gateway_hex)
         .map_err(plane_error)?
         .map(|destination| destination.epoch);
     let client = first_contact(&payload, runtime)?;
+    // THE SECRET PROVES NOTHING ALONE (E7): the vault key signs it with the
+    // gateway's id and a fresh nonce, so a photograph of the code cannot
+    // admit somebody else's vault id.
+    let nonce = nonce(&client, runtime)?;
     let secret = PairRequest {
         vault_id: keyring.vault_id(),
         label: DEVICE_LABEL.to_owned(),
         kind: PairKind::Secret,
-        secret: Some(payload.secret),
+        nonce,
+        secret: Some(SecretBody {
+            secret: payload.secret,
+            signature: sign_pair(
+                keyring.vault.identity.signing(),
+                &payload.gw,
+                &payload.secret,
+                &nonce,
+            ),
+        }),
         claim: None,
         read: None,
     };
@@ -453,6 +485,11 @@ pub fn pair(
     Ok(wire::PairResponse {
         safety_number: safety_number(keyring, &payload.pin),
         destination: Some(wire_destination(&destination)),
+        tokens: vec![wire::GatewayToken {
+            vault_id: keyring.vault_hex(),
+            gateway_id,
+            token: token.hex(),
+        }],
     })
 }
 

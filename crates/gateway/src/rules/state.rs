@@ -191,8 +191,8 @@ pub struct ObjectRecord {
 impl ObjectRecord {
     /// **LIVE**: not held for deletion and not damaged. What `exists` and
     /// write-once answer about: a name that is held or damaged is one the
-    /// phone must send again, and a `PUT` of it replaces the bytes whatever
-    /// its digest.
+    /// phone must send again, and a `PUT` of it is taken only with the digest
+    /// recorded (decision 28); a signed delete frees a damaged one (30).
     #[must_use]
     pub const fn is_live(&self) -> bool {
         self.hold.is_none() && self.damaged_at_ms.is_none()

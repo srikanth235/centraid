@@ -1345,7 +1345,14 @@ fn two_vaults_on_one_gateway_cannot_reach_each_other() {
     ));
     assert!(unauthorized(
         runtime
-            .block_on(client.delete(&two_vault, &theirs))
+            .block_on(client.delete(
+                &two_vault,
+                &centraid_gateway::rules::wire::DeleteRequest {
+                    names: theirs.clone(),
+                    generation: 1,
+                    signature: centraid_gateway::rules::ids::Signature::from_bytes([0; 64]),
+                },
+            ))
             .map(|_| ())
     ));
     let planted = bytes_of("planted in another vault", 100);
@@ -1441,8 +1448,8 @@ fn an_item_deleted_after_backup_is_collected_once_purged() {
             .objects(&vault_id())
             .iter()
             .any(|record| Name::from_bytes(*record.name.as_bytes()) == object
-                && record.tombstone.is_some()),
-        "as a tombstone, with the gateway's grace"
+                && record.hold.is_some()),
+        "held, with the gateway's week"
     );
 }
 
@@ -1720,7 +1727,7 @@ fn a_deleted_file_stays_while_a_kept_snapshot_may_name_it() {
             .objects(&vault_id())
             .iter()
             .filter(|record| Name::from_bytes(*record.name.as_bytes()) == object)
-            .all(|record| record.tombstone.is_none()),
-        "and not even tombstoned"
+            .all(|record| record.hold.is_none()),
+        "and not even held"
     );
 }

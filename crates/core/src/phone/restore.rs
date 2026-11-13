@@ -246,6 +246,7 @@ fn run_controlled(
         runtime,
         cancellation,
         use_older: request.use_older,
+        minted: std::cell::RefCell::new(Vec::new()),
     };
 
     // FIRST, EVERY VAULT IS FETCHED, LAID DOWN AND CHECKED — and no writer
@@ -334,6 +335,7 @@ fn run_controlled(
             gap_scanned,
             unclaimed: Vec::new(),
             older_offers: offers,
+            tokens: Vec::new(),
         });
     }
 
@@ -386,6 +388,7 @@ fn run_controlled(
         // keeps, so the response carries no device secret (field 3 reserved).
         unclaimed,
         older_offers: Vec::new(),
+        tokens: scan.minted.take(),
     })
 }
 
@@ -437,6 +440,8 @@ struct Scan<'a> {
     cancellation: Option<crate::handle::Cancellation>,
     /// The member said yes to an older backup (`RestoreRequest.use_older`).
     use_older: bool,
+    /// The tokens this restore's claims minted, for the shell to keep (#1191, E12).
+    minted: std::cell::RefCell<Vec<wire::GatewayToken>>,
 }
 
 /// What looking at one index came to.
@@ -609,7 +614,7 @@ impl Scan<'_> {
         client.set_token(grant.token);
         let state = self
             .runtime
-            .block_on(client.head_state(&keyring.vault_id()))
+            .block_on(client.head_state(&keyring.vault_id(), &self.payload.gw))
             .map_err(pair::pairing_error)?;
         let Some(head) = state.head else {
             return Ok(Checked::Miss);
@@ -620,12 +625,16 @@ impl Scan<'_> {
             context: format!("making {}: {error}", dir.display()),
         })?;
         let file = dir.join(RESTORING);
+        // A READ GRANT WRITES NOTHING: the store signs nothing until the
+        // claim makes it this phone's, at the claim's epoch.
         let mut store = GatewayStore::over(
             client,
-            keyring.vault_id(),
+            keyring.vault.identity.signing(),
             self.payload.gw.hex(),
+            state.epoch,
+            0,
             self.runtime,
-        );
+        )?;
         store.set_cancellation(self.cancellation.clone());
         let mut older = None;
         let laid = match lay_down(&store, &keyring, &head.name, &file, index) {
@@ -758,6 +767,14 @@ impl Scan<'_> {
             {
                 ClaimAnswer::Claimed(paired) => {
                     after_claim(staged.index);
+                    // THIS PHONE WRITES THERE NOW, at the claim's epoch and from
+                    // generation zero (E3), under the token the claim minted.
+                    staged.store.claimed(paired.token, paired.epoch);
+                    self.minted.borrow_mut().push(wire::GatewayToken {
+                        vault_id: staged.keyring.vault_hex(),
+                        gateway_id: paired.gateway_id.hex(),
+                        token: paired.token.hex(),
+                    });
                     // Once writer authority moved, finish keeping the vault and
                     // its token before honoring a stop at the next vault.
                     staged.store.set_cancellation(None);
@@ -777,11 +794,25 @@ impl Scan<'_> {
                         // THE HEAD MOVED BETWEEN THE CHECK AND THE CLAIM: the
                         // old phone backed up in that window, and nothing
                         // moved. Lay the new head down and check it first.
-                        let view = self
+                        // VERIFIED, as every head this phone acts on (E2).
+                        let state = self
                             .runtime
-                            .block_on(staged.store.client().head(&staged.keyring.vault_id()))
+                            .block_on(
+                                staged
+                                    .store
+                                    .client()
+                                    .head_state(&staged.keyring.vault_id(), &self.payload.gw),
+                            )
                             .map_err(pair::pairing_error)
                             .map_err(ClaimFailure::Claim)?;
+                        let Some(view) = state.head else {
+                            return Err(ClaimFailure::Claim(CoreError::Invariant {
+                                context: format!(
+                                    "the gateway's head for index {} went back to none",
+                                    staged.index
+                                ),
+                            }));
+                        };
                         staged.restored = lay_down(
                             &staged.store,
                             &staged.keyring,
@@ -793,7 +824,7 @@ impl Scan<'_> {
                         staged.head = view.name;
                         staged.older = None;
                         staged.head_set_ms = view.set_at_ms;
-                        staged.epoch = view.epoch;
+                        staged.epoch = state.epoch;
                     }
                 }
             }
@@ -868,6 +899,7 @@ impl Scan<'_> {
                     &Name::from_bytes(*older.as_bytes()),
                     Some(&Name::from_bytes(*staged.head.as_bytes())),
                     u64::try_from(*taken).unwrap_or(0),
+                    staged.restored.manifest.writes,
                 )
                 .map_err(|error| CoreError::Unavailable {
                     reason: format!(

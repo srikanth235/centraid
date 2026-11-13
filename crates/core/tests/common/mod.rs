@@ -164,12 +164,12 @@ impl Gateway {
         }
     }
 
-    /// The names the gateway holds for `vault`: neither tombstoned nor
-    /// damaged.
+    /// The names the gateway holds for `vault`: neither held for deletion
+    /// nor damaged.
     pub fn held(&self, vault: &VaultId) -> BTreeSet<Name> {
         self.objects(vault)
             .iter()
-            .filter(|record| record.is_held())
+            .filter(|record| record.is_live())
             .map(|record| Name::from_bytes(*record.name.as_bytes()))
             .collect()
     }

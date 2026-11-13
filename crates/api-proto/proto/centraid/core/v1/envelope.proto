@@ -143,6 +143,9 @@ message Request {
     ScreenRequest screen = 37;
     // CHECK MY BACKUP (#1188, B6): open each backup in a spare copy. See `phone.proto`.
     CheckBackupRequest check_backup = 45;
+    // THE GATEWAY TOKENS THE SHELL KEEPS (#1191, E12), handed to the core at
+    // open and kept in its memory only. See `phone.proto`.
+    GatewayTokensRequest gateway_tokens = 46;
   }
 }
 
@@ -189,6 +192,7 @@ message Response {
     ActResponse act = 36;
     ScreenResponse screen = 38;
     CheckBackupResponse check_backup = 45;
+    GatewayTokensResponse gateway_tokens = 46;
   }
 }
 

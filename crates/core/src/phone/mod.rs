@@ -141,6 +141,8 @@ pub struct Plane {
     asked: std::sync::atomic::AtomicBool,
     /// Free bytes a test pretends the volume has; `u64::MAX` reads the volume.
     pretend_free: std::sync::atomic::AtomicU64,
+    /// The gateway tokens the shell handed over (#1191, E12), in memory only.
+    tokens: std::sync::Mutex<link::Tokens>,
 }
 
 impl Plane {
@@ -153,7 +155,25 @@ impl Plane {
             ceiling: centraid_vault::backup::spool::SPOOL_CEILING_BYTES,
             asked: std::sync::atomic::AtomicBool::new(false),
             pretend_free: std::sync::atomic::AtomicU64::new(u64::MAX),
+            tokens: std::sync::Mutex::new(link::Tokens::new()),
         }
+    }
+
+    /// Replace the gateway tokens held in memory (#1191, E12).
+    pub fn set_tokens(&self, tokens: link::Tokens) {
+        *self
+            .tokens
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = tokens;
+    }
+
+    /// The gateway tokens held in memory.
+    #[must_use]
+    pub fn tokens(&self) -> link::Tokens {
+        self.tokens
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     /// Pretend the volume has `bytes` free (`None`: read it again). For tests only.
@@ -401,8 +421,10 @@ pub fn wire_destination(destination: &Destination) -> wire::Destination {
 }
 
 /// The gateway this phone was superseded at, and the epoch that superseded
-/// it, when one did. A phone moved at any destination is no longer the
-/// vault's writer and freezes read-only for it (#1029 F1).
+/// it, when one did: what the status line reads ("another phone has taken
+/// over", as soon as any row is moved). **It stops nothing by itself** (#1191,
+/// E4): a gateway that proved a takeover stops the pass to that gateway only,
+/// and [`superseded_everywhere`] is what refuses a whole door.
 ///
 /// # Errors
 /// The ledger's refusal.
@@ -415,6 +437,23 @@ pub fn moved(ledger: &Ledger) -> Result<Option<(String, u64)>> {
     Ok(None)
 }
 
+/// The epoch that superseded this phone **at every paired gateway**, when it
+/// was superseded at all of them: only then is there nowhere left to write,
+/// and a door that writes refuses [`CoreError::VaultMoved`] (#1191, E4).
+///
+/// # Errors
+/// The ledger's refusal.
+pub fn superseded_everywhere(ledger: &Ledger) -> Result<Option<u64>> {
+    let mut highest = None;
+    for destination in ledger.destinations().map_err(plane_error)? {
+        match ledger.moved(&destination.gateway_id).map_err(plane_error)? {
+            Some(epoch) => highest = Some(highest.map_or(epoch, |seen: u64| seen.max(epoch))),
+            None => return Ok(None),
+        }
+    }
+    Ok(highest)
+}
+
 /// A raw 32-byte content hash off the wire.
 pub(crate) fn hash_of(raw: &[u8]) -> Result<PlaintextHash> {
     <[u8; 32]>::try_from(raw)
@@ -422,6 +461,53 @@ pub(crate) fn hash_of(raw: &[u8]) -> Result<PlaintextHash> {
         .map_err(|_| CoreError::InvalidRequest {
             detail: format!("a content hash is 32 bytes, and this one is {}", raw.len()),
         })
+}
+
+// ─── gateway tokens ─────────────────────────────────────────────────────────
+
+/// **The tokens the shell keeps for this vault** (`gateway_tokens`, #1191,
+/// E12): the core replaces its in-memory set with the ones for this vault and
+/// answers every paired gateway it was handed none for, which the next pass
+/// treats as pair again. Nothing is written: a token is never in a file the
+/// core owns.
+///
+/// # Errors
+/// [`CoreError::InvalidRequest`] for a token or an id that is not hex of its
+/// length; the device state's refusal.
+pub fn gateway_tokens(
+    plane: &Plane,
+    keyring: Option<&Keyring>,
+    request: &wire::GatewayTokensRequest,
+) -> Result<wire::GatewayTokensResponse> {
+    let vault_hex = keyring.map(Keyring::vault_hex);
+    let mut held = link::Tokens::new();
+    for given in &request.tokens {
+        if vault_hex
+            .as_deref()
+            .is_some_and(|vault| vault != given.vault_id)
+        {
+            continue;
+        }
+        let token: centraid_gateway::rules::ids::Token =
+            given.token.parse().map_err(|_| CoreError::InvalidRequest {
+                detail: format!("the token for gateway {} is not 64 hex", given.gateway_id),
+            })?;
+        link::gateway_of(&given.gateway_id)?;
+        held.insert(given.gateway_id.clone(), token);
+    }
+    let paired: Vec<String> = plane
+        .ledger()?
+        .destinations()
+        .map_err(plane_error)?
+        .into_iter()
+        .map(|destination| destination.gateway_id)
+        .collect();
+    let pair_again = paired
+        .into_iter()
+        .filter(|gateway_id| !held.contains_key(gateway_id))
+        .collect();
+    plane.set_tokens(held);
+    Ok(wire::GatewayTokensResponse { pair_again })
 }
 
 // ─── pins and forget ────────────────────────────────────────────────────────
@@ -470,12 +556,14 @@ pub fn pins(plane: &Plane) -> Result<wire::PinsResponse> {
 /// refusal.
 pub fn forget_destination(
     plane: &Plane,
-    vault: Option<VaultId>,
+    keyring: Option<&Keyring>,
     runtime: &tokio::runtime::Handle,
     request: &wire::ForgetDestinationRequest,
 ) -> Result<wire::ForgetDestinationResponse> {
     let ledger = plane.ledger()?;
-    if let Some((_, epoch)) = moved(&ledger)? {
+    // ONLY THE GATEWAY THAT PROVED A TAKEOVER is refused (E4): its row is what
+    // carries the mark.
+    if let Some(epoch) = ledger.moved(&request.gateway_id).map_err(plane_error)? {
         return Err(CoreError::VaultMoved {
             current_epoch: epoch,
             moved_at_ms: 0,
@@ -493,10 +581,16 @@ pub fn forget_destination(
     drain::forget_reach(&ledger, &request.gateway_id)?;
     // FORGETTING THE LAST GATEWAY LEAVES NOTHING QUEUED: no gateway owes the spooled parts now.
     centraid_vault::backup::mover::sweep_unowed(&ledger, &plane.spool()?).map_err(plane_error)?;
-    let revoked = vault.is_some_and(|vault| revoke(&destination, vault, runtime));
+    let revoked = keyring.is_some_and(|keyring| revoke(&destination, keyring, runtime));
     Ok(wire::ForgetDestinationResponse {
         forgotten: true,
         revoked,
+        // THE SHELL DELETES THE TOKEN IT KEEPS (#1191, E12), named by its key.
+        forget_token: keyring.map(|keyring| wire::GatewayToken {
+            vault_id: keyring.vault_hex(),
+            gateway_id: destination.gateway_id.clone(),
+            token: String::new(),
+        }),
     })
 }
 
@@ -534,7 +628,9 @@ pub fn refresh_destination(
     use centraid_gateway::client::Client;
 
     let ledger = plane.ledger()?;
-    if let Some((_, epoch)) = moved(&ledger)? {
+    // ONLY THE GATEWAY THAT PROVED A TAKEOVER is refused (E4): its row is what
+    // carries the mark.
+    if let Some(epoch) = ledger.moved(&request.gateway_id).map_err(plane_error)? {
         return Err(CoreError::VaultMoved {
             current_epoch: epoch,
             moved_at_ms: 0,
@@ -615,10 +711,15 @@ pub(crate) fn refresh_candidates(given: &[String]) -> Vec<String> {
 
 /// Ask `destination` to revoke this phone's token for `vault`. Whether the
 /// pinned gateway answered that the token opens nothing there now.
-fn revoke(destination: &Destination, vault: VaultId, runtime: &tokio::runtime::Handle) -> bool {
+fn revoke(destination: &Destination, keyring: &Keyring, runtime: &tokio::runtime::Handle) -> bool {
     use centraid_gateway::client::ClientError;
     use centraid_gateway::rules::Refusal;
-    let store = match link::GatewayStore::for_destination(destination, vault, runtime) {
+    let vault = keyring.vault_id();
+    let store = match link::GatewayStore::for_destination(
+        destination,
+        keyring.vault.identity.signing(),
+        runtime,
+    ) {
         Ok(store) => store,
         Err(error) => {
             tracing::debug!(%error, "a forgotten gateway's token does not read");

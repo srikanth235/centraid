@@ -267,6 +267,37 @@ message PairResponse {
   // paired with more than one; `BackupStatusResponse.destinations` lists them
   // all.
   Destination destination = 5;
+  // THE TOKEN THIS PAIRING MINTED, for the shell to keep (#1191, E12): one
+  // entry. The shell SETs it under `GatewayToken.key()`'s spelling in its
+  // device secret store; the core keeps it in memory and writes it nowhere.
+  repeated GatewayToken tokens = 6;
+}
+
+// A GATEWAY'S BEARER TOKEN, as the shell keeps it (#1191, E12). Device store
+// only, under the key `gateway-token.<vault_id>.<gateway_id>`, value the
+// token's 64 lowercase hex characters. Never in a database file, never in a
+// synchronised store.
+message GatewayToken {
+  // 64 lowercase hex: the vault's id.
+  string vault_id = 1;
+  // 32 lowercase hex: the gateway's id.
+  string gateway_id = 2;
+  // 64 lowercase hex. Empty in `ForgetDestinationResponse.forget_token`,
+  // which names the key to delete.
+  string token = 3;
+}
+
+// The tokens the shell holds for this vault, read at open (LIST the prefix
+// `gateway-token.<vault_id>.`, then GET). The core replaces its in-memory set
+// for the vault with these.
+message GatewayTokensRequest {
+  repeated GatewayToken tokens = 1;
+}
+
+message GatewayTokensResponse {
+  // Gateways the device state has paired and no token was handed for: each is
+  // marked to pair again. Opening is never refused for one.
+  repeated string pair_again = 1;
 }
 
 // ---------------------------------------------------------------- restore --
@@ -396,6 +427,10 @@ message RestoreResponse {
   // restores nothing: `vaults` is empty and each such vault is named here. The member decides;
   // a second restore with `RestoreRequest.use_older` restores them. Empty is the ordinary answer.
   repeated OlderOffer older_offers = 5;
+  // THE TOKENS THIS RESTORE'S CLAIMS MINTED, one per vault per gateway it
+  // claimed at, for the shell to keep (#1191, E12). A read grant is spent
+  // inside the restore and never returned.
+  repeated GatewayToken tokens = 6;
 }
 
 // The newest older backup that passes, for one vault whose newest does not (`RestoreResponse.older_offers`).
@@ -704,6 +739,9 @@ message ForgetDestinationResponse {
   // is forgotten all the same, and the token stays live on that gateway until
   // its operator runs `centraid-gateway pairings revoke <token id>`.
   bool revoked = 2;
+  // THE KEY THE SHELL DELETES from its device secret store (#1191, E12): the
+  // token field is empty. Unset when nothing was forgotten.
+  GatewayToken forget_token = 3;
 }
 
 // ---------------------------------------------------------------- handoff --

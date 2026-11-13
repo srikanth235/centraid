@@ -308,7 +308,8 @@ pub(crate) fn fetch_original_cancellable(
         _ => 0,
     };
     for destination in ledger.destinations().map_err(plane_error)? {
-        let mut store = GatewayStore::for_destination(&destination, keyring.vault_id(), runtime)?;
+        let mut store =
+            GatewayStore::for_destination(&destination, keyring.vault.identity.signing(), runtime)?;
         store.set_cancellation(cancellation.clone());
         let assembled = assemble_into(&store, &keyring.backup, &h, file.len, bytes);
         if assembled.is_err() {
@@ -385,6 +386,7 @@ mod cancellation_tests {
             _: &Name,
             _: Option<&Name>,
             _: u64,
+            _: u64,
         ) -> std::result::Result<Head, StoreError> {
             unreachable!("fetch only")
         }
@@ -399,6 +401,17 @@ mod cancellation_tests {
             unreachable!("fetch only")
         }
         fn delete(&self, _: &[Name]) -> std::result::Result<Deleted, StoreError> {
+            unreachable!("fetch only")
+        }
+        fn held(
+            &self,
+            _: Option<&Name>,
+            _: usize,
+        ) -> std::result::Result<Vec<centraid_vault::backup::store::HeldEntry>, StoreError>
+        {
+            unreachable!("fetch only")
+        }
+        fn undo(&self, _: Option<&[Name]>) -> std::result::Result<u64, StoreError> {
             unreachable!("fetch only")
         }
     }

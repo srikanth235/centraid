@@ -467,7 +467,7 @@ fn moved_and_not_settled(phone: &Handle, path: &Path) -> Name {
     let runtime = runtime();
     let store = centraid_core::phone::link::GatewayStore::for_destination(
         &destination,
-        keyring.vault_id(),
+        keyring.vault.identity.signing(),
         runtime.handle(),
     )
     .expect("a store");

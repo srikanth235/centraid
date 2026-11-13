@@ -243,7 +243,7 @@ fn the_operating_system_moves_a_handed_off_part_and_settle_records_it() {
     assert_eq!(part.vault_id, keys.vault_hex());
     assert!(
         part.url
-            .ends_with(&format!("/v2/v/{}/o/{}", part.vault_id, part.name)),
+            .ends_with(&format!("/v3/v/{}/o/{}", part.vault_id, part.name)),
         "{}",
         part.url
     );

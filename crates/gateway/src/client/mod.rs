@@ -201,9 +201,10 @@ pub struct HeadState {
     pub head: Option<HeadView>,
 }
 
-/// What the gateway answered a `PUT` with. **Every variant is an
-/// acknowledgement**: the gateway holds a sealing of these bytes under this
-/// name, durably. Anything else is a [`ClientError`].
+/// What the gateway answered a `PUT` with. `Stored` and `AlreadyStored` are
+/// acknowledgements: the gateway holds these bytes under this name, durably.
+/// `NameTaken` is one only when the digest it holds is the one sent
+/// ([`Put::acknowledged`], decision 30). Anything else is a [`ClientError`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Put {
     /// `201`: new bytes, now held.

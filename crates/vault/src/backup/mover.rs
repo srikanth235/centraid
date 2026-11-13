@@ -46,7 +46,9 @@ use super::Result;
 use super::ledger::{Ledger, PartKind, Queued};
 use super::naming::Name;
 use super::spool::Spool;
-use super::store::{self, BUNDLE_BYTES, FRAME_HEADER_BYTES, Outgoing, Refusal, Store, StoreError};
+use super::store::{
+    self, BUNDLE_BYTES, FRAME_HEADER_BYTES, NameState, Outgoing, Refusal, Store, StoreError,
+};
 use crate::clock::Clock;
 
 /// Why a pass stopped moving.
@@ -225,6 +227,15 @@ pub fn release_to_reachable(ledger: &Ledger, spool: &Spool, reachable: &[String]
     Ok(leaving.len())
 }
 
+/// Why a part waits after `NAME_TAKEN` by other bytes: the state, recorded
+/// as its attempt.
+fn taken_reason(refusal: &Refusal) -> String {
+    match refusal {
+        Refusal::NameTaken { state, .. } => format!("NAME_TAKEN {state:?}"),
+        other => other.code().to_owned(),
+    }
+}
+
 /// Whether `part` rides in a bundle: a range or a derivative small enough
 /// for one. Everything else goes as its own `put`.
 fn bundled(part: &Queued) -> bool {
@@ -240,6 +251,9 @@ struct Pass<'a> {
     gateway: String,
     clock: &'a dyn Clock,
     moved: Moved,
+    /// Parts whose damaged copy this pass already freed: freed once a pass,
+    /// never in a loop.
+    healed: BTreeSet<Name>,
 }
 
 impl Pass<'_> {
@@ -275,18 +289,32 @@ impl Pass<'_> {
     /// The acknowledged parts are confirmed together, and the first stop wins.
     fn answered(
         &mut self,
+        store: &dyn Store,
         answers: Vec<(&Queued, std::result::Result<(), Refusal>)>,
     ) -> Result<Option<Stop>> {
         let mut acknowledged: Vec<&Queued> = Vec::new();
+        let mut heal: Vec<&Queued> = Vec::new();
         let mut stop = None;
         for (part, answer) in answers {
             match answer {
                 Ok(()) => acknowledged.push(part),
-                // Only the phone's own bytes under the name are an acknowledgement
-                // (decision 30). Another digest is not stored: the S2 outbox
-                // port types what to do with it by state.
+                // ONLY THE PHONE'S OWN BYTES UNDER THE NAME are an acknowledgement
+                // (decision 30).
                 Err(Refusal::NameTaken { held, .. }) if held == part.digest => {
                     acknowledged.push(part);
+                }
+                // A DAMAGED COPY UNDER THE NAME: the vault key's signed delete
+                // frees it at once, and the part goes again (decision 30).
+                Err(Refusal::NameTaken {
+                    state: NameState::Damaged,
+                    ..
+                }) if self.healed.insert(part.name) => heal.push(part),
+                // OTHER BYTES, LIVE OR HELD: never counted as stored. The part
+                // waits, with the reason, and goes again on a later pass (the
+                // hold ends, or the name is freed); the pass to the others goes on.
+                Err(refusal @ Refusal::NameTaken { .. }) => {
+                    self.ledger
+                        .record_attempt(&part.name, &taken_reason(&refusal))?;
                 }
                 Err(Refusal::DigestMismatch) => {
                     // THE PART IS SEALED AGAIN, BUT NOT FOREVER: the same part, refused as
@@ -313,6 +341,24 @@ impl Pass<'_> {
             }
         }
         self.acknowledged(&acknowledged)?;
+        if stop.is_none() && !heal.is_empty() {
+            let names: Vec<Name> = heal.iter().map(|part| part.name).collect();
+            match store.delete(&names) {
+                Ok(deleted) => {
+                    for part in heal {
+                        if deleted.freed.contains(&part.name) {
+                            if let Some(halt) = self.single(store, part)? {
+                                stop.get_or_insert(halt);
+                            }
+                        } else {
+                            self.ledger
+                                .record_attempt(&part.name, "NAME_TAKEN damaged, not freed")?;
+                        }
+                    }
+                }
+                Err(error) => return self.unanswered(&heal, error).map(Some),
+            }
+        }
         Ok(stop)
     }
 
@@ -360,8 +406,8 @@ impl Pass<'_> {
         let put = store.put(&part.name, &part.digest, part.size, &mut body);
         drop(body);
         match put {
-            Ok(_) => self.answered(vec![(part, Ok(()))]),
-            Err(StoreError::Refused(refusal)) => self.answered(vec![(part, Err(refusal))]),
+            Ok(_) => self.answered(store, vec![(part, Ok(()))]),
+            Err(StoreError::Refused(refusal)) => self.answered(store, vec![(part, Err(refusal))]),
             Err(error) => self.unanswered(&[part], error).map(Some),
         }
     }
@@ -406,7 +452,7 @@ impl Pass<'_> {
             .into_iter()
             .filter_map(|(name, answer)| Some((*by_name.get(&name)?, answer.map(|_| ()))))
             .collect();
-        self.answered(answered)
+        self.answered(store, answered)
     }
 }
 
@@ -462,6 +508,7 @@ pub fn move_queue_where(
             errors: Vec::new(),
             stopped: Stop::Empty,
         },
+        healed: BTreeSet::new(),
     };
     let mut next = 0;
     while let Some(part) = queue.get(next) {

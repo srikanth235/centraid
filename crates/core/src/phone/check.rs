@@ -261,7 +261,8 @@ fn one(
     progress: &Progress,
     ledger: &centraid_vault::backup::ledger::Ledger,
 ) -> Result<wire::DeviceCheck> {
-    let mut store = GatewayStore::for_destination(destination, keyring.vault_id(), runtime)?;
+    let mut store =
+        GatewayStore::for_destination(destination, keyring.vault.identity.signing(), runtime)?;
     store.set_cancellation(Some(cancellation.clone()));
     let head = match store.head() {
         Ok(Some(head)) => head,
