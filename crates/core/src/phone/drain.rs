@@ -891,13 +891,9 @@ fn pass_over(
             Err(error) => return Err(store_error(error)),
         }
         // EVERY NAME OWED, ASKED ONCE A LIFE (or at once, after a rollback): the ones the gateway
-        // already holds are let go. **AND THE LIBRARY IS WALKED AGAIN FROM ITS START ONCE A LIFE**
-        // (#1080 ruling 7, "on every launch"): a gateway that lost a file since is found by
-        // `exists`, one question per thousand names, until the read-back samples originals' chunks
-        // (B13) and finds it sooner.
-        if owes_reconcile {
-            state.set_cursor(id, 0).map_err(plane_error)?;
-        }
+        // already holds are let go. The library is NOT walked again from its start (B13): a
+        // gateway that lost a file since is found by the read-back's sample of originals' chunks,
+        // which resets the cursor for exactly that repair.
         if owes_reconcile || pass.rolled.contains(id) {
             let squared =
                 mover::reconcile(state, spool, store, &SystemClock).map_err(plane_error)?;
@@ -1065,44 +1061,86 @@ fn verify_sample(
             return Ok(());
         }
     };
-    let names: Vec<Name> = manifest.ranges.iter().map(|range| range.name).collect();
+    let pieces = centraid_vault::backup::verify::population(&manifest);
     let counter = state.next_sample_counter(id).map_err(plane_error)?;
     let found = sample(
         store,
         keys,
-        &names,
+        &pieces,
         counter,
         if metered {
             SAMPLE_CHUNKS_METERED
         } else {
             SAMPLE_CHUNKS
         },
+        metered,
     );
     pass.sampled = pass.sampled.saturating_add(found.checked);
     plane.note(id, |notes| {
         notes.sample_checked = u32::try_from(found.checked).unwrap_or(u32::MAX);
-        notes.sample_of = u32::try_from(names.len()).unwrap_or(u32::MAX);
+        notes.sample_of = u32::try_from(pieces.len()).unwrap_or(u32::MAX);
+        notes.sample_unverified = 0;
         notes.manifest_unreadable = false;
     });
     if let Some(error) = found.unanswered {
         return Err(store_error(error));
     }
-    if !found.wrong.is_empty() {
+    if found.wrong.is_empty() {
+        return Ok(());
+    }
+    // A CHUNK THAT WAS WRONG, THE GATEWAY NOT KNOWING IT (decision 34): ask it, by a signed
+    // check, to hash that one object. At most the pass's sample size are asked. A name it finds
+    // damaged is freed by a signed delete with the ones it already knew; one it finds intact is
+    // NOT deleted (the read-back and the gateway disagree: the part is counted unverified and
+    // read again next pass); one it does not hold is found by the walk's `exists`.
+    let mut freeable = found.freeable.clone();
+    let mut confirmed_wrong = found.freeable.len();
+    let mut unverified = 0_u32;
+    for name in found
+        .wrong
+        .iter()
+        .filter(|name| !found.freeable.contains(name))
+        .take(SAMPLE_CHUNKS)
+    {
+        match store.check_name(name) {
+            Ok(centraid_vault::backup::store::NameCheck::Damaged) => {
+                freeable.push(*name);
+                confirmed_wrong += 1;
+            }
+            Ok(centraid_vault::backup::store::NameCheck::Intact) => unverified += 1,
+            // GONE, OR A GATEWAY THAT CANNOT CHECK: the walk's `exists` finds a missing one.
+            Ok(
+                centraid_vault::backup::store::NameCheck::Missing
+                | centraid_vault::backup::store::NameCheck::Unsupported,
+            ) => confirmed_wrong += 1,
+            // BUSY or a failed ask: the part is read again next pass.
+            Err(error @ StoreError::Unreachable(_)) => return Err(store_error(error)),
+            Err(_) => unverified += 1,
+        }
+    }
+    plane.note(id, |notes| notes.sample_unverified = unverified);
+    if unverified > 0 {
         tracing::warn!(
             gateway = %id,
-            wrong = found.wrong.len(),
-            "a gateway no longer holds what it acknowledged"
+            unverified,
+            "the read-back found chunks wrong that the gateway says are intact; nothing deleted"
         );
-        // A DAMAGED NAME THE GATEWAY KNOWS is freed by a signed delete at once; the rest are the
-        // gateway's scrub to find, and the next walk sends them once `exists` says they are gone.
-        plane_store::delete_all(store, &found.freeable).map_err(store_error)?;
-        state.set_cursor(id, 0).map_err(plane_error)?;
-        plane.set_snapshot_owed(true);
-        // The head is retaken at once and, until a current one is set, the status says so.
-        plane.set_rolled(id, true);
-        pass.rolled.insert(id.to_owned());
-        pass.repairing.insert(id.to_owned());
     }
+    if confirmed_wrong == 0 {
+        return Ok(());
+    }
+    tracing::warn!(
+        gateway = %id,
+        wrong = confirmed_wrong,
+        "a gateway no longer holds what it acknowledged"
+    );
+    plane_store::delete_all(store, &freeable).map_err(store_error)?;
+    state.set_cursor(id, 0).map_err(plane_error)?;
+    plane.set_snapshot_owed(true);
+    // The head is retaken at once and, until a current one is set, the status says so.
+    plane.set_rolled(id, true);
+    pass.rolled.insert(id.to_owned());
+    pass.repairing.insert(id.to_owned());
     Ok(())
 }
 

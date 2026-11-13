@@ -1503,6 +1503,20 @@ pub fn chunk_span(sealed_len: u64, index: u32) -> Result<ChunkSpan, SealedError>
     Ok(ChunkSpan { offset, len, last })
 }
 
+/// Which bytes of a sealed part to read to get chunk `index` of a part of `count` chunks, from
+/// the chunk count alone (the digests a manifest lists say how many): `(offset, len)`, where a
+/// `None` length reads to the end, as the last chunk must (its frame is as long as its payload,
+/// which compression makes unknowable here). Every other chunk is a full frame.
+#[must_use]
+pub fn chunk_read(index: u32, count: u32) -> (u64, Option<u64>) {
+    let offset = HEADER_BYTES as u64 + u64::from(index) * FULL_FRAME_BYTES;
+    if index + 1 >= count {
+        (offset, None)
+    } else {
+        (offset, Some(FULL_FRAME_BYTES))
+    }
+}
+
 /// Open one chunk on its own: its frame, the part's 30-byte header (for the
 /// salt, and bound into the AAD), its position and whether it is last. A chunk
 /// moved to another position, or taken from another part, fails its tag.

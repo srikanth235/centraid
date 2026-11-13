@@ -133,6 +133,47 @@ pub trait Store {
     /// [`StoreError::Missing`] for a name the destination does not hold.
     fn get(&self, name: &Name, sink: &mut dyn Write) -> Result<u64, StoreError>;
 
+    /// Ask the destination to hash one stored object against its recorded digest and mark the
+    /// name damaged if they differ (decision 34). Signed by the vault key, so a token alone
+    /// cannot ask. The default is a destination that cannot.
+    ///
+    /// # Errors
+    /// As [`Store::delete`]; `BUSY` past the destination's cap is a refusal.
+    fn check_name(&self, _name: &Name) -> Result<NameCheck, StoreError> {
+        Ok(NameCheck::Unsupported)
+    }
+
+    /// Write `len` bytes (to the end when `None`) of one object from `offset` into `sink`,
+    /// returning how many: the protocol's single `Range` read. The default reads the whole
+    /// object and cuts it; a destination that can read a range does.
+    ///
+    /// # Errors
+    /// As [`Store::get`]; an object shorter than `offset` is an `InvalidData` I/O error.
+    fn get_range(
+        &self,
+        name: &Name,
+        offset: u64,
+        len: Option<u64>,
+        sink: &mut dyn Write,
+    ) -> Result<u64, StoreError> {
+        let mut all = Vec::new();
+        self.get(name, &mut all)?;
+        let start = usize::try_from(offset).unwrap_or(usize::MAX);
+        if start > all.len() {
+            return Err(StoreError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "the object is shorter than the range asked",
+            )));
+        }
+        let end = len.map_or(all.len(), |len| {
+            start
+                .saturating_add(usize::try_from(len).unwrap_or(usize::MAX))
+                .min(all.len())
+        });
+        sink.write_all(&all[start..end])?;
+        Ok((end - start) as u64)
+    }
+
     /// Fetch several objects in one request: the protocol's `fetch`. `each`
     /// is handed every object the destination holds of `names` (at most
     /// [`NAMES_PER_CALL`], whose bytes fit [`BUNDLE_BYTES`]), with its name,
@@ -304,6 +345,19 @@ pub struct ObjectEntry {
     pub size: u64,
     pub digest: Digest,
     pub stored_at_ms: u64,
+}
+
+/// What the gateway found when asked to check one name (decision 34).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NameCheck {
+    /// The stored bytes hash to the recorded digest; the gateway changed nothing.
+    Intact,
+    /// They do not: the gateway marked the name damaged, and a signed delete frees it at once.
+    Damaged,
+    /// The gateway holds no object of that name.
+    Missing,
+    /// This destination cannot check a name.
+    Unsupported,
 }
 
 /// What a `delete` did.

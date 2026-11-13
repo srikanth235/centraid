@@ -9,7 +9,7 @@
 //! | `gateway` | the pairing (addresses, pinned certificate, label, the epoch this phone holds) and what this phone knows of that gateway: the head it set, its generation and writes, the blob cursor, how the last pass fared, the sample counter |
 //! | `outbox` | per gateway, each name owed and how its last attempt went |
 //! | `local_bytes` | where each hash's bytes are on this device |
-//! | `part_digests` | the chunk digests of each blob part this phone sealed (rung 2), for the manifest's blobs tree and the read-back |
+//! | `part_digests` | the chunk digests of each blob part this phone sealed for the manifest's blobs tree and the read-back |
 //!
 //! **The token is not here** (E12): the shell keeps it in the device secret
 //! store, and the core holds it in memory only. **Nothing is recorded as
@@ -37,10 +37,7 @@ use super::{Result, invariant};
 pub const STATE_APPLICATION_ID: i64 = 0x4342_5331;
 
 /// The rungs of the ladder, in order. `user_version` is how many are applied.
-const LADDER: &[&str] = &[
-    include_str!("state_ladder/001_founding.sql"),
-    include_str!("state_ladder/002_part_digests.sql"),
-];
+const LADDER: &[&str] = &[include_str!("state_ladder/001_founding.sql")];
 
 /// How a gateway's last pass fared, which decides what the status line says
 /// and whether the next pass tries it (E4, E6, E13).

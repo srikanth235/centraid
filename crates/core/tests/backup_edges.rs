@@ -1677,6 +1677,16 @@ fn a_deleted_file_stays_while_a_kept_snapshot_may_name_it() {
     drain(&phone, at_home());
     let object = Name::from_bytes(*gateway_name(&staged.content_hash, 0).as_bytes());
     assert!(gateway.held(&vault_id()).contains(&object));
+    // THE FIRST PASS CAN TAKE TWO SNAPSHOTS IN ONE FROZEN MILLISECOND, which retention can only
+    // tell apart by name: an hour and a change later, the one that is "from before" is the newest
+    // of its day by the clock and not by luck.
+    clock.advance_ms(60 * 60 * 1000);
+    note(
+        &phone,
+        "Before",
+        "so the snapshot from before is the newest of its day",
+    );
+    drain(&phone, at_home());
     let from_before = first_head(&path);
 
     // TWO DAYS ON, THE PHOTOGRAPH IS DELETED FOREVER, and two snapshots fall on

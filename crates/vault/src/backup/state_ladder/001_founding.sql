@@ -1,4 +1,4 @@
--- The device state of a phone's backup (#1191, E11): three tables, STRICT, no
+-- The device state of a phone's backup (#1191, E11): four tables, STRICT, no
 -- key-value table. The gateway token is not here (E12): the shell keeps it.
 
 CREATE TABLE gateway (
@@ -62,4 +62,12 @@ CREATE TABLE undone (
   name       TEXT NOT NULL CHECK (length(name) = 64 AND name NOT GLOB '*[^0-9a-f]*'),
   until_ms   INTEGER NOT NULL,
   PRIMARY KEY (gateway_id, name)
+) STRICT, WITHOUT ROWID;
+
+-- The chunk digests of every blob part this phone sealed (E9, E10): what a manifest's blobs tree
+-- carries as `d`, and what a read-back of an original checks a chunk against. `d` is the 32-byte
+-- digests one after another, in chunk order; retention forgets rows no longer live.
+CREATE TABLE part_digests (
+  name TEXT PRIMARY KEY CHECK (length(name) = 64 AND name NOT GLOB '*[^0-9a-f]*'),
+  d    BLOB NOT NULL CHECK (length(d) % 32 = 0)
 ) STRICT, WITHOUT ROWID;

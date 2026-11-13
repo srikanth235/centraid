@@ -58,6 +58,13 @@ pub const MAX_JSON_BYTES: usize = 1024 * 1024;
 /// keeps one forged-looking value from locking the real phone out (E3).
 pub const MAX_GENERATION_JUMP: u64 = 256;
 
+/// How many names one vault may have checked (decision 34) in one [`CHECK_WINDOW_MS`]: a pass's
+/// sample size. A phone that asks for more is told `BUSY`.
+pub const MAX_CHECKS_PER_WINDOW: u32 = 64;
+
+/// The window the check cap counts in: the purge sweep's interval.
+pub const CHECK_WINDOW_MS: i64 = 60 * 60 * 1000;
+
 /// HOW LONG A NONCE IS GOOD FOR: five minutes, and one use (E5).
 pub const NONCE_TTL_MS: i64 = 300_000;
 

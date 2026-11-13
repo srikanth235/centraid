@@ -216,6 +216,34 @@ pub struct DeleteRequest {
     pub signature: Signature,
 }
 
+/// `POST /v3/v/{vault}/check`: the vault key's signature over one name and the generation
+/// (decision 34). The gateway hashes that stored object against its recorded digest.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CheckRequest {
+    pub name: Name,
+    pub generation: u64,
+    pub signature: Signature,
+}
+
+/// What a check found.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CheckState {
+    /// The stored bytes hash to the recorded digest; nothing changed.
+    Intact,
+    /// They do not (or the file is gone): the name is marked damaged, so a signed delete frees
+    /// it at once.
+    Damaged,
+    /// The gateway holds no object of that name.
+    Missing,
+}
+
+/// What `POST check` answers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Checked {
+    pub state: CheckState,
+}
+
 /// `POST /v3/v/{vault}/undo`: lift the holds of `names`, or of every hold
 /// when `names` is null.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

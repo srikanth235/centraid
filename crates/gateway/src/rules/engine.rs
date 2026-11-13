@@ -27,23 +27,24 @@ use std::collections::BTreeSet;
 use crate::rules::code::{Code, Refusal};
 use crate::rules::ids::{Digest, GatewayId, Name, Secret, Token, TokenHash, VaultId};
 use crate::rules::limits::{
-    BUSY_RETRY_MS, GRACE_MS, LIST_LIMIT, MAX_BUNDLE_BYTES, MAX_CLOCK_AHEAD_MS, MAX_GENERATION_JUMP,
-    MAX_LABEL_BYTES, MAX_LIVE_NONCES, MAX_LIVE_SECRETS, MAX_NAMES, MAX_OBJECT_BYTES,
-    MAX_REVOKED_PER_VAULT, NONCE_TTL_MS, ORPHAN_MIN_AGE_MS, PROTOCOL, PURGE_GAP_INTERVALS,
-    PURGE_INTERVAL_MS, REVOKED_TOKEN_KEEP_MS, SECRET_KEEP_MS, SECRET_TTL_MS,
+    BUSY_RETRY_MS, CHECK_WINDOW_MS, GRACE_MS, LIST_LIMIT, MAX_BUNDLE_BYTES, MAX_CHECKS_PER_WINDOW,
+    MAX_CLOCK_AHEAD_MS, MAX_GENERATION_JUMP, MAX_LABEL_BYTES, MAX_LIVE_NONCES, MAX_LIVE_SECRETS,
+    MAX_NAMES, MAX_OBJECT_BYTES, MAX_REVOKED_PER_VAULT, NONCE_TTL_MS, ORPHAN_MIN_AGE_MS, PROTOCOL,
+    PURGE_GAP_INTERVALS, PURGE_INTERVAL_MS, REVOKED_TOKEN_KEEP_MS, SECRET_KEEP_MS, SECRET_TTL_MS,
 };
 use crate::rules::nonce;
 use crate::rules::signing::{
-    HeadFields, READ_EPOCH, verify_claim, verify_delete, verify_head, verify_pair, verify_undo,
+    HeadFields, READ_EPOCH, verify_check, verify_claim, verify_delete, verify_head, verify_pair,
+    verify_undo,
 };
 use crate::rules::state::{
     ClaimRecord, Fault, HeadRecord, Hold, ObjectRecord, RevokedToken, SecretRecord, SnapshotRecord,
     State, TokenRecord, VaultRecord,
 };
 use crate::rules::wire::{
-    ClaimView, DeleteAnswer, DeleteRequest, HeadView, HeldEntry, HeldKind, Info, NameRefusal,
-    NameState, NonceAnswer, ObjectEntry, PairKind, PairRequest, Paired, SetHead, SnapshotView,
-    UndoRequest, Undone,
+    CheckRequest, CheckState, Checked, ClaimView, DeleteAnswer, DeleteRequest, HeadView, HeldEntry,
+    HeldKind, Info, NameRefusal, NameState, NonceAnswer, ObjectEntry, PairKind, PairRequest,
+    Paired, SetHead, SnapshotView, UndoRequest, Undone,
 };
 
 /// What a request may do.
@@ -174,6 +175,9 @@ pub struct Gateway<S> {
     /// The key nonces are MAC'd under: gateway-local, kept with the identity,
     /// handed to the rules as an argument like a clock.
     nonce_key: [u8; 32],
+    /// Per vault: when the window of checks it is counted in began, and how many it holds
+    /// (decision 34). Memory only: a restart gives a fresh window.
+    checks: std::collections::BTreeMap<VaultId, (i64, u32)>,
 }
 
 impl<S: State> Gateway<S> {
@@ -183,6 +187,7 @@ impl<S: State> Gateway<S> {
             state,
             id,
             nonce_key,
+            checks: std::collections::BTreeMap::new(),
         }
     }
 
@@ -765,6 +770,75 @@ impl<S: State> Gateway<S> {
             state.put_vault(&record)?;
             Ok(answer)
         })
+    }
+
+    /// `POST /v3/v/{vault}/check`: the vault key's signed request that the gateway hash one
+    /// stored object against its recorded digest (decision 34). A mismatch (or a file gone)
+    /// marks the name damaged, so a signed delete frees it at once; a match changes nothing.
+    /// The check is signed under its own context, bound to this gateway, the vault and the
+    /// name, and ordered by the generation counter like a delete: a replay is refused and a
+    /// token alone is refused. A vault may have [`MAX_CHECKS_PER_WINDOW`] names checked in a
+    /// [`CHECK_WINDOW_MS`]; more is `BUSY`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::delete`], and `BUSY` past the cap.
+    pub fn check(
+        &mut self,
+        vault: &VaultId,
+        token: &Token,
+        request: &CheckRequest,
+        now_ms: i64,
+        read: impl FnOnce(&Name) -> Result<Option<Digest>, Fault>,
+    ) -> Result<Checked, Fault> {
+        let gateway = self.id;
+        let window = self.checks.entry(*vault).or_insert((now_ms, 0));
+        if now_ms.saturating_sub(window.0) >= CHECK_WINDOW_MS || now_ms < window.0 {
+            *window = (now_ms, 0);
+        }
+        let spent = window.1;
+        let answer = self.state.atomically(|state| {
+            let caller = authorize(state, vault, token, Access::Write)?;
+            if !verify_check(
+                &gateway,
+                vault,
+                caller.epoch,
+                request.generation,
+                &request.name,
+                &request.signature,
+            ) {
+                return Err(Refusal::Unauthorized.into());
+            }
+            let mut record = state.vault(vault)?.ok_or(Refusal::Unauthorized)?;
+            ordered(&record, request.generation)?;
+            if spent >= MAX_CHECKS_PER_WINDOW {
+                return Err(Refusal::Busy {
+                    retry_after_ms: u64::try_from(CHECK_WINDOW_MS).unwrap_or(u64::MAX),
+                }
+                .into());
+            }
+            record.generation = request.generation;
+            state.put_vault(&record)?;
+            let Some(mut object) = state.object(vault, &request.name)? else {
+                return Ok(Checked {
+                    state: CheckState::Missing,
+                });
+            };
+            let found = match read(&request.name)? {
+                Some(digest) if digest == object.digest => CheckState::Intact,
+                Some(_) => CheckState::Damaged,
+                None => CheckState::Damaged,
+            };
+            if found == CheckState::Damaged && object.damaged_at_ms.is_none() {
+                object.damaged_at_ms = Some(now_ms);
+                state.put_object(vault, &object)?;
+            }
+            Ok(Checked { state: found })
+        })?;
+        if let Some(window) = self.checks.get_mut(vault) {
+            window.1 = window.1.saturating_add(1);
+        }
+        Ok(answer)
     }
 
     /// `POST /v3/v/{vault}/undo`: the vault key's signed request to lift the

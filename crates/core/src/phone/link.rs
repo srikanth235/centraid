@@ -57,17 +57,17 @@ use centraid_gateway::rules::ids::{
 };
 use centraid_gateway::rules::limits::MAX_OBJECT_BYTES;
 use centraid_gateway::rules::signing::{
-    HeadFields, sign_delete, sign_head, sign_undo, verify_claim,
+    HeadFields, sign_check, sign_delete, sign_head, sign_undo, verify_claim,
 };
 use centraid_gateway::rules::wire::{
-    ClaimView, DeleteRequest, HeadView, HeldKind as WireHeldKind, Info, NameState as WireState,
-    SetHead, UndoRequest,
+    CheckRequest, CheckState, ClaimView, DeleteRequest, HeadView, HeldKind as WireHeldKind, Info,
+    NameState as WireState, SetHead, UndoRequest,
 };
 use centraid_vault::backup::naming::{Digest, Name};
 use centraid_vault::backup::state::{DeviceState, Gateway, Reach};
 use centraid_vault::backup::store::{
-    Deleted, Head, HeldEntry, HeldKind, NameState, ObjectEntry, Outgoing, PartAnswer, Put, Refusal,
-    SnapshotEntry, Store, StoreError,
+    Deleted, Head, HeldEntry, HeldKind, NameCheck, NameState, ObjectEntry, Outgoing, PartAnswer,
+    Put, Refusal, SnapshotEntry, Store, StoreError,
 };
 
 use crate::error::{CoreError, Result};
@@ -562,6 +562,35 @@ impl Store for GatewayStore {
         Ok(bytes.len() as u64)
     }
 
+    fn get_range(
+        &self,
+        name: &Name,
+        offset: u64,
+        len: Option<u64>,
+        sink: &mut dyn Write,
+    ) -> std::result::Result<u64, StoreError> {
+        self.check_transfer()?;
+        let range = centraid_gateway::rules::range::ByteRange {
+            first: offset,
+            last: len.map(|len| offset.saturating_add(len).saturating_sub(1)),
+        };
+        let bytes = self
+            .runtime
+            .block_on(self.client.get(&self.vault, &wire_name(name), Some(range)))
+            .map_err(|error| match error {
+                ClientError::Refused(WireRefusal::BadRange { .. }) => {
+                    StoreError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "the object is shorter than the range asked",
+                    ))
+                }
+                other => self.missing_or(name, other),
+            })?;
+        self.check_transfer()?;
+        sink.write_all(&bytes)?;
+        Ok(bytes.len() as u64)
+    }
+
     fn get_many(
         &self,
         names: &[Name],
@@ -704,6 +733,42 @@ impl Store for GatewayStore {
                     )
                 })
                 .collect(),
+        })
+    }
+
+    fn check_name(&self, name: &Name) -> std::result::Result<NameCheck, StoreError> {
+        self.check_transfer()?;
+        let asked = wire_name(name);
+        let mut retried = false;
+        let answer = loop {
+            let generation = self.next_generation();
+            let request = CheckRequest {
+                name: asked,
+                generation,
+                signature: sign_check(
+                    &self.identity,
+                    &self.gateway,
+                    self.epoch,
+                    generation,
+                    &asked,
+                ),
+            };
+            match self
+                .runtime
+                .block_on(self.client.check(&self.vault, &request))
+            {
+                Ok(answer) => {
+                    self.saw_generation(generation);
+                    break answer;
+                }
+                Err(error) if !retried && self.absorb_out_of_order(&error) => retried = true,
+                Err(error) => return Err(self.store_error(error)),
+            }
+        };
+        Ok(match answer.state {
+            CheckState::Intact => NameCheck::Intact,
+            CheckState::Damaged => NameCheck::Damaged,
+            CheckState::Missing => NameCheck::Missing,
         })
     }
 

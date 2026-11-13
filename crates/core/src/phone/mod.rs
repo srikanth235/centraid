@@ -126,6 +126,9 @@ pub(crate) struct GatewayNotes {
     pub held_purge_at_ms: i64,
     pub sample_checked: u32,
     pub sample_of: u32,
+    /// Parts the read-back found wrong that the gateway then said were intact: counted unverified
+    /// and read again next pass (decision 34); nothing was deleted.
+    pub sample_unverified: u32,
     pub manifest_unreadable: bool,
 }
 

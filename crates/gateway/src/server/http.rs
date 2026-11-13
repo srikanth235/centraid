@@ -66,8 +66,8 @@ use crate::rules::limits::{
 use crate::rules::range::resolve;
 use crate::rules::state::{Fault, ObjectRecord, State as _, StoreFault};
 use crate::rules::wire::{
-    BundleAnswer, CODE_HEADER, DIGEST_HEADER, DeleteRequest, Missing, NameRefusal, Names,
-    PairRequest, Revoked, SetHead, UndoRequest,
+    BundleAnswer, CODE_HEADER, CheckRequest, DIGEST_HEADER, DeleteRequest, Missing, NameRefusal,
+    Names, PairRequest, Revoked, SetHead, UndoRequest,
 };
 use crate::server::state::SqliteState;
 use crate::server::store::{ObjectStore, Staged, StagedFile};
@@ -126,6 +126,7 @@ pub fn router(shared: Handle) -> Router {
         .route("/v3/v/{vault}/objects", get(objects))
         .route("/v3/v/{vault}/held", get(held))
         .route("/v3/v/{vault}/delete", post(delete))
+        .route("/v3/v/{vault}/check", post(check))
         .route("/v3/v/{vault}/undo", post(undo))
         .route("/v3/v/{vault}/revoke", post(revoke))
         .fallback(no_route)
@@ -978,6 +979,36 @@ async fn delete(
     let outcome = blocking(&shared, move |gateway| {
         gateway.delete(&vault, &token, &request, now, |name| {
             worker.store().remove(&vault, name)
+        })
+    })
+    .await;
+    answer(&shared, StatusCode::OK, outcome)
+}
+
+async fn check(
+    State(shared): State<Handle>,
+    path: Result<Path<String>, PathRejection>,
+    headers: HeaderMap,
+    body: Body,
+) -> Response {
+    let parsed = (|| Ok::<_, Refusal>((vault_of(path)?, bearer(&headers)?)))();
+    let (vault, token) = match parsed {
+        Ok(parsed) => parsed,
+        Err(refusal) => return refused(&refusal, shared.now()),
+    };
+    let request: CheckRequest = match read_json(body).await {
+        Ok(request) => request,
+        Err(refusal) => return refused(&refusal, shared.now()),
+    };
+    let now = shared.now();
+    let worker = std::sync::Arc::clone(&shared);
+    let outcome = blocking(&shared, move |gateway| {
+        gateway.check(&vault, &token, &request, now, |name| {
+            Ok(worker
+                .store()
+                .read_digest(&vault, name)
+                .map_err(|error| StoreFault::new(error.to_string()))?
+                .map(|(digest, _)| digest))
         })
     })
     .await;

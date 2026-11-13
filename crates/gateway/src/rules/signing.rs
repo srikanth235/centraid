@@ -46,6 +46,8 @@ pub const HEAD_CONTEXT: &[u8] = b"centraid-gateway-head-v3";
 pub const DELETE_CONTEXT: &[u8] = b"centraid-gateway-delete-v3";
 /// The undo's domain separator.
 pub const UNDO_CONTEXT: &[u8] = b"centraid-gateway-undo-v3";
+/// The check-this-name domain separator (decision 34).
+pub const CHECK_CONTEXT: &[u8] = b"centraid-gateway-check-v3";
 /// The pairing-by-secret domain separator.
 pub const PAIR_CONTEXT: &[u8] = b"centraid-gateway-pair-v3";
 
@@ -146,6 +148,23 @@ pub fn delete_preimage(
     push(&mut out, &epoch.to_be_bytes());
     push(&mut out, &generation.to_be_bytes());
     push(&mut out, &names_digest(names));
+    out
+}
+
+/// The exact bytes a check of one name covers (decision 34): its own context, so a delete's
+/// signature is never a check's and a check's is never a delete's.
+#[must_use]
+pub fn check_preimage(
+    gateway: &GatewayId,
+    vault: &VaultId,
+    epoch: u64,
+    generation: u64,
+    name: &Name,
+) -> Vec<u8> {
+    let mut out = opening(CHECK_CONTEXT, gateway, vault);
+    push(&mut out, &epoch.to_be_bytes());
+    push(&mut out, &generation.to_be_bytes());
+    push(&mut out, name.as_bytes());
     out
 }
 
@@ -250,6 +269,21 @@ pub fn sign_delete(
     )
 }
 
+/// Sign a check of `name`.
+#[must_use]
+pub fn sign_check(
+    identity: &ed25519_dalek::SigningKey,
+    gateway: &GatewayId,
+    epoch: u64,
+    generation: u64,
+    name: &Name,
+) -> Signature {
+    sign(
+        identity,
+        &check_preimage(gateway, &vault_of(identity), epoch, generation, name),
+    )
+}
+
 /// Sign an undo of `names`, or of every hold when `names` is `None`.
 #[must_use]
 pub fn sign_undo(
@@ -321,6 +355,23 @@ pub fn verify_delete(
     verify(
         vault,
         &delete_preimage(gateway, vault, epoch, generation, names),
+        signature,
+    )
+}
+
+/// Does `signature` sign this check?
+#[must_use]
+pub fn verify_check(
+    gateway: &GatewayId,
+    vault: &VaultId,
+    epoch: u64,
+    generation: u64,
+    name: &Name,
+    signature: &Signature,
+) -> bool {
+    verify(
+        vault,
+        &check_preimage(gateway, vault, epoch, generation, name),
         signature,
     )
 }

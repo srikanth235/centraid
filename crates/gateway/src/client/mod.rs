@@ -1044,6 +1044,21 @@ impl Client {
             .await
     }
 
+    /// `POST check`: the vault key's signed request that the gateway hash one stored object
+    /// against its recorded digest (decision 34).
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError`].
+    pub async fn check(
+        &self,
+        vault: &VaultId,
+        request: &crate::rules::wire::CheckRequest,
+    ) -> Result<crate::rules::wire::Checked, ClientError> {
+        self.call(Method::POST, &route(vault, "check"), Some(request), true)
+            .await
+    }
+
     /// `POST undo`: the vault key's signed request to lift holds.
     ///
     /// # Errors

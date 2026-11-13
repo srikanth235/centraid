@@ -301,3 +301,115 @@ fn a_gateway_that_lies_about_exists_is_found_and_then_refilled() {
         before.len()
     );
 }
+
+fn record_of(
+    gateway: &Gateway,
+    name: &centraid_gateway::rules::ids::Name,
+) -> Option<centraid_gateway::rules::state::ObjectRecord> {
+    gateway
+        .objects(&vault_id())
+        .into_iter()
+        .find(|record| &record.name == name)
+}
+
+/// Back up one photograph and a note, twice, so the head's blobs tree names the photograph's part
+/// with the digests this phone sealed it with; answers the phone, its vault path, the gateway
+/// name of the photograph's only part and the gateway's id.
+fn backed_up_photograph(
+    gateway: &Gateway,
+    dir: &Path,
+) -> (
+    centraid_core::Handle,
+    std::path::PathBuf,
+    centraid_gateway::rules::ids::Name,
+) {
+    let path = dir.join("vault.db");
+    let phone = phone(dir);
+    pair(&phone, gateway);
+    let photo = bytes_of("a photograph the gateway will rot", 70_000);
+    let staged = stage(&phone, owned("image/heic", &photo), &photo);
+    add_asset(&phone, &staged, "photo");
+    drain(&phone, at_home());
+    note(
+        &phone,
+        "a change, so a snapshot that names the photograph is taken",
+    );
+    drain(
+        &phone,
+        wire::DrainRequest {
+            asked: true,
+            ..at_home()
+        },
+    );
+    let object = gateway_name(&staged.content_hash, 0);
+    (phone, path, object)
+}
+
+/// **A ROTTED ORIGINAL NOBODY SCRUBBED IS FOUND BY THE READ-BACK** (#1191, B13, decision 34): the
+/// pass reads a sampled chunk by `Range`, finds it is not the digest the blobs tree recorded, asks
+/// the gateway to check that one name, and, when the gateway agrees, frees it by a signed delete
+/// and sends the part again. No scrub ran.
+#[test]
+fn a_rotted_original_is_found_checked_freed_and_sent_again() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let (phone, _path, object) = backed_up_photograph(&gateway, dir.path());
+    gateway
+        .spawned
+        .corrupt(&vault_id(), &object)
+        .expect("the part rots");
+
+    for _ in 0..4 {
+        drain(&phone, quietly());
+    }
+    let counts = gateway
+        .runtime
+        .block_on(gateway.spawned.scrub_now())
+        .expect("the scrub runs");
+    assert_eq!(
+        counts.corrupt, 0,
+        "the part was sent again, sound: {counts:?}"
+    );
+    assert!(
+        record_of(&gateway, &object).is_some_and(|record| record.is_live()),
+        "the photograph's part is live again"
+    );
+}
+
+/// **THE READ-BACK AND THE GATEWAY DISAGREE, AND NOTHING IS DELETED** (decision 34): a digest in the
+/// blobs tree that is not the part's (a phone that recorded the wrong one) reads as wrong, the
+/// gateway hashes the object and says it is intact, and the phone does not delete a sound part.
+#[test]
+fn a_chunk_the_gateway_calls_intact_is_not_deleted() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let (phone, path, object) = backed_up_photograph(&gateway, dir.path());
+    let before = record_of(&gateway, &object).expect("held");
+    // THE PHONE'S RECORD OF THE PART'S DIGESTS IS WRONG from here on.
+    let book = state(&path);
+    book.forget_digests_except(&std::collections::BTreeSet::new())
+        .expect("forgets");
+    book.record_digests(
+        &centraid_vault::backup::naming::Name::from_bytes(*object.as_bytes()),
+        &[centraid_media::sealed::ChunkDigest::of(b"not this part")],
+    )
+    .expect("records");
+    drop(book);
+    note(&phone, "a snapshot that names the wrong digest");
+    for _ in 0..4 {
+        drain(
+            &phone,
+            wire::DrainRequest {
+                asked: true,
+                ..at_home()
+            },
+        );
+    }
+    let after = record_of(&gateway, &object).expect("still held");
+    assert!(
+        after.is_live()
+            && after.digest == before.digest
+            && after.stored_at_ms == before.stored_at_ms,
+        "a part the gateway calls intact is neither deleted nor replaced: {after:?}"
+    );
+}
