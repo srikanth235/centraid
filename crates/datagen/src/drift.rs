@@ -24,8 +24,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
-use centraid_assist::native::meta::Kind;
-use centraid_assist::native::prompt::{ToolsMode, tools};
+use centraid_assist::native::act::act_args;
+use centraid_assist::native::meta::{self, Kind};
+use centraid_assist::native::prompt::{ToolsMode, tools, tools_for};
 use centraid_assist_eval::gold::Session;
 use centraid_assist_eval::source::EvalSource;
 use serde_json::Value;
@@ -89,19 +90,110 @@ pub struct ShapeKey {
     pub what: String,
 }
 
-/// The catalogue's tool definitions, as `native::prompt::tools` writes them: name, properties, required, enums.
-fn definition<'a>(catalogue: &'a [Value], tool: &str) -> Option<&'a Value> {
-    catalogue
-        .iter()
-        .find(|t| t["function"]["name"].as_str() == Some(tool))
+/// What the calls of one tool may carry, from the current runtime.
+#[derive(Debug, Clone, Default)]
+pub struct ToolShape {
+    /// The names a call may carry: the tool's own parameters and the executed form's (`create` and `edit` fold their
+    /// fields into `args`, `do` takes `args`, `edit` and `do` still take a selector the runtime refuses by name later).
+    pub arguments: BTreeSet<String>,
+    /// The tool's own parameters, what coverage counts.
+    pub properties: Vec<String>,
+    /// Parameters with a closed list of values.
+    pub enums: BTreeMap<String, BTreeSet<String>>,
+    /// Whether the executed call carries named fields inside `args` (`create`, `edit`, `do`), counted from there too.
+    pub folds: bool,
 }
 
-/// Every way the reference calls of `sessions` no longer validate against `catalogue`, counted by tool and what, and
-/// the `(session, 1-based turn)` of each turn that has one. A call the runtime is expected to refuse (`bad`) is skipped.
+/// The tools of a tools mode and what their calls may carry.
+///
+/// A reference call is recorded in the form the runtime executes, not in the form the model is shown: `create` and
+/// `edit` take one parameter per field in the compact catalogue but run as `args` lines (`native::legacy::fold_fields`),
+/// and the sig mode's tools block lists signatures only, with no parameter schema. So the tool names are the mode's
+/// (`tools_for`), the parameters are the compact schemas' they are generated from (`tools`), widened by the executed
+/// form. What this cannot judge, the replay through the runtime does: a turn the runtime refuses is a shape finding.
+#[derive(Debug, Clone)]
+pub struct Catalogue {
+    pub tools: BTreeMap<String, ToolShape>,
+}
+
+impl Catalogue {
+    /// From the mode's tool names and the schemas their parameters come from.
+    #[must_use]
+    pub fn from_schema(names: &[String], schema: &[Value]) -> Self {
+        let mut tools = BTreeMap::new();
+        for name in names {
+            let mut shape = ToolShape::default();
+            if let Some(def) = schema
+                .iter()
+                .find(|t| t["function"]["name"].as_str() == Some(name.as_str()))
+            {
+                let properties = def["function"]["parameters"]["properties"].as_object();
+                for (key, spec) in properties.into_iter().flatten() {
+                    shape.arguments.insert(key.clone());
+                    shape.properties.push(key.clone());
+                    if let Some(list) = spec["enum"].as_array() {
+                        shape.enums.insert(
+                            key.clone(),
+                            list.iter()
+                                .filter_map(Value::as_str)
+                                .map(str::to_owned)
+                                .collect(),
+                        );
+                    }
+                }
+            }
+            if matches!(name.as_str(), "create" | "edit" | "do") {
+                shape.folds = true;
+                shape.arguments.insert("args".to_owned());
+            }
+            if matches!(name.as_str(), "edit" | "do") {
+                shape
+                    .arguments
+                    .extend(meta::SELECTOR_PARAMS.iter().map(|k| (*k).to_owned()));
+            }
+            tools.insert(name.clone(), shape);
+        }
+        Self { tools }
+    }
+
+    /// The current runtime's catalogue for `mode`.
+    ///
+    /// # Errors
+    ///
+    /// The `s2` mode: its tools are a frozen constant of another shape (`search`, `open`, `act`), the runtime renames its
+    /// calls, and nothing can drift under it.
+    pub fn of_mode(mode: ToolsMode) -> Result<Self> {
+        if mode == ToolsMode::S2 {
+            bail!(
+                "tools mode `s2` is a frozen constant with tools of its own: there is nothing to drift under it"
+            );
+        }
+        let names: Vec<String> = tools_for(mode)
+            .iter()
+            .filter_map(|t| t["function"]["name"].as_str().map(str::to_owned))
+            .collect();
+        Ok(Self::from_schema(&names, &tools()))
+    }
+}
+
+/// The names a call carries, flat and, for a tool that folds, inside its `args` lines (read as the runtime reads them).
+fn names_of(shape: &ToolShape, args: &serde_json::Map<String, Value>) -> BTreeSet<String> {
+    let mut names: BTreeSet<String> = args.keys().cloned().collect();
+    if shape.folds
+        && let Ok(inner) = act_args(args.get("args"))
+    {
+        names.extend(inner.keys().map(|k| k.trim_end_matches('+').to_owned()));
+    }
+    names
+}
+
+/// Every way the reference calls of `sessions` no longer fit `catalogue`, counted by tool and what, and the
+/// `(session, 1-based turn)` of each turn that has one: a tool that is gone, an argument no call of the tool may carry,
+/// a value outside a closed list. A call the runtime is expected to refuse (`bad`) is skipped.
 #[must_use]
 pub fn shape(
     sessions: &[Session],
-    catalogue: &[Value],
+    catalogue: &Catalogue,
 ) -> (BTreeMap<ShapeKey, usize>, BTreeSet<(String, usize)>) {
     let mut counts: BTreeMap<ShapeKey, usize> = BTreeMap::new();
     let mut turns = BTreeSet::new();
@@ -109,35 +201,19 @@ pub fn shape(
         for (i, turn) in session.turns.iter().enumerate() {
             for call in turn.reference.iter().filter(|c| !c.bad) {
                 let mut found = Vec::new();
-                match definition(catalogue, &call.tool) {
+                match catalogue.tools.get(&call.tool) {
                     None => found.push("the tool is gone".to_owned()),
-                    Some(def) => {
-                        let parameters = &def["function"]["parameters"];
-                        let properties = parameters["properties"].as_object();
+                    Some(shape) => {
                         for (name, value) in &call.args {
-                            match properties.and_then(|p| p.get(name)) {
-                                None => found.push(format!("argument `{name}` is gone")),
-                                Some(schema) => {
-                                    if let Some(allowed) = schema["enum"].as_array() {
-                                        let said = value
-                                            .as_str()
-                                            .map_or_else(|| value.to_string(), str::to_owned);
-                                        if !allowed
-                                            .iter()
-                                            .any(|a| a.as_str() == Some(said.as_str()))
-                                        {
-                                            found
-                                                .push(format!("`{name}` no longer takes `{said}`"));
-                                        }
-                                    }
+                            if !shape.arguments.contains(name) {
+                                found.push(format!("argument `{name}` is gone"));
+                            } else if let Some(allowed) = shape.enums.get(name) {
+                                let said = value
+                                    .as_str()
+                                    .map_or_else(|| value.to_string(), str::to_owned);
+                                if !allowed.contains(&said) {
+                                    found.push(format!("`{name}` no longer takes `{said}`"));
                                 }
-                            }
-                        }
-                        for required in parameters["required"].as_array().into_iter().flatten() {
-                            if let Some(name) = required.as_str()
-                                && !call.args.contains_key(name)
-                            {
-                                found.push(format!("required argument `{name}` is missing"));
                             }
                         }
                     }
@@ -167,11 +243,12 @@ pub struct Gap {
 }
 
 /// The tools, arguments and kinds of `catalogue` that `sessions` show fewer than `floor` times in reference calls
-/// (`bad` calls skipped). A kind is shown by a `kind` argument that names it.
+/// (`bad` calls skipped). An argument is shown by a call that carries it flat or, for `create`, `edit` and `do`, inside
+/// its `args` lines, read as the runtime reads them. A kind is shown by a `kind` argument that names it.
 #[must_use]
 pub fn coverage(
     sessions: &[Session],
-    catalogue: &[Value],
+    catalogue: &Catalogue,
     kinds: &[&str],
     floor: usize,
 ) -> Vec<Gap> {
@@ -185,33 +262,29 @@ pub fn coverage(
         .filter(|c| !c.bad)
     {
         *tool_n.entry(call.tool.as_str()).or_default() += 1;
-        for (name, value) in &call.args {
-            *arg_n.entry((call.tool.clone(), name.clone())).or_default() += 1;
-            if name == "kind"
-                && let Some(kind) = value.as_str()
-            {
-                *kind_n.entry(kind.to_owned()).or_default() += 1;
-            }
+        let Some(shape) = catalogue.tools.get(&call.tool) else {
+            continue;
+        };
+        for name in names_of(shape, &call.args) {
+            *arg_n.entry((call.tool.clone(), name)).or_default() += 1;
+        }
+        if let Some(kind) = call.args.get("kind").and_then(Value::as_str) {
+            *kind_n.entry(kind.to_owned()).or_default() += 1;
         }
     }
     let mut gaps = Vec::new();
-    for tool in catalogue {
-        let name = tool["function"]["name"].as_str().unwrap_or_default();
-        let n = tool_n.get(name).copied().unwrap_or(0);
+    for (name, shape) in &catalogue.tools {
+        let n = tool_n.get(name.as_str()).copied().unwrap_or(0);
         if n < floor {
             gaps.push(Gap {
                 of: "tool",
-                name: name.to_owned(),
+                name: name.clone(),
                 examples: n,
             });
         }
-        for arg in tool["function"]["parameters"]["properties"]
-            .as_object()
-            .into_iter()
-            .flat_map(serde_json::Map::keys)
-        {
+        for arg in &shape.properties {
             let n = arg_n
-                .get(&(name.to_owned(), arg.clone()))
+                .get(&(name.clone(), arg.clone()))
                 .copied()
                 .unwrap_or(0);
             if n < floor {
@@ -244,6 +317,8 @@ pub struct Replayed {
     pub turns: usize,
     /// `(session, 1-based turn)` of each turn whose reference calls did not give the recorded gold.
     pub failed: Vec<(String, usize)>,
+    /// `(session, 1-based turn)` of each turn the runtime refused outright (its own parser said no): not in `failed`.
+    pub refused: Vec<(String, usize)>,
     /// Sessions the runtime could not run at all (a world that no longer seeds).
     pub unrunnable: Vec<String>,
 }
@@ -256,6 +331,13 @@ impl From<&centraid_assist_eval::replay::ReplayReport> for Replayed {
             failed: r
                 .failed
                 .iter()
+                .filter(|f| f.ending != "error")
+                .map(|f| (f.session.clone(), f.turn))
+                .collect(),
+            refused: r
+                .failed
+                .iter()
+                .filter(|f| f.ending == "error")
                 .map(|f| (f.session.clone(), f.turn))
                 .collect(),
             unrunnable: r.unrunnable.iter().map(|(id, _)| id.clone()).collect(),
@@ -297,6 +379,8 @@ pub struct Drift {
     pub gaps: Vec<Gap>,
     pub floor: usize,
     pub level: Level,
+    /// Lines the report prints before the level: the shipped tools mode against the version's, a self-check.
+    pub notes: Vec<String>,
 }
 
 /// Judge: the pure half. `hashes` is the contract against the runtime; `replayed` the replay's counts.
@@ -306,12 +390,34 @@ pub fn judge(
     hashes: HashDrift,
     sessions: &[Session],
     replayed: &Replayed,
-    catalogue: &[Value],
+    catalogue: &Catalogue,
     kinds: &[&str],
     floor: usize,
 ) -> Drift {
-    let (shape_counts, shape_turns) = shape(sessions, catalogue);
+    let (mut shape_counts, mut shape_turns) = shape(sessions, catalogue);
     let by_id: BTreeMap<&str, &Session> = sessions.iter().map(|s| (s.id.as_str(), s)).collect();
+    let tools_of = |id: &str, turn: usize| -> BTreeSet<&str> {
+        by_id
+            .get(id)
+            .and_then(|s| s.turns.get(turn - 1))
+            .into_iter()
+            .flat_map(|t| t.reference.iter().filter(|c| !c.bad))
+            .map(|c| c.tool.as_str())
+            .collect()
+    };
+    // a turn the runtime's own parser refused is a shape finding too: it names the tools of the turn
+    for (id, turn) in &replayed.refused {
+        if shape_turns.insert((id.clone(), *turn)) {
+            for tool in tools_of(id, *turn) {
+                *shape_counts
+                    .entry(ShapeKey {
+                        tool: tool.to_owned(),
+                        what: "the runtime refused the turn's calls".to_owned(),
+                    })
+                    .or_default() += 1;
+            }
+        }
+    }
     let mut behaviour: BTreeMap<String, usize> = BTreeMap::new();
     let mut behaviour_turns = 0;
     for (id, turn) in &replayed.failed {
@@ -320,14 +426,7 @@ pub fn judge(
             continue;
         }
         behaviour_turns += 1;
-        let tools: BTreeSet<&str> = by_id
-            .get(id.as_str())
-            .and_then(|s| s.turns.get(turn - 1))
-            .into_iter()
-            .flat_map(|t| t.reference.iter().filter(|c| !c.bad))
-            .map(|c| c.tool.as_str())
-            .collect();
-        for tool in tools {
+        for tool in tools_of(id, *turn) {
             *behaviour.entry(tool.to_owned()).or_default() += 1;
         }
     }
@@ -356,6 +455,12 @@ pub fn judge(
     if !gaps.is_empty() {
         level = level.max(Level::Coverage);
     }
+    let mut notes = Vec::new();
+    if hashes.same() && !shape_counts.is_empty() {
+        notes.push(
+            "SELF-CHECK: every contract hash is the same, yet calls are reported as no longer fitting. An unchanged contract cannot do that: this points at a fault in this check or in the data, not at a tool change.".to_owned(),
+        );
+    }
     Drift {
         version: version.to_owned(),
         hashes,
@@ -372,6 +477,7 @@ pub fn judge(
         gaps,
         floor,
         level,
+        notes,
     }
 }
 
@@ -426,6 +532,9 @@ impl Drift {
         for gap in &self.gaps {
             let _ = writeln!(out, "  {} {}: {}", gap.of, gap.name, gap.examples);
         }
+        for note in &self.notes {
+            let _ = writeln!(out, "\n{note}");
+        }
         let _ = writeln!(out, "\nlevel: {}", self.level.word());
         let _ = writeln!(out, "{}", self.level.advice());
         if self.level != Level::None {
@@ -474,6 +583,7 @@ pub fn report(dir: &Path) -> Result<Drift> {
         prompt: (pinned.prompt_hash.clone(), now.prompt_hash),
         catalog: (pinned.catalog_hash.clone(), now.catalog_hash),
     };
+    let catalogue = Catalogue::of_mode(mode)?;
     let source = DatagenSource::open_version(dir, &READS)?;
     let sessions = source.sessions()?;
     let replay = centraid_assist_eval::replay::replay(&source, &sessions, mode)?;
@@ -482,13 +592,24 @@ pub fn report(dir: &Path) -> Result<Drift> {
         .map_or(1, |n| usize::try_from(n).unwrap_or(1))
         .max(1);
     let kinds: Vec<&str> = Kind::ALL.iter().map(|k| k.name()).collect();
-    Ok(judge(
+    let mut drift = judge(
         manifest["version"].as_str().unwrap_or("unknown"),
         hashes,
         &sessions,
         &Replayed::from(&replay),
-        &tools(),
+        &catalogue,
         &kinds,
         floor,
-    ))
+    );
+    let shipped = centraid_assist::record::record().current.tools_mode;
+    if shipped != pinned.tools_mode {
+        drift.notes.insert(
+            0,
+            format!(
+                "tools mode: the runtime ships mode `{shipped}` (crates/assist/model.json), this version is mode `{}`. That is a contract difference, not a shape failure: the model this release ships was not trained on this version's tools block.",
+                pinned.tools_mode
+            ),
+        );
+    }
+    Ok(drift)
 }
