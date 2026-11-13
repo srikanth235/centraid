@@ -391,22 +391,12 @@ pub const OMITTED: &[(&str, &str, &str)] = &[
     (
         "locker_item_field",
         "updated_at",
-        "stamped by the table's own trigger",
-    ),
-    (
-        "locker_item_field",
-        "row_version",
-        "the table's recursion guard",
+        "a stamp, set by the command from the vault's clock; every save moves it",
     ),
     (
         "locker_item_passkey",
         "updated_at",
-        "stamped by the table's own trigger",
-    ),
-    (
-        "locker_item_passkey",
-        "row_version",
-        "the table's recursion guard",
+        "a stamp, set by the command from the vault's clock; every save moves it",
     ),
 ];
 

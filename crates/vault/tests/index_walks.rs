@@ -19,7 +19,10 @@ fn plan(scratch: &common::Scratch, sql: &str, binds: &[&str]) -> String {
 }
 
 fn walks(plan: &str, index: &str) {
-    assert!(plan.contains(&format!("INDEX {index}")), "{index} is not used: {plan}");
+    assert!(
+        plan.contains(&format!("INDEX {index}")),
+        "{index} is not used: {plan}"
+    );
     assert!(!plan.contains("TEMP B-TREE"), "the read sorts: {plan}");
 }
 
@@ -83,7 +86,8 @@ fn a_months_budgets_across_categories_and_a_categorys_months_are_both_served() {
         &["category:food"],
     );
     assert!(
-        per_category.contains("SEARCH budget USING PRIMARY KEY") || per_category.contains("USING PRIMARY KEY"),
+        per_category.contains("SEARCH budget USING PRIMARY KEY")
+            || per_category.contains("USING PRIMARY KEY"),
         "{per_category}"
     );
 }
@@ -122,7 +126,10 @@ fn the_edge_order_and_locker_type_indexes_have_readers_and_are_kept() {
     let read = "SELECT position FROM edge WHERE from_id = ?1 AND rel = 'contains'
                  AND position IS NOT NULL ORDER BY position DESC LIMIT 1";
     let with = plan(&scratch, read, &["list-1"]);
-    assert!(with.contains("INDEX edge_order"), "the next position reads the ordered index: {with}");
+    assert!(
+        with.contains("INDEX edge_order"),
+        "the next position reads the ordered index: {with}"
+    );
     scratch
         .vault
         .commit(|tx| {
@@ -132,7 +139,8 @@ fn the_edge_order_and_locker_type_indexes_have_readers_and_are_kept() {
         .expect("drops");
     let without = plan(&scratch, read, &["list-1"]);
     assert!(
-        !without.contains("edge_order") && (without.contains("TEMP B-TREE") || without.contains("SCAN")),
+        !without.contains("edge_order")
+            && (without.contains("TEMP B-TREE") || without.contains("SCAN")),
         "without it the read sorts or scans every member of the list: {without}"
     );
 
@@ -142,7 +150,7 @@ fn the_edge_order_and_locker_type_indexes_have_readers_and_are_kept() {
         &[],
     );
     assert!(
-        by_type.contains("INDEX locker_item_type_idx") && !by_type.contains("TEMP B-TREE"),
+        by_type.contains("INDEX locker_item_by_type") && !by_type.contains("TEMP B-TREE"),
         "the count by type streams from the type index: {by_type}"
     );
 }

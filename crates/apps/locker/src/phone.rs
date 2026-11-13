@@ -523,7 +523,7 @@ pub fn load_item(door: &dyn PageDoor, item_id: &str) -> KitResult<Option<ItemDat
             .map(|row| Address {
                 address_id: text_of(row, "address_id").unwrap_or_default(),
                 url: text_of(row, "url").unwrap_or_default(),
-                position: integer_of(row, "position"),
+                position: position_of(row),
             })
             .collect();
     addresses.sort_by_key(|address| address.position);
@@ -872,7 +872,7 @@ pub fn load_export(door: &dyn PageDoor) -> KitResult<Vec<ExportSource>> {
                 .map(|row| Address {
                     address_id: text_of(row, "address_id").unwrap_or_default(),
                     url: text_of(row, "url").unwrap_or_default(),
-                    position: integer_of(row, "position"),
+                    position: position_of(row),
                 })
                 .collect();
         addresses.sort_by_key(|address| address.position);
@@ -1117,6 +1117,15 @@ fn truthy(row: &Row, column: &str) -> bool {
     }
 }
 
+/// A row's `position`: whole numbers in a REAL column (the vault keeps one type for every
+/// position), read back as the index they are.
+fn position_of(row: &Row) -> i64 {
+    match row.get("position") {
+        Some(Cell::Real(value)) => value.round() as i64,
+        _ => integer_of(row, "position"),
+    }
+}
+
 fn integer_of(row: &Row, column: &str) -> i64 {
     match row.get(column) {
         Some(Cell::Integer(value)) => *value,
@@ -1147,7 +1156,7 @@ fn field_of(row: &Row) -> PhoneField {
         value,
         sealed,
         kind,
-        position: integer_of(row, "position"),
+        position: position_of(row),
     }
 }
 

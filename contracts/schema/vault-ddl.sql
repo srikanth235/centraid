@@ -35,7 +35,7 @@ CREATE INDEX budget_by_month ON budget(month, category_id);
 CREATE INDEX concept_by_parent ON concept(parent_id) WHERE parent_id IS NOT NULL;
 
 -- index contact_point_by_value on contact_point
-CREATE INDEX contact_point_by_value ON contact_point(kind, normalized);
+CREATE INDEX contact_point_by_value ON contact_point(kind, normalized, person_id);
 
 -- index contact_point_preferred on contact_point
 CREATE UNIQUE INDEX contact_point_preferred ON contact_point(person_id, kind) WHERE preferred = 1;
@@ -97,23 +97,26 @@ CREATE INDEX event_by_rule ON event(starts, id) WHERE rule IS NOT NULL;
 -- index event_by_start on event
 CREATE INDEX event_by_start    ON event(starts, id);
 
--- index locker_item_address_item_idx on locker_item_address
-CREATE INDEX locker_item_address_item_idx ON locker_item_address(item_id, position);
+-- index locker_item_address_by_item on locker_item_address
+CREATE INDEX locker_item_address_by_item ON locker_item_address(item_id, position);
 
--- index locker_item_alias_item_idx on locker_item_alias
-CREATE INDEX locker_item_alias_item_idx ON locker_item_alias(item_id);
+-- index locker_item_alias_by_item on locker_item_alias
+CREATE INDEX locker_item_alias_by_item ON locker_item_alias(item_id);
 
--- index locker_item_field_item_idx on locker_item_field
-CREATE INDEX locker_item_field_item_idx ON locker_item_field(item_id, section, position);
+-- index locker_item_by_key on locker_item
+CREATE INDEX locker_item_by_key ON locker_item(key_id) WHERE key_id IS NOT NULL;
 
--- index locker_item_passkey_rp_idx on locker_item_passkey
-CREATE INDEX locker_item_passkey_rp_idx ON locker_item_passkey(rp_id);
+-- index locker_item_by_type on locker_item
+CREATE INDEX locker_item_by_type ON locker_item(type);
 
--- index locker_item_type_idx on locker_item
-CREATE INDEX locker_item_type_idx ON locker_item(type);
+-- index locker_item_field_by_item on locker_item_field
+CREATE INDEX locker_item_field_by_item ON locker_item_field(item_id, section, position);
 
--- index locker_key_one_generation on locker_key
-CREATE UNIQUE INDEX locker_key_one_generation ON locker_key((1));
+-- index locker_item_field_by_key on locker_item_field
+CREATE INDEX locker_item_field_by_key ON locker_item_field(key_id) WHERE key_id IS NOT NULL;
+
+-- index locker_item_passkey_by_key on locker_item_passkey
+CREATE INDEX locker_item_passkey_by_key ON locker_item_passkey(key_id) WHERE key_id IS NOT NULL;
 
 -- index message_attachment_by_entity on message_attachment
 CREATE INDEX message_attachment_by_entity ON message_attachment(entity_id) WHERE entity_id IS NOT NULL;
@@ -417,29 +420,32 @@ CREATE TABLE locker_item (
     'login','card','note','identity','wifi','password',
     'ssh_key','api_credential','passport','bank_account','driving_licence',
     'software_licence','crypto_wallet','membership','document')),
-  username     TEXT,
-  password     TEXT,
-  url          TEXT,
-  otp_seed     TEXT,
-  notes        TEXT,
-  cardholder   TEXT,
-  card_number  TEXT,
-  expiry       TEXT,
-  cvv          TEXT,
-  brand        TEXT,
-  content      TEXT,
-  fullname     TEXT,
-  email        TEXT,
-  phone        TEXT,
-  address      TEXT,
-  network      TEXT,
+  -- A type owns the typed columns it names (`type_fields` in commands/locker.rs) and no others: the
+  -- command nulls the rest on write, and the database refuses a row that keeps one.
+  username     TEXT CHECK (username IS NULL OR type = 'login'),
+  password     TEXT CHECK (password IS NULL OR type IN ('login','wifi','password')),
+  url          TEXT CHECK (url IS NULL OR type = 'login'),
+  otp_seed     TEXT CHECK (otp_seed IS NULL OR type = 'login'),
+  notes        TEXT CHECK (notes IS NULL OR type NOT IN ('card','note','identity','wifi','password')),
+  cardholder   TEXT CHECK (cardholder IS NULL OR type = 'card'),
+  card_number  TEXT CHECK (card_number IS NULL OR type = 'card'),
+  expiry       TEXT CHECK (expiry IS NULL OR type = 'card'),
+  cvv          TEXT CHECK (cvv IS NULL OR type = 'card'),
+  brand        TEXT CHECK (brand IS NULL OR type = 'card'),
+  content      TEXT CHECK (content IS NULL OR type = 'note'),
+  fullname     TEXT CHECK (fullname IS NULL OR type = 'identity'),
+  email        TEXT CHECK (email IS NULL OR type = 'identity'),
+  phone        TEXT CHECK (phone IS NULL OR type = 'identity'),
+  address      TEXT CHECK (address IS NULL OR type = 'identity'),
+  network      TEXT CHECK (network IS NULL OR type = 'wifi'),
   compromised  INTEGER NOT NULL DEFAULT 0 CHECK (compromised IN (0,1)),
-  password_set_at TEXT,
+  password_set_at TEXT CHECK (password_set_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', password_set_at) IS password_set_at),
   memo         TEXT,
-  key_id       TEXT,
+  -- The generation of the Locker key the item's sealed cells were sealed under.
+  key_id       TEXT REFERENCES locker_key(key_id) DEFERRABLE INITIALLY DEFERRED,
   -- When the core last opened one of this item's sealed cells (#1146). A use is not an edit:
   -- stamping it does not move the entity's `updated_at`, and makes no revision.
-  last_used_at TEXT,
+  last_used_at TEXT CHECK (last_used_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', last_used_at) IS last_used_at),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT;
 
@@ -448,15 +454,15 @@ CREATE TABLE locker_item_address (
   address_id   TEXT PRIMARY KEY,
   item_id      TEXT NOT NULL REFERENCES locker_item(id) ON DELETE CASCADE,
   url          TEXT NOT NULL,
-  position     INTEGER NOT NULL DEFAULT 0,
-  created_at   TEXT NOT NULL
+  position     REAL NOT NULL DEFAULT 0,
+  created_at   TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at)
 ) STRICT;
 
 -- table locker_item_alias on locker_item_alias
 CREATE TABLE locker_item_alias (
   alias      TEXT PRIMARY KEY,
   item_id    TEXT NOT NULL REFERENCES locker_item(id) ON DELETE CASCADE,
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  created_at TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at)
 ) STRICT;
 
 -- table locker_item_field on locker_item_field
@@ -468,13 +474,10 @@ CREATE TABLE locker_item_field (
   kind         TEXT NOT NULL CHECK (kind IN ('text','sealed','url','date','otp')),
   value_text   TEXT,
   value_sealed TEXT,
-  position     INTEGER NOT NULL DEFAULT 0,
-  created_at   TEXT NOT NULL,
-  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  -- `row_version` is the recursion guard of this table's `touch_updated_at` trigger (it fires only
-  -- while the version is unchanged, and its own UPDATE moves it). Nothing compares it; it is not an
-  -- entity version (#1146, R-1146-0-2).
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1), key_id TEXT,
+  position     REAL NOT NULL DEFAULT 0,
+  created_at   TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at),
+  updated_at   TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', updated_at) IS updated_at),
+  key_id       TEXT REFERENCES locker_key(key_id) DEFERRABLE INITIALLY DEFERRED,
   -- A one-time-code seed is a secret like a `sealed` value: `otp` keeps its kind so the page shows
   -- a rolling code, but its value lives only as `lk1:` ciphertext, never in the plain column.
   CHECK (kind IN ('sealed', 'otp') OR value_sealed IS NULL),
@@ -491,23 +494,20 @@ CREATE TABLE locker_item_passkey (
   credential_id TEXT,
   algorithm     TEXT,
   private_key   TEXT,
-  created_at    TEXT NOT NULL,
-  updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  -- `row_version` is the recursion guard of this table's `touch_updated_at` trigger (it fires only
-  -- while the version is unchanged, and its own UPDATE moves it). Nothing compares it; it is not an
-  -- entity version (#1146, R-1146-0-2).
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1), key_id TEXT
+  created_at    TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at),
+  updated_at    TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', updated_at) IS updated_at),
+  key_id        TEXT REFERENCES locker_key(key_id) DEFERRABLE INITIALLY DEFERRED
 ) STRICT;
 
 -- table locker_key on locker_key
 CREATE TABLE locker_key (
-  key_id     TEXT PRIMARY KEY,
-  created_at TEXT NOT NULL,
+  id         INTEGER PRIMARY KEY CHECK (id = 1),
+  key_id     TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at),
   -- Unlocks the phone refused since the last one it allowed, and when the latest was (#1146).
-  -- The Locker has one key row, so this is the Locker's whole record of them; a successful unlock
-  -- resets the count and leaves the time.
+  -- A successful unlock resets the count and leaves the time.
   failed_unlocks  INTEGER NOT NULL DEFAULT 0 CHECK (failed_unlocks >= 0),
-  failed_unlock_at TEXT
+  failed_unlock_at TEXT CHECK (failed_unlock_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', failed_unlock_at) IS failed_unlock_at)
 ) STRICT;
 
 -- table measurement on measurement
@@ -970,32 +970,6 @@ CREATE TRIGGER edge_has_a_shape BEFORE INSERT ON edge
 -- trigger entity_kind_is_fixed on entity
 CREATE TRIGGER entity_kind_is_fixed BEFORE UPDATE OF id, kind ON entity
   BEGIN SELECT RAISE(ABORT, 'an entity''s id and kind never change'); END;
-
--- trigger locker_item_field_touch_updated_at on locker_item_field
-CREATE TRIGGER locker_item_field_touch_updated_at
-AFTER UPDATE ON locker_item_field
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE locker_item_field
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE field_id = NEW.field_id;
-END;
-
--- trigger locker_item_passkey_touch_updated_at on locker_item_passkey
-CREATE TRIGGER locker_item_passkey_touch_updated_at
-AFTER UPDATE ON locker_item_passkey
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE locker_item_passkey
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE item_id = NEW.item_id;
-END;
 
 -- trigger message_is_not_born_settled on message
 CREATE TRIGGER message_is_not_born_settled BEFORE INSERT ON message

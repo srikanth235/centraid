@@ -128,11 +128,21 @@ impl Sealed {
                      VALUES ('key-1', '2026-01-01T00:00:00.000Z')",
                     [],
                 )?;
-                for (item_id, title, username, brand) in [
-                    ("item-1", "The bank", "plainuser-xylophone9", None),
+                // A login, and a card (a type owns its own columns, and the file refuses the rest).
+                for (item_id, title, kind, name_column, name, brand) in [
+                    (
+                        "item-1",
+                        "The bank",
+                        "login",
+                        "username",
+                        "plainuser-xylophone9",
+                        None,
+                    ),
                     (
                         "item-2",
                         "The card",
+                        "card",
+                        "memo",
                         "plainname-quokka7",
                         Some("plainbrand-zeppelin3"),
                     ),
@@ -140,9 +150,11 @@ impl Sealed {
                     // A Locker item is an entity first; its kind row joins it.
                     tx.insert_entity(item_id, Kind::LockerItem, title, "2026-01-01T00:00:00.000Z")?;
                     connection.execute(
-                        "INSERT INTO locker_item (id, type, username, brand, key_id)
-                         VALUES (?1, 'login', ?2, ?3, 'key-1')",
-                        rusqlite::params![item_id, username, brand],
+                        &format!(
+                            "INSERT INTO locker_item (id, type, {name_column}, brand, key_id)
+                             VALUES (?1, ?2, ?3, ?4, 'key-1')"
+                        ),
+                        rusqlite::params![item_id, kind, name, brand],
                     )?;
                 }
                 connection.execute(

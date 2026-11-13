@@ -73,7 +73,7 @@ fn the_ddl_fixture_is_not_vacuous() {
         "edge_has_a_shape",
         "revision_is_history",
         "CREATE TABLE action_key ",
-        "locker_key_one_generation",
+        "CREATE TABLE locker_key ",
     ] {
         assert!(fixture.contains(object), "`{object}` is not in the fixture");
     }

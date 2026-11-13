@@ -527,6 +527,15 @@ impl Writer<'_, '_, '_> {
             names.push(crate::log::quoted("position"));
             values.push(Sql::Real(end));
         }
+        // A stamp a state does not keep (`OMITTED`: a child's `updated_at`) is the time of the
+        // restore, from the vault's clock; the schema has no default for it.
+        if super::shape::OMITTED
+            .iter()
+            .any(|(table, column, _)| *table == part.name && *column == "updated_at")
+        {
+            names.push(crate::log::quoted("updated_at"));
+            values.push(Sql::Text(self.ctx.now.clone()));
+        }
         let marks: Vec<String> = (1..=values.len()).map(|n| format!("?{n}")).collect();
         self.ctx.connection().execute(
             &format!(
