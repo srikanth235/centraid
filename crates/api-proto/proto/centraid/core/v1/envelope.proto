@@ -146,6 +146,8 @@ message Request {
     // THE GATEWAY TOKENS THE SHELL KEEPS (#1191, E12), handed to the core at
     // open and kept in its memory only. See `phone.proto`.
     GatewayTokensRequest gateway_tokens = 46;
+    // UNDO THE DELETES A GATEWAY HOLDS (#1191, E6). See `phone.proto`.
+    UndoHeldRequest undo_held = 47;
   }
 }
 
@@ -193,6 +195,7 @@ message Response {
     ScreenResponse screen = 38;
     CheckBackupResponse check_backup = 45;
     GatewayTokensResponse gateway_tokens = 46;
+    UndoHeldResponse undo_held = 47;
   }
 }
 

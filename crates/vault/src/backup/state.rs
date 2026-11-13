@@ -1347,6 +1347,52 @@ impl DeviceState {
         Ok(read_u64(total)?)
     }
 
+    // ─── undone ─────────────────────────────────────────────────────────────
+
+    /// A member's Undo lifted the holds on `names` at `gateway_id`: retention leaves them be until
+    /// `until_ms`.
+    ///
+    /// # Errors
+    ///
+    /// SQLite's refusal.
+    pub fn put_undone(&self, gateway_id: &str, names: &[Name], until_ms: u64) -> Result<()> {
+        let transaction = self.connection.unchecked_transaction()?;
+        for name in names {
+            transaction.execute(
+                "INSERT INTO undone (gateway_id, name, until_ms) VALUES (?1, ?2, ?3)
+                 ON CONFLICT (gateway_id, name) DO UPDATE SET until_ms = excluded.until_ms",
+                params![gateway_id, name.to_hex(), ms(until_ms)?],
+            )?;
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
+    /// The names retention leaves be at `gateway_id` at `now_ms`; the ones whose time is up are
+    /// forgotten as they are read.
+    ///
+    /// # Errors
+    ///
+    /// SQLite's refusal, or a row this build cannot read.
+    pub fn undone(
+        &self,
+        gateway_id: &str,
+        now_ms: u64,
+    ) -> Result<std::collections::BTreeSet<Name>> {
+        self.connection.execute(
+            "DELETE FROM undone WHERE gateway_id = ?1 AND until_ms <= ?2",
+            params![gateway_id, ms(now_ms)?],
+        )?;
+        let mut statement = self
+            .connection
+            .prepare("SELECT name FROM undone WHERE gateway_id = ?1 ORDER BY name")?;
+        let rows = statement.query_map(params![gateway_id], |row| {
+            let text: String = row.get(0)?;
+            Name::from_hex(&text).map_err(|error| bad_text(0, error))
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
     // ─── local bytes ────────────────────────────────────────────────────────
 
     /// Record where a hash's bytes are on this device.

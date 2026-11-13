@@ -117,6 +117,18 @@ impl Keyring {
     }
 }
 
+/// What a pass learned of one gateway that the status draws without dialling (#1191): the
+/// deletes it is holding, the last read-back, whether a kept manifest could not be read.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct GatewayNotes {
+    pub held_count: u32,
+    /// The earliest purge among the holds, on the gateway's clock; 0 when none is held.
+    pub held_purge_at_ms: i64,
+    pub sample_checked: u32,
+    pub sample_of: u32,
+    pub manifest_unreadable: bool,
+}
+
 /// THE PLANE'S FILES FOR ONE VAULT, beside the vault file, stated once.
 ///
 /// One expression per path, because the shells exclude a directory from OS
@@ -149,6 +161,8 @@ pub struct Plane {
     conditions: std::sync::Mutex<Option<drain::Conditions>>,
     /// A snapshot the shell asked for that no pass has taken yet.
     snapshot_owed: std::sync::atomic::AtomicBool,
+    /// What the last pass learned of each gateway that the status shows and does not dial for.
+    notes: std::sync::Mutex<BTreeMap<String, GatewayNotes>>,
     /// The gateways whose head went backwards (a restored disk), until this phone sets a
     /// current head there. In memory: the next contact finds it again.
     rolled: std::sync::Mutex<BTreeSet<String>>,
@@ -169,6 +183,7 @@ impl Plane {
             tokens: std::sync::Mutex::new(link::Tokens::new()),
             conditions: std::sync::Mutex::new(None),
             snapshot_owed: std::sync::atomic::AtomicBool::new(false),
+            notes: std::sync::Mutex::new(BTreeMap::new()),
             rolled: std::sync::Mutex::new(BTreeSet::new()),
             no_room: std::sync::atomic::AtomicBool::new(false),
         }
@@ -188,6 +203,25 @@ impl Plane {
             .conditions
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// What the last pass learned of `gateway_id`.
+    pub(crate) fn notes(&self, gateway_id: &str) -> GatewayNotes {
+        self.notes
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(gateway_id)
+            .copied()
+            .unwrap_or_default()
+    }
+
+    /// Change what is known of `gateway_id`.
+    pub(crate) fn note(&self, gateway_id: &str, change: impl FnOnce(&mut GatewayNotes)) {
+        let mut held = self
+            .notes
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        change(held.entry(gateway_id.to_owned()).or_default());
     }
 
     /// Whether a snapshot the shell asked for is still owed.
@@ -484,6 +518,13 @@ pub fn wire_destination(gateway: &Gateway) -> wire::Destination {
         paired_at_ms: i64::try_from(gateway.paired_ms).unwrap_or(0),
         waiting_apps: Vec::new(),
         refused_limit_bytes: 0,
+        reach_state: wire::DestinationReach::Unspecified as i32,
+        held_count: 0,
+        held_purge_at_ms: 0,
+        held_undoable: 0,
+        sample_checked: 0,
+        sample_of: 0,
+        manifest_unreadable: false,
     }
 }
 
@@ -575,6 +616,70 @@ pub fn gateway_tokens(
         .collect();
     plane.set_tokens(held);
     Ok(wire::GatewayTokensResponse { pair_again })
+}
+
+// ─── undo ───────────────────────────────────────────────────────────────────
+
+/// How long retention leaves a name be after the member's Undo lifted its hold: the gateway's own
+/// week, so an Undo is not undone by the next pass.
+const UNDO_KEEP_MS: u64 = 7 * 24 * 60 * 60 * 1000;
+
+/// **Lift every hold a gateway has for this vault** (`undo_held`, #1191, E6), signed by the vault
+/// key, and remember the names so retention does not delete them again at once.
+///
+/// # Errors
+/// [`CoreError::VaultMoved`] for a gateway that proved a takeover; [`CoreError::Unavailable`] for
+/// one that does not answer or has no token here; the device state's refusal.
+pub fn undo_held(
+    plane: &Plane,
+    keyring: &Keyring,
+    runtime: &tokio::runtime::Handle,
+    request: &wire::UndoHeldRequest,
+) -> Result<wire::UndoHeldResponse> {
+    use centraid_vault::backup::store::Store as _;
+    let state = plane.state()?;
+    let Some(row) = state.gateway(&request.gateway_id).map_err(plane_error)? else {
+        return Ok(wire::UndoHeldResponse::default());
+    };
+    if let Some(epoch) = row.moved_epoch {
+        return Err(CoreError::VaultMoved {
+            current_epoch: epoch,
+            moved_at_ms: 0,
+        });
+    }
+    let Some(token) = plane.tokens().get(&row.gateway_id).copied() else {
+        return Err(CoreError::Unavailable {
+            reason: "pair this gateway again to undo what it holds".to_owned(),
+        });
+    };
+    let store =
+        link::GatewayStore::for_gateway(&row, token, keyring.vault.identity.signing(), runtime)?;
+    // THE NAMES FIRST, so retention knows what the Undo restored.
+    let mut names = Vec::new();
+    let mut after = None;
+    loop {
+        let page = store.held(after.as_ref(), 200).map_err(store_error)?;
+        let Some(last) = page.last().map(|entry| entry.name) else {
+            break;
+        };
+        names.extend(page.iter().map(|entry| entry.name));
+        after = Some(last);
+    }
+    let restored = store.undo(None).map_err(store_error)?;
+    state
+        .put_undone(
+            &row.gateway_id,
+            &names,
+            now_ms().saturating_add(UNDO_KEEP_MS),
+        )
+        .map_err(plane_error)?;
+    plane.note(&row.gateway_id, |notes| {
+        notes.held_count = 0;
+        notes.held_purge_at_ms = 0;
+    });
+    Ok(wire::UndoHeldResponse {
+        restored: u32::try_from(restored).unwrap_or(u32::MAX),
+    })
 }
 
 // ─── pins and forget ────────────────────────────────────────────────────────
@@ -1061,6 +1166,22 @@ pub(crate) fn standing(
     Ok(out)
 }
 
+/// How a gateway last answered, in the word the Backup screen draws.
+const fn reach_state_of(reach: Reach, repairing: bool) -> wire::DestinationReach {
+    use wire::DestinationReach as R;
+    match reach {
+        Reach::Ok if repairing => R::Repairing,
+        Reach::Ok => R::Ok,
+        Reach::Unreachable | Reach::Busy => R::Unreachable,
+        Reach::Untrusted => R::Untrusted,
+        Reach::PairAgain => R::PairAgain,
+        Reach::RefusedDisk | Reach::RefusedLarge | Reach::RefusedOther => R::Refused,
+        Reach::Moved => R::Moved,
+        Reach::Frozen => R::Frozen,
+        Reach::GatewayOld => R::GatewayOld,
+    }
+}
+
 /// **What the shell draws on the backup screen** (`backup_status`). Reads the
 /// ledger, the spool and the vault's rows; it dials nothing, because drawing a
 /// screen must not depend on somebody else's network.
@@ -1163,6 +1284,14 @@ pub fn backup_status(
             })
             .unwrap_or_default();
         row.rolled_back = plane.rolled(&destination.gateway_id);
+        let notes = plane.notes(&destination.gateway_id);
+        row.held_count = notes.held_count;
+        row.held_purge_at_ms = notes.held_purge_at_ms;
+        row.held_undoable = notes.held_count;
+        row.sample_checked = notes.sample_checked;
+        row.sample_of = notes.sample_of;
+        row.manifest_unreadable = notes.manifest_unreadable;
+        row.reach_state = reach_state_of(destination.reach, row.rolled_back) as i32;
         let reach = drain::gateway_reach(&state, &destination.gateway_id)?
             .unwrap_or(wire::WaitReason::Unspecified);
         row.reach = reach as i32;

@@ -1,4 +1,4 @@
-//! The device state of a phone's backup (#1191, E11, B14): the three tables,
+//! The device state of a phone's backup (#1191, E11, B14): the four tables,
 //! the ladder, and the reset rules. Counts and rows, never durations.
 
 use centraid_vault::backup::naming::{Digest, Name, PlaintextHash};
@@ -264,7 +264,7 @@ fn the_sample_counter_counts_each_draw_once() {
 }
 
 #[test]
-fn the_state_has_three_tables_an_id_and_a_rung_and_no_token_and_no_key_value_table() {
+fn the_state_has_four_tables_an_id_and_a_rung_and_no_token_and_no_key_value_table() {
     let (dir, state) = open();
     drop(state);
     let connection = Connection::open(dir.path().join("v.state.db")).expect("opens");
@@ -276,7 +276,7 @@ fn the_state_has_three_tables_an_id_and_a_rung_and_no_token_and_no_key_value_tab
         .collect::<Result<_, _>>()
         .expect("rows");
     tables.sort();
-    assert_eq!(tables, vec!["gateway", "local_bytes", "outbox"]);
+    assert_eq!(tables, vec!["gateway", "local_bytes", "outbox", "undone"]);
     let id: i64 = connection
         .query_row("PRAGMA application_id", [], |row| row.get(0))
         .expect("id");
@@ -353,4 +353,33 @@ fn a_batch_of_done_names_costs_one_commit() {
     let before = state.commit_count();
     state.done_many(GATEWAY, &names).expect("done");
     assert_eq!(state.commit_count() - before, 1);
+}
+
+/// **AN UNDO IS NOT UNDONE BY THE NEXT PASS** (E6): the names a member's Undo lifted are kept
+/// by retention until their time is up, per gateway, and go with the gateway.
+#[test]
+fn undone_names_are_kept_until_their_time_and_go_with_the_gateway() {
+    let (_dir, state) = open();
+    state.put_gateway(&paired(GATEWAY, 1)).expect("pairs");
+    state
+        .put_undone(GATEWAY, &[name(1), name(2)], 1_000)
+        .expect("records");
+    assert_eq!(
+        state.undone(GATEWAY, 999).expect("reads").len(),
+        2,
+        "kept before their time"
+    );
+    assert!(
+        state.undone(GATEWAY, 1_000).expect("reads").is_empty(),
+        "forgotten at their time"
+    );
+    state
+        .put_undone(GATEWAY, &[name(3)], 5_000)
+        .expect("records");
+    state.remove_gateway(GATEWAY).expect("forgets");
+    state.put_gateway(&paired(GATEWAY, 1)).expect("pairs again");
+    assert!(
+        state.undone(GATEWAY, 0).expect("reads").is_empty(),
+        "a forgotten gateway's undone names go with it"
+    );
 }

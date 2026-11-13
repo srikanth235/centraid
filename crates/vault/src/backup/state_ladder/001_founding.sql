@@ -54,3 +54,12 @@ CREATE TABLE local_bytes (
   ref    TEXT CHECK ((source = 'os') = (ref IS NOT NULL AND ref <> '')),
   edited INTEGER NOT NULL DEFAULT 0 CHECK (edited IN (0, 1) AND (edited = 0 OR source = 'os'))
 ) STRICT;
+
+-- Names a member's Undo lifted the hold on (E6): retention does not delete them again until
+-- `until_ms`, so an Undo is not undone by the next pass.
+CREATE TABLE undone (
+  gateway_id TEXT NOT NULL REFERENCES gateway (gateway_id) ON DELETE CASCADE,
+  name       TEXT NOT NULL CHECK (length(name) = 64 AND name NOT GLOB '*[^0-9a-f]*'),
+  until_ms   INTEGER NOT NULL,
+  PRIMARY KEY (gateway_id, name)
+) STRICT, WITHOUT ROWID;

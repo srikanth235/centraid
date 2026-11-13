@@ -80,18 +80,25 @@ fn a_pass_reads_back_a_sample_and_finds_a_part_a_gateway_damaged() {
         .runtime
         .block_on(gateway.spawned.scrub_now())
         .expect("the scrub runs");
-    drain(&phone, quietly());
+    // THE READ-BACK RUNS BEFORE THE PASS WRITES, so the same pass retakes the snapshot: the
+    // damaged names were freed at the gateway (a signed delete frees a damaged name at once) and
+    // sent anew.
+    let mended = drain(&phone, quietly());
     assert!(
-        phone.plane().snapshot_owed(),
-        "the read-back found the damage, so the snapshot is owed again"
+        mended.acked_at_ms.is_some(),
+        "the pass that found the damage retook the snapshot: {mended:?}"
     );
-    // THE NEXT PASS RETAKES IT: the damaged names were freed at the gateway and are sent anew.
-    let mended = drain(&phone, at_home());
-    assert!(mended.acked_at_ms.is_some(), "{mended:?}");
     let again = drain(&phone, quietly());
     assert!(
         again.acked_at_ms.is_none() && !phone.plane().snapshot_owed(),
         "nothing found damaged the second time: {again:?}"
+    );
+    let held = gateway.held(&vault_id());
+    assert!(
+        before.iter().all(|name| held.contains(name)) || held.len() >= before.len(),
+        "what was damaged is held again: {} of {}",
+        held.len(),
+        before.len()
     );
 }
 
@@ -259,10 +266,19 @@ fn a_gateway_that_lies_about_exists_is_found_and_then_refilled() {
             .lose(&vault_id(), &wire_name)
             .expect("the file is lost");
     }
+    // THE READ-BACK IS WHAT FINDS IT: `exists` says held, so a plan believes the gateway and
+    // nothing is sealed; the sample reads the bytes and they are not there. The gateway's row says
+    // it must be re-sent, which the honest passes below do.
     drain(&phone, quietly());
+    let flagged = status(&phone);
+    let row = flagged
+        .destinations
+        .iter()
+        .find(|row| row.gateway_id == id)
+        .expect("paired");
     assert!(
-        phone.plane().snapshot_owed(),
-        "the read-back found what exists denied, so the snapshot is owed again"
+        row.rolled_back || row.manifest_unreadable,
+        "the gateway is marked as having lost what it said it held: {row:?}"
     );
 
     gateway.spawned.lie_about_exists(false);

@@ -734,3 +734,78 @@ fn a_file_is_backed_up_once_its_bytes_and_its_row_are() {
         "the still is offered now"
     );
 }
+
+/// **AN UNDO IS NOT UNDONE BY THE NEXT RETENTION PASS** (#1191, E6; B16). Each head on a day
+/// drops the one before it, and the gateway holds those deletes for a week. The status names the
+/// holds; the member's Undo lifts them, signed by the vault key; and the next snapshots, whose
+/// retention would drop the same ones, do not sign a delete for a name the Undo restored.
+#[test]
+fn an_undo_lifts_the_holds_and_the_next_retention_pass_does_not_delete_them_again() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    let id = pair(&phone, &gateway)
+        .destination
+        .expect("a destination")
+        .gateway_id;
+    for round in 0..4 {
+        run(
+            &phone,
+            "note.create",
+            &json!({ "title": format!("Round {round}"), "body": "x".repeat(4_000), "format": "plain" }),
+            &format!("round-{round}"),
+        );
+        let drained = drain(&phone, at_home());
+        assert!(drained.acked_at_ms.is_some(), "round {round}: {drained:?}");
+    }
+    // A PASS LEARNS WHAT THE GATEWAY IS HOLDING, and the status carries it.
+    drain(&phone, quietly());
+    let held_names = || -> std::collections::BTreeSet<Name> {
+        gateway
+            .objects(&vault_id())
+            .iter()
+            .filter(|record| record.hold.is_some())
+            .map(|record| Name::from_bytes(*record.name.as_bytes()))
+            .collect()
+    };
+    let before = held_names();
+    assert!(!before.is_empty(), "retention dropped snapshots");
+    let backed = status(&phone);
+    let row = backed
+        .destinations
+        .iter()
+        .find(|row| row.gateway_id == id)
+        .expect("paired");
+    assert_eq!(row.held_count as usize, before.len(), "{row:?}");
+    assert_eq!(row.held_undoable, row.held_count);
+    assert!(row.held_purge_at_ms > 0, "{row:?}");
+
+    // THE MEMBER'S UNDO.
+    let wire::response::Kind::UndoHeld(undone) = ask(
+        &phone,
+        wire::request::Kind::UndoHeld(wire::UndoHeldRequest {
+            gateway_id: id.clone(),
+        }),
+    ) else {
+        panic!("an undo answers");
+    };
+    assert_eq!(undone.restored as usize, before.len());
+    assert!(held_names().is_empty(), "nothing is held now");
+
+    // THE NEXT SNAPSHOTS' RETENTION WOULD DROP THE SAME ONES AGAIN: it does not.
+    for round in 4..6 {
+        run(
+            &phone,
+            "note.create",
+            &json!({ "title": format!("Round {round}"), "body": "x".repeat(4_000), "format": "plain" }),
+            &format!("round-{round}"),
+        );
+        drain(&phone, at_home());
+    }
+    let after = held_names();
+    assert!(
+        after.is_disjoint(&before),
+        "a name the Undo restored is not held again: {:?}",
+        after.intersection(&before).collect::<Vec<_>>()
+    );
+}

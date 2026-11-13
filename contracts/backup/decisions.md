@@ -214,13 +214,13 @@ index(k)   = r(k) mod N        (skip an index already drawn this pass; try k+1)
 
 **Replaces.** `verify::read_back_large`, `SAMPLE_MAX_BYTES`, `Ledger::oldest_verified_large`, `confirmed.verified_ms`, the "3 random parts" read-back in `phone/drain.rs`, `check.rs`'s `pick_sample` (its `SAMPLE_FILES` etc. stay for the whole-file "Check my backup"). **Built by** B13.
 
-## E11. Device state: three tables
+## E11. Device state: four tables
 
-**Rule.** `<stem>.state.db` replaces `<stem>.backup.db`. Exactly three tables, STRICT, no key-value table. `addrs` is a JSON array text column, the one exception: the pass reads it whole and nothing queries or indexes it. `application_id = 0x43425331` (`CBS1`), `user_version` is the rung count (1 for this build); a newer rung is refused; the older ledger (`CBL1`) found beside the vault is **deleted without being read** (decision 8). Rungs live as `crates/vault/src/backup/state_ladder/NNN_*.sql`, applied in one transaction each, never edited after the first release. No host clock in DDL.
+**Rule.** `<stem>.state.db` replaces `<stem>.backup.db`. Four tables, STRICT, no key-value table (the fourth, `undone`, holds what a member's Undo restored, E6). `addrs` is a JSON array text column, the one exception: the pass reads it whole and nothing queries or indexes it. `application_id = 0x43425331` (`CBS1`), `user_version` is the rung count (1 for this build); a newer rung is refused; the older ledger (`CBL1`) found beside the vault is **deleted without being read** (decision 8). Rungs live as `crates/vault/src/backup/state_ladder/NNN_*.sql`, applied in one transaction each, never edited after the first release. No host clock in DDL.
 
 ```sql
 CREATE TABLE gateway (
-  gateway_id     TEXT PRIMARY KEY CHECK (length(gateway_id) = 32 AND gateway_id NOT GLOB '*[^0-9a-f]*'),
+  gateway_id     TEXT PRIMARY KEY CHECK (length(gateway_id) BETWEEN 1 AND 64), -- 32 hex in the product; a test store names itself
   addrs          TEXT NOT NULL,                       -- JSON array of "host:port", read by the pass, never queried
   cert_der       BLOB NOT NULL,
   label          TEXT NOT NULL,
@@ -238,7 +238,11 @@ CREATE TABLE gateway (
   seen_ms        INTEGER,
   ack_ms         INTEGER,
   sample_counter INTEGER NOT NULL DEFAULT 0 CHECK (sample_counter >= 0),
-  directory_dirty INTEGER NOT NULL DEFAULT 1 CHECK (directory_dirty IN (0, 1))
+  directory_dirty INTEGER NOT NULL DEFAULT 1 CHECK (directory_dirty IN (0, 1)),
+  snapshot_ms    INTEGER,       -- taken_at_ms of the snapshot spooled for this gateway, set or in flight
+  head_ms        INTEGER,       -- taken_at_ms of the snapshot its head names: how current its records are
+  snapshot       TEXT CHECK (snapshot IS NULL OR (length(snapshot) = 64 AND snapshot NOT GLOB '*[^0-9a-f]*')),
+  snapshot_writes INTEGER NOT NULL DEFAULT 0 CHECK (snapshot_writes >= 0)
 ) STRICT;
 
 CREATE TABLE outbox (
@@ -255,6 +259,7 @@ CREATE TABLE outbox (
   handed_ms  INTEGER,
   attempts   INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
   last_error TEXT,
+  derivative INTEGER NOT NULL DEFAULT 0 CHECK (derivative IN (0, 1) AND (derivative = 0 OR kind = 'blob')),
   PRIMARY KEY (gateway_id, name)
 ) STRICT, WITHOUT ROWID;
 CREATE INDEX outbox_in_order ON outbox (gateway_id, kind = 'manifest', created_ms, name);
@@ -265,10 +270,19 @@ CREATE TABLE local_bytes (          -- unchanged from the ledger's, minus verifi
   source TEXT NOT NULL CHECK (source IN ('os','store')),
   ref    TEXT CHECK ((source = 'os') = (ref IS NOT NULL AND ref <> '')),
   edited INTEGER NOT NULL DEFAULT 0 CHECK (edited IN (0, 1) AND (edited = 0 OR source = 'os'))
-) STRICT;
+) STRICT;                           -- rowid order IS recording order: the newest row for a ref wins
+
+CREATE TABLE undone (               -- names a member's Undo lifted the hold on (E6)
+  gateway_id TEXT NOT NULL REFERENCES gateway (gateway_id) ON DELETE CASCADE,
+  name       TEXT NOT NULL CHECK (length(name) = 64 AND name NOT GLOB '*[^0-9a-f]*'),
+  until_ms   INTEGER NOT NULL,      -- retention leaves the name be until then (the gateway's week)
+  PRIMARY KEY (gateway_id, name)
+) STRICT, WITHOUT ROWID;
 ```
 
-The token is **not** a column (E12). The `snapshot` table and the `meta` table are gone: the one fact `meta` held that matters (a snapshot is owed) is derived, not stored: a snapshot is owed when `directory_dirty` is 1 for any gateway, when a blob part was confirmed whose digest no head records, or when the vault's `writes`/`user_version` differ from the newest head's. The previous head's manifest is kept in the spool under its name; it is fetched from a gateway only when that spool file is absent.
+The token is **not** a column (E12). The `snapshot` table and the `meta` table are gone. **As built:** a snapshot is owed when the gateway's `snapshot` is not its `head`, when the vault's `writes` differ from the row's, when a read-back found damage or its head went backwards, or when the shell asked and no pass has taken one yet — that last is kept in the core's memory for its life, not in the file, because a request the shell made is answered by the pass that follows it. The member's rule and the link are the same: they come with every `drain` request (E12's store keeps the member's choices), and a request without a rule is refused. A kept snapshot's manifest is read from the gateway when retention or a read-back needs it.
+
+**An Undo is not undone by the next pass (E6).** `undo_held` lists the holds, lifts them with one signed `undo`, and writes every name into `undone` with `until_ms = now + 7 days`. Retention treats a name in `undone` as live and keeps a snapshot it names rather than dropping it again; rows past their time are deleted as they are read. A forgotten gateway's rows go with it.
 
 **The per-gateway cursor and what the outbox covers.** Lane V adds `blob.seq` (V12): assigned at insert only, from a counter that never reuses a value (a blob row deleted by collection and inserted again gets a new value naturally); lane V is not asked to re-stamp on revival. A pass asks, per gateway, `SELECT hash, byte_size, seq FROM blob WHERE seq > :cursor ORDER BY seq LIMIT 500`; for each row it computes the part names, asks `exists`, writes an outbox row for each missing name, then sets `cursor` to the last `seq`, in one transaction. An unchanged library returns no rows: one statement and one gateway call. The outbox holds everything the cursor has already passed but that is not done:
 
@@ -278,7 +292,7 @@ The token is **not** a column (E12). The `snapshot` table and the `meta` table a
 
 **Reset rules.** *Restore in place* (a claim at each gateway; the vault is replaced): for each gateway row `epoch = claim epoch`, `head = the head claimed against`, `generation = 0`, `writes = 0`, `cursor = 0`, `reach = 'ok'`, `moved_epoch = NULL`, `sample_counter = 0`, `directory_dirty = 1`; the outbox is emptied and its spool files removed; `local_bytes` is kept (it is about this device, not the vault's history). *Forget a gateway*: delete the row (cascade drops its outbox rows; unreferenced spool files are swept); no confirmation, as today; `local_bytes` untouched. *The state file is lost*: the phone has no gateway rows and re-pairs; each pairing is a claim (the vault key is the seed's), which also revokes the lost token at the gateway (E5).
 
-**Replaces.** All of `vault/src/backup/ledger.rs` (`Ledger`, `Destination`, `Queued`, `PartKind`, `SNAPSHOT_OWED_KEY` and every `meta` key, `set_moved`, `confirmed` and its queries), `mover.rs`'s confirmed bookkeeping, `phone/mod.rs`'s ledger references, the four ledger defects the issue lists as not done on purpose. **Built by** B14 (tables, reset), B12 (cursor, outbox rows).
+**Replaces.** All of `vault/src/backup/ledger.rs` (deleted) (`Ledger`, `Destination`, `Queued`, `PartKind`, `SNAPSHOT_OWED_KEY` and every `meta` key, `set_moved`, `confirmed` and its queries), `mover.rs`'s confirmed bookkeeping, `phone/mod.rs`'s ledger references, the four ledger defects the issue lists as not done on purpose. **Built by** B14 (tables, reset), B12 (cursor, outbox rows).
 
 ## E12. Credential storage
 

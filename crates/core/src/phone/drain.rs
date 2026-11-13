@@ -1043,6 +1043,7 @@ fn verify_sample(
 ) -> Result<()> {
     use centraid_vault::backup::verify::{SAMPLE_CHUNKS, SAMPLE_CHUNKS_METERED, sample};
     let id = store.gateway_id();
+    note_held(plane, store)?;
     let Some(head) = state
         .gateway(id)
         .map_err(plane_error)?
@@ -1058,6 +1059,7 @@ fn verify_sample(
             tracing::warn!(%error, gateway = %id, "the head's manifest would not open");
             plane.set_snapshot_owed(true);
             plane.set_rolled(id, true);
+            plane.note(id, |notes| notes.manifest_unreadable = true);
             pass.rolled.insert(id.to_owned());
             return Ok(());
         }
@@ -1076,6 +1078,11 @@ fn verify_sample(
         },
     );
     pass.sampled = pass.sampled.saturating_add(found.checked);
+    plane.note(id, |notes| {
+        notes.sample_checked = u32::try_from(found.checked).unwrap_or(u32::MAX);
+        notes.sample_of = u32::try_from(names.len()).unwrap_or(u32::MAX);
+        notes.manifest_unreadable = false;
+    });
     if let Some(error) = found.unanswered {
         return Err(store_error(error));
     }
@@ -1096,6 +1103,31 @@ fn verify_sample(
         pass.repairing.insert(id.to_owned());
     }
     Ok(())
+}
+
+/// Learn what deletes `store` is holding for this vault, for the status to show: how many, and
+/// when the earliest goes for good. One listing of up to 200 names; a gateway that does not answer
+/// leaves what was known.
+fn note_held(plane: &Plane, store: &GatewayStore) -> Result<()> {
+    match plane_store::Store::held(store, None, 200) {
+        Ok(held) => {
+            plane.note(store.gateway_id(), |notes| {
+                notes.held_count = u32::try_from(held.len()).unwrap_or(u32::MAX);
+                notes.held_purge_at_ms = held
+                    .iter()
+                    .map(|entry| entry.purge_after_ms)
+                    .min()
+                    .and_then(|at| i64::try_from(at).ok())
+                    .unwrap_or(0);
+            });
+            Ok(())
+        }
+        // A GATEWAY THAT WILL NOT SAY leaves what was known: the status is not the pass.
+        Err(error) => {
+            tracing::debug!(%error, gateway = %store.gateway_id(), "the gateway did not list its holds");
+            Ok(())
+        }
+    }
 }
 
 /// What the records' half of a pass needs, so the pass can run it twice: when
@@ -1516,7 +1548,19 @@ fn retain(
     abandoned: Option<Name>,
 ) -> Result<()> {
     let registered = store.snapshots().map_err(store_error)?;
-    let decided = retention::keep(&registered, now);
+    let mut decided = retention::keep(&registered, now);
+    // WHAT A MEMBER'S UNDO LIFTED IS NOT DELETED AGAIN AT ONCE (E6): such a snapshot is kept
+    // until its time is up, and so is every part of it.
+    let undone = state
+        .undone(store.gateway_id(), now_ms())
+        .map_err(plane_error)?;
+    let (restored, dropped): (Vec<Name>, Vec<Name>) = decided
+        .drop
+        .iter()
+        .copied()
+        .partition(|name| undone.contains(name));
+    decided.drop = dropped;
+    decided.keep.extend(restored);
     if decided.drop.is_empty() && abandoned.is_none() {
         return Ok(());
     }
@@ -1525,6 +1569,7 @@ fn retain(
     // deleted; one that will not open leaves its ranges where they are (never collected on a
     // guess), and a KEPT manifest that will not open stops the collection altogether.
     let mut live: BTreeSet<Name> = state.owed_names().map_err(plane_error)?;
+    live.extend(undone.iter().copied());
     for name in &decided.keep {
         live.insert(*name);
         match manifest_of(store, keys, name) {

@@ -702,6 +702,57 @@ message Destination {
   // The size limit a TOO_LARGE refusal crossed, in bytes (the protocol's largest object); 0
   // when `reach` is anything else. Set only by `backup_status`.
   uint64 refused_limit_bytes = 17;
+  // HOW THIS GATEWAY STANDS, in one word the Backup screen draws (#1191, B16): the last answer
+  // this phone had from it. Set only by `backup_status`.
+  DestinationReach reach_state = 18;
+  // THE DELETES THE GATEWAY IS HOLDING FOR THIS VAULT (#1191, E6): how many names, when the
+  // earliest goes for good (the gateway's clock; 0 when none is held), and how many the member
+  // may undo (every hold is signed by the vault key, so all of them). As of the last pass: the
+  // status dials nobody.
+  uint32 held_count = 19;
+  int64 held_purge_at_ms = 20;
+  uint32 held_undoable = 21;
+  // THE LAST READ-BACK (#1191, E10): parts checked of the parts the head names, 0/0 when none
+  // has run in this core's life.
+  uint32 sample_checked = 22;
+  uint32 sample_of = 23;
+  // A KEPT SNAPSHOT'S MANIFEST CANNOT BE READ at this gateway (E9): collection is stopped there.
+  bool manifest_unreadable = 24;
+}
+
+// How a gateway last answered this phone (`Destination.reach_state`).
+enum DestinationReach {
+  DESTINATION_REACH_UNSPECIFIED = 0;
+  // It answered and took what it was sent.
+  DESTINATION_REACH_OK = 1;
+  // It did not answer.
+  DESTINATION_REACH_UNREACHABLE = 2;
+  // Another machine answered in its place.
+  DESTINATION_REACH_UNTRUSTED = 3;
+  // It does not know this phone's token, or the shell holds none.
+  DESTINATION_REACH_PAIR_AGAIN = 4;
+  // It answered and refused for its own reason: its disk, a size limit, or another code.
+  DESTINATION_REACH_REFUSED = 5;
+  // Another phone took the vault over here, proven by a claim the vault key signed.
+  DESTINATION_REACH_MOVED = 6;
+  // The person at the gateway machine paused the vault.
+  DESTINATION_REACH_FROZEN = 7;
+  // The gateway runs a protocol older than this phone needs.
+  DESTINATION_REACH_GATEWAY_OLD = 8;
+  // A read-back found damage here and the snapshot is being sent again.
+  DESTINATION_REACH_REPAIRING = 9;
+}
+
+// UNDO THE DELETES A GATEWAY IS HOLDING (#1191, E6): lift every hold on this vault at that
+// gateway, signed by the vault key. The names come back as they were; retention will not delete
+// them again for a week.
+message UndoHeldRequest {
+  string gateway_id = 1;
+}
+
+message UndoHeldResponse {
+  // How many holds were lifted.
+  uint32 restored = 1;
 }
 
 // One app's originals a gateway still owes (`Destination.waiting_apps`).

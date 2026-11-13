@@ -1488,6 +1488,13 @@ impl HandleState {
             K::GatewayTokens(request) => Ok(response(wire::response::Kind::GatewayTokens(
                 crate::phone::gateway_tokens(&self.plane, self.keys.as_ref(), request)?,
             ))),
+            // THE MEMBER'S UNDO of what a gateway is holding (#1191, E6).
+            K::UndoHeld(request) => {
+                let runtime = self.runtime_handle()?;
+                Ok(response(wire::response::Kind::UndoHeld(
+                    crate::phone::undo_held(&self.plane, self.keyring()?, &runtime, request)?,
+                )))
+            }
             // PAIRING NEEDS NO VAULT TO BE OPEN: it needs the vault's keys,
             // and keeps the gateway in the ledger beside the file.
             K::PairPhone(request) => {
@@ -2128,6 +2135,8 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             // HANDING THE CORE ITS GATEWAY TOKENS is one read of the device
             // state and a map in memory (#1191, E12).
             | K::GatewayTokens(_)
+            // AN UNDO IS ONE LISTING OF THE HOLDS (200 a page) AND ONE SIGNED REQUEST.
+            | K::UndoHeld(_)
             // PAIRING IS BOUNDED: one payload, one pairing, a claim retried
             // at most three times. It talks to the network, which is not the
             // same question — `Bounded` is "finishes on its own bounded by its
