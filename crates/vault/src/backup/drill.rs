@@ -472,7 +472,7 @@ pub fn run(dir: &Path) -> Result<DrillReport, DrillError> {
 
     // ---- 8. the takeover fences the old writer -----------------------------
     let _successor = store.claim();
-    match store.set_head(&head, Some(&head), 0) {
+    match store.set_head(&head, Some(&head), 0, 0) {
         Err(StoreError::Moved { .. }) => {}
         other => return Err(fail(format!("the old writer was not fenced: {other:?}"))),
     }

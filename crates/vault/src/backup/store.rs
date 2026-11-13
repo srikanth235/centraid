@@ -175,16 +175,28 @@ pub trait Store {
     /// [`StoreError`] when the destination cannot be asked.
     fn head(&self) -> Result<Option<Head>, StoreError>;
 
-    /// Move the head to the manifest `name`, only if it stands at `prev`.
+    /// The generation the last signed record this store sent (or read back as
+    /// standing) used: what the next signed record continues from (E3). A
+    /// store that signs nothing answers its own counter.
+    fn generation(&self) -> u64 {
+        0
+    }
+
+    /// Move the head to the manifest `name`, only if it stands at `prev`,
+    /// signed by the vault key at the next generation. `writes` is the
+    /// vault's write counter in that snapshot (E2).
     ///
     /// # Errors
     /// [`StoreError::HeadConflict`] carrying the current head when it does not
-    /// stand at `prev`; nothing moves.
+    /// stand at `prev`; nothing moves. [`Refusal::OutOfOrder`] when the
+    /// destination holds something newer (after one re-sign),
+    /// [`Refusal::ClockAhead`] when `taken_at_ms` is ahead of its clock.
     fn set_head(
         &self,
         name: &Name,
         prev: Option<&Name>,
         taken_at_ms: u64,
+        writes: u64,
     ) -> Result<Head, StoreError>;
 
     /// Every registered snapshot.
@@ -205,6 +217,20 @@ pub trait Store {
     /// [`StoreError`] when the destination cannot be asked; a per-name refusal
     /// is in [`Deleted::refused`].
     fn delete(&self, names: &[Name]) -> Result<Deleted, StoreError>;
+
+    /// Up to `limit` deletes still held, named after `after`, in name order:
+    /// what the member may still undo (E6).
+    ///
+    /// # Errors
+    /// [`StoreError`] when the destination cannot be asked.
+    fn held(&self, after: Option<&Name>, limit: usize) -> Result<Vec<HeldEntry>, StoreError>;
+
+    /// Lift the holds on `names`, or on every hold when `None`, signed by the
+    /// vault key. Answers how many were lifted.
+    ///
+    /// # Errors
+    /// [`StoreError`] when the destination cannot be asked.
+    fn undo(&self, names: Option<&[Name]>) -> Result<u64, StoreError>;
 }
 
 /// What a `put` stored.
@@ -221,9 +247,14 @@ pub enum Put {
 pub struct Head {
     /// The manifest the head names.
     pub name: Name,
+    /// The head this one replaced, as signed.
+    pub prev: Option<Name>,
     pub taken_at_ms: u64,
-    /// The writer epoch that set it.
+    /// The writer epoch that set it, as signed.
     pub epoch: u64,
+    /// The generation and writes it was signed at (E2, E3).
+    pub generation: u64,
+    pub writes: u64,
     pub set_at_ms: u64,
 }
 
@@ -234,6 +265,36 @@ pub struct SnapshotEntry {
     pub name: Name,
     pub taken_at_ms: u64,
     pub registered_at_ms: u64,
+    /// While its manifest is held for deletion: when, and when it goes (E6).
+    /// A held snapshot stays listed, and a restore may still choose it.
+    pub held_at_ms: Option<u64>,
+    pub purge_after_ms: Option<u64>,
+}
+
+/// What a held delete is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HeldKind {
+    Object,
+    Snapshot,
+}
+
+/// One delete waiting out its hold.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HeldEntry {
+    pub name: Name,
+    pub size: u64,
+    pub digest: Digest,
+    pub kind: HeldKind,
+    pub held_at_ms: u64,
+    pub purge_after_ms: u64,
+}
+
+/// Why a name a `put` wanted is not free.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NameState {
+    Live,
+    Held,
+    Damaged,
 }
 
 /// One held object.
@@ -248,7 +309,10 @@ pub struct ObjectEntry {
 /// What a `delete` did.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Deleted {
+    /// Held now, held before, or never stored.
     pub deleted: Vec<Name>,
+    /// Damaged objects freed at once, with no hold (decision 30).
+    pub freed: Vec<Name>,
     pub refused: Vec<(Name, Refusal)>,
 }
 
@@ -265,9 +329,22 @@ pub struct Deleted {
 pub enum Refusal {
     /// The bytes sent are not the digest declared.
     DigestMismatch,
-    /// The name is held under another digest. A name is a function of the
-    /// plaintext, so the destination already holds a sealing of these bytes.
-    NameTaken,
+    /// The name is not free: the destination holds it under `held`, live,
+    /// held for deletion or damaged. **An acknowledgement only if `held` is
+    /// the digest that was sent** (decision 30); never otherwise.
+    NameTaken {
+        held: Digest,
+        state: NameState,
+    },
+    /// The destination holds something newer or different than the signed
+    /// record this device sent (E3).
+    OutOfOrder,
+    /// The person at the gateway machine paused the vault (E6).
+    Frozen,
+    /// The destination is asked too much just now (E5).
+    Busy,
+    /// A `taken_at_ms` ahead of the destination's clock (E14).
+    ClockAhead,
     /// Over the protocol's byte cap: an object or a bundle.
     TooLarge,
     /// Over the protocol's count cap: more than [`NAMES_PER_CALL`] names.
@@ -290,9 +367,10 @@ pub enum Refusal {
 
 impl Refusal {
     /// Every code this build names, for the tests that hold the table whole.
-    pub const NAMED: [&'static str; 11] = [
+    /// `NAME_TAKEN` is not among them: it travels with the recorded digest
+    /// and the name's state, so a code alone cannot be read back into it.
+    pub const NAMED: [&'static str; 14] = [
         "DIGEST_MISMATCH",
-        "NAME_TAKEN",
         "TOO_LARGE",
         "TOO_MANY",
         "DISK_FULL",
@@ -302,6 +380,10 @@ impl Refusal {
         "BAD_RANGE",
         "VAULT_KNOWN",
         "EPOCH_CONFLICT",
+        "OUT_OF_ORDER",
+        "FROZEN",
+        "BUSY",
+        "CLOCK_AHEAD",
     ];
 
     /// The protocol's spelling.
@@ -309,7 +391,11 @@ impl Refusal {
     pub fn code(&self) -> &str {
         match self {
             Self::DigestMismatch => "DIGEST_MISMATCH",
-            Self::NameTaken => "NAME_TAKEN",
+            Self::NameTaken { .. } => "NAME_TAKEN",
+            Self::OutOfOrder => "OUT_OF_ORDER",
+            Self::Frozen => "FROZEN",
+            Self::Busy => "BUSY",
+            Self::ClockAhead => "CLOCK_AHEAD",
             Self::TooLarge => "TOO_LARGE",
             Self::TooMany => "TOO_MANY",
             Self::DiskFull => "DISK_FULL",
@@ -328,7 +414,10 @@ impl Refusal {
     pub fn from_code(code: &str) -> Self {
         match code {
             "DIGEST_MISMATCH" => Self::DigestMismatch,
-            "NAME_TAKEN" => Self::NameTaken,
+            "OUT_OF_ORDER" => Self::OutOfOrder,
+            "FROZEN" => Self::Frozen,
+            "BUSY" => Self::Busy,
+            "CLOCK_AHEAD" => Self::ClockAhead,
             "TOO_LARGE" => Self::TooLarge,
             "TOO_MANY" => Self::TooMany,
             "DISK_FULL" => Self::DiskFull,
@@ -364,10 +453,14 @@ pub enum StoreError {
     /// the copy it holds, or the bytes on the way, are damaged.
     #[error("the copy on the destination did not open: {0}")]
     Damaged(String),
-    /// A newer writer claimed this vault at `epoch`; this one's writes are
-    /// refused and its reads still answer.
+    /// A newer writer claimed this vault at `epoch`, **proved by a claim that
+    /// verifies under this vault's key and is above the epoch this device
+    /// holds** (E4); this one's writes are refused and its reads still answer.
     #[error("MOVED: a writer at epoch {epoch} superseded this one")]
     Moved { epoch: u64 },
+    /// The gateway runs a protocol below the one this build requires.
+    #[error("the gateway runs protocol {found}; this build needs {required}")]
+    GatewayOld { found: u64, required: u64 },
     /// `set_head` lost its compare-and-set. Nothing moved.
     #[error("HEAD_CONFLICT: the head is not where this writer last left it")]
     HeadConflict { current: Option<Head> },
@@ -416,6 +509,7 @@ pub fn delete_all(store: &dyn Store, names: &[Name]) -> Result<Deleted, StoreErr
     for batch in names.chunks(NAMES_PER_CALL) {
         let deleted = store.delete(batch)?;
         out.deleted.extend(deleted.deleted);
+        out.freed.extend(deleted.freed);
         out.refused.extend(deleted.refused);
     }
     Ok(out)
@@ -430,7 +524,7 @@ struct Held {
     bytes: Vec<u8>,
     digest: Digest,
     stored_at_ms: u64,
-    /// Set while tombstoned: when it was deleted.
+    /// Set while held for deletion: when it was deleted.
     tombstoned_at_ms: Option<u64>,
 }
 
@@ -440,6 +534,7 @@ struct Shared {
     head: Option<Head>,
     snapshots: BTreeMap<Name, SnapshotEntry>,
     writer_epoch: u64,
+    generation: u64,
     clock_ms: Option<u64>,
     puts: u64,
     bundles: u64,
@@ -579,6 +674,8 @@ impl MemoryStore {
             held.tombstoned_at_ms
                 .is_none_or(|at| now.saturating_sub(at) < TOMBSTONE_GRACE_MS)
         });
+        let kept: BTreeSet<Name> = shared.objects.keys().copied().collect();
+        shared.snapshots.retain(|name, _| kept.contains(name));
         before - shared.objects.len()
     }
 }
@@ -617,7 +714,23 @@ impl Store for MemoryStore {
             return if held.digest == *digest {
                 Ok(Put::AlreadyStored)
             } else {
-                Err(StoreError::Refused(Refusal::NameTaken))
+                Err(StoreError::Refused(Refusal::NameTaken {
+                    held: held.digest,
+                    state: NameState::Live,
+                }))
+            };
+        }
+        // A held name takes only the bytes it had (decision 28): the same
+        // digest lifts the hold, anything else is refused.
+        if let Some(held) = shared.objects.get_mut(name) {
+            return if held.digest == *digest {
+                held.tombstoned_at_ms = None;
+                Ok(Put::Stored)
+            } else {
+                Err(StoreError::Refused(Refusal::NameTaken {
+                    held: held.digest,
+                    state: NameState::Held,
+                }))
             };
         }
         shared.objects.insert(
@@ -703,11 +816,16 @@ impl Store for MemoryStore {
         Ok(self.lock().head)
     }
 
+    fn generation(&self) -> u64 {
+        self.lock().generation
+    }
+
     fn set_head(
         &self,
         name: &Name,
         prev: Option<&Name>,
         taken_at_ms: u64,
+        writes: u64,
     ) -> Result<Head, StoreError> {
         let mut shared = self.lock();
         self.writable(&shared)?;
@@ -720,10 +838,14 @@ impl Store for MemoryStore {
             return Err(StoreError::Missing(*name));
         }
         let now = shared.now_ms();
+        shared.generation += 1;
         let head = Head {
             name: *name,
+            prev: prev.copied(),
             taken_at_ms,
             epoch: shared.writer_epoch,
+            generation: shared.generation,
+            writes,
             set_at_ms: now,
         };
         shared.head = Some(head);
@@ -733,13 +855,30 @@ impl Store for MemoryStore {
                 name: *name,
                 taken_at_ms,
                 registered_at_ms: now,
+                held_at_ms: None,
+                purge_after_ms: None,
             },
         );
         Ok(head)
     }
 
     fn snapshots(&self) -> Result<Vec<SnapshotEntry>, StoreError> {
-        let mut entries: Vec<SnapshotEntry> = self.lock().snapshots.values().copied().collect();
+        let shared = self.lock();
+        let mut entries: Vec<SnapshotEntry> = shared
+            .snapshots
+            .values()
+            .map(|entry| {
+                let held = shared
+                    .objects
+                    .get(&entry.name)
+                    .and_then(|held| held.tombstoned_at_ms);
+                SnapshotEntry {
+                    held_at_ms: held,
+                    purge_after_ms: held.map(|at| at.saturating_add(TOMBSTONE_GRACE_MS)),
+                    ..*entry
+                }
+            })
+            .collect();
         entries.sort_by_key(|entry| (entry.taken_at_ms, entry.name));
         Ok(entries)
     }
@@ -778,10 +917,51 @@ impl Store for MemoryStore {
             {
                 held.tombstoned_at_ms = Some(now);
             }
-            shared.snapshots.remove(name);
             out.deleted.push(*name);
         }
+        shared.generation += 1;
         Ok(out)
+    }
+
+    fn held(&self, after: Option<&Name>, limit: usize) -> Result<Vec<HeldEntry>, StoreError> {
+        let shared = self.lock();
+        Ok(shared
+            .objects
+            .iter()
+            .filter(|(name, held)| {
+                held.tombstoned_at_ms.is_some() && after.is_none_or(|after| *name > after)
+            })
+            .take(limit)
+            .filter_map(|(name, held)| {
+                let at = held.tombstoned_at_ms?;
+                Some(HeldEntry {
+                    name: *name,
+                    size: held.bytes.len() as u64,
+                    digest: held.digest,
+                    kind: if shared.snapshots.contains_key(name) {
+                        HeldKind::Snapshot
+                    } else {
+                        HeldKind::Object
+                    },
+                    held_at_ms: at,
+                    purge_after_ms: at.saturating_add(TOMBSTONE_GRACE_MS),
+                })
+            })
+            .collect())
+    }
+
+    fn undo(&self, names: Option<&[Name]>) -> Result<u64, StoreError> {
+        let mut shared = self.lock();
+        self.writable(&shared)?;
+        let mut lifted = 0;
+        for (name, held) in &mut shared.objects {
+            if held.tombstoned_at_ms.is_some() && names.is_none_or(|names| names.contains(name)) {
+                held.tombstoned_at_ms = None;
+                lifted += 1;
+            }
+        }
+        shared.generation += 1;
+        Ok(lifted)
     }
 }
 
@@ -815,7 +995,10 @@ mod tests {
         );
         assert!(matches!(
             put(&store, &name, b"other bytes"),
-            Err(StoreError::Refused(Refusal::NameTaken))
+            Err(StoreError::Refused(Refusal::NameTaken {
+                state: NameState::Live,
+                ..
+            }))
         ));
         assert!(matches!(
             store.put(&name_of("b"), &Digest::of(b"x"), 1, &mut &b"y"[..]),
@@ -837,19 +1020,19 @@ mod tests {
         let store = MemoryStore::new("gw");
         let (first, second) = (name_of("m1"), name_of("m2"));
         assert!(matches!(
-            store.set_head(&first, None, 10),
+            store.set_head(&first, None, 10, 0),
             Err(StoreError::Missing(_))
         ));
         put(&store, &first, b"one").expect("stores");
         put(&store, &second, b"two").expect("stores");
-        let head = store.set_head(&first, None, 10).expect("the first head");
+        let head = store.set_head(&first, None, 10, 0).expect("the first head");
         assert_eq!(head.name, first);
         assert_eq!(store.head().expect("reads"), Some(head));
-        match store.set_head(&second, None, 20) {
+        match store.set_head(&second, None, 20, 0) {
             Err(StoreError::HeadConflict { current }) => assert_eq!(current, Some(head)),
             other => panic!("expected a conflict, got {other:?}"),
         }
-        store.set_head(&second, Some(&first), 20).expect("moves");
+        store.set_head(&second, Some(&first), 20, 0).expect("moves");
         let registered: Vec<Name> = store
             .snapshots()
             .expect("lists")
@@ -860,15 +1043,15 @@ mod tests {
     }
 
     #[test]
-    fn delete_tombstones_spares_the_head_and_deregisters_a_manifest() {
+    fn delete_holds_spares_the_head_and_keeps_a_held_snapshot_listed() {
         let store = MemoryStore::new("gw");
         store.set_clock_ms(1_000);
         let (first, second, range) = (name_of("m1"), name_of("m2"), name_of("r"));
         for (name, bytes) in [(&first, b"one"), (&second, b"two"), (&range, b"rng")] {
             put(&store, name, bytes).expect("stores");
         }
-        store.set_head(&first, None, 1).expect("heads");
-        store.set_head(&second, Some(&first), 2).expect("moves");
+        store.set_head(&first, None, 1, 0).expect("heads");
+        store.set_head(&second, Some(&first), 2, 0).expect("moves");
         let deleted = store.delete(&[first, second, range]).expect("deletes");
         assert_eq!(deleted.deleted, vec![first, range]);
         assert_eq!(deleted.refused, vec![(second, Refusal::HeadInUse)]);
@@ -876,7 +1059,16 @@ mod tests {
             store.exists(&[first, second, range]).expect("asks"),
             vec![first, range]
         );
-        assert_eq!(store.snapshots().expect("lists").len(), 1);
+        // A held manifest's snapshot stays listed, with its dates (E6).
+        let listed = store.snapshots().expect("lists");
+        assert_eq!(listed.len(), 2);
+        assert_eq!(
+            listed
+                .iter()
+                .map(|entry| (entry.name, entry.held_at_ms))
+                .collect::<Vec<_>>(),
+            vec![(first, Some(1_000)), (second, None)]
+        );
         assert_eq!(store.list(None, 10).expect("lists").len(), 1);
 
         // Within the grace a re-upload resurrects; past it the bytes go.
@@ -885,6 +1077,11 @@ mod tests {
         assert_eq!(store.purge(), 0, "inside the grace");
         store.set_clock_ms(1_000 + TOMBSTONE_GRACE_MS);
         assert_eq!(store.purge(), 2, "past it");
+        assert_eq!(
+            store.snapshots().expect("lists").len(),
+            1,
+            "a purged manifest's snapshot goes with it"
+        );
     }
 
     #[test]
@@ -900,7 +1097,7 @@ mod tests {
         ));
         assert!(matches!(old.delete(&[name]), Err(StoreError::Moved { .. })));
         assert!(matches!(
-            old.set_head(&name, None, 1),
+            old.set_head(&name, None, 1, 0),
             Err(StoreError::Moved { .. })
         ));
         assert!(
@@ -908,7 +1105,8 @@ mod tests {
                 .expect("a read still answers")
                 .is_empty()
         );
-        new.set_head(&name, None, 1).expect("the new writer writes");
+        new.set_head(&name, None, 1, 0)
+            .expect("the new writer writes");
         assert_eq!(old.head().expect("reads").map(|head| head.epoch), Some(2));
     }
 
@@ -970,7 +1168,10 @@ mod tests {
             .expect("fetches");
         assert_eq!(fetched, vec![(name, b"sealed range".to_vec())]);
         assert!(
-            matches!(store.set_head(&name, None, 1), Err(StoreError::Missing(_))),
+            matches!(
+                store.set_head(&name, None, 1, 0),
+                Err(StoreError::Missing(_))
+            ),
             "a head never names a tombstone"
         );
 
@@ -1016,7 +1217,13 @@ mod tests {
             answers,
             vec![
                 (held.name, Ok(Put::AlreadyStored)),
-                (taken.name, Err(Refusal::NameTaken)),
+                (
+                    taken.name,
+                    Err(Refusal::NameTaken {
+                        held: Digest::of(b"an earlier sealing"),
+                        state: NameState::Live,
+                    })
+                ),
                 (fresh.name, Ok(Put::Stored)),
                 (torn.name, Err(Refusal::DigestMismatch)),
             ]

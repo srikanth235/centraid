@@ -273,8 +273,9 @@ impl Store for Swapped<'_> {
         name: &Name,
         prev: Option<&Name>,
         taken_at_ms: u64,
+        writes: u64,
     ) -> Result<Head, StoreError> {
-        self.inner.set_head(name, prev, taken_at_ms)
+        self.inner.set_head(name, prev, taken_at_ms, writes)
     }
     fn snapshots(&self) -> Result<Vec<SnapshotEntry>, StoreError> {
         self.inner.snapshots()
@@ -284,6 +285,16 @@ impl Store for Swapped<'_> {
     }
     fn delete(&self, names: &[Name]) -> Result<Deleted, StoreError> {
         self.inner.delete(names)
+    }
+    fn held(
+        &self,
+        after: Option<&Name>,
+        limit: usize,
+    ) -> Result<Vec<centraid_vault::backup::store::HeldEntry>, StoreError> {
+        self.inner.held(after, limit)
+    }
+    fn undo(&self, names: Option<&[Name]>) -> Result<u64, StoreError> {
+        self.inner.undo(names)
     }
 }
 
@@ -305,7 +316,12 @@ fn forge(store: &MemoryStore, snapshot: &Snapshot, edit: impl FnOnce(&mut Manife
         )
         .expect("stores");
     store
-        .set_head(&name, Some(&snapshot.manifest_name), manifest.taken_at_ms)
+        .set_head(
+            &name,
+            Some(&snapshot.manifest_name),
+            manifest.taken_at_ms,
+            0,
+        )
         .expect("moves the head");
     name
 }
@@ -362,7 +378,7 @@ fn a_restore_refuses_every_file_that_is_not_the_snapshots_and_leaves_nothing() {
         other => panic!("the census did not refuse: {other:?}"),
     }
     store
-        .set_head(&snapshot.manifest_name, Some(&counted), 1)
+        .set_head(&snapshot.manifest_name, Some(&counted), 1, 0)
         .expect("moves back");
     forge(&store, &snapshot, |manifest| {
         manifest.db_hash = PlaintextHash::of(b"another file");

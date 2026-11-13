@@ -215,6 +215,8 @@ mod tests {
             name: name_at(taken_at_ms),
             taken_at_ms,
             registered_at_ms: taken_at_ms,
+            held_at_ms: None,
+            purge_after_ms: None,
         }
     }
 
@@ -329,11 +331,15 @@ mod tests {
             name: name_at(NOW_MS + 30 * DAY_MS),
             taken_at_ms: NOW_MS + 30 * DAY_MS,
             registered_at_ms: NOW_MS - 2 * HOUR_MS,
+            held_at_ms: None,
+            purge_after_ms: None,
         };
         let head = SnapshotEntry {
             name: name_at(NOW_MS),
             taken_at_ms: NOW_MS,
             registered_at_ms: NOW_MS,
+            held_at_ms: None,
+            purge_after_ms: None,
         };
         let mut entries: Vec<SnapshotEntry> =
             (1..20).map(|day| entry(NOW_MS - day * DAY_MS)).collect();

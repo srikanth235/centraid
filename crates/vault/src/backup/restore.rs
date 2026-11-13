@@ -559,7 +559,12 @@ mod tests {
             )
             .unwrap();
         store
-            .set_head(&taken.manifest_name, None, taken.manifest.taken_at_ms)
+            .set_head(
+                &taken.manifest_name,
+                None,
+                taken.manifest.taken_at_ms,
+                taken.manifest.writes,
+            )
             .unwrap();
         (store, keys)
     }

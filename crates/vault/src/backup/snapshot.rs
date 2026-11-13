@@ -903,7 +903,12 @@ pub fn settle(
 
     let mut prev = ledger.head(&gateway)?;
     for attempt in 0..2 {
-        match store.set_head(manifest_name, prev.as_ref(), manifest.taken_at_ms) {
+        match store.set_head(
+            manifest_name,
+            prev.as_ref(),
+            manifest.taken_at_ms,
+            manifest.writes,
+        ) {
             Ok(head) => {
                 let now = u64::try_from(clock.now_ms()).unwrap_or(0);
                 // ONE TRANSACTION: the head, when it was taken, the high-water mark (which rises

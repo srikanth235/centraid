@@ -281,7 +281,13 @@ impl Pass<'_> {
         let mut stop = None;
         for (part, answer) in answers {
             match answer {
-                Ok(()) | Err(Refusal::NameTaken) => acknowledged.push(part),
+                Ok(()) => acknowledged.push(part),
+                // Only the phone's own bytes under the name are an acknowledgement
+                // (decision 30). Another digest is not stored: the S2 outbox
+                // port types what to do with it by state.
+                Err(Refusal::NameTaken { held, .. }) if held == part.digest => {
+                    acknowledged.push(part);
+                }
                 Err(Refusal::DigestMismatch) => {
                     // THE PART IS SEALED AGAIN, BUT NOT FOREVER: the same part, refused as
                     // damaged by the same destination `MISMATCH_LIMIT` times in a row, is a
@@ -825,6 +831,7 @@ mod tests {
             _: &Name,
             _: Option<&Name>,
             _: u64,
+            _: u64,
         ) -> std::result::Result<store::Head, StoreError> {
             untrusted()
         }
@@ -839,6 +846,16 @@ mod tests {
             untrusted()
         }
         fn delete(&self, _: &[Name]) -> std::result::Result<store::Deleted, StoreError> {
+            untrusted()
+        }
+        fn held(
+            &self,
+            _: Option<&Name>,
+            _: usize,
+        ) -> std::result::Result<Vec<store::HeldEntry>, StoreError> {
+            untrusted()
+        }
+        fn undo(&self, _: Option<&[Name]>) -> std::result::Result<u64, StoreError> {
             untrusted()
         }
     }
@@ -927,10 +944,11 @@ mod tests {
         assert!(rig.spool.contains(&first));
     }
 
-    /// **R-1080-B4.** The destination already holds a sealing of these bytes
-    /// under this name — the PUT of a pass that crashed before recording it.
+    /// **Decision 30.** A name the destination holds under other bytes is
+    /// not this part stored: it is never counted as acknowledged, and the
+    /// part stays queued and spooled.
     #[test]
-    fn name_taken_is_an_acknowledgement() {
+    fn name_taken_by_other_bytes_is_not_an_acknowledgement() {
         let rig = rig();
         let name = queue(&rig, "photo", PartKind::Original);
         let other = b"an earlier sealing of the same plaintext";
@@ -944,9 +962,9 @@ mod tests {
             .expect("the earlier pass stored it");
         let moved =
             move_queue(&rig.ledger, &rig.spool, &rig.store, far(), &rig.clock).expect("moves");
-        assert_eq!(moved.confirmed, vec![name]);
-        assert!(rig.ledger.is_confirmed(&name, "gw").expect("asks"));
-        assert!(!rig.spool.contains(&name));
+        assert!(moved.confirmed.is_empty());
+        assert!(!rig.ledger.is_confirmed(&name, "gw").expect("asks"));
+        assert!(rig.spool.contains(&name));
     }
 
     #[test]
@@ -1023,8 +1041,9 @@ mod tests {
             name: &Name,
             prev: Option<&Name>,
             taken_at_ms: u64,
+            writes: u64,
         ) -> std::result::Result<store::Head, StoreError> {
-            self.inner.set_head(name, prev, taken_at_ms)
+            self.inner.set_head(name, prev, taken_at_ms, writes)
         }
         fn snapshots(&self) -> std::result::Result<Vec<store::SnapshotEntry>, StoreError> {
             self.inner.snapshots()
@@ -1038,6 +1057,16 @@ mod tests {
         }
         fn delete(&self, names: &[Name]) -> std::result::Result<store::Deleted, StoreError> {
             self.inner.delete(names)
+        }
+        fn held(
+            &self,
+            after: Option<&Name>,
+            limit: usize,
+        ) -> std::result::Result<Vec<store::HeldEntry>, StoreError> {
+            self.inner.held(after, limit)
+        }
+        fn undo(&self, names: Option<&[Name]>) -> std::result::Result<u64, StoreError> {
+            self.inner.undo(names)
         }
     }
 
