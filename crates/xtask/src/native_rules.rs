@@ -28,6 +28,7 @@ use crate::rules::{RuleReport, relative, source_files};
 pub fn all(root: &Path) -> Vec<RuleReport> {
     vec![
         no_kmp_shared(root),
+        sqlite_page_flag(root),
         no_command_request(root),
         native_accessibility(root),
         no_tasks_namespace(root),
@@ -198,6 +199,58 @@ pub fn no_kmp_shared(root: &Path) -> RuleReport {
             if let Some(what) = what {
                 findings.push(format!(
                     "{rel}:{}: names {what}, which #1135 deleted",
+                    number + 1
+                ));
+            }
+        }
+    }
+    RuleReport::applied(NAME, scanned.len(), findings)
+}
+
+/// `sqlite-page-flag` — the snapshot reads the vault through `sqlite_dbpage` (#1191 B11), which
+/// the bundled SQLite compiles only with `-DSQLITE_ENABLE_DBPAGE_VTAB`, and `libsqlite3-sys`
+/// takes its extra flags from the one variable `LIBSQLITE3_FLAGS`. So the repo's
+/// `.cargo/config.toml` sets it under `[env]`, and no workflow, script or Nix shell sets the
+/// variable without the flag (a value set there would replace the repo's and build a core that
+/// cannot take a snapshot).
+pub fn sqlite_page_flag(root: &Path) -> RuleReport {
+    const NAME: &str = "sqlite-page-flag";
+    const FLAG: &str = "SQLITE_ENABLE_DBPAGE_VTAB";
+    const VARIABLE: &str = "LIBSQLITE3_FLAGS";
+    let mut findings = Vec::new();
+    let config = read(&root.join(".cargo/config.toml"));
+    let configured = config.lines().any(|line| {
+        let line = line.trim();
+        !line.starts_with('#') && line.starts_with(VARIABLE) && line.contains(FLAG)
+    });
+    if !configured {
+        findings.push(format!(
+            ".cargo/config.toml: [env] does not set {VARIABLE} to include -D{FLAG}; the snapshot cannot read pages without it"
+        ));
+    }
+    let mut scanned = vec![root.join(".cargo/config.toml")];
+    for (dir, extensions) in [
+        (".github", &["yml", "yaml", "sh"][..]),
+        ("scripts", &["mjs", "js", "ts", "sh"][..]),
+        (
+            "mobile",
+            &["sh", "yml", "yaml", "kts", "gradle", "swift"][..],
+        ),
+        ("deploy", &["sh", "yml", "yaml", "nix"][..]),
+    ] {
+        scanned.extend(files(root, dir, extensions));
+    }
+    scanned.push(root.join("flake.nix"));
+    for file in scanned.iter().skip(1) {
+        let rel = relative(root, file);
+        for (number, line) in read(file).lines().enumerate() {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with('#') || trimmed.starts_with("//") {
+                continue;
+            }
+            if line.contains(VARIABLE) && !line.contains(FLAG) {
+                findings.push(format!(
+                    "{rel}:{}: sets {VARIABLE} without -D{FLAG}, which would replace the repo's value (#1191)",
                     number + 1
                 ));
             }
