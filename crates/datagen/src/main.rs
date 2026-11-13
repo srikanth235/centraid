@@ -829,12 +829,15 @@ fn main() -> Result<()> {
                 );
             }
             println!(
-                "stamped {}: tools_hash {}, prompt_hash {}, catalog_hash {}, tokenizer {}; held-out repo {heldout_repo}; no data file changed, the test split was not read",
+                "stamped {}: tools_hash {}, prompt_hash {}, catalog_hash {}, tokenizer {}; held-out repo {heldout_repo}",
                 input.join("manifest.json").display(),
                 contract.tools_hash,
                 contract.prompt_hash,
                 contract.catalog_hash,
                 contract.tokenizer_blake3
+            );
+            println!(
+                "no data file was changed; the test split was not opened (only train and val were read)"
             );
         }
         Command::Drift { input } => {
