@@ -92,6 +92,33 @@ internal object AppSession {
      */
     val damaged: StateFlow<Boolean> = damagedFlag.asStateFlow()
 
+    private val reopenCount = MutableStateFlow(0)
+
+    /** Bumped by [reopenForRestore]; the activity opens again each time it moves. */
+    val reopens: StateFlow<Int> = reopenCount.asStateFlow()
+
+    @Volatile private var restoreDamagedNext = false
+
+    private val restoreAskedFlag = MutableStateFlow(false)
+
+    /** A restore reopen succeeded and Home has yet to be told to enter the restore entry. */
+    val restoreAsked: StateFlow<Boolean> = restoreAskedFlag.asStateFlow()
+
+    /** Home was told; the ask is spent. */
+    fun restoreAskTold() {
+        restoreAskedFlag.value = false
+    }
+
+    /**
+     * REOPEN FOR RESTORE: the single place the core's `restoreDamaged` key is sent. The damaged
+     * screen's button calls it; the activity opens again over the same path with the key, and on
+     * success Home enters the Rust restore entry. If the open fails again the damaged screen stays.
+     */
+    fun reopenForRestore() {
+        restoreDamagedNext = true
+        reopenCount.value += 1
+    }
+
     /**
      * The session, opened on first use; null when the core would not open (said in the log, and
      * the screen stays on its ground). [devSeedHex] is a debug build's demo seed, read only by the
@@ -147,7 +174,13 @@ internal object AppSession {
     }
 
     private suspend fun open(context: Context, devSeedHex: String?): Open? {
-        val configuration = CoreConfiguration.shelf(context.filesDir.absolutePath, devSeedHex)
+        val restoring = restoreDamagedNext
+        restoreDamagedNext = false
+        val configuration = CoreConfiguration.shelf(
+            context.filesDir.absolutePath,
+            devSeedHex,
+            restoreDamaged = restoring,
+        )
         val core = when (
             val opened = CentraidCore.open(
                 configuration,
@@ -164,6 +197,7 @@ internal object AppSession {
             }
         }
         damagedFlag.value = false
+        if (restoring) restoreAskedFlag.value = true
         core.startReader()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val screens = Screens(core, scope)

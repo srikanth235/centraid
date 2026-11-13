@@ -32,7 +32,7 @@ import dev.centraid.design.KitWords
  * `design/mockups/BackupVaultDamagedOpen.dc.html`.
  */
 @Composable
-internal fun VaultDamagedScreen() {
+internal fun VaultDamagedScreen(onRestore: () -> Unit) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 32.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
@@ -63,17 +63,11 @@ internal fun VaultDamagedScreen() {
         )
         KitPillButton(
             label = KitWords.VAULT_DAMAGED_RESTORE,
-            onPress = ::reopenForRestore,
+            onPress = onRestore,
             modifier = Modifier.padding(top = 12.dp),
             testTag = "vault-damaged-restore",
         )
     }
 }
-
-/**
- * REOPEN FOR RESTORE: the single place the core's "open without the damaged vault" key goes. The
- * core session owns that key (decision 35); until it lands the button does nothing.
- */
-private fun reopenForRestore() = Unit
 
 private const val TITLE_SP: Int = 24
