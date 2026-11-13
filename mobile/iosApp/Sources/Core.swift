@@ -39,6 +39,10 @@ actor Core {
         var devSeed: String?
         var uiThreadName = "main"
         var expectedIdentity: String?
+        /// Sent only after an open answered `VAULT_DAMAGED`: the core opens the same shelf without
+        /// reading the damaged file so the Rust restore entry can run. Older cores ignore it; nil is
+        /// left out of the JSON.
+        var restoreDamaged: Bool?
     }
 
     /// The handle pointer, carried across queues. The core serialises its own

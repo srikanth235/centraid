@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.centraid.android.R
 import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.KitPillButton
 import dev.centraid.android.kit.centraidResource
 import dev.centraid.android.kit.tokenSp
 import dev.centraid.design.KitWords
@@ -31,7 +32,7 @@ import dev.centraid.design.KitWords
  * `design/mockups/BackupVaultDamagedOpen.dc.html`.
  */
 @Composable
-internal fun VaultDamagedScreen() {
+internal fun VaultDamagedScreen(onRestore: () -> Unit) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 32.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
@@ -59,6 +60,12 @@ internal fun VaultDamagedScreen() {
             color = centraidResource(R.color.centraid_text_ink),
             fontSize = tokenSp(R.dimen.centraid_text_row),
             textAlign = TextAlign.Center,
+        )
+        KitPillButton(
+            label = KitWords.VAULT_DAMAGED_RESTORE,
+            onPress = onRestore,
+            modifier = Modifier.padding(top = 12.dp),
+            testTag = "vault-damaged-restore",
         )
     }
 }

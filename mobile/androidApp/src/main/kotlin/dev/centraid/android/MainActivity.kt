@@ -118,7 +118,8 @@ public class MainActivity : FragmentActivity() {
                 // THE PROCESS'S ONE SESSION, held for as long as this composition lives: opened here or
                 // by a background pass that got there first. Not cancellable while it opens, and
                 // released in `finally`, so a fast rotation still gives its hold back.
-                val session by produceState<AppSession.Open?>(null) {
+                val reopens by AppSession.reopens.collectAsState()
+                val session by produceState<AppSession.Open?>(null, reopens) {
                     val opened = withContext(NonCancellable) { AppSession.acquire(applicationContext, devSeed) }
                     if (opened == null) return@produceState
                     try {
@@ -158,7 +159,7 @@ public class MainActivity : FragmentActivity() {
                     if (session != null) {
                         rust.Content(phoneDark = phoneDark)
                     } else if (damaged) {
-                        VaultDamagedScreen()
+                        VaultDamagedScreen(onRestore = AppSession::reopenForRestore)
                     }
                 }
             }

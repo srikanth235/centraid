@@ -30,6 +30,9 @@ struct VaultDamagedView: View {
                         .font(.system(size: bodySize))
                         .foregroundStyle(Color(CentraidAsset.textInk))
                         .accessibilityIdentifier("vault-damaged-safe")
+                    KitPillButton(label: KitWords.VAULT_DAMAGED_RESTORE) { ShellModel.shared.reopenForRestore() }
+                        .accessibilityIdentifier("vault-damaged-restore")
+                        .padding(.top, 12)
                 }
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
