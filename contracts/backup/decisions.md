@@ -10,13 +10,13 @@ Common encoding, used by every signed record below (the claim's scheme in `rules
 
 **Rule.** The vault identity key (the vault id) signs every head, delete, undo, claim and pairing. It is the key claims use today, so no key is added and the gateway already holds its public half. Each kind of record has its own context string, the first field of its preimage, so a signature over one is never valid as another.
 
-| Record | Context (field 1, ASCII) |
-| --- | --- |
-| claim and read grant | `centraid-gateway-claim-v3` |
-| head | `centraid-gateway-head-v3` |
-| delete | `centraid-gateway-delete-v3` |
-| undo | `centraid-gateway-undo-v3` |
-| pairing by secret | `centraid-gateway-pair-v3` |
+| Record               | Context (field 1, ASCII)     |
+| -------------------- | ---------------------------- |
+| claim and read grant | `centraid-gateway-claim-v3`  |
+| head                 | `centraid-gateway-head-v3`   |
+| delete               | `centraid-gateway-delete-v3` |
+| undo                 | `centraid-gateway-undo-v3`   |
+| pairing by secret    | `centraid-gateway-pair-v3`   |
 
 Every preimage's second and third fields are `gateway_id` (16 bytes) and `vault_id` (32 bytes), so a record made for one gateway or vault is void at another. All five use `v3` because the claim's preimage gains a nonce (E5) and the contexts move together with the protocol.
 
@@ -194,7 +194,7 @@ leaf (sealed JSON, one object, name derived from its own plaintext hash)
 
 ## E10. Read-back sampling
 
-**Rule.** Each pass samples, per gateway reached, `SAMPLE_CHUNKS = 64` sealed chunks drawn at random from the newest head snapshot's parts, stopping early at `SAMPLE_BYTES = 64 MiB` of ciphertext read; on a metered link it samples `8` chunks of at most 1 MiB. A *chunk* is one sealed chunk of a part (a range part is one chunk of 64 KiB plus framing; an original's chunk is at most 4 MiB plus 44 bytes of framing and tag). The phone reads exactly that chunk with the gateway's existing single `Range` read (`GET /v3/v/{vault}/o/{name}`, 206), plus the 30-byte header for the salt, opens it (the tag authenticates it under the part's key) and compares BLAKE3 of the opened bytes with the digest the tree lists (E9). A chunk that is gone, that will not open or whose digest differs puts its part back in the outbox for that gateway (the stored copy is the damaged one: the phone signs a delete of the name and re-sends the part at once; the re-send is a `PUT` of a held name, which stores the new bytes and clears the hold, E6).
+**Rule.** Each pass samples, per gateway reached, `SAMPLE_CHUNKS = 64` sealed chunks drawn at random from the newest head snapshot's parts, stopping early at `SAMPLE_BYTES = 64 MiB` of ciphertext read; on a metered link it samples `8` chunks of at most 1 MiB. A _chunk_ is one sealed chunk of a part (a range part is one chunk of 64 KiB plus framing; an original's chunk is at most 4 MiB plus 44 bytes of framing and tag). The phone reads exactly that chunk with the gateway's existing single `Range` read (`GET /v3/v/{vault}/o/{name}`, 206), plus the 30-byte header for the salt, opens it (the tag authenticates it under the part's key) and compares BLAKE3 of the opened bytes with the digest the tree lists (E9). A chunk that is gone, that will not open or whose digest differs puts its part back in the outbox for that gateway (the stored copy is the damaged one: the phone signs a delete of the name and re-sends the part at once; the re-send is a `PUT` of a held name, which stores the new bytes and clears the hold, E6).
 
 **The draw (no clock).** Population: the newest head snapshot's chunks numbered `0..N-1` in tree order (ranges leaves, then blobs leaves, skipping `d: null`). The draw for sample `k` of this pass is
 
@@ -290,7 +290,7 @@ The token is **not** a column (E12). The `snapshot` table and the `meta` table a
 - **Renter changes.** A renter added to an existing rented blob changes nothing on the gateway; no outbox row.
 - **Bytes that arrive later.** An original only the OS library holds gets an outbox row with `part_path` NULL and `waiting = 'bytes'`; `need_bytes` names it; sealing fills `part_path`, `size`, `digest`. A part whose gateway refused, lost it (read-back, E10) or answered missing in `exists` returns to the outbox.
 
-**Reset rules.** *Restore in place* (a claim at each gateway; the vault is replaced): for each gateway row `epoch = claim epoch`, `head = the head claimed against`, `generation = 0`, `writes = 0`, `cursor = 0`, `reach = 'ok'`, `moved_epoch = NULL`, `sample_counter = 0`, `directory_dirty = 1`; the outbox is emptied and its spool files removed; `local_bytes` is kept (it is about this device, not the vault's history). *Forget a gateway*: delete the row (cascade drops its outbox rows; unreferenced spool files are swept); no confirmation, as today; `local_bytes` untouched. *The state file is lost*: the phone has no gateway rows and re-pairs; each pairing is a claim (the vault key is the seed's), which also revokes the lost token at the gateway (E5).
+**Reset rules.** _Restore in place_ (a claim at each gateway; the vault is replaced): for each gateway row `epoch = claim epoch`, `head = the head claimed against`, `generation = 0`, `writes = 0`, `cursor = 0`, `reach = 'ok'`, `moved_epoch = NULL`, `sample_counter = 0`, `directory_dirty = 1`; the outbox is emptied and its spool files removed; `local_bytes` is kept (it is about this device, not the vault's history). _Forget a gateway_: delete the row (cascade drops its outbox rows; unreferenced spool files are swept); no confirmation, as today; `local_bytes` untouched. _The state file is lost_: the phone has no gateway rows and re-pairs; each pairing is a claim (the vault key is the seed's), which also revokes the lost token at the gateway (E5).
 
 **Replaces.** All of `vault/src/backup/ledger.rs` (deleted) (`Ledger`, `Destination`, `Queued`, `PartKind`, `SNAPSHOT_OWED_KEY` and every `meta` key, `set_moved`, `confirmed` and its queries), `mover.rs`'s confirmed bookkeeping, `phone/mod.rs`'s ledger references, the four ledger defects the issue lists as not done on purpose. **Built by** B14 (tables, reset), B12 (cursor, outbox rows).
 
