@@ -53,6 +53,11 @@ pub struct PageOrder {
     /// The tiebreak. The sort key is not unique; the primary key is.
     pub pk_column: String,
     pub descending: bool,
+    /// The tiebreak is an INTEGER column (a count, an offset in a composite key such as
+    /// `reminder(entity_id, offset_min)`): its cursor is the decimal text of the number and the
+    /// door compares it back as a number. Only an order that says so may carry an integer there;
+    /// every other order still refuses one ([`KitError::CursorPkNotText`]).
+    pub pk_integer: bool,
 }
 
 impl PageOrder {
@@ -61,6 +66,7 @@ impl PageOrder {
             sort_column: sort_column.to_owned(),
             pk_column: pk_column.to_owned(),
             descending: false,
+            pk_integer: false,
         }
     }
 
@@ -69,6 +75,25 @@ impl PageOrder {
             sort_column: sort_column.to_owned(),
             pk_column: pk_column.to_owned(),
             descending: true,
+            pk_integer: false,
+        }
+    }
+
+    /// [`Self::asc`] whose tiebreak is an INTEGER column. A key of two parts, text then number,
+    /// is unique per row where the text alone is not (an event's alerts, each a number of
+    /// minutes), so a page that ends inside one text key resumes at the next number.
+    pub fn asc_integer_pk(sort_column: &str, pk_column: &str) -> Self {
+        Self {
+            pk_integer: true,
+            ..Self::asc(sort_column, pk_column)
+        }
+    }
+
+    /// [`Self::desc`] whose tiebreak is an INTEGER column.
+    pub fn desc_integer_pk(sort_column: &str, pk_column: &str) -> Self {
+        Self {
+            pk_integer: true,
+            ..Self::desc(sort_column, pk_column)
         }
     }
 }
@@ -149,13 +174,25 @@ pub fn page_cursor_of(query_name: &str, row: &Row, order: &PageOrder) -> KitResu
             query: query_name.to_owned(),
             column: order.pk_column.clone(),
         })?;
-    let pk = pk_cell
-        .text()
-        .ok_or_else(|| KitError::CursorPkNotText {
-            column: order.pk_column.clone(),
-            found: pk_cell.type_name().to_owned(),
-        })?
-        .to_owned();
+    let pk = if order.pk_integer {
+        match pk_cell {
+            crate::row::Cell::Integer(number) => number.to_string(),
+            other => {
+                return Err(KitError::CursorPkNotInteger {
+                    column: order.pk_column.clone(),
+                    found: other.type_name().to_owned(),
+                });
+            }
+        }
+    } else {
+        pk_cell
+            .text()
+            .ok_or_else(|| KitError::CursorPkNotText {
+                column: order.pk_column.clone(),
+                found: pk_cell.type_name().to_owned(),
+            })?
+            .to_owned()
+    };
     Ok(PageCursor {
         // NULL collapses to the empty string, exactly as `statement.ts:77`.
         sort_key: sort_cell.to_cursor_text(),
@@ -237,6 +274,7 @@ pub fn page_statement(
         sort_column,
         pk_column,
         descending,
+        ..
     } = &query.order;
     let direction = if *descending { "DESC" } else { "ASC" };
     let comparison = if *descending { "<" } else { ">" };
@@ -388,6 +426,32 @@ mod tests {
         assert!(matches!(
             page_cursor_of("kit.test", &row, &order),
             Err(KitError::CursorColumnMissing { .. })
+        ));
+    }
+
+    #[test]
+    fn an_integer_pk_is_a_cursor_only_for_an_order_that_says_so() {
+        let mut row = Row::new();
+        row.insert("entity_id".to_owned(), Cell::Text("e-1".to_owned()));
+        row.insert("offset_min".to_owned(), Cell::Integer(15));
+        let integer = PageOrder::asc_integer_pk("entity_id", "offset_min");
+        assert_eq!(
+            page_cursor_of("kit.test", &row, &integer).unwrap(),
+            PageCursor {
+                sort_key: "e-1".to_owned(),
+                pk: "15".to_owned()
+            }
+        );
+        // The same row under a plain order is still refused: the capability is declared, not ambient.
+        assert!(matches!(
+            page_cursor_of("kit.test", &row, &PageOrder::asc("entity_id", "offset_min")),
+            Err(KitError::CursorPkNotText { .. })
+        ));
+        // And a declared integer key that holds text is refused too.
+        row.insert("offset_min".to_owned(), Cell::Text("15".to_owned()));
+        assert!(matches!(
+            page_cursor_of("kit.test", &row, &integer),
+            Err(KitError::CursorPkNotInteger { .. })
         ));
     }
 

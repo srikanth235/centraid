@@ -158,6 +158,7 @@ proptest! {
             sort_column: "sort_key".to_owned(),
             pk_column: "pk".to_owned(),
             descending,
+            pk_integer: false,
         };
         let walked = walk(&door, &query(order.clone()), window);
         prop_assert_eq!(walked.clone(), whole(&connection, &order));
@@ -182,6 +183,7 @@ proptest! {
             sort_column: "pk".to_owned(),
             pk_column: "pk".to_owned(),
             descending,
+            pk_integer: false,
         };
         let walked = walk(&door, &query(order.clone()), window);
         prop_assert_eq!(walked, whole(&connection, &order));
@@ -202,6 +204,7 @@ proptest! {
             sort_column: "sort_key".to_owned(),
             pk_column: "pk".to_owned(),
             descending,
+            pk_integer: false,
         };
         match try_walk(&door, &query(order.clone()), window) {
             Ok(walked) => prop_assert_eq!(walked, whole(&connection, &order)),

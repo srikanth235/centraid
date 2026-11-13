@@ -176,15 +176,43 @@ impl Read {
         ids: &[String],
         extra: Option<(&str, Vec<PageBindValue>)>,
     ) -> KitResult<Vec<Row>> {
-        if ids.len() <= AMONG_LIMIT {
-            return self.within(bound, door, ids, extra);
+        self.among_ordered(self.order_of(false), bound, door, ids, extra)
+    }
+
+    /// [`Self::among`] for a read whose order ends in an INTEGER column (the table's key is the
+    /// pair, text then number): the cursor carries the number, so a page that ends inside one
+    /// id's rows resumes at that id's next row.
+    pub fn among_integer_key(
+        &self,
+        bound: FanOutBound,
+        door: &dyn PageDoor,
+        ids: &[String],
+        extra: Option<(&str, Vec<PageBindValue>)>,
+    ) -> KitResult<Vec<Row>> {
+        self.among_ordered(self.order_of(true), bound, door, ids, extra)
+    }
+
+    /// The order this read walks: its two columns, the second an integer when `integer_pk`.
+    fn order_of(&self, integer_pk: bool) -> crate::statement::PageOrder {
+        if integer_pk {
+            crate::statement::PageOrder::asc_integer_pk(self.order.0, self.order.1)
+        } else {
+            crate::statement::PageOrder::asc(self.order.0, self.order.1)
         }
-        let mut query = PageQuery::new(
-            self.name,
-            self.select,
-            self.table,
-            crate::statement::PageOrder::asc(self.order.0, self.order.1),
-        );
+    }
+
+    fn among_ordered(
+        &self,
+        order: crate::statement::PageOrder,
+        bound: FanOutBound,
+        door: &dyn PageDoor,
+        ids: &[String],
+        extra: Option<(&str, Vec<PageBindValue>)>,
+    ) -> KitResult<Vec<Row>> {
+        if ids.len() <= AMONG_LIMIT {
+            return self.within_ordered(order, bound, door, ids, extra);
+        }
+        let mut query = PageQuery::new(self.name, self.select, self.table, order);
         if let Some((clause, bind)) = extra {
             query = query.filter(clause, bind);
         }
@@ -206,6 +234,29 @@ impl Read {
         ids: &[String],
         extra: Option<(&str, Vec<PageBindValue>)>,
     ) -> KitResult<Vec<Row>> {
+        self.within_ordered(self.order_of(false), bound, door, ids, extra)
+    }
+
+    /// [`Self::within`] for a read whose order ends in an INTEGER column; see
+    /// [`Self::among_integer_key`].
+    pub fn within_integer_key(
+        &self,
+        bound: FanOutBound,
+        door: &dyn PageDoor,
+        ids: &[String],
+        extra: Option<(&str, Vec<PageBindValue>)>,
+    ) -> KitResult<Vec<Row>> {
+        self.within_ordered(self.order_of(true), bound, door, ids, extra)
+    }
+
+    fn within_ordered(
+        &self,
+        order: crate::statement::PageOrder,
+        bound: FanOutBound,
+        door: &dyn PageDoor,
+        ids: &[String],
+        extra: Option<(&str, Vec<PageBindValue>)>,
+    ) -> KitResult<Vec<Row>> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -219,13 +270,7 @@ impl Read {
         };
         read_pages(
             door,
-            &PageQuery::new(
-                self.name,
-                self.select,
-                self.table,
-                crate::statement::PageOrder::asc(self.order.0, self.order.1),
-            )
-            .filter(&predicate, bind),
+            &PageQuery::new(self.name, self.select, self.table, order).filter(&predicate, bind),
             bound,
         )
     }
@@ -358,6 +403,7 @@ pub fn page_by_predicate(
         sort_column,
         pk_column,
         descending,
+        ..
     } = &query.order;
     let comparison = if *descending { "<" } else { ">" };
     // A ROW VALUE, as the door's own keyset: SQLite turns it into one range seek on
@@ -445,6 +491,128 @@ mod tests {
             in_list("party_id", &[]),
             Err(KitError::EmptyInList { .. })
         ));
+    }
+
+    /// A door that counts the pages it answers, so a test can say how many reads a walk took.
+    struct Counting<'a> {
+        inner: crate::testdoor::TestDoor<'a>,
+        pages: std::cell::Cell<usize>,
+    }
+
+    impl PageDoor for Counting<'_> {
+        fn page(
+            &self,
+            query: &PageQuery,
+            request: &PageRequest,
+        ) -> KitResult<crate::page::Page<Row>> {
+            self.pages.set(self.pages.get() + 1);
+            self.inner.page(query, request)
+        }
+    }
+
+    /// `alerts` is how many alerts each of `a`, `b`, `c` holds, in minutes 10, 20, 30, ...
+    fn alert_table(alerts: [i64; 3]) -> rusqlite::Connection {
+        let connection = rusqlite::Connection::open_in_memory().expect("a database opens");
+        connection
+            .execute_batch(
+                "CREATE TABLE reminder (
+                   entity_id  TEXT NOT NULL,
+                   offset_min INTEGER NOT NULL,
+                   PRIMARY KEY (entity_id, offset_min)
+                 ) STRICT;",
+            )
+            .expect("the table is made");
+        for (id, count) in ["a", "b", "c"].into_iter().zip(alerts) {
+            for at in 1..=count {
+                connection
+                    .execute("INSERT INTO reminder VALUES (?1, ?2)", (id, at * 10))
+                    .expect("an alert is seeded");
+            }
+        }
+        connection
+    }
+
+    const ALERTS: Read = Read {
+        name: "kit.test.alerts",
+        table: "reminder",
+        select: "entity_id, offset_min",
+        order: ("entity_id", "offset_min"),
+        column: "entity_id",
+    };
+
+    fn walked(door: &dyn PageDoor, ids: &[&str], page_size: usize) -> Vec<(String, i64)> {
+        let ids: Vec<String> = ids.iter().map(|id| (*id).to_owned()).collect();
+        ALERTS
+            .within_integer_key(FanOutBound::new(page_size, 20), door, &ids, None)
+            .expect("the walk reads to its end")
+            .iter()
+            .map(|row| {
+                (
+                    crate::row::text_of(row, "entity_id").expect("an id"),
+                    row.get("offset_min")
+                        .and_then(crate::row::Cell::integer)
+                        .expect("minutes"),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_parent_with_more_rows_than_a_page_holds_comes_back_whole_and_in_order() {
+        let connection = alert_table([7, 1, 2]);
+        let door = Counting {
+            inner: crate::testdoor::TestDoor::new(&connection),
+            pages: std::cell::Cell::new(0),
+        };
+        let rows = walked(&door, &["a", "b", "c"], 2);
+        let expected: Vec<(String, i64)> = (1..=7)
+            .map(|at| ("a".to_owned(), at * 10))
+            .chain([
+                ("b".to_owned(), 10),
+                ("c".to_owned(), 10),
+                ("c".to_owned(), 20),
+            ])
+            .collect();
+        assert_eq!(rows, expected, "every alert, the id's own in minute order");
+        // Ten rows at two a page: five pages, the last one's probe finding nothing after it.
+        assert_eq!(door.pages.get(), 5);
+    }
+
+    #[test]
+    fn a_page_boundary_between_two_parents_drops_and_repeats_nothing() {
+        let connection = alert_table([2, 2, 2]);
+        let door = Counting {
+            inner: crate::testdoor::TestDoor::new(&connection),
+            pages: std::cell::Cell::new(0),
+        };
+        let rows = walked(&door, &["a", "b", "c"], 2);
+        assert_eq!(rows.len(), 6);
+        let distinct: std::collections::BTreeSet<_> = rows.iter().cloned().collect();
+        assert_eq!(distinct.len(), 6, "no row twice");
+        assert_eq!(
+            rows.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>(),
+            ["a", "a", "b", "b", "c", "c"]
+        );
+        // Three pages, each ending exactly on a parent; the door's probe row says the last is the end.
+        assert_eq!(door.pages.get(), 3);
+    }
+
+    /// THE DEFECT, kept as a record: the same table read on the id alone loses the rest of a
+    /// parent's rows where a page ends inside them. This is why no read of a table whose key is
+    /// more than the id orders on `(id, id)`.
+    #[test]
+    fn an_order_on_the_id_alone_loses_the_rows_a_page_ended_inside() {
+        let connection = alert_table([5, 0, 0]);
+        let door = crate::testdoor::TestDoor::new(&connection);
+        let ids = vec!["a".to_owned()];
+        let lossy = Read {
+            order: ("entity_id", "entity_id"),
+            ..ALERTS
+        };
+        let rows = lossy
+            .within(FanOutBound::new(2, 20), &door, &ids, None)
+            .expect("the walk reads to its end");
+        assert_eq!(rows.len(), 2, "two of the five arrive");
     }
 
     #[test]
