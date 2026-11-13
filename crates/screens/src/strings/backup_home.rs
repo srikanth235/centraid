@@ -74,6 +74,7 @@ catalog! {
     plain row_unreadable = ("One old backup can't be read", "One old backup can't be read");
     plain row_damage_resent = ("A stored piece was damaged. Sending it again.", "A stored piece was damaged. Sending it again.");
     counted row_held = ("{count} old file goes {date}", "{count} old files go {date}");
+    counted row_held_paused = ("{count} old file kept while it is paused", "{count} old files kept while it is paused");
     plain row_undo_action = ("Undo", "Undo");
     plain device_moved = ("Another phone took over {name}", "Another phone took over {name}");
     plain device_paused = ("{name} is paused", "{name} is paused");

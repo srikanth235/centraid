@@ -11,7 +11,7 @@
     { "name": "a_damaged_piece_is_sent_again", "device": { "label": "Office NAS", "damage_found": true }, "standing": "Up to date", "notes": ["A stored piece was damaged. Sending it again."], "undo": false },
     { "name": "three_deletes_held", "device": { "label": "Office NAS", "held_files": 3, "held_until_ms": 1795176000000 }, "standing": "Up to date", "notes": ["3 old files go Friday 20 November"], "undo": true },
     { "name": "one_delete_held", "device": { "label": "Office NAS", "held_files": 1, "held_until_ms": 1795176000000 }, "standing": "Up to date", "notes": ["1 old file goes Friday 20 November"], "undo": true },
-    { "name": "held_on_a_paused_device_cannot_be_undone_from_here", "device": { "label": "Office NAS", "paused": true, "held_files": 2, "held_until_ms": 1795176000000 }, "standing": "Paused by whoever runs it", "notes": ["2 old files go Friday 20 November"], "undo": false },
+    { "name": "held_on_a_paused_device_says_kept_and_no_date_and_cannot_be_undone_from_here", "device": { "label": "Office NAS", "paused": true, "held_files": 2 }, "standing": "Paused by whoever runs it", "notes": ["2 old files kept while it is paused"], "undo": false },
     { "name": "a_held_count_with_no_date_says_nothing", "device": { "label": "Office NAS", "held_files": 2 }, "standing": "Up to date", "notes": [], "undo": false },
     { "name": "all_three_notes_in_order", "device": { "label": "Office NAS", "unreadable_backup": true, "damage_found": true, "held_files": 3, "held_until_ms": 1795176000000 }, "standing": "Up to date", "notes": ["One old backup can't be read", "A stored piece was damaged. Sending it again.", "3 old files go Friday 20 November"], "undo": true }
   ],
@@ -20,6 +20,7 @@
       "name": "a_damaged_vault_is_not_backed_up_however_recent_the_last_backup",
       "reading": { "damaged": true, "last_ack_ms": 1794560280000, "content_total": 10, "content_confirmed": 10, "devices": [{ "label": "Office NAS", "last_ack_ms": 1794560280000 }] },
       "sentence": "This phone's vault is damaged. No new backup is made.",
+      "detail": "The backups already on your backup devices are untouched.",
       "status": "Vault damaged",
       "tone": "urgent"
     },
@@ -46,9 +47,9 @@
     }
   ],
   "rate": [
-    { "name": "the_usual_sample", "read": 64, "stored": 1216, "sentence": "Each check reads 64 of 1,216 stored pieces, chosen at random. Every piece gets read about once in 19 checks." },
-    { "name": "a_metered_link_states_the_smaller_sample", "read": 8, "stored": 1216, "sentence": "Each check reads 8 of 1,216 stored pieces, chosen at random. Every piece gets read about once in 152 checks." },
-    { "name": "a_small_vault_is_read_whole", "read": 64, "stored": 40, "sentence": "Each check reads all 40 stored pieces." },
+    { "name": "the_usual_sample", "read": 64, "stored": 1216, "sentence": "Each time I check, I read 64 of the 1,216 stored pieces, chosen at random. On average a piece is read once in 19 checks." },
+    { "name": "a_metered_link_states_the_smaller_sample", "read": 8, "stored": 1216, "sentence": "Each time I check, I read 8 of the 1,216 stored pieces, chosen at random. On average a piece is read once in 152 checks." },
+    { "name": "a_small_vault_is_read_whole", "read": 64, "stored": 40, "sentence": "I read all 40 stored pieces." },
     { "name": "before_a_check_ran_nothing_is_said", "read": 0, "stored": 1216, "sentence": null },
     { "name": "with_nothing_stored_nothing_is_said", "read": 8, "stored": 0, "sentence": null }
   ],

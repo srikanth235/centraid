@@ -148,6 +148,7 @@ fn a_damaged_vault_says_so_and_is_never_called_backed_up() {
         let built = line::line(EN, Some(&read), false, false, now);
         assert_eq!(built.sentence, text(case, "sentence"));
         assert_eq!(built.status, text(case, "status"));
+        assert_eq!(built.detail, text(case, "detail"), "what is safe is said");
         assert_eq!(built.tone, tone(&text(case, "tone")));
         // A backup 2 minutes old would otherwise read "Backed up": a damaged vault must not.
         assert!(!built.sentence.contains("Backed up"));

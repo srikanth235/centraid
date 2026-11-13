@@ -131,7 +131,7 @@ pub fn line(
             confirmed: reading.content_confirmed,
             sentence: words::backup_line_damaged(locale),
             status: words::backup_status_damaged(locale),
-            detail: detail(locale, reading),
+            detail: words::backup_detail_damaged(locale),
             tone: Tone::Urgent as i32,
             ..Default::default()
         });

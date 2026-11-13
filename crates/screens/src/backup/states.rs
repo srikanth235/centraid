@@ -35,13 +35,21 @@ pub fn standing_words(locale: Locale, destination: &Destination) -> String {
 }
 
 /// "3 old files go Friday 20 November": deletes this phone made on a device that it holds for a
-/// week. The date is the device's, in the member's zone. `None` with none held.
+/// week. The date is the earliest any of them goes, on the device's clock, in the member's zone.
+/// A paused device is not counting: its row says the files are kept while it is paused and shows
+/// no date. `None` with none held.
 #[must_use]
 pub fn held_words(locale: Locale, zone: &str, destination: &Destination) -> Option<String> {
-    let at = destination.held_until_ms?;
     if destination.held_files == 0 {
         return None;
     }
+    if destination.paused {
+        return Some(fill(
+            &backup_home::row_held_paused(locale, destination.held_files),
+            &[("count", &line::grouped(destination.held_files))],
+        ));
+    }
+    let at = destination.held_until_ms?;
     Some(fill(
         &backup_home::row_held(locale, destination.held_files),
         &[
