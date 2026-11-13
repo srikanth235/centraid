@@ -219,8 +219,14 @@ pub const RENTERS: &[(&str, &str, &str)] = &[
 fn lapsed_blobs(vault: &Vault) -> Result<std::collections::HashSet<String>> {
     use std::collections::{HashMap, HashSet};
     let now = vault.clock().now_text();
+    let now_ms = vault.clock().now_ms();
     vault
         .read(|connection| {
+            // A clock far from the vault's last commit lapses nothing: bytes of a still-restorable
+            // trashed item stay in the backup (#1191, V19).
+            if !crate::clock::is_credible(connection, now_ms)? {
+                return Ok(HashSet::new());
+            }
             // hash -> whether some renter is live
             let mut live: HashMap<String, bool> = HashMap::new();
             for (table, column, owner) in RENTERS {

@@ -13,6 +13,151 @@ use serde_json::{Value, json};
 
 const DAY_MS: i64 = 86_400_000;
 
+/// A clock far from the vault's last write lapses nothing for the backup either: the bytes of a
+/// trashed item that is still restorable are listed, however far the clock says its purge date
+/// is behind it (#1191, V19).
+#[test]
+fn a_clock_far_ahead_leaves_every_trashed_blob_in_the_backup() {
+    let w = World::new();
+    let (trashed, blob) = w.document("Trashed", "trashed bytes");
+    w.ok("entity.trash", json!({ "id": trashed }));
+    let listed = |w: &World| -> Vec<String> {
+        centraid_vault::backup::files::content_files(&w.scratch.vault)
+            .expect("lists")
+            .into_iter()
+            .map(|file| file.h.to_hex())
+            .collect()
+    };
+    // One day ahead: inside the window and inside the bound.
+    w.scratch.clock.advance_ms(DAY_MS);
+    assert!(listed(&w).contains(&blob));
+    // A year ahead: the row reads as long lapsed, but the clock is not believed.
+    w.scratch.clock.advance_ms(365 * DAY_MS);
+    assert!(
+        listed(&w).contains(&blob),
+        "a clock a year ahead lapsed a trashed blob out of the backup"
+    );
+    // Restoring is allowed under that clock.
+    w.ok("entity.restore", json!({ "id": trashed }));
+}
+
+/// V7: a derivative is written by an upsert (the second write of a variant replaces the first, one
+/// row, no delete-and-insert), and `derivative` and `revision` are ordinary rowid tables.
+#[test]
+fn a_derivative_written_twice_is_one_row_and_both_tables_have_rowids() {
+    let w = World::new();
+    let (_, blob) = w.document("Lease", "lease");
+    let first = w.put("first thumb");
+    let second = w.put("second thumb");
+    for out in [&first, &second] {
+        w.ok(
+            "derivative.write",
+            json!({ "blob": blob, "variant": "thumb", "out": out, "out_size": 11, "media_type": "image/jpeg" }),
+        );
+    }
+    let rows: i64 = w
+        .scratch
+        .vault
+        .read(|c| {
+            Ok(c.query_row(
+                "SELECT COUNT(*) FROM derivative WHERE blob = ?1 AND variant = 'thumb'",
+                [&blob],
+                |r| r.get(0),
+            )?)
+        })
+        .expect("counts");
+    assert_eq!(rows, 1, "the second write replaced the first");
+    let kept: String = w
+        .scratch
+        .vault
+        .read(|c| {
+            Ok(c.query_row(
+                "SELECT out FROM derivative WHERE blob = ?1 AND variant = 'thumb'",
+                [&blob],
+                |r| r.get(0),
+            )?)
+        })
+        .expect("reads");
+    assert_eq!(kept, second);
+    // A rowid table answers `rowid`; a WITHOUT ROWID one refuses the column.
+    for table in ["derivative", "revision"] {
+        w.scratch
+            .vault
+            .read(|c| {
+                Ok(
+                    c.query_row(&format!("SELECT COUNT(rowid) FROM {table}"), [], |r| {
+                        r.get::<_, i64>(0)
+                    })?,
+                )
+            })
+            .unwrap_or_else(|error| panic!("{table} is not a rowid table: {error}"));
+    }
+}
+
+/// V19 (named as the plan lists it): one year ahead, nothing is purged and no action key is
+/// dropped; one day ahead, what is due is purged. Counts only.
+#[test]
+fn a_clock_far_ahead_purges_nothing() {
+    let w = World::new();
+    let (trashed, _) = w.document("Old lease", "old lease");
+    w.ok("entity.trash", json!({ "id": trashed }));
+    let held = |w: &World| -> i64 {
+        w.scratch
+            .vault
+            .read(|c| {
+                Ok(c.query_row(
+                    "SELECT COUNT(*) FROM entity WHERE deleted_at IS NOT NULL",
+                    [],
+                    |r| r.get(0),
+                )?)
+            })
+            .expect("counts")
+    };
+    let keys = |w: &World| -> i64 {
+        w.scratch
+            .vault
+            .read(|c| Ok(c.query_row("SELECT COUNT(*) FROM action_key", [], |r| r.get(0))?))
+            .expect("counts")
+    };
+    let keys_before = keys(&w);
+    // A year ahead: the row reads as long overdue; nothing is purged, no key is dropped.
+    w.scratch.clock.advance_ms(365 * DAY_MS);
+    let step = w
+        .scratch
+        .vault
+        .empty_overdue_trash_step(&w.registry, 50, false)
+        .expect("the pass runs");
+    assert_eq!(step.purged, 0);
+    assert_eq!(held(&w), 1);
+    assert_eq!(keys(&w), keys_before);
+}
+
+/// V20: a stored file that rotted on disk is replaced when the same bytes are added again, so the
+/// file under its name is right again.
+#[test]
+fn re_adding_a_rotted_blob_replaces_the_bad_file() {
+    let w = World::new();
+    let hash = w.put("the original bytes");
+    let path = w
+        .scratch
+        .vault
+        .blobs()
+        .expect("a store")
+        .path_of(&hash)
+        .expect("asks")
+        .expect("a file");
+    let mut rotted = std::fs::read(&path).expect("reads");
+    rotted[0] ^= 0xFF;
+    std::fs::write(&path, &rotted).expect("rots");
+    let again = w.put("the original bytes");
+    assert_eq!(again, hash);
+    assert_eq!(
+        std::fs::read(&path).expect("reads"),
+        b"the original bytes".to_vec(),
+        "the file under the name holds the right bytes again"
+    );
+}
+
 struct World {
     scratch: common::Scratch,
     registry: Registry,
@@ -511,7 +656,7 @@ fn the_backup_lists_no_blob_only_a_lapsed_entity_names() {
     w.ok("entity.trash", json!({ "id": lapsing }));
     w.scratch.clock.advance_ms(20 * DAY_MS);
     w.ok("entity.trash", json!({ "id": trashed }));
-    w.scratch.clock.advance_ms(15 * DAY_MS);
+    w.later(15);
     // `lapsing` is 35 days in the trash, `trashed` 15, `kept` live.
     let listed: Vec<String> = centraid_vault::backup::files::content_files(&w.scratch.vault)
         .expect("lists")

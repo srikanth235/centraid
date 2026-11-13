@@ -680,6 +680,8 @@ fn every_read_plans_without_a_table_scan_or_a_sort_unless_the_ledger_says_why() 
             );
 
             let mut findings: BTreeSet<Finding> = BTreeSet::new();
+            // Every plan the sweep sees, for `every_index_has_a_reader`.
+            let mut all_plans: Vec<String> = Vec::new();
 
             // (a) the pages the apps read, as the vault composes them.
             let mut seen = BTreeSet::new();
@@ -690,6 +692,7 @@ fn every_read_plans_without_a_table_scan_or_a_sort_unless_the_ledger_says_why() 
                 }
                 distinct += 1;
                 let plan = vault.explain_query_plan(&page.page.sql, &page.page.binds)?;
+                all_plans.extend(plan.iter().cloned());
                 for table in full_scans(&plan, &page.page.sql, &big) {
                     findings.insert(Finding {
                         kind: "page",
@@ -758,6 +761,7 @@ fn every_read_plans_without_a_table_scan_or_a_sort_unless_the_ledger_says_why() 
                         }
                     };
                     planned += 1;
+                    all_plans.extend(plan.iter().cloned());
                     let one_line = cut(&statement.normalized());
                     for table in full_scans(&plan, &statement.sql, &big) {
                         findings.insert(Finding {
@@ -789,6 +793,17 @@ fn every_read_plans_without_a_table_scan_or_a_sort_unless_the_ledger_says_why() 
                 files.len(),
                 unprepared.len(),
                 unprepared.join(", ")
+            );
+
+            // Every index has a reader (#1191, V6): some page or statement of the product plans
+            // through it, or it is the index a foreign key's child columns need (the engine reads
+            // it on a delete or an update of the parent, which no page plans).
+            let unread = vault.unread_indexes(&all_plans)?;
+            assert!(
+                unread.is_empty(),
+                "an index no read plans through and no foreign key needs: remove it from the \
+                 baseline, or add the read that wants it:\n  {}",
+                unread.join("\n  ")
             );
 
             // The ledger: what is allowed is exactly what is found.
@@ -856,6 +871,56 @@ fn every_read_plans_without_a_table_scan_or_a_sort_unless_the_ledger_says_why() 
             Ok(())
         })
         .expect("the plans are asked");
+}
+
+/// The sweep must be able to tell a walk from a scan: a statement with nothing to seek by is
+/// reported as reading all of the table, one that seeks is not, and the indexes a plan reads
+/// through are named. Without this a plan test that saw nothing would pass for ever.
+#[test]
+fn the_plan_test_sees_a_walk_and_a_scan() {
+    let scratch = centraid_ontology::scratch::scratch_dir().join("plan-canary");
+    std::fs::create_dir_all(&scratch).expect("a directory");
+    let vault = centraid_vault::Vault::create(scratch.join("vault.db")).expect("founds");
+    let big: BTreeSet<String> = BTreeSet::from(["edge".to_owned(), "entity".to_owned()]);
+
+    let scan_sql = centraid_vault::testdoor::CANARY_SCAN;
+    let scan = vault.explain_query_plan(scan_sql, &[]).expect("plans");
+    assert_eq!(
+        full_scans(&scan, scan_sql, &big),
+        vec!["edge".to_owned()],
+        "a read with nothing to seek by is a scan: {scan:?}"
+    );
+
+    let walk_sql = centraid_vault::testdoor::CANARY_WALK;
+    let walk = vault.explain_query_plan(walk_sql, &[]).expect("plans");
+    assert!(
+        centraid_vault::plans::indexes_in(&walk).contains("edge_order"),
+        "a walk of an ordered index is named by the plan: {walk:?}"
+    );
+    let edges: BTreeSet<String> = BTreeSet::from(["edge".to_owned()]);
+    assert!(
+        full_scans(&walk, walk_sql, &edges).is_empty(),
+        "a walk of an index is not a scan: {walk:?}"
+    );
+    let seek_sql = centraid_vault::testdoor::CANARY_SEEK;
+    let seek = vault.explain_query_plan(seek_sql, &[]).expect("plans");
+    assert!(
+        full_scans(&seek, seek_sql, &big).is_empty(),
+        "a seek by key is not a scan: {seek:?}"
+    );
+    assert_eq!(
+        centraid_vault::plans::indexes_in(&[
+            "SEARCH edge USING INDEX edge_order (from_id=? AND rel=?)".to_owned()
+        ]),
+        BTreeSet::from(["edge_order".to_owned()])
+    );
+    assert_eq!(
+        centraid_vault::plans::indexes_in(&[
+            "SCAN blob USING COVERING INDEX blob_by_hash".to_owned()
+        ]),
+        BTreeSet::from(["blob_by_hash".to_owned()])
+    );
+    let _ = std::fs::remove_dir_all(&scratch);
 }
 
 fn normalized(sql: &str) -> String {

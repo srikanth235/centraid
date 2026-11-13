@@ -61,7 +61,7 @@ fn contains(haystack: &[u8], needle: &str) -> bool {
 }
 
 #[test]
-fn a_purged_item_leaves_no_trace_in_the_file_or_its_wal() {
+fn a_purge_leaves_no_deleted_text_in_the_file_or_wal() {
     let scratch = common::Scratch::founded("secure-delete").expect("a vault");
     let note = run(
         &scratch,

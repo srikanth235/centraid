@@ -79,11 +79,37 @@ impl World {
     }
 
     /// The database refuses this statement; the message is returned.
+    /// The database refuses `sql` for a rule it holds: a CHECK, a UNIQUE or a trigger's sentence.
+    /// A statement that fails for another reason (a typo, a missing column) is a broken test, not a held rule, and fails here.
     fn db_refuses(&self, sql: &str) -> String {
         match self.raw(sql) {
             Ok(()) => panic!("the database took what it should refuse: {sql}"),
-            Err(why) => why,
+            Err(why) => {
+                for not_a_rule in [
+                    "no such",
+                    "syntax error",
+                    "has no column",
+                    "datatype mismatch",
+                    "NOT NULL constraint failed",
+                ] {
+                    assert!(
+                        !why.contains(not_a_rule),
+                        "`{sql}` failed for a reason that is not a held rule ({not_a_rule}): {why}"
+                    );
+                }
+                why
+            }
         }
+    }
+
+    /// As [`Self::db_refuses`], and the refusal names `fragment` (the constraint or the trigger's
+    /// sentence).
+    fn db_refuses_with(&self, sql: &str, fragment: &str) {
+        let why = self.db_refuses(sql);
+        assert!(
+            why.contains(fragment),
+            "`{sql}` was refused, but not by the rule named `{fragment}`: {why}"
+        );
     }
 
     fn count(&self, sql: &str) -> i64 {
@@ -154,9 +180,23 @@ fn a_concept_never_nests_in_a_loop_or_under_another_kind() {
     );
     w.db_refuses("UPDATE concept SET parent_id = id WHERE id = 'category:food'");
     // A concept's parent is of its own kind.
-    w.db_refuses("UPDATE concept SET parent_id = 'workout_kind:run' WHERE id = 'category:fees'");
-    w.db_refuses(
+    w.db_refuses_with(
+        "UPDATE concept SET parent_id = 'workout_kind:run' WHERE id = 'category:fees'",
+        "of its own kind",
+    );
+    w.db_refuses_with(
         "INSERT INTO concept (id, kind, key, parent_id) VALUES ('x', 'tag', 'x', 'flag:starred')",
+        "of its own kind",
+    );
+    // Changing a kind keeps it too, as a child (its parent stays) and as a parent (its children
+    // stay): the trigger's sentence, not the entity key that would refuse it afterwards.
+    w.db_refuses_with(
+        "UPDATE concept SET kind = 'flag' WHERE id = 'category:food.dining'",
+        "of its own kind",
+    );
+    w.db_refuses_with(
+        "UPDATE concept SET kind = 'flag' WHERE id = 'category:food'",
+        "of its own kind",
     );
 }
 
@@ -272,6 +312,63 @@ fn a_container_colour_is_a_palette_key_or_a_wheel_hue_and_a_command_keeps_each_t
 // ---------------------------------------------------------------------------------------------
 // V3: one checked format per time column
 // ---------------------------------------------------------------------------------------------
+
+/// L2: the time columns the first pass left untested: `alert.fire_key` (by its `timing`),
+/// `revision.at`, `source.seen_at` and `origin.retired_at`. Each refuses a wrong shape by its own
+/// CHECK and takes the right one.
+#[test]
+fn the_alert_revision_source_and_origin_times_are_checked() {
+    let w = World::new();
+    // origin.retired_at (an instant, only of a followed system).
+    w.db_refuses_with(
+        &format!(
+            "INSERT INTO origin (id, system, ref, label, created_at, retired_at)
+             VALUES ('o-bad', 'files', 'r', 'r', '{AT}', '2026-03-01')"
+        ),
+        "retired_at IS NULL OR",
+    );
+    w.raw(&format!(
+        "INSERT INTO origin (id, system, ref, label, created_at, retired_at)
+         VALUES ('o', 'files', 'r', 'r', '{AT}', '{AT}')"
+    ))
+    .expect("an instant is taken");
+    // source.seen_at.
+    let source = |seen: &str| {
+        format!(
+            "INSERT INTO source (id, origin_id, system, external_id, stated, seen_at)
+             VALUES ('s-{}', 'o', 'files', 'x', '{{}}', '{seen}')",
+            seen.len()
+        )
+    };
+    w.db_refuses_with(&source("2026-03-01T09:00:00Z"), "seen_at");
+    w.raw(&source(AT)).expect("an instant is taken");
+    // revision.at.
+    w.entity("n1", Kind::Note);
+    let revision = |at: &str| {
+        format!(
+            "INSERT INTO revision (entity_id, seq, at) VALUES ('n1', {}, '{at}')",
+            at.len()
+        )
+    };
+    w.db_refuses_with(&revision("2026-03-01T09:00:00"), "strftime");
+    w.raw(&revision(AT)).expect("an instant is taken");
+    // alert.fire_key, by timing: a fixed alert is an instant, a floating one a wall clock.
+    let alert = |offset: i32, timing: &str, key: &str| {
+        format!(
+            "INSERT INTO alert (entity_id, offset_min, timing, fire_key)
+             VALUES ('n1', {offset}, '{timing}', '{key}')"
+        )
+    };
+    w.db_refuses_with(&alert(0, "fixed", "2026-03-01T09:00"), "fire_key");
+    w.db_refuses_with(
+        &alert(0, "floating", "2026-03-01T09:00:00.000Z"),
+        "fire_key",
+    );
+    w.db_refuses_with(&alert(0, "floating", "2026-03-01"), "fire_key");
+    w.raw(&alert(0, "fixed", AT)).expect("a fixed instant");
+    w.raw(&alert(5, "floating", "2026-03-01T09:00"))
+        .expect("a floating wall clock");
+}
 
 #[test]
 fn an_instant_is_the_clocks_one_form() {
@@ -507,7 +604,13 @@ fn a_task_in_a_section_can_be_reordered_after_its_section_moved() {
 #[test]
 fn a_line_is_in_one_transfer_and_never_paired_with_itself() {
     let w = World::new();
-    for (id, account) in [("a1", "acct1"), ("a2", "acct2"), ("a3", "acct1")] {
+    for (id, account) in [
+        ("a0", "acct1"),
+        ("a1", "acct1"),
+        ("a2", "acct2"),
+        ("a3", "acct1"),
+        ("a4", "acct2"),
+    ] {
         if w.count(&format!(
             "SELECT COUNT(*) FROM account WHERE id = '{account}'"
         )) == 0
@@ -526,14 +629,60 @@ fn a_line_is_in_one_transfer_and_never_paired_with_itself() {
         ))
         .expect("a line");
     }
-    w.db_refuses("INSERT INTO transfer (a, b) VALUES ('a1', 'a1')");
-    w.db_refuses("INSERT INTO transfer (a, b) VALUES ('a2', 'a1')");
+    // A line is never paired with itself, and the lower id is `a`.
+    w.db_refuses_with(
+        "INSERT INTO transfer (a, b) VALUES ('a1', 'a1')",
+        "CHECK constraint failed",
+    );
+    w.db_refuses_with(
+        "INSERT INTO transfer (a, b) VALUES ('a2', 'a1')",
+        "CHECK constraint failed",
+    );
     w.raw("INSERT INTO transfer (a, b) VALUES ('a1', 'a2')")
         .expect("a pair");
-    // Neither half joins another pair, on whichever side it would sit.
-    w.db_refuses("INSERT INTO transfer (a, b) VALUES ('a1', 'a3')");
-    w.db_refuses("INSERT INTO transfer (a, b) VALUES ('a3', 'a2')");
-    w.db_refuses("INSERT INTO transfer (a, b) VALUES ('a0', 'a1')");
+    // Neither half joins another pair on the same side: the keys refuse it.
+    w.db_refuses_with(
+        "INSERT INTO transfer (a, b) VALUES ('a1', 'a3')",
+        "UNIQUE constraint failed",
+    );
+    w.db_refuses_with(
+        "INSERT INTO transfer (a, b) VALUES ('a0', 'a2')",
+        "UNIQUE constraint failed",
+    );
+    // Nor on the other side (an existing `a` as a new `b`, an existing `b` as a new `a`): the
+    // trigger's sentence, with every line above existing and unpaired, so the foreign key is not
+    // what refuses.
+    w.db_refuses_with(
+        "INSERT INTO transfer (a, b) VALUES ('a0', 'a1')",
+        "at most one transfer",
+    );
+    w.db_refuses_with(
+        "INSERT INTO transfer (a, b) VALUES ('a2', 'a3')",
+        "at most one transfer",
+    );
+    // The same four on an UPDATE of a second pair.
+    w.raw("INSERT INTO transfer (a, b) VALUES ('a3', 'a4')")
+        .expect("a second pair");
+    w.db_refuses_with(
+        "UPDATE transfer SET a = 'a0', b = 'a1' WHERE a = 'a3'",
+        "at most one transfer",
+    );
+    w.db_refuses_with(
+        "UPDATE transfer SET a = 'a2' WHERE a = 'a3'",
+        "at most one transfer",
+    );
+    w.db_refuses_with(
+        "UPDATE transfer SET b = 'a4' WHERE a = 'a1'",
+        "UNIQUE constraint failed",
+    );
+    w.db_refuses_with(
+        "UPDATE transfer SET b = 'a3' WHERE a = 'a3'",
+        "CHECK constraint failed",
+    );
+    w.raw("UPDATE transfer SET b = 'a4' WHERE a = 'a3'")
+        .expect("a change that keeps the pair is fine");
+    w.raw("DELETE FROM transfer WHERE a = 'a3'")
+        .expect("unpairs");
     assert_eq!(w.count("SELECT COUNT(*) FROM transfer"), 1);
     // The command still says why.
     assert!(

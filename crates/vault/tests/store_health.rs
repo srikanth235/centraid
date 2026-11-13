@@ -130,7 +130,7 @@ fn age(world: &World, hash: &str, before: SystemTime) {
 }
 
 #[test]
-fn a_sweep_lists_the_directory_once_however_many_batches_it_takes() {
+fn a_sweep_lists_the_directory_once() {
     let w = World::new();
     let launch = SystemTime::now();
     let strays: Vec<String> = (0..11).map(|n| w.put(&format!("stray {n}"))).collect();
@@ -167,7 +167,7 @@ fn a_sweep_lists_the_directory_once_however_many_batches_it_takes() {
 }
 
 #[test]
-fn a_thumbnail_write_releases_the_file_it_replaced_and_walks_no_library() {
+fn a_sweep_collects_only_the_replaced_hash() {
     let w = World::new();
     let original = w.put("the picture");
     w.ok(

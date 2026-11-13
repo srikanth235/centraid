@@ -54,6 +54,25 @@ pub const PAGE_SIZE: i64 = 4096;
 /// that the file is not a surprise in a storage listing.
 pub const JOURNAL_SIZE_LIMIT: i64 = 64 * 1024 * 1024;
 
+/// The durability pragmas every connection this crate opens carries, as a list over a target
+/// flag so a test on any machine can ask what an Apple build sets. `journal_mode = WAL`,
+/// `synchronous = FULL` and `secure_delete = ON` everywhere; on Apple targets also `fullfsync` and
+/// `checkpoint_fullfsync` = ON, because there a plain `fsync` does not reach the platter, only
+/// `F_FULLFSYNC` does (V18).
+#[must_use]
+pub fn durability_pragmas(apple: bool) -> Vec<(&'static str, &'static str)> {
+    let mut list = vec![
+        ("journal_mode", "wal"),
+        ("synchronous", "FULL"),
+        ("secure_delete", "ON"),
+    ];
+    if apple {
+        list.push(("fullfsync", "ON"));
+        list.push(("checkpoint_fullfsync", "ON"));
+    }
+    list
+}
+
 /// Where a founding is built before it takes its name.
 fn founding_path(path: &Path) -> PathBuf {
     let mut name = path
@@ -62,6 +81,42 @@ fn founding_path(path: &Path) -> PathBuf {
         .unwrap_or_default();
     name.push(".founding");
     path.with_file_name(name)
+}
+
+/// The paths this process is founding right now. An `open` of the same path must not remove the
+/// side file a founding on another thread is still building.
+static FOUNDING_NOW: std::sync::Mutex<Vec<PathBuf>> = std::sync::Mutex::new(Vec::new());
+
+/// Held for the length of one founding; dropping it says the founding is over (done or failed).
+struct Founding(PathBuf);
+
+impl Founding {
+    fn begin(path: &Path) -> Self {
+        FOUNDING_NOW
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(path.to_path_buf());
+        Self(path.to_path_buf())
+    }
+
+    fn is_under_way(path: &Path) -> bool {
+        FOUNDING_NOW
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .iter()
+            .any(|held| held == path)
+    }
+}
+
+impl Drop for Founding {
+    fn drop(&mut self) {
+        let mut held = FOUNDING_NOW
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(at) = held.iter().position(|path| *path == self.0) {
+            held.swap_remove(at);
+        }
+    }
 }
 
 /// Remove a founding's file and the sidecars SQLite made for it. Best effort: none may exist.
@@ -216,41 +271,57 @@ impl Vault {
             });
         }
         let side = founding_path(&path);
+        let _founding = Founding::begin(&path);
         remove_founding_leftovers(&side);
-        {
-            let connection = Connection::open(&side)?;
-            // THE HEADER PRAGMAS, AND ONLY HERE. `page_size` and `auto_vacuum` are
-            // both recorded in the file header and both are silently ignored once a
-            // page exists — and `journal_mode = wal` writes one. Founding is the
-            // only moment either can be stated, which is why they are not in
-            // [`Self::apply_pragmas`] with the rest: a pragma that can only be set
-            // once must not sit in a function every open calls, where its failure
-            // to take would look like success.
-            connection.pragma_update(None, "page_size", PAGE_SIZE)?;
-            // NO AUTO-VACUUM, AND `VACUUM` NEVER RUNS (#1029 §1, #1080). A vacuum
-            // renumbers pages, and a backup snapshot is the file cut into 64 KiB
-            // ranges named by their bytes: every range would read as changed, no
-            // name would match one the gateway holds, and the next backup would be
-            // a full copy of the vault. The space a vacuum reclaims is worth less
-            // than that.
-            connection.pragma_update(None, "auto_vacuum", "NONE")?;
-            Self::apply_pragmas(&connection)?;
-            connection.pragma_update(None, "application_id", APPLICATION_ID)?;
-            // OFF for the ladder: the baseline's tables point at each other (the
-            // vault row at its owner, a kind row at its entity), SQLite resolves a
-            // foreign key's target lazily, and the seeds are written in the order
-            // that reads best rather than the order that satisfies a check.
-            connection.pragma_update(None, "foreign_keys", "OFF")?;
-            crate::migrations::run_from(&connection, 0)?;
-            // Everything in the one file: no `-wal` is left to rename away from it.
-            connection.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))?;
-            connection
-                .close()
-                .map_err(|(_, error)| VaultError::from(error))?;
+        // A founding that fails (the disk is full, say) leaves no side file behind; one that is
+        // killed leaves it for the next founding or open to remove.
+        let laid = (|| -> Result<()> {
+            {
+                let connection = Connection::open(&side)?;
+                // THE HEADER PRAGMAS, AND ONLY HERE. `page_size` and `auto_vacuum` are
+                // both recorded in the file header and both are silently ignored once a
+                // page exists — and `journal_mode = wal` writes one. Founding is the
+                // only moment either can be stated, which is why they are not in
+                // [`Self::apply_pragmas`] with the rest: a pragma that can only be set
+                // once must not sit in a function every open calls, where its failure
+                // to take would look like success.
+                connection.pragma_update(None, "page_size", PAGE_SIZE)?;
+                // NO AUTO-VACUUM, AND `VACUUM` NEVER RUNS (#1029 §1, #1080). A vacuum
+                // renumbers pages, and a backup snapshot is the file cut into 64 KiB
+                // ranges named by their bytes: every range would read as changed, no
+                // name would match one the gateway holds, and the next backup would be
+                // a full copy of the vault. The space a vacuum reclaims is worth less
+                // than that.
+                connection.pragma_update(None, "auto_vacuum", "NONE")?;
+                Self::apply_pragmas(&connection)?;
+                connection.pragma_update(None, "application_id", APPLICATION_ID)?;
+                // OFF for the ladder: the baseline's tables point at each other (the
+                // vault row at its owner, a kind row at its entity), SQLite resolves a
+                // foreign key's target lazily, and the seeds are written in the order
+                // that reads best rather than the order that satisfies a check.
+                connection.pragma_update(None, "foreign_keys", "OFF")?;
+                crate::migrations::run_from(&connection, 0)?;
+                crate::stage::reached(crate::stage::Stage::FoundingLaidDown)?;
+                // Everything in the one file: no `-wal` is left to rename away from it.
+                connection.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))?;
+                connection
+                    .close()
+                    .map_err(|(_, error)| VaultError::from(error))?;
+            }
+            crate::stage::reached(crate::stage::Stage::FoundingCheckpointed)?;
+            sync_file(&side)?;
+            crate::stage::reached(crate::stage::Stage::FoundingFlushed)?;
+            std::fs::rename(&side, &path)?;
+            crate::stage::reached(crate::stage::Stage::FoundingRenamed)?;
+            sync_directory(&path)?;
+            Ok(())
+        })();
+        if let Err(error) = laid {
+            if !path.exists() {
+                remove_founding_leftovers(&side);
+            }
+            return Err(error);
         }
-        sync_file(&side)?;
-        std::fs::rename(&side, &path)?;
-        sync_directory(&path)?;
         let connection = Connection::open(&path)?;
         Self::apply_pragmas(&connection)?;
         connection.pragma_update(None, "foreign_keys", "ON")?;
@@ -274,7 +345,9 @@ impl Vault {
         ids: Box<dyn Ids>,
     ) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
-        remove_founding_leftovers(&founding_path(&path));
+        if !Founding::is_under_way(&path) {
+            remove_founding_leftovers(&founding_path(&path));
+        }
         if !path.exists() {
             return Err(VaultError::Missing { path });
         }
@@ -310,6 +383,7 @@ impl Vault {
         Self::apply_pragmas(&connection)?;
         connection.pragma_update(None, "foreign_keys", "ON")?;
         quick_check(&connection)?;
+        crate::stage::reached(crate::stage::Stage::QuickChecked)?;
 
         if found < head_version() {
             // A MIGRATION RUNS ON THE OPENED CONNECTION AND THEN IS WRAPPED ONCE (#1191, V15, V16).
@@ -396,17 +470,10 @@ impl Vault {
         // by design, and a write to it skips every check SQLite makes. This is the one connection
         // that writes the vault, so a raw page write through it is refused at the engine.
         connection.set_db_config(rusqlite::config::DbConfig::SQLITE_DBCONFIG_DEFENSIVE, true)?;
-        connection.pragma_update(None, "journal_mode", "wal")?;
-        connection.pragma_update(None, "synchronous", "FULL")?;
-        connection.pragma_update(None, "secure_delete", "ON")?;
-        connection.pragma_update(None, "journal_size_limit", JOURNAL_SIZE_LIMIT)?;
-        // A DEVICE THAT CAN LIE ABOUT A FLUSH (V18): on Apple targets a plain `fsync` does not
-        // reach the platter, `F_FULLFSYNC` does, and SQLite asks for it only when told to.
-        #[cfg(target_vendor = "apple")]
-        {
-            connection.pragma_update(None, "fullfsync", "ON")?;
-            connection.pragma_update(None, "checkpoint_fullfsync", "ON")?;
+        for (name, value) in durability_pragmas(cfg!(target_vendor = "apple")) {
+            connection.pragma_update(None, name, value)?;
         }
+        connection.pragma_update(None, "journal_size_limit", JOURNAL_SIZE_LIMIT)?;
         // The busy timeout has to be set on every connection or a second writer
         // fails instantly instead of waiting.
         connection.busy_timeout(std::time::Duration::from_secs(5))?;
