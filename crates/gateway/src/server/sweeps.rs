@@ -192,6 +192,11 @@ pub fn purge_once(shared: &Shared, last_purge_ms: i64) -> Result<u64, Fault> {
 ///
 /// A store fault, or a read error other than a missing file.
 pub fn orphans_once(shared: &Shared) -> Result<u64, Fault> {
+    // A commit in this process is between its renames and its rows: its files
+    // have no row yet and are not orphans. Stand aside; the next sweep comes.
+    if shared.commits_in_flight() {
+        return Ok(0);
+    }
     let now = shared.now();
     let mut removed = 0;
     let files = shared

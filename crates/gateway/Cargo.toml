@@ -49,6 +49,10 @@ name = "operator"
 required-features = ["server"]
 
 [[test]]
+name = "older_gateway"
+required-features = ["server"]
+
+[[test]]
 name = "plans"
 required-features = ["server"]
 

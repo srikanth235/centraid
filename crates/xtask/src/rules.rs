@@ -166,8 +166,21 @@ pub fn gateway_harness_out_of_release(root: &Path) -> RuleReport {
             others.push((relative(root, &path), text));
         }
     }
-    let scanned = 2 + others.len();
-    RuleReport::applied(NAME, scanned, harness_leaks(&manifest, &module, &others))
+    let consulted: Vec<(String, String)> = ["store.rs", "http.rs"]
+        .iter()
+        .filter_map(|file| {
+            let path = gateway.join("src/server").join(file);
+            fs::read_to_string(&path)
+                .ok()
+                .map(|text| (relative(root, &path), text))
+        })
+        .collect();
+    let scanned = 2 + others.len() + consulted.len();
+    RuleReport::applied(
+        NAME,
+        scanned,
+        harness_leaks(&manifest, &module, &others, &consulted),
+    )
 }
 
 /// What puts the harness in a release build, as findings.
@@ -175,20 +188,40 @@ pub fn harness_leaks(
     gateway_manifest: &str,
     server_module: &str,
     other_manifests: &[(String, String)],
+    consulted: &[(String, String)],
 ) -> Vec<String> {
+    const GATE: &str = "#[cfg(feature = \"test-harness\")]";
     let mut findings = Vec::new();
-    let gated = server_module
-        .lines()
-        .collect::<Vec<_>>()
-        .windows(2)
-        .any(|pair| {
-            pair[0].trim() == "#[cfg(feature = \"test-harness\")]"
-                && pair[1].trim() == "pub mod harness;"
-        });
-    if !gated {
-        findings.push(
-            "crates/gateway/src/server/mod.rs: `pub mod harness;` is not directly behind `#[cfg(feature = \"test-harness\")]`".to_owned(),
-        );
+    for module in ["harness", "knobs"] {
+        let declaration = format!("pub mod {module};");
+        let gated = server_module
+            .lines()
+            .collect::<Vec<_>>()
+            .windows(2)
+            .any(|pair| pair[0].trim() == GATE && pair[1].trim() == declaration);
+        if !gated {
+            findings.push(format!(
+                "crates/gateway/src/server/mod.rs: `{declaration}` is not directly behind `{GATE}`"
+            ));
+        }
+    }
+    // Where the store and the routes consult the test knobs, the attribute
+    // is within a few lines above.
+    for (path, text) in consulted {
+        let lines: Vec<&str> = text.lines().collect();
+        for (index, line) in lines.iter().enumerate() {
+            let code = line.trim();
+            if code.starts_with("//") || !code.contains("knobs") {
+                continue;
+            }
+            let from = index.saturating_sub(8);
+            if !lines[from..=index].iter().any(|above| above.trim() == GATE) {
+                findings.push(format!(
+                    "{path}:{}: `knobs` is consulted outside `{GATE}`, so the release gateway would carry the test knobs",
+                    index + 1
+                ));
+            }
+        }
     }
     findings.extend(feature_mentions(
         "crates/gateway/Cargo.toml",
@@ -1048,18 +1081,29 @@ fn door() {
 
     #[test]
     fn a_harness_that_could_reach_the_release_gateway_is_caught() {
-        let gated = "mod x;\n#[cfg(feature = \"test-harness\")]\npub mod harness;\n";
+        let gated = "mod x;\n#[cfg(feature = \"test-harness\")]\npub mod harness;\n#[cfg(feature = \"test-harness\")]\npub mod knobs;\n";
         let manifest = "[features]\ndefault = [\"server\"]\ntest-harness = [\"server\"]\n[dev-dependencies]\ncentraid-gateway = { path = \".\", features = [\"test-harness\"] }\n";
-        assert!(harness_leaks(manifest, gated, &[]).is_empty());
+        assert!(harness_leaks(manifest, gated, &[], &[]).is_empty());
         let ungated = "pub mod harness;\n";
-        assert_eq!(harness_leaks(manifest, ungated, &[]).len(), 1);
+        assert_eq!(harness_leaks(manifest, ungated, &[], &[]).len(), 2);
+        let leaky_store = vec![(
+            "store.rs".to_owned(),
+            "fn stage() {\n    if self.knobs.full {}\n}\n".to_owned(),
+        )];
+        assert_eq!(harness_leaks(manifest, gated, &[], &leaky_store).len(), 1);
+        let gated_store = vec![(
+            "store.rs".to_owned(),
+            "fn stage() {\n    #[cfg(feature = \"test-harness\")]\n    if self.knobs.full {}\n}\n"
+                .to_owned(),
+        )];
+        assert!(harness_leaks(manifest, gated, &[], &gated_store).is_empty());
         let default_on =
             "[features]\ndefault = [\"server\", \"test-harness\"]\ntest-harness = [\"server\"]\n";
-        assert_eq!(harness_leaks(default_on, gated, &[]).len(), 1);
+        assert_eq!(harness_leaks(default_on, gated, &[], &[]).len(), 1);
         let ordinary = ("crates/core/Cargo.toml".to_owned(), "[dependencies]\ncentraid-gateway = { path = \"../gateway\", features = [\"test-harness\"] }\n".to_owned());
-        assert_eq!(harness_leaks(manifest, gated, &[ordinary]).len(), 1);
+        assert_eq!(harness_leaks(manifest, gated, &[ordinary], &[]).len(), 1);
         let dev = ("crates/core/Cargo.toml".to_owned(), "[dev-dependencies]\ncentraid-gateway = { path = \"../gateway\", features = [\"test-harness\"] }\n".to_owned());
-        assert!(harness_leaks(manifest, gated, &[dev]).is_empty());
+        assert!(harness_leaks(manifest, gated, &[dev], &[]).is_empty());
     }
 
     fn write(root: &Path, relative: &str, contents: &str) {

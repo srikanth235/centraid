@@ -39,7 +39,7 @@ use crate::rules::ids::{Digest, GatewayId, Name, Nonce, Secret, Signature, Token
 use crate::rules::limits::{
     GRACE_MS, LIST_LIMIT, MAX_CLOCK_AHEAD_MS, MAX_GENERATION_JUMP, MAX_LIVE_NONCES,
     MAX_LIVE_SECRETS, MAX_NAMES, MAX_OBJECT_BYTES, MAX_REVOKED_PER_VAULT, NONCE_TTL_MS, PROTOCOL,
-    PURGE_GAP_REBASE_MS, REVOKED_TOKEN_KEEP_MS, SECRET_TTL_MS,
+    REVOKED_TOKEN_KEEP_MS, SECRET_TTL_MS,
 };
 use crate::rules::range::ByteRange;
 use crate::rules::signing::{
@@ -2921,12 +2921,12 @@ async fn delete_is_held<T: Target>(target: &mut T) -> Outcome {
             .all(|entry| entry.name != old.0 && entry.name != part.0),
         || "a held object is listed live".to_owned(),
     )?;
-    // A tick is a minute: a wire gateway's clock runs between two calls.
-    target.advance(GRACE_MS - 60_000).await;
+    // The gateway's clock moves only when told, so the edge is exact.
+    target.advance(GRACE_MS - 1).await;
     ensure(target.purge().await? == 0, || {
-        "purged a minute before the deadline".to_owned()
+        "purged one tick before the deadline".to_owned()
     })?;
-    target.advance(120_000).await;
+    target.advance(2).await;
     let purged = target.purge().await?;
     ensure(purged == 2, || {
         format!("purged {purged} after the deadline")
@@ -3246,8 +3246,7 @@ async fn taken_at_bounded<T: Target>(target: &mut T) -> Outcome {
     let key = identity(1);
     let phone = paired(target, &key).await?;
     let vault = vault_of(&key);
-    // A clock that runs between two calls moves the edge by a few ms; the
-    // margins here are seconds.
+    // The clock moves only when told: the bound is exact.
     let now = ok(target.info().await, "info")?.time_ms;
     let (first, second) = (object("on time"), object("from the future"));
     store(target, &phone, &vault, &first).await?;
@@ -3257,24 +3256,24 @@ async fn taken_at_bounded<T: Target>(target: &mut T) -> Outcome {
             .set_head(
                 &phone.token,
                 &vault,
-                &phone.head(first.0, None, now + MAX_CLOCK_AHEAD_MS - 5_000),
+                &phone.head(first.0, None, now + MAX_CLOCK_AHEAD_MS),
             )
             .await,
-        "a head just inside the bound",
+        "a head exactly at the bound",
     )?;
     let refusal = refused(
         target
             .set_head(
                 &phone.token,
                 &vault,
-                &phone.head(second.0, Some(first.0), now + MAX_CLOCK_AHEAD_MS + 5_000),
+                &phone.head(second.0, Some(first.0), now + MAX_CLOCK_AHEAD_MS + 1),
             )
             .await,
         Code::ClockAhead,
-        "a head just past the bound",
+        "a head one millisecond past the bound",
     )?;
     match refusal {
-        Refusal::ClockAhead { skew_ms } if skew_ms > MAX_CLOCK_AHEAD_MS => Ok(()),
+        Refusal::ClockAhead { skew_ms } if skew_ms == MAX_CLOCK_AHEAD_MS + 1 => Ok(()),
         other => Err(format!("CLOCK_AHEAD must carry the skew: {other:?}")),
     }
 }
@@ -3367,7 +3366,7 @@ async fn frozen_vault<T: Target>(target: &mut T) -> Outcome {
     )?);
     for answer in answers {
         match answer {
-            Refusal::Frozen { since_ms } if since_ms >= frozen_at => {}
+            Refusal::Frozen { since_ms } if since_ms == frozen_at => {}
             other => return Err(format!("FROZEN must carry since_ms: {other:?}")),
         }
     }
@@ -3416,7 +3415,7 @@ async fn unfreeze_gives_time_back<T: Target>(target: &mut T) -> Outcome {
     target.freeze(&vault).await?;
     target.advance(3 * 86_400_000).await;
     let lasted = target.unfreeze(&vault).await?;
-    ensure(lasted >= 3 * 86_400_000, || format!("lasted {lasted}"))?;
+    ensure(lasted == 3 * 86_400_000, || format!("lasted {lasted}"))?;
     let after = ok(target.held(&phone.token, &vault, None, 10).await, "held")?;
     ensure(
         after[0].purge_after_ms - before[0].purge_after_ms == lasted,
@@ -3464,19 +3463,16 @@ async fn long_gap_rebases<T: Target>(target: &mut T) -> Outcome {
     store(target, &phone, &vault, &part).await?;
     tombstone(target, &phone, &vault, &[part.0]).await?;
     target.advance(365 * 86_400_000).await;
-    let before = ok(target.info().await, "info")?.time_ms;
+    let now = ok(target.info().await, "info")?.time_ms;
     ensure(target.purge().await? == 0, || {
         "a hold ended early across a long gap".to_owned()
     })?;
-    let after = ok(target.info().await, "info")?.time_ms;
     let held = ok(target.held(&phone.token, &vault, None, 10).await, "held")?;
     ensure(
-        held.len() == 1
-            && held[0].purge_after_ms >= before + GRACE_MS
-            && held[0].purge_after_ms <= after + GRACE_MS,
+        held.len() == 1 && held[0].purge_after_ms == now + GRACE_MS,
         || format!("re-based to a full week from the sweep: {held:?}"),
     )?;
-    target.advance(PURGE_GAP_REBASE_MS.min(GRACE_MS + 1)).await;
+    target.advance(GRACE_MS + 1).await;
     ensure(target.purge().await? == 1, || {
         "the hold must end a week after the re-base".to_owned()
     })

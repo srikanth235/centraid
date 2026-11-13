@@ -328,16 +328,19 @@ async fn exists(
         Ok(names) => names,
         Err(refusal) => return refused(&refusal, shared.now()),
     };
-    shared.store().note_exists(names.names.len());
     // A TEST'S LYING GATEWAY says it holds every name (#1188, B13).
-    if shared.store().lies_about_exists() {
-        return answer(
-            &shared,
-            StatusCode::OK,
-            Ok::<_, Fault>(Missing {
-                missing: Vec::new(),
-            }),
-        );
+    #[cfg(feature = "test-harness")]
+    {
+        shared.store().knobs().note_exists(names.names.len());
+        if shared.store().knobs().lies() {
+            return answer(
+                &shared,
+                StatusCode::OK,
+                Ok::<_, Fault>(Missing {
+                    missing: Vec::new(),
+                }),
+            );
+        }
     }
     // THE NAMES THE INDEX HOLDS are asked of their files, outside the lock;
     // one whose file is gone is marked, and the rules answer again (the
@@ -412,6 +415,7 @@ async fn receive_object(
     };
     let now = shared.now();
     let store = shared.store();
+    let _committing = shared.commit_guard();
     shared.rules(|gateway| {
         mark_if_gone(gateway, store, &vault, &name, now)?;
         gateway.put(&vault, &token, &arrival, now, || {
@@ -760,6 +764,7 @@ fn admit_frames(
             }
         })
         .collect();
+    let _committing = shared.commit_guard();
     let mut files: Vec<Option<StagedFile>> = staging
         .frames
         .iter_mut()

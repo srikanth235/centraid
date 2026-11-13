@@ -23,8 +23,8 @@
 
 use std::io::{ErrorKind, Read as _};
 use std::path::{Path, PathBuf};
+#[cfg(feature = "test-harness")]
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use tokio::io::AsyncWriteExt as _;
 
@@ -42,23 +42,9 @@ pub const OBJECTS_DIR: &str = "objects";
 pub struct ObjectStore {
     objects: PathBuf,
     incoming: PathBuf,
-    /// Whether every upload is refused `DISK_FULL` as if the disk were. Only
-    /// a test sets it ([`ObjectStore::pretend_full`]): a real full disk is not
-    /// something a test can make on any machine it runs on.
-    full: Arc<AtomicBool>,
-    /// Every upload is refused as over the limit, whatever its size: a test sets it
-    /// ([`ObjectStore::pretend_too_large`]) to prove a phone hears `TOO_LARGE` as its own answer.
-    too_large: Arc<AtomicBool>,
-    /// Whether `exists` answers that everything is held, whatever is on disk. Only a test sets
-    /// it ([`ObjectStore::pretend_to_hold_everything`]): a gateway that lies about what it holds
-    /// is what a phone's read-back is for (#1188, B4, B13).
-    lying: Arc<AtomicBool>,
-    /// How many `exists` calls were answered and how many names they asked about: what a test
-    /// counts to prove a phone asks each name once.
-    exists_asked: Arc<(std::sync::atomic::AtomicU64, std::sync::atomic::AtomicU64)>,
-    /// When each object was committed, as a number from one counter every store in the process
-    /// shares: a test reads the order two gateways were fed in.
-    commits: Arc<std::sync::Mutex<Vec<u64>>>,
+    /// What only a test may do to this store.
+    #[cfg(feature = "test-harness")]
+    knobs: Arc<crate::server::knobs::Knobs>,
 }
 
 /// One file under `objects/`.
@@ -124,63 +110,16 @@ impl ObjectStore {
         Ok(Self {
             objects,
             incoming,
-            full: Arc::new(AtomicBool::new(false)),
-            too_large: Arc::new(AtomicBool::new(false)),
-            lying: Arc::new(AtomicBool::new(false)),
-            exists_asked: Arc::default(),
-            commits: Arc::default(),
+            #[cfg(feature = "test-harness")]
+            knobs: Arc::default(),
         })
     }
 
-    /// Refuse every upload `DISK_FULL` until told otherwise: what a test does
-    /// to prove a phone hears a full disk as one (#1080, the sweep's F1). Not
-    /// reachable from the product — only the test harness calls it.
-    pub fn pretend_full(&self, full: bool) {
-        self.full.store(full, Ordering::SeqCst);
-    }
-
-    /// Refuse every upload `TOO_LARGE` until told otherwise. Not reachable from the product —
-    /// only the test harness calls it.
-    pub fn pretend_too_large(&self, too_large: bool) {
-        self.too_large.store(too_large, Ordering::SeqCst);
-    }
-
-    /// Make `exists` answer that every name is held, whatever the disk holds: a gateway that lies.
-    /// Not reachable from the product — only the test harness calls it.
-    pub fn pretend_to_hold_everything(&self, lying: bool) {
-        self.lying.store(lying, Ordering::SeqCst);
-    }
-
-    /// Note one `exists` call about `names` names.
-    pub fn note_exists(&self, names: usize) {
-        self.exists_asked.0.fetch_add(1, Ordering::SeqCst);
-        self.exists_asked
-            .1
-            .fetch_add(names as u64, Ordering::SeqCst);
-    }
-
-    /// `(calls, names)` the gateway has been asked by `exists`.
+    /// The test knobs of this store.
+    #[cfg(feature = "test-harness")]
     #[must_use]
-    pub fn exists_asked(&self) -> (u64, u64) {
-        (
-            self.exists_asked.0.load(Ordering::SeqCst),
-            self.exists_asked.1.load(Ordering::SeqCst),
-        )
-    }
-
-    /// The order every object was committed in, from one process-wide counter.
-    #[must_use]
-    pub fn commit_order(&self) -> Vec<u64> {
-        self.commits
-            .lock()
-            .map(|held| held.clone())
-            .unwrap_or_default()
-    }
-
-    /// Whether `exists` is lying (a test set it).
-    #[must_use]
-    pub fn lies_about_exists(&self) -> bool {
-        self.lying.load(Ordering::SeqCst)
+    pub fn knobs(&self) -> &crate::server::knobs::Knobs {
+        &self.knobs
     }
 
     /// Remove every upload a crash left staged. **Only the process that
@@ -262,11 +201,9 @@ impl ObjectStore {
     ///
     /// If the staging file cannot be created.
     pub async fn stage(&self, limit: u64) -> Result<Staged, StageError> {
-        if self.full.load(Ordering::SeqCst) {
-            return Err(StageError::DiskFull);
-        }
-        if self.too_large.load(Ordering::SeqCst) {
-            return Err(StageError::TooLarge { limit });
+        #[cfg(feature = "test-harness")]
+        if let Some(refusal) = self.knobs.refusing(limit) {
+            return Err(refusal);
         }
         let path = self
             .incoming
@@ -301,10 +238,8 @@ impl ObjectStore {
         std::fs::rename(&staged.path, &target).map_err(StageError::from)?;
         staged.committed = true;
         sync_dir(parent).map_err(StageError::from)?;
-        static ORDER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        if let Ok(mut commits) = self.commits.lock() {
-            commits.push(ORDER.fetch_add(1, Ordering::SeqCst));
-        }
+        #[cfg(feature = "test-harness")]
+        self.knobs.renamed();
         Ok(())
     }
 

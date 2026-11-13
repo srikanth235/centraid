@@ -41,6 +41,8 @@ pub mod bonjour;
 #[cfg(feature = "test-harness")]
 pub mod harness;
 pub mod http;
+#[cfg(feature = "test-harness")]
+pub mod knobs;
 pub mod operator;
 pub mod qr;
 pub mod report;
@@ -169,6 +171,20 @@ pub struct Shared {
     clock: Clock,
     data_dir: PathBuf,
     announcer: Option<Announcer>,
+    /// How many commits are between a file's rename and its row, in this
+    /// process: the orphan sweep stands aside while any is.
+    committing: std::sync::atomic::AtomicUsize,
+}
+
+/// A commit between rename and row. While one is alive the orphan sweep
+/// removes nothing.
+#[derive(Debug)]
+pub struct CommitGuard<'a>(&'a std::sync::atomic::AtomicUsize);
+
+impl Drop for CommitGuard<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
 }
 
 impl core::fmt::Debug for Shared {
@@ -226,6 +242,7 @@ impl Shared {
             clock,
             data_dir: data_dir.to_path_buf(),
             announcer: None,
+            committing: std::sync::atomic::AtomicUsize::new(0),
         })
     }
 
@@ -316,6 +333,22 @@ impl Shared {
     /// A store fault if the generator cannot be read.
     pub fn fresh_token(&self) -> Result<Token, Fault> {
         Ok(Token::from_bytes(os_random::<32>()?))
+    }
+
+    /// Mark a commit as begun: held across the renames and the transaction
+    /// that writes their rows, so the orphan sweep cannot take a file a commit
+    /// in this process is about to list. The age check is the second margin,
+    /// for a process that crashed.
+    pub fn commit_guard(&self) -> CommitGuard<'_> {
+        self.committing
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        CommitGuard(&self.committing)
+    }
+
+    /// Whether a commit is between its renames and its rows.
+    #[must_use]
+    pub fn commits_in_flight(&self) -> bool {
+        self.committing.load(std::sync::atomic::Ordering::SeqCst) > 0
     }
 
     /// A fresh nonce, from the OS.

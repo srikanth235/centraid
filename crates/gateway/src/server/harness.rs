@@ -42,7 +42,7 @@ pub struct Spawned {
     /// Its id: what a claim is signed to.
     pub gateway_id: GatewayId,
     shared: Handle,
-    offset: Arc<AtomicI64>,
+    clock: Arc<AtomicI64>,
     cable: Arc<Cable>,
     stop: Option<oneshot::Sender<()>>,
     task: Option<JoinHandle<std::io::Result<()>>>,
@@ -90,10 +90,12 @@ async fn serve_on(
     address: &str,
     again: bool,
 ) -> Result<Spawned, OpenError> {
-    let offset = Arc::new(AtomicI64::new(0));
-    let clock_offset = Arc::clone(&offset);
-    let clock =
-        Arc::new(move || system_now_ms().saturating_add(clock_offset.load(Ordering::SeqCst)));
+    // THE GATEWAY'S CLOCK IS THE TEST'S: it starts at the wall clock's reading
+    // and then moves only when the test moves it, so no assertion depends on
+    // time running between two calls.
+    let time = Arc::new(AtomicI64::new(system_now_ms()));
+    let reading = Arc::clone(&time);
+    let clock = Arc::new(move || reading.load(Ordering::SeqCst));
     let opened = Shared::open(data_dir, clock)?;
     let shared = Arc::new(match announcer {
         Some(announcer) => opened.with_announcer(announcer),
@@ -135,7 +137,7 @@ async fn serve_on(
         cert_der: shared.identity().cert_der().to_vec(),
         gateway_id: shared.identity().gateway_id(),
         shared,
-        offset,
+        clock: time,
         cable,
         stop: Some(stop),
         task: Some(task),
@@ -187,7 +189,12 @@ impl Spawned {
 
     /// Move the gateway's clock `ms` forward.
     pub fn advance_clock(&self, ms: i64) {
-        self.offset.fetch_add(ms, Ordering::SeqCst);
+        self.clock.fetch_add(ms, Ordering::SeqCst);
+    }
+
+    /// Set the gateway's clock to `ms` since the Unix epoch.
+    pub fn set_clock(&self, ms: i64) {
+        self.clock.store(ms, Ordering::SeqCst);
     }
 
     /// The cable every connection to this gateway runs through: cut it, or
@@ -247,30 +254,33 @@ impl Spawned {
     /// Make the gateway's disk read as full — every upload is refused
     /// `DISK_FULL` — or as having room again.
     pub fn fill_disk(&self, full: bool) {
-        self.shared.store().pretend_full(full);
+        self.shared.store().knobs().pretend_full(full);
     }
 
     /// `(calls, names)` this gateway has been asked by `exists` since it started.
     #[must_use]
     pub fn exists_asked(&self) -> (u64, u64) {
-        self.shared.store().exists_asked()
+        self.shared.store().knobs().exists_asked()
     }
 
     /// When each object this gateway committed was committed, from a counter every gateway in
     /// the process shares: two gateways' lists show whether they were fed in turn.
     #[must_use]
     pub fn commit_order(&self) -> Vec<u64> {
-        self.shared.store().commit_order()
+        self.shared.store().knobs().commit_order()
     }
 
     /// Make every upload be refused `TOO_LARGE`, or accepted again.
     pub fn refuse_as_too_large(&self, refusing: bool) {
-        self.shared.store().pretend_too_large(refusing);
+        self.shared.store().knobs().pretend_too_large(refusing);
     }
 
     /// Make `exists` answer that everything is held, whatever the disk holds, or answer honestly.
     pub fn lie_about_exists(&self, lying: bool) {
-        self.shared.store().pretend_to_hold_everything(lying);
+        self.shared
+            .store()
+            .knobs()
+            .pretend_to_hold_everything(lying);
     }
 
     /// Delete a stored object from disk, leaving the index as it was: a gateway that lost a file.

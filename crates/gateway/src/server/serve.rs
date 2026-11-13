@@ -414,6 +414,24 @@ pub async fn run(
         .await
 }
 
+/// Serve any `router` on `listener` until `shutdown` resolves: how a test
+/// plays a gateway of another protocol, with a real certificate and real TLS,
+/// through the one file that accepts.
+///
+/// # Errors
+///
+/// If the server stops with an error.
+#[cfg(feature = "test-harness")]
+pub async fn run_router(
+    listener: TlsListener,
+    router: axum::Router,
+    shutdown: impl Future<Output = ()> + Send + 'static,
+) -> std::io::Result<()> {
+    axum::serve(listener, router)
+        .with_graceful_shutdown(shutdown)
+        .await
+}
+
 /// The Bonjour advertisement of one gateway: `_centraid-gateway._tcp` on the
 /// LAN, with `gw=<gateway id>` and `v=2` in its TXT record, so a phone at home
 /// refreshes a destination's addresses by browsing. Stopped when dropped.
