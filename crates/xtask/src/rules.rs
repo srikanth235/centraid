@@ -142,6 +142,91 @@ impl RuleReport {
     }
 }
 
+/// **The release gateway does not link the test harness** (#1191, E14). The
+/// harness spawns a real gateway with knobs no member should ever have (a
+/// clock that moves, a disk that reads full), so `server::harness` sits behind
+/// the `test-harness` cargo feature, which no default feature, no other
+/// feature and no ordinary dependency turns on: only a `[dev-dependencies]`
+/// entry may name it.
+pub fn gateway_harness_out_of_release(root: &Path) -> RuleReport {
+    const NAME: &str = "gateway-harness-out-of-release";
+    let gateway = root.join("crates/gateway");
+    let (Ok(manifest), Ok(module)) = (
+        fs::read_to_string(gateway.join("Cargo.toml")),
+        fs::read_to_string(gateway.join("src/server/mod.rs")),
+    ) else {
+        return RuleReport::pending(NAME, "no crates/gateway yet");
+    };
+    let mut others = Vec::new();
+    for path in source_files(&root.join("crates"), "toml") {
+        if path.ends_with("gateway/Cargo.toml") || !path.ends_with("Cargo.toml") {
+            continue;
+        }
+        if let Ok(text) = fs::read_to_string(&path) {
+            others.push((relative(root, &path), text));
+        }
+    }
+    let scanned = 2 + others.len();
+    RuleReport::applied(NAME, scanned, harness_leaks(&manifest, &module, &others))
+}
+
+/// What puts the harness in a release build, as findings.
+pub fn harness_leaks(
+    gateway_manifest: &str,
+    server_module: &str,
+    other_manifests: &[(String, String)],
+) -> Vec<String> {
+    let mut findings = Vec::new();
+    let gated = server_module
+        .lines()
+        .collect::<Vec<_>>()
+        .windows(2)
+        .any(|pair| {
+            pair[0].trim() == "#[cfg(feature = \"test-harness\")]"
+                && pair[1].trim() == "pub mod harness;"
+        });
+    if !gated {
+        findings.push(
+            "crates/gateway/src/server/mod.rs: `pub mod harness;` is not directly behind `#[cfg(feature = \"test-harness\")]`".to_owned(),
+        );
+    }
+    findings.extend(feature_mentions(
+        "crates/gateway/Cargo.toml",
+        gateway_manifest,
+        true,
+    ));
+    for (path, text) in other_manifests {
+        findings.extend(feature_mentions(path, text, false));
+    }
+    findings
+}
+
+/// Every line naming `test-harness` outside a `[dev-dependencies]` section.
+/// In the gateway's own manifest the feature's definition is the one other
+/// line allowed.
+fn feature_mentions(path: &str, manifest: &str, own: bool) -> Vec<String> {
+    let mut section = String::new();
+    let mut found = Vec::new();
+    for (index, line) in manifest.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            section = trimmed.to_owned();
+            continue;
+        }
+        if trimmed.starts_with('#') || !trimmed.contains("test-harness") {
+            continue;
+        }
+        let definition = own && section == "[features]" && trimmed.starts_with("test-harness =");
+        if section != "[dev-dependencies]" && !definition {
+            found.push(format!(
+                "{path}:{}: `test-harness` named in {section}; only a dev-dependency may turn it on, so the release gateway cannot link the harness",
+                index + 1
+            ));
+        }
+    }
+    found
+}
+
 /// Every rule, in a stable order.
 pub fn all(root: &Path) -> Vec<RuleReport> {
     vec![
@@ -149,6 +234,7 @@ pub fn all(root: &Path) -> Vec<RuleReport> {
         abi_symbol_count(root),
         no_listening_socket(root),
         commonmain_no_platform_import(root),
+        gateway_harness_out_of_release(root),
     ]
     .into_iter()
     .chain(crate::native_rules::all(root))
@@ -958,6 +1044,22 @@ fn door() {
             "package money\n\nimport kotlinx.coroutines.flow.StateFlow\n",
         );
         assert!(commonmain_no_platform_import(&root).findings.is_empty());
+    }
+
+    #[test]
+    fn a_harness_that_could_reach_the_release_gateway_is_caught() {
+        let gated = "mod x;\n#[cfg(feature = \"test-harness\")]\npub mod harness;\n";
+        let manifest = "[features]\ndefault = [\"server\"]\ntest-harness = [\"server\"]\n[dev-dependencies]\ncentraid-gateway = { path = \".\", features = [\"test-harness\"] }\n";
+        assert!(harness_leaks(manifest, gated, &[]).is_empty());
+        let ungated = "pub mod harness;\n";
+        assert_eq!(harness_leaks(manifest, ungated, &[]).len(), 1);
+        let default_on =
+            "[features]\ndefault = [\"server\", \"test-harness\"]\ntest-harness = [\"server\"]\n";
+        assert_eq!(harness_leaks(default_on, gated, &[]).len(), 1);
+        let ordinary = ("crates/core/Cargo.toml".to_owned(), "[dependencies]\ncentraid-gateway = { path = \"../gateway\", features = [\"test-harness\"] }\n".to_owned());
+        assert_eq!(harness_leaks(manifest, gated, &[ordinary]).len(), 1);
+        let dev = ("crates/core/Cargo.toml".to_owned(), "[dev-dependencies]\ncentraid-gateway = { path = \"../gateway\", features = [\"test-harness\"] }\n".to_owned());
+        assert!(harness_leaks(manifest, gated, &[dev]).is_empty());
     }
 
     fn write(root: &Path, relative: &str, contents: &str) {
