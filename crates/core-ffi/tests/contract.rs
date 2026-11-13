@@ -1091,6 +1091,7 @@ fn the_phones_four_flows_round_trip_through_call() {
             12,
             wire::request::Kind::Drain(wire::DrainRequest {
                 deadline_ms: 0,
+                rule: wire::TransferRule::WifiOnly as i32,
                 ..wire::DrainRequest::default()
             }),
         ),
