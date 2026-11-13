@@ -131,7 +131,7 @@ fn every_locker_table_holds_the_instants_of_the_injected_clock() {
     ] {
         assert_eq!(
             w.texts(&format!("SELECT {column} FROM {table}")),
-            [at.clone()],
+            [at.as_str()],
             "{table}.{column} is the injected clock's instant"
         );
     }

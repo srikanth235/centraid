@@ -292,15 +292,8 @@ fn the_scenario_seeds_whole_and_every_revamped_screen_has_its_data() {
     // MONEY: a statement of lines across weeks, and two of the three transfers accepted
     // (four halves), the newest left for the member.
     assert_eq!(scenario.count("txn", "id", "", vec![]), 91);
-    assert_eq!(
-        scenario.count(
-            "txn",
-            "id",
-            "EXISTS (SELECT 1 FROM transfer WHERE a = txn.id OR b = txn.id)",
-            vec![]
-        ),
-        4
-    );
+    // A transfer is one row naming its two halves.
+    assert_eq!(scenario.count("transfer", "a", "", vec![]), 2);
     assert!(
         scenario.count(
             "txn",
