@@ -29,6 +29,7 @@ What the phone does to back its vault up and to get it back. Wording and rules a
 - Small parts go in bundles of up to 256 MiB, and their answers are confirmed in one transaction. An original goes alone. The manifest is queued after every range and goes alone.
 - A part answered `DIGEST_MISMATCH` three times in a row by one gateway stops the pass to that gateway.
 - A part is sealed once and the same file is re-sent on every retry. A file reaches its name by rename after fsync, so a crash leaves a whole part or a `.partial`, which opening the spool sweeps.
+- Each sealed chunk has a digest: BLAKE3 of its payload as it opens (compressed bytes when the part is compressed), returned by `PartSealer` and recorded in the manifest. Read-back opens one sampled chunk and compares. Because a manifest is immutable and a part may be sealed again later, the workspace pins the `zstd` crate exactly and `contracts/crypto/chunk-digest-vectors.json` fails when zstd output moves; regenerate it only as a deliberate format change.
 - The budget is the smaller of 2 GiB and a tenth of free space. One part over the whole budget is sealed alone into an empty spool, and only while 256 MiB would stay free.
 - A core opens the spool once, under a lock, because opening sweeps partials.
 
