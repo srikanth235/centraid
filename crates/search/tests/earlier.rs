@@ -194,12 +194,22 @@ fn a_task_a_person_and_a_renamed_title_are_found_the_same_way() {
     world
         .vault
         .commit(|tx| {
-            tx.insert_entity("t", Kind::Task, "Call the plumber", "2026-03-01T09:00:00Z")?;
+            tx.insert_entity(
+                "t",
+                Kind::Task,
+                "Call the plumber",
+                "2026-03-01T09:00:00.000Z",
+            )?;
             tx.connection().execute(
                 "INSERT INTO task (id, description) VALUES ('t', 'copper')",
                 [],
             )?;
-            tx.insert_entity("p", Kind::Person, "Ada Lovelace", "2026-03-01T09:00:00Z")?;
+            tx.insert_entity(
+                "p",
+                Kind::Person,
+                "Ada Lovelace",
+                "2026-03-01T09:00:00.000Z",
+            )?;
             tx.connection().execute(
                 "INSERT INTO person (id, nickname) VALUES ('p', 'Countess')",
                 [],
@@ -243,7 +253,7 @@ fn a_locker_items_earlier_cells_are_not_found_through_the_door() {
     world
         .vault
         .commit(|tx| {
-            tx.insert_entity("lk", Kind::LockerItem, "Bank", "2026-03-01T09:00:00Z")?;
+            tx.insert_entity("lk", Kind::LockerItem, "Bank", "2026-03-01T09:00:00.000Z")?;
             tx.connection().execute(
                 "INSERT INTO locker_item (id, type, notes) VALUES ('lk', 'login', 'quokkaold')",
                 [],
@@ -258,7 +268,7 @@ fn a_locker_items_earlier_cells_are_not_found_through_the_door() {
                 "UPDATE locker_item SET notes = 'quokkanew' WHERE id = 'lk'",
                 [],
             )?;
-            tx.touch("lk", "2026-03-02T09:00:00Z")?;
+            tx.touch("lk", "2026-03-02T09:00:00.000Z")?;
             Ok(())
         })
         .expect("edits");
