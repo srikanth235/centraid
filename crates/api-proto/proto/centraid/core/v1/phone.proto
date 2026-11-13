@@ -319,6 +319,11 @@ message RestoreRequest {
   // (`fetch_original`). The payload's one-use secret is never spent by a
   // restore: a claim needs only the vault's identity key.
   string payload = 6;
+  // TAKE THE OLDER BACKUP THE LAST RESTORE OFFERED (#1188, B5). Unset, a vault whose newest
+  // backup fails a check is not restored: the answer carries `older_offers` and nothing is
+  // claimed. Set, the same restore uses the newest older backup that passes for each such vault.
+  // Never set by a shell before the member said yes to the offer.
+  bool use_older = 7;
 }
 
 // One vault a restore brought back.
@@ -345,6 +350,12 @@ message RestoredVault {
   // own identity key — one number for all of them would confirm nothing about
   // any of them.
   string safety_number = 6;
+  // How many derivatives (thumbnails, previews) the restore brought back, of how many the
+  // restored vault names. The vault is kept before they are fetched, so a gateway that stops
+  // answering leaves `landed` below `total` and the rest is fetched on demand. Both 0 when
+  // the vault names none.
+  uint32 derivatives_landed = 7;
+  uint32 derivatives_total = 8;
 }
 
 message RestoreResponse {
@@ -375,7 +386,31 @@ message RestoreResponse {
   // it. Empty is the ordinary answer. When no claim landed at all the restore
   // is refused instead, with the first claim's refusal. A second restore
   // naming these in `RestoreRequest.indices` asks for them alone (R-1047-R6).
+  //
+  // ONE EXCEPTION IS NOT AN ABSENCE (#1188, item 7): an entry with `claimed` set is a vault whose
+  // claim LANDED and whose keeping on this phone then failed. The old phone is frozen, nothing is
+  // forgotten here (the checked file stays), and restoring again, naming it, finishes it.
   repeated UnclaimedVault unclaimed = 4;
+  // AN OLDER BACKUP IN PLACE OF A NEWEST THAT WILL NOT OPEN (#1188, B5, NB4). When any vault's
+  // newest backup failed a check and an older one passes, the restore claims nothing and
+  // restores nothing: `vaults` is empty and each such vault is named here. The member decides;
+  // a second restore with `RestoreRequest.use_older` restores them. Empty is the ordinary answer.
+  repeated OlderOffer older_offers = 5;
+}
+
+// The newest older backup that passes, for one vault whose newest does not (`RestoreResponse.older_offers`).
+message OlderOffer {
+  // The derivation index, as `RestoredVault.index`.
+  uint32 index = 1;
+  // The vault's identity public key, hex, as `RestoredVault.vault_id`.
+  string vault_id = 2;
+  // When the newest backup, the one that will not open, was taken (ms since the epoch, the
+  // backup device's record).
+  int64 newest_taken_at_ms = 3;
+  // When the older backup that passes was taken.
+  int64 offered_taken_at_ms = 4;
+  // The backup device it is on, as the pairing code names it.
+  string device = 5;
 }
 
 // One vault a restore checked and could not claim (`RestoreResponse.unclaimed`).
@@ -387,6 +422,11 @@ message UnclaimedVault {
   // Why the claim did not land, for a support log. Carries no key and no
   // word.
   string reason = 3;
+  // True when the claim LANDED on the gateway and keeping the vault on this phone failed: the
+  // old phone is already frozen, this phone kept the checked file, and restoring must be
+  // finished by restoring again naming this index. False when the claim did not land and the
+  // old phone is still the writer.
+  bool claimed = 4;
 }
 
 // ----------------------------------------------------------------- status --
@@ -446,6 +486,15 @@ message BackupStatusResponse {
   // told it): how many originals, and their bytes. Not in `total_bytes`.
   uint64 left_out_items = 15;
   uint64 left_out_bytes = 16;
+  // HOW OLD THE BACKLOG IS: when the oldest item still waiting began to wait (ms since the
+  // epoch, this phone's clock). Waiting means some paired gateway has not confirmed it; videos
+  // left out are not waiting. It is the time the item's row was WRITTEN INTO THE VAULT on this
+  // phone (the entity's `created_at`, or a derivative's), never a photograph's capture time or a
+  // followed store's date. And it is CLAMPED to no earlier than when the earliest paired
+  // gateway was paired: a wait cannot start before there was a gateway to wait for, so a
+  // member who pairs today with a year of data is not told items waited a year. Absent: nothing
+  // waits, or no waiting item says when it was written. The screen subtracts it from now.
+  optional int64 oldest_waiting_ms = 17;
 }
 
 // ONE APP'S PART OF THE BACKUP (#1144). Counts come from the app's own
@@ -508,13 +557,24 @@ enum WaitReason {
   // gateway was replaced or something else answers at its address.
   WAIT_REASON_UNTRUSTED = 8;
   // The last pass stopped because the gateway answered and refused a write
-  // for its own reason: a full disk, a quota (`DRAIN_STOP_REFUSED`; #1080, the
-  // sweep's F1). Not time: the machine has to make room.
+  // for want of room: its disk is full (`DRAIN_STOP_REFUSED`; #1080, the sweep's F1).
+  // Not time: the machine has to make room. A part over its size limit is TOO_LARGE and any
+  // other refusal is REFUSED_OTHER.
   WAIT_REASON_REFUSED = 9;
   // The gateway no longer knows this phone's token — its store was lost, or
   // its operator revoked the token — so nothing reaches it until the member
   // pairs again (`Destination.pair_again`; #1080, the sweep's F2).
   WAIT_REASON_PAIR_AGAIN = 10;
+  // This phone has too little free space to copy its vault for a snapshot
+  // (#1188, design 6). Not time and not the gateway: the member frees space.
+  WAIT_REASON_NO_ROOM = 11;
+  // The gateway refused a part as over its size limit (`TOO_LARGE`); the limit is
+  // `Destination.refused_limit_bytes`. Not time and not room: this build and that gateway
+  // disagree about how big a part may be. (REFUSED, above, is a full disk.)
+  WAIT_REASON_TOO_LARGE = 12;
+  // The gateway refused a write for a reason that is neither: a code this build does not know.
+  // Only that gateway's pass stops; the others are fed.
+  WAIT_REASON_REFUSED_OTHER = 13;
 }
 
 // ----------------------------------------------------------- destinations --
@@ -555,6 +615,43 @@ message Destination {
   // every snapshot range and file it holds for this vault, old snapshots'
   // included. Set only by `backup_status`.
   uint64 held_bytes = 8;
+  // HOW THIS GATEWAY STANDS AGAINST THE VAULT (#1188, NB1). Every paired
+  // gateway is a full replica, fed on its own, so each has its own standing;
+  // "backed up" means every one is current and otherwise the line names the one
+  // behind. Set only by `backup_status`.
+  //
+  // Files whose bytes this gateway has not acknowledged whole, or whose row no
+  // snapshot its head names covers, and the plaintext bytes of those. A video
+  // the member left out is not counted.
+  uint64 behind_files = 9;
+  uint64 behind_bytes = 10;
+  // Its head names no snapshot, or one older than the newest this phone took.
+  bool records_behind = 11;
+  // When the snapshot its head names was taken, on the vault's clock. Absent:
+  // this phone has set no head there.
+  optional int64 head_snapshot_ms = 12;
+  // Why it is behind, as its last answer says: GATEWAY (silent), UNTRUSTED,
+  // REFUSED (its own limit), PAIR_AGAIN. Unspecified: it answered.
+  WaitReason reach = 13;
+  // ITS HEAD WENT BACKWARDS (#1188, B4): it names an older snapshot than this phone
+  // set there, or none. This phone remembers the newest it set at each gateway and
+  // flags the gateway until it sets a current head again. Set only by `backup_status`.
+  bool rolled_back = 14;
+  // When this phone paired with it, on this phone's clock (#1188, NB2): the age a device that
+  // never confirmed anything is counted from.
+  int64 paired_at_ms = 15;
+  // WHAT IT STILL OWES, BY APP (#1188, NB1): the originals this gateway has not acknowledged whole,
+  // per app, for the Backup screen's "waiting for <device>" rows. Set only by `backup_status`.
+  repeated DeviceWaiting waiting_apps = 16;
+  // The size limit a TOO_LARGE refusal crossed, in bytes (the protocol's largest object); 0
+  // when `reach` is anything else. Set only by `backup_status`.
+  uint64 refused_limit_bytes = 17;
+}
+
+// One app's originals a gateway still owes (`Destination.waiting_apps`).
+message DeviceWaiting {
+  string app_id = 1;
+  uint64 files = 2;
 }
 
 // A PAIRED GATEWAY, FOUND AGAIN AT NEW ADDRESSES (#1080, Q-1080-D3).
@@ -971,4 +1068,74 @@ message PhraseWord {
 // stores it in the synchronised secure store and drops it.
 message PhraseSeeded {
   bytes seed = 1;
+}
+
+// CHECK MY BACKUP (#1188, B6). For each backup device the phone can reach: restore the records
+// into a scratch copy and run every restore check, confirm by name that the device holds every
+// file the records refer to, read back and open a sample of those files. It never touches the
+// vault; it obeys the member's transfer rule and a stated scratch-space budget. A sampled file
+// that fails is marked unconfirmed, so the next pass sends it again.
+message CheckBackupRequest {
+  // One device, or every paired one when empty.
+  string gateway_id = 1;
+  // The member's rule, as a drain states it (zero is `WIFI_ONLY`); and whether the link is metered.
+  TransferRule rule = 2;
+  bool metered = 3;
+  // The member left videos out: their files are not expected to be held.
+  bool exclude_videos = 4;
+  // Do not check: answer how far a running check has got (`CheckBackupResponse.progress`).
+  bool progress_only = 5;
+  // Stop the check that is running: the device in hand is "not checked" and so are the rest.
+  bool stop = 6;
+}
+
+message CheckBackupResponse {
+  repeated DeviceCheck devices = 1;
+  CheckProgress progress = 2;
+}
+
+// How far the check this core is running has got; `running` is false when none is.
+message CheckProgress {
+  bool running = 1;
+  string gateway_id = 2;
+  string label = 3;
+  // Parts opened and parts to open for the device in hand.
+  uint64 done = 4;
+  uint64 total = 5;
+}
+
+message DeviceCheck {
+  string gateway_id = 1;
+  string label = 2;
+  Verdict verdict = 3;
+  // The snapshot that was opened (or that would not), vault clock; zero when not known.
+  int64 snapshot_ms = 4;
+  // Files the records refer to that the device holds, and the sample that was opened.
+  uint64 files_held = 5;
+  uint64 files_opened = 6;
+  uint64 files_missing = 7;
+  uint64 files_damaged = 8;
+  NotRun not_run = 9;
+  // When the newest backup would not open and an older one did: that older one, vault clock.
+  int64 older_snapshot_ms = 10;
+
+  enum Verdict {
+    VERDICT_UNSPECIFIED = 0;
+    VERDICT_OPENS = 1;
+    VERDICT_WONT_OPEN = 2;
+    VERDICT_MISSING_FILES = 3;
+    VERDICT_DAMAGED_FILE = 4;
+    VERDICT_NOT_RUN = 5;
+  }
+  enum NotRun {
+    NOT_RUN_UNSPECIFIED = 0;
+    NOT_RUN_DID_NOT_ANSWER = 1;
+    NOT_RUN_WAITING_FOR_WIFI = 2;
+    NOT_RUN_NEEDS_SPACE = 3;
+    NOT_RUN_STOPPED = 4;
+    // Paired and never backed up: there is nothing to open yet.
+    NOT_RUN_NO_BACKUP_YET = 5;
+    // A backup pass is running: files in flight would read as missing.
+    NOT_RUN_BACKUP_RUNNING = 6;
+  }
 }

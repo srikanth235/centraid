@@ -327,12 +327,9 @@ fn reminders_name_a_moment_when_the_core_supplies_one_else_the_day() {
         call.meta
     );
     let bins = row_titled(&data.groups, "Bins");
-    assert!(bins.meta.contains("reminder on the day"), "{}", bins.meta);
-    assert!(
-        !bins.meta.contains("09:00"),
-        "never an invented moment: {}",
-        bins.meta
-    );
+    // A DATE-ONLY DUE SOUNDS AT 09:00 THAT DAY (#1188, NA6): the row says when it will sound.
+    assert!(bins.meta.contains("reminder"), "{}", bins.meta);
+    assert!(bins.meta.contains("09:00"), "{}", bins.meta);
 }
 
 #[test]

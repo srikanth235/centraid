@@ -19,7 +19,7 @@
 //! (the sessions of a data version, chosen to the grid's shares) and [`version`] (the files and the manifest of
 //! a data version, and the record contract M6 reads).
 //!
-//! M7 adds [`rollout`]: the RFT records and DPO pairs `assist-eval` cuts from a model's rollouts, rendered by the M4
+//! M7 adds [`rollout`]: the RFT records `assist-eval` cuts from a model's rollouts, rendered by the M4
 //! renderer (`datagen rollout-records`).
 
 #![forbid(unsafe_code)]
@@ -32,12 +32,16 @@ pub mod facts;
 mod generate;
 pub mod grid;
 pub mod intent;
+pub mod labels;
 pub mod llm;
 pub mod messages;
+pub mod mistakes;
 pub mod mix;
 pub mod persona;
 pub mod plan;
 pub mod pools;
+pub mod publish;
+pub mod rehearsal;
 pub mod render;
 pub mod rng;
 pub mod rollout;
@@ -45,6 +49,7 @@ pub mod run;
 pub mod sample;
 pub mod settings;
 pub mod source;
+pub mod style;
 pub mod text;
 pub mod trace;
 pub mod typos;

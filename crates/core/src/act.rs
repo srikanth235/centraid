@@ -55,6 +55,8 @@ pub(crate) struct Ctx<'a> {
     pub owner: &'a Principal,
     pub changes: &'a ChangeFeed,
     pub plane: &'a Plane,
+    /// Who acts when it is not the member by hand: the chat's door says `assist`.
+    pub actor: Option<&'static str>,
 }
 
 /// The writer epoch another phone holds this vault at, when this phone was
@@ -152,6 +154,7 @@ pub(crate) fn act(ctx: &Ctx<'_>, request: &wire::ActRequest) -> Result<wire::Act
         })?,
         invoke_key: request.invoke_key.clone(),
         quiet: request.autosave,
+        actor: ctx.actor,
     };
     let mark = centraid_vault::action_key::KeyMark {
         key: &request.invoke_key,
@@ -343,6 +346,7 @@ pub(crate) fn command_keyed(
         })?,
         invoke_key: key.to_owned(),
         quiet: false,
+        actor: ctx.actor,
     };
     let mark = centraid_vault::action_key::KeyMark { key, asked: &asked };
     let outcome = match crate::api::command(

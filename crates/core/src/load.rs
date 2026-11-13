@@ -292,6 +292,12 @@ const ATTACHMENTS_ROWS: u32 = 30;
 /// runs is the app's own function (`app_query::docs::document` answers
 /// `docs.history`), called directly with the typed request the arguments decode
 /// to.
+/// The `alerts` input of the two notification reads: how many of the alert index's next firings.
+fn alerts_of(p: &mut Params<'_>) -> Result<u32> {
+    Ok(p.opt_int("alerts")?
+        .map_or(0, |n| u32::try_from(n.clamp(0, 200)).unwrap_or(0)))
+}
+
 #[allow(clippy::too_many_lines)]
 fn read(
     vault: &Vault,
@@ -320,6 +326,7 @@ fn read(
                 from: p.text("from")?,
                 to: p.text("to")?,
                 tz,
+                alerts: alerts_of(p)?,
             },
         )?,
         ("calendar", "day-context") => app_query::calendar_day_context(
@@ -419,6 +426,7 @@ fn read(
             &wire::AgendaTaskRemindersRequest {
                 tz,
                 limit: p.limit(0),
+                alerts: alerts_of(p)?,
             },
         )?,
         ("reminders", "smart-counts") => app_query::reminders::smart_counts(

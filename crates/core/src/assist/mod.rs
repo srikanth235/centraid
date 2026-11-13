@@ -283,6 +283,25 @@ fn pending_to_wire(card: &PendingCard) -> wire::AssistPending {
     }
 }
 
+/// What takes each applied write back, on the wire: one entry per write, in order; a write the
+/// core cannot take back is an entry with no action.
+fn undo_of(outcome: &Confirmed) -> Vec<wire::AssistUndo> {
+    let Confirmed::Done { undo, .. } = outcome else {
+        return Vec::new();
+    };
+    undo.iter()
+        .map(|step| {
+            let inverse: wire::ActInverse =
+                prost::Message::decode(step.wire.as_slice()).unwrap_or_default();
+            wire::AssistUndo {
+                app: step.app.clone(),
+                action: inverse.action,
+                input: inverse.input,
+            }
+        })
+        .collect()
+}
+
 /// How a confirm ended, on the wire.
 fn settle_outcome_of(outcome: &Confirmed) -> wire::AssistSettleOutcome {
     match outcome {
@@ -299,12 +318,14 @@ fn settled(
     pending_id: &str,
     outcome: wire::AssistSettleOutcome,
     line: String,
+    undo: Vec<wire::AssistUndo>,
 ) -> wire::AssistResponse {
     response(wire::assist_response::Kind::Settled(wire::AssistSettled {
         session_id,
         pending_id: pending_id.to_owned(),
         outcome: outcome as i32,
         line,
+        undo,
     }))
 }
 
@@ -322,6 +343,7 @@ fn refusal_to_wire(refusal: &Refusal) -> wire::AssistRefusal {
         Refusal::AttachmentUnsupported => (R::AttachmentUnsupported, String::new()),
         Refusal::AttachmentUnreadable => (R::AttachmentUnreadable, String::new()),
         Refusal::AttachmentTooLarge => (R::AttachmentTooLarge, String::new()),
+        Refusal::TooLong => (R::TooLong, String::new()),
     };
     wire::AssistRefusal {
         reason: reason as i32,
@@ -395,8 +417,41 @@ fn status_to_wire(
                 vision_to_wire(held.state)
             }) as i32,
             projector_bytes: vision.map_or(0, |held| held.bytes),
+            other_model_files: Vec::new(),
+            adapter_files: Vec::new(),
         })),
     }
+}
+
+/// The other model files beside `model_path` (sorted names): `.gguf` files that are neither the
+/// model, a vision projector nor an adapter ([`adapter_files`]). An unreadable directory has none.
+fn other_model_files(model_path: &str) -> Vec<String> {
+    gguf_files(model_path, false)
+}
+
+/// The assistant's adapter files beside `model_path` (sorted names).
+fn adapter_files(model_path: &str) -> Vec<String> {
+    gguf_files(model_path, true)
+}
+
+fn gguf_files(model_path: &str, adapters: bool) -> Vec<String> {
+    let path = std::path::Path::new(model_path);
+    let Some(dir) = path.parent().filter(|dir| !dir.as_os_str().is_empty()) else {
+        return Vec::new();
+    };
+    let own = path.file_name();
+    let mut names: Vec<String> = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_file()))
+        .filter(|entry| Some(entry.file_name().as_os_str()) != own)
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .filter(|name| name.ends_with(".gguf") && !name.contains("mmproj"))
+        .filter(|name| name.starts_with(centraid_assist::record::LOCAL_PREFIX) == adapters)
+        .collect();
+    names.sort();
+    names
 }
 
 /// The projector's state, when the request named a path for one.
@@ -445,10 +500,15 @@ pub fn answer(handle: &Handle, request: &wire::AssistRequest) -> Result<wire::As
     match kind {
         K::Status(asked) => {
             let host = hub.host();
-            Ok(status_to_wire(
+            let mut answer = status_to_wire(
                 host.status(std::path::Path::new(&asked.model_path)),
                 vision_of(&host, &asked.projector_path),
-            ))
+            );
+            if let Some(wire::assist_response::Kind::Status(status)) = &mut answer.kind {
+                status.other_model_files = other_model_files(&asked.model_path);
+                status.adapter_files = adapter_files(&asked.model_path);
+            }
+            Ok(answer)
         }
         K::Load(asked) => {
             let host = hub.host();
@@ -512,6 +572,7 @@ pub fn answer(handle: &Handle, request: &wire::AssistRequest) -> Result<wire::As
                 &asked.pending_id,
                 settle_outcome_of(&tapped.outcome),
                 tapped.line,
+                undo_of(&tapped.outcome),
             ))
         }
         K::Dismiss(asked) => {
@@ -526,6 +587,7 @@ pub fn answer(handle: &Handle, request: &wire::AssistRequest) -> Result<wire::As
                 &asked.pending_id,
                 outcome,
                 dismissed_line(dismissed),
+                Vec::new(),
             ))
         }
         K::Documents(asked) => {
@@ -675,9 +737,16 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
 
     let mut session = locked(&slot.session);
     let text = if asked.regenerate {
-        session
+        let earlier = session
             .prepare_regenerate()
-            .ok_or_else(|| invalid("there is no earlier question to ask again"))?
+            .ok_or_else(|| invalid("there is no earlier question to ask again"))?;
+        // EDIT: a regenerate that carries words asks them in place of the question it replaces,
+        // and the answer and the turn the core saved for it go the same way as a retry's.
+        if asked.text.trim().is_empty() {
+            earlier
+        } else {
+            asked.text.clone()
+        }
     } else {
         asked.text.clone()
     };
@@ -803,10 +872,19 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
         // keeps no record: a reopened thread starts fresh (R-1088-10), so there is nothing a
         // stored record would restore.
         session.note_question(&text);
+        // THE ONE SWITCH (#1188 G4): a vault turn runs with the adapter on when the record's
+        // adapter is the one for the model in use; the attached path above never does.
+        let switched = centraid_assist::Switched {
+            model: &*model,
+            adapter: centraid_assist::adapter::for_vault_turn(
+                &centraid_assist::record::record(),
+                hub.host().loaded_path().as_deref(),
+            ),
+        };
         let outcome = native_turn(
             handle,
             &slot,
-            &*model,
+            &switched,
             &text,
             &asked.tz,
             asked.regenerate,
@@ -1001,6 +1079,7 @@ mod tests {
             (Refusal::AttachmentUnsupported, R::AttachmentUnsupported),
             (Refusal::AttachmentUnreadable, R::AttachmentUnreadable),
             (Refusal::AttachmentTooLarge, R::AttachmentTooLarge),
+            (Refusal::TooLong, R::TooLong),
         ];
         let mut seen = std::collections::BTreeSet::new();
         for (refusal, reason) in cases {
@@ -1058,6 +1137,7 @@ mod tests {
             text: String::new(),
             diff: serde_json::Value::Null,
             steps: 1,
+            undo: Vec::new(),
         };
         let stale = Confirmed::Stale { rows: Vec::new() };
         let cases = [
@@ -1076,6 +1156,35 @@ mod tests {
             !seen.contains(&(S::Dismissed as i32)),
             "a dismissal is its own"
         );
+    }
+
+    #[test]
+    fn a_mixed_chain_has_one_undo_entry_per_write_and_one_with_no_way_back_is_empty() {
+        use centraid_assist::native::door::Inverse;
+        let back = wire::ActInverse {
+            action: "reopen-task".to_owned(),
+            input: std::collections::HashMap::new(),
+        };
+        let done = Confirmed::Done {
+            text: String::new(),
+            diff: serde_json::Value::Null,
+            steps: 3,
+            undo: vec![
+                Inverse {
+                    app: "reminders".to_owned(),
+                    wire: prost::Message::encode_to_vec(&back),
+                },
+                Inverse::default(),
+                Inverse {
+                    app: "reminders".to_owned(),
+                    wire: prost::Message::encode_to_vec(&back),
+                },
+            ],
+        };
+        let entries = undo_of(&done);
+        let actions: Vec<&str> = entries.iter().map(|e| e.action.as_str()).collect();
+        assert_eq!(actions, ["reopen-task", "", "reopen-task"]);
+        assert!(entries[1].app.is_empty() && entries[1].input.is_empty());
     }
 
     #[test]

@@ -52,6 +52,7 @@ impl Chat {
             return Vec::new();
         }
         self.drawer_open = open;
+        self.threads_error = false;
         if open {
             // Opening reads the list again: it is never older than the last act.
             self.read_threads(ctx);
@@ -204,7 +205,8 @@ impl Chat {
                         .filter(|card| card.entity != STEP_ENTITY)
                         .map(stored_card)
                         .collect(),
-                    stopped: matches!(outcome, O::Stopped | O::Refused),
+                    stopped: matches!(outcome, O::Stopped),
+                    failed: matches!(outcome, O::Refused),
                     truncated: message
                         .notices
                         .contains(&(wire::AssistNotice::DocTruncated as i32)),
@@ -262,6 +264,7 @@ impl Chat {
         if id.is_empty() || named.is_empty() {
             return Vec::new();
         }
+        let before = self.thread_title.clone();
         for row in self
             .threads
             .iter_mut()
@@ -274,13 +277,21 @@ impl Chat {
         if id == self.thread_id {
             self.thread_title.clone_from(&named);
         }
-        self.write(
+        let saved = self.write(
             act::shell::RenameChat {
                 chat_thread_id: id.to_owned(),
                 title: named,
             },
             ctx,
         );
+        // A refused rename is not shown as made: the vault's titles are read again and the
+        // sentence says so.
+        if !saved {
+            if id == self.thread_id {
+                self.thread_title = before;
+            }
+            self.read_threads(ctx);
+        }
         Vec::new()
     }
 
@@ -296,13 +307,15 @@ impl Chat {
         if let Some(found) = &mut self.found {
             found.retain(|row| row.id != id);
         }
-        self.write(
+        let deleted = self.write(
             act::shell::DeleteChat {
                 chat_thread_id: id.to_owned(),
             },
             ctx,
         );
-        if was_open {
+        // A chat the vault would not delete stays in the list, with a sentence; the open one
+        // keeps its thread.
+        if was_open && deleted {
             self.reset_session(ctx);
         }
         self.read_threads(ctx);
@@ -313,11 +326,12 @@ impl Chat {
     pub(super) fn all_threads_deleted(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         let stored = !self.thread_id.is_empty();
         self.threads.clear();
-        self.drawer_open = false;
         self.search = Search::default();
         self.found = None;
-        self.write(act::shell::ClearChats {}, ctx);
-        if stored {
+        let cleared = self.write(act::shell::ClearChats {}, ctx);
+        // a refused clear keeps the page open under its sentence
+        self.drawer_open = !cleared;
+        if stored && cleared {
             self.reset_session(ctx);
         }
         self.read_threads(ctx);
@@ -339,10 +353,14 @@ impl Chat {
         }
     }
 
-    fn write(&mut self, request: impl Into<wire::ActRequest>, ctx: &Ctx) {
+    /// Whether the vault took the write. A refusal sets the sentence the Chats list shows; the
+    /// next one that is taken clears it.
+    fn write(&mut self, request: impl Into<wire::ActRequest>, ctx: &Ctx) -> bool {
         self.seq += 1;
         let key = writes::key(&["chat"], self.seq);
-        let _ = writes::act(ctx, request, &key);
+        let settled = writes::act(ctx, request, &key);
+        self.threads_error = !settled.committed;
+        settled.committed
     }
 }
 
@@ -381,6 +399,7 @@ fn stored_proposal(
         destructive: false,
         stage: Stage::Inert,
         line: words::not_done(ctx.locale()),
+        undo: Vec::new(),
     })
 }
 

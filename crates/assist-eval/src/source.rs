@@ -1,9 +1,10 @@
 //! WHERE A SET COMES FROM. The eval reads sessions and worlds through [`EvalSource`], so the record the `datagen`
 //! crate will write (#1166, stage 7) is one more implementation, not a change to the runner.
 //!
-//! Today's source is the frozen JSONL set the retired Python eval scored (`data/v7/val.jsonl`, `data/v7/FROZEN.md`) and the
-//! world JSON files its sessions name (`data/v7/worlds`). Both are held out: `experiments/toolchat/native/artefacts.py
-//! fetch` brings them from the private data version.
+//! The source is a JSONL set (one session per line) and the world JSON files its sessions name. A data version's split is
+//! `data/<split>.jsonl.zst` (decompress it) and its `worlds/`; the version comes from the private Hugging Face repository
+//! `srikanth235/centraid-native-data` at a pinned revision. There is no default set and no default worlds: see
+//! [`require_set`].
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -54,8 +55,69 @@ fn read(path: &Path) -> Result<String, EvalError> {
     })
 }
 
+/// A presence-only world document (what `datagen` writes: a locker row names its sealed fields and holds no secret)
+/// as the seeder reads it: each sealed marker becomes the deterministic placeholder `placeholder:<key>:<field>`, in
+/// memory only. A document with no `sealed` marker (the frozen worlds) comes back unchanged.
+#[must_use]
+pub fn seed_document_of(doc: &Value) -> Value {
+    let mut doc = doc.clone();
+    if let Some(rows) = doc.get_mut("locker").and_then(Value::as_array_mut) {
+        for row in rows {
+            let key = row["key"].as_str().unwrap_or_default().to_owned();
+            let sealed: Vec<String> = row
+                .get("sealed")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(|field| field.as_str().map(str::to_owned))
+                .collect();
+            if let Some(object) = row.as_object_mut() {
+                object.remove("sealed");
+                for field in sealed {
+                    object.insert(
+                        field.clone(),
+                        Value::String(format!("placeholder:{key}:{field}")),
+                    );
+                }
+            }
+        }
+    }
+    doc
+}
+
+/// The set and the worlds a command was given, or a plain error saying what to pass. There is no default: a run names
+/// the data it scores.
+///
+/// # Errors
+/// A message naming the missing flag.
+pub fn require_set(
+    set: Option<PathBuf>,
+    worlds: Vec<PathBuf>,
+) -> Result<(PathBuf, Vec<PathBuf>), String> {
+    const FROM: &str = "a data version of the private Hugging Face dataset srikanth235/centraid-native-data at a pinned revision: data/<split>.jsonl.zst decompressed, and its worlds/ directory";
+    let set = set.ok_or_else(|| format!("give --set SET.jsonl ({FROM})"))?;
+    if worlds.is_empty() {
+        return Err(format!("give --worlds DIR, the set's worlds ({FROM})"));
+    }
+    Ok((set, worlds))
+}
+
+/// The split a set file is named for: `val.jsonl`, `test.jsonl.zst`, or `<dir>/val/sessions.jsonl` (what
+/// `datagen intents` writes). `None` for any other name.
+#[must_use]
+pub fn split_of_path(path: &Path) -> Option<String> {
+    let known = |word: &str| ["train", "val", "test", "noise"].contains(&word);
+    let name = path.file_name()?.to_string_lossy();
+    let stem = name.split('.').next().unwrap_or_default();
+    if known(stem) {
+        return Some(stem.to_owned());
+    }
+    let parent = path.parent()?.file_name()?.to_string_lossy().into_owned();
+    known(&parent).then_some(parent)
+}
+
 /// A frozen JSONL set (one session per line) and the directories its worlds live in, searched in order
-/// (by default `data/v7/worlds`).
+/// (a data version's `worlds/`).
 #[derive(Debug, Clone)]
 pub struct JsonlSource {
     set: PathBuf,
@@ -79,16 +141,22 @@ impl EvalSource for JsonlSource {
 
     fn sessions(&self) -> Result<Vec<Session>, EvalError> {
         let text = read(&self.set)?;
+        let split = split_of_path(&self.set);
         let mut out = Vec::new();
         for (index, line) in text
             .lines()
             .enumerate()
             .filter(|(_, l)| !l.trim().is_empty())
         {
-            out.push(serde_json::from_str(line).map_err(|error| EvalError::Json {
-                what: format!("{} line {}", self.set.display(), index + 1),
-                message: error.to_string(),
-            })?);
+            let mut session: Session =
+                serde_json::from_str(line).map_err(|error| EvalError::Json {
+                    what: format!("{} line {}", self.set.display(), index + 1),
+                    message: error.to_string(),
+                })?;
+            if session.split.is_none() {
+                session.split.clone_from(&split);
+            }
+            out.push(session);
         }
         Ok(out)
     }
@@ -97,16 +165,18 @@ impl EvalSource for JsonlSource {
         for dir in &self.worlds {
             let path = dir.join(format!("{name}.json"));
             if path.exists() {
-                return serde_json::from_str(&read(&path)?).map_err(|error| EvalError::Json {
-                    what: path.display().to_string(),
-                    message: error.to_string(),
-                });
+                return serde_json::from_str(&read(&path)?)
+                    .map(|doc: Value| seed_document_of(&doc))
+                    .map_err(|error| EvalError::Json {
+                        what: path.display().to_string(),
+                        message: error.to_string(),
+                    });
             }
         }
         Err(EvalError::Read {
             path: name.to_owned(),
             message: format!(
-                "no world {name}.json in {}; `python3 experiments/toolchat/native/artefacts.py fetch` brings the held-out worlds",
+                "no world {name}.json in {}, and the set's worlds are in its data version's `worlds/` directory (pass it with --worlds)",
                 self.worlds
                     .iter()
                     .map(|d| d.display().to_string())
@@ -165,6 +235,59 @@ mod tests {
     }
 
     #[test]
+    fn a_run_names_its_set_and_worlds_there_is_no_default() {
+        let none = require_set(None, vec![]).unwrap_err();
+        assert!(
+            none.contains("--set") && none.contains("srikanth235/centraid-native-data"),
+            "{none}"
+        );
+        let no_worlds = require_set(Some("val.jsonl".into()), vec![]).unwrap_err();
+        assert!(no_worlds.contains("--worlds"), "{no_worlds}");
+        assert!(require_set(Some("val.jsonl".into()), vec!["worlds".into()]).is_ok());
+    }
+
+    #[test]
+    fn a_presence_only_world_is_read_with_its_sealed_placeholders() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            dir.path().join("W.json"),
+            r#"{"me":"Sam","locker":[{"key":"wifi","sealed":["password"],"name":"Wifi"}]}"#,
+        )
+        .expect("write");
+        let world = JsonlSource::new("unused", vec![dir.path().to_path_buf()])
+            .world("W")
+            .expect("world");
+        assert_eq!(world["locker"][0]["password"], "placeholder:wifi:password");
+        assert!(world["locker"][0].get("sealed").is_none());
+    }
+
+    #[test]
+    fn a_set_named_for_its_split_carries_the_split_to_its_sessions() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let line = r#"{"id":"S1","world":"W","today":"2026-03-12T18:20","me":"Sam","turns":[]}"#;
+        for (name, want) in [("val.jsonl", Some("val")), ("mixed.jsonl", None)] {
+            let path = dir.path().join(name);
+            std::fs::write(&path, format!("{line}\n")).expect("write");
+            let sessions = JsonlSource::new(&path, vec![])
+                .sessions()
+                .expect("sessions");
+            assert_eq!(sessions[0].split.as_deref(), want, "{name}");
+            assert_eq!(sessions[0].is_held_out(), want.is_some());
+        }
+        let nested = dir.path().join("test");
+        std::fs::create_dir(&nested).expect("dir");
+        assert_eq!(
+            split_of_path(&nested.join("sessions.jsonl")).as_deref(),
+            Some("test")
+        );
+        // a record that says its own split keeps it
+        let own = dir.path().join("val2.jsonl");
+        std::fs::write(&own, line.replace("\"id\"", "\"split\":\"noise\",\"id\"")).expect("write");
+        let sessions = JsonlSource::new(&own, vec![]).sessions().expect("sessions");
+        assert!(sessions[0].is_held_out());
+    }
+
+    #[test]
     fn a_world_is_found_in_the_first_directory_that_has_it() {
         let (a, b) = (
             tempfile::tempdir().expect("a"),
@@ -181,7 +304,7 @@ mod tests {
                 .world("X")
                 .expect_err("missing")
                 .to_string()
-                .contains("artefacts.py fetch")
+                .contains("--worlds")
         );
     }
 }

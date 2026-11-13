@@ -9,6 +9,41 @@ final class ChatMarkdownTests: XCTestCase {
         switch block {
         case let .paragraph(text), let .heading(text), let .item(_, text):
             return String(text.characters)
+        case let .table(rows):
+            return rows.map { $0.map { String($0.characters) }.joined(separator: "|") }.joined(separator: ";")
+        case let .code(code):
+            return code
+        }
+    }
+
+    /// A block as the shared fixture writes it (`mobile/fixtures/chat-markdown.txt`).
+    private func written(_ block: ChatMarkdown.Block) -> String {
+        switch block {
+        case let .paragraph(text): return "p:" + String(text.characters)
+        case let .heading(text): return "h:" + String(text.characters)
+        case let .item(marker, text): return "i:" + marker + " " + String(text.characters)
+        case .table: return "t:" + words(block)
+        case let .code(code): return "c:" + code.replacingOccurrences(of: "\n", with: "\\n")
+        }
+    }
+
+    func testEveryCaseOfTheSharedFixtureReadsTheSameOnBothShells() throws {
+        // …/mobile/iosApp/Tests/ChatMarkdownTests.swift → …/mobile/fixtures/chat-markdown.txt
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("fixtures/chat-markdown.txt")
+        let text = try String(contentsOf: url, encoding: .utf8)
+        let kept = text.components(separatedBy: "\n").filter { !$0.hasPrefix("# ") }.joined(separator: "\n")
+        let cases = kept.components(separatedBy: "\n====\n")
+        XCTAssertGreaterThanOrEqual(cases.count, 9)
+        for fixture in cases {
+            let lines = fixture.components(separatedBy: "\n")
+            let name = lines.first { $0.hasPrefix("name:") } ?? "?"
+            let streaming = (lines.first { $0.hasPrefix("streaming:") } ?? "").contains("yes")
+            let input = fixture.components(separatedBy: "--- input\n")[1].components(separatedBy: "\n--- blocks")[0]
+            let expected = fixture.components(separatedBy: "--- blocks\n")[1]
+                .trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: "\n")
+            XCTAssertEqual(ChatMarkdown.blocks(input, streaming: streaming).map(written), expected, name)
         }
     }
 

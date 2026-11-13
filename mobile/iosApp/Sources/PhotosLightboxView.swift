@@ -41,7 +41,7 @@ struct PhotosLightboxView: View {
                 lightPage(model)
             }
         }
-        // THE STAGE ROOM TAKES NO HEADER (product-intuition/references/design-behaviour.md § Rooms): its way out is the close
+        // THE STAGE ROOM TAKES NO HEADER (design/behaviour.md § Rooms): its way out is the close
         // chip and the swipe down, both the same act.
         .toolbar(.hidden, for: .navigationBar)
         .sheet(item: sheetBinding) { item in

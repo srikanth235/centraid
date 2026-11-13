@@ -23,6 +23,7 @@ fn button(id: &str, verb: Verb) -> E {
             wire::NotificationAnswered {
                 notification_id: id.to_owned(),
                 verb: verb as i32,
+                press_id: String::new(),
             },
         )),
     })

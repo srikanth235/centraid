@@ -239,7 +239,11 @@ impl Service {
             HOME,
             Self::told(wire::home_event::Kind::BackupTold(
                 wire::home_event::BackupLineTold {
-                    line: Self::backup_line(ctx, held.foreground.is_empty()),
+                    line: Self::backup_line(
+                        ctx,
+                        held.foreground.is_empty(),
+                        self.secrets.conductor().facts().running,
+                    ),
                 },
             )),
         );
@@ -258,7 +262,7 @@ impl Service {
 
     /// The line under the vault's name, from the backup lane's reading of the
     /// vault in front. A vault that could not be asked draws no line.
-    fn backup_line(ctx: &Ctx, none: bool) -> Option<wire::HomeBackupLine> {
+    fn backup_line(ctx: &Ctx, none: bool, running: bool) -> Option<wire::HomeBackupLine> {
         if none {
             return None;
         }
@@ -269,6 +273,7 @@ impl Service {
             ctx.locale(),
             Some(&standing.reading),
             standing.reading.frozen,
+            running,
             standing.now_ms,
         );
         // NOTHING PAIRED: the line is the way to pairing (decided in #1173), not

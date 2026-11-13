@@ -17,7 +17,7 @@
 # RE-RUN THIS EVERY TIME `crates/core` CHANGES. The `.so` below is a COPIED
 # file, so nothing in the Gradle build knows it is stale and nothing will tell
 # you: the app builds, installs, runs, and answers with the core from whenever
-# this script last ran. See `.claude/skills/mobile-verify/SKILL.md`.
+# this script last ran. See `.claude/skills/land/mobile.md`.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

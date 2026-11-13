@@ -437,6 +437,30 @@ pub fn write_version(
             }),
         );
     }
+    // nested train subsets: each is a file of its own, `data/<name>.jsonl.zst`, holding the same records as the train file
+    // does for those sessions, in the train file's order, so a job names a subset and fetches one file
+    let mut subsets = serde_json::Map::new();
+    for (name, indices) in &selection.subsets {
+        let mut indices = indices.clone();
+        indices.sort_unstable();
+        let rel = format!("{DATA}/{name}.jsonl.zst");
+        let path = out.join(&rel);
+        let file = std::fs::File::create(&path)?;
+        let mut encoder = zstd::stream::Encoder::new(std::io::BufWriter::new(file), 6)?;
+        for i in &indices {
+            encoder.write_all(&rendered.spool.read(&rendered.slots[*i])?)?;
+        }
+        encoder.finish()?.flush()?;
+        let bytes = std::fs::read(&path)?;
+        let entry = json!({
+            "sessions": indices.len(),
+            "within": "train",
+            "bytes": bytes.len(),
+            "blake3": blake3::hash(&bytes).to_hex().to_string(),
+        });
+        files.insert(rel, entry.clone());
+        subsets.insert(name.clone(), entry);
+    }
     let wdir = out.join(WORLDS);
     std::fs::create_dir_all(&wdir)?;
     for id in &worlds {
@@ -453,6 +477,7 @@ pub fn write_version(
     for (from, to) in [
         ("manifest.json", "messages.json"),
         ("report.txt", "messages.txt"),
+        ("models.json", "models.json"),
     ] {
         if input.join(from).exists() {
             std::fs::copy(input.join(from), out.join(BUILD).join(to))?;
@@ -461,6 +486,7 @@ pub fn write_version(
     let splits: Vec<Value> = selection
         .reports
         .iter()
+        .chain(&selection.subset_reports)
         .map(|r| {
             json!({
                 "split": r.split,
@@ -471,22 +497,59 @@ pub fn write_version(
                 "minimal_pairs": r.pairs,
                 "multi_turn_share": r.multi_turn_share,
                 "three_plus_share": r.three_plus_share,
+                "ask_or_act_pairs": r.ask_or_act_pairs,
                 "by_turns": r.by_turns,
-                "across": r.across,
+                "shares": r.shares,
                 "apps": r.apps,
+                "cells": r.cells,
                 "duplicates_removed": r.duplicates,
                 "broken_pairs_removed": r.orphan_pairs,
+                "reserved_removed": r.reserved_out,
                 "missed": r.missed,
             })
         })
         .collect();
+    let models: Value = std::fs::read_to_string(input.join("models.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or(Value::Null);
+    let test_tokenizer = rendered.tokenizer_hash
+        == blake3::hash(crate::render::byte_level_tokenizer_json().as_bytes())
+            .to_hex()
+            .to_string();
+    let rehearsal = models["writers"]
+        .as_object()
+        .into_iter()
+        .chain(models["readers"].as_object())
+        .flat_map(serde_json::Map::values)
+        .filter_map(Value::as_str)
+        .any(|m| m.starts_with(crate::rehearsal::PREFIX));
+    let mut blockers: Vec<&str> = Vec::new();
+    if test_tokenizer {
+        blockers.push("rendered with the test (byte-level) tokenizer, not the chat model's own");
+    }
+    if provenance.runtime_commit.ends_with("-dirty") || provenance.runtime_commit == "unknown" {
+        blockers.push("built from a tree with uncommitted changes, or an unknown commit");
+    }
+    let tools = crate::plan::tools_mode();
+    if tools == centraid_assist::native::prompt::ToolsMode::S2 {
+        blockers.push(
+            "the model record's tools block is s2, the tools before the regroup: it does not list create, edit or do, which the reference calls use",
+        );
+    }
+    if rehearsal {
+        blockers.push("written or read back by a rehearsal model, not a language model");
+    }
     let manifest = json!({
         "version": provenance.version,
+        "tools_block": {"mode": tools.name(), "from": "crates/assist/model.json"},
+        "publishable": {"value": blockers.is_empty(), "blockers": blockers},
+        "messages": models,
         "stage": "render+mix",
         "catalog_hash": catalog.hash(),
         "runtime_commit": provenance.runtime_commit,
         "seeds": provenance.seeds,
-        "tokenizer": {"file": provenance.tokenizer_path, "blake3": rendered.tokenizer_hash},
+        "tokenizer": {"file": provenance.tokenizer_path, "blake3": rendered.tokenizer_hash, "test_tokenizer": test_tokenizer},
         "llm_cache": {"blake3": cache, "entries": entries, "packed": format!("{BUILD}/{PACKED_CACHE}"), "packed_entries": packed},
         "weights": {
             "decision": decision_weight,
@@ -501,7 +564,10 @@ pub fn write_version(
         "targets": {
             "train": cfg.targets[0], "val": cfg.targets[1], "test": cfg.targets[2],
             "shares": cfg.shares,
+            "cell_floor": {"train": cfg.floor[0], "val": cfg.floor[1], "test": cfg.floor[2]},
         },
+        "subsets": subsets,
+        "reserved_combinations": selection.reserved,
         "render": {
             "sessions_in": rendered.sessions_in,
             "sessions_rendered": rendered.features.len(),

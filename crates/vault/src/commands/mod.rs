@@ -421,6 +421,10 @@ pub struct Command {
     /// A QUIET save: an editor's autosave, which the caller says it is (never inferred from the
     /// name). Its history may fold into the session of the last one; see [`crate::history`].
     pub quiet: bool,
+    /// WHO ACTED when it is not the member acting by hand: the chat's door says `assist`. It is
+    /// said by the door, never inferred from the command's name or input, and it only changes the
+    /// commit's producer, so the history can say "Changed by Chat" ([`crate::history::Who`]).
+    pub actor: Option<&'static str>,
 }
 
 impl Command {
@@ -430,7 +434,15 @@ impl Command {
             name: name.into(),
             input,
             quiet: false,
+            actor: None,
         }
+    }
+
+    /// This command as made by `actor` (the chat's door), not by the member's own hand.
+    #[must_use]
+    pub const fn by(mut self, actor: &'static str) -> Self {
+        self.actor = Some(actor);
+        self
     }
 
     /// This command as a quiet save (an editor's autosave).
@@ -534,7 +546,10 @@ impl Vault {
         })?;
 
         let ran = self.commit(|tx| {
-            tx.set_producer(&command.name);
+            match command.actor {
+                Some(actor) => tx.set_producer(format!("{actor}.{}", command.name)),
+                None => tx.set_producer(&command.name),
+            }
             tx.set_quiet(command.quiet);
             let connection = tx.connection();
             if let Some(mark) = keyed

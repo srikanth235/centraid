@@ -490,7 +490,7 @@ private fun EditBar(
 
 /**
  * THE ONE FILLED ELEMENT. A commit that cannot fire is OUTLINED, never a dimmed
- * fill (product-intuition/references/design-behaviour.md § Controls), and says why beneath.
+ * fill (design/behaviour.md § Controls), and says why beneath.
  */
 @Composable
 private fun Commit(
@@ -659,7 +659,7 @@ private fun rotatedFrameRatio(assetRatio: Double, degrees: Int): Double {
 /** v0's `maskFill`: the stage colour at `8C`; alpha on the colour, never on the pane. */
 private const val MASK_ALPHA: Float = 0x8C / 255f
 
-/** The coarse target floor (product-intuition/references/design-behaviour.md: 44 on touch). */
+/** The coarse target floor (design/behaviour.md: 44 on touch). */
 private const val TARGET: Int = 44
 
 /** One spoken step of the crop: a twentieth of the frame. */

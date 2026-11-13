@@ -3,8 +3,9 @@
 //! The assistant and the member have the same functionality; the one rule is that a sealed value's
 //! plaintext never reaches the model, an event, the stored thread or the index. So a
 //! call that would show or set a secret does not run and does not decline: it ends the turn with a
-//! [`MemberAction`], the chat draws it as a card, and the member's tap completes it through
-//! Locker's own flow (unlock, stamp first, reveal). The model's observation names what was
+//! [`MemberAction`], the chat draws it as a card, and the member's tap completes it: a `reveal` or
+//! `code` is shown on the card itself after the owner check (the core reads it through Locker's
+//! reveal, stamp first; the model never does), an `edit_secret` opens Locker's editor. The model's observation names what was
 //! offered and never a value.
 //!
 //! The action rides a chat card of the Locker item (`app` locker, `entity` `locker_item`) with the

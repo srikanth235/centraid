@@ -67,6 +67,7 @@ fn alerts(world: &World, title: &str) -> usize {
         world.load(centraid_screens::catalog::load::calendar::Upcoming {
             from: Some("2026-11-01T00:00:00Z".to_owned()),
             to: Some("2027-03-01T00:00:00Z".to_owned()),
+            alerts: None,
         })
     else {
         panic!("upcoming answered something else");
@@ -81,6 +82,8 @@ fn alerts(world: &World, title: &str) -> usize {
         projects: &[],
         events: &upcoming.events,
         calendars: &upcoming.calendars,
+        extra: &[],
+        extra_wanted: &[],
     })
     .iter()
     .filter(|pending| pending.title == title)

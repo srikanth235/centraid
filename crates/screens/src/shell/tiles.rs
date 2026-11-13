@@ -378,6 +378,7 @@ fn calendar(ctx: &Ctx) -> Made {
         load::calendar::Upcoming {
             from: None,
             to: Some(to),
+            alerts: None,
         },
         |answer| match answer {
             Answer::AgendaUpcoming(upcoming) => Some(upcoming),

@@ -11,7 +11,8 @@
 //! Rust sends the WHOLE desired set (`wire::ScheduleNotifications`); a shell
 //! diffs it against what the OS holds and reports back what the member pressed
 //! (`NotificationAnswered`). Every word travels inside the set. A task or an
-//! event with no moment (a date-only due, an all-day event) never notifies.
+//! event with no moment (a date-only due, an all-day event) sounds at 09:00 that day wherever
+//! the member is, and the item never gains that time (#1188, NA6).
 
 pub mod answer;
 pub mod desired;
@@ -19,5 +20,5 @@ mod receipt;
 mod retention;
 pub mod service;
 
-pub use desired::{CAP, Inputs, OS_PENDING_LIMIT, RECEIPTS, WINDOW_DAYS, categories, desired};
+pub use desired::{CAP, HORIZON_DAYS, Inputs, OS_PENDING_LIMIT, RECEIPTS, categories, desired};
 pub use service::{NAME, Sync, build, route, services};

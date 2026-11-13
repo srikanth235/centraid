@@ -73,7 +73,7 @@ pub const OPEN_STATUSES: [&str; 1] = ["open"];
 pub const CLOSED_STATUSES: [&str; 2] = ["done", "cancelled"];
 
 const TASK_COLUMNS: &str = "id, parent_id, project_id, section_id, status, description, priority, \
-     due, done_at, effort_min, remind_before_min, rule, zone, anchor, series_id, position, url";
+     due, done_at, effort_min, remind_before_min, rule, zone, anchor, series_id, position, url, snoozed_until";
 const ENTITY_COLUMNS: &str = "id, title, created_at, updated_at";
 const ARCHIVED: &str = "flag:archived";
 
@@ -129,6 +129,8 @@ pub struct TaskRow {
     pub effort_min: Option<i64>,
     /// The reminder's lead time, in minutes before the due moment.
     pub remind_before_min: Option<i64>,
+    /// A UTC instant the member snoozed the reminder to: the alert sounds then, the due unmoved.
+    pub snoozed_until: Option<String>,
     pub rrule: Option<String>,
     pub tz: Option<String>,
     pub recurrence_anchor: Option<String>,
@@ -294,6 +296,7 @@ fn task_of(entity: &Row, row: &Row) -> TaskRow {
         completed_at: text_of(row, "done_at"),
         effort_min: int(row, "effort_min"),
         remind_before_min: int(row, "remind_before_min"),
+        snoozed_until: text_of(row, "snoozed_until"),
         rrule: text_of(row, "rule"),
         tz: text_of(row, "zone"),
         recurrence_anchor: text_of(row, "anchor"),
@@ -1211,6 +1214,57 @@ pub fn load_reminders(
             tasks,
             projects,
             truncated,
+            window,
+        },
+        None,
+    ))
+}
+
+/// `reminders`, among the tasks the alert index names (#1188): the same rows for exactly those
+/// ids, the open and live ones that carry a lead time and a due. The window is the index's, so a
+/// vault of any size reads only the few tasks that fire next.
+///
+/// # Errors
+///
+/// A door refusal becomes the payload's denial; a reached bound is an `Err`.
+pub fn load_reminders_among(
+    door: &dyn PageDoor,
+    ids: &[String],
+    now: &str,
+    zone: &FireZone,
+) -> KitResult<(RemindersData, Option<Denial>)> {
+    let window = ids.len().max(1);
+    let found = match live_tasks(door, "reminders.reminders.among", "id", ids) {
+        Ok(found) => found,
+        Err(KitError::Door(message)) => {
+            return Ok((
+                RemindersData {
+                    window,
+                    ..RemindersData::default()
+                },
+                Some(denial_of(message)),
+            ));
+        }
+        Err(other) => return Err(other),
+    };
+    let rows: Vec<TaskRow> = found
+        .into_iter()
+        .filter(|task| {
+            task.status == "open" && task.remind_before_min.is_some() && task.due_at.is_some()
+        })
+        .collect();
+    let task_ids: Vec<String> = rows.iter().map(|task| task.task_id.clone()).collect();
+    let decorations = read_decorations(door, &task_ids, true)?;
+    let tasks = rows
+        .iter()
+        .map(|task| family(task, &[], &decorations, now, zone))
+        .collect();
+    let (projects, _) = load_chrome(door)?;
+    Ok((
+        RemindersData {
+            tasks,
+            projects,
+            truncated: false,
             window,
         },
         None,

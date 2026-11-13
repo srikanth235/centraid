@@ -19,7 +19,7 @@
 //!
 //! ADOPTING: a `crates/screens/src/<app>/export.rs` with a `static SPEC: ExportSpec` and
 //! `pub fn build(route) -> Option<Box<dyn Screen>> { export::build(&SPEC, route) }`; register it
-//! under `<app>.export`; and put [`entry`]'s row in the More sheet. See the `screen-change` skill.
+//! under `<app>.export`; and put [`entry`]'s row in the More sheet. See `.claude/skills/change/keep-a-promise.md`.
 
 use centraid_api_proto::core_v1 as wire;
 use wire::screen_event::Kind as E;

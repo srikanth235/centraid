@@ -4,8 +4,8 @@
 //!
 //! A list of deleted rows the spec's `load` reads, restore as a write with no
 //! confirm ("{title} restored" with Undo), and purge / empty behind a
-//! destructive confirm with full sentences (product-intuition/references/
-//! design-behaviour.md § Controls). Every spec can restore, delete forever and
+//! destructive confirm with full sentences (.claude/skills/design/
+//! behaviour.md § Controls). Every spec can restore, delete forever and
 //! empty: the wording is the kit's, the app passes its noun. A refused write
 //! keeps the list and says the core's sentence; the vault's own change event reloads the list after a
 //! write commits, and the screen never deletes a row on a guess.

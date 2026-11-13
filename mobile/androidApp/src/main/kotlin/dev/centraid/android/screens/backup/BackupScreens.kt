@@ -47,6 +47,7 @@ import dev.centraid.android.kit.StateColor
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.tokenSp
+import dev.centraid.android.screens.words.WordsCallout
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -157,19 +158,114 @@ private fun BackupPage(
             modifier = Modifier.padding(horizontal = 4.dp).testTag("backup-title").semantics { heading() },
         )
         // THE STATUS CARD: where the backup stands, and the one act that moves it (iOS `statusCard`).
+        // THE ONE-TIME PROMPT after the first confirmed backup (#1188, NB5): dismissible, no checkbox.
+        model.key_prompt?.let { prompt ->
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(CardRadius)).background(Surface.card).padding(16.dp).testTag("backup-key-prompt"),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(prompt.title, style = centraidType("title").copy(fontSize = tokenSp(R.dimen.centraid_text_section)), color = Surface.ink)
+                Sentence(prompt.body)
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        prompt.save_label,
+                        style = centraidType("body"),
+                        color = appAccent("").text,
+                        modifier = Modifier
+                            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+                            .clickable(role = Role.Button) {
+                                onEvent(BackupHomeEvent(key_prompt_answered = BackupHomeEvent.KeyPromptAnswered()))
+                                prompt.save?.let(onOpen)
+                            }
+                            .testTag("backup-key-prompt-save"),
+                    )
+                    Text(
+                        prompt.not_now_label,
+                        style = centraidType("body"),
+                        color = Surface.meta,
+                        modifier = Modifier
+                            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+                            .clickable(role = Role.Button) {
+                                onEvent(BackupHomeEvent(key_prompt_answered = BackupHomeEvent.KeyPromptAnswered()))
+                            }
+                            .testTag("backup-key-prompt-not-now"),
+                    )
+                }
+            }
+        }
+        // THE ASK FOR NOTIFICATIONS after the first device is paired (#1188, NB2): the explanation first,
+        // the system prompt only after "Allow notifications".
+        model.notify_ask?.let { ask ->
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(CardRadius)).background(Surface.card).padding(16.dp).testTag("backup-notify-ask"),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(ask.title, style = centraidType("title").copy(fontSize = tokenSp(R.dimen.centraid_text_section)), color = Surface.ink)
+                Sentence(ask.body)
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        ask.allow_label,
+                        style = centraidType("body"),
+                        color = appAccent("").text,
+                        modifier = Modifier
+                            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+                            .clickable(role = Role.Button) { onEvent(BackupHomeEvent(notify_allow = BackupHomeEvent.NotifyAllow())) }
+                            .testTag("backup-notify-allow"),
+                    )
+                    Text(
+                        ask.not_now_label,
+                        style = centraidType("body"),
+                        color = Surface.meta,
+                        modifier = Modifier
+                            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+                            .clickable(role = Role.Button) { onEvent(BackupHomeEvent(notify_not_now = BackupHomeEvent.NotifyNotNow())) }
+                            .testTag("backup-notify-not-now"),
+                    )
+                }
+            }
+        }
+        // WHEN BACKUP ALERTS CANNOT ARRIVE, the phone's sentence, with Settings when Settings mends it.
+        if (model.notify_off.isNotEmpty()) {
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(CardRadius)).background(Surface.card).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Sentence(model.notify_off, "backup-notify-off")
+                if (model.notify_settings_label.isNotEmpty()) {
+                    Text(
+                        model.notify_settings_label,
+                        style = centraidType("body"),
+                        color = appAccent("").text,
+                        modifier = Modifier
+                            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+                            .clickable(role = Role.Button) { onEvent(BackupHomeEvent(notify_open_settings = BackupHomeEvent.NotifyOpenSettings())) }
+                            .testTag("backup-notify-settings"),
+                    )
+                }
+            }
+        }
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(CardRadius)).background(Surface.card).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(Modifier.padding(top = 6.dp).size(10.dp).clip(CircleShape).background(conditionTint(model)))
+                // THE STATE'S MARK (Backup, BackupRunning, BackupFailed): a round badge in the state's
+                // pale ground, its glyph in the state's colour. The iOS twin draws the same.
+                val tint = conditionTint(model)
+                Box(
+                    Modifier.size(40.dp).clip(CircleShape).background(tint.copy(alpha = 0.14f)).clearAndSetSemantics { },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CentraidIcon(iconKey = conditionMark(model), tint = tint, size = 20.dp)
+                }
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(line?.sentence.orEmpty(), style = centraidType("title").copy(fontSize = tokenSp(R.dimen.centraid_text_section)), color = Surface.ink)
                     if (!line?.detail.isNullOrEmpty()) Sentence(line?.detail.orEmpty())
                     if (model.last_good.isNotEmpty()) Sentence(model.last_good, "backup-last-good")
-                    if (model.reason.isNotEmpty()) Sentence(model.reason, "backup-reason")
                 }
             }
+            // WHY THE DEVICE IS NOT ANSWERING is an amber callout of its own, not a quiet line.
+            if (model.reason.isNotEmpty()) WordsCallout(model.reason, StateColor.Amber, testTag = "backup-reason")
             if (model.progress.isNotEmpty()) {
                 if (model.progress_known) {
                     // THE RUN'S BAR (BackupRunning): what a gateway has acknowledged of the whole,
@@ -260,6 +356,9 @@ private fun BackupPage(
                         }
                     }
                 }
+                if (model.posture.isNotEmpty()) {
+                    Box(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) { Sentence(model.posture, "backup-posture") }
+                }
                 if (model.include_videos_label.isNotEmpty()) {
                     Row(
                         Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 16.dp).testTag("backup-include-videos"),
@@ -279,7 +378,7 @@ private fun BackupPage(
                 }
             }
         }
-        if (model.key_heading.isNotEmpty() || model.restore_label.isNotEmpty()) {
+        if (model.key_heading.isNotEmpty() || model.restore_label.isNotEmpty() || model.check_label.isNotEmpty()) {
             Group(model.key_heading) {
                 if (model.key_heading.isNotEmpty()) {
                     val open = model.key_show_label.isNotEmpty()
@@ -324,6 +423,32 @@ private fun BackupPage(
                         }
                     }
                 }
+                if (model.check_label.isNotEmpty()) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 56.dp)
+                            .clickable { model.check?.let(onOpen) }
+                            .padding(horizontal = 12.dp)
+                            .testTag("backup-check"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        KitTile(iconKey = "Check", size = 32.dp)
+                        Column(Modifier.weight(1f)) {
+                            Text(model.check_label, style = centraidType("body"), color = Surface.ink)
+                            if (model.check_status.isNotEmpty()) {
+                                Text(
+                                    model.check_status,
+                                    style = centraidType("annotLabel"),
+                                    color = if (model.check_warning) StateColor.Amber.text else Surface.meta,
+                                    modifier = Modifier.testTag("backup-check-status"),
+                                )
+                            }
+                        }
+                        CentraidIcon(iconKey = "ChevronRight", tint = Surface.meta, size = 16.dp)
+                    }
+                }
                 if (model.restore_label.isNotEmpty()) {
                     Row(
                         Modifier
@@ -350,9 +475,16 @@ private val CardRadius = 16.dp
 @Composable
 private fun conditionTint(model: BackupHomeData) = when (model.condition) {
     BackupCondition.BACKUP_CONDITION_UP_TO_DATE -> StateColor.Green.text
-    BackupCondition.BACKUP_CONDITION_RUNNING -> Surface.meta
-    BackupCondition.BACKUP_CONDITION_NOT_REACHED -> StateColor.Amber.text
+    BackupCondition.BACKUP_CONDITION_RUNNING, BackupCondition.BACKUP_CONDITION_CATCHING_UP -> Surface.meta
+    BackupCondition.BACKUP_CONDITION_NOT_REACHED, BackupCondition.BACKUP_CONDITION_ATTENTION -> StateColor.Amber.text
     else -> if (model.line?.tone == BackupLine.Tone.TONE_URGENT) StateColor.Red.text else StateColor.Amber.text
+}
+
+/** The badge's glyph: a tick only for a backup that is whole and warns of nothing (iOS `markKey`). */
+private fun conditionMark(model: BackupHomeData): String = when (model.condition) {
+    BackupCondition.BACKUP_CONDITION_UP_TO_DATE -> "Check"
+    BackupCondition.BACKUP_CONDITION_RUNNING, BackupCondition.BACKUP_CONDITION_CATCHING_UP -> "Refresh"
+    else -> "AlertCircle"
 }
 
 private fun needsNotificationGrant(context: Context): Boolean =
@@ -458,6 +590,7 @@ private fun Destinations(model: BackupHomeData, onEvent: (BackupHomeEvent) -> Un
             ) {
                 Text(row.label, style = centraidType("body"), color = Surface.ink)
                 if (row.held.isNotEmpty()) Sentence(row.held)
+                if (row.backed_up.isNotEmpty()) Sentence(row.backed_up)
                 if (row.detail.isNotEmpty()) Sentence(row.detail)
             }
             // FORGET IS PLAIN AND VISIBLE, and needs no confirmation: it forgets this phone's pairing and

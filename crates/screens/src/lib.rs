@@ -103,6 +103,7 @@ pub fn assemble() -> (Runtime, std::sync::Arc<vault::Shelf>) {
             custody::services(),
             vault::services(),
             agenda::notify::services(),
+            backup::alerts::services(),
             agenda::glance::services(),
             health::glance::services(),
         ]

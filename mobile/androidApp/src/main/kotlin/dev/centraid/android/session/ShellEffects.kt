@@ -181,6 +181,10 @@ internal class ShellEffects(
                     Notify.schedule(context, effect.schedule_notifications!!) { ui?.ask(Manifest.permission.POST_NOTIFICATIONS) }
                 },
             )
+            // THE APP'S NOTIFICATION PAGE, where the channels and the exact-alarm switch are.
+            effect.open_notification_settings != null -> start(
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
+            )
             effect.long_run != null -> {
                 if (effect.long_run!!.start) BackupNow.start(context, effect.long_run!!.title, effect.long_run!!.channel_name) else BackupNow.stop(context)
                 EffectResult(pass_noted = PassNoted())

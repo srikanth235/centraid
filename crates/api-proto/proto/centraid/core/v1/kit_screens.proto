@@ -43,7 +43,7 @@ message Denied {
 }
 
 // A list with nothing in it, said once: one sentence and at most one action
-// (product-intuition/references/design-behaviour.md § Wording). `action_label` empty means no action; the action
+// (design/wording.md § Wording). `action_label` empty means no action; the action
 // itself is the screen's own event.
 message EmptyState {
   string headline = 1;
@@ -169,7 +169,7 @@ message Autosave {
 }
 
 // A decision the member confirms. Full sentences, because only a destructive
-// confirm earns them (product-intuition/references/design-behaviour.md § Controls); `destructive` draws the outlined `net` action.
+// confirm earns them (design/behaviour.md § Controls); `destructive` draws the outlined `net` action.
 message Confirm {
   string title = 1;
   string body = 2;
@@ -178,7 +178,7 @@ message Confirm {
 }
 
 // A row's status as a finished label and a tone. `seam` is "not yet", `net`
-// is owe/leaves (product-intuition/references/design-behaviour.md § Colour).
+// is owe/leaves (design/behaviour.md § Colour).
 // `accent` is the app's own colour for a state that is the app's good news
 // ("New" on an import row, "Paid" on a bill): a wash of the app accent with the
 // accent's text.
@@ -211,12 +211,12 @@ message ListRow {
   string accessibility_label = 7;
   bool dimmed = 8;
   bool pending = 9;
-  // How `trailing` is inked: NEUTRAL is ink, NET is owe/leaves (product-intuition/references/design-behaviour.md § Colour).
+  // How `trailing` is inked: NEUTRAL is ink, NET is owe/leaves (design/behaviour.md § Colour).
   // UNSPECIFIED is ink too, so a row with a plain count sets nothing.
   StatusChip.Tone trailing_tone = 10;
 }
 
-// THE ONE FILTER AND SORT MENU (product-intuition/references/design-behaviour.md § App roots): the header's filter
+// THE ONE FILTER AND SORT MENU (design/behaviour.md § App roots): the header's filter
 // button opens this, in every app that filters or sorts, in place of the chip
 // row that stood under the header. Rust makes the whole menu: every section,
 // option, count and checkmark, the words, and whether anything is narrowing the
@@ -292,7 +292,7 @@ message HeaderSubtitle {
   bool tappable = 5;
 }
 
-// THE ONE STATUS LINE (product-intuition/references/design-behaviour.md § Status line). One clause, at most one verb.
+// THE ONE STATUS LINE (design/behaviour.md § Status line). One clause, at most one verb.
 // A screen carries it where it says what a write did — "Task done" with
 // Undo — and `action_label` empty is a line with no verb. What the verb does
 // is the kit's `StatusActed` (any screen), or the screen's own.
@@ -404,6 +404,10 @@ message EarlierVersion {
   // (`contacts`, `calendar`, `files`, `health`, `statement`); empty when the member did.
   string store_system = 4;
   string since_store_system = 6;
+  // `assist` when the chat made the change that replaced it, and when the chat made it the record's
+  // state; empty otherwise.
+  string made_by = 7;
+  string since_made_by = 8;
   // What the replacing change moved, field by field: `entity.title`, `<kind table>.<column>`,
   // `contact_point[<key>].<column>`, `attendee[<person>]`, and what decorates the record: `tag[<id>]`,
   // `flag[<id>]`, `membership[<list>]`, `link[<id>]` (either end), `about[<id>]`,
@@ -443,6 +447,10 @@ message EarlierRecord {
   // The titles of the other records the version, or its change, names by id, as the list's page
   // gives them.
   repeated EarlierName names = 8;
+  // `assist` when the chat made the change that replaced it, and when it made it the record's
+  // state; empty otherwise.
+  string made_by = 9;
+  string since_made_by = 10;
 }
 
 // One row of the earlier-versions list. The first is the record as it is now, tagged "Current",

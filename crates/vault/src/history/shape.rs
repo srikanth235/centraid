@@ -300,6 +300,10 @@ pub const TABLES: &[(&str, Role)] = &[
     ("locker_key", Role::Outside("custody's own bookkeeping")),
     ("search_word", Role::Outside("the search index")),
     ("search_owed", Role::Outside("the search index")),
+    (
+        "alert",
+        Role::Outside("derived from the event or task it belongs to"),
+    ),
 ];
 
 /// The relations (`edge.rel`) that are not part of an entity's state, with the reason. Every

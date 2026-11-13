@@ -635,7 +635,7 @@ fn picked_rule(d: &mut Driver, i: u64) -> String {
 fn every_writing_row_says_so_when_its_save_is_refused() {
     use centraid_screens::shell::settings::Row;
     use wire::settings_event::{
-        AppearancePicked, Kind as S, RowPressed, TransferRuleChosen, UnitsPicked,
+        AppearancePicked, DetailsPicked, Kind as S, RowPressed, TransferRuleChosen, UnitsPicked,
     };
     for row in Row::ALL {
         let (mut d, _home, i) = started();
@@ -680,6 +680,20 @@ fn every_writing_row_says_so_when_its_save_is_refused() {
                 );
                 answer(&mut d, i, units_write, units_answer(false));
                 "Couldn't save your units. Try again."
+            }
+            Row::Details => {
+                sheet_event(
+                    &mut d,
+                    i,
+                    S::DetailsPicked(DetailsPicked { id: "off".into() }),
+                );
+                answer(
+                    &mut d,
+                    i,
+                    |kind| matches!(kind, wire::effect::Kind::Secrets(batch) if batch.ops.iter().any(|op| op.key == "alert_details")),
+                    units_answer(false),
+                );
+                "Couldn't save that. Try again."
             }
             Row::Appearance => {
                 sheet_event(

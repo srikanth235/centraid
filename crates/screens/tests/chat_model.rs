@@ -50,14 +50,20 @@ fn open_in(chat: &mut Chat, dir: &Path) {
 }
 
 #[test]
-fn a_fresh_chat_checks_and_draws_only_its_header() {
+fn a_fresh_chat_checks_and_draws_its_header_and_what_it_is_looking_at() {
     let chat = Chat::with(None);
     let state = chat.state();
     assert_eq!(state.phase(), Phase::Checking);
     assert_eq!(state.title, "New chat");
     assert_eq!(state.subtitle, "On this phone");
     assert!(state.messages.is_empty() && state.empty_line.is_empty());
-    assert!(state.model_step.is_none());
+    // the blank page of a check says what it looks at (#1188 C12)
+    let step = state.model_step.clone().expect("a step");
+    assert_eq!(step.title, "Checking this phone");
+    assert_eq!(
+        step.note_line,
+        "Looking at memory and free space for the model."
+    );
 }
 
 #[test]
@@ -70,9 +76,14 @@ fn no_model_draws_the_download_step_with_the_size_the_sentence_and_the_action() 
     assert_eq!(step.size_line, "563 MB download");
     assert_eq!(
         step.note_line,
-        "This is the only time Centraid fetches anything."
+        "It stays on this phone, and nothing you ask leaves it."
     );
-    assert_eq!(step.action_label, "Download model");
+    assert_eq!(
+        step.extra_line,
+        "Photos need another 205 MB download, asked when you attach one."
+    );
+    assert_eq!(step.action_label, "Download on Wi‑Fi");
+    assert_eq!(step.secondary_label, "Use mobile data instead");
     assert!(
         state.messages.is_empty(),
         "a member never types into a chat with no model"
@@ -130,6 +141,7 @@ fn the_download_step_tap_progress_then_a_load_and_a_failure_goes_back_with_one_l
     chat.open("");
     chat.event(C::Download(wire::chat_event::DownloadTapped {
         vision: false,
+        ..Default::default()
     }));
     assert_eq!(chat.state().phase(), Phase::Downloading);
     let asked = chat.asked(|kind| match kind {
@@ -167,10 +179,11 @@ fn the_download_step_tap_progress_then_a_load_and_a_failure_goes_back_with_one_l
     }));
     let state = chat.state();
     assert_eq!(state.phase(), Phase::NeedsModel);
-    assert_eq!(state.error, "Download stopped. Retry.");
+    assert_eq!(state.error, "Download stopped. Try again.");
     // and again, to a load
     chat.event(C::Download(wire::chat_event::DownloadTapped {
         vision: false,
+        ..Default::default()
     }));
     assert!(chat.state().error.is_empty());
     chat.event(C::DownloadFinished(wire::chat_event::DownloadFinished {
@@ -186,6 +199,7 @@ fn a_download_tap_outside_the_download_step_does_nothing_and_a_stale_status_cann
     chat.driver.effects.clear();
     chat.event(C::Download(wire::chat_event::DownloadTapped {
         vision: false,
+        ..Default::default()
     }));
     assert_eq!(chat.state().phase(), Phase::Ready);
     assert!(chat.driver.effects.is_empty());
@@ -194,6 +208,7 @@ fn a_download_tap_outside_the_download_step_does_nothing_and_a_stale_status_cann
     chat.open("");
     chat.event(C::Download(wire::chat_event::DownloadTapped {
         vision: false,
+        ..Default::default()
     }));
     // the tab appears again while the transfer runs: the status read must not step back
     chat.open("");
@@ -321,7 +336,9 @@ fn a_photo_with_no_reader_on_the_phone_is_the_offer_with_the_size_and_a_send_wai
     assert_eq!(state.pending[0].label, "Lake");
     let step = state.vision_step.clone().expect("the reader's offer");
     assert_eq!(step.size_line, "Reading photos needs a 205 MB download");
-    assert_eq!(step.action_label, "Download");
+    assert_eq!(step.action_label, "Download on Wi‑Fi");
+    assert_eq!(step.secondary_label, "Use mobile data instead");
+    assert_eq!(step.tertiary_label, "Not now");
     assert!(state.vision_blocked);
     chat.say("what is this?");
     assert!(
@@ -390,6 +407,7 @@ fn a_reader_download_that_stops_is_offered_again_with_one_line_and_its_events_ne
     vault_photo(&mut chat);
     chat.event(C::Download(wire::chat_event::DownloadTapped {
         vision: true,
+        ..Default::default()
     }));
     let asked = chat.asked(|kind| match kind {
         wire::effect::Kind::ModelDownload(download) if download.vision => {
@@ -417,8 +435,48 @@ fn a_reader_download_that_stops_is_offered_again_with_one_line_and_its_events_ne
         vision: true,
     }));
     let step = chat.state().vision_step.clone().unwrap();
-    assert_eq!(step.status_line, "Download stopped. Retry.");
-    assert_eq!(step.action_label, "Download");
+    assert_eq!(step.status_line, "Download stopped. Try again.");
+    assert_eq!(step.action_label, "Download on Wi‑Fi");
+}
+
+fn vision_download(chat: &mut Chat, choice: wire::ChatStepAction) -> Option<wire::ModelDownload> {
+    chat.driver.effects.clear();
+    chat.event(C::Download(wire::chat_event::DownloadTapped {
+        vision: true,
+        choice: choice as i32,
+        ..Default::default()
+    }));
+    download_effect(chat)
+}
+
+#[test]
+fn a_tap_on_the_photo_offer_is_not_consent_to_mobile_data_the_explicit_choice_is() {
+    use wire::chat_event::device_facts::Network;
+    let mut chat = Chat::ready(script(&read_tasks()));
+    facts(&mut chat, Network::Cellular, 2_000_000_000);
+    vault_photo(&mut chat);
+    let download = vision_download(&mut chat, wire::ChatStepAction::Unspecified)
+        .expect("the primary button starts the fetch");
+    assert!(
+        !download.allow_cellular,
+        "a default tap never uses mobile data"
+    );
+    let step = chat.state().vision_step.clone().unwrap();
+    assert_eq!(step.secondary_label, "Use mobile data for the rest");
+    let download = vision_download(&mut chat, wire::ChatStepAction::DownloadCellular)
+        .expect("the explicit choice");
+    assert!(download.allow_cellular);
+}
+
+#[test]
+fn not_now_on_the_photo_sheet_drops_the_photo_and_the_offer() {
+    let mut chat = Chat::ready(script(&read_tasks()));
+    vault_photo(&mut chat);
+    assert!(chat.state().vision_step.is_some());
+    assert!(vision_download(&mut chat, wire::ChatStepAction::NotNow).is_none());
+    let state = chat.state();
+    assert!(state.pending.is_empty());
+    assert!(state.vision_step.is_none() && !state.vision_blocked);
 }
 
 #[test]
@@ -462,6 +520,7 @@ fn attaching_waits_for_a_thread_and_not_while_a_turn_runs() {
     let mut chat = Chat::ready(script(&read_tasks()));
     chat.event(C::Sent(wire::chat_event::Sent {
         text: "tasks?".to_owned(),
+        ..Default::default()
     }));
     vault_photo(&mut chat);
     assert!(chat.state().pending.is_empty());
@@ -483,4 +542,502 @@ fn the_scopes_are_the_vaults_roster() {
             .iter()
             .all(|app| centraid_screens::chat::scope_of(app) == *app)
     );
+}
+
+fn facts(chat: &mut Chat, network: wire::chat_event::device_facts::Network, free_bytes: u64) {
+    chat.event(C::DeviceFacts(wire::chat_event::DeviceFacts {
+        network: network as i32,
+        free_bytes,
+        ..Default::default()
+    }));
+}
+
+fn download_effect(chat: &Chat) -> Option<wire::ModelDownload> {
+    chat.asked(|kind| match kind {
+        wire::effect::Kind::ModelDownload(download) => Some(download.clone()),
+        _ => None,
+    })
+    .pop()
+}
+
+#[test]
+fn a_phone_with_too_little_space_is_told_so_and_nothing_is_fetched_until_it_has_it() {
+    use wire::chat_event::device_facts::Network;
+    let mut chat = Chat::with(None);
+    chat.open("");
+    facts(&mut chat, Network::Wifi, 310_000_000);
+    let step = chat.state().model_step.clone().expect("a step");
+    assert_eq!(step.title, "Not enough space");
+    assert_eq!(
+        step.note_line,
+        "The model needs 563 MB and this phone has 310 MB free. Free up 253 MB, then check again."
+    );
+    assert_eq!(step.action_label, "Check again");
+    assert_eq!(step.action_kind, wire::ChatStepAction::CheckAgain as i32);
+    chat.driver.effects.clear();
+    chat.event(C::Download(wire::chat_event::DownloadTapped::default()));
+    assert!(download_effect(&chat).is_none());
+    assert_eq!(chat.state().phase(), Phase::NeedsModel);
+    // space was made: the same chat offers the download
+    facts(&mut chat, Network::Wifi, 2_000_000_000);
+    assert_eq!(
+        chat.state().model_step.clone().unwrap().action_kind,
+        wire::ChatStepAction::Download as i32
+    );
+}
+
+#[test]
+fn on_mobile_data_the_chat_asks_first_and_waiting_for_wifi_is_a_download_that_will_not_use_it() {
+    use wire::chat_event::device_facts::Network;
+    let mut chat = Chat::with(None);
+    chat.open("");
+    facts(&mut chat, Network::Cellular, 2_000_000_000);
+    let step = chat.state().model_step.clone().expect("a step");
+    assert_eq!(step.title, "Use mobile data?");
+    assert_eq!(
+        (step.action_label.as_str(), step.secondary_label.as_str()),
+        ("Download now", "Wait for Wi‑Fi")
+    );
+    // Wait for Wi-Fi: the download starts and the shell is told not to use mobile data
+    chat.driver.effects.clear();
+    chat.event(C::Download(wire::chat_event::DownloadTapped {
+        vision: false,
+        choice: wire::ChatStepAction::WaitWifi as i32,
+        ..Default::default()
+    }));
+    assert!(!download_effect(&chat).expect("a download").allow_cellular);
+    let step = chat.state().model_step.clone().expect("a step");
+    assert_eq!(step.title, "Waiting for Wi‑Fi");
+    assert_eq!(step.secondary_label, "Use mobile data for the rest");
+    // …and the rest over mobile data takes the same file up again, allowed
+    chat.driver.effects.clear();
+    chat.event(C::Download(wire::chat_event::DownloadTapped {
+        vision: false,
+        choice: wire::ChatStepAction::DownloadCellular as i32,
+        ..Default::default()
+    }));
+    assert!(download_effect(&chat).expect("a download").allow_cellular);
+    assert_eq!(chat.state().model_step.clone().unwrap().title, "");
+}
+
+#[test]
+fn wifi_is_the_default_the_download_carries_no_permission_for_mobile_data() {
+    use wire::chat_event::device_facts::Network;
+    let mut chat = Chat::with(None);
+    chat.open("");
+    facts(&mut chat, Network::Wifi, 2_000_000_000);
+    chat.driver.effects.clear();
+    chat.event(C::Download(wire::chat_event::DownloadTapped::default()));
+    assert!(!download_effect(&chat).expect("a download").allow_cellular);
+}
+
+#[test]
+fn a_phone_with_too_little_memory_is_told_why_and_is_offered_no_download() {
+    use wire::chat_event::device_facts::Network;
+    let mut chat = Chat::with(None);
+    chat.open("");
+    chat.event(C::DeviceFacts(wire::chat_event::DeviceFacts {
+        network: Network::Wifi as i32,
+        free_bytes: 2_000_000_000,
+        memory_bytes: 3_000_000_000,
+    }));
+    let step = chat.state().model_step.clone().expect("a step");
+    assert_eq!(step.title, "Chat can’t run on this phone");
+    assert_eq!(
+        step.note_line,
+        "It needs 4 GB of memory and this phone has 3.0 GB."
+    );
+    assert!(step.action_label.is_empty());
+    chat.driver.effects.clear();
+    chat.event(C::Download(wire::chat_event::DownloadTapped::default()));
+    assert!(
+        download_effect(&chat).is_none(),
+        "nothing is fetched for a phone that cannot run it"
+    );
+}
+
+// ------------------------------------------------------ the two-model window --
+
+fn window_record() -> centraid_assist::record::Record {
+    let current = centraid_assist::record::record().current;
+    let entry = |file: &str, sha: &str, bytes: u64| centraid_assist::record::Entry {
+        url: format!(
+            "https://huggingface.co/x/y/resolve/{}/{file}",
+            "a".repeat(40)
+        ),
+        file_name: file.to_owned(),
+        sha256: sha.repeat(64),
+        bytes,
+        ..current.clone()
+    };
+    centraid_assist::record::Record {
+        adapter: None,
+        current: entry("New-Q4_0.gguf", "b", 604_000_000),
+        previous: Some(entry("Old-Q4_0.gguf", "c", 563_000_000)),
+    }
+}
+
+/// A chat whose models directory holds exactly `files`, over a loader that accepts any of them.
+fn with_files(files: &[&str]) -> (Chat, std::path::PathBuf) {
+    let dir = centraid_ontology::scratch::scratch_dir();
+    std::fs::create_dir_all(&dir).unwrap();
+    for file in files {
+        std::fs::write(dir.join(file), b"weights").unwrap();
+    }
+    let chat = Chat::with(None);
+    chat.driver
+        .handle
+        .assist()
+        .host()
+        .set_loader(Arc::new(Loader(script(&read_tasks()))));
+    (chat, dir)
+}
+
+fn deleted(chat: &Chat) -> Vec<String> {
+    chat.asked(|kind| match kind {
+        wire::effect::Kind::DeleteModelFile(gone) => Some(gone.file_name.clone()),
+        _ => None,
+    })
+}
+
+#[test]
+fn the_model_before_the_current_one_keeps_working_and_a_row_offers_the_new_one_with_its_size() {
+    centraid_assist::record::held_for(window_record(), || {
+        let (mut chat, dir) = with_files(&["Old-Q4_0.gguf"]);
+        open_in(&mut chat, &dir);
+        let state = chat.state();
+        assert_eq!(
+            state.phase(),
+            Phase::Ready,
+            "the older model is in the window"
+        );
+        let row = state.update_step.clone().expect("the update row");
+        assert_eq!(row.title, "A newer model is ready");
+        assert_eq!(row.size_line, "604 MB");
+        assert_eq!(row.action_label, "Update");
+        assert!(
+            deleted(&chat).is_empty(),
+            "nothing goes before the new one is in use"
+        );
+    });
+}
+
+#[test]
+fn the_update_is_fetched_beside_the_old_file_swapped_in_and_the_old_file_deleted() {
+    centraid_assist::record::held_for(window_record(), || {
+        let (mut chat, dir) = with_files(&["Old-Q4_0.gguf"]);
+        open_in(&mut chat, &dir);
+        chat.driver.effects.clear();
+        chat.event(C::Download(wire::chat_event::DownloadTapped {
+            update: true,
+            ..Default::default()
+        }));
+        let fetch = download_effect(&chat).expect("the fetch of the new file");
+        assert_eq!(fetch.file_name, "New-Q4_0.gguf");
+        assert!(!fetch.allow_cellular, "the update waits for Wi‑Fi");
+        assert_eq!(
+            chat.state().phase(),
+            Phase::Ready,
+            "the old model keeps answering"
+        );
+        chat.event(C::DownloadProgress(wire::chat_event::DownloadProgress {
+            done_bytes: 151,
+            total_bytes: 604,
+            vision: false,
+        }));
+        assert!(chat.state().update_step.clone().unwrap().progress_known);
+        // the shell verified the file and put it beside the old one
+        std::fs::write(dir.join("New-Q4_0.gguf"), b"weights").unwrap();
+        chat.event(C::DownloadFinished(wire::chat_event::DownloadFinished {
+            ok: true,
+            vision: false,
+        }));
+        chat.perform();
+        let state = chat.state();
+        assert_eq!(state.phase(), Phase::Ready);
+        assert!(state.update_step.is_none());
+        assert_eq!(deleted(&chat), vec!["Old-Q4_0.gguf".to_owned()]);
+    });
+}
+
+#[test]
+fn a_model_older_than_the_window_says_an_update_is_needed_and_is_removed_after_the_new_one_arrives()
+{
+    centraid_assist::record::held_for(window_record(), || {
+        let (mut chat, dir) = with_files(&["Ancient-Q4_0.gguf"]);
+        open_in(&mut chat, &dir);
+        let state = chat.state();
+        assert_eq!(state.phase(), Phase::NeedsModel);
+        let step = state.model_step.clone().expect("the step");
+        assert_eq!(step.title, "Chat needs a newer model");
+        assert!(step.note_line.contains("604 MB"), "{}", step.note_line);
+        assert_eq!(step.action_label, "Download on Wi‑Fi");
+        chat.event(C::Download(wire::chat_event::DownloadTapped::default()));
+        std::fs::write(dir.join("New-Q4_0.gguf"), b"weights").unwrap();
+        chat.event(C::DownloadFinished(wire::chat_event::DownloadFinished {
+            ok: true,
+            vision: false,
+        }));
+        chat.perform();
+        assert_eq!(chat.state().phase(), Phase::Ready);
+        assert_eq!(deleted(&chat), vec!["Ancient-Q4_0.gguf".to_owned()]);
+    });
+}
+
+#[test]
+fn a_phone_on_the_current_model_has_no_update_row_and_deletes_nothing() {
+    centraid_assist::record::held_for(window_record(), || {
+        let (mut chat, dir) = with_files(&["New-Q4_0.gguf"]);
+        open_in(&mut chat, &dir);
+        assert_eq!(chat.state().phase(), Phase::Ready);
+        assert!(chat.state().update_step.is_none());
+        assert!(deleted(&chat).is_empty());
+    });
+}
+
+// ------------------------------------------------------------ the adapter --
+
+const ADAPTER_BYTES: u64 = 40_000_000;
+const ADAPTER_FILE: &str = "centraid-adapter-dddddddddddd.gguf";
+
+/// The window record with an adapter made for its current model.
+fn adapter_record() -> centraid_assist::record::Record {
+    let mut record = window_record();
+    record.adapter = Some(centraid_assist::record::Adapter {
+        url: format!(
+            "https://huggingface.co/x/adapter/resolve/{}/a.gguf",
+            "a".repeat(40)
+        ),
+        file_name: "a.gguf".to_owned(),
+        sha256: "d".repeat(64),
+        bytes: ADAPTER_BYTES,
+        base_sha256: record.current.sha256.clone(),
+        tools_hash: record.current.tools_hash.clone(),
+        prompt_hash: record.current.prompt_hash.clone(),
+        score: None,
+    });
+    record
+}
+
+fn finished(chat: &mut Chat, ok: bool) {
+    chat.event(C::DownloadFinished(wire::chat_event::DownloadFinished {
+        ok,
+        vision: false,
+    }));
+}
+
+#[test]
+fn the_adapter_rides_in_the_assistants_one_download_with_one_size_and_one_bar() {
+    centraid_assist::record::held_for(adapter_record(), || {
+        let (mut chat, dir) = with_files(&[]);
+        open_in(&mut chat, &dir);
+        let state = chat.state();
+        assert_eq!(state.phase(), Phase::NeedsModel);
+        // 604 MB model + 40 MB adapter, quoted as one size
+        assert_eq!(
+            state.model_step.clone().unwrap().size_line,
+            "644 MB download"
+        );
+        chat.driver.effects.clear();
+        chat.event(C::Download(wire::chat_event::DownloadTapped::default()));
+        let base = download_effect(&chat).expect("the model first");
+        assert_eq!(base.file_name, "New-Q4_0.gguf");
+        // the model arrives: the adapter follows on the same rules, and the phase is still one download
+        chat.driver.effects.clear();
+        std::fs::write(dir.join("New-Q4_0.gguf"), b"weights").unwrap();
+        finished(&mut chat, true);
+        let adapter = download_effect(&chat).expect("then the adapter");
+        assert_eq!(adapter.file_name, ADAPTER_FILE);
+        assert_eq!(adapter.bytes, ADAPTER_BYTES);
+        assert!(!adapter.vision);
+        assert!(!adapter.allow_cellular, "Wi‑Fi, as for the model");
+        assert_eq!(chat.state().phase(), Phase::Downloading);
+        // the bar runs over both files: half the adapter is 604 + 20 of 644
+        chat.event(C::DownloadProgress(wire::chat_event::DownloadProgress {
+            done_bytes: 20_000_000,
+            total_bytes: ADAPTER_BYTES,
+            vision: false,
+        }));
+        let progress = chat.state().model_step.clone().unwrap().progress;
+        assert!((progress - 624.0 / 644.0).abs() < 0.001, "{progress}");
+        std::fs::write(dir.join(ADAPTER_FILE), b"lora").unwrap();
+        finished(&mut chat, true);
+        chat.perform();
+        assert_eq!(chat.state().phase(), Phase::Ready);
+        assert!(
+            deleted(&chat).is_empty(),
+            "the adapter this release names stays"
+        );
+    });
+}
+
+#[test]
+fn an_adapter_that_does_not_arrive_is_not_an_error_the_model_runs_alone() {
+    centraid_assist::record::held_for(adapter_record(), || {
+        let (mut chat, dir) = with_files(&[]);
+        open_in(&mut chat, &dir);
+        chat.event(C::Download(wire::chat_event::DownloadTapped::default()));
+        std::fs::write(dir.join("New-Q4_0.gguf"), b"weights").unwrap();
+        finished(&mut chat, true);
+        finished(&mut chat, false);
+        chat.perform();
+        let state = chat.state();
+        assert_eq!(state.phase(), Phase::Ready);
+        assert!(state.error.is_empty(), "{}", state.error);
+    });
+}
+
+#[test]
+fn the_quote_counts_the_adapter_so_a_phone_without_room_for_both_is_told_before_anything_moves() {
+    centraid_assist::record::held_for(adapter_record(), || {
+        let (mut chat, dir) = with_files(&[]);
+        open_in(&mut chat, &dir);
+        // room for the model and not the adapter after it: the quote counted both, so the tap is
+        // refused whole, and nothing half-fetched is left to explain
+        facts(
+            &mut chat,
+            wire::chat_event::device_facts::Network::Wifi,
+            620_000_000,
+        );
+        chat.driver.effects.clear();
+        chat.event(C::Download(wire::chat_event::DownloadTapped::default()));
+        assert!(download_effect(&chat).is_none());
+        assert_eq!(chat.state().phase(), Phase::NeedsModel);
+    });
+}
+
+#[test]
+fn an_adapter_file_this_release_does_not_name_goes_with_the_leftovers_and_the_one_it_names_stays() {
+    centraid_assist::record::held_for(adapter_record(), || {
+        let (mut chat, dir) = with_files(&[
+            "New-Q4_0.gguf",
+            ADAPTER_FILE,
+            "centraid-adapter-ffffffffffff.gguf",
+        ]);
+        open_in(&mut chat, &dir);
+        assert_eq!(chat.state().phase(), Phase::Ready);
+        assert_eq!(
+            deleted(&chat),
+            vec!["centraid-adapter-ffffffffffff.gguf".to_owned()]
+        );
+        assert!(
+            chat.state().model_step.is_none() && chat.state().update_step.is_none(),
+            "the adapter adds no row"
+        );
+    });
+}
+
+#[test]
+fn an_adapter_alone_is_not_a_model_and_does_not_say_an_update_is_needed() {
+    centraid_assist::record::held_for(adapter_record(), || {
+        let (mut chat, dir) = with_files(&[ADAPTER_FILE]);
+        open_in(&mut chat, &dir);
+        let state = chat.state();
+        assert_eq!(state.phase(), Phase::NeedsModel);
+        assert_ne!(
+            state.model_step.clone().unwrap().title,
+            "Chat needs a newer model"
+        );
+    });
+}
+
+#[test]
+fn the_offer_cases_in_the_shared_fixture_hold() {
+    let text = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../contracts/assist/adapter-offer-cases.json"),
+    )
+    .unwrap();
+    let all: serde_json::Value = serde_json::from_str(&text).unwrap();
+    for case in all["cases"].as_array().unwrap() {
+        let name = case["name"].as_str().unwrap();
+        let files: Vec<&str> = case["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| f.as_str().unwrap())
+            .collect();
+        centraid_assist::record::held_for(adapter_record(), || {
+            let (mut chat, dir) = with_files(&files);
+            open_in(&mut chat, &dir);
+            let state = chat.state();
+            assert_eq!(state.update_step.is_some(), case["row"], "{name}");
+            if let Some(row) = &state.update_step {
+                let size = case["row_size"].as_str().unwrap_or("40.0 MB");
+                assert_eq!(row.size_line, size, "{name}");
+                assert_eq!(row.title, "A newer model is ready", "{name}");
+            }
+            let want: Vec<String> = case["deleted"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|f| f.as_str().unwrap().to_owned())
+                .collect();
+            assert_eq!(deleted(&chat), want, "{name}");
+        });
+    }
+}
+
+#[test]
+fn nothing_is_fetched_until_the_member_taps_the_row_and_then_only_the_adapter() {
+    centraid_assist::record::held_for(adapter_record(), || {
+        let (mut chat, dir) = with_files(&["New-Q4_0.gguf"]);
+        open_in(&mut chat, &dir);
+        assert_eq!(
+            chat.state().phase(),
+            Phase::Ready,
+            "chat works on the model alone"
+        );
+        assert!(chat.state().update_step.is_some());
+        assert!(download_effect(&chat).is_none(), "an offer fetches nothing");
+        chat.driver.effects.clear();
+        chat.event(C::Download(wire::chat_event::DownloadTapped {
+            update: true,
+            ..Default::default()
+        }));
+        let fetch = download_effect(&chat).expect("the tap fetches");
+        assert_eq!(fetch.file_name, ADAPTER_FILE);
+        assert!(
+            !fetch.allow_cellular,
+            "Wi‑Fi unless the member chose mobile data"
+        );
+        assert_eq!(
+            chat.state().phase(),
+            Phase::Ready,
+            "chat keeps working during the fetch"
+        );
+        chat.event(C::DownloadProgress(wire::chat_event::DownloadProgress {
+            done_bytes: 10_000_000,
+            total_bytes: ADAPTER_BYTES,
+            vision: false,
+        }));
+        let row = chat.state().update_step.clone().unwrap();
+        assert!(row.progress_known);
+        assert!(
+            (row.progress - 0.25).abs() < 0.001,
+            "the bar is the adapter's own"
+        );
+        std::fs::write(dir.join(ADAPTER_FILE), b"lora").unwrap();
+        finished(&mut chat, true);
+        chat.perform();
+        let state = chat.state();
+        assert_eq!(state.phase(), Phase::Ready, "the model reloaded with it");
+        assert!(state.update_step.is_none());
+    });
+}
+
+#[test]
+fn an_adapter_fetch_that_stops_short_is_the_rows_retry_and_chat_keeps_working() {
+    centraid_assist::record::held_for(adapter_record(), || {
+        let (mut chat, dir) = with_files(&["New-Q4_0.gguf"]);
+        open_in(&mut chat, &dir);
+        chat.event(C::Download(wire::chat_event::DownloadTapped {
+            update: true,
+            ..Default::default()
+        }));
+        finished(&mut chat, false);
+        let state = chat.state();
+        assert_eq!(state.phase(), Phase::Ready);
+        assert_eq!(state.update_step.clone().unwrap().action_label, "Try again");
+    });
 }

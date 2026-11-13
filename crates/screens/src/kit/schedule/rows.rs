@@ -267,9 +267,10 @@ pub fn meta(locale: Locale, task: &wire::AgendaTask, ctx: &Context) -> String {
     parts.join(META_SEPARATOR)
 }
 
-/// THE OWNER'S RULING ON A DATE-ONLY REMINDER: it names a moment only when the
-/// core supplies one (`remind_at_local`); a date has no moment to count back
-/// from, so it says "on the day" and never invents 09:00.
+/// A REMINDER NAMES A MOMENT WHEN THE CORE SUPPLIES ONE (`remind_at_local`). A date-only due has
+/// no moment to count back from, but its alert does sound at the day's own convention, 09:00
+/// that day (#1188, NA6), and the row says so because it is true; the due itself never gets the
+/// time. Only a task the core placed no moment for says "on the day".
 #[must_use]
 pub fn reminder_part(
     locale: Locale,

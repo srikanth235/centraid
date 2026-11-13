@@ -1,9 +1,10 @@
 //! The finished state the shells draw: every label, count and line is made here.
 
 use centraid_api_proto::core_v1 as wire;
+use wire::chat_event::device_facts::Network;
 use wire::chat_state::Phase;
 
-use super::model::{Chat, Msg, Pending, Proposal, Row, Stage, VisionPhase};
+use super::model::{Chat, Fail, Msg, Pending, Proposal, Row, Stage, Update, VisionPhase};
 use super::when;
 use crate::kit::quantity::{Quantity, UnitsPref};
 use crate::screen::Ctx;
@@ -52,39 +53,196 @@ fn spoken(text: &str) -> String {
 impl Chat {
     fn model_step(&self, locale: Locale) -> Option<wire::ChatModelStep> {
         match self.phase {
-            Phase::NeedsModel => Some(wire::ChatModelStep {
-                size_line: if self.model_bytes() > 0 {
-                    fill(
-                        &words::size_line(locale),
-                        &[("size", &size_text(self.model_bytes()))],
-                    )
-                } else {
-                    String::new()
-                },
-                note_line: words::download_note(locale),
-                action_label: words::download_action(locale),
-                ..wire::ChatModelStep::default()
-            }),
-            Phase::Downloading => Some(wire::ChatModelStep {
-                progress_known: self.progress.is_some(),
-                progress: self.progress.unwrap_or(0.0),
-                status_line: percent(locale, self.progress),
-                ..wire::ChatModelStep::default()
-            }),
+            Phase::NeedsModel if self.too_little_memory() => Some(self.unavailable_step(locale)),
+            Phase::NeedsModel => Some(self.needs_step(locale)),
+            Phase::Downloading => {
+                let waiting = self.waiting_for_wifi();
+                Some(wire::ChatModelStep {
+                    progress_known: self.progress.is_some(),
+                    progress: self.progress.unwrap_or(0.0),
+                    status_line: percent(locale, self.progress),
+                    title: if waiting {
+                        words::waiting_wifi(locale)
+                    } else {
+                        String::new()
+                    },
+                    note_line: if waiting {
+                        words::waiting_wifi_note(locale)
+                    } else {
+                        words::downloading_note(locale)
+                    },
+                    secondary_label: if waiting {
+                        words::use_mobile_data_rest(locale)
+                    } else {
+                        String::new()
+                    },
+                    secondary_kind: if waiting {
+                        wire::ChatStepAction::DownloadCellular as i32
+                    } else {
+                        0
+                    },
+                    ..wire::ChatModelStep::default()
+                })
+            }
             Phase::Loading => Some(wire::ChatModelStep {
                 status_line: words::loading(locale),
                 ..wire::ChatModelStep::default()
             }),
-            Phase::Unavailable => Some(wire::ChatModelStep {
-                status_line: words::unavailable(locale),
+            Phase::Unavailable => Some(self.unavailable_step(locale)),
+            // CHECKING SAYS WHAT IT LOOKS AT, not a blank page (#1188 C12).
+            Phase::Checking => Some(wire::ChatModelStep {
+                title: words::checking_title(locale),
+                note_line: words::checking_body(locale),
                 ..wire::ChatModelStep::default()
             }),
             _ => None,
         }
     }
 
+    /// CHAT CANNOT RUN HERE, and why when the phone said: too little memory, in the board's words.
+    fn unavailable_step(&self, locale: Locale) -> wire::ChatModelStep {
+        if self.too_little_memory() {
+            return wire::ChatModelStep {
+                title: words::unavailable_title(locale),
+                note_line: fill(
+                    &words::unavailable_memory(locale),
+                    &[("have", &size_text(self.memory_bytes))],
+                ),
+                ..wire::ChatModelStep::default()
+            };
+        }
+        wire::ChatModelStep {
+            status_line: words::unavailable(locale),
+            ..wire::ChatModelStep::default()
+        }
+    }
+
+    /// The download is going, but this phone is on mobile data (or offline) and the member has not
+    /// allowed it: the shell holds the transfer until Wi-Fi comes.
+    fn waiting_for_wifi(&self) -> bool {
+        !self.cellular_ok && matches!(self.network, Network::Cellular | Network::Offline)
+    }
+
+    /// THE STEP BEFORE A DOWNLOAD, by what the phone says: not enough space says so and offers a
+    /// look again; on mobile data it asks first; otherwise it offers Wi-Fi, and mobile data as the
+    /// second choice. The photo reader's own download is named, so the first is not "the only one".
+    fn needs_step(&self, locale: Locale) -> wire::ChatModelStep {
+        let bytes = self.model_bytes();
+        let size = size_text(bytes);
+        let size_line = if bytes > 0 {
+            fill(&words::size_line(locale), &[("size", &size)])
+        } else {
+            String::new()
+        };
+        if self.update_needed && !self.too_little_space(bytes) {
+            // OLDER THAN THE WINDOW (ChatUpdateNeeded.dc.html): the same two choices as a first
+            // download, under the reason.
+            return wire::ChatModelStep {
+                title: words::update_needed_title(locale),
+                note_line: fill(&words::update_needed_body(locale), &[("size", &size)]),
+                action_label: words::download_action(locale),
+                action_kind: wire::ChatStepAction::Download as i32,
+                secondary_label: words::use_mobile_data(locale),
+                secondary_kind: wire::ChatStepAction::DownloadCellular as i32,
+                ..wire::ChatModelStep::default()
+            };
+        }
+        if self.too_little_space(bytes) {
+            return wire::ChatModelStep {
+                size_line,
+                title: words::low_space_title(locale),
+                note_line: fill(
+                    &words::low_space_body(locale),
+                    &[
+                        ("need", &size),
+                        ("free", &size_text(self.free_bytes)),
+                        ("short", &size_text(bytes - self.free_bytes)),
+                    ],
+                ),
+                action_label: words::check_again(locale),
+                action_kind: wire::ChatStepAction::CheckAgain as i32,
+                ..wire::ChatModelStep::default()
+            };
+        }
+        if self.network == Network::Cellular && !self.cellular_ok {
+            return wire::ChatModelStep {
+                size_line,
+                title: words::mobile_data_title(locale),
+                note_line: fill(&words::mobile_data_body(locale), &[("size", &size)]),
+                action_label: words::download_now(locale),
+                action_kind: wire::ChatStepAction::DownloadCellular as i32,
+                secondary_label: words::wait_wifi(locale),
+                secondary_kind: wire::ChatStepAction::WaitWifi as i32,
+                ..wire::ChatModelStep::default()
+            };
+        }
+        wire::ChatModelStep {
+            size_line,
+            note_line: words::download_note(locale),
+            extra_line: fill(
+                &words::download_photo_note(locale),
+                &[("size", &size_text(super::asset::VISION.bytes))],
+            ),
+            action_label: words::download_action(locale),
+            action_kind: wire::ChatStepAction::Download as i32,
+            secondary_label: words::use_mobile_data(locale),
+            secondary_kind: wire::ChatStepAction::DownloadCellular as i32,
+            ..wire::ChatModelStep::default()
+        }
+    }
+
+    /// THE UPDATE ROW (ChatModelUpdate.dc.html): a newer model than the one in use, above the
+    /// composer, while the older one keeps answering.
+    fn update_step(&self, locale: Locale) -> Option<wire::ChatModelStep> {
+        if self.phase != Phase::Ready || !(self.on_previous || self.adapter_only) {
+            return None;
+        }
+        let title = words::update_title(locale);
+        let bytes = if self.adapter_only {
+            super::asset::adapter().map_or(0, |adapter| adapter.bytes)
+        } else {
+            self.model_bytes()
+        };
+        match self.update {
+            Update::None => None,
+            Update::Offered | Update::Failed => Some(wire::ChatModelStep {
+                title,
+                size_line: size_text(bytes),
+                action_label: if self.update == Update::Failed {
+                    words::retry(locale)
+                } else {
+                    words::update_action(locale)
+                },
+                action_kind: wire::ChatStepAction::Download as i32,
+                status_line: if self.update == Update::Failed {
+                    self.fail_line(Fail::DownloadStopped, locale)
+                } else if self.too_little_space(bytes) {
+                    words::low_space_title(locale)
+                } else {
+                    String::new()
+                },
+                ..wire::ChatModelStep::default()
+            }),
+            Update::Downloading => {
+                let waiting = !self.cellular_ok
+                    && matches!(self.network, Network::Cellular | Network::Offline);
+                Some(wire::ChatModelStep {
+                    title,
+                    progress_known: self.update_progress.is_some(),
+                    progress: self.update_progress.unwrap_or(0.0),
+                    status_line: if waiting {
+                        words::waiting_wifi(locale)
+                    } else {
+                        percent(locale, self.update_progress)
+                    },
+                    ..wire::ChatModelStep::default()
+                })
+            }
+        }
+    }
+
     fn model_bytes(&self) -> u64 {
-        super::asset::MODEL.bytes
+        super::asset::assistant_bytes()
     }
 
     fn vision_step(&self, locale: Locale) -> Option<wire::ChatModelStep> {
@@ -92,25 +250,54 @@ impl Chat {
             return None;
         }
         match self.vision.phase {
-            VisionPhase::Needs if self.wants_reader() => Some(wire::ChatModelStep {
-                size_line: fill(
-                    &words::vision_line(locale),
-                    &[("size", &size_text(self.vision_bytes()))],
-                ),
-                action_label: words::vision_action(locale),
-                status_line: self
-                    .vision
-                    .error
-                    .map(|fail| self.fail_line(fail, locale))
-                    .unwrap_or_default(),
-                ..wire::ChatModelStep::default()
-            }),
-            VisionPhase::Downloading => Some(wire::ChatModelStep {
-                progress_known: self.vision.progress.is_some(),
-                progress: self.vision.progress.unwrap_or(0.0),
-                status_line: percent(locale, self.vision.progress),
-                ..wire::ChatModelStep::default()
-            }),
+            // THE PHOTO READER'S SHEET (ChatPhotoDownload.dc.html): Wi-Fi is the first choice, mobile
+            // data an explicit second, Not now takes the photo off. A tap on the offer is never the
+            // member's word for mobile data.
+            VisionPhase::Needs if self.wants_reader() => {
+                let size = size_text(self.vision_bytes());
+                Some(wire::ChatModelStep {
+                    size_line: fill(&words::vision_line(locale), &[("size", &size)]),
+                    title: words::photo_reader_title(locale),
+                    note_line: fill(&words::photo_reader_body(locale), &[("size", &size)]),
+                    action_label: words::download_action(locale),
+                    action_kind: wire::ChatStepAction::Download as i32,
+                    secondary_label: words::use_mobile_data(locale),
+                    secondary_kind: wire::ChatStepAction::DownloadCellular as i32,
+                    tertiary_label: words::not_now(locale),
+                    tertiary_kind: wire::ChatStepAction::NotNow as i32,
+                    status_line: self
+                        .vision
+                        .error
+                        .map(|fail| self.fail_line(fail, locale))
+                        .unwrap_or_default(),
+                    ..wire::ChatModelStep::default()
+                })
+            }
+            VisionPhase::Downloading => {
+                let waiting = !self.vision.cellular_ok
+                    && matches!(self.network, Network::Cellular | Network::Offline);
+                Some(wire::ChatModelStep {
+                    progress_known: self.vision.progress.is_some(),
+                    progress: self.vision.progress.unwrap_or(0.0),
+                    status_line: percent(locale, self.vision.progress),
+                    title: if waiting {
+                        words::waiting_wifi(locale)
+                    } else {
+                        String::new()
+                    },
+                    secondary_label: if waiting {
+                        words::use_mobile_data_rest(locale)
+                    } else {
+                        String::new()
+                    },
+                    secondary_kind: if waiting {
+                        wire::ChatStepAction::DownloadCellular as i32
+                    } else {
+                        0
+                    },
+                    ..wire::ChatModelStep::default()
+                })
+            }
             VisionPhase::Loading => Some(wire::ChatModelStep {
                 status_line: words::vision_loading(locale),
                 ..wire::ChatModelStep::default()
@@ -123,7 +310,7 @@ impl Chat {
     /// (a camera-roll image kept only as a thumbnail, a photo since deleted) would be dropped from
     /// the answer without a word. So the question can be asked again only when everything it
     /// carried still can.
-    fn retry_loses_an_attachment(&self) -> bool {
+    pub(super) fn retry_loses_an_attachment(&self) -> bool {
         self.messages
             .iter()
             .rev()
@@ -198,9 +385,15 @@ impl Chat {
             },
             scope_app: self.scope.clone(),
             messages: if ready {
+                let editable = self.editable().filter(|_| !self.editing);
                 self.messages
                     .iter()
-                    .map(|message| self.message(message, locale))
+                    .enumerate()
+                    .map(|(at, message)| {
+                        let mut drawn = self.message(message, locale);
+                        drawn.can_edit = editable == Some(at);
+                        drawn
+                    })
                     .collect()
             } else {
                 Vec::new()
@@ -226,12 +419,33 @@ impl Chat {
                 .map(|fail| self.fail_line(fail, locale))
                 .unwrap_or_default(),
             model_step: self.model_step(locale),
+            update_step: self.update_step(locale),
             composer_placeholder: words::composer_placeholder(locale),
             send_label: words::send(locale),
             stop_label: words::stop(locale),
             new_chat_label: words::new_chat(locale),
             retry_label: words::retry(locale),
             copy_label: words::copy(locale),
+            edit_label: words::edit(locale),
+            editing: ready && self.editing,
+            edit_text: if ready && self.editing {
+                self.messages
+                    .iter()
+                    .rfind(|message| message.user)
+                    .map(|message| message.text.clone())
+                    .unwrap_or_default()
+            } else {
+                String::new()
+            },
+            edit_token: self.edit_token,
+            editing_title: words::editing_title(locale),
+            editing_body: words::editing_body(locale),
+            cancel_edit_label: words::cancel_edit(locale),
+            dictate_label: words::dictate(locale),
+            listening_label: words::listening(locale),
+            dictation_off_label: words::dictation_off(locale),
+            latest_label: words::latest(locale),
+            jump_to_latest_label: words::jump_to_latest(locale),
             can_retry: ready
                 && !self.running
                 && self.asked.is_some()
@@ -324,6 +538,12 @@ impl Chat {
             copied_label: words::copied(locale),
             scope_all_label: words::scope_all(locale),
             scope_label: words::scope_label(locale),
+            accepted_send: self.accepted_send,
+            threads_error: if self.threads_error {
+                words::error_thread_write(locale)
+            } else {
+                String::new()
+            },
             scopes: super::scopable_apps()
                 .into_iter()
                 .map(|app| wire::ChatScopeOption {
@@ -354,9 +574,16 @@ impl Chat {
             label.push_str(": ");
             label.push_str(&attachment_label(held, locale));
         }
-        if message.stopped {
+        let mark = if message.failed {
+            words::did_not_finish(locale)
+        } else if message.stopped {
+            words::stopped(locale)
+        } else {
+            String::new()
+        };
+        if !mark.is_empty() {
             label.push_str(". ");
-            label.push_str(&words::stopped(locale));
+            label.push_str(&mark);
         }
         wire::ChatMessage {
             id: message.id,
@@ -366,7 +593,12 @@ impl Chat {
                 wire::chat_message::Role::Assistant
             } as i32,
             text: message.text.clone(),
-            cards: message.cards.clone(),
+            cards: message
+                .cards
+                .iter()
+                .enumerate()
+                .map(|(at, card)| self.reveals.card(card, message.id, at, locale))
+                .collect(),
             streaming: message.streaming,
             accessibility_label: label,
             attachments: message
@@ -380,6 +612,9 @@ impl Chat {
                 String::new()
             },
             pending: message.proposal.as_ref().map(|held| proposal(held, locale)),
+            can_edit: false,
+            mark,
+            mark_failed: message.failed,
         }
     }
 }
@@ -469,6 +704,7 @@ fn proposal(held: &Proposal, locale: Locale) -> wire::ChatPending {
         cancel_label: words::not_now(locale),
         destructive: held.destructive,
         settled_line: held.line.clone(),
+        undo: held.undo.iter().filter_map(|undo| undo.status()).collect(),
         accessibility_label: parts.join(". "),
     }
 }

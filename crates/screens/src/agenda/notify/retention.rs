@@ -236,9 +236,15 @@ fn event_minutes(id: &str) -> Option<i64> {
 }
 
 fn event_eligible(event: &wire::AgendaEvent, minutes: i64) -> bool {
-    !event.all_day
-        && event.status.as_deref() != Some("cancelled")
-        && event.reminders.iter().any(|r| r.minutes_before == minutes)
+    event.status.as_deref() != Some("cancelled")
+        && if event.all_day {
+            event
+                .reminders
+                .first()
+                .is_some_and(|r| r.minutes_before == minutes)
+        } else {
+            event.reminders.iter().any(|r| r.minutes_before == minutes)
+        }
 }
 
 fn same_fingerprint(stored: &str, current: &str) -> bool {

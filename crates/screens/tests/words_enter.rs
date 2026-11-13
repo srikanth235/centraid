@@ -107,6 +107,7 @@ fn restore_answer(vaults: &[(&str, u32, i64, &str)], unclaimed: &[u32]) -> wire:
                     path: (*path).to_owned(),
                     rows: *rows,
                     safety_number: (*safety).to_owned(),
+                    ..wire::RestoredVault::default()
                 })
                 .collect(),
             gap_scanned: 0,
@@ -116,8 +117,59 @@ fn restore_answer(vaults: &[(&str, u32, i64, &str)], unclaimed: &[u32]) -> wire:
                     index: *index,
                     vault_id: "ab".repeat(32),
                     reason: "logs only".to_owned(),
+                    claimed: false,
                 })
                 .collect(),
+            older_offers: Vec::new(),
+        })),
+    };
+    wire::OffThreadDone {
+        tag: "restore".to_owned(),
+        bytes: wire::VaultCalled {
+            response: response.encode_to_vec(),
+            error: None,
+        }
+        .encode_to_vec(),
+    }
+}
+
+fn restore_offer(newest_ms: i64, offered_ms: i64) -> wire::OffThreadDone {
+    let response = wire::Response {
+        kind: Some(wire::response::Kind::Restore(wire::RestoreResponse {
+            vaults: Vec::new(),
+            gap_scanned: 0,
+            unclaimed: Vec::new(),
+            older_offers: vec![wire::OlderOffer {
+                index: 0,
+                vault_id: "ab".repeat(32),
+                newest_taken_at_ms: newest_ms,
+                offered_taken_at_ms: offered_ms,
+                device: "Office NAS".to_owned(),
+            }],
+        })),
+    };
+    wire::OffThreadDone {
+        tag: "restore".to_owned(),
+        bytes: wire::VaultCalled {
+            response: response.encode_to_vec(),
+            error: None,
+        }
+        .encode_to_vec(),
+    }
+}
+
+/// A restore whose claim LANDED but whose vault could not be kept on this phone: nothing was
+/// restored, the old phone is already stopped.
+fn restore_claimed_unfinished() -> wire::OffThreadDone {
+    let response = wire::Response {
+        kind: Some(wire::response::Kind::Restore(wire::RestoreResponse {
+            unclaimed: vec![wire::UnclaimedVault {
+                index: 0,
+                vault_id: "ab".repeat(32),
+                reason: "logs only".to_owned(),
+                claimed: true,
+            }],
+            ..wire::RestoreResponse::default()
         })),
     };
     wire::OffThreadDone {
@@ -294,7 +346,10 @@ fn a_valid_phrase_opens_the_one_control_and_a_restore_answer_drops_every_word() 
     primary(&mut phone);
     let state = phone.enter();
     assert_eq!(state.phase, Phase::Working as i32);
-    assert_eq!(state.progress, "Looking for your backup device…");
+    assert_eq!(
+        state.progress,
+        "Looking for your backup device and checking what it holds. This can take a minute."
+    );
 
     deliver(
         &mut phone,
@@ -312,11 +367,58 @@ fn a_valid_phrase_opens_the_one_control_and_a_restore_answer_drops_every_word() 
 }
 
 #[test]
+fn a_restore_with_previews_still_on_the_backup_device_finishes_and_keeps_the_vault() {
+    let mut phone = filled(routes::restore(), Some(CODE));
+    primary(&mut phone);
+    let response = wire::Response {
+        kind: Some(wire::response::Kind::Restore(wire::RestoreResponse {
+            vaults: vec![wire::RestoredVault {
+                vault_id: "id-0".to_owned(),
+                index: 0,
+                path: "/v/a/vault.db".to_owned(),
+                rows: 10,
+                safety_number: "12345 67890".to_owned(),
+                derivatives_landed: 3,
+                derivatives_total: 12,
+            }],
+            ..wire::RestoreResponse::default()
+        })),
+    };
+    deliver(
+        &mut phone,
+        wire::OffThreadDone {
+            tag: "restore".to_owned(),
+            bytes: wire::VaultCalled {
+                response: response.encode_to_vec(),
+                error: None,
+            }
+            .encode_to_vec(),
+        },
+    );
+    assert!(phone.enter().finished);
+    assert_eq!(phone.keeper.log(), vec!["adopt [0] seed=true".to_owned()]);
+    assert_eq!(
+        centraid_screens::strings::custody::restore_previews_pending(
+            centraid_screens::strings::Locale::En
+        ),
+        "Restored. Some previews load when you open them."
+    );
+}
+
+#[test]
 fn an_unreachable_gateway_or_an_empty_one_keeps_the_words_on_screen_with_the_sentence() {
     let cases = [
         (
+            restore_refused(wire::ErrorCode::BackupUnreadable),
+            "This version of Centraid can't open this backup.",
+        ),
+        (
+            restore_refused(wire::ErrorCode::BackupFromNewerBuild),
+            "A newer Centraid made this backup. Update Centraid.",
+        ),
+        (
             restore_refused(wire::ErrorCode::PeerUnreachable),
-            "Couldn't reach your backup device. Check “centraid-gateway serve” is running, or paste a new pairing code.",
+            "Couldn't reach your backup device. Check it is on and connected, or paste a new pairing code.",
         ),
         (
             restore_answer(&[], &[]),
@@ -325,6 +427,12 @@ fn an_unreachable_gateway_or_an_empty_one_keeps_the_words_on_screen_with_the_sen
         (
             restore_refused(wire::ErrorCode::Unauthorized),
             "Your backup device refused the restore. Try again, and check it's the one you paired.",
+        ),
+        // A CLAIM THAT LANDED says the old phone has stopped and to restore again; it never says
+        // "unclaimed" and never implies the old phone still works.
+        (
+            restore_claimed_unfinished(),
+            "Your old phone has stopped, but this phone couldn't finish restoring. Restore again to finish.",
         ),
         // A BACKUP THIS PHONE WOULD NOT ACCEPT says so, never "could not reach".
         (
@@ -343,6 +451,57 @@ fn an_unreachable_gateway_or_an_empty_one_keeps_the_words_on_screen_with_the_sen
         assert!(!phone.shell.device.contains_key(secrets::LOCAL_SEED));
         assert!(phone.shell.synced.is_empty());
     }
+}
+
+/// **#1188, B5.** A newest backup that will not open and an older one that does is OFFERED: the
+/// screen says which, claims nothing, stores nothing, and either restores the older one on a yes
+/// or goes back to the scan step for a different backup device.
+#[test]
+fn an_older_backup_is_offered_and_taken_only_on_a_yes() {
+    // Tuesday 10 November 2026, 21:40 UTC, and four days before it.
+    let newest = 1_794_346_800_000_i64;
+    let older = newest - 4 * 86_400_000;
+    let mut phone = filled(routes::restore(), Some(CODE));
+    primary(&mut phone);
+    deliver(&mut phone, restore_offer(newest, older));
+    let state = phone.enter();
+    assert_eq!(state.phase, Phase::Offer as i32);
+    assert_eq!(state.title, "Newest backup won't open");
+    assert!(state.body.contains("4 days older"), "{}", state.body);
+    assert!(
+        state
+            .body
+            .contains("Another backup device may hold a newer one.")
+    );
+    assert!(
+        state.primary_label.starts_with("Restore "),
+        "{}",
+        state.primary_label
+    );
+    assert!(state.primary_enabled);
+    assert_eq!(state.another_label, "Scan another QR code");
+    assert_eq!(state.offer_rows.len(), 2);
+    assert!(!state.offer_rows[0].opens && state.offer_rows[1].opens);
+    assert_eq!(state.offer_rows[0].title, "Office NAS");
+    assert!(state.cells.is_empty() && !state.secure, "no word is drawn");
+    // NOTHING WAS STORED OR CLAIMED.
+    assert!(!phone.shell.device.contains_key(secrets::LOCAL_SEED));
+    assert!(phone.keeper.log().is_empty());
+
+    // A DIFFERENT BACKUP DEVICE: back to the scan step, the code field empty, the words kept.
+    phone.send_enter(K::Another(wire::WordsAnother {}));
+    let state = phone.enter();
+    assert_eq!(state.phase, Phase::Entering as i32);
+    assert_eq!(state.endpoint, "");
+    assert!(state.offer_rows.is_empty());
+    assert_eq!(state.cells[0].typed, "abandon");
+
+    // A YES: the restore is sent again, asking for the older backup.
+    let mut phone = filled(routes::restore(), Some(CODE));
+    primary(&mut phone);
+    deliver(&mut phone, restore_offer(newest, older));
+    phone.send_enter(K::Primary(wire::WordsPrimary {}));
+    assert_eq!(phone.enter().phase, Phase::Working as i32);
 }
 
 #[test]

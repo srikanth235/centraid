@@ -1,9 +1,9 @@
 //! THE FOLLOW COORDINATOR (#1183): when the phone's own stores are followed into the vault.
 //!
 //! The apps follow the phone's stores ONE WAY into the vault: contacts into People, calendars
-//! into Calendar, a picked folder into Docs, the health store into Health (the camera roll has
+//! into Calendar, reminders into Reminders, a picked folder into Docs, the health store into Health (the camera roll has
 //! its own importer, `imports.camera_roll`). Whether a store changed is a question the whole
-//! session asks, not a home screen, so one service answers it for all four.
+//! session asks, not a home screen, so one service answers it for all five.
 //!
 //! | Piece | What it is |
 //! |---|---|
@@ -15,7 +15,7 @@
 //!
 //! - **The app came to the foreground**: every store.
 //! - **The OS said a store changed** while the app runs (`PhoneChanged`, from the watches the
-//!   coordinator asks for): contacts and calendar. Files and Health have no cheap change
+//!   coordinator asks for): contacts, calendar and reminders. Files and Health have no cheap change
 //!   notice on both platforms, so for them the foreground is the trigger.
 //! - **A background window the pass service was granted** (the one that walks the camera roll
 //!   and backs up), once that work has ended: every store once, before the window is reported

@@ -172,6 +172,7 @@ impl Rig {
         let mut request: wire::LoadRequest = load::calendar::Upcoming {
             from: Some(format!("{}T00:00:00Z", plus(day, -1))),
             to: Some(format!("{}T00:00:00Z", plus(day, 2))),
+            alerts: None,
         }
         .into();
         request.zone.clone_from(&self.zone);

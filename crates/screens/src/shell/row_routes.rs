@@ -138,20 +138,18 @@ pub fn earlier(
     Some(crate::kit::search::earlier_route(locale, screen, id))
 }
 
-/// A Locker item, or the member action a chat card asks of it
-/// (`reveal:password`, `code:totp`, `edit_secret:password`, `export:`).
+/// A Locker item, or the page a chat card's member action opens: `edit_secret:password` the
+/// editor, `export:` the export. A `reveal:` or `code:` card opens nothing here: the chat shows
+/// the value on the card itself (#1188), so a row of that kind is only the item.
 fn locker_item(row: &RowRef, parent: &str) -> wire::Route {
     let (word, column) = row
         .qualifier
         .split_once(':')
         .unwrap_or((row.qualifier.as_str(), ""));
     match word {
-        "reveal" | "code" if !row.id.is_empty() && !column.is_empty() => {
-            locker::routes::item(&row.id, parent, &row.qualifier)
-        }
         "edit_secret" if !row.id.is_empty() && !column.is_empty() => locker::routes::edit(&row.id),
         "export" => locker::routes::export(parent),
-        _ => locker::routes::item(&row.id, parent, ""),
+        _ => locker::routes::item(&row.id, parent),
     }
 }
 
@@ -369,23 +367,16 @@ mod tests {
     fn a_locker_member_action_picks_the_page_that_performs_it() {
         let mut row = RowRef::new("locker", "locker_item", "i1", "Bank");
         assert_eq!(screen(route(&row, "", &[])), locker::ITEM);
-        row.qualifier = "reveal:password".to_owned();
-        let Some(wire::Route {
-            args: Some(wire::route::Args::LockerItem(item)),
-            ..
-        }) = route(&row, "", &[])
-        else {
-            panic!("not an item");
-        };
-        assert_eq!(item.follow, "reveal:password");
         row.qualifier = "edit_secret:password".to_owned();
         assert_eq!(screen(route(&row, "", &[])), locker::EDITOR);
         row.qualifier = "export:".to_owned();
         assert_eq!(screen(route(&row, "", &[])), locker::EXPORT);
-        // A reveal naming no column is only the item.
-        // no action, an unknown one, or one with no field: the plain card, never a crash
+        // A reveal or a code is shown on the chat card, never on Locker's page: the row is only
+        // the item. So is no action, an unknown one, or one with no field.
         for plain in [
             "",
+            "reveal:password",
+            "code:otp_seed",
             "wipe:password",
             "reveal:",
             "reveal",
@@ -400,17 +391,7 @@ mod tests {
             else {
                 panic!("not an item for `{plain}`");
             };
-            assert!(item.follow.is_empty(), "`{plain}` follows nothing");
             assert_eq!(item.parent, "Chat");
         }
-        row.qualifier = "reveal:".to_owned();
-        let Some(wire::Route {
-            args: Some(wire::route::Args::LockerItem(item)),
-            ..
-        }) = route(&row, "", &[])
-        else {
-            panic!("not an item");
-        };
-        assert!(item.follow.is_empty());
     }
 }

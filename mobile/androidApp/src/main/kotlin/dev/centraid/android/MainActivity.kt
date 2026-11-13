@@ -25,6 +25,7 @@ import dev.centraid.android.glance.AgendaIntents
 import dev.centraid.android.glance.HealthIntents
 import dev.centraid.android.kit.AndroidHealth
 import dev.centraid.android.kit.ClipboardDeadline
+import dev.centraid.android.notify.Notify
 import dev.centraid.android.notify.NotifyTaps
 import dev.centraid.android.screens.RustRoot
 import dev.centraid.android.session.AppSession
@@ -122,6 +123,8 @@ public class MainActivity : FragmentActivity() {
                         rust.attach(opened, scope)
                         value = opened
                         NotifyTaps.flush(opened.screens)
+                        // PRESSES THAT NEVER REACHED THE CORE (a receiver the process outlived) go now.
+                        opened.scope.launch { Notify.drain(applicationContext) }
                         awaitCancellation()
                     } finally {
                         rust.detach()

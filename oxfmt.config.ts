@@ -50,11 +50,6 @@ export default defineConfig({
     // files, and `crates/nativetools/tests/export_fixture.rs` asserts them
     // byte for byte against the live export.
     "contracts/assist/export/**",
-    // The fetched data-v7 of the native tool task (#1044, #1171): the frozen
-    // eval sets, their worlds and the training build. Every file's sha256 is
-    // pinned in artefacts.json and `artefacts.py check` compares it, so a
-    // reformat is a new set version, not a style fix.
-    "experiments/toolchat/native/data/v7/**",
     "scripts/docs-site/src/content/**",
     // The native redesign canvas (#1173): the design canvas writes these
     // screens and canvas.json itself on every save, so they are its output,

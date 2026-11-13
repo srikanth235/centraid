@@ -74,6 +74,7 @@ final class ScreenStore: ObservableObject {
     private struct NotificationAnswerKey: Hashable {
         let id: String
         let verb: Centraid_Core_V1_NotificationVerb
+        let pressID: String
     }
     private var notifyWaiters: [NotificationAnswerKey: [UInt64: CheckedContinuation<Bool, Never>]] = [:]
     private var notifyTokens: UInt64 = 0
@@ -171,13 +172,14 @@ final class ScreenStore: ObservableObject {
     /// means that matching performance finished; false is the existing expiry,
     /// never a claim that the task write committed.
     @discardableResult
-    func answerNotification(id: String, verb: Centraid_Core_V1_NotificationVerb) async -> Bool {
+    func answerNotification(id: String, verb: Centraid_Core_V1_NotificationVerb, pressID: String = "") async -> Bool {
         var answered = Centraid_Core_V1_NotificationAnswered()
         answered.notificationID = id
         answered.verb = verb
+        answered.pressID = pressID
         var shell = Centraid_Core_V1_ShellFact()
         shell.fact = .notificationAnswered(answered)
-        let key = NotificationAnswerKey(id: id, verb: verb)
+        let key = NotificationAnswerKey(id: id, verb: verb, pressID: pressID)
         notifyTokens += 1
         let token = notifyTokens
         return await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
@@ -206,7 +208,7 @@ final class ScreenStore: ObservableObject {
 
     private func notifyPerformed(_ answers: [Centraid_Core_V1_NotificationAnswered]) {
         for answer in answers {
-            let key = NotificationAnswerKey(id: answer.notificationID, verb: answer.verb)
+            let key = NotificationAnswerKey(id: answer.notificationID, verb: answer.verb, pressID: answer.pressID)
             let waiting = notifyWaiters.removeValue(forKey: key)
             if let waiting {
                 NotificationStartupTrace.mark(.matchingAnswerPerformed, count: waiting.count)
@@ -399,6 +401,13 @@ final class ScreenStore: ObservableObject {
                 sendRoot(RustScreens.madeTab, .importsMade(made))
             }
         }
+        // THE NEXT WORDS OF A STREAMING ANSWER (#1188 C14), applied in order to the view they were
+        // made against; one made against another revision is dropped and the next full view repairs it.
+        for delta in update.deltas where !closed.contains(delta.instance) {
+            if let held = views[delta.instance], let grown = ViewDeltas.apply(delta, to: held) {
+                views[delta.instance] = grown
+            }
+        }
         for effect in update.effects { enqueue(effect) }
     }
 
@@ -490,6 +499,14 @@ final class ScreenStore: ObservableObject {
             }
         case .cameraRoll(let roll)?:
             answer(request, Self.cameraRoll(roll))
+        case .openNotificationSettings?:
+            // THE APP'S PAGE in Settings, where its notifications are switched.
+            #if os(iOS)
+            if let url = URL(string: UIApplication.openSettingsURLString) {
+                UIApplication.shared.open(url, options: [:], completionHandler: nil)
+            }
+            #endif
+            answer(request, done)
         // THE PHONE IMPORTS (#1135, `imports`): the library, its link, its stage and its
         // derivatives; the folders; the reminders. Every decision is Rust's.
         case .libraryPermission(let permission)?:
@@ -677,6 +694,13 @@ final class ScreenStore: ObservableObject {
         // hears progress and the end as events (`ChatModel`).
         case .modelDownload(let download)?:
             ChatModelDownloader.shared.start(ChatAsset(download))
+            answer(request, done)
+        // THE MODEL FILE THE NEW ONE REPLACED: a name in the models folder, nothing else.
+        case .deleteModelFile(let gone)?:
+            if !gone.fileName.isEmpty, !gone.fileName.contains("/"), !gone.fileName.contains("..") {
+                try? FileManager.default.removeItem(
+                    at: URL(fileURLWithPath: gone.modelsDir).appendingPathComponent(gone.fileName))
+            }
             answer(request, done)
         // THE CAPTURE SHIELD, per screen: the host wraps the instance's content in `WordsShield`
         // while it holds one. No screen asks today (Locker shields through its own `secure`).

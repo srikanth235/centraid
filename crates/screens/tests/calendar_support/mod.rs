@@ -233,6 +233,7 @@ impl World {
             self.load(load::calendar::Upcoming {
                 from: Some("1970-01-01T00:00:00Z".to_owned()),
                 to: Some("1970-01-01T00:00:01Z".to_owned()),
+                alerts: None,
             })
         else {
             panic!("upcoming answered something else");
@@ -250,6 +251,7 @@ impl World {
             self.load(load::calendar::Upcoming {
                 from: Some(from.to_owned()),
                 to: Some(to.to_owned()),
+                alerts: None,
             })
         else {
             panic!("upcoming answered something else");
@@ -263,6 +265,7 @@ impl World {
             self.load(load::calendar::Upcoming {
                 from: Some("1970-01-01T00:00:00Z".to_owned()),
                 to: Some("1970-01-01T00:00:01Z".to_owned()),
+                alerts: None,
             })
         else {
             panic!("upcoming answered something else");

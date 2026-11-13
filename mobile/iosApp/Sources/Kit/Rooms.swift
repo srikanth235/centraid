@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-// THE ROOMS (K5; product-intuition/references/design-behaviour.md § Rooms).
+// THE ROOMS (K5; design/behaviour.md § Rooms).
 //
 // A mobile screen is one of seven rooms and nothing else. The room owns the
 // header, the back control, search, the empty/loading/error states (through

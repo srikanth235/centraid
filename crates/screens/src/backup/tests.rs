@@ -16,13 +16,14 @@ use prost::Message;
 use wire::backup_line::Tone;
 use wire::screen_event::Kind as E;
 
+use super::check::Check;
 use super::line::{self, STALE_MS};
 use super::reading::Reading;
 use super::rule::TransferRule;
 use super::{claim, doors, freeze, home, routes};
 use crate::custody::secrets::{self, VaultSecrets};
 use crate::screen::{Ctx, Environment, Screen, TimerOp};
-use crate::strings::{Locale, backup as words, backup_home, fill};
+use crate::strings::{Locale, backup as words, fill};
 use crate::testing::FakeShell;
 
 const NOW: i64 = 1_790_000_000_000;
@@ -161,6 +162,8 @@ struct Page {
     /// Whether the platform took a background window.
     background: bool,
     timers: Vec<(String, bool)>,
+    /// What the phone said about alerts, shared by every turn as the runtime shares it.
+    alerts: crate::kit::permission::AlertBoard,
 }
 
 impl Page {
@@ -190,6 +193,7 @@ impl Page {
             jobs: Vec::new(),
             background: true,
             timers: Vec::new(),
+            alerts: crate::kit::permission::AlertBoard::default(),
         }
     }
 
@@ -202,7 +206,7 @@ impl Page {
     }
 
     fn send(&mut self, event: E) {
-        let ctx = Ctx::new(&self.fake, &self.env);
+        let ctx = Ctx::new(&self.fake, &self.env).with_alerts(self.alerts.clone());
         let effects = self
             .screen
             .update(wire::ScreenEvent { kind: Some(event) }, &ctx);
@@ -277,7 +281,7 @@ impl Page {
     }
 
     fn state(&self) -> wire::BackupHomeState {
-        let ctx = Ctx::new(&self.fake, &self.env);
+        let ctx = Ctx::new(&self.fake, &self.env).with_alerts(self.alerts.clone());
         match self.screen.view(&ctx).kind {
             Some(wire::view_state::Kind::BackupHome(state)) => state,
             other => panic!("not the backup screen: {other:?}"),
@@ -305,7 +309,7 @@ impl Page {
 // ============================================================================
 
 fn lined(status: &wire::BackupStatusResponse, frozen: bool) -> wire::BackupLine {
-    line::line(EN, Some(&reading(status)), frozen, NOW)
+    line::line(EN, Some(&reading(status)), frozen, false, NOW)
 }
 
 fn steady() -> wire::BackupStatusResponse {
@@ -437,7 +441,7 @@ fn a_gateway_that_refused_for_room_and_one_that_forgot_this_phone_have_rows_of_t
             .map(|row| row.sentence.as_str())
             .collect::<Vec<_>>(),
         vec![
-            "25 waiting. Your backup device is full or refusing.",
+            "25 waiting. Your backup device is full.",
             "15 waiting. Pair your backup device again."
         ]
     );
@@ -448,6 +452,29 @@ fn a_gateway_that_refused_for_room_and_one_that_forgot_this_phone_have_rows_of_t
     assert_eq!(
         wire::backup_waiting_row::Reason::PairAgain as i32,
         wire::WaitReason::PairAgain as i32
+    );
+}
+
+#[test]
+fn a_phone_with_no_room_to_copy_its_vault_says_so_in_a_row_of_its_own() {
+    let line = lined(
+        &wire::BackupStatusResponse {
+            content_confirmed: 1_200,
+            waiting: waiting(&[(wire::WaitReason::NoRoom, 212)]),
+            ..steady()
+        },
+        false,
+    );
+    assert_eq!(
+        line.waiting
+            .iter()
+            .map(|row| row.sentence.as_str())
+            .collect::<Vec<_>>(),
+        vec!["212 waiting. This phone is too full to back up. Free some space."]
+    );
+    assert_eq!(
+        wire::backup_waiting_row::Reason::NoRoom as i32,
+        wire::WaitReason::NoRoom as i32
     );
 }
 
@@ -525,10 +552,27 @@ fn an_old_acknowledgement_or_a_gateway_unreached_for_days_earns_attention() {
     assert_eq!(STALE_MS, 3 * DAY);
 }
 
+/// **B11.** A clock set a year ahead and corrected leaves an acknowledgement dated in the
+/// future; it must not read as a recent, healthy backup.
+#[test]
+fn an_acknowledgement_dated_in_the_future_earns_attention() {
+    let ahead = wire::BackupStatusResponse {
+        acked_at_ms: Some(NOW + 300 * DAY),
+        ..steady()
+    };
+    assert_eq!(lined(&ahead, false).tone, Tone::Attention as i32);
+    // Two clocks a few minutes apart are not a clock that was set ahead.
+    let close = wire::BackupStatusResponse {
+        acked_at_ms: Some(NOW + MINUTE),
+        ..steady()
+    };
+    assert_ne!(lined(&close, false).tone, Tone::Attention as i32);
+}
+
 #[test]
 fn a_vault_the_core_could_not_be_asked_about_draws_no_line_at_all() {
     assert_eq!(
-        line::line(EN, None, false, NOW),
+        line::line(EN, None, false, false, NOW),
         wire::BackupLine::default()
     );
 }
@@ -638,94 +682,8 @@ fn the_status_reads_the_ledger_destinations_counts_and_why_the_rest_waits() {
 }
 
 // ============================================================================
-// What may be claimed (the BackupClaim half of CustodyAndBackupClaimSpec)
+// How a size is said
 // ============================================================================
-
-#[test]
-fn nothing_is_backed_up_before_the_gateway_has_acknowledged_a_commit() {
-    assert_eq!(claim::line(EN, None, 0, "just now"), "Not backed up yet.");
-    assert!(!claim::is_backed_up(None, 0));
-    // AND NOT EVEN WITH AN EMPTY SPOOL: "no changes waiting" is not the same
-    // claim as "the gateway has it".
-    assert!(!claim::line(EN, None, 0, "just now").contains("Backed up"));
-}
-
-#[test]
-fn an_acknowledgement_with_changes_behind_it_leads_with_what_is_not_backed_up() {
-    let line = claim::line(EN, Some(1_770_000_000_000), 3, "2 minutes ago");
-    assert_eq!(line, "3 changes not backed up. Last backup 2 minutes ago.");
-    assert!(!claim::is_backed_up(Some(1_770_000_000_000), 3));
-}
-
-#[test]
-fn one_change_reads_as_one_because_a_member_counts() {
-    assert_eq!(
-        claim::line(EN, Some(1), 1, "an hour ago"),
-        "1 change not backed up. Last backup an hour ago."
-    );
-}
-
-#[test]
-fn an_acknowledgement_with_an_empty_spool_is_the_only_thing_that_says_backed_up() {
-    assert_eq!(
-        claim::line(EN, Some(1_770_000_000_000), 0, "2 minutes ago"),
-        "Records backed up 2 minutes ago."
-    );
-    assert!(claim::is_backed_up(Some(1_770_000_000_000), 0));
-}
-
-#[test]
-fn a_frozen_vault_says_the_changes_are_only_here_and_never_that_they_are_lost() {
-    let line = claim::frozen(EN, 4, "12 March");
-    assert!(line.contains("Moved to another phone"));
-    assert!(line.contains("4 changes since 12 March are only here"));
-    assert!(!line.contains("lost") && !line.contains("deleted"));
-    assert!(claim::frozen(EN, 0, "12 March").contains("Nothing unsent here"));
-    assert!(claim::frozen(EN, 1, "12 March").contains("1 change since 12 March is only here"));
-}
-
-#[test]
-fn a_pass_is_told_in_one_sentence_per_reason_and_a_deadline_is_not_an_error() {
-    use wire::DrainStop as S;
-    let say = |stopped, pending| claim::stopped_sentence(EN, stopped, pending);
-    assert_eq!(
-        say(S::Empty, 0),
-        "Your backup device has everything that was ready."
-    );
-    assert_eq!(
-        say(S::Deadline, 2_000_000),
-        "Still backing up. 2.0 MB to go."
-    );
-    assert_eq!(
-        say(S::Unreachable, 99),
-        "Backup device didn't answer. Will try again."
-    );
-    assert_eq!(
-        say(S::Untrusted, 99),
-        "That isn't your backup device. Nothing was sent."
-    );
-    assert_eq!(say(S::Refused, 99), words::backup_refused(EN));
-    // AN UNKNOWN STOP READS AS UNREACHABLE: "try again" is never a harmful remedy.
-    assert_eq!(say(S::Unspecified, 0), say(S::Unreachable, 0));
-    assert_eq!(
-        claim::moved_sentence(EN),
-        "Moved to another phone. This phone is read-only."
-    );
-    let all: Vec<String> = [
-        S::Empty,
-        S::Deadline,
-        S::Unreachable,
-        S::Untrusted,
-        S::Refused,
-    ]
-    .into_iter()
-    .map(|stopped| say(stopped, 99))
-    .collect();
-    for (at, sentence) in all.iter().enumerate() {
-        assert!(!sentence.to_lowercase().contains("error"), "{sentence}");
-        assert!(all.iter().skip(at + 1).all(|other| other != sentence));
-    }
-}
 
 #[test]
 fn bytes_are_decimal_and_rounded_down() {
@@ -740,19 +698,6 @@ fn bytes_are_decimal_and_rounded_down() {
     assert_eq!(claim::bytes(2_999_999_999), "2.9 GB");
     assert_eq!(claim::bytes(5_000_000_000), "5.0 GB");
     assert_eq!(claim::bytes(120_400_000_000), "120 GB");
-}
-
-#[test]
-fn the_postures_a_member_is_told_about_uploading_are_honest() {
-    let posture = backup_home::pass_posture(EN);
-    assert!(posture.contains("keeps uploading"));
-    assert!(!posture.contains("does not upload while the app is closed"));
-    let force = backup_home::pass_force_quit(EN);
-    assert!(force.contains("swipe Centraid away"));
-    assert!(force.contains("cancels those uploads until you open it again"));
-    assert!(force.contains("Low Power Mode pauses them"));
-    assert!(backup_home::pass_android_unmetered(EN).contains("your setting"));
-    assert_eq!(backup_home::pass_in_flight_title(EN), "Backing up");
 }
 
 // ============================================================================
@@ -791,7 +736,7 @@ fn a_read_draws_the_line_the_gateways_and_the_controls_every_word_finished() {
     // THE LINE IS HOME'S LINE, the same value and the same words.
     assert_eq!(
         data.line,
-        Some(line::line(EN, Some(&reading(&both())), false, NOW))
+        Some(line::line(EN, Some(&reading(&both())), false, false, NOW))
     );
     assert_eq!(
         data.line.as_ref().expect("line").sentence,
@@ -823,7 +768,7 @@ fn a_read_draws_the_line_the_gateways_and_the_controls_every_word_finished() {
     );
     assert_eq!(
         data.destinations[0].accessibility_label,
-        "Home laptop. 192.168.1.20:7443 · Reached 2 minutes ago"
+        "Home laptop. Up to date. Last backup just now. 192.168.1.20:7443 · Reached 2 minutes ago"
     );
     assert_eq!(data.devices_heading, words::backup_devices_heading(EN));
     assert_eq!(
@@ -1304,7 +1249,7 @@ fn forgetting_asks_nothing_reaches_only_a_gateway_the_screen_draws_and_says_whet
             &[("name", "Your backup device")]
         )
     );
-    assert!(words::backup_forgotten_not_revoked(EN).contains("centraid-gateway pairings revoke"));
+    assert!(!words::backup_forgotten_not_revoked(EN).contains("centraid-gateway"));
 
     let mut page = Page::open(both());
     page.say(forget("gw-1"));
@@ -1836,7 +1781,7 @@ fn a_new_record_after_the_acknowledged_snapshot_never_reads_all_backed_up() {
 
     let mut several = waiting.clone();
     several.apps[0].edits_waiting = 2;
-    let line = line::line(EN, Some(&reading(&several)), false, NOW);
+    let line = line::line(EN, Some(&reading(&several)), false, false, NOW);
     assert_eq!(
         line.sentence,
         "3 changes not backed up. Last backup 2 minutes ago."
@@ -1947,7 +1892,7 @@ fn in_this_backup_lists_every_app_biggest_first_with_what_it_holds() {
     // EACH BACKUP DEVICE SAYS WHAT IT HOLDS.
     assert_eq!(
         data.destinations[0].held,
-        "Holds 5.1 GB \u{b7} can't open it"
+        "Up to date \u{b7} Holds 5.1 GB \u{b7} can't open it"
     );
     assert!(
         data.destinations[0]
@@ -2170,4 +2115,1007 @@ fn recovery_has_a_summary_and_a_restore_row_and_a_moved_vault_has_no_restore() {
     })
     .data();
     assert_eq!(moved.restore_label, "");
+}
+
+// ---------------------------------------------------------------------------
+// Check my backup (#1188, B6): the page says what the core found, in the approved words.
+// ---------------------------------------------------------------------------
+
+mod check_my_backup {
+    use wire::device_check::{NotRun, Verdict};
+
+    use super::*;
+
+    /// Tuesday 10 November 2026, 21:40 UTC.
+    const TUESDAY: i64 = 1_794_346_800_000;
+    /// Sunday 8 November 2026, 21:40 UTC.
+    const SUNDAY: i64 = TUESDAY - 2 * 86_400_000;
+
+    fn device(label: &str, verdict: Verdict) -> wire::DeviceCheck {
+        wire::DeviceCheck {
+            gateway_id: format!("id-{label}"),
+            label: label.to_owned(),
+            verdict: verdict as i32,
+            snapshot_ms: TUESDAY,
+            ..Default::default()
+        }
+    }
+
+    fn drawn(page: &Check) -> wire::BackupCheckState {
+        let shell = Page::over(steady());
+        let ctx = Ctx::new(&shell.fake, &shell.env);
+        page.drawn(&ctx)
+    }
+
+    #[test]
+    fn a_backup_that_opens_says_when_and_how_much_was_read() {
+        let mut opens = device("Mac mini", Verdict::Opens);
+        opens.files_held = 91_204;
+        opens.files_opened = 40;
+        let state = drawn(&Check::resting(true, Some((vec![opens], Check::now_ms()))));
+        assert_eq!(state.rows[0].line, "Tuesday 10 November, 21:40 opens.");
+        assert_eq!(
+            state.rows[0].detail,
+            "91,204 files held, 40 opened to check."
+        );
+        assert_eq!(state.rows[0].tone, wire::BackupCheckTone::Ok as i32);
+        assert_eq!(state.status.unwrap().sentence, "Checked just now");
+        assert_eq!(state.action, wire::BackupCheckAction::Check as i32);
+        assert_eq!(state.action_label, "Check again");
+        assert!(state.back_up_now_label.is_empty(), "nothing to send again");
+    }
+
+    #[test]
+    fn a_failure_is_a_failure_and_offers_a_pass() {
+        let mut wont = device("Office NAS", Verdict::WontOpen);
+        wont.older_snapshot_ms = SUNDAY;
+        let mut missing = device("Garage drive", Verdict::MissingFiles);
+        missing.files_missing = 3;
+        let damaged = device("Parents' NAS", Verdict::DamagedFile);
+        let state = drawn(&Check::resting(
+            true,
+            Some((vec![wont, missing, damaged], NOW)),
+        ));
+        let lines: Vec<&str> = state.rows.iter().map(|r| r.line.as_str()).collect();
+        assert_eq!(
+            lines,
+            [
+                "Tuesday 10 November, 21:40 won't open.",
+                "Tuesday 10 November, 21:40 is missing 3 files.",
+                "Tuesday 10 November, 21:40 has a damaged file.",
+            ]
+        );
+        assert_eq!(
+            state.rows[0].detail,
+            "Its backup from Sunday 8 November, 21:40 opens."
+        );
+        assert!(
+            state
+                .rows
+                .iter()
+                .all(|r| r.tone == wire::BackupCheckTone::Bad as i32)
+        );
+        assert_eq!(state.back_up_now_label, "Back up now");
+    }
+
+    #[test]
+    fn a_device_that_was_not_checked_is_never_drawn_as_a_pass() {
+        let reasons = [
+            (NotRun::DidNotAnswer, "It didn't answer."),
+            (NotRun::WaitingForWifi, "Waiting for Wi-Fi."),
+            (NotRun::NeedsSpace, "This phone needs more free space."),
+            (NotRun::Stopped, "It was stopped before it finished."),
+        ];
+        let devices: Vec<wire::DeviceCheck> = reasons
+            .iter()
+            .map(|(why, _)| {
+                let mut d = device("Device", Verdict::NotRun);
+                d.not_run = *why as i32;
+                d
+            })
+            .collect();
+        let state = drawn(&Check::resting(true, Some((devices, Check::now_ms()))));
+        for (row, (_, said)) in state.rows.iter().zip(reasons) {
+            assert_eq!(row.line, "Not checked.");
+            assert_eq!(row.detail, said);
+            assert_eq!(row.tone, wire::BackupCheckTone::NotRun as i32);
+        }
+        assert_eq!(state.status.unwrap().sentence, "Nothing was checked.");
+        assert!(state.back_up_now_label.is_empty());
+    }
+
+    #[test]
+    fn a_running_check_draws_a_determinate_bar_and_names_the_device() {
+        let state = drawn(&Check::running(wire::CheckProgress {
+            running: true,
+            gateway_id: "id".to_owned(),
+            label: "Office NAS".to_owned(),
+            done: 112,
+            total: 260,
+        }));
+        assert!(state.running);
+        assert!((state.fraction - 112.0 / 260.0).abs() < 1e-6);
+        assert_eq!(state.rows[0].detail, "112 of 260 parts");
+        assert_eq!(state.status.unwrap().sentence, "Checking Office NAS");
+        assert_eq!(state.action, wire::BackupCheckAction::Stop as i32);
+        assert_eq!(state.heading, "Checking");
+    }
+
+    #[test]
+    fn nothing_paired_offers_no_check() {
+        let state = drawn(&Check::resting(false, None));
+        assert_eq!(state.action, wire::BackupCheckAction::None as i32);
+        assert_eq!(
+            state.status.unwrap().sentence,
+            "No backup device is paired."
+        );
+        assert_eq!(
+            state.intro,
+            "Opens each backup in a spare copy and reads a sample of its files. Your vault isn't touched."
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// One backup device behind, full, or holding an older backup (#1188, NB1, B4): the card names
+// it by the name the member gave it, and "backed up" is never said while a device owes anything.
+// ---------------------------------------------------------------------------
+
+mod one_device_behind {
+    use super::*;
+
+    fn office(change: impl FnOnce(&mut wire::Destination)) -> wire::BackupStatusResponse {
+        let mut behind = gateway(
+            "gw-2",
+            "Office NAS",
+            Some("192.168.1.30:7443"),
+            NOW - 2 * 86_400_000,
+            NOW - 2 * 86_400_000,
+        );
+        behind.held_bytes = 4_700 * MB;
+        change(&mut behind);
+        wire::BackupStatusResponse {
+            destinations: vec![
+                wire::Destination {
+                    held_bytes: 5_100 * MB,
+                    ..home_laptop()
+                },
+                behind,
+            ],
+            ..status(Vec::new())
+        }
+    }
+
+    #[test]
+    fn every_device_current_says_backed_up() {
+        let data = Page::open(office(|_| {})).data();
+        let line = data.line.expect("a line");
+        assert_eq!(line.status, "Backed up 2 minutes ago");
+        assert!(data.reason.is_empty());
+    }
+
+    /// **"UP TO DATE" IS SAID ONLY OF A DEVICE NOTHING WAITS FOR** (#1188, NB1): a phone too full to
+    /// copy its vault leaves every device that lacks something with its count behind, state first,
+    /// and no row reads "Up to date" while it does.
+    #[test]
+    fn no_room_with_items_waiting_never_yields_up_to_date_on_a_row_that_waits() {
+        for lagging in [212_u64, 0] {
+            let mut status = office(|d| {
+                d.behind_files = lagging;
+                d.records_behind = lagging == 0;
+            });
+            status.waiting = waiting(&[(wire::WaitReason::NoRoom, 212)]);
+            let data = Page::open(status).data();
+            let behind = &data.destinations[1].held;
+            assert!(!behind.starts_with("Up to date"), "{behind}");
+            if lagging > 0 {
+                assert!(
+                    behind.starts_with("212 files behind \u{b7} Holds"),
+                    "{behind}"
+                );
+            } else {
+                assert!(behind.starts_with("Catching up"), "{behind}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_silent_device_is_named_with_the_day_it_last_answered() {
+        let data = Page::open(office(|d| {
+            d.behind_files = 184;
+            d.reach = wire::WaitReason::Gateway as i32;
+            d.waiting_apps = vec![wire::DeviceWaiting {
+                app_id: "photos".to_owned(),
+                files: 184,
+            }];
+        }))
+        .data();
+        let line = data.line.expect("a line");
+        assert_eq!(line.status, "Office NAS is behind");
+        assert_eq!(line.sentence, "Office NAS is behind");
+        assert_eq!(data.last_good, "Backed up to Home laptop just now");
+        assert_eq!(line.tone, Tone::Attention as i32);
+        assert!(
+            data.reason.starts_with("Office NAS hasn't answered since "),
+            "{}",
+            data.reason
+        );
+        assert!(
+            data.reason
+                .ends_with("Check it's awake and on the same network as this phone.")
+        );
+        let row = &data.destinations[1];
+        assert!(row.held.starts_with("184 files behind"), "{}", row.held);
+        assert_eq!(data.apps_waiting.len(), 1, "{:?}", data.apps_waiting);
+        assert_eq!(data.apps_waiting[0].status, "184 waiting for Office NAS");
+        assert_eq!(data.waiting_heading, "Not backed up yet");
+        assert!(
+            data.destinations[0].held.starts_with("Up to date"),
+            "{}",
+            data.destinations[0].held
+        );
+    }
+
+    /// **EACH REFUSAL IS WORDED FOR ITS OWN REMEDY** (#1188, item 21): a full disk says to free
+    /// space on the device, a file over its limit names the limit and says to update, and a code
+    /// this build does not know says the device is refusing. None says "full" for the others.
+    #[test]
+    fn a_refusal_is_worded_for_its_own_remedy() {
+        let too_large = Page::open(office(|d| {
+            d.behind_files = 3;
+            d.reach = wire::WaitReason::TooLarge as i32;
+            d.refused_limit_bytes = 80 * 1024 * 1024;
+        }))
+        .data();
+        assert_eq!(
+            too_large.line.expect("a line").status,
+            "Office NAS refused a file"
+        );
+        assert_eq!(
+            too_large.reason,
+            "Office NAS refused a file as over its 83.8 MB limit. Update Centraid on this phone and on Office NAS, then back up again."
+        );
+        assert_eq!(
+            too_large.destinations[1].held.split(" \u{b7} ").next(),
+            Some("Refused a file as too large")
+        );
+
+        let other = Page::open(office(|d| {
+            d.behind_files = 3;
+            d.reach = wire::WaitReason::RefusedOther as i32;
+        }))
+        .data();
+        assert_eq!(
+            other.line.expect("a line").status,
+            "Office NAS is refusing the backup"
+        );
+        assert!(!other.reason.contains("no room"), "{}", other.reason);
+        assert!(!other.reason.contains("full"), "{}", other.reason);
+    }
+
+    #[test]
+    fn a_full_device_says_so_in_its_card_and_its_row() {
+        let data = Page::open(office(|d| {
+            d.behind_files = 184;
+            d.reach = wire::WaitReason::Refused as i32;
+        }))
+        .data();
+        assert_eq!(data.line.expect("a line").status, "Office NAS is full");
+        assert_eq!(
+            data.reason,
+            "Office NAS has no room left. Free some space on it, then back up again."
+        );
+        assert_eq!(
+            data.destinations[1].held.split(" \u{b7} ").next(),
+            Some("Full")
+        );
+    }
+
+    #[test]
+    fn a_device_holding_an_older_backup_is_a_plain_warning() {
+        let data = Page::open(office(|d| d.rolled_back = true)).data();
+        assert_eq!(
+            data.line.expect("a line").status,
+            "Office NAS has an older backup"
+        );
+        assert_eq!(
+            data.reason,
+            "It holds an older backup than this phone sent. Back up now to bring it up to date."
+        );
+        assert_eq!(
+            data.destinations[1].held.split(" \u{b7} ").next(),
+            Some("Older backup than this phone sent")
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The one-time recovery-key prompt after the first confirmed backup (#1188, NB5).
+// ---------------------------------------------------------------------------
+
+mod recovery_key_prompt {
+    use super::*;
+
+    fn key_only_here(status: wire::BackupStatusResponse) -> Page {
+        let mut page = Page::over(status);
+        page.shell.synced.clear();
+        page.send(E::Appeared(wire::Appeared {}));
+        page.serve();
+        page
+    }
+
+    #[test]
+    fn it_is_asked_once_after_the_first_confirmed_backup_and_never_again() {
+        let mut page = key_only_here(steady());
+        let prompt = page.data().key_prompt.expect("the prompt is due");
+        assert_eq!(prompt.title, "Save your recovery key");
+        assert_eq!(
+            prompt.body,
+            "Your first backup is done. Without the recovery key it can't be opened on a new phone."
+        );
+        assert_eq!(
+            (prompt.save_label.as_str(), prompt.not_now_label.as_str()),
+            ("Save recovery key", "Not now")
+        );
+        assert_eq!(prompt.save, Some(routes::show_key()));
+        assert!(!prompt.body.to_lowercase().contains("words"));
+
+        page.say(wire::backup_home_event::Kind::KeyPromptAnswered(
+            wire::backup_home_event::KeyPromptAnswered {},
+        ));
+        page.serve();
+        assert!(page.data().key_prompt.is_none());
+        assert!(
+            page.shell.device.contains_key(rule_key_prompt()),
+            "remembered on this phone"
+        );
+        // A LATER OPEN READS IT BACK.
+        page.send(E::Appeared(wire::Appeared {}));
+        page.serve();
+        assert!(page.data().key_prompt.is_none());
+    }
+
+    #[test]
+    fn it_waits_for_a_confirmed_backup() {
+        let mut never = steady();
+        never.acked_at_ms = None;
+        assert!(key_only_here(never).data().key_prompt.is_none());
+    }
+
+    #[test]
+    fn it_is_not_asked_when_the_key_is_already_saved_somewhere() {
+        let page = Page::open(steady());
+        // The fake's key is in the synced store: nothing to ask.
+        assert!(page.data().key_prompt.is_none());
+    }
+
+    fn rule_key_prompt() -> &'static str {
+        super::super::rule::KEY_PROMPT_KEY
+    }
+}
+
+mod stale_notice_offered {
+    use super::*;
+    use crate::backup::alerts;
+    use crate::kit::permission::Channel;
+
+    fn stale_by(days: i64) -> wire::BackupStatusResponse {
+        let at = NOW - days * DAY;
+        wire::BackupStatusResponse {
+            destinations: vec![gateway(
+                "gw-1",
+                "Home laptop",
+                Some("192.168.1.20:7443"),
+                NOW,
+                at,
+            )],
+            acked_at_ms: Some(at),
+            last_snapshot_ms: Some(at),
+            content_total: 10,
+            content_confirmed: 10,
+            ..Default::default()
+        }
+    }
+
+    /// **A PAIRED DEVICE TWO DAYS STALE, BACKUP NEVER OPENED**: a fresh start of the service alone
+    /// ends with the first warning offered to the notification service, scheduled for three days
+    /// after the last confirmed backup. No Backup screen is built anywhere in this test.
+    #[test]
+    fn a_fresh_start_with_a_stale_device_offers_the_notice_without_backup_ever_opening() {
+        let fake = Fake {
+            status: RefCell::new(Some(stale_by(2))),
+            reads: Cell::new(0),
+        };
+        let env = Environment::default();
+        let mut service = alerts::build(&alerts::route()).expect("the service builds");
+        let ctx = Ctx::new(&fake, &env);
+        service.update(
+            wire::ScreenEvent {
+                kind: Some(E::Appeared(wire::Appeared {})),
+            },
+            &ctx,
+        );
+        let notices = ctx.alerts().notices();
+        assert_eq!(notices.len(), 2, "{notices:?}");
+        assert!(
+            notices
+                .iter()
+                .all(|notice| notice.channel == Channel::Backup)
+        );
+        assert!(
+            notices[0].id.starts_with("backup-stale:"),
+            "{}",
+            notices[0].id
+        );
+        assert_eq!(notices[0].fire_at_ms, NOW - 2 * DAY + 3 * DAY);
+        assert_eq!(notices[0].opens, routes::home());
+        assert_eq!(ctx.alerts().wanted().len(), 2);
+    }
+
+    /// **A READ THAT FAILED IS NOT AN EMPTY LEDGER**: the offer stands; a new confirmed backup replaces
+    /// its ids.
+    #[test]
+    fn a_failed_read_keeps_the_offer_and_a_new_backup_replaces_its_ids() {
+        let fake = Fake {
+            status: RefCell::new(Some(stale_by(2))),
+            reads: Cell::new(0),
+        };
+        let env = Environment::default();
+        let mut service = alerts::build(&alerts::route()).expect("the service builds");
+        let ctx = Ctx::new(&fake, &env);
+        let appear = || wire::ScreenEvent {
+            kind: Some(E::Appeared(wire::Appeared {})),
+        };
+        service.update(appear(), &ctx);
+        assert_eq!(ctx.alerts().notices().len(), 2);
+        let before: Vec<String> = ctx.alerts().notices().into_iter().map(|n| n.id).collect();
+
+        *fake.status.borrow_mut() = None;
+        service.update(appear(), &ctx);
+        assert_eq!(
+            ctx.alerts().notices().len(),
+            2,
+            "a failed read changes nothing"
+        );
+
+        *fake.status.borrow_mut() = Some(status(vec![home_laptop()]));
+        service.update(appear(), &ctx);
+        // THE NEW BACKUP REPLACES THE OLD IDS (deterministic from the last confirmed backup): the
+        // notices stay scheduled ahead from the fresh one, and none of the old are wanted.
+        let after = ctx.alerts().notices();
+        assert_eq!(after[0].fire_at_ms, NOW + 3 * DAY, "{after:?}");
+        assert!(
+            after.iter().all(|notice| !before.contains(&notice.id)),
+            "{after:?} against {before:?}"
+        );
+        assert!(ctx.alerts().wanted().iter().all(|id| !before.contains(id)));
+    }
+}
+
+mod notification_ask {
+    use super::*;
+    use crate::kit::permission::AlertFacts;
+
+    fn opened(permission: Option<wire::NotificationPermission>) -> Page {
+        let mut page = Page::over(status(vec![home_laptop()]));
+        page.alerts.set(AlertFacts {
+            permission,
+            ..AlertFacts::default()
+        });
+        page.send(E::Appeared(wire::Appeared {}));
+        page.serve();
+        page
+    }
+
+    /// **THE ASK**: a paired device and a phone never asked show the explanation; "Allow
+    /// notifications" asks the one notification service (and nothing else does).
+    #[test]
+    fn a_paired_device_and_an_unasked_phone_show_the_ask_and_allow_calls_the_service() {
+        let mut page = opened(Some(wire::NotificationPermission::NotAsked));
+        let data = page.data();
+        let ask = data.notify_ask.expect("the ask is shown");
+        assert_eq!(ask.title, "Home laptop is paired");
+        assert_eq!(ask.allow_label, "Allow notifications");
+        assert!(data.notify_off.is_empty(), "the ask is the thing on screen");
+        assert!(!page.alerts.take_ask(), "showing the ask asks nothing");
+        page.say(wire::backup_home_event::Kind::NotifyAllow(
+            wire::backup_home_event::NotifyAllow {},
+        ));
+        assert!(
+            page.alerts.take_ask(),
+            "Allow notifications asks the service"
+        );
+    }
+
+    /// **NOT NOW IS KEPT**: the ask goes, nothing asks the system, and it stays gone on a reopen.
+    #[test]
+    fn not_now_removes_the_ask_for_good_and_asks_nothing() {
+        let mut page = opened(Some(wire::NotificationPermission::NotAsked));
+        page.say(wire::backup_home_event::Kind::NotifyNotNow(
+            wire::backup_home_event::NotifyNotNow {},
+        ));
+        page.serve();
+        assert!(page.data().notify_ask.is_none());
+        assert!(!page.alerts.take_ask());
+        page.send(E::Appeared(wire::Appeared {}));
+        page.serve();
+        assert!(
+            page.data().notify_ask.is_none(),
+            "still gone after a reopen"
+        );
+    }
+
+    /// **A REFUSAL IS SAID, IN THE BACKUP CHANNEL'S WORDS, WITH THE WAY TO MEND IT.**
+    #[test]
+    fn a_refused_grant_says_so_and_offers_settings() {
+        let mut page = opened(Some(wire::NotificationPermission::Denied));
+        let data = page.data();
+        assert!(data.notify_ask.is_none());
+        assert_eq!(
+            data.notify_off,
+            "Notifications are off. Turn them on in Settings."
+        );
+        assert_eq!(data.notify_settings_label, "Open Settings");
+        page.effects.clear();
+        page.say(wire::backup_home_event::Kind::NotifyOpenSettings(
+            wire::backup_home_event::NotifyOpenSettings {},
+        ));
+        assert!(page.effects.iter().any(|effect| matches!(
+            effect.kind,
+            Some(wire::effect::Kind::CameraRoll(ref roll))
+                if roll.action == wire::camera_roll::Action::OpenSettings as i32
+        )));
+    }
+
+    /// A granted phone with the backup channel switched off says which channel; nothing is said
+    /// of a phone that will deliver on time, and nothing before a device is paired.
+    #[test]
+    fn an_off_channel_is_named_and_a_healthy_phone_or_no_device_says_nothing() {
+        let mut page = Page::over(status(vec![home_laptop()]));
+        page.alerts.set(AlertFacts {
+            permission: Some(wire::NotificationPermission::Granted),
+            backup_channel_off: true,
+            backup_channel: "Backup warnings".to_owned(),
+            ..AlertFacts::default()
+        });
+        page.send(E::Appeared(wire::Appeared {}));
+        page.serve();
+        let data = page.data();
+        assert!(
+            data.notify_off.contains("Backup warnings"),
+            "{}",
+            data.notify_off
+        );
+        assert!(
+            data.notify_settings_label.is_empty(),
+            "Settings mends a refusal, not a channel"
+        );
+
+        let healthy = opened(Some(wire::NotificationPermission::Granted)).data();
+        assert!(healthy.notify_ask.is_none() && healthy.notify_off.is_empty());
+
+        let mut unpaired = Page::over(status(Vec::new()));
+        unpaired.alerts.set(AlertFacts {
+            permission: Some(wire::NotificationPermission::NotAsked),
+            ..AlertFacts::default()
+        });
+        unpaired.send(E::Appeared(wire::Appeared {}));
+        unpaired.serve();
+        assert!(unpaired.data().notify_ask.is_none(), "no device, no ask");
+    }
+}
+
+// ============================================================================
+// What a member reads about backup (#1188, K1): the card is never green over a warning, a
+// backlog that stood warns, a frozen phone gets no notice, "Backing up" is said only while a
+// pass runs, every device says what it last backed up, and the check keeps its verdict.
+// ============================================================================
+
+mod what_a_member_reads {
+    use wire::BackupCondition as C;
+
+    use super::*;
+    use crate::backup::rule::{self, CheckKind, KeptCheck};
+    use crate::backup::{alerts, reading, stale};
+
+    /// A reading, one device, in a state a test bends.
+    fn one(change: impl FnOnce(&mut wire::BackupStatusResponse)) -> wire::BackupStatusResponse {
+        let mut reading = steady();
+        reading.content_total = 10;
+        reading.content_confirmed = 10;
+        change(&mut reading);
+        reading
+    }
+
+    /// Every state the line warns of, each bending one fact of a calm reading.
+    fn warnings() -> Vec<(&'static str, wire::BackupStatusResponse)> {
+        vec![
+            ("never acknowledged", one(|r| r.acked_at_ms = None)),
+            ("pair again", one(|r| r.destinations[0].pair_again = true)),
+            (
+                "one behind",
+                one(|r| {
+                    r.destinations.push(gateway("gw-2", "NAS", None, NOW, NOW));
+                    r.destinations[1].behind_files = 4;
+                }),
+            ),
+            (
+                "records behind",
+                one(|r| r.destinations[0].records_behind = true),
+            ),
+            ("rolled back", one(|r| r.destinations[0].rolled_back = true)),
+            (
+                "refused",
+                one(|r| r.destinations[0].reach = wire::WaitReason::Refused as i32),
+            ),
+            (
+                "wrong device",
+                one(|r| {
+                    r.content_confirmed = 8;
+                    r.waiting = waiting(&[(wire::WaitReason::Untrusted, 2)]);
+                }),
+            ),
+            (
+                "old acknowledgement",
+                one(|r| r.acked_at_ms = Some(NOW - STALE_MS - 1)),
+            ),
+        ]
+    }
+
+    #[test]
+    fn the_card_is_never_green_beside_a_warning_line() {
+        for (name, reading) in warnings() {
+            let data = Page::open(reading).data();
+            let tone = data.line.as_ref().map(|line| line.tone());
+            assert_ne!(
+                data.condition(),
+                C::UpToDate,
+                "{name}: green over a warning"
+            );
+            assert_eq!(tone, Some(Tone::Attention), "{name}: the line warns");
+        }
+        // AND THE OTHER WAY: whenever the card is green the line is quiet.
+        for status in [steady(), both(), one(|r| r.content_confirmed = 6)] {
+            let data = Page::open(status).data();
+            if data.condition() == C::UpToDate {
+                assert_eq!(data.line.unwrap().tone(), Tone::Quiet);
+            }
+        }
+    }
+
+    #[test]
+    fn a_warning_condition_is_attention_and_items_waiting_alone_are_catching_up() {
+        assert_eq!(
+            Page::open(one(|r| r.destinations[0].pair_again = true))
+                .data()
+                .condition(),
+            C::Attention
+        );
+        let waiting_a_little = one(|r| {
+            r.content_confirmed = 7;
+            r.waiting = waiting(&[(wire::WaitReason::Wifi, 3)]);
+        });
+        let data = Page::open(waiting_a_little).data();
+        assert_eq!(data.condition(), C::CatchingUp);
+        assert_eq!(data.line.unwrap().tone(), Tone::Quiet);
+    }
+
+    #[test]
+    fn a_backlog_older_than_the_stale_threshold_warns_with_the_count_and_the_reason() {
+        let mut waiting_long = reading(&one(|r| {
+            r.content_confirmed = 7;
+            r.waiting = waiting(&[(wire::WaitReason::Wifi, 3)]);
+        }));
+        // ON THE THRESHOLD IS NOT PAST IT; one millisecond after is.
+        waiting_long.oldest_waiting_ms = Some(NOW - STALE_MS);
+        let quiet = line::line(EN, Some(&waiting_long), false, false, NOW);
+        assert_eq!(quiet.tone(), Tone::Quiet);
+        waiting_long.oldest_waiting_ms = Some(NOW - STALE_MS - 1);
+        let warned = line::line(EN, Some(&waiting_long), false, false, NOW);
+        assert_eq!(warned.tone(), Tone::Attention);
+        assert_eq!(
+            warned.sentence,
+            "3 not backed up. The oldest was added 3 days ago."
+        );
+        assert_eq!(warned.waiting[0].sentence, "3 waiting for Wi-Fi");
+        // Nothing waiting is never a backlog, whatever the age says.
+        waiting_long.content_confirmed = 10;
+        assert!(!line::backlog_old(&waiting_long, NOW, false));
+    }
+
+    #[test]
+    fn the_cores_oldest_waiting_age_warns_on_the_page_but_not_while_a_pass_runs() {
+        let backlog = || {
+            one(|r| {
+                r.content_confirmed = 7;
+                r.waiting = waiting(&[(wire::WaitReason::Wifi, 3)]);
+                r.oldest_waiting_ms = Some(NOW - STALE_MS - 1);
+            })
+        };
+        let data = Page::open(backlog()).data();
+        assert_eq!(data.condition(), C::Attention);
+        assert_eq!(data.line.unwrap().tone(), Tone::Attention);
+        let mut running = Page::open(backlog());
+        running.say(wire::backup_home_event::Kind::BackUpNow(
+            wire::backup_home_event::BackUpNow {},
+        ));
+        let data = running.data();
+        assert_eq!(data.condition(), C::Running);
+        assert_eq!(data.line.unwrap().tone(), Tone::Quiet);
+        // A value of zero on the wire is no age.
+        let none = Page::open(one(|r| {
+            r.content_confirmed = 7;
+            r.oldest_waiting_ms = Some(0);
+        }))
+        .data();
+        assert_eq!(none.condition(), C::CatchingUp);
+    }
+
+    #[test]
+    fn an_oldest_waiting_time_ahead_of_the_clock_is_not_believed_and_still_warns() {
+        let mut ahead = reading(&one(|r| r.content_confirmed = 7));
+        ahead.oldest_waiting_ms = Some(NOW + 10 * MINUTE);
+        let line = line::line(EN, Some(&ahead), false, false, NOW);
+        assert_eq!(line.tone(), Tone::Attention);
+        assert!(
+            line.sentence.starts_with("Records backed up"),
+            "{}",
+            line.sentence
+        );
+        ahead.oldest_waiting_ms = Some(NOW + MINUTE);
+        assert_eq!(
+            line::line(EN, Some(&ahead), false, false, NOW).tone(),
+            Tone::Quiet,
+            "within the tolerance it is only a clock a minute out"
+        );
+    }
+
+    #[test]
+    fn an_old_backlog_schedules_its_notice_from_the_oldest_waiting_item() {
+        let mut backlog = reading(&one(|r| r.content_confirmed = 7));
+        let queued = NOW - 2 * DAY;
+        backlog.oldest_waiting_ms = Some(queued);
+        let notices = stale::stale_backup_notices(EN, "UTC", &backlog, NOW);
+        assert_eq!(notices.len(), 2);
+        assert_eq!(notices[0].fire_at_ms, queued + STALE_MS);
+        assert_eq!(notices[0].title, "Some files are not backed up");
+        assert!(
+            notices[0].body.starts_with("Items added "),
+            "{}",
+            notices[0].body
+        );
+        // A calm backlog schedules nothing of its own: the device's age still sets the notice.
+        backlog.oldest_waiting_ms = None;
+        let by_device = stale::stale_backup_notices(EN, "UTC", &backlog, NOW);
+        assert_ne!(by_device[0].title, "Some files are not backed up");
+    }
+
+    #[test]
+    fn a_frozen_phone_gets_no_stale_notice() {
+        let mut moved = reading(&one(|r| {
+            r.acked_at_ms = Some(NOW - 30 * DAY);
+            r.destinations[0].last_ack_ms = NOW - 30 * DAY;
+            r.frozen = true;
+        }));
+        assert!(stale::stale_backup_notices(EN, "UTC", &moved, NOW).is_empty());
+        let standing = reading::Standing {
+            reading: moved.clone(),
+            now_ms: NOW,
+        };
+        let offer = alerts::offer_of(EN, "UTC", &standing);
+        assert!(offer.notices.is_empty() && offer.wanted.is_empty());
+        // The same phone, not moved, is told.
+        moved.frozen = false;
+        assert!(!stale::stale_backup_notices(EN, "UTC", &moved, NOW).is_empty());
+    }
+
+    #[test]
+    fn backing_up_is_said_only_while_a_pass_runs() {
+        let behind = reading(&one(|r| {
+            r.content_confirmed = 7;
+            r.waiting = waiting(&[(wire::WaitReason::Wifi, 3)]);
+        }));
+        let at_rest = line::line(EN, Some(&behind), false, false, NOW);
+        assert_eq!(at_rest.status, "Records backed up 2 minutes ago, 3 waiting");
+        assert!(!at_rest.status.contains("Backing up"));
+        let running = line::line(EN, Some(&behind), false, true, NOW);
+        assert_eq!(running.status, "Backing up, last 2 minutes ago");
+        // Whole is "Backed up" in either case.
+        let whole = reading(&steady());
+        assert_eq!(
+            line::line(EN, Some(&whole), false, true, NOW).status,
+            "Backed up 2 minutes ago"
+        );
+    }
+
+    #[test]
+    fn each_device_says_when_it_last_acknowledged_a_backup() {
+        let data = Page::open(one(|r| {
+            r.destinations
+                .push(gateway("gw-2", "NAS", None, NOW - MINUTE, 0));
+        }))
+        .data();
+        assert_eq!(data.destinations[0].backed_up, "Last backup 2 minutes ago");
+        assert_eq!(data.destinations[1].backed_up, "Not backed up yet");
+        assert!(
+            data.destinations[0]
+                .accessibility_label
+                .contains("Last backup 2 minutes ago")
+        );
+    }
+
+    #[test]
+    fn the_page_says_how_backup_runs_on_each_platform_and_never_claims_always() {
+        let mut ios = Page::open(steady()).data().posture;
+        assert!(ios.contains("swipe Centraid away"), "{ios}");
+        let mut android = Page::over(steady());
+        android.env.platform = "android".to_owned();
+        android.send(E::Appeared(wire::Appeared {}));
+        android.serve();
+        let android = android.data().posture;
+        assert!(
+            android.contains("your setting") && android.contains("force-stop"),
+            "{android}"
+        );
+        for said in [&mut ios, &mut android.clone()] {
+            let said = said.to_lowercase();
+            assert!(
+                !said.contains("always") && !said.contains("continuous"),
+                "{said}"
+            );
+        }
+    }
+
+    #[test]
+    fn check_my_backup_says_what_it_last_found_or_that_it_never_ran() {
+        let paired = Page::open(steady()).data();
+        assert_eq!(paired.check_status, "Never checked");
+        assert!(!paired.check_warning);
+        let mut kept = Page::over(steady());
+        kept.shell.device.insert(
+            "backup.check".to_owned(),
+            format!("opens:{}", NOW - 2 * DAY),
+        );
+        kept.send(E::Appeared(wire::Appeared {}));
+        kept.serve();
+        let data = kept.data();
+        assert_eq!(data.check_status, "Checked 2 days ago");
+        let mut problem = Page::over(steady());
+        problem
+            .shell
+            .device
+            .insert("backup.check".to_owned(), format!("problem:{}", NOW - HOUR));
+        problem.send(E::Appeared(wire::Appeared {}));
+        problem.serve();
+        let data = problem.data();
+        assert_eq!(data.check_status, "Found a problem 1 hour ago");
+        assert!(data.check_warning);
+        // A value this build cannot read is no verdict.
+        let mut odd = Page::over(steady());
+        odd.shell
+            .device
+            .insert("backup.check".to_owned(), "later-build".to_owned());
+        odd.send(E::Appeared(wire::Appeared {}));
+        odd.serve();
+        assert_eq!(odd.data().check_status, "Never checked");
+    }
+
+    #[test]
+    fn a_kept_verdict_round_trips_and_a_check_that_opened_nothing_keeps_none() {
+        let kept = KeptCheck {
+            kind: CheckKind::Problem,
+            at_ms: NOW,
+        };
+        let op = rule::write_check(kept);
+        let answer = wire::SecretAnswer {
+            ok: true,
+            found: true,
+            value: op.value,
+            entries: Vec::new(),
+        };
+        assert_eq!(rule::kept_check(Some(&answer)), Some(kept));
+        assert_eq!(rule::kept_check(None), None);
+    }
+
+    mod the_check_page {
+        use super::*;
+
+        fn drawn(page: &Check) -> wire::BackupCheckState {
+            let shell = Page::over(steady());
+            let ctx = Ctx::new(&shell.fake, &shell.env);
+            page.drawn(&ctx)
+        }
+
+        #[test]
+        fn a_verdict_kept_earlier_is_the_foot_until_the_member_checks_again() {
+            let kept = KeptCheck {
+                kind: CheckKind::Opens,
+                at_ms: Check::now_ms() - 2 * DAY,
+            };
+            let state = drawn(&Check::resting(true, None).kept(Some(kept)));
+            assert_eq!(state.status.unwrap().sentence, "Checked 2 days ago");
+            assert_eq!(state.action_label, "Check again");
+            let never = drawn(&Check::resting(true, None));
+            assert_eq!(never.status.unwrap().sentence, "Not checked");
+            assert_eq!(never.action_label, "Check my backup");
+        }
+
+        #[test]
+        fn a_check_the_core_could_not_do_says_it_failed_with_retry() {
+            let state = drawn(&Check::resting(true, None).failed());
+            assert_eq!(
+                state.status.unwrap().sentence,
+                "The check didn't finish. Try again."
+            );
+            assert_eq!(state.action_label, "Retry");
+            assert_eq!(state.action, wire::BackupCheckAction::Check as i32);
+            assert!(
+                state.rows.is_empty(),
+                "no row reads as a pass or as not checked"
+            );
+        }
+
+        #[test]
+        fn an_unanswered_check_fails_and_a_real_verdict_is_kept() {
+            let shell = Page::over(steady());
+            let ctx = Ctx::new(&shell.fake, &shell.env);
+            let done = |called: wire::VaultCalled| wire::ScreenEvent {
+                kind: Some(E::OffThreadDone(wire::OffThreadDone {
+                    tag: super::super::super::check::JOB.to_owned(),
+                    bytes: called.encode_to_vec(),
+                })),
+            };
+            // No answer: a failure, nothing kept.
+            let mut page = Check::resting(true, None);
+            let effects = page.update(done(wire::VaultCalled::default()), &ctx);
+            assert!(effects.is_empty());
+            assert_eq!(page.drawn(&ctx).action_label, "Retry");
+            // A backup that opened: kept.
+            let answer = wire::Response {
+                kind: Some(wire::response::Kind::CheckBackup(
+                    wire::CheckBackupResponse {
+                        devices: vec![wire::DeviceCheck {
+                            verdict: wire::device_check::Verdict::Opens as i32,
+                            ..Default::default()
+                        }],
+                        ..Default::default()
+                    },
+                )),
+            };
+            let mut page = Check::resting(true, None);
+            let effects = page.update(
+                done(wire::VaultCalled {
+                    response: answer.encode_to_vec(),
+                    error: None,
+                }),
+                &ctx,
+            );
+            assert_eq!(
+                effects.len(),
+                1,
+                "the verdict is written to the device store"
+            );
+            // A device that did not answer opened nothing: no verdict is kept.
+            let nothing = wire::Response {
+                kind: Some(wire::response::Kind::CheckBackup(
+                    wire::CheckBackupResponse {
+                        devices: vec![wire::DeviceCheck {
+                            verdict: wire::device_check::Verdict::NotRun as i32,
+                            ..Default::default()
+                        }],
+                        ..Default::default()
+                    },
+                )),
+            };
+            let mut page = Check::resting(true, None);
+            let effects = page.update(
+                done(wire::VaultCalled {
+                    response: nothing.encode_to_vec(),
+                    error: None,
+                }),
+                &ctx,
+            );
+            assert!(effects.is_empty());
+        }
+    }
 }

@@ -63,6 +63,8 @@ fn run_with_cycle(
             color: None,
             icon: None,
         }],
+        extra: &[],
+        extra_wanted: &[],
     })
 }
 
@@ -133,7 +135,7 @@ fn a_repeating_event_alerts_each_occurrence_in_the_window() {
     let events = [
         event("ev@1", "2026-11-11T12:00", &[10, 60]),
         event("ev@2", "2026-11-12T12:00", &[10, 60]),
-        event("ev@far", "2026-12-12T12:00", &[10]),
+        event("ev@far", "2027-12-12T12:00", &[10]),
     ];
     let set = run(NY, &[], &events);
     assert_eq!(set.len(), 4);
@@ -179,16 +181,10 @@ fn what_is_done_cancelled_dateless_or_past_is_left_out() {
     let past = task("p", "2026-11-10", "07:00", "2026-11-10T07:00");
     let mut off = event("e1", "2026-11-11T12:00", &[10]);
     off.status = Some("cancelled".to_owned());
-    let mut all_day = event("e2", "2026-11-11T00:00", &[10]);
-    all_day.all_day = true;
     let gone = event("e3", "2026-11-10T08:05", &[10]);
     let none = event("e4", "2026-11-11T12:00", &[]);
     assert_eq!(
-        run(
-            NY,
-            &[done, cancelled, date_only, past],
-            &[off, all_day, gone, none]
-        ),
+        run(NY, &[done, cancelled, date_only, past], &[off, gone, none]),
         Vec::new()
     );
 }
@@ -200,16 +196,19 @@ fn a_reminder_at_this_minute_is_kept() {
 }
 
 #[test]
-fn the_window_is_two_weeks() {
-    let inside = task("in", "2026-11-24", "08:00", "2026-11-24T08:00");
-    let outside = task("out", "2026-11-25", "09:00", "2026-11-25T09:00");
+fn the_horizon_is_ninety_days() {
+    let inside = task("in", "2027-02-06", "08:00", "2027-02-06T08:00");
+    let outside = task("out", "2027-02-10", "09:00", "2027-02-10T09:00");
     let set = run(NY, &[inside, outside], &[]);
     assert_eq!(set.len(), 1);
     assert!(set[0].notification_id.contains("|in|"));
 }
 
+/// A4: THE HORIZON IS FILLED BY TIME. The soonest reminders are held, and when more remain than
+/// the phone can hold the last slot says reminders are paused, at the moment the last held one
+/// would have sounded, with no buttons.
 #[test]
-fn the_cap_keeps_the_soonest_forty_eight() {
+fn the_cap_holds_the_soonest_and_ends_in_the_paused_notice() {
     let tasks: Vec<_> = (0..60)
         .map(|i| {
             let minute = format!("2026-11-11T09:{:02}", 59 - i % 60);
@@ -219,8 +218,41 @@ fn the_cap_keeps_the_soonest_forty_eight() {
     let set = run(NY, &tasks, &[]);
     assert_eq!(set.len(), CAP);
     assert_eq!(set[0].fire_local, "2026-11-11T09:00");
-    assert_eq!(set[CAP - 1].fire_local, "2026-11-11T09:47");
+    let paused = set.last().expect("paused");
+    assert!(paused.notification_id.starts_with("paused|"), "{paused:?}");
+    assert!(paused.category_id.is_empty(), "no buttons");
+    assert_eq!(paused.title, "Reminders paused");
+    let real: Vec<_> = set
+        .iter()
+        .filter(|n| !n.notification_id.starts_with("paused|"))
+        .collect();
+    assert_eq!(real.len(), CAP - 1, "the last slot is the notice");
+    assert_eq!(
+        paused.fire_at_ms,
+        real.iter().map(|n| n.fire_at_ms).max().unwrap(),
+        "it sounds when the last held reminder would have"
+    );
     assert!(set.windows(2).all(|w| w[0].fire_at_ms <= w[1].fire_at_ms));
+}
+
+#[test]
+fn a_set_that_fits_has_no_paused_notice() {
+    let tasks: Vec<_> = (0..CAP)
+        .map(|i| {
+            task(
+                &format!("t{i:02}"),
+                "2026-11-11",
+                "09:00",
+                &format!("2026-11-11T09:{:02}", i % 60),
+            )
+        })
+        .collect();
+    let set = run(NY, &tasks, &[]);
+    assert_eq!(set.len(), CAP);
+    assert!(
+        set.iter()
+            .all(|n| !n.notification_id.starts_with("paused|"))
+    );
 }
 
 #[test]
@@ -309,4 +341,143 @@ fn a_full_set_is_read_again_when_its_last_item_arrives() {
     assert_eq!(refresh_after(&full, 0), Duration::from_secs(30 * 60));
     let soon: Vec<_> = (0..CAP).map(|_| at(1_000)).collect();
     assert_eq!(refresh_after(&soon, 0), REFRESH_LEAST);
+}
+
+/// DST ON A FIRE TIME (#1188, A8): a wall clock that does not exist (the spring gap) fires at the
+/// next real one, and one that happens twice (the autumn overlap) fires once, at the earlier.
+#[test]
+fn a_fire_time_in_the_spring_gap_reads_forward_and_one_in_the_autumn_overlap_fires_once() {
+    let at = |now_local: &str, remind: &str| {
+        let t = task("a", &remind[..10], &remind[11..], remind);
+        desired(&Inputs {
+            vault_id: "v1",
+            zone: NY,
+            locale: Locale::En,
+            hour_cycle: civil::HourCycle::H24,
+            now_local,
+            tasks: &[t],
+            projects: &[],
+            events: &[],
+            calendars: &[],
+            extra: &[],
+            extra_wanted: &[],
+        })
+    };
+    // 2027-03-14 02:30 does not exist in New York; the clocks go from 02:00 to 03:00.
+    let set = at("2027-03-13T08:00", "2027-03-14T02:30");
+    assert_eq!(set.len(), 1);
+    assert_eq!(set[0].fire_local, "2027-03-14T03:30");
+    // 01:30 on 2026-11-01 happens twice: once, at the earlier, 01:30 EDT = 05:30Z.
+    let set = at("2026-10-31T08:00", "2026-11-01T01:30");
+    assert_eq!(set.len(), 1);
+    assert_eq!(set[0].fire_at_ms, 1_793_511_000_000);
+}
+
+fn stale_notice(n: u32, at: i64) -> ExtraNotice {
+    use crate::kit::permission::Channel;
+    ExtraNotice {
+        id: format!("backup-stale:T:{n}"),
+        channel: Channel::Backup,
+        fire_at_ms: at,
+        title: "Backup".to_owned(),
+        body: "No backup in 3 days".to_owned(),
+        opens: wire::Route::default(),
+    }
+}
+
+/// ANOTHER PRODUCER'S NOTICES ARE HELD EVEN WHEN AGENDA FILLS THE CAP, on their own channel, and a
+/// delivered one stays live while its producer wants it.
+#[test]
+fn a_second_producers_notices_keep_their_slots_when_agenda_fills_the_cap() {
+    let tasks: Vec<_> = (0..70)
+        .map(|n| {
+            let minute = format!("2026-11-11T{:02}:{:02}", 9 + n / 60, n % 60);
+            task(&n.to_string(), "2026-11-11", "09:00", &minute)
+        })
+        .collect();
+    let ms_now = parse_civil_ms(NOW, &FireZone::named(NY).unwrap()).unwrap();
+    let late = [
+        stale_notice(1, ms_now + 10 * 24 * HOUR),
+        stale_notice(2, ms_now + 17 * 24 * HOUR),
+    ];
+    let wanted = ["backup-stale:T:0".to_owned()];
+    let inputs = Inputs {
+        vault_id: "v1",
+        zone: NY,
+        locale: Locale::En,
+        hour_cycle: civil::HourCycle::H24,
+        now_local: NOW,
+        tasks: &tasks,
+        projects: &[],
+        events: &[],
+        calendars: &[],
+        extra: &late,
+        extra_wanted: &wanted,
+    };
+    let set = desired(&inputs);
+    assert!(set.len() <= CAP, "{}", set.len());
+    let backup: Vec<_> = set.iter().filter(|n| n.channel_id == "backup").collect();
+    assert_eq!(backup.len(), 2, "both warnings are held");
+    assert!(
+        backup.iter().all(|n| n.category_id.is_empty()),
+        "no buttons"
+    );
+    assert!(live(&inputs).contains(&"backup-stale:T:0".to_owned()));
+}
+
+#[test]
+fn a_notice_in_the_past_is_not_held() {
+    let ms_now = parse_civil_ms(NOW, &FireZone::named(NY).unwrap()).unwrap();
+    let past = [stale_notice(1, ms_now - HOUR)];
+    let set = desired(&Inputs {
+        vault_id: "v1",
+        zone: NY,
+        locale: Locale::En,
+        hour_cycle: civil::HourCycle::H24,
+        now_local: NOW,
+        tasks: &[],
+        projects: &[],
+        events: &[],
+        calendars: &[],
+        extra: &past,
+        extra_wanted: &[],
+    });
+    assert!(set.is_empty());
+}
+
+/// NA6: A DAY HAS NO MOMENT. An all-day event sounds at 09:00 that day in the member's zone, once,
+/// whatever its lead times; the body names the day and no clock.
+#[test]
+fn an_all_day_event_sounds_at_nine_on_its_day_once() {
+    let mut holiday = event("h", "2026-11-12T00:00", &[10, 60]);
+    holiday.all_day = true;
+    holiday.local_end = "2026-11-13".to_owned();
+    let set = run(NY, &[], &[holiday]);
+    assert_eq!(set.len(), 1, "the first lead stands for the day");
+    assert_eq!(set[0].fire_local, "2026-11-12T09:00");
+    assert!(!set[0].body.contains(':'), "{}", set[0].body);
+    let elsewhere = {
+        let mut e = event("h", "2026-11-12T00:00", &[10]);
+        e.all_day = true;
+        run("Asia/Tokyo", &[], &[e])
+    };
+    assert_eq!(
+        elsewhere[0].fire_local, "2026-11-12T09:00",
+        "09:00 wherever the member is"
+    );
+}
+
+#[test]
+fn with_details_off_a_notification_says_only_that_something_is_due() {
+    let t = task("a", "2026-11-11", "09:00", "2026-11-11T09:00");
+    let mut set = run(NY, &[t], &[event("e", "2026-11-11T12:00", &[10])]);
+    assert!(
+        set.iter()
+            .all(|n| n.title.starts_with("Task") || n.title == "Lunch")
+    );
+    redact(&mut set, Locale::En);
+    let titles: Vec<_> = set.iter().map(|n| n.title.as_str()).collect();
+    assert_eq!(titles, ["Reminder", "Event"], "{titles:?}");
+    assert!(set.iter().all(|n| n.body == "Open Centraid to see it."));
+    assert!(set[0].category_id == "task", "the buttons stay");
 }

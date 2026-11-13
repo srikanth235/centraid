@@ -98,6 +98,7 @@ impl Phone {
             self.read(load::calendar::Upcoming {
                 from: Some(from.to_owned()),
                 to: Some(to.to_owned()),
+                alerts: None,
             })
         else {
             panic!("upcoming answered something else");

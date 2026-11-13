@@ -6,10 +6,15 @@ name: gate
 #
 #   gate               `cargo xtask gate --profile pr` — every step a PR must
 #                      pass, Rust, protobuf, TypeScript and CI policy alike
-#                      (crates/xtask/README.md).
+#                      (crates/xtask/README.md). Its cargo cache is saved from
+#                      pull requests too, so a PR's second push starts warm
+#                      (.github/actions/setup, `cargo-cache-save-pr`).
 #   engine             the on-device chat's llama.cpp build, too slow for the
 #                      `pr` profile (R-CHAT-10).
 #   ios                Swift 6 app/XCTest, HealthSeeder, and the Rust simulator core.
+#   android            the Compose shell's Kotlin compiled against the Android SDK (no native
+#                      core: `compileDebugKotlin` stops before the libraries are packaged), on
+#                      the runner's own SDK.
 #   dependency-review  the PR's dependency diff, read through the API.
 #   pr-title           the squash subject, checked by `.githooks/commit-msg`.
 
@@ -83,25 +88,14 @@ jobs:
         with:
           rust: "true"
           cargo-cache: gate
-      # The profile's external tools. Under CI each step FAILS rather than
-      # skips when its binary is missing, so a broken install reds the gate.
-      # Release binaries, pinned here and nowhere else.
-      - name: Install the gate's tools
-        env:
-          NEXTEST_VERSION: 0.9.144
-          NEXTEST_SHA256: 8a4f726272b0a1c499bd87ca3978bfbb1a8c20bb08ccf075b9996e2081bd1e1e
-          ACTIONLINT_VERSION: 1.7.12
-          BUF_VERSION: 1.61.0
-        run: |
-          set -euo pipefail
-          command -v cargo-deny >/dev/null || cargo install cargo-deny --locked
-          nextest="cargo-nextest-${NEXTEST_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
-          curl -sSfL "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-${NEXTEST_VERSION}/${nextest}" -o "${RUNNER_TEMP}/${nextest}"
-          echo "${NEXTEST_SHA256}  ${RUNNER_TEMP}/${nextest}" | sha256sum -c -
-          tar -xzf "${RUNNER_TEMP}/${nextest}" -C /usr/local/bin cargo-nextest
-          curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" | tar -xz -C /usr/local/bin actionlint
-          curl -sSfL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64" -o /usr/local/bin/buf
-          chmod +x /usr/local/bin/buf
+          # A cold compile is what made PR runs take 50 to 70 minutes against
+          # about 24 warm. Saved from the PR too, so its second push is warm;
+          # GitHub scopes a PR's cache to its ref, and `main`'s stays the
+          # restore fallback and is never replaced.
+          cargo-cache-save-pr: "true"
+      # The profile's external tools, pinned in the action and nowhere else.
+      # Under CI each step FAILS rather than skips when its binary is missing.
+      - uses: ./.github/actions/gate-tools
       - run: cargo xtask gate --profile pr
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: failure()
@@ -115,6 +109,39 @@ jobs:
   # and `centraid-core-ffi/llama` are off in the workspace build and this job
   # builds, lints and tests the two crates with the engine on. A phone's
   # cross-compile of the engine is `lane-prebuilt-core.yml`'s.
+  # THE COMPOSE SHELL COMPILED, which nothing else in a pull request does: the JVM gate
+  # (`mobile-jvm`) proves the binding, and Linux has no Android SDK in the `gate` job. This is
+  # `compileDebugKotlin`, not `assembleDebug`: it type-checks every Kotlin file of `:androidApp`
+  # and `:core`'s Android target without packaging the native libraries the release lane owns.
+  # A job of its own so `gate` is no longer for it (#1188, B13).
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          # AGP 9 requires JDK 17+; `mobile/*/build.gradle.kts` declares `jvmToolchain(21)`.
+          java-version: "21"
+          cache: gradle
+          cache-dependency-path: |
+            mobile/gradle/libs.versions.toml
+            mobile/**/*.gradle.kts
+            mobile/gradle/wrapper/gradle-wrapper.properties
+      # THE RUNNER'S OWN SDK (ANDROID_HOME, /usr/local/lib/android/sdk): `android-actions/setup-android`
+      # failed in sdkmanager ("Failed to find package 'tools'") on top of it. Licences are accepted here
+      # so AGP can fetch the platform and build-tools it names.
+      - name: Accept the Android SDK licences
+        run: yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+      - name: Compile the Android shell's Kotlin
+        working-directory: mobile
+        run: ./gradlew -Pcentraid.android=true :androidApp:compileDebugKotlin --no-daemon --stacktrace
+      # The fixtures both shells read, run where the Kotlin compiles: no emulator, no native core.
+      - name: Run the shared-fixture tests
+        working-directory: mobile
+        run: ./gradlew -Pcentraid.android=true :androidApp:testDebugUnitTest --tests 'dev.centraid.android.kit.BackupCheckControlsTest' --no-daemon --stacktrace
+
   engine:
     runs-on: ubuntu-latest
     timeout-minutes: 45

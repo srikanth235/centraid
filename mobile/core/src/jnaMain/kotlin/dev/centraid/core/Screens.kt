@@ -160,7 +160,7 @@ public class Screens(
                 ?.takeIf { it.revision > incoming.revision }
                 ?: incoming
         }
-        if (update.views.isNotEmpty() || update.closed.isNotEmpty()) {
+        if (update.views.isNotEmpty() || update.closed.isNotEmpty() || update.deltas.isNotEmpty()) {
             viewStates.value = viewStates.value.toMutableMap().apply {
                 update.closed.forEach {
                     closedInstances.add(it)
@@ -172,6 +172,14 @@ public class Screens(
                     ) {
                         this[view.instance] = view
                     }
+                }
+                // THE NEXT WORDS OF A STREAMING ANSWER (#1188 C14), applied in order to the view they
+                // were made against; one made against another revision is dropped and the next full
+                // view repairs it.
+                update.deltas.forEach { delta ->
+                    if (delta.instance in closedInstances) return@forEach
+                    val held = this[delta.instance] ?: return@forEach
+                    held.withDelta(delta)?.let { this[delta.instance] = it }
                 }
             }
         }

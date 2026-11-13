@@ -33,26 +33,47 @@ catalog! {
     plain background_off_ios = ("Background App Refresh is off, so Centraid only catches up when you open it.", "Background App Refresh is off, so Centraid only catches up when you open it.");
     plain background_off_android = ("Centraid cannot catch up in the background on this phone.", "Centraid cannot catch up in the background on this phone.");
 
-    // WHAT A MEMBER IS TOLD ABOUT A PASS (`DrainCopy`): one sentence per reason it
-    // stopped. A window that ran out with bytes left is the ordinary case for a
-    // first backup of a camera roll, so a deadline is not an error and does not say
-    // so. "Everything" would be a claim, so an empty spool says only what was ready.
+    // HOW BACKUP RUNS, on the Backup page under "What travels when": it is foreground work and
+    // the windows the OS grants, never continuous, and a force-quit stops it until the next launch.
     plain pass_in_flight_title = ("Backing up", "Backing up");
-    plain pass_stopped_empty = ("Your backup device has everything that was ready.", "Your backup device has everything that was ready.");
-    plain pass_stopped_deadline = ("Still backing up. {size} to go.", "Still backing up. {size} to go.");
-    plain pass_stopped_unreachable = ("Backup device didn't answer. Will try again.", "Backup device didn't answer. Will try again.");
-    plain pass_stopped_untrusted = ("That isn't your backup device. Nothing was sent.", "That isn't your backup device. Nothing was sent.");
-    plain pass_stopped_moved = ("Moved to another phone. This phone is read-only.", "Moved to another phone. This phone is read-only.");
     plain pass_posture = ("Centraid backs up while open. Your phone keeps uploading after you leave.", "Centraid backs up while open. Your phone keeps uploading after you leave.");
     plain pass_force_quit = ("If you swipe Centraid away, your phone cancels those uploads until you open it again. Low Power Mode pauses them.", "If you swipe Centraid away, your phone cancels those uploads until you open it again. Low Power Mode pauses them.");
+    plain pass_force_quit_android = ("If you force-stop Centraid, backup waits until you open it again.", "If you force-stop Centraid, backup waits until you open it again.");
     plain pass_android_unmetered = ("Centraid backs up in the background on Wi-Fi, and on cellular when your setting allows it.", "Centraid backs up in the background on Wi-Fi, and on cellular when your setting allows it.");
 
-    // WHAT MAY BE CLAIMED as backed up (`BackupClaim`): the sentence leads with
-    // what is NOT backed up when anything is behind, because that is the part a
-    // member would be wrong about.
-    plain claim_never = ("Not backed up yet.", "Not backed up yet.");
-    plain claim_up_to_date = ("Records backed up {when}.", "Records backed up {when}.");
-    counted claim_behind = ("{n} change not backed up. Last backup {when}.", "{n} changes not backed up. Last backup {when}.");
-    plain claim_moved_nothing = ("Moved to another phone. Nothing unsent here.", "Moved to another phone. Nothing unsent here.");
-    counted claim_moved_unsent = ("Moved to another phone. {n} change since {since} is only here.", "Moved to another phone. {n} changes since {since} are only here.");
+    // WHICH BACKUP DEVICE IS BEHIND, FULL OR HOLDING AN OLDER BACKUP (#1188, NB1): the card names
+    // it by the name the member gave it, and each row says how it stands.
+    plain device_behind = ("{name} is behind", "{name} is behind");
+    plain device_full = ("{name} is full", "{name} is full");
+    plain device_older = ("{name} has an older backup", "{name} has an older backup");
+    plain device_backed_up_to = ("Backed up to {others} {when}", "Backed up to {others} {when}");
+    plain device_silent_since = ("{name} hasn't answered since {day}. Check it's awake and on the same network as this phone.", "{name} hasn't answered since {day}. Check it's awake and on the same network as this phone.");
+    plain device_too_large = ("{name} refused a file", "{name} refused a file");
+    plain device_refusing = ("{name} is refusing the backup", "{name} is refusing the backup");
+    plain device_too_large_reason = ("{name} refused a file as over its {limit} limit. Update Centraid on this phone and on {name}, then back up again.", "{name} refused a file as over its {limit} limit. Update Centraid on this phone and on {name}, then back up again.");
+    plain device_refusing_reason = ("{name} keeps refusing part of the backup. Check its disk and that Centraid on it is up to date, then back up again.", "{name} keeps refusing part of the backup. Check its disk and that Centraid on it is up to date, then back up again.");
+    plain device_full_reason = ("{name} has no room left. Free some space on it, then back up again.", "{name} has no room left. Free some space on it, then back up again.");
+    plain device_older_reason = ("It holds an older backup than this phone sent. Back up now to bring it up to date.", "It holds an older backup than this phone sent. Back up now to bring it up to date.");
+    plain device_catching_up = ("{name} is catching up. Back up now to send what it is missing.", "{name} is catching up. Back up now to send what it is missing.");
+    plain row_up_to_date = ("Up to date", "Up to date");
+    plain row_behind_one = ("1 file behind", "1 file behind");
+    plain row_behind_many = ("{n} files behind", "{n} files behind");
+    plain device_waiting = ("{count} waiting for {name}", "{count} waiting for {name}");
+    plain row_catching_up = ("Catching up", "Catching up");
+    plain row_full = ("Full", "Full");
+    plain row_too_large = ("Refused a file as too large", "Refused a file as too large");
+    plain row_refusing = ("Refusing the backup", "Refusing the backup");
+    plain row_older = ("Older backup than this phone sent", "Older backup than this phone sent");
+
+    // THE ONE-TIME PROMPT after the first confirmed backup (#1188, NB5): "recovery key", never
+    // "words"; no checkbox.
+    plain key_prompt_title = ("Save your recovery key", "Save your recovery key");
+    plain key_prompt_body = ("Your first backup is done. Without the recovery key it can't be opened on a new phone.", "Your first backup is done. Without the recovery key it can't be opened on a new phone.");
+    plain key_prompt_save = ("Save recovery key", "Save recovery key");
+    plain key_prompt_not_now = ("Not now", "Not now");
+    plain notify_ask_title = ("{name} is paired", "{name} is paired");
+    plain notify_ask_body = ("Allow notifications so Centraid can tell you when a backup falls behind.", "Allow notifications so Centraid can tell you when a backup falls behind.");
+    plain notify_ask_allow = ("Allow notifications", "Allow notifications");
+    plain notify_ask_not_now = ("Not now", "Not now");
+    plain notify_open_settings = ("Open Settings", "Open Settings");
 }

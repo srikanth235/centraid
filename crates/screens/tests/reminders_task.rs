@@ -143,7 +143,7 @@ fn the_fields_are_computed_and_repeats_is_the_cores_sentence() {
     assert_eq!(selected(repeats), "monthly");
     assert_eq!(selected(field(v, "anchor")), "completion");
     assert_eq!(field(v, "priority").value, "None");
-    // SIGNAGE, NOT AN ESSAY (product-intuition/references/design-behaviour.md § Wording; #1047): "None" is on the row, so
+    // SIGNAGE, NOT AN ESSAY (design/wording.md § Wording; #1047): "None" is on the row, so
     // no note explains that priority is optional.
     assert_eq!(field(v, "priority").note, "");
     assert_eq!(data.title_placeholder, "Task name");
@@ -173,14 +173,14 @@ fn a_one_off_repeats_never_and_a_date_only_reminder_is_on_the_day() {
     let i = open(&mut d, &id);
     let v = d.view(i);
     assert_eq!(field(v, "repeats").value, "Never");
-    assert_eq!(field(v, "reminder").value, "On the day");
+    assert_eq!(field(v, "reminder").value, "On the day, 09:00");
     assert!(detail_data(v).fields.iter().all(|f| f.key != "anchor"));
 }
 
 #[test]
-fn the_reminder_row_says_no_alert_will_sound_for_a_date_with_no_time() {
+fn the_reminder_row_says_it_sounds_at_nine_for_a_date_with_no_time() {
     let mut d = driver();
-    let silent = "No alert will sound because no time is set";
+    let silent = "A reminder for a day with no time sounds at 09:00 that day.";
     let dated = add(
         &d,
         act::reminders::AddTask {

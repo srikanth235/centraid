@@ -98,6 +98,9 @@ pub struct Cache<'a> {
     llm: &'a dyn Llm,
     dir: PathBuf,
     offline: bool,
+    /// Where a miss is written as a pending prompt instead of asked (see [`Cache::collecting`]).
+    collect: Option<PathBuf>,
+    pending: AtomicUsize,
     pub calls: AtomicUsize,
     pub hits: AtomicUsize,
 }
@@ -122,9 +125,26 @@ impl<'a> Cache<'a> {
             llm,
             dir: dir.to_path_buf(),
             offline,
+            collect: None,
+            pending: AtomicUsize::new(0),
             calls: AtomicUsize::new(0),
             hits: AtomicUsize::new(0),
         })
+    }
+
+    /// A cache that answers no miss: each is written to `dir/<hash>.json` as `{model, hash, prompt}` and answered
+    /// with an empty string that is not cached, so a caller sees an unusable answer. The prompts are answered
+    /// elsewhere and put back with [`put`]. A caller stops asking again when [`Cache::pending`] is not zero.
+    #[must_use]
+    pub fn collecting(mut self, dir: &Path) -> Self {
+        self.collect = Some(dir.to_path_buf());
+        self
+    }
+
+    /// The prompts a collecting cache has written so far.
+    #[must_use]
+    pub fn pending(&self) -> usize {
+        self.pending.load(Ordering::Relaxed)
     }
 
     fn path(&self, hash: &str) -> PathBuf {
@@ -144,6 +164,15 @@ impl<'a> Cache<'a> {
                 .with_context(|| format!("a corrupt cache file {}", path.display()))?;
             self.hits.fetch_add(1, Ordering::Relaxed);
             return Ok(entry.response);
+        }
+        if let Some(dir) = &self.collect {
+            std::fs::create_dir_all(dir)?;
+            let pending = serde_json::json!({
+                "model": self.llm.model(), "hash": hash, "prompt": prompt,
+            });
+            std::fs::write(dir.join(format!("{hash}.json")), pending.to_string())?;
+            self.pending.fetch_add(1, Ordering::Relaxed);
+            return Ok(String::new());
         }
         if self.offline {
             bail!("offline: no cached completion for prompt {hash}");
@@ -172,6 +201,32 @@ impl<'a> Cache<'a> {
             self.hits.load(Ordering::Relaxed),
         )
     }
+}
+
+/// Put an answer into the cache under `hash` (what [`prompt_hash`] gave `model` and the prompt), the way a
+/// completed call would have. A hash is 64 hex digits. Returns false when an entry is already there (kept).
+///
+/// # Errors
+///
+/// A hash that is not one, or a file that cannot be written.
+pub fn put(dir: &Path, model: &str, hash: &str, response: &str) -> Result<bool> {
+    if hash.len() != 64 || !hash.bytes().all(|b| b.is_ascii_hexdigit()) {
+        bail!("`{hash}` is not a prompt hash");
+    }
+    let path = dir.join(&hash[..2]).join(format!("{hash}.json"));
+    if path.exists() {
+        return Ok(false);
+    }
+    std::fs::create_dir_all(path.parent().context("no parent")?)?;
+    let entry = Entry {
+        model: model.to_owned(),
+        prompt_hash: hash.to_owned(),
+        response: response.to_owned(),
+    };
+    let tmp = path.with_extension("tmp");
+    std::fs::write(&tmp, serde_json::to_string(&entry)?)?;
+    std::fs::rename(&tmp, &path)?;
+    Ok(true)
 }
 
 /// The first JSON value in a model's answer, whatever it wrapped it in (a code fence, a sentence).
@@ -249,6 +304,31 @@ mod tests {
         assert_eq!(second.complete("hello").expect("a"), a);
         assert_eq!(llm.0.load(Ordering::Relaxed), 1);
         assert!(second.complete("other").is_err());
+    }
+
+    #[test]
+    fn a_collecting_cache_writes_the_prompt_and_a_put_answer_is_then_a_hit() {
+        let dir = tempfile::tempdir().expect("dir");
+        let pending = dir.path().join("pending");
+        let cache_dir = dir.path().join("cache");
+        let llm = Echo(AtomicUsize::new(0));
+        let cache = Cache::open(&llm, &cache_dir, false)
+            .expect("cache")
+            .collecting(&pending);
+        assert_eq!(cache.complete("hello").expect("empty"), "");
+        assert_eq!(cache.pending(), 1);
+        assert_eq!(llm.0.load(Ordering::Relaxed), 0);
+        let hash = prompt_hash("echo", "hello");
+        let file: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(pending.join(format!("{hash}.json"))).expect("pending"),
+        )
+        .expect("json");
+        assert_eq!(file["prompt"], "hello");
+        assert!(put(&cache_dir, "echo", &hash, "{\"a\": 1}").expect("put"));
+        assert!(!put(&cache_dir, "echo", &hash, "other").expect("kept"));
+        assert!(put(&cache_dir, "echo", "nothex", "x").is_err());
+        let offline = Cache::open(&llm, &cache_dir, true).expect("cache");
+        assert_eq!(offline.complete("hello").expect("hit"), "{\"a\": 1}");
     }
 
     #[test]

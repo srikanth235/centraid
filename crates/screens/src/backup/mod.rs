@@ -5,13 +5,14 @@
 //! | Piece | What it decides |
 //! |---|---|
 //! | [`home`] | the screen `backup.home`: the line, the gateways, the controls, the key |
+//! | [`check`] | the page `backup.check`, "Check my backup": each device's backup opened in a spare copy |
 //! | [`apps`] | "In this backup": one row per app, what it holds and whether it is backed up |
 //! | [`line`] | the one honest line Home draws too: never more than a gateway acknowledged |
 //! | [`reading`] | the ledger's reading, and the `backup-status` query behind it |
 //! | [`rule`] | the member's transfer rule and the videos bit, as this phone keeps them |
 //! | [`key`] | where the recovery key is, worded for the platform |
 //! | [`freeze`] | what is only on this phone when the vault moved |
-//! | [`claim`] | what a sentence may claim about backup, and what a pass is told in words |
+//! | [`claim`] | how a size is said, in decimal units rounded down |
 //!
 //! **"Free up space" is Photos'**: the count, the verb and its sentences are
 //! `photos::keep_originals::FreeUpRow` over `photos::free_up`, so this
@@ -25,7 +26,9 @@
 use crate::Registry;
 use crate::custody::secrets::VaultSecrets;
 
+pub mod alerts;
 pub mod apps;
+pub mod check;
 pub mod claim;
 mod doors;
 pub mod freeze;
@@ -34,6 +37,7 @@ pub mod key;
 pub mod line;
 pub mod reading;
 pub mod rule;
+pub mod stale;
 
 #[cfg(test)]
 mod tests;
@@ -47,7 +51,11 @@ pub const TAB: &str = "backup";
 #[must_use]
 pub fn registry(secrets: &VaultSecrets) -> Registry {
     let secrets = secrets.clone();
-    Registry::default().with(HOME, move |route| home::build(route, &secrets))
+    let for_check = secrets.clone();
+    Registry::default()
+        .with(HOME, move |route| home::build(route, &secrets))
+        .with(check::NAME, move |route| check::build(route, &for_check))
+        .with(alerts::NAME, alerts::build)
 }
 
 /// The routes the backup screens hand to a shell inside a view state, and that
@@ -64,6 +72,16 @@ pub mod routes {
             sheet: false,
             screen: HOME.to_owned(),
             args: Some(wire::route::Args::BackupHome(wire::BackupHomeRoute {})),
+        }
+    }
+
+    /// Check my backup (#1188, B6): pushed from Backup's Recovery section.
+    #[must_use]
+    pub fn check() -> wire::Route {
+        wire::Route {
+            sheet: false,
+            screen: super::check::NAME.to_owned(),
+            args: Some(wire::route::Args::BackupCheck(wire::BackupCheckRoute {})),
         }
     }
 

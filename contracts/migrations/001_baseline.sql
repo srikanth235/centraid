@@ -326,6 +326,24 @@ CREATE TABLE search_owed (
   after TEXT NOT NULL
 ) STRICT;
 
+-- ALERTS (#1188, A5): the index of "what fires next". One row per (event or task, lead time): the
+-- writer keeps `fire_key`, the moment of its next firing, at every commit that touches the
+-- item (`alerts::refresh`), so the notification service reads "the next 48" off `alert_by_fire`
+-- whatever the vault's size. `timing` says how `fire_key` reads: 'fixed' is a UTC instant
+-- (an event with a zone, a due that names one), 'floating' a wall clock (09:00 wherever the member
+-- is). A repeating item holds its NEXT firing (`repeats`) and the launch and idle passes move it on
+-- (`alerts::advance`). Derived like `search`: a rebuild rewrites it, a restore carries it, nothing
+-- a member made.
+CREATE TABLE alert (
+  entity_id  TEXT NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
+  offset_min INTEGER NOT NULL CHECK (offset_min >= 0),
+  timing     TEXT NOT NULL CHECK (timing IN ('fixed','floating')),
+  fire_key   TEXT NOT NULL,
+  repeats    INTEGER NOT NULL DEFAULT 0 CHECK (repeats IN (0,1)),
+  PRIMARY KEY (entity_id, offset_min)
+) STRICT, WITHOUT ROWID;
+CREATE INDEX alert_by_fire ON alert(timing, fire_key, entity_id);
+
 -- ---------------------------------------------------------------------------------------------
 -- The kinds. Every kind row is its entity's own: kind is a generated constant, and the
 -- composite foreign key is what keeps a person row from naming a note.
@@ -435,6 +453,10 @@ CREATE TABLE task (
   zone              TEXT,
   series_id         TEXT REFERENCES task(id),
   remind_before_min INTEGER CHECK (remind_before_min IS NULL OR remind_before_min >= 0),
+  -- A SNOOZE MOVES THE ALERT, NOT THE DUE (#1188, NA5): the UTC instant the member asked to be
+  -- reminded again. While it is set it is the task's one alert (`alerts::refresh`); an edit of the
+  -- due, the lead or the rule clears it, and so does finishing the task.
+  snoozed_until     TEXT CHECK (snoozed_until IS NULL OR (datetime(snoozed_until) IS NOT NULL AND length(snoozed_until) > 10)),
   url               TEXT CHECK (url IS NULL OR length(trim(url)) > 0),
   effort_min        INTEGER CHECK (effort_min IS NULL OR effort_min > 0),
   parent_id         TEXT REFERENCES task(id) CHECK (parent_id IS NULL OR parent_id <> id),

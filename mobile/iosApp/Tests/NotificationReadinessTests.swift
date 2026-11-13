@@ -59,13 +59,13 @@ final class NotificationReadinessTests: XCTestCase {
         let oldWatcher = LibraryWatcher.shared.onChange
         defer { LibraryWatcher.shared.onChange = oldWatcher }
         let core = NotificationTestCore()
-        let performer = NotificationTestPerformer(heldCalls: [3])
+        let performer = NotificationTestPerformer(heldCalls: [4])
         let store = ScreenStore(core: core, scheduleNotifications: performer.perform)
         await store.start()
         var calls = core.calls.makeAsyncIterator()
         _ = await calls.next() // Snapshot.
         let answer = Task {
-            let matched = await store.answerNotification(id: "public-task-A", verb: .done)
+            let matched = await store.answerNotification(id: "public-task-A", verb: .done, pressID: "public-press-current")
             performer.events.append("callback A")
             return matched
         }
@@ -79,13 +79,18 @@ final class NotificationReadinessTests: XCTestCase {
         core.emit(schedule: schedule(id: "public-task-A", verb: .open), effectID: 2)
         _ = await performed.next()
         _ = await calls.next()
-        core.emit(schedule: schedule(id: "public-task-A", verb: .done), effectID: 3)
+        // Another press of the same verb on the same notification cannot acknowledge this one.
+        core.emit(schedule: schedule(id: "public-task-A", verb: .done, pressID: "public-press-other"), effectID: 3)
+        _ = await performed.next()
+        _ = await calls.next()
+        XCTAssertFalse(performer.events.contains("callback A"))
+        core.emit(schedule: schedule(id: "public-task-A", verb: .done, pressID: "public-press-current"), effectID: 4)
         _ = await performed.next()
         XCTAssertFalse(performer.events.contains("callback A"))
-        performer.release(3)
+        performer.release(4)
         let matched = await answer.value
         XCTAssertTrue(matched)
-        XCTAssertEqual(performer.events, ["begin 1", "end 1", "begin 2", "end 2", "begin 3", "end 3", "callback A"])
+        XCTAssertEqual(performer.events, ["begin 1", "end 1", "begin 2", "end 2", "begin 3", "end 3", "begin 4", "end 4", "callback A"])
         core.finish()
     }
 
@@ -132,8 +137,10 @@ final class NotificationReadinessTests: XCTestCase {
         core.finish()
     }
 
-    private func schedule(id: String, verb: Centraid_Core_V1_NotificationVerb) -> Centraid_Core_V1_ScheduleNotifications {
-        .with { $0.completedAnswers = [.with { $0.notificationID = id; $0.verb = verb }] }
+    private func schedule(
+        id: String, verb: Centraid_Core_V1_NotificationVerb, pressID: String = ""
+    ) -> Centraid_Core_V1_ScheduleNotifications {
+        .with { $0.completedAnswers = [.with { $0.notificationID = id; $0.verb = verb; $0.pressID = pressID }] }
     }
 }
 

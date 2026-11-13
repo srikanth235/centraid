@@ -32,24 +32,70 @@ pub fn levenshtein(a: &str, b: &str) -> usize {
     row[b.len()]
 }
 
+/// Whether `levenshtein(a, b) <= 2`, without filling the table when the answer is plain: the
+/// common ends cost nothing, and a row whose every cell is past two ends the work.
+fn within_two(a: &str, b: &str) -> bool {
+    let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
+    let lead = a.iter().zip(&b).take_while(|(x, y)| x == y).count();
+    let (a, b) = (&a[lead..], &b[lead..]);
+    let tail = a
+        .iter()
+        .rev()
+        .zip(b.iter().rev())
+        .take_while(|(x, y)| x == y)
+        .count();
+    let (a, b) = (&a[..a.len() - tail], &b[..b.len() - tail]);
+    if a.len().abs_diff(b.len()) > 2 {
+        return false;
+    }
+    let mut row: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.iter().enumerate() {
+        let mut diagonal = row[0];
+        row[0] = i + 1;
+        for (j, cb) in b.iter().enumerate() {
+            let above = row[j + 1];
+            row[j + 1] = (diagonal + usize::from(ca != cb))
+                .min(above + 1)
+                .min(row[j] + 1);
+            diagonal = above;
+        }
+        // every later row is at least this row's smallest cell
+        if row.iter().all(|&cell| cell > 2) {
+            return false;
+        }
+    }
+    row[b.len()] <= 2
+}
+
 /// Whether two names are different but one slip, one initial or one extra word apart: the pairs
 /// a person would read as "the same thing, twice".
 #[must_use]
 pub fn near_duplicates(a: &str, b: &str) -> bool {
-    let (a, b) = (normalize(a), normalize(b));
+    near_duplicates_normalized(&normalize(a), &normalize(b))
+}
+
+/// [`near_duplicates`] of two names already passed through [`normalize`], for a caller that
+/// compares one name against many and normalizes each once.
+#[must_use]
+pub fn near_duplicates_normalized(a: &str, b: &str) -> bool {
     if a == b || a.is_empty() || b.is_empty() {
         return false;
     }
-    if a.chars().count().min(b.chars().count()) >= 4 && levenshtein(&a, &b) <= 2 {
+    let (len_a, len_b) = (a.chars().count(), b.chars().count());
+    // the distance is at least the difference in length, so a wider gap needs no table
+    if len_a.min(len_b) >= 4 && len_a.abs_diff(len_b) <= 2 && within_two(a, b) {
         return true;
     }
-    let (wa, wb): (Vec<&str>, Vec<&str>) = (a.split(' ').collect(), b.split(' ').collect());
-    let (short, long) = if wa.len() <= wb.len() {
-        (&wa, &wb)
+    // words are single-space separated: the longer has exactly one more word, and the shorter's
+    // words lead it
+    let (short, long) = if a.split(' ').count() <= b.split(' ').count() {
+        (a, b)
     } else {
-        (&wb, &wa)
+        (b, a)
     };
-    long.len() == short.len() + 1 && long[..short.len()] == short[..]
+    long.strip_prefix(short)
+        .and_then(|rest| rest.strip_prefix(' '))
+        .is_some_and(|extra| !extra.contains(' '))
 }
 
 /// A near twin of `name`: one deleted, doubled or swapped letter, a trailing number or word, or

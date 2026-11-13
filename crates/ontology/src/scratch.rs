@@ -2,7 +2,7 @@
 //!
 //! A vault is never opened in place from a committed path: opening one writes a
 //! `-wal` sidecar and a checkpoint folds that back into the file
-//! (`.claude/skills/sqlite/SKILL.md`). So
+//! (`.claude/skills/stack/sqlite/centraid.md`). So
 //! whoever needs a vault makes a directory of their own, here.
 
 use std::path::{Path, PathBuf};

@@ -913,8 +913,8 @@ fn tail_any() -> Rule {
 // the step's use of it
 // ---------------------------------------------------------------------------------------------
 
-/// The grammar of one step as GBNF, with the mode it is in effect: `Full` is the grammar of the regrouped tools, so a
-/// model whose tools are S2's (`search`, `open`, a create's kind in `set`) gets `Handles`. `None` for `Off`.
+/// The grammar of one step as GBNF, with the mode it is in effect. `Full` holds for the regrouped tools and for S2's
+/// (`search`, `open`, a create's kind in `set`, each derived by it). `None` for `Off`.
 #[must_use]
 pub fn grammar_for_step(
     mode: GrammarMode,
@@ -922,9 +922,13 @@ pub fn grammar_for_step(
     seen: &Visible,
     prefix: &str,
 ) -> Option<(GrammarMode, String)> {
-    let mode = match (mode, tools) {
-        (GrammarMode::Full, ToolsMode::S2) => GrammarMode::Handles,
-        (other, _) => other,
+    // S2 says `search` and `open` for `find`, and puts a create's kind in `set`: the full grammar
+    // admits both (every S2-shaped think of the training set is derived by it), so `Full` stays
+    // `Full` for S2 with its own `via` words.
+    let via: &[&str] = if tools == ToolsMode::S2 {
+        &["find", "compute", "search", "open"]
+    } else {
+        &["find", "compute"]
     };
     let end = MODEL.think_close;
     let grammar = match mode {
@@ -935,7 +939,7 @@ pub fn grammar_for_step(
             if extra {
                 handles(seen)
             } else {
-                full_ending(seen, !prefix.is_empty(), &["find", "compute"], end)
+                full_ending(seen, !prefix.is_empty(), via, end)
             }
         }
     };

@@ -100,7 +100,8 @@ pub const fn refusal_word(refusal: &Refusal) -> Option<&'static str> {
         Refusal::AttachmentUnsupported => "attachment_unsupported",
         Refusal::AttachmentUnreadable => "attachment_unreadable",
         Refusal::AttachmentTooLarge => "attachment_too_large",
-        Refusal::Cancelled | Refusal::Busy => return None,
+        // a turn that never read the question is not a turn to save: the draft stays to be shortened
+        Refusal::Cancelled | Refusal::Busy | Refusal::TooLong => return None,
     })
 }
 
@@ -282,6 +283,7 @@ fn run(
         input,
         invoke_key: key.to_owned(),
         quiet: false,
+        actor: None,
     };
     let changes = crate::events::ChangeFeed::new(handle.events());
     let outcome = handle
@@ -364,6 +366,7 @@ fn settle(handle: &Handle, thread: &str, key: &str, outcome: &str, text: &str) -
         input,
         invoke_key: key.to_owned(),
         quiet: false,
+        actor: None,
     };
     let changes = crate::events::ChangeFeed::new(handle.events());
     let ran = handle
@@ -504,6 +507,7 @@ mod tests {
             text: String::new(),
             diff: serde_json::json!({}),
             steps: 1,
+            undo: Vec::new(),
         };
         let refused = Confirmed::Refused {
             step: 0,

@@ -1,4 +1,4 @@
-//! THE ONE FILTER AND SORT MENU (product-intuition/references/design-behaviour.md § App roots): the header's filter
+//! THE ONE FILTER AND SORT MENU (design/behaviour.md § App roots): the header's filter
 //! button opens a menu Rust finishes, in place of the chip row that stood under
 //! the header. An app builds its sections here and puts the result on its state;
 //! the shell draws it with the platform's menu and sends a pick back as

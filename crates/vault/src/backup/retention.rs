@@ -13,8 +13,9 @@
 //! Sunday, UTC) and calendar months. A phone that was off for a month comes
 //! back to the history it left rather than to one snapshot. The rules overlap
 //! — today's newest is also this week's and this month's — so the union is at
-//! most 17. The newest snapshot is always kept, and so is one dated after
-//! `now_ms`: a clock that went backwards cannot be judged against.
+//! most 17. The newest snapshot is always kept. One dated after `now_ms` is
+//! judged as if taken at `now_ms` (see [`keep`]), so a clock that went forwards
+//! and was corrected cannot keep a snapshot for ever.
 //!
 //! ## WHAT IS LIVE
 //!
@@ -29,7 +30,9 @@
 //! The vault's current files are live, and a file the vault no longer names is
 //! garbage — but a kept snapshot's rows may still name it, and a restore of
 //! that snapshot needs its bytes. [`collectable`] holds such a file until
-//! every kept snapshot was taken after it left (the sweep's F5).
+//! every kept snapshot was taken after it left (the sweep's F5). While any kept
+//! snapshot is dated in the future nothing is collectable at all
+//! ([`collectable_among`]): its real time is unknown, and doubt never deletes.
 
 use std::collections::BTreeSet;
 
@@ -82,22 +85,26 @@ fn month(taken_at_ms: u64) -> i64 {
 }
 
 /// Decide which snapshots to keep.
+///
+/// **A DATE IN THE FUTURE IS CLAMPED, NOT KEPT FOR EVER** (#1188, B11). A phone whose clock was
+/// set ahead and corrected dated snapshots after `now`; they were kept untouched until the real
+/// date caught up, which for a year-9999 clock is never. A snapshot's time is judged as at most
+/// `now`, and where two share it the one registered later is the newer — the gateway's own
+/// clock says which is the head, so a bad phone clock never makes retention drop the head.
 #[must_use]
 pub fn keep(entries: &[SnapshotEntry], now_ms: u64) -> Keep {
+    let judged_at = |entry: &SnapshotEntry| entry.taken_at_ms.min(now_ms);
     let mut ordered: Vec<&SnapshotEntry> = entries.iter().collect();
-    ordered
-        .sort_by(|left, right| (right.taken_at_ms, right.name).cmp(&(left.taken_at_ms, left.name)));
+    ordered.sort_by(|left, right| {
+        (judged_at(right), right.registered_at_ms, right.name).cmp(&(
+            judged_at(left),
+            left.registered_at_ms,
+            left.name,
+        ))
+    });
 
-    let mut kept: BTreeSet<Name> = ordered
-        .iter()
-        .filter(|entry| entry.taken_at_ms > now_ms)
-        .map(|entry| entry.name)
-        .collect();
-    let judged: Vec<&SnapshotEntry> = ordered
-        .iter()
-        .copied()
-        .filter(|entry| entry.taken_at_ms <= now_ms)
-        .collect();
+    let mut kept: BTreeSet<Name> = BTreeSet::new();
+    let judged: Vec<&SnapshotEntry> = ordered.clone();
     if let Some(newest) = judged.first() {
         kept.insert(newest.name);
     }
@@ -110,7 +117,7 @@ pub fn keep(entries: &[SnapshotEntry], now_ms: u64) -> Keep {
         let mut last: Option<i64> = None;
         let mut periods = 0;
         for entry in &judged {
-            let this = period(entry.taken_at_ms);
+            let this = period(judged_at(entry));
             if last == Some(this) {
                 continue;
             }
@@ -163,6 +170,19 @@ pub fn live_names(
 #[must_use]
 pub fn collectable(first_unlive_ms: u64, oldest_kept_ms: Option<u64>) -> bool {
     oldest_kept_ms.is_some_and(|oldest| oldest > first_unlive_ms)
+}
+
+/// [`collectable`] over every kept snapshot's `taken_at_ms`, with the clock it is judged on.
+///
+/// **DOUBT NEVER DELETES.** While any kept snapshot is dated after `now_ms`, nothing is
+/// collectable: that snapshot's real take time is unknown (its phone's clock was set ahead), so
+/// it may name a file that left the vault after it was really taken, and the oldest date alone
+/// cannot say. It heals itself — once the clock passes the date, or [`keep`] (which clamps the
+/// date) drops that snapshot, the rule is [`collectable`]'s again.
+#[must_use]
+pub fn collectable_among(first_unlive_ms: u64, kept_taken_ms: &[u64], now_ms: u64) -> bool {
+    kept_taken_ms.iter().all(|taken| *taken <= now_ms)
+        && collectable(first_unlive_ms, kept_taken_ms.iter().copied().min())
 }
 
 /// What a destination lists beyond the live set.
@@ -294,20 +314,36 @@ mod tests {
     }
 
     #[test]
-    fn the_newest_is_always_kept_and_the_future_is_never_judged() {
+    fn the_newest_is_always_kept() {
         let only = [entry(NOW_MS - 400 * DAY_MS)];
         assert_eq!(keep(&only, NOW_MS).keep, vec![only[0].name]);
         assert_eq!(keep(&[], NOW_MS), Keep::default());
+    }
 
-        let ahead = entry(NOW_MS + 30 * DAY_MS);
+    /// **B11.** A snapshot dated ahead of now (a clock set forward and corrected) is judged as
+    /// today's and ages out like any other, and the head — registered last — is never the one
+    /// dropped for it.
+    #[test]
+    fn a_snapshot_dated_in_the_future_is_clamped_and_never_costs_the_head() {
+        let ahead = SnapshotEntry {
+            name: name_at(NOW_MS + 30 * DAY_MS),
+            taken_at_ms: NOW_MS + 30 * DAY_MS,
+            registered_at_ms: NOW_MS - 2 * HOUR_MS,
+        };
+        let head = SnapshotEntry {
+            name: name_at(NOW_MS),
+            taken_at_ms: NOW_MS,
+            registered_at_ms: NOW_MS,
+        };
         let mut entries: Vec<SnapshotEntry> =
-            (0..20).map(|day| entry(NOW_MS - day * DAY_MS)).collect();
+            (1..20).map(|day| entry(NOW_MS - day * DAY_MS)).collect();
         entries.push(ahead);
+        entries.push(head);
         let decided = keep(&entries, NOW_MS);
-        assert!(decided.keep.contains(&ahead.name));
+        assert!(decided.keep.contains(&head.name), "the head stays");
         assert!(
-            decided.keep.contains(&name_at(NOW_MS)),
-            "the newest judged one"
+            decided.drop.contains(&ahead.name),
+            "the future-dated one shares today with the head and goes"
         );
     }
 
@@ -378,5 +414,25 @@ mod tests {
         );
         // The same file, left 200 days ago: older than every kept snapshot.
         assert!(collectable(NOW_MS - 200 * DAY_MS, oldest));
+    }
+
+    /// **A FUTURE-DATED KEPT SNAPSHOT HOLDS EVERY COLLECTION BACK,** and the same data with a
+    /// sane date is collected as before.
+    #[test]
+    fn a_future_dated_kept_snapshot_collects_nothing_until_it_heals() {
+        let left = NOW_MS - 10 * DAY_MS;
+        let sane = [NOW_MS - DAY_MS, NOW_MS - 2 * DAY_MS];
+        assert!(collectable_among(left, &sane, NOW_MS), "as before");
+        // The oldest is sane but a newer kept one is dated ahead: still nothing.
+        let ahead = [NOW_MS - DAY_MS, NOW_MS + 400 * DAY_MS];
+        assert!(!collectable_among(left, &ahead, NOW_MS));
+        // The oldest itself is in the future: it would read as "newer than the leaving".
+        assert!(!collectable_among(left, &[NOW_MS + DAY_MS], NOW_MS));
+        // The clock passes the date: collectable again.
+        assert!(collectable_among(left, &ahead, NOW_MS + 401 * DAY_MS));
+        assert!(
+            !collectable_among(left, &[], NOW_MS),
+            "no kept snapshot collects nothing"
+        );
     }
 }

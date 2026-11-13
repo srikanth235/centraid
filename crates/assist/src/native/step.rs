@@ -1,8 +1,8 @@
 //! THE DECODE STEP (SPEC §6.6, §9; #1088, D-1044-18, #1166): one assistant message, written by any [`Model`].
 //!
-//! The model writes text and the runtime reads it. The think is free by default (`StepOptions::grammar` is `Off`: S2 and the
-//! phone); a model trained on the regrouped tools decodes it under a grammar built fresh from the catalog and the prompt
-//! (`native/grammar.rs`), sent as the think generation's `grammar` and to no other. The call and the rest of the message
+//! The model writes text and the runtime reads it. The think is free under `StepOptions::default()` (grammar `Off`); the phone does not
+//! decode with the default but with `native_turn::phone_options()` (grammar `Full`), where the think is decoded under a grammar
+//! built fresh from the catalog and the prompt (`native/grammar.rs`), sent as the think generation's `grammar` and to no other. The call and the rest of the message
 //! are never masked. The spans the think copies are checked against the user's message after decoding
 //! ([`StepInfo::unspanned`]). Three things generation does not do
 //! by itself are done here, as steps over TEXT, which is the only thing an engine behind the [`Model`] trait takes:
@@ -55,11 +55,11 @@ pub struct StepOptions {
     /// `0.0` is greedy; rollouts sample (Python: 0.6).
     pub temperature: f32,
     /// The tools the model was trained on, which fix the shape of the call its think states
-    /// (`compile_think_for`). The default is S2, the model the phone ships; a model trained on the
-    /// regrouped tools sets `Sig` (#1166).
+    /// (`compile_think_for`). The default is `Sig`, the eight tools; the phone takes the mode the
+    /// model record names (`native_turn::phone_options`), and a model on S2's tools sets `S2` (#1166).
     pub tools: ToolsMode,
-    /// How much of the think the decoder holds to (`native/grammar.rs`). `Off` is the phone's and S2's: the think is free.
-    /// `Full` is the grammar of the regrouped tools; under `ToolsMode::S2` it is `Handles`, because S2 writes `search`
+    /// How much of the think the decoder holds to (`native/grammar.rs`). `Off` leaves the think free (the default here; the phone holds `Full`, see `native_turn::phone_options`).
+    /// `Full` is the grammar of the tools; under `ToolsMode::S2` it admits `search`
     /// and `open` and puts a create's kind in `set`.
     pub grammar: GrammarMode,
 }
@@ -70,7 +70,7 @@ impl Default for StepOptions {
             think_limit: THINK_LIMIT,
             max_new: MAX_NEW,
             temperature: 0.0,
-            tools: ToolsMode::S2,
+            tools: ToolsMode::Sig,
             grammar: GrammarMode::Off,
         }
     }
@@ -301,15 +301,7 @@ mod tests {
     }
 
     fn step(model: &dyn Model, prompt: &str, dates: Option<&str>) -> StepOutput {
-        decode_step(
-            model,
-            prompt,
-            dates,
-            TraceMode::V4,
-            StepOptions::default(),
-            &Cancel::new(),
-        )
-        .expect("a step")
+        decode_step(model, prompt, dates, TraceMode::V4, s2(), &Cancel::new()).expect("a step")
     }
 
     /// An engine that answers each request with a scripted text and finish (which `ScriptedModel` does not: it only stops).
@@ -360,6 +352,14 @@ mod tests {
                 prompt_tokens: 0,
                 generated_tokens,
             })
+        }
+    }
+
+    /// These thinks are S2-shaped (`compile_think` is S2's), so they say so; the plain default is `Sig`.
+    fn s2() -> StepOptions {
+        StepOptions {
+            tools: ToolsMode::S2,
+            ..StepOptions::default()
         }
     }
 
@@ -582,7 +582,7 @@ mod tests {
             "<|im_start|>user\nq<|im_end|>\n",
             None,
             TraceMode::V4,
-            StepOptions::default(),
+            s2(),
             &Cancel::new(),
         );
         assert!(matches!(refused, Err(ModelError::Generate(_))));
@@ -616,15 +616,7 @@ mod tests {
         let v31 = "intent: write \"cancel\"\nverb: cancel\nscope: one\nrefer: none\nkind: event\nname: Night shift\nwhen: \"friday\" = week+1 wd5\n";
         for mode in [TraceMode::V31, TraceMode::V4] {
             let model = ScriptedModel::new([v31]);
-            let out = decode_step(
-                &model,
-                &prompt(),
-                None,
-                mode,
-                StepOptions::default(),
-                &Cancel::new(),
-            )
-            .unwrap();
+            let out = decode_step(&model, &prompt(), None, mode, s2(), &Cancel::new()).unwrap();
             let want = compile_think(py_strip(v31), None, mode).expect("the think states a call");
             assert!(out.info.rendered_call, "{mode:?}: {}", out.text);
             assert_eq!(
@@ -706,7 +698,7 @@ mod tests {
     }
 
     #[test]
-    fn s2_is_held_to_the_handles_only_and_off_sends_nothing() {
+    fn s2_is_held_to_the_full_grammar_with_its_own_words_and_off_sends_nothing() {
         let model = ScriptedModel::new([THINK, THINK, THINK]);
         let run = |grammar, tools| {
             decode_step(
@@ -725,15 +717,11 @@ mod tests {
         let requests = model.requests();
         assert_eq!(requests[0].grammar, None);
         assert_eq!(off.info.grammar, None);
-        // `full` over S2's tools is `handles`: S2 writes `search` and `open`, and a create's kind in `set`
-        assert_eq!(s2.info.grammar, Some(GrammarMode::Handles));
-        assert!(
-            requests[1]
-                .grammar
-                .as_deref()
-                .unwrap()
-                .starts_with("root ::= any-s0\n")
-        );
+        // `full` over S2's tools stays full, with S2's words: `search` and `open` for `find`
+        assert_eq!(s2.info.grammar, Some(GrammarMode::Full));
+        let s2_grammar = requests[1].grammar.as_deref().unwrap();
+        assert!(s2_grammar.starts_with("root ::= think\n"), "{s2_grammar}");
+        assert!(s2_grammar.contains("\"search\""), "{s2_grammar}");
         assert_eq!(sig.info.grammar, Some(GrammarMode::Handles));
     }
 
@@ -789,15 +777,7 @@ mod tests {
         let model = ScriptedModel::new([THINK]);
         let cancel = Cancel::new();
         cancel.cancel();
-        let out = decode_step(
-            &model,
-            &prompt(),
-            None,
-            TraceMode::V4,
-            StepOptions::default(),
-            &cancel,
-        )
-        .unwrap();
+        let out = decode_step(&model, &prompt(), None, TraceMode::V4, s2(), &cancel).unwrap();
         assert!(out.info.cancelled && !out.info.stopped);
         assert_eq!(out.text, "<think>\n");
         assert!(model.requests().is_empty());
@@ -806,15 +786,8 @@ mod tests {
     #[test]
     fn a_stop_during_the_think_returns_the_text_so_far() {
         let model = ScriptedModel::new([THINK]).cancelling_during(0, 2);
-        let out = decode_step(
-            &model,
-            &prompt(),
-            None,
-            TraceMode::V4,
-            StepOptions::default(),
-            &Cancel::new(),
-        )
-        .unwrap();
+        let out =
+            decode_step(&model, &prompt(), None, TraceMode::V4, s2(), &Cancel::new()).unwrap();
         assert!(out.info.cancelled && !out.info.rendered_call);
         assert!(out.text.starts_with("<think>\n"));
         assert!(!out.text.contains("</think>"), "{}", out.text);
@@ -842,15 +815,7 @@ mod tests {
         }
         let cancel = Cancel::new();
         let model = StopsAfterTheThink(cancel.clone(), Mutex::new(0));
-        let out = decode_step(
-            &model,
-            &prompt(),
-            None,
-            TraceMode::V4,
-            StepOptions::default(),
-            &cancel,
-        )
-        .unwrap();
+        let out = decode_step(&model, &prompt(), None, TraceMode::V4, s2(), &cancel).unwrap();
         assert!(out.info.cancelled);
         assert_eq!(
             *model.1.lock().unwrap(),
@@ -863,14 +828,7 @@ mod tests {
     #[test]
     fn an_engine_failure_is_the_steps() {
         let model = ScriptedModel::empty();
-        let failed = decode_step(
-            &model,
-            &prompt(),
-            None,
-            TraceMode::V4,
-            StepOptions::default(),
-            &Cancel::new(),
-        );
+        let failed = decode_step(&model, &prompt(), None, TraceMode::V4, s2(), &Cancel::new());
         assert!(matches!(failed, Err(ModelError::Generate(_))));
     }
 }

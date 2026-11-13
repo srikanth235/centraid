@@ -25,15 +25,18 @@ use super::receipt::{self, Metadata};
 use super::retention::Sources;
 use crate::catalog::load;
 use crate::kit::civil;
+use crate::kit::permission::AlertFacts;
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
-use crate::strings::agenda_reminders as reminders;
+use crate::strings::{agenda_notify as words, home};
 
 /// The route name of the service.
 pub const NAME: &str = "reminders.notify";
 
 /// How many reminders one read looks at (the query's own ceiling).
 const TASK_LIMIT: u32 = 500;
+/// Indexed next firings include one overflow row for the paused notice.
+const ALERTS: i64 = desired::CAP as i64 + 1;
 /// How long before a set that could not be read is tried again.
 const RETRY: Duration = Duration::from_secs(10 * 60);
 
@@ -62,12 +65,19 @@ pub fn build(_route: &wire::Route) -> Option<Box<dyn Screen>> {
     Some(Box::new(Service::default()))
 }
 
+/// What one speaking says: the notifications to hold, and the delivered ones still wanted.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Spoken {
+    pub all: Vec<wire::PendingNotification>,
+    pub live: Vec<String>,
+}
+
 /// WHEN TO SPEAK. `vault` is the vault the last set was for; `last` is the set
 /// last spoken for it.
 #[derive(Clone, Debug, Default)]
 pub struct Sync {
     pub vault: Option<String>,
-    pub last: Option<Vec<wire::PendingNotification>>,
+    pub last: Option<Spoken>,
 }
 
 impl Sync {
@@ -84,11 +94,7 @@ impl Sync {
     }
 
     /// The set to speak, if any. `reading` is `None` when a read failed.
-    pub fn next(
-        &mut self,
-        vault: &str,
-        reading: Option<Vec<wire::PendingNotification>>,
-    ) -> Option<Vec<wire::PendingNotification>> {
+    pub fn next(&mut self, vault: &str, reading: Option<Spoken>) -> Option<Spoken> {
         if self.is_new_vault(vault) {
             // A VAULT SWITCH CLEARS THE OLD VAULT'S NOTIFICATIONS, even when the new one cannot be read.
             self.vault = Some(vault.to_owned());
@@ -119,7 +125,7 @@ struct Loaded {
 struct Service {
     sync: Sync,
     receipt: Option<Receipt>,
-    permission: Option<i32>,
+    alerts: AlertFacts,
     facts: Facts,
     store_loaded: bool,
     stored: Option<Metadata>,
@@ -148,7 +154,10 @@ impl Service {
     fn read(ctx: &Ctx) -> Option<Loaded> {
         let Reading::Data(board) = read::read(
             ctx,
-            load::reminders::Reminders { limit: TASK_LIMIT },
+            load::reminders::Reminders {
+                limit: TASK_LIMIT,
+                alerts: Some(ALERTS),
+            },
             |answer| match answer {
                 Answer::AgendaTaskReminders(board) => Some(board),
                 _ => None,
@@ -157,12 +166,16 @@ impl Service {
             return None;
         };
         let to =
-            civil::plus_days(&board.today, desired::WINDOW_DAYS + 1).and_then(|d| midnight(&d))?;
+            civil::plus_days(&board.today, desired::HORIZON_DAYS + 1).and_then(|d| midnight(&d))?;
+        // The delivered ones too: a reminder that fired within the last days and is still wanted.
+        let since =
+            civil::plus_days(&board.today, -(desired::LIVE_DAYS + 1)).and_then(|d| midnight(&d))?;
         let Reading::Data(upcoming) = read::read(
             ctx,
             load::calendar::Upcoming {
-                from: None,
+                from: Some(since),
                 to: Some(to),
+                alerts: Some(ALERTS),
             },
             |answer| match answer {
                 Answer::AgendaUpcoming(upcoming) => Some(upcoming),
@@ -190,9 +203,11 @@ impl Service {
         out: &mut Vec<wire::Effect>,
         sources: &mut Sources,
     ) {
+        let extra = ctx.alerts().notices();
+        let extra_wanted = ctx.alerts().wanted();
         let mut wait = RETRY;
         let reading = loaded.map(|loaded| {
-            let set = desired::desired(&Inputs {
+            let inputs = Inputs {
                 vault_id: vault,
                 zone: ctx.zone(),
                 locale: ctx.locale(),
@@ -202,14 +217,23 @@ impl Service {
                 projects: &loaded.projects,
                 events: &loaded.events,
                 calendars: &loaded.calendars,
-            });
+                extra: &extra,
+                extra_wanted: &extra_wanted,
+            };
+            let mut set = desired::desired(&inputs);
+            if !ctx.show_details() {
+                desired::redact(&mut set, ctx.locale());
+            }
             if let Some(now) = FireZone::named(ctx.zone())
                 .ok()
                 .and_then(|zone| parse_civil_ms(&loaded.now_local, &zone))
             {
                 wait = desired::refresh_after(&set, now);
             }
-            set
+            Spoken {
+                all: set,
+                live: desired::live(&inputs),
+            }
         });
         let clear_departed_vault = self.sync.vault.is_some() && self.sync.is_new_vault(vault);
         let next = self.sync.next(vault, reading);
@@ -219,7 +243,20 @@ impl Service {
             BTreeSet::new()
         } else {
             ctx.now_ms().map_or_else(BTreeSet::new, |now| {
-                sources.cancellations(ctx, vault, &self.delivered, self.receipt.as_ref(), now)
+                // Extra producers own their continued eligibility; the paused card remains
+                // until acted on/dismissed in this vault, not until the future window moves.
+                let paused = format!("paused|{vault}");
+                let delivered = self
+                    .delivered
+                    .iter()
+                    .filter(|(id, _)| {
+                        !extra_wanted.contains(id)
+                            && !extra.iter().any(|notice| notice.id == id.as_str())
+                            && id.as_str() != paused
+                    })
+                    .map(|(id, fingerprint)| (id.clone(), fingerprint.clone()))
+                    .collect();
+                sources.cancellations(ctx, vault, &delivered, self.receipt.as_ref(), now)
             })
         };
         let fresh_cancellations: Vec<String> =
@@ -229,8 +266,11 @@ impl Service {
                 .then(|| self.sync.last.clone())
                 .flatten()
         });
-        if let Some(mut all) = next {
-            let ask_permission = !all.is_empty();
+        if let Some(Spoken { mut all, live }) = next {
+            let own = all
+                .iter()
+                .any(|held| !extra.iter().any(|notice| notice.id == held.notification_id));
+            let ask_permission = ctx.alerts().take_ask() || own;
             all.extend(self.receipt.iter().map(|held| held.notification.clone()));
             self.cancelled.extend(fresh_cancellations.iter().cloned());
             out.push(wire::Effect {
@@ -239,7 +279,9 @@ impl Service {
                         all,
                         categories: desired::categories(ctx.locale()),
                         ask_permission,
-                        channel_name: reminders::band_reminders(ctx.locale()),
+                        channel_name: words::channel_reminders(ctx.locale()),
+                        live_ids: live,
+                        backup_channel_name: home::band_backup(ctx.locale()),
                         retain_delivered: !clear_departed_vault,
                         cancel_delivered_ids: fresh_cancellations,
                         completed_answers: std::mem::take(&mut self.completed_answers),
@@ -428,6 +470,37 @@ impl Service {
             ctx.start_timer(RECEIPT_TIMER, Duration::from_millis(remaining));
         }
         if let Some(answered) = self.queued.front() {
+            let already_stored = self.receipt.as_ref().is_some_and(|held| {
+                !answered.press_id.is_empty() && held.meta.press_id == answered.press_id
+                    && held.meta.verb == answered.verb
+                    && matches!(answer::parse(&answered.notification_id), Some(answer::Target::Task { vault: target_vault, task_id })
+                        if target_vault == held.meta.vault && task_id == held.task_id)
+            });
+            if already_stored {
+                self.answer_inflight = self.queued.pop_front();
+                self.complete_answer();
+                self.sync.invalidate();
+                self.advance(ctx, out);
+                return;
+            }
+            if let Some(notice) = ctx
+                .alerts()
+                .notices()
+                .into_iter()
+                .find(|notice| notice.id == answered.notification_id)
+            {
+                let answered = self.queued.pop_front().expect("queued producer answer");
+                self.answer_inflight = Some(answered);
+                out.push(wire::Effect {
+                    kind: Some(wire::effect::Kind::OpenRoute(wire::OpenRoute {
+                        route: Some(notice.opens),
+                    })),
+                });
+                self.complete_answer();
+                self.sync.invalidate();
+                self.advance(ctx, out);
+                return;
+            }
             if sources
                 .augment_facts(ctx, &vault, &mut self.facts, answered)
                 .is_err()
@@ -479,12 +552,11 @@ impl Service {
         ctx: &Ctx,
         out: &mut Vec<wire::Effect>,
     ) {
-        // One OS card is removed by its first button. Bound queued cold cards by the set's cap.
+        // The upstream native outbox identifies presses independently, even on one card.
+        // Deduplicate only the same full press; distinct verbs/press_ids retain FIFO order.
         if self.queued.len() < desired::CAP + desired::RECEIPTS
-            && !self
-                .queued
-                .iter()
-                .any(|queued| queued.notification_id == answered.notification_id)
+            && self.answer_inflight.as_ref() != Some(&answered)
+            && !self.queued.iter().any(|queued| queued == &answered)
         {
             self.queued.push_back(answered);
         }
@@ -509,6 +581,10 @@ impl Screen for Service {
                 self.cancelled.clear();
                 self.advance(ctx, &mut out);
             }
+            Some(E::Signalled(_)) => {
+                self.sync.invalidate();
+                self.advance(ctx, &mut out);
+            }
             Some(E::ShellFact(fact)) => match fact.fact {
                 Some(wire::shell_fact::Fact::NotificationAnswered(answered)) => {
                     self.enqueue(answered, ctx, &mut out);
@@ -530,8 +606,10 @@ impl Screen for Service {
             },
             Some(E::EffectResult(result)) => match result.outcome {
                 Some(wire::effect_result::Outcome::NotificationsScheduled(scheduled)) => {
-                    // DENIED IS QUIET: nothing else happens.
-                    self.permission = Some(scheduled.permission);
+                    self.alerts = AlertFacts::of(&scheduled);
+                    if ctx.alerts().set(self.alerts.clone()) {
+                        ctx.redraw_all();
+                    }
                     let delivered: BTreeMap<String, String> = scheduled
                         .delivered
                         .into_iter()
@@ -567,20 +645,33 @@ impl Screen for Service {
 mod tests {
     use super::*;
 
-    fn set(ids: &[&str]) -> Vec<wire::PendingNotification> {
-        ids.iter()
-            .map(|id| wire::PendingNotification {
-                notification_id: (*id).to_owned(),
-                ..Default::default()
-            })
-            .collect()
+    fn set(ids: &[&str]) -> Spoken {
+        Spoken {
+            all: ids
+                .iter()
+                .map(|id| wire::PendingNotification {
+                    notification_id: (*id).to_owned(),
+                    ..Default::default()
+                })
+                .collect(),
+            live: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_change_only_in_the_delivered_ids_is_spoken() {
+        let mut sync = Sync::default();
+        sync.next("a", Some(set(&["x"])));
+        let mut changed = set(&["x"]);
+        changed.live = vec!["gone-by-time-but-not-resolved".to_owned()];
+        assert_eq!(sync.next("a", Some(changed.clone())), Some(changed));
     }
 
     #[test]
     fn the_first_set_is_spoken_even_when_empty() {
         let mut sync = Sync::default();
-        assert_eq!(sync.next("a", Some(Vec::new())), Some(Vec::new()));
-        assert_eq!(sync.next("a", Some(Vec::new())), None);
+        assert_eq!(sync.next("a", Some(set(&[]))), Some(set(&[])));
+        assert_eq!(sync.next("a", Some(set(&[]))), None);
     }
 
     #[test]
@@ -607,7 +698,7 @@ mod tests {
     fn a_vault_switch_clears_the_old_vaults_set_even_when_the_new_read_fails() {
         let mut sync = Sync::default();
         assert_eq!(sync.next("a", Some(set(&["x"]))), Some(set(&["x"])));
-        assert_eq!(sync.next("b", None), Some(Vec::new()));
+        assert_eq!(sync.next("b", None), Some(set(&[])));
         // The new vault's own failure afterwards is quiet.
         assert_eq!(sync.next("b", None), None);
         assert_eq!(sync.next("a", Some(set(&["x"]))), Some(set(&["x"])));

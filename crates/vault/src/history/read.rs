@@ -19,6 +19,10 @@ use crate::error::{Result, VaultError};
 /// The most versions one page returns.
 pub const MAX_PAGE: usize = 100;
 
+/// A commit the chat's door made carries `assist.` before the command's name as its cause
+/// ([`crate::commands::Command::by`]); the vault keeps no other producer by that prefix.
+pub const ASSISTANT_PREFIX: &str = "assist.";
+
 /// Who made the change that replaced a version.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Who {
@@ -27,11 +31,20 @@ pub enum Who {
     /// A phone store the vault follows (`contacts`, `calendar`, `files`, `health`, `statement`):
     /// the change is what the store said, not something the member did.
     Store(String),
+    /// The chat acted on the member's word (`assist.<command>`): the member confirmed it, and
+    /// the history says who made it.
+    Assistant,
 }
 
 impl Who {
     fn of(cause: &str) -> Self {
-        follow::system_of(cause).map_or(Self::Member, |system| Self::Store(system.to_owned()))
+        if let Some(system) = follow::system_of(cause) {
+            return Self::Store(system.to_owned());
+        }
+        match cause.strip_prefix(ASSISTANT_PREFIX) {
+            Some(command) if !command.is_empty() => Self::Assistant,
+            _ => Self::Member,
+        }
     }
 
     #[must_use]
@@ -39,6 +52,7 @@ impl Who {
         match self {
             Self::Member => serde_json::json!({"kind": "member"}),
             Self::Store(system) => serde_json::json!({"kind": "store", "system": system}),
+            Self::Assistant => serde_json::json!({"kind": "assistant"}),
         }
     }
 }

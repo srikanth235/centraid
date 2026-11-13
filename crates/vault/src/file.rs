@@ -258,7 +258,7 @@ impl Vault {
     ///   that once read the WAL frame by frame — and so had to own every
     ///   checkpoint and keep the `-wal` across a close — is gone: a backup is
     ///   the online backup API's page-for-page copy of the file, which reads
-    ///   through the WAL whatever its state (`.claude/skills/sqlite/SKILL.md`).
+    ///   through the WAL whatever its state (`.claude/skills/stack/sqlite/centraid.md`).
     /// - **`journal_size_limit`** — see [`JOURNAL_SIZE_LIMIT`].
     /// - **No `secure_delete`.** The file is plaintext to whoever can read it,
     ///   so zeroing freed cells buys nothing — and it dirties ranges the next
@@ -292,7 +292,8 @@ impl Vault {
         // **The one connection is SQLite's single writer** (D-1020-D2-9): reads
         // are `query_only` toggled on this same connection ([`Self::read`])
         // rather than served from a pool, and nothing else in the process
-        // opens the file for writing.
+        // opens the file for writing. (The snapshot plane opens it READ-ONLY, on a reader of its
+        // own, to copy it without holding this one: `backup::snapshot::copy_from`.)
         Self::apply_pragmas(&connection)?;
         crate::log::guard::install_without_rowid_census(&connection)?;
         crate::history::install(&connection)?;
@@ -450,7 +451,7 @@ impl Vault {
     /// A last [`Self::close`] checkpoints too (#1080 returned the vault to
     /// SQLite's checkpoint default), but it cannot say so when it fails, and a
     /// process whose ARTIFACT IS THE FILE needs to know: trap #2 of
-    /// `.claude/skills/sqlite/SKILL.md` — "copying only `vault.db` without its
+    /// `.claude/skills/stack/sqlite/centraid.md` — "copying only `vault.db` without its
     /// `-wal` and `-shm`" — is `seed-demo-vault` leaving rows in a `-wal` that
     /// `mobile/scripts/demo-vault.sh` then dropped. So the log is checkpointed
     /// `TRUNCATE` here, which folds every frame into the database, and the
@@ -692,7 +693,7 @@ mod tests {
     /// THE DURABILITY HALF, AND TRAP #2 (#1080). A last close folds the WAL
     /// into the file, so the `.db` alone carries every committed row — a copy
     /// of it without its sidecars is the whole vault, which is the copy
-    /// `.claude/skills/sqlite/SKILL.md` records going wrong while closes left
+    /// `.claude/skills/stack/sqlite/centraid.md` records going wrong while closes left
     /// the `-wal` behind on purpose.
     #[test]
     fn a_last_close_folds_the_wal_into_the_file() {

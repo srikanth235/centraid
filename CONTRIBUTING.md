@@ -42,7 +42,7 @@ There is no guaranteed commit bit. Response cadence: see [README.md](README.md).
 
 The product is one Rust core under `crates/`, with `contracts/`, `mobile/`, `design/`, `copy/` and `deploy/` around it. Two rules bite hardest on a first change:
 
-- **The gate is one command.** `cargo xtask gate --profile <local|pr|nightly|release|mobile-jvm>`, each profile a concatenation of the one before. The down-only ledgers in `contracts/ledgers/` hold sizes and query-plan counts and **only fall**; a raise needs an owner ruling, not a flag. No ledger, gate step or test holds a wall-clock budget (owner ruling 2026-11-04). Give every worktree its own `CARGO_TARGET_DIR` (`.claude/skills/rust/SKILL.md`, Pitfalls).
+- **The gate is one command.** `cargo xtask gate --profile <local|pr|nightly|release|mobile-jvm>`, each profile a concatenation of the one before. The down-only ledgers in `contracts/ledgers/` hold sizes and query-plan counts and **only fall**; a raise needs an owner ruling, not a flag. No ledger, gate step or test holds a wall-clock budget (owner ruling 2026-11-04). Give every worktree its own `CARGO_TARGET_DIR` (`.claude/skills/stack/rust/centraid.md`, Pitfalls).
 - **`sql-confinement`.** SQL string literals appear only under `crates/{ontology,vault,seat,search}` and `crates/apps/kit` — an app crate holds no SQL and never sees a `Connection`. The rule has moved real APIs rather than being widened for them, and widening it to go green is weakening a gate.
 
 Every user-facing gate lands with a **demonstrated red** recorded in the PR description, and a claim of absence names the grep that establishes it.

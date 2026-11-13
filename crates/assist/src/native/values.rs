@@ -114,6 +114,16 @@ fn group_label(row: &Row, group: &str) -> String {
     }
 }
 
+/// A count the store gave, in the shape [`fold`] gives one (#1188, C3).
+#[must_use]
+pub fn counted(total: i64) -> ((String, String), Value) {
+    let bucket: Bucket = BTreeMap::from([(None, total)]);
+    (
+        (text_values(&bucket), String::new()),
+        json!({"op": "count", "field": Value::Null, "values": machine_values(&bucket)}),
+    )
+}
+
 /// `count`, `sum`, `avg`, `min`, `max`, optionally one per group value.
 #[must_use]
 pub fn fold(

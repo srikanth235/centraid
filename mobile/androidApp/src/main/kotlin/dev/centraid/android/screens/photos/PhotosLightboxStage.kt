@@ -104,7 +104,7 @@ import kotlin.math.max
  * - **A pinch, or a double tap, zooms**, from fit to 2.5× and up to 5×, and a
  *   one-finger drag pans a zoomed photograph. A zoomed photograph does not
  *   page — the drag that would have paged is the drag that pans it.
- * - **A swipe down closes**, the `StageRoom`'s own way out (product-intuition/references/design-behaviour.md § Rooms); the
+ * - **A swipe down closes**, the `StageRoom`'s own way out (design/behaviour.md § Rooms); the
  *   close control in the chrome is the same act.
  *
  * One bare tap toggles the chrome, a long press plays a Live Photo's movie.
@@ -507,7 +507,7 @@ internal fun PlayerSurface(player: LightboxPlayer) {
 /**
  * THE TRANSPORT — play, pause and the scrub strip (v0's `Transport`).
  *
- * Determinate, always: a position over a length, never a spinner (product-intuition/references/design-behaviour.md § Status line
+ * Determinate, always: a position over a length, never a spinner (design/behaviour.md § Status line
  * §5). The strip is a track the member drags or taps to seek; the time beside
  * it is the clock the strip is drawing.
  */

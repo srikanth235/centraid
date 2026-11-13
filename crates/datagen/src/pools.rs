@@ -9,7 +9,11 @@ pub const FIRST: &[&str] = &[
     "Arjun", "Bianca", "Callum", "Dana", "Emil", "Farah", "Gustav", "Hedy", "Idris", "Julia",
     "Kavya", "Lars", "Marta", "Nikhil", "Olga", "Pedro", "Rhea", "Samir", "Thea", "Umar", "Vera",
     "Wen", "Yusuf", "Anika", "Beni", "Carmen", "Dev", "Esme", "Finn", "Gita", "Hiro", "Isla",
-    "Jai", "Kira", "Lior", "Mila", "Nico", "Orla", "Pia", "Rafa", "Sana", "Tomas",
+    "Jai", "Kira", "Lior", "Mila", "Nico", "Orla", "Pia", "Rafa", "Sana", "Tomas", "Aditi",
+    "Rohit", "Sunita", "Anil", "Deepa", "Vijay", "Lakshmi", "Manoj", "Pooja", "Sanjay", "Ananya",
+    "Karthik", "Meera", "Rajesh", "Swati", "Ashok", "Bhavna", "Gaurav", "Divya", "Harish", "Isha",
+    "Jyoti", "Kunal", "Madhavi", "Naveen", "Pallavi", "Rakesh", "Shreya", "Tanvi", "Uday", "Varun",
+    "Yamini",
 ];
 
 pub const LAST: &[&str] = &[
@@ -71,16 +75,36 @@ pub const LAST: &[&str] = &[
     "Brandt",
     "Cohen",
     "Demir",
+    "Sharma",
+    "Verma",
+    "Reddy",
+    "Gupta",
+    "Joshi",
+    "Desai",
+    "Bhat",
+    "Menon",
+    "Chopra",
+    "Banerjee",
+    "Mukherjee",
+    "Shetty",
+    "Naidu",
+    "Chauhan",
+    "Bose",
+    "Kapoor",
+    "Malhotra",
+    "Saxena",
+    "Trivedi",
+    "Hegde",
 ];
 
 /// The owner's own first names, partitioned by split so a held-out persona is a name the
 /// training worlds never used.
 pub const ME_TRAIN: &[&str] = &[
     "Sam", "Alex", "Jordan", "Casey", "Robin", "Morgan", "Avery", "Riley", "Jamie", "Taylor",
-    "Devon", "Rowan", "Skyler", "Harper", "Emery", "Parker",
+    "Devon", "Rowan", "Skyler", "Harper", "Emery", "Parker", "Anjali", "Rahul", "Sneha", "Amit",
 ];
-pub const ME_VAL: &[&str] = &["Kai", "Sasha", "Blake", "Reese"];
-pub const ME_TEST: &[&str] = &["Drew", "Lane", "Marlow", "Shay"];
+pub const ME_VAL: &[&str] = &["Kai", "Sasha", "Blake", "Reese", "Kriti", "Sameer"];
+pub const ME_TEST: &[&str] = &["Drew", "Lane", "Marlow", "Shay", "Ishaan", "Mehul"];
 
 pub const ROLES: &[&str] = &[
     "designer",
@@ -397,13 +421,14 @@ pub const NEW_FIRST_TRAIN: &[&str] = &[
     "Aarav", "Bella", "Caleb", "Daria", "Eitan", "Fiona", "Gael", "Hazel", "Imran", "Jade",
     "Kabir", "Luna", "Mohan", "Nora", "Owen", "Petra", "Reza", "Selma", "Tobias", "Ulla", "Vikram",
     "Willa", "Yash", "Zainab", "Anselm", "Brynn", "Cyrus", "Delia", "Elias", "Fatima", "Greta",
-    "Harun", "Ivy", "Joaquin", "Kaito", "Leila", "Mateus", "Nadir", "Opal", "Rohan",
+    "Harun", "Ivy", "Joaquin", "Kaito", "Leila", "Mateus", "Nadir", "Opal", "Rohan", "Chirag",
+    "Devika", "Eshaan", "Farhan", "Girish", "Heena", "Ila", "Jatin",
 ];
 pub const NEW_FIRST_VAL: &[&str] = &[
-    "Alina", "Bruno", "Celia", "Dario", "Eva", "Gabriel", "Halima", "Ismail",
+    "Alina", "Bruno", "Celia", "Dario", "Eva", "Gabriel", "Halima", "Ismail", "Kamini", "Lokesh",
 ];
 pub const NEW_FIRST_TEST: &[&str] = &[
-    "Jasper", "Kiran", "Livia", "Malik", "Nina", "Otis", "Pablo", "Rania",
+    "Jasper", "Kiran", "Livia", "Malik", "Nina", "Otis", "Pablo", "Rania", "Mohit", "Nisha",
 ];
 
 /// Last names a created or renamed person can get, by split; none is in [`LAST`].
@@ -418,7 +443,7 @@ pub const NEW_LAST_TRAIN: &[&str] = &[
     "Hashemi",
     "Ito",
     "Jovanovic",
-    "Kapoor",
+    "Venkataraman",
     "Laurent",
     "Mbeki",
     "Nakamura",
@@ -442,10 +467,10 @@ pub const NEW_LAST_TRAIN: &[&str] = &[
 pub const NEW_LAST_VAL: &[&str] = &[
     "Gallo",
     "Hartmann",
-    "Joshi",
+    "Kasturirangan",
     "Kowalski",
     "Lindahl",
-    "Mukherjee",
+    "Subramaniam",
 ];
 pub const NEW_LAST_TEST: &[&str] = &["Nilsson", "Ortega", "Pillai", "Quintero", "Rossi", "Sandhu"];
 

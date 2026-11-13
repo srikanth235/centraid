@@ -1214,14 +1214,16 @@ fn the_alert_row_says_so_when_the_event_is_all_day_and_a_timed_one_has_no_such_s
     let page = world.open_new("2099-06-18", Kind::Event);
     // A TIMED EVENT: the alert control is as it always was.
     assert_eq!(world.editor_data(page).reminder_note, "");
-    // ALL DAY HAS NO MOMENT: the row says no alert will sound, and keeps the choice it was given.
+    // ALL DAY HAS NO MOMENT: the alert sounds at 09:00 that day, and the row says so.
     world.send_editor(page, all_day(true));
     let data = world.editor_data(page);
     assert_eq!(
         data.reminder_note,
-        "No alert will sound because no time is set"
+        "An alert for an all-day event sounds at 09:00 that day."
     );
-    assert!(!data.reminders.is_empty(), "the choice is told, not hidden");
+    let keys: Vec<_> = data.reminders.iter().map(|c| c.label.as_str()).collect();
+    assert_eq!(keys, ["No reminder", "On the day, 09:00"], "{keys:?}");
+    assert!(!data.show_second_reminder);
     world.send_editor(page, all_day(false));
     assert_eq!(world.editor_data(page).reminder_note, "");
 }

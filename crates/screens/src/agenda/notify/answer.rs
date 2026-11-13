@@ -63,27 +63,14 @@ pub fn parse(id: &str) -> Option<Target> {
     }
 }
 
-/// An hour from `now_local`, as the wall clock of `zone` (`YYYY-MM-DDTHH:MM`).
-/// The hour is elapsed time: across a spring-forward 01:30 snoozes to 03:30.
-/// An autumn overlap's repeated wall clock reads as its earlier instant, so a
-/// wall clock that would land before the hour is up moves on by what it lacks.
+/// An hour from `now_local` in `zone`, as the UTC instant the alert sounds again (#1188, NA5). The
+/// hour is elapsed time, so a spring-forward or an autumn overlap changes nothing about it.
 #[must_use]
-pub fn snooze_due(now_local: &str, zone: &str) -> Option<String> {
+pub fn snooze_until(now_local: &str, zone: &str) -> Option<String> {
     let zone = FireZone::named(zone).ok()?;
-    let target = parse_civil_ms(now_local, &zone)? + 3_600_000;
-    let wall = |ms: i64| {
-        let at = zone.zoned_parts(ms);
-        format!(
-            "{:04}-{:02}-{:02}T{:02}:{:02}",
-            at.year, at.month, at.day, at.hour, at.minute
-        )
-    };
-    let due = wall(target);
-    let read = parse_civil_ms(&due, &zone)?;
-    if read < target {
-        return Some(wall(target + (target - read)));
-    }
-    Some(due)
+    Some(centraid_vault::clock::format_iso_ms(
+        parse_civil_ms(now_local, &zone)? + 3_600_000,
+    ))
 }
 
 /// Tomorrow at the task's own time of day, as a wall clock the core places
@@ -182,11 +169,15 @@ pub enum Handled {
     Open(Box<wire::Route>),
 }
 
-fn key(verb: &str, id: &str) -> String {
-    kit_act::key(&["notify", verb, id], kit_act::fresh())
+fn key(verb: &str, id: &str, press_id: &str) -> String {
+    if press_id.is_empty() {
+        kit_act::key(&["notify", verb, id], kit_act::fresh())
+    } else {
+        format!("notify:{verb}:{id}:press={press_id}")
+    }
 }
 
-fn edit(ctx: &Ctx, task_id: &str, due: String, lead: Field<i64>) -> Settled {
+fn edit(ctx: &Ctx, task_id: &str, due: String, lead: Field<i64>, press: &str) -> Settled {
     // undo-exempt: a notification has no status line; its receipt offers the Undo.
     kit_act::act(
         ctx,
@@ -196,7 +187,21 @@ fn edit(ctx: &Ctx, task_id: &str, due: String, lead: Field<i64>) -> Settled {
             remind_before_min: lead,
             ..Default::default()
         },
-        &key("edit-task", task_id),
+        &key("edit-task", task_id, press),
+    )
+}
+
+/// Move the alert and nothing else: the due and the lead stay as the member set them.
+fn snooze(ctx: &Ctx, task_id: &str, until: String, press: &str) -> Settled {
+    // undo-exempt: a notification has no status line; its receipt offers the Undo.
+    kit_act::act(
+        ctx,
+        act::reminders::EditTask {
+            task_id: task_id.to_owned(),
+            snoozed_until: Field::Is(until),
+            ..Default::default()
+        },
+        &key("snooze-task", task_id, press),
     )
 }
 
@@ -290,7 +295,7 @@ pub fn handle(
                         act::reminders::CompleteTask {
                             task_id: task_id.clone(),
                         },
-                        &key("complete-task", &task_id),
+                        &key("complete-task", &task_id, &answered.press_id),
                     );
                     // A REPEATING TASK'S COMPLETION HAS NO UNDO: its next occurrence is open already.
                     let seq = if !task.repeats && settled.committed && settled.inverse.is_some() {
@@ -301,40 +306,24 @@ pub fn handle(
                     } else {
                         None
                     };
-                    done(ctx, &vault, &task_id, task, settled, Verb::Done as i32, seq)
+                    done(ctx, &vault, &task_id, task, settled, answered, seq)
                 }
                 // MOVING A REPEATING TASK'S DUE WOULD MOVE THE WHOLE SERIES.
                 Verb::SnoozeHour if !task.repeats => {
-                    let Some(due) = snooze_due(&facts.now_local, ctx.zone()) else {
+                    let Some(until) = snooze_until(&facts.now_local, ctx.zone()) else {
                         return Handled::Refused;
                     };
-                    let settled = edit(ctx, &task_id, due, Field::Is(0));
+                    let settled = snooze(ctx, &task_id, until, &answered.press_id);
                     let seq = inverse_seq(&settled);
-                    done(
-                        ctx,
-                        &vault,
-                        &task_id,
-                        task,
-                        settled,
-                        Verb::SnoozeHour as i32,
-                        seq,
-                    )
+                    done(ctx, &vault, &task_id, task, settled, answered, seq)
                 }
                 Verb::Tomorrow if !task.repeats => {
                     let Some(due) = tomorrow_due(&facts.today, &task.due_time) else {
                         return Handled::Refused;
                     };
-                    let settled = edit(ctx, &task_id, due, Field::Keep);
+                    let settled = edit(ctx, &task_id, due, Field::Keep, &answered.press_id);
                     let seq = inverse_seq(&settled);
-                    done(
-                        ctx,
-                        &vault,
-                        &task_id,
-                        task,
-                        settled,
-                        Verb::Tomorrow as i32,
-                        seq,
-                    )
+                    done(ctx, &vault, &task_id, task, settled, answered, seq)
                 }
                 _ => Handled::Ignored,
             }
@@ -349,13 +338,22 @@ fn done(
     task_id: &str,
     task: &TaskFacts,
     settled: Settled,
-    verb: i32,
+    answered: &wire::NotificationAnswered,
     seq: Option<i64>,
 ) -> Handled {
     if !settled.committed {
         return Handled::Refused;
     }
-    Receipt::made(ctx, vault, task_id, &task.title, verb, seq).map_or(Handled::Refused, |receipt| {
+    Receipt::made(
+        ctx,
+        vault,
+        task_id,
+        &task.title,
+        answered.verb,
+        seq,
+        &answered.press_id,
+    )
+    .map_or(Handled::Refused, |receipt| {
         Handled::Committed(Box::new(receipt))
     })
 }

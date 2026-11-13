@@ -1,7 +1,7 @@
 //! THE COMPILE STEP: the call a slot trace states.
 //!
 //! `{"op":"compile","slots":{…}}` on the session protocol takes the slots of a v3 trace as JSON
-//! (`experiments/toolchat/native/CONTRACT_V3.md` §2: `intent`, `via`, `verb`, `kind`, `op`,
+//! (`crates/assist/docs/CONTRACT_V3.md` §2: `intent`, `via`, `verb`, `kind`, `op`,
 //! `field`, `group`, `trashed`, `name`, `text`, `where`, `when`, `linked_to`, `within`, `exclude`,
 //! `order`, `limit`, `more`, `set`, `rows`, `row`, `value`, `options`, `question`, `reason`, and
 //! `pick`) and answers with the call the runtime will execute:
@@ -39,7 +39,7 @@
 //! - a row handle must be one the model can see: the directory, the pre-grounded rows, the
 //!   `focus:` line or a visible observation. Anything else is refused with the slot named.
 //!
-//! THE v4 TRACE (`CONTRACT_V3.md` §8): `"trace": "v4"` among the slots. The model writes fewer
+//! THE v4 TRACE (`crates/assist/docs/CONTRACT_V3.md` §8): `"trace": "v4"` among the slots. The model writes fewer
 //! slots and this step infers the rest, naming what it inferred in the reply (`inferred`):
 //!
 //! - a `pick` is one row with its reason (`{"row":"#3","verdict":"ok","reason":"focus"}`), and it

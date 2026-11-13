@@ -55,11 +55,16 @@ message BackupWaitingRow {
     // The machine that answered at a gateway's address is not the gateway this
     // phone pinned.
     REASON_UNTRUSTED = 8;
-    // The gateway answered and refused a write for its own reason, a full disk
-    // or a quota.
+    // The gateway answered and refused a write because its disk is full.
     REASON_REFUSED = 9;
     // The gateway no longer knows this phone's token: pair it again.
     REASON_PAIR_AGAIN = 10;
+    // This phone has too little free space to copy its vault.
+    REASON_NO_ROOM = 11;
+    // The gateway refused a part as over its size limit.
+    REASON_TOO_LARGE = 12;
+    // The gateway refused a write for a reason that is neither full nor too large.
+    REASON_REFUSED_OTHER = 13;
   }
 }
 
@@ -123,6 +128,10 @@ message BackupDestinationRow {
   // What it holds, finished: "Holds 5.1 GB". Empty when it holds nothing
   // this phone recorded (#1144).
   string held = 6;
+  // WHEN THIS GATEWAY LAST ACKNOWLEDGED A BACKUP, on its own clock, finished: "Last backup 2
+  // hours ago" or "Not backed up yet". The row's `detail` says when it was reached; this says
+  // what it holds (#1188).
+  string backed_up = 7;
 }
 
 // ONE APP'S PART OF THE BACKUP (#1144), finished: "In this backup" draws one
@@ -153,7 +162,7 @@ message BackupRuleChoice {
   bool picked = 3;
 }
 
-// THE PAGE'S ONE INK BUTTON (product-intuition/references/design-behaviour.md § Controls: at most one per view), named once for
+// THE PAGE'S ONE INK BUTTON (design/behaviour.md § Controls: at most one per view), named once for
 // both shells.
 enum BackupInk {
   BACKUP_INK_UNSPECIFIED = 0;
@@ -257,6 +266,29 @@ message BackupHomeData {
   string key_summary = 38;
   // "Restore my vaults": the row under the recovery key, and its event.
   string restore_label = 39;
+  // "Check my backup": the row under the recovery key that pushes the check page (#1188, B6);
+  // empty with nothing paired or on a vault that moved.
+  string check_label = 42;
+  Route check = 43;
+  // THE ONE-TIME PROMPT after the first confirmed backup (#1188, NB5): unset when it is not due,
+  // already answered, or the key is already saved somewhere.
+  BackupKeyPrompt key_prompt = 44;
+  // THE ASK FOR NOTIFICATIONS after the first device is paired (#1188, NB2): unset when it is not due,
+  // already answered with Not now, or the phone has answered the system prompt either way.
+  BackupNotifyAsk notify_ask = 45;
+  // WHAT THE PHONE SAYS ABOUT BACKUP ALERTS when they cannot arrive: refused, switched off, or late.
+  // Empty when they will.
+  string notify_off = 46;
+  // "Open Settings", set only when the grant was refused (the only case Settings mends).
+  string notify_settings_label = 47;
+  // HOW BACKUP RUNS ON THIS PLATFORM, in the sentences the member is owed: never continuous, and
+  // what a force-quit does. Drawn under "What travels when" (#1188).
+  string posture = 48;
+  // "Checked 2 days ago" or "Never checked": the second line of the "Check my backup" row,
+  // from the verdict this phone kept (#1188). Empty when the row is not drawn.
+  string check_status = 49;
+  // Whether that verdict found something wrong, so the row's line is drawn as a warning.
+  bool check_warning = 50;
   // A RUN'S BYTES, for the status card's bar under `progress` ("Backing up — 412
   // MB to go"). Known only while a run is going and the phone can say how many
   // bytes the backup covers; the fraction is what a gateway has acknowledged
@@ -268,7 +300,7 @@ message BackupHomeData {
 // WHERE THE BACKUP STANDS, in one word the page draws its status card from (#1173).
 enum BackupCondition {
   BACKUP_CONDITION_UNSPECIFIED = 0;
-  // Backed up, or catching up on its own.
+  // Everything a gateway was sent is acknowledged and nothing warns.
   BACKUP_CONDITION_UP_TO_DATE = 1;
   // A "Back up now" run is going.
   BACKUP_CONDITION_RUNNING = 2;
@@ -279,6 +311,30 @@ enum BackupCondition {
   BACKUP_CONDITION_UNPAIRED = 4;
   // The vault moved to another phone: read-only here.
   BACKUP_CONDITION_MOVED = 5;
+  // Something stands that the line warns of (a device behind, full or holding an older backup,
+  // nothing acknowledged yet, a device to pair again, a backlog that has waited too long): the
+  // card is never green beside it.
+  BACKUP_CONDITION_ATTENTION = 6;
+  // Records are backed up and items still wait for a window, with nothing yet to warn of.
+  BACKUP_CONDITION_CATCHING_UP = 7;
+}
+
+// "Save your recovery key": shown once, dismissible, with no checkbox.
+message BackupKeyPrompt {
+  string title = 1;
+  string body = 2;
+  string save_label = 3;
+  string not_now_label = 4;
+  // Where Save goes: the page that shows the key behind the passcode.
+  Route save = 5;
+}
+
+// "Allow notifications": shown once, dismissible.
+message BackupNotifyAsk {
+  string title = 1;
+  string body = 2;
+  string allow_label = 3;
+  string not_now_label = 4;
 }
 
 message BackupHomeEvent {
@@ -294,7 +350,23 @@ message BackupHomeEvent {
     Retry retry = 6;
     // Restore this phone's vaults: Home's own restore, asked from here.
     RestorePressed restore_pressed = 7;
+    // The prompt was answered, by Save or by Not now: it is not shown again.
+    KeyPromptAnswered key_prompt_answered = 8;
+    // Allow notifications: the system prompt through the one notification service.
+    NotifyAllow notify_allow = 9;
+    // Not now: the ask is not shown again.
+    NotifyNotNow notify_not_now = 10;
+    // The platform's own settings page for this app.
+    NotifyOpenSettings notify_open_settings = 11;
   }
+
+  message KeyPromptAnswered {}
+
+  message NotifyAllow {}
+
+  message NotifyNotNow {}
+
+  message NotifyOpenSettings {}
 
   message RestorePressed {}
 
@@ -332,4 +404,67 @@ message BackgroundProbe {}
 message BackgroundStatus {
   // The platform took at least one window.
   bool registered = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Check my backup (#1188, B6): `backup.check`, pushed from Backup's Recovery section.
+// ---------------------------------------------------------------------------
+
+message BackupCheckState {
+  string title = 1;
+  string intro = 2;
+  // "Result" while a result stands, "Checking" while one runs; empty before the first check.
+  string heading = 3;
+  repeated BackupCheckRow rows = 4;
+  // THE STATUS LINE AT THE FOOT: "Checked just now", "Not checked", "Checking Office NAS".
+  StatusLine status = 5;
+  // A determinate bar while a check runs: `fraction` of the device in hand, 0..1.
+  bool running = 6;
+  float fraction = 7;
+  // The one action: "Check my backup", "Check again", or "Stop" while running.
+  string action_label = 8;
+  BackupCheckAction action = 9;
+  // "Back up now", offered under a result that found something to send again; empty otherwise.
+  string back_up_now_label = 10;
+  // The page it was pushed from, for the back control: "Backup".
+  string back_label = 11;
+}
+
+enum BackupCheckAction {
+  BACKUP_CHECK_ACTION_UNSPECIFIED = 0;
+  BACKUP_CHECK_ACTION_CHECK = 1;
+  BACKUP_CHECK_ACTION_STOP = 2;
+  BACKUP_CHECK_ACTION_NONE = 3;
+}
+
+message BackupCheckRow {
+  string gateway_id = 1;
+  // The name the member gave the device.
+  string name = 2;
+  // "Tuesday 10 November, 21:40 opens." / "Not checked." / "Opens fine · Tuesday 10 November, 21:40".
+  string line = 3;
+  // "91,204 files held, 40 opened to check." / "It didn't answer." / "112 of 260 parts".
+  string detail = 4;
+  BackupCheckTone tone = 5;
+}
+
+enum BackupCheckTone {
+  BACKUP_CHECK_TONE_UNSPECIFIED = 0;
+  BACKUP_CHECK_TONE_OK = 1;
+  BACKUP_CHECK_TONE_BAD = 2;
+  BACKUP_CHECK_TONE_NOT_RUN = 3;
+  BACKUP_CHECK_TONE_RUNNING = 4;
+}
+
+message BackupCheckEvent {
+  oneof kind {
+    Start start = 1;
+    Stop stop = 2;
+    // "Back up now" under a result: the pass service's, asked of the conductor.
+    BackUpNow back_up_now = 3;
+  }
+
+  message Start {}
+  message Stop {}
+  message BackUpNow {}
 }

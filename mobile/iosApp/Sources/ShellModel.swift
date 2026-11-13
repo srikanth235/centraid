@@ -253,6 +253,9 @@ final class ShellModel: ObservableObject {
             queuedFacts = []
             for fact in queued { store.report(fact) }
             refreshUploadPins()
+            // PRESSES THAT NEVER REACHED THE CORE (the app was suspended mid-press) go now, after the
+            // store is up and not holding it: each waits for Rust's answer.
+            await Notifications.drain(store)
         }
     }
 

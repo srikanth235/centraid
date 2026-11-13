@@ -64,6 +64,8 @@ pub struct Environment {
     /// The units the member chose (`kit::quantity::stored`), or `None` to follow the region. The
     /// runtime fills it from the phone's store before every call; [`Ctx::units`] is the reader.
     pub units: Option<crate::kit::quantity::UnitsPref>,
+    /// Notifications show their details (`kit::permission::details_shown`); filled like `units`.
+    pub show_details: bool,
 }
 
 impl Default for Environment {
@@ -76,6 +78,7 @@ impl Default for Environment {
             library_deletes: false,
             hour_cycle_12: false,
             units: None,
+            show_details: true,
         }
     }
 }
@@ -110,6 +113,7 @@ pub struct Ctx<'a> {
     env: &'a Environment,
     done: RefCell<Done>,
     follows: Follows,
+    alerts: crate::kit::permission::AlertBoard,
     /// The line a page that just closed handed down to this screen, until it takes it.
     handed_in: RefCell<Option<Handed>>,
 }
@@ -127,6 +131,7 @@ impl<'a> Ctx<'a> {
             env,
             done: RefCell::new(Done::default()),
             follows: Follows::default(),
+            alerts: crate::kit::permission::AlertBoard::default(),
             handed_in: RefCell::new(None),
         }
     }
@@ -163,6 +168,19 @@ impl<'a> Ctx<'a> {
     pub(crate) fn with_follows(mut self, follows: Follows) -> Self {
         self.follows = follows;
         self
+    }
+
+    /// This context over the runtime's one alert board (`kit::permission::AlertBoard`).
+    #[must_use]
+    pub(crate) fn with_alerts(mut self, alerts: crate::kit::permission::AlertBoard) -> Self {
+        self.alerts = alerts;
+        self
+    }
+
+    /// What the phone last said about alerts, shared by every screen (#1188, NA1).
+    #[must_use]
+    pub fn alerts(&self) -> &crate::kit::permission::AlertBoard {
+        &self.alerts
     }
 
     /// The board the follow coordinator shares with the screens (`crate::follow`).
@@ -351,6 +369,12 @@ impl<'a> Ctx<'a> {
             .borrow_mut()
             .posts
             .push((screen.to_owned(), event));
+    }
+
+    /// Whether a notification says what it is about, or only that something is due (#1188, NA3).
+    #[must_use]
+    pub fn show_details(&self) -> bool {
+        self.env.show_details
     }
 
     /// A SETTING EVERY SCREEN READS CHANGED (the units): every other open screen hears

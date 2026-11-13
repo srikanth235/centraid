@@ -2637,6 +2637,16 @@
       "why_no_example": ""
     },
     {
+      "argument": "when",
+      "example": null,
+      "family": "value",
+      "id": "session.there_are_more_x_than_can",
+      "source": "session.rs",
+      "template": "error: there are more {} than can be {} exactly; narrow it with a date.",
+      "tool": "compute",
+      "why_no_example": "needs a kind with more rows than the world's window of 500; the example vault holds fewer, and crates/core/tests/assist_scale.rs produces it over a year-3 vault"
+    },
+    {
       "argument": "kind",
       "example": [
         {
@@ -2722,6 +2732,16 @@
       "template": "error: {op} needs a number field; {field} is not. {} number fields: {}.",
       "tool": "compute",
       "why_no_example": ""
+    },
+    {
+      "argument": "when",
+      "example": null,
+      "family": "value",
+      "id": "session.events_can_only_be_x_for",
+      "source": "session.rs",
+      "template": "error: events can only be {} for the days from {} back to {} ahead; ask about a day in that range.",
+      "tool": "compute",
+      "why_no_example": "needs a vault with a repeating event, which the example vault lacks; crates/core/tests/assist_scale.rs produces it over a year-3 vault"
     },
     {
       "argument": "where",

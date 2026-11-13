@@ -32,46 +32,59 @@ internal object NotifyPlan {
     }
 
     /**
-     * What to do to make the OS hold exactly [wanted]. [cancel] are the ids recorded and no longer wanted:
-     * their alarm AND any delivered notification go. [drop] are wanted ones whose moment is already past:
-     * their alarm goes (the one already delivered stays, it is still what the member sees). [arm] is every
-     * timed one still to come, set again whether or not it changed (the same request code replaces it).
-     * [post] is every immediate one not already delivered as this very notification.
+     * PENDING AND DELIVERED ARE SEPARATE (#1188, A2). What to do to make the OS hold what Rust wants:
+     *
+     * - [removePending]: alarms set for ids that are no longer wanted to come, or that are already past.
+     * - [removeShowing]: notifications on the screen whose id is in NEITHER the wanted set NOR [live],
+     *   Rust's ids of reminders already fired and still wanted. TIME PASSING NEVER REMOVES A DELIVERED
+     *   REMINDER; RESOLVING THE ITEM DOES.
+     * - [schedule]: every timed one still to come, set again whether or not it changed (the same request
+     *   code replaces it).
+     * - [post]: immediate offers not showing and not previously delivered during this offer.
+     * Explicit retention leaves delivered cards alone except the ids Rust withdraws.
+     *
+     * Pure, and tested against the one fixture the iOS shell reads too (`contracts/notify/reconcile-cases.json`).
      */
-    class Diff(
-        val cancel: List<String>,
-        val drop: List<String>,
-        val arm: List<PendingNotification>,
+    class Plan(
+        val removePending: List<String>,
+        val removeShowing: List<String>,
+        val schedule: List<PendingNotification>,
         val post: List<PendingNotification>,
     )
 
-    fun diff(recorded: List<PendingNotification>, wanted: List<PendingNotification>, nowMs: Long): Diff {
+    /**
+     * [pending] are the ids this phone has an alarm for, [showing] the ids of the notifications the OS
+     * is actually showing for this app (not what was once recorded).
+     */
+    fun reconcile(
+        wanted: List<PendingNotification>,
+        live: List<String>,
+        pending: Collection<String>,
+        showing: Collection<String>,
+        nowMs: Long,
+        retainDelivered: Boolean = false,
+        explicitIds: Collection<String> = emptyList(),
+        seenImmediateIds: Set<String> = emptySet(),
+    ): Plan {
         // THE LAST OF A REPEATED ID WINS, as a replace by id would.
         val next = LinkedHashMap<String, PendingNotification>()
         wanted.forEach { next[it.notification_id] = it }
-        val before = recorded.associateBy { it.notification_id }
-        val cancel = before.keys.filter { it !in next }
-        val drop = next.values.filter { !it.immediate && it.fire_at_ms <= nowMs }.map { it.notification_id }
-        val arm = next.values.filter { !it.immediate && it.fire_at_ms > nowMs }
-        val post = next.values.filter { it.immediate && it.notification_id !in before }
-        return Diff(cancel = cancel, drop = drop, arm = arm, post = post)
+        val schedule = next.values.filter { !it.immediate && it.fire_at_ms > nowMs }
+        val scheduled = schedule.map { it.notification_id }.toSet()
+        val keep = next.keys + live
+        return Plan(
+            removePending = pending.filter { it !in scheduled }.distinct().sorted(),
+            removeShowing = showing.filter { it in explicitIds || (!retainDelivered && it !in keep) }.distinct().sorted(),
+            schedule = schedule,
+            post = next.values.filter { it.immediate && it.notification_id !in showing && it.notification_id !in seenImmediateIds },
+        )
     }
 
-    /** Delivered cards are withdrawn only as Rust asks in retention mode. */
-    fun withdrawDelivered(
-        recorded: List<PendingNotification>,
-        wanted: List<PendingNotification>,
-        deliveredIds: List<String>,
-        retainDelivered: Boolean,
-        explicitIds: List<String>,
-    ): Set<String> = if (retainDelivered) {
-        explicitIds.toSet()
-    } else {
-        val next = wanted.map { it.notification_id }.toSet()
-        (recorded.map { it.notification_id } + deliveredIds).filter { it !in next }.toSet()
-    }
+    /** Keep dismissal memory only for the currently offered immediate ids, never an unbounded log. */
+    fun rememberedImmediates(current: Set<String>, previous: Set<String>, showing: Set<String>): Set<String> =
+        (previous + showing).intersect(current)
 
-    /** What the record keeps after [diff]: everything wanted that is still to come, and the immediates. */
+    /** What the record keeps after [reconcile]: future alarms and the immediate offers. */
     fun kept(wanted: List<PendingNotification>, nowMs: Long): List<PendingNotification> {
         val next = LinkedHashMap<String, PendingNotification>()
         wanted.forEach { next[it.notification_id] = it }

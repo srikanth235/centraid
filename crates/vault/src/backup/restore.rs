@@ -37,7 +37,8 @@ use super::PlaneError;
 use super::naming::{BackupKeys, Name, PlaintextHash};
 use super::snapshot::{Manifest, RANGE_BYTES, RangeRef, census_of, read_copy};
 use super::store::{NAMES_PER_CALL, Store, StoreError};
-use crate::format::{APPLICATION_ID, EARLIER_APPLICATION_ID, SCHEMA_DIGEST, schema_digest};
+use crate::format::{APPLICATION_ID, EARLIER_APPLICATION_ID, schema_digest};
+use crate::migrations::{LADDER, Migration};
 
 /// Why a restore refused the file.
 #[derive(Debug, thiserror::Error)]
@@ -70,6 +71,12 @@ pub enum RestoreError {
         "this backup does not match this version of Centraid: its tables are not the ones this version expects"
     )]
     SchemaMismatch { found: String, expected: String },
+    /// The snapshot was taken by a build whose ladder is longer than this one's: its rung is not
+    /// one this build knows. A file is never guessed down (the ladder is forward-only).
+    #[error(
+        "this backup was made by a newer version of Centraid (schema {found}; this version reads up to {supported}). Update Centraid and restore again"
+    )]
+    NewerBuild { found: i64, supported: i64 },
     #[error(
         "census: {table}: the manifest says {expected:?} rows and the restored file holds {found:?}"
     )]
@@ -147,11 +154,27 @@ pub fn fetch_and_assemble(
     head_name: &Name,
     out_path: &Path,
 ) -> Result<Restored, RestoreError> {
+    fetch_and_assemble_on(LADDER, store, keys, head_name, out_path)
+}
+
+/// [`fetch_and_assemble`] over any ladder, so a rung two can be exercised before the real ladder
+/// holds one: a backup is accepted at any rung `ladder` knows, and the caller's `Vault::open`
+/// climbs it to the head.
+///
+/// # Errors
+/// As [`fetch_and_assemble`].
+pub fn fetch_and_assemble_on(
+    ladder: &[Migration],
+    store: &dyn Store,
+    keys: &BackupKeys,
+    head_name: &Name,
+    out_path: &Path,
+) -> Result<Restored, RestoreError> {
     if out_path.exists() {
         return Err(RestoreError::Exists(out_path.to_path_buf()));
     }
     let partial = partial_of(out_path);
-    let outcome = rebuild(store, keys, head_name, &partial);
+    let outcome = rebuild(ladder, store, keys, head_name, &partial);
     match outcome {
         Ok((manifest, checks)) => {
             fs::rename(&partial, out_path)?;
@@ -238,6 +261,7 @@ fn write_ranges(
 }
 
 fn rebuild(
+    ladder: &[Migration],
     store: &dyn Store,
     keys: &BackupKeys,
     head_name: &Name,
@@ -337,15 +361,27 @@ fn rebuild(
         name: "header",
         detail: format!("page_size {page_size}, user_version {user_version}"),
     });
-    if digest != SCHEMA_DIGEST {
+    // THE BACKUP'S OWN RUNG, NOT THE RUNNING BUILD'S (B2): the manifest records `user_version`,
+    // the rung the file had reached, and the file must be exactly that rung's schema. Any rung
+    // the ladder knows is accepted here and climbed by `Vault::open`; a rung above the ladder is
+    // a newer build's, refused with a sentence that says to update.
+    let supported = ladder.last().map_or(0, |rung| rung.version);
+    if user_version > supported {
+        return Err(RestoreError::NewerBuild {
+            found: user_version,
+            supported,
+        });
+    }
+    let expected = rung_digest(ladder, user_version)?;
+    if digest != expected {
         return Err(RestoreError::SchemaMismatch {
             found: digest,
-            expected: SCHEMA_DIGEST.to_owned(),
+            expected,
         });
     }
     checks.push(Check {
         name: "schema",
-        detail: format!("digest {digest}"),
+        detail: format!("rung {user_version}, digest {digest}"),
     });
 
     let tables: BTreeSet<&String> = manifest.census.keys().chain(census.keys()).collect();
@@ -369,6 +405,30 @@ fn rebuild(
         ),
     });
     Ok((manifest, checks))
+}
+
+/// The schema digest of a file that has run the ladder up to and including `version`: the rungs
+/// are applied to an empty in-memory file, so the answer is whatever the ladder says that rung
+/// makes, never a constant that could drift from it.
+fn rung_digest(ladder: &[Migration], version: i64) -> Result<String, RestoreError> {
+    let connection = rusqlite::Connection::open_in_memory().map_err(PlaneError::from)?;
+    let mut reached = 0_i64;
+    for rung in ladder.iter().filter(|rung| rung.version <= version) {
+        connection
+            .execute_batch(rung.sql)
+            .map_err(PlaneError::from)?;
+        reached = rung.version;
+    }
+    if reached != version || version < 1 {
+        return Err(RestoreError::SchemaMismatch {
+            found: format!("rung {version}"),
+            expected: format!(
+                "a rung from 1 to {}",
+                ladder.last().map_or(0, |r| r.version)
+            ),
+        });
+    }
+    Ok(schema_digest(&connection).map_err(PlaneError::from)?)
 }
 
 // ---------------------------------------------------------------------------
@@ -441,6 +501,128 @@ pub fn restore_check(file: &Path) -> Result<StructuralReport, CheckError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::backup::naming::{Digest, keys_from_root};
+    use crate::backup::snapshot;
+    use crate::backup::store::MemoryStore;
+
+    const ROOT: [u8; 32] = [0x42; 32];
+    const VAULT: &str = "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2";
+
+    /// A rung two the real ladder does not have yet: one more table.
+    const RUNG_TWO: &str = "CREATE TABLE later_rung (id TEXT PRIMARY KEY, note TEXT) STRICT;";
+
+    fn two_rungs() -> Vec<Migration> {
+        vec![
+            Migration {
+                version: 1,
+                name: "baseline",
+                sql: LADDER[0].sql,
+            },
+            Migration {
+                version: 2,
+                name: "later",
+                sql: RUNG_TWO,
+            },
+        ]
+    }
+
+    /// A founded vault's snapshot, published whole to a store whose head names it.
+    fn published(dir: &Path) -> (MemoryStore, BackupKeys) {
+        let keys = keys_from_root(&ROOT);
+        let vault = crate::file::Vault::create(dir.join("vault.db")).unwrap();
+        vault.found("The Household", "Ada").unwrap();
+        let taken = snapshot::take(&vault, &keys, &dir.join("scratch"), VAULT, "test").unwrap();
+        let store = MemoryStore::new("gw");
+        let mut file = File::open(&taken.path).unwrap();
+        for range in &taken.ranges {
+            let mut buffer = vec![0_u8; usize::try_from(range.len).unwrap()];
+            file.seek(SeekFrom::Start(range.offset)).unwrap();
+            file.read_exact(&mut buffer).unwrap();
+            let sealed_bytes = sealed::seal_part(&keys, 0, &buffer, true).unwrap();
+            store
+                .put(
+                    &range.name,
+                    &Digest::of(&sealed_bytes),
+                    sealed_bytes.len() as u64,
+                    &mut &sealed_bytes[..],
+                )
+                .unwrap();
+        }
+        let sealed_manifest = sealed::seal_part(&keys, 0, &taken.manifest_json, true).unwrap();
+        store
+            .put(
+                &taken.manifest_name,
+                &Digest::of(&sealed_manifest),
+                sealed_manifest.len() as u64,
+                &mut &sealed_manifest[..],
+            )
+            .unwrap();
+        store
+            .set_head(&taken.manifest_name, None, taken.manifest.taken_at_ms)
+            .unwrap();
+        (store, keys)
+    }
+
+    /// **B2.** A backup taken at rung one restores under a build whose ladder has a rung two: the
+    /// restore accepts any rung the ladder knows (the caller's `Vault::open` climbs it), where it
+    /// used to refuse every backup whose digest differed from the running build's.
+    #[test]
+    fn a_backup_at_an_older_rung_restores_under_a_longer_ladder() {
+        let dir = tempfile::tempdir().unwrap();
+        let (store, keys) = published(dir.path());
+        let head = store.head().unwrap().unwrap();
+        let out = dir.path().join("restored.db");
+        let restored =
+            fetch_and_assemble_on(&two_rungs(), &store, &keys, &head.name, &out).unwrap();
+        assert_eq!(restored.manifest.user_version, 1);
+        assert!(
+            restored
+                .checks
+                .iter()
+                .any(|check| check.name == "schema" && check.detail.starts_with("rung 1")),
+            "{:?}",
+            restored.checks
+        );
+    }
+
+    /// A backup from a newer build is a sentence that says to update, never a guess down.
+    #[test]
+    fn a_backup_from_a_newer_build_asks_for_an_update() {
+        let dir = tempfile::tempdir().unwrap();
+        let (store, keys) = published(dir.path());
+        let head = store.head().unwrap().unwrap();
+        let out = dir.path().join("restored.db");
+        let error = fetch_and_assemble_on(&[], &store, &keys, &head.name, &out).unwrap_err();
+        assert!(
+            matches!(
+                error,
+                RestoreError::NewerBuild {
+                    found: 1,
+                    supported: 0
+                }
+            ),
+            "{error:?}"
+        );
+        assert!(!out.exists(), "a refused restore leaves nothing");
+    }
+
+    /// Accepting any rung is not accepting any file: a file whose tables are not its own rung's
+    /// is still refused.
+    #[test]
+    fn a_file_that_is_not_its_rungs_schema_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let (store, keys) = published(dir.path());
+        let head = store.head().unwrap().unwrap();
+        let out = dir.path().join("restored.db");
+        let mut altered = two_rungs();
+        altered[0].sql = "CREATE TABLE not_the_baseline (id TEXT) STRICT;";
+        let error = fetch_and_assemble_on(&altered, &store, &keys, &head.name, &out).unwrap_err();
+        assert!(
+            matches!(error, RestoreError::SchemaMismatch { .. }),
+            "{error:?}"
+        );
+    }
 
     #[test]
     fn a_sound_vault_file_is_structurally_clean() {

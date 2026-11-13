@@ -104,11 +104,17 @@ pub enum Promise {
     /// screen under a sentence and Reload keeps them as an earlier version. Health has no editor,
     /// a named exception.
     StaleSave,
+    /// Whatever can alert the member does it through the ONE notification service
+    /// (`reminders.notify`, #1188), whoever produces the alert: the ids are deterministic, a
+    /// delivered notification stays until its item is resolved, a button press is durable, and
+    /// nothing from Locker is ever a notification. An app with nothing to alert for is a named
+    /// exception, and fails when it grows an `alerts` read.
+    Notify,
 }
 
 impl Promise {
     /// Every promise, in the order the table is read.
-    pub const ALL: [Promise; 12] = [
+    pub const ALL: [Promise; 13] = [
         Promise::Trash,
         Promise::Undo,
         Promise::History,
@@ -121,6 +127,7 @@ impl Promise {
         Promise::Origin,
         Promise::Link,
         Promise::StaleSave,
+        Promise::Notify,
     ];
 
     fn name(self) -> &'static str {
@@ -137,6 +144,7 @@ impl Promise {
             Promise::Origin => "Origin",
             Promise::Link => "Link",
             Promise::StaleSave => "Stale save",
+            Promise::Notify => "Notify",
         }
     }
 }
@@ -643,6 +651,34 @@ pub const REGISTER: &[Row] = &[
         Promise::Link,
         "crates/screens/src/reminders/detail.rs",
     ),
+    // Notify (#1188): one service for every alert. Reminders and Calendar hold items with a moment
+    // and a lead time; the other apps have nothing to alert for.
+    kept("reminders", Promise::Notify, NOTIFY_PROOF),
+    kept("calendar", Promise::Notify, NOTIFY_PROOF),
+    exempt("locker", Promise::Notify, NOTIFY_EXEMPT[0].1),
+    exempt("docs", Promise::Notify, NOTIFY_EXEMPT[1].1),
+    exempt("health", Promise::Notify, NOTIFY_EXEMPT[2].1),
+    exempt("money", Promise::Notify, NOTIFY_EXEMPT[3].1),
+    exempt("notes", Promise::Notify, NOTIFY_EXEMPT[4].1),
+    exempt("people", Promise::Notify, NOTIFY_EXEMPT[5].1),
+    exempt("photos", Promise::Notify, NOTIFY_EXEMPT[6].1),
+];
+
+const NOTIFY_PROOF: &str = "crates/screens/src/agenda/notify/service.rs";
+
+/// The apps with nothing to alert for, with the ruling that says so (the Notify promise's only
+/// exceptions). Locker's is the owner's: its contents never leave as a notification.
+pub const NOTIFY_EXEMPT: &[(&str, &str)] = &[
+    (
+        "locker",
+        "Locker's contents never appear in a notification (D11)",
+    ),
+    ("docs", "A document has no moment to alert at"),
+    ("health", "A measurement has no moment to alert at"),
+    ("money", "A transaction has no moment to alert at"),
+    ("notes", "A note has no moment to alert at"),
+    ("people", "A person has no moment to alert at"),
+    ("photos", "A photo has no moment to alert at"),
 ];
 
 /// The apps with no editor, with the ruling that says so (the Stale save promise's only
@@ -675,6 +711,9 @@ pub fn promises(root: &Path) -> RuleReport {
     // Nor is the rest of the screens crate, and the list of what can leave is held to the proto.
     report.findings.extend(owner_tree_missing(root));
     report.findings.extend(effect_kinds_missing(root));
+    // Backup is the vault's, not an app's: its three promises are held to the tests that prove them.
+    report.findings.extend(backup_missing(root));
+    report.findings.extend(chat_missing(root));
     report
 }
 
@@ -742,11 +781,14 @@ pub(crate) fn check(root: &Path, register: &[Row]) -> RuleReport {
                     Promise::StaleSave => STALE_SAVE_EXEMPT
                         .iter()
                         .any(|(app, said)| *app == row.app && *said == ruling),
+                    Promise::Notify => NOTIFY_EXEMPT
+                        .iter()
+                        .any(|(app, said)| *app == row.app && *said == ruling),
                     _ => false,
                 };
                 if !named {
                     findings.push(format!(
-                        "{} / {}: Exempt, but `{ruling}` is not a ruling listed in ATTACH_EXEMPT or STALE_SAVE_EXEMPT",
+                        "{} / {}: Exempt, but `{ruling}` is not a ruling listed in ATTACH_EXEMPT, STALE_SAVE_EXEMPT or NOTIFY_EXEMPT",
                         row.app,
                         row.promise.name()
                     ));
@@ -797,6 +839,7 @@ pub fn missing(root: &Path, app: &str, promise: Promise) -> Vec<String> {
         Promise::Origin => origin_missing(root, app),
         Promise::Link => link_missing(root, app),
         Promise::StaleSave => stale_save_missing(root, app),
+        Promise::Notify => notify_missing(root, app),
     }
 }
 
@@ -1643,6 +1686,74 @@ fn stale_save_missing(root: &Path, app: &str) -> Vec<String> {
 }
 
 // ---------------------------------------------------------------------------
+// Notify
+// ---------------------------------------------------------------------------
+
+/// What the service must say, whoever the producer is: the proof of each rule, as a fragment of the
+/// file that holds it.
+const NOTIFY_RULES: &[(&str, &str, &str)] = &[
+    (
+        "crates/screens/src/agenda/notify/desired.rs",
+        "pub fn live(",
+        "the delivered reading: a notification stays until its item is resolved",
+    ),
+    (
+        "crates/screens/src/agenda/notify/desired.rs",
+        "task|{}|{}|{fire_local}",
+        "deterministic ids, made from the item and its firing",
+    ),
+    (
+        "crates/screens/src/agenda/notify/service.rs",
+        "live_ids",
+        "the shell is told which delivered notifications are still wanted",
+    ),
+    (
+        "crates/screens/src/agenda/notify/answer.rs",
+        "press_id",
+        "a button press is durable and applies once",
+    ),
+];
+
+/// Notify is kept when the service's four rules ([`NOTIFY_RULES`]) hold, nothing in the service
+/// names Locker, and the app declares the `alerts` read the service names its items with. An app in
+/// [`NOTIFY_EXEMPT`] is held the other way: it fails when its manifest grows an `alerts` input.
+fn notify_missing(root: &Path, app: &str) -> Vec<String> {
+    let manifest = fs::read_to_string(root.join("crates/apps").join(app).join("manifest.json"))
+        .unwrap_or_default();
+    let declares = manifest.contains("\"alerts\"");
+    if NOTIFY_EXEMPT.iter().any(|(exempt, _)| *exempt == app) {
+        return if declares {
+            vec![format!(
+                "crates/apps/{app}/manifest.json declares an `alerts` read, but {app} is exempt from the Notify promise as an app with nothing to alert for"
+            )]
+        } else {
+            Vec::new()
+        };
+    }
+    let mut gaps = Vec::new();
+    if !declares {
+        gaps.push(format!(
+            "crates/apps/{app}/manifest.json declares no `alerts` read for the service to name its items with"
+        ));
+    }
+    for (file, fragment, rule) in NOTIFY_RULES {
+        if !live_source(&root.join(file)).is_some_and(|text| text.contains(fragment)) {
+            gaps.push(format!("{file}: `{fragment}` is missing ({rule})"));
+        }
+    }
+    let dir = root.join("crates/screens/src/agenda/notify");
+    for file in source_files(&dir, "rs") {
+        if live_source(&file).is_some_and(|text| text.to_lowercase().contains("locker")) {
+            gaps.push(format!(
+                "{} names Locker; nothing from Locker is ever a notification",
+                file.strip_prefix(root).unwrap_or(&file).display()
+            ));
+        }
+    }
+    gaps
+}
+
+// ---------------------------------------------------------------------------
 // Origin
 // ---------------------------------------------------------------------------
 
@@ -2238,6 +2349,10 @@ pub const STAYING_EFFECTS: &[(&str, &str)] = &[
         "reads the phone's contacts into the vault's screens",
     ),
     (
+        "delete_model_file",
+        "removes a model file the assistant no longer needs from the app's own models folder",
+    ),
+    (
         "folders_read",
         "reads a followed folder into the vault's screens",
     ),
@@ -2275,6 +2390,10 @@ pub const STAYING_EFFECTS: &[(&str, &str)] = &[
     ("long_run", "asks the platform for time to finish work"),
     ("model_download", "fetches the on-device assistant's model"),
     ("open_map", "opens an address in the maps app"),
+    (
+        "open_notification_settings",
+        "opens this app's own notification page in the phone's Settings",
+    ),
     ("open_route", "opens a page inside the app"),
     (
         "open_url",
@@ -2938,6 +3057,358 @@ fn link_missing(root: &Path, app: &str) -> Vec<String> {
             gaps.push(format!(
                 "crates/screens/src/{app}/{screen}: the {kind} page does not embed the kit's general \"Linked to\" section (`kit::{LINK_PIECE}`)"
             ));
+        }
+    }
+    gaps
+}
+
+/// **BACKUP** (#1188, Part B). Backup is the vault's, so no app has a row; each promise names the
+/// tests that prove it, and the rule fails when a named test is gone, renamed or `#[ignore]`d.
+/// `(promise, [(file, test)])`.
+pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 8] = [
+    (
+        "every paired backup device receives every pass",
+        &[
+            (
+                "crates/core/tests/backup_replicas.rs",
+                "a_pass_feeds_every_paired_gateway",
+            ),
+            (
+                "crates/core/tests/backup_holes.rs",
+                "a_device_away_past_the_wait_still_restores_the_whole_vault",
+            ),
+        ],
+    ),
+    (
+        "a backup restores on any later build",
+        &[
+            (
+                "crates/vault/src/backup/restore.rs",
+                "a_backup_at_an_older_rung_restores_under_a_longer_ladder",
+            ),
+            (
+                "crates/vault/src/backup/restore.rs",
+                "a_backup_from_a_newer_build_asks_for_an_update",
+            ),
+        ],
+    ),
+    (
+        "backed up is said only when every backup device is current",
+        &[
+            (
+                "crates/screens/src/backup/tests.rs",
+                "a_silent_device_is_named_with_the_day_it_last_answered",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "a_device_holding_an_older_backup_is_a_plain_warning",
+            ),
+            (
+                "crates/core/tests/backup_verify.rs",
+                "a_gateway_that_lies_about_exists_is_found_and_then_refilled",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "the_card_is_never_green_beside_a_warning_line",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "a_backlog_older_than_the_stale_threshold_warns_with_the_count_and_the_reason",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "the_cores_oldest_waiting_age_warns_on_the_page_but_not_while_a_pass_runs",
+            ),
+        ],
+    ),
+    (
+        "a backup never holds the vault's writer for a copy, and the copy goes once spooled",
+        &[
+            (
+                "crates/vault/src/backup/snapshot.rs",
+                "a_commit_between_steps_is_not_blocked_and_is_in_the_next_copy",
+            ),
+            (
+                "crates/core/tests/backup_scratch.rs",
+                "a_commit_lands_between_steps_of_a_copy_a_pass_would_take",
+            ),
+            (
+                "crates/core/tests/backup_scratch.rs",
+                "a_copy_a_crash_left_is_gone_at_the_next_open",
+            ),
+            (
+                "crates/core/src/phone/drain.rs",
+                "the_scratch_copy_goes_on_every_way_out_of_a_pass",
+            ),
+        ],
+    ),
+    (
+        "a phone with no room says so, and an unchanged vault is not copied again",
+        &[
+            (
+                "crates/core/tests/backup_scratch.rs",
+                "a_phone_with_no_room_says_so_and_catches_up_when_it_has_some",
+            ),
+            (
+                "crates/core/tests/backup_scratch.rs",
+                "a_second_pass_with_no_write_copies_nothing",
+            ),
+        ],
+    ),
+    (
+        "a stale backup is warned of with the app closed, and notifications are asked for in words",
+        &[
+            (
+                "crates/screens/src/backup/tests.rs",
+                "a_fresh_start_with_a_stale_device_offers_the_notice_without_backup_ever_opening",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "a_paired_device_and_an_unasked_phone_show_the_ask_and_allow_calls_the_service",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "a_refused_grant_says_so_and_offers_settings",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "a_frozen_phone_gets_no_stale_notice",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "an_old_backlog_schedules_its_notice_from_the_oldest_waiting_item",
+            ),
+        ],
+    ),
+    (
+        "what a member reads about backup is what happened: Backing up only while a pass runs, each device's last backup, how backup runs on this platform, and the check's kept result",
+        &[
+            (
+                "crates/screens/src/backup/tests.rs",
+                "backing_up_is_said_only_while_a_pass_runs",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "each_device_says_when_it_last_acknowledged_a_backup",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "the_page_says_how_backup_runs_on_each_platform_and_never_claims_always",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "check_my_backup_says_what_it_last_found_or_that_it_never_ran",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "a_check_the_core_could_not_do_says_it_failed_with_retry",
+            ),
+        ],
+    ),
+    (
+        "a refusal names its reason, each with its own remedy, and stops only the gateway that gave it",
+        &[
+            (
+                "crates/core/tests/backup_replicas.rs",
+                "a_refusal_is_read_as_the_reason_the_gateway_gave",
+            ),
+            (
+                "crates/core/tests/backup_replicas.rs",
+                "a_full_gateway_is_named_while_the_other_is_fed",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "a_refusal_is_worded_for_its_own_remedy",
+            ),
+        ],
+    ),
+];
+
+/// What the Backup promises lack: a named test that does not exist, or is ignored.
+pub fn backup_missing(root: &Path) -> Vec<String> {
+    backup_missing_in(root, &BACKUP_PROMISES)
+}
+
+fn backup_missing_in(root: &Path, promises: &[(&str, &[(&str, &str)])]) -> Vec<String> {
+    proofs_missing_in("backup", root, promises)
+}
+
+/// **CHAT** (#1188, Part C). The assistant is the phone's, so no app has a row; the same shape and
+/// the same checker as Backup's. `(promise, [(file, test)])`.
+pub const CHAT_PROMISES: [(&str, &[(&str, &str)]); 9] = [
+    (
+        "a change is made only after the member confirms it",
+        &[
+            (
+                "crates/core/tests/assist_native.rs",
+                "a_write_parks_behind_a_card_and_nothing_is_written_until_the_member_taps",
+            ),
+            (
+                "crates/core/tests/assist_native.rs",
+                "a_dismissed_card_writes_nothing_and_cannot_be_confirmed_afterwards",
+            ),
+            (
+                "crates/screens/tests/chat_turn.rs",
+                "cancel_settles_the_card_at_once_and_writes_nothing",
+            ),
+        ],
+    ),
+    (
+        "an answer shows the rows it came from",
+        &[
+            (
+                "crates/core/tests/assist_native.rs",
+                "a_read_turn_finds_then_answers_with_its_events_in_order_its_cards_mapped_and_its_line_composed",
+            ),
+            (
+                "crates/core/tests/assist_native.rs",
+                "every_kind_is_drawn_as_a_card_of_one_of_the_six_apps_and_the_homeless_ones_open_their_apps_home",
+            ),
+        ],
+    ),
+    (
+        "the assistant never fetches a model file the member did not ask for",
+        &[
+            (
+                "crates/screens/tests/chat_model.rs",
+                "nothing_is_fetched_until_the_member_taps_the_row_and_then_only_the_adapter",
+            ),
+            (
+                "crates/screens/tests/chat_model.rs",
+                "the_offer_cases_in_the_shared_fixture_hold",
+            ),
+            (
+                "crates/screens/tests/chat_model.rs",
+                "the_adapter_rides_in_the_assistants_one_download_with_one_size_and_one_bar",
+            ),
+        ],
+    ),
+    (
+        "nothing the member asks or the assistant reads leaves the device",
+        &[
+            (
+                "crates/assist/tests/nothing_leaves.rs",
+                "the_assistant_crate_depends_on_no_network_library",
+            ),
+            (
+                "crates/assist/tests/nothing_leaves.rs",
+                "no_assistant_or_chat_source_names_a_socket_or_an_http_client",
+            ),
+            (
+                "crates/core/tests/assist_native.rs",
+                "an_attachment_never_leaves_the_attached_path_whichever_plane_answers_the_rest",
+            ),
+        ],
+    ),
+    (
+        "a sealed Locker value never reaches the model",
+        &[
+            (
+                "crates/core/tests/assist_channel.rs",
+                "no_sealed_value_reaches_the_model_an_event_the_thread_an_action_key_or_the_index",
+            ),
+            (
+                "crates/core/tests/assist_plane.rs",
+                "no_sealed_value_is_in_any_prompt_a_session_ever_builds",
+            ),
+            (
+                "crates/core/tests/assist_native.rs",
+                "a_locker_item_is_found_and_drawn_like_any_row_and_its_secrets_reach_no_byte",
+            ),
+        ],
+    ),
+    (
+        "a Locker secret shows on the chat card only after the phone's owner check",
+        &[
+            (
+                "crates/screens/tests/chat_reveal.rs",
+                "a_reveal_shows_only_after_the_owner_check_and_a_cancel_shows_nothing",
+            ),
+            (
+                "crates/screens/tests/chat_reveal.rs",
+                "a_phone_that_refuses_the_member_is_counted_and_said_on_the_card",
+            ),
+            (
+                "crates/screens/tests/chat_reveal.rs",
+                "a_one_time_code_shows_the_current_code_and_never_the_seed",
+            ),
+        ],
+    ),
+    (
+        "a secret shown on a chat card is in no prompt, no saved turn and no reopened thread",
+        &[(
+            "crates/screens/tests/chat_reveal.rs",
+            "the_revealed_value_is_in_no_prompt_and_no_saved_turn",
+        )],
+    ),
+    (
+        "a secret shown on a chat card is dropped on a relock, on leaving, and when its item is gone",
+        &[
+            (
+                "crates/screens/tests/chat_reveal.rs",
+                "a_relock_or_leaving_drops_the_value",
+            ),
+            (
+                "crates/screens/tests/chat_reveal.rs",
+                "an_item_deleted_since_makes_the_card_say_it_is_gone",
+            ),
+        ],
+    ),
+    (
+        "a secret typed into chat is masked on the card, masked in the saved message and sealed on save",
+        &[
+            (
+                "crates/core/tests/assist_native.rs",
+                "a_secret_typed_in_chat_parks_masked_and_the_thread_never_holds_it",
+            ),
+            (
+                "crates/core/tests/assist_channel.rs",
+                "no_sealed_value_reaches_the_model_an_event_the_thread_an_action_key_or_the_index",
+            ),
+        ],
+    ),
+];
+
+/// What the Chat promises lack: a named test that does not exist, or is ignored.
+pub fn chat_missing(root: &Path) -> Vec<String> {
+    proofs_missing_in("chat", root, &CHAT_PROMISES)
+}
+
+fn proofs_missing_in(
+    label: &str,
+    root: &Path,
+    promises: &[(&str, &[(&str, &str)])],
+) -> Vec<String> {
+    let mut gaps = Vec::new();
+    for (promise, proofs) in promises {
+        for (file, test) in *proofs {
+            let Ok(text) = fs::read_to_string(root.join(file)) else {
+                gaps.push(format!(
+                    "{label} / {promise}: its proof file `{file}` does not exist"
+                ));
+                continue;
+            };
+            let needle = format!("fn {test}(");
+            let lines: Vec<&str> = text.lines().collect();
+            let Some(at) = lines.iter().position(|line| line.contains(&needle)) else {
+                gaps.push(format!(
+                    "{label} / {promise}: `{file}` has no test `{test}`"
+                ));
+                continue;
+            };
+            let ignored = lines[..at]
+                .iter()
+                .rev()
+                .take_while(|line| {
+                    let line = line.trim();
+                    line.starts_with("#[") || line.starts_with("///") || line.starts_with("//")
+                })
+                .any(|line| line.contains("#[ignore"));
+            if ignored {
+                gaps.push(format!(
+                    "{label} / {promise}: `{test}` in `{file}` is ignored"
+                ));
+            }
         }
     }
     gaps

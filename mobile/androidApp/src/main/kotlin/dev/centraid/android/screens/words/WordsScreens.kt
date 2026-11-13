@@ -103,6 +103,8 @@ import centraid.core.v1.WordsOwnToggled
 import centraid.core.v1.WordsPrimary
 import centraid.core.v1.WordsRestoreTapped
 import centraid.core.v1.WordsSaveCopy
+import centraid.core.v1.WordsAnother
+import centraid.core.v1.WordsOfferRow
 import centraid.core.v1.WordsSecondary
 import centraid.core.v1.WordsUseWords
 import dev.centraid.android.kit.CentraidIcon
@@ -349,6 +351,12 @@ internal fun WordsEntryScreen(
             if (state.scan_label.isNotEmpty() && held) {
                 WordsTonalButton(state.scan_label, testTag = "words-scan", iconKey = "Maximize", enabled = !working, onPress = scan)
             }
+            // OFFER: a different backup device is a second, quieter control under the verb.
+            if (state.another_label.isNotEmpty()) {
+                WordsTonalButton(state.another_label, testTag = "words-another", iconKey = "Maximize", enabled = !working) {
+                    onEvent(WordsEnterEvent(another = WordsAnother()))
+                }
+            }
             if (state.primary_label.isNotEmpty()) {
                 InkButton(
                     label = state.primary_label,
@@ -364,6 +372,8 @@ internal fun WordsEntryScreen(
         WordsHead(state.title, state.body)
         // A HELD KEY IS ALREADY HERE: say so, and where it came from.
         if (held) WordsHeldCard(state.held_found, state.held_place)
+        // OFFER: which backup opens and which does not, one card of rows.
+        if (state.offer_rows.isNotEmpty()) WordsOfferRows(state.offer_rows)
         if (state.cells.isNotEmpty()) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 for (row in state.cells.chunked(WORD_COLUMNS)) {
@@ -523,6 +533,36 @@ private fun WordsHeldCard(found: String, place: String) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(found, style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold), color = Surface.ink)
             if (place.isNotEmpty()) KitText(place, KitType.Meta, Surface.meta)
+        }
+    }
+}
+
+/** The backups a restore found: a check or a cross, the backup device, and what that backup came to. */
+@Composable
+private fun WordsOfferRows(rows: List<WordsOfferRow>) {
+    Column(Modifier.fillMaxWidth().kitCard().testTag("words-offer")) {
+        for ((at, row) in rows.withIndex()) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp).semantics(mergeDescendants = true) { },
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier.size(32.dp).wordsBox(fill = if (row.opens) StateColor.Green.tint else StateColor.Red.tint, border = null).clearAndSetSemantics { },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CentraidIcon(
+                        iconKey = if (row.opens) "Check" else "X",
+                        tint = if (row.opens) StateColor.Green.text else StateColor.Red.text,
+                        size = 18.dp,
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    KitText(row.title, KitType.Row, Surface.ink)
+                    KitText(row.detail, KitType.Meta, Surface.meta)
+                }
+            }
+            if (at < rows.size - 1) Box(Modifier.fillMaxWidth().height(KitGeometry.HAIRLINE).background(Surface.line))
         }
     }
 }

@@ -37,15 +37,26 @@
 //! `exists` asks about a thousand at a time and the mover sends in bundles
 //! (A14, A15). The manifest grows with them and its format does not change.
 //!
-//! ## THE COPY CANNOT INTERLEAVE WITH A COMMIT, BY CONSTRUCTION (R-1080-B6)
+//! ## THE COPY IS ONE MOMENT, AND THE WRITER IS NEVER HELD FOR IT (R-1080-B6, #1188 design 6)
 //!
-//! [`copy`] runs the whole backup in one step on the vault's own connection,
-//! holding `&Vault`, and `Vault` is `!Sync`: no other thread can hold the vault
-//! while the copy does, and a vault shared across threads is behind a `Mutex`
-//! that serialises `commit` and `copy`. The assertion below this header fails
-//! to compile if `Vault` ever becomes `Sync`. The one interleaving left — a
-//! copy asked for from inside a commit, on the connection holding the write —
-//! SQLite answers `BUSY`, and [`copy`] refuses it first, by name.
+//! [`source`] takes what the copy needs from the vault in one short hold: the file's path, the
+//! vault's clock and its size. [`copy_from`] then opens the file READ-ONLY on a connection of its
+//! own, pins one read transaction (a WAL reader sees the file as it was when the transaction began,
+//! whatever commits after) and copies it in steps of [`PAGES_PER_STEP`] pages. The vault is free
+//! between steps and for the whole of the copy: a commit lands while the copy runs, is not in it,
+//! and is in the next snapshot, which the write counter in the manifest ([`unchanged`]) says is owed.
+//! The copy can carry no row that later rolls back, because an uncommitted row is on no reader's
+//! side. The one connection that writes the vault is still the only one that writes it; this one
+//! never does.
+//!
+//! The copy sits in a directory only the app can enter (`0700`, the file `0600`), holds the vault
+//! in the clear, and is deleted the moment the last range is spooled, and on every way out of a pass
+//! before that. A crash leaves it for the next core open to remove.
+//!
+//! ## A VAULT THAT HAS NOT CHANGED IS NOT COPIED AGAIN
+//!
+//! The vault's own write counter and `user_version` ride in every manifest. A pass whose vault shows
+//! the same two as the newest snapshot, held whole at every gateway, takes no snapshot ([`unchanged`]).
 //!
 //! ## THE CENSUS IS COUNTED ON THE COPY
 //!
@@ -268,6 +279,22 @@ pub fn history(vault: &Vault) -> Result<History> {
     Ok(vault.read(|connection| Ok(History::of(connection)?))?)
 }
 
+/// Whether `vault` shows what `manifest` was taken from: the same write counter, the same moment of
+/// the last write and the same `user_version`. A vault that does is not copied again; a commit that
+/// changed anything a screen reads, and a migration, show up in one of the three.
+///
+/// # Errors
+/// SQLite's refusal.
+pub fn unchanged(vault: &Vault, manifest: &Manifest) -> Result<bool> {
+    let now = history(vault)?;
+    let user_version: i64 = vault.read(|connection| {
+        Ok(connection.query_row("PRAGMA user_version", [], |row| row.get(0))?)
+    })?;
+    Ok(now.writes == manifest.writes
+        && now.last_write_ms == manifest.written_at_ms
+        && user_version == manifest.user_version)
+}
+
 /// The page-identical copy and when it was taken.
 #[derive(Debug, Clone)]
 pub struct Copied {
@@ -275,48 +302,190 @@ pub struct Copied {
     pub taken_at_ms: u64,
 }
 
-/// Copy the vault page for page into a fresh file under `scratch_dir`.
-///
-/// The caller holds the vault for this call alone; everything after it reads
-/// the copy.
+/// Pages one step of the copy moves. The vault is free between steps; this size keeps one step to
+/// a few milliseconds on a phone.
+pub const PAGES_PER_STEP: i32 = 128;
+
+/// How long a step waits for a source or destination SQLite says is busy, and how many times.
+const BUSY_RETRIES: u32 = 200;
+
+/// What a copy needs from the vault, taken in one short hold.
+#[derive(Debug, Clone)]
+pub struct Source {
+    path: PathBuf,
+    taken_at_ms: u64,
+    /// The vault's size in pages times the page size: what the copy will weigh.
+    pub len: u64,
+}
+
+/// What a copy did, by counts.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct CopyStats {
+    /// Calls that moved pages.
+    pub steps: u32,
+    /// Pages in the finished copy.
+    pub pages: u32,
+    /// Times a step found the file busy and waited.
+    pub busy: u32,
+}
+
+/// Take what a copy needs from `vault`: the caller holds the vault for this call alone.
 ///
 /// # Errors
-/// A copy asked for inside a commit, or SQLite's or the filesystem's refusal.
-pub fn copy(vault: &Vault, scratch_dir: &Path) -> Result<Copied> {
+/// A copy asked for inside a commit, or SQLite's refusal.
+pub fn source(vault: &Vault) -> Result<Source> {
     if vault.depth.get() > 0 {
         return Err(invariant(
             "a snapshot was asked for inside a commit; a copy is taken between commits",
         ));
     }
-    fs::create_dir_all(scratch_dir)?;
-    let taken_at_ms = u64::try_from(vault.clock().now_ms()).unwrap_or(0);
+    let (pages, page_size): (i64, i64) = {
+        let connection = vault.connection();
+        (
+            connection.query_row("PRAGMA page_count", [], |row| row.get(0))?,
+            connection.query_row("PRAGMA page_size", [], |row| row.get(0))?,
+        )
+    };
+    Ok(Source {
+        path: vault.path().to_path_buf(),
+        taken_at_ms: u64::try_from(vault.clock().now_ms()).unwrap_or(0),
+        len: u64::try_from(pages)
+            .unwrap_or(0)
+            .saturating_mul(u64::try_from(page_size).unwrap_or(0)),
+    })
+}
+
+/// Copy the vault page for page into a fresh file under `scratch_dir`, holding the vault only for
+/// [`source`].
+///
+/// # Errors
+/// A copy asked for inside a commit, or SQLite's or the filesystem's refusal.
+pub fn copy(vault: &Vault, scratch_dir: &Path) -> Result<Copied> {
+    let source = source(vault)?;
+    copy_from(&source, scratch_dir, &mut |_| Ok(())).map(|(copied, _)| copied)
+}
+
+/// Copy `source` into a fresh file under `scratch_dir` without holding the vault: one pinned read
+/// transaction, [`PAGES_PER_STEP`] pages at a time. `between` runs after every step that left pages
+/// to copy, with the number of steps so far; an error from it ends the copy and removes it (a test
+/// uses it to commit a write between steps, or to fail).
+///
+/// # Errors
+/// SQLite's or the filesystem's refusal, or `between`'s. A failed copy is removed.
+pub fn copy_from(
+    source: &Source,
+    scratch_dir: &Path,
+    between: &mut dyn FnMut(u32) -> Result<()>,
+) -> Result<(Copied, CopyStats)> {
+    make_private_dir(scratch_dir)?;
     // A RANDOM SUFFIX, not the time alone: a copy whose ranges are still
     // being spooled must never be replaced by a second copy taken in the same
     // millisecond, or by any copy under a clock a test holds still.
     let path = scratch_dir.join(format!(
-        "snapshot-{taken_at_ms}-{:016x}.db",
+        "snapshot-{}-{:016x}.db",
+        source.taken_at_ms,
         rand::random::<u64>()
     ));
     remove_copy(&path)?;
-    backup_into(&vault.connection(), &path)?;
-    Ok(Copied { path, taken_at_ms })
-}
-
-/// `sqlite3_backup` of `source` into a new file at `target`, in ONE step:
-/// `-1` is every remaining page, so the copy is one read transaction and
-/// there is no window in which it is half-made while the source moves.
-fn backup_into(source: &Connection, target: &Path) -> Result<()> {
-    let mut destination = Connection::open(target)?;
-    {
-        let backup = rusqlite::backup::Backup::new(source, &mut destination)?;
-        let step = backup.step(-1)?;
-        if step != rusqlite::backup::StepResult::Done {
-            return Err(invariant(format!(
-                "the copy did not finish in one step: {step:?}"
-            )));
+    create_private_file(&path)?;
+    match step_through(&source.path, &path, between) {
+        Ok(stats) => Ok((
+            Copied {
+                path,
+                taken_at_ms: source.taken_at_ms,
+            },
+            stats,
+        )),
+        Err(error) => {
+            let _ = remove_copy(&path);
+            Err(error)
         }
     }
+}
+
+/// `sqlite3_backup` from a read-only connection to `from`, pinned to one moment, into `target`.
+fn step_through(
+    from: &Path,
+    target: &Path,
+    between: &mut dyn FnMut(u32) -> Result<()>,
+) -> Result<CopyStats> {
+    use rusqlite::backup::StepResult;
+    let live = Connection::open_with_flags(
+        from,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )?;
+    let journal: String = live.query_row("PRAGMA journal_mode", [], |row| row.get(0))?;
+    if !journal.eq_ignore_ascii_case("wal") {
+        return Err(invariant(
+            "the vault is not in WAL mode; a copy that left the writer free would not be one moment",
+        ));
+    }
+    // THE PIN: a read transaction begun here sees the file as it is now until it ends, however
+    // many commits land. The backup's own steps join it rather than begin their own.
+    live.execute_batch("BEGIN")?;
+    live.query_row("SELECT count(*) FROM sqlite_schema", [], |row| {
+        row.get::<_, i64>(0)
+    })?;
+    let mut destination = Connection::open(target)?;
+    let mut stats = CopyStats::default();
+    {
+        let backup = rusqlite::backup::Backup::new(&live, &mut destination)?;
+        loop {
+            match backup.step(PAGES_PER_STEP)? {
+                StepResult::Done => {
+                    stats.steps += 1;
+                    break;
+                }
+                StepResult::More => {
+                    stats.steps += 1;
+                    between(stats.steps)?;
+                }
+                StepResult::Busy | StepResult::Locked => {
+                    stats.busy += 1;
+                    if stats.busy > BUSY_RETRIES {
+                        return Err(invariant("the copy waited too long for a busy file"));
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                other => {
+                    return Err(invariant(format!("the copy stopped at {other:?}")));
+                }
+            }
+        }
+        stats.pages = u32::try_from(backup.progress().pagecount).unwrap_or(0);
+    }
+    live.execute_batch("COMMIT")?;
     destination.close().map_err(|(_, error)| error)?;
+    live.close().map_err(|(_, error)| error)?;
+    Ok(stats)
+}
+
+/// A directory only this app can enter, made if it is not there.
+fn make_private_dir(dir: &Path) -> Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{DirBuilderExt as _, PermissionsExt as _};
+        fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(dir)?;
+        fs::set_permissions(dir, fs::Permissions::from_mode(0o700))?;
+    }
+    #[cfg(not(unix))]
+    fs::create_dir_all(dir)?;
+    Ok(())
+}
+
+/// An empty file only this app can read, for SQLite to fill.
+fn create_private_file(path: &Path) -> Result<()> {
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        options.mode(0o600);
+    }
+    options.open(path)?;
     Ok(())
 }
 
@@ -515,6 +684,28 @@ pub fn plan(snapshot: &Snapshot, store: &dyn Store) -> Result<Plan> {
     })
 }
 
+/// What several destinations are missing between them: every range any of them lacks, once
+/// by name, and the manifest if any lacks it. Every destination is a full replica (#1188, B1),
+/// so a part is sealed for the union and each destination is sent what it lacks.
+#[must_use]
+pub fn union(snapshot: &Snapshot, plans: &[Plan]) -> Plan {
+    let mut wanted: BTreeSet<u32> = BTreeSet::new();
+    for plan in plans {
+        wanted.extend(plan.missing_ranges.iter().copied());
+    }
+    let mut seen = BTreeSet::new();
+    let missing_ranges = snapshot
+        .ranges
+        .iter()
+        .filter(|range| wanted.contains(&range.i) && seen.insert(range.name))
+        .map(|range| range.i)
+        .collect();
+    Plan {
+        missing_ranges,
+        manifest_missing: plans.iter().any(|plan| plan.manifest_missing),
+    }
+}
+
 /// Record what `plan` found `gateway_id` already holds: every range and the
 /// manifest its `exists` did not name missing. Answers how many names that
 /// was.
@@ -584,15 +775,29 @@ pub fn spool(
     let json = std::str::from_utf8(&snapshot.manifest_json)
         .map_err(|_| invariant("the manifest is not UTF-8"))?;
     ledger.record_snapshot(&snapshot.manifest_name, snapshot.manifest.taken_at_ms, json)?;
-    let queued: BTreeSet<Name> = ledger.queued()?.iter().map(|part| part.name).collect();
     let mut held = spool.bytes()?;
     let mut out = Spooled::default();
     let mut file = File::open(&snapshot.path)?;
     let mut buffer = Vec::new();
 
-    let put = |name: Name, kind: PartKind, sealed: &[u8], out: &mut Spooled| -> Result<u64> {
+    // THE QUEUE ROWS GO IN BATCHES, one transaction each (`PENDING_ROWS` parts): a snapshot of
+    // hundreds of ranges is a handful of syncs, not one per range. A part's file is written
+    // before its row, so a crash between leaves a file the opener sweeps.
+    const PENDING_ROWS: usize = 256;
+    let mut pending: Vec<Queued> = Vec::new();
+    let flush = |pending: &mut Vec<Queued>| -> Result<()> {
+        ledger.enqueue_many(pending)?;
+        pending.clear();
+        Ok(())
+    };
+    let put = |name: Name,
+               kind: PartKind,
+               sealed: &[u8],
+               out: &mut Spooled,
+               pending: &mut Vec<Queued>|
+     -> Result<u64> {
         let path = spool.write(&name, sealed)?;
-        ledger.enqueue(&Queued {
+        pending.push(Queued {
             name,
             part_path: path,
             size: sealed.len() as u64,
@@ -603,7 +808,7 @@ pub fn spool(
             handed_off_ms: None,
             attempts: 0,
             last_error: None,
-        })?;
+        });
         out.bytes += sealed.len() as u64;
         out.spooled.push(name);
         Ok(sealed.len() as u64)
@@ -614,7 +819,7 @@ pub fn spool(
             .ranges
             .get(usize::try_from(*index).unwrap_or(usize::MAX))
             .ok_or_else(|| invariant(format!("the plan names range {index}, which is not here")))?;
-        if queued.contains(&range.name) && spool.contains(&range.name) {
+        if spool.contains(&range.name) && ledger.is_queued(&range.name)? {
             out.spooled.push(range.name);
             continue;
         }
@@ -635,12 +840,16 @@ pub fn spool(
             )));
         }
         let sealed = sealed::seal_part(keys, 0, &buffer, true)?;
-        held += put(range.name, PartKind::Range, &sealed, &mut out)?;
+        held += put(range.name, PartKind::Range, &sealed, &mut out, &mut pending)?;
+        if pending.len() >= PENDING_ROWS {
+            flush(&mut pending)?;
+        }
     }
+    flush(&mut pending)?;
 
     if plan.manifest_missing {
         let name = snapshot.manifest_name;
-        if queued.contains(&name) && spool.contains(&name) {
+        if spool.contains(&name) && ledger.is_queued(&name)? {
             out.spooled.push(name);
         } else if !out.deferred.is_empty()
             || !super::spool::admits(held, snapshot.manifest_json.len() as u64, budget)
@@ -648,7 +857,8 @@ pub fn spool(
             out.deferred.push(name);
         } else {
             let sealed = sealed::seal_part(keys, 0, &snapshot.manifest_json, true)?;
-            put(name, PartKind::Manifest, &sealed, &mut out)?;
+            put(name, PartKind::Manifest, &sealed, &mut out, &mut pending)?;
+            flush(&mut pending)?;
         }
     }
     Ok(out)
@@ -684,13 +894,9 @@ pub fn settle(
     clock: &dyn Clock,
 ) -> Result<Settled> {
     let gateway = store.gateway_id().to_owned();
-    let confirmed = ledger.confirmed_names(&gateway)?;
     let mut needed = manifest.range_names();
     needed.insert(*manifest_name);
-    let unconfirmed: Vec<Name> = needed
-        .into_iter()
-        .filter(|name| !confirmed.contains(name))
-        .collect();
+    let unconfirmed = ledger.unconfirmed_among(needed, &gateway)?;
     if !unconfirmed.is_empty() {
         return Ok(Settled::Waiting { unconfirmed });
     }
@@ -700,16 +906,27 @@ pub fn settle(
         match store.set_head(manifest_name, prev.as_ref(), manifest.taken_at_ms) {
             Ok(head) => {
                 let now = u64::try_from(clock.now_ms()).unwrap_or(0);
-                ledger.set_head(&gateway, manifest_name)?;
-                ledger.ack_snapshot(manifest_name, now)?;
+                // ONE TRANSACTION: the head, when it was taken, the high-water mark (which rises
+                // with every head this device sets), the rolled-back mark a current head mends
+                // (#1188, B4) and the snapshot's acknowledgement.
+                ledger.record_head_set(&gateway, manifest_name, manifest.taken_at_ms, now)?;
                 return Ok(Settled::HeadSet(head));
             }
             Err(StoreError::HeadConflict { current }) => {
-                let ours = current.is_some_and(|head| {
-                    ledger
-                        .snapshots()
-                        .is_ok_and(|taken| taken.iter().any(|snapshot| snapshot.name == head.name))
-                });
+                // A HEAD OLDER THAN THE NEWEST THIS DEVICE EVER SET THERE (the high-water mark,
+                // #1188 B4) is this device's own past: a gateway put back as it was a backup
+                // ago names a snapshot retention has since dropped from the ledger.
+                let behind = ledger.rolled_back(&gateway)? && {
+                    let high = ledger.highwater(&gateway)?;
+                    current
+                        .as_ref()
+                        .is_some_and(|head| high.is_some_and(|high| head.taken_at_ms < high))
+                };
+                let ours = behind
+                    || match current.as_ref() {
+                        Some(head) => ledger.has_snapshot(&head.name)?,
+                        None => false,
+                    };
                 if attempt == 0 && ours {
                     prev = current.map(|head| head.name);
                     continue;
@@ -763,18 +980,17 @@ mod tests {
         .expect("counts")
     }
 
-    /// **R-1080-B6.** Inside a commit no copy is made: the plane refuses by
-    /// name, and the backup underneath would not run there either — SQLite
-    /// answers `BUSY` on the connection holding the write — so no copy can
-    /// carry a row that then rolls back. Between commits it holds exactly what
+    /// **R-1080-B6.** Inside a commit no copy is asked for: the plane refuses by name. A copy
+    /// that reads the file on a connection of its own, from inside one, sees only what committed,
+    /// so no copy can carry a row that then rolls back. Between commits it holds exactly what
     /// committed.
     #[test]
     fn no_copy_is_made_inside_a_commit_and_one_between_holds_what_committed() {
         let dir = tempfile::tempdir().expect("a directory");
         let vault = founded(dir.path());
-        let torn = dir.path().join("torn.db");
         let id = vault.ids().next();
         let now = vault.clock().now_text();
+        let before = source(&vault).expect("a source outside a commit");
         let outcome = vault.commit(|tx| {
             tx.connection().execute(
                 "INSERT INTO entity (id, kind, title, created_at, updated_at)
@@ -790,12 +1006,12 @@ mod tests {
                 ),
                 "the plane refuses a copy here"
             );
-            let underneath = backup_into(tx.connection(), &torn);
-            assert!(
-                underneath
-                    .as_ref()
-                    .is_err_and(|error| error.to_string().contains("Busy")),
-                "SQLite does not back up a connection mid-write: {underneath:?}"
+            let (aside, _) = copy_from(&before, &dir.path().join("aside"), &mut |_| Ok(()))
+                .expect("a reader of its own copies");
+            assert_eq!(
+                parties(&aside.path),
+                1,
+                "the uncommitted row is on no reader's side"
             );
             Err::<(), _>(VaultError::Invariant {
                 context: "roll back".to_owned(),
@@ -804,6 +1020,103 @@ mod tests {
         assert!(outcome.is_err());
         let copied = copy(&vault, &dir.path().join("scratch")).expect("copies");
         assert_eq!(parties(&copied.path), 1, "the rolled-back row is nowhere");
+    }
+
+    /// **#1188 design 6.** The copy runs in steps and the vault is free between them: a commit lands
+    /// between two steps, from the same thread that called the copy (so nothing is held), and the
+    /// finished copy is one moment — the file as it was when the copy began, whole and
+    /// consistent — with the commit in the next one.
+    #[test]
+    fn a_commit_between_steps_is_not_blocked_and_is_in_the_next_copy() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let vault = founded(dir.path());
+        // Enough rows that the copy takes several steps.
+        for index in 0..400 {
+            add_party(&vault, &format!("Person {index:04} {}", "x".repeat(400)));
+        }
+        let begun = source(&vault).expect("a source");
+        let mut landed_at = Vec::new();
+        let (first, stats) = copy_from(&begun, &dir.path().join("one"), &mut |step| {
+            if landed_at.is_empty() {
+                add_party(&vault, "Landed between steps");
+                landed_at.push(step);
+            }
+            Ok(())
+        })
+        .expect("copies");
+        assert!(stats.steps > 1, "the copy took several steps: {stats:?}");
+        assert!(
+            i64::from(stats.pages) > i64::from(PAGES_PER_STEP),
+            "more pages than one step moves: {stats:?}"
+        );
+        assert_eq!(landed_at, vec![1], "the commit landed after the first step");
+        assert_eq!(parties(&first.path), 401, "the copy is the moment it began");
+        read_copy(&first.path, |connection| {
+            let verdict: String =
+                connection.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
+            assert_eq!(verdict, "ok");
+            Ok(())
+        })
+        .expect("checks");
+        let second = copy(&vault, &dir.path().join("two")).expect("copies");
+        assert_eq!(parties(&second.path), 402, "the next copy holds the commit");
+        // THE COMMIT LEAVES A SNAPSHOT OWED, not skipped as unchanged: the first copy's manifest
+        // no longer describes the vault.
+        let keys = BackupKeys::from_root(&[3; 32]);
+        let described = describe(&first, &keys, &"ab".repeat(32), APP).expect("describes");
+        assert!(
+            !unchanged(&vault, &described.manifest).expect("compares"),
+            "a commit that landed during the copy is a vault that changed since it"
+        );
+    }
+
+    /// **Scratch hygiene.** A copy that fails part-way is removed, and the directory and file are
+    /// the app's alone.
+    #[test]
+    fn a_failed_copy_leaves_nothing_and_a_good_one_is_private() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let vault = founded(dir.path());
+        for index in 0..300 {
+            add_party(&vault, &format!("Person {index:04} {}", "x".repeat(400)));
+        }
+        let scratch = dir.path().join("scratch");
+        let begun = source(&vault).expect("a source");
+        let refused = copy_from(&begun, &scratch, &mut |_| Err(invariant("the disk filled")));
+        assert!(refused.is_err());
+        assert_eq!(
+            fs::read_dir(&scratch)
+                .expect("the directory is there")
+                .count(),
+            0,
+            "no plaintext copy remains"
+        );
+        let (good, _) = copy_from(&begun, &scratch, &mut |_| Ok(())).expect("copies");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            let mode =
+                |path: &Path| fs::metadata(path).expect("exists").permissions().mode() & 0o777;
+            assert_eq!(mode(&scratch), 0o700, "only the app enters the directory");
+            assert_eq!(mode(&good.path), 0o600, "only the app reads the file");
+        }
+    }
+
+    #[test]
+    fn a_vault_is_unchanged_until_a_commit_or_a_migration_shows() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let vault = founded(dir.path());
+        let keys = BackupKeys::from_root(&[3; 32]);
+        let taken = take(
+            &vault,
+            &keys,
+            &dir.path().join("scratch"),
+            &"ab".repeat(32),
+            APP,
+        )
+        .expect("takes");
+        assert!(unchanged(&vault, &taken.manifest).expect("compares"));
+        add_party(&vault, "Somebody");
+        assert!(!unchanged(&vault, &taken.manifest).expect("compares"));
     }
 
     #[test]
@@ -1045,7 +1358,17 @@ mod tests {
         use super::super::store::MemoryStore;
 
         let dir = tempfile::tempdir().expect("a directory");
-        let vault = founded(dir.path());
+        // A FIXED CLOCK THE TEST TICKS, so the second manifest is a new name by construction.
+        let tick = std::sync::Arc::new(crate::clock::FixedClock::frozen());
+        let vault = Vault::create_with(
+            dir.path().join("vault.db"),
+            Box::new(std::sync::Arc::clone(&tick)),
+            Box::new(crate::clock::ClockIds::new(Box::new(
+                std::sync::Arc::clone(&tick),
+            ))),
+        )
+        .expect("a vault");
+        vault.found("Household", "Ada").expect("founds");
         add_party(&vault, "Grace");
         let keys = BackupKeys::from_root(&[3; 32]);
         let store = MemoryStore::new("gw");
@@ -1087,9 +1410,9 @@ mod tests {
         let moved = move_queue(&first_ledger, &first_spool, &store, far, &clock).expect("moves");
         assert_eq!(moved.stopped, Stop::Empty);
 
-        // A second ledger, knowing nothing, snapshots the same vault — a
-        // millisecond later at least, so its manifest is a new name.
-        std::thread::sleep(std::time::Duration::from_millis(5));
+        // A second ledger, knowing nothing, snapshots the same vault — a millisecond later,
+        // so its manifest is a new name.
+        tick.advance_ms(1);
         let ledger = Ledger::open(dir.path().join("two.backup.db")).expect("a ledger");
         destination(&ledger);
         let again = take(&vault, &keys, &dir.path().join("b"), &vault_id, APP).expect("takes");

@@ -22,35 +22,28 @@
 //! the item's secrets, or that it never has; the Locker keeps no history behind
 //! that line.
 
-use std::time::Duration;
-
 use centraid_api_proto::core_v1 as wire;
 use wire::app_query_response::Answer;
 use wire::locker_item_event::Kind as I;
 use wire::screen_event::Kind as E;
 
+use super::reveal::{Outcome as Revealed, Reveal, TICK, verb};
 use super::routes;
-use super::shared::{self, Opened, Refused};
+use super::shared;
 use super::types::{self, SEED};
-use super::wall::{CLIPBOARD_LIFE, Change, Wall};
+use super::wall::{Change, Wall};
 use crate::catalog::{act, load};
 use crate::kit::act::{self as kit_act, Settled};
 use crate::kit::civil;
 use crate::kit::earlier;
 use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::read::{self, Page, Reading};
-use crate::kit::secret::Secrets;
 use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, links as link_words, locker as words, shared as kit_words};
 
-/// The product's reveal window, in seconds (`REVEAL_WINDOW_MS`).
-const REVEAL_SECONDS: u32 = 30;
-
-const DOTS: &str = "••••••••••";
-const CODE_MASK: &str = "••• •••";
-const FIELD: &str = "field:";
-const TICK: &str = "tick";
+const DOTS: &str = super::reveal::DOTS;
+pub(super) const FIELD: &str = "field:";
 
 /// The vault's "leave this secret alone" (`SEALED_PLACEHOLDER`).
 pub(super) const PLACEHOLDER: &str = "«sealed»";
@@ -77,19 +70,6 @@ enum Confirming {
     Passkey,
 }
 
-/// A revealed value's life: what the screen counts down.
-struct Shown {
-    column: String,
-    seconds_left: u32,
-    /// A one-time code: its step, and whether the roll is followed once.
-    code: Option<Code>,
-}
-
-struct Code {
-    period: u32,
-    follow: bool,
-}
-
 /// The custom-field sheet while it is open.
 struct FieldSheet {
     /// The field being edited, or empty for a new one.
@@ -105,9 +85,8 @@ struct FieldSheet {
 struct Item {
     route: wire::LockerItemRoute,
     wall: Wall,
-    secrets: Secrets,
+    reveal: Reveal,
     loaded: Page<Loaded>,
-    shown: Option<Shown>,
     /// The status line and what its Undo reverses (the kit's one door). A line never carries a
     /// secret: it names the field, never the value.
     undo: Undo,
@@ -115,9 +94,6 @@ struct Item {
     memo: Option<String>,
     field: Option<FieldSheet>,
     passkey_name: Option<String>,
-    /// A chat card's member action, run once after the first load under an open
-    /// Locker.
-    follow: String,
     /// The Linked to section's picker (#1173, #1185): every kind but Locker, so an item starts a
     /// link to anything and is never one's target (owner ruling D11).
     links: Links,
@@ -136,12 +112,10 @@ struct Item {
 impl Item {
     fn new(route: wire::LockerItemRoute) -> Self {
         Self {
-            follow: route.follow.clone(),
             route,
             wall: Wall::default(),
-            secrets: Secrets::view_shielded(),
+            reveal: Reveal::new(true),
             loaded: Page::loading(),
-            shown: None,
             undo: Undo::default(),
             confirming: None,
             memo: None,
@@ -201,15 +175,12 @@ impl Item {
         // THE ITEM MOVED UNDER A REVEAL (an edit, a trash): the revealed value
         // is for the item as it was, so it goes.
         let mut effects = Vec::new();
-        if let Some(shown) = &self.shown {
+        if let Some(column) = self.reveal.column().map(str::to_owned) {
             let keep = self
                 .item()
-                .is_some_and(|item| !item.trashed && stored_secret(item, &shown.column));
+                .is_some_and(|item| !item.trashed && stored_secret(item, &column));
             if !keep {
-                let column = shown.column.clone();
-                self.shown = None;
-                ctx.cancel_timer(TICK);
-                effects.extend(self.secrets.hide(ctx, &column));
+                effects.extend(self.reveal.conceal(ctx, &column));
             }
         }
         effects
@@ -256,27 +227,12 @@ impl Item {
         ids
     }
 
-    /// Run what the opener asked, once: a chat card's `reveal:password`.
-    fn followed(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        if self.follow.is_empty() || self.item().is_none() {
-            return Vec::new();
-        }
-        let follow = std::mem::take(&mut self.follow);
-        let (action, column) = follow.split_once(':').unwrap_or((follow.as_str(), ""));
-        match action {
-            "reveal" => self.verb(ctx, column, "reveal"),
-            "code" => self.verb(ctx, SEED, "code"),
-            _ => Vec::new(),
-        }
-    }
-
     /// Apply what the wall did to the page under it.
     fn walled(&mut self, ctx: &Ctx, step: super::wall::Step) -> Vec<wire::Effect> {
         let mut effects = step.effects;
         match step.change {
             Change::Opened => {
                 effects.extend(self.reload(ctx));
-                effects.extend(self.followed(ctx));
             }
             Change::Closed => effects.extend(self.wipe(ctx)),
             Change::None => {}
@@ -288,7 +244,6 @@ impl Item {
     /// goes, and the screen is its blank until the Locker opens again.
     fn wipe(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         self.loaded = Page::loading();
-        self.shown = None;
         self.undo.clear();
         self.confirming = None;
         self.memo = None;
@@ -299,10 +254,7 @@ impl Item {
         self.linked_unread = false;
         self.owner_id = None;
         self.earlier = earlier::Foot::default();
-        ctx.cancel_timer(TICK);
-        let mut effects = self.secrets.hide_all(ctx);
-        effects.extend(self.secrets.clear_clip(ctx));
-        effects
+        self.reveal.wipe(ctx)
     }
 
     /// A session step answered LOCKED: idle ended it under this page.
@@ -361,34 +313,30 @@ impl Item {
                     }]
                 })
                 .unwrap_or_default(),
-            "conceal" => {
-                self.shown = None;
-                ctx.cancel_timer(TICK);
-                self.secrets.hide(ctx, key)
-            }
+            "conceal" => self.reveal.conceal(ctx, key),
             // A SHOWN CODE COPIES WITHOUT A SECOND STAMP, for the reveal's
             // reason, and lives on the clipboard only as long as it is good.
-            "copy_code" if stored && self.shown_code(key).is_some() => {
-                let left = self.shown.as_ref().map_or(1, |shown| shown.seconds_left);
-                let code = self.secrets.value(key).unwrap_or_default().to_owned();
+            "copy_code" if stored && self.reveal.shows_code(key) => {
                 self.undo.say(words::code_copied(locale));
-                self.secrets
-                    .copy(ctx, &code, Duration::from_secs(u64::from(left.max(1))))
+                self.reveal.copy_shown(ctx, key).unwrap_or_default()
             }
             "code" | "copy_code" if stored && (key == SEED || is_code_field(&item, key)) => {
-                self.code(ctx, key, verb == "copy_code", verb == "code")
+                let outcome =
+                    self.reveal
+                        .code(ctx, &item.item_id, key, verb == "copy_code", verb == "code");
+                self.revealed(ctx, &item, key, outcome, words::code_copied(locale))
             }
             // A REVEALED VALUE COPIES WITHOUT A SECOND STAMP: it is already
             // revealed, and the item already says it was used.
-            "copy" if stored && key != SEED && self.secrets.value(key).is_some() => {
-                let value = self.secrets.value(key).unwrap_or_default().to_owned();
+            "copy" if stored && key != SEED && self.reveal.value(key).is_some() => {
                 self.undo.say(copied_secret(locale, &item, key));
-                self.secrets.copy(ctx, &value, CLIPBOARD_LIFE)
+                self.reveal.copy_shown(ctx, key).unwrap_or_default()
             }
             // THE SEED ITSELF IS NOT SHOWN OR COPIED from this page: its row
             // makes codes.
             "reveal" | "copy" if stored && key != SEED && !is_code_field(&item, key) => {
-                self.reveal(ctx, &item, key, verb == "copy")
+                let outcome = self.reveal.reveal(ctx, &item.item_id, key, verb == "copy");
+                self.revealed(ctx, &item, key, outcome, copied_secret(locale, &item, key))
             }
             // A PLAIN VALUE COPIES AS ITSELF — it is metadata, never stamped.
             "copy" => match plain_value(&item, key) {
@@ -405,123 +353,30 @@ impl Item {
         }
     }
 
-    fn shown_code(&self, key: &str) -> Option<&Shown> {
-        self.shown
-            .as_ref()
-            .filter(|shown| shown.column == key && shown.code.is_some())
-    }
-
-    fn reveal(
+    /// What a reveal, a copy or a code came to, said on the status line.
+    fn revealed(
         &mut self,
         ctx: &Ctx,
-        item: &wire::LockerItem,
-        key: &str,
-        copy: bool,
+        _item: &wire::LockerItem,
+        _key: &str,
+        outcome: Revealed,
+        copied: String,
     ) -> Vec<wire::Effect> {
-        let locale = ctx.locale();
-        let field_id = key.strip_prefix(FIELD).unwrap_or("");
-        match shared::reveal(ctx, &item.item_id, key, field_id, copy, 0) {
-            Err(Refused::Locked) => self.locked(ctx),
-            Err(Refused::Said(sentence)) => {
+        match outcome {
+            Revealed::Locked => self.locked(ctx),
+            Revealed::Refused(sentence) => {
                 self.undo.refuse(sentence);
                 Vec::new()
             }
-            Ok(Opened { value, life }) if copy => {
-                let _ = life;
-                self.undo.say(copied_secret(locale, item, key));
-                self.secrets.copy(ctx, &value, CLIPBOARD_LIFE)
+            Revealed::Copied(effects) => {
+                self.undo.say(copied);
+                effects
             }
-            Ok(Opened { value, life }) => {
+            Revealed::Shown(effects) => {
                 self.undo.clear();
-                let mut effects = self.secrets.hide_all(ctx);
-                let seconds = u32::try_from(life.as_secs())
-                    .unwrap_or(REVEAL_SECONDS)
-                    .clamp(1, REVEAL_SECONDS);
-                effects.extend(self.secrets.show(
-                    ctx,
-                    key,
-                    &value,
-                    Duration::from_secs(u64::from(seconds)),
-                ));
-                self.shown = Some(Shown {
-                    column: key.to_owned(),
-                    seconds_left: seconds,
-                    code: None,
-                });
-                ctx.start_timer(TICK, Duration::from_secs(1));
                 effects
             }
         }
-    }
-
-    /// The code the seed makes now: shown with its life, or copied.
-    fn code(&mut self, ctx: &Ctx, key: &str, copy: bool, follow: bool) -> Vec<wire::Effect> {
-        let locale = ctx.locale();
-        let id = self.id();
-        // The login's own seed, or a one-time-code field's (`field:<id>`).
-        let field_id = key.strip_prefix(FIELD).unwrap_or("");
-        match shared::totp(ctx, &id, field_id, copy) {
-            Err(Refused::Locked) => self.locked(ctx),
-            Err(Refused::Said(sentence)) => {
-                self.undo.refuse(sentence);
-                Vec::new()
-            }
-            Ok(code) if copy => {
-                self.undo.say(words::code_copied(locale));
-                self.secrets.copy(
-                    ctx,
-                    &code.code,
-                    Duration::from_secs(u64::from(code.remaining)),
-                )
-            }
-            Ok(code) => {
-                self.undo.clear();
-                let mut effects = self.secrets.hide_all(ctx);
-                // The kit's own hide is the safety net a second past the roll,
-                // after the tick that follows it.
-                effects.extend(self.secrets.show(
-                    ctx,
-                    key,
-                    &code.code,
-                    Duration::from_secs(u64::from(code.remaining) + 1),
-                ));
-                self.shown = Some(Shown {
-                    column: key.to_owned(),
-                    seconds_left: code.remaining,
-                    code: Some(Code {
-                        period: code.period,
-                        follow,
-                    }),
-                });
-                ctx.start_timer(TICK, Duration::from_secs(1));
-                effects
-            }
-        }
-    }
-
-    /// One second of a revealed value's life; at zero it is concealed — or, for
-    /// a code shown first, the next code is asked for once.
-    fn tick(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        let Some(shown) = &mut self.shown else {
-            return Vec::new();
-        };
-        if self.secrets.value(&shown.column).is_none() {
-            self.shown = None;
-            return Vec::new();
-        }
-        shown.seconds_left = shown.seconds_left.saturating_sub(1);
-        if shown.seconds_left > 0 {
-            ctx.start_timer(TICK, Duration::from_secs(1));
-            return Vec::new();
-        }
-        let follow = shown.code.as_ref().is_some_and(|code| code.follow);
-        let column = shown.column.clone();
-        self.shown = None;
-        let mut effects = self.secrets.hide(ctx, &column);
-        if follow {
-            effects.extend(self.code(ctx, &column, false, false));
-        }
-        effects
     }
 
     // --- actions -------------------------------------------------------------
@@ -1138,9 +993,11 @@ impl Item {
                 let secret = item.secrets.iter().find(|secret| secret.column == *column);
                 match secret {
                     Some(secret) if secret.present => Some(if *column == SEED {
-                        self.code_row(locale, SEED, words::verification_code(locale), &[])
+                        self.reveal
+                            .code_row(locale, SEED, words::verification_code(locale), &[])
                     } else {
-                        self.sealed_row(locale, column, types::label(locale, column), &[])
+                        self.reveal
+                            .sealed_row(locale, column, types::label(locale, column), &[])
                     }),
                     Some(_) => None,
                     None => plain_value(item, column)
@@ -1200,9 +1057,11 @@ impl Item {
                         Vec::new()
                     };
                     if field.kind == "otp" && field.present {
-                        self.code_row(locale, &key, field.label.clone(), &edit)
+                        self.reveal
+                            .code_row(locale, &key, field.label.clone(), &edit)
                     } else if field.sealed && field.present {
-                        self.sealed_row(locale, &key, field.label.clone(), &edit)
+                        self.reveal
+                            .sealed_row(locale, &key, field.label.clone(), &edit)
                     } else if field.sealed {
                         wire::LockerFieldRow {
                             key,
@@ -1232,119 +1091,6 @@ impl Item {
                 rows,
                 note: String::new(),
             });
-        }
-    }
-
-    /// A SEALED VALUE'S ROW — an item cell, or a custom field: the mask with
-    /// Reveal and Copy (and `more`, a field's Edit), revealed with Copy and
-    /// Conceal and its countdown.
-    fn sealed_row(
-        &self,
-        locale: Locale,
-        key: &str,
-        label: String,
-        more: &[wire::LockerVerb],
-    ) -> wire::LockerFieldRow {
-        if let (Some(value), Some(shown)) = (
-            self.secrets.value(key),
-            self.shown.as_ref().filter(|shown| shown.column == key),
-        ) {
-            return wire::LockerFieldRow {
-                key: key.to_owned(),
-                label: label.clone(),
-                value: value.to_owned(),
-                sealed: true,
-                revealed: true,
-                note: fill(
-                    &words::revealed_note(locale),
-                    &[("seconds", &shown.seconds_left.to_string())],
-                ),
-                verbs: vec![
-                    verb("copy", words::copy(locale)),
-                    verb("conceal", words::conceal(locale)),
-                ],
-                accessibility_label: format!("{label}, {}", words::revealed(locale)),
-                monospace: true,
-                ..wire::LockerFieldRow::default()
-            };
-        }
-        let mut verbs = vec![
-            verb("reveal", words::reveal(locale)),
-            verb("copy", words::copy(locale)),
-        ];
-        verbs.extend(more.iter().cloned());
-        wire::LockerFieldRow {
-            key: key.to_owned(),
-            label: label.clone(),
-            sealed: true,
-            mask: DOTS.to_owned(),
-            note: words::sealed_note(locale),
-            verbs,
-            accessibility_label: format!("{label}, {}", words::sealed(locale)),
-            monospace: true,
-            ..wire::LockerFieldRow::default()
-        }
-    }
-
-    /// A ONE-TIME CODE'S ROW: the code, grouped, with its seconds and a
-    /// countdown while shown; a mask with Show code and Copy code otherwise.
-    fn code_row(
-        &self,
-        locale: Locale,
-        key: &str,
-        label: String,
-        more: &[wire::LockerVerb],
-    ) -> wire::LockerFieldRow {
-        if let (Some(code), Some(shown)) = (self.secrets.value(key), self.shown_code(key)) {
-            let grouped = if code.chars().count() == 6 {
-                format!(
-                    "{} {}",
-                    code.chars().take(3).collect::<String>(),
-                    code.chars().skip(3).collect::<String>()
-                )
-            } else {
-                code.to_owned()
-            };
-            return wire::LockerFieldRow {
-                key: key.to_owned(),
-                label: label.clone(),
-                value: grouped.clone(),
-                sealed: true,
-                revealed: true,
-                note: fill(
-                    &words::code_note(locale),
-                    &[("seconds", &shown.seconds_left.to_string())],
-                ),
-                verbs: vec![
-                    verb("copy_code", words::copy(locale)),
-                    verb("conceal", words::conceal(locale)),
-                ],
-                accessibility_label: format!("{label}, {grouped}"),
-                monospace: true,
-                countdown: Some(wire::LockerCountdown {
-                    seconds_left: shown.seconds_left,
-                    period: shown.code.as_ref().map_or(0, |code| code.period),
-                }),
-                ..wire::LockerFieldRow::default()
-            };
-        }
-        wire::LockerFieldRow {
-            key: key.to_owned(),
-            label: label.clone(),
-            sealed: true,
-            mask: CODE_MASK.to_owned(),
-            note: words::otp_note(locale),
-            verbs: {
-                let mut verbs = vec![
-                    verb("code", words::show_code(locale)),
-                    verb("copy_code", words::copy_code(locale)),
-                ];
-                verbs.extend(more.iter().cloned());
-                verbs
-            },
-            accessibility_label: format!("{label}, {}", words::sealed(locale)),
-            monospace: true,
-            ..wire::LockerFieldRow::default()
         }
     }
 
@@ -1483,15 +1229,6 @@ fn action(key: &str, label: String, destructive: bool) -> wire::LockerAction {
         key: key.to_owned(),
         label,
         destructive,
-    }
-}
-
-fn verb(key: &str, label: String) -> wire::LockerVerb {
-    wire::LockerVerb {
-        key: key.to_owned(),
-        label,
-        // THE VERIFICATION CODE'S COPY is the card's one pill, as the board draws it.
-        pill: key == "copy_code",
     }
 }
 
@@ -1804,7 +1541,6 @@ impl Screen for Item {
                 // The session may be open already: read what it opens.
                 if self.wall.is_open() && matches!(self.loaded, Page::Loading) {
                     effects.extend(self.reload(ctx));
-                    effects.extend(self.followed(ctx));
                 }
                 effects
             }
@@ -1834,20 +1570,15 @@ impl Screen for Item {
                 self.event(item, ctx)
             }
             Some(E::EffectResult(result)) => {
-                self.secrets.answered(ctx, &result);
+                self.reveal.answered(ctx, &result);
                 let step = self.wall.answered(ctx, &result);
                 self.walled(ctx, step)
             }
-            Some(E::TimerFired(fired)) if fired.timer == TICK => self.tick(ctx),
-            Some(E::TimerFired(fired)) => {
-                let effects = self.secrets.fired(&fired.timer);
-                if self.shown.as_ref().is_some_and(|shown| {
-                    self.secrets.value(&shown.column).is_none() && shown.code.is_none()
-                }) {
-                    self.shown = None;
-                }
-                effects
+            Some(E::TimerFired(fired)) if fired.timer == TICK => {
+                let id = self.id();
+                self.reveal.tick(ctx, &id)
             }
+            Some(E::TimerFired(fired)) => self.reveal.fired(&fired.timer),
             // LEAVING CONCEALS: nothing revealed outlives the screen, and a
             // sheet with a typed secret goes with it.
             Some(E::StatusActed(_)) => {
@@ -1858,8 +1589,7 @@ impl Screen for Item {
             }
             Some(E::Left(_)) => {
                 self.undo.clear();
-                self.secrets.conceal();
-                self.shown = None;
+                self.reveal.leave(ctx);
                 self.field = None;
                 self.passkey_name = None;
                 self.confirming = None;

@@ -51,7 +51,7 @@ struct CentraidApp: App {
                         .task(id: route) { shell.opened(route) }
                         // THE ASSISTANT'S DOOR for a search's Ask row (#1097, R-1097-30, #1135).
                         .environment(\.askChat, { shell.open($0) })
-                        // THE IMPORT'S LINE on every route, at the foot (product-intuition/references/design-behaviour.md § Status line                        // one status line): above the app's band where the page
+                        // THE IMPORT'S LINE on every route, at the foot (design/behaviour.md § Status line                        // one status line): above the app's band where the page
                         // has one, at the page's own foot where it does not.
                         .modifier(ShellLineHost(shell: shell))
                     }
@@ -62,7 +62,7 @@ struct CentraidApp: App {
                     .environment(\.askChat, { shell.open($0) })
                     .kitRootTint()
             }
-            // THE ROOT'S TINT (product-intuition/references/design-behaviour.md § Controls): `link`
+            // THE ROOT'S TINT (design/behaviour.md § Controls): `link`
             // ink on every platform control, not system blue.
             .kitRootTint()
             // THE PICKERS A SCREEN CAN ASK FOR WHEREVER THE MEMBER IS: Docs' file
@@ -87,7 +87,7 @@ struct CentraidApp: App {
             .overlay { if shell.masked { Color.black.ignoresSafeArea() } }
             // THE MEMBER'S APPEARANCE (R-CHROME-7): nil follows the phone.
             .preferredColorScheme(shell.preferredScheme)
-            // THE SYSTEM TEXT SIZE, CAPPED ONCE (product-intuition/references/design-behaviour.md § Accessibility): every
+            // THE SYSTEM TEXT SIZE, CAPPED ONCE (design/behaviour.md § Accessibility): every
             // role but `band` follows it up to `xxxLarge`, here and nowhere else.
             .dynamicTypeSize(...Theme.textSizeCap)
             .onChange(of: scenePhase) { _, phase in

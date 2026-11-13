@@ -17,7 +17,7 @@
 
 use centraid_api_proto::core_v1 as wire;
 
-use crate::strings::{Locale, permission as words};
+use crate::strings::{Locale, fill, permission as words};
 
 /// What a phone grant is for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -147,6 +147,278 @@ pub fn says(locale: Locale, resource: Resource, state: State) -> String {
         (R::Files, S::NotAsked) => words::files_not_asked(locale),
         (R::Files, S::Refused | S::Limited) => words::files_refused(locale),
         (R::Files, S::Restricted) => words::files_restricted(locale),
+    }
+}
+
+/// WHAT THE PHONE SAYS ABOUT ALERTS (#1188, NA1), as the one notification service last heard it.
+/// Everything that asks for or relies on notifications (a reminder's or an event's editor, the
+/// Backup screen's stale-backup line) reads the same facts and says the same sentence.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AlertFacts {
+    /// `None` while the phone has not answered yet.
+    pub permission: Option<wire::NotificationPermission>,
+    /// Android: exact alarms are not allowed, so an alert can be minutes late.
+    pub exact_denied: bool,
+    /// Android: the channel is switched off; `channel` is its name as the system shows it.
+    pub channel_off: bool,
+    pub channel: String,
+    /// The same for the backup channel.
+    pub backup_channel_off: bool,
+    pub backup_channel: String,
+}
+
+/// What a screen shows about alerts: the sentence, and the label of the button under it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AlertText {
+    pub line: Option<String>,
+    pub settings: String,
+}
+
+impl AlertFacts {
+    /// What a `NotificationsScheduled` answer says.
+    #[must_use]
+    pub fn of(scheduled: &wire::NotificationsScheduled) -> Self {
+        Self {
+            permission: wire::NotificationPermission::try_from(scheduled.permission).ok(),
+            exact_denied: scheduled.exact_denied,
+            channel_off: scheduled.channel_off,
+            channel: scheduled.channel_shown.clone(),
+            backup_channel_off: scheduled.backup_channel_off,
+            backup_channel: scheduled.backup_channel_shown.clone(),
+        }
+    }
+
+    /// The one line to show, or `None` when alerts will arrive on time. A refused or never-asked
+    /// grant says its own sentence; a granted one that the phone still limits says which limit.
+    #[must_use]
+    pub fn line(&self, locale: Locale) -> Option<String> {
+        self.line_for(locale, Channel::Reminders)
+    }
+
+    /// The line and its button, as a screen draws them.
+    #[must_use]
+    pub fn text(&self, locale: Locale) -> AlertText {
+        AlertText {
+            line: self.line(locale),
+            settings: self.settings_label(locale),
+        }
+    }
+
+    /// The button under the line: "Open Settings" while the line sends the member there, else empty.
+    #[must_use]
+    pub fn settings_label(&self, locale: Locale) -> String {
+        if self.line(locale).is_some() {
+            words::notifications_open_settings(locale)
+        } else {
+            String::new()
+        }
+    }
+
+    /// The effect a press of that button asks of the shell.
+    #[must_use]
+    pub fn open_settings() -> wire::Effect {
+        wire::Effect {
+            kind: Some(wire::effect::Kind::OpenNotificationSettings(
+                wire::OpenNotificationSettings {},
+            )),
+        }
+    }
+
+    /// The same for the notices of one `channel`.
+    #[must_use]
+    pub fn line_for(&self, locale: Locale, channel: Channel) -> Option<String> {
+        if let Some(state) = self.permission.and_then(State::of_notifications) {
+            return Some(says(locale, Resource::Notifications, state));
+        }
+        if channel == Channel::Reminders && self.channel_off {
+            return Some(words::notifications_reminders_off(locale));
+        }
+        if channel == Channel::Backup && self.backup_channel_off {
+            let shown = if self.backup_channel.is_empty() {
+                words::notifications_backup_channel_fallback(locale)
+            } else {
+                self.backup_channel.clone()
+            };
+            return Some(fill(
+                &words::notifications_channel_off(locale),
+                &[("channel", &shown)],
+            ));
+        }
+        self.exact_denied
+            .then(|| words::notifications_inexact(locale))
+    }
+}
+
+/// The phone-store key of the "show details" choice (#1188, NA3): "off" hides what a reminder or an
+/// event notification says; anything else, or nothing stored, shows it.
+const DETAILS_KEY: &str = "alert_details";
+
+/// Whether notifications show their details: on unless the member turned it off.
+#[must_use]
+pub fn details_shown(secrets: &crate::custody::secrets::VaultSecrets) -> bool {
+    secrets.device_value(DETAILS_KEY).as_deref() != Some("off")
+}
+
+/// The op that keeps the choice.
+#[must_use]
+pub fn details_op(shown: bool) -> wire::SecretOp {
+    crate::custody::secrets::VaultSecrets::device_set(DETAILS_KEY, if shown { "" } else { "off" })
+}
+
+/// Which of the app's notification channels a notice posts to (Android shows a channel's name in
+/// system settings; iOS has none). The backup warnings have a channel of their own, so switching
+/// off reminders does not silence them, and the reverse.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Channel {
+    Reminders,
+    Backup,
+}
+
+impl Channel {
+    /// The id the wire names it by (`PendingNotification.channel_id`); empty is Reminders.
+    #[must_use]
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Reminders => "",
+            Self::Backup => "backup",
+        }
+    }
+}
+
+impl Channel {
+    /// The thread its notices are grouped under.
+    #[must_use]
+    pub const fn thread(self) -> &'static str {
+        match self {
+            Self::Reminders => "reminders",
+            Self::Backup => "backup",
+        }
+    }
+}
+
+/// A notice a screen other than Agenda wants held, posted through the one notification service
+/// (#1188): a fixed instant, no buttons, a tap that opens `opens`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExtraNotice {
+    /// Deterministic: the same notice has the same id, so the shell replaces rather than doubles it.
+    pub id: String,
+    pub channel: Channel,
+    pub fire_at_ms: i64,
+    pub title: String,
+    pub body: String,
+    pub opens: wire::Route,
+}
+
+/// What one producer wants held, and which of its delivered notices are still wanted.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Offer {
+    pub notices: Vec<ExtraNotice>,
+    pub wanted: Vec<String>,
+}
+
+#[derive(Debug, Default)]
+struct Inner {
+    facts: AlertFacts,
+    offers: std::collections::BTreeMap<String, Offer>,
+    /// A screen asked for the system prompt (Backup's "Allow notifications"); the next sync asks.
+    asking: bool,
+}
+
+/// THE ONE BOARD the notification service and every screen that relies on alerts share, so a
+/// refusal is said in the same words wherever an alert is set, and a second producer posts through
+/// the one service (#1188, NA1/NB2).
+#[derive(Clone, Debug, Default)]
+pub struct AlertBoard(std::sync::Arc<std::sync::Mutex<Inner>>);
+
+impl AlertBoard {
+    fn lock(&self) -> std::sync::MutexGuard<'_, Inner> {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// What the phone last said.
+    #[must_use]
+    pub fn get(&self) -> AlertFacts {
+        self.lock().facts.clone()
+    }
+
+    /// Record what the phone said; whether it differs from what was known.
+    pub fn set(&self, facts: AlertFacts) -> bool {
+        let mut held = self.lock();
+        let changed = held.facts != facts;
+        held.facts = facts;
+        changed
+    }
+
+    /// A PRODUCER'S WORD: what `producer` wants held and which of its delivered notices are still
+    /// wanted (an empty offer withdraws it). The service hears of a change and speaks again.
+    pub fn offer(&self, ctx: &crate::screen::Ctx, producer: &str, offer: Offer) {
+        if self.hold(producer, offer) {
+            Self::signal(ctx);
+        }
+    }
+
+    /// `offer` for a caller with no `Ctx` (start-up registration, tests): records the offer and
+    /// says whether it changed. It posts nothing; send the service a `Signalled`.
+    pub fn hold(&self, producer: &str, offer: Offer) -> bool {
+        let mut inner = self.lock();
+        if offer == Offer::default() {
+            inner.offers.remove(producer).is_some()
+        } else {
+            inner.offers.insert(producer.to_owned(), offer.clone()) != Some(offer)
+        }
+    }
+
+    fn signal(ctx: &crate::screen::Ctx) {
+        ctx.post(
+            crate::agenda::notify::NAME,
+            wire::ScreenEvent {
+                kind: Some(wire::screen_event::Kind::Signalled(wire::Signalled {})),
+            },
+        );
+    }
+
+    /// THE MEMBER SAID "Allow notifications" on a screen that explained why (Backup's sheet): the
+    /// service's next sync starts the system prompt, through the same one path as the agenda's. A
+    /// producer's notices alone never ask; only this does.
+    pub fn ask(&self, ctx: &crate::screen::Ctx) {
+        self.request_ask();
+        Self::signal(ctx);
+    }
+
+    /// `ask` for a caller with no `Ctx`; send the service a `Signalled` after it.
+    pub fn request_ask(&self) {
+        self.lock().asking = true;
+    }
+
+    /// Whether `ask` was called since the service last spoke; clears it.
+    pub(crate) fn take_ask(&self) -> bool {
+        std::mem::take(&mut self.lock().asking)
+    }
+
+    /// Every producer's notices, soonest first, each id once.
+    #[must_use]
+    pub fn notices(&self) -> Vec<ExtraNotice> {
+        let mut all: Vec<ExtraNotice> = self
+            .lock()
+            .offers
+            .values()
+            .flat_map(|offer| offer.notices.clone())
+            .collect();
+        all.sort_by(|a, b| (a.fire_at_ms, &a.id).cmp(&(b.fire_at_ms, &b.id)));
+        all.dedup_by(|a, b| a.id == b.id);
+        all
+    }
+
+    /// The delivered ids the producers still want.
+    #[must_use]
+    pub fn wanted(&self) -> Vec<String> {
+        self.lock()
+            .offers
+            .values()
+            .flat_map(|offer| offer.wanted.clone())
+            .collect()
     }
 }
 

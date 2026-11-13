@@ -168,6 +168,11 @@ struct WordsEntryView: View {
                     WordsHeldCard(found: state.heldFound, place: state.heldPlace)
                 }
 
+                // OFFER: which backup opens and which does not, one card of rows.
+                if !state.offerRows.isEmpty {
+                    WordsOfferRows(rows: state.offerRows)
+                }
+
                 if !state.cells.isEmpty {
                     LazyVGrid(columns: wordColumns, spacing: 8) {
                         ForEach(state.cells, id: \.position) { cell in
@@ -274,6 +279,13 @@ struct WordsEntryView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .foregroundStyle(AppAccent.shell.text)
+                }
+                // OFFER: a different backup device is a second, quieter control under the verb.
+                if !state.anotherLabel.isEmpty {
+                    WordsTonalButton(label: state.anotherLabel, iconKey: "Maximize", identifier: "words-another") {
+                        send(Self.event { $0.another = .init() })
+                    }
+                    .disabled(working)
                 }
                 if !state.scanLabel.isEmpty, held {
                     WordsTonalButton(label: state.scanLabel, iconKey: "Maximize", identifier: "words-scan") {
@@ -430,6 +442,45 @@ private struct WordsHeldCard: View {
 }
 
 /// The vaults on their own recovery key, one white card of rows: an initial, then the name.
+/// The backups a restore found: a check or a cross, the backup device, and what that backup came to.
+private struct WordsOfferRows: View {
+    let rows: [Centraid_Core_V1_WordsOfferRow]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { at, row in
+                HStack(spacing: 12) {
+                    CentraidIconView(
+                        iconKey: row.opens ? "Check" : "X",
+                        tint: row.opens ? StateColor.green.text : StateColor.red.text,
+                        size: 18
+                    )
+                    .frame(width: 32, height: 32)
+                    .wordsBox(fill: row.opens ? StateColor.green.tint : StateColor.red.tint, border: nil)
+                    .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(row.title)
+                            .kitType(.row)
+                            .foregroundStyle(Surface.ink)
+                        Text(row.detail)
+                            .kitType(.meta)
+                            .foregroundStyle(Surface.meta)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .accessibilityElement(children: .combine)
+                if at < rows.count - 1 {
+                    Rectangle().fill(Surface.line).frame(height: CentraidGeometry.hairline)
+                }
+            }
+        }
+        .kitCard()
+        .accessibilityIdentifier("words-offer")
+    }
+}
+
 private struct WordsHeldKeys: View {
     let names: [String]
 

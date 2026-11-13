@@ -1,7 +1,8 @@
 //! THE NATIVE TURN LOOP (#1088): the phone runs the runtime the fine-tuning loop trains.
 //!
 //! The model drives [`native::Session`](crate::native::Session), eight flat tools over a vault, one
-//! call per message, up to [`STEP_CAP`] messages per question. Every question about the vault
+//! call per message, up to [`STEP_CAP`] (6) messages per question: the session itself ends the turn in an `ask` at the sixth
+//! call, and the loop's own bound is two more ([`LOOP_BOUND`]), a backstop that a session which failed to end its turn cannot pass. Every question about the vault
 //! takes this loop; an explicit exact-title Find runs its two read calls without model generation; only a turn with an attachment takes [`Plane::run_attached_turn`] instead
 //! (R-1088-9). The order is the driver loop's of the retired Python rig (`eval/run.py`, `train/hf_backend.py`, #1171), in Rust:
 //!
@@ -89,6 +90,15 @@ use log::Log;
 pub use pending::CardStep;
 use words::{Say, say, say_with};
 
+/// The prompt budget in tokens, less the room a message may take: the engine's context with a
+/// quarter of it held back, because [`estimate_tokens`](crate::prompt::estimate_tokens) counts
+/// the plane's own text near 1.2x and the template adds words the log does not hold.
+const CONTEXT_BUDGET: u32 = Budget::DEFAULT.context / 4 * 3;
+
+/// The loop's own bound on messages in a turn: [`STEP_CAP`] and two more. The session ends a turn at
+/// [`STEP_CAP`]; these two are slack for a session that did not, so the loop never spins (#1188 C15).
+const LOOP_BOUND: usize = STEP_CAP + 2;
+
 /// The longest user message the loop hands the runtime, in characters. A guard on the prompt's
 /// size, not a product limit: the trained messages are a sentence.
 pub const MESSAGE_MAX: usize = 800;
@@ -122,11 +132,11 @@ impl NativeChat {
     /// The door's words, when the vault would not load into a world.
     pub fn open(door: Box<dyn Door>, tz: &str) -> Result<Self, String> {
         let now = civil_at(door.now_ms(), tz);
-        // the phone ships S2, which learned the tools before the regroup (#1166): its prompt, and
-        // its way of calling. The retrained model sets this (and `StepOptions::tools`) to `Sig`.
+        // the tools block the model record names (`phone_tools`): the prompt it shows and the way
+        // of calling it reads, the same as `phone_options().tools`
         let flags = Flags {
             writes: Writes::Park,
-            tools: crate::native::prompt::ToolsMode::S2,
+            tools: phone_tools(),
             ..Flags::default()
         };
         let mut session = Session::with_door_in(door, now, tz, "", flags)?;
@@ -256,6 +266,26 @@ pub fn dismissed_line(was_waiting: bool) -> String {
     }
 }
 
+/// The tools the shipped model was trained on, from the model record.
+fn phone_tools() -> crate::native::prompt::ToolsMode {
+    crate::native::prompt::ToolsMode::parse(&crate::record::record().current.tools_mode)
+        .unwrap_or_default()
+}
+
+/// THE PHONE'S DECODE OPTIONS (#1188): the think is held to the strongest grammar the model's tools
+/// have. `Full` limits it to the catalogue's tools, kinds, verbs and fields and to handles the
+/// prompt shows, so only a valid call to one of the tools can be written. A model trained on the
+/// tools before the regroup (S2) is held to the same grammar with its own words (`search`, `open`,
+/// a create's kind in `set`; `grammar_for_step`).
+#[must_use]
+pub fn phone_options() -> StepOptions {
+    StepOptions {
+        tools: phone_tools(),
+        grammar: crate::native::grammar::GrammarMode::Full,
+        ..StepOptions::default()
+    }
+}
+
 /// What a native turn needs besides its chat.
 pub struct NativePlane<'a> {
     pub model: &'a dyn Model,
@@ -268,7 +298,7 @@ impl<'a> NativePlane<'a> {
     pub fn new(model: &'a dyn Model) -> Self {
         Self {
             model,
-            options: StepOptions::default(),
+            options: phone_options(),
         }
     }
 
@@ -312,7 +342,11 @@ impl<'a> NativePlane<'a> {
         chat.session
             .set_clock(now, tz)
             .map_err(Refusal::QueryFailed)?;
-        let message: String = text.trim().chars().take(MESSAGE_MAX).collect();
+        // a message past the cap is refused, not cut: the member shortens it (#1188 C4)
+        let message = text.trim().to_owned();
+        if message.chars().count() > MESSAGE_MAX {
+            return Err(Refusal::TooLong);
+        }
         let user = chat.session.user(&message);
         chat.log.compact(&user["compacted"]);
         chat.log.user(&message, user["block"].as_str());
@@ -323,34 +357,57 @@ impl<'a> NativePlane<'a> {
         let mut last = user.get("ended").cloned();
         let mut lookup = lookup::calls(&chat.session, &message).into_iter();
         let mut step = 0;
-        while last.is_none() && step < STEP_CAP + 2 {
+        while last.is_none() && step < LOOP_BOUND {
             step += 1;
             if cancel.is_cancelled() {
                 return Err(Refusal::Cancelled);
             }
+            let model_wrote = lookup.len() == 0;
             let sent = if let Some(call) = lookup.next() {
                 call
             } else {
-                let prompt = chat.log.prompt().map_err(Refusal::ModelFailed)?;
-                let written = decode_step(
-                    self.model,
-                    &prompt,
-                    dates,
-                    TraceMode::V4,
-                    self.options,
-                    cancel,
-                )
-                .map_err(failed)?;
+                // a long chat keeps working: the oldest turns go, inside the context less the room
+                // the message may take and a margin for the template's own words (#1188 C4)
+                chat.log
+                    .fit(CONTEXT_BUDGET.saturating_sub(self.options.max_new));
+                // the engine's own count is the last word: a prompt it still finds too big loses
+                // its oldest turn and is asked again, and one turn alone that does not fit is said
+                let written = loop {
+                    let prompt = chat.log.prompt().map_err(Refusal::ModelFailed)?;
+                    match decode_step(
+                        self.model,
+                        &prompt,
+                        dates,
+                        TraceMode::V4,
+                        self.options,
+                        cancel,
+                    ) {
+                        Ok(written) => break written,
+                        Err(ModelError::ContextExceeded { .. }) => {
+                            if !chat.log.drop_oldest_turn() {
+                                return Err(Refusal::TooLong);
+                            }
+                        }
+                        Err(other) => return Err(failed(other)),
+                    }
+                };
                 if written.info.cancelled || cancel.is_cancelled() {
                     return Err(Refusal::Cancelled);
                 }
                 first_call(&written.text).to_owned()
             };
-            let call = parse_call(&sent).ok();
+            // the model may echo a name it read escaped: the call that runs, is shown on the card and
+            // is written carries the member's own words; the log keeps what the model said
+            let run = if model_wrote {
+                crate::escape::unescape(&sent)
+            } else {
+                sent.clone()
+            };
+            let call = parse_call(&run).ok();
             if let Some((app, tool)) = call.as_ref().and_then(|call| activity_of(chat, call)) {
                 sink(Event::Activity { app, tool });
             }
-            let reply = chat.session.call_text(&sent);
+            let reply = chat.session.call_text(&run);
             chat.log.assistant(&sent);
             chat.log.tool(
                 usize_of(&reply["obs"]),
@@ -815,7 +872,8 @@ mod tests {
             confirmed_line(&Confirmed::Done {
                 text: String::new(),
                 diff: Value::Null,
-                steps: 1
+                steps: 1,
+                undo: Vec::new(),
             }),
             "Done."
         );

@@ -431,7 +431,7 @@ fn apps() -> Vec<App> {
                 use centraid_screens::locker::routes as r;
                 vec![
                     list("locker home", r::home(wire::LockerDestination::Unspecified)),
-                    screen("locker item", r::item("x", "Locker", "")),
+                    screen("locker item", r::item("x", "Locker")),
                     screen("locker edit", r::edit("x")),
                     screen("locker export", r::export("Locker")),
                     screen("locker import", r::import("Locker")),

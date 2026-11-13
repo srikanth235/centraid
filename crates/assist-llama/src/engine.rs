@@ -27,12 +27,13 @@ use std::sync::{Arc, Mutex, Once, OnceLock, PoisonError, Weak};
 
 use centraid_assist::host::ModelLoader;
 use centraid_assist::model::{
-    Control, GenerateRequest, Generation, ImageInput, MEDIA_MARKER, Model, ModelError,
+    AdapterUse, Control, GenerateRequest, Generation, ImageInput, MEDIA_MARKER, Model, ModelError,
 };
 use llama_cpp_2::context::LlamaContext;
 use llama_cpp_2::context::params::LlamaContextParams;
 use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
+use llama_cpp_2::model::LlamaLoraAdapter;
 use llama_cpp_2::model::LlamaModel as Weights;
 use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::mtmd::{
@@ -45,6 +46,7 @@ use llama_cpp_2::token::data_array::LlamaTokenDataArray;
 use llama_cpp_2::{LogOptions, send_logs_to_tracing};
 
 use crate::Config;
+use crate::adapter;
 use crate::generate::{Backend, run};
 use crate::sampling::{Rng, pick};
 
@@ -93,6 +95,8 @@ fn free_every_model_at_exit() {
                 // projector goes first: it points into the weights.
                 let mut weights = model.weights.lock().unwrap_or_else(PoisonError::into_inner);
                 *model.vision.lock().unwrap_or_else(PoisonError::into_inner) = None;
+                // llama.cpp frees the adapter with the weights; this only forgets the handle.
+                *model.adapter.lock().unwrap_or_else(PoisonError::into_inner) = None;
                 *weights = None;
             }
         }
@@ -123,6 +127,22 @@ impl LlamaLoader {
 
 impl ModelLoader for LlamaLoader {
     fn load(&self, path: &Path) -> Result<Arc<dyn Model>, ModelError> {
+        self.open(path, None)
+    }
+
+    /// The base, then the adapter if there is one. An adapter that is not one (or is not for this
+    /// model) is a `ModelError::AdapterLoad` naming why, and nothing stays loaded.
+    fn load_with_adapter(
+        &self,
+        path: &Path,
+        adapter: Option<&Path>,
+    ) -> Result<Arc<dyn Model>, ModelError> {
+        self.open(path, adapter)
+    }
+}
+
+impl LlamaLoader {
+    fn open(&self, path: &Path, adapter: Option<&Path>) -> Result<Arc<dyn Model>, ModelError> {
         if !path.is_file() {
             return Err(ModelError::Load(format!(
                 "there is no file at {}",
@@ -134,9 +154,11 @@ impl ModelLoader for LlamaLoader {
         let weights = Weights::load_from_file(backend, path, &params).map_err(|error| {
             ModelError::Load(format!("llama.cpp could not read the model: {error}"))
         })?;
+        let adapter = adapter.map(|file| attach(&weights, file)).transpose()?;
         let model = Arc::new(LlamaModel {
             backend,
             vision: Mutex::new(None),
+            adapter: Mutex::new(adapter),
             weights: Mutex::new(Some(weights)),
             config: self.config.clone(),
             draws: AtomicU64::new(0),
@@ -158,6 +180,11 @@ pub struct LlamaModel {
     /// `weights` so it drops first**: it points into them. Locked only while
     /// the weights' lock is held, so there is one lock order.
     vision: Mutex<Option<MtmdContext>>,
+    /// The attached LoRA adapter (#1188), if any. The handle is a pointer into the weights, which
+    /// own the adapter and free it with themselves (`llama_model::~llama_model`), so it is
+    /// **declared before `weights`**, is never handed out, and is forgotten by the exit hook
+    /// first. Locked only while the weights' lock is held, after the projector's.
+    adapter: Mutex<Option<Attached>>,
     /// The weights, and the lock that makes generations one at a time: a
     /// context is a hundred-megabyte allocation on a phone and the plane's turns
     /// are sequential anyway. `None` once the exit hook has freed them.
@@ -166,6 +193,33 @@ pub struct LlamaModel {
     /// Sampled generations so far: each takes the next stream of `Config::seed`.
     draws: AtomicU64,
 }
+
+/// The attached adapter.
+struct Attached {
+    handle: LlamaLoraAdapter,
+}
+
+/// Open the adapter at `file` on `weights`. llama.cpp refuses a bad adapter with a log line and a
+/// null pointer, so the file's header is read first and says why in words ([`adapter::check`]).
+fn attach(weights: &Weights, file: &Path) -> Result<Attached, ModelError> {
+    let architecture = weights
+        .meta_val_str("general.architecture")
+        .map_err(|error| ModelError::Load(format!("the model names no architecture: {error}")))?;
+    adapter::check(file, &architecture)
+        .map_err(|error| ModelError::AdapterLoad(error.to_string()))?;
+    let handle = weights.lora_adapter_init(file).map_err(|error| {
+        ModelError::AdapterLoad(format!(
+            "llama.cpp refused the adapter (its tensors do not fit this model): {error}"
+        ))
+    })?;
+    Ok(Attached { handle })
+}
+
+// SAFETY: `LlamaLoraAdapter` is a pointer into the weights, which own the adapter. It is dereferenced
+// only inside llama.cpp calls made while `LlamaModel::weights` is locked (`attach`,
+// `generate`), so it is never used on two threads at once, and llama.cpp keeps no thread affinity
+// for an adapter. `Weights` itself is `Send + Sync` for the same reason.
+unsafe impl Send for Attached {}
 
 impl LlamaModel {
     /// The model's parameter count, for a log line a shell can show.
@@ -236,12 +290,29 @@ impl Model for LlamaModel {
         request: &GenerateRequest<'_>,
         on_token: &mut dyn FnMut(&str) -> Control,
     ) -> Result<Generation, ModelError> {
+        self.generate_with(request, AdapterUse::Off, on_token)
+    }
+
+    fn generate_with(
+        &self,
+        request: &GenerateRequest<'_>,
+        adapter: AdapterUse,
+        on_token: &mut dyn FnMut(&str) -> Control,
+    ) -> Result<Generation, ModelError> {
         let held = self.weights.lock().unwrap_or_else(PoisonError::into_inner);
         let weights = held.as_ref().ok_or_else(|| {
             ModelError::Generate("the model was freed when the process began to exit".to_owned())
         })?;
         let vision = self.vision.lock().unwrap_or_else(PoisonError::into_inner);
-        let mut session = Session::open(self, weights, vision.as_ref(), request)?;
+        let mut attached = self.adapter.lock().unwrap_or_else(PoisonError::into_inner);
+        // Off unless this generation asks and an adapter is loaded: with none attached the
+        // context is built exactly as it was before adapters existed.
+        let on = if adapter == AdapterUse::On {
+            attached.as_mut().map(|a| &mut a.handle)
+        } else {
+            None
+        };
+        let mut session = Session::open(self, weights, vision.as_ref(), on, request)?;
         if request.temperature > 0.0 {
             let stream = self.draws.fetch_add(1, Ordering::Relaxed);
             session.sampling = Some(Sampling {
@@ -289,6 +360,7 @@ impl<'m> Session<'m> {
         model: &'m LlamaModel,
         weights: &'m Weights,
         vision: Option<&'m MtmdContext>,
+        adapter: Option<&mut LlamaLoraAdapter>,
         request: &GenerateRequest<'_>,
     ) -> Result<Self, ModelError> {
         if !request.images.is_empty() && vision.is_none() {
@@ -309,6 +381,14 @@ impl<'m> Session<'m> {
                     .with_op_offload(config.gpu_layers > 0),
             )
             .map_err(|error| failed("the context would not open", error))?;
+        // ONLY HERE, ON A CONTEXT NOBODY HAS DECODED WITH: switching an adapter inside a live
+        // context leaves the cache and recurrent state computed under the old setting, which is
+        // neither output (measured, #1188). The scale is 1: the file's alpha/rank is the strength.
+        if let Some(adapter) = adapter {
+            context
+                .lora_adapter_set(adapter, 1.0)
+                .map_err(|error| failed("the adapter would not switch on", error))?;
+        }
         let grammar = request
             .grammar
             .map(|grammar| LlamaSampler::grammar(weights, grammar, "root"))

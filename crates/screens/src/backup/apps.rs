@@ -12,7 +12,7 @@ use super::claim::bytes;
 use super::line::{grouped, of_bytes};
 use super::reading::Reading;
 use crate::shell::home::app_name;
-use crate::strings::{Locale, backup as words, fill};
+use crate::strings::{Locale, backup as words, backup_home as words_home, fill};
 
 /// Every app's row, biggest first; an equal size keeps the catalogue's order.
 /// Empty when the reading carries no per-app holdings.
@@ -24,6 +24,37 @@ pub fn rows(locale: Locale, reading: &Reading) -> Vec<wire::BackupAppRow> {
     apps.into_iter()
         .map(|app| row(locale, app, acked))
         .collect()
+}
+
+/// "NOT BACKED UP YET": one row per app per backup device that still owes it, naming the device by
+/// the name the member gave it ("184 waiting for Office NAS"). "Your backup device" is wrong once
+/// there is more than one (#1188, NB1). Empty when no device owes anything by app.
+#[must_use]
+pub fn device_waiting(locale: Locale, reading: &Reading) -> Vec<wire::BackupAppRow> {
+    let mut out = Vec::new();
+    for destination in &reading.destinations {
+        let name = super::line::device_name(locale, destination);
+        for (app_id, files) in &destination.waiting_apps {
+            if *files == 0 {
+                continue;
+            }
+            let app = app_name(locale, app_id);
+            let status = fill(
+                &words_home::device_waiting(locale),
+                &[("count", &grouped(*files)), ("name", &name)],
+            );
+            out.push(wire::BackupAppRow {
+                app_id: app_id.clone(),
+                name: app.clone(),
+                detail: String::new(),
+                note: String::new(),
+                accessibility_label: format!("{app}. {status}"),
+                status,
+                waiting: true,
+            });
+        }
+    }
+    out
 }
 
 fn row(locale: Locale, app: &wire::AppHolding, acked: bool) -> wire::BackupAppRow {

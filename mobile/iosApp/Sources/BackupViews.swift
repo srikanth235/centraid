@@ -90,16 +90,16 @@ struct BackupHomeView: View {
     private func markKey(_ model: Centraid_Core_V1_BackupHomeData) -> String {
         switch model.condition {
         case .upToDate: return "Check"
-        case .running: return "Refresh"
-        default: return model.line.tone == .urgent || model.condition == .notReached ? "AlertCircle" : "Refresh"
+        case .running, .catchingUp: return "Refresh"
+        default: return "AlertCircle"
         }
     }
 
     private func tint(_ model: Centraid_Core_V1_BackupHomeData) -> Color {
         switch model.condition {
         case .upToDate: return StateColor.green.text
-        case .running: return Surface.meta
-        case .notReached: return StateColor.amber.text
+        case .running, .catchingUp: return Surface.meta
+        case .notReached, .attention: return StateColor.amber.text
         default: return model.line.tone == .urgent ? StateColor.red.text : StateColor.amber.text
         }
     }
@@ -124,7 +124,80 @@ struct BackupHomeView: View {
                     if !model.lastGood.isEmpty { sentence(model.lastGood, id: "backup-last-good") }
                 }
             }
-            // WHY THE DEVICE IS NOT ANSWERING is an amber callout of its own, not a quiet line.
+            // THE ONE-TIME PROMPT after the first confirmed backup (#1188, NB5): dismissible, no checkbox.
+            if model.hasKeyPrompt {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(model.keyPrompt.title).kitType(.section).foregroundStyle(Surface.ink)
+                    sentence(model.keyPrompt.body)
+                    HStack(spacing: 16) {
+                        Button {
+                            send(event { $0.keyPromptAnswered = .init() })
+                            open(model.keyPrompt.save)
+                        } label: {
+                            Text(model.keyPrompt.saveLabel).kitType(.row).foregroundStyle(AppAccent.shell.text)
+                                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("backup-key-prompt-save")
+                        Button {
+                            send(event { $0.keyPromptAnswered = .init() })
+                        } label: {
+                            Text(model.keyPrompt.notNowLabel).kitType(.row).foregroundStyle(Surface.meta)
+                                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("backup-key-prompt-not-now")
+                    }
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("backup-key-prompt")
+            }
+            // THE ASK FOR NOTIFICATIONS after the first device is paired (#1188, NB2): the explanation first,
+            // the system prompt only after "Allow notifications".
+            if model.hasNotifyAsk {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(model.notifyAsk.title).kitType(.section).foregroundStyle(Surface.ink)
+                    sentence(model.notifyAsk.body)
+                    HStack(spacing: 16) {
+                        Button {
+                            send(event { $0.notifyAllow = .init() })
+                        } label: {
+                            Text(model.notifyAsk.allowLabel).kitType(.row).foregroundStyle(AppAccent.shell.text)
+                                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("backup-notify-allow")
+                        Button {
+                            send(event { $0.notifyNotNow = .init() })
+                        } label: {
+                            Text(model.notifyAsk.notNowLabel).kitType(.row).foregroundStyle(Surface.meta)
+                                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("backup-notify-not-now")
+                    }
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("backup-notify-ask")
+            }
+            // WHEN BACKUP ALERTS CANNOT ARRIVE, the phone's sentence, with Settings when Settings mends it.
+            if !model.notifyOff.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    sentence(model.notifyOff, id: "backup-notify-off")
+                    if !model.notifySettingsLabel.isEmpty {
+                        Button {
+                            send(event { $0.notifyOpenSettings = .init() })
+                        } label: {
+                            Text(model.notifySettingsLabel).kitType(.row).foregroundStyle(AppAccent.shell.text)
+                                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("backup-notify-settings")
+                    }
+                }
+            }
+            // WHY THE DEVICE IS NOT ANSWERING is an amber callout of its own, not a quiet line: the
+            // same kit callout on both platforms (`WordsCallout`), the sentence beside its mark.
             if !model.reason.isEmpty {
                 WordsCallout(text: model.reason, state: .amber, identifier: "backup-reason")
             }
@@ -251,6 +324,7 @@ struct BackupHomeView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(row.label).kitType(.row).foregroundStyle(Surface.ink)
                     if !row.held.isEmpty { sentence(row.held) }
+                    if !row.backedUp.isEmpty { sentence(row.backedUp) }
                     if !row.detail.isEmpty { sentence(row.detail) }
                 }
                 .accessibilityElement(children: .ignore)
@@ -335,6 +409,12 @@ struct BackupHomeView: View {
                 .accessibilityIdentifier("backup-rule-\(choice.stored)")
             }
         }
+        if !model.posture.isEmpty {
+            sentence(model.posture, id: "backup-posture")
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
         if !model.includeVideosLabel.isEmpty {
             Rectangle().fill(Surface.line).frame(height: CentraidGeometry.hairline).padding(.leading, 16)
             Toggle(isOn: Binding(
@@ -356,7 +436,7 @@ struct BackupHomeView: View {
     /// the key row opens the words behind the passcode. Restore is Home's door.
     @ViewBuilder
     private func recovery(_ model: Centraid_Core_V1_BackupHomeData) -> some View {
-        if !model.keyHeading.isEmpty || !model.restoreLabel.isEmpty {
+        if !model.keyHeading.isEmpty || !model.restoreLabel.isEmpty || !model.checkLabel.isEmpty {
             group(model.keyHeading) {
                 if !model.keyHeading.isEmpty {
                     let row = HStack(spacing: 12) {
@@ -397,8 +477,32 @@ struct BackupHomeView: View {
                         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     }
                 }
-                if !model.restoreLabel.isEmpty {
+                if !model.checkLabel.isEmpty {
                     if !model.keyHeading.isEmpty { hairline() }
+                    Button { open(model.check) } label: {
+                        HStack(spacing: 12) {
+                            KitTile(iconKey: "Check", size: 32)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(model.checkLabel).kitType(.row).foregroundStyle(Surface.ink)
+                                if !model.checkStatus.isEmpty {
+                                    Text(model.checkStatus)
+                                        .kitType(.meta)
+                                        .foregroundStyle(model.checkWarning ? StateColor.amber.text : Surface.meta)
+                                        .accessibilityIdentifier("backup-check-status")
+                                }
+                            }
+                            Spacer(minLength: 0)
+                            CentraidIconView(iconKey: "ChevronRight", tint: Surface.meta, size: 16)
+                        }
+                        .padding(.horizontal, 12)
+                        .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("backup-check")
+                }
+                if !model.restoreLabel.isEmpty {
+                    if !model.keyHeading.isEmpty || !model.checkLabel.isEmpty { hairline() }
                     Button { send(event { $0.restorePressed = .init() }) } label: {
                         HStack(spacing: 12) {
                             KitTile(iconKey: "History", size: 32)

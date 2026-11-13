@@ -1,6 +1,6 @@
 [package]
 name = "centraid-nativetools"
-description = "The flat tool surface for a small on-device model: eight tools over the real vault, the date-expression evaluator, observations and the system prompt (experiments/toolchat/native/SPEC.md)."
+description = "The flat tool surface for a small on-device model: eight tools over the real vault, the date-expression evaluator, observations and the system prompt (crates/assist/docs/SPEC.md)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

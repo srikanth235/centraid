@@ -227,7 +227,7 @@ public fun PhotoTile(
  * photograph still on its way gets none — tapping it would ask for something
  * already queued — and `HELD_ORIGINAL` and `HELD_ABSENT` draw nothing at all.
  *
- * A FETCH IS A LINE AND NOT A SPINNER (product-intuition/references/design-behaviour.md § Status line: loading is determinate or
+ * A FETCH IS A LINE AND NOT A SPINNER (design/behaviour.md § Status line: loading is determinate or
  * static, never a spinner). The byte plane reports completion and not progress
  * (the tile carries no percentage), so the honest mark is words on the tile's own
  * chip — v0's state slot, which is one quiet mono line on the page colour.
@@ -314,7 +314,7 @@ private fun BoxScope.SelectionDot(selected: Boolean, muted: Boolean = false) {
 /**
  * SLOT 3 — KIND (v0's `kindOverlay`): a video's length or `live`, in mono,
  * bottom-trailing, from rung S up — below it the type would have to shrink
- * past legibility, and product-intuition/references/design-behaviour.md § Accessibility puts the floor there rather than shrinking it.
+ * past legibility, and design/behaviour.md § Accessibility puts the floor there rather than shrinking it.
  * A video whose length the vault does not know still says it is a video,
  * with the catalog's play mark, because that is what changes what a tap does.
  */
@@ -357,7 +357,7 @@ public fun mediaClock(seconds: Int): String = MediaClock.clock(seconds.toLong())
  * Skeleton tiles at the rung's own geometry, packed by Rust at the width the
  * shell reported ([rows] is `PhotosLibrary.skeleton`), so the photographs
  * land where their placeholders stood. The aspect sequence is FIXED — random
- * aspects would flicker — and nothing moves: product-intuition/references/design-behaviour.md § Status line: `Loading` is static
+ * aspects would flicker — and nothing moves: design/behaviour.md § Status line: `Loading` is static
  * skeletons, and a shimmer is attention-seeking about work the product can
  * simply describe.
  */

@@ -14,8 +14,14 @@ import UIKit
 ///
 /// | Identifier | Request | What it runs |
 /// |---|---|---|
-/// | `dev.centraid.upload-pass` | `BGProcessingTaskRequest`, network, and external power when the window requires charging | the full pass: snapshot when due, prepare, settle, then hand the next batch to the OS |
-/// | `dev.centraid.sync-pass` | `BGAppRefreshTaskRequest`, seconds | a short pass whose deadline leaves it time to settle and hand off, not to prepare much |
+/// | `dev.centraid.upload-pass` | `BGProcessingTaskRequest`, network and external power | the night shift (`centraid-night-shift`): the full pass, snapshot when due, prepare, settle, then hand the next batch to the OS |
+/// | `dev.centraid.nudge-pass` | `BGProcessingTaskRequest`, network, no earliest date, no power | the one-off nudge after a capture or an import (`centraid-nudge`): the same full pass, as soon as iOS allows |
+/// | `dev.centraid.sync-pass` | `BGAppRefreshTaskRequest`, seconds | the periodic window (`centraid-sync-pass`): a short pass whose deadline leaves it time to settle and hand off, not to prepare much |
+///
+/// **One identifier per window** (#1188, B7). iOS keeps one pending request per identifier, so
+/// two windows sharing one replaced each other: the nudge, asked for with no charger, replaced
+/// the night shift that needs one. The handler also named every processing task the night
+/// shift. [identifier(for:)] and [windowName(for:)] are the one mapping, pure, and tested.
 ///
 /// **On power, now** (#1080). The processing window used to ask for a network
 /// and no charger, because the drain carried the bytes itself and a member who
@@ -59,8 +65,38 @@ enum BackgroundPasses {
     /// the plist does not list terminates the app.
     static let refreshIdentifier = "dev.centraid.sync-pass"
 
-    /// The long one: minutes, on power, with a network.
+    /// The night shift: minutes, on power, with a network.
     static let processingIdentifier = "dev.centraid.upload-pass"
+
+    /// The one-off nudge after a capture or an import: minutes, with a network, and no
+    /// charger to wait for. Its own identifier, or it would replace the night shift.
+    static let nudgeIdentifier = "dev.centraid.nudge-pass"
+
+    /// Rust's window names (`crates/screens/src/passes/windows.rs`).
+    static let periodicWindow = "centraid-sync-pass"
+    static let nightWindow = "centraid-night-shift"
+    static let nudgeWindow = "centraid-nudge"
+
+    /// Which identifier carries a window: the one-off is the nudge, a window that needs the
+    /// charger is the night shift, and the rest are the app-refresh window.
+    static func identifier(for window: Centraid_Core_V1_Window) -> String {
+        if window.periodMinutes == 0 { return nudgeIdentifier }
+        return window.requiresCharging ? processingIdentifier : refreshIdentifier
+    }
+
+    /// The window Rust named, for the identifier iOS woke the app with.
+    static func windowName(for identifier: String) -> String {
+        switch identifier {
+        case processingIdentifier: return nightWindow
+        case nudgeIdentifier: return nudgeWindow
+        default: return periodicWindow
+        }
+    }
+
+    /// Whether the request for `identifier` is a processing request.
+    static func isProcessing(_ identifier: String) -> Bool {
+        identifier == processingIdentifier || identifier == nudgeIdentifier
+    }
 
     /// What a refresh window is told it has. iOS documents ~30 seconds and
     /// expires the task itself; this is the budget the pass plans against, and
@@ -100,6 +136,7 @@ enum BackgroundPasses {
     static func register() {
         register(identifier: refreshIdentifier, budget: refreshBudgetSeconds)
         register(identifier: processingIdentifier, budget: processingBudgetSeconds)
+        register(identifier: nudgeIdentifier, budget: processingBudgetSeconds)
     }
 
     /// Keep exactly the windows Rust asked for scheduled (`ScheduleWindows`), and answer which
@@ -110,10 +147,9 @@ enum BackgroundPasses {
         var answer = Centraid_Core_V1_WindowsScheduled()
         var refusals: [String] = []
         for window in windows {
-            let identifier = window.requiresCharging || window.periodMinutes == 0
-                ? processingIdentifier : refreshIdentifier
+            let carrier = identifier(for: window)
             if let refusal = submit(
-                identifier: identifier,
+                identifier: carrier,
                 oneOff: window.periodMinutes == 0,
                 requiresCharging: window.requiresCharging
             ) {
@@ -136,8 +172,8 @@ enum BackgroundPasses {
 
     private static func run(_ task: BGTask, identifier: String, budget: TimeInterval) {
         let completion = TaskCompletion(task)
-        // The window's name, as Rust scheduled it: the processing request is the night shift.
-        let name = identifier == processingIdentifier ? "centraid-night-shift" : "centraid-sync-pass"
+        // The window's name, as Rust scheduled it.
+        let name = windowName(for: identifier)
         let work = Task { @MainActor in
             // A COLD BACKGROUND LAUNCH HAS NO SESSION YET: opening it is
             // `ShellModel`'s, and the store is published after its first snapshot.
@@ -193,7 +229,7 @@ enum BackgroundPasses {
     /// identifier is another exception.
     private static func submit(identifier: String, oneOff: Bool, requiresCharging: Bool) -> String? {
         let request: BGTaskRequest
-        if identifier == processingIdentifier {
+        if isProcessing(identifier) {
             let processing = BGProcessingTaskRequest(identifier: identifier)
             processing.requiresNetworkConnectivity = true
             // ON POWER (#1080) when the window says so: see the header.

@@ -27,6 +27,7 @@ pub struct Metadata {
     pub vault: String,
     pub task: String,
     pub verb: i32,
+    pub press_id: String,
     pub created: i64,
     pub expires: i64,
     pub seq: Option<i64>,
@@ -36,8 +37,8 @@ pub struct Metadata {
 
 impl Metadata {
     pub fn encode(&self) -> Option<Vec<u8>> {
-        let bytes = json!({"v":1,"id":self.id,"vault":self.vault,"task":self.task,
-            "verb":self.verb,"created":self.created,"expires":self.expires,
+        let bytes = json!({"v":2,"id":self.id,"vault":self.vault,"task":self.task,
+            "verb":self.verb,"press_id":self.press_id,"created":self.created,"expires":self.expires,
             "seq":self.seq,"undo_key":self.undo_key,"undo_requested_at":self.undo_requested_at})
         .to_string()
         .into_bytes();
@@ -50,8 +51,9 @@ impl Metadata {
         }
         let value: Value = serde_json::from_slice(bytes).ok()?;
         let map = value.as_object()?;
-        if map.len() != 10
-            || value["v"].as_i64()? != 1
+        let version = value["v"].as_i64()?;
+        if !matches!((version, map.len()), (1, 10) | (2, 11))
+            || (version == 2 && !map.contains_key("press_id"))
             || [
                 "v",
                 "id",
@@ -78,6 +80,11 @@ impl Metadata {
             vault: text("vault", 128)?,
             task: text("task", 128)?,
             verb: i32::try_from(value["verb"].as_i64()?).ok()?,
+            press_id: if version == 2 {
+                text("press_id", 256)?
+            } else {
+                String::new()
+            },
             created: value["created"].as_i64()?,
             expires: value["expires"].as_i64()?,
             seq: if value["seq"].is_null() {
@@ -136,6 +143,7 @@ impl Receipt {
         title: &str,
         verb: i32,
         seq: Option<i64>,
+        press_id: &str,
     ) -> Option<Self> {
         let now = ctx.now_ms()?;
         let meta = Metadata {
@@ -143,6 +151,7 @@ impl Receipt {
             vault: vault.to_owned(),
             task: task.to_owned(),
             verb,
+            press_id: press_id.to_owned(),
             created: now,
             expires: now.checked_add(LIFETIME_MS)?,
             seq,

@@ -4,6 +4,7 @@ use centraid_api_proto::core_v1 as wire;
 use prost::Message;
 use wire::assist_request::Kind as Ask;
 use wire::chat_event::Kind as E;
+use wire::chat_event::device_facts::Network;
 use wire::chat_state::Phase;
 
 use super::{asset, when};
@@ -22,6 +23,8 @@ pub(super) struct Msg {
     pub cards: Vec<wire::ChatCard>,
     pub streaming: bool,
     pub stopped: bool,
+    /// The turn failed after drawing some of its answer (not a Stop): the text is kept and says so.
+    pub failed: bool,
     /// What the member attached to this question: shown as chips, never as bytes.
     pub attachments: Vec<Pending>,
     /// The attached document was cut before the model read it.
@@ -90,6 +93,8 @@ pub(super) struct Proposal {
     pub stage: Stage,
     /// How it ended, once it has.
     pub line: String,
+    /// One Undo for each write the card made, in the order they ran (the kit's one door).
+    pub undo: Vec<crate::kit::undo::Undo>,
 }
 
 impl Proposal {
@@ -136,6 +141,7 @@ pub(super) enum Fail {
     AttachUnsupported,
     AttachUnreadable,
     AttachTooLarge,
+    TooLong,
     Generic,
     ThreadGone,
     DownloadStopped,
@@ -153,6 +159,9 @@ pub(super) enum VisionPhase {
 }
 
 /// Whether the loaded model can read a photo, and the step on the way there.
+/// What a phone must report for the model to run on it.
+pub(super) const MIN_MEMORY_BYTES: u64 = 3_500_000_000;
+
 #[derive(Clone, Debug, Default)]
 pub(super) struct Vision {
     pub phase: VisionPhase,
@@ -160,6 +169,8 @@ pub(super) struct Vision {
     pub bytes: u64,
     pub progress: Option<f32>,
     pub error: Option<Fail>,
+    /// The member chose mobile data for the photo reader's download: its own word, not the model's.
+    pub cellular_ok: bool,
 }
 
 impl Vision {
@@ -167,6 +178,7 @@ impl Vision {
     pub fn unloaded(&self) -> Self {
         Self {
             bytes: self.bytes,
+            cellular_ok: self.cellular_ok,
             ..Self::default()
         }
     }
@@ -212,6 +224,15 @@ pub(super) struct Sheet {
     pub rows: Vec<wire::AssistDocument>,
 }
 
+/// Where the update to the current model stands while the chat works on the one before it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Update {
+    None,
+    Offered,
+    Downloading,
+    Failed,
+}
+
 /// The chat's state.
 pub(super) struct Chat {
     pub phase: Phase,
@@ -226,6 +247,15 @@ pub(super) struct Chat {
     /// The last turn id minted; the running turn's, while `running`.
     pub turn: u64,
     pub next_id: u64,
+    /// The `Sent.token` of the last question taken: the shell clears its draft when it sees it.
+    pub accepted_send: u64,
+    /// The last member message is being edited: the composer holds it, and sending replaces it
+    /// and the answer to it.
+    pub editing: bool,
+    /// Moves whenever the words the composer should hold change by an edit starting or ending.
+    pub edit_token: u64,
+    /// The last rename or delete of a chat was refused: the Chats list says so (#1188 C11).
+    pub threads_error: bool,
     pub messages: Vec<Msg>,
     pub suggestions: Vec<String>,
     pub running: bool,
@@ -240,6 +270,31 @@ pub(super) struct Chat {
     /// The last turn's attachments, asked again by Retry.
     pub last_sent: Vec<Pending>,
     pub vision: Vision,
+    /// THE DOWNLOAD RULES' FACTS (#1188): what the phone said about its network and free space, and
+    /// whether the member allowed mobile data. Unknown until the shell tells.
+    pub network: Network,
+    pub free_bytes: u64,
+    pub memory_bytes: u64,
+    pub cellular_ok: bool,
+    /// THE TWO-MODEL WINDOW (#1188): the chat is using the model before the current one, and the
+    /// newer one is on offer (`update`). `others` are the model files beside the one in use, which
+    /// go once the current model has loaded.
+    pub on_previous: bool,
+    pub update: Update,
+    pub update_progress: Option<f32>,
+    /// No model on the phone is one this release supports: the current one is needed.
+    pub update_needed: bool,
+    pub others: Vec<String>,
+    /// The adapter files in the models directory, as the core last listed them.
+    pub adapter_files: Vec<String>,
+    /// The next finished transfer is the adapter's: it rides in the same step as the model and
+    /// its failure is silent (the model runs alone).
+    pub adapter_fetching: bool,
+    /// The update row offers the adapter alone: the model in use is the current one and the
+    /// adapter the release names is not on the phone. Never fetched until the member taps.
+    pub adapter_only: bool,
+    /// The adapter arrived while a turn ran: the model reloads with it when the tab next opens.
+    pub reload_pending: bool,
     /// The stored thread this chat is saved in, or empty until a turn has been saved.
     pub thread_id: String,
     pub thread_title: String,
@@ -259,6 +314,8 @@ pub(super) struct Chat {
     pub unlocking: Option<String>,
     /// Invoke-key sequence for this screen's writes.
     pub seq: u64,
+    /// What the cards show of Locker secrets, in memory only (`reveal.rs`).
+    pub(super) reveals: super::reveal::Reveals,
 }
 
 impl Default for Chat {
@@ -272,6 +329,10 @@ impl Default for Chat {
             session: 0,
             turn: 0,
             next_id: 1,
+            accepted_send: 0,
+            editing: false,
+            edit_token: 0,
+            threads_error: false,
             messages: Vec::new(),
             suggestions: Vec::new(),
             running: false,
@@ -283,6 +344,19 @@ impl Default for Chat {
             next_pending: 1,
             last_sent: Vec::new(),
             vision: Vision::default(),
+            network: Network::Unspecified,
+            free_bytes: 0,
+            memory_bytes: 0,
+            cellular_ok: false,
+            on_previous: false,
+            update: Update::None,
+            update_progress: None,
+            update_needed: false,
+            others: Vec::new(),
+            adapter_files: Vec::new(),
+            adapter_fetching: false,
+            adapter_only: false,
+            reload_pending: false,
             thread_id: String::new(),
             thread_title: String::new(),
             drawer_open: false,
@@ -297,6 +371,7 @@ impl Default for Chat {
             reopen: None,
             unlocking: None,
             seq: crate::kit::act::fresh(),
+            reveals: super::reveal::Reveals::default(),
         }
     }
 }
@@ -331,7 +406,11 @@ impl Chat {
 
     /// A model path in the shell's models directory.
     pub fn model_path(&self) -> String {
-        asset::path(&self.models_dir, &asset::MODEL)
+        let asset = match asset::previous() {
+            Some(previous) if self.on_previous => previous,
+            _ => asset::model(),
+        };
+        asset::path(&self.models_dir, &asset)
     }
 
     pub fn projector_path(&self) -> String {
@@ -379,12 +458,19 @@ impl Chat {
         }
         match event {
             E::Opened(opened) => self.opened(opened, ctx),
-            E::Sent(sent) => self.asked_by_member(&sent.text, ctx),
+            E::Sent(sent) => self.asked_by_member(&sent.text, sent.token, ctx),
             E::Stopped(_) => self.stopped(ctx),
             E::Regenerated(_) => self.regenerated(ctx),
+            E::EditStarted(_) => self.edit_started(),
+            E::EditCancelled(_) => self.edit_cancelled(),
             E::NewChat(_) => self.new_chat(ctx),
             E::Copied(copied) => self.copied(copied.message_id),
-            E::Download(download) => self.download_tapped(download.vision),
+            E::Download(download) if download.update => self.update_tapped(download.choice),
+            E::Download(download) => self.download_tapped(download.vision, download.choice),
+            E::DeviceFacts(facts) => self.device_facts(&facts),
+            E::RevealVerb(tapped) => {
+                self.reveal_verb(tapped.message_id, tapped.index as usize, &tapped.key, ctx)
+            }
             E::DownloadProgress(progress) => self.progressed(&progress, ctx),
             E::DownloadFinished(done) => self.download_finished(done.vision, done.ok, ctx),
             E::Attached(attached) => self.attached(attached, ctx),
@@ -398,6 +484,10 @@ impl Chat {
             E::AllThreadsDeleted(_) => self.all_threads_deleted(ctx),
             E::PendingConfirmed(confirmed) => self.confirm_tapped(&confirmed.pending_id, ctx),
             E::PendingCancelled(cancelled) => self.cancel_tapped(&cancelled.pending_id, ctx),
+            E::PendingUndone(undone) => {
+                self.undo_tapped(&undone.pending_id, undone.index as usize, ctx);
+                Vec::new()
+            }
             E::DrawerSearchOpened(_) => self.search_opened(),
             E::DrawerSearchTerm(term) => self.search_term(&term.term, ctx),
             E::DrawerSearchClosed(_) => self.search_closed(),
@@ -441,7 +531,11 @@ impl Chat {
         let rescope = self.opened && self.scope != asked && (opened.scope_chosen || untouched);
         if self.opened && !rescope {
             let mut effects = Vec::new();
-            if matches!(self.phase, Phase::NeedsModel | Phase::Unavailable) {
+            // A chat on the older model whose update has arrived loads the new one now.
+            let arrived = (self.on_previous || self.reload_pending)
+                && self.update == Update::None
+                && !self.running;
+            if matches!(self.phase, Phase::NeedsModel | Phase::Unavailable) || arrived {
                 effects.extend(self.read_status(ctx));
             }
             if !self.running {
@@ -468,6 +562,7 @@ impl Chat {
             threads,
             now_ms: self.now_ms,
             turn: self.turn + 1,
+            reveals: std::mem::take(&mut self.reveals),
             ..Self::default()
         };
         effects.extend(self.read_status(ctx));
@@ -485,19 +580,48 @@ impl Chat {
             model_path: self.model_path(),
             projector_path: String::new(),
         })));
+        let mut beside = Vec::new();
+        let mut adapters = Vec::new();
         let state = match answer.ok().and_then(|answer| answer.kind) {
             Some(wire::assist_response::Kind::Status(status)) => {
+                beside = status.other_model_files.clone();
+                adapters = status.adapter_files.clone();
                 wire::AssistModelState::try_from(status.state).ok()
             }
             _ => None,
         };
+        self.others = beside;
+        self.adapter_files = adapters;
+        self.reload_pending = false;
+        if self.adapter_only && self.update != Update::Downloading {
+            self.adapter_only = false;
+            self.update = Update::None;
+        }
+        self.on_previous = false;
+        self.update_needed = false;
         match state {
             Some(wire::AssistModelState::Absent) => {
+                // THE TWO-MODEL WINDOW: the model before this one still works with this release,
+                // so the chat uses it and offers the new one. Any other model file is older than
+                // the window: the chat needs the current one before it can answer.
+                let previous = asset::previous()
+                    .filter(|previous| self.others.iter().any(|n| n == previous.file_name));
+                if let Some(previous) = previous {
+                    self.others.retain(|name| name != previous.file_name);
+                    self.others.push(previous.file_name.to_owned());
+                    self.on_previous = true;
+                    self.update = Update::Offered;
+                    self.phase = Phase::Loading;
+                    self.vision = self.vision.unloaded();
+                    return self.load_effect(ctx);
+                }
+                self.update_needed = !self.others.is_empty();
                 self.phase = Phase::NeedsModel;
                 self.progress = None;
                 Vec::new()
             }
             Some(wire::AssistModelState::Present) => {
+                self.offer_adapter();
                 self.phase = Phase::Loading;
                 // The projector belongs to the loaded model: a model about to be loaded has none.
                 self.vision = self.vision.unloaded();
@@ -507,13 +631,28 @@ impl Chat {
                 self.phase = Phase::Loading;
                 Vec::new()
             }
-            Some(wire::AssistModelState::Ready) => self.became_ready(ctx),
+            Some(wire::AssistModelState::Ready) => {
+                self.offer_adapter();
+                self.became_ready(ctx)
+            }
             // NO_ENGINE, a core that would not answer, and a state this build has no name for
             // are all "not available here".
             _ => {
                 self.phase = Phase::Unavailable;
                 Vec::new()
             }
+        }
+    }
+
+    /// THE ADAPTER ALONE (#1188 G5): the model in use is the current one and the release names an
+    /// adapter that is not on the phone (never fetched, or a newer one). Nothing is fetched until
+    /// the member taps the same row that offers a newer model; chat works as it is meanwhile.
+    fn offer_adapter(&mut self) {
+        let missing = asset::adapter()
+            .is_some_and(|adapter| !self.adapter_files.iter().any(|n| n == adapter.file_name));
+        if missing && self.update == Update::None {
+            self.update = Update::Offered;
+            self.adapter_only = true;
         }
     }
 
@@ -547,11 +686,37 @@ impl Chat {
         self.phase = Phase::Ready;
         self.progress = None;
         self.error = None;
+        // THE SWAP'S LAST STEP: the current model is loaded, so the files beside it (the model
+        // before it, or an older one this release cannot use) are deleted.
+        let mut effects = self.remove_leftovers();
         if self.session != 0 {
-            return Vec::new();
+            return effects;
         }
         self.start_session(ctx);
-        self.ask_waiting(ctx)
+        effects.extend(self.ask_waiting(ctx));
+        effects
+    }
+
+    /// Delete the other model files, once, when the model in use is the current one.
+    fn remove_leftovers(&mut self) -> Vec<wire::Effect> {
+        if self.on_previous {
+            return Vec::new();
+        }
+        // the adapter files this release does not name go with the leftovers
+        let keep = asset::adapter().map(|adapter| adapter.file_name);
+        let stale = std::mem::take(&mut self.adapter_files)
+            .into_iter()
+            .filter(|name| Some(name.as_str()) != keep);
+        std::mem::take(&mut self.others)
+            .into_iter()
+            .chain(stale)
+            .map(|file_name| {
+                effect(wire::effect::Kind::DeleteModelFile(wire::DeleteModelFile {
+                    models_dir: self.models_dir.clone(),
+                    file_name,
+                }))
+            })
+            .collect()
     }
 
     /// Open a session on the scope; a refusal is "not available here".
@@ -607,15 +772,74 @@ impl Chat {
         }
     }
 
-    fn download_tapped(&mut self, vision: bool) -> Vec<wire::Effect> {
-        let model = if vision { asset::VISION } else { asset::MODEL };
-        if vision {
+    fn download_tapped(&mut self, vision: bool, choice: i32) -> Vec<wire::Effect> {
+        use wire::ChatStepAction as Choice;
+        let model = if vision {
+            asset::VISION
+        } else {
+            asset::model()
+        };
+        let choice = Choice::try_from(choice).unwrap_or(Choice::Unspecified);
+        // CHECK AGAIN asks nothing of the transfer: the shell told the facts again just before, and
+        // the step is drawn from them.
+        if choice == Choice::CheckAgain {
+            return Vec::new();
+        }
+        // NOT NOW, on the photo reader's sheet: the photo that asked for it is taken off.
+        if choice == Choice::NotNow {
+            if vision {
+                self.pending.retain(|held| !held.photo);
+                if self.vision.phase == VisionPhase::Needs {
+                    self.vision.phase = VisionPhase::None;
+                    self.vision.error = None;
+                }
+            }
+            return Vec::new();
+        }
+        // Mobile data is the member's explicit choice, for the photo reader as for the model, each
+        // with its own word.
+        let held = if vision {
+            self.vision.cellular_ok
+        } else {
+            self.cellular_ok
+        };
+        let more_data = match choice {
+            Choice::DownloadCellular => true,
+            Choice::WaitWifi => false,
+            _ => held,
+        };
+        // NOT ENOUGH SPACE OR MEMORY: nothing is fetched into a phone that cannot keep it or run it.
+        if self.too_little_space(if vision {
+            model.bytes
+        } else {
+            asset::assistant_bytes()
+        }) || self.too_little_memory()
+        {
+            return Vec::new();
+        }
+        let waiting = if vision {
+            self.vision.phase == VisionPhase::Downloading
+        } else {
+            self.phase == Phase::Downloading
+        };
+        if vision && waiting {
+            // as for the model: mobile data for the rest takes the same file up again, allowed
+            if choice != Choice::DownloadCellular {
+                return Vec::new();
+            }
+        } else if vision {
             if self.vision.phase != VisionPhase::Needs {
                 return Vec::new();
             }
             self.vision.phase = VisionPhase::Downloading;
             self.vision.progress = None;
             self.vision.error = None;
+        } else if waiting {
+            // Mobile data was allowed for the rest of a transfer that was waiting for Wi-Fi: the
+            // shell takes the same file up again with the new rule. Nothing else restarts it.
+            if choice != Choice::DownloadCellular {
+                return Vec::new();
+            }
         } else {
             if self.phase != Phase::NeedsModel {
                 return Vec::new();
@@ -623,6 +847,11 @@ impl Chat {
             self.phase = Phase::Downloading;
             self.progress = None;
             self.error = None;
+        }
+        if vision {
+            self.vision.cellular_ok = more_data;
+        } else {
+            self.cellular_ok = more_data;
         }
         vec![effect(wire::effect::Kind::ModelDownload(
             wire::ModelDownload {
@@ -632,8 +861,70 @@ impl Chat {
                 sha256: model.sha256.to_owned(),
                 bytes: model.bytes,
                 models_dir: self.models_dir.clone(),
+                allow_cellular: more_data,
             },
         ))]
+    }
+
+    /// The update row's Update: the current model is fetched beside the one in use, over Wi-Fi unless
+    /// the member chose mobile data. The chat keeps answering on the model it has.
+    fn update_tapped(&mut self, choice: i32) -> Vec<wire::Effect> {
+        use wire::ChatStepAction as Choice;
+        let adapter = asset::adapter().filter(|_| self.adapter_only);
+        let model = adapter.unwrap_or_else(asset::model);
+        let choice = Choice::try_from(choice).unwrap_or(Choice::Unspecified);
+        let started = matches!(self.update, Update::Offered | Update::Failed);
+        let waiting = self.update == Update::Downloading;
+        if !(started || waiting && choice == Choice::DownloadCellular)
+            || !(self.on_previous || adapter.is_some())
+        {
+            return Vec::new();
+        }
+        // The new file lands beside the old one, so the phone needs room for both.
+        if self.too_little_space(adapter.map_or_else(asset::assistant_bytes, |a| a.bytes)) {
+            return Vec::new();
+        }
+        let more_data = match choice {
+            Choice::DownloadCellular => true,
+            Choice::WaitWifi => false,
+            _ => self.cellular_ok,
+        };
+        self.cellular_ok = more_data;
+        if started {
+            self.update = Update::Downloading;
+            self.update_progress = None;
+            self.adapter_fetching = adapter.is_some();
+        }
+        vec![effect(wire::effect::Kind::ModelDownload(
+            wire::ModelDownload {
+                vision: false,
+                url: model.url.to_owned(),
+                file_name: model.file_name.to_owned(),
+                sha256: model.sha256.to_owned(),
+                bytes: model.bytes,
+                models_dir: self.models_dir.clone(),
+                allow_cellular: more_data,
+            },
+        ))]
+    }
+
+    /// The phone told how it is: kept, and the step is drawn from it.
+    fn device_facts(&mut self, facts: &wire::chat_event::DeviceFacts) -> Vec<wire::Effect> {
+        self.network = Network::try_from(facts.network).unwrap_or(Network::Unspecified);
+        self.free_bytes = facts.free_bytes;
+        self.memory_bytes = facts.memory_bytes;
+        Vec::new()
+    }
+
+    /// The model needs about 4 GB of memory; a phone reports a little under what it is sold as, so
+    /// the line is drawn at 3.5 GB. An unknown amount is not "too little".
+    pub(super) fn too_little_memory(&self) -> bool {
+        self.memory_bytes > 0 && self.memory_bytes < MIN_MEMORY_BYTES
+    }
+
+    /// Whether the phone says it has less free than `needed` (an unknown amount is not "less").
+    pub(super) fn too_little_space(&self, needed: u64) -> bool {
+        self.free_bytes > 0 && self.free_bytes < needed
     }
 
     /// A transfer reported progress.
@@ -648,12 +939,27 @@ impl Chat {
         progress: &wire::chat_event::DownloadProgress,
         _ctx: &Ctx,
     ) -> Vec<wire::Effect> {
-        let fraction = (progress.total_bytes > 0)
-            .then(|| (progress.done_bytes as f32 / progress.total_bytes as f32).clamp(0.0, 1.0));
+        // ONE BAR FOR THE ASSISTANT: the adapter's bytes follow the model's, so the fraction runs
+        // over both (the member reads one download).
+        let (before, after) = if progress.vision || self.adapter_fetching && self.adapter_only {
+            (0, 0)
+        } else if self.adapter_fetching {
+            (asset::model().bytes, 0)
+        } else {
+            (0, asset::adapter().map_or(0, |adapter| adapter.bytes))
+        };
+        let fraction = (progress.total_bytes > 0).then(|| {
+            ((progress.done_bytes + before) as f32 / (progress.total_bytes + before + after) as f32)
+                .clamp(0.0, 1.0)
+        });
         if progress.vision {
             self.vision.phase = VisionPhase::Downloading;
             self.vision.progress = fraction;
             self.vision.error = None;
+            return Vec::new();
+        }
+        if self.update == Update::Downloading {
+            self.update_progress = fraction;
             return Vec::new();
         }
         let resumed = matches!(self.phase, Phase::Checking | Phase::NeedsModel);
@@ -668,14 +974,62 @@ impl Chat {
         Vec::new()
     }
 
+    /// The effect that fetches the current model's adapter, when the release ships one, none is on
+    /// the phone and there is room for it. It uses the same rules as the model: Wi-Fi unless the
+    /// member allowed mobile data. `None` means load the model as it is.
+    fn fetch_adapter(&mut self) -> Option<wire::Effect> {
+        let adapter = asset::adapter()?;
+        if self
+            .adapter_files
+            .iter()
+            .any(|name| name == adapter.file_name)
+            || self.too_little_space(adapter.bytes)
+        {
+            return None;
+        }
+        self.adapter_fetching = true;
+        Some(effect(wire::effect::Kind::ModelDownload(
+            wire::ModelDownload {
+                vision: false,
+                url: adapter.url.to_owned(),
+                file_name: adapter.file_name.to_owned(),
+                sha256: adapter.sha256.to_owned(),
+                bytes: adapter.bytes,
+                models_dir: self.models_dir.clone(),
+                allow_cellular: self.cellular_ok,
+            },
+        )))
+    }
+
     fn download_finished(&mut self, vision: bool, ok: bool, ctx: &Ctx) -> Vec<wire::Effect> {
         if vision {
             return self.vision_finished(ok, ctx);
         }
+        // THE ADAPTER ARRIVED (or did not): either way the model loads next. A missing adapter is
+        // not an error a member acts on; the model runs alone.
+        let adapter_done = std::mem::take(&mut self.adapter_fetching);
+        if self.update == Update::Downloading && self.adapter_only {
+            return self.adapter_only_finished(ok, ctx);
+        }
+        if self.update == Update::Downloading {
+            if !adapter_done
+                && ok
+                && let Some(fetch) = self.fetch_adapter()
+            {
+                return vec![fetch];
+            }
+            return self.update_finished(ok || adapter_done, ctx);
+        }
         if self.phase != Phase::Downloading {
             return Vec::new();
         }
-        if ok {
+        if ok
+            && !adapter_done
+            && let Some(fetch) = self.fetch_adapter()
+        {
+            return vec![fetch];
+        }
+        if ok || adapter_done {
             self.phase = Phase::Loading;
             self.progress = None;
             self.load_effect(ctx)
@@ -688,16 +1042,55 @@ impl Chat {
         }
     }
 
+    /// The adapter alone arrived (or stopped short). The member asked for it, so a failure is the
+    /// row's Retry; success reloads the model with it between turns.
+    fn adapter_only_finished(&mut self, ok: bool, ctx: &Ctx) -> Vec<wire::Effect> {
+        self.update_progress = None;
+        if !ok {
+            self.update = Update::Failed;
+            return Vec::new();
+        }
+        self.update = Update::None;
+        self.adapter_only = false;
+        if self.running {
+            self.reload_pending = true;
+            return Vec::new();
+        }
+        self.read_status(ctx)
+    }
+
+    /// The new model arrived whole and verified beside the old one. Between turns it is loaded in
+    /// the old one's place and the old file goes (`became_ready`); while a turn runs the old one
+    /// finishes it and the new one loads the next time the tab opens.
+    fn update_finished(&mut self, ok: bool, ctx: &Ctx) -> Vec<wire::Effect> {
+        self.update_progress = None;
+        if !ok {
+            self.update = Update::Failed;
+            return Vec::new();
+        }
+        self.update = Update::None;
+        if self.running {
+            return Vec::new();
+        }
+        self.on_previous = false;
+        self.phase = Phase::Loading;
+        self.load_effect(ctx)
+    }
+
     pub fn on_data_changed(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         if self.opened {
             self.read_threads(ctx);
         }
-        Vec::new()
+        self.reveal_data_changed(ctx)
     }
 
     /// What a shell's answer to an effect means to this screen.
     pub fn on_effect(&mut self, result: wire::EffectResult, ctx: &Ctx) -> Vec<wire::Effect> {
         use wire::effect_result::Outcome as O;
+        // The owner check of a held confirm is answered by the confirm; any other is a card's.
+        if self.unlocking.is_none() && !matches!(result.outcome, Some(O::LibraryPhotoPicked(_))) {
+            return self.reveal_answered(&result, ctx);
+        }
         match result.outcome {
             Some(O::OwnerChecked(checked)) => self.owner_checked(&checked, ctx),
             Some(O::LibraryPhotoPicked(picked)) => self.library_photo_picked(picked, ctx),
@@ -760,6 +1153,7 @@ impl Chat {
             Fail::AttachUnsupported => words::error_attach_unsupported(locale),
             Fail::AttachUnreadable => words::error_attach_unreadable(locale),
             Fail::AttachTooLarge => words::error_attach_too_large(locale),
+            Fail::TooLong => words::error_too_long(locale),
             Fail::Generic => words::error_generic(locale),
             Fail::ThreadGone => words::error_thread_gone(locale),
             Fail::DownloadStopped => words::download_failed(locale),
@@ -793,6 +1187,7 @@ mod proposal_app_tests {
             destructive: false,
             stage: Stage::Waiting,
             line: String::new(),
+            undo: Vec::new(),
         }
     }
 

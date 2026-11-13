@@ -111,7 +111,8 @@ internal fun HostScreenEffects(
                     effect.scan_code != null ->
                         scanDoor.scan(effect.scan_code!!.photo_label)?.let { EffectResult(code_scanned = CodeScanned(text = it)) }
                             ?: EffectResult(failed = EffectFailed(reason = EffectReason.CANCELLED, cancelled = true))
-                    effect.model_download != null -> ChatEffects.download(session.screens, request, effect.model_download!!)
+                    effect.model_download != null -> ChatEffects.download(context, session.screens, request, effect.model_download!!)
+                    effect.delete_model_file != null -> ChatEffects.deleteModelFile(effect.delete_model_file!!)
                     effect.pick_library_photo != null -> ChatEffects.pickLibraryPhoto(context, photoDoor) {
                         photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                     }

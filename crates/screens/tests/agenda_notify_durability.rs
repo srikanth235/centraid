@@ -136,6 +136,7 @@ fn button(id: &str, verb: Verb) -> E {
             wire::NotificationAnswered {
                 notification_id: id.to_owned(),
                 verb: verb as i32,
+                press_id: String::new(),
             },
         )),
     })
@@ -308,7 +309,7 @@ fn only_the_exact_current_receipt_can_undo_and_a_later_title_is_preserved() {
 }
 
 #[test]
-fn a_later_conflicting_due_is_not_overwritten_by_snooze_undo() {
+fn a_later_conflicting_snooze_is_not_overwritten_by_snooze_undo() {
     let mut r = Rig::new();
     let receipt = r.posted(Verb::SnoozeHour);
     let later = format!("{}T18:30", day(&r.d, 2));
@@ -316,7 +317,7 @@ fn a_later_conflicting_due_is_not_overwritten_by_snooze_undo() {
         &r.d,
         act::reminders::EditTask {
             task_id: r.task.clone(),
-            due: Field::Is(later),
+            snoozed_until: Field::Is(format!("{later}:00Z")),
             ..Default::default()
         },
     );
@@ -484,7 +485,8 @@ fn action_completion_waits_for_receipt_ack_and_undo_completion_waits_for_cleanup
         completed(&committed),
         vec![wire::NotificationAnswered {
             notification_id: id,
-            verb: Verb::Done as i32
+            verb: Verb::Done as i32,
+            press_id: String::new(),
         }]
     );
     let receipt = notifications(&committed)
@@ -510,7 +512,8 @@ fn action_completion_waits_for_receipt_ack_and_undo_completion_waits_for_cleanup
         completed(&cleared),
         vec![wire::NotificationAnswered {
             notification_id: receipt.notification_id,
-            verb: Verb::Undo as i32
+            verb: Verb::Undo as i32,
+            press_id: String::new(),
         }]
     );
     assert!(
@@ -535,7 +538,8 @@ fn failed_receipt_write_completes_only_after_the_partial_write_is_cleared() {
         completed(&cleared),
         vec![wire::NotificationAnswered {
             notification_id: id,
-            verb: Verb::Done as i32
+            verb: Verb::Done as i32,
+            press_id: String::new(),
         }]
     );
 }
@@ -563,6 +567,8 @@ fn past_notice(r: &mut Rig) -> wire::PendingNotification {
         projects: &[],
         events: &[],
         calendars: &[],
+        extra: &[],
+        extra_wanted: &[],
     })
     .into_iter()
     .next()
@@ -649,4 +655,104 @@ fn past_inventory_survives_refresh_and_a_source_change_cancels_once_without_repl
         r.raw(os_reply(Vec::new())).is_empty(),
         "observing the removal requires no redundant schedule"
     );
+}
+
+#[test]
+fn an_outbox_replay_keeps_the_original_deadline_and_acks_the_exact_press_id() {
+    let mut r = Rig::new();
+    let answer = wire::NotificationAnswered {
+        notification_id: r.notice.clone(),
+        verb: Verb::Done as i32,
+        press_id: "original-press".to_owned(),
+    };
+    let event = || {
+        E::ShellFact(wire::ShellFact {
+            fact: Some(wire::shell_fact::Fact::NotificationAnswered(answer.clone())),
+        })
+    };
+    let initial = r.drive(event());
+    assert_eq!(completed(&initial), vec![answer.clone()]);
+    let before = r.metadata();
+    let original_receipt = notifications(&initial)
+        .into_iter()
+        .find(|n| n.immediate)
+        .expect("durable receipt");
+    r.restart();
+    let replayed = r.drive(event());
+    assert_eq!(completed(&replayed), vec![answer]);
+    assert_eq!(
+        r.metadata(),
+        before,
+        "outbox replay must not renew or replace Undo"
+    );
+    assert_eq!(
+        notifications(&replayed)
+            .into_iter()
+            .find(|n| n.immediate)
+            .expect("same receipt")
+            .notification_id,
+        original_receipt.notification_id
+    );
+    assert_eq!(task_of_status(&r.d, &r.task), "done");
+    r.drive(button(&original_receipt.notification_id, Verb::Undo));
+    assert_eq!(task_of_status(&r.d, &r.task), "open");
+}
+
+#[test]
+fn snooze_undo_preserves_a_later_unrelated_due_edit() {
+    let mut r = Rig::new();
+    let original = task_of(&r.d, &r.task);
+    let receipt = r.posted(Verb::SnoozeHour);
+    assert_eq!(task_of(&r.d, &r.task).due_at, original.due_at);
+    let due = format!("{}T18:30", day(&r.d, 2));
+    arrange(
+        &r.d,
+        act::reminders::EditTask {
+            task_id: r.task.clone(),
+            due: Field::Is(due.clone()),
+            ..Default::default()
+        },
+    );
+    r.restart();
+    r.drive(button(&receipt.notification_id, Verb::Undo));
+    let current = task_of(&r.d, &r.task);
+    assert_eq!(current.due_local, due);
+    assert_eq!(current.remind_before_min, original.remind_before_min);
+    assert_eq!(
+        current.remind_at_local, current.due_local,
+        "only snooze is reversed; the later due stays"
+    );
+}
+
+#[test]
+fn distinct_outbox_presses_on_one_card_keep_their_exact_completion_ids() {
+    let mut r = Rig::new();
+    let first = wire::NotificationAnswered {
+        notification_id: r.notice.clone(),
+        verb: Verb::Done as i32,
+        press_id: "first".to_owned(),
+    };
+    let second = wire::NotificationAnswered {
+        notification_id: r.notice.clone(),
+        verb: Verb::Open as i32,
+        press_id: "second".to_owned(),
+    };
+    let third = wire::NotificationAnswered {
+        press_id: "third".to_owned(),
+        ..second.clone()
+    };
+    let event = |answer| {
+        E::ShellFact(wire::ShellFact {
+            fact: Some(wire::shell_fact::Fact::NotificationAnswered(answer)),
+        })
+    };
+    let writing = r.raw(event(first.clone()));
+    assert!(completed(&writing).is_empty());
+    assert!(completed(&r.raw(event(second.clone()))).is_empty());
+    assert!(completed(&r.raw(event(third.clone()))).is_empty());
+    let batch = secret(&writing, wire::secret_op::Op::Set);
+    let answer = r.shell.batch(&batch);
+    let acknowledged = r.ack(answer);
+    assert_eq!(completed(&acknowledged), vec![first, second, third]);
+    assert_eq!(task_of_status(&r.d, &r.task), "done");
 }

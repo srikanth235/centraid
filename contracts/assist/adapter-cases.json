@@ -1,0 +1,231 @@
+{
+  "about": "Whether the assistant's adapter is used for a turn (#1188, G2), and whether the file on the phone can never be used again by the base in use (`delete_file`). The rule is `centraid_assist::adapter::decide`; its test reads this file. Shells never decide: they ask the core. `disk_bytes` is the size of the file at the adapter's local name, absent when there is none. Order of reasons: no adapter, other base, other catalogue, not on disk. A frozen golden: a change is a change in behaviour.",
+  "cases": [
+    {
+      "name": "no adapter in the release: the stock model",
+      "adapter": null,
+      "disk_bytes": null,
+      "app": {
+        "base_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "tools_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "prompt_hash": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "verdict": "none",
+      "used": false,
+      "delete_file": false
+    },
+    {
+      "name": "no adapter in the release, a stray file is ignored",
+      "adapter": null,
+      "disk_bytes": 30000000,
+      "app": {
+        "base_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "tools_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "prompt_hash": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "verdict": "none",
+      "used": false,
+      "delete_file": false
+    },
+    {
+      "name": "everything holds: used",
+      "adapter": {
+        "file_name": "adapter.gguf",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bytes": 30000000,
+        "base_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "tools_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "prompt_hash": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "disk_bytes": 30000000,
+      "app": {
+        "base_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "tools_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "prompt_hash": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "verdict": "use",
+      "used": true,
+      "delete_file": false
+    },
+    {
+      "name": "the file is not on the phone",
+      "adapter": {
+        "file_name": "adapter.gguf",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bytes": 30000000,
+        "base_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "tools_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "prompt_hash": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "disk_bytes": null,
+      "app": {
+        "base_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "tools_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "prompt_hash": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "verdict": "not-on-disk",
+      "used": false,
+      "delete_file": false
+    },
+    {
+      "name": "a partial file of the wrong size",
+      "adapter": {
+        "file_name": "adapter.gguf",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bytes": 30000000,
+        "base_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "tools_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "prompt_hash": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "disk_bytes": 29999999,
+      "app": {
+        "base_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "tools_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "prompt_hash": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "verdict": "not-on-disk",
+      "used": false,
+      "delete_file": false
+    },
+    {
+      "name": "a larger file than the record names",
+      "adapter": {
+        "file_name": "adapter.gguf",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bytes": 30000000,
+        "base_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "tools_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "prompt_hash": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "disk_bytes": 30000001,
+      "app": {
+        "base_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "tools_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "prompt_hash": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "verdict": "not-on-disk",
+      "used": false,
+      "delete_file": false
+    },
+    {
+      "name": "trained on another base: not used, and the file goes",
+      "adapter": {
+        "file_name": "adapter.gguf",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bytes": 30000000,
+        "base_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "tools_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "prompt_hash": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "disk_bytes": 30000000,
+      "app": {
+        "base_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "tools_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "prompt_hash": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "verdict": "other-base",
+      "used": false,
+      "delete_file": true
+    },
+    {
+      "name": "other base and no file: still other-base, nothing to delete",
+      "adapter": {
+        "file_name": "adapter.gguf",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bytes": 30000000,
+        "base_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "tools_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "prompt_hash": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "disk_bytes": null,
+      "app": {
+        "base_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "tools_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "prompt_hash": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "verdict": "other-base",
+      "used": false,
+      "delete_file": true
+    },
+    {
+      "name": "trained on another catalogue",
+      "adapter": {
+        "file_name": "adapter.gguf",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bytes": 30000000,
+        "base_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "tools_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "prompt_hash": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "disk_bytes": 30000000,
+      "app": {
+        "base_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "tools_hash": "9999999999999999999999999999999999999999999999999999999999999999",
+        "prompt_hash": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "verdict": "other-catalogue",
+      "used": false,
+      "delete_file": false
+    },
+    {
+      "name": "trained on another prompt",
+      "adapter": {
+        "file_name": "adapter.gguf",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bytes": 30000000,
+        "base_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "tools_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "prompt_hash": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "disk_bytes": 30000000,
+      "app": {
+        "base_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "tools_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "prompt_hash": "9999999999999999999999999999999999999999999999999999999999999999"
+      },
+      "verdict": "other-catalogue",
+      "used": false,
+      "delete_file": false
+    },
+    {
+      "name": "other base outranks other catalogue",
+      "adapter": {
+        "file_name": "adapter.gguf",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bytes": 30000000,
+        "base_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "tools_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "prompt_hash": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "disk_bytes": 30000000,
+      "app": {
+        "base_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "tools_hash": "9999999999999999999999999999999999999999999999999999999999999999",
+        "prompt_hash": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "verdict": "other-base",
+      "used": false,
+      "delete_file": true
+    },
+    {
+      "name": "other catalogue outranks a missing file",
+      "adapter": {
+        "file_name": "adapter.gguf",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bytes": 30000000,
+        "base_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "tools_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "prompt_hash": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "disk_bytes": null,
+      "app": {
+        "base_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "tools_hash": "9999999999999999999999999999999999999999999999999999999999999999",
+        "prompt_hash": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "verdict": "other-catalogue",
+      "used": false,
+      "delete_file": false
+    }
+  ]
+}

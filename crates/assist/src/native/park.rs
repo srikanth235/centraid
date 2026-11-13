@@ -42,7 +42,7 @@ use std::collections::BTreeMap;
 use serde_json::{Value, json};
 
 use crate::native::dates::Stamp;
-use crate::native::door::{Call, Ran};
+use crate::native::door::{Call, Inverse, Ran};
 use crate::native::meta::{Kind, Verb, Via};
 use crate::native::world::local_stamp;
 use crate::native::world::{Edge, Key, Row, Val, World};
@@ -252,6 +252,9 @@ pub enum Confirmed {
         text: String,
         diff: Value,
         steps: usize,
+        /// What takes each write back, one entry per write in the order they ran; a write with no
+        /// inverse is an empty entry. The card draws one line per entry.
+        undo: Vec<Inverse>,
     },
     /// A row the steps address reads differently than when they were planned: nothing ran.
     Stale { rows: Vec<String> },
@@ -274,7 +277,9 @@ impl Confirmed {
     #[must_use]
     pub fn to_json(&self) -> Value {
         match self {
-            Self::Done { text, diff, steps } => {
+            Self::Done {
+                text, diff, steps, ..
+            } => {
                 json!({"status": "done", "text": text, "diff": diff, "steps": steps})
             }
             Self::Stale { rows } => json!({"status": "stale", "rows": rows}),
@@ -308,6 +313,7 @@ fn ok(output: Value) -> Ran {
         output,
         reason: None,
         predicate: None,
+        inverse: None,
     }
 }
 
@@ -317,6 +323,7 @@ fn refused(predicate: &str, reason: &str) -> Ran {
         output: Value::Null,
         reason: Some(reason.to_owned()),
         predicate: Some(predicate.to_owned()),
+        inverse: None,
     }
 }
 
@@ -2460,6 +2467,7 @@ impl Session {
         }
         let mut aliases: BTreeMap<String, String> = BTreeMap::new();
         let mut landed = 0;
+        let mut undo: Vec<Inverse> = Vec::new();
         let mut texts = Vec::new();
         let mut before = pending.before.clone();
         // the steps run call by call, and the vault is read after each call, as a run reads it: a
@@ -2497,6 +2505,9 @@ impl Session {
                                 }
                             }
                         }
+                        // One entry per write, so the card has one line for each; a write with no inverse is
+                        // an empty one, which draws its line without an Undo key.
+                        undo.push(ran.inverse.unwrap_or_default());
                         landed += 1;
                     }
                     Ok(ran) => {
@@ -2542,6 +2553,7 @@ impl Session {
             text: texts.join("\n"),
             diff: self.diff_json(&diff),
             steps: pending.steps.len(),
+            undo,
         }
     }
 

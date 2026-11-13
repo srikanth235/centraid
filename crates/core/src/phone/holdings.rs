@@ -42,6 +42,8 @@ pub(crate) struct Held {
     pub confirmed_bytes: u64,
     pub left_out_items: u64,
     pub left_out_bytes: u64,
+    /// Per gateway, per app: originals it has not acknowledged whole (#1188, NB1).
+    pub behind: BTreeMap<String, BTreeMap<&'static str, u64>>,
 }
 
 /// The entity kinds an app's rows are, and the ones it counts as its items.
@@ -80,13 +82,31 @@ pub(crate) fn read(
     ledger: &Ledger,
     files: &[ContentFile],
     outcomes: &[Outcome],
+    lagging: &[Vec<String>],
 ) -> Result<Held> {
     let records_at = records_backed_up_at(ledger)?;
     let since = records_at
         .and_then(|at| i64::try_from(at).ok())
         .map(centraid_vault::clock::format_iso_ms);
     let holdings = holdings(vault, since.as_deref()).map_err(plane_error)?;
-    Ok(fold(&holdings, files, outcomes, records_at.is_some()))
+    let mut held = fold(&holdings, files, outcomes, records_at.is_some());
+    // WHAT EACH GATEWAY STILL OWES, BY APP: only an owned original names an app.
+    for (file, behind) in files.iter().zip(lagging) {
+        if behind.is_empty() || !file.is_original() {
+            continue;
+        }
+        if let Some(owner) = holdings.owners.get(&file.h) {
+            for id in behind {
+                *held
+                    .behind
+                    .entry(id.clone())
+                    .or_default()
+                    .entry(owner_app(*owner))
+                    .or_default() += 1;
+            }
+        }
+    }
+    Ok(held)
 }
 
 /// One app's files, as they stand.

@@ -2,20 +2,17 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::sync::Mutex;
 use std::sync::OnceLock;
 
 use anyhow::Result;
-use centraid_datagen::brief::Briefer;
-use centraid_datagen::intent::Scenario;
-use centraid_datagen::llm::{Llm, json_of};
+use centraid_datagen::llm::Llm;
 use centraid_datagen::messages::{self, Config};
 use centraid_datagen::plan::is_placeholder;
+use centraid_datagen::rehearsal::Rehearsal;
 use centraid_datagen::run::{self, Config as RunConfig};
 use centraid_datagen::source::DatagenSource;
-use centraid_datagen::verify;
 use centraid_datagen::{Catalog, World, WorldSpec};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 fn catalog() -> &'static Catalog {
     static CATALOG: OnceLock<Catalog> = OnceLock::new();
@@ -31,6 +28,7 @@ fn intents_dir() -> &'static Path {
             counts: [1, 1, 0],
             per_world: [0; 3],
             cell_limit: Some(14),
+            mistakes: Vec::new(),
         };
         let scratch = tempfile::tempdir().expect("tempdir");
         let generated = run::generate(&config, catalog(), scratch.path()).expect("run");
@@ -41,116 +39,35 @@ fn intents_dir() -> &'static Path {
     .path()
 }
 
-/// The marker a fake writer puts in a message: a number that identifies the turn's brief, so the
-/// fake reader can look the intent up again. (A digit run: the typo pass leaves it alone.)
-fn marker(ask: &str, how: &str) -> String {
-    let h = blake3::hash(format!("{ask}\n{how}").as_bytes());
-    let mut n = [0_u8; 4];
-    n.copy_from_slice(&h.as_bytes()[..4]);
-    format!("q{}", u32::from_le_bytes(n))
+/// The rehearsal models of the library: two writers (the test split's is another model than train's) and a reader.
+struct Models {
+    writer: Rehearsal,
+    test_writer: Rehearsal,
+    reader: Rehearsal,
 }
 
-/// Writes `show <spans> <marker>` for each turn (a pronoun turn says `show those <marker>`), reads
-/// back by looking the marker up in the intents. Records every prompt.
-struct Fake {
-    expected: BTreeMap<String, verify::Expected>,
-    prompts: Mutex<Vec<String>>,
-    calls: Mutex<usize>,
-}
-
-impl Fake {
+impl Models {
     fn new() -> Self {
-        let mut expected = BTreeMap::new();
-        for split in ["train", "val"] {
-            let text = std::fs::read_to_string(intents_dir().join(split).join("sessions.jsonl"))
-                .expect("sessions");
-            for line in text.lines() {
-                let record: Value = serde_json::from_str(line).expect("json");
-                let scenario: Scenario =
-                    serde_json::from_value(record["scenario"].clone()).expect("scenario");
-                let today = record["today"].as_str().expect("today")[..10]
-                    .parse()
-                    .expect("date");
-                let briefer = Briefer {
-                    catalog: catalog(),
-                    today,
-                };
-                for (i, turn) in scenario.turns.iter().enumerate() {
-                    let b = briefer.turn(turn, i);
-                    expected.insert(marker(&b.ask, &b.how), verify::expected(turn, today));
-                }
-            }
-        }
+        let make = |role: &str| Rehearsal::new(role, catalog(), intents_dir()).expect("rehearsal");
         Self {
-            expected,
-            prompts: Mutex::new(Vec::new()),
-            calls: Mutex::new(0),
+            writer: make("writer"),
+            test_writer: make("writer-b"),
+            reader: make("reader"),
         }
     }
-}
 
-impl Llm for Fake {
-    fn model(&self) -> &str {
-        "fake"
+    fn all(&self) -> messages::Models<'_> {
+        messages::Models {
+            writer: [&self.writer, &self.writer, &self.test_writer],
+            reader: [&self.reader, &self.reader, &self.reader],
+        }
     }
 
-    fn complete(&self, prompt: &str) -> Result<String> {
-        self.prompts.lock().expect("lock").push(prompt.to_owned());
-        *self.calls.lock().expect("lock") += 1;
-        let start = prompt.find("Sessions:\n").expect("sessions") + "Sessions:\n".len();
-        let sessions = json_of(&format!("{{\"s\": {}}}", &prompt[start..]))?;
-        let mut out = Vec::new();
-        if prompt.starts_with("You write what a person types") {
-            for s in sessions["s"].as_array().expect("array") {
-                let messages: Vec<String> = s["turns"]
-                    .as_array()
-                    .expect("turns")
-                    .iter()
-                    .map(|t| {
-                        let spans: Vec<&str> = t["say_verbatim"]
-                            .as_array()
-                            .expect("spans")
-                            .iter()
-                            .filter_map(Value::as_str)
-                            .collect();
-                        let m = marker(
-                            t["ask"].as_str().expect("ask"),
-                            t["how"].as_str().expect("how"),
-                        );
-                        if spans.is_empty() {
-                            format!("show those {m}")
-                        } else {
-                            format!("show {} {m}", spans.join(" and "))
-                        }
-                    })
-                    .collect();
-                out.push(json!({"id": s["id"], "messages": messages}));
-            }
-        } else {
-            for s in sessions["s"].as_array().expect("array") {
-                let turns: Vec<Value> = s["messages"]
-                    .as_array()
-                    .expect("messages")
-                    .iter()
-                    .map(|m| {
-                        let text = m.as_str().expect("text");
-                        let at = text.rfind('q').expect("marker");
-                        let want = &self.expected[&text[at..]];
-                        json!({
-                            "act": want.act,
-                            "kind": want.kind.clone().unwrap_or_else(|| "unknown".into()),
-                            "from": want.period.map(|p| p.0.to_string()).unwrap_or_default(),
-                            "to": want.period.map(|p| p.1.to_string()).unwrap_or_default(),
-                            "numbers": want.numbers,
-                            "leans_on": want.leans.map(|l| l.0 + 1),
-                            "decline_reason": want.decline,
-                        })
-                    })
-                    .collect();
-                out.push(json!({"id": s["id"], "turns": turns}));
-            }
-        }
-        Ok(json!({"sessions": out}).to_string())
+    fn prompts(&self) -> Vec<String> {
+        [&self.writer, &self.test_writer, &self.reader]
+            .iter()
+            .flat_map(|m| m.prompts.lock().expect("lock").clone())
+            .collect()
     }
 }
 
@@ -180,17 +97,25 @@ fn config(offline: bool) -> Config {
         batch: 5,
         concurrency: 3,
         offline,
+        collect: None,
         limit: None,
         seed: 1,
+        style_shares: centraid_datagen::style::DEFAULT_SHARES,
     }
 }
 
 #[test]
 fn a_rebuild_from_a_warm_cache_makes_no_call_and_is_byte_identical() {
     let a = tempfile::tempdir().expect("tempdir");
-    let fake = Fake::new();
-    let first =
-        messages::run(&config(false), catalog(), &fake, intents_dir(), a.path()).expect("run");
+    let models = Models::new();
+    let first = messages::run(
+        &config(false),
+        catalog(),
+        &models.all(),
+        intents_dir(),
+        a.path(),
+    )
+    .expect("run");
     assert!(first.calls > 0);
     assert!(
         first.stats.turns_kept > 0,
@@ -201,16 +126,25 @@ fn a_rebuild_from_a_warm_cache_makes_no_call_and_is_byte_identical() {
     // must not be called
     let b = tempfile::tempdir().expect("tempdir");
     copy_dir(&a.path().join("llm-cache"), &b.path().join("llm-cache"));
-    struct Never;
+    struct Never(&'static str);
     impl Llm for Never {
         fn model(&self) -> &str {
-            "fake"
+            self.0
         }
         fn complete(&self, _: &str) -> Result<String> {
             anyhow::bail!("a warm cache must make no call")
         }
     }
-    let second = messages::run(&config(true), catalog(), &Never, intents_dir(), b.path())
+    let (w, wb, r) = (
+        Never("rehearsal-writer"),
+        Never("rehearsal-writer-b"),
+        Never("rehearsal-reader"),
+    );
+    let never = messages::Models {
+        writer: [&w, &w, &wb],
+        reader: [&r, &r, &r],
+    };
+    let second = messages::run(&config(true), catalog(), &never, intents_dir(), b.path())
         .expect("offline rebuild");
     assert_eq!(second.calls, 0);
     assert!(second.hits > 0);
@@ -222,7 +156,7 @@ fn a_rebuild_from_a_warm_cache_makes_no_call_and_is_byte_identical() {
 
     // offline with a cold cache fails instead of calling
     let c = tempfile::tempdir().expect("tempdir");
-    assert!(messages::run(&config(true), catalog(), &Never, intents_dir(), c.path()).is_err());
+    assert!(messages::run(&config(true), catalog(), &never, intents_dir(), c.path()).is_err());
 }
 
 fn copy_dir(from: &Path, to: &Path) {
@@ -241,9 +175,16 @@ fn copy_dir(from: &Path, to: &Path) {
 #[test]
 fn no_sealed_value_or_placeholder_reaches_a_prompt() {
     let out = tempfile::tempdir().expect("tempdir");
-    let fake = Fake::new();
-    messages::run(&config(false), catalog(), &fake, intents_dir(), out.path()).expect("run");
-    let prompts = fake.prompts.lock().expect("lock");
+    let models = Models::new();
+    messages::run(
+        &config(false),
+        catalog(),
+        &models.all(),
+        intents_dir(),
+        out.path(),
+    )
+    .expect("run");
+    let prompts = models.prompts();
     assert!(!prompts.is_empty());
     // every sealed placeholder a world would seed
     let mut sealed = Vec::new();
@@ -269,9 +210,15 @@ fn no_sealed_value_or_placeholder_reaches_a_prompt() {
 #[test]
 fn the_output_is_a_run_the_eval_reads_with_real_messages_and_verdicts() {
     let out = tempfile::tempdir().expect("tempdir");
-    let fake = Fake::new();
-    let report =
-        messages::run(&config(false), catalog(), &fake, intents_dir(), out.path()).expect("run");
+    let models = Models::new();
+    let report = messages::run(
+        &config(false),
+        catalog(),
+        &models.all(),
+        intents_dir(),
+        out.path(),
+    )
+    .expect("run");
     let source = DatagenSource::open(out.path(), None).expect("open");
     let sessions = centraid_assist_eval::source::EvalSource::sessions(&source).expect("sessions");
     assert_eq!(sessions.len(), report.stats.sessions_kept);
@@ -312,4 +259,73 @@ fn a_world_read_back_from_its_document_replays_like_the_original() {
     let world = World::from_doc(&doc).expect("world");
     assert_eq!(world.id(), "train-00");
     let _: WorldSpec = world.spec;
+}
+
+#[test]
+fn a_reader_that_is_its_split_writer_is_refused_and_so_is_a_test_writer_of_trains() {
+    let models = Models::new();
+    let out = tempfile::tempdir().expect("tempdir");
+    // the test split read back by its own writer
+    let own = messages::Models {
+        writer: [&models.writer, &models.writer, &models.test_writer],
+        reader: [&models.reader, &models.reader, &models.test_writer],
+    };
+    let err = messages::run(&config(false), catalog(), &own, intents_dir(), out.path())
+        .err()
+        .expect("refused");
+    assert!(
+        err.to_string()
+            .contains("test split is read back by its own writer"),
+        "{err}"
+    );
+    // the test split written by train's writer
+    let same = messages::Models {
+        writer: [&models.writer, &models.writer, &models.writer],
+        reader: [&models.reader, &models.reader, &models.reader],
+    };
+    let err = messages::run(&config(false), catalog(), &same, intents_dir(), out.path())
+        .err()
+        .expect("refused");
+    assert!(err.to_string().contains("train's writer"), "{err}");
+    assert!(models.prompts().is_empty(), "a refused build calls nothing");
+}
+
+#[test]
+fn sessions_carry_their_style_and_writer_and_the_test_split_has_its_own_style_words() {
+    let out = tempfile::tempdir().expect("tempdir");
+    let models = Models::new();
+    let report = messages::run(
+        &config(false),
+        catalog(),
+        &models.all(),
+        intents_dir(),
+        out.path(),
+    )
+    .expect("run");
+    assert!(report.text.contains("recovery of act"));
+    let train =
+        std::fs::read_to_string(out.path().join("train").join("sessions.jsonl")).expect("train");
+    let first: Value =
+        serde_json::from_str(train.lines().next().expect("a session")).expect("json");
+    let tags: Vec<&str> = first["tags"]
+        .as_array()
+        .expect("tags")
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    assert!(tags.iter().any(|t| t.starts_with("style:")), "{tags:?}");
+    assert!(tags.contains(&"writer:rehearsal-writer"), "{tags:?}");
+    // no prompt the train writer was given holds a sentence of the test split's style wording
+    for style in centraid_datagen::style::ALL {
+        let test_words = style.instruction(true);
+        for p in models.writer.prompts.lock().expect("lock").iter() {
+            assert!(
+                !p.contains(test_words),
+                "train's prompt holds the test wording of {}",
+                style.name()
+            );
+        }
+    }
+    let models_json = std::fs::read_to_string(out.path().join("models.json")).expect("models.json");
+    assert!(models_json.contains("rehearsal-writer-b"));
 }

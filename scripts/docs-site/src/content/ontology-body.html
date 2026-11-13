@@ -30,7 +30,7 @@
     <div class="hero-kv">
       <div><b data-count="kinds">26</b>kinds</div>
       <div><b data-count="relations">9</b>edge relations</div>
-      <div><b data-count="tables">44</b>tables</div>
+      <div><b data-count="tables">45</b>tables</div>
       <div><b>1</b>file, on the phone</div>
       <div><b>0</b>silos</div>
     </div>
@@ -208,6 +208,14 @@
 <div class="colrow"><span class="cn">id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">after</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
+<div class="tbl rv in" data-group="kernel" data-table="alert"><header><h4>alert</h4><p class="tp">When each reminder of an event or a task fires next, one row per lead time, kept by the writer so the notification service reads the next few at any vault size.</p></header>
+<div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
+<div class="colrow"><span class="cn">entity_id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ entity.id</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">offset_min</span><span class="ct">integer</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">timing</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">fire_key</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">repeats</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 0</span></div>
+</div></div>
 <div class="schemahdr" data-group="words"><span class="sid">words</span><h3>words and holders</h3><p class="sdesc">Concepts are the words a member names (tags, categories, relations); containers are the things that hold things (notebooks, folders, albums, projects, calendars).</p></div>
 <div class="tbl rv in" data-group="words" data-table="concept"><header><h4>concept</h4><p class="tp">A word the member names: a tag, a flag, a category, a workout kind, an activity kind or a relation.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
@@ -310,6 +318,7 @@
 <div class="colrow"><span class="cn">zone</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">series_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ task.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">remind_before_min</span><span class="ct">integer</span><span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">snoozed_until</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">url</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">effort_min</span><span class="ct">integer</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">parent_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ task.id</span><span class="cnote"></span></div>
@@ -579,7 +588,7 @@
 <div class="colrow"><span class="cn">failed_unlocks</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 0</span></div>
 <div class="colrow"><span class="cn">failed_unlock_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
-<p class="note" data-tables="44" data-columns="329">44 tables and 329 columns, read off a vault this build founded.</p>
+<p class="note" data-tables="45" data-columns="335">45 tables and 335 columns, read off a vault this build founded.</p>
 <!-- schema:end -->
     </div>
     <div class="physcard rv">

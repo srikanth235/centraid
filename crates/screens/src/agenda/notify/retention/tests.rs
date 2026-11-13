@@ -241,6 +241,7 @@ fn a_past_calendar_occurrence_uses_one_exact_read_for_retention_and_open_route()
     let answered = wire::NotificationAnswered {
         notification_id: format!("event||{id}|10"),
         verb: wire::NotificationVerb::Open as i32,
+        press_id: String::new(),
     };
     let delivered = BTreeMap::from([(
         answered.notification_id.clone(),

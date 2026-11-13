@@ -314,6 +314,17 @@ async fn exists(
         Ok(names) => names,
         Err(refusal) => return refused(&refusal, shared.now()),
     };
+    shared.store().note_exists(names.names.len());
+    // A TEST'S LYING GATEWAY says it holds every name (#1188, B13).
+    if shared.store().lies_about_exists() {
+        return answer(
+            &shared,
+            StatusCode::OK,
+            Ok::<_, Fault>(Missing {
+                missing: Vec::new(),
+            }),
+        );
+    }
     // THE NAMES THE INDEX HOLDS are asked of their files, outside the lock;
     // one whose file is gone is marked, and the rules answer again (the
     // module header). A request the rules refused is answered as refused.

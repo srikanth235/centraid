@@ -596,6 +596,18 @@ impl Wall {
         }
     }
 
+    /// What a card that asked the owner check says when it did not open the Locker: why it
+    /// failed, or that this phone cannot ask. Empty after a cancel (not a failure) and while open.
+    #[must_use]
+    pub fn card_note(&self, locale: Locale) -> String {
+        match self.phase {
+            Phase::Failed => self.notice.clone(),
+            Phase::Unavailable if self.keyed => words::lock_unavailable_notice(locale),
+            Phase::Unavailable => words::lock_no_words_notice(locale),
+            _ => String::new(),
+        }
+    }
+
     /// The wall to draw, or `None` while the Locker is open.
     #[must_use]
     pub fn view(&self, locale: Locale) -> Option<wire::LockerWall> {

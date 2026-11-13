@@ -199,6 +199,7 @@ impl Rig {
             self.read(load::calendar::Upcoming {
                 from: Some(format!("{today}T00:00:00Z")),
                 to: Some(format!("{}T00:00:00Z", self.day(1))),
+                alerts: None,
             })
         else {
             panic!("upcoming");
@@ -344,6 +345,7 @@ impl Rig {
             self.read(load::calendar::Upcoming {
                 from: Some("2000-01-01T00:00:00Z".to_owned()),
                 to: Some(far),
+                alerts: None,
             })
         else {
             panic!("upcoming");

@@ -3,9 +3,8 @@
 //! the core's), a vault or a screen, so the whole rule is tested with built
 //! messages and a pinned now.
 //!
-//! A moment is a moment: a task whose due is a date has no `remind_at_local`
-//! and an all-day event has no start, so neither is ever given an invented
-//! time. A repeating task contributes its one next reminder (the core already
+//! A day has no moment: a task whose due is a date, and an all-day event, sound at 09:00 that
+//! day (`remind_at_local` already says so for the task) and are never given that time. A repeating task contributes its one next reminder (the core already
 //! computed it from the effective due), a repeating event each occurrence of
 //! the window.
 
@@ -17,12 +16,18 @@ use centraid_vault::time::{FireZone, parse_civil_ms};
 
 use super::retention;
 use crate::kit::civil;
+use crate::kit::permission::ExtraNotice;
+use crate::strings::agenda_reminders as reminders_words;
 use crate::strings::{
     Locale, agenda as agenda_words, agenda_notify as words, fill, shared, task as task_words,
 };
 
-/// How far ahead a reminder is scheduled, in days.
-pub const WINDOW_DAYS: i64 = 14;
+/// The furthest ahead a reminder is looked for, in days. THE HORIZON IS FILLED BY TIME, NOT BY A
+/// FIXED WINDOW: the soonest reminders are held until the cap is full, and when more remain beyond
+/// it the last slot says reminders are paused until Centraid is opened (#1188, A4).
+pub const HORIZON_DAYS: i64 = 90;
+/// The id of that last notification.
+const PAUSED: &str = "paused";
 /// The most notifications held at once. iOS keeps at most 64 pending; the rest
 /// is headroom for the receipt of a button just pressed.
 pub const CAP: usize = 48;
@@ -56,7 +61,7 @@ pub struct Inputs<'a> {
     pub vault_id: &'a str,
     pub zone: &'a str,
     pub locale: Locale,
-    /// The phone's time-of-day format; presentation never changes scheduling.
+    /// The phone clock format changes words, never the desired instant.
     pub hour_cycle: civil::HourCycle,
     /// The core's now, `YYYY-MM-DDTHH:MM`, in `zone`.
     pub now_local: &'a str,
@@ -65,6 +70,10 @@ pub struct Inputs<'a> {
     pub projects: &'a [wire::AgendaTaskProject],
     pub events: &'a [wire::AgendaEvent],
     pub calendars: &'a [wire::AgendaCalendar],
+    /// What other screens want held through this service (`kit::permission::AlertBoard`), soonest
+    /// first, and the delivered ids they still want.
+    pub extra: &'a [ExtraNotice],
+    pub extra_wanted: &'a [String],
 }
 
 /// Every task of a board's groups and of their children, each once, the
@@ -129,6 +138,8 @@ fn titled(untitled: fn(Locale) -> String, locale: Locale, title: &str) -> String
 struct Window {
     from: i64,
     to: i64,
+    /// For the DELIVERED reading ([`live`]): now, so an event that has ended is not wanted.
+    ongoing_at: Option<i64>,
 }
 
 impl Window {
@@ -137,7 +148,15 @@ impl Window {
     }
 }
 
-/// Future alerts the phone should schedule, soonest first, at most [`CAP`].
+/// How far back the service reads events for the delivered reading, in days. A bound on the READ
+/// only: an event running longer keeps its banner (the loader keeps what is still running), and a
+/// task reminder until its task is resolved (the newest `LIVE_CAP`; an older banner is not named
+/// and goes).
+pub const LIVE_DAYS: i64 = 2;
+/// The most delivered ids named at once.
+pub const LIVE_CAP: usize = 64;
+
+/// Everything the phone should hold, soonest first, at most [`CAP`].
 #[must_use]
 pub fn desired(inputs: &Inputs) -> Vec<wire::PendingNotification> {
     let Ok(zone) = FireZone::named(inputs.zone) else {
@@ -148,14 +167,125 @@ pub fn desired(inputs: &Inputs) -> Vec<wire::PendingNotification> {
     };
     let window = Window {
         from: now,
-        to: now + WINDOW_DAYS * DAY_MS,
+        to: now + HORIZON_DAYS * DAY_MS,
+        ongoing_at: None,
     };
     let mut all = tasks(inputs, &zone, &window);
     all.extend(events(inputs, &zone, &window));
     all.sort_by(|a, b| (a.fire_at_ms, &a.notification_id).cmp(&(b.fire_at_ms, &b.notification_id)));
     all.dedup_by(|a, b| a.notification_id == b.notification_id);
-    all.truncate(CAP);
+    // THE OTHER PRODUCERS' SLOTS ARE THEIR OWN: agenda fill never starves them.
+    let extra = extras(inputs, &zone, now);
+    let room = CAP - extra.len();
+    if all.len() > room {
+        // MORE REMAIN THAN THE PHONE CAN HOLD: the last slot says so, at the moment the last
+        // reminder it holds would have sounded, so the member learns reminders have stopped
+        // before one is missed. Opening Centraid brings them back.
+        all.truncate(room - 1);
+        if let Some(last) = all.last() {
+            let locale = inputs.locale;
+            let paused = pending(
+                &zone,
+                THREAD,
+                format!("{PAUSED}|{}", inputs.vault_id),
+                last.fire_at_ms,
+                reminders_words::paused_title(locale),
+                reminders_words::paused_body(locale),
+                "",
+            );
+            all.push(paused);
+        }
+    }
+    all.extend(extra);
+    // The paused notice comes after the reminder whose moment it shares.
+    all.sort_by_key(|n| {
+        (
+            n.fire_at_ms,
+            n.notification_id.starts_with("paused|"),
+            n.notification_id.clone(),
+        )
+    });
     all
+}
+
+/// The most slots of the cap other producers' notices take, kept for them when they exist (the stale-backup warnings, #1188).
+pub const EXTRA_RESERVE: usize = 2;
+
+fn extras(inputs: &Inputs, zone: &FireZone, now: i64) -> Vec<wire::PendingNotification> {
+    inputs
+        .extra
+        .iter()
+        .filter(|notice| notice.fire_at_ms >= now)
+        .take(EXTRA_RESERVE)
+        .map(|notice| {
+            let mut held = pending(
+                zone,
+                notice.channel.thread(),
+                notice.id.clone(),
+                notice.fire_at_ms,
+                notice.title.clone(),
+                notice.body.clone(),
+                "",
+            );
+            held.channel_id = notice.channel.id().to_owned();
+            held
+        })
+        .collect()
+}
+
+/// WITH DETAILS OFF (#1188, NA3) a reminder or an event notification says only that one is due. The
+/// buttons stay, the ids and moments stay; the backup warnings, the receipt and the paused notice
+/// say nothing of the member's items and are left as they are.
+pub fn redact(set: &mut [wire::PendingNotification], locale: Locale) {
+    for held in set {
+        let (title, private) = if held.notification_id.starts_with("task|") {
+            (words::private_task_title(locale), true)
+        } else if held.notification_id.starts_with("event|") {
+            (words::private_event_title(locale), true)
+        } else {
+            (String::new(), false)
+        };
+        if private {
+            held.title = title;
+            held.body = words::private_body(locale);
+        }
+    }
+}
+
+/// THE DELIVERED READING (#1188, A2): the ids of reminders that have already fired and are still
+/// wanted. TIME PASSING NEVER REMOVES A DELIVERED REMINDER; ONLY RESOLVING THE ITEM DOES: a task
+/// done, moved or deleted, an event cancelled, moved, deleted or over. A shell keeps a delivered
+/// notification while its id is in the set or here, and removes it otherwise.
+#[must_use]
+pub fn live(inputs: &Inputs) -> Vec<String> {
+    let Ok(zone) = FireZone::named(inputs.zone) else {
+        return Vec::new();
+    };
+    let Some(now) = parse_civil_ms(inputs.now_local, &zone) else {
+        return Vec::new();
+    };
+    let window = Window {
+        // No lower bound: the index names only what may still be live (see `alerts::advance`).
+        from: i64::MIN,
+        to: now,
+        ongoing_at: Some(now),
+    };
+    let mut ids: Vec<(i64, String)> = inputs
+        .extra_wanted
+        .iter()
+        .map(|id| (i64::MAX, id.clone()))
+        .chain(
+            tasks(inputs, &zone, &window)
+                .into_iter()
+                .chain(events(inputs, &zone, &window))
+                .map(|n| (n.fire_at_ms, n.notification_id)),
+        )
+        .collect();
+    // The newest first, so the cap keeps what is most likely on the screen.
+    ids.sort_by(|a, b| b.cmp(a));
+    ids.dedup_by(|a, b| a.1 == b.1);
+    ids.truncate(LIVE_CAP);
+    ids.into_iter().map(|(_, id)| id).collect()
 }
 
 fn pending(
@@ -177,6 +307,7 @@ fn pending(
         category_id: category.to_owned(),
         thread_id: thread.to_owned(),
         immediate: false,
+        channel_id: String::new(),
         source_fingerprint: String::new(),
     }
 }
@@ -233,11 +364,23 @@ fn events(inputs: &Inputs, zone: &FireZone, window: &Window) -> Vec<wire::Pendin
     let locale = inputs.locale;
     let mut out = Vec::new();
     for event in inputs.events {
-        // A DAY HAS NO MOMENT: an all-day event is never alerted, as a date-only task is not.
-        if event.all_day || event.status.as_deref() == Some("cancelled") {
+        if event.status.as_deref() == Some("cancelled") {
             continue;
         }
-        let Some(start_ms) = parse_civil_ms(&event.local_start, zone) else {
+        // A DAY HAS NO MOMENT (#1188, NA6): an all-day event's alert sounds at 09:00 that day,
+        // wherever the member is, and its lead times mean nothing (the first stands for "on the
+        // day"). The event itself keeps no time.
+        let day_alert = event.all_day;
+        let start_text = if day_alert {
+            format!(
+                "{}T{}",
+                event.local_start.get(..10).unwrap_or_default(),
+                centraid_vault::alerts::DAY_ALERT_TIME
+            )
+        } else {
+            event.local_start.clone()
+        };
+        let Some(start_ms) = parse_civil_ms(&start_text, zone) else {
             continue;
         };
         let place = event
@@ -251,11 +394,32 @@ fn events(inputs: &Inputs, zone: &FireZone, window: &Window) -> Vec<wire::Pendin
                 calendar.name.clone().filter(|name| !name.trim().is_empty())
             })
             .unwrap_or_default();
-        for reminder in &event.reminders {
+        let reminders = if day_alert {
+            &event.reminders[..event.reminders.len().min(1)]
+        } else {
+            &event.reminders[..]
+        };
+        for reminder in reminders {
             let minutes = reminder.minutes_before;
-            let fire_ms = start_ms - minutes * MINUTE_MS;
+            let fire_ms = if day_alert {
+                start_ms
+            } else {
+                start_ms - minutes * MINUTE_MS
+            };
             if !window.holds(fire_ms) {
                 continue;
+            }
+            if let Some(now) = window.ongoing_at {
+                // AN EVENT THAT IS OVER IS RESOLVED: its reminder is not wanted on the screen.
+                let end_text = if event.local_end.len() == 10 {
+                    format!("{}T00:00", event.local_end)
+                } else {
+                    event.local_end.clone()
+                };
+                let end = parse_civil_ms(&end_text, zone).unwrap_or(start_ms);
+                if end <= now {
+                    continue;
+                }
             }
             let fire_local = local_of(zone, fire_ms);
             let fire_day = fire_local.get(..10).unwrap_or_default();
@@ -275,7 +439,11 @@ fn events(inputs: &Inputs, zone: &FireZone, window: &Window) -> Vec<wire::Pendin
                     &when(
                         locale,
                         &day,
-                        &civil::clock_for(locale, &event.local_start, inputs.hour_cycle),
+                        &if day_alert {
+                            String::new()
+                        } else {
+                            civil::clock_for(locale, &event.local_start, inputs.hour_cycle)
+                        },
                     ),
                     &place,
                 ),

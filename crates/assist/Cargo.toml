@@ -17,6 +17,7 @@ centraid-apps-calendar = { path = "../apps/calendar" }
 centraid-apps-kit = { path = "../apps/kit" }
 centraid-search = { path = "../search" }
 centraid-vault = { path = "../vault" }
+blake3.workspace = true
 jiff.workspace = true
 serde.workspace = true
 serde_json.workspace = true

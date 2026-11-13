@@ -56,6 +56,6 @@ pub use board::{
 };
 pub use queries::{
     BoardData, DUE_ROWS_MAX, DueWindow, RemindersData, RepeatingDue, SearchData, TaskDetailData,
-    TaskRow, TrashData, TrashRow, load_board, load_due_rows, load_reminders, load_repeating_due,
-    load_search, load_search_term, load_task, load_trash,
+    TaskRow, TrashData, TrashRow, load_board, load_due_rows, load_reminders, load_reminders_among,
+    load_repeating_due, load_search, load_search_term, load_task, load_trash,
 };

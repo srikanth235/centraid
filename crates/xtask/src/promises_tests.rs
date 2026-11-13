@@ -2181,3 +2181,77 @@ fn the_kits_restore_doors_answer_to_rule_c_once_for_every_app() {
     );
     assert!(kit_door_direct_writes(&root).is_empty());
 }
+
+#[test]
+fn the_backup_promises_name_tests_that_exist() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    assert_eq!(backup_missing(&root), Vec::<String>::new());
+}
+
+#[test]
+fn the_chat_promises_name_tests_that_exist() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    assert_eq!(chat_missing(&root), Vec::<String>::new());
+}
+
+#[test]
+fn a_backup_promise_whose_test_is_gone_or_ignored_is_caught() {
+    let dir = fixture_dir("backup-promises");
+    let file = dir.join("proof.rs");
+    fs::write(
+        &file,
+        "#[test]\n#[ignore]\nfn skipped() {}\n#[test]\nfn kept() {}\n",
+    )
+    .expect("written");
+    let promises: [(&str, &[(&str, &str)]); 1] = [(
+        "a promise",
+        &[
+            ("proof.rs", "skipped"),
+            ("proof.rs", "kept"),
+            ("proof.rs", "gone"),
+            ("absent.rs", "x"),
+        ],
+    )];
+    let gaps = backup_missing_in(&dir, &promises).join("\n");
+    assert!(
+        gaps.contains("`skipped` in `proof.rs` is ignored"),
+        "{gaps}"
+    );
+    assert!(gaps.contains("has no test `gone`"), "{gaps}");
+    assert!(gaps.contains("`absent.rs` does not exist"), "{gaps}");
+    assert!(!gaps.contains("`kept`"), "{gaps}");
+}
+
+// ---------------------------------------------------------------------------
+// Notify
+// ---------------------------------------------------------------------------
+
+#[test]
+fn notify_is_kept_by_the_two_apps_that_alert_and_exempt_for_the_rest() {
+    let status = |app: &str| {
+        REGISTER
+            .iter()
+            .find(|row| row.app == app && row.promise == Promise::Notify)
+            .map(|row| row.status)
+            .expect("a row")
+    };
+    for app in ["reminders", "calendar"] {
+        assert!(matches!(status(app), Status::Kept(_)), "{app}");
+    }
+    for (app, _) in NOTIFY_EXEMPT {
+        assert!(matches!(status(app), Status::Exempt(_)), "{app}");
+    }
+    assert_eq!(NOTIFY_EXEMPT.len(), 7);
+}
+
+#[test]
+fn an_exempt_app_that_grows_an_alerts_read_fails_the_promise() {
+    let root = std::env::temp_dir().join(format!("notify-exempt-{}", std::process::id()));
+    let dir = root.join("crates/apps/notes");
+    std::fs::create_dir_all(&dir).expect("dir");
+    std::fs::write(dir.join("manifest.json"), r#"{"inputs":{"alerts":{}}}"#).expect("write");
+    let gaps = missing(&root, "notes", Promise::Notify);
+    assert_eq!(gaps.len(), 1, "{gaps:?}");
+    assert!(gaps[0].contains("exempt"));
+    std::fs::remove_dir_all(&root).ok();
+}

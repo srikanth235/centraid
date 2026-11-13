@@ -26,7 +26,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import dev.centraid.android.session.AppSession
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 
 /**
@@ -44,9 +44,14 @@ import kotlinx.coroutines.launch
  *
  * Both run the same body, [run]: they hold the process while Rust's pass runs
  * (the member's rule decides per item what crosses which link, so the job's
- * own constraint is only "a network exists") and both stop at [BUDGET_MS].
- * What the pass does not finish, the periodic worker and the next open carry
- * on with: the spool never loses a sealed part.
+ * own constraint is only "a network exists"), until Rust's `LongRun` effect
+ * ends the run ([stop]) or the system stops the job. There is no clock of
+ * our own: a first backup of a large library runs as long as the pass does
+ * (#1188, B8; it used to end at thirty minutes whether or not the pass had
+ * finished). What the pass does not finish when the system stops it, the job
+ * asks to be rescheduled for ([BackupJobService.onStopJob], with the system's
+ * backoff), and the periodic worker and the next open carry on with: the
+ * spool never loses a sealed part.
  *
  * **Started and stopped by the member's run, from a visible app.**
  * Rust's `LongRun` effect calls [start] as the run begins and [stop] however
@@ -57,13 +62,6 @@ import kotlinx.coroutines.launch
  * periodic worker remains the backstop. Starting twice is a no-op.
  */
 public object BackupNow {
-    /**
-     * Thirty minutes per run. Long enough for a first backup to make real
-     * progress with the member watching; short enough that a job nobody is
-     * watching does not hold a radio for an evening.
-     */
-    public const val BUDGET_MS: Long = 30L * 60L * 1_000L
-
     /**
      * One id for the job and its notification: there is one "Back up now".
      *
@@ -142,12 +140,18 @@ public object BackupNow {
     /**
      * THE BODY BOTH RUN: the process's session held, nothing else. The pass is Rust's (`passes`):
      * the member's "Back up now" starts it and `LongRun` starts this, so the job exists to hold the
-     * process and its one core for exactly that run, even once the activity is gone; [stop] ends it
-     * when the run does, and [BUDGET_MS] bounds a job nobody is watching.
+     * process and its one core for exactly that run, even once the activity is gone. It ends when
+     * Rust's run does ([stop], however the run ends) or when the system stops the job or the
+     * service, which cancels it.
      */
     internal suspend fun run(context: Context): Boolean {
-        AppSession.use(context) { delay(BUDGET_MS) }
+        AppSession.use(context) { holdUntilStopped() }
         return false
+    }
+
+    /** Suspend until cancelled: the run's own end is [stop]; nothing here ends it. */
+    internal suspend fun holdUntilStopped() {
+        awaitCancellation()
     }
 }
 

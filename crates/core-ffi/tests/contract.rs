@@ -1232,6 +1232,7 @@ fn the_app_queries_round_trip_through_call() {
                 from: "2099-06-01T00:00:00.000Z".to_owned(),
                 to: "2099-06-22T00:00:00.000Z".to_owned(),
                 tz: "America/New_York".to_owned(),
+                alerts: 0,
             }),
         )) else {
             panic!("upcoming is answered as upcoming");
@@ -1316,6 +1317,7 @@ fn the_app_queries_round_trip_through_call() {
             from: String::new(),
             to: String::new(),
             tz: "Mars/Olympus_Mons".to_owned(),
+            alerts: 0,
         }),
     );
     assert_eq!(code, CENTRAID_BAD_ARGUMENT, "an unknown zone is refused");

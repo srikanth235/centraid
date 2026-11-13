@@ -94,6 +94,15 @@ pub enum Restored {
     NotTaken,
     /// What the gateway sent did not pass this phone's check (#1047 R3).
     DidNotCheck,
+    /// The newest backup would not open and an older one does: offered, nothing restored.
+    Offer(Vec<door::OfferAt>),
+    /// A vault's claim landed (the old phone is stopped) but keeping it on this phone failed:
+    /// nothing was kept, and restoring again finishes it.
+    Unfinished,
+    /// No backup the device holds opens in this version. Nothing stored.
+    CantOpen,
+    /// A newer Centraid made the backup: update, then restore. Nothing stored.
+    NewerBuild,
     Refused(Refusal),
 }
 
@@ -106,7 +115,11 @@ impl fmt::Debug for Restored {
             Self::Unreachable => f.write_str("Unreachable"),
             Self::NothingHeld => f.write_str("NothingHeld"),
             Self::NotTaken => f.write_str("NotTaken"),
+            Self::Unfinished => f.write_str("Unfinished"),
             Self::DidNotCheck => f.write_str("DidNotCheck"),
+            Self::Offer(offers) => write!(f, "Offer({})", offers.len()),
+            Self::CantOpen => f.write_str("CantOpen"),
+            Self::NewerBuild => f.write_str("NewerBuild"),
             Self::Refused(why) => write!(f, "Refused({why:?})"),
         }
     }
@@ -184,6 +197,8 @@ fn stopped(because: RestoreRefusal) -> Restored {
         RestoreRefusal::Unreachable => Restored::Unreachable,
         RestoreRefusal::NotTaken => Restored::NotTaken,
         RestoreRefusal::DidNotCheck => Restored::DidNotCheck,
+        RestoreRefusal::CantOpen => Restored::CantOpen,
+        RestoreRefusal::NewerBuild => Restored::NewerBuild,
     }
 }
 
@@ -563,7 +578,18 @@ impl Job {
     /// Bring this member's vaults back from `words`.
     #[must_use]
     pub fn restore(words: Vec<String>, payload: &str) -> Self {
+        Self::restoring(words, payload, false)
+    }
+
+    /// [`Self::restore`] after the member said yes to the older backup it offered.
+    #[must_use]
+    pub fn restore_older(words: Vec<String>, payload: &str) -> Self {
+        Self::restoring(words, payload, true)
+    }
+
+    fn restoring(words: Vec<String>, payload: &str, use_older: bool) -> Self {
         Self(Flow::Restore(Box::new(RestoreJob {
+            use_older,
             words,
             payload: payload.trim().to_owned(),
             stage: RestoreStage::Start,
@@ -761,6 +787,8 @@ enum RestoreStage {
 }
 
 struct RestoreJob {
+    /// The member took the older backup that was offered.
+    use_older: bool,
     words: Vec<String>,
     payload: String,
     stage: RestoreStage,
@@ -798,6 +826,8 @@ impl RestoreJob {
                         return done(Restored::Unreachable);
                     };
                     self.seed = seed;
+                    let mut request = request;
+                    request.use_older = self.use_older;
                     self.stage = RestoreStage::Asked;
                     return Step::Ask(Ask::Restore(request));
                 }
@@ -807,6 +837,15 @@ impl RestoreJob {
                         Some(Reply::Restored(Err(why))) => return done(stopped(why)),
                         _ => return done(Restored::Unreachable),
                     };
+                    // AN OLDER BACKUP OFFERED claims and restores nothing: the member decides.
+                    if answer.vaults.is_empty() && !answer.offers.is_empty() {
+                        return done(Restored::Offer(answer.offers));
+                    }
+                    if answer.vaults.is_empty()
+                        && answer.unclaimed.iter().any(|vault| vault.claimed)
+                    {
+                        return done(Restored::Unfinished);
+                    }
                     if answer.vaults.is_empty() {
                         return done(Restored::NothingHeld);
                     }

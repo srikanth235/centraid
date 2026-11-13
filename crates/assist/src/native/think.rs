@@ -1,6 +1,6 @@
 //! THE STATELESS COMPILER: the call a think states, and the v4 text of a v3.1 think.
 //!
-//! A think is the model's slot trace (`experiments/toolchat/native/CONTRACT_V3.md`):
+//! A think is the model's slot trace (`crates/assist/docs/CONTRACT_V3.md`):
 //!
 //! ```text
 //! intent: write "cancel it"

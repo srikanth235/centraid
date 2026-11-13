@@ -52,9 +52,10 @@ import UserNotifications
 /// `ShellFact.notificationAnswered`. It decides nothing and holds no word: the titles, bodies and
 /// button labels all arrive from Rust.
 ///
-/// THE SET IS DECLARATIVE: all is wanted pending work. Delivered cards remain until Rust
-/// withdraws them or the member acts on/dismisses them; the OS inventory goes back to Rust.
-/// A legacy request without retention still removes every unwanted card.
+/// THE SET IS DECLARATIVE: `all` is wanted pending work. `liveIds` supports the older
+/// whole-set contract; explicit retention uses Rust's delivered-card withdrawals instead.
+/// Actual delivered IDs and source fingerprints go back to Rust, so passing a moment
+/// alone never removes an unresolved reminder and a changed source can withdraw it.
 enum Notifications {
     /// The key the notification's id travels under in `userInfo`, besides the request identifier.
     private static let idKey = "notification_id"
@@ -91,36 +92,34 @@ enum Notifications {
 
         center.setNotificationCategories(Set(schedule.categories.map(category)))
 
-        // Pending work and already-delivered cards have different lifetimes.
-        // Rust explicitly withdraws an obsolete delivered card; passing its moment alone does not.
-        let wanted = Set(schedule.all.map(\.notificationID))
-        let pending = await center.pendingNotificationRequests().map(\.identifier)
+        // Diff against the actual OS inventory, preserving the upstream pending/live plan.
+        let now = Date()
         let delivered = await center.deliveredNotifications()
         let deliveredIDs = Set(delivered.map { $0.request.identifier })
-        let stale = Set(pending).subtracting(wanted)
-        if !stale.isEmpty {
-            center.removePendingNotificationRequests(withIdentifiers: Array(stale))
-        }
-        let withdrawn = NotificationPlan.withdrawn(
-            wanted: wanted,
-            delivered: deliveredIDs,
-            retain: schedule.retainDelivered,
-            explicit: Set(schedule.cancelDeliveredIds)
+        let plan = NotificationPlan.reconcile(
+            wanted: schedule.all,
+            live: schedule.liveIds,
+            pending: await center.pendingNotificationRequests().map(\.identifier),
+            delivered: Array(deliveredIDs),
+            nowMs: Int64(now.timeIntervalSince1970 * 1000),
+            retainDelivered: schedule.retainDelivered,
+            cancelDeliveredIDs: schedule.cancelDeliveredIds
         )
-        if !withdrawn.isEmpty {
-            center.removeDeliveredNotifications(withIdentifiers: Array(withdrawn))
+        if !plan.removePending.isEmpty {
+            center.removePendingNotificationRequests(withIdentifiers: plan.removePending)
+        }
+        if !plan.removeDelivered.isEmpty {
+            center.removeDeliveredNotifications(withIdentifiers: plan.removeDelivered)
         }
 
-        // Remember only the current immediate IDs, not words or notification payloads. Dismissing
-        // an Undo receipt must not post it again on a foreground refresh or a process restart.
+        // Only IDs are remembered: dismissing an Undo receipt must not resurrect it on
+        // refresh or restart. A failed post remains eligible for a later reconciliation.
         let previousImmediates = Set(UserDefaults.standard.stringArray(forKey: immediatesKey) ?? [])
         let currentImmediates = Set(schedule.all.filter(\.immediate).map(\.notificationID))
         var heldImmediates = NotificationPlan.rememberedImmediates(
             current: currentImmediates, previous: previousImmediates, delivered: deliveredIDs
         )
-
-        let now = Date()
-        for item in schedule.all {
+        for item in plan.schedule + plan.post {
             if item.immediate, heldImmediates.contains(item.notificationID) { continue }
             guard let request = request(item, now: now) else { continue }
             do {
@@ -144,6 +143,8 @@ enum Notifications {
     private static func category(_ category: Centraid_Core_V1_NotificationCategory) -> UNNotificationCategory {
         // THE ACTION'S IDENTIFIER IS THE VERB'S NUMBER, sent back unchanged. No `.foreground`:
         // Done, Snooze, Tomorrow and Undo run in the background; the tap is the default action.
+        // No `.authenticationRequired` either: they work from the lock screen without unlocking
+        // (#1188, NA4), and each is reversible through Undo and history.
         let actions = category.actions.map { action in
             UNNotificationAction(identifier: String(action.verb.rawValue), title: action.label, options: [])
         }
@@ -200,6 +201,8 @@ enum Notifications {
             verb = Int(action).flatMap { Centraid_Core_V1_NotificationVerb(rawValue: $0) }
         }
         guard let verb else { return }
+        // Persist the upstream idempotent press before cold startup can suspend this callback.
+        let press = NotificationOutbox.add(notificationID: id, verb: verb.rawValue)
         NotificationStartupTrace.mark(.shellModelTouchStarted)
         _ = ShellModel.shared
         NotificationStartupTrace.mark(.shellModelTouched)
@@ -209,28 +212,23 @@ enum Notifications {
             return
         }
         NotificationStartupTrace.mark(.storeWaitCompleted)
-        let matched = await store.answerNotification(id: id, verb: verb)
+        let matched = await store.answerNotification(id: id, verb: verb, pressID: press.pressID)
         NotificationStartupTrace.mark(.answerReturned, succeeded: matched)
-    }
-}
-
-/// Mechanical OS bookkeeping only: Rust supplies both the future set and withdrawals.
-enum NotificationPlan {
-    static func withdrawn(
-        wanted: Set<String>,
-        delivered: Set<String>,
-        retain: Bool,
-        explicit: Set<String>
-    ) -> Set<String> {
-        retain ? explicit : delivered.subtracting(wanted)
+        if matched { NotificationOutbox.remove(press.pressID) }
     }
 
-    static func rememberedImmediates(
-        current: Set<String>,
-        previous: Set<String>,
-        delivered: Set<String>
-    ) -> Set<String> {
-        previous.union(delivered).intersection(current)
+    /// Replay every persisted press through its original idempotency key. A startup failure
+    /// or callback expiry leaves it in the outbox; only its exact terminal schedule removes it.
+    @MainActor static func drain(_ store: ScreenStore) async {
+        for press in NotificationOutbox.pending() {
+            guard let verb = Centraid_Core_V1_NotificationVerb(rawValue: press.verb) else {
+                NotificationOutbox.remove(press.pressID)
+                continue
+            }
+            if await store.answerNotification(id: press.notificationID, verb: verb, pressID: press.pressID) {
+                NotificationOutbox.remove(press.pressID)
+            }
+        }
     }
 }
 

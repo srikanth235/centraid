@@ -249,7 +249,7 @@ public fun FailureView(
 
 /**
  * NOTHING HERE: one sentence, at most one more, and at most one action
- * (product-intuition/references/design-behaviour.md § Wording). The strings are finished; the action is the
+ * (design/wording.md § Wording). The strings are finished; the action is the
  * screen's own event.
  *
  * A ported app's day one that offers the phone's own data (People's contacts,

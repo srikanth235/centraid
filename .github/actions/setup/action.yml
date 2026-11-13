@@ -17,9 +17,14 @@ inputs:
     default: ""
   cargo-cache:
     description: >-
-      Cache key for `Swatinem/rust-cache` (registry, git deps, `~/.cargo/bin` and `target/`), or empty for no cache. Restored everywhere, saved only from `main`, so PR branches never fill the 10 GB cache pool (#637).
+      Cache key for `Swatinem/rust-cache` (registry, git deps, `~/.cargo/bin` and `target/`), or empty for no cache. Restored everywhere, saved only from `main` unless `cargo-cache-save-pr` is true, so PR branches do not fill the 10 GB cache pool (#637).
     required: false
     default: ""
+  cargo-cache-save-pr:
+    description: >-
+      Also save the cache from pull-request runs. GitHub scopes a PR's cache to its own ref: it can read `main`'s as the fallback but can never replace or evict-by-overwrite it, and the PR's own copy is what makes the PR's second push warm. For the one lane whose cold compile is the cost; every other lane stays main-only so the pool is not filled (#637).
+    required: false
+    default: "false"
 
 runs:
   using: composite
@@ -79,4 +84,4 @@ runs:
       uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       with:
         shared-key: ${{ inputs.cargo-cache }}
-        save-if: ${{ github.ref == 'refs/heads/main' }}
+        save-if: ${{ github.ref == 'refs/heads/main' || inputs.cargo-cache-save-pr == 'true' }}

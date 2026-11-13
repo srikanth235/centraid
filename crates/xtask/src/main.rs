@@ -26,9 +26,11 @@ mod design_glance;
 mod design_icon;
 mod design_site;
 mod design_words;
+mod dev_paths;
 mod doc_links;
 mod gate;
 mod ledger;
+mod model_pin;
 mod native_parity;
 mod native_parity_register;
 mod native_rules;
@@ -101,6 +103,41 @@ enum Command {
         /// Compare instead of write.
         #[arg(long)]
         check: bool,
+    },
+    /// Write the model record (`crates/assist/model.json`, #1188): the file this release
+    /// ships by Hugging Face URL at a commit, its size and SHA-256 (read from the file you
+    /// name), the runtime's tool-catalogue and prompt hashes, and its score. The record that
+    /// stood becomes `previous` unless `--replace`. Nothing is fetched.
+    ModelPin {
+        /// `https://huggingface.co/<repo>/resolve/<commit>/<file>`: a commit, never a branch.
+        #[arg(long, requires_all = ["file", "tools_mode"])]
+        url: Option<String>,
+        /// The local copy of that exact file.
+        #[arg(long, requires = "url")]
+        file: Option<PathBuf>,
+        /// The catalogue the model learned: sig, s2, compact or full.
+        #[arg(long, requires = "url")]
+        tools_mode: Option<String>,
+        /// The score it earned, 0 to 1.
+        #[arg(long, requires = "url")]
+        score: Option<f64>,
+        /// Do not keep the standing record as `previous`.
+        #[arg(long, requires = "url")]
+        replace: bool,
+        /// The adapter made for the base the record then pins (a commit URL, as for the base).
+        /// Written beside `current`, against its SHA-256 and the runtime's hashes. Given alone it
+        /// leaves the base untouched; given with a new base it is the adapter for that base.
+        #[arg(long, requires = "adapter_file")]
+        adapter_url: Option<String>,
+        /// The local copy of the adapter file.
+        #[arg(long, requires = "adapter_url")]
+        adapter_file: Option<PathBuf>,
+        /// The adapter's score, 0 to 1.
+        #[arg(long, requires = "adapter_url")]
+        adapter_score: Option<f64>,
+        /// Remove the adapter: the release ships the stock model alone.
+        #[arg(long, conflicts_with = "adapter_url")]
+        no_adapter: bool,
     },
     /// Print the repository root every path-based rule will scan.
     ///
@@ -267,6 +304,46 @@ fn main() -> ExitCode {
             }
         },
         Command::Design { check } => match design_emit::run(&root, check) {
+            Ok(()) => true,
+            Err(error) => {
+                eprintln!("xtask: {error:#}");
+                false
+            }
+        },
+        Command::ModelPin {
+            url,
+            file,
+            tools_mode,
+            score,
+            replace,
+            adapter_url,
+            adapter_file,
+            adapter_score,
+            no_adapter,
+        } => match model_pin::run(
+            &root,
+            &model_pin::Pin {
+                base: match (&url, &file, &tools_mode) {
+                    (Some(url), Some(file), Some(tools_mode)) => Some(model_pin::Base {
+                        url,
+                        file,
+                        tools_mode,
+                        score,
+                        replace,
+                    }),
+                    _ => None,
+                },
+                adapter: match (&adapter_url, &adapter_file) {
+                    (Some(url), Some(file)) => Some(model_pin::AdapterPin {
+                        url,
+                        file,
+                        score: adapter_score,
+                    }),
+                    _ => None,
+                },
+                no_adapter,
+            },
+        ) {
             Ok(()) => true,
             Err(error) => {
                 eprintln!("xtask: {error:#}");

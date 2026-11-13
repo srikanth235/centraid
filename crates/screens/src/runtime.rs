@@ -68,6 +68,8 @@ struct State {
     onward: Option<(u64, Handed)>,
     /// What the screens and the follow coordinator tell one another (`crate::follow`).
     follows: crate::follow::Follows,
+    /// What the phone said about alerts, for every screen's row (`kit::permission::AlertBoard`).
+    alerts: crate::kit::permission::AlertBoard,
     band: Option<BandFn>,
     next_instance: u64,
     next_effect: u64,
@@ -131,6 +133,7 @@ impl Runtime {
                 handing: None,
                 onward: None,
                 follows: crate::follow::Follows::default(),
+                alerts: crate::kit::permission::AlertBoard::default(),
                 band: None,
                 next_instance: 1,
                 next_effect: 1,
@@ -151,6 +154,13 @@ impl Runtime {
                 opened: Vec::new(),
             }),
         }
+    }
+
+    /// The board every notification producer writes to and the notification service reads
+    /// (`AlertBoard::offer`, `AlertBoard::ask`).
+    #[must_use]
+    pub fn alerts(&self) -> crate::kit::permission::AlertBoard {
+        self.lock().alerts.clone()
     }
 
     /// Screens that run for as long as the runtime does, with no view and no
@@ -271,6 +281,7 @@ impl Runtime {
             // or an effect for a screen the same update closes would be drawn
             // or performed for nothing.
             out.views.retain(|view| view.instance != id);
+            out.deltas.retain(|delta| delta.instance != id);
             // ...EXCEPT A WITHDRAWN PROMPT: the screen's goodbye asked the shell to
             // take down the OS prompt it raised, and that must outlive the screen.
             out.effects
@@ -347,7 +358,12 @@ impl Runtime {
     ) {
         let mut env = state.env.clone();
         env.units = state.units.as_ref().and_then(crate::kit::quantity::stored);
+        env.show_details = state
+            .units
+            .as_ref()
+            .is_none_or(crate::kit::permission::details_shown);
         let follows = state.follows.clone();
+        let alerts = state.alerts.clone();
         let Some(instance) = state.instances.get_mut(&id) else {
             return;
         };
@@ -358,6 +374,7 @@ impl Runtime {
             .map(|(_, handed)| handed.clone());
         let ctx = Ctx::new(core, &env)
             .with_follows(follows.clone())
+            .with_alerts(alerts.clone())
             .with_handed(handed);
         let effects = instance.screen.update(event, &ctx);
         let done = ctx.finish();
@@ -400,19 +417,42 @@ impl Runtime {
         instance.screen.effects_numbered(&numbers);
 
         if !instance.service {
-            let view_ctx = Ctx::new(core, &env).with_follows(follows);
+            let view_ctx = Ctx::new(core, &env)
+                .with_follows(follows)
+                .with_alerts(alerts);
             let mut view = instance.screen.view(&view_ctx);
             view.instance = id;
             view.revision = 0;
-            let encoded = view.encode_to_vec();
-            if encoded != instance.last {
+            // A STREAMING ANSWER GROWING AT ITS END is sent as the words alone (#1188 C14), and the
+            // chat is not encoded again for it: the revision moves, the echo check starts afresh.
+            let growth = crate::chat::delta::append(&mut instance.view, &mut view);
+            if let Some(add) = growth {
+                let base = instance.revision;
                 instance.revision += 1;
-                instance.last = encoded;
-            }
-            view.revision = instance.revision;
-            if view != instance.view {
+                instance.last.clear();
+                view.revision = instance.revision;
                 instance.view = view.clone();
-                out.views.push(view);
+                match out.views.iter_mut().find(|held| held.instance == id) {
+                    // the same update already carries this screen whole: it carries the newest
+                    Some(held) => *held = view,
+                    None => out.deltas.push(wire::ViewDelta {
+                        instance: id,
+                        base,
+                        revision: instance.revision,
+                        kind: Some(wire::view_delta::Kind::ChatAppend(add)),
+                    }),
+                }
+            } else {
+                let encoded = view.encode_to_vec();
+                if encoded != instance.last {
+                    instance.revision += 1;
+                    instance.last = encoded;
+                }
+                view.revision = instance.revision;
+                if view != instance.view {
+                    instance.view = view.clone();
+                    out.views.push(view);
+                }
             }
         }
 
@@ -843,6 +883,7 @@ impl Runtime {
     fn empty(update: &wire::ScreenUpdate) -> bool {
         update.navigation.is_none()
             && update.views.is_empty()
+            && update.deltas.is_empty()
             && update.effects.is_empty()
             && update.closed.is_empty()
     }
@@ -899,6 +940,7 @@ impl ScreenHost for Runtime {
                     library_deletes: environment.library_deletes,
                     hour_cycle_12: environment.hour_cycle_12,
                     units: None,
+                    show_details: true,
                 };
                 // The band's words follow the locale.
                 if state.band.is_some() {

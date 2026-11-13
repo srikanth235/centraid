@@ -2,7 +2,13 @@
 
 This is an incomplete audit of the main app and nine mini apps following #1185. The PR is a draft. Native Android/iOS observations, shared regressions and builds are distinct evidence; a passing build does not mean every workflow passed.
 
-The audit started on `96bf41246`. Main subsequently advanced to `c960911b4` through #1190, which substantially changes notifications, backup and chat. This branch preserves the audited implementation and needs reconciliation with that newer main before merge. Validation below describes the audited branch, not the newer main or a merged result.
+The audit started on `96bf41246`. Main subsequently advanced to `c960911b4` through #1190, which substantially changes notifications, backup and chat. The branch now combines that main with the audit fixes. The recorded device observations below describe the earlier audited branch; they are not fresh device evidence for the combined result.
+
+## Reconciliation with main
+
+The merge preserves main's durable notification press queues, original protobuf field numbers, indexed 90-day scheduling, backup channels and producer notices. Audit retention and guarded Undo use the exact `(notification_id, verb, press_id)` acknowledgment. Snooze retains main's behavior: only the alert changes, not the task's due date. Android cache migration recognizes the earlier audit format without resetting app or vault data; successfully posted timed alarms leave the reboot cache so dismissal does not resurrect them. Regression tests cover those transitions and failed persistence.
+
+The combined light/dark design generation completed for 348 files. The first complete Android unit run passed all 150 tests. Final native compilation and required gate results will be recorded after validation finishes. No new device UI/UX pass is claimed by these compilation checks.
 
 ## Changes included
 
@@ -40,7 +46,7 @@ The current iOS coverage ledger has **82 narrow passes, 3 failed cases, 8 explic
 5. **Reminder history time:** a preview displays the raw UTC clock rather than the phone-zone clock; this is a source-backed candidate requiring repair and retesting.
 6. **Incomplete execution:** fresh iOS recovery, cold notification inverses/dismissed receipts, remaining uniform workflows and accessibility cases remain unrun. Dot visual spot checks passed separately; remaining control interactions and layouts still need their own verification.
 7. **Locker export:** automatic approval review rejected the all-secrets export test. The rejected action did not run; the guarded file export remains unverified.
-8. Reconcile with #1190 and run the final appropriate gate profiles against the resulting branch.
+8. Complete the final appropriate gate profiles and native validation against the combined branch.
 
 ## Published material
 

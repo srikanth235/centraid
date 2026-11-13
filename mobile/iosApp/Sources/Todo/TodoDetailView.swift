@@ -284,6 +284,16 @@ struct TodoDetailView: View {
                         .centraidType("annotLabel")
                         .foregroundStyle(Theme.color("textFaint", scheme))
                 }
+                // "Open Settings" under a line that sends the member there (#1188, NA1).
+                if !field.actionLabel.isEmpty {
+                    Button(field.actionLabel) {
+                        send(event { $0.alertSettings = .init() })
+                    }
+                    .centraidType("annotLabel")
+                    .foregroundStyle(Theme.color("text", scheme))
+                    .frame(minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+                    .accessibilityIdentifier("tasks-field-\(field.key)-settings")
+                }
             }
             .padding(.horizontal, CentraidGeometry.pageMargin)
             .padding(.vertical, 8)

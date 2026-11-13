@@ -3,10 +3,10 @@
 //! are replayed through it (so gold is the runtime's effect, reproduced).
 
 use std::collections::BTreeMap;
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 
 use centraid_assist::native::prompt::ToolsMode;
-use centraid_assist_eval::run::{Runner, StepOut, Stepper};
+use centraid_assist_eval::replay;
 use centraid_assist_eval::source::EvalSource;
 use centraid_datagen::Catalog;
 use centraid_datagen::grid::Grid;
@@ -24,6 +24,7 @@ const CONFIG: Config = Config {
     counts: [3, 0, 0],
     per_world: [0; 3],
     cell_limit: None,
+    mistakes: Vec::new(),
 };
 
 fn catalog() -> &'static Catalog {
@@ -54,6 +55,7 @@ fn a_run_is_a_pure_function_of_its_seed() {
         counts: [1, 0, 0],
         per_world: [0; 3],
         cell_limit: Some(30),
+        mistakes: Vec::new(),
     };
     let go = || {
         let scratch = tempfile::tempdir().expect("tempdir");
@@ -150,94 +152,12 @@ fn a_minimal_pair_differs_in_one_argument_and_in_its_answer() {
     assert!(pairs >= 1, "no minimal pair in the run");
 }
 
-/// Says each turn's reference calls in turn, reading the turn from the placeholder in the prompt.
-struct Replay {
-    calls: BTreeMap<String, Vec<String>>,
-    said: Mutex<BTreeMap<String, usize>>,
-}
-
-impl Replay {
-    fn new(records: &[Value]) -> Self {
-        let mut calls = BTreeMap::new();
-        for record in records {
-            for turn in record["turns"].as_array().expect("turns") {
-                let user = turn["user"].as_str().expect("user").to_owned();
-                let texts = turn["ref"]
-                    .as_array()
-                    .expect("ref")
-                    .iter()
-                    .map(|call| {
-                        let mut text = format!(
-                            "<tool_call>\n<function={}>\n",
-                            call["tool"].as_str().unwrap_or_default()
-                        );
-                        for (k, v) in call["args"].as_object().into_iter().flatten() {
-                            text += &format!(
-                                "<parameter={k}>\n{}\n</parameter>\n",
-                                v.as_str().unwrap_or_default()
-                            );
-                        }
-                        text + "</function>\n</tool_call>"
-                    })
-                    .collect();
-                calls.insert(user, texts);
-            }
-        }
-        Self {
-            calls,
-            said: Mutex::new(BTreeMap::new()),
-        }
-    }
-}
-
-impl Stepper for Replay {
-    fn step(
-        &self,
-        prompt: &str,
-        _dates: Option<&str>,
-        _tools: ToolsMode,
-    ) -> Result<StepOut, String> {
-        // the last placeholder in the prompt is the turn being answered
-        let start = prompt.rfind("⟨m3:").ok_or("no placeholder in the prompt")?;
-        let end = start + prompt[start..].find('⟩').ok_or("unclosed placeholder")? + '⟩'.len_utf8();
-        let user = &prompt[start..end];
-        let mut said = self.said.lock().expect("lock");
-        let n = said.entry(user.to_owned()).or_default();
-        let text = self
-            .calls
-            .get(user)
-            .and_then(|c| c.get(*n))
-            .ok_or("more steps than reference calls")?;
-        *n += 1;
-        Ok(StepOut {
-            text: text.clone(),
-            think_cut: false,
-        })
-    }
-}
-
 #[test]
 fn replaying_the_reference_calls_through_the_eval_reproduces_every_gold() {
     let records: Vec<Value> = generated().kept.iter().map(|k| k.record.clone()).collect();
-    let source = DatagenSource::new("test", records.clone(), generated().docs.clone());
-    let replay = Replay::new(&records);
-    let mut runner = Runner::new(&source, &replay).expect("runner");
-    let mut failed = Vec::new();
-    for session in source.sessions().expect("the eval reads the sessions") {
-        let result = runner.run_session(&session).expect("session runs");
-        for turn in result.turns.iter().filter(|t| !t.pass) {
-            failed.push(format!(
-                "{} {}: {:?} ended {}",
-                result.id, turn.user, turn.problems, turn.ending
-            ));
-        }
-    }
-    assert!(
-        failed.is_empty(),
-        "{} turns failed, first: {:?}",
-        failed.len(),
-        failed.iter().take(5).collect::<Vec<_>>()
-    );
+    let source = DatagenSource::new("test", records, generated().docs.clone());
+    let sessions = source.sessions().expect("the eval reads the sessions");
+    replay::require(&source, &sessions, ToolsMode::Sig).expect("every gold is reproduced");
 }
 
 #[test]

@@ -269,6 +269,12 @@ impl Vault {
             // land together or not at all.
             let owed = std::mem::take(&mut self.pending.borrow_mut().reindex);
             crate::index::reindex(&connection, &owed)?;
+            // The alerts are part of the commit too: what an item fires next lands with it.
+            crate::alerts::refresh(
+                &connection,
+                &owed,
+                crate::alerts::now_ms(&self.clock().now_text()),
+            )?;
             // The history is part of the commit too: the states it replaced are kept with the
             // change that replaced them, or neither lands.
             let producer = std::mem::take(&mut self.pending.borrow_mut().producer);
@@ -342,6 +348,7 @@ pub(crate) fn is_index(table: &str) -> bool {
         || table == "search_past"
         || table == "search_word"
         || table == "search_owed"
+        || table == "alert"
         || is_fts_shadow(table)
 }
 
@@ -548,6 +555,7 @@ mod tests {
             "search_config",
             "search_word",
             "search_owed",
+            "alert",
             "search_past",
             "search_past_data",
             "search_past_docsize",

@@ -70,6 +70,8 @@ fn answer() -> RestoreAnswer {
                 rows: 1,
                 safety_number: String::new(),
                 own: None,
+                derivatives_total: 0,
+                derivatives_landed: 0,
             })
             .collect(),
         ..Default::default()

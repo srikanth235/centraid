@@ -45,6 +45,25 @@ struct SettingsView: View {
                                     .padding(.vertical, 8)
                                     .accessibilityIdentifier("settings-units-note")
                             }
+                            if data.hasNotifications {
+                                GroupHead(title: data.notifications.title)
+                                Text(data.notifications.label)
+                                    .kitType(.row)
+                                    .foregroundStyle(Surface.ink)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 4)
+                                SettingsSegmented(choices: data.notifications.choices, identifier: "settings-notifications") { id in
+                                    var event = Centraid_Core_V1_SettingsEvent()
+                                    event.kind = .detailsPicked(.with { $0.id = id })
+                                    send(event)
+                                }
+                                Text(data.notifications.note)
+                                    .kitType(.meta)
+                                    .foregroundStyle(Surface.meta)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 8)
+                                    .accessibilityIdentifier("settings-notifications-note")
+                            }
                             ForEach(data.sections, id: \.key) { section in
                                 GroupHead(title: section.title)
                                 // THE ROWS ARE ONE CARD; the last hairline falls outside the clip.
