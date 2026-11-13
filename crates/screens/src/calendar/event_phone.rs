@@ -160,7 +160,7 @@ pub fn lines(wording: Wording<'_>, found: &[Difference]) -> Lines {
         })
         .filter(|alerts| !alerts.is_empty())
     {
-        let shown: Vec<String> = alerts
+        let shown: Vec<String> = centraid_vault::alerts::longest_first(alerts)
             .iter()
             .map(|minutes| reminder_label(locale, *minutes))
             .collect();

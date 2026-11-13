@@ -168,12 +168,12 @@ fn parts(look: &Look, fields: &[Field]) -> Vec<String> {
     parts.push(own("event.url"));
     parts.push(own("event.rule").map(|rule| rule_words::stored(locale, &rule)));
     // An alert is a row of its own, named `reminder[<minutes>]`; one that is not held is null.
-    let mut held: Vec<i64> = fields
+    let held: Vec<i64> = fields
         .iter()
         .filter(|field| field.name.starts_with("reminder["))
         .filter_map(|field| field.value.get("offset_min").and_then(Value::as_i64))
         .collect();
-    held.sort_unstable();
+    let held = centraid_vault::alerts::longest_first(held);
     parts.push(Some(held).filter(|l| !l.is_empty()).map(|leads| {
         leads
             .iter()

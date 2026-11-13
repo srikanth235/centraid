@@ -200,8 +200,8 @@ fn an_event_with_more_alerts_than_a_page_holds_keeps_every_alert() {
     let (events, names) = month(&world, 3);
     assert_eq!(
         titled(&events, "Reminded").reminders,
-        minutes,
-        "every alert, smallest first"
+        minutes.iter().rev().copied().collect::<Vec<_>>(),
+        "every alert, longest lead first"
     );
     assert_eq!(pages_of(&names, "calendar.events.reminders"), 2);
 }

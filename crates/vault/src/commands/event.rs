@@ -118,7 +118,8 @@ pub fn found(ctx: &CommandCtx<'_, '_>, event: &NewEvent<'_>) -> Result<String> {
     Ok(id)
 }
 
-/// The alerts an event holds, minutes before it starts, smallest first.
+/// The alerts an event holds, minutes before it starts, smallest first: the set the vault compares
+/// and merges on. A reader that shows them goes through `alerts::longest_first`.
 pub(crate) fn reminders_held(connection: &Connection, id: &str) -> Result<Vec<i64>> {
     connection
         .prepare_cached("SELECT offset_min FROM reminder WHERE entity_id = ?1 ORDER BY offset_min")?
@@ -1930,7 +1931,7 @@ const PROPOSE_SCHEMA: &str = r#"{
     "travel_min": { "type": ["integer", "null"], "minimum": 0,
       "description": "Minutes of travel to allow before it starts." },
     "reminders": { "type": ["array", "null"], "items": { "type": "integer", "minimum": 0 },
-      "description": "Minutes before it starts, one per alert: the first and a second." },
+      "description": "Minutes before it starts, one per alert (at most two in the editor). Held as a set and read longest lead first." },
     "attendees": { "type": "array", "items": { "type": "string", "minLength": 1 } },
     "status": { "type": "string", "enum": ["confirmed", "tentative", "cancelled"] },
     "busy": { "type": "boolean" }

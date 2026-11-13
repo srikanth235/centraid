@@ -161,7 +161,8 @@ pub struct EventRow {
     pub calendar_id: Option<String>,
     /// The joining link.
     pub conferencing_uri: Option<String>,
-    /// Minutes before it starts, in the order they were set (the first alert, then the second).
+    /// Minutes before it starts, longest lead first: the first alert is the one that fires first
+    /// (`centraid_vault::alerts::longest_first`).
     pub reminders: Vec<i64>,
     /// Whether it blocks its time; `false` is the member's "free".
     pub busy: bool,
@@ -457,7 +458,8 @@ pub(crate) fn decorate(door: &dyn PageDoor, events: &mut [EventRow]) -> KitResul
     }
     for event in events {
         event.reminders = alerts.remove(&event.event_id).unwrap_or_default();
-        event.reminders.sort_unstable();
+        event.reminders =
+            centraid_vault::alerts::longest_first(std::mem::take(&mut event.reminders));
         event.attendees = guests.remove(&event.event_id).unwrap_or_default();
         event.attachments = attached.remove(&event.event_id).unwrap_or_default();
         event.location_name = event

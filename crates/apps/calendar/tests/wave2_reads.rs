@@ -131,7 +131,7 @@ fn an_event_reads_back_travel_availability_two_alerts_and_its_calendars_icon() {
             let row = detail.event.expect("the event");
             assert_eq!(row.travel_min, Some(25));
             assert!(!row.busy, "free");
-            assert_eq!(row.reminders, vec![5, 30], "the alerts, smallest first");
+            assert_eq!(row.reminders, vec![30, 5], "the alerts, longest lead first");
             assert_eq!(row.location_place_id.as_deref(), Some(place.as_str()));
             assert_eq!(
                 row.conferencing_uri.as_deref(),
@@ -141,6 +141,40 @@ fn an_event_reads_back_travel_availability_two_alerts_and_its_calendars_icon() {
             let calendar = detail.calendar.expect("its calendar");
             assert_eq!(calendar.icon.as_deref(), Some("Users"));
             assert_eq!(calendar.color.as_deref(), Some("raspberry"));
+            Ok(())
+        })
+        .expect("a read");
+}
+
+/// THE OWNER'S RULING (#1191): an event's alerts come back longest lead first, whatever order they
+/// were entered in, so the first alert is the one that fires first.
+#[test]
+fn alerts_entered_shortest_first_are_read_longest_first() {
+    let world = World::new();
+    let event = world.id(
+        "event.propose",
+        json!({ "title": "Review", "starts": "2026-03-02T09:00", "ends": "2026-03-02T10:00",
+                "zone": "Europe/Paris", "reminders": [10, 1440, 30] }),
+    );
+    let zone = FireZone::named("Etc/UTC").expect("a zone");
+    world
+        .vault
+        .read(|connection| {
+            let door = TestDoor::new(connection);
+            let (detail, _) = load_event(&door, &event, None, None).expect("reads");
+            assert_eq!(
+                detail.event.expect("the event").reminders,
+                vec![1440, 30, 10]
+            );
+            let (upcoming, _) = load_upcoming(
+                &door,
+                Some("2026-03-01T00:00:00.000Z"),
+                Some("2026-03-31T00:00:00.000Z"),
+                "2026-03-01T00:00:00.000Z",
+                &zone,
+            )
+            .expect("reads");
+            assert_eq!(upcoming.events[0].reminders, vec![1440, 30, 10]);
             Ok(())
         })
         .expect("a read");

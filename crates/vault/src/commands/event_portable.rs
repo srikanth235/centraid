@@ -316,7 +316,9 @@ fn events(
     for (mut event, place) in rows {
         event.place = place.and_then(|id| place_text(connection, &id));
         event.guests = guests(connection, &event.id)?;
-        event.reminders = crate::commands::event::reminders_held(connection, &event.id)?;
+        event.reminders = crate::alerts::longest_first(crate::commands::event::reminders_held(
+            connection, &event.id,
+        )?);
         event.stamp =
             ical::compact_utc(&event.stamp).unwrap_or_else(|| "19700101T000000Z".to_owned());
         out.push(event);
