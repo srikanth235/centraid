@@ -22,6 +22,9 @@ actor Core {
         case closed
         case poisoned(diagnosticID: String)
         case malformed(String)
+        /// `centraid_open` answered `CENTRAID_VAULT_DAMAGED`: the vault file is untouched and no
+        /// handle exists. The shell draws the launch screen for it (`VaultDamagedView`).
+        case vaultDamaged
         case refused(Centraid_Core_V1_Error)
     }
 
@@ -83,6 +86,7 @@ actor Core {
             centraid_open(
                 bytes.bindMemory(to: UInt8.self).baseAddress, json.count, &handle)
         }
+        if status == CENTRAID_VAULT_DAMAGED { throw Failure.vaultDamaged }
         guard status == CENTRAID_OK, let handle else {
             throw Failure.malformed("centraid_open answered \(status)")
         }

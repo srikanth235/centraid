@@ -65,6 +65,9 @@ final class ShellModel: ObservableObject {
 
     /// THE SCREEN RUNTIME'S STORE, once the core is open. Every view draws from it.
     @Published private(set) var screens: ScreenStore?
+    /// THE VAULT FILE IS DAMAGED (`CENTRAID_VAULT_DAMAGED` at open): no core exists, so the root
+    /// draws `VaultDamagedView` in place of bare paper. Set once, at launch.
+    @Published private(set) var vaultDamaged = false
     /// The instance Rust opened for each Rust entry on `path`, by entry token.
     @Published private(set) var rustInstances: [Int: UInt64] = [:]
     private var rustOpening: Set<Int> = []
@@ -142,6 +145,9 @@ final class ShellModel: ObservableObject {
                 let core = try Core.open(configuration)
                 VaultFileProtection.secure(directory: directory)
                 await MainActor.run { ShellModel.shared.attach(core) }
+            } catch Core.Failure.vaultDamaged {
+                NSLog("centraid: the vault is damaged")
+                await MainActor.run { ShellModel.shared.vaultDamaged = true }
             } catch {
                 // The screen stays on its ground; nothing here can word it.
                 NSLog("centraid: the core did not open: %@", String(describing: error))

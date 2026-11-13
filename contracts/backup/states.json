@@ -255,5 +255,12 @@
       "sentence": "The newest backup found is from Sunday 8 November, on Office NAS. A newer one may be on a backup device that didn't answer. Restore this one?"
     }
   ],
-  "never_said": ["verified", "gateway", "sealed", "24 words"]
+  "never_said": ["verified", "gateway", "sealed", "24 words"],
+  "vault_damaged_at_launch": {
+    "$comment": "The launch screen when the core's open answers VAULT_DAMAGED. No core is open, so the shells draw these four words from their generated KitWords tables (VAULT_DAMAGED_*); the test reads both tables.",
+    "title": "Vault damaged",
+    "line": "This phone's vault is damaged. No new backup is made.",
+    "safe": "The backups already on your backup devices are untouched.",
+    "action": "Restore my vaults"
+  }
 }

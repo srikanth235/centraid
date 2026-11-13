@@ -199,6 +199,50 @@ fn the_rate_sentence_states_what_was_read() {
     }
 }
 
+/// **Row B16, vault damaged at launch.** No core is open, so the two shells draw the words from
+/// their generated `KitWords` tables: those tables, the fixture and the Rust catalogue say the same
+/// four words, and the one action is the restore entry's own word.
+#[test]
+fn a_vault_damaged_at_launch_says_the_same_words_on_both_shells() {
+    let case = &fixture()["vault_damaged_at_launch"];
+    let kotlin = include_str!(
+        "../../../mobile/androidApp/src/main/kotlin/dev/centraid/android/design/Words.kt"
+    );
+    let swift = include_str!("../../../mobile/iosApp/Design/Words.swift");
+    for (name, key) in [
+        ("VAULT_DAMAGED_TITLE", "title"),
+        ("VAULT_DAMAGED_LINE", "line"),
+        ("VAULT_DAMAGED_SAFE", "safe"),
+        ("VAULT_DAMAGED_RESTORE", "action"),
+    ] {
+        let words = text(case, key);
+        assert!(
+            kotlin.contains(&format!("const val {name}: String = \"{words}\"")),
+            "Android's table says something else for {name}"
+        );
+        assert!(
+            swift.contains(&format!("static let {name} = \"{words}\"")),
+            "iOS's table says something else for {name}"
+        );
+    }
+    assert_eq!(
+        text(case, "title"),
+        centraid_screens::strings::backup::backup_status_damaged(EN)
+    );
+    assert_eq!(
+        text(case, "line"),
+        centraid_screens::strings::backup::backup_line_damaged(EN)
+    );
+    assert_eq!(
+        text(case, "safe"),
+        centraid_screens::strings::backup::backup_detail_damaged(EN)
+    );
+    assert_eq!(
+        text(case, "action"),
+        centraid_screens::strings::home::restore_first_action(EN)
+    );
+}
+
 #[test]
 fn the_restore_ask_names_the_date_and_the_device_and_does_not_claim() {
     let fixture = fixture();

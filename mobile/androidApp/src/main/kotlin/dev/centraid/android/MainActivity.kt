@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberCoroutineScope
@@ -28,6 +29,7 @@ import dev.centraid.android.kit.ClipboardDeadline
 import dev.centraid.android.notify.Notify
 import dev.centraid.android.notify.NotifyTaps
 import dev.centraid.android.screens.RustRoot
+import dev.centraid.android.screens.words.VaultDamagedScreen
 import dev.centraid.android.session.AppSession
 import dev.centraid.android.theme.CentraidTheme
 import dev.centraid.android.theme.centraidColor
@@ -152,7 +154,12 @@ public class MainActivity : FragmentActivity() {
                         .background(centraidColor(if (onStage) "stage" else "bg"))
                         .safeDrawingPadding(),
                 ) {
-                    if (session != null) rust.Content(phoneDark = phoneDark)
+                    val damaged by AppSession.damaged.collectAsState()
+                    if (session != null) {
+                        rust.Content(phoneDark = phoneDark)
+                    } else if (damaged) {
+                        VaultDamagedScreen()
+                    }
                 }
             }
         }

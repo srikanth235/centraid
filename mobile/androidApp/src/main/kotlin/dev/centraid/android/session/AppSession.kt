@@ -8,6 +8,7 @@ import android.util.Log
 import dev.centraid.android.backup.LinkFacts
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreConfiguration
+import dev.centraid.core.CoreFailure
 import dev.centraid.core.CoreOutcome
 import dev.centraid.core.Screens
 import java.util.Locale
@@ -82,6 +83,15 @@ internal object AppSession {
     /** The open session, or null: what composition draws from. Never opens. */
     val current: StateFlow<Open?> = state.asStateFlow()
 
+    private val damagedFlag = MutableStateFlow(false)
+
+    /**
+     * The vault file is damaged (`CENTRAID_VAULT_DAMAGED` at open): no core exists, so composition
+     * draws `VaultDamagedScreen` in place of bare paper. Set by the open that failed; a later
+     * successful open clears it.
+     */
+    val damaged: StateFlow<Boolean> = damagedFlag.asStateFlow()
+
     /**
      * The session, opened on first use; null when the core would not open (said in the log, and
      * the screen stays on its ground). [devSeedHex] is a debug build's demo seed, read only by the
@@ -149,9 +159,11 @@ internal object AppSession {
             is CoreOutcome.Answered -> opened.value
             is CoreOutcome.Failed -> {
                 Log.w("Centraid", "the core did not open: ${opened.failure}")
+                damagedFlag.value = opened.failure is CoreFailure.VaultDamaged
                 return null
             }
         }
+        damagedFlag.value = false
         core.startReader()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val screens = Screens(core, scope)
