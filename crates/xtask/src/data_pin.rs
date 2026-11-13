@@ -7,9 +7,17 @@
 //! wording, arguments or behaviour moves a hash and fails the rule, so a tool change cannot ship quietly past data that
 //! was built for the old one.
 //!
+//! The pin also holds `catalog_hash`, the data catalogue's hash (`datagen`'s `Catalog::build`, BLAKE3 of its canonical
+//! text). Only the `datagen` crate builds it, so the rule asks `datagen catalog` for the runtime's value (offline) and
+//! compares it like the other two.
+//!
 //! The two ways out, both a visible decision: publish a new data version and update the pin, or mark the pin stale
-//! with `"stale": {"since": "<what changed, one line>", "level": "wording|shape|behaviour|coverage"}` after running
-//! `datagen drift` (the level is its verdict). A stale pin passes and the rule prints a notice line.
+//! with `"stale": {"since": "<what changed, one line>", "level": "wording|shape|behaviour|coverage", "at": {"tools_hash":
+//! "…", "prompt_hash": "…", "catalog_hash": "…"}}` after running `datagen drift` (the level is its verdict; `at` is the
+//! runtime's hashes the mark was made at). A stale pin passes and the rule prints a notice line, but only for the contract
+//! it was marked at: when the runtime's hashes equal the pin's, `at` is not read; when they differ, `at` must hold the
+//! runtime's value of every hash that moved, or the rule fails, printing the current hashes to copy into `at`. The pin's
+//! own hashes are never edited to get past it.
 
 use std::path::Path;
 
@@ -56,25 +64,37 @@ pub fn verdict(pin: &Value, hashes: &Value) -> (Vec<String>, Vec<String>) {
         ));
         return (findings, details);
     };
-    let mut differs = Vec::new();
-    for (key, what) in [
+    // (key, what, runtime value, pinned value) for each hash that moved.
+    let mut moved: Vec<(&str, &str, &str, &str)> = Vec::new();
+    for (key, what, runtime) in [
         (
             "tools_hash",
             "the tool catalogue (the tools the model is shown)",
+            now.get("tools_hash"),
         ),
         (
             "prompt_hash",
             "the static prompt (identity, system turn, rules)",
+            now.get("prompt_hash"),
+        ),
+        (
+            "catalog_hash",
+            "the data catalogue (the kinds, verbs and fields the generator covers)",
+            hashes.get("catalog_hash"),
         ),
     ] {
         let pinned = text(key).unwrap_or("");
-        let runtime = now.get(key).and_then(Value::as_str).unwrap_or("");
+        let runtime = runtime.and_then(Value::as_str).unwrap_or("");
         if pinned != runtime {
-            differs.push(format!(
-                "{what}: {key} is {runtime} in the runtime, {pinned} in the pin"
-            ));
+            moved.push((key, what, runtime, pinned));
         }
     }
+    let differs: Vec<String> = moved
+        .iter()
+        .map(|(key, what, runtime, pinned)| {
+            format!("{what}: {key} is {runtime} in the runtime, {pinned} in the pin")
+        })
+        .collect();
     let stale = match pin.get("stale") {
         None | Some(Value::Null) => None,
         Some(s) => {
@@ -87,7 +107,7 @@ pub fn verdict(pin: &Value, hashes: &Value) -> (Vec<String>, Vec<String>) {
                 .and_then(Value::as_str)
                 .filter(|l| LEVELS.contains(l));
             if let (Some(since), Some(level)) = (since, level) {
-                Some((since.to_owned(), level.to_owned()))
+                Some((since.to_owned(), level.to_owned(), s.get("at")))
             } else {
                 findings.push(format!(
                     "{PIN}: `stale` needs a non-empty `since` (what changed, one line) and a `level` of {}",
@@ -99,15 +119,39 @@ pub fn verdict(pin: &Value, hashes: &Value) -> (Vec<String>, Vec<String>) {
     };
     match (differs.is_empty(), stale) {
         (true, None) => {}
-        (true, Some((since, level))) => details.push(format!(
+        (true, Some((since, level, _))) => details.push(format!(
             "notice: data {version} is marked stale ({level}) though the tool contract still hashes the same: {since}. Clear `stale` if it no longer holds."
         )),
-        (false, Some((since, level))) => details.push(format!(
-            "notice: data {version} is marked stale ({level}): {since}. The tool contract no longer hashes to the data's ({}). It passes until the data is regenerated for `{level}` and the pin updated.",
-            differs.join("; ")
-        )),
+        (false, Some((since, level, at))) => {
+            // The mark covers only the contract it was made at: `at` must hold the runtime's value of every hash that moved.
+            let covered = moved.iter().all(|(key, _, runtime, _)| {
+                at.and_then(|a| a.get(*key))
+                    .and_then(Value::as_str)
+                    .is_some_and(|v| v == *runtime)
+            });
+            if covered {
+                details.push(format!(
+                    "notice: data {version} is marked stale ({level}): {since}. The tool contract no longer hashes to the data's ({}). It passes until the data is regenerated for `{level}` and the pin updated.",
+                    differs.join("; ")
+                ));
+            } else {
+                let now_hash = |k: &str| match k {
+                    "catalog_hash" => hashes.get(k),
+                    _ => now.get(k),
+                }
+                .and_then(Value::as_str)
+                .unwrap_or("");
+                findings.push(format!(
+                    "data {version} is marked stale ({level}), but the contract moved again since it was marked: {}. A stale mark covers only the contract it was made at ({PIN} `stale.at`). Run `datagen drift --in <version dir>`, then update `stale` in {PIN} with the level it reports, `since`, and `\"at\": {{\"tools_hash\": \"{}\", \"prompt_hash\": \"{}\", \"catalog_hash\": \"{}\"}}`. Do not edit the pin's own `tools_hash`, `prompt_hash` or `catalog_hash`: they say what the data was built for.",
+                    differs.join("; "),
+                    now_hash("tools_hash"),
+                    now_hash("prompt_hash"),
+                    now_hash("catalog_hash"),
+                ));
+            }
+        }
         (false, None) => findings.push(format!(
-            "data {version} was built for a different tool contract than the runtime serves in mode `{mode}`: {}. Two ways out: publish a new data version and update {PIN}, or mark the pin stale in {PIN} (\"stale\": {{\"since\": \"<what changed>\", \"level\": \"{}\"}}) after running `datagen drift --in <version dir>`, which says the level.",
+            "data {version} was built for a different tool contract than the runtime serves in mode `{mode}`: {}. Two ways out: publish a new data version and update {PIN}, or mark the pin stale in {PIN} (\"stale\": {{\"since\": \"<what changed>\", \"level\": \"{}\", \"at\": {{the runtime's hashes}}}}) after running `datagen drift --in <version dir>`, which says the level.",
             differs.join("; "),
             LEVELS.join("|")
         )),
@@ -127,7 +171,7 @@ pub fn data_pin(root: &Path) -> RuleReport {
         Ok(v) => v,
         Err(e) => return RuleReport::applied(NAME, 1, vec![format!("{PIN}: not JSON: {e}")]),
     };
-    let hashes = match crate::model_pin::runtime_hashes(root) {
+    let hashes = match runtime_contract(root) {
         Ok(h) => h,
         Err(e) => {
             return RuleReport::applied(
@@ -141,6 +185,44 @@ pub fn data_pin(root: &Path) -> RuleReport {
     let mut report = RuleReport::applied(NAME, 1, findings);
     report.details = details;
     report
+}
+
+/// The runtime's hashes per mode plus a top-level `catalog_hash`. The catalogue is built by the `datagen` crate from the
+/// runtime (`Catalog::build`, BLAKE3 of its canonical text, the value `datagen` stamps), so it is asked of `datagen
+/// catalog`, offline; it does not depend on the tools mode.
+fn runtime_contract(root: &Path) -> anyhow::Result<Value> {
+    use anyhow::{Context, bail};
+    let mut hashes = crate::model_pin::runtime_hashes(root)?;
+    let out = std::process::Command::new("cargo")
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "centraid-datagen",
+            "--bin",
+            "datagen",
+            "--",
+            "catalog",
+            "--out",
+        ])
+        .arg("/dev/null")
+        .current_dir(root)
+        .output()
+        .context("run `datagen catalog`")?;
+    if !out.status.success() {
+        bail!(
+            "`datagen catalog` failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let hash = stderr
+        .lines()
+        .find_map(|l| l.strip_prefix("catalog "))
+        .and_then(|l| l.split_whitespace().next())
+        .context("`datagen catalog` printed no catalogue hash")?;
+    hashes["catalog_hash"] = Value::String(hash.to_owned());
+    Ok(hashes)
 }
 
 #[cfg(test)]
@@ -158,7 +240,11 @@ mod tests {
     }
 
     fn runtime(tools: &str, prompt: &str) -> Value {
-        json!({"sig": {"tools_hash": tools, "prompt_hash": prompt}, "s2": {"tools_hash": "x", "prompt_hash": "y"}})
+        runtime_with_catalog(tools, prompt, "ccc")
+    }
+
+    fn runtime_with_catalog(tools: &str, prompt: &str, catalog: &str) -> Value {
+        json!({"sig": {"tools_hash": tools, "prompt_hash": prompt}, "s2": {"tools_hash": "x", "prompt_hash": "y"}, "catalog_hash": catalog})
     }
 
     #[test]
@@ -188,9 +274,10 @@ mod tests {
     }
 
     #[test]
-    fn a_stale_pin_passes_and_prints_a_notice() {
-        let stale =
-            json!({"since": "the read tool takes a new `order` argument", "level": "shape"});
+    fn a_stale_pin_at_the_contract_it_was_marked_at_passes_and_prints_a_notice() {
+        // Changed from the earlier test: the mark now carries `at`, the runtime's hashes at marking.
+        let stale = json!({"since": "the read tool takes a new `order` argument", "level": "shape",
+            "at": {"tools_hash": "zzz", "prompt_hash": "bbb", "catalog_hash": "ccc"}});
         let (findings, details) = verdict(&pin(&stale), &runtime("zzz", "bbb"));
         assert!(findings.is_empty(), "{findings:?}");
         assert_eq!(details.len(), 1);
@@ -199,6 +286,62 @@ mod tests {
                 && details[0].contains("new `order` argument"),
             "{details:?}"
         );
+    }
+
+    #[test]
+    fn a_stale_pin_whose_contract_moved_with_no_at_fails_naming_the_hashes() {
+        let stale = json!({"since": "x", "level": "shape"});
+        let (findings, details) = verdict(&pin(&stale), &runtime("zzz", "bbb"));
+        assert!(details.is_empty(), "{details:?}");
+        assert_eq!(findings.len(), 1);
+        let text = &findings[0];
+        assert!(
+            text.contains("moved again")
+                && text.contains("\"tools_hash\": \"zzz\"")
+                && text.contains("\"prompt_hash\": \"bbb\"")
+                && text.contains("\"catalog_hash\": \"ccc\"")
+                && text.contains("datagen drift")
+                && text.contains("Do not edit the pin's own"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn a_stale_pin_whose_contract_moved_again_after_the_mark_fails() {
+        let stale = json!({"since": "x", "level": "shape",
+            "at": {"tools_hash": "zzz", "prompt_hash": "bbb", "catalog_hash": "ccc"}});
+        let (findings, _) = verdict(&pin(&stale), &runtime("yyy", "bbb"));
+        assert_eq!(findings.len(), 1);
+        assert!(
+            findings[0].contains("tools_hash is yyy in the runtime, aaa in the pin")
+                && findings[0].contains("\"tools_hash\": \"yyy\""),
+            "{findings:?}"
+        );
+    }
+
+    #[test]
+    fn a_stale_pin_that_equals_the_runtime_passes_without_at() {
+        let stale = json!({"since": "x", "level": "coverage"});
+        let (findings, details) = verdict(&pin(&stale), &runtime("aaa", "bbb"));
+        assert!(findings.is_empty(), "{findings:?}");
+        assert_eq!(details.len(), 1);
+    }
+
+    #[test]
+    fn a_moved_catalogue_hash_fails_when_not_stale_and_is_covered_by_at_when_stale() {
+        let (findings, _) = verdict(
+            &pin(&Value::Null),
+            &runtime_with_catalog("aaa", "bbb", "new"),
+        );
+        assert_eq!(findings.len(), 1);
+        assert!(
+            findings[0].contains("the data catalogue")
+                && findings[0].contains("catalog_hash is new in the runtime, ccc in the pin"),
+            "{findings:?}"
+        );
+        let stale = json!({"since": "x", "level": "coverage", "at": {"catalog_hash": "new"}});
+        let (findings, details) = verdict(&pin(&stale), &runtime_with_catalog("aaa", "bbb", "new"));
+        assert!(findings.is_empty() && details.len() == 1, "{findings:?}");
     }
 
     #[test]
