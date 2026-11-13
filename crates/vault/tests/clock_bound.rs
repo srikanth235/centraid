@@ -197,7 +197,7 @@ fn the_bound_is_seven_days_to_the_millisecond_in_both_directions() {
     let credible = |now: i64| {
         w.scratch
             .vault
-            .read(|connection| Ok(centraid_vault::clock::is_credible(connection, now)?))
+            .read(|connection| centraid_vault::clock::is_credible(connection, now))
             .expect("asks")
     };
     let bound = CLOCK_BOUND_DAYS * 86_400_000;
@@ -212,4 +212,29 @@ fn the_bound_is_seven_days_to_the_millisecond_in_both_directions() {
         !credible(written_ms - bound - 1),
         "seven days and a millisecond behind"
     );
+}
+
+/// A phone idle for 8 days: the first pass after it purges nothing (the clock is more than the
+/// bound from the last write), the member writes once, and the next pass purges the rows that are
+/// due. Counted, not timed.
+#[test]
+fn a_phone_idle_eight_days_purges_after_its_first_write() {
+    let w = World::new("bound-idle");
+    w.trashed_note("one");
+    // The trash lapses at 30 days; the phone is then idle a further stretch past the 7-day bound.
+    w.scratch.clock.advance_days(31);
+    assert_eq!(
+        w.pass(),
+        0,
+        "idle more than the bound: the first pass purges nothing"
+    );
+    assert_eq!(w.trashed(), 1);
+    // The member opens the app and writes once: that write re-bases the bound on today's clock.
+    w.run("note.create", json!({"title": "back", "body": "x"}));
+    assert_eq!(
+        w.pass(),
+        1,
+        "after one write, the next pass purges what is due"
+    );
+    assert_eq!(w.trashed(), 0);
 }

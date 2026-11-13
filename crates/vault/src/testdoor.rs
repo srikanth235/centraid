@@ -261,6 +261,15 @@ pub fn stamp_earlier_model(path: &std::path::Path) -> rusqlite::Result<()> {
     )
 }
 
+/// Move every committed page of a closed vault into its main file, so a test that overwrites a page
+/// of the file damages content and not a log that would be replayed over it.
+///
+/// # Errors
+/// SQLite's refusal to open or checkpoint the file.
+pub fn checkpoint_into_main_file(path: &std::path::Path) -> rusqlite::Result<()> {
+    Connection::open(path)?.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))
+}
+
 /// Make a founded, closed vault file one this build refuses for its tables: add one the baseline
 /// does not have.
 ///
@@ -269,6 +278,15 @@ pub fn stamp_earlier_model(path: &std::path::Path) -> rusqlite::Result<()> {
 pub fn add_stray_table(path: &std::path::Path) -> rusqlite::Result<()> {
     Connection::open(path)?.execute_batch("CREATE TABLE stray (x TEXT)")
 }
+
+// The statements the plan test checks it can read a plan of (#1191); `testdoor.rs` is not swept as product.
+/// A read with nothing to seek by: the plan test must report it as a scan of `edge`.
+pub const CANARY_SCAN: &str = "SELECT from_id FROM edge WHERE created_at = 'x'";
+/// A walk of an ordered index: the plan test must name `edge_order` and report no scan.
+pub const CANARY_WALK: &str = "SELECT position FROM edge WHERE from_id = 'a' AND rel = 'contains'
+                    AND position IS NOT NULL ORDER BY position DESC LIMIT 1";
+/// A seek by key: the plan test must report no scan.
+pub const CANARY_SEEK: &str = "SELECT id FROM entity WHERE id = 'a'";
 
 #[cfg(test)]
 mod tests {

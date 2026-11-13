@@ -1531,7 +1531,7 @@ mod held_tests {
     /// writes than the restored file, so it is "newer"; with one of its pages really damaged it
     /// does not open, and it is not.
     #[test]
-    fn a_held_copy_with_a_damaged_page_is_not_newer() {
+    fn a_restore_prefers_a_healthy_backup_over_a_damaged_local_copy() {
         let dir = tempfile::tempdir().expect("a directory");
         let (held, restored) = (dir.path().join("held.db"), dir.path().join("restored.db"));
         vault_with(&held, 3);

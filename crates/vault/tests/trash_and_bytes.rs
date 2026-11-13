@@ -94,6 +94,70 @@ fn a_derivative_written_twice_is_one_row_and_both_tables_have_rowids() {
     }
 }
 
+/// V19 (named as the plan lists it): one year ahead, nothing is purged and no action key is
+/// dropped; one day ahead, what is due is purged. Counts only.
+#[test]
+fn a_clock_far_ahead_purges_nothing() {
+    let w = World::new();
+    let (trashed, _) = w.document("Old lease", "old lease");
+    w.ok("entity.trash", json!({ "id": trashed }));
+    let held = |w: &World| -> i64 {
+        w.scratch
+            .vault
+            .read(|c| {
+                Ok(c.query_row(
+                    "SELECT COUNT(*) FROM entity WHERE deleted_at IS NOT NULL",
+                    [],
+                    |r| r.get(0),
+                )?)
+            })
+            .expect("counts")
+    };
+    let keys = |w: &World| -> i64 {
+        w.scratch
+            .vault
+            .read(|c| Ok(c.query_row("SELECT COUNT(*) FROM action_key", [], |r| r.get(0))?))
+            .expect("counts")
+    };
+    let keys_before = keys(&w);
+    // A year ahead: the row reads as long overdue; nothing is purged, no key is dropped.
+    w.scratch.clock.advance_ms(365 * DAY_MS);
+    let step = w
+        .scratch
+        .vault
+        .empty_overdue_trash_step(&w.registry, 50, false)
+        .expect("the pass runs");
+    assert_eq!(step.purged, 0);
+    assert_eq!(held(&w), 1);
+    assert_eq!(keys(&w), keys_before);
+}
+
+/// V20: a stored file that rotted on disk is replaced when the same bytes are added again, so the
+/// file under its name is right again.
+#[test]
+fn re_adding_a_rotted_blob_replaces_the_bad_file() {
+    let w = World::new();
+    let hash = w.put("the original bytes");
+    let path = w
+        .scratch
+        .vault
+        .blobs()
+        .expect("a store")
+        .path_of(&hash)
+        .expect("asks")
+        .expect("a file");
+    let mut rotted = std::fs::read(&path).expect("reads");
+    rotted[0] ^= 0xFF;
+    std::fs::write(&path, &rotted).expect("rots");
+    let again = w.put("the original bytes");
+    assert_eq!(again, hash);
+    assert_eq!(
+        std::fs::read(&path).expect("reads"),
+        b"the original bytes".to_vec(),
+        "the file under the name holds the right bytes again"
+    );
+}
+
 struct World {
     scratch: common::Scratch,
     registry: Registry,

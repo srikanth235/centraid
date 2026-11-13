@@ -23,6 +23,12 @@ pub enum Stage {
     FoundingRenamed,
     /// A migration rung has written its changes and has not committed them.
     RungWritten,
+    /// A commit's body, index, alerts and history are written; `COMMIT` has not run.
+    BeforeCommit,
+    /// `COMMIT` has returned: the commit is durable.
+    Committed,
+    /// `open` ran `PRAGMA quick_check` (counted by a test: a healthy open runs it once).
+    QuickChecked,
 }
 
 /// What a test installs: called at every stage this thread reaches.

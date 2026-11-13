@@ -86,21 +86,37 @@ fn a_months_budgets_across_categories_and_a_categorys_months_are_both_served() {
         &["category:food"],
     );
     assert!(
-        per_category.contains("SEARCH budget USING PRIMARY KEY")
-            || per_category.contains("USING PRIMARY KEY"),
+        per_category.contains("SEARCH budget USING PRIMARY KEY"),
         "{per_category}"
     );
 }
 
-/// V6: two indexes the brief asked to retire have readers today and no other index serves them as
-/// well, so they stay. The plans are the evidence, on a list of 3,000 members after `ANALYZE`:
-/// with `edge_order` the next position in the list is the end of an index walk (and the commands
-/// now ask for it that way: the old `MAX(position)` could not use a partial index at all); without
-/// it the same read goes through `edge_key` and sorts every member. And the count of the Locker's
-/// items by type streams from the type index, where without it every item is sorted in a
-/// temporary tree.
+/// M5: the whole-library listing the drill and garbage collection run (`content_hashes`) names
+/// every claim by design, so it reads the whole `blob` table; what it must not do is sort. Its
+/// statement is the product's own constant, and it is an ordered walk of `blob`'s unique `hash`
+/// index, never a temporary sort tree.
 #[test]
-fn the_edge_order_and_locker_type_indexes_have_readers_and_are_kept() {
+fn the_content_listing_walks_the_hash_index_and_never_sorts() {
+    let scratch = common::Scratch::founded("walk-content").expect("a vault");
+    let plan = plan(
+        &scratch,
+        centraid_vault::backup::naming::CONTENT_HASHES,
+        &[],
+    );
+    assert!(
+        plan.contains("USING INDEX") && !plan.contains("TEMP B-TREE"),
+        "the listing sorts or does not use the hash index: {plan}"
+    );
+}
+
+/// V6: `edge_order` has a reader and no other index serves it as well, so it stays. The plan is the
+/// evidence, on a list of 3,000 members after `ANALYZE`: with `edge_order` the next position in the
+/// list is the end of an index walk (and the commands now ask for it that way: the old
+/// `MAX(position)` could not use a partial index at all); without it the same read goes through
+/// `edge_key` and sorts every member. (The Locker's type index had no reader any page or statement
+/// plans through, and is gone: `every_index_has_a_reader` in `core/tests/query_plans.rs`.)
+#[test]
+fn the_edge_order_index_has_a_reader_and_is_kept() {
     let scratch = common::Scratch::founded("walk-kept").expect("a vault");
     scratch
         .vault
@@ -142,15 +158,5 @@ fn the_edge_order_and_locker_type_indexes_have_readers_and_are_kept() {
         !without.contains("edge_order")
             && (without.contains("TEMP B-TREE") || without.contains("SCAN")),
         "without it the read sorts or scans every member of the list: {without}"
-    );
-
-    let by_type = plan(
-        &scratch,
-        "SELECT type, COUNT(*) FROM locker_item GROUP BY type ORDER BY type",
-        &[],
-    );
-    assert!(
-        by_type.contains("INDEX locker_item_by_type") && !by_type.contains("TEMP B-TREE"),
-        "the count by type streams from the type index: {by_type}"
     );
 }

@@ -24,6 +24,9 @@ fn named(stage: Stage) -> &'static str {
         Stage::FoundingFlushed => "flushed",
         Stage::FoundingRenamed => "renamed",
         Stage::RungWritten => "rung-written",
+        Stage::BeforeCommit => "before-commit",
+        Stage::Committed => "committed",
+        Stage::QuickChecked => "quick-checked",
     }
 }
 

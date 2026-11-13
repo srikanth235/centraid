@@ -849,7 +849,6 @@ CREATE TABLE locker_item (
   last_used_at TEXT CHECK (last_used_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', last_used_at) IS last_used_at),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT;
-CREATE INDEX locker_item_by_type ON locker_item(type);
 CREATE INDEX locker_item_by_key ON locker_item(key_id) WHERE key_id IS NOT NULL;
 
 CREATE TABLE locker_item_address (

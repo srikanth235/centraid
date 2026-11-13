@@ -54,6 +54,25 @@ pub const PAGE_SIZE: i64 = 4096;
 /// that the file is not a surprise in a storage listing.
 pub const JOURNAL_SIZE_LIMIT: i64 = 64 * 1024 * 1024;
 
+/// The durability pragmas every connection this crate opens carries, as a list over a target
+/// flag so a test on any machine can ask what an Apple build sets. `journal_mode = WAL`,
+/// `synchronous = FULL` and `secure_delete = ON` everywhere; on Apple targets also `fullfsync` and
+/// `checkpoint_fullfsync` = ON, because there a plain `fsync` does not reach the platter, only
+/// `F_FULLFSYNC` does (V18).
+#[must_use]
+pub fn durability_pragmas(apple: bool) -> Vec<(&'static str, &'static str)> {
+    let mut list = vec![
+        ("journal_mode", "wal"),
+        ("synchronous", "FULL"),
+        ("secure_delete", "ON"),
+    ];
+    if apple {
+        list.push(("fullfsync", "ON"));
+        list.push(("checkpoint_fullfsync", "ON"));
+    }
+    list
+}
+
 /// Where a founding is built before it takes its name.
 fn founding_path(path: &Path) -> PathBuf {
     let mut name = path
@@ -364,6 +383,7 @@ impl Vault {
         Self::apply_pragmas(&connection)?;
         connection.pragma_update(None, "foreign_keys", "ON")?;
         quick_check(&connection)?;
+        crate::stage::reached(crate::stage::Stage::QuickChecked)?;
 
         if found < head_version() {
             // A MIGRATION RUNS ON THE OPENED CONNECTION AND THEN IS WRAPPED ONCE (#1191, V15, V16).
@@ -450,17 +470,10 @@ impl Vault {
         // by design, and a write to it skips every check SQLite makes. This is the one connection
         // that writes the vault, so a raw page write through it is refused at the engine.
         connection.set_db_config(rusqlite::config::DbConfig::SQLITE_DBCONFIG_DEFENSIVE, true)?;
-        connection.pragma_update(None, "journal_mode", "wal")?;
-        connection.pragma_update(None, "synchronous", "FULL")?;
-        connection.pragma_update(None, "secure_delete", "ON")?;
-        connection.pragma_update(None, "journal_size_limit", JOURNAL_SIZE_LIMIT)?;
-        // A DEVICE THAT CAN LIE ABOUT A FLUSH (V18): on Apple targets a plain `fsync` does not
-        // reach the platter, `F_FULLFSYNC` does, and SQLite asks for it only when told to.
-        #[cfg(target_vendor = "apple")]
-        {
-            connection.pragma_update(None, "fullfsync", "ON")?;
-            connection.pragma_update(None, "checkpoint_fullfsync", "ON")?;
+        for (name, value) in durability_pragmas(cfg!(target_vendor = "apple")) {
+            connection.pragma_update(None, name, value)?;
         }
+        connection.pragma_update(None, "journal_size_limit", JOURNAL_SIZE_LIMIT)?;
         // The busy timeout has to be set on every connection or a second writer
         // fails instantly instead of waiting.
         connection.busy_timeout(std::time::Duration::from_secs(5))?;

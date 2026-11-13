@@ -903,9 +903,7 @@ fn a_damaged_vault_at_open_is_vault_damaged_through_the_abi() {
         handle.close();
     }
     {
-        let connection = centraid_vault::rusqlite::Connection::open(&path).expect("the file opens");
-        connection
-            .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))
+        centraid_vault::testdoor::checkpoint_into_main_file(&path)
             .expect("the rows reach the main file");
     }
     let mut bytes = std::fs::read(&path).expect("reads");
@@ -975,8 +973,9 @@ fn an_open_that_refuses_an_ordinary_file_never_answers_ok() {
     let mut handle = sentinel;
     // SAFETY: live config bytes and a live out-pointer.
     let code = unsafe { centraid_open(config.as_ptr(), config.len(), &raw mut handle) };
+    // Since the damaged-vault status, a file that is no vault of ours reads as damaged at open.
     assert_eq!(
-        code, CENTRAID_BAD_ARGUMENT,
+        code, CENTRAID_VAULT_DAMAGED,
         "an open that produces no handle answers a negative code"
     );
     assert!(

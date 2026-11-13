@@ -18,6 +18,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 
 mod artifact;
 mod ci;
+mod ddl_rules;
 #[cfg(test)]
 mod design_checks;
 mod design_dark;

@@ -30,6 +30,10 @@ pub fn keys_from_root(root_key: &[u8; 32]) -> BackupKeys {
     BackupKeys::from_root(root_key)
 }
 
+/// The statement [`content_hashes`] runs: every claim ordered by hash, an ordered walk of the
+/// unique `hash` index (`tests/index_walks.rs` plans it).
+pub const CONTENT_HASHES: &str = "SELECT hash, size FROM blob ORDER BY hash";
+
 /// Every file the vault knows by hash, with its length: each `blob` row, which
 /// is every original and every derivative that has bytes of its own (a
 /// thumbnail, a preview, a poster). A trashed document's bytes are included
@@ -45,7 +49,7 @@ pub fn content_hashes(vault: &Vault) -> Result<Vec<(PlaintextHash, u64)>> {
     // every derivative (`derivative.out` is a foreign key into `blob`), and
     // nothing else holds a hash.
     let rows: Vec<(String, i64)> = vault.read(|connection| {
-        let mut statement = connection.prepare("SELECT hash, size FROM blob ORDER BY hash")?;
+        let mut statement = connection.prepare(CONTENT_HASHES)?;
         let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     })?;

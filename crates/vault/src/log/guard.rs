@@ -312,6 +312,11 @@ impl Vault {
 
         match outcome {
             Ok(value) => {
+                if let Err(error) = crate::stage::reached(crate::stage::Stage::BeforeCommit) {
+                    let _ = self.connection().execute_batch("ROLLBACK");
+                    let _ = hook.take(&census);
+                    return Err(error);
+                }
                 if let Err(error) = self.connection().execute_batch("COMMIT") {
                     // A COMMIT CAN FAIL AND LEAVE THE TRANSACTION OPEN: a deferred foreign key
                     // (the Locker's `key_id`) is checked at COMMIT, and SQLite then keeps the
@@ -322,6 +327,8 @@ impl Vault {
                     let _ = hook.take(&census);
                     return Err(VaultError::from_sqlite("committing", error));
                 }
+                // The commit is durable; a fault test may stop the process here.
+                let _ = crate::stage::reached(crate::stage::Stage::Committed);
                 // READ AFTER THE COMMIT, and cleared only then. A census read
                 // before it would be a screen redrawn from a transaction that
                 // could still roll back.
