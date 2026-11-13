@@ -197,6 +197,7 @@ pub enum Refusal {
     /// The writer epoch, so a restoring phone can claim one past it.
     NoHead {
         epoch: u64,
+        claim: Option<Box<ClaimView>>,
     },
     /// The object that is not there, when there is one to name.
     NotFound {
@@ -295,7 +296,10 @@ impl Refusal {
                 epoch: body.epoch?,
                 head: body.head?.map(Box::new),
             },
-            Code::NoHead => Self::NoHead { epoch: body.epoch? },
+            Code::NoHead => Self::NoHead {
+                epoch: body.epoch?,
+                claim: body.claim.map(Box::new),
+            },
             Code::NotFound => Self::NotFound { name: body.name },
             Code::DigestMismatch => Self::DigestMismatch {
                 computed: body.digest?,
@@ -419,7 +423,10 @@ impl RefusalBody {
                 body.epoch = Some(epoch);
                 body.claim = Some(*claim);
             }
-            Refusal::NoHead { epoch } => body.epoch = Some(epoch),
+            Refusal::NoHead { epoch, claim } => {
+                body.epoch = Some(epoch);
+                body.claim = claim.map(|claim| *claim);
+            }
             Refusal::EpochConflict { epoch, head } | Refusal::HeadConflict { epoch, head } => {
                 body.epoch = Some(epoch);
                 body.head = Some(head.map(|head| *head));
@@ -464,7 +471,7 @@ mod tests {
             prev: None,
             taken_at_ms: 1,
             epoch: 2,
-            writer_epoch: 2,
+            claim: None,
             generation: 4,
             writes: 5,
             set_at_ms: 3,
@@ -506,7 +513,14 @@ mod tests {
                 epoch: 1,
                 head: None,
             },
-            Refusal::NoHead { epoch: 1 },
+            Refusal::NoHead {
+                epoch: 1,
+                claim: None,
+            },
+            Refusal::NoHead {
+                epoch: 3,
+                claim: Some(Box::new(claim())),
+            },
             Refusal::NotFound {
                 name: Some(Name::from_bytes([1; 32])),
             },

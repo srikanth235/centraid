@@ -145,10 +145,13 @@ pub struct HeadView {
     pub taken_at_ms: i64,
     /// **The writer epoch the phone held when it signed.**
     pub epoch: u64,
-    /// **The vault's writer epoch as of this answer**, unsigned: the number a
-    /// restoring phone claims one past. After a takeover it is above `epoch`
-    /// until the new writer sets a head.
-    pub writer_epoch: u64,
+    /// The vault's standing claim, beside the signed head and the same shape
+    /// `MOVED` carries: a restoring phone takes the writer epoch as the
+    /// greater of the verified head's epoch and the verified claim's, and
+    /// acts on neither unverified. `None` while the vault has never been
+    /// claimed.
+    #[serde(default)]
+    pub claim: Option<ClaimView>,
     /// The signed counter shared by heads, deletes and undos.
     pub generation: u64,
     /// The vault's write counter in the snapshot.

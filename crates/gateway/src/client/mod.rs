@@ -544,10 +544,10 @@ impl Client {
     pub async fn head_state(&self, vault: &VaultId) -> Result<HeadState, ClientError> {
         match self.head(vault).await {
             Ok(head) => Ok(HeadState {
-                epoch: head.writer_epoch,
+                epoch: head.epoch.max(head.claim.map_or(0, |claim| claim.epoch)),
                 head: Some(head),
             }),
-            Err(ClientError::Refused(Refusal::NoHead { epoch })) => {
+            Err(ClientError::Refused(Refusal::NoHead { epoch, .. })) => {
                 Ok(HeadState { epoch, head: None })
             }
             Err(error) => Err(error),

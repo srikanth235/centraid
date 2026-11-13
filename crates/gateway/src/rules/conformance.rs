@@ -1044,9 +1044,14 @@ async fn secret_admits_once<T: Target>(target: &mut T) -> Outcome {
         Code::NoHead,
         "the new vault's head",
     )?;
-    ensure(no_head == Refusal::NoHead { epoch: 1 }, || {
-        format!("NO_HEAD must carry the writer epoch: {no_head:?}")
-    })
+    ensure(
+        no_head
+            == Refusal::NoHead {
+                epoch: 1,
+                claim: None,
+            },
+        || format!("NO_HEAD must carry the writer epoch: {no_head:?}"),
+    )
 }
 
 async fn known_vault<T: Target>(target: &mut T) -> Outcome {
@@ -1537,7 +1542,7 @@ async fn head<T: Target>(target: &mut T) -> Outcome {
         "the first head",
     )?;
     ensure(
-        one.name == first.0 && one.epoch == 1 && one.taken_at_ms == 100 && one.writer_epoch == 1,
+        one.name == first.0 && one.epoch == 1 && one.taken_at_ms == 100 && one.claim.is_none(),
         || format!("{one:?}"),
     )?;
     let conflict = refused(
@@ -2097,7 +2102,7 @@ async fn read_grant<T: Target>(target: &mut T) -> Outcome {
     })?;
     let seen = ok(target.head(&reader.token, &vault).await, "reading the head")?;
     ensure(
-        seen.name == manifest.0 && seen.epoch == 1 && seen.writer_epoch == 1,
+        seen.name == manifest.0 && seen.epoch == 1 && seen.claim.is_none(),
         || format!("{seen:?}"),
     )?;
     let bytes = ok(
@@ -2558,6 +2563,14 @@ async fn claim_resets_generation<T: Target>(target: &mut T) -> Outcome {
             )
             .await,
         "generation 1 after a claim",
+    )?;
+    // The head answer carries the standing claim beside the signed head, so
+    // a restoring phone can take the writer epoch from signed records only.
+    let seen = ok(target.head(&second.token, &vault).await, "the head")?;
+    ensure(
+        seen.claim
+            .is_some_and(|claim| claim.epoch == 2 && claim.head_seen == Some(manifest.0)),
+        || format!("the head answer must carry the claim: {seen:?}"),
     )?;
     Ok(())
 }

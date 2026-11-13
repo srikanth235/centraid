@@ -322,10 +322,12 @@ impl<S: State> Gateway<S> {
     /// fault.
     pub fn head(&self, vault: &VaultId, token: &Token) -> Result<HeadView, Fault> {
         let caller = authorize(&self.state, vault, token, Access::Read)?;
+        let claim = self.state.claim(vault)?.map(|claim| claim_view(&claim));
         let head = self.state.head(vault)?.ok_or(Refusal::NoHead {
             epoch: caller.writer_epoch,
+            claim: claim.map(Box::new),
         })?;
-        Ok(view(&head, caller.writer_epoch))
+        Ok(view(&head, claim))
     }
 
     /// `PUT /v3/v/{vault}/head`: the signed record, judged in the order of
@@ -367,7 +369,7 @@ impl<S: State> Gateway<S> {
             if let Some(current) = current
                 .filter(|head| head.name == request.name && head.signature == request.signature)
             {
-                return Ok(view(&current, caller.writer_epoch));
+                return Ok(view(&current, standing_claim(state, vault)?));
             }
             let skew = request.taken_at_ms.saturating_sub(now_ms);
             if skew > MAX_CLOCK_AHEAD_MS {
@@ -378,9 +380,10 @@ impl<S: State> Gateway<S> {
                 return Err(out_of_order(&record).into());
             }
             if current.map(|head| head.name) != request.prev {
+                let claim = standing_claim(state, vault)?;
                 return Err(Refusal::HeadConflict {
                     epoch: caller.writer_epoch,
-                    head: current.map(|head| Box::new(view(&head, caller.writer_epoch))),
+                    head: current.map(|head| Box::new(view(&head, claim))),
                 }
                 .into());
             }
@@ -421,7 +424,7 @@ impl<S: State> Gateway<S> {
             record.generation = request.generation;
             record.writes = request.writes;
             state.put_vault(&record)?;
-            Ok(view(&head, caller.writer_epoch))
+            Ok(view(&head, standing_claim(state, vault)?))
         })
     }
 
@@ -1192,18 +1195,23 @@ impl<S: State> Gateway<S> {
 
 /// The head as an answer carries it: the record as signed, and the writer
 /// epoch joined in.
-const fn view(head: &HeadRecord, writer_epoch: u64) -> HeadView {
+const fn view(head: &HeadRecord, claim: Option<ClaimView>) -> HeadView {
     HeadView {
         name: head.name,
         prev: head.prev,
         taken_at_ms: head.taken_at_ms,
         epoch: head.epoch,
-        writer_epoch,
+        claim,
         generation: head.generation,
         writes: head.writes,
         set_at_ms: head.set_at_ms,
         signature: head.signature,
     }
+}
+
+/// The vault's standing claim, as an answer carries it.
+fn standing_claim<S: State>(state: &S, vault: &VaultId) -> Result<Option<ClaimView>, Fault> {
+    Ok(state.claim(vault)?.map(|claim| claim_view(&claim)))
 }
 
 const fn claim_view(claim: &ClaimRecord) -> ClaimView {
@@ -1413,7 +1421,8 @@ fn pair_by_claim<S: State>(
         return Err(Refusal::Frozen { since_ms }.into());
     }
     let head = state.head(&request.vault_id)?;
-    let head_view = head.map(|head| Box::new(view(&head, vault.writer_epoch)));
+    let claim_now = standing_claim(state, &request.vault_id)?;
+    let head_view = head.map(|head| Box::new(view(&head, claim_now)));
     if vault.writer_epoch.checked_add(1) != Some(claim.epoch) {
         return Err(Refusal::EpochConflict {
             epoch: vault.writer_epoch,
