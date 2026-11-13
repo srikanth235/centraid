@@ -248,7 +248,7 @@ fn delete_forever_on_a_trashed_document_asks_first_purges_it_and_the_page_leaves
     assert_eq!(confirm.title, "Delete this document forever?");
     assert_eq!(
         confirm.body,
-        "It leaves this vault for good. This cannot be undone."
+        "Erased from this phone now. Copies on your backup devices go when old backups age out. This cannot be undone."
     );
     assert_eq!(confirm.confirm_label, "Delete forever");
     assert!(confirm.destructive);

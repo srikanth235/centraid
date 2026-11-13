@@ -4,7 +4,7 @@
 //! `purge` (`entity.purge`) and "Empty trash" is `empty-trash`
 //! (`entity.empty_trash`), each behind the kit's destructive confirm — the row
 //! goes now and its bytes are released when nothing else names them. So the
-//! kit's own sentences ("leaves this vault for good") are true here. No sweep
+//! kit's own sentences ("Erased from this phone now") are true here. No sweep
 //! runs on the phone, so no row says when it will be erased.
 
 use centraid_api_proto::core_v1 as wire;

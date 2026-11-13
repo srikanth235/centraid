@@ -413,7 +413,7 @@ fn the_trash_deletes_forever_and_empties_in_the_shared_words() {
     assert_eq!(confirm.title, "Delete this transaction forever?");
     assert_eq!(
         confirm.body,
-        "It leaves this vault for good. This cannot be undone."
+        "Erased from this phone now. Copies on your backup devices go when old backups age out. This cannot be undone."
     );
     assert_eq!(confirm.confirm_label, "Delete forever");
     assert!(confirm.destructive);
