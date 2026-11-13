@@ -275,6 +275,7 @@ pub fn all(root: &Path) -> Vec<RuleReport> {
     .chain([
         crate::promises::promises(root),
         crate::page_state::page_state(root),
+        crate::data_pin::data_pin(root),
     ])
     .collect()
 }
