@@ -74,7 +74,7 @@ jobs:
     # A backstop against a hung job, not a performance budget: the gate does not
     # fail a profile for taking long (owner ruling 2026-11-04), so this sits well
     # above a cold `pr` run on a loaded runner.
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
