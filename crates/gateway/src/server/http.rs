@@ -73,6 +73,21 @@ use crate::server::state::SqliteState;
 use crate::server::store::{ObjectStore, Staged, StagedFile};
 use crate::server::{Event, Handle, Shared};
 
+/// **Every call into the rules and every file it touches runs on the blocking
+/// pool**, never on an async worker: a transaction with `synchronous = FULL`
+/// and an `fsync`ed rename wait on the disk, and a worker that waits is a
+/// worker no other connection is served on (#1191, R2).
+async fn blocking<T: Send + 'static>(
+    shared: &Handle,
+    op: impl FnOnce(&mut Gateway<SqliteState>) -> Result<T, Fault> + Send + 'static,
+) -> Result<T, Fault> {
+    let shared = std::sync::Arc::clone(shared);
+    match tokio::task::spawn_blocking(move || shared.rules(op)).await {
+        Ok(outcome) => outcome,
+        Err(error) => Err(StoreFault::new(format!("a blocking task failed: {error}")).into()),
+    }
+}
+
 /// Mark `name` as the scrub marks a file it cannot find, when the index holds
 /// it and its file is gone (the module header's "a row whose bytes are gone").
 /// Answers whether it did.
@@ -224,11 +239,8 @@ async fn read_json<T: DeserializeOwned>(body: Body) -> Result<T, Refusal> {
 
 async fn info(State(shared): State<Handle>) -> Response {
     let now = shared.now();
-    answer(
-        &shared,
-        StatusCode::OK,
-        shared.rules(|gateway| Ok(gateway.info(now))),
-    )
+    let outcome = blocking(&shared, move |gateway| Ok(gateway.info(now))).await;
+    answer(&shared, StatusCode::OK, outcome)
 }
 
 /// `POST nonce`: no auth, no body, no vault, and **no write**. The random part
@@ -236,7 +248,10 @@ async fn info(State(shared): State<Handle>) -> Response {
 async fn nonce(State(shared): State<Handle>) -> Response {
     let now = shared.now();
     let drawn = shared.fresh_nonce_id();
-    let outcome = drawn.and_then(|random| shared.rules(|gateway| gateway.issue_nonce(random, now)));
+    let outcome = match drawn {
+        Ok(random) => blocking(&shared, move |gateway| gateway.issue_nonce(random, now)).await,
+        Err(fault) => Err(fault),
+    };
     answer(&shared, StatusCode::OK, outcome)
 }
 
@@ -250,13 +265,14 @@ async fn pair(State(shared): State<Handle>, body: Body) -> Response {
         Err(fault) => return faulted(&fault, shared.now()),
     };
     let now = shared.now();
-    let outcome = shared.rules(|gateway| gateway.pair(&request, &token, now));
+    let (vault_id, kind, label) = (request.vault_id, request.kind, request.label.clone());
+    let outcome = blocking(&shared, move |gateway| gateway.pair(&request, &token, now)).await;
     if let Ok(paired) = &outcome {
         shared.announce(&Event::Paired {
-            vault: request.vault_id,
-            kind: request.kind,
+            vault: vault_id,
+            kind,
             epoch: paired.epoch,
-            label: request.label.clone(),
+            label,
         });
     }
     answer(&shared, StatusCode::OK, outcome)
@@ -267,11 +283,12 @@ async fn get_head(
     path: Result<Path<String>, PathRejection>,
     headers: HeaderMap,
 ) -> Response {
-    let outcome = (|| {
+    let outcome = async {
         let vault = vault_of(path)?;
         let token = bearer(&headers)?;
-        shared.rules(|gateway| gateway.head(&vault, &token))
-    })();
+        blocking(&shared, move |gateway| gateway.head(&vault, &token)).await
+    }
+    .await;
     answer(&shared, StatusCode::OK, outcome)
 }
 
@@ -291,11 +308,11 @@ async fn put_head(
         Err(refusal) => return refused(&refusal, shared.now()),
     };
     let now = shared.now();
-    answer(
-        &shared,
-        StatusCode::OK,
-        shared.rules(|gateway| gateway.set_head(&vault, &token, &request, now)),
-    )
+    let outcome = blocking(&shared, move |gateway| {
+        gateway.set_head(&vault, &token, &request, now)
+    })
+    .await;
+    answer(&shared, StatusCode::OK, outcome)
 }
 
 async fn snapshots(
@@ -304,12 +321,16 @@ async fn snapshots(
     query: Result<Query<Page>, QueryRejection>,
     headers: HeaderMap,
 ) -> Response {
-    let outcome = (|| {
+    let outcome = async {
         let vault = vault_of(path)?;
         let token = bearer(&headers)?;
         let (after, limit) = page_of(query)?;
-        shared.rules(|gateway| gateway.snapshots(&vault, &token, after.as_ref(), limit))
-    })();
+        blocking(&shared, move |gateway| {
+            gateway.snapshots(&vault, &token, after.as_ref(), limit)
+        })
+        .await
+    }
+    .await;
     answer(&shared, StatusCode::OK, outcome)
 }
 
@@ -342,15 +363,17 @@ async fn exists(
             );
         }
     }
-    // THE NAMES THE INDEX HOLDS are asked of their files, outside the lock;
-    // one whose file is gone is marked, and the rules answer again (the
-    // module header). A request the rules refused is answered as refused.
-    let outcome = shared.rules(|gateway| gateway.exists(&vault, &token, &names.names));
-    let outcome = outcome.and_then(|missing| {
+    // THE NAMES THE INDEX HOLDS are asked of their files; one whose file is
+    // gone is marked, and the rules answer again (the module header). A
+    // request the rules refused is answered as refused. All of it on the
+    // blocking pool: it stats up to a thousand files.
+    let worker = std::sync::Arc::clone(&shared);
+    let outcome = blocking(&shared, move |gateway| {
+        let missing = gateway.exists(&vault, &token, &names.names)?;
         if names.names.len() > MAX_NAMES {
             return Ok(missing);
         }
-        let store = shared.store();
+        let store = worker.store();
         let gone: Vec<Name> = names
             .names
             .iter()
@@ -360,14 +383,13 @@ async fn exists(
         if gone.is_empty() {
             return Ok(missing);
         }
-        let now = shared.now();
-        shared.rules(|gateway| {
-            for name in &gone {
-                mark_if_gone(gateway, store, &vault, name, now)?;
-            }
-            gateway.exists(&vault, &token, &names.names)
-        })
-    });
+        let now = worker.now();
+        for name in &gone {
+            mark_if_gone(gateway, store, &vault, name, now)?;
+        }
+        gateway.exists(&vault, &token, &names.names)
+    })
+    .await;
     answer(
         &shared,
         StatusCode::OK,
@@ -390,7 +412,7 @@ async fn put_object(
 }
 
 async fn receive_object(
-    shared: &Shared,
+    shared: &Handle,
     path: Result<Path<(String, String)>, PathRejection>,
     headers: &HeaderMap,
     body: Body,
@@ -398,7 +420,10 @@ async fn receive_object(
     let (vault, name) = object_of(path)?;
     let token = bearer(headers)?;
     // A stranger is answered before a byte of the body is read.
-    shared.rules(|gateway| gateway.authorize(&vault, &token, Access::Read))?;
+    blocking(shared, move |gateway| {
+        gateway.authorize(&vault, &token, Access::Read)
+    })
+    .await?;
     let mut stream = body.into_data_stream();
     let (file, declared) = match stage_object(shared, &vault, &token, headers, &mut stream).await {
         Ok(staged) => staged,
@@ -414,26 +439,32 @@ async fn receive_object(
         size: file.size,
     };
     let now = shared.now();
-    let store = shared.store();
-    let _committing = shared.commit_guard();
-    shared.rules(|gateway| {
+    let worker = std::sync::Arc::clone(shared);
+    blocking(shared, move |gateway| {
+        let store = worker.store();
+        let _committing = worker.commit_guard();
         mark_if_gone(gateway, store, &vault, &name, now)?;
         gateway.put(&vault, &token, &arrival, now, || {
             store.commit(file, &vault, &name)
         })
     })
+    .await
 }
 
 /// What a `PUT` must pass before the rules judge it — write authority, its
 /// headers, its size — and its bytes staged on disk.
 async fn stage_object(
-    shared: &Shared,
+    shared: &Handle,
     vault: &VaultId,
     token: &Token,
     headers: &HeaderMap,
     stream: &mut BodyDataStream,
 ) -> Result<(StagedFile, Digest), Fault> {
-    shared.rules(|gateway| gateway.authorize(vault, token, Access::Write))?;
+    let (vault_id, bearer_token) = (*vault, *token);
+    blocking(shared, move |gateway| {
+        gateway.authorize(&vault_id, &bearer_token, Access::Write)
+    })
+    .await?;
     let declared = headers
         .get(DIGEST_HEADER)
         .and_then(|value| value.to_str().ok())
@@ -473,21 +504,25 @@ async fn drain(stream: &mut BodyDataStream, limit: u64) {
 }
 
 /// The object a `GET` or `HEAD` serves, and where its bytes are.
-fn served(
-    shared: &Shared,
+async fn served(
+    shared: &Handle,
     path: Result<Path<(String, String)>, PathRejection>,
     headers: &HeaderMap,
 ) -> Result<(ObjectRecord, PathBuf), Fault> {
     let (vault, name) = object_of(path)?;
     let token = bearer(headers)?;
-    let record = shared.rules(|gateway| gateway.object(&vault, &token, &name))?;
-    let file = shared.store().path(&vault, &name);
-    if !file.is_file() {
-        // A row whose bytes are gone: the scrub will mark it, and the phone
-        // that asks is told the truth now.
-        return Err(Refusal::NotFound { name: Some(name) }.into());
-    }
-    Ok((record, file))
+    let worker = std::sync::Arc::clone(shared);
+    blocking(shared, move |gateway| {
+        let record = gateway.object(&vault, &token, &name)?;
+        let file = worker.store().path(&vault, &name);
+        if !file.is_file() {
+            // A row whose bytes are gone: the scrub will mark it, and the
+            // phone that asks is told the truth now.
+            return Err(Refusal::NotFound { name: Some(name) }.into());
+        }
+        Ok((record, file))
+    })
+    .await
 }
 
 async fn get_object(
@@ -495,7 +530,7 @@ async fn get_object(
     path: Result<Path<(String, String)>, PathRejection>,
     headers: HeaderMap,
 ) -> Response {
-    let (record, file) = match served(&shared, path, &headers) {
+    let (record, file) = match served(&shared, path, &headers).await {
         Ok(served) => served,
         Err(fault) => return faulted(&fault, shared.now()),
     };
@@ -559,7 +594,7 @@ async fn head_object(
     path: Result<Path<(String, String)>, PathRejection>,
     headers: HeaderMap,
 ) -> Response {
-    let (record, _) = match served(&shared, path, &headers) {
+    let (record, _) = match served(&shared, path, &headers).await {
         Ok(served) => served,
         Err(fault) => return faulted(&fault, shared.now()),
     };
@@ -623,10 +658,16 @@ async fn bundle(
         let vault = vault_of(path)?;
         let token = bearer(&headers)?;
         // A stranger is answered before a byte of the body is read.
-        shared.rules(|gateway| gateway.authorize(&vault, &token, Access::Read))?;
+        blocking(&shared, move |gateway| {
+            gateway.authorize(&vault, &token, Access::Read)
+        })
+        .await?;
         let mut stream = body.into_data_stream();
         let received = async {
-            shared.rules(|gateway| gateway.authorize(&vault, &token, Access::Write))?;
+            blocking(&shared, move |gateway| {
+                gateway.authorize(&vault, &token, Access::Write)
+            })
+            .await?;
             if content_length(&headers).is_some_and(|length| length > MAX_BUNDLE_BYTES) {
                 return Err(Refusal::TooLarge {
                     limit: MAX_BUNDLE_BYTES,
@@ -650,14 +691,14 @@ async fn bundle(
 /// staging, the frames complete before it are still admitted — each was
 /// verified on its own — and the refusal is what is answered.
 async fn receive_bundle(
-    shared: &Shared,
+    shared: &Handle,
     vault: &VaultId,
     token: &Token,
     stream: &mut BodyDataStream,
 ) -> Result<BundleAnswer, Fault> {
     let mut staging = Staging::default();
     let read = stage_frames(shared, stream, &mut staging).await;
-    let answer = admit_frames(shared, vault, token, staging);
+    let answer = admit_frames(shared, vault, token, staging).await;
     read?;
     answer
 }
@@ -736,8 +777,8 @@ async fn advance(
 
 /// Judge and admit every staged frame as one step. A frame whose name the
 /// index holds but whose file is gone is marked first, as `PUT` does.
-fn admit_frames(
-    shared: &Shared,
+async fn admit_frames(
+    shared: &Handle,
     vault: &VaultId,
     token: &Token,
     mut staging: Staging,
@@ -750,7 +791,6 @@ fn admit_frames(
         return Ok(answer);
     }
     let now = shared.now();
-    let store = shared.store();
     let arrivals: Vec<Arrival> = staging
         .frames
         .iter()
@@ -764,24 +804,28 @@ fn admit_frames(
             }
         })
         .collect();
-    let _committing = shared.commit_guard();
     let mut files: Vec<Option<StagedFile>> = staging
         .frames
         .iter_mut()
         .map(|(_, file)| file.take())
         .collect();
-    let outcomes = shared.rules(|gateway| {
+    let (vault, token, worker) = (*vault, *token, std::sync::Arc::clone(shared));
+    let (named, outcomes) = blocking(shared, move |gateway| {
+        let store = worker.store();
+        let _committing = worker.commit_guard();
         for arrival in &arrivals {
-            mark_if_gone(gateway, store, vault, &arrival.name, now)?;
+            mark_if_gone(gateway, store, &vault, &arrival.name, now)?;
         }
-        gateway.put_bundle(vault, token, &arrivals, now, |index| {
+        let outcomes = gateway.put_bundle(&vault, &token, &arrivals, now, |index| {
             let file = files[index]
                 .take()
                 .ok_or_else(|| StoreFault::new("a bundle frame committed twice"))?;
-            store.commit(file, vault, &arrivals[index].name)
-        })
-    })?;
-    for (arrival, outcome) in arrivals.iter().zip(outcomes) {
+            store.commit(file, &vault, &arrivals[index].name)
+        })?;
+        Ok((arrivals, outcomes))
+    })
+    .await?;
+    for (arrival, outcome) in named.iter().zip(outcomes) {
         match outcome {
             Ok(PutOutcome::Stored(_)) => answer.stored.push(arrival.name),
             Ok(PutOutcome::AlreadyStored(_)) => answer.already.push(arrival.name),
@@ -813,18 +857,23 @@ async fn fetch(
         Ok(names) => names,
         Err(refusal) => return refused(&refusal, shared.now()),
     };
-    let plan = match shared.rules(|gateway| gateway.fetch(&vault, &token, &names.names)) {
-        Ok(plan) => plan,
+    let worker = std::sync::Arc::clone(&shared);
+    let planned = blocking(&shared, move |gateway| {
+        let plan = gateway.fetch(&vault, &token, &names.names)?;
+        Ok(plan
+            .into_iter()
+            .filter_map(|record| {
+                let file = worker.store().path(&vault, &record.name);
+                let length = std::fs::metadata(&file).ok()?.len();
+                (length == record.size).then_some((record, file))
+            })
+            .collect::<Vec<(ObjectRecord, PathBuf)>>())
+    })
+    .await;
+    let entries = match planned {
+        Ok(entries) => entries,
         Err(fault) => return faulted(&fault, shared.now()),
     };
-    let entries: Vec<(ObjectRecord, PathBuf)> = plan
-        .into_iter()
-        .filter_map(|record| {
-            let file = shared.store().path(&vault, &record.name);
-            let length = std::fs::metadata(&file).ok()?.len();
-            (length == record.size).then_some((record, file))
-        })
-        .collect();
     let total: u64 = entries
         .iter()
         .map(|(record, _)| HEADER_LEN as u64 + record.size)
@@ -879,12 +928,16 @@ async fn objects(
     query: Result<Query<Page>, QueryRejection>,
     headers: HeaderMap,
 ) -> Response {
-    let outcome = (|| {
+    let outcome = async {
         let vault = vault_of(path)?;
         let token = bearer(&headers)?;
         let (after, limit) = page_of(query)?;
-        shared.rules(|gateway| gateway.objects(&vault, &token, after.as_ref(), limit))
-    })();
+        blocking(&shared, move |gateway| {
+            gateway.objects(&vault, &token, after.as_ref(), limit)
+        })
+        .await
+    }
+    .await;
     answer(&shared, StatusCode::OK, outcome)
 }
 
@@ -896,12 +949,16 @@ async fn held(
     query: Result<Query<Page>, QueryRejection>,
     headers: HeaderMap,
 ) -> Response {
-    let outcome = (|| {
+    let outcome = async {
         let vault = vault_of(path)?;
         let token = bearer(&headers)?;
         let (after, limit) = page_of(query)?;
-        shared.rules(|gateway| gateway.held(&vault, &token, after.as_ref(), limit))
-    })();
+        blocking(&shared, move |gateway| {
+            gateway.held(&vault, &token, after.as_ref(), limit)
+        })
+        .await
+    }
+    .await;
     answer(&shared, StatusCode::OK, outcome)
 }
 
@@ -921,11 +978,11 @@ async fn delete(
         Err(refusal) => return refused(&refusal, shared.now()),
     };
     let now = shared.now();
-    answer(
-        &shared,
-        StatusCode::OK,
-        shared.rules(|gateway| gateway.delete(&vault, &token, &request, now)),
-    )
+    let outcome = blocking(&shared, move |gateway| {
+        gateway.delete(&vault, &token, &request, now)
+    })
+    .await;
+    answer(&shared, StatusCode::OK, outcome)
 }
 
 async fn undo(
@@ -943,11 +1000,11 @@ async fn undo(
         Ok(request) => request,
         Err(refusal) => return refused(&refusal, shared.now()),
     };
-    answer(
-        &shared,
-        StatusCode::OK,
-        shared.rules(|gateway| gateway.undo(&vault, &token, &request)),
-    )
+    let outcome = blocking(&shared, move |gateway| {
+        gateway.undo(&vault, &token, &request)
+    })
+    .await;
+    answer(&shared, StatusCode::OK, outcome)
 }
 
 /// `POST revoke`: the bearer token revokes itself. No body.
@@ -961,13 +1018,10 @@ async fn revoke(
         Ok(parsed) => parsed,
         Err(refusal) => return refused(&refusal, shared.now()),
     };
-    answer(
-        &shared,
-        StatusCode::OK,
-        shared
-            .rules(|gateway| gateway.revoke(&vault, &token))
-            .map(|()| Revoked { revoked: true }),
-    )
+    let outcome = blocking(&shared, move |gateway| gateway.revoke(&vault, &token))
+        .await
+        .map(|()| Revoked { revoked: true });
+    answer(&shared, StatusCode::OK, outcome)
 }
 
 async fn no_route(State(shared): State<Handle>) -> Response {
